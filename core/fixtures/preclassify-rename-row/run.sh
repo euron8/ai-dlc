@@ -71,6 +71,34 @@ echo "  subject: ${RECON#$ROOT/}/preclassify.sh"
 # The REQUIRED inputs of inputs.decl: the subject and the library it sources, both driven below.
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/preclassify.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/lib.sh"
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# IN PROCESS (BL-878). The subject is SOURCED once into this shell (its guard returns after defining prec_main) and
+# every cell calls prec_main in a background subshell (pc_ip below), so the subject's own `exit`, `set -u`, `set -f`,
+# traps and cd stay there. The source is one fx_inproc pass (the inproc: row).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped
+# preclassify.sh, and sourcing a pre-wrap subject would run its whole body in this shell. So the shape is checked
+# first, on its two halves: neither the `prec_main() {` line nor the column-0 source guard is a subject that predates
+# the wrap, which prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled subject this fixture can no
+# longer drive, which FAILS. The distribution cannot reach the SKIP unnoticed: C5 (validate-fixture-inprocess.sh)
+# refuses a cli subject without the guard, and J3 refuses the start count moving.
+PCS="$RECON/preclassify.sh"
+prec_def=0; prec_guard=0
+grep -q '^prec_main() {$' "$PCS"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $PCS (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || prec_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$PCS"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $PCS (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || prec_guard=1
+if [ "$prec_def$prec_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$prec_def" = 0 ]; then echo "   FAIL  $PCS carries the column-0 source guard but no \`prec_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "preclassify-rename-row: FAIL (1)" >&2; exit 1; fi
+if [ "$prec_guard" = 0 ]; then echo "   FAIL  $PCS defines \`prec_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run prec_main in this shell" >&2; echo "preclassify-rename-row: FAIL (1)" >&2; exit 1; fi
+fx_inproc "$PCS"
+. "$PCS" || { echo "FIXTURE BROKEN: sourcing $PCS failed" >&2; exit 2; }
+declare -F prec_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $PCS defined no prec_main" >&2; exit 2; }
 
 # --- a synthetic distribution, two commits ------------------------------------
 # base ships a fixture directory with a transcript and a runner. theirs renames the
@@ -109,7 +137,37 @@ git -C "$DIST" show "$BASE:core/fixtures/probe/old-name.jsonl" > "$CONS/tests/fi
 git -C "$DIST" show "$BASE:core/fixtures/probe/run.sh"        > "$CONS/tests/fixtures/probe/run.sh"
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$CONS/.claude/.ai-dlc-version"
 
-run_pc() { bash "$1/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
+# THE FAILURE SIGNAL. The subject refuses a run through `kill -USR1 "$PC_TOP"`, with PC_TOP the pid it read from `$$`
+# and a `trap 'exit 2' USR1` of its own, so that a failing helper inside `$( )` ends the WHOLE run with exit 2. In a
+# subshell `$$` is still THIS shell's pid, and bash 3.2 has no $BASHPID, so the signal would end this fixture. pc_ip
+# therefore starts the subshell in the background, hands it its own pid over a fifo (`$!` is known only here), and
+# shadows `kill` inside it: a `kill -USR1` aimed at this shell is delivered to the subshell instead, synchronously
+# from the failing helper exactly as the program signals itself, so the subject's own trap ends the run with exit 2.
+# This shell ignores USR1 as a guard: nothing else may signal it.
+trap : USR1
+PCX_P=$$
+# pc_ip <rows> <err> [VAR=value ...] -- <subject args...> -> prec_main's exit status. The VAR=value words are
+# exported inside the subshell; PCX_SHIM=fx_git|fx_ngit defines `git` there as that shim function.
+pc_ip() {
+  local _r="$1" _e="$2" _f="$WORK/pcx.fifo" _rc
+  shift 2
+  mkfifo "$_f" || { echo "FIXTURE ERROR: mkfifo failed" >&2; exit 2; }
+  ( read -r PCX_SELF < "$_f"
+    while [ "$1" != -- ]; do export "$1"; shift; done
+    shift
+    case "${PCX_SHIM:-}" in
+      fx_git) git() { fx_git "$@"; } ;;
+      fx_ngit) git() { fx_ngit "$@"; } ;;
+    esac
+    kill() { if [ "${1:-}" = -USR1 ] && [ "${2:-}" = "$PCX_P" ]; then builtin kill -USR1 "$PCX_SELF"; else builtin kill "$@"; fi; }
+    fx_inproc "$PCS"
+    prec_main "$@" ) > "$_r" 2> "$_e" &
+  printf '%s\n' "$!" > "$_f"
+  wait "$!"; _rc=$?
+  rm -f "$_f"
+  return "$_rc"
+}
+run_pc() { pc_ip "$1" /dev/null -- "$DIST" "$BASE" "$THEIRS" "$CONS"; } # run_pc <rows-file>
 bucket_of() { # bucket_of <rows> <core-path> -> field 4 of that path's row, or empty
   printf '%s\n' "$1" | LC_ALL=C awk -F'\t' -v p="$2" '$2==p {print $4}'
 }
@@ -192,7 +250,7 @@ fi
 grp_R() { # grp_R <recon> <tag> <ctl> <cells>
   local _d="$1" _o="$WORK/r-$2" _ctl="$3" _rows n n4 v
   WANT="$4"; mkdir -p "$_o" || exit 2
-  run_pc "$_d" > "$_o/rows"; _rows="$(<"$_o/rows")"
+  run_pc "$_o/rows"; _rows="$(<"$_o/rows")"
   [ "$_ctl" != 1 ] || REF_ROWS="$_o/rows"
   # A. the new path is a plain upstream add
   if want A; then v=0; [ "$(bucket_of "$_rows" core/fixtures/probe/new-name.jsonl)" = UPSTREAM-ONLY-ADD ] || v=1; put A "$v"; fi
@@ -224,9 +282,8 @@ grp_R() { # grp_R <recon> <tag> <ctl> <cells>
 # land in <out-prefix>.{rows,err,hits}
 pc_shim() {
   : > "$3.hits"
-  ( git() { fx_git "$@"; }; export -f git fx_git
-    FX_GIT_FAIL="$2" FX_GIT_HITS="$3.hits" FX_GIT_ONCE="${5:-}" AI_DLC_RECONCILE_MEMO="${4:-}" \
-      bash "$1/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$3.rows" 2> "$3.err" )
+  pc_ip "$3.rows" "$3.err" PCX_SHIM=fx_git FX_GIT_FAIL="$2" FX_GIT_HITS="$3.hits" FX_GIT_ONCE="${5:-}" AI_DLC_RECONCILE_MEMO="${4:-}" \
+    -- "$DIST" "$BASE" "$THEIRS" "$CONS"
 }
 grp_B230() { # grp_B230 <recon> <tag> <ctl> <cells>
   local _d="$1" _o="$WORK/b230-$2" _ctl="$3" _s _rc _m v
@@ -304,9 +361,8 @@ fi
 m_run() {
   local _b="$M_B"; [ "$2" = --untangle ] && _b="$M_T"
   : > "$4.hits"
-  ( git() { fx_git "$@"; }; export -f git fx_git
-    FX_GIT_FAIL="$3" FX_GIT_HITS="$4.hits" FX_GIT_ONCE="" AI_DLC_RECONCILE_MEMO="" \
-      bash "$1/preclassify.sh" "$MD" "$_b" "$M_T" "$MC" "$2" > "$4.rows" 2> "$4.err" )
+  pc_ip "$4.rows" "$4.err" PCX_SHIM=fx_git FX_GIT_FAIL="$3" FX_GIT_HITS="$4.hits" FX_GIT_ONCE="" AI_DLC_RECONCILE_MEMO="" \
+    -- "$MD" "$_b" "$M_T" "$MC" "$2"
 }
 grp_B308() { # grp_B308 <recon> <tag> <ctl> <cells>
   local _d="$1" _o="$WORK/b308-$2" _ctl="$3" _c _s _m _rc v
@@ -393,11 +449,13 @@ grp_MEMO() { # grp_MEMO <recon> <tag> <ctl> <cells>
     fi
   fi
   if want mE; then
-    _l="$(env -u AI_DLC_RECONCILE_MEMO bash "$_d/preclassify.sh" "$LONGD" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+    # a fresh memo directory, as the program's own private one: the key that embeds the long dist path is still written
+    mkdir -p "$_o/e-memo" || exit 2
+    pc_ip "$_o/e.rows" /dev/null AI_DLC_RECONCILE_MEMO="$_o/e-memo" -- "$LONGD" "$BASE" "$THEIRS" "$CONS"; _l="$(<"$_o/e.rows")"
     v=0; [ "$S_REF" = "$_l" ] || v=1; put mE "$v"
   fi
   if want mF; then
-    _r="$(AI_DLC_RECONCILE_MEMO="$RO" bash "$_d/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+    pc_ip "$_o/f.rows" /dev/null AI_DLC_RECONCILE_MEMO="$RO" -- "$DIST" "$BASE" "$THEIRS" "$CONS"; _r="$(<"$_o/f.rows")"
     v=0; [ "$S_REF" = "$_r" ] || v=1; put mF "$v"
   fi
   if want mG; then
@@ -525,18 +583,22 @@ lq() {
     AI_DLC_RECONCILE_MEMO="$_m"; export AI_DLC_RECONCILE_MEMO
     . "$_r/lib.sh" >/dev/null 2>&1
     command -v memo_has_path >/dev/null || exit 97
-    "$@" >/dev/null 2>&1 ) 2>/dev/null
+    case "$1" in
+      true) true ;;
+      memo_has_path) shift; memo_has_path "$@" ;;
+      memo_rev_parse) shift; memo_rev_parse "$@" ;;
+      *) exit 97 ;;
+    esac >/dev/null 2>&1 ) 2>/dev/null
 }
 aside() { mv "$1" "$1.aside" || { echo "FIXTURE ERROR: could not move $1 aside" >&2; exit 2; }; }
 back()  { mv "$1.aside" "$1" || { echo "FIXTURE ERROR: could not restore $1" >&2; exit 2; }; }
 # n_pc <recon> <out-prefix> <base> <theirs> <mode> -> rc
-n_pc() { AI_DLC_RECONCILE_MEMO="" bash "$1/preclassify.sh" "$ND" "$3" "$4" "$NC" "$5" > "$2.rows" 2> "$2.err"; }
+n_pc() { pc_ip "$2.rows" "$2.err" AI_DLC_RECONCILE_MEMO= -- "$ND" "$3" "$4" "$NC" "$5"; }
 # nl_run <recon> <out-prefix> <force> -> rc: the rename world's preclassify with the .dist-only shim
 nl_run() {
   : > "$2.hits"
-  ( git() { fx_ngit "$@"; }; export -f git fx_ngit
-    FX_N_FORCE="$3" FX_N_HITS="$2.hits" AI_DLC_RECONCILE_MEMO="" \
-      bash "$1/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$2.rows" 2> "$2.err" )
+  pc_ip "$2.rows" "$2.err" PCX_SHIM=fx_ngit FX_N_FORCE="$3" FX_N_HITS="$2.hits" AI_DLC_RECONCILE_MEMO= \
+    -- "$DIST" "$BASE" "$THEIRS" "$CONS"
 }
 grp_N() { # grp_N <recon> <tag> <ctl> <cells>
   local _d="$1" _o="$NW/s-$2" _ctl="$3" _m _x _y _z _rc v
@@ -686,6 +748,42 @@ if [ "$(grep -c . "$REF_ROWS")" -lt 3 ]; then
   exit 2
 fi
 run_cells "$RECON" tip 1 $TIP_REST
+
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome -----------------------
+# The outcomes are exit x output class: 0 with the classified rows, 2 with the refusal line naming a failed git call
+# on stderr. One `FXCELL=<id> bash "$PCS"` start per outcome, each compared with the in-process call on the same
+# input: stdout, stderr and exit separately, byte for byte. A cell also asserts its own outcome (a positive
+# conjunct, so two runs that both printed nothing cannot read as equivalent), and the two cells must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ" || exit 2
+eqv() { # eqv <cell-id> [VAR=value ...] -- <subject args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two agree
+  local id="$1"; shift
+  pc_ip "$EQ/$id.ip.out" "$EQ/$id.ip.err" "$@"; echo "$?" > "$EQ/$id.ip.rc"
+  ( while [ "$1" != -- ]; do export "$1"; shift; done
+    shift
+    case "${PCX_SHIM:-}" in fx_git) git() { fx_git "$@"; }; export -f git fx_git ;; esac
+    FXCELL="$id" bash "$PCS" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s rows=%s err=[%s] / program rc=%s rows=%s err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(grep -c . "$EQ/$1.ip.out")" \
+  "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(grep -c . "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+echo "== cli cells"
+if eqv cli-rows -- "$DIST" "$BASE" "$THEIRS" "$CONS" && [ "$(cat "$EQ/cli-rows.cl.rc")" = 0 ] \
+   && [ "$(bucket_of "$(cat "$EQ/cli-rows.cl.out")" core/fixtures/probe/new-name.jsonl)" = UPSTREAM-ONLY-ADD ] \
+   && [ "$(bucket_of "$(cat "$EQ/cli-rows.cl.out")" core/fixtures/probe/old-name.jsonl)" = UPSTREAM-DELETED ]; then
+  ok "cli-rows: the program classifies the rename world exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-rows: the program and the in-process call differ, or the outcome is not exit 0 with the rename rows ($(eq_twin cli-rows))"; fi
+if [ "$RUN_B230" = 1 ]; then
+  : > "$EQ/cli-refuse.hits"
+  if eqv cli-refuse PCX_SHIM=fx_git FX_GIT_FAIL=diff FX_GIT_HITS="$EQ/cli-refuse.hits" FX_GIT_ONCE= AI_DLC_RECONCILE_MEMO= \
+       -- "$DIST" "$BASE" "$THEIRS" "$CONS" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-refuse.cl.out" ] \
+     && [ -s "$EQ/cli-refuse.hits" ] \
+     && grep -qE '^preclassify: git failed, refusing to classify: .* exited 128$' "$EQ/cli-refuse.cl.err"; then
+    ok "cli-refuse: the program refuses a forced git 128 exactly as the in-process call does (stdout, stderr, exit 2)"
+  else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 2 naming the failed call ($(eq_twin cli-refuse))"; fi
+  if ! cmp -s "$EQ/cli-rows.cl.out" "$EQ/cli-refuse.cl.out" && ! cmp -s "$EQ/cli-rows.cl.rc" "$EQ/cli-refuse.cl.rc"; then
+    ok "cli cells discriminate: the classifying and the refusing input give different stdout and exit"
+  else bad "cli cells do not discriminate: cli-rows and cli-refuse gave the same stdout or exit"; fi
+fi
 
 
 # R. the rename row

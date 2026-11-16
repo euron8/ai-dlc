@@ -122,6 +122,34 @@ if env PATH=/var/empty /bin/bash -c 'command -v jq' >/dev/null 2>&1; then
 fi
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# IN PROCESS (BL-878). The hook is SOURCED once (its column-0 guard returns after defining fgb_main) and every call
+# runs fgb_main in a subshell with the payload on stdin, so the hook's own `exit`, `set -uo pipefail`, PATH and
+# variables stay in that subshell. PROGFAULT's copy with an injected jq compile error is sourced inside its own
+# subshell, once per call: that is its own in-process pass.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped hook, and
+# sourcing a pre-wrap one would run the whole hook in this shell. So the shape is checked first, on its two halves:
+# neither the `fgb_main() {` line nor the column-0 source guard is a subject that predates the wrap, which prints SKIP
+# and exits 0 -- never an ok. Exactly one half is a respelled subject this fixture can no longer drive, which FAILS.
+# An unreadable subject is FIXTURE ERROR.
+fgb_def=0; fgb_guard=0
+grep -q '^fgb_main() {$' "$HOOK"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $HOOK (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || fgb_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $HOOK (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || fgb_guard=1
+if [ "$fgb_def$fgb_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$fgb_def" = 0 ]; then echo "   FAIL  $HOOK carries the column-0 source guard but no \`fgb_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "foreground-budget-deny: FAIL (1)" >&2; exit 1; fi
+if [ "$fgb_guard" = 0 ]; then echo "   FAIL  $HOOK defines \`fgb_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run fgb_main in this shell" >&2; echo "foreground-budget-deny: FAIL (1)" >&2; exit 1; fi
+fx_inproc "$HOOK"
+. "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK failed" >&2; exit 2; }
+declare -F fgb_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no fgb_main" >&2; exit 2; }
+INF="$WORK/in"
 
 
 # The arms that own a call of their own. REASON is read off the OVER call, FAILOPEN off the
@@ -138,11 +166,17 @@ W='scripts/ai-dlc/wait-for-deliverable.sh'; S='_bmad-output/pipeline-snapshot.md
 # call <hook> <project> <budget-or-dash> <json>  -> sets RC, DEC, REASON_TXT, ERR_TXT
 call() {
   NCALL=$((NCALL+1))
-  if [ "$3" = "-" ]; then
-    printf '%s' "$4" | env -u AI_DLC_STEERING_BUDGET CLAUDE_PROJECT_DIR="$2" bash "$1" >"$OUTF" 2>"$ERRF"
-  else
-    printf '%s' "$4" | env AI_DLC_STEERING_BUDGET="$3" CLAUDE_PROJECT_DIR="$2" bash "$1" >"$OUTF" 2>"$ERRF"
-  fi
+  printf '%s' "$4" > "$INF"
+  ( if [ "$3" = "-" ]; then unset AI_DLC_STEERING_BUDGET; else export AI_DLC_STEERING_BUDGET="$3"; fi
+    export CLAUDE_PROJECT_DIR="$2"
+    if [ "$1" != "$HOOK" ]; then
+      fx_inproc "$1"
+      . "$1" || exit 97
+      fgb_main
+    else
+      fx_inproc "$1"
+      fgb_main
+    fi ) <"$INF" >"$OUTF" 2>"$ERRF"
   RC=$?
   DEC="$(jq -r '.hookSpecificOutput.permissionDecision // empty' "$OUTF" 2>/dev/null)"
   [ -n "$DEC" ] || DEC=allow
@@ -300,7 +334,8 @@ arm_PROGFAULT() {
   # PROGFAULT: a compile error injected into the jq program (a copy of THIS hook, in the push
   # regex every call evaluates) makes jq exit non-zero on `echo hi`. That is a program fault, not
   # an unparseable payload: allow, with the fail-open line on stderr.
-  local _pf="$MUT/hook-pf.sh"
+  local _pf="$MUT/core/hooks/ai-dlc-foreground-budget.sh"
+  mkdir -p "$MUT/core/hooks"
   sed 's/def pushfirst: test("/def pushfirst: test("(/' "$h" > "$_pf"
   if cmp -s "$h" "$_pf"; then note PROGFAULT; else
     call "$_pf" "$REAL" - '{"tool_name":"Bash","tool_input":{"command":"echo hi"}}'; chk_rc
@@ -312,11 +347,11 @@ arm_PROGFAULT() {
 arm_NOJQ() {
   local h="$1"
   # NOJQ: jq absent -> allow with stderr, on an over-budget call jq-present DENIES (OVER).
-  # /usr/bin/jq exists on macOS, so the hook runs under PATH=/var/empty by absolute /bin/bash.
+  # /usr/bin/jq exists on macOS, so the in-process call runs under PATH=/var/empty, where `command -v jq` finds none.
   # Fed from a file, not a pipe: this path exits without reading stdin, and under pipefail a
   # writer that loses that race reports EPIPE as the call's status.
   bash_call 600000 false > "$WORK/nojq.json"
-  env PATH=/var/empty CLAUDE_PROJECT_DIR="$REAL" /bin/bash "$h" <"$WORK/nojq.json" >"$OUTF" 2>"$ERRF"
+  ( PATH=/var/empty; export CLAUDE_PROJECT_DIR="$REAL"; fx_inproc "$HOOK"; fgb_main ) <"$WORK/nojq.json" >"$OUTF" 2>"$ERRF"
   [ "$?" -eq 0 ] || EXITBAD=1
   DEC="$(jq -r '.hookSpecificOutput.permissionDecision // empty' "$OUTF" 2>/dev/null)"
   [ -n "$DEC" ] || DEC=allow
@@ -611,12 +646,61 @@ if cmp -s "$REAL/scripts/ai-dlc/validate-steering-budget.sh" "$SHIFT/scripts/ai-
   bad "FIXTURE BROKEN: the SHIFT detector is byte-identical to the real one, so DEFAULT cannot discriminate"
 fi
 
+# --- the cli cells (cells.decl): the hook run as a PROGRAM once per distinct CLI outcome ---------------------------
+# The hook always exits 0, so the outcomes are output classes: a deny on stdout (the budget reason), silence, silence
+# with the fail-open line on stderr (no detector on disk), the printf-built parse-failure deny, and the jq-absent
+# fail-open (PATH=/var/empty, /bin/bash by absolute path). One `FXCELL=<id> bash "$HOOK"` start per outcome, each
+# compared with the in-process call on the same payload, project and environment: stdout, stderr and exit separately,
+# byte for byte. A cell also asserts its own outcome (a positive conjunct, so two runs that both printed nothing
+# cannot read as equivalent).
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <project> <budget|-> <nojq 0|1> <json> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" proj="$2" bud="$3" nojq="$4"; printf '%s' "$5" > "$EQ/$id.in"
+  ( if [ "$bud" = - ]; then unset AI_DLC_STEERING_BUDGET; else export AI_DLC_STEERING_BUDGET="$bud"; fi
+    export CLAUDE_PROJECT_DIR="$proj"; [ "$nojq" = 0 ] || PATH=/var/empty
+    fx_inproc "$HOOK"
+    fgb_main ) < "$EQ/$id.in" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  if [ "$nojq" = 0 ]; then
+    if [ "$bud" = - ]; then env -u AI_DLC_STEERING_BUDGET CLAUDE_PROJECT_DIR="$proj" FXCELL="$id" bash "$HOOK" < "$EQ/$id.in" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"
+    else env AI_DLC_STEERING_BUDGET="$bud" CLAUDE_PROJECT_DIR="$proj" FXCELL="$id" bash "$HOOK" < "$EQ/$id.in" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; fi
+  else
+    if [ "$bud" = - ]; then env -u AI_DLC_STEERING_BUDGET PATH=/var/empty CLAUDE_PROJECT_DIR="$proj" FXCELL="$id" /bin/bash "$HOOK" < "$EQ/$id.in" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"
+    else env AI_DLC_STEERING_BUDGET="$bud" PATH=/var/empty CLAUDE_PROJECT_DIR="$proj" FXCELL="$id" /bin/bash "$HOOK" < "$EQ/$id.in" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; fi
+  fi
+  echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+cellspec() { # <file> <spec>: `-` the file is empty, `~text` it contains text
+  case "$2" in
+    -)  [ ! -s "$1" ] ;;
+    ~*) grep -qF -e "${2#\~}" "$1" ;;
+    *)  return 1 ;;
+  esac
+}
+cell() { # <id> <stdout spec> <stderr spec> <why> <eqv args...>
+  local id="$1" op="$2" ep="$3" why="$4"; shift 4
+  if eqv "$id" "$@" && [ "$(cat "$EQ/$id.cl.rc")" = 0 ] && cellspec "$EQ/$id.cl.out" "$op" && cellspec "$EQ/$id.cl.err" "$ep"; then
+    ok "$id: $why: the program answers exactly as the in-process call does (stdout, stderr, exit 0)"
+  else bad "$id: $why: the program and the in-process call differ, or the outcome is not the expected class ($(eq_twin "$id"))"; fi
+}
+echo "== cli cells"
+cell cli-deny '~"permissionDecision": "deny"' - "a foreground call over the budget is denied" "$REAL" - 0 "$(bash_call 600000 false)"
+cell cli-allow - - "a call run in the background is allowed in silence" "$REAL" - 0 "$(bash_call 600000 true)"
+cell cli-failopen - '~fail-open' "no detector and no override: allowed, with the fail-open line" "$NONE" - 0 "$(bash_call 600000 false)"
+cell cli-parsefail '~could not be parsed as JSON' - "a payload that does not parse is denied by the printf-built reason" "$REAL" - 0 '{"tool_name":"Bash","tool_input":{"command":"x","timeout":600000'
+cell cli-nojq - '~jq not found' "jq absent: allowed, with the fail-open line" "$REAL" - 1 "$(bash_call 600000 false)"
+if ! cmp -s "$EQ/cli-deny.cl.out" "$EQ/cli-allow.cl.out"; then
+  ok "cli cells discriminate: the denying and the allowing call give different stdout"
+else bad "cli cells do not discriminate: cli-deny and cli-allow gave the same stdout"; fi
+
 printf '  hook invocations  %s\n' "$NCALL"
 
 # Clean up by name: the seed's files and directories, never a recursive delete of a variable.
-rm -f "$OUTF" "$ERRF" "$WORK/env.sh" "$WORK/nojq.json" "$MUT"/hook-*.sh \
+rm -f "$OUTF" "$ERRF" "$INF" "$EQ"/cli-* "$WORK/env.sh" "$WORK/nojq.json" "$MUT/core/hooks/ai-dlc-foreground-budget.sh" \
       "$REAL/scripts/ai-dlc/validate-steering-budget.sh" "$SHIFT/scripts/ai-dlc/validate-steering-budget.sh"
-rmdir "$REAL/scripts/ai-dlc" "$REAL/scripts" "$REAL" "$SHIFT/scripts/ai-dlc" "$SHIFT/scripts" "$SHIFT" \
+rmdir "$MUT/core/hooks" "$MUT/core" "$EQ" "$REAL/scripts/ai-dlc" "$REAL/scripts" "$REAL" "$SHIFT/scripts/ai-dlc" "$SHIFT/scripts" "$SHIFT" \
       "$NONE" "$MUT" "$WORK" 2>/dev/null
 
 echo

@@ -1,0 +1,7 @@
+# preclassify-mode-bucket's starts of core/skills/ai-dlc-update/reconcile/preclassify.sh (BL-879 grammar). Every other
+# drive is in process: run.sh sources the subject once and calls prec_main in a subshell. One cli cell per distinct CLI
+# outcome (exit 0 with the default mode's rows, exit 0 with --untangle's rows, exit 2 with the refusal line), each
+# started as FXCELL=<id> bash "$PCS" in eqv() and compared byte for byte with the in-process call on the same input.
+cli core/skills/ai-dlc-update/reconcile/preclassify.sh cli-rows
+cli core/skills/ai-dlc-update/reconcile/preclassify.sh cli-untangle
+cli core/skills/ai-dlc-update/reconcile/preclassify.sh cli-refuse

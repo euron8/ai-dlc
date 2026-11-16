@@ -13,7 +13,7 @@ core/skills/ai-dlc-update/reconcile/setup-sites.md
 core/fixtures/lib/preamble.sh
 core/skills/ai-dlc-update/SKILL.md
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
-core/skills/ai-dlc-update/reconcile/self-update-push.sh
+!core/skills/ai-dlc-update/reconcile/self-update-push.sh
 core/skills/ai-dlc-update/reconcile/apply.sh
 core/skills/ai-dlc-update/reconcile/derivation-differential.sh
 core/skills/ai-dlc-update/reconcile/emit-report.sh
@@ -23,3 +23,4 @@ core/skills/ai-dlc-update/reconcile/settings-merge.sh
 core/skills/ai-dlc-update/reconcile/template-sites.md
 core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
+core/fixtures/lib/mutant.sh

@@ -1,0 +1,15 @@
+# retro-audit-scans' starts of its two subjects (BL-879 grammar). Every other drive is in process: run.sh sources the audit
+# and the manifest scan once each (arf_main, vgm_main) and calls them through call() in a subshell. One cli cell per
+# distinct CLI outcome, each started as FXCELL=<id> bash <subject> in eqv() and compared byte for byte with the in-process
+# call on the same world. The audit: exit 0 clean report, exit 1 finding report, exit 0 corpus listing, exit 2 usage
+# line, exit 2 resolver refusal (a scratch copy under core/scripts/ whose core-paths.sh fails). The manifest scan: exit 0
+# resolved, exit 1 MISSING, exit 2 unreadable file, exit 2 no gate-validation.md under the root.
+cli core/scripts/audit-rule-files.sh cli-clean
+cli core/scripts/audit-rule-files.sh cli-findings
+cli core/scripts/audit-rule-files.sh cli-list
+cli core/scripts/audit-rule-files.sh cli-usage
+cli core/scripts/audit-rule-files.sh cli-resolver
+cli core/scripts/validate-gate-manifest.sh cli-resolve
+cli core/scripts/validate-gate-manifest.sh cli-missing
+cli core/scripts/validate-gate-manifest.sh cli-unreadable
+cli core/scripts/validate-gate-manifest.sh cli-noarg

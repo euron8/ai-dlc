@@ -18,3 +18,4 @@ tail
 tr
 od
 mv
+cmp

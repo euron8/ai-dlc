@@ -9,3 +9,4 @@
 !core/scripts/validate-gate-adjudication.sh
 !core/scripts/validate-adversarial-convergence.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh

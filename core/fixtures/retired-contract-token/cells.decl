@@ -1,0 +1,7 @@
+# retired-contract-token's starts of core/skills/ai-dlc-update/reconcile/retired-tokens.sh (BL-879 grammar). Every other
+# drive is in process: run.sh sources the detector once and calls rt_main in a subshell. One cli cell per distinct CLI
+# outcome (exit 0 with rows, exit 0 with the denominator NOTE, exit 2 refusal), each started as FXCELL=<id> bash "$DETECT"
+# in eqv() and compared byte for byte with the in-process call on the same world.
+cli core/skills/ai-dlc-update/reconcile/retired-tokens.sh cli-rows
+cli core/skills/ai-dlc-update/reconcile/retired-tokens.sh cli-note
+cli core/skills/ai-dlc-update/reconcile/retired-tokens.sh cli-refuse

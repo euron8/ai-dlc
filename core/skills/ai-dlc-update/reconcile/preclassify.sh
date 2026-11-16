@@ -43,6 +43,7 @@
 #   UPSTREAM-DELETED                      consumer copy untouched vs base -> delete (gated in step 7)
 #   UPSTREAM-DELETED-NOOP                 consumer already lacks it -> noop
 #   UPSTREAM-DELETED+consumer-modified->CLASSIFY   consumer changed it -> semantic classify (treat as conflict)
+prec_main() {
 set -u
 # GLOBBING IS OFF FOR THE WHOLE RUN. No word list here relies on pathname expansion, and an
 # unquoted expansion that met a consumer-authored `*` would resolve against the cwd, a read no key
@@ -58,7 +59,7 @@ MODE="${5:-}"
 # every path MISSING.
 # `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
 # `/x.sh` is `/`, which is what `dirname` answered.
-case "$0" in */*) _pc_d0="${0%/*}"; _pc_d0="${_pc_d0:-/}" ;; *) _pc_d0=. ;; esac
+case "${BASH_SOURCE[0]}" in */*) _pc_d0="${BASH_SOURCE[0]%/*}"; _pc_d0="${_pc_d0:-/}" ;; *) _pc_d0=. ;; esac
 SELF="$(cd "$_pc_d0" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "preclassify: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 . "$SELF/lib.sh" 2>/dev/null || true
@@ -216,7 +217,7 @@ opted_out() { # opted_out <consumer-path> -> 0 if this file must be skipped
 # other status here uses (1-3, 125, 127 and 128 are taken). An EMPTY set from a readable manifest
 # is an answer, and returns 0 under `pipefail` too.
 setup_sited_paths() { # -> one core-relative setup-sited path per line; 4 = the manifest could not be read
-  _ssp_mm="$(dirname "$0")/setup-sites.md"
+  _ssp_mm="$(dirname "${BASH_SOURCE[0]:-$0}")/setup-sites.md"
   [ -f "$_ssp_mm" ] || return 4
   _ssp_out="$(awk '/^[ \t]*file:[ \t]*core\//{sub(/^[ \t]*file:[ \t]*/,""); print}' "$_ssp_mm")" || return 4
   [ -n "$_ssp_out" ] || return 0
@@ -945,3 +946,6 @@ for _pc_reloc in '.claude/fixtures|fixtures' '.claude/ci-templates|ci-templates'
     printf '%s\t%s\t%s\t%s\n' "O" "$core_path" "$cons_rel" "$bucket -> now at $new_path"
   done < "$PC_STAGE/orphan-sorted"
 done
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+prec_main "$@"

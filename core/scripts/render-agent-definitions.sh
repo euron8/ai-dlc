@@ -73,6 +73,7 @@
 # two codes differently, and none of them re-derives the applicability test.
 #
 # --check NEVER WRITES, so it is safe to call from a gate.
+rad_main() {
 set -uo pipefail
 
 MODE="write"
@@ -101,14 +102,14 @@ done
 # beside it in this repository; a consumer worktree has no VERSION and would resolve to
 # whatever lies further up, or to nothing.
 if [ -z "$PROJECT_ROOT" ]; then
-  _d="$(cd "$(dirname "$0")" && pwd)"
+  _d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   while [ "$_d" != "/" ]; do
     if [ -e "$_d/.git" ] || [ -f "$_d/VERSION" ]; then PROJECT_ROOT="$_d"; break; fi
     _d="$(dirname "$_d")"
   done
 fi
 if [ -z "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT" ]; then
-  echo "render-agent-definitions.sh: could not resolve a project root (no .git or VERSION above $(dirname "$0"))" >&2
+  echo "render-agent-definitions.sh: could not resolve a project root (no .git or VERSION above $(dirname "${BASH_SOURCE[0]}"))" >&2
   exit 2
 fi
 
@@ -327,3 +328,6 @@ echo "  .claude/agents/: $rendered definition(s) written, $skipped_nomodel model
 [ -n "${stale// /}" ] && echo "  removed stale generated definition(s) for role(s) no longer in aiDlcRoles:${stale}"
 # rc is 1 here only when a model key resolved to nothing, which the stderr line above named.
 exit "$rc"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rad_main "$@"

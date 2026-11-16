@@ -143,9 +143,10 @@
 # AN UNRECORDABLE VERDICT IS UNDECIDED. If the directory or the file cannot be created, the row
 # says so: an autonomous write whose decision left no artifact is the defect this record exists
 # for, and reporting OK anyway would ship exactly that.
+sug_main() {
 set -uo pipefail
 
-SELF_SRC="$0"
+SELF_SRC="${BASH_SOURCE[0]}"
 
 # ONE LOADER FOR THE TWO FUNCTIONS THIS GATE BORROWS FROM `preclassify.sh`, because two callers now
 # need them: arm C below, and the `--safe-stop` walk, which runs BEFORE arm C is reached and has to
@@ -153,7 +154,8 @@ SELF_SRC="$0"
 # the walk would be a second grammar for one join, and the two drift with nothing comparing them.
 # The reasoning for the `eval` of the function's own text lives at arm C, where it was first made.
 gate_load_preclassify() { # gate_load_preclassify <preclassify.sh> -> defines machinery_paths, map_consumer
-  eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$1" 2>/dev/null)"
+  GATE_PRE_SRC="$1"
+  eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$1" 2>/dev/null | awk '{ gsub(/"\$0"/, "\"$GATE_PRE_SRC\""); print }')"
   eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$1" 2>/dev/null)"
 }
 
@@ -1804,3 +1806,6 @@ if [ "$deferred" -ne 0 ]; then
   advise_safe_stop
 fi
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+sug_main "$@"

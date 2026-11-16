@@ -1,0 +1,13 @@
+# self-update-join-gate's starts of core/skills/ai-dlc-update/reconcile/self-update-gate.sh (BL-879 grammar). Every other drive is in process: run.sh sources the gate
+# once and calls sug_main in a subshell. One cli cell per distinct CLI outcome (an OK row, a DEFER row, an UNDECIDED row,
+# the usage refusal at exit 2), each started as FXCELL=<id> bash "$GATE" in eqv() and compared byte for byte with the
+# in-process call on the same input.
+cli core/skills/ai-dlc-update/reconcile/self-update-gate.sh cli-ok
+cli core/skills/ai-dlc-update/reconcile/self-update-gate.sh cli-defer
+cli core/skills/ai-dlc-update/reconcile/self-update-gate.sh cli-undecided
+cli core/skills/ai-dlc-update/reconcile/self-update-gate.sh cli-usage
+# r_old is the run whose SAFE-STOP walk is real. The walk starts the gate again as a child process per release candidate
+# (`bash "$SELF_SRC"`), which cannot happen inside a subshell, so this one run is a program and its children are covered
+# by the nested row below.
+e2e core/skills/ai-dlc-update/reconcile/self-update-gate.sh r-old why=the unflagged run: its real SAFE-STOP walk starts the gate as child processes, which a subshell cannot do
+nested core/skills/ai-dlc-update/reconcile/self-update-gate.sh core/skills/ai-dlc-update/reconcile/self-update-gate.sh why=the walk's --safe-stop start and one nested classify start per release candidate, both children of r-old

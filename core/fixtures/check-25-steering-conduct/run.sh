@@ -41,11 +41,39 @@ trap 'rm -rf "$ROOT"' EXIT
 # drives this file, so this is the point the declaration is consumed.
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd -P)/$(basename "$VALIDATOR")"
 
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$DIR/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $DIR" >&2; exit 2; }
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# IN PROCESS (BL-878). The validator is SOURCED once (its column-0 guard returns after defining sb_main) and every
+# drive below calls sb_main through sbv in a subshell, so the validator's own `exit`, `set -u` and its variables
+# (it assigns DIR, TRANSCRIPT, COUNT) stay in that subshell and never reach this shell.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped validator, and
+# sourcing a pre-wrap one would run its argument loop and `exit` in this shell. So the shape is checked first, on its
+# two halves: neither the `sb_main() {` line nor the column-0 source guard is a subject that predates the wrap, which
+# prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled subject this fixture can no longer drive,
+# which FAILS. An unreadable subject is FIXTURE ERROR.
+sb_def=0; sb_guard=0
+grep -q '^sb_main() {$' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || sb_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || sb_guard=1
+if [ "$sb_def$sb_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$sb_def" = 0 ]; then echo "FAIL: $VALIDATOR carries the column-0 source guard but no \`sb_main() {\` line -- a respelled subject this fixture cannot drive"; exit 1; fi
+if [ "$sb_guard" = 0 ]; then echo "FAIL: $VALIDATOR defines \`sb_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run sb_main in this shell"; exit 1; fi
+fx_inproc "$VALIDATOR"
+. "$VALIDATOR" || { echo "FIXTURE BROKEN: sourcing $VALIDATOR failed" >&2; exit 2; }
+declare -F sb_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined no sb_main" >&2; exit 2; }
+sbv() { fx_inproc "$VALIDATOR"; ( sb_main "$@" ); }
+
 FAILURES=0
 
 expect_count() { # $1 case-dir  $2 expected count  $3 why  [$4 a count already read from one run]
   local got
-  got="${4-$(bash "$VALIDATOR" --transcript "$ROOT/$1/session.jsonl" --count 2>/dev/null)}"
+  got="${4-$(sbv --transcript "$ROOT/$1/session.jsonl" --count 2>/dev/null)}"
   if [ "$got" != "$2" ]; then
     echo "FAIL [$1]: --count returned '$got', expected '$2' -- $3"
     FAILURES=$((FAILURES + 1))
@@ -55,7 +83,7 @@ expect_count() { # $1 case-dir  $2 expected count  $3 why  [$4 a count already r
 }
 
 expect_status() { # $1 case-dir  $2 expected exit  $3 why
-  bash "$VALIDATOR" --transcript "$ROOT/$1/session.jsonl" --quiet >/dev/null 2>&1
+  sbv --transcript "$ROOT/$1/session.jsonl" --quiet >/dev/null 2>&1
   local rc=$?
   if [ "$rc" != "$2" ]; then
     echo "FAIL [$1]: exit $rc, expected $2 -- $3"
@@ -69,7 +97,7 @@ expect_status() { # $1 case-dir  $2 expected exit  $3 why
 # were two identical invocations of the same command on the same transcript, the contract arm
 # merely adding the exit status. `rc=$?` is appended inside the substitution so the status
 # survives, which is the only thing the second run bought.
-raw="$(bash "$VALIDATOR" --transcript "$ROOT/starves/session.jsonl" --count 2>/dev/null; echo "rc=$?")"
+raw="$(sbv --transcript "$ROOT/starves/session.jsonl" --count 2>/dev/null; echo "rc=$?")"
 rawcount="${raw%%rc=*}"; rawcount="${rawcount%$'\n'}"
 expect_count starves      1 "an unbounded foreground poll loop is one Check A starvation" "$rawcount"
 expect_count clean        0 "a bounded beat through wait-for-deliverable.sh starves nobody"
@@ -136,8 +164,8 @@ bad_() { echo "FAIL [$1]: $2"; FAILURES=$((FAILURES + 1)); }
 has()  { case "$2" in *"$1"*) return 0 ;; *) return 1 ;; esac; }
 
 # --- id-transcript: --transcript names the file it actually read -------------
-OA="$(bash "$VALIDATOR" --transcript "$CORPA/alpha-session.jsonl" 2>&1)"; ra=$?
-OB="$(bash "$VALIDATOR" --transcript "$CORPB/alpha-session.jsonl" 2>&1)"; rb=$?
+OA="$(sbv --transcript "$CORPA/alpha-session.jsonl" 2>&1)"; ra=$?
+OB="$(sbv --transcript "$CORPB/alpha-session.jsonl" 2>&1)"; rb=$?
 if [ "$ra" != 0 ] || [ "$rb" != 0 ]; then
   bad_ id-transcript "the clean corpus must exit 0 on both sides; got $ra/$rb -- the run did not complete"
 elif ! has "$CORPA/alpha-session.jsonl" "$OA" || ! has "$CORPB/alpha-session.jsonl" "$OB"; then
@@ -151,8 +179,8 @@ else
 fi
 
 # --- id-dir: --dir names every member it actually read -----------------------
-OC="$(bash "$VALIDATOR" --dir "$CORPA" 2>&1)"; rc1=$?
-OD="$(bash "$VALIDATOR" --dir "$CORPB" 2>&1)"; rd1=$?
+OC="$(sbv --dir "$CORPA" 2>&1)"; rc1=$?
+OD="$(sbv --dir "$CORPB" 2>&1)"; rd1=$?
 if [ "$rc1" != 0 ] || [ "$rd1" != 0 ]; then
   bad_ id-dir "the clean corpus must exit 0 on both sides; got $rc1/$rd1 -- the run did not complete"
 elif ! has "$CORPA/alpha-session.jsonl" "$OC" || ! has "$CORPA/bravo-session.jsonl" "$OC"; then
@@ -184,8 +212,8 @@ fi
 # across the two corpora BY CONSTRUCTION -- the timestamps match -- so the
 # discrimination has to come from the diagnostic on stderr, and these arms
 # capture both streams.
-OE="$(bash "$VALIDATOR" --dir "$CORPA" --cite "$CITE_PHRASE" 2>&1)"; re1=$?
-OF="$(bash "$VALIDATOR" --dir "$CORPB" --cite "$CITE_PHRASE" 2>&1)"; rf1=$?
+OE="$(sbv --dir "$CORPA" --cite "$CITE_PHRASE" 2>&1)"; re1=$?
+OF="$(sbv --dir "$CORPB" --cite "$CITE_PHRASE" 2>&1)"; rf1=$?
 if [ "$re1" != 0 ] || [ "$rf1" != 0 ]; then
   bad_ id-cite-match "a genuine operator message must MATCH and exit 0; got $re1/$rf1"
 elif ! has "MATCH 2026-07-13T12:05:00.000Z" "$OE" || ! has "MATCH 2026-07-13T12:05:00.000Z" "$OF"; then
@@ -201,8 +229,8 @@ else
 fi
 
 # --- id-cite-nomatch: the no-match diagnostic names its corpus ---------------
-OG="$(bash "$VALIDATOR" --dir "$CORPA" --cite "$NO_SUCH" 2>&1)"; rg1=$?
-OH="$(bash "$VALIDATOR" --dir "$CORPB" --cite "$NO_SUCH" 2>&1)"; rh1=$?
+OG="$(sbv --dir "$CORPA" --cite "$NO_SUCH" 2>&1)"; rg1=$?
+OH="$(sbv --dir "$CORPB" --cite "$NO_SUCH" 2>&1)"; rh1=$?
 if [ "$rg1" != 2 ] || [ "$rh1" != 2 ]; then
   bad_ id-cite-nomatch "an uncited phrase must exit 2; got $rg1/$rh1"
 elif ! has "no genuine operator message carried it" "$OG"; then
@@ -220,8 +248,8 @@ fi
 # --- id-cite-zero: the zero-parseable-records diagnostic names its corpus ----
 # The third --cite site, and the one a differential found rather than a reading:
 # two of three were patched and the corpora were still indistinguishable here.
-OI="$(bash "$VALIDATOR" --dir "$CORPA/zero" --cite "$NO_SUCH" 2>&1)"; ri1=$?
-OJ="$(bash "$VALIDATOR" --dir "$CORPB/zero" --cite "$NO_SUCH" 2>&1)"; rj1=$?
+OI="$(sbv --dir "$CORPA/zero" --cite "$NO_SUCH" 2>&1)"; ri1=$?
+OJ="$(sbv --dir "$CORPB/zero" --cite "$NO_SUCH" 2>&1)"; rj1=$?
 if [ "$ri1" != 2 ] || [ "$rj1" != 2 ]; then
   bad_ id-cite-zero "an unparseable corpus must exit 2; got $ri1/$rj1 -- the seed did not reach the branch"
 elif ! has "NOMATCH (0 records across 1 transcript(s)" "$OI"; then
@@ -239,8 +267,8 @@ fi
 # directly). It is the one output path that must stay identity-free, so this arm
 # asserts the two corpora are INDISTINGUISHABLE here -- the inverse of every arm
 # above -- with the expected integer as its positive conjunct.
-CA="$(bash "$VALIDATOR" --dir "$CORPA" --count 2>/dev/null)"; rca=$?
-CB="$(bash "$VALIDATOR" --dir "$CORPB" --count 2>/dev/null)"
+CA="$(sbv --dir "$CORPA" --count 2>/dev/null)"; rca=$?
+CB="$(sbv --dir "$CORPB" --count 2>/dev/null)"
 if [ "$rca" = 0 ] && [ "$CA" = "0" ] && [ "$CB" = "0" ]; then
   ok_ count-carries-no-identity "--count is still a bare integer on both corpora and carries no path"
 else
@@ -252,7 +280,7 @@ fi
 # FAIL diagnostics are console.error and are NOT suppressed, so the positive
 # conjunct is that the STARVATION row is still there.
 # ONE run, the two streams kept apart: stdout in QO, stderr in a file read back as QE.
-QO="$(bash "$VALIDATOR" --transcript "$ROOT/starves/session.jsonl" --quiet 2>"$ROOT/quiet.err")"; qrc=$?
+QO="$(sbv --transcript "$ROOT/starves/session.jsonl" --quiet 2>"$ROOT/quiet.err")"; qrc=$?
 QE="$(cat "$ROOT/quiet.err")"
 if [ "$qrc" != 1 ]; then
   bad_ quiet-suppresses-identity "the starving session must still exit 1 under --quiet; got $qrc"
@@ -272,8 +300,8 @@ fi
 # original defect, surviving in the case where a wrong corpus is MOST likely:
 # a mis-derived project slug resolves to a directory that exists and holds no
 # transcripts. The `(none)` branch has to name the SOURCE.
-OM="$(bash "$VALIDATOR" --dir "$CORPA/none" 2>&1)"; rm1=$?
-ON="$(bash "$VALIDATOR" --dir "$CORPB/none" 2>&1)"
+OM="$(sbv --dir "$CORPA/none" 2>&1)"; rm1=$?
+ON="$(sbv --dir "$CORPB/none" 2>&1)"
 if [ "$rm1" != 0 ]; then
   bad_ dir-empty-identity "an empty corpus must exit 0; got $rm1"
 elif ! has "transcripts scanned : 0" "$OM"; then
@@ -295,8 +323,8 @@ fi
 # branch runs, so the audit the retro records cannot say which project directory
 # it was pointed at. Same owner as the arm above; one fix closes both.
 SINCE_CUT="2026-01-01T00:00:00Z"
-OP="$(bash "$VALIDATOR" --dir "$CORPA/old" --since "$SINCE_CUT" 2>&1)"; rp1=$?
-OQ="$(bash "$VALIDATOR" --dir "$CORPB/old" --since "$SINCE_CUT" 2>&1)"
+OP="$(sbv --dir "$CORPA/old" --since "$SINCE_CUT" 2>&1)"; rp1=$?
+OQ="$(sbv --dir "$CORPB/old" --since "$SINCE_CUT" 2>&1)"
 if [ "$rp1" != 0 ]; then
   bad_ dir-since-excluded-identity "a fully-excluded corpus must exit 0; got $rp1"
 elif ! grep -qxF "transcripts scanned : 0 (2 excluded: mtime before $SINCE_CUT)" <<<"$OP"; then
@@ -374,36 +402,36 @@ AUTH_TS_OFFSET="2026-07-02T07:37:00-07:00"
 
 # rc AND stdout from one invocation. `cmd | grep` takes grep's status, and --cite exits 2 on
 # NOMATCH, so the two have to be captured together.
-acite() { # acite <validator> <quote> [<authorized-at>] -> prints "<verdict>/<rc>"
-  local v="$1" q="$2" at="${3:-}" o r
+acite() { # acite <quote> [<authorized-at>] -> prints "<verdict>/<rc>"
+  local q="$1" at="${2:-}" o r
   if [ -n "$at" ]; then
-    o="$(bash "$v" --dir "$AWORK/corpus" --cite "$q" --authorized-at "$at" --quiet 2>/dev/null)"; r=$?
+    o="$(sbv --dir "$AWORK/corpus" --cite "$q" --authorized-at "$at" --quiet 2>/dev/null)"; r=$?
   else
-    o="$(bash "$v" --dir "$AWORK/corpus" --cite "$q" --quiet 2>/dev/null)"; r=$?
+    o="$(sbv --dir "$AWORK/corpus" --cite "$q" --quiet 2>/dev/null)"; r=$?
   fi
   printf '%s/%s' "${o:-EMPTY}" "$r"
 }
-acount() { bash "$1" --transcript "$2" --count 2>/dev/null; }
+acount() { sbv --transcript "$1" --count 2>/dev/null; }
 
 w() { # w <name> <got> <want> <why>
   if [ "$2" = "$3" ]; then ok_ "$1" "$4"; else bad_ "$1" "got '$2', want '$3' -- $4"; fi
 }
 
 # --- W1: the two-file corpus, bounded, with a ROUNDED authorization timestamp --
-w two-file-rounded "$(acite "$VALIDATOR" "$CITE_AUTH" "$AUTH_TS")" "MATCH 2026-07-02T14:37:41Z/0" \
+w two-file-rounded "$(acite "$CITE_AUTH" "$AUTH_TS")" "MATCH 2026-07-02T14:37:41Z/0" \
   "a genuine turn 41s after a minute-rounded authorization time still verifies, and it is in the corpus's SECOND file"
 
 # --- W2: the same corpus, a phrase said a WEEK from the cited moment ----------
 # ONE run feeds this arm and the diagnostic arm (W2d) below: the same command and arguments,
 # the diagnostic arm having only wanted stderr as well. stdout -> W2O, stderr -> a file.
-W2O="$(bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>"$AWORK/w2.err")"; W2RC=$?
+W2O="$(sbv --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>"$AWORK/w2.err")"; W2RC=$?
 w said-elsewhere "${W2O:-EMPTY}/$W2RC" "NOMATCH/2" \
   "words the operator really said, seven days from the moment this citation claims, do not verify it"
 
 # --- W2c: THE DISCRIMINATOR for W2. Same quote, same corpus, no bound ---------
 # Without this the NOMATCH above is indistinguishable from a corpus that does not hold the
 # words at all, which is what every pre-bound arm in this file would have reported.
-w said-elsewhere-unbounded "$(acite "$VALIDATOR" "$CITE_LATER")" "MATCH 2026-07-09T11:02:13Z/0" \
+w said-elsewhere-unbounded "$(acite "$CITE_LATER")" "MATCH 2026-07-09T11:02:13Z/0" \
   "unbounded, that same phrase verifies -- so W2's NOMATCH came from the WINDOW and not from the corpus"
 
 # --- W2d: the NOMATCH says WHICH of the two findings it is -------------------
@@ -420,11 +448,11 @@ fi
 # The entry is stamped 2026-07-02; the words were typed on 2026-06-10, three weeks BEFORE it.
 # Every other out-of-window case in this suite puts the record AFTER the bound, and a window
 # refusing only that side accepts this citation while passing every one of them.
-w said-weeks-before "$(acite "$VALIDATOR" "$CITE_OLD" "$AUTH_TS")" "NOMATCH/2" \
+w said-weeks-before "$(acite "$CITE_OLD" "$AUTH_TS")" "NOMATCH/2" \
   "a phrase the operator typed three weeks BEFORE the cited authorization does not verify it"
 
 # --- W2f: THE DISCRIMINATOR for W2e. Same quote, same corpus, no bound --------
-w said-weeks-before-unbounded "$(acite "$VALIDATOR" "$CITE_OLD")" "MATCH 2026-06-10T08:12:44Z/0" \
+w said-weeks-before-unbounded "$(acite "$CITE_OLD")" "MATCH 2026-06-10T08:12:44Z/0" \
   "unbounded, that same phrase verifies -- so W2e's NOMATCH came from the WINDOW and not from the corpus, and it came from the corpus's FIRST file"
 
 # --- W2g: a zone OFFSET is honoured, not truncated ---------------------------
@@ -432,24 +460,24 @@ w said-weeks-before-unbounded "$(acite "$VALIDATOR" "$CITE_OLD")" "MATCH 2026-06
 # as its naive part the window moves by the offset and this citation NOMATCHes; read whole it
 # is the same moment and must MATCH. The pair is W1's, one property apart -- only the spelling
 # of the timestamp differs.
-w offset-honoured "$(acite "$VALIDATOR" "$CITE_AUTH" "$AUTH_TS_OFFSET")" "MATCH 2026-07-02T14:37:41Z/0" \
+w offset-honoured "$(acite "$CITE_AUTH" "$AUTH_TS_OFFSET")" "MATCH 2026-07-02T14:37:41Z/0" \
   "an authorization time written with a -07:00 offset is the same instant as the Z form and verifies the same citation"
-w offset-still-bounds "$(acite "$VALIDATOR" "$CITE_OLD" "$AUTH_TS_OFFSET")" "NOMATCH/2" \
+w offset-still-bounds "$(acite "$CITE_OLD" "$AUTH_TS_OFFSET")" "NOMATCH/2" \
   "and it still BOUNDS -- the offset form is not a way to widen the window to everything"
 
 # --- W3: a harness injection is not an operator turn -------------------------
-w ismeta-not-citable "$(acite "$VALIDATOR" "$CITE_META")" "NOMATCH/2" \
+w ismeta-not-citable "$(acite "$CITE_META")" "NOMATCH/2" \
   "an isMeta:true record's text does not verify a citation, however operator-shaped its bytes are"
 
 # --- W3b: the ALLOW twin, ONE PROPERTY APART ---------------------------------
 # Same file, same record shape, same neighbourhood; only the isMeta key differs. Without it,
 # W3 passes identically against a predicate that rejects everything in this corpus.
-w typed-still-citable "$(acite "$VALIDATOR" "$CITE_TYPED")" "MATCH 2026-07-02T14:39:00Z/0" \
+w typed-still-citable "$(acite "$CITE_TYPED")" "MATCH 2026-07-02T14:39:00Z/0" \
   "the same record without isMeta still verifies -- W3 discriminates on the flag, not on the file"
 
 # --- W4: an unparseable bound is REFUSED, never dropped ----------------------
 # Silently ignoring it hands back a fully unbounded verify wearing a bounded one's exit code.
-W4="$(bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "yesterday afternoon" --quiet 2>&1)"; W4RC=$?
+W4="$(sbv --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "yesterday afternoon" --quiet 2>&1)"; W4RC=$?
 if [ "$W4RC" -ne 0 ] && [ "$W4RC" -ne 2 ] && has "authorized-at" "$W4"; then
   ok_ bad-bound-refused "an --authorized-at that will not parse exits ${W4RC} (neither MATCH nor NOMATCH) and names the flag"
 else
@@ -457,7 +485,7 @@ else
 fi
 
 # --- W5: the bound has no meaning without --cite -----------------------------
-bash "$VALIDATOR" --dir "$AWORK/corpus" --authorized-at "$AUTH_TS" --quiet >/dev/null 2>&1
+sbv --dir "$AWORK/corpus" --authorized-at "$AUTH_TS" --quiet >/dev/null 2>&1
 W5RC=$?
 w bound-needs-cite "$W5RC" "1" "--authorized-at outside a --cite query is refused rather than accepted and ignored"
 
@@ -474,9 +502,9 @@ cat > "$AWORK/btyped/session.jsonl" <<'JSONL'
 {"type":"user","timestamp":"2026-07-04T10:00:00Z","message":{"role":"user","content":"Your claude.ai usage limit has reset. Continue the task you were working on"}}
 {"type":"assistant","timestamp":"2026-07-04T10:00:05Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Agent","input":{"prompt":"go"}}]}}
 JSONL
-w checkb-ignores-ismeta "$(acount "$VALIDATOR" "$AWORK/bmeta/session.jsonl")" "0" \
+w checkb-ignores-ismeta "$(acount "$AWORK/bmeta/session.jsonl")" "0" \
   "a harness injection followed by an Agent dispatch is not a steamroll"
-w checkb-counts-typed "$(acount "$VALIDATOR" "$AWORK/btyped/session.jsonl")" "1" \
+w checkb-counts-typed "$(acount "$AWORK/btyped/session.jsonl")" "1" \
   "the SAME two records without isMeta still count as one -- W6 discriminates on the flag"
 
 # --- W8: A CLEAR IN A DENIED CALL CLEARED NOTHING ----------------------------
@@ -498,9 +526,9 @@ cat > "$AWORK/bclrran/session.jsonl" <<'JSONL'
 {"type":"user","timestamp":"2026-07-04T10:00:06Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"Exit code 7"}]}}
 {"type":"assistant","timestamp":"2026-07-04T10:00:10Z","message":{"content":[{"type":"tool_use","id":"t2","name":"Agent","input":{"prompt":"go"}}]}}
 JSONL
-w checkb-denied-clear-not-cleared "$(acount "$VALIDATOR" "$AWORK/bclrdeny/session.jsonl")" "1" \
+w checkb-denied-clear-not-cleared "$(acount "$AWORK/bclrdeny/session.jsonl")" "1" \
   "an rm of the pause flag inside a call a hook DENIED cleared nothing, so the Agent after it is a steamroll"
-w checkb-run-clear-cleared "$(acount "$VALIDATOR" "$AWORK/bclrran/session.jsonl")" "0" \
+w checkb-run-clear-cleared "$(acount "$AWORK/bclrran/session.jsonl")" "0" \
   "the SAME call that RAN and exited non-zero cleared the flag -- W8 discriminates on the deny, not on is_error"
 
 # --- W7: THE TOLERANCE IS A CONSTANT, AND NO ENVIRONMENT REACHES IT ------------
@@ -513,12 +541,12 @@ w checkb-run-clear-cleared "$(acount "$VALIDATOR" "$AWORK/bclrran/session.jsonl"
 #
 # THE ARM IS RUN WITH THE OLD VARIABLE SET, not with it absent: an absent variable proves only
 # that the default is 7200, which was true while the knob existed too.
-W7O="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; W7RC=$?
+W7O="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 sbv --dir "$AWORK/corpus" --cite "$CITE_LATER" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; W7RC=$?
 w tolerance-not-overridable "${W7O:-EMPTY}/$W7RC" "NOMATCH/2" \
   "a phrase said a week away still NOMATCHes with AI_DLC_CITE_AUTH_TOLERANCE_S=10^9 exported -- the window is a literal in the program"
 # The ALLOW twin, one property apart: the same environment must not break a genuine citation
 # either. Without it this arm passes against a build that refuses everything.
-W7B="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 bash "$VALIDATOR" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; W7BRC=$?
+W7B="$(AI_DLC_CITE_AUTH_TOLERANCE_S=1000000000 sbv --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "$AUTH_TS" --quiet 2>/dev/null)"; W7BRC=$?
 w tolerance-env-harmless "${W7B:-EMPTY}/$W7BRC" "MATCH 2026-07-02T14:37:41Z/0" \
   "the same environment leaves a genuine in-window citation verifying -- W7 discriminates on the window, not on the run failing"
 
@@ -561,21 +589,21 @@ cp "$DSLUG/aaaa-earlier-session.jsonl" "$DWORK/esc/.claude/projects/escape-sessi
 
 REF_CITE="FAIL: --cite requires --transcript PATH or --dir PATH"
 REF_ANY="FAIL: pass --transcript PATH or --dir PATH"
-# drive <validator> <home> <sid-or-UNSET> <args...> -> "<rc>|<stdout+stderr>"
+# drive <home> <sid-or-UNSET> <args...> -> "<rc>|<stdout+stderr>"
 drive() {
-  local v="$1" h="$2" sid="$3" o r; shift 3
+  local h="$1" sid="$2" o r; shift 2
   if [ "$sid" = "UNSET" ]; then
-    o="$(env -u CLAUDE_CODE_SESSION_ID HOME="$h" bash "$v" "$@" 2>&1)"; r=$?
+    o="$( ( unset CLAUDE_CODE_SESSION_ID; export HOME="$h"; fx_inproc "$VALIDATOR"; sb_main "$@" ) 2>&1)"; r=$?
   else
-    o="$(env HOME="$h" CLAUDE_CODE_SESSION_ID="$sid" bash "$v" "$@" 2>&1)"; r=$?
+    o="$( ( export HOME="$h" CLAUDE_CODE_SESSION_ID="$sid"; fx_inproc "$VALIDATOR"; sb_main "$@" ) 2>&1)"; r=$?
   fi
   printf '%s|%s' "$r" "$o"
 }
 # DREF: the unset-id reference for each refusal world, driven ONCE with the shipping program.
 # `refuse` compares each set-id run against this reference and against the literal.
-DREF0C="$(drive "$VALIDATOR" "$DH0" UNSET --cite "$DPHRASE")"; DREF0N="$(drive "$VALIDATOR" "$DH0" UNSET --count)"
-DREF2C="$(drive "$VALIDATOR" "$DH2" UNSET --cite "$DPHRASE")"; DREF2N="$(drive "$VALIDATOR" "$DH2" UNSET --count)"
-DREFEC="$(drive "$VALIDATOR" "$DWORK/esc" UNSET --cite "$DPHRASE")"; DREFEN="$(drive "$VALIDATOR" "$DWORK/esc" UNSET --count)"
+DREF0C="$(drive "$DH0" UNSET --cite "$DPHRASE")"; DREF0N="$(drive "$DH0" UNSET --count)"
+DREF2C="$(drive "$DH2" UNSET --cite "$DPHRASE")"; DREF2N="$(drive "$DH2" UNSET --count)"
+DREFEC="$(drive "$DWORK/esc" UNSET --cite "$DPHRASE")"; DREFEN="$(drive "$DWORK/esc" UNSET --count)"
 # The verdict for one validator over the derivation worlds, one token per world.
 #   C  flagless --cite, single match: MATCH, and the diagnostic names the slug DIRECTORY
 #   N  flagless --count, single match: the bare integer 1 (the FILE, not the directory's 2)
@@ -584,25 +612,25 @@ DREFEC="$(drive "$VALIDATOR" "$DWORK/esc" UNSET --cite "$DPHRASE")"; DREFEN="$(d
 #   T  two matches: the same
 #   E  an id carrying ../: the same
 dvec() {
-  local v="$1" c n s z t e x y
-  c="$(drive "$v" "$DH1" "$DSID" --cite "$DPHRASE")"
+  local c n s z t e x y
+  c="$(drive "$DH1" "$DSID" --cite "$DPHRASE")"
   if [ "$c" = "0|cite: scanned 2 transcript(s) from $DSLUG
 MATCH 2026-07-13T12:05:00.000Z" ]; then c=C; else c=c; fi
-  n="$(drive "$v" "$DH1" "$DSID" --count)"
+  n="$(drive "$DH1" "$DSID" --count)"
   if [ "$n" = "0|1" ]; then
-    n="$(drive "$v" "$DH1" "$DSID")"
+    n="$(drive "$DH1" "$DSID")"
     case "$n" in *"corpus              : $DSLUG/$DSID.jsonl"*) n=N ;; *) n=n ;; esac
   else n=n; fi
-  s="$(drive "$v" "$DH1" "$DSID" --since 2020-01-01T00:00:00Z)"
+  s="$(drive "$DH1" "$DSID" --since 2020-01-01T00:00:00Z)"
   case "$s" in *"corpus              : $DSLUG
 "*) s=S ;; *) s=s ;; esac
   # refuse <home> <sid> <yc> <yn> -> R when both flagless shapes refuse exactly as an unset id
   # does. <yc>/<yn> are that unset-id reference, read ONCE per world from the shipping program
   # (see DREF above).
   refuse() {
-    x="$(drive "$v" "$1" "$2" --cite "$DPHRASE")"
+    x="$(drive "$1" "$2" --cite "$DPHRASE")"
     [ "$x" = "$3" ] && [ "$x" = "1|$REF_CITE" ] || { printf r; return; }
-    x="$(drive "$v" "$1" "$2" --count)"
+    x="$(drive "$1" "$2" --count)"
     [ "$x" = "$4" ] && [ "$x" = "1|$REF_ANY" ] || { printf r; return; }
     printf R
   }
@@ -610,12 +638,12 @@ MATCH 2026-07-13T12:05:00.000Z" ]; then c=C; else c=c; fi
   z="${z/R/Z}"; z="${z/r/z}"; t="${t/R/T}"; t="${t/r/t}"; e="${e/R/E}"; e="${e/r/e}"
   printf '%s%s%s%s%s%s' "$c" "$n" "$s" "$z" "$t" "$e"
 }
-DV="$(dvec "$VALIDATOR")"
+DV="$(dvec)"
 w derive-shipping "$DV" "CNSZTE" \
   "flagless --cite derives the slug DIRECTORY, --count the session FILE, --since the DIRECTORY; zero, two and a ../ id refuse byte-for-byte as an unset id does"
 # THE ESCAPE WORLD MUST BE ABLE TO MATCH, or E is a refusal for a reason that is not the guard:
 # the same file read through an explicit --dir must MATCH the phrase.
-w derive-escape-reachable "$(drive "$VALIDATOR" "$DWORK/esc" UNSET --dir "$DWORK/esc/.claude/projects" --cite "$DPHRASE" | sed -n '$p')" \
+w derive-escape-reachable "$(drive "$DWORK/esc" UNSET --dir "$DWORK/esc/.claude/projects" --cite "$DPHRASE" | sed -n '$p')" \
   "MATCH 2026-07-13T12:05:00.000Z" "the ../ world's file carries the phrase, so E refuses because of the id guard and not an empty world"
 
 # ===========================================================================
@@ -647,9 +675,9 @@ echo "  -- AskUserQuestion siblings --"
 # sibling case has no operator turn, wait run or TaskOutput, so the count IS the starvation
 # count. `0` still needs a positive witness -- the report's last line, `PASS  (D)` -- so a
 # program that emitted nothing reads EMPTY and matches no expected token.
-sib() { # sib <validator> <case> -> "<count>/<yes|no>"
+sib() { # sib <case> -> "<count>/<yes|no>"
   local c o st=no
-  o="$(bash "$1" --transcript "$ROOT/$2/session.jsonl" 2>&1)"
+  o="$(sbv --transcript "$ROOT/$1/session.jsonl" 2>&1)"
   case "$o" in
     *"FAIL (A -- STARVATION): "*) st=yes; c="${o#*FAIL (A -- STARVATION): }"; c="${c%% *}" ;;
     *"PASS  (D)"*) c=0 ;;
@@ -657,21 +685,21 @@ sib() { # sib <validator> <case> -> "<count>/<yes|no>"
   esac
   printf '%s/%s' "$c" "$st"
 }
-w sib-a-same-message-acquitted "$(sib "$VALIDATOR" sib-a)" "0/no" \
+w sib-a-same-message-acquitted "$(sib sib-a)" "0/no" \
   "a Bash sharing an AskUserQuestion's message.id and ending at the answer is think-time, not starvation"
-w sib-b-other-message-charged "$(sib "$VALIDATOR" sib-b)" "1/yes" \
+w sib-b-other-message-charged "$(sib sib-b)" "1/yes" \
   "the same timing with the Bash in ANOTHER message is starvation -- the key is message.id, not proximity"
-w sib-c-past-answer-charged "$(sib "$VALIDATOR" sib-c)" "1/yes" \
+w sib-c-past-answer-charged "$(sib sib-c)" "1/yes" \
   "a same-message Bash blocking 600s past the answer is still starvation -- the exemption is bounded"
-w sib-d-no-message-id-charged "$(sib "$VALIDATOR" sib-d)" "1/yes" \
+w sib-d-no-message-id-charged "$(sib sib-d)" "1/yes" \
   "a record with no message.id joins nothing and is charged its full duration"
-w sib-e-latest-answer "$(sib "$VALIDATOR" sib-e)" "0/no" \
+w sib-e-latest-answer "$(sib sib-e)" "0/no" \
   "with two AskUserQuestions in one message the sibling is charged from the LATER answer"
-w sib-f-read-sibling-acquitted "$(sib "$VALIDATOR" sib-f)" "0/no" \
+w sib-f-read-sibling-acquitted "$(sib sib-f)" "0/no" \
   "a READ sibling ending at the answer is think-time too -- the join is not limited to Bash"
-w sib-g-sibling-written-first "$(sib "$VALIDATOR" sib-g)" "0/no" \
+w sib-g-sibling-written-first "$(sib sib-g)" "0/no" \
   "a sibling whose record precedes the AskUserQuestion's in the same message still joins"
-w sib-h-unanswered-charged "$(sib "$VALIDATOR" sib-h)" "1/yes" \
+w sib-h-unanswered-charged "$(sib sib-h)" "1/yes" \
   "an AskUserQuestion with no answer acquits nothing: its Bash sibling is charged in full"
 # ===========================================================================
 # SERVER-SIDE TOOLS. Two layers, and they cover each other on the advisor seed, which is why
@@ -683,10 +711,10 @@ w sib-h-unanswered-charged "$(sib "$VALIDATOR" sib-h)" "1/yes" \
 #   srv-search   tool_search_tool_regex, 176s, same  count 1 (a server tool is still charged)
 echo
 echo "  -- server-side tools --"
-srvc() { local c; c="$(bash "$1" --transcript "$ROOT/$2/session.jsonl" --count 2>/dev/null)"; printf '%s' "${c:-EMPTY}"; }
-w srv-advisor-exempt "$(srvc "$VALIDATOR" srv-advisor)" "0" \
+srvc() { local c; c="$(sbv --transcript "$ROOT/$1/session.jsonl" --count 2>/dev/null)"; printf '%s' "${c:-EMPTY}"; }
+w srv-advisor-exempt "$(srvc srv-advisor)" "0" \
   "an advisor call over 150s, in the shape the harness writes it, is exempt by name"
-w srv-search-charged "$(srvc "$VALIDATOR" srv-search)" "1" \
+w srv-search-charged "$(srvc srv-search)" "1" \
   "CONTROL: a non-advisor server tool over 150s is still charged -- the exemption is the name, not the shape"
 # ===========================================================================
 # PAUSE-LEGAL CALLS ARE NOT STEAMROLLS (BL-783). Check B must not score a call the pause hook
@@ -726,9 +754,9 @@ pb_beat() { printf '{"type":"assistant","timestamp":"2026-07-04T10:0%s:00Z","mes
 pb_seed wait "$pb_ai" "$(pb_beat 1)" "$(pb_beat 2)" "$(pb_beat 3)" "$(pb_beat 4)" "$(pb_edit pipeline-snapshot.md)" "$(pb_beat 5)" "$(pb_beat 6)" "$(pb_beat 7)"
 PB_CELLS="snapshot resolution archive control skillupd updater recency wait"
 # One string per program: the eight counts in PB_CELLS order, EMPTY for a copy that emitted nothing.
-pbv() { local v="$1" o="" c n; for c in $PB_CELLS; do n="$(acount "$v" "$PB/$c.jsonl")"; o="$o${n:-E}"; done; printf '%s' "$o"; }
+pbv() { local o="" c n; for c in $PB_CELLS; do n="$(acount "$PB/$c.jsonl")"; o="$o${n:-E}"; done; printf '%s' "$o"; }
 PB_WANT=00110011
-w pb-shipped "$(pbv "$VALIDATOR")" "$PB_WANT" \
+w pb-shipped "$(pbv)" "$PB_WANT" \
   "snapshot 0, nested resolution 0, archive 1, control 1, Skill(ai-dlc-update) 0, updater Edit 0, recency 1, Check C wait run across a snapshot Edit 1"
 # ===========================================================================
 # A LEAD'S Explore DISPATCH WHILE PAUSED IS NOT A STEAMROLL (BL-784). acknowledge.sh allows a lead
@@ -763,10 +791,54 @@ ex_seed gp       Agent '{"subagent_type":"general-purpose","description":"find X
 ex_seed objrole  Agent '{"subagent_type":"Explore","description":"find X","prompt":{"a":"team-roles/dev.md"}}'
 ex_seed hyphen   Agent '{"subagent_type":"Explore","description":"find X","prompt":"read team-roles/a-b.md, then find X"}'
 EX_CELLS="agent task noprompt namenull role lower team gp objrole hyphen"
-exv() { local v="$1" o="" c n; for c in $EX_CELLS; do n="$(acount "$v" "$EX/$c.jsonl")"; o="$o${n:-E}"; done; printf '%s' "$o"; }
+exv() { local o="" c n; for c in $EX_CELLS; do n="$(acount "$EX/$c.jsonl")"; o="$o${n:-E}"; done; printf '%s' "$o"; }
 EX_WANT=0001111111
-w ex-shipped "$(exv "$VALIDATOR")" "$EX_WANT" \
+w ex-shipped "$(exv)" "$EX_WANT" \
   "Explore as Agent 0, as Task 0, with no prompt 0; name:null 1, a team-roles/dev.md prompt 1, lower-case explore 1, team_name 1, general-purpose 1, an object prompt citing a role 1, team-roles/a-b.md 1"
+
+# ===========================================================================
+# THE CLI CELLS (cells.decl). The validator run as a PROGRAM once per distinct CLI outcome: exit 0 with the --count
+# integer, exit 0 with the PASS report, exit 1 with the starvation report, exit 0 MATCH, exit 2 NOMATCH and exit 1 with
+# a FAIL refusal. One `FXCELL=<id> bash "$VALIDATOR"` start per outcome, each compared with the in-process call on the
+# same input: stdout, stderr and exit separately, byte for byte. A cell also asserts its own outcome (a positive
+# conjunct, so two runs that both printed nothing cannot read as equivalent).
+echo
+echo "  -- cli cells --"
+EQ="$ROOT/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"; shift
+  sbv "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+cellspec() { # <file> <spec>: `=text` the file is exactly text, `~text` it contains text, `-` it is empty
+  case "$2" in
+    -)  [ ! -s "$1" ] ;;
+    =*) [ "$(cat "$1")" = "${2#=}" ] ;;
+    ~*) grep -qF -e "${2#\~}" "$1" ;;
+    *)  return 1 ;;
+  esac
+}
+cellok() { # <id> <want rc> <stdout spec> <stderr spec>
+  [ "$(cat "$EQ/$1.cl.rc")" = "$2" ] && cellspec "$EQ/$1.cl.out" "$3" && cellspec "$EQ/$1.cl.err" "$4"
+}
+cell() { # <id> <want rc> <stdout pattern> <stderr pattern> <why> <args...>
+  local id="$1" rc="$2" op="$3" ep="$4" why="$5"; shift 5
+  if eqv "$id" "$@" && cellok "$id" "$rc" "$op" "$ep"; then ok_ "$id" "$why: the program answers exactly as the in-process call does (stdout, stderr, exit $rc)"
+  else bad_ "$id" "$why: the program and the in-process call differ, or the outcome is not exit $rc ($(eq_twin "$id"))"; fi
+}
+cell cli-count 0 '=1' - "--count over the starving session" --transcript "$ROOT/starves/session.jsonl" --count
+cell cli-pass 0 '~PASS  (D)' - "the full report over the clean session" --transcript "$ROOT/clean/session.jsonl"
+cell cli-violation 1 '~PASS  (D)' '~FAIL (A -- STARVATION): ' "the full report over the starving session" --transcript "$ROOT/starves/session.jsonl"
+cell cli-match 0 '~MATCH 2026-07-02T14:37:41Z' '~cite: scanned' "--cite of an authorized phrase" --dir "$AWORK/corpus" --cite "$CITE_AUTH" --authorized-at "$AUTH_TS" --quiet
+cell cli-nomatch 2 '=NOMATCH' '~no genuine operator message carried it' "--cite of a phrase said weeks before the authorization" --dir "$AWORK/corpus" --cite "$CITE_OLD" --authorized-at "$AUTH_TS" --quiet
+cell cli-refuse 1 - '~FAIL: dir not readable' "--dir naming a directory that does not exist" --dir "$ROOT/no-such-dir"
+if ! cmp -s "$EQ/cli-match.cl.out" "$EQ/cli-nomatch.cl.out" && ! cmp -s "$EQ/cli-match.cl.rc" "$EQ/cli-nomatch.cl.rc" \
+   && ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-violation.cl.rc"; then
+  ok_ cli-discriminate "the passing and the refusing inputs give different stdout and exit"
+else bad_ cli-discriminate "cli-match/cli-nomatch or cli-pass/cli-violation gave the same stdout or exit"; fi
 
 if [ "$FAILURES" -eq 0 ]; then
   echo "PASS: check-25 steering-conduct fixture holds."

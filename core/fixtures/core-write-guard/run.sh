@@ -34,8 +34,33 @@ skip() { # skip <what> <why>
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
 }
 
-# raw <project_dir> <json> -> the hook's stdout (JSON on deny, empty on allow)
-raw() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null; }
+# IN PROCESS (BL-878). The hook is SOURCED once into this shell (its guard returns after defining cwg_main) and every
+# drive calls cwg_main in a subshell with the payload on stdin, so the hook's own `exit`, `set -u` and variables end
+# with that subshell. Each call is one fx_inproc pass (the inproc: row), paired on the line of the call.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped hook, and
+# sourcing a pre-wrap hook would run its body, which reads stdin, in this shell. So the shape is checked first, on its
+# two halves: neither the `cwg_main() {` line nor the column-0 source guard is a hook that predates the wrap, which
+# prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled hook this fixture can no longer drive, which
+# FAILS. A hook that cannot be read is a fixture error, not a hook that predates the wrap.
+cwg_def=0; cwg_guard=0
+grep -q '^cwg_main() {$' "$HOOK"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $HOOK (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || cwg_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $HOOK (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || cwg_guard=1
+if [ "$cwg_def$cwg_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$cwg_def" = 0 ]; then echo "   FAIL  $HOOK carries the column-0 source guard but no \`cwg_main() {\` line -- a respelled hook this fixture cannot drive" >&2; echo "core-write-guard: FAIL (1)" >&2; exit 1; fi
+if [ "$cwg_guard" = 0 ]; then echo "   FAIL  $HOOK defines \`cwg_main() {\` but carries no column-0 source guard -- a respelled hook; sourcing it would run cwg_main in this shell" >&2; echo "core-write-guard: FAIL (1)" >&2; exit 1; fi
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+. "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK failed" >&2; exit 2; }
+declare -F cwg_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no cwg_main" >&2; exit 2; }
+
+# raw <project_dir> <json> -> the hook's stdout (JSON on deny, empty on allow): one in-process call of cwg_main
+raw() { printf '%s' "$2" | ( export CLAUDE_PROJECT_DIR="$1"; fx_inproc "$HOOK"; cwg_main ) 2>/dev/null; }
 
 # decision <project_dir> <json> -> "deny" | "allow"
 decision() {
@@ -214,6 +239,37 @@ if [ "$CLAIMED" = 1 ]; then
     bad "fixture deny gave layer-routing or generic advice — a seed cannot go in overrides/"
   fi
 fi
+
+# --- the cli cells (cells.decl): the hook run as a PROGRAM once per distinct CLI outcome ----------------------------
+# Every path of the hook exits 0, so the outcomes are output classes: a deny prints the decision JSON on stdout, an
+# allow prints nothing. One `FXCELL=<id> bash "$HOOK"` start per class, each compared with the in-process call on the
+# same payload: stdout, stderr and exit separately, byte for byte. A cell also asserts its own outcome (a positive
+# conjunct, so two runs that both printed nothing cannot read as equivalent), and the two classes must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <project_dir> <json> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" proj="$2" json="$3"
+  printf '%s' "$json" | ( export CLAUDE_PROJECT_DIR="$proj"; fx_inproc "$HOOK"; cwg_main ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  printf '%s' "$json" | CLAUDE_PROJECT_DIR="$proj" FXCELL="$id" bash "$HOOK" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+# The provenance wrap on a deny mints a random nonce unless the store already holds one, and a mint the sandbox does
+# not persist would differ between the two runs of a cell. A well-formed store line is seeded so both read the same.
+mkdir -p "$CONSUMER/_bmad-output" && printf '2026-01-01T00:00:00Z 00112233445566ff\n' > "$CONSUMER/_bmad-output/.ai-dlc-context-nonce" \
+  || { echo "FIXTURE ERROR: cannot seed the provenance nonce store" >&2; exit 2; }
+echo "== cli cells"
+if eqv cli-deny "$CONSUMER" "$(mkjson Edit "$CORE" "Fixed rulebook prose.")" && [ "$(cat "$EQ/cli-deny.cl.rc")" = 0 ] \
+   && grep -q '"permissionDecision": *"deny"' "$EQ/cli-deny.cl.out" && [ ! -s "$EQ/cli-deny.cl.err" ]; then
+  ok "cli-deny: the program denies a core edit exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-deny: the program and the in-process call differ, or the outcome is not exit 0 with a deny decision ($(eq_twin cli-deny))"; fi
+if eqv cli-allow "$CONSUMER" "$(mkjson Edit "$SKILL/overrides/example-shadow.md" "Consumer-owned override body.")" \
+   && [ "$(cat "$EQ/cli-allow.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-allow.cl.out" ] && [ ! -s "$EQ/cli-allow.cl.err" ]; then
+  ok "cli-allow: the program allows an overrides/ edit exactly as the in-process call does (nothing on stdout or stderr, exit 0)"
+else bad "cli-allow: the program and the in-process call differ, or the outcome is not exit 0 with no output ($(eq_twin cli-allow))"; fi
+if ! cmp -s "$EQ/cli-deny.cl.out" "$EQ/cli-allow.cl.out"; then
+  ok "cli cells discriminate: the denied and the allowed payload give different stdout"
+else bad "cli cells do not discriminate: cli-deny and cli-allow gave the same stdout"; fi
 
 # --- Assertion 11: derivation FALLBACK — remove core-manifest.md, keep sites -
 # The hook must fall back to setup-sites.md's I5-synced core_manifest copy and still deny.

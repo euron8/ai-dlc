@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+vgm_main() {
 set -euo pipefail
 
 # validate-gate-manifest.sh — two-way resolve between the GATE_MANIFEST table and
@@ -472,3 +473,6 @@ if missing or orphan or unloadable:
     sys.exit(1)
 print("validate-gate-manifest: PASS — both directions resolve.")
 PY
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vgm_main "$@"

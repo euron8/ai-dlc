@@ -8,7 +8,11 @@
 #
 # usage:  validate-fixture-inprocess.sh [--root R]             the gate (exit 0 clean, 1 FAIL, 2 refused)
 #         validate-fixture-inprocess.sh --complete [--root R]  the gate, AND non-zero while any allowlist row remains or
-#                                                              when zero fixtures were scanned (BL-878's receipt)
+#                                                              when zero fixtures were scanned (BL-878's receipt); a
+#                                                              refusal CAUSED BY AN ABSENT OR UNOPENABLE INPUT (a sibling
+#                                                              validator, a `cli` subject) exits 9 here, the ledger's
+#                                                              could-not-measure code, and 2 in every other mode
+#                                                              (absent_refuse); every other refusal exits 2
 #         validate-fixture-inprocess.sh --derive [--root R]    write the allowlist from the tree (header + rows)
 #
 # THE GRAMMAR is the judge's own: core/fixtures/<f>/cells.decl rows `cli <subject> <cell-id>`,
@@ -98,7 +102,10 @@ JUDGE="$HERE/validate-fixture-invocations.sh"
 HYG="$HERE/validate-fixture-hygiene.sh"
 ALLOW_REL="scripts/fixture-inprocess-allowlist.txt"
 M4_REMEDY="do not list the fixture; build it in-process and declare its remaining starts in cells.decl (.claude/rules/fixture-mutants.md, the reference fixtures BL-878 names) and delete the row."
-for f in "$JUDGE" "$HYG"; do [ -f "$f" ] || { echo "validate-fixture-inprocess: REFUSED -- $f is absent" >&2; exit 2; }; done
+# absent_refuse <what>: a refusal caused by an absent or unopenable input -- exit 9 under --complete (read by
+# scripts/validate-backlog-receipts.sh's cm_reason as could-not-measure), 2 otherwise.
+absent_refuse() { echo "validate-fixture-inprocess: REFUSED -- $1" >&2; [ "$MODE" = complete ] && exit 9; exit 2; }
+for f in "$JUDGE" "$HYG"; do { [ -f "$f" ] && { : < "$f"; } 2>/dev/null; } || absent_refuse "$f is absent or unopenable"; done
 WORK="$(mktemp -d)" || { echo "validate-fixture-inprocess: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
@@ -301,6 +308,10 @@ case "$jr" in
   3) echo "validate-fixture-inprocess: REFUSED -- zero core/fixtures/*/run.sh under $ROOT" >&2; exit 2 ;;
   *) echo "validate-fixture-inprocess: REFUSED -- the static join or the B2 census could not run: $(head -c 400 "$WORK/c.join.err")" >&2; exit 2 ;;
 esac
+# The join's `A` rows: a `cli` subject absent or unopenable under the root is an absent input, never a C5 finding.
+if grep -q '^A	' "$WORK/c.join"; then
+  absent_refuse "cli subject(s) absent or unopenable: $(awk -F'\t' '$1 == "A" { printf "%s%s", s, $2; s = " " }' "$WORK/c.join")"
+fi
 if [ "$MODE" = derive ]; then
   sc="$(grep -c '^F	' "$WORK/c.join")" || sc=0
   [ "$sc" = "$(cat "$WORK/c.listed")" ] || { echo "validate-fixture-inprocess: REFUSED -- listed $(cat "$WORK/c.listed") run.sh, the join scanned $sc" >&2; exit 2; }

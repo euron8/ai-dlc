@@ -1,0 +1,11 @@
+# upstream-routing's starts of its two subjects (BL-879 grammar). Every other drive is in process: run.sh sources the
+# router and the core guard once each (upr_main, cwg_main) and calls them in a subshell. One cli cell per distinct CLI
+# outcome, each started as FXCELL=<id> bash <subject> in eqv() / eqg() and compared byte for byte with the in-process
+# call on the same input. The router: exit 0 prose report, exit 0 JSON report, exit 2 EXAMINED NOTHING refusal, exit 2
+# usage line. The guard exits 0 on every path, so its outcomes are output classes: deny JSON, nothing on stdout.
+cli core/scripts/audit-upstream-routing.sh cli-report
+cli core/scripts/audit-upstream-routing.sh cli-json
+cli core/scripts/audit-upstream-routing.sh cli-refuse
+cli core/scripts/audit-upstream-routing.sh cli-usage
+cli core/hooks/ai-dlc-core-guard.sh cli-deny
+cli core/hooks/ai-dlc-core-guard.sh cli-allow

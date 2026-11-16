@@ -76,6 +76,7 @@
 #
 # Usage: audit-upstream-routing.sh [--backlog <path>] [--json]
 # Exit:  0 = ran (with or without findings), 2 = examined nothing.
+upr_main() {
 set -uo pipefail
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -340,3 +341,6 @@ PY
 rc=$?
 [ "$rc" = 2 ] && exit 2
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+upr_main "$@"

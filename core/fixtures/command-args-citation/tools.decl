@@ -12,3 +12,5 @@ rm
 sed
 tr
 wc
+grep
+mkdir

@@ -37,11 +37,36 @@ trap 'rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED $VALIDATOR"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# IN PROCESS (BL-878). The validator is SOURCED once (its column-0 guard returns after defining sb_main) and every
+# assertion calls sb_main in a subshell, so the validator's own `exit`, `set -u` and variables stay in that subshell.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped validator, and
+# sourcing a pre-wrap one would run its argument loop and `exit` in this shell. So the shape is checked first, on its
+# two halves: neither the `sb_main() {` line nor the column-0 source guard is a subject that predates the wrap, which
+# prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled subject this fixture can no longer drive,
+# which FAILS. An unreadable subject is FIXTURE ERROR.
+sb_def=0; sb_guard=0
+grep -q '^sb_main() {$' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || sb_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || sb_guard=1
+if [ "$sb_def$sb_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$sb_def" = 0 ]; then echo "   FAIL  $VALIDATOR carries the column-0 source guard but no \`sb_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "askuserquestion-citation: FAIL (1)" >&2; exit 1; fi
+if [ "$sb_guard" = 0 ]; then echo "   FAIL  $VALIDATOR defines \`sb_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run sb_main in this shell" >&2; echo "askuserquestion-citation: FAIL (1)" >&2; exit 1; fi
+fx_inproc "$VALIDATOR"
+. "$VALIDATOR" || { echo "FIXTURE BROKEN: sourcing $VALIDATOR failed" >&2; exit 2; }
+declare -F sb_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined no sb_main" >&2; exit 2; }
 # Capture, never pipe. --cite exits 2 on NOMATCH, and under `set -o pipefail` a
 # `cite ... | grep -q NOMATCH` pipeline inherits that 2 even when grep matched — so every
 # assertion expecting NOMATCH would take its else branch and report a failure that did not
 # happen. Caught by this fixture on its first run.
-cite() { bash "$VALIDATOR" --transcript "$1" --cite "$2" 2>/dev/null || true; }
+cite() { fx_inproc "$VALIDATOR"; ( sb_main --transcript "$1" --cite "$2" ) 2>/dev/null || true; }
 
 echo "askuserquestion-citation:"
 
@@ -80,7 +105,8 @@ esac
 # The lead SOLICITED the answer, then advanced. No pause flag is set, because a tool result is
 # not a UserPromptSubmit, and no acknowledgement is owed. If AskUserQuestion answers entered
 # Check B, every checkpoint in every sprint would score as a steamroll.
-COUNT="$(bash "$VALIDATOR" --transcript "$ASK" --count 2>/dev/null)"
+fx_inproc "$VALIDATOR"
+COUNT="$( ( sb_main --transcript "$ASK" --count ) 2>/dev/null)"
 if [ "$COUNT" = "0" ]; then
   ok "Check B counts 0 on AskUserQuestion -> advance (the predicate was split, not widened)"
 else
@@ -93,38 +119,39 @@ fi
 # exit 2 unchanged so no reader is acquitted by it. Every arm asserts the stdout VALUE and the
 # exit.
 # pc <validator> <cwd> <quote> [extra args] -> "<rc> <stdout>"; the root comes from the caller.
-pc() { local v="$1" d="$2" q="$3"; shift 3; local o r
-  o="$(cd "$d" && bash "$v" --dir "$CORPUS" --cite "$q" "$@" 2>/dev/null)"; r=$?
+pc() { local d="$1" q="$2"; shift 2; local o r
+  o="$( ( fx_inproc "$VALIDATOR"; cd "$d" && sb_main --dir "$CORPUS" --cite "$q" "$@" ) 2>/dev/null)"; r=$?
   printf '%s %s' "$r" "$o"; }
 # The fixture's copy of the validator sits inside the distribution, so its own-install walk
 # resolves the REPO; the root is handed over explicitly. Arm P6 covers the walk.
-pr() { local v="$1"; shift; AI_DLC_PROJECT_ROOT="$PROJ" pc "$v" "$PROJ" "$@"; }
-p_arms() { # p_arms <validator> [letters] -> one letter per arm asked for (default ABCDE), upper case = holds
-  local v="$1" sel="${2:-ABCDE}" s=""
-  case "$sel" in *A*) [ "$(pr "$v" "$Q_PRUNED")" = "2 NOMATCH-TRANSCRIPT-PRUNED" ] && s="${s}A" || s="${s}a" ;; esac
-  case "$sel" in *B*) [ "$(pr "$v" "$Q_LIVE")" = "2 NOMATCH" ] && s="${s}B" || s="${s}b" ;; esac
-  case "$sel" in *C*) [ "$(pr "$v" "$Q_OLD" --since 2010-01-01T00:00:00Z)" = "2 NOMATCH" ] && s="${s}C" || s="${s}c" ;; esac
-  case "$sel" in *D*) [ "$(pr "$v" "$Q_ASKED")" = "2 NOMATCH" ] && s="${s}D" || s="${s}d" ;; esac
-  case "$sel" in *E*) [ "$(pr "$v" "a phrase nobody logged or typed")" = "2 NOMATCH" ] && s="${s}E" || s="${s}e" ;; esac
+pr() { AI_DLC_PROJECT_ROOT="$PROJ" pc "$PROJ" "$@"; }
+p_arms() { # p_arms [letters] -> one letter per arm asked for (default ABCDE), upper case = holds
+  local sel="${1:-ABCDE}" s=""
+  case "$sel" in *A*) [ "$(pr "$Q_PRUNED")" = "2 NOMATCH-TRANSCRIPT-PRUNED" ] && s="${s}A" || s="${s}a" ;; esac
+  case "$sel" in *B*) [ "$(pr "$Q_LIVE")" = "2 NOMATCH" ] && s="${s}B" || s="${s}b" ;; esac
+  case "$sel" in *C*) [ "$(pr "$Q_OLD" --since 2010-01-01T00:00:00Z)" = "2 NOMATCH" ] && s="${s}C" || s="${s}c" ;; esac
+  case "$sel" in *D*) [ "$(pr "$Q_ASKED")" = "2 NOMATCH" ] && s="${s}D" || s="${s}d" ;; esac
+  case "$sel" in *E*) [ "$(pr "a phrase nobody logged or typed")" = "2 NOMATCH" ] && s="${s}E" || s="${s}e" ;; esac
   printf '%s' "$s"
 }
 # P6 runs the INSTALLED copy from a subdirectory with no root in the environment, so only the
-# walk from the script's own location can find the log.
+# walk from the script's own location can find the log. The copy is a relocated copy of the subject, run as a
+# program: an untagged start, never an in-process pass.
 p_installed() { local v="$1"
   [ "$(env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR bash -c 'o="$(cd "$1" && bash "$2" --dir "$3" --cite "$4" 2>/dev/null)"; printf "%s %s" "$?" "$o"' _ "$PROJ/sub" "$v" "$CORPUS" "$Q_PRUNED")" = "2 NOMATCH-TRANSCRIPT-PRUNED" ] && printf F || printf f; }
 
 # Controls first: the corpus must be READ (a record it holds cites), and the OLD transcript
 # must really be dropped by the bound, or arm C cannot separate disk from scan list.
-R="$(AI_DLC_PROJECT_ROOT="$PROJ" pc "$VALIDATOR" "$PROJ" "an unrelated operator turn about lunch")"
+R="$(AI_DLC_PROJECT_ROOT="$PROJ" pc "$PROJ" "an unrelated operator turn about lunch")"
 case "$R" in "0 MATCH"*) ok "control: the pruned-world corpus is read (a turn it holds cites)" ;;
   *) bad "FIXTURE BROKEN: the pruned-world corpus did not cite its own turn ($R)" ;; esac
-R="$(AI_DLC_PROJECT_ROOT="$PROJ" pc "$VALIDATOR" "$PROJ" "another unrelated operator turn" --since 2010-01-01T00:00:00Z)"
+R="$(AI_DLC_PROJECT_ROOT="$PROJ" pc "$PROJ" "another unrelated operator turn" --since 2010-01-01T00:00:00Z)"
 [ "$R" = "2 NOMATCH" ] && ok "control: --since drops the OLD transcript from the scan while it stays on disk" \
   || bad "FIXTURE BROKEN: the OLD transcript was not excluded by --since ($R), so arm C tests nothing"
 
-PA="$(p_arms "$VALIDATOR")"
+PA="$(p_arms)"
 case "$PA" in A*) ok "P1: a logged answer whose session transcript is gone reads NOMATCH-TRANSCRIPT-PRUNED, exit 2" ;;
-  *) bad "P1: a pruned-session answer reads as never given ($(pr "$VALIDATOR" "$Q_PRUNED"))" ;; esac
+  *) bad "P1: a pruned-session answer reads as never given ($(pr "$Q_PRUNED"))" ;; esac
 case "$PA" in ?B*) ok "P2: a logged answer whose transcript IS on disk and refutes it stays plain NOMATCH" ;;
   *) bad "P2: the token fired for a session whose transcript is on disk" ;; esac
 case "$PA" in ??C*) ok "P3: a session merely older than --since is ON DISK and stays plain NOMATCH" ;;
@@ -140,48 +167,48 @@ case "$PA" in ????E) ok "P5: a quote no answer ever carried stays plain NOMATCH"
 # --- The --accept-captured worlds (BL-939) --------------------------------------
 # F1 is the ALLOW twin: a flagged, in-window, exact, hash-true entry whose session transcript is
 # gone. Every other cell differs from F1 by ONE property, so each denial is keyed on that property.
-# fr <validator> <world> <quote> <authorized-at> [extra args] -> "<rc> <stdout>" (stderr to $FERR).
+# fr <world> <quote> <authorized-at> [extra args] -> "<rc> <stdout>" (stderr to $FERR).
 FERR="$WORK/fr.err"
-fr() { local v="$1" w="$2" q="$3" at="$4"; shift 4; local o r
-  o="$(cd "$FW/$w/proj" && env AI_DLC_PROJECT_ROOT="$FW/$w/proj" ${FENV:-} bash "$v" --dir "$CORPUS" --cite "$q" --authorized-at "$at" "$@" 2>"$FERR")"; r=$?
+fr() { local w="$1" q="$2" at="$3"; shift 3; local o r
+  o="$( ( fx_inproc "$VALIDATOR"; cd "$FW/$w/proj" && export AI_DLC_PROJECT_ROOT="$FW/$w/proj" && { [ -z "${FENV:-}" ] || export "$FENV"; } && sb_main --dir "$CORPUS" --cite "$q" --authorized-at "$at" "$@" ) 2>"$FERR")"; r=$?
   printf '%s %s' "$r" "$o"; }
 F_OK="0 MATCH $FAUTH"; F_PR="2 NOMATCH-TRANSCRIPT-PRUNED"
-R="$(fr "$VALIDATOR" w1 "$FQ" "$FAUTH" --accept-captured)"
+R="$(fr w1 "$FQ" "$FAUTH" --accept-captured)"
 if [ "$R" = "$F_OK" ] && [ "$(grep -c '^cite: accepted under --accept-captured: captured in' "$FERR")" = 1 ] && [ "$(grep -c '^cite: scanned' "$FERR")" -ge 1 ]; then
   ok "F1: a flagged, in-window, exact, hash-true entry of a pruned session reads MATCH <ts>, exit 0, with the acceptance named on stderr beside the scan line"
 else bad "F1: the allow twin did not accept ($R) -- every denial cell below is then keyed on nothing"; fi
 fcell() { # fcell <name> <expected> <what> <fr args...>
   local n="$1" e="$2" w="$3" r; shift 3; r="$(fr "$@")"
   if [ "$r" = "$e" ]; then ok "$n: $w"; else bad "$n: $w -- got ($r), wanted ($e)"; fi; }
-fcell F2 "2 NOMATCH" "a flagged quote the log never carried stays plain NOMATCH" "$VALIDATOR" w1 "a sentence nobody captured" "$FAUTH" --accept-captured
-fcell F3 "$F_PR" "a flagged entry outside the +/-7200s window stays PRUNED" "$VALIDATOR" w3 "$FQ" "$FAUTH" --accept-captured
-fcell F4 "$F_PR" "the F1 world WITHOUT the flag stays PRUNED (acquits nothing elsewhere)" "$VALIDATOR" w1 "$FQ" "$FAUTH"
-fcell F5 "1 " "an empty --authorized-at under the flag refuses with exit 1" "$VALIDATOR" w1 "$FQ" "" --accept-captured
-fcell F6 "1 " "a date-only --authorized-at under the flag refuses with exit 1" "$VALIDATOR" w1 "$FQ" "2026-07-21" --accept-captured
-fcell F7 "$F_PR" "a needle that is a strict substring of the in-window pruned body stays PRUNED (equality, not includes)" "$VALIDATOR" w7 "$FQ" "$FAUTH" --accept-captured
-fcell F8 "$F_PR" "the same exact in-window quote also captured in a session whose transcript IS on disk stays PRUNED (the contradiction)" "$VALIDATOR" w8 "$FQ" "$FAUTH" --accept-captured
-fcell F9 "$F_PR" "an accepting entry back-dated out of header order stays PRUNED" "$VALIDATOR" w9 "$FQ" "$FAUTH" --accept-captured
-R="$(FENV=AI_DLC_ACC=1 fr "$VALIDATOR" w1 "$FQ" "$FAUTH")"
+fcell F2 "2 NOMATCH" "a flagged quote the log never carried stays plain NOMATCH" w1 "a sentence nobody captured" "$FAUTH" --accept-captured
+fcell F3 "$F_PR" "a flagged entry outside the +/-7200s window stays PRUNED" w3 "$FQ" "$FAUTH" --accept-captured
+fcell F4 "$F_PR" "the F1 world WITHOUT the flag stays PRUNED (acquits nothing elsewhere)" w1 "$FQ" "$FAUTH"
+fcell F5 "1 " "an empty --authorized-at under the flag refuses with exit 1" w1 "$FQ" "" --accept-captured
+fcell F6 "1 " "a date-only --authorized-at under the flag refuses with exit 1" w1 "$FQ" "2026-07-21" --accept-captured
+fcell F7 "$F_PR" "a needle that is a strict substring of the in-window pruned body stays PRUNED (equality, not includes)" w7 "$FQ" "$FAUTH" --accept-captured
+fcell F8 "$F_PR" "the same exact in-window quote also captured in a session whose transcript IS on disk stays PRUNED (the contradiction)" w8 "$FQ" "$FAUTH" --accept-captured
+fcell F9 "$F_PR" "an accepting entry back-dated out of header order stays PRUNED" w9 "$FQ" "$FAUTH" --accept-captured
+R="$(FENV=AI_DLC_ACC=1 fr w1 "$FQ" "$FAUTH")"
 [ "$R" = "$F_PR" ] && ok "F10: AI_DLC_ACC=1 in the environment with no argv flag stays PRUNED (argv only)" || bad "F10: the environment turned the acceptance on ($R)"
-R="$(cd "$FW/w1/proj" && AI_DLC_PROJECT_ROOT="$FW/w1/proj" bash "$VALIDATOR" --dir "$CORPUS" --accept-captured 2>/dev/null)"; r=$?
+R="$( ( fx_inproc "$VALIDATOR"; cd "$FW/w1/proj" && AI_DLC_PROJECT_ROOT="$FW/w1/proj" sb_main --dir "$CORPUS" --accept-captured ) 2>/dev/null)"; r=$?
 [ "$r" = 1 ] && [ -z "$R" ] && ok "F11: --accept-captured without --cite refuses with exit 1" || bad "F11: the flag without --cite gave rc $r ($R)"
-fcell F12 "$F_PR" "an entry whose SHA256 line was altered stays PRUNED" "$VALIDATOR" w12 "$FQ" "$FAUTH" --accept-captured
-fcell F13 "$F_OK" "an on-disk exact copy OUTSIDE the window contradicts nothing, so the in-window pruned entry is accepted" "$VALIDATOR" w13 "$FQ" "$FAUTH" --accept-captured
+fcell F12 "$F_PR" "an entry whose SHA256 line was altered stays PRUNED" w12 "$FQ" "$FAUTH" --accept-captured
+fcell F13 "$F_OK" "an on-disk exact copy OUTSIDE the window contradicts nothing, so the in-window pruned entry is accepted" w13 "$FQ" "$FAUTH" --accept-captured
 # F14-F17: --authorized-at needs a time of day, not seconds (escalations.md allows any ISO-8601 UTC
 # timestamp). F14 is the minute form graph's two real minute lines carry; F15 is the transcript
 # route at minute precision, and its stderr must NOT name the captured acceptance, or the cell
 # cannot tell which route verified; F16 is a malformed time; F17 is a zone-less minute under a
 # non-UTC TZ, which reads as UTC only if the zone-less widening reached the parser too.
-R="$(fr "$VALIDATOR" w1 "$FQ" "$FAUTH_MIN" --accept-captured)"
+R="$(fr w1 "$FQ" "$FAUTH_MIN" --accept-captured)"
 if [ "$R" = "$F_OK" ] && [ "$(grep -c '^cite: accepted under --accept-captured: captured in' "$FERR")" = 1 ]; then
   ok "F14: a minute-precision --authorized-at ($FAUTH_MIN) under the flag is accepted on the captured route, exit 0"
 else bad "F14: a minute-precision authorization was refused on the captured route ($R)"; fi
-R="$(fr "$VALIDATOR" w1 "$Q_TURN" "$TURN_MIN" --accept-captured)"
+R="$(fr w1 "$Q_TURN" "$TURN_MIN" --accept-captured)"
 if [ "$R" = "0 MATCH $TURN_TS" ] && [ "$(grep -c 'accepted under --accept-captured' "$FERR")" = 0 ]; then
   ok "F15: a minute-precision --authorized-at ($TURN_MIN) under the flag verifies on the TRANSCRIPT route (MATCH, no captured-acceptance line)"
 else bad "F15: the transcript route at minute precision gave ($R)"; fi
-fcell F16 "1 " "a malformed time of day under the flag refuses with exit 1" "$VALIDATOR" w1 "$FQ" "2026-07-21T~" --accept-captured
-R="$(FENV=TZ=America/New_York fr "$VALIDATOR" w1 "$FQ" "${FAUTH_MIN%Z}" --accept-captured)"
+fcell F16 "1 " "a malformed time of day under the flag refuses with exit 1" w1 "$FQ" "2026-07-21T~" --accept-captured
+R="$(FENV=TZ=America/New_York fr w1 "$FQ" "${FAUTH_MIN%Z}" --accept-captured)"
 [ "$R" = "$F_OK" ] && ok "F17: a zone-less minute value under TZ=America/New_York is read as UTC, so the in-window entry is accepted" \
   || bad "F17: a zone-less minute value was read in the runner's local time ($R)"
 
@@ -239,19 +266,19 @@ else echo "  note  G1-completeness: not run -- no git-readable distribution tree
 # verify against a longer answer, a longer id, the joined text of several answers, or typed prose.
 # Each refusal cell has an allow cell one property apart; each cell is one transcript, read once.
 D_OK="0 MATCH 2026-07-21T02:05:00Z"
-# dc <validator> <transcript> <quote> -> "<rc> <stdout>" for the disposition-shaped cells.
-dc() { local o r; o="$(bash "$1" --transcript "$WORK/$2" --cite "$3" 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o"; }
-d_out() { # d_out <arm> <validator>
-  local a="$1" v="$2"
+# dc <transcript> <quote> -> "<rc> <stdout>" for the disposition-shaped cells.
+dc() { local o r; o="$( ( fx_inproc "$VALIDATOR"; sb_main --transcript "$WORK/$1" --cite "$2" ) 2>/dev/null)"; r=$?; printf '%s %s' "$r" "$o"; }
+d_out() { # d_out <arm>
+  local a="$1"
   case "$a" in
-    D1) dc "$v" disp-exact.jsonl "Strike LR-S7-2" ;;
-    D2) dc "$v" disp-more.jsonl "Strike LR-S7-2" ;;
-    D3) dc "$v" disp-prefix.jsonl "Strike LR-S7-2" ;;
-    D4) dc "$v" disp-multi.jsonl "Strike LR-S7-4" ;;
-    D5) dc "$v" ask.jsonl "$SUBQ" ;;
-    D6) dc "$v" disp-typed.jsonl "Strike LR-S7-2" ;;
-    D7) dc "$v" disp-badge.jsonl "Confirm LR-S7-2" ;;
-    D8) dc "$v" disp-exact.jsonl "Strike LR-S7-2 (Recommended)" ;;
+    D1) dc disp-exact.jsonl "Strike LR-S7-2" ;;
+    D2) dc disp-more.jsonl "Strike LR-S7-2" ;;
+    D3) dc disp-prefix.jsonl "Strike LR-S7-2" ;;
+    D4) dc disp-multi.jsonl "Strike LR-S7-4" ;;
+    D5) dc ask.jsonl "$SUBQ" ;;
+    D6) dc disp-typed.jsonl "Strike LR-S7-2" ;;
+    D7) dc disp-badge.jsonl "Confirm LR-S7-2" ;;
+    D8) dc disp-exact.jsonl "Strike LR-S7-2 (Recommended)" ;;
   esac
 }
 d_holds() { # d_holds <arm> <output>: does the arm's own expectation hold on that output
@@ -262,7 +289,7 @@ d_holds() { # d_holds <arm> <output>: does the arm's own expectation hold on tha
   return 1
 }
 dcell() { # dcell <arm> <what>
-  local o; o="$(d_out "$1" "$VALIDATOR")"
+  local o; o="$(d_out "$1")"
   if d_holds "$1" "$o"; then ok "$1: $2"; else bad "$1: $2 -- got ($o)"; fi; }
 dcell D1 "a disposition quote equal to one whole AskUserQuestion answer verifies"
 dcell D2 "the same quote against the answer 'Strike LR-S7-2 but keep the index' is refused (option plus more text)"
@@ -272,6 +299,49 @@ dcell D5 "a non-disposition quote that is a substring of an answer still verifie
 dcell D6 "'Strike LR-S7-2' typed as prose, with no AskUserQuestion answer, is refused"
 dcell D7 "bare 'Confirm LR-S7-2' verifies against the answer 'Confirm LR-S7-2 (Recommended)' (badge stripped)"
 dcell D8 "badged 'Strike LR-S7-2 (Recommended)' verifies against the bare answer 'Strike LR-S7-2' (badge stripped from the quote too)"
+
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome -------------------------
+# The outcomes this fixture reaches: exit 0 MATCH, exit 2 plain NOMATCH, exit 2 NOMATCH-TRANSCRIPT-PRUNED, exit 1 with
+# nothing on stdout (a refusal) and exit 0 with the --count integer. One `FXCELL=<id> bash <validator>` start per outcome, each compared with the in-process call on the same
+# input (same cwd, same root in the environment): stdout, stderr and exit separately, byte for byte. A cell also asserts
+# its own outcome (a positive conjunct, so two runs that both printed nothing cannot read as equivalent).
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <cwd> <root|-> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" cwd="$2" root="$3"; shift 3
+  ( cd "$cwd" || exit 97
+    if [ "$root" = - ]; then unset AI_DLC_PROJECT_ROOT CLAUDE_PROJECT_DIR; else export AI_DLC_PROJECT_ROOT="$root"; fi
+    fx_inproc "$VALIDATOR"
+    sb_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$cwd" || exit 97
+    if [ "$root" = - ]; then unset AI_DLC_PROJECT_ROOT CLAUDE_PROJECT_DIR; else export AI_DLC_PROJECT_ROOT="$root"; fi
+    FXCELL="$id" bash "$VALIDATOR" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+cellok() { # <id> <want rc> <want stdout, a case pattern> <stderr substring or empty for none>
+  [ "$(cat "$EQ/$1.cl.rc")" = "$2" ] && case "$(cat "$EQ/$1.cl.out")" in $3) true ;; *) false ;; esac \
+    && { if [ -z "$4" ]; then [ ! -s "$EQ/$1.cl.err" ]; else grep -qF -e "$4" "$EQ/$1.cl.err"; fi; }
+}
+echo "== cli cells"
+if eqv cli-match "$PWD" - --transcript "$ASK" --cite "$ANSWER" && cellok cli-match 0 'MATCH\ *' "cite: scanned"; then
+  ok "cli-match: the program cites the answer exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-match: the program and the in-process call differ, or the outcome is not exit 0 with a MATCH line ($(eq_twin cli-match))"; fi
+if eqv cli-nomatch "$PWD" - --transcript "$ASK" --cite "$QUESTION" && cellok cli-nomatch 2 "NOMATCH" "no genuine operator message carried it"; then
+  ok "cli-nomatch: the program refuses the lead-authored question exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-nomatch: the program and the in-process call differ, or the outcome is not exit 2 with NOMATCH ($(eq_twin cli-nomatch))"; fi
+if eqv cli-pruned "$PROJ" "$PROJ" --dir "$CORPUS" --cite "$Q_PRUNED" && cellok cli-pruned 2 "NOMATCH-TRANSCRIPT-PRUNED" "cite: scanned"; then
+  ok "cli-pruned: the program reads a pruned-session answer exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-pruned: the program and the in-process call differ, or the outcome is not exit 2 with NOMATCH-TRANSCRIPT-PRUNED ($(eq_twin cli-pruned))"; fi
+if eqv cli-refuse "$FW/w1/proj" "$FW/w1/proj" --dir "$CORPUS" --accept-captured && cellok cli-refuse 1 "" "--accept-captured qualifies --cite"; then
+  ok "cli-refuse: the program refuses --accept-captured without --cite exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 1 with the FAIL line ($(eq_twin cli-refuse))"; fi
+if eqv cli-count "$PWD" - --transcript "$ASK" --count && cellok cli-count 0 "0" ""; then
+  ok "cli-count: the program counts 0 exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-count: the program and the in-process call differ, or the outcome is not exit 0 with the integer 0 ($(eq_twin cli-count))"; fi
+if ! cmp -s "$EQ/cli-match.cl.out" "$EQ/cli-nomatch.cl.out" && ! cmp -s "$EQ/cli-match.cl.rc" "$EQ/cli-nomatch.cl.rc"; then
+  ok "cli cells discriminate: the passing and the refusing input give different stdout and exit"
+else bad "cli cells do not discriminate: cli-match and cli-nomatch gave the same stdout or exit"; fi
 
 echo
 report_end askuserquestion-citation

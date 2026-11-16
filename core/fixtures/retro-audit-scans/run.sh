@@ -28,6 +28,63 @@ echo "HERMETIC-CONSUMED core/scripts/audit-rule-files.sh"
 echo "HERMETIC-CONSUMED core/scripts/validate-gate-manifest.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECTS. A consumer can receive this file one pull before the wrapped subjects, and
+# sourcing a pre-wrap one would run its whole body in this shell. Each subject's shape is checked first, on its two
+# halves: neither the `<p>_main() {` line nor the column-0 source guard is a subject that predates the wrap, which
+# prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled subject this fixture can no longer drive,
+# which FAILS. A subject that cannot be read is a fixture error, not one that predates the wrap.
+wrap_state() { # <file> <prefix> -> WS_STATE=none|both|def-only|guard-only
+  local d=0 g=0 x
+  grep -q "^$2_main() {\$" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  case "$d$g" in 00) WS_STATE=none ;; 11) WS_STATE=both ;; 10) WS_STATE=def-only ;; *) WS_STATE=guard-only ;; esac
+}
+wrap_state "$AUDIT" arf; ws_audit="$WS_STATE"
+wrap_state "$MANIFEST" vgm; ws_manifest="$WS_STATE"
+for _w in "$ws_audit $AUDIT arf" "$ws_manifest $MANIFEST vgm"; do
+  set -- $_w
+  case "$1" in
+    def-only)   echo "   FAIL  $2 defines \`$3_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $3_main in this shell" >&2; echo "retro-audit-scans: FAIL (1)" >&2; exit 1 ;;
+    guard-only) echo "   FAIL  $2 carries the column-0 source guard but no \`$3_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "retro-audit-scans: FAIL (1)" >&2; exit 1 ;;
+  esac
+done
+if [ "$ws_audit" = none ] || [ "$ws_manifest" = none ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+# IN PROCESS (BL-878). Both subjects are SOURCED once into this shell (their guards return after defining arf_main and
+# vgm_main) and every arm calls the function through call() in a subshell, so a subject's `exit`, `set -euo pipefail`,
+# cd and AI_DLC_* tunables end with that subshell. Each call is one fx_inproc pass (the inproc: rows), paired on its line in call().
+fx_inproc "$AUDIT"
+. "$AUDIT" || { echo "FIXTURE BROKEN: sourcing $AUDIT failed" >&2; exit 2; }
+declare -F arf_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $AUDIT defined no arf_main" >&2; exit 2; }
+fx_inproc "$MANIFEST"
+. "$MANIFEST" || { echo "FIXTURE BROKEN: sourcing $MANIFEST failed" >&2; exit 2; }
+declare -F vgm_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $MANIFEST defined no vgm_main" >&2; exit 2; }
+# call <script> [args...]: one in-process call of a subject, its stdout, stderr and status the caller's. A COPY of a
+# subject (the scratch sandboxes below, which sit under core/scripts/ so its calls are counted under the subject's
+# inproc: row) is sourced inside the subshell, so the real arf_main stays defined in this shell for the next arm.
+# The call is its own subshell, so the subject's `set -e` cannot end the caller's `echo "@@RC=$?"`.
+call() {
+  local s="$1" m; shift
+  case "${s##*/}" in
+    audit-rule-files.sh) m=arf_main ;;
+    validate-gate-manifest.sh) m=vgm_main ;;
+    *) echo "FIXTURE ERROR: call: no in-process entry for $s" >&2; return 2 ;;
+  esac
+  ( if [ "$s" = "$AUDIT" ] || [ "$s" = "$MANIFEST" ]; then
+      fx_inproc "$s"; "$m" "$@"
+    else
+      fx_inproc "$s"
+      . "$s" || exit 2
+      fx_inproc "$s"; "$m" "$@"
+    fi )
+}
 # Herestring, not a pipe: under `pipefail`, a `grep -q` that matches in the first
 # few lines exits before the writer finishes and the pipeline reports the writer's
 # SIGPIPE, so a MATCH is read as a failed assertion. Every tier-1 label prints at
@@ -55,7 +112,7 @@ memo() { # <out|rc> <dir> <script> [args...]
   key="$( { printf '%s\n' "$script|$*"; cksum < "$script"; fp "$dir"; } | cksum )"
   key="${key// /_}"
   if [ ! -f "$MEMO/$key.rc" ]; then
-    o="$( cd "$dir" && bash "$script" "$@" 2>&1; echo "@@RC=$?" )"
+    o="$( cd "$dir" && call "$script" "$@" 2>&1; echo "@@RC=$?" )"
     printf '%s' "${o%@@RC=*}" > "$MEMO/$key.out"
     printf '%s' "${o##*@@RC=}" > "$MEMO/$key.rc"
     echo x >> "$MEMO/runs"
@@ -1054,14 +1111,14 @@ fi
 # tree: the audit finds it beside itself, so a sibling copy is the only way to
 # express its absence without mutating the distribution.
 fresh
-SB="$WORK/nores"
-rm -rf "$SB"; mkdir -p "$SB"
+SB="$WORK/nores/core/scripts"
+rm -rf "$WORK/nores"; mkdir -p "$SB"
 cp "$AUDIT" "$SB/audit-rule-files.sh"
 if [ -f "$SB/core-paths.sh" ]; then
   bad "FIXTURE BROKEN — the scratch dir was seeded with a resolver, so the absent-resolver world is not the world under test"
 else
   printf 'The lead MUST retry, because we lost a sprint to this.\n' >> "$WORK/t/.claude/skills/ai-dlc/SKILL.md"
-  out_nr="$( cd "$WORK/t" && bash "$SB/audit-rule-files.sh" --fail-on=local 2>&1; echo "@@RC=$?" )"
+  out_nr="$( cd "$WORK/t" && call "$SB/audit-rule-files.sh" --fail-on=local 2>&1; echo "@@RC=$?" )"
   rc_nr="${out_nr##*@@RC=}"; out_nr="${out_nr%@@RC=*}"
   if [ "$rc_nr" = "1" ] && has 'unresolved 1' "$out_nr"; then
     ok "an UNRESOLVED owner counts as local and FAILS — a missing resolver cannot acquit"
@@ -1072,7 +1129,7 @@ else
   # the resolver restored beside it, must go back to 0. Without this, "rc=1 with
   # no resolver" is equally consistent with a copy that simply cannot run.
   cp "$RESOLVER" "$SB/core-paths.sh"
-  rc_ok="$( cd "$WORK/t" && bash "$SB/audit-rule-files.sh" --fail-on=local >/dev/null 2>&1; echo $? )"
+  rc_ok="$( cd "$WORK/t" && call "$SB/audit-rule-files.sh" --fail-on=local >/dev/null 2>&1; echo $? )"
   [ "$rc_ok" = "0" ] \
     && ok "  control: the same copy with the resolver restored returns 0 — the rc=1 above was the ABSENCE, not a broken copy" \
     || bad "  control FAILED: the scratch copy returns rc=$rc_ok even with its resolver — assertion 28 proves nothing"
@@ -1119,20 +1176,20 @@ rc_bad="$(rc_of "$AUDIT" --fail-on=nonsense)"
 # STATED LIMIT: "none never times out" is not separable from "30s" by a load-free arm; the
 # fifo-release probe recorded in commit 0ed48124a's message is the evidence for it.
 fresh
-SS="$WORK/stall"
-rm -rf "$SS"; mkdir -p "$SS"
-cp "$AUDIT" "$SS/audit-rule-files.sh"
-cp "$RESOLVER" "$SS/core-paths.real.sh"
-cmp -s "$RESOLVER" "$SS/core-paths.real.sh" || bad "FIXTURE BROKEN — the real resolver was not copied beside the scratch audit"
+SS="$WORK/stall"; SSD="$SS/core/scripts"
+rm -rf "$SS"; mkdir -p "$SSD"
+cp "$AUDIT" "$SSD/audit-rule-files.sh"
+cp "$RESOLVER" "$SSD/core-paths.real.sh"
+cmp -s "$RESOLVER" "$SSD/core-paths.real.sh" || bad "FIXTURE BROKEN — the real resolver was not copied beside the scratch audit"
 FIFO="$SS/release"
 if ! mkfifo "$FIFO"; then
   bad "FIXTURE BROKEN — mkfifo failed, so the control cannot gate its resolver on an event"
 else
   # The stall NEVER ENDS: the shim stops itself, so the timeout always fires first.
   # The timeout's SIGKILL ends a stopped process, so nothing is orphaned.
-  printf '#!/usr/bin/env bash\nkill -STOP $$\n' > "$SS/core-paths.sh"
+  printf '#!/usr/bin/env bash\nkill -STOP $$\n' > "$SSD/core-paths.sh"
   printf 'The dev MUST comply, because we lost a sprint to this.\n' >> "$WORK/t/docs/coding-conventions.md"
-  rc_st="$( cd "$WORK/t" && AI_DLC_AUDIT_RESOLVER_TIMEOUT=0.5 bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+  rc_st="$( cd "$WORK/t" && export AI_DLC_AUDIT_RESOLVER_TIMEOUT=0.5 && call "$SSD/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
   if [ "$rc_st" = "2" ] && grep -q 'timed out after 0.5s' "$SS/err" && ! grep -q '\[unknown\]' "$SS/out"; then
     ok "a STALLED resolver names the timeout and exits 2 — it is not scored as unresolved ownership"
   else
@@ -1143,7 +1200,7 @@ else
   # non-positive timeouts that expire at once and refuse as `timed out after`.
   inv_ok=1
   for v in abc 0; do
-    rc_iv="$( cd "$WORK/t" && AI_DLC_AUDIT_RESOLVER_TIMEOUT="$v" bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+    rc_iv="$( cd "$WORK/t" && export AI_DLC_AUDIT_RESOLVER_TIMEOUT="$v" && call "$SSD/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
     { [ "$rc_iv" = "2" ] && grep -q 'is neither a positive number nor' "$SS/err" && ! grep -q 'timed out after' "$SS/err"; } || { inv_ok=0; inv_bad="$v rc=$rc_iv"; }
   done
   [ "$inv_ok" = 1 ] \
@@ -1155,9 +1212,9 @@ else
   # fd 9 holds the fifo open read-write for the whole run: the write below cannot
   # block whether or not the shim has opened it yet, and its bytes stay buffered
   # until the shim reads them. It is closed only after the audit has exited.
-  printf '#!/usr/bin/env bash\nread -r _ < "%s"\nexec bash "%s" "$@"\n' "$FIFO" "$SS/core-paths.real.sh" > "$SS/core-paths.sh"
+  printf '#!/usr/bin/env bash\nread -r _ < "%s"\nexec bash "%s" "$@"\n' "$FIFO" "$SSD/core-paths.real.sh" > "$SSD/core-paths.sh"
   exec 9<>"$FIFO"
-  ( cd "$WORK/t" && AI_DLC_AUDIT_RESOLVER_TIMEOUT=none bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? > "$SS/rc" ) &
+  ( cd "$WORK/t" && export AI_DLC_AUDIT_RESOLVER_TIMEOUT=none && call "$SSD/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? > "$SS/rc" ) &
   sc_pid=$!
   printf 'go\n' >&9
   wait "$sc_pid"
@@ -1175,11 +1232,11 @@ else
   # used to become an empty glob set and score every owner `unknown`. Same
   # seeded tree and scratch dir as 31, whose control has just shown this copy
   # scores the finding when the resolver answers.
-  printf '#!/usr/bin/env bash\nexit 2\n' > "$SS/core-paths.sh"
-  rc_f="$( cd "$WORK/t" && bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+  printf '#!/usr/bin/env bash\nexit 2\n' > "$SSD/core-paths.sh"
+  rc_f="$( cd "$WORK/t" && call "$SSD/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
   f_named=0; grep -q 'core-paths.sh --list` exited 2' "$SS/err" && f_named=1
-  printf '#!/usr/bin/env bash\nexit 0\n' > "$SS/core-paths.sh"
-  rc_e="$( cd "$WORK/t" && bash "$SS/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$SSD/core-paths.sh"
+  rc_e="$( cd "$WORK/t" && call "$SSD/audit-rule-files.sh" --fail-on=local >"$SS/out" 2>"$SS/err"; echo $? )"
   e_named=0; grep -q 'exited 0 with no globs' "$SS/err" && e_named=1
   if [ "$rc_f" = "2" ] && [ "$f_named" = 1 ] && [ "$rc_e" = "2" ] && [ "$e_named" = 1 ]; then
     ok "a resolver exiting non-zero, or exiting 0 with no globs, names the cause and exits 2"
@@ -1203,7 +1260,7 @@ LDTAG='The lead MUST re-run the gate; this replaced the v0.42.0 behaviour.'
 ldc_world() { fresh; echo "$LDTAG" >> "$WORK/t/.claude/skills/ai-dlc/SKILL.md"; }
 ldl_world() { fresh; echo "$LDTAG" >> "$WORK/t/docs/coding-conventions.md"; }
 ld2_world() { fresh; printf 'The dev MUST comply, because we lost a sprint to this.\n' >> "$WORK/t/docs/coding-conventions.md"; }
-LDU="$WORK/ldnores"; mkdir -p "$LDU"
+LDU="$WORK/ldnores/core/scripts"; mkdir -p "$LDU"
 ld_c() { # <script> -> "rc|presence" in LDc
   ldc_world; local o r
   o="$(memo out "$WORK/t" "$1" "$LD")"; r="$(memo rc "$WORK/t" "$1" "$LD")"
@@ -1302,8 +1359,8 @@ dfresh() {
     > "$DW/core/skills/ai-dlc-update/SKILL.md"
   printf '# Setup\n\nThe `model` enum is opus, sonnet or haiku.\n' > "$DW/core/skills/ai-dlc-setup/SKILL.md"
 }
-daudit() { ( cd "$DW" && bash "${1:-$AUDIT}" --fail-on=deterministic 2>&1 ); }
-drc()    { ( cd "$DW" && bash "${1:-$AUDIT}" --fail-on=deterministic >/dev/null 2>&1; echo $? ); }
+daudit() { ( cd "$DW" && call "${1:-$AUDIT}" --fail-on=deterministic 2>&1 ); }
+drc()    { ( cd "$DW" && call "${1:-$AUDIT}" --fail-on=deterministic >/dev/null 2>&1; echo $? ); }
 
 dfresh
 out="$(daudit)"
@@ -1385,6 +1442,74 @@ has 'ROLE_MODEL_NAMING: CLEAN' "$out" \
   || bad "a mechanism enum, the escalation ladder or a finding tier was flagged as a role-model claim"
 
 
+# --- the cli cells (cells.decl): each subject run as a PROGRAM once per distinct CLI outcome --------------------------
+# The audit's outcomes are exit x output class: 0 a clean report, 1 a report naming a finding, 0 the corpus listing, 2 the
+# usage line, 2 the resolver refusal. The gate-manifest scan's: 0 both directions resolve, 1 a MISSING row, 2 an
+# unreadable file, 2 no gate-validation.md under the root. One `FXCELL=<id> bash <subject>` start per outcome, each
+# compared with the in-process call on the same world: stdout, stderr and exit separately, byte for byte. A cell also
+# asserts its own outcome (a positive conjunct, so two runs that both printed nothing cannot read as equivalent), and the
+# classes of each subject must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <script> <dir> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; EQ_ENV is a NAME=value list for both sides
+  local id="$1" sc="$2" d="$3"; shift 3
+  ( cd "$d" && { [ -z "${EQ_ENV:-}" ] || export $EQ_ENV; } && call "$sc" "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$d" && { [ -z "${EQ_ENV:-}" ] || export $EQ_ENV; } && FXCELL="$id" bash "$sc" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -c 300 "$EQ/$1.ip.out")" "$(head -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -c 300 "$EQ/$1.cl.out")" "$(head -c 300 "$EQ/$1.cl.err")"; }
+cl_out() { cat "$EQ/$1.cl.out"; }
+cl_err() { cat "$EQ/$1.cl.err"; }
+cl_rc() { cat "$EQ/$1.cl.rc"; }
+echo "== cli cells"
+EQ_ENV=""
+fresh
+if eqv cli-clean "$AUDIT" "$WORK/t" && [ "$(cl_rc cli-clean)" = 0 ] && has 'NARRATIVE_DRIFT: CLEAN' "$(cl_out cli-clean)" && [ ! -s "$EQ/cli-clean.cl.err" ]; then
+  ok "cli-clean: the audit program scores the clean corpus exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-clean: the program and the in-process call differ, or the outcome is not exit 0 with every class CLEAN ($(eq_twin cli-clean))"; fi
+fresh; echo "$LDTAG" >> "$WORK/t/.claude/skills/ai-dlc/SKILL.md"
+if eqv cli-findings "$AUDIT" "$WORK/t" && [ "$(cl_rc cli-findings)" = 1 ] && has 'ORIGIN_TAG: FLAGGED' "$(cl_out cli-findings)" && [ ! -s "$EQ/cli-findings.cl.err" ]; then
+  ok "cli-findings: the audit program reports a seeded tier-1 finding exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-findings: the program and the in-process call differ, or the outcome is not exit 1 with ORIGIN_TAG FLAGGED ($(eq_twin cli-findings))"; fi
+fresh
+if eqv cli-list "$AUDIT" "$WORK/t" --list && [ "$(cl_rc cli-list)" = 0 ] && has 'CLAUDE.md' "$(cl_out cli-list)" && ! has 'NARRATIVE_DRIFT' "$(cl_out cli-list)" && [ ! -s "$EQ/cli-list.cl.err" ]; then
+  ok "cli-list: the audit program prints the scan corpus exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-list: the program and the in-process call differ, or the outcome is not exit 0 with the corpus ($(eq_twin cli-list))"; fi
+if eqv cli-usage "$AUDIT" "$WORK/t" --fail-on=nonsense && [ "$(cl_rc cli-usage)" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] && has '^usage: audit-rule-files.sh' "$(cl_err cli-usage)"; then
+  ok "cli-usage: the audit program refuses an unknown flag exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-usage))"; fi
+CR="$WORK/cellres/core/scripts"; mkdir -p "$CR"
+cp "$AUDIT" "$CR/audit-rule-files.sh"; printf '#!/usr/bin/env bash\nexit 2\n' > "$CR/core-paths.sh"
+printf 'The dev MUST comply, because we lost a sprint to this.\n' >> "$WORK/t/docs/coding-conventions.md"
+if eqv cli-resolver "$CR/audit-rule-files.sh" "$WORK/t" --fail-on=local && [ "$(cl_rc cli-resolver)" = 2 ] \
+   && has 'core-paths.sh --list` exited 2' "$(cl_err cli-resolver)"; then
+  ok "cli-resolver: the audit program refuses a failing resolver exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-resolver: the program and the in-process call differ, or the outcome is not exit 2 naming the resolver ($(eq_twin cli-resolver))"; fi
+if ! cmp -s "$EQ/cli-clean.cl.out" "$EQ/cli-findings.cl.out" && ! cmp -s "$EQ/cli-clean.cl.rc" "$EQ/cli-findings.cl.rc" \
+   && ! cmp -s "$EQ/cli-clean.cl.out" "$EQ/cli-list.cl.out" && ! cmp -s "$EQ/cli-usage.cl.err" "$EQ/cli-resolver.cl.err"; then
+  ok "audit cli cells discriminate: the clean report, the finding report, the listing, the usage line and the resolver refusal differ"
+else bad "audit cli cells do not discriminate: two of cli-clean, cli-findings, cli-list, cli-usage and cli-resolver gave the same output"; fi
+fresh
+if eqv cli-resolve "$MANIFEST" "$WORK/t" "$GV" && [ "$(cl_rc cli-resolve)" = 0 ] && [ ! -s "$EQ/cli-resolve.cl.err" ] && [ -s "$EQ/cli-resolve.cl.out" ]; then
+  ok "cli-resolve: the manifest scan program resolves a consistent manifest exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-resolve: the program and the in-process call differ, or the outcome is not exit 0 with a report ($(eq_twin cli-resolve))"; fi
+sed -i.bak 's/| retro     | 3 |/| retro     | 3, 99 |/' "$WORK/t/$GV" && rm -f "$WORK/t/$GV.bak"
+if eqv cli-missing "$MANIFEST" "$WORK/t" "$GV" && [ "$(cl_rc cli-missing)" = 1 ] && has 'MISSING (manifest id, no anchor): 99' "$(cl_out cli-missing)"; then
+  ok "cli-missing: the manifest scan program reports a manifest id with no anchor exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-missing: the program and the in-process call differ, or the outcome is not exit 1 naming MISSING 99 ($(eq_twin cli-missing))"; fi
+if eqv cli-unreadable "$MANIFEST" "$WORK/t" "$WORK/t/no-such-gate-validation.md" && [ "$(cl_rc cli-unreadable)" = 2 ] && [ ! -s "$EQ/cli-unreadable.cl.out" ] \
+   && has 'cannot read' "$(cl_err cli-unreadable)"; then
+  ok "cli-unreadable: the manifest scan program refuses an absent file exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-unreadable: the program and the in-process call differ, or the outcome is not exit 2 naming the unreadable file ($(eq_twin cli-unreadable))"; fi
+mkdir -p "$WORK/emptyroot"; EQ_ENV="AI_DLC_PROJECT_ROOT=$WORK/emptyroot"
+if eqv cli-noarg "$MANIFEST" "$WORK/emptyroot" && [ "$(cl_rc cli-noarg)" = 2 ] && [ ! -s "$EQ/cli-noarg.cl.out" ] && has '^usage: validate-gate-manifest.sh' "$(cl_err cli-noarg)"; then
+  ok "cli-noarg: the manifest scan program refuses a root with no gate-validation.md exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-noarg: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-noarg))"; fi
+EQ_ENV=""
+if ! cmp -s "$EQ/cli-resolve.cl.out" "$EQ/cli-missing.cl.out" && ! cmp -s "$EQ/cli-resolve.cl.rc" "$EQ/cli-missing.cl.rc" \
+   && ! cmp -s "$EQ/cli-unreadable.cl.err" "$EQ/cli-noarg.cl.err"; then
+  ok "manifest-scan cli cells discriminate: the resolving, the MISSING, the unreadable and the no-argument outcomes differ"
+else bad "manifest-scan cli cells do not discriminate: two of cli-resolve, cli-missing, cli-unreadable and cli-noarg gave the same output"; fi
 
 echo
 report_end retro-audit-scans

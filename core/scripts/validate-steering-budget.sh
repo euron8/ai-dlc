@@ -208,6 +208,7 @@
 #      no unbounded wait sequence
 #   1  a violation was found, or input unreadable
 
+sb_main() {
 set -u
 
 BUDGET="${AI_DLC_STEERING_BUDGET:-120}"
@@ -1288,3 +1289,6 @@ if (wrongjoin.length) {
 
 process.exit(bad ? 1 : 0);
 NODE
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+sb_main "$@"

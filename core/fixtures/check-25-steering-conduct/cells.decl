@@ -1,0 +1,11 @@
+# check-25-steering-conduct's starts of core/scripts/validate-steering-budget.sh (BL-879 grammar). Every other drive is in
+# process: run.sh sources the validator once and calls sb_main through sbv in a subshell. One cli cell per distinct CLI
+# outcome (exit 0 --count integer, exit 0 PASS report, exit 1 starvation report, exit 0 MATCH, exit 2 NOMATCH, exit 1
+# FAIL refusal), each started as FXCELL=<id> bash "$VALIDATOR" in eqv() and compared byte for byte with the
+# in-process call on the same input.
+cli core/scripts/validate-steering-budget.sh cli-count
+cli core/scripts/validate-steering-budget.sh cli-pass
+cli core/scripts/validate-steering-budget.sh cli-violation
+cli core/scripts/validate-steering-budget.sh cli-match
+cli core/scripts/validate-steering-budget.sh cli-nomatch
+cli core/scripts/validate-steering-budget.sh cli-refuse

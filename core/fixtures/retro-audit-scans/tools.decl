@@ -21,3 +21,4 @@ sort
 cksum
 mkfifo
 git
+head

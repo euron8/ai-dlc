@@ -1,4 +1,5 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-165 *
-161 core/hooks/ai-dlc-foreground-budget.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge J3 output). The subject rows are the cli cells of cells.decl; inproc rows count the fx_inproc passes (one per call of the entry function).
+8 *
+5 core/hooks/ai-dlc-foreground-budget.sh
 0 core/scripts/validate-steering-budget.sh
+168 inproc:core/hooks/ai-dlc-foreground-budget.sh

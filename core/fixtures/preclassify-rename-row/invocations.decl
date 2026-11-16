@@ -1,4 +1,5 @@
-# Measured by one counted ARMED run (armed-run.sh) of the fixture in PUSH mode. Every subject start is a fixed function of the cells run, with no sleep, loop-until or early-exit pipe on a counted start, so the count does not move with load.
-23 *
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output); starts are run.sh plus the cli cells of cells.decl, every other drive in process (BL-878).
+3 *
 0 core/skills/ai-dlc-update/reconcile/lib.sh
-22 core/skills/ai-dlc-update/reconcile/preclassify.sh
+2 core/skills/ai-dlc-update/reconcile/preclassify.sh
+25 inproc:core/skills/ai-dlc-update/reconcile/preclassify.sh

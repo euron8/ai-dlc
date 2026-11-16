@@ -1,0 +1,10 @@
+# agent-definition-render's starts of core/scripts/render-agent-definitions.sh (BL-879 grammar). Every other drive is in
+# process: run.sh sources the subject once and calls rad_main in a subshell. One cli cell per distinct CLI outcome
+# (exit 0 writing, exit 0 checking a current tree, exit 1 a missing definition, exit 2 unparseable settings, exit 3 not
+# applicable), each started as FXCELL=<id> bash "$SUBJECT" in eqv() and compared byte for byte (stdout, stderr, exit and
+# the definitions left on disk) with the in-process call on a fresh copy of the same seed.
+cli core/scripts/render-agent-definitions.sh cli-write
+cli core/scripts/render-agent-definitions.sh cli-check-current
+cli core/scripts/render-agent-definitions.sh cli-check-drifted
+cli core/scripts/render-agent-definitions.sh cli-refuse
+cli core/scripts/render-agent-definitions.sh cli-not-applicable

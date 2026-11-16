@@ -1,0 +1,9 @@
+# suite-content-key's starts of scripts/suite-content-key.sh (BL-879 grammar). Every other drive is in process: run.sh
+# sources the copy's key script once and calls sck_main in a subshell, and the hook-driver worlds answer the hook's own
+# `bash scripts/suite-content-key.sh` through a function that sources the world's copy. One cli cell per distinct CLI
+# outcome (key exit 0, --summary exit 0, --explain exit 0, usage exit 1), each started as FXCELL=<id> bash "$KEY" in
+# cli_eqv() and compared byte for byte with the in-process call over the same untouched tree.
+cli scripts/suite-content-key.sh cli-key
+cli scripts/suite-content-key.sh cli-summary
+cli scripts/suite-content-key.sh cli-explain
+cli scripts/suite-content-key.sh cli-usage
