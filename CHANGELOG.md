@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1154.0] - 2026-11-16
+
+### BL-1144: a sandbox window refused for loss alone keeps its lower bound
+
+`core/scripts/derive-fixture-readsets.sh --declared-out` now writes the fixture's set from a window that `rs_fx_judge` refused only for a lost report (drop notices, the LOSS CANARY or STAT LOSS) as `#lower` rows under its `#omitted` row. A lost report only shortens a set, so these rows can confirm a `whole` row but never narrow one. A window refused for any other reason, such as a non-zero fixture exit, writes no `#lower` row. `core/fixtures/readset-skip` (shard c) runs it end to end on a lossy stub window, in both directions.
+
+### Rules and records
+
+- BL-1144 closes: a guarded `--declared-out` trace confirms dispatch-model-guard's, validator-arm-selection's and schema-install-fallback's 7 `whole` rows as whole; `docs/inputs-decl-whole-rows.tsv` is unchanged.
+- BL-1155 filed: the `inputs.decl` narrowings taken from sandbox windows before the STAT LOSS guard, enumerated by commit, still need re-tracing, and schema-install-fallback has no lossless window yet.
+
 ## [0.1153.0] - 2026-11-16
 
 ### BL-1143: an undeclared tool call fails a distribution-layout fixture run
