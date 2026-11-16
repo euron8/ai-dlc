@@ -3389,3 +3389,22 @@ Provenance: batch 257, wave 12, refiled from BL-1056 by ai-dlc-c2 (W12-14); id a
 
 verify: manual
 
+
+## BL-1158 — graph's reconcile to 0.1152.0 is blocked by gate-adjudication S23-pre finding the trap farm's node stub (PC-S323-GATE-ADJUDICATION-S23-PRE-STRIPS-HR_BIN-BUT-NOT-THE-TRAP-FARM)
+
+**DEFECT.** OPEN. Filed 2026-11-16. Owner: `core/fixtures/gate-adjudication/run.sh` (S23-pre), already fixed by BL-1154.
+
+The graph consumer filed PC-S323-GATE-ADJUDICATION-S23-PRE-STRIPS-HR_BIN-BUT-NOT-THE-TRAP-FARM in its push-candidate ledger, on its reconcile branch `ai-dlc-update/0.1152.0-reconcile-20261116T153000Z` at 022040ae2. Under 0.1152.0's `hermetic-run.sh` the PATH is the farm followed by the undeclared-tool trap dir, which holds a `node` stub. S23-pre strips only the farm dir, so `command -v node` still finds the stub and the fixture reads FIXTURE BROKEN. The consumer's pre-push is red, so the reconcile cannot be delivered. This is the BL-1154 defect, seen from the consumer side.
+
+**LANDED (vVERSION_PLACEHOLDER).** (batch 257, W12-21; closed by BL-1154, v0.1153.0, with no code change here.)
+- **Measured on a scratch `file://` clone of graph at 022040ae2.** graph itself was never written. Each reading ran the PC's own re-check, `bash scripts/ai-dlc/hermetic-run.sh gate-adjudication`, from the clone root.
+  - Clone as filed: rc 1, `FAIL S23-pre: FIXTURE BROKEN — node is still on PATH after stripping <sandbox>/bin`. The installed fixture and runner are md5-identical to 52ac10fdb (0.1152.0): fixture `914c4908…`, runner `0d109d83…`.
+  - After `scripts/install.sh` from d2137329e (0.1154.0): rc 0, `ok S23-pre` and `PASS: gate-adjudication -- 117 assertion(s)`. Fixture `1f3bf2d3…` and runner `29d9be69…` are md5-identical to 63c3a7659 (0.1153.0). Neither file changed after BL-1154, so the flip is BL-1154's.
+  - Control: the same installed clone with only the fixture reverted to 52ac10fdb's bytes, and the runner still `29d9be69…`. rc 1, the same S23-pre reading, `1 assertion(s) failed, 115 passed`. The fixture's diff between those two versions is exactly BL-1154's three added lines.
+- **Not measured, though available on the clone:** the consumer's full pre-push and the reconcile itself. This entry establishes that the PC's re-check flips, not that the reconcile is unblocked.
+- **How the consumer credits this.** Its `ledger-reverify.sh` gives the entry no path receipt, so this commit's full-slug citation reads `NAMED-UPSTREAM-DOCS-ONLY`. That was measured with the installed engine against a scratch dist clone: no row on the control, `NAMED-UPSTREAM-DOCS-ONLY` on a docs-only naming commit, and `NAMED-UPSTREAM` with a VERSION change. The absorbing release is v0.1153.0.
+
+Provenance: batch 257, wave 12, absorbed from the graph consumer's push-candidate ledger by W12-21; id allocated by the lead.
+
+verify: manual
+
