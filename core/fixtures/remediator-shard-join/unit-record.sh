@@ -28,7 +28,7 @@ broken() { echo "FIXTURE BROKEN: $NAME: $1" >&2; exit 2; }
 RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
 JO="$WORK/unit.out"
 # shellcheck source=/dev/null
-. "$JOIN" || broken "sourcing $JOIN failed"
+fx_inproc "$JOIN" && . "$JOIN" || broken "sourcing $JOIN failed"
 for _f in contract_check checks_field record_tail spec_render_probe spec_memlog_of_sprint spec_render_check spec_render_scan; do
   declare -F "$_f" >/dev/null || broken "$JOIN defined no $_f when sourced"
 done

@@ -13,6 +13,7 @@ set -u
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset CLAUDE_PROJECT_DIR
 DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 
 # I10 — a fixture must not inherit an ambient tunable that changes what it measures.
 unset AI_DLC_LAYER_CONTRACT
@@ -45,7 +46,7 @@ NAME="layer-contract-conformance"
 SKIP_MSG="SKIP — validate-enforcement-map.sh is distribution-only and is not installed in a consumer tree."
 if [ -z "$VAL" ] || [ -z "$CONTRACT" ]; then
   echo "$NAME: $SKIP_MSG"
-  exit 0
+  fx_skip_exit "$DIR"
 fi
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh"
@@ -176,16 +177,18 @@ if [ "$GROUP" = a ]; then
   # THE CONSUMER SKIP NAMES ITS OWN SHARD
   # ---------------------------------------------------------------------------
   # On a consumer neither directory resolves $VAL, both take the SKIP, and the runner's log is read BY NAME. This
-  # builds that tree: copies of both drivers three levels below a scratch root, so `$DIR/../../../scripts/` and
-  # both contract candidates resolve to nothing, and runs each. Shard 'b' must print ITS name and never this
-  # directory's.
+  # builds that tree: copies of both drivers in the consumer layout, tests/fixtures/, three levels below a scratch
+  # root, so `$DIR/../../../scripts/` and both contract candidates resolve to nothing, and runs each. Shard 'b'
+  # must print ITS name and never this directory's.
   _SK="$TMP/skip-name"
-  mkdir -p "$_SK/x/y/core/fixtures/layer-contract-conformance" "$_SK/x/y/core/fixtures/layer-contract-conformance-b" \
-    && cp "$DIR/run.sh" "$_SK/x/y/core/fixtures/layer-contract-conformance/run.sh" \
-    && cp "$DIR/../layer-contract-conformance-b/run.sh" "$_SK/x/y/core/fixtures/layer-contract-conformance-b/run.sh" \
+  mkdir -p "$_SK/x/y/tests/fixtures/layer-contract-conformance" "$_SK/x/y/tests/fixtures/layer-contract-conformance-b" \
+           "$_SK/x/y/tests/fixtures/lib" \
+    && cp "$DIR/run.sh" "$_SK/x/y/tests/fixtures/layer-contract-conformance/run.sh" \
+    && cp "$DIR/../layer-contract-conformance-b/run.sh" "$_SK/x/y/tests/fixtures/layer-contract-conformance-b/run.sh" \
+    && cp "$DIR/../lib/layout.sh" "$_SK/x/y/tests/fixtures/lib/layout.sh" \
     || { echo "$NAME: FIXTURE ERROR — could not build the consumer-shaped SKIP tree" >&2; exit 2; }
-  _sk_a="$(bash "$_SK/x/y/core/fixtures/layer-contract-conformance/run.sh" 2>&1)"
-  _sk_b="$(bash "$_SK/x/y/core/fixtures/layer-contract-conformance-b/run.sh" 2>&1)"
+  _sk_a="$(bash "$_SK/x/y/tests/fixtures/layer-contract-conformance/run.sh" 2>&1)"
+  _sk_b="$(bash "$_SK/x/y/tests/fixtures/layer-contract-conformance-b/run.sh" 2>&1)"
   if grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_a" \
      && grep -q '^layer-contract-conformance-b: SKIP' <<<"$_sk_b" \
      && ! grep -q '^layer-contract-conformance: SKIP' <<<"$_sk_b"; then

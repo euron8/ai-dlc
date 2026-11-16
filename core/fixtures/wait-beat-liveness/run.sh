@@ -58,6 +58,7 @@ echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"
 echo "HERMETIC-CONSUMED core/scripts/wfd-start-of.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 broken() { printf 'wait-beat-liveness: FIXTURE BROKEN — %s\n' "$1" >&2; exit 2; }
 
 TMPROOT="$(mktemp -d)" || broken "mktemp failed"
@@ -287,9 +288,9 @@ wbl_ip() {  # $1 = subject; rest = its argv. Call it inside a subshell.
        fi ;;
   esac
   # shellcheck disable=SC1090
-  . "$wi_s_"
+  [[ "$wi_s_" != */core/scripts/wait-for-deliverable.sh ]] && [[ "$wi_s_" != */core/fixtures/*/../../scripts/wait-for-deliverable.sh ]] || fx_inproc "$wi_s_"; . "$wi_s_"
   wfd_mark_main "$@"
-  wfd_beat_main "$@"
+  [[ "$wi_s_" != */core/scripts/wait-for-deliverable.sh ]] && [[ "$wi_s_" != */core/fixtures/*/../../scripts/wait-for-deliverable.sh ]] || fx_inproc "$wi_s_"; wfd_beat_main "$@"
 }
 wbl_clock_fns() {  # defines date and sleep as the in-process clock, in the calling (sub)shell
   date() {

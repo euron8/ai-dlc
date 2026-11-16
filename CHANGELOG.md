@@ -19,6 +19,41 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1146.0] - 2026-11-15
+
+### BL-1136 and BL-1137: one advisor detection for both gates
+
+`core/hooks/ai-dlc-advisor-detect.sh` is a new shipped hook library that holds the advisor detection both gates source. The recover gate now holds a no-grant lead that holds `mcp__advisor__consult` to the advisor stage, as the advisor gate already did. Both gates stop crediting tool calls on `api-request-blob` lines, which re-carry earlier assistant content. A replay of the executed calls shows 0 moves over 1,877 lead calls. Over 14,694 teammate edits, 3 false acquittals now DENY. At the recover stage, 1 false DENY of a compliant lead is gone. A gate whose library is missing fails open with a WARN.
+
+### BL-1147: a LANDED line backlog-rotate refuses fails at pregate
+
+`scripts/validate-backlog-receipts.sh` arm R14 judges every live LANDED line with the `LANDED_FORM` span of `scripts/backlog-rotate.sh`, so a form the rotation refuses is caught before the squash.
+
+### BL-1118: hermetic-run's undeclared-tool trap, carried forward
+
+`core/scripts/hermetic-run.sh` puts a trap after the tool farm on a fixture's PATH: a call to an existing tool the fixture did not declare still answers `command not found` (exit 127), and the trap records its name. And the push carries existing verdicts forward (`READSET_RUNNER_CARRY`), so shipping the trap voids no verdict. BL-984 advances and BL-1143 is filed.
+
+### BL-1144 PARTIAL: a sandbox trace window that lost a stat report is omitted
+
+`rs_fx_judge` in `core/scripts/derive-fixture-readsets.sh` omits a window on `STAT LOSS`: a metadata report with no paired existence report from the same process. Over 142 accepted windows it refuses 11. The rows those windows may back still need re-traces. BL-1134 and BL-1144 carry corrected loss figures.
+
+### BL-1140 PARTIAL: the whole-row ratchet accepts a same-fixture narrowing
+
+`scripts/invalidation-guard.sh` r3 accepts a new row that extends a directory row the same fixture dropped, with the same markers and no growth in that fixture's row count, and prints each accepted narrowing. `derived-fence-binding` narrows from 2,024 key rows to 152 (both counted with `hermetic-run.sh --key-only`).
+
+### BL-915 PARTIAL: unreached fixtures removed, a distribution-layout SKIP fails
+
+Three unreached fixtures and their four scripts are removed, and a fixture whose subject is absent in the distribution layout now fails instead of skipping. `retro-branch-behind-main`'s BL-990 receipt is folded into its run.sh.
+
+### BL-982, BL-583, BL-584, BL-541, BL-514 and BL-975 advance
+
+- BL-982: P2 OWED reads 207 in 14 fixtures on this tree (288 in 40 before W9-10).
+- BL-583: fixture trims, and the self-update-gate read-set wake is narrowed.
+- BL-584: the read-set map no longer records one run's omissions.
+- BL-541: a `--complete-repair --dispatch` beat extends in-call. BL-1142 is filed.
+- BL-514 and BL-975: measuring scripts.
+- BL-843: one paragraph is corrected.
+
 ## [0.1145.0] - 2026-11-15
 
 ### BL-1139: the role contracts name the MCP advisor consult

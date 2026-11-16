@@ -5,3 +5,4 @@
 # The f-ctl seed control lifts its block from the sibling fixture's seed.sh.
 core/fixtures/check-17-bypass/seed.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/layout.sh

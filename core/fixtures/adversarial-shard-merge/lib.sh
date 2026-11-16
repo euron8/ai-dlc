@@ -13,6 +13,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # Resolution walks up from THIS file's directory, so both callers resolve identically, and the
 # seeds are read from beside it.
 LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$LIB_DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 SEED_DIR="$LIB_DIR"
 
 # The subject, found by walking UP for a directory that carries it in either layout -- never by
@@ -499,13 +500,13 @@ mx() {
       done
       [ "$_mx_n" -eq 0 ] && break
     done
-    for _mx_v in $(compgen -A function); do [ "$_mx_v" = mx ] || unset -f "$_mx_v"; done
+    for _mx_v in $(compgen -A function); do case "$_mx_v" in mx|fx_inproc) ;; *) unset -f "$_mx_v" ;; esac; done
     unset _mx_keep _mx_exp _mx_i _mx_n _mx_v
     . "$1" || exit 90
     # MX_HOOK (exported, so the sweep above keeps it): code eval'd after the merge is sourced and before merge_main,
     # to inject a fault at a point the SHIPPED merge reaches (p_pcmv). Unset everywhere else, so nothing changes.
     [ -z "${MX_HOOK:-}" ] || eval "$MX_HOOK"
-    shift; merge_main "$@" )
+    [[ "$1" != */core/scripts/merge-adversarial-shards.sh ]] || fx_inproc "$1"; shift; merge_main "$@" )
 }
 run_merge() { # <merge-script> <shard-dir> -> RC, $MO
   $ASM_RUN "$1" "$2" > "$MO" 2>&1; RC=$?

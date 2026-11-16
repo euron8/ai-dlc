@@ -44,6 +44,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 broken() { echo "FIXTURE BROKEN: push-drain-refusals -- $1" >&2; echo "FAIL  push-drain-refusals -- fixture broken: $1"; exit 2; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)" || broken "cannot resolve the fixture directory"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || broken "no lib/report.sh beside $HERE"
 MUT_LIB="$HERE/../lib/mutant.sh"
@@ -75,7 +76,7 @@ for _c in "$ROOT/core/skills/ai-dlc-update/reconcile/push-drain.sh" \
 done
 if [ -z "$RD" ]; then
   echo "PENDING  push-drain-refusals -- reconcile/push-drain.sh is absent from both layouts under $ROOT (core/skills/ai-dlc-update/ and .claude/skills/ai-dlc-update/). NOTHING WAS CHECKED; this is not a pass. It clears on the pull that delivers the reader."
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 echo "HERMETIC-CONSUMED $RD"
 command -v git >/dev/null 2>&1    || broken "no git on PATH"

@@ -35,13 +35,14 @@ set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 
 # Distribution-only. `validate-enforcement-map.sh` is not shipped by install.sh (it checks
 # the distribution's own two writers against each other — a consumer has neither), so in a
 # consumer tree there is nothing to test. Say so and stop; do not fake a pass.
 if [ ! -f "$HERE/../../../scripts/validate-enforcement-map.sh" ]; then
   echo "enforcement-map-sites: SKIP — distribution-only (validate-enforcement-map.sh is not shipped to consumers)"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 # The validator is present and about to be driven; inputs.decl marks it REQUIRED.
 echo "HERMETIC-CONSUMED scripts/validate-enforcement-map.sh" >&2

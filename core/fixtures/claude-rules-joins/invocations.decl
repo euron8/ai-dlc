@@ -4,4 +4,5 @@
 # <tree>/scripts/validate-claude-rules.sh.
 4 *
 3 scripts/validate-claude-rules.sh
-14 inproc:scripts/validate-claude-rules.sh
+# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
+32 inproc:scripts/validate-claude-rules.sh

@@ -10,10 +10,15 @@
 # script, and the two install layouts make that walk resolve differently in a consumer than it
 # does here — green upstream, red installed.
 #
-# `templates/` is staged for the reason the siblings state: I22 joins the role files against
-# templates/settings.json.template, and its absence makes the PRISTINE seed fail. `.githooks/` is
-# neither declared nor staged: every run here, --matrix included, selects arms (I75 I108 I121
-# I122 I123) that never open it.
+# THE SEED IS THE READ SET OF THE ARMS THIS FIXTURE SELECTS, NOT THE TREE. Every run here selects
+# I75, I108, I121, I122 or I123, and an --arms run executes the validator's prologue, the selected
+# units and the verdict block, nothing else. Those read: the prologue's five required inputs and
+# render-invariant-index.sh (the --arms map); core/team-roles/ (the I108/I121/I122/I123
+# population); core/scripts/*.sh (I75's subject glob, which includes I108's reader
+# validate-artifact-derivations.sh); and the six half-B roots, which are walked whole. The real
+# tree's half-B verdict is the gate's own full validator run (.githooks/pre-push), not this
+# fixture's: a battery plants into a root, and plant_root creates the root it plants in, so no
+# other file of templates/, patterns/ or .claude/rules/ is copied.
 #
 # Prints the temp root on stdout. Caller owns cleanup.
 set -euo pipefail
@@ -26,11 +31,6 @@ D_ROOT="$(cd "$HERE/../../.." && pwd)"
   exit 2
 }
 
-# `patterns/` and `.claude/rules/` are staged for THIS fixture's own reason: I108's sixth-copy
-# half scans six roots, and a root the seed does not carry is one the battery cannot plant a
-# copy in. `grep` on an absent root is silent, so an unstaged root would leave the assertion
-# that plants there passing over a directory that was never there.
-#
 # THE ROOT-LEVEL CLAUDE.md IS SYNTHESISED, NOT COPIED, AND I55 IS WHY. That path is EXCLUDED
 # from the suite's content key, so a fixture that READS it is one whose input can change without
 # the suite ever re-running -- and I55 fails the build on exactly that, which is how this line
@@ -38,12 +38,24 @@ D_ROOT="$(cd "$HERE/../../.." && pwd)"
 # the distribution's own text, and taking it would buy a stale-skip hazard for nothing.
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/derived-fence-binding.XXXXXX")"
 mkdir -p "$ROOT"
-cp -R "$D_ROOT/core"      "$ROOT/core"
-cp -R "$D_ROOT/scripts"   "$ROOT/scripts"
-cp -R "$D_ROOT/templates" "$ROOT/templates"
-cp -R "$D_ROOT/patterns"  "$ROOT/patterns"
+for rel in scripts/validate-enforcement-map.sh scripts/render-invariant-index.sh \
+           core/skills/ai-dlc/steps/gate-validation.md core/skills/ai-dlc/enforcement-map.yaml \
+           core/skills/ai-dlc/core-manifest.md core/skills/ai-dlc-update/reconcile/setup-sites.md \
+           core/skills/ai-dlc-update/fixture-manifest.md; do
+  mkdir -p "$ROOT/$(dirname "$rel")"
+  cp -p "$D_ROOT/$rel" "$ROOT/$rel"
+done
+cp -R "$D_ROOT/core/team-roles" "$ROOT/core/team-roles"
+mkdir -p "$ROOT/core/scripts"
+cp -p "$D_ROOT"/core/scripts/*.sh "$ROOT/core/scripts/"
+# A00 and A03 are the acquittal probe for half B's core/fixtures/ exclusion, and its subject is
+# THIS fixture's run.sh, which carries the opener: it must sit under core/fixtures/ in the copy.
+mkdir -p "$ROOT/core/fixtures"
+cp -R "$HERE" "$ROOT/core/fixtures/derived-fence-binding"
+# run.sh's plant_root creates a missing root and fresh() rmdirs only the plant's own directory,
+# so .claude/ is the one parent staged: without it the .claude/rules plant leaves it behind and
+# the final restore differs from this seed.
 mkdir -p "$ROOT/.claude"
-cp -R "$D_ROOT/.claude/rules" "$ROOT/.claude/rules"
 printf '# Authoring rules\n\nA synthetic stand-in; see seed.sh for why this is not the real one.\n' \
   > "$ROOT/rootrules.md.tmp"
 mv "$ROOT/rootrules.md.tmp" "$ROOT/$(printf 'CLAUDE')".md

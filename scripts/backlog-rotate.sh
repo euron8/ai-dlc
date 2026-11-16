@@ -564,16 +564,27 @@ shaless_verdict() { # shaless_verdict <version> -> the SHAV for a sha-less LANDE
   fi
 }
 
+# LANDED_FORM_BEGIN
+# THE TWO LANDED FORMS THIS SCRIPT MOVES, AND ONLY THESE. `landed_form <annotation line>` sets LF_SHA to the sha of
+# `**LANDED (v<version>, verified <sha>)...` and LF_SLV to the <version> of the sha-less `**LANDED (v<version>).**`;
+# a line in neither form leaves both empty, which the loop below reads as `sha ABSENT` and refuses.
+# scripts/validate-backlog-receipts.sh R14 extracts this span by its sentinels and applies it to every live LANDED
+# line, so a line this script would refuse fails the push that adds it.
+landed_form() {
+  # The annotation is the WHOLE line (an optional `<br>` prefix, then the bold form, then any prose). Anchored on
+  # the form so a later "verified <word>" in the prose cannot replace the sha.
+  LF_SHA="$(printf '%s\n' "$1" | sed -n 's/^\(<br>\)\{0,1\}\*\*LANDED (v[^,]*, verified \([0-9a-f]\{7,\}\)[^0-9a-f].*/\2/p')"
+  # The sha-less form, `**LANDED (v<version>).**`, and only that form: a dated `(v.., verified <date>)` line is
+  # neither form and stays ABSENT.
+  LF_SLV="$(printf '%s\n' "$1" | sed -n 's/^\(<br>\)\{0,1\}\*\*LANDED (v\([0-9][0-9.]*\))\.\*\*.*/\2/p')"
+}
+# LANDED_FORM_END
+
 EVID_TABLE=""; EVID_REFUSE=""; OLDIFS="$IFS"
 while IFS="$(printf '\t')" read -r ST LB DT; do
   [ -n "$LB" ] || continue
   ANN="$(awk -F'\t' -v l="$LB" '$1==l{print $2; exit}' <<<"$MOVED_ANN")"
-  # ANN is the WHOLE annotation line (an optional `<br>` prefix, then the bold form, then any prose).
-  # Anchored on the form so a later "verified <word>" in the prose cannot replace the sha.
-  SHA="$(printf '%s\n' "$ANN" | sed -n 's/^\(<br>\)\{0,1\}\*\*LANDED (v[^,]*, verified \([0-9a-f]\{7,\}\)[^0-9a-f].*/\2/p')"
-  # The sha-less form, `**LANDED (v<version>).**`, and only that form: a dated `(v.., verified <date>)`
-  # line is neither form and stays ABSENT.
-  SLV="$(printf '%s\n' "$ANN" | sed -n 's/^\(<br>\)\{0,1\}\*\*LANDED (v\([0-9][0-9.]*\))\.\*\*.*/\2/p')"
+  landed_form "$ANN"; SHA="$LF_SHA"; SLV="$LF_SLV"
   if   [ "$R1_SKIP" = true ]; then SHAV="sha SKIPPED (ledger is not in a git repository)"
   elif [ -z "$SHA" ] && [ -n "$SLV" ]; then SHAV="$(shaless_verdict "$SLV")"
   elif [ -z "$SHA" ];          then SHAV="sha ABSENT"

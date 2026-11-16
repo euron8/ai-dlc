@@ -96,8 +96,8 @@ src_vcr() { # src_vcr <tree>
   VCR_SOURCED="$c"
 }
 vcr_ready() { [ "$1/scripts/validate-claude-rules.sh" = "$VCR_SOURCED" ] || { echo "FIXTURE BROKEN: driving $1 while ${VCR_SOURCED:-nothing} is sourced" >&2; return 97; }; }
-run_v() { vcr_ready "$1" || return 97; ( cd "$1" && vcr_main 2>&1 ); }
-run_v_env() { vcr_ready "$2" || return 97; ( cd "$2" && export "$1" && vcr_main 2>&1 ); }
+run_v() { vcr_ready "$1" || return 97; ( cd "$1" && fx_inproc "$VCR_SOURCED" && vcr_main 2>&1 ); }
+run_v_env() { vcr_ready "$2" || return 97; ( cd "$2" && export "$1" && fx_inproc "$VCR_SOURCED" && vcr_main 2>&1 ); }
 
 # --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome -----------------
 # Outcomes, by exit: 0 every arm passes (cli-pass, over the control tree), 1 a finding (cli-finding, over m1's tree),
@@ -108,7 +108,7 @@ EQ="$TMP/eq"; mkdir -p "$EQ"
 eqv() { # eqv <cell-id> <tree> <args...>
   local id="$1" t="$2"; shift 2
   vcr_ready "$t" || exit 2
-  ( cd "$t" && vcr_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$t" && fx_inproc "$VCR_SOURCED" && vcr_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
   ( cd "$t" && FXCELL="$id" bash scripts/validate-claude-rules.sh "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
   cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
 }

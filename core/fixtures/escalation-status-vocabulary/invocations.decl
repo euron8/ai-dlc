@@ -7,4 +7,5 @@
 # grep starts shrink with the removed mutant copies; the counted run states it.
 10 *
 4 core/scripts/validate-escalation-status-vocabulary.sh
-8 inproc:core/scripts/validate-escalation-status-vocabulary.sh
+# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
+53 inproc:core/scripts/validate-escalation-status-vocabulary.sh

@@ -52,7 +52,8 @@
 # them here to drift.
 #
 # THE SANDBOX. A fresh `mktemp -d`, `env -i`, PATH set to a symlink farm of the declared tools (keyed and
-# unkeyed) and nothing else, so an undeclared tool is not found, `AI_DLC_PROJECT_ROOT` set to the sandbox root, and the fixture invoked as
+# unkeyed) and then the undeclared-tool trap, so an undeclared tool is not found and a call to one that exists in the
+# fixed tool dirs is logged and WARNED, `AI_DLC_PROJECT_ROOT` set to the sandbox root, and the fixture invoked as
 # `<absolute bash> core/fixtures/<f>/run.sh` from the sandbox ROOT -- the pre-push pool's own invocation, never
 # a `cd` into the fixture directory (CLAUDE.md measures that as five fabricated failures).
 # The sandbox is removed on exit unless `AI_DLC_HERMETIC_KEEP=1`. A declared DIRECTORY is copied by
@@ -559,6 +560,8 @@ while IFS= read -r un; do
   [ -n "$un" ] || continue
   ur="$(command -v "$un" 2>/dev/null)" || ur=""
   case "$ur" in /*) [ -x "$ur" ] || ur="" ;; *) ur="" ;; esac
+  # A stub of an enclosing run's undeclared-tool trap (below) is not the tool.
+  [ -z "$ur" ] || [ ! -f "${ur%/*}/.hr-trap-farm" ] || ur=""
   [ -n "$ur" ] || { printf 'hermetic-run: %s: declared tool name (unkeyed) is not on PATH: %s\n' "$HR_FX" "$un" >&2; exit 2; }
   printf '%s\n' "$ur" >> "$HR_WORK/tools.unk"
 done < "$HR_WORK/unkeyed"
@@ -580,6 +583,61 @@ done
 # PATH of those dirs ran before; it is not put on the fixture's PATH, so a run.sh forking `bash` must declare it.
 HR_BASH="$( IFS=:; for d in $HR_TOOL_DIRS; do [ -x "$d/bash" ] && { printf '%s' "$d/bash"; break; }; done )"
 [ -n "$HR_BASH" ] || { printf 'hermetic-run: %s: no bash in any of %s to launch the fixture with\n' "$HR_FX" "$HR_TOOL_DIRS" >&2; exit 2; }
+# THE UNDECLARED-TOOL TRAP (BL-1118). After the farm on the fixture's PATH sits a directory holding a `#!/bin/sh` stub
+# for every executable name in the fixed tool dirs, so a call to a tool that exists here and is not declared reaches a
+# stub instead of `command not found`. The stub appends its name to HR_TRAP_LOG when set, prints `<name>: command not
+# found` and exits 127, so the call answers as before, its stderr redirected or not, while the log records it. A
+# declared name resolves in the farm first. The stub runs under /bin/sh and starts no counted bash. The directory is
+# built once per name set and reused: found on this run's own PATH (an enclosing run's trap), else in the invoker's
+# TMPDIR under a name carrying the set's size, else built there, aside, and renamed in whole. Only builtins and tools
+# this span already runs (cp, ln, mkdir, mv, rm) run here, so a fixture driving this runner declares nothing new.
+# The name list is globbed under LC_ALL=C: glob order follows the collation, and a nested runner (under the outer
+# run's env -i, no locale) must list the names in the order the run that built the farm listed them.
+hr_tn="$( LC_ALL=C
+  for d in $( IFS=:; printf '%s ' $HR_TOOL_DIRS ); do
+    for hr_tp in "$d"/*; do [ -f "$hr_tp" ] && [ -x "$hr_tp" ] && printf '%s\n' "${hr_tp##*/}"; done
+  done )"
+hr_tc=0
+while IFS= read -r hr_tp; do [ -z "$hr_tp" ] || hr_tc=$((hr_tc + 1)); done <<EOF
+$hr_tn
+EOF
+hr_trap_same() { # <dir>: the dir is a complete trap farm built for exactly this name list
+  local x=""
+  [ -f "$1/.hr-trap-farm" ] && [ -f "$1/.names" ] || return 1
+  IFS= read -r -d '' x < "$1/.names"
+  [ "$x" = "$hr_tn" ]
+}
+hr_trap=""
+for d in $( IFS=:; printf '%s ' ${PATH:-} ); do hr_trap_same "$d" && { hr_trap="$d"; break; }; done
+if [ -z "$hr_trap" ]; then
+  hr_trap="${TMPDIR:-/tmp}/ai-dlc-hr-trapc.${UID:-0}.$hr_tc.${#hr_tn}"
+  if ! hr_trap_same "$hr_trap"; then
+    hr_tb="$HR_WORK/trapbuild"
+    # The stub takes its mode from a copy of this runner (tracked 100755), then its text replaces the copy's bytes;
+    # chmod runs only where that copy is not executable.
+    mkdir -p "$hr_tb" && cp "${BASH_SOURCE[0]:-$0}" "$hr_tb/.stub" || exit 2
+    printf '%s\n' '#!/bin/sh' 'n=${0##*/}' \
+      "[ -z \"\${HR_TRAP_LOG:-}\" ] || printf '%s\\n' \"\$n\" >> \"\$HR_TRAP_LOG\"" \
+      "printf '%s: command not found\\n' \"\$n\" >&2" 'exit 127' > "$hr_tb/.stub" || exit 2
+    [ -x "$hr_tb/.stub" ] || chmod u+x "$hr_tb/.stub" || exit 2
+    while IFS= read -r hr_tp; do
+      [ -n "$hr_tp" ] && [ ! -e "$hr_tb/$hr_tp" ] && ln -s .stub "$hr_tb/$hr_tp"
+    done <<EOF
+$hr_tn
+EOF
+    printf '%s' "$hr_tn" > "$hr_tb/.names" && : > "$hr_tb/.hr-trap-farm" || exit 2
+    # Renamed in only where the slot is absent. A concurrent builder that renamed first wins: this copy then lands
+    # INSIDE it and is removed from there. A slot holding another name set (stale, or cleaned in part) is left as it
+    # is, and this run uses its own build.
+    if [ ! -e "$hr_trap" ]; then
+      mv "$hr_tb" "$hr_trap" 2>/dev/null || :
+      [ ! -d "$hr_trap/trapbuild" ] || rm -rf "$hr_trap/trapbuild"
+    fi
+    hr_trap_same "$hr_trap" || hr_trap="$hr_tb"
+    hr_trap_same "$hr_trap" || { printf 'hermetic-run: %s: could not build the undeclared-tool trap at %s\n' "$HR_FX" "$hr_trap" >&2; exit 2; }
+  fi
+fi
+: > "$HR_WORK/trap.log" || exit 2
 # A DECLARED GIT RUN THROUGH A FARM SYMLINK derives its helper and template dirs from the SYMLINK's path (a
 # RUNTIME_PREFIX build), so `git clone` reported `git-upload-pack: command not found` and `git init` reported
 # `templates not found in <work>/share/git-core/templates`. Both are taken from the REAL binary behind the farm
@@ -614,11 +672,19 @@ set --
 [ -z "$hr_gtd" ] || set -- "$@" "GIT_TEMPLATE_DIR=$hr_gtd"
 [ "$hr_fxc" = 0 ] || set -- "$@" "BASH_ENV=$FXCOUNT_RC" "FXCOUNT_LOG=$FXCOUNT_DIR/$HR_FX"
 HR_LOG="$HR_WORK/log"
-( cd "$HR_SB" && env -i PATH="$HR_BIN" HOME="$HR_WORK/home" TMPDIR="$HR_WORK/tmp" \
+( cd "$HR_SB" && env -i PATH="$HR_BIN:$hr_trap" HR_TRAP_LOG="$HR_WORK/trap.log" HOME="$HR_WORK/home" TMPDIR="$HR_WORK/tmp" \
     AI_DLC_PROJECT_ROOT="$HR_SB" PREPUSH_POOL_DEPTH="${PREPUSH_POOL_DEPTH:-}" ${1+"$@"} \
     "$HR_BASH" "$HR_FXROOT/$HR_FX/run.sh" ) > "$HR_LOG" 2>&1
 hr_rc=$?
 cat "$HR_LOG"
+# AN UNDECLARED TOOL CALLED is a WARNING in both layouts, and the verdict is unchanged: a fixture carried across this
+# arm's landing meets it on another change's push, so a FAIL here would block work that did not cause it (BL-1143
+# measures the population and makes it a FAIL). Names are listed once each, in call order.
+if [ -s "$HR_WORK/trap.log" ]; then
+  hr_und=" "
+  while IFS= read -r hr_tp; do case "$hr_und" in *" $hr_tp "*) ;; *) hr_und="$hr_und$hr_tp " ;; esac; done < "$HR_WORK/trap.log"
+  printf 'hermetic-run: %s: WARNING undeclared tool(s) called:%s-- each exists in %s and is absent from tools.decl, so the call answered rc 127; declare it (the verdict is unchanged)\n' "$HR_FX" "$hr_und" "$HR_TOOL_DIRS"
+fi
 
 # REQUIRED inputs: each must have a `HERMETIC-CONSUMED <path>` line in the fixture's output, the
 # path spelled as declared or prefixed by the sandbox root, whole-line, so neither a longer path

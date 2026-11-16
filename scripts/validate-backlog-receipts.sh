@@ -212,6 +212,10 @@
 # grammar, exemption, the measured false-positive set, its narrowing and its floors: the R12
 # block above r12_judge. `R12-POPULATION:` prints in every verbosity; ceiling 0.
 #
+# R14 -- A LIVE LANDED LINE IS IN A FORM scripts/backlog-rotate.sh MOVES (BL-1147). Population, the loaded
+# grammar, scope and the measured false-positive set: the R14 block above r14_judge. `R14-POPULATION:` prints
+# in every verbosity; ceiling 0.
+#
 # M1 AND R13 -- A REMOVED DRIVER IS A CANNOT-MEASURE EXIT, AND A NAMED FILE A RECEIPT READS IS REMOVED AND THE
 # RECEIPT RE-RUN (BL-899). M1 is R7's fourth route (driver-absent, lead ruling L3); R13 runs only under
 # `--traced-removal`. Mechanism, instrument (atime after a forced epoch), the NAMED closure and its narrowing,
@@ -2668,6 +2672,63 @@ END { r12_flush(); printf "R12-COUNTS %d %d %d\n", ne, np, nx }' "$_l")" || retu
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# R14 -- A LIVE LANDED LINE IS IN A FORM scripts/backlog-rotate.sh MOVES (BL-1147). Rotate keys an entry's close on
+# its FIRST line opening `(<br>)?**LANDED (v<digit>` (fenced or not) and moves it only when that line is one of the two
+# forms of its LANDED_FORM span; any other form reads `sha ABSENT` and REFUSES the release's rotate, after every
+# builder check and pregate passed.
+#   POPULATION: every LIVE entry's first line opening `(<br>)?**LANDED (v`, after `vVERSION_PLACEHOLDER` is stamped
+#     to `v0.0.0` (a builder's line names no version until the squash; the stamp is the lead's). The archive is OUT:
+#     `--archive` exits before this arm.
+#   GRAMMAR: LOADED, never restated. The `# LANDED_FORM_BEGIN` .. `# LANDED_FORM_END` span of backlog-rotate.sh
+#     (beside this script) is extracted once per run and its `landed_form` applied to each line; empty LF_SHA AND
+#     LF_SLV is a finding. A missing span, or one that defines no landed_form, is a refusal (exit 2), never a pass.
+#   SCOPE: LANDED only. A PARTIAL line never rotates, and `**PARTIAL (vVERSION_PLACEHOLDER; ...)` is a legal form.
+#   TIER: ERROR, ceiling 0.
+#   FALSE-POSITIVE SET, MEASURED: {} (0), by r14_judge itself at edb812bc1. Population: the 1040 archived LANDED
+#     lines (every one an entry's first, R14-COUNTS 1040), each a line rotate has already moved; applying the loaded
+#     landed_form to every line opening `(<br>)?**LANDED (v` there reads 820 sha + 220 sha-less, 0 neither. The live
+#     ledger carries 0 LANDED lines (they rotate out), so the archive is the corpus that discriminates. Positive
+#     control: a seeded `**LANDED (vVERSION_PLACEHOLDER; batch 1, W1).**` line FIRES, and `**LANDED
+#     (vVERSION_PLACEHOLDER).** (prose)`, a `(v.., verified <sha>)` line and a `**PARTIAL (vVERSION_PLACEHOLDER; ..)`
+#     line stay quiet. HOW IT GOT THERE: no narrowing was needed; the grammar is rotate's own.
+#   COST: one sed extraction of the span per run and one awk pass over the ledger; then landed_form's two sed forks
+#     per live LANDED line (a handful on a release branch, 0 on main).
+# ---------------------------------------------------------------------------
+# r14_judge <ledger-file> <backlog-rotate.sh> -> one `R14 <BL-id>\t<line>` per finding, then one
+# `R14-COUNTS <landed lines>` line. Returns 0 with no finding, 1 with any, 2 when it cannot read either file.
+r14_judge() {
+  local _l="$1" _r="$2" _span _p _o _lb _ln _n=0 _f=""
+  _span="$(sed -n '/^# LANDED_FORM_BEGIN$/,/^# LANDED_FORM_END$/p' "$_r" 2>/dev/null)" || return 2
+  [ -n "$_span" ] || return 2
+  eval "$_span" || return 2
+  declare -F landed_form >/dev/null || return 2
+  if ! declare -F ledger_entry_awk >/dev/null || ! declare -F backlog_entry_label_awk >/dev/null; then
+    return 2
+  fi
+  _p="$(ledger_entry_awk; backlog_entry_label_awk)" || return 2
+  _o="$(awk "$_p"'
+{
+  l = backlog_entry_label($0)
+  if (l != "") { lbl = l; got = 0; next }
+  if (lbl == "" || got) next
+  if ($0 ~ /^(<br>)?\*\*LANDED \(v/) { got = 1; printf "%s\t%s\n", lbl, $0 }
+}' "$_l")" || return 2
+  while IFS="$(printf '\t')" read -r _lb _ln; do
+    [ -n "$_lb" ] || continue
+    _n=$((_n + 1))
+    landed_form "${_ln//vVERSION_PLACEHOLDER/v0.0.0}"
+    [ -z "$LF_SHA" ] && [ -z "$LF_SLV" ] && _f="$_f$(printf 'R14 %s\t%s' "$_lb" "$_ln" | cut -c1-200)
+"
+  done <<R14_EOF
+$_o
+R14_EOF
+  [ -n "$_f" ] && printf '%s' "$_f"
+  printf 'R14-COUNTS %d\n' "$_n"
+  [ -z "$_f" ] || return 1
+  return 0
+}
+
 
 # ===========================================================================
 # M1 AND R13 -- A RECEIPT THAT STOPS MEASURING WHEN A FILE IT READS IS REMOVED (BL-899).
@@ -3413,8 +3474,21 @@ r12_report() { # prints the R12 failure on stderr; returns 1 when there is one
   echo "FAIL: R12: $N_R12 live PARTIAL entr(ies) in $LEDGER (named above) carry a verify: value that is not manual. A PARTIAL entry has owed work open, and an sh receipt over the half that shipped exits 0, which scripts/backlog-reverify.sh reads as CLOSE-CANDIDATE -- a false close. REMEDY: write \`verify: manual\` (a reason may follow) until the entry closes; a closing entry carries a pending \`**LANDED (v<version>).**\` line (its first LANDED line, naming a version >= VERSION, anywhere in the body) and R8 then runs its receipt." >&2
   return 1
 }
+# R14 is TEXT-ONLY too: it runs no receipt, so it judges the ledger on a re-entered run as well.
+R14_OUT="$(r14_judge "$LEDGER" "${SELF%/*}/backlog-rotate.sh")"; _r14_rc=$?
+[ "$_r14_rc" -eq 2 ] && { echo "$(me): FAIL -- R14 could not read $LEDGER or the LANDED_FORM span of ${SELF%/*}/backlog-rotate.sh; this is a refusal, not a reading." >&2; exit 2; }
+N_R14="$(printf '%s\n' "$R14_OUT" | grep -c '^R14 ')" || N_R14=0
+read -r _ R14_N <<<"$(printf '%s\n' "$R14_OUT" | sed -n '/^R14-COUNTS /p')"
+echo "R14-POPULATION: ${R14_N:-0} live LANDED line(s), ${N_R14} in a form backlog-rotate.sh refuses."
+r14_report() { # prints the R14 failure on stderr; returns 1 when there is one
+  [ "$N_R14" -gt 0 ] || return 0
+  printf '%s\n' "$R14_OUT" | awk -F'\t' '$1 ~ /^R14 / { printf "FAIL: %s\t%s\n", $1, $2 }' >&2
+  echo "FAIL: R14: $N_R14 live LANDED line(s) in $LEDGER (named above) are in neither form scripts/backlog-rotate.sh moves, so the release's rotate reads them \`sha ABSENT\` and REFUSES. REMEDY: open the line with exactly \`**LANDED (vVERSION_PLACEHOLDER).**\` and put any provenance after it, e.g. \`**LANDED (vVERSION_PLACEHOLDER).** (batch N, unit.) <text>\`." >&2
+  return 1
+}
 if [ -n "$RE_ENTRY" ]; then
   r12_report || exit 1
+  r14_report || exit 1
   R8_SKIP=1
   score_closed "$LEDGER" "$SUBJECT_ROOT" "$BASE_REF" >/dev/null || exit 2
   open_skip_line
@@ -3594,6 +3668,7 @@ if [ "$N_R11" -gt 0 ]; then
   RC=1
 fi
 r12_report || RC=1
+r14_report || RC=1
 
 # THE POPULATION FLOOR. The three ceilings all bound a count WITHIN the `sh` population, so
 # the last escape is to leave it: rewrite `verify: sh` as `verify: manual`, or delete the

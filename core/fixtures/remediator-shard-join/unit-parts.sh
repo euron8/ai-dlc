@@ -30,7 +30,7 @@ UP_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
 broken() { echo "FIXTURE BROKEN: $NAME: $1" >&2; exit 2; }
 # shellcheck source=/dev/null
-. "$JOIN" || broken "sourcing $JOIN failed"
+fx_inproc "$JOIN" && . "$JOIN" || broken "sourcing $JOIN failed"
 for _f in contract_check contract_refusals checks_field checks_refusals src_check src_refusals seat_complete_check sib_control; do
   declare -F "$_f" >/dev/null || broken "$JOIN defined no $_f when sourced; nothing was asserted"
 done

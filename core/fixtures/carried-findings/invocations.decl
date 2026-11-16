@@ -1,4 +1,5 @@
 # Set from one counted run (scripts/seed-verdict-store.sh) after the batteries were removed; every row is exact.
 6 *
 5 core/scripts/validate-carried-findings.sh
-1 inproc:core/scripts/validate-carried-findings.sh
+# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
+61 inproc:core/scripts/validate-carried-findings.sh

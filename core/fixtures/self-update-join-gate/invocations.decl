@@ -1,9 +1,10 @@
 # Gate starts, 10, set from a counted run (BL-878): the e2e cell r-old (1), the 5 starts its real SAFE-STOP walk makes
 # of the gate (the --safe-stop start and 4 nested classify runs, covered by the nested row of cells.decl), and the 4 cli
 # cells. Every other gate run is one in-process call of sug_main, each paired with an fx_inproc: the source (1), r_current and
-# r_noanchor (2), the 7 rc pairs, the enclosed-layout run (1) and the 4 equivalence twins (4) make the 15 of the inproc row.
+# r_noanchor (2), the 4 rc pairs (0,2 1,1 3,3 1,0; the 2,2 0,1 2,1 pairs are the in-process side of the cli-ok, cli-defer and
+# cli-undecided cells), the enclosed-layout run (1) and the 4 equivalence twins (4) make the 12 of the inproc row.
 # RE-MEASURE when an arm or a gate run is added or removed, AND when range.sh's range moves: a newer
 # anchor-adding commit changes the walk's candidate count, so its nested-run count can move with history.
-65 *
+56 *
 10 core/skills/ai-dlc-update/reconcile/self-update-gate.sh
-15 inproc:core/skills/ai-dlc-update/reconcile/self-update-gate.sh
+12 inproc:core/skills/ai-dlc-update/reconcile/self-update-gate.sh

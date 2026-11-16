@@ -3,3 +3,7 @@
 0 core/scripts/validate-handoff-evidence.sh
 0 core/scripts/sprint-status.sh
 0 core/scripts/record-only-diff.sh
+# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
+678 inproc:core/scripts/record-only-diff.sh
+108 inproc:core/scripts/sprint-status.sh
+122 inproc:core/scripts/validate-handoff-evidence.sh

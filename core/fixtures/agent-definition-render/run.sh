@@ -38,6 +38,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 [ -n "$ROOT" ] || { echo "FIXTURE ERROR: could not resolve project root three levels above $HERE" >&2; exit 2; }
 
@@ -54,7 +55,7 @@ echo "agent-definition-render"
 if [ -z "$SUBJECT" ]; then
   echo "  skip  render-agent-definitions.sh is not in this tree yet"
   echo "  0 failed, 1 skipped"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 if ! command -v jq >/dev/null 2>&1; then
   echo "  FIXTURE BROKEN: jq is absent, so the expected role set cannot be derived from the declaration"
@@ -88,7 +89,7 @@ grep -q '^rad_main() {$' "$SUBJECT"; _gx=$?
 grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJECT"; _gx=$?
 [ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJECT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
 [ "$_gx" -ne 0 ] || rad_guard=1
-if [ "$rad_def$rad_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$rad_def$rad_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
 if [ "$rad_def" = 0 ]; then echo "   FAIL  $SUBJECT carries the column-0 source guard but no \`rad_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "agent-definition-render: FAIL (1)" >&2; exit 1; fi
 if [ "$rad_guard" = 0 ]; then echo "   FAIL  $SUBJECT defines \`rad_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run rad_main in this shell" >&2; echo "agent-definition-render: FAIL (1)" >&2; exit 1; fi
 fx_inproc "$SUBJECT"

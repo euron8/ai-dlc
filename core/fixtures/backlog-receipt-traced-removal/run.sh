@@ -38,7 +38,7 @@ broken() { echo "$NAME: FIXTURE BROKEN -- $1" >&2; exit 2; }
 R="$FX"
 while [ "$R" != "/" ] && [ ! -f "$R/scripts/validate-backlog-receipts.sh" ]; do R="$(dirname "$R")"; done
 [ -f "$R/scripts/validate-backlog-receipts.sh" ] || broken "no scripts/validate-backlog-receipts.sh above $FX"
-for _f in scripts/backlog-receipt-lib.sh scripts/backlog-reverify.sh core/skills/ai-dlc-update/reconcile/lib.sh \
+for _f in scripts/backlog-receipt-lib.sh scripts/backlog-reverify.sh scripts/backlog-rotate.sh core/skills/ai-dlc-update/reconcile/lib.sh \
           core/skills/ai-dlc-update/reconcile/ledger-reverify.sh; do
   [ -f "$R/$_f" ] || broken "$_f is absent under $R"
 done
@@ -46,6 +46,7 @@ for _t in git awk sed find touch xargs sort cmp mktemp; do command -v "$_t" >/de
 # Every `!` (REQUIRED) input of inputs.decl, said consumed once it is resolved: hermetic-run refuses a run that never
 # names one.
 echo "HERMETIC-CONSUMED scripts/validate-backlog-receipts.sh"
+echo "HERMETIC-CONSUMED scripts/backlog-rotate.sh"
 
 FAILS=0
 ok()  { echo "ok    $*"; }
@@ -64,7 +65,7 @@ mkdist() {
   mkdir -p "$1/scripts" "$1/core/skills/ai-dlc-update/reconcile" || return 1
   echo "0.0.0" > "$1/VERSION"
   cp "$2" "$1/scripts/validate-backlog-receipts.sh" && cp "$R/scripts/backlog-receipt-lib.sh" "$1/scripts/" \
-    && cp "$R/scripts/backlog-reverify.sh" "$1/scripts/" \
+    && cp "$R/scripts/backlog-reverify.sh" "$1/scripts/" && cp "$R/scripts/backlog-rotate.sh" "$1/scripts/" \
     && cp "$R/core/skills/ai-dlc-update/reconcile/lib.sh" "$1/core/skills/ai-dlc-update/reconcile/" \
     && cp "$R/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" "$1/core/skills/ai-dlc-update/reconcile/"
 }

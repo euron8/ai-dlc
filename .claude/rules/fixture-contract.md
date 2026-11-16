@@ -35,7 +35,8 @@ change. Building good arms is `fixture-mutants.md`'s; shipping is `fixture-ship-
   <args>]`, which prints the hook's status and runs it with `GIT_*` unset, stdin `/dev/null`,
   `AI_DLC_READSET_LIVE_TRACE=0` and the store `<tree>.verdicts`; it sets no `AI_DLC_FIXTURE_JOBS` (a nested pool is
   capped at two workers). `inproc.sh`: `inproc_load`, `inproc_run`. `mutant.sh`: `fx_inproc`. `settled-net.sh`:
-  `st_net`, `st_reap`. `pool-span.sh`: `pool_span <hook> <out> <SPAN>...`, which writes the named hook spans under an
+  `st_net`, `st_reap`. `layout.sh`: `fx_dist_layout`, `fx_skip_exit` (ends a subject-absent SKIP: exit 0 on a
+  consumer, FIXTURE BROKEN in the distribution). `pool-span.sh`: `pool_span <hook> <out> <SPAN>...`, which writes the named hook spans under an
   exported store default of `<world>.verdicts` for the shell that sources `<out>` inside its world. Enforcer: `core/fixtures/suite-dispatch-order/run.sh` hook_drive, world_git, report_end;
   `scripts/validate-fixture-hygiene.sh` H10, H11.
 - **C9** No fixture carries a mutation battery: no `run.sh` or `lib.sh` calls or defines `mutant_killed`, `need_base`,

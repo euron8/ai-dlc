@@ -33,6 +33,9 @@
 #                the roster and a consult (the consult never clears a granted agent)
 #   WITHDRAWN    grant then `available:false`, no roster -> SILENT; twin: withdrawn then re-granted -> DENY
 #   ORDER        push then advisor -> SILENT; twin: advisor then push -> DENY
+#   BLOB         BL-1137, the same blocks re-carried on an `api-request-blob` line: push then a blob
+#                advisor -> DENY; advisor then a blob push -> SILENT; no grant, roster, push then a
+#                blob consult -> DENY; twin: that consult on an assistant line -> SILENT
 #   ERRCLEAR     push, advisor, an errored (non-unavailable) result -> SILENT
 #   UNAV         advisor, `unavailable`, push -> WARN; twin REARM: then advisor + success -> DENY
 #   MERGE        `gh pr merge 7 --squash --delete-branch` and mcp__github__merge_pull_request -> DENY;
@@ -251,6 +254,11 @@ mk "$P1/ap.jsonl"       "$GRANT" "$ADV" "$PUSHL"
 mk "$P1/err.jsonl"      "$GRANT" "$PUSHL" "$ADV" "$ERRRES"
 mk "$P1/unav.jsonl"     "$GRANT" "$ADV" "$UNAV" "$PUSHL"
 mk "$P1/rearm.jsonl"    "$GRANT" "$ADV" "$UNAV" "$ADV" "$OKRES" "$PUSHL"
+# BLOB (BL-1137): an `api-request-blob` line re-carrying an earlier block, in the graph shape
+# (type, hash, sessionId, message{role, content}). blob() turns a harness line into one.
+blob() { printf '%s' "$1" | jq -c '{type:"api-request-blob",hash:"h",sessionId:"s",message:{role:"user",content:.message.content}}'; }
+mk "$P1/blob-adv.jsonl"  "$GRANT" "$PUSHL" "$(blob "$ADV")"
+mk "$P1/blob-push.jsonl" "$GRANT" "$ADV" "$(blob "$PUSHL")"
 mk "$P1/denied.jsonl"   "$GRANT" "$ADV" "$PUSH9" "$DENY9"
 mk "$P1/pushed.jsonl"   "$GRANT" "$ADV" "$PUSH9" "$OK9"
 mk "$P1/deniedarr.jsonl" "$GRANT" "$ADV" "$PUSH9" "$DENY9A"
@@ -351,6 +359,10 @@ mk "$P1/ng-offc.jsonl"  "$GRANT" "$ROSTER" "$GOFF" "$MCPU" "$MCPR"
 # A granted agent's stale `unavailable`, then the grant withdrawn: the WARN is the granted arm's only.
 mk "$P1/ng-offunav.jsonl" "$GRANT" "$ROSTER" "$ADV" "$UNAV" "$GOFF" "$PUSHL" "$OK1"
 mk "$P1/ng-grc.jsonl"   "$GRANT" "$ROSTER" "$USER" "$MCPU" "$MCPR"
+# BLOB, the no-grant arm: a consult after the shipped push re-carried on a blob line, and its twin
+# with the consult on its own assistant line.
+mk "$P1/ng-blobc.jsonl" "$USER" "$ROSTER" "$PUSHL" "$OK1" "$(blob "$MCPU")"
+mk "$P1/ng-blobc-real.jsonl" "$USER" "$ROSTER" "$PUSHL" "$OK1" "$MCPU" "$MCPR"
 mk "$P1/par/subagents/agent-a20.jsonl" "$USER" "$ROSTER"
 mk "$P1/par/subagents/agent-a21.jsonl" "$USER" "$ROSTER" "$MCPU" "$MCPR"
 mkdir -p "$P1/q/subagents"
@@ -390,6 +402,7 @@ _wt="$(jq -r '.message.id? // empty' "$P1/win-out.jsonl" | sort -u | grep -c .)"
 for _f in g none off regrant pa ap err unav rearm denied pushed deniedarr ran ranfull okenv apok apm amp ap1 ac par q \
           mcp-done mcp-bare mcp-adv \
           ng-r ng-rx ng-rc ng-rrm ng-call ng-callok ng-off ng-offc ng-offunav ng-grc ng-win-in ng-win-out \
+          blob-adv blob-push ng-blobc ng-blobc-real \
           par/subagents/agent-a20 par/subagents/agent-a21 \
           win-in win-out \
           f404 fmergeok fmergedel fmerge404 f141 fdots fforced frej fsafe fhook fred fokref fokutd \
@@ -467,6 +480,13 @@ c WITHDRAWN DENY "$(bash_in "$P1/regrant.jsonl" "$SPRINT" 'git push -u origin HE
 
 c ORDER SILENT "$(bash_in "$P1/pa.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 c ORDER DENY "$(bash_in "$P1/ap.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+# BLOB (BL-1137): a block re-carried on an api-request-blob line is credited nowhere. Twins one line
+# kind apart: ORDER's pa (the attempt on an assistant line -> SILENT) and ap (the push -> DENY), and
+# b-consult-real (the consult on an assistant line -> SILENT).
+ct BLOB DENY b-adv "$(bash_in "$P1/blob-adv.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct BLOB SILENT b-push "$(bash_in "$P1/blob-push.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct BLOB DENY b-consult "$(bash_in "$P1/ng-blobc.jsonl" "$SPRINT" 'git push -u origin HEAD')"
+ct BLOB SILENT b-consult-real "$(bash_in "$P1/ng-blobc-real.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 
 c ERRCLEAR SILENT "$(bash_in "$P1/err.jsonl" "$SPRINT" 'git push -u origin HEAD')"
 

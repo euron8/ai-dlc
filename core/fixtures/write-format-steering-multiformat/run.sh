@@ -32,6 +32,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 SEED_ERRF="${TMPDIR:-/tmp}/wfs-mf-seed-err.$$"
 SEED_OUT="$(bash "$HERE/seed.sh" 2>"$SEED_ERRF")"; SEED_RC=$?
 SEED_ERR="$(cat "$SEED_ERRF" 2>/dev/null)"
@@ -43,7 +44,7 @@ rm -f "$SEED_ERRF"
 if [ "$SEED_RC" -eq 3 ]; then
   echo "write-format-steering-multiformat: SKIPPED — validate-write-format-steering.sh or its"
   echo "  declaration is not on this tree yet (a consumer between two pulls). Nothing was judged."
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 [ "$SEED_RC" -eq 0 ] && [ -n "$SEED_OUT" ] || {
   echo "write-format-steering-multiformat: FIXTURE ERROR — seed failed (rc=$SEED_RC): ${SEED_ERR:-<no message>}" >&2

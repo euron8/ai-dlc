@@ -37,6 +37,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 unset GIT_CONFIG_COUNT
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 ROOT="$HERE"; RECON=""; SKILL=""
 while [ "$ROOT" != "/" ]; do
   for c in "core/skills/ai-dlc-update" ".claude/skills/ai-dlc-update"; do
@@ -50,7 +51,7 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/dist-clone.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/SKILL.md"
 if [ ! -f "$SUBJ" ]; then
   echo "SKIP dist-clone: reconcile/dist-clone.sh is not installed yet (the fixture arrived before its subject); nothing was checked"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 
 W="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
@@ -116,7 +117,7 @@ dc() {
   [ "$s" = "$DC_SOURCED" ] || { echo "FIXTURE BROKEN: driving $s while the dcl_main sourced last is ${DC_SOURCED:-none}" >&2; exit 2; }
   ERRF="$SD/$t.err"
   OUT="$(export ${envs[@]+"${envs[@]}"} DCF_LOG="$SD/fetch.log" DCF_REALGIT="$REALGIT" PATH="$SD/shim:$PATH" \
-    && dcl_main "$@" 2>"$ERRF")"; RC=$?
+    && fx_inproc "$s" && dcl_main "$@" 2>"$ERRF")"; RC=$?
   L1="$(printf '%s\n' "$OUT" | sed -n 1p)"; L2="$(printf '%s\n' "$OUT" | sed -n 2p)"
 }
 has() { grep -qF -- "$1" "$ERRF"; }
@@ -244,7 +245,7 @@ grep -q '^dcl_main() {$' "$SUBJ"; _gx=$?
 grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJ"; _gx=$?
 [ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
 [ "$_gx" -ne 0 ] || w_guard=1
-if [ "$w_def$w_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$w_def$w_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
 if [ "$w_def" = 0 ]; then bad "$SUBJ carries the column-0 source guard but no \`dcl_main() {\` line -- a respelled subject this fixture cannot drive"; report_end dist-clone; fi
 if [ "$w_guard" = 0 ]; then bad "$SUBJ defines \`dcl_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run dcl_main in this shell"; report_end dist-clone; fi
 suite "$SUBJ" "$W/real"
@@ -265,7 +266,7 @@ EQ="$W/eq"; mkdir -p "$EQ"
 eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
   local id="$1"; shift
   [ "$DC_SOURCED" = "$SUBJ" ] || { echo "FIXTURE BROKEN: cli cell $id with the dcl_main of ${DC_SOURCED:-nothing} sourced" >&2; exit 2; }
-  ( export DCF_LOG="$W/real/fetch.log" DCF_REALGIT="$REALGIT" PATH="$W/real/shim:$PATH" && dcl_main "$@" ) \
+  ( export DCF_LOG="$W/real/fetch.log" DCF_REALGIT="$REALGIT" PATH="$W/real/shim:$PATH" && fx_inproc "$SUBJ" && dcl_main "$@" ) \
     > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
   DCF_LOG="$W/real/fetch.log" DCF_REALGIT="$REALGIT" PATH="$W/real/shim:$PATH" FXCELL="$id" bash "$SUBJ" "$@" \
     > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"

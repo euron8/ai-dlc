@@ -159,6 +159,22 @@ earliest subagent record is 2026-10-07T09:45Z, so its figure is a floor on a par
 `pipeline-efficiency-s317-s320/b244-snapshot` holds no `segs.jsonl`, so s318 alone is the whole before-sprint. s322 is
 open (8 planned stories, window ends 2026-11-11T10:30Z).
 
+## gapclass.py: what the subagent gap was spent on
+
+`gapclass.py` takes the same extract as `gap.py` and classes every sub gap by the state when it opened. The docstring
+defines the classes, the record rules and the per-unit control. The control refuses unless each transcript's summed
+gap equals its `segs.jsonl` gap to the millisecond. Set the same `EXTRACT_WIN_START`, `EXTRACT_WIN_END` and
+`EXTRACT_ROOT` as the extract.
+
+    EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py OUT
+    EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 docs/analysis/subagent-poll-bl514/gapclass.py OUT
+    python3 docs/analysis/subagent-poll-bl514/gapclass.py --probe
+    (add `--detail FILE` for one row per gap, with the text before it and the line that closed it)
+
+The self-probe is one synthetic transcript holding one gap of each class and a 200 s interval that is not a gap. The
+open-tool:poll class is the hook's own `loopsleep or longsleep`, lifted by `lift.sh`. BL-514's batch-257 paragraph
+carries the complete-s322 reading.
+
 ## lift.sh: one copy of the rule lift and the reader
 
 `lift.sh` is sourced by `classify.sh` and `join.sh`; neither owns a copy. `bl514_lift HOOK WORK` lifts the hook's four jq

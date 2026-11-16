@@ -1,8 +1,0 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts are run.sh
-# itself, the three cli cells of cells.decl, and the `bash core-paths.sh --map` of every scan that reaches a `!`
-# input (arm c, each world but w8, and the two cli cells that scan); every other run of a validator copy is in process. inproc rows
-# (fx_inproc, one per source): the shipped validator (arm c) and each world's copy, one per world driven (w1-w5
-# and w7-w16), every copy at <world>/scripts/validate-hermetic-consumption.sh.
-23 *
-3 scripts/validate-hermetic-consumption.sh
-16 inproc:scripts/validate-hermetic-consumption.sh

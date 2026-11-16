@@ -106,6 +106,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 XDG_CONFIG_HOME="$WORK/
 unset FXCELL
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 
 QUIET=0; JF=0
 # chk <status> <message>: a passing status is ok, any other a failure; under QUIET only counted.
@@ -165,7 +166,7 @@ rep() {
   ( for _kv in "$@"; do export "$_kv"; done
     set -e
     . "$N1_LIB"
-    . "$lib"
+    fx_inproc "$lib" && . "$lib"
     if [ "$n1" = stub ]; then scaffold_ignore_state() { si_stub_state "$@"; }; fi
     ai_dlc_scaffold_ignore_report "$root" "$dist" ) </dev/null >"$o" 2>"$o.err"
   RC=$?
@@ -210,7 +211,7 @@ exp_of() { # <tag> <path list on stdin> -> sorted rows
 rows() { printf '%s\n' "$@" | grep . | srt; }
 
 # --- the in-process worlds, each built once ------------------------------------------------------
-POP0="$( ( set -e; . "$SI_LIB"; ai_dlc_once_paths "$ROOT_DIR" ) 2>/dev/null)" || broken "the unmutated population returned non-zero"
+POP0="$( ( set -e; fx_inproc "$SI_LIB" && . "$SI_LIB"; ai_dlc_once_paths "$ROOT_DIR" ) 2>/dev/null)" || broken "the unmutated population returned non-zero"
 POP0_S="$(printf '%s\n' "$POP0" | grep . | srt)"
 n_pop="$(printf '%s\n' "$POP0_S" | grep -c .)" || n_pop=0
 [ "$n_pop" -ge 9 ] || broken "the population has $n_pop path(s), expected at least 9"
@@ -279,7 +280,7 @@ PZD="$WORK/pzd"; seedfile "$PZD/core/skills/ai-dlc/layer-contract.yaml" "schema:
 # --- the in-process cells ---------------------------------------------------------------------------
 cell_P() { # <lib>
   local pop rc=0 d
-  pop="$( ( set -e; . "$1"; ai_dlc_once_paths "$ROOT_DIR" ) 2>/dev/null)" || rc=$?
+  pop="$( ( set -e; fx_inproc "$1" && . "$1"; ai_dlc_once_paths "$ROOT_DIR" ) 2>/dev/null)" || rc=$?
   pop="$(printf '%s\n' "$pop" | grep . | srt)"
   [ "$rc" = 0 ] && [ -n "$pop" ]; chk $? "P: the population is non-empty and returns 0 (rc $rc)"
   if [ "$pop" = "$HAND_S" ]; then chk 0 "P: the population equals the hand list it replaces ($(printf '%s\n' "$pop" | grep -c .) paths: $n_hk keys install.sh reads, 2 READMEs, the feedback log)"
@@ -290,7 +291,7 @@ cell_P() { # <lib>
 }
 cell_PZ() { # <lib>
   local pop rc=0 o="$WORK/out.PZ.$RANDOM"
-  pop="$( ( set -e; . "$1"; ai_dlc_once_paths "$PZD" ) 2>/dev/null)" || rc=$?
+  pop="$( ( set -e; fx_inproc "$1" && . "$1"; ai_dlc_once_paths "$PZD" ) 2>/dev/null)" || rc=$?
   [ "$rc" = 2 ] && [ -z "$pop" ]; chk $? "PZ: a declaration with no key returns 2 and prints no path (rc $rc)"
   rep "$1" 1 "$WM" "$PZD" "$o"
   [ "$RC" = 2 ] && ! grep -q 'scaffold-ignored' "$o"; chk $? "PZ: the report over an empty population returns 2 and prints no row (rc $RC)"

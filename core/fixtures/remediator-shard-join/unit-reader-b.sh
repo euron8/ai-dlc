@@ -44,7 +44,7 @@ RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remed
 # ------------------------------------------------------------------------- the in-process route
 UB_V0=" $(compgen -v | tr '\n' ' ') "; UB_F0=" $(compgen -A function | tr '\n' ' ') "
 # shellcheck source=/dev/null
-. "$JOIN" || { echo "FIXTURE BROKEN: sourcing $JOIN failed" >&2; exit 2; }
+fx_inproc "$JOIN" && . "$JOIN" || { echo "FIXTURE BROKEN: sourcing $JOIN failed" >&2; exit 2; }
 declare -F join_main >/dev/null || { echo "FIXTURE BROKEN: $JOIN defined no join_main when sourced; nothing was asserted" >&2; exit 2; }
 # The join's own top-level names: what sourcing it added, measured, never hand-listed.
 UB_JV=""; for _ub in $(compgen -v); do case "$UB_V0" in *" $_ub "*) ;; *) UB_JV="$UB_JV $_ub" ;; esac; done
@@ -80,7 +80,7 @@ bash() {
     case "$UB_K" in
       join) fx_inproc $RSJ_J; ub_scrub "$UB_JV" "$UB_JF"; join_main "$@" ;;
       hook) fx_inproc $RSJ_H; ub_scrub "" ""; set --; ( . "$UB_F"; hook_pretool_head ) ;;
-      cap) ub_scrub "" ""; set --; . "$UB_F" ;;
+      cap) [[ "$UB_F" != */core/* ]] || fx_inproc "$UB_F"; ub_scrub "" ""; set --; . "$UB_F" ;;
       dval) ub_scrub "" ""
         case "$UB_F" in
           */validate-artifact-derivations.sh) . "$UB_F"; vad_cli "$@" ;; # the loadable validator: sourcing runs nothing

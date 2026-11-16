@@ -64,21 +64,26 @@
 # is untouched -- the wait-beat a teammate row requires is a Bash call, and R puts it BEFORE the
 # advisor call. An advisor attempt after the digest Read clears the stage and deletes the file.
 #
-# THE DETECTION IS THE ADVISOR GATE'S, restated in one jq pass: an attempt is a
-# `server_tool_use` named `advisor`, the grant is the latest `advisor_tool` attachment, and a
-# latest `advisor_tool_result` whose `error_code` is `unavailable` means the harness withdrew
-# the tool (`ai-dlc-advisor-gate.sh` header, DESIGN). NOT BYTE-BOUND to that copy: there it is
-# three arms inside a larger reduce, not a function both files could share, and a binding would
-# need that reduce split first. A divergence between the two is a residual no invariant sees.
+# THE DETECTION IS THE ADVISOR GATE'S, loaded from the sibling library both gates source,
+# `ai-dlc-advisor-detect.sh` (BL-1136): an attempt is a `server_tool_use` named `advisor`, the
+# grant is the latest `advisor_tool` attachment, a latest `advisor_tool_result` whose
+# `error_code` is `unavailable` means the harness withdrew the tool, a consult is a `tool_use`
+# named `mcp__advisor__consult`, and the lead HOLDS the consult when the latest
+# `deferred_tools_delta` naming it adds it, or none names it and a consult is on disk. A block is
+# credited only on an `assistant` line, so an `api-request-blob` line re-carrying an earlier
+# attempt clears nothing (BL-1137). The library unreadable -> a stderr WARN and the call allowed.
+# As in the advisor gate, a GRANTED lead is cleared by a built-in attempt only, and a lead with
+# NO GRANT that holds the consult is cleared by a consult only; its deny names that tool.
 #
 # IT CANNOT WEDGE, by the same argument the read stages make: the action that clears it, an
 # advisor call, is available whenever it is enforced, and every state where it is not stands
-# the stage down. No grant line, or a withdrawn grant -> the file is deleted and the call
-# allowed (a lead on a local model owes no R). A latest result of `unavailable` -> allowed. No
+# the stage down. No grant line, or a withdrawn grant, AND no consult held -> the file is
+# deleted and the call allowed (a lead on a local model with no advisor owes no R). A granted
+# lead's latest result of `unavailable` -> allowed. No
 # digest Read since the compaction -> allowed (this stage does not police that Read, the
 # injected block does). A teammate (`agent_id` set) -> allowed; R binds the lead. A different
 # `session_id` from the one recorded -> the file is stale; deleted, allowed. No readable
-# transcript -> allowed. A LOCAL-MODEL LEAD WITH NO GRANT LINE IS NEVER HELD.
+# transcript -> allowed. A LEAD THAT HOLDS NEITHER ADVISOR IS NEVER HELD.
 #
 # THE BOUNDED ESCAPE, because one state is not covered by the grant line: a lead granted the
 # tool that then switches to a model without it, where the harness may write no withdrawal.
@@ -206,46 +211,61 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
     exit 0
   fi
   [ -n "$R_TP" ] && [ -r "$R_TP" ] || exit 0
+  # THE DETECTION IS THE ADVISOR GATE'S, loaded from the one sibling library both gates source.
+  _AI_DLC_DETECT="${BASH_SOURCE[0]:-$0}"; case "$_AI_DLC_DETECT" in */*) _AI_DLC_DETECT="${_AI_DLC_DETECT%/*}/ai-dlc-advisor-detect.sh" ;; *) _AI_DLC_DETECT=./ai-dlc-advisor-detect.sh ;; esac
+  ADV_DETECT_JQ=""
+  { [ -r "$_AI_DLC_DETECT" ] && . "$_AI_DLC_DETECT"; } 2>/dev/null
+  [ -n "$ADV_DETECT_JQ" ] || { echo "WARN: ai-dlc-recover-gate: the advisor detection library is unreadable ($_AI_DLC_DETECT); touchpoint R is not enforced on this call" >&2; exit 0; }
   # One pass: grant (latest advisor_tool attachment), dig (line of the last digest Read after
   # the last compact_boundary, 0 if none), adv (line of the last advisor attempt), res (U when
   # the latest advisor result is `unavailable`), seen (the incoming call's own line is on disk),
-  # mid (that line's `message.id`; `-` when it carries none or is not on disk).
+  # mid (that line's `message.id`; `-` when it carries none or is not on disk), mcp (line of the
+  # last `mcp__advisor__consult`), held (1 when the lead holds the consult). Blocks are credited
+  # only through `adv_blocks`, so an `api-request-blob` line credits nothing.
   r_scan() {
-    jq -n -R -r --arg tuid "$R_TUID" '
+    jq -n -R -r --arg tuid "$R_TUID" "$ADV_DETECT_JQ"'
       reduce (inputs | (fromjson? // empty) as $l | select(($l | type) == "object") | [input_line_number, $l]) as [$n, $l]
-        ({grant: null, dig: 0, adv: 0, res: "-", seen: 0, mid: "-"};
-         if ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "advisor_tool") then
-           .grant = (($l.attachment.available != false) and ($l.attachment.toolChange != "remove"))
+        ({grant: null, dig: 0, adv: 0, res: "-", seen: 0, mid: "-", roster: null, mcp: 0};
+         if adv_attach($l) then adv_fold($l)
          elif ($l.type == "system" and $l.subtype == "compact_boundary") then .dig = 0
          else
-           reduce ((($l.message.content? // []) | if type == "array" then .[] else empty end | select(type == "object"))) as $b (.;
-             if ($b.type == "server_tool_use" and $b.name == "advisor") then .adv = $n
-             elif $b.type == "advisor_tool_result" then
-               .res = (if (($b.content | if type == "object" then .error_code else null end) // "") == "unavailable" then "U" else "R" end)
+           reduce adv_blocks($l) as $b (.;
+             if ($b | adv_attempt) then .adv = $n
+             elif ($b | adv_res) != null then .res = ($b | adv_res)
+             elif ($b | adv_consult) then .mcp = $n
              elif ($b.type == "tool_use" and $b.name == "Read"
                    and ((($b.input.file_path // "") | tostring) | test("(^|/)skills/ai-dlc/postcompact-digest\\.md$"))) then .dig = $n
              elif ($b.type == "tool_use" and $tuid != "" and (($b.id // "") | tostring) == $tuid) then
                .seen = 1 | .mid = ((($l.message.id? // "") | tostring | gsub("[[:space:]]"; "")) | if . == "" then "-" else . end)
              else . end)
          end)
-      | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.dig) \(.adv) \(.res) \(.seen) \(.mid)"' "$R_TP" 2>/dev/null
+      | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.dig) \(.adv) \(.res) \(.seen) \(.mid) \(.mcp) \(if adv_held then 1 else 0 end)"' "$R_TP" 2>/dev/null
   }
-  # r_judge: sets R_V to allow | clear | owed from R_STATE.
+  # r_judge: sets R_V to allow | clear | owed from R_STATE, and R_ARMED to 1 when the lead holds
+  # an advisor the stage can demand: the built-in grant, or (no grant) the MCP consult.
+  # A granted lead is cleared by a built-in attempt only and stands down on `unavailable`; a
+  # no-grant lead that holds the consult is cleared by a consult only, as in the advisor gate.
   r_judge() {
-    read -r R_GRANT R_DIG R_ADV R_RES R_SEEN R_MID <<<"$R_STATE"
+    read -r R_GRANT R_DIG R_ADV R_RES R_SEEN R_MID R_MCP R_HELD <<<"$R_STATE"
+    R_ARMED=0
+    if [ "${R_GRANT:-none}" = on ] || [ "${R_HELD:-0}" = 1 ]; then R_ARMED=1; fi
     R_V=owed
     [ "${R_DIG:-0}" -gt 0 ] 2>/dev/null || R_V=allow
-    if [ "$R_V" = owed ] && [ "${R_ADV:-0}" -gt "${R_DIG:-0}" ] 2>/dev/null; then R_V=clear; fi
-    if [ "$R_V" = owed ] && [ "${R_RES:--}" = U ]; then R_V=allow; fi
+    if [ "${R_GRANT:-none}" = on ]; then
+      if [ "$R_V" = owed ] && [ "${R_ADV:-0}" -gt "${R_DIG:-0}" ] 2>/dev/null; then R_V=clear; fi
+      if [ "$R_V" = owed ] && [ "${R_RES:--}" = U ]; then R_V=allow; fi
+    else
+      if [ "$R_V" = owed ] && [ "${R_MCP:-0}" -gt "${R_DIG:-0}" ] 2>/dev/null; then R_V=clear; fi
+    fi
     return 0
   }
   R_STATE="$(r_scan)" || exit 0
   [ -n "$R_STATE" ] || exit 0
   r_judge
-  # THIS CHECK IS A PERFORMANCE FAST-PATH, NOT THE BEHAVIOURAL GUARD: a call with no grant is let
-  # through at once instead of after the wait. The post-wait grant check below decides the same
-  # verdict, and the fixture asserts the cost of this line directly (a_nogrant).
-  if [ "${R_GRANT:-none}" != on ]; then rm -f "$OWED" 2>/dev/null || true; exit 0; fi
+  # THIS CHECK IS A PERFORMANCE FAST-PATH, NOT THE BEHAVIOURAL GUARD: a lead holding neither
+  # advisor is let through at once instead of after the wait. The post-wait check below decides
+  # the same verdict, and the fixture asserts the cost of this line directly (a_nogrant).
+  if [ "$R_ARMED" != 1 ]; then rm -f "$OWED" 2>/dev/null || true; exit 0; fi
   # THE DENY IS DECIDED BY R_SEEN, NEVER BY THE CLOCK (BL-630; header: THE RACE). R_NET bounds the
   # stall and is not a ceiling whose expiry denies: the line being waited for lands when its whole
   # message flushes, and a timed deny refused a correct same-message advisor call. Expiry with the
@@ -279,8 +299,8 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
     r_judge
   done
   if [ "$R_V" = clear ]; then rm -f "$OWED" 2>/dev/null || true; exit 0; fi
-  # A GRANT WITHDRAWN DURING THE WAIT: the loop refreshed R_GRANT through r_judge, so a remove-grant attachment that landed with the call's own line allows the call.
-  [ "${R_GRANT:-none}" = on ] || { rm -f "$OWED" 2>/dev/null || true; exit 0; }
+  # A GRANT WITHDRAWN DURING THE WAIT: the loop refreshed R_ARMED through r_judge, so a remove-grant attachment that landed with the call's own line allows the call unless the lead holds the consult.
+  [ "$R_ARMED" = 1 ] || { rm -f "$OWED" 2>/dev/null || true; exit 0; }
   [ "$R_V" = owed ] || exit 0
   # RE-READ AFTER THE WAIT. The other hooks of this call's message may have written the owed file
   # while this one waited, or an advisor attempt or a new recovery removed it, so every decision
@@ -315,7 +335,12 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
     [ "${R_MID:--}" = - ] || R_DMSG="$R_MID"
     owed_put "$R_OSID" "$R_N" "$R_DMSG" "$R_EXP"
   fi
-  jq -n --arg m "AI/DLC post-compact recovery: SKILL.md Rule 32 touchpoint R is owed. You read postcompact-digest.md after this compaction and have made no advisor call since, so this ${R_TOOL} call -- a dispatch or a write -- is refused (message ${R_N} of ${R_MAX_DENIES}; every call of a refused message is refused, and the message counts once). Call the advisor in a message of its own, read its answer, then retry the same call. Any advisor attempt clears this, including one that errors; if the advisor answers 'unavailable' this gate stands down. If you hold no advisor tool, say so in one line (RECOVERY-SKIP: advisor -- <why>) and retry: after ${R_MAX_DENIES} refused messages this stage stands down. Arming a wait-beat (Bash) is not refused and belongs before the advisor call." \
+  if [ "${R_GRANT:-none}" = on ]; then
+    R_ASK="Call the advisor in a message of its own, read its answer, then retry the same call. Any advisor attempt clears this, including one that errors; if the advisor answers 'unavailable' this gate stands down. You hold the built-in advisor tool, so call it; a call to mcp__advisor__consult does not clear this."
+  else
+    R_ASK="You have no built-in advisor grant but hold mcp__advisor__consult: call mcp__advisor__consult in a message of its own, read its answer, then retry the same call. Any consult clears this, including one that errors."
+  fi
+  jq -n --arg m "AI/DLC post-compact recovery: SKILL.md Rule 32 touchpoint R is owed. You read postcompact-digest.md after this compaction and have made no advisor call since, so this ${R_TOOL} call -- a dispatch or a write -- is refused (message ${R_N} of ${R_MAX_DENIES}; every call of a refused message is refused, and the message counts once). ${R_ASK} If you hold no advisor tool, say so in one line (RECOVERY-SKIP: advisor -- <why>) and retry: after ${R_MAX_DENIES} refused messages this stage stands down. Arming a wait-beat (Bash) is not refused and belongs before the advisor call." \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
   exit 0
 fi

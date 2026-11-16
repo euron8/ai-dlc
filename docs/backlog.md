@@ -196,13 +196,47 @@ Owed, by owner:
 - ai-dlc-9b (BL-1059): `review-shard-merge` GM1 `receipt-bl980` re-drive (39 of 47 record-only in-process runs in shard a), `receipt-bl988` retire (-9 runs, shard f), `lib.sh` top-level seeding gated by unit; `owed-derivations` Bt1, 32 reader spawns to 1; `apply-restamp-worklist` 4 merges; `adversarial-shard-merge` 3 merges and the dead guard at `lib.sh:251`.
 - ai-dlc-f3: `enforcement-map-sites` -b/-c repeat A00 and the eq-arms (-2 full runs, -4 CLI, -4 in-process, -4 copies).
 - ai-dlc-f1 (BL-1102): `enforcement-map-derivations` I112, 10 assertions (A33, A34, A35, A41, A42, A60, A61, A66, A67, A69) repeat the validator's own self-probe seeds; one side goes.
-- Unowned, buildable now that 0.1133.0 has landed (re-count first: 0.1133.0 edited the fixture): `retro-branch-behind-main`'s BL-990 receipt (`receipt-bl990.sh` and its call in `run.sh`, repeating the P2/P3/P4 inputs, -7 starts) and the BL-993 norecord cell (the same input as `repointed-ghfail`, -2); `*` 118 to 109 counted at 30a78d884.
-- Unowned: `validator-arm-selection` MERGE1 (2 full runs and 132 in-process onto shard b's seeded tree; first needs hand mutants on the SIGPIPE stderr compare and the TEMPLATE slice). `self-update-gate` wake (27 of 36 `reconcile/` files copied whole but unnamed; `pu-readset-same` unproven against `readset-skip`'s tk-inv). `enforcement-map-derivations` wake (inputs.decl rows 3, 12 and 13 sit inside row 11's `core/`). `derived-fence-binding` wake: it declares `inputs.decl` (whole `core/`, `scripts/`, `templates/`, `patterns/`, `.claude/rules/`, because `seed.sh:41` copies them whole), so it takes no committed map row; the fix is a narrower seed copy and decl, not a trace. `shell-portability` shared corpus (about -71 of 90 worlds, unsafe until arm entanglement is measured). `self-update-join-gate` -4 of 16. `snapshot-archive-rotate` -3 of 382. `layer-readopt-gate` -1. `ledger-reverify` shard rebalance (a 555 s against b and c 168 s). check-24 shard moves (unmeasured).
+- Unowned: `validator-arm-selection` MERGE1 (2 full runs and 132 in-process onto shard b's seeded tree; first needs hand mutants on the SIGPIPE stderr compare and the TEMPLATE slice). `shell-portability` shared corpus (about -71 of 90 worlds, unsafe until arm entanglement is measured). `self-update-join-gate` -4 of 16. `snapshot-archive-rotate` -3 of 382. `layer-readopt-gate` -1. `ledger-reverify` shard rebalance (a 555 s against b and c 168 s). check-24 shard moves (unmeasured).
 - Unowned: an executable line added outside `FIXTURE_POOL` in only one pre-push hook escapes both I66 and `readset-skip`.
+- Unowned: `enforcement-map-derivations` wake. Not narrowed: `A00_control` (`run.sh:509-517`, `run_map ""`) and the `cli-full-pass` twin (`run.sh:2034`) run the validator with no `--arms`, so they read the whole tree, and I8 keys on the `core/fixtures/` directory listing. Running them as `--arms` would weaken a control, so that option is not built (lead ruling, batch 257).
+- Unowned: `self-update-gate-d` wake. Units `mp` and `av` run `unregistered-drift.sh` and the real `apply.sh` in place, and `apply.sh`'s closure needs a sandbox trace before d's decl can name it. d keeps `core/skills/ai-dlc-update/reconcile/` whole. One `--list "self-update-gate-d" --tracer sandbox` run, in the main checkout detached at this unit's sha, exited 0 but OMITTED the fixture: "the stream dropped reports 20 time(s) in this window" (BL-584's loss). It mapped nothing, and its one change to the tracked map was the `# OMITTED by the last run` line, which was not kept. Retry the trace once BL-584's owed (3), the report loss under load, is fixed; no retry is scheduled before then.
+- Unowned: `derived-fence-binding` wake, blocked on BL-1140 (`scripts/invalidation-guard.sh --ratchet` r3 refuses a same-fixture whole-row replacement). A narrowing was built and passed: the seed copies only the read set of its five selected arms (I75, I108, I121, I122, I123), which is the validator's prologue inputs, `render-invariant-index.sh`, `core/team-roles/`, `core/scripts/*.sh` and the fixture's own directory (its `run.sh` is the A00/A03 acquittal subject). Its inputs.decl replaces five whole rows with `core/team-roles/` and `core/scripts/`. Key rows went from 2023 to 151, with 53 assertions and the same labels. r3 refuses the two narrower rows as rows "the base copy lacks", so the narrowing was reverted and rides on BL-1140's fix. Measured with it: deleting I108's `core/fixtures/*) continue` turns A00 red. `seed.sh`'s claim that an unstaged half-B root lets its plant pass vacuously is false, because `plant_root` creates the root it plants in.
+
+**Progress (batch 257, wave 9, W9-09; the entry stays open, `verify: manual` unchanged).** The `self-update-gate`, `-b` and `-c` read-set wake is narrowed.
+
+- Four `reconcile/*.sh *.md` glob copies in `run.sh` (`:266`, `:863`, `:1357`, `:2932`) now copy named files through `sg_copy`, after a top-level existence check. The decls of a, b and c name the gate's five-file closure (`self-update-gate.sh`, `preclassify.sh`, `consumer-read.sh`, `lib.sh`, `!setup-sites.md`), and `-c` adds `self-update-push.sh` and `self-update-fixtures.sh`. `-d` keeps its decl.
+- Key rows went 91 to 59, 92 to 60 and 95 to 65; `-d` stays at 93. Assertions are unchanged at 94, 66, 27 and 39, with the same labels.
+- **Probe.** `hermetic-run.sh --key-only` on this tree and on its base: an edit to `reconcile/apply.sh` leaves the a, b and c keys the same, and an edit to `reconcile/lib.sh` moves them. At base, both edits move all four keys.
+- **Mutants.** Each was hand-run once.
+  - Dropping `consumer-read.sh` from `SG_CLOSURE` turns `self-update-gate-d` red (`mp-pc-empty`, `mp-sited-missing`, `mp-sited-none`).
+  - A closure name with no file behind it stops the run at rc 2 before any assertion.
+- **`pu-readset-same`.** Not a repeat of `readset-skip`'s `tk-inv`. It drives the real wrapper and a real `git push`, where `tk-inv` simulates the environment in-process.
+- **Struck from Owed, for W9-10 ai-dlc-cf.** The `retro-branch-behind-main` item (the BL-990 receipt and the BL-993 norecord cell) is satisfied by W9-10 ai-dlc-cf, which deletes `receipt-bl990.sh`, its call in `run.sh` and the norecord cell.
+
+**PARTIAL (v0.1146.0) — five of the Unowned trims built; two measured as no gain; the pole value judgment and the other owners' rows stay open.** Each premise was re-derived from the fixture code at f29ff3693, because the readers' reports behind the figures above are not in the tree. A partial search of the session scratchpads found only copies of this entry. Counts are from one measurement run on 1f1f08cca (`scripts/seed-verdict-store.sh`, `AI_DLC_FIXTURE_JOBS=12`), whose fixture code is byte-identical to the final tree; the push gate's counted run confirms them, before → after:
+- `validator-arm-selection` MERGE1. Shard a's 132-id clean-tree sweep and its `--arms ALL` compare move onto shard b's seeded tree. The attrib workers already run each id once there, and now also keep each id's stdout, stderr and rc and apply the sweep predicate, so one pass serves both. Shard a keeps the real-tree plain run (arm 0). The broken-slice predicate also matches `Broken pipe`: the `i75_failsclosed` writer-into-`grep -q` shape prints a run-dependent number of those lines. The byte compare alone caught it in 1 of 3 and in 2 of 3 merged runs, and once in the single base run. The predicate catches it in 3 of 3, and a clean run prints no such line. Rows: a `*` 210 → 29 and in-process 139 → 6; b `*` 190 → 205 (inferred: the `--arms ALL` run and its child starts moved from a) and in-process 135 → 136.
+- `shell-portability` shared corpus. Every arm is per-file independent: S1-S11 are a grep per line, S12 and S13 reset at `FNR == 1`, S14 runs `bash -n` per file, and S15 is keyed per file and line. So 82 of the 90 worlds become one file each in one world, read by a per-arm, per-file hit parser. A near-miss also requires its offender twin in the same block. Eight runs stay solo: the control, the dead-corpus worlds m8, m10, m10b and m10c (the corpus gate skips every arm), both r1 runs (the refusal exits 2), and x7 (its subject is the caller's locale). One-time equivalence check, hand-run and not committed: 82 of 82 merged files give the same finding rows as their old worlds, and the 8 solo runs are byte-identical. The "-71" above does not reproduce. Rows: `*` 129 → 48, `scripts/validate-shell-portability.sh` 90 → 9.
+- `self-update-join-gate`: -3, not -4. The rc pairs 2,2, 0,1 and 2,1 read their token from the in-process side of the cli-ok, cli-defer and cli-undecided cells. The state is the same, and the six tokens were hand-compared equal on the base tree. No fourth identical-state run exists. Rows: `*` 65 → 56, in-process 15 → 12.
+- `layer-readopt-gate`, shard a: -1. B5's quiet-direction panel is read from the Rule 7 dossier run `short_out`. Its panel span is md5-equal to the dropped run's. Rows: `*` 34 → 33, `readopt-override.sh` 23 → 22.
+- `snapshot-archive-rotate`: -3. `arm_unhead` repeated A12 and is deleted. `arm_staged` (2) copies `expect_above`'s rotated world, and `arm_idem` copies `arm_shape nohist`'s absorbed world. Both copies were hand-checked byte-equal to a re-run. Rows: `*` 406 → 403, `rotate-snapshot-archive.sh` 382 → 379.
+- `ledger-reverify` rebalance: a small gain exists, and it is not built because it is blocked. The record reads a 555 s, b 108 s, c 60 s.
+  - A full suite (plain rows 15176 s, about 1265 s at width 12) is bound by width.
+  - The 45 push logs in the batch-257 session scratchpads tell the other half. They are parsed from their `done i/N` lines and priced at the same record. Shard a was dispatched in 3 of them, and in 2 it was the floor: 39 units at 488 s per 12 workers, and 26 units at 334 s.
+  - The gain is blocked on two counts. The movable units can go only to dist-only b or c, which consumers do not run, or to a new shipping shard (`uninstall.sh` plus both manifests). And no per-unit seconds are recorded to choose a move.
+- check-24 shard moves: no gain, not built. The shards read a 154, b 75, c 76, d 111, e 45 and f 34 s. None is the longest dispatched unit in any of the 45 push logs.
+
+Hand-run once, at authoring:
+- MERGE1: M2 (`TEMPLATE=` moved into I13's unit) is killed by the base fixture's shard a and by the merged fixture's shard b.
+- `shell-portability`: removing S12's `FNR == 1` flush, an `exit 0` subject that prints PASS, and an S11 that never matches each turned the merged run red through their own arms.
+- `self-update-join-gate`: DEFER for equal codes turns cli-ok and rc 2,2 red.
+- `layer-readopt-gate`: a broken "(none -- all" sentence turns the quiet arm red.
+- `snapshot-archive-rotate`: a stripped cut-floor guard turns A12 red, and a re-appending absorb turns `arm_idem` red.
 
 verify: manual — the owed work is a judgment of the non-mutant poles and a per-gate wall clock and dollar figure from a real release push, so no predicate over the tree can test it; a live 0-mutants receipt would read CLOSE-CANDIDATE while that work is open.
 
 ## BL-584 — two fixtures cannot be traced and have no `inputs.decl`, so they run on every push
+
+**PARTIAL (v0.1146.0) — the map-write guard (option 2 of "Refuted premise" below) ships; owed (3), the sender behind a high-load drop, stays open, so this entry carries no `**LANDED` line.** `readset_write_map` in `core/scripts/derive-fixture-readsets.sh` no longer writes the `# OMITTED by the last run (always run):` line, so a run whose omitted set differs from the last one, a clean run included, no longer changes the tracked map on that line. The omission is still reported on the run's stdout (`OMITTED and therefore always run:`), and an omitted fixture still keeps no rows, which is what makes the hook run it. The committed map's own line (`fixture-git-env-seam`) is deleted in the same change. Only fixture code read the line: `git grep -F "OMITTED by the last run"` over `.githooks`, `scripts` and `core` hit the emitter and three `core/fixtures/readset-skip/run.sh` lines, all in the `tracer` unit (shard c), against 3 files for the map's `# GENERATED` header line in the same tree. Those arms (OMITTED --list, the two `--all` worlds, IDENTITY) now require 0 `# OMITTED` lines in the map and 1 stdout report naming the omitted fixture.
 
 **PARTIAL (batch 257, wave 5) — in one window at push load, no outside Sandbox report fell within ±100 ms of any drop. The window's own volume is the leading cause, but it is unproven. (3) stays open, and this entry carries no `**LANDED` line.** One box-wide `log stream --style compact --predicate 'sender == "Sandbox"'` ran across B11's push (main checkout at d594c01f2), from 15:46:05Z to 15:46:35Z, at 1-minute load 25.6-28.2. It was started with no sudo and stopped by its recorded pid. Beside it, `--list "layer-contract-conformance-b" --tracer sandbox` ran clamped for 24 s, with trace rc 0. The liveness control passed: the seeded deny and the seeded allow-with-report each appear twice, once at start and once at stop. The stream held 76,168 report lines, 75,851 of them under the trace root. lcc-b's window logged 52 `dropped during` notices, in the 100 ms buckets 10:46:26.5 and 10:46:27.0-27.3 local. The box stream logged 46 in the same buckets except 27.0. In each drop bucket lcc-b's own reports ran 2,727-3,825 per 100 ms, against 0 from outside senders; the neighbouring buckets held at most 3 outside reports. Over the window, outside senders made 317 lines in total, and the largest outside burst, `spotlightknowledged.updater`'s 220 lines at 10:46:32.0, came after the trace and logged no drop. A Sandbox report is never persisted: `log show` over the same minutes returns none, not even the two seeded reports a live stream did capture, while the unfiltered `log show` window returns 20,087 lines. So no window can be attributed after the fact; only a live box-wide stream can name a sender. The method has a gap: the stream's predicate sees only Sandbox-sender messages, and the loss is upstream of the stream client (BL-1068), on a path that other log traffic shares. So a non-Sandbox burst at a drop is invisible to this capture. Owed for (3): a live capture across a push at load 27-135 that counts non-Sandbox log lines per 100 ms beside the Sandbox stream, from an unfiltered stream.
 
@@ -1420,7 +1454,7 @@ Decision rule: the step-value ruling, "A step with no measured value goes" (`.cl
 - s321 2-4 p1 (a lost provenance block, derived `grep -c` fences that replay empty) is not a retype.
 - s321 3-4 p1 is the existing `head-tree` WARN on mutation captures.
 - s321 6-1 p1 and p2 are stale Dev Agent Record prose, which a render cannot reach.
-- s321 4-3 p2's capture items are Suggestions.
+- s321 4-3 p2's capture items are a stale mutation-anchor line (Important, part 4) and Suggestions; neither is a typed count.
 - s322 4 p3 (`32 passed` after a rework to 34) is the one retype, and the shipped block cannot reach it. At its reviewed sha 2bd341fe5, the `Full-collection run:` value types the count and cites only a capture directory, and no capture is tracked there. `--list-captures` lists 0, and `--render-dar --check` exits 0. Control, same validator: s321 2-4 at 9ea960039 lists 2 captures and renders both counts.
 
 A draft arm was built and measured but not committed. It warned `full-collection-uncaptured` when RUN-GATE accepts the value as a run (exit 0), the render counted no capture the value cites (`DAR_NCOUNT` 0), and the value matches the render's own `<n> passed|failed` grammar. It was driven, base f29ff3693 against changed, over every gate state on a file:// clone of graph with all refs fetched. Population: 417 non-shard `code-review` and `qa-validation` files under `docs/reviews/s317` to `s322`. Of these, 374 states have a resolving `reviewed-sha` and exactly one story file; excluded are 15 with no sha and 28 naming no story. 199 of the 374 read `LEGACY` (dev.md at the frozen sha prescribes no column-0 label), so (k) does not run there, and 175 are evaluated. The clone is checked out, with graph's `docs/coding-conventions.md` at ed61de745 on disk, which the validator reads.
@@ -1956,6 +1990,50 @@ Cost: classify.sh over the s321 window took 1080 s one-jq-per-file on the base b
 
 What still blocks a close: BL-817's reopened-range rule needs value evidence or a measured fall of the gap-inclusive subagent wait. s318 to s321 falls, but s322 rises, and none of it is attributed to this mechanism. The entry stays PARTIAL and `verify: manual` stays.
 
+**PARTIAL (v0.1146.0) — the subagent gap is classified; most of it is agents parked between rounds with none of their own background work outstanding.**
+
+New script: `docs/analysis/subagent-poll-bl514/gapclass.py <EXTRACT_OUT>`. It sits beside `gap.py`, and `gap.py` is unchanged.
+- It classifies every subagent gap of an extract, meaning every interval over 300 s between two records, by the state when the gap opened. Its docstring defines the eight classes: open-model-request, open-tool:poll, open-tool:other, own-background-wait, parked-bg:poll, parked-bg:other, parked-until-message and other.
+- A parked gap (the agent ended its turn, and a message ended the gap) is parked-bg when one of the agent's own background launches was still outstanding. A launch is a Bash call with `run_in_background`, a Monitor call, or a foreground Bash call the harness moved to the background on timeout. It is outstanding from its result until a task-notification names its task id or tool_use id, the same join as `join.sh`. A launch whose result names no task id stays outstanding, keyed on its tool_use id alone.
+- Both poll classes use the hook's own `loopsleep or longsleep`, lifted by `lift.sh`.
+- Its self-probe runs before the corpus is read: one synthetic transcript holding one gap of each class, plus a 200 s interval that must stay active. Among its six parked gaps are an id-less launch outstanding and a harness-moved launch outstanding. The probe also pins the launch counts.
+- `--detail FILE` writes one row per gap, with the agent's last text before the gap and the line that closed it.
+- It refuses unless, for every sub transcript, its summed gap equals the summed `gap` of that transcript's `segs.jsonl` rows, to the millisecond.
+
+The s322 row above was cut on an open sprint. At EXTRACT_WIN_END=2026-11-11T10:30:00Z, graph's s322 had 3 of 8 stories done (BL-975's population line), and s322 closed at graph f7e60625b (2026-11-12T07:32:58-05:00).
+
+Re-taken at the complete-s322 window that 0.1087.0 committed: `EXTRACT_WIN_END=2026-11-12T14:41:00Z`, extract.py over graph's transcripts.
+- `gap.py`: both probes PASS; 7171 segs rows, of which 6721 are sub. The s317 to s321 rows are equal to the table above to two decimals. s322 reads 11.02 h active, 2.92 h gap and 13.94 h wait per story.
+- `gapclass.py` over the same extract: probe PASS; 6158 units and 579 gaps. The per-unit gap equals segs.jsonl for all 6158 units, and no gap needed the sprint fallback.
+- Join coverage, same run: 1431 background launches, 1400 with a task id (125 of them moved by the harness), 0 without one and 31 with error results; 1294 completions joined.
+- Control: 125 results carry the harness's `moved to the background (ID:`, equal to the 125 parsed. The control was first keyed on the bare phrase, which also matched one printed file's prose (agent-ac987c29af1e3bb2, 2026-10-24) and refused; it was narrowed to the phrase with its ID.
+- Hours per story:
+
+| Sprint (stories) | gap | open model request | open poll | open other tool | own background wait | parked, bg poll out | parked, bg other out | parked until message | other |
+|---|---|---|---|---|---|---|---|---|---|
+| s317 (21) | 1.18 | 0.00 | 0.36 | 0.15 | 0.17 | 0.03 | 0.02 | 0.34 | 0.12 |
+| s318 (13) | 1.79 | 0.00 | 0.27 | 0.16 | 0.10 | 0.09 | 0.05 | 0.88 | 0.25 |
+| s319 (20) | 2.16 | 0.18 | 0.00 | 0.07 | 0.21 | 0.19 | 0.03 | 1.34 | 0.14 |
+| s320 (13) | 1.63 | 0.01 | 0.00 | 0.01 | 0.26 | 0.09 | 0.02 | 1.21 | 0.02 |
+| s321 (25) | 0.94 | 0.04 | 0.00 | 0.00 | 0.11 | 0.01 | 0.09 | 0.68 | 0.01 |
+| s322 (8) | 2.92 | 0.13 | 0.00 | 0.00 | 0.12 | 0.11 | 0.00 | 2.44 | 0.12 |
+
+Each row's gap equals gap.py's gap for that sprint.
+- Foreground poll gaps read 0.36 and 0.27 h per story at s317 and s318, and 0.00 from s319 on. That is a reading of the mechanism, not the subject's fall: as "Why this does not close" above says, a denied or backgrounded poll leaves no foreground wait whether or not the agent waited less.
+- The wait that moved shows in parked-bg:poll: agents parked while their own backgrounded poll was outstanding. It reads 0.03 and 0.09 h at s317 and s318, 0.19 h at s319 and 0.11 h at s322. A launch with no recorded completion (106 of the 1400 with an id) stays outstanding to the end of the transcript, so this class is an upper bound.
+- parked-until-message is 84% of s322's gap: 2.44 of 2.92 h, which is 33 gaps and 19.53 h. In those gaps the agent had ended its turn with none of its own background launches outstanding, and nothing of the agent's ran until the lead's next message. It is the class that makes s322 rise.
+- Read from `--detail`: all 33 close on the harness's fixed SendMessage wrapper "The coordinator sent a message while you were working:". Its "while you were working" is template text, not a sign the agent was busy.
+- The five largest (20006, 5855, 4306, 3848 and 3832 s) each follow the agent's delivery report: files written, a `--mark ... seat-complete`, or a record's repaired/escalated counts. Each closes on a lead message carrying rework or a resume. The two at 2026-11-09T19:00:17Z are BL-975's resumes of agents that had already delivered.
+- Without parked-until-message, the gap reads 0.84 h at s317, 0.91 h at s318, 0.82 h at s319, 0.42 h at s320, 0.26 h at s321 and 0.48 h at s322.
+
+Proposed close measure, for the operator to decide at the batch review: re-key the "measured fall of the gap-inclusive subagent wait" route to the gap excluding parked-until-message, by `gapclass.py`. This entry does not change the route.
+
+Hand-run mutants, once, each killed by the self-probe: classifying parked-until-message before own-background-wait (the background seed reads parked), and ignoring outstanding background launches (the parked-bg seeds read parked-until-message).
+
+The readings above were taken at f29ff3693. Between f29ff3693 and edb812bc1, none of the files they read changed: extract.py, roll.py, `docs/analysis/subagent-poll-bl514/`, the hook and wait-for-deliverable.sh show 0 changed files, against 29 changed files across the whole range.
+
+Still owed: the close this entry's route allows, either value evidence or a measured fall. The fall on the proposed measure, 0.91 h at s318 to 0.48 h at s322, is not attributed to this mechanism and stands only if the operator re-keys the route.
+
 verify: manual
 
 ## BL-541 — the serial remediator's join is a beat on a record that already exists and is appended to, so it returns on every append and never on completion
@@ -1987,6 +2065,8 @@ Step: requirements
 Verdict: carry-over-evaluation plus requirements plus architecture plus stories-test-strategy did not fall.
 
 **Progress (batch 257 wave 5, graph s323; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** This reading measures what this entry's mechanism changes: how often the serial join wakes the lead. Graph s323 carry-over-evaluation party repair, lead `0ef7ba46`, serial remediator `agent-a37305a67843ee413` (dispatched 09:18:54Z). The counter is a read-only scratch script, not committed. It counts executed `Bash` or `ctx_execute` calls whose text names `wait-for-deliverable.sh`: each `tool_use` is deduplicated by id and paired with a `tool_result` that is not `is_error`. The lead armed `--complete-repair --dispatch` on `s323/carry-over-evaluation-party-repair-p1.md` at 09:18:58Z. It re-armed with `--since` at 09:30:39Z and once more after a resume, at 12:02:16Z. That makes 3 calls over the 22-minute pass. The first two returned on their beat cap, at 09:28:52Z (`beat 1/6, 9m … not yet delivered`) and 09:40:34Z (`beat 2/6, 21m`, `UNFINISHED … last non-blank line is not repair-complete: serial`), while the remediator was appending (first write 09:23:56Z). Neither returned on an append. The record at graph `6c30b864f`, read through a scratch `file://` clone, ends `repair-complete: serial 1 sha=…`. Control, same counter, s319 lead `62eadbbe`, 2026-10-15T23:54Z to 2026-10-16T00:05Z: 20 executed calls, against this entry's recorded 21 (6 `--reset --since` as recorded; 10 plain `--since` against the recorded 9; the one-call gap is unexplained). This entry's mechanism cut the join's wakes from 20 in ten minutes to 2 cap returns in 22 minutes. The step-group verdict above is unchanged. No planning run started after s323's handoff: there are 0 references to an `s32[3-9]` planning artifact in graph assistant records after 2026-11-13T13:14Z, out of 313 such records up to 2026-11-14T16:51Z. The same pattern reads 324 between 09:00Z and 13:14Z, and the token `ZQV-5e0de3c8-nevertoken-b257w5`, absent from this tree before this paragraph, reads 0 in that corpus.
+
+**Progress (batch 257 W9-11; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The 2 cap returns that the wave-5 paragraph above measured in a 22-minute pass are removed by construction. Under `--complete-repair --dispatch`, `wait-for-deliverable.sh`'s new `live_extend` keeps a beat polling past its deadline when the dispatched agent's own transcript took a turn strictly after the current quantum started (`dispatch_live` LIVE, not stalled, not FAILED). It charges one beat per extension and never extends a counter at or past `max_wait_beats`, so the sequence bound and the cap/grant block on the next call are unchanged. A transcript that exists but stops advancing returns at the quantum as before. Nothing in the script refuses a second beat on a target that already has a live one: the `.beat-inflight` lease is project-wide and the sibling guard is per shell. So each sleeping beat in this mode stamps `<key>.arm` with its pid and start epoch, the newest arm overwriting it, and only the beat whose stamp still stands may extend. An overlap of two beats on one record therefore lasts at most one quantum, as before. `rule-29.md` states the exception, which applies only to the backgrounded lead join; its foreground half has no enforcer (BL-1142). Hand probe (quantum 4 s, poll 1 s, four probe runs in parallel): with a writer taking a turn every second for 9 s before `--mark-repair`, base returns WAITING at 4 s and tip returns DELIVERED at 10 s in one call. With a static transcript, tip returns WAITING at 3 s. With a writer that stops after 2 s, tip returns WAITING at 7 s, one quantum after the stop. With two beats on one record, armed 1 s apart from separate shells, tip's older beat returns WAITING at 5 s and the newer one DELIVERED at 9 s. The mutant that tests only that the transcript exists runs the static and stopped arms to 24 s and 23 s. The mutant without the newest-arm check keeps the older beat alive to DELIVERED at 10 s. Still owed: the step-group outcome above, and a re-taken wake count on the first consumer serial pass that runs this release.
 
 verify: manual
 
@@ -2577,6 +2657,14 @@ Remainder, why the entry stays PARTIAL: Fix item 1 is not done on `origin/main`.
 7. Counts at this release, each taken by the shell glob loop `for f in <glob>; do [ -f "$f" ] && n=$((n+1)); done`: fixtures (`core/fixtures/*/run.sh`) 273, control `core/fixtures/zzqq*/run.sh` 0; fixture receipt files (`core/fixtures/*/receipt*.sh`) 34, control `core/fixtures/*/receipt-zzqq*.sh` 0.
 8. There is no graph pipeline step behind this progress: `docs/analysis/bl915-fixture-audit.md` is a static audit of fixture source, not a reading of a consumer sprint; the cost lives in core/fixtures/ and scripts/kill-matrix.sh.
 
+**PARTIAL (v0.1146.0).** Item 1(b), part A and part C are done in batch 257: W9-10 (ai-dlc-cf) did 1(b) and A, W9-28 (ai-dlc-37) did C. One read-set map row stays owed.
+- W9-10, item 1(b): Item 1 (b) is closed as SUPERSEDED, by the lead's batch-257 ruling on the operator's batch-257 ruling. Every committed mutation battery is deleted, and proving an arm can fail is a one-time hand run at authoring (CLAUDE.md "Build process", builder step 4). The within-fixture declared-mutant matrix that the batch-256 ruling chose for (b) therefore has no population. At 947fd491e, 0 of 295 `core/fixtures/*/run.sh` carry `MUTANT-MATRIX` or `mutate_file`, by `git grep -l`. The control is 242 of the same files carrying `ok `, in the same invocation. Subject sampling with `scripts/kill-matrix.sh` gives 0 conclusive removals by construction, by the batch-256 bound above.
+- W9-10, part A: `retro-branch-behind-main`: `receipt-bl990.sh` and its `run.sh` block are deleted, and so is `receipt-bl993.sh`'s norecord cell. Both repeated inputs that part 2 already runs, and `invocations.decl` `*` goes from 118 to 109 (-7 and -2). The one assertion that only the receipt held is moved into part 2's classifier before the deletion: the carry cell required the CARRY line to name the exact PR-head sha, and part 2's `n3@gh#7` token did not. A gh-sourced count token now carries `=head` when the line's sha equals that world's gh row for the PR, and `!head` otherwise; `repointed` and `head-fetched` expect `n3@gh#7=head`. Probe, run once by hand on a scratch retro.md whose Step 1 CARRY echo prints `$(git rev-parse HEAD)` in place of `$PR_HEAD`. With the old `run.sh`, part 2 reads `ok` and only the BL-990 receipt fails (`CELL carry FAIL`). With the new one, part 2 FAILs its battery. The archived BL-990 `verify: sh` line (`docs/backlog.archive.md`) now runs the fixture.
+- W9-28, part C, the (a) FAILs: removed, with no recovery copy: fixtures `hermetic-consumption`, `party-wave-barrier` and `readset-stage1-verdict` (all `.dist-only`, so `uninstall.sh` and both manifests are unchanged), and `scripts/validate-hermetic-consumption.sh`, `scripts/audit-party-wave-barrier.sh`, `scripts/readset-stage1-run.sh` and `scripts/readset-stage1-verdict.sh`. Caller check: one `git grep -F` per script name over the tree outside its own fixture, the backlog, `docs/analysis`, the CHANGELOG and the plan archive named only the fixture and the sibling script; the same grep for `validate-plan-shape.sh` names `.githooks/pre-push`. Their rows in `scripts/fixture-inprocess-allowlist.txt` and `scripts/env-scrub-allowlist.txt` are removed, and `FXC_CELLS_REMEDY` in `scripts/validate-fixture-invocations.sh` no longer names `readset-stage1-verdict` (FXC-IDENTITY row, format 1). `census-hermetic-coverage` stays by ruling.
+- W9-28, part C, the READs: `core/fixtures/lib/layout.sh` adds `fx_dist_layout` (the fixture's parent directory is `core/fixtures`) and `fx_skip_exit` (exit 0 on a consumer; FIXTURE BROKEN, exit 2, in the distribution). Every SKIP or PENDING that exited 0 before the first ok now ends in `fx_skip_exit` in 23 fixtures: agent-definition-render, apply-setup-sited-merge, consumer-machinery-home, derivation-differential, derived-fence-binding, dist-clone, enforcement-map-derivations, enforcement-map-sites, layer-contract-conformance, ledger-status-vocabulary, owed-derivations, post-write-gates, preclassify-mode-bucket, predicate-reclassification, provenance-flagless-default, push-drain-refusals, release-version-triple, retro-compliance-workflow, self-update-join-gate, transient-ignore-block, update-preflight-push, validator-arm-selection and write-format-steering-multiformat. layer-contract-conformance's skip-name world moves to `tests/fixtures/`. `.claude/rules/fixture-contract.md` C8 names `layout.sh` (claude-rules A7), and provenance-flagless-default's `AI_DLC_*` scrub moves to the first statement after `set -uo pipefail`, above the new source (fixture-hygiene H8). retro-compliance-workflow (`.undeclarable`) now reads `core/fixtures/lib/layout.sh`: its read-set map row is owed, blocked on BL-1144 (operator ruling), and until then the fixture runs unmapped. No edit, as re-read at f29ff3693: check-15-bypass and fold-architect-ledger-join already fail in the distribution, check-17-bypass counts its SKIP as a failure, hook-registration-join exits 2 on every absence, fixture-hygiene's SKIP lines are seed text, early-exit-reader has no skip, and smoke-surface-ignored-mutants no longer exists. The READ item covers exits before the first ok, so the later arm SKIPs (preclassify-mode-bucket, update-preflight-push) are not in it.
+- W9-28's counts by the shell glob loop, on its own tree: `core/fixtures/*/run.sh` 295 to 292, `core/fixtures/*/receipt*.sh` 38 to 37; control `core/fixtures/zzqq*/run.sh` 0. W9-10's deletion of `receipt-bl990.sh` takes `receipt*.sh` one lower.
+- Owed: the read-set map row for retro-compliance-workflow, blocked on BL-1144 (operator ruling). The entry closes when that row is committed.
+
 verify: manual
 
 
@@ -2634,6 +2722,36 @@ Progress, premise corrected (graph s322, read only): the four dead seats, parts 
 Re-derivation on the fixed extractor (batch 257, BL-1003 item 3). This entry's population is re-taken at its own window, EXTRACT_WIN_END=2026-11-11T10:30:00Z, over two extracts that differ only in `extract.py`: e3cb7710f, the parent of 0.1100.0, against the fixed one. Driver and output: `docs/analysis/pipeline-efficiency-s317-s322/scripts/bl1003_rederive.py` and `docs/analysis/pipeline-efficiency-s317-s322/out/bl1003_rederive.txt`. The selection is every spawn starting between 17:50Z and 18:00Z on 2026-11-09: 9 remediators, "Repair part 1" to "Repair part 9", dispatched 17:54:56Z to 17:54:57Z. Control, same invocation: all four dead seats this entry names (ac4b451217711d991, af5fbf05bbbf3f481, a35c2f46ce6da29b6, a4993bb965978e3cc) are in the selection. All 9 read `gate-validation[carry-over-evaluation]` on the old extractor and `requirements` on the fixed one. They are 9 of the 29 s322 spawns that change owner at this window; all 29 move from that label to `requirements`, and no spawn of any other sprint changes. So the step this entry's event belongs to is `requirements`, not the `Step: gate-validation[carry-over-evaluation]` line above. That line is left as filed, because a Step line is the entry's declaration and is not changed here. R1 (0.1103.0) has since relabelled that line to `Step: requirements`. Every other figure in this entry (the idle minutes, the 1.2 h, the resume counts and the open-interval bound) is read from transcripts by agent id, carries no step label, and does not move.
 
 **PARTIAL (v0.1133.0) — a round-dispatcher is now covered by DISPATCH FAILED.** Rule 28 said the lead's beat over a round-return file passes `--since <epoch>` alone. The dispatcher is spawned role-less, the dispatch guard writes a ledger row only for a role-bound spawn, and `--dispatch <dispatcher>` refused with "the ledger holds 0 row(s)", so no dispatcher had either arm. Measured on graph's transcripts from 2026-11-11T22:16:06Z (graph's 0.1058.0 merge 24bc88927) to 2026-11-15: both dispatcher spawns lacked the arms. In e444bf13 (45 members) the lead armed `--dispatch`, got rc 64 and re-armed without it. In 0ef7ba46 (28 seats) both return-file beats ran without it. Fix: in `dispatch_epoch_of`, when the ledger holds 0 rows, `dispatch_roleless_ts` takes the dispatch time from the lead transcript's own `Agent`/`Task` tool_use line for that id, cut to the second. It applies only when this session's `agent-*.meta.json` carries the toolUseId (the spawn launched; a guard-denied dispatch has none), when exactly one lead-transcript line carries the id, and when that line names no `subagent_type` and no `team-roles/` path. Anything else keeps the refusal. `rule-28.md` now gives the return-file beat `--since <epoch> --dispatch <dispatcher agentId>`, a re-arm after a compaction included; only a re-arm in a later session passes `--since <epoch>` alone. `_dispatch-protocol.md` cites it after "Round-dispatcher brief". The `process-rule-pins` row `r28-rd-return-dispatch` moves to the new sentence. Receipt: `wait-beat-liveness` S30, three arms. Arm 1 runs `--dispatch-ts` over a five-spawn lead transcript with a compaction boundary after the spawns: the dispatcher (by agentId and by toolu_ id) and a role-less epoch spawn each print their own stamp, while five ids keep the 0-row refusal: a guard-denied role-less spawn, a guard-denied role-bound spawn, a launched spawn naming only a `subagent_type`, one naming only a `team-roles/` path, and a launched role-less spawn whose id is on two lines. Arm 2 is a beat over a dead dispatcher, which names it FAILED by arm B. Arm 3 is a later session's `--since`-alone beat, which still WAITS with no refusal. Hand-run mutants, once, each killed by its own seed: no fallback fails arms 1 and 2; no launch check acquits the guard-denied role-less id; no one-line check acquits the two-line id; dropping the `subagent_type` alternative acquits the `subagent_type`-only id; dropping the `team-roles/` alternative acquits the `team-roles/`-only id. New refusals on real beats: each changed dispatcher's lead beats over its own return file were paired with it by return path, 25 beats in all. 24 pass `--since` 11 to 585 s before the dispatcher's stamp. One, s322 `requirements-party` in 6c14d949, passes a hand-typed `S=1794235332`, 389 s after the dispatch, and now gets the existing "--since is N s after the earliest dispatch" refusal, the hidden-write case `--dispatch` exists to refuse. False-positive census: the shipping `--dispatch-ts` at origin/main 30a78d884 and at this tip, over every lead `Agent`/`Task` spawn in graph's transcripts from 2026-10-30T00:10:03Z to 2026-11-15 (1622 spawns), with graph's spawn ledger and each session's subagents dir. 7 answers change, all from rc 64 to a stamp, all launched role-less spawns, the two in-window dispatchers among them. All 62 unledgered spawns that never launched (guard-denied) still refuse, and all 1552 ledgered answers are identical. One launched role-less spawn (4f12d1d9, toolu_012mngwa7W6TYtCYJyhcP9rE) still refuses, because two lead-transcript lines carry its id. Still owed: the `Outcome measured:` line this entry's v0.1056.0 paragraph names. The window has 0 dispatched-agent deaths in 184 subagents. The same scan finds 6 in the 1753 subagents of the baseline window (2026-10-30T00:10:03Z to 2026-11-11T10:30:00Z), so the predicted count for this window is under 1. The same classifier counts this entry's 4 api-error resumes in the baseline and 0 in the window.
+
+**PARTIAL (v0.1146.0) — the measuring script the exit condition names is committed.** `docs/analysis/dispatch-death-bl975/scan.sh --project DIR --from ISO --to ISO` lists every dispatched-agent death in a window with the lead's report latency. Its rules are not its own: both DISPATCH FAILED arms are lifted from `df_scan` in `core/scripts/wait-for-deliverable.sh` at run time, and so are the report token `say_dispatch_failed` echoes and the `OPEN_REQUEST_SECS` default. A lift that does not match exactly once refuses.
+- Arm B is the per-agent awk, run on each whole transcript.
+- Arm A is the lead-transcript awk, run on the lead transcript cut at each failed notice that names one of the session's agents, so it also sees a death that was later resumed. Only notices inside the window count.
+- The death time is the agent's open request (the last send), taken for an arm-A-only death by arm B on the transcript cut at the notice. The notice is printed beside it, and both latencies count from the death.
+- The report is the first lead line carrying the lifted token and the agent id. The resume is the agent's first user or assistant record after the death.
+- Channel R is that report line inside the window, for any of the session's agents. It sees a death the lead's beat reported and then resumed with no harness notice. Once the engine is live, that is this entry's own population: after the resume closes the request, arm B is quiet, and arm A needs a harness notice, which 2 of the 4 original seats never got.
+- An arm-B-only row whose lead session ran on for less than the bound after the death is a CANDIDATE, not a death: no beat of that session could have named it.
+- A symlinked transcript, which is another session's file, is skipped and counted.
+
+Readings over graph's `~/.claude/projects/-Users-n8-git-graph`, read only, with the self-probe PASS. Both windows ran from one copy of the script, `cmp`-equal to the committed one.
+- Baseline window, 2026-10-30T00:10:03Z..2026-11-11T10:30:00Z: 4 deaths (arm A 2, arm B 3, channel R 0, reported 0) and 3 candidates.
+  - The 4 deaths are exactly the four dead seats this entry names, which is the control. a35c2f46ce6da29b6 (AB) sent last at 17:58:30Z, with its notice at 18:03:43Z. a4993bb965978e3cc (A only) sent last at 17:58:07Z, with its notice at 18:03:07Z, and was resumed 3730 s after the send. ac4b451217711d991 (B) sent at 17:58:10Z and af5fbf05bbbf3f481 (B) at 17:58:35Z.
+  - Each death's lead session ran on for about 8,800 s after it.
+  - Reported 0 is expected, because no beat with these arms ran before 0.1056.0 reached graph.
+  - The 3 candidates are a865bae550fb8d959 in fdc4249a and a3f41f44a6c847a1a and a678dfd5f2ae5b272 in 70fd1d6d. Their lead transcripts end between 44 s before and 8 s after the open request. These match the "3 agents whose lead session ended mid-request" in arm B's header in wait-for-deliverable.sh.
+  - The 6 files ending in an open request (CONTROL line) are those 3 plus ac4b4512, af5fbf05 and a35c2f46. That is the likely source of the v0.1133.0 paragraph's "6 in the 1753 subagents", whose scan is not committed.
+- Post-engine window, 2026-11-11T22:16:06Z (graph's 0.1058.0 merge) to 2026-11-16T00:00:00Z: 0 deaths and 0 candidates, with arm A 0, arm B 0 and channel R 0. So no reported-then-resumed death occurred either.
+- Same invocation in each run: 6209 agent files scanned, equal to `/usr/bin/find`'s count, with 1 symlinked transcript skipped. 6 files end in an open request at any time. The absent token counts 0 files, beside 4720 files carrying an `api-request`.
+
+The first run refused on 6210 scanned against 6209 listed. The extra file was the symlink df56108b/subagents/agent-a422ac9aa8d949aab.jsonl, which points to 4f12d1d9's copy; the skip was added after that refusal.
+
+Hand-run mutants, once:
+- Dropping the user line from arm B's request-closing reset, on a copy of wait-for-deliverable.sh passed by `--wfd`, first SURVIVED the self-probe, because every probe request was closed by an assistant line. A seed whose request a user line closes (aUSER) was added, and the mutant now fails the self-probe.
+- Dropping the window filter on arm A rows fails the self-probe: aOLD, which failed before the window, appears at an in-window cut.
+- Dropping channel R fails the self-probe: aREP, reported and then resumed with no notice, disappears.
+
+The readings above were taken at f29ff3693. Between f29ff3693 and edb812bc1, wait-for-deliverable.sh did not change (0 files, against 29 changed across the range).
+
+Still owed: the `Outcome measured:` line, from the first window in which this script finds a death. The predicted count in the post-engine window is under 1 (the v0.1133.0 paragraph above), and the reading is 0.
 
 verify: manual
 
@@ -2755,6 +2873,26 @@ Receipt: `verify: manual`; the entry closes when the tree-wide arm is built with
 
 Outside this release's scope: item 8 of this file's real-time-waits list cites backlog-receipt-binding `run.sh:1050` for a `sleep 2` before a racing `worktree add`. That citation was already stale at base. `grep -n sleep` over the fixture finds no `sleep` command at ca6a6f941, at 808918467 or at this tip; the only hits are the comment describing the removed `sleep 2` writer (`:1278` at ca6a6f941, `:1282` at 808918467, `:1219` at this tip).
 
+**Progress (batch 257, W9-10).** P2 OWED goes from 288 rows in 40 fixtures to 211 in 16, with 0 NEW. Both figures are from `bash scripts/validate-fixture-inprocess.sh`, rc 0, at the base 947fd491e and at this tip. 77 rows over 61 sites are paired on the subject's PATH, the F8 ruling. Each pairing puts `fx_inproc <subject>` earlier on the line than the drive, as `fx_inproc <subject> && <drive>` or `fx_inproc <subject>; <drive>`. Every edited fixture's `inproc:` rows are re-counted, in 29 `invocations.decl` files. A new comment line there states the per-CALL unit, which supersedes their older "one per source" notes.
+- A site whose subject path can also be a copy outside the layout logs only when that path matches the subject's root-relative path. The renamed copies are under `mktemp`, and the consumer-layout copies are `scripts/ai-dlc/`. A logged row that no `inproc:` row covers fails J7. The guarded sites are `wait-beat-liveness` `wbl_ip`, `adversarial-shard-merge/lib.sh` `mx`, `postcompact-rulebook-recovery` `hook_run`, and `remediator-shard-join/unit-reader-b.sh`'s cap drive.
+- The shared drivers now source `lib/mutant.sh` themselves: `adversarial-shard-merge/lib.sh`, `remediator-shard-join/lib.sh` and `story-evidence-scaffold/he-inproc.sh`. `mx` and `_ut_fresh` keep `fx_inproc` through their function sweeps, and `unit-reader-b.sh` calls it before `ub_scrub`. 16 `inputs.decl` files gain `core/fixtures/lib/mutant.sh`.
+- Probe, run once by hand. Deleting the `carried-findings/run.sh:305` pairing reads `P2 OWED: 212` and lists that site again. Restored, it reads 211.
+
+The 211 that remain, each with its reason:
+- 188 in `readset-skip` (-b/-c/-d). These are spans, drivers and `hermetic-run.sh` sites, kept OWED by the F8 ruling.
+- 4 in fixtures that W9-28 deletes under BL-915: `hermetic-consumption` (3) and `readset-stage1-verdict` (1).
+- 2 phantoms at `dist-clone/run.sh:155`. `G` there is the fixture's own git wrapper, not the subject's `G()`.
+- 6 that are extracted spans or fixture-written files: `advisor-gate-deny/lib.sh:1021`, `fold-architect-ledger-join/run.sh:521`, `spec-join-integrity/run.sh:1101`, `wait-beat-liveness/run.sh:2022` and `:2023` (an eval'd `wfd_start_of` span), and `:312` (the world's `.onsleep` hook).
+- 2 at `story-evidence-scaffold/he-inproc.sh:39`, in gate-transition and story-evidence-receipts. `rcpt_run` sources the fixture's receipts there, not a subject.
+- 9 in `content-seal` and `remediator-shard-join` (-b), at `remediator-shard-join/lib.sh:2629`, `:2636` and `:2639` (`wfd_run`, `cs_run`) and `unit-reader-b.sh:86` and `:87` (its dval drives). Their subjects, `wait-for-deliverable.sh`, `content-seal.sh`, `validate-adversarial-convergence.sh` and `validate-artifact-derivations.sh`, are not `!` lines of those fixtures. J4 refuses an `inproc:` row for a subject that is not `!`, and declaring them `!` makes P2 fail closed at 14 sites: the dynamic command words at `unit-reader-a.sh:125`, `:131` and `:139`, `unit-reader-b.sh:194`, `:200` and `:208`, and `run.sh:523`, in both shards. Pairing these 9 sites first needs those 14 resolved.
+
+Owed list, renumbered:
+1. The 211 above. Apart from W9-28's four and the 9 that wait on the 14 fail-closed sites, none is a subject pass that a pairing could count.
+2. The B route.
+3. `lib/mutant.sh`'s `fx_inproc` comment, and the header of `scripts/validate-fixture-invocations.sh` that calls it superseded.
+
+Receipt unchanged.
+
 Provenance: batch 255, fixture cluster F14; id allocated by the lead.
 
 verify: manual
@@ -2833,6 +2971,11 @@ LEFT OPEN by this progress, in addition to every LEFT OPEN item above: the herme
 - **Declared:** prepush-worktree-env-scrub `ls`, `mkfifo` and `rmdir`; apply-restamp-worklist-d `rmdir`. After the declarations the trap logs 0 in both fixtures. One counted hermetic run each (scratch `--gen-rc`): rc 0, `invocation budget ok: 16 start(s)` and `121 start(s)`, with no `invocations.decl` row moved.
 - **Not re-measured:** askuserquestion-citation `cmp`, owed-derivations `python3` and apply-restamp-worklist-d `sleep` logged 0 trap hits (their sites are not reached); the other removed rows have no static site.
 - **Left open:** every LEFT OPEN item above, including the hermetic-run arm, now BL-1118.
+
+**Progress, batch 257 wave 9 (the entry stays PARTIAL, `verify: manual` unchanged).** The hermetic-run arm, this entry's main subject, is built (BL-1118). An undeclared call to any tool in the fixed tool dirs, its stderr redirected or not, prints a WARNING naming it in both layouts, with the verdict unchanged; making it a FAIL is BL-1143. Left open:
+- **The carried set.** The delivery carries every recorded pass forward (`READSET_RUNNER_CARRY`), so a fixture meets the arm only on its next run with moved inputs. Every declared fixture outside the delivering push's run set is carried untrapped until then.
+- **The arm's own blind spots.** Names outside the fixed tool dirs; a call under a fixture's own `env -i`, which drops `HR_TRAP_LOG`; a PATH a fixture builds without the trap directory (the 7 fixtures that set `PATH=/usr/bin:/bin:…`); and branches a green run never executes (failing-branch-only and `--matrix`-only sites).
+- Every LEFT OPEN item above that the arm does not reach.
 
 Receipt: `verify: manual`. No runner-wired receipt exists for an unbuilt hermetic-run arm. A `has` on `hermetic-run.sh` for `command not found` is closable by a comment. A fixture arm that seeds a fixture calling an undeclared tool and asserts hermetic-run refuses it is the receipt shape, and it lands with the arm. What else would satisfy a weaker receipt: declaring every tool the census found, which fixes today's population and leaves the next undeclared tool as silent as this one.
 
@@ -3107,21 +3250,6 @@ Provenance: batch 257, ruled by lead ai-dlc-a9 on the operator's approval; id al
 verify: manual
 
 
-## BL-1118 — hermetic-run has a buildable undeclared-tool arm, and shipping it voids every verdict
-
-**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/scripts/hermetic-run.sh` (HR_SANDBOX).
-
-BL-984's `command_not_found_handle` arm cannot be built on bash 3.2. A PATH trap can be. hermetic-run would put a trap directory after `$HR_BIN` on the fixture's PATH. The directory holds one `#!/bin/sh` stub for each executable name in the fixed tool dirs that the fixture does not declare. Each stub appends its own name to a log that hermetic-run names, and exits 127. hermetic-run then fails a fixture whose log is non-empty. Because the stubs run under `#!/bin/sh`, the invocation counter does not count them. This channel also sees a call whose stderr is redirected, which a scan for `command not found` in the run log cannot.
-- The false-positive set is unmeasured. A `command -v <tool>` fallback now finds the stub, so it takes the other branch.
-- C20 keys every declared fixture on `<runner>#HR_SANDBOX`, so shipping the arm forces a whole-suite rerun, which the standing rules forbid. Part of what is owed is a way to ship it that does not void every verdict.
-- Cost is unmeasured: building one stub per tool-dir name for each fixture.
-
-Owed: the false-positive set, measured; a cost-bounded farm; and a delivery path that carries existing verdicts forward.
-
-**Progress (batch 257; the entry stays OPEN).** No code shipped. All three owed items remain: the false-positive set, the cost-bounded farm and the delivery path. Two things block them. The arm's PATH sits inside HR_SANDBOX, so shipping it voids every declared fixture's verdict (C20). Measuring its false-positive set across the suite is a census, which the batch's build process forbids.
-
-verify: manual
-
 ## BL-1124 — the push suite is throughput-bound, not pole-bound, and nothing that reads the push says so
 
 **DEFECT.** OPEN. Filed 2026-11-15. Owner: `.githooks/pre-push` and `core/git-hooks/pre-push` (`pole_info_step`, `.githooks/pre-push:4060`; the `POLE-BOUND` header at `:4050` and the dispatch-order header at `:3184`), `CLAUDE.md` (the "POLE-BOUND" sentence in the fixture-suite section), and `fixture_suite_step`'s work outside the pool.
@@ -3243,39 +3371,13 @@ Provenance: batch 257, wave 7, the BL-1124 (d) remainder named by ai-dlc-82 (W7-
 - Every drop instant is preceded by the same burst. In the 100 ms before each of the 8 distinct instants of the step-1 run there are 2,630-3,439 reports, all from `git`: `file-read-metadata` and `file-test-existence` in about equal halves, spread across the tracked tree of the trace copy. Each burst is one `git` pid lasting about 20 ms, consistent with `scripts/install.sh:24`, `git -C "$AI_DLC_ROOT" diff-index --quiet HEAD --`, once per install run. That command lstats every tracked entry: in a scratch clone of f29ff3693, `GIT_TRACE2_PERF` reads `preload/sum_lstat:2399` against `read/cache_nr:2399`, on 3 of 3 runs. The burst pid's own argv was not observed. cp and the per-second averages (4.5-5k/s) are not the trigger, and the burst holds no `.git/**` or `file-read-xattr` line, so cutting those reports relieves nothing.
 - The loss is upstream of every stream client. In run 1, two observer streams used the deriver's predicate narrowed to one operation. The `file-read-data` observer matches almost nothing in the burst, yet it lost messages at all 8 of the main stream's drop instants, each about 20 ms earlier, and nowhere else. The `file-test-existence` observer lost messages at the same 8. Splitting a window across op-partitioned clients therefore cannot help.
 - Unreporting either operation class is excluded. In two windows from earlier traces with no drop notice, 299 and 342 paths were reported by `file-test-existence` alone, and 66 and 152 by `file-read-metadata` alone.
-- THE WINDOWS WITH NO DROP NOTICE WERE NOT LOSSLESS. Two earlier sandbox traces in this batch were ACCEPTED with 0 drop notices: install-scaffold-ignored in `/private/tmp/ai-dlc-readset-sandbox-501-f19-s4`, and schema-install-fallback in `-f19-s1`. In them, each `git` pid with over 800 reports reported only 639-1,073 of the copy's 2,281 and 2,280 tracked files, where the lstat count above says it statted all of them. So the kernel or logd loses stat reports with no notice, and the loss canary cannot see it, because atime moves only on a data read. The drop-notice guard and the canary together accept a short set. Through other readers, the two accepted sets still hold 1,757 and 1,615 of the 1,767 tracked `core/` files, and every tracked `templates/` and `patterns/` file.
+- THE WINDOWS WITH NO DROP NOTICE WERE NOT LOSSLESS. Two earlier sandbox traces in this batch were ACCEPTED with 0 drop notices: install-scaffold-ignored in `/private/tmp/ai-dlc-readset-sandbox-501-f19-s4`, and schema-install-fallback in `-f19-s1`. In them, each `git` pid with over 800 reports reported only 536-1,073 of the copy's 2,281 tracked files (all 8 such pids) and 807-909 of 2,280 (both such pids), where the lstat count above says it statted all of them. These ranges are a floor on the loss, because the 800-report cut drops a burst that lost more. So the kernel or logd loses stat reports with no notice, and the loss canary cannot see it, because atime moves only on a data read. The drop-notice guard and the canary together accept a short set. Through other readers, the two accepted sets still hold 1,757 and 1,615 of the 1,767 tracked `core/` files, and every tracked `templates/` and `patterns/` file.
 
 The 5 `legacy` rows are SUPPORTED, not narrowable, for as long as `install.sh:24` stats the whole tracked tree: `diff-index` lstats every tracked path under `core/`, `templates/` and `patterns/`. The raw windows are scratch files and are not committed, so these counts cannot be re-derived from the tree.
 
 Remaining:
 - BL-1138: whether `install.sh:24` needs a whole-tree `diff-index`. A cheaper dirty probe would remove the burst, and a trace would then decide whether the 5 rows narrow.
 - BL-1144: the silent stat loss above. An accepted sandbox window can be short with no drop notice and a zero canary.
-
-verify: manual
-
-## BL-1136 — the recover gate's advisor stage stands down for a lead with no built-in grant, though it holds `mcp__advisor__consult`
-
-**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/hooks/ai-dlc-recover-gate.sh` (the advisor stage, `:248`), and its fixture.
-
-BL-1135 gated the advisor gate's no-grant agents on the MCP consult. The recover gate's touchpoint-R stage restates that gate's detection (`:67-72`, not byte-bound) and still deletes the owed file and allows the call when the grant is not `on` (`:248`). A probe at f29ff3693 drove the shipped recover gate with touchpoint R owed: the owed file present, no marker, a `compact_boundary`, then a digest Read, no advisor since, and an incoming `Agent` call.
-- Granted lead: DENY, owed file kept.
-- No-grant lead with `mcp__advisor__consult` in its `deferred_tools_delta` roster: SILENT, owed file deleted.
-
-Fix: credit a consult as the no-grant lead's attempt and stand down only when the lead holds neither advisor, using BL-1135's held test, and add the matching cells to the recover gate's fixture.
-
-Provenance: batch 257, wave 8, measured read-only by ai-dlc-d8 (W8-01) while fixing BL-1135; id allocated by the lead.
-
-verify: manual
-
-## BL-1137 — the advisor gate's scan credits tool calls on `api-request-blob` lines, which re-carry earlier assistant content
-
-**NOTE.** OPEN. Filed 2026-11-15. Owner: `core/hooks/ai-dlc-advisor-gate.sh` `scan()` (both arms; `ai-dlc-recover-gate.sh`'s `r_scan` restates it).
-
-`scan()` reads `message.content` blocks on every line type. Graph transcripts carry `api-request-blob` lines (113 session files, 90 of them granted) that re-carry assistant blocks. In f7ff0ac0, 57 of 57 blob `tool_use` blocks repeat an id already on an assistant line, up to 206 lines later, and blobs in 75 files carry a `server_tool_use`. A repeated gated call moves the last gated action later, which could deny a call an advisor attempt already cleared. A repeated advisor attempt moves the last attempt later, which could acquit a gated action made after the real attempt. Measured effect, one session: replaying f7ff0ac0 at each of its 8 push/merge calls with blob lines dropped changes no verdict (BL-1135's replay).
-
-Fix: credit `tool_use`, `server_tool_use` and `advisor_tool_result` only on `type == "assistant"` lines (the gated `tool_result` on `user` lines). Before landing, replay granted and no-grant consumer transcripts with and without the restriction, and enumerate every verdict that moves.
-
-Provenance: batch 257, wave 8, found by ai-dlc-d8 (W8-01) in BL-1135's replay; the lead kept granted verdicts byte-unchanged there and allocated this id.
 
 verify: manual
 
@@ -3311,6 +3413,16 @@ r3 keys a list row on its fixture and declared line, and refuses any key the bas
 Fix: let r3 accept a new row for a fixture that drops one of its own base rows in the same change, provided the new line is narrower than the dropped one and the list's row count does not grow. Then declare `core/skills/ai-dlc-update/reconcile/` in `core/fixtures/fixture-git-env-seam/inputs.decl` with a `whole` row, in place of its 36 file lines.
 
 Provenance: batch 257, wave 9, named by ai-dlc-19 (W9-05) while landing BL-1117; id allocated by the lead.
+
+**PARTIAL (v0.1146.0) — r3 accepts a prefix narrowing, and `derived-fence-binding` is narrowed with it; the `fixture-git-env-seam` half stays open.** Built by ai-dlc-8c.
+- r3 now accepts a new row when all of these hold; any other new row is still refused with r3's message:
+  - the same fixture drops a base directory row in the same change;
+  - the new line strictly extends that row's line, with the same leading `!`/`+` markers;
+  - the fixture's row count does not grow. The count is per fixture, so another fixture's shrink cannot fund the growth.
+- Each accepted row prints `narrowing accepted: <fx> <parent> -> <row>`, and the success summary counts them.
+- `g_ratchet_probe` gains a near-miss, where fixture `c` narrows `core/hooks/` to `core/hooks/sub/` and must be accepted and printed, and an offender, where `c` takes `core/hookz/` and must fire r3.
+- `derived-fence-binding` is narrowed. The seed copies only the read set of its five selected arms, and its five whole rows (`core/`, `scripts/`, `templates/`, `patterns/`, `.claude/rules/`) become `core/team-roles/` and `core/scripts/`. Its key rows go from 2023 to 151, with 53 assertions and the same labels.
+- Remainder: `fixture-git-env-seam`. It has no row left to narrow from: BL-1117 dropped its `core/fixtures/` row and declares 36 `reconcile/` files one per line. A `reconcile/` whole row would therefore be a pure addition, and it was never a prefix narrowing (`core/fixtures/` to `core/skills/ai-dlc-update/reconcile/`). The premise that the fixture reads that directory's listing comes from ai-dlc-19's trace and has not been re-derived. An acceptance for a directory row replacing a fixture's own file lines would acquit a widening to any directory where the fixture already declares a file, so it was not built (lead ruling, batch 257).
 
 verify: manual
 
@@ -3356,16 +3468,35 @@ verify: manual
 `rs_fx_judge` omits a window on a `=== Messages dropped during live streaming` notice, or on a loss-canary hit: a path whose atime moved but that the stream never reported. A lost `file-read-metadata` or `file-test-existence` report trips neither, because the stream prints no notice for it and a stat does not move atime. So a window that lost only stat reports is ACCEPTED, and its set is short, which is the silent-skip direction.
 
 Measured on two windows ACCEPTED in batch 257 with 0 drop notices and a zero canary:
-- install-scaffold-ignored, `/private/tmp/ai-dlc-readset-sandbox-501-f19-s4`, tree 5897d226: each `git` pid with over 800 reports reported 639-1,073 of the copy's 2,281 tracked files.
+- install-scaffold-ignored, `/private/tmp/ai-dlc-readset-sandbox-501-f19-s4`, tree 5897d226: each `git` pid with over 800 reports reported 536-1,073 of the copy's 2,281 tracked files, over all 8 such pids.
 - schema-install-fallback, `/private/tmp/ai-dlc-readset-sandbox-501-f19-s1`, tree ec9e5626: the same measure reads 807-909 of 2,280.
 
-Those pids are consistent with `scripts/install.sh:24`, `git diff-index --quiet HEAD --`, which lstats every tracked entry: in a scratch clone of f29ff3693, `GIT_TRACE2_PERF` reads `preload/sum_lstat:2399` against `read/cache_nr:2399`, on 3 of 3 runs. In those two windows the bursts peaked at 1,584-1,818 reports per 100 ms, against 2,562 or more in every window where drops were noticed (BL-1134). The two accepted sets still hold 1,757 and 1,615 of the 1,767 tracked `core/` files, because other readers in each fixture read them.
+Those pids are consistent with `scripts/install.sh:24`, `git diff-index --quiet HEAD --`, which lstats every tracked entry: in a scratch clone of f29ff3693, `GIT_TRACE2_PERF` reads `preload/sum_lstat:2399` against `read/cache_nr:2399`, on 3 of 3 runs. In those two windows the bursts peaked at 1,584-1,818 reports per 100 ms, against 2,628 or more in each of the 9 windows on record where drops were noticed: BL-1134's 6, and the f19-s4 (schema-install-fallback), f19-s5 and f19-s6 windows. The two accepted sets still hold 1,757 and 1,615 of the 1,767 tracked `core/` files, because other readers in each fixture read them.
+
+The pid population is selected by outcome. Only `git` pids with over 800 reports are counted, so a burst that lost more falls out of it, and the ranges above are a floor on the loss, not its extent.
 
 How much the other accepted fixtures lost is UNMEASURED. Every trace-narrowed row in `docs/inputs-decl-whole-rows.tsv` and `.ai-dlc-fixture-readsets.tsv` rests on windows this guard pair accepted.
 
 Owed: a loss guard that can see a lost stat, with its false-positive set measured before it ships; then a measure of which accepted rows it would have refused. The raw windows are scratch files and are not committed, so these counts cannot be re-derived from the tree.
 
 Provenance: batch 257, wave 8, found by ai-dlc-d4 (W8-03) while checking BL-1134; id allocated by the lead.
+
+**PARTIAL (v0.1146.0).** Batch 257, W10-01, ai-dlc-da. The first owed item is built: `rs_fx_judge` now omits a window on `STAT LOSS`, which `readset_stat_pairing` counts (the `READSET_STATPAIR` span of `core/scripts/derive-fixture-readsets.sh`). Under the deriver's profile one lookup is reported as `file-test-existence` and then `file-read-metadata` by the same process, so a metadata report with no paired existence report is a lost report. The guard sees only a lost existence half: a lost metadata half or a lookup that lost both reports is invisible to it, so its refusals are a floor. `core/fixtures/readset-skip` (shard c, the `tracer` unit) drives the span on seeded windows, runs the deriver's own guard line, and runs the whole deriver on a stub window with one lone metadata report, which must be omitted naming `STAT LOSS: 1`. That last arm alone fails when the `rs_fx_judge` call site is deleted. Measured on read-only copies of the five f19 slot directories, by replaying the shipping `rs_fx_judge` over each recorded window. The replay reproduces every recorded accepted set byte for byte (142 of 142):
+- Of 162 recorded windows, the old guards accept 142 and omit 20 on drop notices.
+- The new judge omits 31: those 20 plus 11 that were accepted before, all for `STAT LOSS` alone. Install-scaffold-ignored (s4) refuses with 2,367 unpaired reports and schema-install-fallback (s1) with 599.
+- The other nine are shipped-rule-version-floor (s4, 454), validator-arm-selection (s4, 244; s5, 157), validator-fork-budget (s1, 95), apply-restamp-theirs (s4, 3), layer-readopt-gate (s4, 2), apply-restamp-worklist (s4, 1), layer-crosswalk-home (s4, 1) and dispatch-model-guard (s1, 1).
+- False-positive set: of the 87 accepted windows that never exceeded 200 reports in any 10 ms, the new judge refuses 1, on 1 row, a `Python` metadata report on `core` with no existence report. The rows of the 5 refusals in windows peaking under 400 were checked for a natural shape. In every one, another process of the same program reports the same path paired in the same fixture's windows: `Python` on `core` 1 of 2, and `cp` on each refused `reconcile/` script 8-25 of 9-25. So each row is a loss, and none is exempted.
+- Over every `git` process in the 162 windows, the rule breaks for none of the 26,052 whose own peak stays under 428 reports per 10 ms, and for all 40 at or above it.
+
+Remaining (the second owed item, the part on disk is done):
+- First cut for the 10 refused fixtures, by `git blame` and `git log` of their `inputs.decl` and of `docs/inputs-decl-whole-rows.tsv`, against each window file's write time:
+  - Every current `inputs.decl` line that names a real path predates its refused window, except `core/fixtures/lib/report.sh` and `core/fixtures/*/inputs.decl`, which were added to every fixture alike.
+  - The lines removed since are `core/fixtures/lib/mutant.sh` (7 fixtures), comments, and layer-readopt-gate's `!core/skills/ai-dlc-update/reconcile/layer-drift.sh`. Its directory is declared `whole`.
+  - So no current declared line was narrowed from a refused window.
+  - Of their 36 whole-rows rows, 26 are `legacy` and 10 `whole`.
+  - The `whole` rows written after the windows by 0.1126.0 (B3, which carried F19's traced narrowing) are the ones whose class may rest on f19 traces: dispatch-model-guard `core/hooks/`, layer-readopt-gate `core/skills/ai-dlc-update/reconcile/`, and validator-arm-selection `templates/`, `scripts/`, `patterns/`, `core/`, `.githooks/`. So is schema-install-fallback's `patterns/ whole` from 0.1142.0.
+  - A lost report shortens a set, so it cannot make a row read `whole` that is not. A re-trace under the guard decides whether any of these 8 rows could narrow.
+- Every other trace-narrowed row rests on a window that is no longer on disk. Deciding them needs re-traces under the new guard, each in a trace slot the lead grants. Traced map rows stay frozen by operator ruling until the lead lifts the freeze.
 
 verify: manual
 
@@ -3396,3 +3527,52 @@ Fix: key the consumer-layout lookup the way its entries are written. Either drop
 Provenance: batch 257, wave 8, found by ai-dlc-63 (W8-02) in BL-1133's hand probe; id allocated by the lead.
 
 verify: manual
+
+## BL-1142 — rule-29's "never call `--complete-repair --dispatch` in the foreground" has no enforcer, and the foreground-budget hook admits a subagent's call
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/hooks/ai-dlc-foreground-budget.sh` (the subagent exemption and `is_poll`), with `core/skills/ai-dlc/rule-bodies/rule-29.md` stating the rule.
+
+BL-541's batch-257 W9-11 change lets a `--complete-repair --dispatch` beat poll in one call for up to `max_wait_beats` quanta while its agent's transcript advances (`live_extend` in `core/scripts/wait-for-deliverable.sh`). Backgrounded, that only removes the lead's re-arm wakes. In the foreground the call outlives the declared Bash timeout, and the harness then backgrounds it and the caller loses the verdict. `rule-29.md` says not to call that mode in the foreground, and that sentence is prose only. The hook's jq pass decides the budget scope at `ai-dlc-foreground-budget.sh:328-330`: a call with a non-empty `agent_id` is in scope only when `is_poll` holds (`:306-308`, a loop that sleeps or a `sleep` of 30 s or more in the command text). A subagent's foreground `wait-for-deliverable.sh --complete-repair --dispatch <id> <rec>` at `timeout: 600000` has neither, so it is ADMITTED with no deny. The lead's own foreground call above the 120 s budget is denied by the general budget arm. A lead call that declares no timeout is out of the hook's scope (`:326`) and is admitted too. Read from the hook's text, not driven with a payload.
+
+Fix: deny a foreground Bash call whose command runs `wait-for-deliverable.sh` with `--complete-repair` as a command word, from any caller and whatever its timeout, with the remedy "the same call with `run_in_background: true`"; the remedy is always available, so the deny cannot wedge. Drive the hook with a subagent payload and a lead payload, each in both directions, before shipping.
+
+Provenance: batch 257, wave 9, the W9-11 roll-call note; id allocated by the lead.
+
+verify: manual
+
+## BL-1143 — hermetic-run's undeclared-tool arm only warns: its subject-script population is unmeasured
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `core/scripts/hermetic-run.sh` (HR_SANDBOX, the undeclared-tool trap's report) and the `tools.decl` of each fixture it names.
+
+BL-1118's arm prints `WARNING undeclared tool(s) called: <names>` and leaves the verdict unchanged, in both layouts. A FAIL would turn every fixture carried across its landing (`READSET_RUNNER_CARRY`) red on the push of whatever change next re-runs it, so the arm cannot fail a run until that population is measured.
+
+The dominant shape is a PROBE ORDER, for example `if command -v shasum …; then shasum …; elif command -v sha256sum …; then sha256sum …; else <fallback>` (`core/scripts/content-seal.sh:207`, `core/scripts/merge-review-shards.sh:1434-1435`, `core/scripts/wait-for-deliverable.sh:577-578`). With the first leg undeclared, the subject silently takes its fallback in the sandbox. Under the trap, `command -v` finds the stub, the stub is called, and the arm reports it: a true positive, because the subject ran a path production does not take. The same class covers the hooks' tracer probes (`.githooks/pre-push:1440`, `:1442` sandbox-exec and python3) and `pgrep` (`:3066`).
+
+The static population, at f29ff3693: 128 non-comment sites in `*.sh` files and both hooks probe a tool-dir name the reaching fixture does not declare. 79 fixtures name such a script in `inputs.decl`, and 132 do counting directory reach. The join's control is 3351 declared-reach pairs. The 12 names, by fixtures reaching by name:
+
+| tool | fixtures |
+|---|---|
+| sha256sum | 32 |
+| file | 24 |
+| sandbox-exec | 20 |
+| pgrep | 18 |
+| jq | 16 |
+| python3 | 14 |
+| shasum | 14 |
+| node | 11 |
+| git | 9 |
+| fs_usage | 7 |
+| uniq | 2 |
+| gh | 1 |
+
+Fix:
+1. Measure the union of the 79 direct-reach fixtures and the 57 that BL-1118's delivering push re-runs, under the trap, in one counted seed.
+2. Declare or fix each hit, and re-seed the changed fixtures.
+3. Make the report a FAIL in the distribution layout. The receipt then flips hermetic-runner arm TR's distribution cell to exit 1.
+
+The 53 directory-reach-only fixtures are named in the result: measured, or stated as static only.
+
+Provenance: batch 257, wave 9, the remainder of BL-1118 named by ai-dlc-49 (W9-07); id allocated by the lead.
+
+verify: manual
+

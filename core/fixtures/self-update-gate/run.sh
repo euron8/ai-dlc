@@ -30,9 +30,23 @@ for cand in \
   [ -f "$cand" ] && GATE="$cand" && break
 done
 [ -n "$GATE" ] || { printf 'FAIL: cannot locate self-update-gate.sh from %s. Looked in:\n%s' "$DIR" "$LOOKED"; exit 1; }
-# Reached only once the gate resolved; its whole directory is the input, because the gate sources
-# preclassify.sh and setup-sites.md beside itself and the arms below read two more siblings.
+# Reached only once the gate resolved. The gate's own closure is five files of its directory: it
+# loads preclassify.sh, which sources consumer-read.sh and lib.sh and reads setup-sites.md. Every
+# engine copy below takes that closure by name (sg_copy), never the directory by glob.
+# Two sentinels: shards a, b and c require setup-sites.md, which every engine reads; shard d still
+# requires the whole directory.
+echo "HERMETIC-CONSUMED $(cd "$(dirname "$GATE")" && pwd -P)/setup-sites.md"
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$GATE")" && pwd -P)/"
+SG_CLOSURE="self-update-gate.sh preclassify.sh consumer-read.sh lib.sh setup-sites.md"
+# Checked here, at top level: sg_copy runs inside $( ) in sc_engine and mp_engine, where an exit
+# ends only the subshell.
+for _sgf in $SG_CLOSURE; do
+  [ -f "$(dirname "$GATE")/$_sgf" ] || { echo "FIXTURE BROKEN: $_sgf is not beside the gate in $(dirname "$GATE")" >&2; exit 2; }
+done
+sg_copy() { # sg_copy <dest dir> <file>... -> copies the named siblings of the gate (each checked above)
+  local d="$1" f; shift
+  for f in "$@"; do cp "$(dirname "$GATE")/$f" "$d/"; done
+}
 
 # ---------------------------------------------------------------------------- shards ----
 # THIS FILE IS FOUR SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
@@ -263,7 +277,7 @@ ss_ack() {
 SU_PC="$(dirname "$GATE")/preclassify.sh"
 # SHARED: the machinery lister the `vr` unit reads (the `su` unit builds its own copy under $SU).
 MACHD="$(dirname "$DIST")/mach"; rm -rf "$MACHD"; mkdir -p "$MACHD"
-cp "$(dirname "$SU_PC")"/*.sh "$(dirname "$SU_PC")"/*.md "$MACHD"/ 2>/dev/null
+sg_copy "$MACHD" preclassify.sh setup-sites.md
 cat > "$MACHD/list-machinery.sh" <<'MACHEOF2'
 DIST="$1"; BASE="$2"; THEIRS="$3"
 eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$(dirname "$0")/preclassify.sh")"
@@ -860,7 +874,7 @@ ss_assert "sc-walk-unmoved" \
 sc_engine() { # sc_engine <name> <nomanifest|norows|nopre> -> a gate copy whose arm C cannot decide
   local E="$SC/eng-$1" mode="$2"
   rm -rf "$E"; mkdir -p "$E"
-  cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$E"/ 2>/dev/null
+  sg_copy "$E" $SG_CLOSURE
   case "$mode" in
     # `machinery:` emptied -> machinery_paths() resolves EMPTY -> the setup-sites.md terminal.
     nomanifest) awk '/^machinery:/{print; skip=1; next} skip && /^[a-z_]+:/{skip=0} !skip' \
@@ -1354,7 +1368,7 @@ ss_assert "su-seed-index-control" \
 # returns EMPTY, and both arms below then score a zero that means nothing. Measured: the first cut
 # did exactly that, and only the control arm caught it.
 mkdir -p "$SU/mach"
-cp "$(dirname "$SU_PC")"/*.sh "$(dirname "$SU_PC")"/*.md "$SU/mach"/ 2>/dev/null
+sg_copy "$SU/mach" preclassify.sh setup-sites.md
 cat > "$SU/mach/list-machinery.sh" <<'MACHEOF'
 DIST="$1"; BASE="$2"; THEIRS="$3"
 eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$(dirname "$0")/preclassify.sh")"
@@ -2928,8 +2942,8 @@ mp_shim() { # mp_shim <dir> <ref> -- a git that fails only `ls-files --with-tree
     "$2" "$1" "$(command -v git)" > "$1/git"
   chmod +x "$1/git"
 }
-# mp_engine <name> -> a whole copy of the reconcile dir, so a mutant resolves its siblings
-mp_engine() { rm -rf "$MP/e-$1"; mkdir -p "$MP/e-$1"; cp "$(dirname "$GATE")"/*.sh "$(dirname "$GATE")"/*.md "$MP/e-$1"/ 2>/dev/null; printf '%s' "$MP/e-$1"; }
+# mp_engine <name> -> a copy of the gate's closure, so a mutant resolves its siblings
+mp_engine() { rm -rf "$MP/e-$1"; mkdir -p "$MP/e-$1"; sg_copy "$MP/e-$1" $SG_CLOSURE; printf '%s' "$MP/e-$1"; }
 
 # The gate world: kappa diverged-and-untouched, omega deleted at theirs and consumer-modified.
 GD="$MP/gd"; GC="$MP/gc"; mkdir -p "$GD/core/rules" "$GC/.claude/rules" "$GC/.githooks"

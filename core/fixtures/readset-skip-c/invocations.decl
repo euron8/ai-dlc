@@ -5,4 +5,4 @@
 2 core/scripts/derive-fixture-readsets.sh
 # BL-982: every drive of the deriver through the runner inproc() logs one in-process pass, keyed on the path (a mutant
 # copy at the subject path counts, as lib/inproc.sh states); measured by one counted run.
-50 inproc:core/scripts/derive-fixture-readsets.sh
+53 inproc:core/scripts/derive-fixture-readsets.sh

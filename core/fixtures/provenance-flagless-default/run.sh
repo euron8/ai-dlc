@@ -44,8 +44,17 @@
 # fixture's own idea of the format.
 
 set -uo pipefail
+# HERMETICITY. The hooks honour a set of AI_DLC_* tunables and a consumer that sets one in
+# settings.json exports it into every session, so the fixture would be adjudicating the
+# operator's configuration rather than the code.
+#
+# IT ALSO BLINDS THIS FIXTURE TO AN AI_DLC_-NAMED BACK DOOR INTO THE ACQUITTAL, which is the
+# reason (a4) sets its variable in the INVOCATION rather than exporting one here. The scrub is
+# correct and stays; the arm works around it, and `drive_env` below is how.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 
 # --- subject: WALK UP for a marker, never count `..` hops ---------------------
 # The marker is this fixture's OWN home, which names the layout it is running in:
@@ -103,21 +112,12 @@ if [ -z "$VALIDATOR" ] || [ -z "$SCHEMA" ]; then
            "h  a block that VIOLATES a rule under --allow-missing, DENIED"; do
     printf '  SKIP  %s — subject absent in both layouts:%s\n' "$a" "$miss"
   done
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 
 command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 not on PATH" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/validate-provenance-block.sh"
 echo "HERMETIC-CONSUMED core/schemas/provenance-block.json"
-
-# HERMETICITY. The hooks honour a set of AI_DLC_* tunables and a consumer that sets one in
-# settings.json exports it into every session, so the fixture would be adjudicating the
-# operator's configuration rather than the code.
-#
-# IT ALSO BLINDS THIS FIXTURE TO AN AI_DLC_-NAMED BACK DOOR INTO THE ACQUITTAL, which is the
-# reason (a4) sets its variable in the INVOCATION rather than exporting one here. The scrub is
-# correct and stays; the arm works around it, and `drive_env` below is how.
-for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT

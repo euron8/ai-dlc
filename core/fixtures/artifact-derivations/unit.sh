@@ -16,7 +16,7 @@ vad_call() {
     for _vk in ${_ve[@]+"${_ve[@]}"}; do export "$_vk"; done
     # shellcheck source=/dev/null
     . "$_vc" || exit 125
-    vad_load
-    vad_invoke "$@"
+    fx_inproc "$_vc" && vad_load
+    fx_inproc "$_vc" && vad_invoke "$@"
   )
 }

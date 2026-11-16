@@ -36,11 +36,8 @@ consumer-suite-pool	!core/git-hooks/pre-push	whole
 content-seal	core/fixtures/adversarial-shard-merge/	legacy
 crosswalk-home-declaration	core/	legacy
 crosswalk-home-declaration	scripts/	legacy
-derived-fence-binding	core/	whole
-derived-fence-binding	scripts/	whole
-derived-fence-binding	templates/	whole
-derived-fence-binding	patterns/	whole
-derived-fence-binding	.claude/rules/	whole
+derived-fence-binding	core/team-roles/	whole
+derived-fence-binding	core/scripts/	whole
 dispatch-model-guard	core/hooks/	whole
 divergence-hard-block	core/hooks/	whole
 emit-report-refusal	core/skills/ai-dlc-update/reconcile/	whole
@@ -166,12 +163,9 @@ route-defect-classification	core/fixtures/route-defect-classification/	legacy
 schema-install-fallback	core/	legacy
 schema-install-fallback	patterns/	whole
 schema-install-fallback	templates/	legacy
-self-update-gate-b	!core/skills/ai-dlc-update/reconcile/	legacy
 self-update-gate-b	!core/git-hooks/pre-push	whole
-self-update-gate-c	!core/skills/ai-dlc-update/reconcile/	legacy
 self-update-gate-c	!core/git-hooks/pre-push	whole
 self-update-gate-d	!core/skills/ai-dlc-update/reconcile/	legacy
-self-update-gate	!core/skills/ai-dlc-update/reconcile/	legacy
 self-update-join-gate	core/skills/ai-dlc-update/	whole
 setup-config-drift	core/skills/ai-dlc-update/reconcile/	whole
 shell-portability	.githooks/pre-push	whole

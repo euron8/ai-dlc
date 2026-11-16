@@ -68,7 +68,7 @@ declare -F vsa_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $V defined n
 
 # Run, then read $?. Never `out=$(...)` for a verdict — command substitution moves
 # the status into the assignment's and the fixture reads the wrong one.
-rcof() { ( vsa_main "$@" ) >/dev/null 2>&1; echo $?; }
+rcof() { ( fx_inproc "$V" && vsa_main "$@" ) >/dev/null 2>&1; echo $?; }
 
 # --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome ---------------------
 # Outcomes, exit x output class: 0 a verdict line on stdout; 1 a REFUSED/malformed line on stderr; 2 PENDING or a
@@ -78,7 +78,7 @@ rcof() { ( vsa_main "$@" ) >/dev/null 2>&1; echo $?; }
 EQ="$WORK/.eq"; mkdir -p "$EQ"
 eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
   local id="$1"; shift
-  ( vsa_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( fx_inproc "$V" && vsa_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
   FXCELL="$id" bash "$V" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
   cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
 }
@@ -104,7 +104,7 @@ g=$(rcof --verdict 300 "$WORK")
 
 g=$(rcof --report "$WORK")
 [ "$g" -eq 0 ] && ok "--report never fails, even undeclared" || bad "--report exited $g, expected 0"
-if ( vsa_main --report "$WORK" ) 2>&1 | grep -q 'UNDECLARED'; then
+if ( fx_inproc "$V" && vsa_main --report "$WORK" ) 2>&1 | grep -q 'UNDECLARED'; then
   ok "--report SAYS the floor is undeclared (visible on every push, not silent)"
 else
   bad "--report printed nothing about the missing declaration — the absence stays invisible"
@@ -120,7 +120,7 @@ g=$(rcof --declare 900 --current 299 "$WORK")
 g=$(rcof --declare 300 --current 299 "$WORK")
 [ "$g" -eq 0 ] && ok "declaring s300 from s299 is accepted" || bad "declaring s300 from s299 exited $g, expected 0"
 
-if ( vsa_main --verdict 299 "$WORK" ) 2>/dev/null | grep -q 'SKIPPED-PRE-ADOPTION'; then
+if ( fx_inproc "$V" && vsa_main --verdict 299 "$WORK" ) 2>/dev/null | grep -q 'SKIPPED-PRE-ADOPTION'; then
   ok "a pre-floor sprint PRINTS SKIPPED-PRE-ADOPTION (the token is what makes the skip auditable)"
 else
   bad "a pre-floor sprint printed no SKIPPED-PRE-ADOPTION token — indistinguishable from a check that ran and found nothing"
@@ -128,7 +128,7 @@ fi
 g=$(rcof --verdict 299 "$WORK")
 [ "$g" -eq 0 ] && ok "a pre-floor sprint exits 0 (out of scope is not a failure)" || bad "pre-floor verdict exited $g, expected 0"
 
-if ( vsa_main --verdict 300 "$WORK" ) 2>/dev/null | grep -q 'IN-FORCE'; then
+if ( fx_inproc "$V" && vsa_main --verdict 300 "$WORK" ) 2>/dev/null | grep -q 'IN-FORCE'; then
   ok "a sprint at the floor PRINTS IN-FORCE"
 else
   bad "a sprint at the floor did not print IN-FORCE"

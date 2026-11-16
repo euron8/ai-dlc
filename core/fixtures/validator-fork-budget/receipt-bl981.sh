@@ -139,7 +139,7 @@ if [ "${R981_EQUIV:-}" = 1 ]; then
     : > "$W/$ql.iev"
     fx_inproc "$EM"
     ( cd "$root" || exit 97; export GIT_TRACE2_EVENT="$W/$ql.iev"; [ -z "$qx" ] || export GIT_INDEX_FILE="$qx"
-      . "$EM" || exit 97; vem_entry --arms I14 ) < /dev/null > "$W/$ql.iso" 2> "$W/$ql.ise"; q_rc=$?
+      . "$EM" || exit 97; fx_inproc "$EM" && vem_entry --arms I14 ) < /dev/null > "$W/$ql.iso" 2> "$W/$ql.ise"; q_rc=$?
     q_d=""
     cmp -s "$W/$ql.so" "$W/$ql.iso" || q_d="$q_d stdout"
     cmp -s "$W/$ql.se" "$W/$ql.ise" || q_d="$q_d stderr"

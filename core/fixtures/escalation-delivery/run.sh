@@ -71,7 +71,7 @@ entry()  { sed -n '/^## [^ ]* -- ESCALATION_UNDELIVERED$/,/^$/p' "$1/$LOG" 2>/de
 drive() { # <payload-json> -> work dir on stdout
   local w; w="$(mktemp -d "${TMPDIR:-/tmp}/esc-deliv-XXXXXX")"
   mkdir -p "$w/_bmad-output"
-  printf '%s' "$1" | ( set +o pipefail; export CLAUDE_PROJECT_DIR="$w"; esd_main ) >/dev/null 2>&1
+  printf '%s' "$1" | ( set +o pipefail; export CLAUDE_PROJECT_DIR="$w"; fx_inproc "$HOOK" && esd_main ) >/dev/null 2>&1
   printf '%s\n' "$w"
 }
 
@@ -160,7 +160,7 @@ EQ="$(mktemp -d "${TMPDIR:-/tmp}/esc-eq-XXXXXX")"
 eqv() { # <cell-id> <payload> -> $EQ/<id>.{ip,cl}.{out,err,rc,log}
   local id="$1" p="$2" s
   mkdir -p "$EQ/$id.ip.w/_bmad-output" "$EQ/$id.cl.w/_bmad-output"
-  printf '%s' "$p" | ( set +o pipefail; export CLAUDE_PROJECT_DIR="$EQ/$id.ip.w"; esd_main ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  printf '%s' "$p" | ( set +o pipefail; export CLAUDE_PROJECT_DIR="$EQ/$id.ip.w"; fx_inproc "$HOOK" && esd_main ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
   printf '%s' "$p" | CLAUDE_PROJECT_DIR="$EQ/$id.cl.w" FXCELL="$id" bash "$HOOK" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
   for s in ip cl; do
     if [ -f "$EQ/$id.$s.w/$LOG" ]; then sed 's/^## [0-9TZ:-]* -- /## <stamp> -- /' "$EQ/$id.$s.w/$LOG" > "$EQ/$id.$s.log"

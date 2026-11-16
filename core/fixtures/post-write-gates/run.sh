@@ -34,13 +34,14 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 PWG="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/post-write-gates.sh" \
             "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/post-write-gates.sh")"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/"
 if [ -z "$PWG" ]; then
   echo "SKIP: subject absent — reconcile/post-write-gates.sh predates this fixture's pull"
-  exit 0
+  fx_skip_exit "$HERE"
 fi
 RDIR="$(cd "$(dirname "$PWG")" && pwd)"
 # The hook-registration gate runs the CONSUMER's installed validator, so the seeded consumer gets a

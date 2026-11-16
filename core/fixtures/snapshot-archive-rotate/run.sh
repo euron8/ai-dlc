@@ -101,7 +101,7 @@ subst()  { sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$@" | awk 'length($0) >= 
 
 echo "${NAME}:"
 
-# The floor world of assertion 12, also read by the `unhead` arm.
+# The floor world of assertion 12.
 FLOOR="$WORK/floor"
 build_floor() {
   rm -rf "$FLOOR"; mkdir -p "$FLOOR"
@@ -385,11 +385,15 @@ arm_neg() {
 
 # SHAPE: one per non-refusal path. The rotator's own verdict line is asserted too, so the three
 # worlds are PROVEN to reach three different paths rather than assumed to.
+# The nohist world arm_shape leaves after its absorb, and the snapshot copy taken before it; arm_idem
+# copies the one and reads the other, so it runs only the SECOND absorb.
+SHAPE_NOHIST_W=""; SHAPE_NOHIST_PRE=""
 arm_shape() {  # <world> <verdict regex>
   local w out rc pre; w="$(world "$1")" || { MSG="world copy failed"; return 1; }
   pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
   out="$(bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply 2>&1)"; rc=$?
   local whole=no; absorbed_ok "$w" "STALESNAP-$1" "$pre" && whole=yes
+  if [ "$1" = nohist ]; then SHAPE_NOHIST_W="$w"; SHAPE_NOHIST_PRE="$pre"; fi
   MSG="rc=${rc}, path verdict matched=$(grep -cE "$2" <<<"$out"), marker in archive=$(grep -c "STALESNAP-$1" "$w/$ARCH_REL" 2>/dev/null), whole snapshot is the archive tail=$(cmp -s "$pre" "$w.tail" && echo yes || echo no) ($(wc -l < "$pre" | tr -d ' ') lines), snapshot present=$([ -f "$w/$SNAP_REL" ] && echo yes || echo no) bytes=$(fbytes "$w/$SNAP_REL"), archive tracked=$(tracked "$w" "$ARCH_REL" && echo yes || echo no)"
   [ "$rc" -eq 0 ] && grep -qE "$2" <<<"$out" && [ "$whole" = yes ]
 }
@@ -682,10 +686,13 @@ done
 # The expected new history of the `above` world, from the SHIPPED rotator on an unmodified copy, so the
 # subject under test cannot move its own yardstick. Asserted to differ from the pre-run history.
 EXPECT="$WORK/expect.above"
+# EXPECT_W is the world that run left behind: arm_staged copies it rather than re-running the same call.
+EXPECT_W=""
 expect_above() {
   [ -s "$EXPECT" ] && return 0
   local c; c="$(world above)" || return 1
   bash "$ROT" "$c/$HIST_REL" --apply >/dev/null 2>&1 || return 1
+  EXPECT_W="$c"
   cp "$c/$HIST_REL" "$EXPECT" && ! cmp -s "$EXPECT" "$TMPL/above/$HIST_REL" && [ -s "$EXPECT" ]
 }
 fmode() { ls -l "$1" | cut -c1-10; }
@@ -1095,8 +1102,9 @@ arm_staged() {
   miss="$(comm -23 "$w.want" "$w.corpus" | wc -l | tr -d ' ')"
   # (2) an already-cut history with an untracked archive.
   local w2 o3 rc3 trk2 trk3 heq2
-  w2="$(world above)" || { MSG="world copy failed"; return 1; }
-  bash "$ROT" "$w2/$HIST_REL" --apply >/dev/null 2>&1
+  # The state of that run is expect_above's world: copy it instead of rotating a second fresh world.
+  [ -n "$EXPECT_W" ] && [ -d "$EXPECT_W/.git" ] || { MSG="expect_above left no world to copy"; return 1; }
+  w2="$(mktemp -d "$WORK/w.XXXXXX")" && cp -R "$EXPECT_W/." "$w2/" || { MSG="world copy failed"; return 1; }
   ( cd "$w2" && git rm -q --cached -- "$ARCH_REL" ) >/dev/null 2>&1
   trk2=no; tracked "$w2" "$ARCH_REL" && trk2=yes
   o3="$(bash "$R_" "$w2/$HIST_REL" --apply 2>&1)"; rc3=$?
@@ -1199,23 +1207,13 @@ arm_args() {
   [ "$rc1" -eq 2 ] && [ "$rc2" -eq 2 ] && [ "$same" = yes ]
 }
 
-# UNHEAD: assertion 12's world (a history at the cut floor carrying unheaded move markers), on a
-# fresh copy, through the rotator under test: refused (rc 1, naming the cut floor), bytes unchanged.
-# A subject with the guard stripped affirms "nothing to rotate" and exits 0 (MUT2).
-arm_unhead() {
-  local w h0 out rc; w="$(mktemp -d "$WORK/uh.XXXXXX")" || { MSG="world dir failed"; return 1; }
-  cp "$FLOOR/h.md" "$w/h.md" || { MSG="floor copy failed"; return 1; }
-  h0="$(shasum "$w/h.md" | cut -d' ' -f1)"
-  out="$(bash "$R_" "$w/h.md" --keep-entries 10 --apply 2>&1)"; rc=$?
-  MSG="rc=${rc}, names the cut floor=$(grep -c 'cut floor' <<<"$out"), says nothing-to-rotate=$(grep -c 'nothing to rotate' <<<"$out"), unchanged=$([ "$(shasum "$w/h.md" | cut -d' ' -f1)" = "$h0" ] && echo yes || echo no)"
-  [ "$rc" -eq 1 ] && grep -q 'cut floor' <<<"$out" && [ "$(shasum "$w/h.md" | cut -d' ' -f1)" = "$h0" ]
-}
-
 # IDEM: absorbing the now-empty snapshot again appends nothing.
 arm_idem() {
-  local w rc a0 a1 pre; w="$(world nohist)" || { MSG="world copy failed"; return 1; }
-  pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
-  bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1
+  local w rc a0 a1 pre
+  [ -n "$SHAPE_NOHIST_W" ] && [ -d "$SHAPE_NOHIST_W/.git" ] && [ -s "$SHAPE_NOHIST_PRE" ] \
+    || { MSG="arm_shape nohist left no world to copy (nohist must precede idem in ARMS)"; return 1; }
+  pre="$SHAPE_NOHIST_PRE"
+  w="$(mktemp -d "$WORK/w.XXXXXX")" && cp -R "$SHAPE_NOHIST_W/." "$w/" || { MSG="world copy failed"; return 1; }
   a0="$(fbytes "$w/$ARCH_REL")"; [ -f "$w/$ARCH_REL" ] && cp "$w/$ARCH_REL" "$w/arch.first"
   bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; rc=$?
   a1="$(fbytes "$w/$ARCH_REL")"
@@ -1224,7 +1222,7 @@ arm_idem() {
     && absorbed_ok "$w" "STALESNAP-nohist" "$pre"
 }
 
-ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort rohist links mode atomic sweep staged args idem ro rodir rosnap h1head noval keep0 same gitfail unhead"
+ARMS="swap neg nohist floor above ign unw ulim wlate wshort rew tlate tshort rohist links mode atomic sweep staged args idem ro rodir rosnap h1head noval keep0 same gitfail"
 arm_run() {
   case "$1" in
     h1head)   arm_h1head ;;
@@ -1255,7 +1253,6 @@ arm_run() {
     unw)    arm_unw ;;
     args)   arm_args ;;
     idem)   arm_idem ;;
-    unhead) arm_unhead ;;
     ro)     arm_ro ;;
   esac
 }
@@ -1292,7 +1289,6 @@ for a in $ARMS; do
     sweep)    what="KILL-POINT SWEEP — a kill-point sweep with --absorb, traced by a DEBUG trap in the rotator's own shell (builtins, redirections, absolute paths, command -p, subshells): simple command N runs under ulimit -f 1 at every N and ulimit -f 0 at every N from the rename on plus every 8th before, SIGKILL at N+1, the last point never signalled and clean, a kill on mv, one after the rename and one leaving a 1024-byte partial write; each then a plain re-run: rc 0, 0 pre-run history and snapshot lines missing from the tracked corpus, history == clean rotation" ;;
     staged)   what="STAGED — SIGKILL at the staging after the rename, without --absorb (then a plain re-run: rc 0, archive tracked, history == clean rotation, no pre-run line missing from the corpus)" ;;
     args)   what="USAGE on the no-history path — unknown option rc 2, --absorb naming no file rc 2" ;;
-    unhead) what="REFUSAL — assertion 12's world through the rotator under test: at the cut floor with unheaded move markers, rc 1 naming the cut floor, bytes unchanged" ;;
     idem)   what="idempotent — absorbing the already-empty snapshot appends nothing" ;;
     ro)     what="REPORT-ONLY — --absorb without --apply on no history, the floor and above it writes nothing (git status empty, snapshot byte-identical, no archive) and says what it would do" ;;
     h1head)   what="LINE-1 HEADING — a history with no preamble rotates (rc 0) and conserves: pre-run == moved + kept byte for byte, the archive's tail == moved" ;;

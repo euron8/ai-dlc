@@ -119,7 +119,7 @@ src_warn() { # src_warn <script>
 WS_SOURCED=""
 run_warn_2() { # run_warn_2 <script> <stderr-file> -- <script> must be the one src_warn sourced last
   [ "$1" = "$WS_SOURCED" ] || { echo "FIXTURE BROKEN: driving $1 while the ws_main sourced last is ${WS_SOURCED:-none}" >&2; return 2; }
-  ( ws_main --root "$WORK" --ledger "$WORK/ledger.md" \
+  ( fx_inproc "$1" && ws_main --root "$WORK" --ledger "$WORK/ledger.md" \
     --local-dir "$WORK/local" --core-dir "$WORK/core" ) 2>"$2"
 }
 run_warn() { run_warn_2 "$1" /dev/null; }
@@ -177,7 +177,7 @@ EQ="$WORK/eq"; mkdir -p "$EQ"
 eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
   local id="$1"; shift
   [ "$WS_SOURCED" = "$SCRIPT" ] || { echo "FIXTURE BROKEN: cli cell $id with the ws_main of ${WS_SOURCED:-nothing} sourced" >&2; exit 2; }
-  ( ws_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( fx_inproc "$SCRIPT" && ws_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
   FXCELL="$id" bash "$SCRIPT" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
   cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
 }

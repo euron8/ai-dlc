@@ -6,7 +6,10 @@
 # state-dir-guard and path-exists-check deciding cells), 341 to 404.
 # inproc rows (fx_inproc, one per in-process beat): the base arms' beats, the mutant and MX0 cells' beats (each copy
 # keeps the declared suffix, $MUTDIR/<m>/core/scripts/wait-for-deliverable.sh), C31's relaunch of C23, and C48's
-# three in-process sides. Each is counted in the call site's foreground before any background (BL-868).
+# three in-process sides. Each beat is two rows: its source, counted in the call site's foreground before any
+# background, and its wfd_beat_main call, counted inside the beat's subshell after wfd_mark_main returns and before
+# anything a reaper waits on (a forced delay before that fx_inproc moved no count) (BL-868).
 213 *
 3 core/scripts/wait-for-deliverable.sh
-26 inproc:core/scripts/wait-for-deliverable.sh
+# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
+52 inproc:core/scripts/wait-for-deliverable.sh

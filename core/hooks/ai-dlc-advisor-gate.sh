@@ -51,6 +51,11 @@
 #     granted fresh) writes no line at all, which is correct: nothing was withdrawn.
 #   - The judged file is one the agent could write, so a write onto a transcript is denied
 #     (below) BEFORE and INDEPENDENT of the grant test -- deleting the grant line is the attack.
+#   - THE TESTS ABOVE ARE ONE SOURCE, `ai-dlc-advisor-detect.sh` (BL-1136): the grant, the roster,
+#     an attempt, a result, a consult and the held test, which `ai-dlc-recover-gate.sh` loads too.
+#     A block is credited only on the line type that wrote it: `tool_use`, `server_tool_use` and
+#     `advisor_tool_result` on `assistant` lines, `tool_result` on `user` lines. An
+#     `api-request-blob` line re-carries earlier blocks and credits nothing (BL-1137).
 #
 # GATED ACTIONS, DERIVED BY GREP over core/skills/ai-dlc/SKILL.md, steps/*.md and team-roles/*.md
 # (line numbers at this release; the touchpoint that precedes each is named after it):
@@ -549,7 +554,16 @@ WIN="${ADVISOR_GATE_WINDOW:-10}"
 case "$WIN" in ''|*[!0-9]*) WIN=10 ;; esac
 WIN=$((10#$WIN))
 
-# One pass over the judged transcript. Lines that are not JSON are skipped, never fatal.
+# THE DETECTION IS ONE SOURCE: the sibling library defines the grant, roster, attempt, result and
+# consult tests and the line types a block may be credited on (BL-1136, BL-1137), and
+# `ai-dlc-recover-gate.sh` loads the same file. Unreadable -> silent with the reason on stderr.
+_AI_DLC_DETECT="${BASH_SOURCE[0]:-$0}"; case "$_AI_DLC_DETECT" in */*) _AI_DLC_DETECT="${_AI_DLC_DETECT%/*}/ai-dlc-advisor-detect.sh" ;; *) _AI_DLC_DETECT=./ai-dlc-advisor-detect.sh ;; esac
+ADV_DETECT_JQ=""
+{ [ -r "$_AI_DLC_DETECT" ] && . "$_AI_DLC_DETECT"; } 2>/dev/null
+[ -n "$ADV_DETECT_JQ" ] || { say "WARN: the advisor detection library is unreadable ($_AI_DLC_DETECT); gate skipped"; exit 0; }
+
+# One pass over the judged transcript. Lines that are not JSON are skipped, never fatal. A content
+# block is credited only through `adv_blocks` (assistant blocks; `tool_result` on user lines).
 #   grant: the latest `advisor_tool` attachment (null = never granted)
 #   adv:   line of the last advisor attempt;  res: U (`unavailable`) or R, the last result
 #   g:     tool_use id -> [line, path, kind] of every gated call; a call that did not ship is removed.
@@ -559,30 +573,24 @@ WIN=$((10#$WIN))
 #          number), whether each holds an advisor attempt, and the one holding the incoming call.
 #   inwin: 1 when an advisor attempt sits in one of the last $win turns, the incoming call's turn 1.
 scan() {
-jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg tuid "$TUID" --arg fp "$FP" --arg kind "$KIND" --argjson win "$WIN" "$CLASSIFY"'
+jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg tuid "$TUID" --arg fp "$FP" --arg kind "$KIND" --argjson win "$WIN" "$CLASSIFY$ADV_DETECT_JQ"'
   reduce (inputs | (fromjson? // empty) as $l | select(($l | type) == "object") | [input_line_number, $l]) as [$n, $l]
     ({grant: null, adv: 0, res: "-", g: {}, last: 0, seen: 0, order: [], madv: {}, cur: null,
       roster: null, mcp: 0, mmadv: {}};
      .last = $n
-     | if ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "advisor_tool") then
-       .grant = (($l.attachment.available != false) and ($l.attachment.toolChange != "remove"))
-     elif ($l.type == "attachment" and ($l.attachment | type) == "object" and $l.attachment.type == "deferred_tools_delta") then
-       (if (($l.attachment.removedNames // []) | if type == "array" then any(.[]; . == "mcp__advisor__consult") else false end)
-        then .roster = false else . end)
-       | (if (($l.attachment.addedNames // []) | if type == "array" then any(.[]; . == "mcp__advisor__consult") else false end)
-          then .roster = true else . end)
+     | if adv_attach($l) then adv_fold($l)
      else
        (if $l.type == "assistant" then ((($l.message.id? // "") | tostring) | if . == "" then "L\($n)" else . end) else null end) as $mk
        | (if $mk != null and .madv[$mk] == null then (.order += [$mk] | .madv[$mk] = false) else . end)
        | (if ($l.type == "user" and ($l | notif | not) and (($l.message.content? | type) == "string"
              or ([($l.message.content? // []) | .[]? | select(type == "object") | .type] | index("text") != null)))
         then .g |= map_values(.[1] = "") else . end)
-       | reduce ((($l.message.content? // []) | if type == "array" then .[] else empty end | select(type == "object"))) as $b (.;
-         if ($b.type == "server_tool_use" and $b.name == "advisor") then
+       | reduce adv_blocks($l) as $b (.;
+         if ($b | adv_attempt) then
            .adv = $n | (if $mk != null then .madv[$mk] = true else . end)
-         elif $b.type == "advisor_tool_result" then
-           .res = (if (($b.content | if type == "object" then .error_code else null end) // "") == "unavailable" then "U" else "R" end)
-         elif ($b.type == "tool_use" and $b.name == "mcp__advisor__consult") then
+         elif ($b | adv_res) != null then
+           .res = ($b | adv_res)
+         elif ($b | adv_consult) then
            .mcp = $n | (if $mk != null then .mmadv[$mk] = true else . end)
          elif ($b.type == "tool_use" and (($b.id // "") | tostring) != "" and (($b.id | tostring) != $tuid)) then
            ({name: $b.name, input: ($b.input // {})} | kindx($role) | sub("^gatelogw$"; "gatelog")
@@ -605,7 +613,7 @@ jq -n -R -r --arg home "${HOME:-}" --arg proj "$PROJ" --arg role "$ROLE" --arg t
   | [range([0, $ci - $win + 1] | max; [$ci + 1, $len] | min)] as $wr
   | (if ([$wr[] | $ma[$o[.]] // false] | any) then 1 else 0 end) as $inwin
   | (if ([$wr[] | $mm[$o[.]] // false] | any) then 1 else 0 end) as $minwin
-  | (if .roster == true or (.roster == null and .mcp > 0) then 1 else 0 end) as $held
+  | (if adv_held then 1 else 0 end) as $held
   | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.adv) \($act) \(.res) \($same) \(.seen) \($inwin) \(.mcp) \($minwin) \($held)"' "$JUDGED" 2>/dev/null
 }
 # judge: sets GRANT LAST_ADV LAST_ACT LAST_RES SAME SEEN INWIN LAST_MCP MINWIN MHELD from STATE, and
