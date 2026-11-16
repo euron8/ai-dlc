@@ -239,8 +239,8 @@ actions 3 and 4 are COMPLETED (0.750.0); they are kept numbered so citations res
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
      placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
      the moment its turn comes.
-   - BUNDLE BY DEFAULT. Ready releases are collected by the lead onto one integration branch and
-     gated once. The rule is stated in full under that label in
+   - BUNDLE ONLY TO CUT WALL CLOCK. Ready releases are collected by the lead onto one integration branch and
+     gated once only when that cuts overall wall clock. The rule is stated in full under that label in
      `docs/plans/graph-ledger-full-drain.md` action 0; follow it there.
 1. **MAKE THE CLONE AND PIN IT** — completed each batch; repeat: a full clone under `mktemp -d`, a
    `github` remote pointing at GitHub, this branch checked out, `PIN` recorded as `github/main`.

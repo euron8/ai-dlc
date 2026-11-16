@@ -43,7 +43,6 @@ consolidate them here.
   read-only, the set a push runs.
 - After a red push the failing set is in `.git/ai-dlc-fixture-failures`; a re-push re-runs those and any
   whose key moved.
-- Clear the shared verdict store by EXACT LISTING before a gate, never by glob or `rm -rf`.
 - Pool width is `AI_DLC_FIXTURE_JOBS` (default 12; not `FIXTURE_JOBS`), read at the top of the hook's pool
   block. A nested pool (depth 1 or more) is capped at two workers. Re-measure on a smaller box.
 - `<vs>/fixture-verified/<root>` (with its `.format` sidecar, which must read `v2`) is the

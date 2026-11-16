@@ -45,7 +45,20 @@ silences P9 through P13 on this file. **A record is moved whole, including any s
 written inside it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in
 a batch record.
 
-**BATCH 256 — OPEN.** Lead `ai-dlc-a7`, accepted from `ai-dlc-f3` at `0.1078.0` `e3d2dfc35`. No `graph-*` session is ever messaged.
+**BATCH 257 — CLOSED.** Landed: `v0.1102.0` to `v0.1159.0` (46 versioned releases; `0.1109.0`-`0.1111.0`, `0.1113.0`, `0.1115.0`-`0.1121.0` and `0.1123.0` never landed) plus versionless commits, last `20ac0fc6f`. The batch closed on the operator's word with wave 13 unstaffed.
+Leads in order: `ai-dlc-15` (opened at `0.1101.0` `0569579f4`), `ai-dlc-a9`, `ai-dlc-35`, `ai-dlc-7b`. Batch 256's lead `ai-dlc-a7` never ran actions 6, 6b and 9; this close covers both batches. Rulings and NOTEs are in the commit that adds this record. No `graph-*` session is ever messaged.
+- **Landed (`git log --reverse --format='%h %s' 0569579f4..20ac0fc6f`; each subject names its ids):** `0.1102.0` BL-1029; `0.1103.0` BL-510/615; `0.1104.0` BL-844; `0.1105.0` BL-1009 advances; `0.1106.0` BL-1017; `0.1107.0` BL-1028; `0.1108.0` BL-1042 plus ten; `0.1112.0` BL-1048; `0.1114.0` BL-1050; `0.1122.0` BL-1049; bundles B1-B6 `0.1124.0`-`0.1129.0` (`0.1129.0` carries F2, BL-1016); `0.1130.0` PW (BL-1090-1100); bundles B7-B25 `0.1131.0`-`0.1149.0`; wave 12 (W12-01 to W12-21) `0.1150.0`-`0.1159.0` plus versionless W12-06/08/09/13/14/20/21. Closed in wave 12: BL-1140/1142, 1146, 982, 1143/1145/1154, 1157, 899 and 1056 (LANDED), 1144, 1158, 1151, 1134/1138, 1156. Next VERSION `0.1160.0`; next free id `BL-1160`; `docs/backlog.md` 54 headings.
+- **BL-1156's LANDED line reads `vVERSION_PLACEHOLDER`** (`20ac0fc6f` was versionless); the next versioned release stamps it.
+- **Live entries by what their own text says the next step waits on, at `20ac0fc6f`** (a lead-granted trace slot is not an external wait):
+  - Buildable now: BL-583 (the I66 single-hook escape), BL-878 (next allowlist slice), BL-984 (LEFT OPEN rows; the hermetic-run arm is ruled "Record unbuildable"), BL-1030 (remainder (1), gate 2's record-only route), BL-1068 (stat volume, then a re-trace in a slot), BL-1124, BL-1148 (no mechanism proposed yet), BL-1152, BL-1153 (false-positive set first), BL-1155 (guarded `--declared-out` re-traces in a slot), BL-1159, and BL-819's `open` class (data on disk; its close waits on a graph sprint).
+  - Administrative close (WITHDRAWN or LANDED, heading still live): BL-909, BL-1014, BL-1074, BL-1085, BL-1156.
+  - The operator's: BL-847 strict mechanism B (standing ruling, only the operator reopens it); the contact-shape re-rule in BL-841/BL-972.
+  - A measurement not yet on disk: BL-584, BL-806, BL-910, BL-1008, BL-1133.
+  - Every other live entry waits on a graph sprint.
+- **Graph (read-only, `/Users/n8/git/graph`):** `origin` carries reconcile branches through `ai-dlc-update/0.1157.0-reconcile-*`. `main` and the checked-out working tree each carry the `pytest-footprint-watchdog` declaration in `docs/coding-conventions.md` (2 lines; control `pytest` 27). The PC filed during the batch, `PC-S323-GATE-ADJUDICATION-S23-PRE-STRIPS-HR_BIN-BUT-NOT-THE-TRAP-FARM`, is fixed by BL-1154 (`0.1153.0`) and absorbed by BL-1158. **A pull is never dispatched by this program.**
+- **Left after the close cleanup (lead-reported):** worktrees: `main` only; no `refs/b257/*` and no `257-*`/`b257-*` branch, local or remote; rerere off (`rerere.enabled=false`; its disabled cache was deleted); `scripts/collect-counted-stores.sh --apply` ran on the operator's answer (6 dead stores, 3399 files; `counted-b4f3542dc948` live and `counted-cd68ce325a3d` legacy kept); the context-mode database purge runs after the last session closes.
+
+**BATCH 256 — CLOSED (its close is in batch 257's record).** Lead `ai-dlc-a7`, accepted from `ai-dlc-f3` at `0.1078.0` `e3d2dfc35`. No `graph-*` session is ever messaged.
 - **Graph at open:** `main` `6ee289617`, stamp `0.1061.0` (`e0ebaf019` is an ancestor), 17 behind; s322 has 8/8 stories done, its retro still running; ledger live 4 at `main`, all unfiled at open; one further filing uncommitted in graph's working tree (`PC-S322-RETRO-CARRY-DERIVATION-REPOINT-BLINDS-TREE-MATCH`). Action 7 at open: PENDING 0, no rc regression, banked.
 - **Owners:** 29 sessions, one release each. C1 BL-984 decls; C2 BL-986; C3 BL-987; C4 BL-988; C5 BL-989; C6 BL-981/976/974; N1 BL-978; N2 BL-985; N3 BL-809; N4 BL-819; N5 BL-880; N6 BL-695; N7 BL-510/514; N8 BL-909; N9 BL-990, also files BL-993; N10 BL-972; N11 BL-878; N12 BL-899; N13 core narrative drift (BL-991 reserved); M1 BL-508/541/543/550/552 planning re-audit; M2 BL-842/843/844/846/847 gate-2 outcomes; M3 BL-838/839/912/913; M4 BL-808/810; M5 BL-397/398/512/615; M6 BL-806/583/914/868; B1 BL-915 audit; B2 BL-911 narrowing; B3 BL-992 `install.sh`; B4 BL-982 static arm (`ai-dlc-d8`).
 - **Load:** the operator paused 24 of 29 sessions (05:37-05:45); active C1, C2, C3, C5, N9.
@@ -832,7 +845,7 @@ candidate's surviving half is upstream's to file and build, never a question for
      happens only when NO TIMING RUNS allows it, and then after every release in the batch that is
      ready or in flight, unless a release depends on the result.
    - SHORTEST GATE FIRST. Among ready releases, the bundle gates first. A docs-only release never
-     gets a gate of its own; it rides the next bundle (BUNDLE BY DEFAULT).
+     gets a gate of its own; it rides the next bundle (BUNDLE ONLY TO CUT WALL CLOCK).
    - NO IDLE SESSIONS. At roll call, and again whenever a session finishes, every unassigned plan
      item goes at once to an idle session that has not owned a release this batch. Build work (hands, edits only) never waits on box load;
      only runs load the box.
@@ -847,8 +860,8 @@ candidate's surviving half is upstream's to file and build, never a question for
    - RELEASE TEXT IS PREPARED IN ADVANCE. Each owner has its release commit text (a VERSION
      placeholder, CHANGELOG, LANDED lines) written by a hand before its gate opens, so a gate starts
      the moment its turn comes.
-   - BUNDLE BY DEFAULT. Ready releases are collected by the lead onto ONE integration branch and
-     gated once; pushes stay serialized, one at a time. A red caused only by one release drops that
+   - BUNDLE ONLY TO CUT WALL CLOCK. Ready releases are collected by the lead onto ONE integration branch and
+     gated once only when that cuts overall wall clock; pushes stay serialized, one at a time. A red caused only by one release drops that
      release from the bundle, and the rest re-gate without it; the dropped owner fixes it and rides
      the next bundle. A release that turns ready after a bundle starts gating rides the next one. A
      docs-only release (only `docs/`, `CHANGELOG.md`, `VERSION`) never gets a gate of its own: its
@@ -1584,6 +1597,13 @@ given at batch 90.
    - **Leave a `## Discharge` section empty for the executor**, and require the file be retitled
      `DISCHARGED — DO NOT EXECUTE` when spent. A spent runbook still reading as instructions is
      this directory's recurring hazard: measured once at 5 of 6 files.
+
+   **A PULL THAT DELIVERS `0.1129.0` (the F2 release) NEEDS GRAPH'S WATCHDOG DECLARATION FIRST.** The
+   line is the one `CHANGELOG.md`'s `[0.1129.0]` section carries verbatim, and it goes in graph's
+   `docs/coding-conventions.md` on the ref the pull lands on. Check it read-only with
+   `git -C /Users/n8/git/graph grep -c pytest-footprint-watchdog <ref> -- docs/coding-conventions.md`,
+   with `pytest` as the present-token control. If it is absent, the runbook states adding it as the
+   pull's precondition. The report reads READY, never AUTHORIZED.
 
    **You cannot run the pull and must not try.** `consumer-boundary.md` is unconditional. Your
    deliverable is the released version, the runbook, and the number.

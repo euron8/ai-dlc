@@ -85,7 +85,7 @@ Record every fixture, census or gate verdict in the shared, content-keyed verdic
 
 ## A release never waits for another release's landing
 
-A release never waits for another release's landing to build, rebase, verify or push; only its merge is ordered behind earlier merges.
+A release never waits for another release's landing to build, rebase, verify or push; only its merge is ordered behind earlier merges. Bundle READY releases into one gate only when that cuts overall wall clock.
 
 ## Read-set traces use the sandbox tracer, and the session runs them
 
