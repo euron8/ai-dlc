@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1149.0] - 2026-11-16
+
+### BL-1150: the local-map discard report counts lost-stat omissions as `stat-loss`
+
+`cls()` in `.githooks/pre-push` and `core/git-hooks/pre-push` maps a `STAT LOSS:` omission cause to a `stat-loss` class, listed after `trip`; before this they counted as `other`. The edit is byte-identical in both hooks.
+
+### Rules and records
+
+- `.claude/rules/verification-discipline.md`: instrument a shared file only while nothing else runs that tree's code, with a control in the same invocation that must log more than 0.
+- BL-1147's archived false-positive sentence gives the figures measured on 0.1146.0: 0 over 1049 archived LANDED lines (820 sha, 229 sha-less), and a live ledger carrying none.
+- Filed, open: BL-1148 (while the main checkout holds an unlanded hook-editing squash, every other session's pregate is refused) and BL-1151 (a pure narrowing of `inputs.decl` is never run by the gate, in either layout).
+
 ## [0.1148.0] - 2026-11-16
 
 ### BL-1144: guarded re-trace of the mapped fixtures; layer-readopt-gate's declaration narrowed

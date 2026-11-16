@@ -1330,6 +1330,7 @@ readset_trace_report() { # <out, or empty where this push built no keys>
       if (index(c, "VERDICT:") == 1) return "verdict"
       if (index(c, "LOSS CANARY:") == 1) return "loss-canary"
       if (index(c, "TRIP:") == 1) return "trip"
+      if (index(c, "STAT LOSS:") == 1) return "stat-loss"
       if (c ~ /^fixture exited /) return "fixture-exit"
       if (c == "tracing never settled") return "never-settled"
       if (index(c, "no end sentinel")) return "no-end-sentinel"
@@ -1350,7 +1351,7 @@ readset_trace_report() { # <out, or empty where this push built no keys>
       s = ""; for (i = 1; i <= n; i++) s = s (s == "" ? "" : " ") a[i]
       return s }
     BEGIN {
-      NC = split("stream-drop verdict loss-canary trip fixture-exit never-settled no-end-sentinel unread-control empty-set wrote-tree no-own-run.sh not-hashed other", C, " ")
+      NC = split("stream-drop verdict loss-canary trip stat-loss fixture-exit never-settled no-end-sentinel unread-control empty-set wrote-tree no-own-run.sh not-hashed other", C, " ")
       n = split(ENVIRON["RS_CK"], a, "\n")
       for (i = 1; i <= n; i++) { j = index(a[i], "  "); if (j) { p = substr(a[i], j + 2); RK[p] = substr(a[i], 1, j - 1) } }
       ng = split(ENVIRON["RS_LIST"], g, " ")

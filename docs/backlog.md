@@ -3470,4 +3470,47 @@ Provenance: batch 257, wave 9, the remainder of BL-1118 named by ai-dlc-49 (W9-0
 
 verify: manual
 
+## BL-1148 — while the main checkout holds an unlanded hook-editing squash, every other session's pregate is refused
+
+**NOTE.** OPEN. Filed 2026-11-16. Owner: `scripts/pregate-self-check.sh` (HOOK-RESOLVE), with `.githooks/pre-push` (`pregate_gate`).
+
+`core.hooksPath` is the main checkout's `.githooks`, so a push of a release that edits `.githooks/pre-push` runs the edit only once the main checkout holds it. The lead therefore detaches the main checkout at the unlanded squash for that push. Measured from the code at 5a38afcc9:
+- `pregate-self-check.sh:143-147` resolves the hook a push would run with `git rev-parse --git-path hooks/pre-push`, which is the main checkout's hook in every worktree. `:148` compares it with the tree's own `.githooks/pre-push` by `cmp -s`, unless `--member` is given.
+- In any other session's tree, still at `origin/main`, the resolved hook differs and the tree hook equals `origin/main:.githooks/pre-push`. That takes `:153`, "the resolved hook moved", which sets no remedy, and the script exits 2 at `:169`.
+- `--member` skips the comparison but never writes the pregate record (`:44-48`). `pregate_gate` at `.githooks/pre-push:107-109` refuses any push whose tree has no record. While the window is open, no other session can produce a pushable tree.
+
+Cost: every builder's pregate and push stalls for the hook-editing push's whole duration, from the detach to the landing and re-detach. The refusing builder reads "the resolved hook moved" with no remedy, so the stall reads like a defect in the builder's own tree. Who notices it gone: the builders who hold pregate slots during a hook-editing push, and the lead, who schedules those slots. No mechanism proposed. The record is keyed on the tree alone, `<root commit>/<HEAD tree>` (`.githooks/pre-push:74`, `:106`; written at `pregate-self-check.sh:531-534`). So the stall comes only from the comparison at `:148`, which refuses before any step runs. That comparison is what makes a record attest a run by the hook a push runs, so relaxing it is not a simple change.
+
+Provenance: batch 257, wave 11, W11-01 item 1 (ai-dlc-9c); id allocated by the lead.
+
+verify: manual
+
+## BL-1151 — a pure narrowing of inputs.decl is never run by the gate, in either layout
+
+**DEFECT.** OPEN. Filed 2026-11-16. Owner: `.githooks/pre-push` (and `core/git-hooks/pre-push`, one program by I66) readset_keys, the `.dfull` drop at `:2643` and `:2650`; `scripts/seed-verdict-store.sh:124`. Line numbers are read on 0.1149.0.
+
+Under C22 (`.githooks/pre-push:2639-2650`), a declared fixture whose `inputs.decl` only narrows moves no key, so the gate never runs the narrowed declaration:
+- Its own `inputs.decl` row is dropped from both sides when every path it declares has a row (`.dfull`, `:2643`, `:2650`).
+- A recorded row it no longer keys is ignored outside its own directory (`:2644`).
+- So the fixture is decided `skip` on the record taken under the WIDER declaration (`:2661`), with no store lookup. Its `.kdec` row reads `<fx>\tskip\t\t\tok`.
+
+The consumer layout runs the same program: its keys are taken inside the installed tree (`:2733-2736`), so the same drop applies there too, and a narrowing moves no `<fx>@consumer` key either. No builder run fills that gap. `bash scripts/seed-verdict-store.sh <fx>@consumer` prints `<fx>@consumer rc=0` for a unit the selection does not hold, because `:124` maps the census's `not selected` to the same line as `ok`. So a builder who asks for the consumer verdict by name reads a current record as a pass, and nothing ran.
+
+Evidence, the B24 case (0.1148.0, layer-readopt-gate):
+- `core/skills/ai-dlc-update/reconcile/` was narrowed to the 8 files a guarded trace showed it reading.
+- `scripts/predict-push-set.sh` on the tip named it in neither the RUN list nor the store-skip line. Its `.kdec` row was `layer-readopt-gate\tskip\t\t\tok`, compared against the B22 key record, which still held the old `inputs.decl` hash and the whole `reconcile/` rows.
+- The pregate of the same tree did not name it.
+- The only run of the narrowed declaration was the builder's counted seed (56 assertions, `required_missing=0`).
+- `seed-verdict-store.sh layer-readopt-gate@consumer` printed `rc=0`, and the census had not selected the unit.
+
+Cost: a narrowing that drops a path the fixture still reads lands green. The fixture then fails `cannot source` or `No such file` on the first later push that moves any of its keys. That push is red on a change it did not make, and its owner is the one who notices. In the consumer layout the paths are mapped through `core-paths.sh --map`, so a narrowing correct in the distribution can still be short there. The first consumer push that moves the unit's keys notices.
+
+Mechanism question: C22 reuses a pass taken under a wider declaration, and operator-rulings ("A change never invalidates a verdict whose read inputs it did not change") forbids re-running it on that ground alone. The sandbox a narrowed declaration builds is a different input set, though, so a pass under the wider one does not prove the narrower is sufficient. Should a narrowing run once per layout, and record its pass, before its record is reused?
+
+Fix, the part the code shows is simple: at `scripts/seed-verdict-store.sh:124`, print the census's `not selected` as its own line, for example `<fx>@consumer rc=0 not-selected (record current, not run)`. A builder can then tell a fresh consumer pass from a current record. Run the seeder on one selected and one unselected unit and read both lines. The gate half waits on a ruling on the question above.
+
+Provenance: batch 257, wave 10, found by ai-dlc-da (W10-01) on the B24 layer-readopt-gate narrowing; id allocated by the lead.
+
+verify: manual
+
 

@@ -45364,7 +45364,7 @@ verify: manual
 **LANDED (v0.1146.0).** (batch 257, ai-dlc-21.)
 - `backlog-rotate.sh` keeps its two forms in one function, `landed_form`, inside `# LANDED_FORM_BEGIN` .. `# LANDED_FORM_END`. The two sed programs are byte-identical to the inline ones they replace, and a dry-run's output is byte-identical before and after on four ledgers: the live one, a sha-less close, the in-paren refusal (rc 2) and a verified-sha close.
 - `validate-backlog-receipts.sh` R14 extracts that span from the rotate script beside it, stamps `vVERSION_PLACEHOLDER` to `v0.0.0`, and applies `landed_form` to each live entry's first line opening `**LANDED (v`. A line in neither form FAILs. A missing span is a refusal (exit 2). PARTIAL lines are out of scope: they never rotate.
-- False-positive set, by r14_judge itself: 0 over the 1040 archived LANDED lines (820 sha, 220 sha-less) and 0 over the live ledger, which carries none.
+- False-positive set, by r14_judge itself on 925d02f39 (0.1146.0, the tree that shipped this entry): 0 over the 1049 archived LANDED lines, from `bash scripts/validate-backlog-receipts.sh docs/backlog.archive.md` (`R14-POPULATION: 1049 live LANDED line(s), 0 in a form backlog-rotate.sh refuses.`); that command prints only the total. The split, 820 sha and 229 sha-less, comes from a scratch harness calling rotate's own `landed_form` on the same population on 925d02f39. It is also 0 over the live ledger, which carries no LANDED line, from `bash scripts/validate-backlog-receipts.sh` (`R14-POPULATION: 0 live LANDED line(s), 0 ...`).
 - backlog-real-ledger and backlog-receipt-traced-removal copy `scripts/backlog-rotate.sh` into the worlds where they run the validator, and key only its `LANDED_FORM` span (`spans.decl`); neither runs rotate. Without that copy, R14 refuses inside the world (traced-removal `cli-wire -- rc 2`).
 
 Provenance: batch 257, found at the B21 squash by lead ai-dlc-7b; filed and built by ai-dlc-21; id allocated by the lead.
@@ -45514,4 +45514,19 @@ Remainder, why the entry stays PARTIAL: Fix item 1 is not done on `origin/main`.
 
 verify: manual
 
+
+## BL-1150 — a `STAT LOSS:` trace omission tallies as `other` in the local-map discard report
+
+**NOTE.** OPEN. Filed 2026-11-16. Owner: `.githooks/pre-push` and `core/git-hooks/pre-push` (the trace-report awk's `cls()` and its class list `C`).
+
+`core/scripts/derive-fixture-readsets.sh:2205` (`rs_fx_judge`) gives the omission reason `STAT LOSS: <n> metadata report(s) with no existence report from the same process for the same path -- see <work>/<fx>.statpair`. `cls()` (`.githooks/pre-push:1717-1729`, `core/git-hooks/pre-push:1328-1340` at 5a38afcc9) had no branch for it, so the discard tally counted it under `other`.
+
+**LANDED (v0.1149.0).** (batch 257, W11-01, ai-dlc-9c.)
+- Both hooks classify a cause opening `STAT LOSS:` as `stat-loss`, and the class list `C` names `stat-loss` after `trip`. The two edits are byte-identical, so the hooks stay one program (I66).
+- Probe: each hook's own `cls`/`tally`/`show` and `NC` line are extracted from its bytes and fed a `STAT LOSS:` cause and a `TRIP:` control. Tip: `trip 1, stat-loss 1`. Base 5a38afcc9: `trip 1, other 1`. Mutant, with the new `cls` line deleted: `trip 1, other 1`. Same result for both hooks.
+- `show()` prints only classes counted above 0, so the pinned causes line in `core/fixtures/readset-skip/run.sh:2038` is unchanged.
+
+Provenance: batch 257, wave 11, W11-01 item 2 (ai-dlc-9c); id allocated by the lead.
+
+verify: manual
 

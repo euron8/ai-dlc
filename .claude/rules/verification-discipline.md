@@ -85,6 +85,9 @@ A count over a derived corpus is a function of what is on disk, in both directio
 and agent worktrees (each carrying a full tree) move it. Take such a count in a clean `git worktree` checkout
 and name the tree beside the number.
 
+An instrumented shared file logs every reader of its tree. Instrument one only while nothing else runs that
+tree's code, with a control in the same invocation that must log more than 0.
+
 ## Run the shipping code against the real corpus
 
 A hand-written probe is a second implementation whose bugs nobody finds. When probe and shipping code disagree,
