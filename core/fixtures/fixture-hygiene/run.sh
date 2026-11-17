@@ -11,21 +11,29 @@
 #   dirty  one offender per arm: H1 a `-d …/.git` skip, H2 a declared-tool skip, H3 a `sh -c` start and a written
 #          `#!/bin/sh` stub run by path, H12 a run.sh defining a mutation helper, E1 a receipt-x.sh that nothing reads,
 #          H6 an unguarded `. "$HERE/../lib/mutant.sh"`, H9 a top-level `sleep 5` carrying a `# bl868-allow:` marker in
-#          a world with no H9 allowlist file (it fires, and so does its marker as W-ALLOW-STALE).
+#          a world with no H9 allowlist file (it fires, and so does its marker as W-ALLOW-STALE), H14 a hand repository init
+#          (git, then init) at fa:12 and a second in fb/lib.sh behind `-C <dir> -c init.defaultBranch=main`, in a world with no
+#          world-adoption-allowlist.txt.
 #   clean  the near-miss of each, carrying the property a regression would key on: a `-d …/.git` that exits 2, a
 #          declared tool that exits 2, `sh` inside an awk program, the same chmod'ed stub run as `bash P` (which
 #          ignores the shebang), a run.sh that only MENTIONS a retired battery helper in a comment and a string, the
-#          same receipt-x.sh run by its run.sh, the same lib source carrying `|| { … exit 2; }`, and the sleep as the
-#          poll quantum of an unbounded `until` wait.
+#          same receipt-x.sh run by its run.sh, the same lib source carrying `|| { … exit 2; }`, the sleep as the
+#          poll quantum of an unbounded `until` wait, the same hand init in fa as a row of the world's own
+#          world-adoption-allowlist.txt (the listed cell), and in the unlisted fb `world_git init`, `git commit -m init`,
+#          a wrapper `git -c init.defaultBranch=main "$@"`, `git log --grep=init`, and the hand init spelled in a
+#          comment, an echo string and a heredoc body.
+#          (No line above the preamble spells the hand init itself: scripts/validate-fixture-git-env.sh reads raw lines.)
 # THE ARMS, each one read of a validator run:
-#   D1 D2 D3 D6 D12 DE1 DW  the dirty run (rc 1) names exactly its arm's seeded line under `FAIL H<n>:` / `FAIL E1:`
-#       (DW reads `FAIL H9:`; D12 reads `FAIL H12:` and its reasons `def mkmut:2, mkmut:2`)
+#   D1 D2 D3 D6 D12 DE1 DW D14  the dirty run (rc 1) names exactly its arm's seeded line under `FAIL H<n>:` /
+#       `FAIL E1:` (DW reads `FAIL H9:`; D12 reads `FAIL H12:` and its reasons `def mkmut:2, mkmut:2`; D14 reads
+#       `FAIL H14:`, one row each for fa and fb, `H14 <fx>: <file>:<line>: <text>`)
 #   D8  IS receipt-bl929.sh, D9 IS receipt-bl930.sh: each seeds its OWN world and drives the validator (BL-929: a
 #       scrubbed fixture and a scrubbed-IMPL stub read SCRUBBED, an unscrubbed unlisted one FAILs H8, a listed one
 #       passes; BL-930: the GIT_-only hook driver I10 acquitted, and a listed hook driver, FAIL H8). The dirty and clean
 #       worlds' fa and fb carry no scrub and are rows of the world's own H8 list, so H8 is quiet there.
-#   C   the clean run is rc 0 with the OK line, which counts 1 receipt and 0 inert (the positive control: a run that
-#       scanned nothing cannot print it)
+#   C   the clean run is rc 0 with the OK line, which counts 1 receipt and 0 inert and exactly 1 hand init line,
+#       every one allowlisted (the positive control: a run that scanned nothing cannot print it; the listed cell and
+#       every H14 near-miss are read in this one run)
 #   R   the clean run's OK line names the probe's corpus count (3 files), so the root walk resolved to the probe
 #
 # Usage: run.sh     Exit: 0 pass, 1 FAIL, 2 FIXTURE BROKEN.
@@ -73,10 +81,14 @@ EOF
     # and its marker read W-ALLOW-STALE (an absent list acquits nothing). Appended by printf, so this file's own line
     # does not END in the marker and the real tree's H9 reads no marker here.
     printf '%s\n' 'sleep 5 # bl868-allow: fa-wait' >> "$w/core/fixtures/fa/run.sh"
+    # fa:12, the H14 offender: a hand git init in a world with NO world-adoption-allowlist.txt. fb/lib.sh:1, its second
+    # shape, outside run.sh and behind global options whose `-c` argument names `init`.
+    printf '%s\n' 'git init -q "$d"' >> "$w/core/fixtures/fa/run.sh"
     put "$w/core/fixtures/fb/run.sh" <<'EOF'
 #!/usr/bin/env bash
 mkmut() { :; }
 EOF
+    printf '%s\n' 'git -C "$d" -c init.defaultBranch=main init -q' > "$w/core/fixtures/fb/lib.sh"
     cp "$w/tools.tmp" "$w/core/fixtures/fa/tools.decl"
     printf '#!/usr/bin/env bash\nexit 0\n' > "$w/core/fixtures/fb/receipt-x.sh"
   else
@@ -92,13 +104,25 @@ printf '#!/bin/sh\nexit 0\n' > "$W/stub" && chmod +x "$W/stub"
 bash "$W/stub"
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 until [ -s "$W/stub" ]; do sleep 0.1; done
+git init -q "$d"
 EOF
     put "$w/core/fixtures/fb/run.sh" <<'EOF'
 #!/usr/bin/env bash
 # mutant_killed and mkmut were retired with the batteries; this fixture only drives its subject
 echo "no mkmut() { :; } here"
 bash "$HERE/receipt-x.sh"
+world_git init -q "$d"
+git commit -m init
+g() { git -c init.defaultBranch=main "$@"; }
+git log --grep=init
+# git init
+echo "git init"
+cat > "$W/body" <<'BODY'
+git init
+BODY
 EOF
+    # fa's hand git init is the LISTED cell: a row of the clean world's own H14 list (no origin/main, so H14-M4 SKIPs)
+    printf '# probe\nfa\tlisted cell: a hand init on the list\n' > "$w/world-adoption-allowlist.txt"
     cp "$w/tools.tmp" "$w/core/fixtures/fa/tools.decl"
     printf '#!/usr/bin/env bash\nexit 0\n' > "$w/core/fixtures/fb/receipt-x.sh"
   fi
@@ -145,7 +169,12 @@ verdict() { # <arm> <tag>
     W-ALLOW-STALE core/fixtures/fa/run.sh fa-wait: line 11 carries $H9MK and no allowlist row names that id" ] ;;
     D8) rcis "$t" 0 && has "$t" 'receipt-bl929: PASS' ;;
     D9) rcis "$t" 0 && has "$t" 'receipt-bl930: PASS' ;;
-    C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-hygiene -- ' && has "$t" 'E1 1 receipt(s), 0 inert' ;;
+    D14) rcis "$t" 1 && [ "$(section "$t" H14)" = '    H14 fa: core/fixtures/fa/run.sh:12: git init -q "$d"
+    H14 fb: core/fixtures/fb/lib.sh:1: git -C "$d" -c init.defaultBranch=main init -q' ] ;;
+    # H14's clause counts exactly fa's ONE listed line: an unread list is H14 fa, a stale one H14STALE, a near-miss read
+    # as a hand init H14 fb or a count of 2 or more
+    C)  rcis "$t" 0 && has "$t" 'OK: validate-fixture-hygiene -- ' && has "$t" 'E1 1 receipt(s), 0 inert' \
+          && has "$t" 'H14 1 hand git init line(s), every one allowlisted.' ;;
     R)  rcis "$t" 0 && has "$t" '-- 3 fixture .sh scanned;' ;;
     *) return 1 ;;
   esac
@@ -154,7 +183,7 @@ H9MK="# bl868-allow: fa-wait"
 
 drive dirty "$WORK/w-dirty" & drive clean "$WORK/w-clean" & d8drive d8 & d9drive d9 &
 wait
-for a in D1 D2 D3 D6 D12 DE1 DW; do
+for a in D1 D2 D3 D6 D12 DE1 DW D14; do
   if verdict "$a" dirty; then ok "$a the dirty world names exactly its seeded line"; : > "$WORK/base.$a"
   else bad "$a fails on the validator (rc $(cat "$WORK/c.dirty.rc")): $(head -c 800 "$WORK/c.dirty.out" | tr '\n' ' ')"; fi
 done

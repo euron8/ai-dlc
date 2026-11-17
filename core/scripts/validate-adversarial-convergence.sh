@@ -553,6 +553,14 @@ if [ -n "$DUPES" ]; then
   err "ORDER" "two or more artifacts claim the same pass number ($(printf '%s' "$DUPES" | sed 's/^0*//' | tr '\n' ' ')).
       Any chaining is a guess. Give each pass a distinct number."
 fi
+# NO PASS COULD BE ORDERED: every file is UNORDERABLE, so the series below is empty. Stop on the
+# ORDER findings: every arm past here judges the ordered series, and arm D on an empty one reports a
+# terminal pass with no path. --cycle-state keeps its un-adjudicable contract (exit 1, empty stdout).
+if [ "${#SORTED[@]}" -eq 0 ]; then
+  [ "$CYCLE_STATE" -eq 1 ] && exit 1
+  echo "FAIL: $ERRORS convergence violation(s)."
+  exit 1
+fi
 
 # THE ORDERING KEY FOR `invoked_at`, owned here and EVAL'D by merge-adversarial-shards.sh
 # (count-guarded, the way join-remediator-shards.sh takes repair_field), so arm G and the

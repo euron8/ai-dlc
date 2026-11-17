@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1161.0] - 2026-11-17
+
+### An all-unorderable adversarial series exits with its summary; six ledger entries close
+
+- `core/scripts/validate-adversarial-convergence.sh`: when no file in a series carries a pass number, `SORTED` is empty, and the run now exits with the summary after the `ORDER` findings. Before, `for f in "${SORTED[@]}"` aborted under bash 3.2's `set -u` with `SORTED[@]: unbound variable`, and a guard alone would have let arm D judge an empty series. `core/fixtures/check-24-adversarial-convergence` gains the `all-unorderable` and `all-unorderable-state` cells. BL-1160 is closed.
+- BL-984 closes with residue, by operator ruling: the main subject closed at 0.1153.0, and every surviving blind spot is recorded in the entry as inherent, with no live owner.
+- BL-909, BL-1014, BL-1074 and BL-1085 close by withdrawal: each subject is gone, as its WITHDRAWN line records.
+- Ledger edits: BL-819 and BL-841 gain `Step: pipeline`; BL-806 records a recount (219 of 300 bare-token writes) and corrects a stale projection.
+
+### BL-974 (term 7): `--mark` refuses an adjudicator batch file whose name disagrees with its `<b>/<k>` field; BL-1030 remainder (1) left open
+
+- `core/scripts/wait-for-deliverable.sh`: `--mark` header term 9 (BL-974's term 7). In an `*-adjudicate-p<M>` shard dir, the file must be named `lane-<n>-b<b>.md` or `fanin-b<b>.md`, the last word before `findings=` must be `<b>/<k>`, and field b must equal the name's b with b <= k. Each rule refuses with exit 64 and its own text, before the content-seal row read, so nothing is written. A name refusal prints an `rm '<absolute path>'` line. `core/team-roles/remediator.md` gains one paragraph telling an adjudicator to Write to the name its `shard:` line gives, mark it, and remove the refused file with that line.
+- `core/fixtures/content-seal/merge-arms.sh`: arm CS-K2b, three offenders and three near-misses. Hand-run mutants: the term-9 block deleted fails the offender cells; `b <= k` written `b < k` fails the b-equals-k cell.
+- BL-974 advances (stays PARTIAL): the `Outcome measured:` line from a graph sprint is still owed.
+- BL-1030 advances (records only, stays PARTIAL): by operator ruling, remainder (1), gate 2's route after a gate-3 rework, is left open and not built, with no catch on record. Remainder (3) is still owed.
+
 ## [0.1160.0] - 2026-11-16
 
 ### An underscore in a push-candidate id no longer truncates it; BL-1160 filed

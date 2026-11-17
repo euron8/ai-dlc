@@ -9,4 +9,4 @@
 58 inproc:core/scripts/content-seal.sh
 29 inproc:core/hooks/ai-dlc-content-seal.sh
 78 inproc:core/scripts/merge-adversarial-shards.sh
-41 inproc:core/scripts/wait-for-deliverable.sh
+47 inproc:core/scripts/wait-for-deliverable.sh
