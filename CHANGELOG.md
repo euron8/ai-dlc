@@ -19,7 +19,7 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
-## [VERSION_PLACEHOLDER] - 2026-11-17
+## [0.1162.0] - 2026-11-17
 
 ### Thirty more subjects run in process in their fixtures; 52 allowlist rows retired (BL-878 advances, stays PARTIAL)
 
