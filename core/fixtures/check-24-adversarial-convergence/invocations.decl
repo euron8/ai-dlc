@@ -3,4 +3,4 @@
 130 *
 4 core/scripts/validate-adversarial-convergence.sh
 # Re-measured (BL-878, W12-18) by one counted run: the validator runs in process through vac_run (inproc row); it starts only in its cli cells (cells.decl).
-155 inproc:core/scripts/validate-adversarial-convergence.sh
+158 inproc:core/scripts/validate-adversarial-convergence.sh

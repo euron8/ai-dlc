@@ -374,6 +374,41 @@
 #     budget run.sh:204, suite-content-key run.sh:325 and :445) sit in 11 files of 10 fixtures, every one read by hand
 #     and a real extraction. FALSE POSITIVES: 0. Proved by hand at authoring: a marker in a `#` comment, in an echo
 #     string and in a trailing comment after a real sed stays quiet.
+# H14 a hand `git init` (BL-1153): a fixture builds its git world through core/fixtures/lib/world.sh (`world_repo
+#     <dir>` or `world_git init -q <dir>`). Population: every tracked core/fixtures/<f>/**/*.sh (core/fixtures/lib
+#     excluded), H13's, so moving a line from run.sh into lib.sh does not escape the arm. The EMISSION site is a CODE
+#     line read on the scan's mask (never a comment, a string or a heredoc body) matching the INIT_RE of the sibling
+#     scripts/validate-fixture-git-env.sh: `git` with no name character or `-` before it, then only `-c`/`-C <word>`,
+#     `--git-dir=`, `--work-tree=`, `--no-pager`, `-P` or `--bare`, then the whole word `init`. `world_git init` never
+#     matches (the `_` before `git`). The scan emits one GI row per line; a fixture with one that is not a row of
+#     world-adoption-allowlist.txt (repo root) -> FAIL, naming its first line as `<file>:<line>: <text>`. The list's
+#     own findings are H14STALE (a listed fixture with no such line, or no tracked run.sh), H14DUP and H14NOREASON, and
+#     a row not on the list at origin/main FAILs H14-M4 (the shared m4). `--derive-h14` prints the rows.
+#     THE REMAINDER the grammar does not read, each re-derived at 619bfde94 by an uncommitted instrumented copy of this
+#     scan (its controls: hits on the known `gitq -C … init` and `G init` lines): wrapper-function inits, a command-
+#     position word other than git/world_git followed by `init`, 129 code lines in 29 fixtures, 19 of them with no
+#     arm row; variable-held git, 2 lines (`"$REAL_GIT" init`, fanout-payload-channel run.sh:156 and fanout-untracked-
+#     corpus run.sh:96), neither an arm row; heredoc-body inits, 11 lines in fixture-invocation-budget,
+#     prepush-worktree-env-scrub and shell-portability, each also an arm row through a code line, so no fixture is
+#     heredoc-only (gate-remediation-deny seed.sh:212 and ledger-reverify-dist-only-reach run.sh:82 are CODE lines and
+#     arm rows); script-string inits, 5 lines (fixture-git-env-seam run.sh:272/295/325, review-shard-merge
+#     receipt-bl980.sh:114, shell-portability run.sh:433); `git clone` worlds, 27 code lines in 13 fixtures; `cp -R`/
+#     `-r`/`-a` in command position, 311 lines in 82 fixtures, an upper bound (not each copies a git world). The
+#     wrapper-rewrite escape: a hand init rewritten through a local wrapper (`g() { git "$@"; }; g init`) clears H14.
+#     COST, execs counted by a PATH-front logging shim over one check run of the real tree: 88 at 619bfde94, 97 with
+#     H14 (its list cp, judge awk, sort, N14 grep, count awk, grep -c, grep -qE, and H14-M4's git rev-parse and cat-file
+#     on the SKIP path); once origin/main carries the list, m4's git show, awk and sort make it 100. No new corpus pass.
+#     FP SET, how it reached its value: at 619bfde94 the arm reads 259 lines in 100 fixtures. Its fixture set against
+#     the sibling's INIT_RE population (git grep over core/fixtures/*/*.sh, raw, run.sh-bearing dirs: 102): arm-only 0
+#     (no deeper or long-option-only hit outside it); INIT_RE-only 2, both string-only -- carried-findings (run.sh:310,
+#     an echo "git init failed"; its init is the wrapper G) and review-shard-merge (receipt-bl980.sh:114, a script
+#     string; its inits are G). Per line, the 29 raw INIT_RE lines of the population the arm does not read are 6
+#     comments, 12 strings (7 messages, the 5 script strings above) and the 11 heredoc lines above. The text before
+#     `git` on every arm line was classified, and each is a command-position git init (line start, after `&&`, `||`, `;`, `{`, `(`, `!`, `then`, or an
+#     `env -u …`/NAME=value prefix). FALSE POSITIVES: 0. Proved by hand at authoring: `world_git init`, `world_repo`,
+#     a `#` comment, an echo string, a heredoc body, `git log --grep=init`, `git commit -m init` and a wrapper defined
+#     as `git -c init.defaultBranch=main "$@"` stay quiet; `git -C "$d" -c init.defaultBranch=main init -q` in a lib.sh
+#     FAILs.
 #
 # ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
 # rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
@@ -382,7 +417,8 @@
 # COST: a constant number of forks -- one git ls-files, one resolver call, one awk scan (two passes over the corpus),
 # one judge awk, sorts. E1 adds one e1_run pass over the tree: a git ls-files, the inert() awk and the judge awk.
 # H9 adds one H9_AWK pass over the corpus, its join awk and sorts, and reuses run_all's list. H13 reads inside the
-# scan awk's existing pass and adds its judge awk, one sort and one grep; its H13-M4 is the shared m4.
+# scan awk's existing pass and adds its judge awk, one sort and one grep; its H13-M4 is the shared m4. H14 likewise
+# (its own COST line above).
 set -uo pipefail
 
 MODE=check
@@ -390,7 +426,8 @@ case "${1:-}" in
   "") ;;
   --derive-h8) MODE=derive8 ;;
   --derive-h10) MODE=derive10 ;;
-  *) echo "usage: validate-fixture-hygiene.sh [--derive-h8 | --derive-h10]" >&2; exit 2 ;;
+  --derive-h14) MODE=derive14 ;;
+  *) echo "usage: validate-fixture-hygiene.sh [--derive-h8 | --derive-h10 | --derive-h14]" >&2; exit 2 ;;
 esac
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -406,6 +443,7 @@ H8_ALLOW_REL="scripts/env-scrub-allowlist.txt"
 H10_ALLOW_REL="fixture-contract-allowlist.txt"
 H9_ALLOW_REL="scripts/bl868-wait-allowlist.txt"
 H13_ALLOW_REL="scripts/pool-span-allowlist.txt"
+H14_ALLOW_REL="world-adoption-allowlist.txt"
 
 WORK="$(mktemp -d)" || { echo "validate-fixture-hygiene: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -829,6 +867,17 @@ function ps13(i,   o, s, st, p, k, t) {
   if (!HDL[i]) { t = p; while (t > 1 && substr(M[i], t - 1, 1) == "X") t--; if (t <= 1 || substr(M[i], t - 1, 1) !~ /["\047]/) return }
   print "PS\t" FX "\t" REL ":" i
 }
+# --- H14: a hand `git init` (world adoption) ----------------------------------------------------------------------
+# gi14 <line>: `GI <fx> <rel>:<line>: <text>` when the MASKED code line runs `git init`: scripts/validate-fixture-git-env.sh
+# INIT_RE (a `git` with no name character or `-` before it, then only global options, then the whole word `init`),
+# its option run widened by the long options a world builder spells. A heredoc body line is never read.
+function gi14(i,   s, t) {
+  s = M[i]
+  if (!index(s, "init") || !index(s, "git")) return
+  if (s !~ /(^|[^[:alnum:]_-])git([[:space:]]+(-[cC][[:space:]]*[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare))*[[:space:]]+init([[:space:]]|$)/) return
+  t = trim(O[i]); gsub(/\t/, " ", t)
+  print "GI\t" FX "\t" REL ":" i ": " substr(t, 1, 160)
+}
 function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h, k, re, w2, pe) {
   if (FX != "" && FX != "lib") prep6()
   R12 = ""; split("", S12); split("", MV12)
@@ -892,6 +941,7 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
       if (t8 ~ /hooks\/ai-dlc|\$HOOK/) { HK8[FX] = 1; print "HK8\t" FX "\t" REL ":" i }
     }
     if (ISF12) ps13(i)
+    if (ISF12 && !HDL[i]) gi14(i)
     if (!HDL[i]) { h6(i); if (ISRUN || ISL12 || ISF12) h12(i) }
     # H10/H11 facts (the fixture contract's skeleton): a run.sh code line DEFINING ok or bad, and a run.sh code line
     # whose command-position `bash` runs a pre-push hook. Both read the masked line, so a comment, a string (a
@@ -1030,6 +1080,31 @@ END {
 }
 AWK
 
+# --- the H14 judge: hand `git init` lines per fixture, against world-adoption-allowlist.txt ------------------------
+# ARGV[1] the allowlist, rows `<fixture>\t<reason>`; ARGV[2] the scan. Rows: H14 <fx> <where> (an unlisted fixture's
+# FIRST hand init line, `<file>:<line>: <text>`); H14LISTED <fx>; H14STALE <fx> <why>; H14DUP <fx>; H14NOREASON <fx>;
+# N14 <hand init lines>.
+read -r -d '' H14_JUDGE_AWK <<'AWK'
+FILENAME == ARGV[1] {
+  if ($0 ~ /^[[:space:]]*(#|$)/) next
+  x = $1; gsub(/[[:space:]]/, "", x); r = (NF >= 2) ? $2 : ""; gsub(/[[:space:]]/, "", r)
+  if (x in LISTED) print "H14DUP\t" x
+  LISTED[x] = 1
+  if (r == "") print "H14NOREASON\t" x
+  next
+}
+$1 == "F" { n = split($2, a, "/"); if (n == 4 && a[4] == "run.sh" && a[3] != "lib") FXS[a[3]] = 1; next }
+$1 == "GI" { N14++; if (!(($2) in HIT)) HIT[$2] = $3; next }
+END {
+  for (f in HIT) print ((f in LISTED) ? "H14LISTED\t" f : "H14\t" f "\t" HIT[f])
+  for (x in LISTED) {
+    if (!(x in FXS)) { print "H14STALE\t" x "\tno core/fixtures/" x "/run.sh is tracked"; continue }
+    if (!(x in HIT)) print "H14STALE\t" x "\tthe fixture no longer runs git init by hand; drop the row"
+  }
+  print "N14\t" (N14 + 0)
+}
+AWK
+
 # run_all <root> <out-prefix>: list, resolve, scan, judge. Writes <out>.scan and <out>.verdict; returns 2 on a broken
 # corpus with the reason on stdout.
 run_all() {
@@ -1066,6 +1141,10 @@ run_all() {
   awk -F'\t' "$H13_JUDGE_AWK" "$o.h13allow" "$o.scan" | LC_ALL=C sort -u > "$o.h13" \
     || { echo "BROKEN: the H13 judge awk failed, so its verdict is empty rather than clean"; return 2; }
   grep -q '^N13	' "$o.h13" || { echo "BROKEN: the H13 judge printed no extraction count"; return 2; }
+  [ -f "$r/$H14_ALLOW_REL" ] && cp "$r/$H14_ALLOW_REL" "$o.h14allow" || : > "$o.h14allow"
+  awk -F'\t' "$H14_JUDGE_AWK" "$o.h14allow" "$o.scan" | LC_ALL=C sort -u > "$o.h14" \
+    || { echo "BROKEN: the H14 judge awk failed, so its verdict is empty rather than clean"; return 2; }
+  grep -q '^N14	' "$o.h14" || { echo "BROKEN: the H14 judge printed no hand-init count"; return 2; }
   return 0
 }
 
@@ -1431,6 +1510,14 @@ if [ "$MODE" = derive10 ]; then
     "$WORK/c.h10allow" "$WORK/c.h10" | LC_ALL=C sort
   exit 0
 fi
+if [ "$MODE" = derive14 ]; then
+  # Every fixture with a hand `git init` line, listed or not, one `<fixture>\t<reason>` row; a committed row keeps its
+  # reason (keyed on field 1).
+  awk -F'\t' 'FILENAME == ARGV[1] { if ($0 !~ /^[[:space:]]*(#|$)/ && NF >= 2) { x = $1; gsub(/[[:space:]]/, "", x); R[x] = $2 } next }
+    $1 == "H14" || $1 == "H14LISTED" { print $2 "\t" (($2 in R) ? R[$2] : "predates H14: runs git init by hand") }' \
+    "$WORK/c.h14allow" "$WORK/c.h14" | LC_ALL=C sort
+  exit 0
+fi
 if [ "$MODE" = derive8 ]; then
   # Every not-SCRUBBED fixture, one `<fixture>\t<reason>` row. A fixture already a row of the committed list keeps
   # its reason (keyed on field 1, so a re-derive on a later tip never rewrites a hand-written reason); a new row gets
@@ -1494,6 +1581,16 @@ fi
 h13m4_out="$(m4 "$ROOT" "$ROOT/$H13_ALLOW_REL" "$WORK/h13m4-root-base.txt" "$H13_ALLOW_REL" H13-M4 \
   "do not list the fixture; extract the span through pool_span (core/fixtures/lib/pool-span.sh), and drop the row.")" || rc=1
 echo "$h13m4_out"
+n14="$(awk -F'\t' '$1 == "N14" { print $2 }' "$WORK/c.h14")"; n14l="$(grep -c '^H14LISTED	' "$WORK/c.h14")" || n14l=0
+echo "validate-fixture-hygiene: H14 ${n14:-0} hand git init line(s); $n14l allowlisted fixture(s) carry them"
+if grep -qE '^(H14|H14STALE|H14DUP|H14NOREASON)	' "$WORK/c.h14"; then
+  rc=1; echo "FAIL H14:"
+  awk -F'\t' '$1 ~ /^H14(STALE|DUP|NOREASON)?$/ { print "    " $1 " " $2 (NF >= 3 ? ": " $3 : "") }' "$WORK/c.h14"
+  echo "  H14 (BL-1153): build a fixture's git world through core/fixtures/lib/world.sh -- \`world_repo <dir>\` (a repository with one root commit) or \`world_git init -q <dir>\` -- never a hand \`git init\`. world_git unsets every leaked GIT_* location and fixes the identity, the branch, hooks and signing; a hand init under an armed GIT_DIR writes into the caller's repository. H14STALE/H14DUP/H14NOREASON: fix $H14_ALLOW_REL."
+fi
+h14m4_out="$(m4 "$ROOT" "$ROOT/$H14_ALLOW_REL" "$WORK/h14m4-root-base.txt" "$H14_ALLOW_REL" H14-M4 \
+  "do not list the fixture; build its world through world_repo or world_git init (core/fixtures/lib/world.sh), and drop the row.")" || rc=1
+echo "$h14m4_out"
 e1_out="$(e1_run "$ROOT" "$WORK/e1c")"; e1rc=$?
 if [ "$e1rc" -ne 0 ]; then echo "validate-fixture-hygiene: REFUSED -- E1: $e1_out" >&2; exit 2; fi
 ne1="$(awk 'END { print NR }' "$WORK/e1c.e1list")"; ni1="$(awk 'END { print NR }' "$WORK/e1c.inert")"
@@ -1525,6 +1622,6 @@ if [ "$nh9k" -gt 0 ] || [ "$nh9s" -gt 0 ]; then
 fi
 nlist="$(awk 'END { print NR }' "$WORK/c.list")"
 if [ "$rc" = 0 ]; then
-  echo "OK: validate-fixture-hygiene -- $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H12 no mutation battery in a run.sh or lib.sh; E1 $ne1 receipt(s), $ni1 inert and allowlisted; H9 $nh9r bounded-wait row(s), every one allowlisted; H13 ${n13:-0} hand span extraction(s), every one allowlisted."
+  echo "OK: validate-fixture-hygiene -- $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H12 no mutation battery in a run.sh or lib.sh; E1 $ne1 receipt(s), $ni1 inert and allowlisted; H9 $nh9r bounded-wait row(s), every one allowlisted; H13 ${n13:-0} hand span extraction(s), every one allowlisted; H14 ${n14:-0} hand git init line(s), every one allowlisted."
 fi
 exit "$rc"

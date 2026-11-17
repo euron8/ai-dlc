@@ -202,6 +202,39 @@ if [ "$MRC" = 64 ] && cmp -s "$ka/fanin-b1.md" "$WORK/ka.before" && has "$WORK/m
    && has "$WORK/mark.out" "re-dispatch that batch's adjudicator" && ! has "$WORK/mark.out" "re-dispatch the adversary"; then
   ok "CS-K2a: a Bash-amended sealed ADJUDICATOR batch file: --mark refuses (64) with the delete-and-re-dispatch-that-batch remedy, never the adversary's"
 else bad "CS-K2a: --mark over a Bash-amended adjudicator batch file: rc=$MRC: $(head -1 "$WORK/mark.out")"; fi
+# CS-K2b: BL-974 term 7 (wfd --mark header term 9). An adjudicator batch file's name carries the <b> of its <b>/<k> field,
+# with b <= k. Every file is written FRESH and unsealed in its own dir. Three offenders, one per rule (b mismatch, b > k,
+# not the grammar) -> 64 with that rule's text, the file byte-identical, no marker, never the seal's refusal; two
+# near-misses mark 0 (one from a RELATIVE path at the world root, one with b == k); a non-grammar name in a dir whose
+# -p suffix is not all digits is outside the population and marks 0 with no term-9 text.
+kb="$(dirname "$dk2")/stories-serial-adjudicate-p2"; kx="$(dirname "$dk2")/stories-serial-adjudicate-pX"
+mkdir -p "$kb" "$kx" || { echo "FIXTURE BROKEN: cannot make $kb" >&2; exit 2; }
+case "$kb" in "$KWR"/*) ;; *) echo "FIXTURE BROKEN: $kb is not under the world root $KWR" >&2; exit 2 ;; esac
+kb_mark() { # <file as passed> <b>/<k> [cwd] -> MRC, $WORK/mark.out
+  ( set +o pipefail; [ -z "${3:-}" ] || cd "$3" || exit 93; fx_inproc core/scripts/wait-for-deliverable.sh; . "$WFD"
+    wfd_mark_main --mark "$1" stories adjudicator "$2" findings=1 ) > "$WORK/mark.out" 2>&1; MRC=$?
+}
+kb_t9() { has "$WORK/mark.out" "adjudicator batch file name" || has "$WORK/mark.out" "is not <b>/<k>" || has "$WORK/mark.out" "the file name carries"; }
+kb_off() { # <file> <b>/<k> <rule text> -> 0 when refused 64 with that text, untouched, unmarked, and not the seal's refusal
+  printf '### 01.md F-1 — MINOR\n- decision: no change\n' > "$1"; cp "$1" "$WORK/kb.before"; kb_mark "$1" "$2"
+  [ "$MRC" = 64 ] && has "$WORK/mark.out" "$3" && ! has "$WORK/mark.out" "changed through Bash" && cmp -s "$1" "$WORK/kb.before" \
+    && ! grep -q '^seat-complete:' "$1"
+}
+kb_ok() { # <file> <b>/<k> [cwd] [file as passed] -> 0 when marked 0 with its marker and no term-9 text
+  printf '### 01.md F-1 — MINOR\n- decision: no change\n' > "$1"; kb_mark "${4:-$1}" "$2" "${3:-}"
+  [ "$MRC" = 0 ] && grep -q "^seat-complete: stories adjudicator $2 sha=" "$1" && ! kb_t9
+}
+kbc=""
+kb_off "$kb/fanin-b1.md" 2/2 "the file name carries b1, the field <b>/<k> 2/2" || kbc="${kbc} A(fanin-b1 2/2)"
+kb_off "$kb/lane-1-b3.md" 3/2 "the file name carries b3, the field <b>/<k> 3/2" || kbc="${kbc} B(lane-1-b3 3/2)"
+kb_off "$kb/fanin-1.md" 1/2 "is not an adjudicator batch file name" || kbc="${kbc} C(fanin-1 1/2)"
+has "$WORK/mark.out" "rm '" || kbc="${kbc} C-rm-line"
+kb_ok "$kb/lane-2-b2.md" 2/3 "$KWR" "${kb#"$KWR"/}/lane-2-b2.md" || kbc="${kbc} N1(lane-2-b2 2/3 relative)"
+kb_ok "$kb/fanin-b2.md" 2/2 || kbc="${kbc} N2(fanin-b2 2/2)"
+kb_ok "$kx/notes.md" 1/2 || kbc="${kbc} N3(pX/notes)"
+if [ -z "$kbc" ]; then
+  ok "CS-K2b: adjudicator batch name vs <b>/<k>: b mismatch, b > k and a non-grammar name refuse 64 untouched; lane-2-b2 2/3 (relative), fanin-b2 2/2 and pX/notes.md mark"
+else bad "CS-K2b: cells that did not hold:$kbc (last rc=$MRC): $(head -2 "$WORK/mark.out")"; fi
 
 # CS-K3: a shard with NO seal row (written wholly through Bash) beside one that has one -> --mark
 # marks it and leaves it with no row: an unsealed file never becomes a sealed one.

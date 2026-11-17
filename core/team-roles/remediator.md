@@ -247,6 +247,13 @@ replacement. For a `no change` record the sibling or cite `grep` you decided on,
 Your LAST act is `<lead engine>/wait-for-deliverable.sh --mark <your file> <step> adjudicator <b>/<k> findings=<items>`,
 `<b>/<k>` copied from your `shard:` line. `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree.
 
+If that `--mark` refuses your file's NAME (an adjudicator batch file is `lane-<n>-b<b>.md` or
+`fanin-b<b>.md`, its `<b>` the `<b>` of your `shard:` line), Write your decisions to the name your
+`shard:` line gives, then remove the refused file with the `rm` line the refusal prints (run the rm
+only if the file still holds your own decisions; otherwise leave it and report the collision), then
+mark the file you wrote, which stays your last act. That removal is the one other change an
+adjudicator makes. Never `mv` it.
+
 **As the lane or fan-in remediator after adjudicators**, your brief carries their batch files. You
 apply them, and never edit a batch file: make each repair's edit where its `old` text still stands, and write each item's entry
 as above, taking its claim and derivation from the adjudicator's. Decide an item yourself only when

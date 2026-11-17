@@ -425,6 +425,39 @@ expect refused-to-converge 1 "S289 pass-4 shape: clean residue, still stamps NOT
 expect divergent           1 "no field, CRITICALs 3 -> 6, no DHB: the default is FAIL-CLOSED"
 expect no-verdict          1 "a pass with no verdict: key is un-adjudicable"
 
+# --- all-unorderable: no file carries a pass number, so the ordered series is EMPTY ------------------
+# `-pass-1`/`-pass-2` carry no `pass<N>`/`p<N>` token. The gate reports the two ORDER findings and its
+# summary, and stops there: no `unbound variable` abort, and no arm D row about a terminal pass with no
+# path. --cycle-state answers un-adjudicable: exit 1, nothing on stdout.
+mkdir -p "$ROOT/all-unorderable" || broken "cannot create $ROOT/all-unorderable"
+cp "$ROOT/converged/s1-adversarial-pass1.md" "$ROOT/all-unorderable/s1-adversarial-pass-1.md" \
+  && cp "$ROOT/converged/s1-adversarial-pass3.md" "$ROOT/all-unorderable/s1-adversarial-pass-2.md" \
+  || broken "cannot seed the all-unorderable series"
+vrun split "$VALIDATOR" --series "$ROOT/all-unorderable/s1-adversarial-pass-" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+au_out="$VR_OUT"; au_err="$VR_ERR"; au_rc="$VR_RC"
+au_n="$(grep -c '^FAIL (ORDER): ' <<<"$au_out")" || au_n=0
+vrun split "$VALIDATOR" --series "$ROOT/all-unorderable/s1-adversarial-pass-" --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT"
+au_cs_out="$VR_OUT"; au_cs_err="$VR_ERR"; au_cs_rc="$VR_RC"
+au_cs_n="$(grep -c '^FAIL (ORDER): ' <<<"$au_cs_err")" || au_cs_n=0
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$au_rc" = 1 ] && [ "$au_n" = 2 ] && ! grep -q 'unbound' <<<"$au_err" \
+   && ! grep -qF 'D -- TERMINAL' <<<"$au_out" \
+   && [ "$(tail -1 <<<"$au_out")" = "FAIL: 2 convergence violation(s)." ]; then
+  printf '  ok    %-28s exit=1, 2 ORDER findings, then the summary counting only them; no abort, no arm D\n' "all-unorderable"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s exit=%s ORDER=%s want exit=1 ORDER=2, last line "FAIL: 2 convergence violation(s).", no unbound, no D -- TERMINAL\n' "all-unorderable" "$au_rc" "$au_n"
+  printf '%s\n' "$au_out" "$au_err" | sed 's/^/          | /'
+fi
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$au_cs_rc" = 1 ] && [ -z "$au_cs_out" ] && [ "$au_cs_n" = 2 ] && ! grep -q 'unbound' <<<"$au_cs_err"; then
+  printf '  ok    %-28s --cycle-state exit=1, empty stdout, the 2 ORDER findings on stderr: un-adjudicable\n' "all-unorderable-state"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s --cycle-state exit=%s ORDER=%s stdout=[%s] want exit=1, ORDER=2, empty stdout, no unbound\n' "all-unorderable-state" "$au_cs_rc" "$au_cs_n" "$au_cs_out"
+  printf '%s\n' "$au_cs_err" | sed 's/^/          | /'
+fi
+
 echo
 # --- v0.52.0: the scope-relative predicate ------------------------------------
 expect scope-grew-converges   0 "RELEASE: CRIT rise 2->3 but only 1 in prior scope -- NOT divergence"

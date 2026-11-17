@@ -152,7 +152,12 @@ printf '== a. hook steps above the fixture suite (derived from .githooks/pre-pus
 # branch is behind ("rebase onto <base>"); different means the branch EDITED the hook, so rebasing would repeat the
 # refusal, and the message says the push runs the resolved hook, not the edit, and that the checkout holding it must be
 # updated or the push made from it. When no merge-base (or no hook blob at it) exists, the message says so and gives
-# both remedies. An ABSENT resolved hook means a push runs no pre-push hook: refused. A resolved hook that
+# both remedies. When only the resolved hook moved, the message names the checkout holding it and three readings:
+# <BASE> is an unlanded predecessor release that edited the hook (wait for it to land, then rebase and rerun); the
+# checkout is detached at an unlanded hook-editing release for that release's push (wait for it to land and the
+# re-detach at origin/main, then rerun); or it is stale or locally edited (ask the lead to re-detach it at origin/main).
+# When both hooks moved, the message gives the same waits (an unlanded release the checkout is detached at, or a
+# stacked <BASE>), --member for gating the branch's own edit, and the re-detach for a stale or edited checkout. An ABSENT resolved hook means a push runs no pre-push hook: refused. A resolved hook that
 # is not byte-identical to $ROOT/.githooks/pre-push is refused, naming both paths and which side moved relative to
 # <BASE>:.githooks/pre-push (BASE is the positional argument; when that blob is absent the side is reported unknown).
 TREE_HOOK="$ROOT/.githooks/pre-push"
@@ -166,7 +171,9 @@ if [ "$MEMBER" = 0 ] && ! cmp -s "$HOOK" "$TREE_HOOK"; then
     r_moved=1; t_moved=1; remedy=""
     cmp -s "$HOOK" "$W/base-hook" && r_moved=0
     cmp -s "$TREE_HOOK" "$W/base-hook" && t_moved=0
-    if [ "$r_moved" = 1 ] && [ "$t_moved" = 0 ]; then side="the resolved hook moved"
+    if [ "$r_moved" = 1 ] && [ "$t_moved" = 0 ]; then
+      side="the resolved hook moved"
+      remedy="; the push will run ${HOOK}, held by the checkout whose hooks git resolves (in this repo's setup, the main checkout): if ${BASE} is an unlanded predecessor release that edited the hook (a stacked base), wait for it to land, then rebase and rerun; if that checkout is detached at an unlanded hook-editing release for that release's push, wait for that push to land and the main checkout to be re-detached at origin/main, then rerun; otherwise it is stale or its hook is locally edited: ask the lead to re-detach it at origin/main"
     elif [ "$r_moved" = 0 ] && [ "$t_moved" = 1 ]; then
       side="the tree hook moved"
       mb="$(git -C "$ROOT" merge-base HEAD "$BASE" 2>/dev/null)" || mb=""
@@ -176,7 +183,10 @@ if [ "$MEMBER" = 0 ] && ! cmp -s "$HOOK" "$TREE_HOOK"; then
       else
         remedy="; the merge-base with ${BASE} is unavailable, so behind cannot be told from edited: rebase onto ${BASE}, or update the checkout holding ${HOOK} if the edit is intended"
       fi
-    else side="both hooks moved"; fi
+    else
+      side="both hooks moved"
+      remedy="; the branch edited the hook while the checkout holding ${HOOK} (in this repo's setup, the main checkout) holds a different hook: if that checkout is detached at an unlanded hook-editing release for its push, or ${BASE} is a stacked base not yet landed, wait for it to land, then rebase and rerun; if the edit is this branch's own and must be gated, the push runs ${HOOK}, not the edit, so before READY run this script with --member, which runs the tree's own hook and records nothing; otherwise the checkout is stale or locally edited: ask the lead to re-detach it at origin/main"
+    fi
     side="$side relative to ${BASE}:.githooks/pre-push${remedy}"
   else
     side="which side moved is unknown: ${BASE}:.githooks/pre-push is absent"
@@ -264,6 +274,14 @@ fi
 # ON A DIRTY TREE THE SAME SEED RUNS WITH --dirty-ok (BL-1066): hermetic-run.sh copies the sandbox from the work tree
 # and keys the entry on that same work tree, so the pass lands in the counted store under the content that ran, and
 # only a push of a tree holding the same bytes reuses it.
+# A red unit's output, indented under its FAIL line: lines matching <drop ERE> are skipped; every evidence line
+# (`      | `, seed-verdict-store.sh's own pattern) prints, in source order, with the line directly above its block; the
+# other lines are capped to their last <cap>, since a red with no verdict line prints its whole output.
+red_print() { # <drop ERE> <cap> <file>
+  awk -v drop="$1" -v cap="$2" '$0 ~ drop { next }
+    { L[++n] = $0; if ($0 ~ /^      [|] /) E[n] = 1; else m++ }
+    END { k = 0; for (i = 1; i <= n; i++) { if (!E[i]) k++; if (E[i] || E[i + 1] || k > m - cap) print "     " L[i] } }' "$3"
+}
 printf '== d. validator fork budget (core/fixtures/validator-fork-budget, counted, about 40s)\n'
 FB="$ROOT/core/fixtures/validator-fork-budget/run.sh"
 HR="$ROOT/core/scripts/hermetic-run.sh"
@@ -300,7 +318,7 @@ elif [ "$d_rc" -eq 2 ]; then
   exit 2
 else
   printf '   FAIL (exit %s):\n' "$d_rc"
-  grep -Ev '^HERMETIC-CONSUMED|^ *ok ' "$W/d.out" | tail -12 | sed 's/^/     /'
+  red_print '^HERMETIC-CONSUMED|^ *ok ' 12 "$W/d.out"
   note_fail "d:fork-budget"
 fi
 
@@ -322,7 +340,20 @@ pred_once() {
 # is the seeder's own non-failure line for an @consumer unit the selection no longer holds,
 # `<fx>@consumer not-selected (record current; nothing ran)`: it is printed as not-selected and counted neither as
 # red nor as a run or recorded pass.
-seed_set() { # <section dir> <jobs> <unit count> <finding name>
+# THE UNDECLARED DROP: core/scripts/hermetic-run.sh refuses (exit 2) a fixture whose directory has no inputs.decl, so
+# such a unit cannot be counted-seeded; the push runs it plain. It leaves $1/torun, printed as undeclared, and
+# u_drop counts it. An `<fx>@consumer` unit is run by the consumer census, not hermetic-run.sh, and stays. Builtins only.
+drop_undeclared() { # <section dir>
+  local d="$1" u; u_drop=0
+  { while IFS= read -r u; do
+      case "$u" in *@consumer) ;; *)
+        [ -f "core/fixtures/$u/inputs.decl" ] || { printf '     %s undeclared: runs plain in the push\n' "$u" >&3; u_drop=$((u_drop + 1)); continue; } ;;
+      esac
+      printf '%s\n' "$u"
+    done < "$d/torun"; } 3>&1 > "$d/torun.kept"
+  while IFS= read -r u; do printf '%s\n' "$u"; done < "$d/torun.kept" > "$d/torun"
+}
+seed_set() { # <section dir> <jobs> <unit count> <finding name> [<why nothing ran, when nothing does>]
   local d="$1" j="$2" k="$3" s_rc s_red="" s_rec=0 s_ns=0 n r
   arm_start
   if [ "$k" -gt 0 ]; then
@@ -349,8 +380,13 @@ seed_set() { # <section dir> <jobs> <unit count> <finding name>
   done < "$d/torun"
   if [ -n "$s_red" ]; then
     printf '   FAIL: red:%s\n' "$s_red"
-    grep -vE '^[A-Za-z0-9._-]+ rc=[0-9]+$|^counted store: ' "$d/seed" | tail -20 | sed 's/^/     /'
+    red_print '^[A-Za-z0-9._-]+ rc=[0-9]+$|^counted store: ' 20 "$d/seed"
     note_fail "$4"
+  elif [ "$((k - s_ns))" -eq 0 ]; then
+    # Nothing ran, so nothing passed: reported as section c reports an empty diff, never as ok and never as a finding.
+    printf '   EXAMINED NOTHING -- %s' "${5:-no unit was left to run}"
+    [ "$s_ns" -eq 0 ] || printf '; %s not-selected (record current)' "$s_ns"
+    printf ' (this is not a pass)\n'
   else
     printf '   ok: %s fixture(s) run green; %s pass(es) recorded in the counted store (%s)' "$((k - s_ns))" "$s_rec" "$(sed -n 's/^counted store: //p' "$d/seed")"
     [ "$s_ns" -eq 0 ] || printf '; %s not-selected (record current)' "$s_ns"
@@ -536,7 +572,10 @@ else
     "$f_sel" "$f_run" "$(grep -c 'DIR:' "$W/f/sel")" "$(grep -c 'DECLFILE:' "$W/f/sel")" "$(grep -c 'NAME:' "$W/f/sel")" \
     "$((f_sel - f_k))" "$f_k" "$F_JOBS"
   awk -F'\t' '{ printf "     %s  %s\n", $1, $2 }' "$W/f/sel"
-  seed_set "$W/f" "$F_JOBS" "$f_k" f:reached-fixtures
+  drop_undeclared "$W/f"
+  f_why="no RUN unit that reaches a changed script is left to run"
+  [ "$u_drop" -eq 0 ] || f_why="every selected unit is undeclared and runs plain in the push"
+  seed_set "$W/f" "$F_JOBS" "$((f_k - u_drop))" f:reached-fixtures "$f_why"
 fi
 
 printf '\n'

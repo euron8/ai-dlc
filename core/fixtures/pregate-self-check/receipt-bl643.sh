@@ -138,6 +138,10 @@ for v in A B C D U J; do
   printf '#!/usr/bin/env bash\nbash .githooks/pre-push </dev/null\n' > "$T/core/fixtures/hookfx/run.sh"
   printf '#!/usr/bin/env bash\nIMPL="$HERE/../hookfx/run.sh"\n' > "$T/core/fixtures/hookfx-w/run.sh"
   for n in backlog-real-ledger hermetic-runner; do printf '#!/usr/bin/env bash\nexit 0\n' > "$T/core/fixtures/$n/run.sh"; done
+  # Each stub fixture is a DECLARED one: the self-check seeds only a fixture carrying inputs.decl.
+  for n in validator-fork-budget hookfx hookfx-w backlog-real-ledger hermetic-runner; do
+    printf 'core/fixtures/%s/run.sh\n' "$n" > "$T/core/fixtures/$n/inputs.decl" || exit 9
+  done
   case "$v" in U) seed_counted "$T" unarmed ;; J) seed_counted "$T" j3 ;; *) seed_counted "$T" ok ;; esac || exit 9
   for s in validate-enforcement-map.sh validate-shell-portability.sh; do printf '#!/usr/bin/env bash\nexit 0\n' > "$T/scripts/$s"; done
   {
@@ -257,6 +261,7 @@ printf '#!/usr/bin/env bash\nbash core/scripts/fx-sub.sh\n' > "$W/rootFs/core/fi
 printf '#!/usr/bin/env bash\nbash core/scripts/xfx-sub.sh\n' > "$W/rootFs/core/fixtures/fnear/run.sh"
 printf '#!/usr/bin/env bash\nbash core/scripts/fx-sub.sh\n' > "$W/rootFs/core/fixtures/fout/run.sh"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$W/rootFs/core/scripts/fx-sub.sh" || exit 9
+for n in fdir ffile fname fnear fout; do printf 'core/fixtures/%s/run.sh\n' "$n" > "$W/rootFs/core/fixtures/$n/inputs.decl" || exit 9; done
 printf '%s\n' '#!/usr/bin/env bash' \
   'case "$1" in fname) echo "fname: FAIL (J3): row \"3 *\": measured 2, declared 3"; exit 1 ;; esac' \
   'echo "validator-fork-budget: invocation budget ok: 1 start(s)"; exit 0' > "$W/rootFs/core/scripts/hermetic-run.sh" || exit 9
@@ -324,7 +329,7 @@ eskip=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches neither pre-pus
 fskip=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches no core/scripts/\*\.sh or scripts/\*\.sh path$' "$W/A.out" && fskip=yes
 mte=no; grep -qF '   triggered by: .githooks/pre-push ' "$W/Mt.out" && grep -qF '   4 fixture(s): 3 naming a hook or named by the ruling, 1 wrapper(s) in 2 round(s); ' "$W/Mt.out" \
   && grep -qF '   predict-push-set.sh: 4 of 4 hold a counted pass on their current key rows (reused); 0 to run' "$W/Mt.out" \
-  && grep -qF '   ok: 0 fixture(s) run green' "$W/Mt.out" && mte=yes
+  && grep -qxF '   EXAMINED NOTHING -- no unit was left to run (this is not a pass)' "$W/Mt.out" && mte=yes
 # Ep: the predictor's subset runs (hookfx alone); Epall would read yes if the whole set ran, Epnone if none did.
 drive_member "$W/rootEp" "$W/Ep.out" base0; ep=$?
 epn=no; grep -qF '   predict-push-set.sh: 3 of 4 hold a counted pass on their current key rows (reused); 1 to run' "$W/Ep.out" \
@@ -341,7 +346,7 @@ tnn=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches neither pre-push 
 # Tn: f reads the added script and no RUN unit reaches it (the near-miss of Fs).
 tnf=no; grep -qxF '   1 changed script(s): scripts/unnamed.sh ' "$W/Tn.out" \
   && grep -qF '   predict-push-set.sh: 0 of 5 RUN unit(s) reach a changed script (DIR 0, DECLFILE 0, NAME 0); 0 already run in section e; 0 to run' "$W/Tn.out" \
-  && grep -qF '   ok: 0 fixture(s) run green' "$W/Tn.out" && tnf=yes
+  && grep -qxF '   EXAMINED NOTHING -- no RUN unit that reaches a changed script is left to run (this is not a pass)' "$W/Tn.out" && tnf=yes
 # Fs: f runs exactly the three RUN units that reach fx-sub.sh, one route each, and fname's red is its finding.
 drive_base "$W/rootFs" "$W/Fs.out" base0; fs=$?
 fsn=no; grep -qF '   predict-push-set.sh: 3 of 4 RUN unit(s) reach a changed script (DIR 1, DECLFILE 1, NAME 1); 0 already run in section e; 3 to run' "$W/Fs.out" \

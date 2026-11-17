@@ -38,7 +38,7 @@ change. Building good arms is `fixture-mutants.md`'s; shipping is `fixture-ship-
   `st_net`, `st_reap`. `layout.sh`: `fx_dist_layout`, `fx_skip_exit` (ends a subject-absent SKIP: exit 0 on a
   consumer, FIXTURE BROKEN in the distribution). `pool-span.sh`: `pool_span <hook> <out> <SPAN>...`, which writes the named hook spans under an
   exported store default of `<world>.verdicts` for the shell that sources `<out>` inside its world. Enforcer: `core/fixtures/suite-dispatch-order/run.sh` hook_drive, world_git, report_end;
-  `scripts/validate-fixture-hygiene.sh` H10, H11.
+  `scripts/validate-fixture-hygiene.sh` H10, H11, H14.
 - **C9** No fixture carries a mutation battery: no `run.sh` or `lib.sh` calls or defines `mutant_killed`, `need_base`,
   `matrix_row`, `mkmut`, `mut_copy` or `mutate_file`, carries a `# MUTANT-MATRIX` line or sources `lib/matrix.sh`.
   That an arm can fail is proved once, by hand, at authoring. Enforcer: `scripts/validate-fixture-hygiene.sh` H12.
