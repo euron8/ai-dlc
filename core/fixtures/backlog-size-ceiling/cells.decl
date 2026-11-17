@@ -1,0 +1,11 @@
+# backlog-size-ceiling's starts of its two subjects (BL-879 grammar). Every other drive is in process: run.sh's run_v
+# sources the seed's copy of validate-backlog-size.sh in a subshell and calls vbs_main, and the child shim (`bash`,
+# defined in run.sh) answers that validator's own `bash .../backlog-reverify.sh` start, and the fixture's direct
+# reverify drives, by sourcing the copy and calling brv_main in a reset subshell. One cli cell per distinct CLI
+# outcome, each started as `FXCELL=<id> command bash <copy>` and compared byte for byte with the in-process call.
+cli scripts/validate-backlog-size.sh cli-size-ok
+cli scripts/validate-backlog-size.sh cli-size-fail
+cli scripts/validate-backlog-size.sh cli-size-env
+cli scripts/backlog-reverify.sh cli-rv-rows
+cli scripts/backlog-reverify.sh cli-rv-marker
+nested scripts/validate-backlog-size.sh scripts/backlog-reverify.sh why=a started validator starts backlog-reverify.sh once per run as its declared-empty and marker-position oracle

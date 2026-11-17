@@ -1,0 +1,9 @@
+# ledger-rotate's starts of core/skills/ai-dlc-update/reconcile/ledger-rotate.sh (BL-879 grammar). Every other drive is
+# in process: run.sh loads the subject once and calls lrot_main through `rot` in a subshell. One cli cell per distinct
+# CLI outcome (exit 0 dry run, exit 0 --apply, exit 0 nothing to rotate, exit 1 split refusal, exit 2 usage), each
+# started as FXCELL=<id> bash "$ROT" in eqv() and compared byte for byte with the in-process call on the same input.
+cli core/skills/ai-dlc-update/reconcile/ledger-rotate.sh cli-dry
+cli core/skills/ai-dlc-update/reconcile/ledger-rotate.sh cli-apply
+cli core/skills/ai-dlc-update/reconcile/ledger-rotate.sh cli-noop
+cli core/skills/ai-dlc-update/reconcile/ledger-rotate.sh cli-refuse
+cli core/skills/ai-dlc-update/reconcile/ledger-rotate.sh cli-usage

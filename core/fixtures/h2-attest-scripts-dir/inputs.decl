@@ -3,7 +3,7 @@
 # run.sh:114 copies exactly these by name and exits 2 on any absent; check-17-bypass/run.sh:48-49 runs them as PROV and EVID.
 core/scripts/validate-provenance-block.sh
 core/scripts/validate-retro-evidence.sh
-# validate-provenance-block.sh:180 loads core/schemas/provenance-block.json; run.sh:107 copies the schemas dir, and no other schema is read.
+# validate-provenance-block.sh:181 loads core/schemas/provenance-block.json; run.sh:107 copies the schemas dir, and no other schema is read.
 core/schemas/provenance-block.json
 # lib rows: validate-h2-attestation.sh:107,624 runs check-17-bypass, whose run.sh:2 sources preamble.sh. check-h1-recursion and check-manifest-bypass have no run.sh (seed.sh only, no lib/ source).
 core/fixtures/lib/preamble.sh

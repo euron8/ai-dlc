@@ -15,6 +15,8 @@
 # honouring `--group` would run shard 'a' here, print PASS for it, and leave this shard's phases
 # run nowhere while every directory read green. Stdout goes to a FILE, never `$( )`, and is
 # replayed whole; stderr passes straight through.
+# A SKIP line naming this shard is the sibling's SKIP for a subject that predates the in-process wrap; its
+# exit (0 on a consumer, 2 in the distribution) is the verdict.
 #
 # Resolved as a SIBLING inside core/fixtures/, never by walking up into a core subtree.
 #
@@ -33,7 +35,7 @@ trap 'rm -f "$RER_OUT"' EXIT
 bash "$IMPL" --group c > "$RER_OUT"
 rc=$?
 cat "$RER_OUT" || { echo "FIXTURE ERROR: could not replay shard 'c' output" >&2; exit 2; }
-grep -qE "^(PASS|FAIL): reconcile-emit-report shard 'c' of '[a-z ]+' -- " "$RER_OUT" || {
+grep -qE "^((PASS|FAIL): reconcile-emit-report shard 'c' of '[a-z ]+'|SKIP: reconcile-emit-report shard 'c') -- " "$RER_OUT" || {
   echo "FIXTURE BROKEN: the sibling's verdict does not name shard 'c' (rc=$rc) — it ran another shard or none, and shard 'c' ran nowhere" >&2
   exit 2
 }

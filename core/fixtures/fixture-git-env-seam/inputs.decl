@@ -5,10 +5,12 @@
 !scripts/validate-fixture-git-env.sh
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh
 core/fixtures/trunk-push-bound/run.sh
 core/fixtures/setup-config-drift/run.sh
 core/fixtures/setup-config-drift/seed.sh
-core/scripts/validate-audit-anchors.sh
+!core/scripts/validate-audit-anchors.sh
 core/schemas/audit-anchors.json
 core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
 core/skills/ai-dlc-update/reconcile/apply.sh

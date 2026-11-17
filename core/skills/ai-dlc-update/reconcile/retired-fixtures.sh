@@ -39,6 +39,7 @@
 # Usage:  retired-fixtures.sh <dist-repo> <theirs-ref> <consumer-root>
 # Output: TSV — STATUS<TAB>consumer-path<TAB>DETAIL
 # Exit:   0 ALWAYS. A classifier, not a gate — the signal never blocks.
+rf_main() {
 set -uo pipefail
 # GLOBBING OFF: every consumer path is read through consumer-read.sh, and the one directory listing
 # below is a cr_walk, never a glob.
@@ -191,3 +192,6 @@ else
 fi
 
 exit 0   # classifier — the signal never blocks
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rf_main "$@"

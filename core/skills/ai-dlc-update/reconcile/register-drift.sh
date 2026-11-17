@@ -24,6 +24,7 @@
 #        (default: dry-run -- print the override it WOULD write)
 # Exit:  0 ok / 1 nothing to register / 2 usage OR refusal -- a section that cannot be
 #        classified or accounted for; nothing is written and core is NOT reverted
+rd_main() {
 set -uo pipefail
 
 DIST="${1:?usage: register-drift.sh <dist-repo> <base-sha> <consumer-root> <core-rel-path> [--apply]}"
@@ -90,7 +91,7 @@ headings_of() { grep -nE '^#{2,3} ' "$1" | sed 's/:.*#\{2,3\} /:/'; }
 #
 # Two resolvers that disagree means the tool and the gate disagree, and the tool wins.
 # This used to say "byte for byte" over a hand-copied body; now there is one body.
-SELF="$(cd "$(dirname "$0")" && pwd)"
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "register-drift: cannot source $SELF/lib.sh" >&2; exit 1; }
 
@@ -554,3 +555,6 @@ echo ""
 echo "  WRITE THE reason: LINE. It says TODO. An override whose reason nobody stated is"
 echo "  one nobody can ever retire — the next pull cannot ask 'does upstream supersede this?'"
 echo "  about a reason that was never given."
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rd_main "$@"

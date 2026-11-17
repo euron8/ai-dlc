@@ -1,3 +1,5 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-18 *
-16 core/scripts/validate-provenance-block.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once.
+# The validator is loaded once and asked in process (inproc row); it starts only in its three cli cells (cells.decl).
+5 *
+3 core/scripts/validate-provenance-block.sh
+19 inproc:core/scripts/validate-provenance-block.sh

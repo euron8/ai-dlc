@@ -50,12 +50,35 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 absent" >&2
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
-EXPECTED_ASSERTIONS=47
+EXPECTED_ASSERTIONS=48
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 show() { sed 's/^/        /' <<<"$1"; }
 
-run() { bash "$AUDIT" --register "$1" 2>&1; }
+# IN PROCESS (BL-878). The subject is loaded ONCE (inproc_load: its column-0 guard returns after defining ald_main)
+# and every drive is inproc_run, which calls ald_main in a subshell made to look like a fresh `bash <subject>`; the
+# subject's `exit` ends that subshell only. It runs as a program only in its cli cell (cells.decl, at the end).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with neither its `ald_main() {` line nor the column-0 source
+# guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE BROKEN in
+# the distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+grep -q '^ald_main() {$' "$AUDIT"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$AUDIT"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $AUDIT (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  10) echo "  FAIL  $AUDIT defines \`ald_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run ald_main in this shell"; echo "layer-debt-due-and-discharge: 1 FAILED"; exit 1 ;;
+  *) echo "  FAIL  $AUDIT carries the column-0 source guard but no \`ald_main() {\` line -- a respelled subject this fixture cannot drive"; echo "layer-debt-due-and-discharge: 1 FAILED"; exit 1 ;;
+esac
+inproc_load "$AUDIT" || { echo "FIXTURE BROKEN: sourcing $AUDIT defined nothing" >&2; exit 2; }
+ald() { inproc_run "$AUDIT" ald_main "$@"; }
+
+run() { ald --register "$1" 2>&1; }
 
 # --- the seeds are written by a producer, never from the reader's accept-set ------------------
 # A seed derived from what the reader accepts proves the reader accepts its own grammar. These
@@ -270,7 +293,7 @@ fi
 # THIS script, so the answer must not depend on where the process happens to stand. A fixture
 # that is green only from the repo root may be asserting nothing; this arm asserts the property
 # in its own arms rather than inheriting it from how the suite is driven.
-cwd_out="$( (cd / && bash "$AUDIT" --register "$DREG" 2>&1) )"
+cwd_out="$( (cd / && ald --register "$DREG" 2>&1) )"
 if [ "$cwd_out" = "$dout" ]; then
   ok "cwd-invariant: the same register read from / produces a byte-identical report"
 else
@@ -542,7 +565,7 @@ fi
 # BASELINE CONTROL — rc=0-with-no-findings is exactly what a subject replaced by `exit 0` looks
 # like, so this carries a POSITIVE conjunct: the subject must still NAME the baseline rows.
 # =============================================================================================
-ctl_out="$(bash "$AUDIT" --register "$DREG" 2>&1)"; ctl_rc=$?
+ctl_out="$(ald --register "$DREG" 2>&1)"; ctl_rc=$?
 if [ "$ctl_rc" -eq 0 ] && grep -q 'nom\.md' <<<"$ctl_out" && grep -q 'OWED-B1' <<<"$ctl_out"; then
   ok "CONTROL: the subject exits 0 on the discharge register and still names the baseline rows"
 else
@@ -629,7 +652,7 @@ else
   bad "a bare-string \`withdraws\` was not reported as malformed, or was honoured"
   show "$wout"
 fi
-wjson="$(bash "$AUDIT" --register "$WREG" --json 2>&1)"
+wjson="$(ald --register "$WREG" --json 2>&1)"
 if [ "$(python3 -c 'import json,sys; print(len(json.loads(sys.stdin.read()).get("unresolved_withdrawals", [])))' <<<"$wjson" 2>/dev/null)" = 4 ]; then
   ok "--json carries all 4 unresolved withdrawals under \`unresolved_withdrawals\`"
 else
@@ -642,7 +665,7 @@ else
   bad "a withdrawal discharged a structured \`owed\` — withdrawing prose is not closing a commitment"
   show "$wout"
 fi
-if grep -q 'WITHDRAWALS\|withdraw' <<<"$dout" || grep -q 'unresolved_withdrawals' <<<"$(bash "$AUDIT" --register "$DREG" --json 2>&1)"; then
+if grep -q 'WITHDRAWALS\|withdraw' <<<"$dout" || grep -q 'unresolved_withdrawals' <<<"$(ald --register "$DREG" --json 2>&1)"; then
   bad "a register carrying no \`withdraws\` field printed withdrawal output — the reader is not backward compatible"
   show "$dout"
 else
@@ -705,6 +728,26 @@ else
   bad "a trigger naming a DIFFERENT id that merely starts with this one was classified as joinable — the id has no boundary"
   show "$kout"
 fi
+
+# --- the cli cell (cells.decl): the subject run as a PROGRAM once, for the one CLI outcome this fixture drives -----
+# Exit 0, a report. It is compared with the in-process call on the same input, stdout, stderr and exit separately,
+# byte for byte, and asserts its own exit and a string it must say, so two runs that both printed nothing cannot
+# read as equivalent.
+EQ="$WORK"
+eq_cell() { # eq_cell <cell-id> <want rc> <must-say> <args...>
+  local id="$1" want="$2" say="$3"; shift 3
+  ald "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$AUDIT" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" \
+     && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" && [ "$(< "$EQ/$id.cl.rc")" = "$want" ] \
+     && grep -qF -- "$say" "$EQ/$id.cl.out" "$EQ/$id.cl.err"; then
+    ok "$id: the program answers exit $want exactly as the in-process call does (stdout, stderr, exit)"
+  else
+    bad "$id: in-process rc=$(< "$EQ/$id.ip.rc") / program rc=$(< "$EQ/$id.cl.rc") want $want, saying \"$say\""
+    sed -n '1,3s/^/          | /p' "$EQ/$id.ip.out" "$EQ/$id.cl.out" "$EQ/$id.ip.err" "$EQ/$id.cl.err"
+  fi
+}
+eq_cell cli-report 0 "LAYER DEBT" --register "$DREG"
 
 echo ""
 report_end layer-debt-due-and-discharge "$EXPECTED_ASSERTIONS"

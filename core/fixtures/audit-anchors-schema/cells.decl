@@ -1,0 +1,7 @@
+# audit-anchors-schema's starts of core/scripts/validate-audit-anchors.sh (BL-879 grammar). Every other drive is in
+# process: run.sh loads the validator once (inproc_load) and calls vaa_main through inproc_run. One cli cell per distinct
+# CLI outcome (exit 0 a valid file, exit 1 an enum refusal, exit 2 a fumbled argument), each started as
+# FXCELL=<id> bash "$VALIDATOR" in eqv() and compared byte for byte with the in-process call on the same input.
+cli core/scripts/validate-audit-anchors.sh cli-pass
+cli core/scripts/validate-audit-anchors.sh cli-fail
+cli core/scripts/validate-audit-anchors.sh cli-usage

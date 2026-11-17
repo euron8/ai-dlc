@@ -1,0 +1,6 @@
+# settings-merge-unparseable-template's starts of core/skills/ai-dlc-update/reconcile/settings-merge.sh (BL-879
+# grammar). Every other drive is in process: run.sh sources the subject once and calls sm_main in a subshell. One cli
+# cell per distinct CLI outcome it drives (exit 0 with the yes verdict, exit 1 FAIL: refusal), each started as
+# FXCELL=<id> bash "$SUBJECT" in eqv() and compared byte for byte with the in-process call on the same inputs.
+cli core/skills/ai-dlc-update/reconcile/settings-merge.sh cli-yes
+cli core/skills/ai-dlc-update/reconcile/settings-merge.sh cli-refuse

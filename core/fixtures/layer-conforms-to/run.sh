@@ -27,6 +27,31 @@ LINTER="$(pick "$LARG" "$HERE/../../../scripts/ai-dlc/validate-layer-entries.sh"
 echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 [ -f "$(dirname "$LINTER")/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED core/scripts/artifact-path-config.sh"
 
+# IN PROCESS (BL-878). The validator is SOURCED ONCE into this shell (its guard returns after defining vle_main), and
+# every drive calls vle_main inside the subshell of the `$( )` that captures it, so its `exit`, `set -u`, EXIT trap and
+# function definitions stay there. It starts as a program only in the cli cells (cells.decl). A CORE FIXTURE SHIPS
+# AHEAD OF ITS SUBJECT: a subject with neither its `vle_main() {` line nor the column-0 source guard predates the wrap
+# and reads SKIP (exit 0, never an ok); exactly one half is a respelled subject and FAILs; a subject grep cannot READ
+# (exit 2) is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$LINTER" vle_main; g_vle=$?
+[ "$g_vle" = 2 ] && exit 2
+[ "$g_vle" = 1 ] && { echo "layer-conforms-to: 1 FAILED"; exit 1; }
+[ "$g_vle" = 3 ] && { echo "SKIP: subject predates the in-process wrap"; exit 0; }
+
 ROOT="$(bash "$HERE/seed.sh")"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/layer-conforms-to-m.XXXXXX")"
 trap 'rm -rf "$ROOT" "$TMP"' EXIT
@@ -34,6 +59,10 @@ CONS="$ROOT/consumer"; BAD="$ROOT/bad-consumer"; NOLC="$ROOT/no-contract"
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+fx_inproc "$LINTER"
+. "$LINTER" || { echo "FIXTURE ERROR: sourcing $LINTER failed" >&2; exit 2; }
+declare -F vle_main > /dev/null || { echo "FIXTURE ERROR: sourcing $LINTER defined no vle_main" >&2; exit 2; }
 say() { if [ "$1" = 1 ]; then ok "$2"; else bad "$2"; fi; }
 
 # NO run() HELPER, deliberately. `OUT="$(run ...)"` evaluates the helper in a SUBSHELL, so an
@@ -55,7 +84,7 @@ echo "layer-conforms-to:"
 # ---------------------------------------------------------------------------
 # Part 1 — the conforming consumer, and the footer's counts
 # ---------------------------------------------------------------------------
-CLEAN_OUT="$(bash "$LINTER" "$CONS" 2>&1)"; CLEAN_RC=$?
+CLEAN_OUT="$( ( fx_inproc "$LINTER"; vle_main "$CONS" ) 2>&1)"; CLEAN_RC=$?
 say "$([ "$CLEAN_RC" -eq 0 ] && echo 1 || echo 0)" \
   "a consumer whose every entry carries a current receipt exits 0"
 if [ "$(footer_field "$CLEAN_OUT" entries)" = 3 ]; then
@@ -71,7 +100,7 @@ say "$([ "$(footer_field "$CLEAN_OUT" contract_version)" = "$(awk '/^contract_ve
 # ---------------------------------------------------------------------------
 # Part 2 — one arm per malformed receipt
 # ---------------------------------------------------------------------------
-BAD_OUT="$(bash "$LINTER" "$BAD" 2>&1)"; BAD_RC=$?
+BAD_OUT="$( ( fx_inproc "$LINTER"; vle_main "$BAD" ) 2>&1)"; BAD_RC=$?
 has() { grep -Fq "$1" <<<\"$BAD_OUT\"; }
 
 say "$([ "$BAD_RC" -eq 1 ] && echo 1 || echo 0)"  "a malformed receipt exits 1 — the consumer's pre-push refuses"
@@ -117,7 +146,7 @@ fi
 # ---------------------------------------------------------------------------
 # Part 4 — the refusal arm: an absent contract is not a clean one
 # ---------------------------------------------------------------------------
-NOLC_OUT="$(bash "$LINTER" "$NOLC" 2>&1)"; NOLC_RC=$?
+NOLC_OUT="$( ( fx_inproc "$LINTER"; vle_main "$NOLC" ) 2>&1)"; NOLC_RC=$?
 if [ "$NOLC_RC" -eq 1 ]; then
   ok "a consumer with no installed layer-contract.yaml exits 1 rather than reporting clean"
 else
@@ -152,8 +181,8 @@ if awk '{exit}' "$SEALED_LC" 2>/dev/null; then
   exit 2
 fi
 grep -q '^contract_version:' "$MALF_LC" && { echo "FIXTURE BROKEN: the malformed contract still carries contract_version:" >&2; exit 2; }
-SEAL_OUT="$(bash "$LINTER" "$SEALED" 2>&1)"; SEAL_RC=$?
-MALF_OUT="$(bash "$LINTER" "$MALF" 2>&1)"
+SEAL_OUT="$( ( fx_inproc "$LINTER"; vle_main "$SEALED" ) 2>&1)"; SEAL_RC=$?
+MALF_OUT="$( ( fx_inproc "$LINTER"; vle_main "$MALF" ) 2>&1)"
 UNREAD_MSG='is present but UNREADABLE'
 if [ "$SEAL_RC" -eq 1 ] && grep -Fq "$UNREAD_MSG" <<<"$SEAL_OUT"; then
   ok "a contract present at mode 000 exits 1 and is reported as UNREADABLE, by its own E17 message"
@@ -169,7 +198,28 @@ say "$(grep -Fq "got '<none>'" <<<"$MALF_OUT" && ! grep -Fq "$UNREAD_MSG" <<<"$M
   "NEAR-MISS: a READABLE contract missing contract_version still says got '<none>' and is NOT called unreadable"
 say "$(grep -Fq "$UNREAD_MSG" <<<"$CLEAN_OUT" && echo 0 || echo 1)" \
   "the readable, well-formed consumer never draws the UNREADABLE message"
+# ---------------------------------------------------------------------------
+# The cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome this fixture reads (exit 0
+# the conforming consumer, exit 1 the malformed receipts), each compared byte for byte with the in-process call on the
+# same input (stdout, stderr and exit separately) and asserting its own outcome.
+# ---------------------------------------------------------------------------
+EQ="$TMP/eq"; mkdir -p "$EQ" || exit 2
+eqv() { # eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two answers are identical
+  local id="$1"; shift
+  ( fx_inproc "$LINTER"; vle_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$LINTER" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(tail -2 "$EQ/$1.ip.out")" "$(head -2 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(tail -2 "$EQ/$1.cl.out")" "$(head -2 "$EQ/$1.cl.err")"; }
+if eqv cli-pass "$CONS" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && grep -q '^LAYER_CONFORMANCE v1 .* errors=0 ' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program passes the conforming consumer exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with errors=0 ($(eq_twin cli-pass))"; fi
+if eqv cli-fail "$BAD" && [ "$(cat "$EQ/cli-fail.cl.rc")" = 1 ] && grep -q "no-receipt.md: missing 'conforms_to:'" "$EQ/cli-fail.cl.out"; then
+  ok "cli-fail: the program refuses the malformed receipts exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-fail: the program and the in-process call differ, or the outcome is not exit 1 with the E17 missing-receipt row ($(eq_twin cli-fail))"; fi
+
 # THE ASSERTION-COUNT FLOOR. A skipped arm prints a shorter green report, which reads exactly like a passing one.
-EXPECTED_ASSERTIONS=20
+EXPECTED_ASSERTIONS=22
 echo
 report_end layer-conforms-to "$EXPECTED_ASSERTIONS"

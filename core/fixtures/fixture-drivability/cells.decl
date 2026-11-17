@@ -1,0 +1,6 @@
+# fixture-drivability's starts of core/scripts/validate-fixture-drivability.sh (BL-879 grammar). Every other drive is
+# in process: run.sh loads the script once and asks vfd_main through inproc_run. One cli cell per distinct CLI outcome
+# (exit 1 naming the undeclared directories, exit 0 on a compliant tree), each started as FXCELL=<id> bash in eqv() and
+# compared byte for byte with the in-process call on the same tree.
+cli core/scripts/validate-fixture-drivability.sh cli-fail
+cli core/scripts/validate-fixture-drivability.sh cli-pass

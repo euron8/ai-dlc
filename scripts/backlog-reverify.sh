@@ -76,6 +76,7 @@
 #                              prints, so the text is spelled in this file and nowhere else.
 # Every early exit below routes through `unresolved`, which prints the INPUT-UNRESOLVED row and
 # exits 0 in row mode and exits 2 SILENTLY in a query mode -- a 0 there would read as "declared".
+brv_main() {
 set -uo pipefail
 
 EMPTY_MARKER='**EMPTY — every entry is closed and rotated to docs/backlog.archive.md.**'
@@ -98,13 +99,13 @@ if [ "$MODE" = print-marker ] && [ "$#" -eq 1 ]; then printf '%s\n' "$EMPTY_MARK
 # that counts hops answers differently from the root, from a subdirectory and from a sandbox
 # that copied it, and the sandbox answer is the silent one.
 REPO_ROOT=""
-d="$(cd "$(dirname "$0")" && pwd)"
+d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [ "$d" != "/" ]; do
   if [ -f "$d/VERSION" ]; then REPO_ROOT="$d"; break; fi
   d="$(dirname "$d")"
 done
 if [ -z "$REPO_ROOT" ]; then
-  unresolved "$(dirname "$0")" "unresolved: no VERSION marker above this script, so the repo root is unknown and every relative receipt path would resolve against the wrong tree. Nothing was re-verified; a zero row count here is not a clean corpus."
+  unresolved "$(dirname "${BASH_SOURCE[0]}")" "unresolved: no VERSION marker above this script, so the repo root is unknown and every relative receipt path would resolve against the wrong tree. Nothing was re-verified; a zero row count here is not a clean corpus."
 fi
 
 # `--closed-receipts` DISABLES THE ANNOTATION SHORT-CIRCUIT BELOW, AND EXISTS FOR ONE CALLER.
@@ -265,7 +266,7 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 # and is sourced here, at the position the in-file definition held, so it is NOT among LIB_FNS and
 # stays visible inside each receipt's subshell exactly as before. SELF_NAME is the `$0` this
 # script's receipts are `eval`led under, which is what the prefix rule keys on.
-SELF_NAME="$0"
+SELF_NAME="${BASH_SOURCE[0]}"
 RECEIPT_LIB="$REPO_ROOT/scripts/backlog-receipt-lib.sh"
 if [ ! -f "$RECEIPT_LIB" ]; then
   unresolved "$RECEIPT_LIB" "unresolved: scripts/backlog-receipt-lib.sh is missing, so a receipt that could not run could not be told from one that reproduced. Refusing to fall back to a private copy of the could-not-measure rule. Nothing was re-verified."
@@ -437,3 +438,6 @@ $RECORDS
 EOF
 
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+brv_main "$@"

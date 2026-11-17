@@ -33,6 +33,7 @@
 # an unconverged verdict would notarize a cycle that has not closed — the opposite of the
 # gate's intent. Exit codes: 0 wrote (or --check: all current); 1 error / --check drift; 2 usage.
 
+sp_main() {
 set -u
 
 # --profile selects which schema profile governs the stamp. Two ship:
@@ -542,3 +543,7 @@ for w in wrote:
     print(f"  wrote {w}")
 sys.exit(0)
 PYEOF
+}
+# Loadable: sourcing defines sp_main and runs nothing; run as a program, it runs sp_main.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+sp_main "$@"

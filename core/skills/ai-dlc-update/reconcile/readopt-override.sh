@@ -84,6 +84,7 @@
 #
 # Exit: 0 ok / 1 blocked (stale core text still in the body) / 2 usage, or a scan that did
 #       not run to completion (a refusal; its reason is on stderr).
+rov_main() {
 set -uo pipefail
 
 DIST="${1:?usage: readopt-override.sh <dist> <theirs> <consumer> <override> [--check|--merge|--stamp <outcome>]}"
@@ -174,7 +175,7 @@ esac
 # paragraph)" is a descriptive label whose heading is just "## Empirical gate
 # validation" — the bidirectional-substring match resolves it; an exact/prefix
 # match does not.)
-SELF="$(cd "$(dirname "$0")" && pwd)"
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "readopt-override: cannot source $SELF/lib.sh" >&2; exit 1; }
 
@@ -953,3 +954,6 @@ printf '%s\n' \
   '  DOING NOTHING IS NOT AN OUTCOME. The HARD block persists until base_sha is' \
   '  re-stamped, and a bare re-stamp is refused while the body is stale.' \
   '================================================================================'
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rov_main "$@"

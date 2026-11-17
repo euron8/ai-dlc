@@ -54,6 +54,50 @@ done
 printf 'HERMETIC-CONSUMED %s\n' "$ROT"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# --- THE SUBJECT IS ASKED IN PROCESS (BL-878) -------------------------------------------------------
+# ledger-rotate.sh is loadable: sourcing it defines lrot_main and returns at its column-0 guard. It is
+# loaded ONCE here (core/fixtures/lib/inproc.sh), and `rot <rotator> <args>` answers what `bash <rotator>
+# <args>` prints and exits with, in a subshell made to look like a fresh bash. <rotator> is $ROT, whose
+# loaded definitions are used, or a relocated copy (dv_run's), which is sourced inside that run's own
+# subshell so it locates its own siblings. Each call is one fx_inproc pass (the inproc: row).
+#
+# THE BLOB MEMO. A CLI run sources lib.sh at the top of its own process and builds a private memo for that
+# one run; in a subshell lib.sh does not (it keys on `$BASH_SUBSHELL` 0). So `rot` hands each run a FRESH
+# memo, exactly as private to that run as the CLI's.
+#
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped
+# ledger-rotate.sh, and sourcing a pre-wrap subject would run its whole body in this shell. So the shape is
+# checked first, on its two halves: neither the `lrot_main() {` line nor the column-0 source guard is a
+# subject that predates the wrap, which prints SKIP and exits 0 -- never an ok. Exactly one half is a
+# respelled subject this fixture can no longer drive, which FAILS. An unreadable subject is FIXTURE ERROR.
+lrot_def=0; lrot_guard=0
+grep -q '^lrot_main() {$' "$ROT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $ROT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || lrot_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$ROT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $ROT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || lrot_guard=1
+if [ "$lrot_def$lrot_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+if [ "$lrot_def" = 0 ]; then echo "   FAIL  $ROT carries the column-0 source guard but no \`lrot_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "ledger-rotate: FAIL (1)" >&2; exit 1; fi
+if [ "$lrot_guard" = 0 ]; then echo "   FAIL  $ROT defines \`lrot_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run lrot_main in this shell" >&2; echo "ledger-rotate: FAIL (1)" >&2; exit 1; fi
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $HERE" >&2; exit 2; }
+inproc_load "$ROT" || { echo "FIXTURE BROKEN: sourcing $ROT defined nothing" >&2; exit 2; }
+declare -F lrot_main >/dev/null || { echo "FIXTURE BROKEN: $ROT defined no lrot_main when sourced" >&2; exit 2; }
+rot() { # <rotator> [args...] -> what `bash <rotator> [args...]` prints and exits with
+  local _m _rc
+  _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
+  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$1" lrot_main "${@:2}"; _rc=$?
+  rm -rf "$_m"
+  return "$_rc"
+}
+
 entries() { grep -cE '^(## |- \*\*)' "$1" 2>/dev/null || echo 0; }
 
 # THE CLOSE VOCABULARY, DERIVED FROM ITS SINGLE HOME AND NEVER SPELLED HERE.
@@ -112,13 +156,13 @@ else
 fi
 
 # --- Assertion 1: dry run writes NOTHING ----------------------------------------------
-bash "$ROT" "$LEDGER" >/dev/null 2>&1
+rot "$ROT" "$LEDGER" >/dev/null 2>&1
 [ "$(wc -l < "$LEDGER" | tr -d ' ')" = "$before_lines" ] \
   && ok "dry run (no --apply) leaves the ledger byte-for-byte unchanged" \
   || bad "dry run modified the ledger"
 
 # --- Assertion 2: rotate ---------------------------------------------------------------
-bash "$ROT" "$LEDGER" --apply >/dev/null 2>&1
+rot "$ROT" "$LEDGER" --apply >/dev/null 2>&1
 ARCH="$(dirname "$LEDGER")/push-candidate-ledger.archive.md"
 
 grep -q 'PC-OPEN-A'      "$LEDGER" && grep -q 'PC-OPEN-BULLET' "$LEDGER" \
@@ -319,7 +363,7 @@ xc_walk() { # <reverify> <ledger-dir> -> writes v1/v2/v3 raw verdicts into that 
   rm -f "$d/push-candidate-ledger.archive.md"
   xc_write "$led" 1;  xc_verdicts "$rv" "$led" > "$d/v1"
   xc_write "$led" 2;  xc_verdicts "$rv" "$led" > "$d/v2"
-  bash "$ROT" "$led" --apply >/dev/null 2>&1
+  rot "$ROT" "$led" --apply >/dev/null 2>&1
   xc_verdicts "$rv" "$led" > "$d/v3"
 }
 
@@ -369,7 +413,7 @@ else
 fi
 
 # --- Assertion 5: IDEMPOTENT -----------------------------------------------------------
-second="$(bash "$ROT" "$LEDGER" --apply 2>&1)"
+second="$(rot "$ROT" "$LEDGER" --apply 2>&1)"
 grep -q '0 closed entries' <<<"$second" \
   && ok "second run is a no-op (0 closed entries — rotation is idempotent)" \
   || bad "second run moved something: not idempotent — $second"
@@ -392,7 +436,7 @@ noop_facts() { # <rotate-script>
   dir="$WORK/noop-run"
   rm -rf "$dir"; mkdir -p "$dir"
   cp "$WORK/noop/push-candidate-ledger.md" "$dir/push-candidate-ledger.md"
-  out="$(bash "$rot" "$dir/push-candidate-ledger.md" --apply 2>"$dir/stderr")"
+  out="$(rot "$rot" "$dir/push-candidate-ledger.md" --apply 2>"$dir/stderr")"
   rc=$?
   NF_RC=0; NF_MSG=0; NF_ERR=1; NF_ARCH=1
   [ "$rc" -eq 0 ] && NF_RC=1
@@ -422,7 +466,7 @@ fi
 # KEPT entry "costs one more pull to notice" — but nothing noticed, because nothing reported
 # the gap. Measured on the reference consumer at 0.329.0: 8 such entries, while the same run
 # printed "0 closed entries — nothing to rotate".
-stuck_out="$(bash "$ROT" "$LEDGER" 2>&1)"
+stuck_out="$(rot "$ROT" "$LEDGER" 2>&1)"
 if grep -q 'CLOSED for re-verification but NOT archivable' <<<"$stuck_out"; then
   ok "an entry closed for re-verification but unarchivable is REPORTED, not silently kept"
 else
@@ -525,7 +569,7 @@ q_tok2="$(q_close_token 2)"
   printf '## PC-Q7 — closed by the SECOND token reverify honours, which rotate must archive too\n'
   printf '**%s (v0.202.0, verified 2026-07-21).** closed by a token no literal in this file spells.\n' "$q_tok2"
 } >> "$Q"
-q_out="$(bash "$ROT" "$Q" --archive "$WORK/quoting-archive.md" 2>&1)"
+q_out="$(rot "$ROT" "$Q" --archive "$WORK/quoting-archive.md" 2>&1)"
 q_moved="$(awk '/closed entries would move/{on=1;next} /^  archive:/{on=0} on' <<<"$q_out")"
 
 if grep -q 'PC-Q1' <<<"$q_moved"; then
@@ -639,7 +683,7 @@ rg_write() { printf '%s%s' "$rg_closed" "$2" > "$RG/$1.md"; }
 # rotator that died sourcing lib.sh also exits non-zero and would score as a refusal.
 rg_refused() {
   local out rc
-  out="$(bash "$ROT" "$RG/$1.md" 2>&1)"; rc=$?
+  out="$(rot "$ROT" "$RG/$1.md" 2>&1)"; rc=$?
   [ "$rc" -ne 0 ] || return 1
   grep -q 'REFUSING to rotate' <<<"$out" || return 1
   return 0
@@ -720,7 +764,7 @@ fp_check fp-versionless "SUBJECT DEFECT" "a real prose-titled entry with a VERSI
 # the two: an annotation lead-in and an entry title are byte-indistinguishable.
 #
 # THE TWO OUTCOMES ARE NOT SYMMETRIC, which is the whole of the argument. A wrong refusal is a
-# two-line edit; a wrong rotation is an entry. `scripts/backlog-rotate.sh:101-109` already
+# two-line edit; a wrong rotation is an entry. `scripts/backlog-rotate.sh:102-110` already
 # argues this stance for the fence case in this repo`s own tool, and the analysis file closes
 # on "the guard belongs in the tool".
 #
@@ -807,7 +851,7 @@ fi
 # `ledger_body_archives()` decides whether the entry ABOVE is closed, which is what makes a
 # non-id boundary inside it a refusal candidate at all -- it ARMS the refusal.
 # `ledger_entry_line_closes()` decides whether the SUSPECT LINE carries a close of its own,
-# which SUPPRESSES the refusal. `ledger-rotate.sh:242-247` and `:257-276` state why one is the
+# which SUPPRESSES the refusal. `ledger-rotate.sh:243-248` and `:258-277` state why one is the
 # archive grammar and the other the loose skip rule: they fail in opposite directions, so one
 # rule cannot serve both.
 #
@@ -897,7 +941,7 @@ fi
 #
 # THE TWO TESTS ASK A SIMILAR QUESTION AND FAIL IN OPPOSITE DIRECTIONS, so routing the arming
 # side through the loose rule is a mutation every arm above survives -- measured, scored ZERO
-# findings across this whole file until this arm existed. `ledger-rotate.sh:264-276` says it was
+# findings across this whole file until this arm existed. `ledger-rotate.sh:265-277` says it was
 # BUILT and MEASURED that way and that it WEDGES rotation; nothing in the fixture could see that.
 #
 # THE DISCRIMINATING INPUT WAS MISSING, NOT THE PROPERTY. Every seed above whose entry is closed
@@ -961,7 +1005,7 @@ fi
 # fixture has just PROVEN works — give the line an entry id — is one the banner actually
 # offers. Anchoring on the annotation half alone would pass a banner that names only the
 # destructive exit, which is the state this arm was written for.
-rg_msg="$(bash "$ROT" "$RG/fp-open.md" 2>&1)"
+rg_msg="$(rot "$ROT" "$RG/fp-open.md" 2>&1)"
 rg_msg_check() { # <text> -> 0 iff it carries the annotation remedy AND the entry-id exit
   grep -q 're-indent it so it does not start a line' <<<"$1" || return 2
   grep -q 'an entry id' <<<"$1" || return 1
@@ -1009,7 +1053,7 @@ verify: theirs_has core/scripts/s900-landed.sh "s900"
 
 verify: theirs_has core/scripts/thing.sh "MARKER_B"
 PCLED
-bash "$ROT" "$PC/led/push-candidate-ledger.md" --apply >/dev/null 2>&1
+rot "$ROT" "$PC/led/push-candidate-ledger.md" --apply >/dev/null 2>&1
 # THE HISTORY-DELETED TWIN: the same rotated live ledger, with no archive beside it.
 mkdir -p "$PC/nohist"
 cp "$PC/led/push-candidate-ledger.md" "$PC/nohist/push-candidate-ledger.md"
@@ -1089,7 +1133,7 @@ sed 's@(\\\*\\\*\[\^`\]\*)?@@' "$RV" > "$DV/off/ledger-reverify.sh"
 # The insertion is anchored on the FIRST derived token so nothing here spells the alternation.
 sed "s@$(q_close_token 1)|@$(q_close_token 1)|SUPERSEDED BY THE FIXTURE|@" "$RV" > "$DV/near/ledger-reverify.sh"
 
-dv_run() { bash "$DV/$1/ledger-rotate.sh" "$DV/led.md" --archive "$DV/$1/arch.md" 2>&1; }
+dv_run() { rot "$DV/$1/ledger-rotate.sh" "$DV/led.md" --archive "$DV/$1/arch.md" 2>&1; }
 
 if cmp -s "$RV" "$DV/off/ledger-reverify.sh"; then
   bad "FIXTURE BROKEN — removing the optional bold span from the close rule matched nothing, so the refusal arm below is unproven"
@@ -1159,7 +1203,7 @@ bl_ledger "$BLW/inbody.md" \
   '- **validate-ci-gates.sh** legacy id-less entry' \
   '  **ADOPTED UPSTREAM (v0.135.0, verified 2026-08-25).**'
 
-bl_moves() { bash "$ROT" "$1" --archive "$BLW/arch.md" 2>&1 | grep -c 'would move'; }
+bl_moves() { rot "$ROT" "$1" --archive "$BLW/arch.md" 2>&1 | grep -c 'would move'; }
 bl_on="$(bl_moves "$BLW/onboundary.md")"
 bl_in="$(bl_moves "$BLW/inbody.md")"
 
@@ -1198,7 +1242,7 @@ printf '%s\n' \
   '  Body text carrying no annotation.' '' \
   '## PC-BL-NOBOLD — ADOPTED UPSTREAM (absorbed before base acdae7a, verified 2026-07-24), no bold span' \
   '  Body line carrying no annotation of its own.' > "$BLW/nobold.md"
-bl_nb_out="$(bash "$ROT" "$BLW/nobold.md" --archive "$BLW/arch.md" 2>&1)"
+bl_nb_out="$(rot "$ROT" "$BLW/nobold.md" --archive "$BLW/arch.md" 2>&1)"
 bl_stuck="$(grep -c 'NOT archivable' <<<"$bl_nb_out")" || bl_stuck=0
 bl_nb_moved="$(grep -c 'would move' <<<"$bl_nb_out")" || bl_nb_moved=0
 if [ "$bl_stuck" -eq 1 ] && [ "$bl_nb_moved" -eq 0 ]; then
@@ -1215,7 +1259,7 @@ fi
 bl_ledger "$BLW/versionless.md" \
   '- **ADOPTED UPSTREAM (absorbed before base acdae7a, verified 2026-07-24).** thing' \
   '  Body line carrying no annotation of its own.'
-bl_vl_out="$(bash "$ROT" "$BLW/versionless.md" --archive "$BLW/arch.md" 2>&1)"
+bl_vl_out="$(rot "$ROT" "$BLW/versionless.md" --archive "$BLW/arch.md" 2>&1)"
 bl_vl_moved="$(grep -c 'would move' <<<"$bl_vl_out")" || bl_vl_moved=0
 bl_vl_stuck="$(grep -c 'NOT archivable' <<<"$bl_vl_out")" || bl_vl_stuck=0
 if [ "$bl_vl_moved" -eq 1 ] && [ "$bl_vl_stuck" -eq 0 ]; then
@@ -1248,7 +1292,7 @@ else
     '  Body text carrying no annotation.' '' \
     "- **${bl_tok2} 2026-07-25 — done.** legacy id-less, closed on its OWN boundary line" \
     '  Body line carrying no annotation of its own.' > "$BLW/tokboundary.md"
-  bl_tk_out="$(bash "$ROT" "$BLW/tokboundary.md" --archive "$BLW/arch.md" 2>&1)"
+  bl_tk_out="$(rot "$ROT" "$BLW/tokboundary.md" --archive "$BLW/arch.md" 2>&1)"
   bl_tk_moved="$(grep -c 'would move' <<<"$bl_tk_out")" || bl_tk_moved=0
   bl_tk_stuck="$(grep -c 'NOT archivable' <<<"$bl_tk_out")" || bl_tk_stuck=0
   if [ "$bl_tk_moved" -eq 1 ] && [ "$bl_tk_stuck" -eq 0 ]; then
@@ -1353,7 +1397,7 @@ if [ "$C71_RUN" = 1 ]; then
   C71_WANT=RRRRRRRSSSSRRRSS
   c71_one() { # <rotator> <seed> -> one letter (R refused, S rotates, E died)
     local out rc
-    out="$(bash "$1" "$RG/$2.md" 2>&1)"; rc=$?
+    out="$(rot "$1" "$RG/$2.md" 2>&1)"; rc=$?
     if [ "$rc" -ne 0 ] && grep -q 'REFUSING to rotate' <<<"$out"; then printf R
     elif [ "$rc" -eq 0 ]; then printf S
     else printf E; fi
@@ -1418,8 +1462,8 @@ if [ "$C6_RUN" = 1 ]; then
   c6_check() {
     local out rc
     cp "$2" "$C6/run.md"; rm -f "$C6/arch.md"
-    if [ "$3" = apply ]; then out="$(bash "$1" "$C6/run.md" --archive "$C6/arch.md" --apply 2>&1)"; rc=$?
-    else out="$(bash "$1" "$C6/run.md" --archive "$C6/arch.md" 2>&1)"; rc=$?; fi
+    if [ "$3" = apply ]; then out="$(rot "$1" "$C6/run.md" --archive "$C6/arch.md" --apply 2>&1)"; rc=$?
+    else out="$(rot "$1" "$C6/run.md" --archive "$C6/arch.md" 2>&1)"; rc=$?; fi
     [ "$rc" -eq 0 ] || return 3
     grep -q "WARN — .* entries stay in the live ledger after rotation, above the ceiling of ${C6_MAX}" <<<"$out" || return 1
     case "$3" in
@@ -1432,7 +1476,7 @@ if [ "$C6_RUN" = 1 ]; then
   }
   c6_quiet() { # <rotator> <ledger> -> 0 iff rc 0 and NO warning
     local out rc
-    out="$(bash "$1" "$2" --archive "$C6/arch.md" 2>&1)"; rc=$?
+    out="$(rot "$1" "$2" --archive "$C6/arch.md" 2>&1)"; rc=$?
     [ "$rc" -eq 0 ] && ! grep -q 'WARN' <<<"$out" && grep -q 'closed entries would move' <<<"$out"
   }
   c6_cells() { # <rotator> -> four letters: over-dry over-apply over-zero-closed at-quiet (P pass, F fail)
@@ -1455,6 +1499,51 @@ if [ "$C6_RUN" = 1 ]; then
 
   rm -rf "$C6"
 fi
+
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome --------------------------
+# The outcomes are exit x output class: 0 with the dry run's "would move" report, 0 with --apply's "moved" report
+# (and the ledger and archive it writes), 0 with the nothing-to-rotate line, 1 with the split refusal on stderr, 2 with
+# the usage line. One `FXCELL=<id> bash "$ROT"` start per outcome, each compared with the in-process call on the same
+# input: stdout, stderr and exit separately, byte for byte, plus the written files for --apply. Each cell also asserts
+# its own outcome (a positive conjunct, so two runs that both printed nothing cannot read as equivalent). A cell whose
+# run writes is handed the same fresh copy of its input both times, at the same path.
+EQ="$WORK/eq"; rm -rf "$EQ"; mkdir -p "$EQ/in"
+eq_seed() { [ -z "${1:-}" ] || cp "$1" "$EQ/in/push-candidate-ledger.md"; rm -f "$EQ/in/push-candidate-ledger.archive.md"; }
+eq_files() { cat "$EQ/in/push-candidate-ledger.md" "$EQ/in/push-candidate-ledger.archive.md" 2>/dev/null; }
+eqv() { # <cell-id> <seed ledger or ''> <subject args...> -> $EQ/<id>.{ip,cl}.{out,err,rc,files}
+  local id="$1" seed="$2"; shift 2
+  eq_seed "$seed"; rot "$ROT" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"; eq_files > "$EQ/$id.ip.files"
+  eq_seed "$seed"; FXCELL="$id" bash "$ROT" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"; eq_files > "$EQ/$id.cl.files"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+    && cmp -s "$EQ/$id.ip.files" "$EQ/$id.cl.files"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(head -1 "$EQ/$1.ip.out")" \
+  "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+EQL="$EQ/in/push-candidate-ledger.md"
+if eqv cli-dry "$ORIG" "$EQL" && [ "$(cat "$EQ/cli-dry.cl.rc")" = 0 ] && grep -q 'closed entries would move' "$EQ/cli-dry.cl.out" \
+   && cmp -s "$ORIG" "$EQL"; then
+  ok "cli-dry: the program's dry run reports what would move exactly as the in-process call does (stdout, stderr, exit 0, ledger untouched)"
+else bad "cli-dry: the program and the in-process call differ, or the outcome is not exit 0 with a would-move report ($(eq_twin cli-dry))"; fi
+if eqv cli-apply "$ORIG" "$EQL" --apply && [ "$(cat "$EQ/cli-apply.cl.rc")" = 0 ] && grep -q '^ledger-rotate: moved ' "$EQ/cli-apply.cl.out" \
+   && grep -q 'PC-CLOSED-A' "$EQ/in/push-candidate-ledger.archive.md"; then
+  ok "cli-apply: the program's --apply moves the closed entries exactly as the in-process call does (stdout, stderr, exit 0, ledger and archive bytes)"
+else bad "cli-apply: the program and the in-process call differ, or the outcome is not exit 0 with the closed entries archived ($(eq_twin cli-apply))"; fi
+if eqv cli-noop "$WORK/noop/push-candidate-ledger.md" "$EQL" --apply && [ "$(cat "$EQ/cli-noop.cl.rc")" = 0 ] \
+   && grep -q 'nothing to rotate' "$EQ/cli-noop.cl.out" && [ ! -f "$EQ/in/push-candidate-ledger.archive.md" ]; then
+  ok "cli-noop: the program's nothing-to-rotate exit matches the in-process call (stdout, stderr, exit 0, no archive)"
+else bad "cli-noop: the program and the in-process call differ, or the outcome is not exit 0 with the nothing-to-rotate line ($(eq_twin cli-noop))"; fi
+if eqv cli-refuse "$RG/splitter.md" "$EQL" --apply && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 1 ] \
+   && grep -q 'REFUSING to rotate' "$EQ/cli-refuse.cl.err" && [ ! -s "$EQ/cli-refuse.cl.out" ] && cmp -s "$RG/splitter.md" "$EQL"; then
+  ok "cli-refuse: the program refuses a splitting ledger exactly as the in-process call does (stdout, stderr, exit 1, nothing written)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 1 with the split refusal ($(eq_twin cli-refuse))"; fi
+if eqv cli-usage '' && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && [ "$(cat "$EQ/cli-usage.cl.err")" = "usage: ledger-rotate.sh <ledger-path> [--archive <path>] [--apply]" ]; then
+  ok "cli-usage: the program's usage refusal matches the in-process call (stdout, stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-usage))"; fi
+if ! cmp -s "$EQ/cli-dry.cl.out" "$EQ/cli-apply.cl.out" && ! cmp -s "$EQ/cli-dry.cl.rc" "$EQ/cli-refuse.cl.rc" \
+   && ! cmp -s "$EQ/cli-refuse.cl.rc" "$EQ/cli-usage.cl.rc"; then
+  ok "the cli cells are distinct outcomes (dry and apply differ in output; exits 0, 1 and 2 differ)"
+else bad "the cli cells do not discriminate: two of them read the same outcome"; fi
 
 echo
 report_end ledger-rotate

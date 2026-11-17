@@ -3,8 +3,9 @@
 # one --scope run each (52 runs, 2 starts each, become 2 batches). From one counted run through core/scripts/hermetic-run.sh.
 # 452 to 394, BL-1059: Gd, Ge, Gf and Gg read the reader runs B1a, B1e and B7a made on the same records (Gf also lost an unread
 # duplicate run), and Bt1 reuses the Sc arms' per-path --scope runs for the 8 paths they drove. From one counted run through core/scripts/hermetic-run.sh.
-394 *
+397 *
 0 core/scripts/check-owed-derivations.sh
 0 core/scripts/core-paths.sh
 0 core/scripts/validate-artifact-derivations.sh
-3 core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+1 core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+4 inproc:core/skills/ai-dlc-update/reconcile/derivation-differential.sh

@@ -27,13 +27,53 @@ DRIFT="$(pick "${2:-}" "$HERE/../../../core/skills/ai-dlc-update/reconcile/layer
 [ -n "$LINTER" ] || { echo "FIXTURE ERROR: cannot locate validate-layer-entries.sh" >&2; exit 2; }
 [ -n "$DRIFT" ]  || { echo "FIXTURE ERROR: cannot locate layer-drift.sh" >&2; exit 2; }
 
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found beside $HERE" >&2; exit 2; }
+
+# IN PROCESS (BL-878). Both subjects are driven in process: `ld_ip <args>` answers what `bash "$DRIFT" <args>` gives
+# and `vle_ip <args>` what `bash "$LINTER" <args>` gives, each in a subshell made to look like a fresh bash that sources
+# the subject (its guard returns after defining <p>_main) and calls its entry (core/fixtures/lib/inproc.sh). Neither is
+# inproc_load-ed, so every pass is logged under the path it sourced. lib.sh builds its own blob memo only at
+# BASH_SUBSHELL 0, which no subshell is, so `ld_ip` hands each run a fresh private memo, as the program builds one per
+# run. The cli equivalence cells live in layer-title-join (layer-drift) and layer-reference-resolution (the linter), so
+# this fixture starts neither as a program. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with neither its
+# `<p>_main() {` line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an ok); exactly one
+# half is a respelled subject and FAILs; a subject grep cannot READ is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$DRIFT" ld_main; g_ld=$?
+wrap_gate "$LINTER" vle_main; g_vle=$?
+if [ "$g_ld" = 2 ] || [ "$g_vle" = 2 ]; then exit 2; fi
+if [ "$g_ld" = 1 ] || [ "$g_vle" = 1 ]; then echo "layer-qualifier-grain: 1 FAILED" >&2; exit 1; fi
+if [ "$g_ld" = 3 ] || [ "$g_vle" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+ld_ip() { # what `bash "$DRIFT" "$@"` gives, in process, with a fresh private memo
+  local _m _rc
+  _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
+  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$DRIFT" ld_main "$@"; _rc=$?
+  rm -rf "$_m"; return "$_rc"
+}
+vle_ip() { inproc_run "$LINTER" vle_main "$@"; }
+
 ROOT="$(bash "$HERE/seed.sh")"
 trap 'rm -rf "$ROOT"' EXIT
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"; BAD="$ROOT/bad-consumer"
 BASE="$(git -C "$DIST" rev-parse --short HEAD~1)"
 THEIRS="$(git -C "$DIST" rev-parse --short HEAD)"
-
-. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 echo "layer-qualifier-grain:"
 
@@ -41,7 +81,7 @@ echo "layer-qualifier-grain:"
 status_for() { printf '%s\n' "$DRIFT_OUT" | awk -v e="$1" -F'\t' '$2 ~ e {print $1}' | sort -u | tr '\n' ' '; }
 
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$DRIFT")" && pwd)/$(basename "$DRIFT")"
-DRIFT_OUT="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
+DRIFT_OUT="$(ld_ip "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
 
 # --- Part 0: the seed is a real range, and the classifier ran ------------------
 # Every assertion below is shaped "this status did NOT appear". A run that produced
@@ -94,7 +134,7 @@ esac
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$LINTER")" && pwd)/$(basename "$LINTER")"
 L_DIR="$(cd "$(dirname "$LINTER")" && pwd -P)"
 [ -f "$L_DIR/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED $L_DIR/artifact-path-config.sh"
-BAD_OUT="$(bash "$LINTER" "$BAD" 2>&1)"
+BAD_OUT="$(vle_ip "$BAD" 2>&1)"
 
 # The linter arms are DATA: <arm> -> message fragment.
 lpat() {
@@ -141,7 +181,7 @@ assert_msg "E14 rejects gate_types: on a kind no row loads"      e14
 # --- Part 3: THE DISCRIMINATION CONTROL ---------------------------------------
 # Every arm above is an "it fired" assertion, and all of them are satisfied by a
 # linter that errors on every entry. The clean tree is what says otherwise.
-GOOD_OUT="$(bash "$LINTER" "$CONS" 2>&1)"
+GOOD_OUT="$(vle_ip "$CONS" 2>&1)"
 if grep -q '^ERROR' <<<"$GOOD_OUT"; then
   bad "the CLEAN consumer drew errors — the new arms fire on well-formed entries, so every Part 2 assertion above is consistent with a linter that simply rejects everything:
 $(printf '%s' "$GOOD_OUT" | grep '^ERROR' | sed 's/^/        /')"

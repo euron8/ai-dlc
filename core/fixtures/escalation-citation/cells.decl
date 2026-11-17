@@ -1,0 +1,9 @@
+# escalation-citation's starts of core/scripts/validate-escalation-resolution.sh (BL-879 grammar). Every other drive is
+# in process: run.sh loads the validator once (inproc_load) and calls ver_main through inproc_run. One cli cell per
+# distinct CLI outcome (exit 0 a verified citation, exit 1 a missing citation, exit 2 a directory refused), each
+# started as FXCELL=<id> bash "$VALIDATOR" in eqv() and compared byte for byte with the in-process call on the same
+# input; and one e2e cell, the sup/argv cell of sv_cell.
+cli core/scripts/validate-escalation-resolution.sh cli-pass
+cli core/scripts/validate-escalation-resolution.sh cli-finding
+cli core/scripts/validate-escalation-resolution.sh cli-refused
+e2e core/scripts/validate-escalation-resolution.sh sup-argv why=its bound is the program's own bash -x trace under ulimit -f, and inproc_run resets xtrace, so in process a looping parser would be bounded by nothing

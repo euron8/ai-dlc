@@ -242,6 +242,7 @@
 # `git` derivations read the shared refs from both roots. Runtime is roughly the validator's cost
 # twice, run in parallel -- tens of seconds per side on the reference consumer. apply.sh pays that once per
 # ordinary pull; `emit-report.sh` never invokes this script, which is why it is exempt from I105.
+dd_main() {
 set -uo pipefail
 
 PROG=derivation-differential
@@ -279,7 +280,7 @@ if [ "$OWED_SET" -eq 1 ]; then
 fi
 [ "$_n" -eq 4 ] || refuse usage "expected four arguments. Usage: $PROG.sh <dist> <base> <consumer> <theirs> [--base-root <dir>]"
 
-SELF="$(cd "$(dirname "$0")" && pwd)"
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ---- lift the ONE join and the ONE mapper ------------------------------------------------
 eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$SELF/preclassify.sh" 2>/dev/null)"
@@ -1010,3 +1011,6 @@ if [ "$N_NF" -gt 0 ]; then
 fi
 say_row VERDICT "_bmad-output/" "zero NEWLY-FAILING: this pull broke no recorded derivation. STALE-BOTH rows are pre-existing debt outside this row's scope; UNASSESSABLE rows are not cleared by this verdict and need a hand adjudication."
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+dd_main "$@"

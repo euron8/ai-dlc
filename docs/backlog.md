@@ -45,7 +45,7 @@ permanently. An irrelevant but real identifier is left to review. This is enforc
 non-HEAD revision are exempt.
 
 **THIS FILE'S `sh` POLARITY IS THE OPPOSITE OF THE CONSUMER LEDGER'S, AND THE TWO ARE WRITTEN
-IN THE SAME SESSIONS.** Here, `scripts/backlog-reverify.sh:334-335` reads **exit 0 as "the fix
+IN THE SAME SESSIONS.** Here, `scripts/backlog-reverify.sh:335-336` reads **exit 0 as "the fix
 is present"** and non-zero as "still reproduces". In a consumer's push-candidate ledger,
 `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:2929` reads it the other way — **exit 0
 means the entry STILL REPRODUCES**, and non-zero proposes CLOSE-CANDIDATE. Carrying this file's
@@ -1729,7 +1729,7 @@ Cross-reference: the dev-side full-collection run is now read through `record-on
 
 **PARTIAL (batch 257); the section-empty arm landed in v0.1134.0.** `validate-handoff-evidence.sh` handoff mode gains arm (r) SECTION-EMPTY, a WARN that never changes the exit: `WARN section-empty <story>` when `## Production Integrity Tests` or `## Smoke Test Updates` sits at level 2 with no content line before the next level-1 or level-2 heading. Empty is arm (p)'s Dev Agent Record content grammar plus one placeholder rule for these two sections (a line opening `to be populated` or `to be filled` once list markers and `*_()` are stripped), which reads graph s322 story 4's `(to be filled by the dev: ...)` as empty. The operator lifted the batch-230 "empty evidence headings: no arm" ruling for a warning arm only; a refusal is not authorized, and the archive entry's history is unchanged. FALSE-POSITIVE SET, measured before building, read-only file:// clone of graph at c8ab65397: the arm's awk, extracted from the edited script, over every s317-s322 code-review and QA pass whose reviewed-sha resolves and names a story, 375 states (42 excluded, unmeasured: 15 record no sha, 27 name no story file). 18 fires over 16 story states; the DAR and heading verdicts are byte-identical to the previous script on all 375. 10 fires are gate-1 code-review passes. 8 are QA passes: 6 were QA-rejected on exactly this ground (s317 1-4, 4-2a; s320 1-3, 2-1, 3-5; s322 4) and 2 were QA-accepted (s317 1-6 evidence-only, s317 2-7 docs-only), which now get a warning only. Fixture: `story-evidence-receipts` SECTION-EMPTY, five offenders (empty, the s322 placeholder, a comment, a bare subheading, an empty Smoke Test Updates) and five near-misses (a table, fenced content, a subheading with a line, `none: <reason>`, a placeholder beside a real line), each read for its WARN line and exit 0. Still owed, unchanged by this arm: value evidence that the step's cost buys a catch no other step makes, and core `qa.md`'s Handoff Evidence Precondition not requiring the invocation to be the full collection (BL-1016 reads the run at handoff).
 
-**Progress (batch 257, wave 5, 2026-11-15).** The filter half of the `qa.md` owed item is met on origin/main 39184970b by BL-1016's landing: `core/team-roles/qa.md:103-109` (Handoff Evidence Precondition) REJECTs a recorded invocation that `record-only-diff.sh run-filter` refuses, naming a file or node-id argument as a partial run, and `core/scripts/validate-handoff-evidence.sh:1222` refuses it at handoff as `full-collection-filtered`. Driven in one invocation on that tree: run-filter on graph s322 story 1.3's shape (`pytest` naming three server test files) exits 1, "names a file or test node"; the controls `pytest` and `pytest -q` exit 0. The working-directory half is NOT met and stays owed by this entry: `qa.md`'s Handoff Evidence Precondition asks for the run's working directory but never requires it to be the repo root (`repo root` is on 0 lines of `core/team-roles/qa.md`, against `working directory` on 4 lines there and `repo root` on 1 line of `core/team-roles/dev.md`, same tree; `validate-handoff-evidence.sh` checks only that a working directory is written, at its `full-collection-missing` and `dependency-setup-missing` refusals), and the probe above carried its working directory as text inside the run-filter value, so it shows nothing about that half. Owed, buildable in core: a `qa.md` REJECT for a full-collection run whose working directory is not the repo root, with the matching `validate-handoff-evidence.sh` arm, built after BL-1036's `run-filter` change lands so the two do not overlap. Still owed, and closable only on a consumer sprint's measurement: value evidence that the step's cost buys a catch no other step makes.
+**Progress (batch 257, wave 5, 2026-11-15).** The filter half of the `qa.md` owed item is met on origin/main 39184970b by BL-1016's landing: `core/team-roles/qa.md:103-109` (Handoff Evidence Precondition) REJECTs a recorded invocation that `record-only-diff.sh run-filter` refuses, naming a file or node-id argument as a partial run, and `core/scripts/validate-handoff-evidence.sh:1230` refuses it at handoff as `full-collection-filtered`. Driven in one invocation on that tree: run-filter on graph s322 story 1.3's shape (`pytest` naming three server test files) exits 1, "names a file or test node"; the controls `pytest` and `pytest -q` exit 0. The working-directory half is NOT met and stays owed by this entry: `qa.md`'s Handoff Evidence Precondition asks for the run's working directory but never requires it to be the repo root (`repo root` is on 0 lines of `core/team-roles/qa.md`, against `working directory` on 4 lines there and `repo root` on 1 line of `core/team-roles/dev.md`, same tree; `validate-handoff-evidence.sh` checks only that a working directory is written, at its `full-collection-missing` and `dependency-setup-missing` refusals), and the probe above carried its working directory as text inside the run-filter value, so it shows nothing about that half. Owed, buildable in core: a `qa.md` REJECT for a full-collection run whose working directory is not the repo root, with the matching `validate-handoff-evidence.sh` arm, built after BL-1036's `run-filter` change lands so the two do not overlap. Still owed, and closable only on a consumer sprint's measurement: value evidence that the step's cost buys a catch no other step makes.
 
 **PARTIAL (batch 257); the recorded-working-directory arm landed in v0.1136.0.** The rule is BL-1036's, by lead ruling: a full-collection run is made from the repository root or from a path `docs/coding-conventions.md` declares canonical. `core/team-roles/qa.md` Handoff Evidence Precondition REJECTs a run recorded from a narrower relative directory, and `validate-handoff-evidence.sh` (header (k), RECORDED WORKING DIRECTORY; `ev_cwdfilter_fc`) refuses it `full-collection-filtered`. It does so on a value RUN-GATE accepts as an unfiltered run whose first `working directory` or `cwd` annotation names a relative directory (backticked, or a bare word carrying a `/`), by asking `record-only-diff.sh run-span` for the invocation and `run-filter`, with the conventions, for `cd "<dir>" && <invocation>`; `record-only-diff.sh` is not edited. Before the change `` `pytest -q`, working directory `server/` `` was accepted while `` `cd server && pytest -q` `` was refused. Not judged, the RECORDED-DIRECTORY RESIDUAL: an absolute, `~`, `<placeholder>` or `$VAR` directory (the gate cannot know the dev's worktree path), prose such as `from the worktree root` or `in <dir>`, a bare word with no `/`, a `--cwd` option (THE RELOCATION RESIDUAL), an invocation carrying its own `cd`/`pushd`, a declared wrapper's span, and a value the capture-heads count route accepts (RUN-GATE 4), whose run claim is the capture's command line and whose recorded directory is not read. FALSE-POSITIVE SET, measured before the arm refuses, read-only on a bare file:// clone of graph with every ref fetched: the 76 distinct `Full-collection run:` values in all story-file history, each driven through the base (d619fe62a) and the changed validator, once with no conventions file and once with graph's `docs/coding-conventions.md` at ed61de745. 0 verdicts moved in either mode, and the set is empty. Control in the same harness: a 77th value recording `web/` moves from accepted to `full-collection-filtered` in both modes, and nothing else moves. By annotation the 76 are 24 with none, 23 absolute or placeholder, 26 root wording and 3 relative (`server/` once, `infra/` twice), each of those 3 repeating a `cd` already in its invocation. So the arm's predicted catch rate on this history is below one. Fixture: `story-evidence-scaffold`'s rf1016-d1/-d1-nm, wv957-run-dir and wv957-cov-comma worlds now record `./`, since their subjects are a filter and collect-only boundaries, not the directory. Still owed, closable only on a consumer sprint's measurement: value evidence that the step's cost buys a catch no other step makes.
 
@@ -2557,6 +2557,145 @@ Remainder: the rows of `scripts/fixture-inprocess-allowlist.txt` (`bash scripts/
 - Every shipping converted fixture (adversarial-citation, check-24 a, b, c) carries the pre-wrap consumer gate, proven on a tree built by `scripts/install.sh`: the wrapped subject passes; the base subject reads SKIP through `lib/layout.sh` `fx_skip_exit` (exit 0, no ok; the same subject in the distribution layout is FIXTURE BROKEN, exit 2); a subject without the guard FAILs (exit 1); a `chmod 000` subject is FIXTURE ERROR (exit 2).
 - Hand mutant, run once: arm F7's `[ "$opts" -lt 2 ]` set to `-lt 1` turns shard a red on exactly its in-process cells adjudication-one-option and F7-one-option (2 of 113), the four cli cells green.
 
+**Progress (batch 258, C4; the entry stays PARTIAL, `verify:` unchanged, no LANDED line).** Fifty-two rows in eleven hand groups are converted and are gone from `scripts/fixture-inprocess-allowlist.txt`, which is regenerated by `--derive`: 138 -> 86 rows. It loses exactly those 52 rows and gains none. The derive also rewrites the reason text of the remediator-shard-join and remediator-shard-join-b rows to what the join now reads, because W12-18's `vac_main` call had moved them while the committed text stayed as it was. On the combined tree, `bash scripts/validate-fixture-inprocess.sh --complete` exits 1 with `  INCOMPLETE  86 allowlist row(s) remain in scripts/fixture-inprocess-allowlist.txt` over 292 fixtures scanned. No FAIL or OWED line there names a converted fixture.
+
+Rows converted, by group:
+- **layer-drift / relabel:** layer-absorption-retire, layer-adjudication-tier, layer-catalog-collision, layer-qualifier-grain, layer-readopt-gate-c, layer-title-join, relabel-theirs-collision.
+- **validate-layer-entries:** consumer-machinery-inventory, layer-anchor-declaration, layer-artifact-path-prescriptions, layer-conforms-to, layer-entry-unreadable, layer-extends-grain, layer-retired-id-crosswalk.
+- **emit-report / derivation-differential:** derivation-differential, emit-report-refusal, owed-derivations, reconcile-emit-report and its `-b` and `-c`.
+- **reconcile drift and rotation:** layer-readopt-gate, ledger-rotate, retired-layer-token, setup-config-drift.
+- **reconcile sites, fixtures and settings:** retired-fixture-orphan, retired-layer-passage, settings-merge-documented-form, settings-merge-unparseable-template, setup-site-drift.
+- **backlog scripts:** backlog-ledger, backlog-real-ledger, backlog-rotate-fence-guard, backlog-size-ceiling.
+- **audit / trunk / escalation:** audit-anchors-schema, escalation-citation, trunk-audit-classes, trunk-audit-gate, trunk-push-bound.
+- **bmad / layer-debt / write-format / stub-audit:** bmad-invocation-resolve, check-15-bypass, layer-debt-due-and-discharge, layer-debt-ledger, write-format-steering-multiformat.
+- **fanout / drivability / coverage / conservation:** fanout-payload-channel, fanout-untracked-corpus, fixture-drivability, request-coverage, snapshot-conservation.
+- **provenance:** known-skills-extension, provenance-flagless-default, provenance-not-accessible, story-provenance.
+
+The wrap `<p>_main() { <body> }`, then the bare column-0 guard `[ "${BASH_SOURCE[0]}" = "$0" ] || return 0`, then `<p>_main "$@"` is applied to thirty subjects:
+- **Thirteen under `core/skills/ai-dlc-update/reconcile/`:** `layer-drift.sh` (ld), `relabel-extension-checks.sh` (rec), `emit-report.sh` (er), `derivation-differential.sh` (dd), `unregistered-drift.sh` (ud), `register-drift.sh` (rd), `readopt-override.sh` (rov), `ledger-rotate.sh` (lrot), `retired-layer-token.sh` (rlt), `setup-site-drift.sh` (ssd), `retired-fixtures.sh` (rf), `retired-layer-passage.sh` (rlp) and `settings-merge.sh` (sm).
+- **Three under `scripts/`:** `backlog-reverify.sh` (brv), `backlog-rotate.sh` (brt) and `validate-backlog-size.sh` (vbs).
+- **Fourteen under `core/scripts/`:** `validate-audit-anchors.sh` (vaa), `validate-cycle-commits.sh` (vcc), `validate-trunk-audit-gate.sh` (vtag), `validate-escalation-resolution.sh` (ver), `validate-bmad-invocations.sh` (vbi), `audit-layer-debt.sh` (ald), `validate-write-format-steering.sh` (vwfs), `validate-stub-audit.sh` (vstub), `report-propagation-fanout.sh` (rpf), `validate-fixture-drivability.sh` (vfd), `validate-request-coverage.sh` (vrc), `validate-snapshot-conservation.sh` (vsc), `validate-provenance-block.sh` (pb) and `stamp-story-provenance.sh` (sp).
+
+`validate-layer-entries.sh` (`vle_main`) and `validate-backlog-receipts.sh` (`vbr_main`) were already wrapped and are unchanged.
+
+Self-reads ported from `$0` to `${BASH_SOURCE[0]}`, each named:
+- the `SELF` / `SELF="${0%/*}"` line in layer-drift, relabel-extension-checks, emit-report, derivation-differential, unregistered-drift, register-drift, readopt-override, ledger-rotate, retired-layer-token and retired-layer-passage;
+- `SELF_DIR` in validate-request-coverage and validate-stub-audit;
+- validate-stub-audit's `--help` sed;
+- validate-escalation-resolution's `--help` sed, `STEER_SCRIPT=` and `SUPP_SCRIPT=`;
+- the root lookup in backlog-reverify, backlog-rotate and validate-backlog-size, plus backlog-reverify's root-not-found message and `SELF_NAME`, and validate-backlog-size's no-VERSION message.
+
+Non-pure deviations, each named:
+- `unregistered-drift.sh`'s eval'd `machinery_paths()` text has `"$0"` rewritten to `"$PRECLASSIFY_SRC"`, the same shape as self-update-gate.sh. The rewrite is a bash parameter expansion on the captured text, so it starts no extra process.
+- `validate-snapshot-conservation.sh`'s `--help` range moves from `'2,86p'` to `'2,85p'`, and drops a stray `set -uo pipefail` line from the `--help` output.
+- In seven reconcile scripts (emit-report, readopt-override, register-drift, retired-fixtures, retired-layer-passage, retired-layer-token, unregistered-drift), bash's own `${N:?}` usage message reports a line number one higher; it shows only on a wrong argument count, which no shipped caller produces.
+- A stale `${0%/*}` comment stays above the ported SELF line in unregistered-drift and retired-layer-token, kept for the pure move.
+- `stamp-story-provenance.sh` and `validate-provenance-block.sh` are pure moves with no port.
+
+Two carried items are closed in shipped code.
+- **The guard hook's five `printf | jq` reads** (`core/hooks/ai-dlc-gate-remediation-guard.sh` `hook_pretool_head`, now lines 795-817) are one `jq -j` start. It is NUL-framed and rebuilt to the old output: a NUL inside a value is dropped, trailing newlines are stripped, and values from several documents are joined. It reads through the hook's first process substitution. The hand differential covers 27 payload shapes with 0 DIFF under `/bin/bash` 3.2 and jq 1.7.1. Removing the NUL strip gives 1 DIFF, removing the trailing trim 18, and removing the per-value newline 2. It is not tested on jq 1.6. Mutating `.agent_id` to `.agent_idX` turns gate-remediation-deny red. It moves no counts, since jq is not a bash start.
+- **The record-only-diff label read** in `core/scripts/validate-handoff-evidence.sh` `render_dar` (`he_ro_label`) sources `record-only-diff.sh` in a subshell with the label arguments, then calls `ro_main label`. A pre-guard copy answers through its own label branch, and an absent file gives 127. The differential covers 26 cases with 0 DIFF. New cells cli-ro-label-hit and cli-ro-label-miss sit in story-evidence-scaffold's EQUIV block, group b, and only the new cell catches dropping `ro_main` in `-b`. The story-evidence-scaffold-b decl moves: `*` 42 -> 39; `record-only-diff.sh` 25 -> 22; `inproc:` record-only-diff 842 -> 704 and validate-handoff-evidence 170 -> 172.
+
+Rows as `*` / subject starts -> tip `*` / subject / `inproc:`, from each hand's counted run:
+- layer-absorption-retire: 11 / 10 -> 1 / 0 / 10, 0 cli.
+- layer-adjudication-tier: 88 / 71 -> 22 / 0 / 71, 0 cli; driven through `inproc_run` without `inproc_load`.
+- layer-qualifier-grain: 5 -> 2; layer-drift 1 -> 0 and validate-layer-entries 2 -> 0; `inproc:` 1 + 2.
+- layer-readopt-gate-c: 4 / 1 -> 3 / 0 / 1; the edit is in the parent's unit c3.
+- layer-title-join: 41 / 19 -> 30 / 8 / 19, 5 cli. A new `apply.sh` row has 3 starts. Three of the 8 layer-drift starts are apply.sh's own detector child (3 e2e cells, plus `nested apply.sh -> layer-drift.sh`).
+- layer-catalog-collision: 20 -> 2; validate-layer-entries 4 -> 0 and relabel 2 -> 0; `inproc:` drift 6, validate-layer-entries 10, relabel 2. Twelve `bash -c` runs of extracted functions are now in-process evaluations paired with `fx_inproc`.
+- relabel-theirs-collision: 6 / 4 -> 5 / 3 / 5, 3 cli.
+- consumer-machinery-inventory: 14 / 13 -> 3 / 2 / 16, 2 cli.
+- layer-anchor-declaration: 4 / 2 -> 3 / 1 / 3, 1 cli.
+- layer-artifact-path-prescriptions: 13 / 11 -> 3 / 1 / 3, 1 cli.
+- layer-conforms-to: 7 / 5 -> 4 / 2 / 8, 2 cli.
+- layer-entry-unreadable: 19 / 10 -> 7 / 3 / 19, 3 cli.
+- layer-extends-grain: 7 / 1 -> 7 / 1 / 3, 1 cli.
+- layer-retired-id-crosswalk: 8 / 6 -> 4 / 2 / 9, 2 cli.
+- reconcile-emit-report: 171 / 19 -> 179 / 5 / 30, 5 cli. Its `*` rises by 8: cli-render costs a full program render plus its in-process twin.
+- reconcile-emit-report-b: 225 / 20 -> 199 / 0 / 26, no cells.
+- reconcile-emit-report-c: 191 / 12 -> 176 / 0 / 15, no cells.
+- emit-report-refusal: 478 / 2 -> 476 / 2 / 19, 2 cli.
+- derivation-differential: 363 / 55 -> 322 / 3 / 60, 3 cli.
+- owed-derivations: 394 / 3 -> 397 / 1 / 4, 1 cli. Its `*` rises by 3 because its cli writer run starts its own children.
+- layer-readopt-gate: 33 -> 12; readopt-override 22 -> 4, register-drift 2 -> 3, unregistered-drift 5 -> 1; `inproc:` 26 / 5 / 6; 8 cli. register-drift rises to give 3 distinct CLI outcomes.
+- ledger-rotate: 60 / 49 -> 14 / 5 / 56, 5 cli.
+- setup-config-drift: 30 / 16 -> 15 / 4 / 18, 2 cli and 2 e2e (`ulimit -f` runs).
+- retired-layer-token: 74 / 23 -> 57 / 5 / 21, 2 cli, 3 e2e and 1 nested. It has a new `emit-report.sh` row with 2 starts.
+- setup-site-drift: 13 / 12 -> 4 / 3 / 15, 3 cli.
+- retired-fixture-orphan: 6 / 3 -> 4 / 3 / 8, 3 cli.
+- retired-layer-passage: 24 / 8 -> 18 / 4 / 9, 4 cli.
+- settings-merge-documented-form: 6 / 5 -> 4 / 3 / 8, 3 cli.
+- settings-merge-unparseable-template: 11 / 10 -> 3 / 2 / 12, 2 cli.
+- backlog-ledger: 97 -> 21; reverify 55 -> 9, rotate 23 -> 2; `inproc:` 64 / 25; 4 cli plus nested rotate -> reverify.
+- backlog-rotate-fence-guard: 50 / 28 -> 26 / 2 / 30, 2 cli.
+- backlog-size-ceiling: 44 -> 8; size 21 -> 3, reverify 22 -> 4; `inproc:` 24 / 26; 5 cli plus nested size -> reverify.
+- backlog-real-ledger: 18 -> 20; size 2 -> 3, reverify 5 -> 6, receipts 10 -> 10; `inproc:` 5 / 2. Its `*` rises by 2, a second CLI outcome each for size and reverify. The receipts validator stays as 3 e2e cells plus 4 nested.
+- audit-anchors-schema: 29 / 27 -> 5 / 3 / 30, 3 cli.
+- trunk-push-bound: 9 / 8 -> 3 / 2 / 10, 2 cli.
+- trunk-audit-classes: 33 / 27 -> 12 / 2 / 29, 2 cli.
+- escalation-citation: 157 / 91 -> 71 / 4 / 94, 3 cli and 1 e2e (sup-argv).
+- trunk-audit-gate: 36 / 12 -> 34 / 12, 2 cli, 10 e2e and 3 nested (cycle-commits 11, audit-anchors 1, escalation-resolution 2).
+- bmad-invocation-resolve: 23 / 21 -> 5 / 3 / 24, 3 cli.
+- layer-debt-ledger: 10 / 9 -> 3 / 2 / 11, 2 cli.
+- layer-debt-due-and-discharge: 11 / 10 -> 2 / 1 / 11, 1 cli.
+- write-format-steering-multiformat: 9 / 4 -> 4 / 2 / 9, 2 cli.
+- check-15-bypass: 45 / 4 -> 46 / 3 / 4, 3 cli. Its `*` rises by 1 because each cli cell repeats a `core-paths.sh` resolver start.
+- fanout-untracked-corpus: 3 / 2 -> 4 / 3 / 5, 3 cli. Its `*` rises by 1 for the cli-root resolution cell.
+- fanout-payload-channel: 11 / 6 -> 11 / 2 / 8, 2 cli.
+- snapshot-conservation: 12 / 10 -> 5 / 3 / 13, 3 cli.
+- request-coverage: 48 / 22 -> 31 / 3 / 27, 3 cli.
+- fixture-drivability: 5 / 3 -> 4 / 2 / 5, 2 cli.
+- known-skills-extension: 7 / 5 -> 4 / 2 / 7, 2 cli.
+- provenance-flagless-default: 18 / 16 -> 5 / 3 / 19, 3 cli.
+- provenance-not-accessible: 4 / 3 -> 3 / 2 / 5, 2 cli.
+- story-provenance: 61 -> 10; stamp-story-provenance 45 -> 4, validate-provenance-block 2 -> 2; `inproc:` 55 / 8; 6 cli, including the w-cli-walk and r-cli-walk root-walk cells run from cwd `/`.
+
+Deviations the hands reported:
+- **Not using `lib/inproc.sh`.** P2 reads `. "$1"` as an unrouted drive or as an unpaired source wherever a fixture declares an unguarded bash subject. So these fixtures source the subject in a stripped subshell paired with `fx_inproc`:
+  - layer-title-join;
+  - retired-layer-token, through its own `rlt_run`, which copies `inproc_run`'s clean-up and so departs from contract clause C8; its `vec()` now names its 17 predicates literally;
+  - emit-report-refusal, derivation-differential and owed-derivations, with no caller-variable reset; the cli twins are the equivalence evidence.
+- **Rotate and size start reverify as a program.** backlog-ledger and backlog-size-ceiling answer that start through a fixture-local `bash` shim. The shim sources reverify in a subshell reset to fresh-bash state and calls `brv_main`, and its output is byte-identical to the CLI.
+- **Shared seed.** The shared `reconcile-emit-report/seed.sh` renders in process only under `RER_SEED_INPROC=1`. procsub-staged-refusal-boot keeps its program run, with its decls unchanged. The `-b` and `-c` drivers accept a `SKIP:` verdict line that names their shard.
+- **Fresh memos.** Each in-process reconcile call gets a fresh `AI_DLC_RECONCILE_MEMO`.
+- **Pre-wrap gate.** Every shipping converted fixture carries the pre-wrap consumer gate. owed-derivations answers a writer that carries neither wrap half with SKIP and then `fx_skip_exit` before any assertion.
+- **retired-layer-passage.** The BL-355 locale-fold check drops its second identical N1 run, and N3 compares against N1.
+- **retired-fixture-orphan.** The memo cell's copy moves under `rfo-memo-dir/core/skills/ai-dlc-update/reconcile/` for J7.
+- **Documentation.** provenance-flagless-default's README is updated by two lines.
+
+No hand added or removed a hand-rolled `git init`.
+
+Left open:
+- trunk-audit-gate's 10 worlds that reach the audit stay e2e. Cutting gate starts needs the shipped Check 36 to source its siblings.
+- layer-readopt-gate shards b, d and e still start readopt-override, unregistered-drift and register-drift as programs. They are not allowlist rows and declare no `!` line.
+- check-24-b and check-24-c are owed on the receipt route.
+- receipt-bl706.sh is not converted; its direct calls run only in owed-derivations-c.
+- ledger-rotate lacks the C2 `AI_DLC_*` unset loop, which is pre-existing.
+- 13 bootstrapping rows are excluded from this release.
+- The K00 44-row component and the other deferred components are not taken.
+- Item 3, the matrix allowlist, is moot for this release.
+- Stale line citations remain in files this release does not edit. Each pair is the citing file and line, then the cited line at the base:
+  - `core/fixtures/backlog-real-ledger/ledger.snapshot:36` -> `backlog-reverify.sh:334-335`
+  - `core/fixtures/gate-repair-record/run.sh:203` and `seed.sh:166` -> `ai-dlc-gate-remediation-guard.sh:1110-1111`
+  - `core/fixtures/reconcile-blocking-list/run.sh:210` -> `emit-report.sh:814`
+  - `core/hooks/ai-dlc-acknowledge.sh:78` -> `ai-dlc-gate-remediation-guard.sh:797`, a line h10 rewrote
+  - `core/scripts/check-owed-derivations.sh:206` -> `ledger-rotate.sh:136`
+  - `core/scripts/check-owed-derivations.sh:265` -> `ai-dlc-gate-remediation-guard.sh:1025-1039`
+  - `core/scripts/gate_adjudication.py:541` -> `ai-dlc-gate-remediation-guard.sh:1110-1111`
+  - `core/scripts/validate-escalation-status-vocabulary.sh:186` -> `validate-escalation-resolution.sh:272`
+  - `core/skills/ai-dlc-update/reconcile/apply.sh:1445` -> `unregistered-drift.sh:737`
+  - `core/skills/ai-dlc-update/reconcile/preclassify.sh:340` -> `unregistered-drift.sh:204-214`
+  - `scripts/plan-rotate.sh:21`, `:29`, `:34`, `:486` and `:681` -> `backlog-rotate.sh:66`, `:115`, `:71`, `:88` and `:339`
+  - `scripts/validate-backlog-receipts.sh:1055` -> `backlog-reverify.sh:87`
+  - `scripts/validate-shell-portability.sh:236` -> `emit-report.sh:726`
+
+  Citations in records (the CHANGELOG, the backlog archive, and the analysis, plans, reviews and versioned-spec documents under `docs/`) are left as written.
+- BL-1164 owns the six fixtures that bypass `lib/inproc.sh` because of P2: layer-title-join, retired-layer-token, emit-report-refusal, derivation-differential, owed-derivations and trunk-push-bound.
+
+fixture-git-env-seam drives the converted trunk-push-bound `run.sh` inside its own sandbox, and that sandbox lacked the libs trunk-push-bound now sources, so the inner run exited 2. Declaring `lib/inproc.sh` in the seam failed P2 at `inproc.sh:51` and `:96`, because the seam declares the unguarded subject `scripts/validate-fixture-git-env.sh`. So trunk-push-bound no longer uses `lib/inproc.sh`: its `tpb_ip` sources the validator in a subshell paired with `fx_inproc` and calls `vaa_main`. The seam's `inputs.decl` now declares `lib/mutant.sh` and `lib/layout.sh`, and marks `core/scripts/validate-audit-anchors.sh` as a `!` input. Its `run.sh` prints that input's HERMETIC-CONSUMED line itself, because the inner run's line is captured. Its `*` and validate-audit-anchors rows are the lead's to set. NOTE: the seam's B1 cell asserts only the victim's state, not the inner setup-config-drift's rc.
+
+Count rows expected to move, which the lead ratchets: story-evidence-scaffold (a), `-c`, `-d` and `-g`, smoke-surface-ignored, and story-evidence-receipts, all from the record-only-diff label change. gate-transition's `*` row also moves, 380 -> 362, in a counted run on the combined tree. Unconfirmed and not reproduced: one counted run of emit-report-refusal under a non-default TMPDIR read 2 fewer `git-split/git` starts (parent layer-drift.sh, cell a5) than every default-TMPDIR log, so that count may depend on the TMPDIR path.
+
 **Close condition.** The allowlist is empty and BL-879's check passes over the whole suite. The receipt runs that check in its completion mode, which exits non-zero while any allowlist row remains, so the entry cannot close the day the check lands. At the 0.986.0 base `bash scripts/validate-fixture-inprocess.sh --complete` exits 1 with `  INCOMPLETE  177 allowlist row(s) remain in scripts/fixture-inprocess-allowlist.txt`, so the receipt reads STILL-LIVE for that reason.
 
 The receipt's reads of `scripts/validate-enforcement-map.sh`, `scripts/validate-fixture-hygiene.sh` and `scripts/validate-fixture-invocations.sh` are guarded (W6-10): under `--complete`, an absent or unopenable input makes the driver exit 9, which R13 reads as could-not-measure. R13 still reads `core/fixtures/lib/mutant.sh`, `scripts/fixture-inprocess-allowlist.txt` and the ENUMERATED removal as unguarded (exit 1). Its ceiling is `DEFAULT_MAX_R13` in `scripts/validate-backlog-receipts.sh`, which the two-sided ratchet holds equal to that live count.
@@ -3183,5 +3322,29 @@ The remainder, from the `# H14` header of `scripts/validate-fixture-hygiene.sh` 
 Owed: decide which of these sets an arm can bind (the wrapper-rewrite escape first, since it defeats H14 itself), and measure and enumerate each candidate arm's false-positive set before shipping it.
 
 Provenance: batch 258, C2, filed on H14's landing; id allocated by the lead (ai-dlc-84).
+
+verify: manual
+
+
+
+## BL-1164 — `lib/inproc.sh` cannot be used in a fixture that declares an unguarded bash subject or a second subject, because P2 reads inproc.sh's own sources as unpaired drives
+
+**DEFECT.** OPEN. Filed 2026-11-17. Owner: unassigned (`scripts/validate-fixture-invocations.sh` P2, run by `scripts/validate-fixture-inprocess.sh`; `core/fixtures/lib/inproc.sh`).
+
+In a fixture that declares an unguarded bash subject, or a second subject, P2 judges `core/fixtures/lib/inproc.sh`'s own source lines as unpaired in-process drives. Those lines are `:51` (`. "$1" || return 1` in `inproc_load`) and `:96` (`. "$_inproc_s"` in `inproc_run`). Such a fixture cannot use the library that contract clause C8 names as the one entry point. Instead it sources its subject itself.
+
+Fixtures that bypass `lib/inproc.sh` for this reason, from batch 258 C4 (BL-878):
+- layer-title-join, which declares `apply.sh` as a `!` input, uses an inline stripped subshell plus `fx_inproc`.
+- retired-layer-token uses its own `rlt_run`, which copies `inproc_run`'s clean-up, against clause C8.
+- emit-report-refusal, derivation-differential and owed-derivations source the subject in a subshell paired with `fx_inproc`, without `inproc_run`'s caller-variable reset. Their cli twins are the equivalence evidence.
+- trunk-push-bound uses `tpb_ip`, the same form without the variable reset. The cause is a second-order one: fixture-git-env-seam runs trunk-push-bound's `run.sh` inside its own sandbox, and the seam declares the unguarded subject `scripts/validate-fixture-git-env.sh`. Declaring `lib/inproc.sh` in the seam so the inner run could source it made P2 fail the seam at `inproc.sh:51` and `:96`.
+
+Session ai-dlc-11 (C10) is changing P2 in this batch, to per-call counting and to reading `core/fixtures/<fx>/` and `core/fixtures/lib/` directory lines. Read at 258-C10 73c74146b (c47b91ff7, the P2 change), the change adds no exemption or routing for `lib/inproc.sh`'s own source lines: no non-comment line of its diff names `inproc`. So it does not cover this gap. It was not run against these fixtures.
+
+Owed: make P2 attribute `lib/inproc.sh`'s two source lines to the `inproc_load`/`inproc_run` call that drives them, with the `fx_inproc` inside `inproc_run` as their pairing. Then move the six fixtures back onto `inproc_run` and delete `rlt_run` and `tpb_ip`.
+
+Receipt: `verify: manual`. The fix is proved when each of the six fixtures drives its subject through `inproc_run` and `bash scripts/validate-fixture-inprocess.sh` reports no P2 row at `inproc.sh:51` or `:96`.
+
+Provenance: batch 258, cluster C4 (BL-878), reported by the h1, h3 and h4 hands; id allocated by the lead.
 
 verify: manual

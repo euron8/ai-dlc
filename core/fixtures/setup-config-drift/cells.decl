@@ -1,0 +1,8 @@
+# setup-config-drift's starts of core/skills/ai-dlc-update/reconcile/unregistered-drift.sh (BL-879 grammar). Every
+# other drive is in process: run.sh loads the subject once and calls ud_main through inproc_run in a subshell. One cli
+# cell per distinct CLI outcome (exit 0 with the classified rows, exit 2 with the memo refusal), each compared byte for
+# byte with the in-process call on the same input.
+cli core/skills/ai-dlc-update/reconcile/unregistered-drift.sh cli-rows
+cli core/skills/ai-dlc-update/reconcile/unregistered-drift.sh cli-refuse
+e2e core/skills/ai-dlc-update/reconcile/unregistered-drift.sh e2e-forced-blob why=the run is under ulimit -f, which binds every write of its process, and an in-process pass's fx_inproc append under the limit is lost
+e2e core/skills/ai-dlc-update/reconcile/unregistered-drift.sh e2e-forced-hunks why=the run is under ulimit -f, which binds every write of its process, and an in-process pass's fx_inproc append under the limit is lost

@@ -152,6 +152,7 @@
 #
 # bash 3.2+ and Python 3.
 
+vcc_main() {
 TRUNK="${AI_DLC_TRUNK:-main}"
 
 # ============================================================================
@@ -1013,3 +1014,7 @@ else:
     print(f"RESULT: PASS -- all artifacts have >={min_cycles} cycles with matching log rows.")
     sys.exit(0)
 PYEOF
+}
+# Loadable: sourcing defines vcc_main and runs nothing; run as a program, it runs vcc_main.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vcc_main "$@"

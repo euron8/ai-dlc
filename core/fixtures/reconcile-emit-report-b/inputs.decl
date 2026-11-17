@@ -4,6 +4,9 @@ core/skills/ai-dlc-update/reconcile/
 # lib rows derived from the sibling reconcile-emit-report/run.sh:2 (preamble.sh) and :156 (report.sh).
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh
 core/fixtures/reconcile-emit-report/run.sh
 core/fixtures/reconcile-emit-report/seed.sh
 core/fixtures/reconcile-emit-report-c/run.sh

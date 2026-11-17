@@ -1,3 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-191 *
-12 core/skills/ai-dlc-update/reconcile/emit-report.sh
+# BL-878 (batch 258 C4): emit-report.sh runs in process (seed.sh and run.sh: inproc_load once, er_main through inproc_run); its remaining starts are the cli cells of cells.decl. One counted run through core/scripts/hermetic-run.sh.
+176 *
+0 core/skills/ai-dlc-update/reconcile/emit-report.sh
+15 inproc:core/skills/ai-dlc-update/reconcile/emit-report.sh

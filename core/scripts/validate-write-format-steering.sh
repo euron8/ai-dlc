@@ -82,6 +82,7 @@
 #
 # Compatible with bash 3.2 and Python 3 stdlib.
 
+vwfs_main() {
 set -uo pipefail
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -478,3 +479,6 @@ echo "  The four Rule 25(a) planning histories are OUTSIDE this population — t
 echo "  'planning-artifacts', which the population schema declares only at top level. Reaching"
 echo "  them is a widening of that schema, not a gap in this join."
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vwfs_main "$@"

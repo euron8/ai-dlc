@@ -1,0 +1,13 @@
+# story-provenance's starts of its two subjects (BL-879 grammar). Every other drive is in process: cpy() asks the
+# writer (sp_main) or the reader (pb_main), or a copy of either placed in a world, in a subshell made to look like a
+# fresh bash (lib/inproc.sh inproc_run). One cli cell per distinct CLI outcome -- the writer's exit 0 (--check of a
+# current stamp), exit 1 (--check of a drifted one), exit 2 (an unknown profile) and --print-schema from cwd / with no
+# override in a BL-302 world copy (the root walk from the script's own directory), the reader's exit 0 -- each
+# started as FXCELL=<id> bash "$sj" in eqv() and compared byte for byte with the in-process call.
+# r-cli-walk is the reader's walk from cwd / in the same world, keyed on the extension only its walked root holds.
+cli core/scripts/stamp-story-provenance.sh w-cli-ok
+cli core/scripts/stamp-story-provenance.sh w-cli-drift
+cli core/scripts/stamp-story-provenance.sh w-cli-usage
+cli core/scripts/validate-provenance-block.sh r-cli-pass
+cli core/scripts/stamp-story-provenance.sh w-cli-walk
+cli core/scripts/validate-provenance-block.sh r-cli-walk

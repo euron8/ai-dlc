@@ -1,3 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-11 *
-10 core/skills/ai-dlc-update/reconcile/layer-drift.sh
+# In process (BL-878): layer-drift.sh starts 0 times here (layer-title-join owns its cli cells); its 10 drives are ld_ip
+# passes, counted from one run's fx_inproc log. The `*` row is the base's, owed a counted re-measure.
+1 *
+0 core/skills/ai-dlc-update/reconcile/layer-drift.sh
+10 inproc:core/skills/ai-dlc-update/reconcile/layer-drift.sh

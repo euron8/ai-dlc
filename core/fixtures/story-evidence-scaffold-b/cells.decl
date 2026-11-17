@@ -18,3 +18,5 @@ e2e core/scripts/sprint-status.sh cli-ss-untracked why=the byte-for-byte CLI twi
 nested core/scripts/validate-handoff-evidence.sh core/scripts/record-only-diff.sh why=the CLI validator shells to its record-only-diff.sh sibling, as shipped
 nested core/scripts/validate-handoff-evidence.sh core/scripts/sprint-status.sh why=the CLI validator shells to its sprint-status.sh sibling, as shipped
 nested core/scripts/record-only-diff.sh core/scripts/record-only-diff.sh why=record-only-diff.sh calls itself as bash "$0" <mode>, as shipped
+e2e core/scripts/record-only-diff.sh cli-ro-label-hit why=the byte-for-byte CLI twin of the validator in-process label read (he_ro_label) on a matching document
+e2e core/scripts/record-only-diff.sh cli-ro-label-miss why=the byte-for-byte CLI twin of the validator in-process label read (he_ro_label) on a non-matching document

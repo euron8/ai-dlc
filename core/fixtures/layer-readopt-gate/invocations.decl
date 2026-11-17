@@ -1,5 +1,8 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-33 *
-22 core/skills/ai-dlc-update/reconcile/readopt-override.sh
-2 core/skills/ai-dlc-update/reconcile/register-drift.sh
-5 core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output); the subject starts are the cli cells of cells.decl, every other drive of the three subjects in process (BL-878).
+12 *
+4 core/skills/ai-dlc-update/reconcile/readopt-override.sh
+3 core/skills/ai-dlc-update/reconcile/register-drift.sh
+1 core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+26 inproc:core/skills/ai-dlc-update/reconcile/readopt-override.sh
+5 inproc:core/skills/ai-dlc-update/reconcile/register-drift.sh
+6 inproc:core/skills/ai-dlc-update/reconcile/unregistered-drift.sh

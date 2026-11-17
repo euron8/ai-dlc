@@ -33,6 +33,7 @@
 #        1 = collisions found and NOT applied (dry-run with work outstanding)
 #        2 = usage error, or the extension walk did not run, or an anchor set could not be
 #            staged for reading (a refusal, no verdict)
+rec_main() {
 set -uo pipefail
 # GLOBBING IS OFF FOR THE WHOLE FILE: no line here relies on pathname expansion, and an unquoted
 # expansion that did would resolve against the caller's cwd, never the consumer.
@@ -40,7 +41,7 @@ set -f
 
 # `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
 # `/x.sh` is `/`, which is what `dirname` answered.
-case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
 SELF="$(cd "$SELF" && pwd)"
 # Every consumer read goes through consumer-read.sh, which refuses a `..` or absolute path.
 . "$SELF/consumer-read.sh" || { echo "relabel-extension-checks: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
@@ -296,3 +297,7 @@ fi
 echo "relabel-extension-checks: ${found} colliding heading(s) need the [ext:<id>] label."
 echo "  Re-run with --apply to write them. The integer never moves; only the label is added."
 exit 1
+}
+# Sourced (BL-878): define rec_main and return; run as a program: run it.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rec_main "$@"

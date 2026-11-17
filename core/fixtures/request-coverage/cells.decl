@@ -1,0 +1,7 @@
+# request-coverage's starts of core/scripts/validate-request-coverage.sh (BL-879 grammar). Every other drive is in
+# process: run.sh loads the validator once and asks vrc_main through inproc_run (the BL-327 copies are sourced in their
+# own subshell). One cli cell per distinct CLI outcome (exit 0 PASS, exit 1 dropped identifiers, exit 2 missing capture
+# file), each started as FXCELL=<id> bash in eqv() and compared byte for byte with the in-process call on the same input.
+cli core/scripts/validate-request-coverage.sh cli-pass
+cli core/scripts/validate-request-coverage.sh cli-fail
+cli core/scripts/validate-request-coverage.sh cli-error

@@ -1,0 +1,6 @@
+# known-skills-extension's starts of core/scripts/validate-provenance-block.sh (BL-879 grammar). Every other drive
+# is in process: run.sh loads the validator once (lib/inproc.sh) and asks pb_main in a subshell. One cli cell per
+# distinct CLI outcome (exit 0 the skill registered by the extension, exit 1 no extension), each started as
+# FXCELL=<id> bash "$VALIDATOR" in eqv() and compared byte for byte with the in-process call under the same extension.
+cli core/scripts/validate-provenance-block.sh cli-pass
+cli core/scripts/validate-provenance-block.sh cli-fail

@@ -55,6 +55,7 @@
 #   1  at least one directory is neither
 #   2  usage error
 
+vfd_main() {
 set -u
 
 # I52 binds this string to `EXEMPT_MARKER` in scripts/validate-enforcement-map.sh.
@@ -184,3 +185,6 @@ fi
 
 say "PASS  every fixture directory is driven or declares why it cannot be."
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vfd_main "$@"

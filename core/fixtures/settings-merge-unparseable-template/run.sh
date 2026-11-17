@@ -100,6 +100,24 @@ trap 'rm -rf "$WORK"' EXIT
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# The subject is driven IN PROCESS (BL-878): sourced once, `sm_main` called in a subshell per drive, each drive one
+# fx_inproc pass. This fixture is .dist-only, so the subject is always this tree's wrapped one; a subject missing
+# either half of the wrap is a broken fixture world, never a SKIP.
+grep -q '^sm_main() {$' "$SUBJECT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJECT (grep exit $_gx)" >&2; exit 2; }
+[ "$_gx" -eq 0 ] || { echo "FIXTURE BROKEN: $SUBJECT carries no \`sm_main() {\` line, so it cannot be driven in process" >&2; exit 2; }
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJECT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJECT (grep exit $_gx)" >&2; exit 2; }
+[ "$_gx" -eq 0 ] || { echo "FIXTURE BROKEN: $SUBJECT carries no column-0 source guard; sourcing it would run sm_main in this shell" >&2; exit 2; }
+. "$SUBJECT" || { echo "FIXTURE BROKEN: sourcing $SUBJECT failed" >&2; exit 2; }
+declare -F sm_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $SUBJECT defined no sm_main" >&2; exit 2; }
+sm_run() { ( set +o pipefail
+  fx_inproc "$SUBJECT"
+  sm_main "$@" ); }
 
 # --- seeds ------------------------------------------------------------------------------------
 CONSUMER="$WORK/settings.json"
@@ -127,8 +145,8 @@ jq -e . "$S_SCALAR" >/dev/null 2>&1 && jq -e . "$S_HOOKS" >/dev/null 2>&1 \
 # --- the arms, as functions, so the subject is scored by ONE instrument ------
 RC=0
 OUT=""
-run_check() { # run_check <script> <template>
-  OUT="$(bash "$1" --consumer "$CONSUMER" --template "$2" --check 2>&1)"
+run_check() { # run_check <script> <template>; <script> is the resolved subject, sourced above and driven in process
+  OUT="$(sm_run --consumer "$CONSUMER" --template "$2" --check 2>&1)"
   RC=$?
 }
 
@@ -217,6 +235,30 @@ else
   bad "cwd-DEPENDENT: from \$WORK the failing set is [${elsewhere:-none}], from the process cwd it is [${here_now:-none}]. A verdict that moves with the caller's directory is not a verdict."
 fi
 
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome this fixture drives -----
+# The outcomes: exit 0 with the `yes` verdict and the ask: block on stdout, and exit 1 with the FAIL: refusal naming the
+# template on stderr. One `FXCELL=<id> bash "$SUBJECT"` start per outcome, each compared with the in-process call on the
+# same inputs: stdout, stderr and exit separately, byte for byte. Each cell asserts its own outcome, and they must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE BROKEN: cannot create $EQ" >&2; exit 2; }
+eqv() { # <cell-id> <template> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" t="$2"
+  sm_run --consumer "$CONSUMER" --template "$t" --check > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$SUBJECT" --consumer "$CONSUMER" --template "$t" --check > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -c 300 "$EQ/$1.ip.out")" "$(head -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -c 300 "$EQ/$1.cl.out")" "$(head -c 300 "$EQ/$1.cl.err")"; }
+if eqv cli-yes "$S_GOOD" && [ "$(cat "$EQ/cli-yes.cl.rc")" = 0 ] && grep -qx 'model_window_needed=yes' "$EQ/cli-yes.cl.out" \
+   && grep -q '^ask: ' "$EQ/cli-yes.cl.out" && [ ! -s "$EQ/cli-yes.cl.err" ]; then
+  ok "cli-yes: the program answers model_window_needed=yes with the ask: block exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-yes: the program and the in-process call differ, or the outcome is not exit 0 with the yes verdict ($(eq_twin cli-yes))"; fi
+if eqv cli-refuse "$S_HOOKS" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 1 ] && [ ! -s "$EQ/cli-refuse.cl.out" ] \
+   && grep -q "^FAIL: .*$S_HOOKS" "$EQ/cli-refuse.cl.err"; then
+  ok "cli-refuse: the program refuses an unevaluable template exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not the exit-1 FAIL: refusal ($(eq_twin cli-refuse))"; fi
+if ! cmp -s "$EQ/cli-yes.cl.rc" "$EQ/cli-refuse.cl.rc" && ! cmp -s "$EQ/cli-yes.cl.out" "$EQ/cli-refuse.cl.out"; then
+  ok "cli cells discriminate: the verdict and the refusal give different output and exit"
+else bad "cli cells do not discriminate: the verdict and the refusal read the same"; fi
 
 printf '\n'
 report_end "$NAME"

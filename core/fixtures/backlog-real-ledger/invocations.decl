@@ -3,7 +3,16 @@
 # Measured by one counted run through core/scripts/hermetic-run.sh (the judge's own J3 output) at this change's tip; the
 # push's counted run is the second.
 # Over the frozen ledger.snapshot (BL-872), so a docs/backlog.md edit no longer moves these rows.
-18 *
+# BL-878 (batch 258 C4): 18 -> 20 *, 10 -> 10 validator, 2 -> 3 size, 5 -> 6 reverify, plus 5 + 2 inproc. The ceiling and
+# the classifier run in process; their starts are now the cli cells of cells.decl (size: cli-size-ok and cli-size-over,
+# plus R9's ceiling start; reverify: cli-rv-rows and cli-rv-de, R9's classifier start and the --marker-last child of each
+# of the three ceiling starts). The +1 on each is the second CLI outcome the equivalence pair needs. inproc reverify 5:
+# the j1 rows (b16's declared-empty branch, a second rows pass, does not run on the snapshot), cli-rv-rows' and cli-rv-de's in-process sides,
+# and the shim's answer to the ceiling's --marker-last child in its two in-process passes; inproc size 2: those two
+# passes. Measured by one counted run (scripts/seed-verdict-store.sh, the judge's own J3 and J7 output).
+20 *
 10 scripts/validate-backlog-receipts.sh
-2 scripts/validate-backlog-size.sh
-5 scripts/backlog-reverify.sh
+3 scripts/validate-backlog-size.sh
+6 scripts/backlog-reverify.sh
+5 inproc:scripts/backlog-reverify.sh
+2 inproc:scripts/validate-backlog-size.sh

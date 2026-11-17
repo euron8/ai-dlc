@@ -1,9 +1,10 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge's own J2 output). Every subject is asked in process (he-inproc.sh), so the starts are the run's own bash and, in group b, EQUIV's CLI rows.
-42 *
+# 42 -> 39 and 25 -> 22 (BL-878 item 2): render_dar's label read is in process in the shipped validator (he_ro_label), so the CLI validator rows start record-only-diff.sh five times fewer; the cli-ro-label-hit/-miss cells add two. inproc record-only-diff 842 -> 704 (that read no longer passes he-inproc.sh's bash shim), validate-handoff-evidence 170 -> 172 (the two cells' sources).
+39 *
 10 core/scripts/validate-handoff-evidence.sh
 5 core/scripts/sprint-status.sh
-25 core/scripts/record-only-diff.sh
+22 core/scripts/record-only-diff.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
-842 inproc:core/scripts/record-only-diff.sh
+704 inproc:core/scripts/record-only-diff.sh
 138 inproc:core/scripts/sprint-status.sh
-170 inproc:core/scripts/validate-handoff-evidence.sh
+172 inproc:core/scripts/validate-handoff-evidence.sh

@@ -46,7 +46,16 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 SIB="$HERE/../reconcile-emit-report"
 [ -f "$SIB/seed.sh" ] \
   || { echo "FIXTURE ERROR: sibling reconcile-emit-report/seed.sh not found beside this unit" >&2; exit 2; }
-WORK="$(bash "$SIB/seed.sh")" || { echo "FIXTURE ERROR: the sibling seed failed" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# The sibling seed reads emit-report.sh's two in-process wrap halves before it sources it (its header
+# says why): 3 is a subject that predates the wrap (SKIP, never an ok), 4 one carrying one half (FAIL).
+WORK="$(RER_SEED_INPROC=1 bash "$SIB/seed.sh")"; _seed_rc=$?
+case "$_seed_rc" in
+  0) ;;
+  3) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  4) echo "emit-report-refusal: FAIL (1) -- emit-report.sh carries one half of the in-process wrap (the seed names it above)" >&2; exit 1 ;;
+  *) echo "FIXTURE ERROR: the sibling seed failed" >&2; exit 2 ;;
+esac
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
@@ -54,6 +63,19 @@ RDIR="$(dirname "$EMIT")"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/emit-report.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# IN PROCESS (BL-878). Every render and --verify below is er_ip: a subshell that sources the engine copy it is
+# handed and calls its er_main, so the subject's `exit`, traps and `set` stay there, and a copy of reconcile/ finds
+# ITS stubbed siblings beside itself. `hash -r` empties the inherited command hash, so a `PATH=<shim>:$PATH er_ip`
+# prefix reaches the shim as it reached a fresh `bash emit-report.sh`. Each pass is one fx_inproc logged under
+# $EMIT (the inproc: row). NOT lib/inproc.sh's inproc_run: this fixture declares an unguarded bash subject
+# (validate-hook-registration.sh), and inproc.sh's own operand sources then read as unpaired P2 drives here.
+# The two cli cells (cells.decl) are the only command-line starts, each compared byte for byte.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+er_ip() { # er_ip <emit-report.sh path> <args...> -> the subject's stdout, stderr and exit
+  local _e="$1"; shift
+  ( fx_inproc "$EMIT"; . "$_e" || exit 126; hash -r; er_main "$@" )
+}
 echo "emit-report-refusal:"
 
 R="$WORK/err"; mkdir -p "$R/sh" "$R/prog" "$R/out"
@@ -116,7 +138,26 @@ C3="$R/c3"; cp -R "$CONSUMER" "$C3"
 # the DETECTOR-REFUSED set matched, so how often load reached the orientation-diff race decided which
 # render A6 read. The engine's diff no longer races (A7's forced half proves it 5 of 5), so a single
 # render must match; a mismatch is a broken seed, refused here, never retried into agreement.
-bash "$EMIT" "$DIST" "$BASE" "$C3" "$THEIRS" > "$R/a6-region.md" 2>/dev/null
+# THE cli CELLS (cells.decl): emit-report.sh run as a PROGRAM once per distinct outcome this unit asserts,
+# each compared with the in-process call on the same input -- stdout, stderr and exit, byte for byte -- and
+# each asserting its own outcome, so two runs that both printed nothing cannot read as equivalent.
+# cli-a6-render is A6's approval render itself (print mode, exit 0, the region on stdout); cli-refuse, below,
+# is the refusing input, a --verify whose supplied region file is unreadable (exit 2, the refusal on stderr).
+# The --verify outcomes 0, 1 and 3 are reconcile-emit-report's cli cells.
+EQ="$R/eq"; mkdir -p "$EQ"
+err_eqv() { # <cell-id> <subject args...> -> 0 when the program and the in-process call agree byte for byte
+  local id="$1"; shift
+  SHIM_FIRED="$EQ/$id.ip.fired" er_ip "$EMIT" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  SHIM_FIRED="$EQ/$id.cl.fired" FXCELL="$id" bash "$EMIT" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+err_twin() { printf 'in-process rc=%s lines=%s err=[%s] / program rc=%s lines=%s err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(grep -c . "$EQ/$1.ip.out")" \
+  "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(grep -c . "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+if err_eqv cli-a6-render "$DIST" "$BASE" "$C3" "$THEIRS" && [ "$(cat "$EQ/cli-a6-render.cl.rc")" = 0 ] \
+   && grep -qF 'BEGIN GENERATED: reconcile-mechanical' "$EQ/cli-a6-render.cl.out"; then
+  ok "cli-a6-render: the program renders A6's approval region exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-a6-render: the program and the in-process call differ, or the render is not exit 0 with a region ($(err_twin cli-a6-render))"; fi
+cp "$EQ/cli-a6-render.ip.out" "$R/a6-region.md"
 grep '^DETECTOR-REFUSED' "$R/a6-region.md" > "$R/a6-refused.txt"; grep '^DETECTOR-REFUSED' "$REGION" > "$R/region-refused.txt"
 cmp -s "$R/a6-refused.txt" "$R/region-refused.txt" \
   || { echo "FIXTURE BROKEN: A6's approval render refused a different detector set from the seed region's" >&2; exit 2; }
@@ -124,6 +165,13 @@ cmp -s "$R/a6-refused.txt" "$R/region-refused.txt" \
 git -C "$DIST" show "${BASE}:core/schemas/thing.json" > "$C3/.claude/schemas/thing.json" 2>/dev/null
 grep -q 'HARD-UNREGISTERED-CORE-DRIFT' "$R/a6-region.md" && ! cmp -s "$C3/.claude/schemas/thing.json" "$CONSUMER/.claude/schemas/thing.json" \
   || { echo "FIXTURE ERROR: A6's approval carries no HARD row, or the resolution changed nothing" >&2; exit 2; }
+if err_eqv cli-refuse --verify --region-from "$R/no-such-region.md" "$R/a6-approved.md" "$DIST" "$BASE" "$C3" "$THEIRS" \
+   && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] && grep -qF 'cannot read the supplied region file' "$EQ/cli-refuse.cl.err"; then
+  ok "cli-refuse: the program refuses an unreadable region file exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 2 with the refusal line ($(err_twin cli-refuse))"; fi
+if ! cmp -s "$EQ/cli-a6-render.cl.rc" "$EQ/cli-refuse.cl.rc" && ! cmp -s "$EQ/cli-a6-render.cl.out" "$EQ/cli-refuse.cl.out"; then
+  ok "cli cells discriminate: the render and the refusal give different stdout and exit"
+else bad "cli cells do not discriminate: cli-a6-render and cli-refuse gave the same stdout or exit"; fi
 
 # --- PROGRAMS -----------------------------------------------------------------------------
 # Every program is a copy of the WHOLE reconcile/ directory (emit-report.sh resolves $SELF
@@ -184,7 +232,7 @@ a8_prog() { # a8_prog <dir> <emit-source> <rows...> -> a reconcile/ copy whose d
   { echo '#!/usr/bin/env bash'; for r in "$@"; do printf "printf '%%s\\\\n' '%s'\n" "$r"; done; echo 'exit 0'; } > "$d/predicate-differential.sh"
 }
 a8_sect() { # a8_sect <dir> -> the rendered Predicate reclassification section
-  bash "$1/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$1.out" 2>/dev/null
+  er_ip "$1/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$1.out" 2>/dev/null
   sect "$1.out" '**Predicate reclassification'
 }
 a8_want_s='PREDICATE-STABLE  validate-x.sh  population: root=`_bmad-output` corpus=`*p*` series=`s/$//`'
@@ -208,11 +256,11 @@ A9STUB
 }
 a9_run() { # a9_run <dir> -> "<rc-before-write> <rc-after-write>"
   local d="$1" r1 r2
-  bash "$d/emit-report.sh" "$DIST" "$BASE" "$d.c" "$THEIRS" > "$d.region" 2>/dev/null
+  er_ip "$d/emit-report.sh" "$DIST" "$BASE" "$d.c" "$THEIRS" > "$d.region" 2>/dev/null
   { echo "# Reconcile report (fixture)"; echo; cat "$d.region"; } > "$d.report"
-  bash "$d/emit-report.sh" --verify "$d.report" "$DIST" "$BASE" "$d.c" "$THEIRS" >/dev/null 2>&1; r1=$?
+  er_ip "$d/emit-report.sh" --verify "$d.report" "$DIST" "$BASE" "$d.c" "$THEIRS" >/dev/null 2>&1; r1=$?
   printf 'a9\n' > "$d.c/_bmad-output/a9/a9-pass2.md"
-  bash "$d/emit-report.sh" --verify "$d.report" "$DIST" "$BASE" "$d.c" "$THEIRS" >/dev/null 2>&1; r2=$?
+  er_ip "$d/emit-report.sh" --verify "$d.report" "$DIST" "$BASE" "$d.c" "$THEIRS" >/dev/null 2>&1; r2=$?
   printf '%s %s' "$r1" "$r2"
 }
 
@@ -225,7 +273,7 @@ ren() { # ren <prog> <arm> <shim-or-> <theirs> <consumer> [<emit>]
   local o="$R/out/$1" p="$PATH" e="${6:-$R/prog/$1/emit-report.sh}"
   [ "$3" != - ] && p="$R/sh/$3:$PATH"
   : > "$o/$2.fired"
-  env PATH="$p" SHIM_FIRED="$o/$2.fired" bash "$e" "$DIST" "$BASE" "$5" "$4" > "$o/$2.out" 2>/dev/null
+  PATH="$p" SHIM_FIRED="$o/$2.fired" er_ip "$e" "$DIST" "$BASE" "$5" "$4" > "$o/$2.out" 2>/dev/null
   echo "$?" > "$o/$2.rc"
 }
 unit_of() { # <arm> -> the unit whose run decides it
@@ -236,9 +284,9 @@ unit_of() { # <arm> -> the unit whose run decides it
 }
 h1_unit() { # <prog> -> $R/out/<prog>/H1.v = "<identical yes|no> <verify rc> <unregistered named yes|no>"
   local e="$R/prog/$1/emit-report.sh" o="$R/out/$1" a b v
-  a="$(bash "$e" "$H/d" "$HB" "$H/c" "$HT" 2>/dev/null)"; b="$(bash "$e" "$H/d" "$HB" "$H/c" "$HT" 2>/dev/null)"
+  a="$(er_ip "$e" "$H/d" "$HB" "$H/c" "$HT" 2>/dev/null)"; b="$(er_ip "$e" "$H/d" "$HB" "$H/c" "$HT" 2>/dev/null)"
   printf '%s\n' "$a" > "$o/H1.report"
-  bash "$e" --verify "$o/H1.report" "$H/d" "$HB" "$H/c" "$HT" >/dev/null 2>&1; v=$?
+  er_ip "$e" --verify "$o/H1.report" "$H/d" "$HB" "$H/c" "$HT" >/dev/null 2>&1; v=$?
   printf '%s %s %s' "$([ "$a" = "$b" ] && echo yes || echo no)" "$v" \
     "$(grep -qF '.claude/hooks/ai-dlc-probe.sh' <<<"$a" && echo yes || echo no)" > "$o/H1.v"
 }
@@ -265,7 +313,7 @@ unit_run() { # <prog> <unit>
     a5)  ren "$p" a5 git-split "$T2" "$C2" ;;
     a6)
       : > "$o/a6.fired"
-      env PATH="$R/sh/diff-classes:$PATH" SHIM_FIRED="$o/a6.fired" bash "$d/emit-report.sh" --verify "$R/a6-approved.md" "$DIST" "$BASE" "$C3" "$THEIRS" >/dev/null 2>"$o/a6.err"
+      PATH="$R/sh/diff-classes:$PATH" SHIM_FIRED="$o/a6.fired" er_ip "$d/emit-report.sh" --verify "$R/a6-approved.md" "$DIST" "$BASE" "$C3" "$THEIRS" >/dev/null 2>"$o/a6.err"
       echo "$?" > "$o/a6.rc" ;;
     a1)
       cp -R "$d" "$d-allstub"

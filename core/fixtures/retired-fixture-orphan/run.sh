@@ -61,6 +61,33 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# --- the pre-wrap consumer gate (BL-878): a consumer runs its OWN installed detector, which can predate the
+# in-process wrap. Neither half -> SKIP (never an ok); one half -> FAIL naming it; unreadable -> FIXTURE ERROR.
+rf_def=0; rf_guard=0
+grep -q '^rf_main() {$' "$DETECT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $DETECT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rf_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$DETECT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $DETECT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rf_guard=1
+if [ "$rf_def$rf_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$rf_def" = 0 ]; then echo "   FAIL  $DETECT carries the column-0 source guard but no \`rf_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "retired-fixture-orphan: FAIL (1)" >&2; exit 1; fi
+if [ "$rf_guard" = 0 ]; then echo "   FAIL  $DETECT defines \`rf_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run rf_main in this shell" >&2; echo "retired-fixture-orphan: FAIL (1)" >&2; exit 1; fi
+
+# One in-process pass: a subshell that sources ONE copy of the detector (the copy decides SELF, so its
+# siblings are the ones beside it) and calls rf_main. The detector sources lib.sh inside rf_main, so in a
+# subshell lib.sh builds no memo of its own (BASH_SUBSHELL > 0) and goes direct; an exported
+# AI_DLC_RECONCILE_MEMO is still borrowed, which the memo cell below relies on.
+rf_run() { # <detector copy> <args...>
+  ( _c="$1"; shift
+    fx_inproc "$_c"
+    . "$_c" || exit 2
+    declare -F rf_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $_c defined no rf_main" >&2; exit 2; }
+    rf_main "$@" ); }
 
 git_q() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}" >/dev/null 2>&1; }
 
@@ -105,7 +132,7 @@ for n in still-shipped will-be-distonly will-be-deleted consumer-authored-only; 
 done
 
 UNDER_TEST="$DIST/core/skills/ai-dlc-update/reconcile/retired-fixtures.sh"
-out="$(bash "$UNDER_TEST" "$DIST" "$THEIRS" "$CONS" 2>/dev/null)"
+out="$(rf_run "$UNDER_TEST" "$DIST" "$THEIRS" "$CONS" 2>/dev/null)"
 rc=$?
 
 # --- the run itself is a control: a detector that died reports nothing, which is also
@@ -171,7 +198,7 @@ fi
 # repo is a shape git itself produces.
 SHALLOW="$WORK/shallow"
 if git clone -q --depth 1 "file://$DIST" "$SHALLOW" 2>/dev/null && [ -d "$SHALLOW/.git" ]; then
-  s_out="$(bash "$UNDER_TEST" "$SHALLOW" HEAD "$CONS" 2>/dev/null)"
+  s_out="$(rf_run "$UNDER_TEST" "$SHALLOW" HEAD "$CONS" 2>/dev/null)"
 
   # FIRST, PROVE THE STATE UNDER TEST WAS ACTUALLY BUILT, and prove it with the question
   # arm B ASKS rather than with a neighbouring one. The first cut of this fixture gated on
@@ -220,7 +247,7 @@ cp -R "$DIST" "$NOMAP"
 : > "$NOMAP/core/skills/ai-dlc-update/reconcile/preclassify.sh"
 if ! cmp -s "$DIST/core/skills/ai-dlc-update/reconcile/preclassify.sh" \
             "$NOMAP/core/skills/ai-dlc-update/reconcile/preclassify.sh"; then
-  m_out="$(bash "$NOMAP/core/skills/ai-dlc-update/reconcile/retired-fixtures.sh" "$NOMAP" "$THEIRS" "$CONS" 2>/dev/null)"
+  m_out="$(rf_run "$NOMAP/core/skills/ai-dlc-update/reconcile/retired-fixtures.sh" "$NOMAP" "$THEIRS" "$CONS" 2>/dev/null)"
   if grep -q '^HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE' <<<"$m_out"; then
     ok "refuses loudly when map_consumer() cannot be loaded"
   else
@@ -237,15 +264,16 @@ fi
 # The detector copy under test sits in the scratch dist with no lib.sh beside it, so it never loads
 # the memo; this cell runs it from its own directory WITH lib.sh. Keyed on DOUBLING: a detector whose
 # arm A emits nothing is arm A's own arm above, not this one.
-RD="$WORK/rfo-memo-dir"; mkdir -p "$RD"
+# The copy sits under the subject's own relative path so its in-process passes count on the declared inproc: row.
+RD="$WORK/rfo-memo-dir/core/skills/ai-dlc-update/reconcile"; mkdir -p "$RD"
 cp "$UNDER_TEST" "$RD/retired-fixtures.sh"; cp "$DIST/core/skills/ai-dlc-update/reconcile/preclassify.sh" "$RD/"
 cp "$SRC_DIR/lib.sh" "$RD/lib.sh"; cp "$SRC_DIR/consumer-read.sh" "$RD/consumer-read.sh"
 RM="$(mktemp -d "$WORK/rfo-memo.XXXXXX")"
-AI_DLC_RECONCILE_MEMO="$RM" bash "$RD/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONS" > "$WORK/rm.ctl" 2>/dev/null
+( export AI_DLC_RECONCILE_MEMO="$RM"; rf_run "$RD/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONS" ) > "$WORK/rm.ctl" 2>/dev/null
 rm_c="$(grep -c '^RETIRED-FIXTURE-ORPHAN.*tests/fixtures/will-be-distonly' "$WORK/rm.ctl")" || rm_c=0
 rm_n=0
 for rm_f in "$RM"/"t "*.s; do [ -f "$rm_f" ] || continue; : > "$rm_f"; rm_n=$((rm_n + 1)); done
-rm_out="$(AI_DLC_RECONCILE_MEMO="$RM" bash "$RD/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONS" 2>/dev/null)"
+rm_out="$(export AI_DLC_RECONCILE_MEMO="$RM"; rf_run "$RD/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONS" 2>/dev/null)"
 rm_a="$(printf '%s\n' "$rm_out" | grep -c '^RETIRED-FIXTURE-ORPHAN.*tests/fixtures/will-be-distonly')" || rm_a=0
 if [ "$rm_n" -lt 1 ]; then
   bad "FIXTURE BROKEN — no tree-listing memo key was written, so the served-then-failed memo cell asserts nothing"
@@ -254,6 +282,37 @@ elif [ "$rm_a" -le 1 ] && [ "$rm_a" -eq "$rm_c" ]; then
 else
   bad "a memo listing whose status cannot be read printed the arm-A orphan $rm_a time(s) against $rm_c healthy — the fallback listing ran on top of the served one"
 fi
+
+# --- the cli cells (cells.decl): the detector run as a PROGRAM once per distinct CLI outcome ----------------------
+# The detector always exits 0; its outcomes are the row class on stdout: orphan rows, the history-unavailable
+# refusal row (shallow clone), and the scan-unavailable row (no mapper). One `FXCELL=<id> bash <copy>` start per
+# outcome, each compared with the in-process call on the same inputs: stdout, stderr and exit separately, byte for
+# byte. Each cell also asserts its own outcome, and the three outcomes must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <detector copy> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" c="$2"; shift 2
+  rf_run "$c" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$c" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+if eqv cli-orphans "$UNDER_TEST" "$DIST" "$THEIRS" "$CONS" && [ "$(cat "$EQ/cli-orphans.cl.rc")" = 0 ] \
+   && grep -q '^RETIRED-FIXTURE-ORPHAN.*tests/fixtures/will-be-deleted' "$EQ/cli-orphans.cl.out"; then
+  ok "cli-orphans: the program reports the orphans exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-orphans: the program and the in-process call differ, or no orphan row ($(eq_twin cli-orphans))"; fi
+if [ -d "$SHALLOW/.git" ] && eqv cli-shallow "$UNDER_TEST" "$SHALLOW" HEAD "$CONS" && [ "$(cat "$EQ/cli-shallow.cl.rc")" = 0 ] \
+   && grep -q '^RETIRED-FIXTURE-HISTORY-UNAVAILABLE' "$EQ/cli-shallow.cl.out"; then
+  ok "cli-shallow: the program refuses arm B on a truncated clone exactly as the in-process call does"
+else bad "cli-shallow: the program and the in-process call differ, or no history-unavailable row ($(eq_twin cli-shallow 2>/dev/null))"; fi
+if eqv cli-nomap "$NOMAP/core/skills/ai-dlc-update/reconcile/retired-fixtures.sh" "$NOMAP" "$THEIRS" "$CONS" \
+   && [ "$(cat "$EQ/cli-nomap.cl.rc")" = 0 ] && grep -q '^HARD-RETIRED-FIXTURE-SCAN-UNAVAILABLE' "$EQ/cli-nomap.cl.out"; then
+  ok "cli-nomap: the program refuses with no mapper exactly as the in-process call does"
+else bad "cli-nomap: the program and the in-process call differ, or no scan-unavailable row ($(eq_twin cli-nomap))"; fi
+if ! cmp -s "$EQ/cli-orphans.cl.out" "$EQ/cli-shallow.cl.out" && ! cmp -s "$EQ/cli-shallow.cl.out" "$EQ/cli-nomap.cl.out" \
+   && ! cmp -s "$EQ/cli-orphans.cl.out" "$EQ/cli-nomap.cl.out"; then
+  ok "cli cells discriminate: the orphan rows, the history refusal and the mapper refusal give different output"
+else bad "two cli cells gave identical output -- the cells do not discriminate"; fi
 
 echo ""
 report_end retired-fixture-orphan

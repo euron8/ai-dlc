@@ -41,8 +41,92 @@ trap 'rm -rf "$ROOT"' EXIT
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$HERE/../lib/layout.sh" ] || { echo "FIXTURE ERROR: lib/layout.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: sourcing lib/layout.sh failed" >&2; exit 2; }
 
 echo "layer-title-join:"
+
+# IN PROCESS (BL-878). layer-drift.sh is SOURCED ONCE (its column-0 guard returns after defining ld_main) and every
+# drive calls ld_main through ld_run, in a subshell made to look like a fresh `bash layer-drift.sh` (the strip
+# core/fixtures/lib/inproc.sh's inproc_run makes, inlined: this fixture declares the unguarded apply.sh, and P2 reads
+# inproc.sh's opaque `. "$1"` there as an unrouted source), so its `exit`, `set -uo pipefail`, `set -f` and EXIT trap
+# stay there. lib.sh builds its own memo only at BASH_SUBSHELL 0,
+# which no subshell is, so ld_ip hands each run a FRESH private memo, exactly as private as the program's, unless the
+# caller exported one (Part 9's cells hand theirs explicitly, as they did to the program). The only command-line runs
+# left are the five cli cells (cells.decl), one per distinct CLI outcome, each compared byte for byte with ld_ip;
+# apply.sh's own starts of layer-drift (Part 6e) are its nested row.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: neither the `ld_main() {` line nor the column-0 source guard is a subject
+# that predates the wrap, which reads SKIP (exit 0, never an ok); exactly one half is a respelled subject and FAILs; a
+# subject grep cannot READ is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$DRIFT" ld_main; g_ld=$?
+[ "$g_ld" != 2 ] || exit 2
+if [ "$g_ld" = 1 ]; then echo "layer-title-join: 1 FAILED"; exit 1; fi
+if [ "$g_ld" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+LDDIR="$(cd "$(dirname "$DRIFT")" && pwd)" || { echo "FIXTURE BROKEN: cannot resolve the directory of $DRIFT" >&2; exit 2; }
+DRIFT="$LDDIR/layer-drift.sh"
+# A literal-tail path, never `. "$VAR"`: P2 reads an opaque source as a drive. The source is one pass (the inproc: row).
+fx_inproc "$LDDIR/layer-drift.sh"
+. "$LDDIR/layer-drift.sh" || { echo "FIXTURE BROKEN: sourcing $DRIFT failed" >&2; exit 2; }
+declare -F ld_main >/dev/null || { echo "FIXTURE BROKEN: sourcing $DRIFT defined no ld_main" >&2; exit 2; }
+ld_run() { # <args> -> ld_main's stdout, stderr and exit, in a subshell holding only the subject's function, the
+  # exported variables and bash's own, a fresh bash's options and an empty command hash
+  (
+    IFS=$' \t\n'
+    _ld_p="$LDDIR/layer-drift.sh"
+    _ld_x=" $(compgen -e) "; _ld_x="${_ld_x//$'\n'/ }"
+    for _ld_f in $(compgen -A function); do case "$_ld_f" in ld_main|fx_inproc) ;; *) unset -f "$_ld_f" ;; esac; done
+    for _ld_v in $(compgen -v); do
+      case "$_ld_x" in *" $_ld_v "*) continue ;; esac
+      case "$_ld_v" in
+        _ld_x|_ld_v|_ld_p|BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
+        IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
+        SHLVL|TERM|UID|_) continue ;;
+      esac
+      unset "$_ld_v" 2>/dev/null
+    done
+    unset _ld_x _ld_v _ld_f
+    OPTIND=1
+    set +eufx +o pipefail
+    hash -r
+    fx_inproc "$_ld_p"; unset -f fx_inproc; unset _ld_p
+    ld_main "$@"
+  )
+}
+ld_ip() { # what `bash "$DRIFT" "$@"` gives, in process
+  local _m _rc
+  case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in "declare -x"*) ld_run "$@"; return ;; esac
+  _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
+  AI_DLC_RECONCILE_MEMO="$_m" ld_run "$@"; _rc=$?
+  rm -rf "$_m"; return "$_rc"
+}
+# eqv <cell-id> <subject args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}: the in-process call, then the program once, tagged
+# FXCELL=<id>; 0 when stdout, stderr and exit are each byte-identical.
+EQ="$ROOT/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir $EQ" >&2; exit 2; }
+eqv() {
+  local id="$1"; shift
+  ld_ip "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$DRIFT" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s rows=%s err=[%s] / program rc=%s rows=%s err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(grep -c . "$EQ/$1.ip.out")" \
+  "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(grep -c . "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
 
 # ---------------------------------------------------------------------------------------
 # The distribution at BASE.
@@ -224,7 +308,12 @@ This entry's only heading is an h5, which is below both joins' `#{2,4}` grammar.
 heading, so LC-E20's claim does not hold of it.
 MD
 
-OUT="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>"$ROOT/err")"
+# cli-rows: this classify run IS the in-process answer every Part below reads, and its program twin is the cli cell.
+if eqv cli-rows "$DIST" "$BASE" "$THEIRS" "$CONS" && [ "$(cat "$EQ/cli-rows.cl.rc")" = 0 ] \
+   && grep -q '^EXTENSION-TITLE-MATCHES-CORE' "$EQ/cli-rows.cl.out"; then
+  ok "cli-rows: the program classifies the layer exactly as the in-process call does (stdout, stderr, exit 0, title rows present)"
+else bad "cli-rows: the program and the in-process call differ, or the outcome is not exit 0 with title-match rows ($(eq_twin cli-rows))"; fi
+OUT="$(cat "$EQ/cli-rows.ip.out")"; cp "$EQ/cli-rows.ip.err" "$ROOT/err"
 st() { printf '%s\n' "$OUT" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
 detail() { printf '%s\n' "$OUT" | awk -F'\t' -v e="$1" -v s="$2" '$1==s && $2 ~ e {print $4}'; }
 
@@ -342,7 +431,7 @@ MD
 git -C "$DIST" add -A >/dev/null 2>&1
 git -C "$DIST" -c user.email=f@x -c user.name=f commit -qm "a glob that matches nothing" >/dev/null 2>&1
 THEIRS3="$(git -C "$DIST" rev-parse --short HEAD)"
-bash "$DRIFT" "$DIST" "$BASE" "$THEIRS3" "$CONS" >/dev/null 2>"$ROOT/err3"
+ld_ip "$DIST" "$BASE" "$THEIRS3" "$CONS" >/dev/null 2>"$ROOT/err3"
 if grep -q "nowhere/\*\.md" "$ROOT/err3"; then
   ok "  a rulebook glob matching no file is reported per glob, not swallowed by a non-empty total"
 else
@@ -439,7 +528,7 @@ fi
 #     rather than from a restatement here. The seeded contract is a stub with no clauses, so
 #     the control asserted in Part 7 (nothing at ADJUDICATED in this tree) is what makes this
 #     a real zero; re-derived here against the DISTRIBUTION's contract, which does have some.
-e20_adj="$(bash "$DRIFT" --adjudicated-codes "$HERE/../../.." HEAD 2>/dev/null)"
+e20_adj="$(ld_ip --adjudicated-codes "$HERE/../../.." HEAD 2>/dev/null)"
 if [ -z "$e20_adj" ]; then
   ok "  (LC-E20 level: the distribution contract is unreadable from here, so this arm stands down rather than asserting against an empty set)"
 elif grep -qxF 'EXTENSION-NO-HEADINGS' <<<"$e20_adj"; then
@@ -464,7 +553,7 @@ fi
 # =======================================================================================
 REG="$CONS/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
 mkdir -p "$(dirname "$REG")"
-rerun() { bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
+rerun() { ld_ip "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
 tm_rows() { printf '%s\n' "$1" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE"' | grep -c . ; }
 
 CTL_OUT=""
@@ -525,13 +614,16 @@ else
     DIG3="$(printf '%s\n' "$CTL_OUT" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2 ~ /MATCH\.md$/' | grep -oE 'subject_digest [0-9a-f]{40}' | awk '{print $2}' | head -1)"
     ap_n=0
     AP_OUT=/dev/null
-    ap_run() { # <apply.sh> -> sets AP_OUT; ONE apply run serves every count taken of that state
+    echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/apply.sh"
+    # apply.sh stays a PROGRAM (e2e cells ap-empty, ap-verdict, ap-spent): the WORKLIST row it writes is the property,
+    # and it starts layer-drift.sh itself, which the nested row in cells.decl covers.
+    ap_run() { # <apply.sh> <cell-id> -> sets AP_OUT; ONE apply run serves every count taken of that state
       # A FRESH DIRECTORY PER CALL: `cp -R` into an existing directory nests the tree and leaves the
       # stale register behind.
       local c; c="$(mktemp -d "$ROOT/ap.XXXXXX")" || { bad "FIXTURE BROKEN: cannot make an apply scratch dir"; return 2; }
       cp -R "$CONS/." "$c/" || { bad "FIXTURE BROKEN: cannot copy the consumer for apply"; return 2; }
       mkdir -p "$c/.claude" && printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$c/.claude/.ai-dlc-version"
-      bash "$1" "$DIST" "$BASE" "$c" "$THEIRS" > "$c.out" 2>/dev/null
+      FXCELL="$2" bash "$1" "$DIST" "$BASE" "$c" "$THEIRS" > "$c.out" 2>/dev/null
       AP_OUT="$c.out"
     }
     ap_count() { # <entry-regex> -> count of WORKLIST extension-title-match rows in AP_OUT
@@ -544,21 +636,21 @@ else
       bad "FIXTURE BROKEN: no keyed title-match row to record the apply-level verdict against"
     else
       : > "$REG"
-      ap_run "$APPLY"; E0="$(ap_count 'MATCH\.md$')"; F0="$(ap_count 'FRESH\.md$')"
+      ap_run "$APPLY" ap-empty; E0="$(ap_count 'MATCH\.md$')"; F0="$(ap_count 'FRESH\.md$')"
       if [ "$E0" -eq 1 ] && [ "$F0" -ge 1 ]; then
         ok "apply-level PRECONDITION: with an empty register apply.sh emits the WORKLIST row for MATCH ($E0) and for the control FRESH ($F0)"
       else
         bad "apply-level PRECONDITION: empty register gave MATCH=$E0 FRESH=$F0 WORKLIST extension-title-match row(s), expected 1 and >=1"
       fi
       verdict "$DIG3"
-      ap_run "$APPLY"; E1="$(ap_count 'MATCH\.md$')"; F1="$(ap_count 'FRESH\.md$')"
+      ap_run "$APPLY" ap-verdict; E1="$(ap_count 'MATCH\.md$')"; F1="$(ap_count 'FRESH\.md$')"
       if [ "$E1" -eq 0 ] && [ "$F1" -eq "$F0" ]; then
         ok "apply-level: a TITLE-clause verdict removes the WORKLIST extension-title-match row for MATCH (1 -> 0) and leaves the undisposed control FRESH ($F1)"
       else
         bad "apply-level: with MATCH's verdict recorded apply.sh emitted MATCH=$E1 FRESH=$F1 row(s), expected 0 and $F0"
       fi
       verdict "0000000000000000000000000000000000000000"
-      ap_run "$APPLY"; E2="$(ap_count 'MATCH\.md$')"
+      ap_run "$APPLY" ap-spent; E2="$(ap_count 'MATCH\.md$')"
       if [ "$E2" -eq 1 ]; then
         ok "apply-level CONTROL: a verdict whose digest does not match (a spent verdict) re-emits the row"
       else
@@ -590,7 +682,11 @@ echo ""
 # tree. A listing derived from the adjudicated code set could not name a single subject here.
 # The reader's empty answer is corroborated against the contract's own text, because an empty
 # answer from a broken reader would otherwise read the same.
-adj_n="$(bash "$DRIFT" --adjudicated-codes "$DIST" "$THEIRS" 2>/dev/null | grep -c .)"
+# cli-codes: the --adjudicated-codes mode's outcome (exit 0, no stderr), its in-process answer the one this control reads.
+if eqv cli-codes --adjudicated-codes "$DIST" "$THEIRS" && [ "$(cat "$EQ/cli-codes.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-codes.cl.err" ]; then
+  ok "cli-codes: the program answers --adjudicated-codes exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-codes: the program and the in-process call differ, or the outcome is not exit 0 with an empty stderr ($(eq_twin cli-codes))"; fi
+adj_n="$(grep -c . "$EQ/cli-codes.ip.out")" || adj_n=0
 lvl_adj="$(git -C "$DIST" show "$THEIRS:core/skills/ai-dlc/layer-contract.yaml" 2>/dev/null | grep -c 'level: ADJUDICATED')"
 if [ "$lvl_adj" -ne 0 ]; then
   bad "CONTROL: the seeded contract now puts $lvl_adj clause(s) at ADJUDICATED. Part 7 was written against a stub contract with none, and the sharpest version of its assertion depends on that. Re-derive this arm against the new seed"
@@ -605,7 +701,7 @@ FRESH="$CTL_OUT"   # same dist/consumer state as 6d, register not matching: rows
 [ -n "$FRESH" ] || FRESH="$(rerun)"
 DIG2="$(printf '%s\n' "$FRESH" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE" && $2 ~ /MATCH\.md$/' \
         | grep -oE 'subject_digest [0-9a-f]{40}' | awk '{print $2}' | head -1)"
-listing() { bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
+listing() { ld_ip --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
             | awk -F'\t' '$1=="ADJUDICABLE"{print $4}'; }
 
 if [ -z "$DIG2" ]; then
@@ -615,7 +711,13 @@ else
   # pipefail the reader leaves at its first match and the pipeline answers with the writer's
   # EPIPE, so a MATCH reports as not-found once the upstream's remaining output clears the pipe
   # buffer. I54b holds the whole tree to that shape.
-  LIST_OPEN="$(listing)"
+  # cli-list: the --list-adjudications outcome (exit 0, ADJUDICABLE rows, the summary line on stderr); its in-process
+  # answer is LIST_OPEN, so the open listing costs no extra run.
+  if eqv cli-list --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" && [ "$(cat "$EQ/cli-list.cl.rc")" = 0 ] \
+     && grep -q '^ADJUDICABLE' "$EQ/cli-list.cl.out" && grep -q 'keyed subject(s)' "$EQ/cli-list.cl.err"; then
+    ok "cli-list: the program lists the keyed subjects exactly as the in-process call does (stdout, stderr, exit 0)"
+  else bad "cli-list: the program and the in-process call differ, or the outcome is not exit 0 with ADJUDICABLE rows and the summary line ($(eq_twin cli-list))"; fi
+  LIST_OPEN="$(awk -F'\t' '$1=="ADJUDICABLE"{print $4}' "$EQ/cli-list.ip.out")"
   if grep -qxF -- "$DIG2" <<<"$LIST_OPEN"; then
     ok "the listing names this WARN-level row's subject — a listing derived from the ADJUDICATED code set would miss it, and on the reference consumer that is 11 of 12 subjects"
   else
@@ -648,11 +750,11 @@ fi
 # same way. Each cell warms a memo, damages ONE key, and demands exit 1 with the memo named.
 # =======================================================================================
 LM0="$(mktemp -d "$ROOT/ltj-memo.XXXXXX")" || { echo "FIXTURE ERROR: cannot make the memo dir" >&2; exit 2; }
-AI_DLC_RECONCILE_MEMO="$LM0" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$LM0.ctl" 2>/dev/null   # the ONE fill
+AI_DLC_RECONCILE_MEMO="$LM0" ld_ip "$DIST" "$BASE" "$THEIRS" "$CONS" > "$LM0.ctl" 2>/dev/null   # the ONE fill
 # each damaged-key cell starts from a copy of the warm memo (cp -Rp keeps modes), not a fresh fill
 ltj_memo_copy() { local m; m="$(mktemp -d "$ROOT/ltj-memo.XXXXXX")" || return 1; cp -Rp "$LM0/." "$m/" || return 1; printf '%s' "$m"; }
 LM="$LM0"
-AI_DLC_RECONCILE_MEMO="$LM" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.out" 2>/dev/null; lm_rc=$?
+AI_DLC_RECONCILE_MEMO="$LM" ld_ip "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.out" 2>/dev/null; lm_rc=$?
 if [ "$lm_rc" = 0 ] && [ -s "$ROOT/lm.out" ] && cmp -s "$ROOT/lm.out" "$LM0.ctl"; then
   ok "Part 9 control: a warm memo HIT with nothing damaged reproduces the fill's rows at rc 0"
 else
@@ -678,7 +780,7 @@ EOF
     bad "FIXTURE BROKEN — Part 9 cell $lm_id found $lm_n memo key(s), not 1; the memo key grammar moved"
     continue
   fi
-  AI_DLC_RECONCILE_MEMO="$LM" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.out" 2> "$ROOT/lm.err"; lm_rc=$?
+  AI_DLC_RECONCILE_MEMO="$LM" ld_ip "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.out" 2> "$ROOT/lm.err"; lm_rc=$?
   chmod -R u+rw "$LM" 2>/dev/null
   if [ "$lm_rc" = 1 ] && grep -qF 'could not be served by the reconcile memo' "$ROOT/lm.err" \
      && ! grep -q 'shared skeleton' "$ROOT/lm.out"; then
@@ -687,6 +789,19 @@ EOF
     bad "Part 9 $lm_id: $lm_what the memo cannot serve gave rc=$lm_rc, $(grep -c . "$ROOT/lm.out") row(s), $(grep -c 'shared skeleton' "$ROOT/lm.out") skeleton row(s) — a lost cached object moved the rows"
   fi
 done
+
+# --- the two refusing cli cells, and the discrimination over all five --------------------------------------------
+if eqv cli-refuse "$DIST" "$BASE" no-such-ref-ltj "$CONS" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 1 ] && [ ! -s "$EQ/cli-refuse.cl.out" ] \
+   && grep -q "^layer-drift: REFUSED — theirs ref 'no-such-ref-ltj'" "$EQ/cli-refuse.cl.err"; then
+  ok "cli-refuse: the program refuses an unresolvable theirs ref exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 1 with the REFUSED line ($(eq_twin cli-refuse))"; fi
+if eqv cli-usage "$DIST" && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && grep -q '^usage: layer-drift.sh ' "$EQ/cli-usage.cl.err"; then
+  ok "cli-usage: the program refuses a wrong argument count exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line ($(eq_twin cli-usage))"; fi
+if [ "$(for c in rows codes list refuse usage; do printf '%s %s\n' "$(cat "$EQ/cli-$c.cl.rc" 2>/dev/null)" "$(cat "$EQ/cli-$c.cl.out" "$EQ/cli-$c.cl.err" 2>/dev/null | cksum)"; done | sort -u | grep -c .)" = 5 ]; then
+  ok "cli cells discriminate: the five outcomes give five different (exit, output) pairs"
+else bad "cli cells do not discriminate: two of the five cli outcomes gave the same exit and output"; fi
 
 echo ""
 report_end layer-title-join

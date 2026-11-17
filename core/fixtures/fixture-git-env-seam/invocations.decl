@@ -1,5 +1,7 @@
 # Set from one counted run through core/scripts/hermetic-run.sh (the judge's own J2 output).
 # BL-1117 (* 61->51): no whole-tree copy and no H2 canary, so trunk-push-bound runs twice (cells A and U, 9 starts
 # each) and setup-config-drift once (cell B, 30); arm V is gone, so the validator starts twice, both in arm W.
-51 *
+11 *
 2 scripts/validate-fixture-git-env.sh
+4 core/scripts/validate-audit-anchors.sh
+20 inproc:core/scripts/validate-audit-anchors.sh

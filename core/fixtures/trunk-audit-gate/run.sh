@@ -64,6 +64,37 @@ trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
+# IN PROCESS WHERE IT CAN BE (BL-878). A gate run that reaches the audit starts its siblings
+# (validate-cycle-commits.sh, validate-audit-anchors.sh, validate-escalation-resolution.sh) as separate programs, and
+# a `nested` row covers such a child only when its logged parent is a START of the gate: driven in process, the gate
+# is no start, so every sibling start would be an untagged start of a declared subject (C1). Those ten worlds stay
+# end to end, one `e2e` cell each with its reason in cells.decl, and three `nested` rows cover the siblings. The two
+# worlds that start no sibling (feature, nobmad) and the two validate-audit-anchors.sh seed calls run in process
+# through core/fixtures/lib/inproc.sh inproc_run (never inproc_load: two subjects are driven, and a loaded one would
+# log every pass under its own path); the gate's two cli cells compare those worlds' in-process answers with the
+# program's. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECTS: a subject with neither its `<p>_main() {` line nor the
+# column-0 source guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok;
+# FIXTURE BROKEN in the distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+wrap_gate() { # <subject> <entry>
+  local _wd _wg
+  grep -q "^$2() {\$" "$1"; _wd=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; _wg=$?
+  if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+  fi
+  case "$_wd$_wg" in
+    00) ;;
+    11) echo "SKIP: subject $1 predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+    10) echo "  FAIL $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; echo "trunk-audit-gate: FAIL (1 assertion(s))"; exit 1 ;;
+    *) echo "  FAIL $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"; echo "trunk-audit-gate: FAIL (1 assertion(s))"; exit 1 ;;
+  esac
+}
+wrap_gate "$SUBJ" vtag_main
+wrap_gate "$SUBJ_DIR/validate-audit-anchors.sh" vaa_main
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+
 
 G() { git -C "$1" -c user.email=f@x -c user.name=F -c commit.gpgsign=false "${@:2}"; }
 
@@ -132,7 +163,7 @@ mkworld "$W/anchors"   carry-over declared nowm
 AG="$(git -C "$W/anchors" rev-parse HEAD)"
 commit_under "$W/anchors" src
 AA="$W/anchors/_bmad-output/audit-anchors.md"
-AI_DLC_PROJECT_ROOT="$W/anchors" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" bash "$SUBJ_DIR/validate-audit-anchors.sh" --render > "$AA" 2>/dev/null \
+AI_DLC_PROJECT_ROOT="$W/anchors" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" inproc_run "$SUBJ_DIR/validate-audit-anchors.sh" vaa_main --render > "$AA" 2>/dev/null \
   || { echo "FIXTURE BROKEN: validate-audit-anchors.sh --render failed" >&2; exit 2; }
 printf -- '\n## Entries\n\n- sprint: 5\n  sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n  closed_at: 2026-10-07\n- sprint: 6\n  sha: %s\n  closed_at: 2026-10-14\n' \
   "$AG" >> "$AA"
@@ -175,7 +206,7 @@ done
 ! grep -q '^  sha: ' "$AA" && { echo "FIXTURE BROKEN: anchors seeds no sha entry field" >&2; exit 2; }
 grep -q '^  audit_window:' "$AA" \
   && { echo "FIXTURE BROKEN: anchors seeds an audit_window entry field, which step 5b never writes" >&2; exit 2; }
-AI_DLC_PROJECT_ROOT="$W/anchors" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" bash "$SUBJ_DIR/validate-audit-anchors.sh" "$AA" >/dev/null 2>&1 \
+AI_DLC_PROJECT_ROOT="$W/anchors" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" inproc_run "$SUBJ_DIR/validate-audit-anchors.sh" vaa_main "$AA" >/dev/null 2>&1 \
   || { echo "FIXTURE BROKEN: the anchors seed fails the producer-side validate-audit-anchors.sh check" >&2; exit 2; }
 # Printed only past the check above, which ran the validator on the schema's rendered header.
 echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-audit-anchors.sh"
@@ -183,16 +214,21 @@ echo "HERMETIC-CONSUMED $SCHEMA"
 
 OUT=""; RC=""
 # Not a command substitution at the call site: OUT and RC must reach the caller.
-drive() { # $1 subject script, $2 world dir. A fresh copy of the world per drive: the audit
-          # advances the watermark, so a second drive of one world would audit an empty range.
+drive() { # $1 e2e cell id, or "" for an in-process call; $2 world dir. A fresh copy of the world
+          # per drive: the audit advances the watermark, so a second drive of one world would audit
+          # an empty range.
   local cp="$WORK/run.$$.$RANDOM"
   rm -rf "$cp"; cp -R "$2" "$cp"
-  OUT="$(AI_DLC_PROJECT_ROOT="$cp" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" bash "$1" --sprint 7 2>&1)"; RC=$?
+  if [ -z "$1" ]; then
+    OUT="$(AI_DLC_PROJECT_ROOT="$cp" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" inproc_run "$SUBJ" vtag_main --sprint 7 2>&1)"; RC=$?
+  else
+    OUT="$(AI_DLC_PROJECT_ROOT="$cp" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" FXCELL="$1" bash "$SUBJ" --sprint 7 2>&1)"; RC=$?
+  fi
   rm -rf "$cp"
 }
 has() { grep -qF -- "$1" <<< "$OUT"; }
 
-# expect <subject> <world> <rc> <required verdict text> <label>
+# expect <e2e cell id, or "" in process> <world> <rc> <required verdict text>
 expect() {
   drive "$1" "$W/$2"
   if [ "$RC" = "$3" ] && has "$4"; then return 0; fi
@@ -202,46 +238,76 @@ expect() {
 
 echo "trunk-audit-gate:"
 
-if expect "$SUBJ" clean 0 'verdict  : PASS' && has 'audit_rc : 0' && has 'AUDIT-TRUNK: audited=1 ' \
+if expect clean clean 0 'verdict  : PASS' && has 'audit_rc : 0' && has 'AUDIT-TRUNK: audited=1 ' \
   && echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-cycle-commits.sh"; then
   ok "clean: the audit re-ran 1 commit at the gate -> PASS"
 else bad "clean: $LAST"; fi
-if expect "$SUBJ" finding 1 'reported findings' && has 'audit_rc : 1' && has 'findings=1'; then
+if expect finding finding 1 'reported findings' && has 'audit_rc : 1' && has 'findings=1'; then
   ok "finding: audit exit 1 -> gate FAIL exit 1, HARD_BLOCK named"
 else bad "finding: $LAST"; fi
-if expect "$SUBJ" empty 0 'verdict  : PASS' && has 'control: the trunk holds'; then
+if expect empty empty 0 'verdict  : PASS' && has 'control: the trunk holds'; then
   ok "empty range: PASS carries the audit's own control line"
 else bad "empty: $LAST"; fi
-if expect "$SUBJ" worklist 0 'verdict  : WORKLIST' && has 'AUDIT-TRUNK: WORKLIST'; then
+if expect worklist worklist 0 'verdict  : WORKLIST' && has 'AUDIT-TRUNK: WORKLIST'; then
   ok "worklist: undeclared taxonomy -> WORKLIST, exit 0, not a FAIL"
 else bad "worklist: $LAST"; fi
-if expect "$SUBJ" nogenesis 2 'could not run (setup error)' && has 'audit_rc : 2' && ! has 'SHALLOW'; then
+if expect nogenesis nogenesis 2 'could not run (setup error)' && has 'audit_rc : 2' && ! has 'SHALLOW'; then
   ok "nogenesis: audit exit 2 -> gate FAIL exit 2, not a clean result, not called shallow"
 else bad "nogenesis: $LAST"; fi
-if expect "$SUBJ" nobmad 2 'no readable pipeline snapshot'; then
+if expect "" nobmad 2 'no readable pipeline snapshot'; then
   ok "no _bmad-output/: exit 2, no verdict about nothing"
 else bad "nobmad: $LAST"; fi
-if expect "$SUBJ" feature 0 'NOT-APPLICABLE -- EXAMINED NOTHING' && ! has 'audit_rc'; then
+if expect "" feature 0 'NOT-APPLICABLE -- EXAMINED NOTHING' && ! has 'audit_rc'; then
   ok "feature variant: NOT-APPLICABLE, audit not run, no watermark needed"
 else bad "feature: $LAST"; fi
-if expect "$SUBJ" anchors 0 'verdict  : PASS' && has "audit-anchors.md prior-sprint sha (${AG})" \
+if expect anchors anchors 0 'verdict  : PASS' && has "audit-anchors.md prior-sprint sha (${AG})" \
   && has 'AUDIT-TRUNK: audited=1 '; then
   ok "anchors: no watermark, genesis from the prior sprint's required sha, no audit_window -> PASS"
 else bad "anchors: $LAST"; fi
-if expect "$SUBJ" wedge-resolved 0 'verdict  : PASS' && has "exit     : ${BAD_R}" && has 'findings=1' \
+if expect wedge-resolved wedge-resolved 0 'verdict  : PASS' && has "exit     : ${BAD_R}" && has 'findings=1' \
   && has 'AUDIT-TRUNK: audited=1 ' \
   && echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-escalation-resolution.sh"; then
   ok "wedge-resolved: finding -> fix-forward -> operator-RESOLVED entry names the sha -> PASS"
 else bad "wedge-resolved: $LAST"; fi
-if expect "$SUBJ" wedge-noexit 1 'reported findings' && has 'an escalation names'; then
+if expect wedge-noexit wedge-noexit 1 'reported findings' && has 'an escalation names'; then
   ok "wedge-noexit: fix-forward with the entry still HARD_BLOCK -> still FAIL"
 else bad "wedge-noexit: $LAST"; fi
-if expect "$SUBJ" wedge-othersha 1 'reported findings' && has 'no escalation entry names'; then
+if expect wedge-othersha wedge-othersha 1 'reported findings' && has 'no escalation entry names'; then
   ok "wedge-othersha: a resolved entry naming another sha is not an exit -> still FAIL"
 else bad "wedge-othersha: $LAST"; fi
-if expect "$SUBJ" shallow 2 'SHALLOW clone' && has 'git fetch --unshallow' && ! has 'setup error'; then
+if expect shallow shallow 2 'SHALLOW clone' && has 'git fetch --unshallow' && ! has 'setup error'; then
   ok "shallow: exit 2 names the shallow history and git fetch --unshallow"
 else bad "shallow: $LAST"; fi
+
+# --- the cli cells (cells.decl): the gate run as a PROGRAM on the two in-process worlds ---------------------------
+# feature (exit 0, NOT-APPLICABLE) and nobmad (exit 2, no snapshot) are the gate's in-process outcomes. One
+# `FXCELL=<id> bash "$SUBJ"` start per outcome, each compared with the in-process call on a copy of the same world at
+# the same path: stdout, stderr and exit separately, byte for byte, plus the outcome's own wording; the two must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <world> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" cpw="$WORK/eq.w"
+  rm -rf "$cpw"; cp -R "$W/$2" "$cpw"
+  AI_DLC_PROJECT_ROOT="$cpw" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" inproc_run "$SUBJ" vtag_main --sprint 7 \
+    > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  rm -rf "$cpw"; cp -R "$W/$2" "$cpw"
+  AI_DLC_PROJECT_ROOT="$cpw" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" FXCELL="$id" bash "$SUBJ" --sprint 7 \
+    > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  rm -rf "$cpw"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+if eqv cli-feature feature && [ "$(cat "$EQ/cli-feature.cl.rc")" = 0 ] \
+   && grep -qF 'NOT-APPLICABLE -- EXAMINED NOTHING' "$EQ/cli-feature.cl.out"; then
+  ok "cli-feature: the program answers the feature world exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-feature: the program and the in-process call differ, or the outcome is not exit 0 NOT-APPLICABLE ($(eq_twin cli-feature))"; fi
+if eqv cli-nobmad nobmad && [ "$(cat "$EQ/cli-nobmad.cl.rc")" = 2 ] \
+   && grep -qF 'no readable pipeline snapshot' "$EQ/cli-nobmad.cl.out"; then
+  ok "cli-nobmad: the program refuses the snapshot-less world exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-nobmad: the program and the in-process call differ, or the outcome is not exit 2 with no snapshot ($(eq_twin cli-nobmad))"; fi
+if ! cmp -s "$EQ/cli-feature.cl.rc" "$EQ/cli-nobmad.cl.rc" && ! cmp -s "$EQ/cli-feature.cl.out" "$EQ/cli-nobmad.cl.out"; then
+  ok "cli cells discriminate: the feature and the snapshot-less world give different stdout and exit"
+else bad "cli cells do not discriminate: cli-feature and cli-nobmad gave the same stdout or exit"; fi
 
 
 echo

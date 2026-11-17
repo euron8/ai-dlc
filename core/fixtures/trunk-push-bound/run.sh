@@ -43,6 +43,32 @@ fi
 [ -f "$S" ] || { echo "FIXTURE ERROR: cannot locate audit-anchors.json ($S)" >&2; exit 2; }
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$V")" && pwd)/$(basename "$V")"
 
+# IN PROCESS (BL-878). Every push is answered by tpb_ip: a subshell that sources the validator (its column-0 guard
+# returns after defining vaa_main) and calls vaa_main, reading the same stdin a `bash validate-audit-anchors.sh` would.
+# Each call is one fx_inproc pass (the inproc: row). NOT lib/inproc.sh: fixture-git-env-seam runs this run.sh inside
+# its own sandbox and declares an unguarded bash subject, where inproc.sh's own operand sources read as unpaired P2
+# drives (BL-1164). The command-line runs left are the cli cells at the end (cells.decl).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a validator with neither its `vaa_main() {` line nor the column-0 source
+# guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE BROKEN in
+# the distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+grep -q '^vaa_main() {$' "$V"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$V"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $V (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  10) echo "  FAIL $V defines \`vaa_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vaa_main in this shell"; echo "trunk-push-bound: FAIL (1 assertion(s))"; exit 1 ;;
+  *) echo "  FAIL $V carries the column-0 source guard but no \`vaa_main() {\` line -- a respelled subject this fixture cannot drive"; echo "trunk-push-bound: FAIL (1 assertion(s))"; exit 1 ;;
+esac
+tpb_ip() { # tpb_ip <validator> [args...] -> vaa_main's stdout, stderr and exit
+  local _v="$1"; shift
+  ( fx_inproc "$V"; set +eufx +o pipefail; hash -r; . "$_v" || exit 126; vaa_main "$@" )
+}
+
 WORK="$(mktemp -d)" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 REPO="$WORK/repo"; mkdir -p "$REPO"
@@ -77,7 +103,7 @@ C_RETRO="$(git rev-parse HEAD)"
 push() {
   local s="$1" l="$2" r="$3" ref="${4:-refs/heads/main}"
   OUT="$(printf '%s %s %s %s\n' "$ref" "$l" "$ref" "$r" \
-        | AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA_USE" bash "$s" --trunk-push 2>&1)"
+        | AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA_USE" tpb_ip "$s" --trunk-push 2>&1)"
   RC=$?
 }
 SCHEMA_USE="$S"
@@ -135,7 +161,7 @@ fi
 # repo's named defect class, and it is not hypothetical here: the first draft read
 # sys.stdin inside a `python3 - <<PY` heredoc, so it read the heredoc's leftovers --
 # nothing -- in all nine cases it was tested against.
-OUT="$(printf '' | AI_DLC_AUDIT_ANCHORS_SCHEMA="$S" bash "$V" --trunk-push 2>&1)"; RC=$?
+OUT="$(printf '' | AI_DLC_AUDIT_ANCHORS_SCHEMA="$S" tpb_ip "$V" --trunk-push 2>&1)"; RC=$?
 if [ "$RC" -eq 0 ] && grep -q "NO REF LINES ON STDIN" <<<"$OUT" \
    && ! grep -q "PASS" <<<"$OUT"; then
   ok "reading no refs reports that it judged nothing, in wording no passing run emits"
@@ -155,11 +181,39 @@ fi
 
 # --- Assertion 8: the trunk name is a tunable, not a literal ------------------------
 OUT="$(printf 'refs/heads/main %s refs/heads/main %s\n' "$C_BARE" "$C_OK" \
-      | AI_DLC_TRUNK=develop AI_DLC_AUDIT_ANCHORS_SCHEMA="$S" bash "$V" --trunk-push 2>&1)"; RC=$?
+      | AI_DLC_TRUNK=develop AI_DLC_AUDIT_ANCHORS_SCHEMA="$S" tpb_ip "$V" --trunk-push 2>&1)"; RC=$?
 if [ "$RC" -eq 0 ] && grep -q "develop" <<<"$OUT"; then
   ok "AI_DLC_TRUNK repoints the trunk (the same tunable validate-cycle-commits.sh reads)"
 else
   bad "AI_DLC_TRUNK was ignored and 'main' was judged regardless (rc=$RC)"
 fi
+
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome ---------------------
+# The outcomes this fixture reaches are exit 0 (the licensed commit) and a rejection (an unlicensed subject). One
+# `FXCELL=<id> bash "$V"` start per outcome, each compared with the in-process call on the same ref line on stdin:
+# stdout, stderr and exit separately, byte for byte, plus the outcome's own wording, and the two must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <local-sha> <remote-sha> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"
+  printf 'refs/heads/main %s refs/heads/main %s\n' "$2" "$3" > "$EQ/$id.in"
+  AI_DLC_AUDIT_ANCHORS_SCHEMA="$S" tpb_ip "$V" --trunk-push < "$EQ/$id.in" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"
+  echo "$?" > "$EQ/$id.ip.rc"
+  AI_DLC_AUDIT_ANCHORS_SCHEMA="$S" FXCELL="$id" bash "$V" --trunk-push < "$EQ/$id.in" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"
+  echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+if eqv cli-pass "$C_OK" "$C_BASE" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] \
+   && grep -q "1 commit(s) judged" "$EQ/cli-pass.cl.out" "$EQ/cli-pass.cl.err"; then
+  ok "cli-pass: the program passes the licensed commit exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 judging 1 commit ($(eq_twin cli-pass))"; fi
+if eqv cli-reject "$C_BARE" "$C_OK" && [ "$(cat "$EQ/cli-reject.cl.rc")" != 0 ] \
+   && grep -q "under a subject Step 5b does not license" "$EQ/cli-reject.cl.out" "$EQ/cli-reject.cl.err"; then
+  ok "cli-reject: the program rejects the unlicensed rewrite exactly as the in-process call does (stdout, stderr, exit $(cat "$EQ/cli-reject.cl.rc"))"
+else bad "cli-reject: the program and the in-process call differ, or the outcome is not a rejection naming the subject ($(eq_twin cli-reject))"; fi
+if ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-reject.cl.rc"; then
+  ok "cli cells discriminate: the licensed and the unlicensed push give different exits"
+else bad "cli cells do not discriminate: cli-pass and cli-reject gave the same exit"; fi
 
 report_end trunk-push-bound

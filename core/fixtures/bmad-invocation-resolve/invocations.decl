@@ -1,3 +1,5 @@
 # Set from one counted run (scripts/seed-verdict-store.sh) after the batteries were removed; every row is exact.
-23 *
-21 core/scripts/validate-bmad-invocations.sh
+# Re-measured (BL-878, batch 258 C4) by one counted run: the validator runs in process through vbi (inproc row); it starts only in its cli cells (cells.decl).
+5 *
+3 core/scripts/validate-bmad-invocations.sh
+24 inproc:core/scripts/validate-bmad-invocations.sh

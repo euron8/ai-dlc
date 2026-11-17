@@ -63,6 +63,32 @@ trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
+# IN PROCESS (BL-878). validate-cycle-commits.sh is LOADED once (core/fixtures/lib/inproc.sh inproc_load: its column-0
+# guard returns after defining vcc_main) and every audit below is `inproc_run "$VAL" vcc_main --audit-trunk ...`: a
+# subshell holding only the subject's functions, the caller's exported variables and a fresh bash's options (the
+# subject sets none of its own), so the call starts as the program would. Each call is one fx_inproc pass (the
+# inproc: row). Two cli cells, exit 0 (a clean range) and exit 1 (a finding), each compare the program's stdout,
+# stderr and exit with the in-process call on the same world at the same path (cells.decl).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a validator with neither its `vcc_main() {` line nor the column-0 source
+# guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE BROKEN in the
+# distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+grep -q '^vcc_main() {$' "$VAL"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VAL"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $VAL (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  10) echo "  FAIL $VAL defines \`vcc_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vcc_main in this shell"; echo "trunk-audit-classes: FAIL (1 assertion(s))"; exit 1 ;;
+  *) echo "  FAIL $VAL carries the column-0 source guard but no \`vcc_main() {\` line -- a respelled subject this fixture cannot drive"; echo "trunk-audit-classes: FAIL (1 assertion(s))"; exit 1 ;;
+esac
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$VAL" || { echo "FIXTURE BROKEN: sourcing $VAL defined nothing" >&2; exit 2; }
+declare -F vcc_main >/dev/null || { echo "FIXTURE BROKEN: sourcing $VAL defined no vcc_main" >&2; exit 2; }
+
 G() { git -C "$1" -c user.email=f@x -c user.name=F -c commit.gpgsign=false "${@:2}"; }
 
 # A synthetic consumer that is also a git repo: a trunk, two validators (one that passes and
@@ -111,9 +137,12 @@ validator: none'
 # and an assignment inside `$( )` dies with the subshell — the trap this repo has recorded and
 # which cost this fixture its first run.
 RCF="$WORK/rc"
+# In process: the callers' locals (decl_case's o r, stdin_case's d g c o r) are unset here, repeatedly, so none of
+# them reaches the subject; inproc_run unsets each visible name once, which would uncover an outer binding.
 run_audit() { # $1 = repo, rest = args. Prints output; writes the exit code to $RCF.
-  local d="$1"; shift
-  ( cd "$d" && bash "$VAL" --audit-trunk "$@" 2>&1; echo "$?" > "$RCF" )
+  ( cd "$1" || exit 2; shift
+    for _i in 1 2 3; do unset d g c o r 2>/dev/null; done; unset _i
+    inproc_run "$VAL" vcc_main --audit-trunk "$@" 2>&1; echo "$?" > "$RCF" )
 }
 arc() { cat "$RCF"; }
 
@@ -472,6 +501,40 @@ stdin_case read     'read -r _x; true' 'false' FAIL
 # that reads stdin -- would turn red, which is why the reader itself is seeded green here.
 stdin_case nm-true  'true'             'true'  CLEAN
 stdin_case nm-cat   'cat >/dev/null'   'true'  CLEAN
+
+# ---- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome --------------------
+# The outcomes this fixture reaches are exit 0 (a clean range) and exit 1 (a finding). One `FXCELL=<id> bash "$VAL"`
+# start per outcome, each compared with the in-process call on the same world: --audit-trunk advances the watermark,
+# so each side runs on a fresh copy of one template at the SAME path. stdout, stderr and exit separately, byte for
+# byte; each cell also asserts its own outcome, and the two cells must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+EQW="$WORK/eqw"; mkdir -p "$EQW"
+cp -R "$R1" "$EQW/clean.t"; git -C "$EQW/clean.t" rev-parse HEAD~1 > "$EQW/clean.t/_bmad-output/.audit-watermark"
+EQG_CLEAN="$g1"
+cp -R "$R2" "$EQW/finding.t"; printf '%s\n' "$g2" > "$EQW/finding.t/_bmad-output/.audit-watermark"
+EQG_FINDING="$g2"
+eqv() { # <cell-id> <template> <genesis> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" t="$2" gen="$3" p="$EQW/$1"
+  rm -rf "$p"; cp -R "$t" "$p"
+  ( cd "$p" || exit 2; set -- "$gen"; for _i in 1 2 3; do unset id t gen p 2>/dev/null; done; unset _i
+    inproc_run "$VAL" vcc_main --audit-trunk "$1" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  rm -rf "$p"; cp -R "$t" "$p"
+  ( cd "$p" || exit 2; FXCELL="$id" bash "$VAL" --audit-trunk "$gen" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+if eqv cli-clean "$EQW/clean.t" "$EQG_CLEAN" && [ "$(cat "$EQ/cli-clean.cl.rc")" = 0 ] \
+   && grep -qE "^  CLEAN   ${c1} \(retro\)" "$EQ/cli-clean.cl.out" && grep -q 'findings=0' "$EQ/cli-clean.cl.out"; then
+  ok "cli-clean: the program audits a clean range exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-clean: the program and the in-process call differ, or the outcome is not exit 0 with a CLEAN row ($(eq_twin cli-clean))"; fi
+if eqv cli-finding "$EQW/finding.t" "$EQG_FINDING" && [ "$(cat "$EQ/cli-finding.cl.rc")" = 1 ] \
+   && grep -qE "^  FAIL    ${c2} \(code\)" "$EQ/cli-finding.cl.out"; then
+  ok "cli-finding: the program reports the finding exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-finding: the program and the in-process call differ, or the outcome is not exit 1 with a FAIL row ($(eq_twin cli-finding))"; fi
+if ! cmp -s "$EQ/cli-clean.cl.out" "$EQ/cli-finding.cl.out" && ! cmp -s "$EQ/cli-clean.cl.rc" "$EQ/cli-finding.cl.rc"; then
+  ok "cli cells discriminate: the clean and the finding world give different stdout and exit"
+else bad "cli cells do not discriminate: cli-clean and cli-finding gave the same stdout or exit"; fi
 
 # ---- the run itself is a control
 [ -n "$out1" ] && ok "the audit produced output (the run is not a silent death)" \

@@ -1,0 +1,5 @@
+# layer-artifact-path-prescriptions' starts of core/scripts/validate-layer-entries.sh (BL-879 grammar). The fixture
+# reads one state: run.sh sources the validator once and every reader reads one in-process vle_main answer. One cli
+# cell for its one CLI outcome (exit 1 on the seeded consumer, three W11 rows), started as FXCELL=cli-fail bash
+# "$LINTER" and compared byte for byte with an in-process call on the same input.
+cli core/scripts/validate-layer-entries.sh cli-fail

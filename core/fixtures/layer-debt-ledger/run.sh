@@ -31,9 +31,32 @@ WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 REG="$WORK/register.jsonl"
 
-EXPECTED_ASSERTIONS=30
+EXPECTED_ASSERTIONS=32
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The subject is loaded ONCE (inproc_load: its column-0 guard returns after defining ald_main)
+# and every drive is inproc_run, which calls ald_main in a subshell made to look like a fresh `bash <subject>`; the
+# subject's `exit` ends that subshell only. It runs as a program only in its cli cells (cells.decl, at the end).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with neither its `ald_main() {` line nor the column-0 source
+# guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE BROKEN in
+# the distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+grep -q '^ald_main() {$' "$AUDIT"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$AUDIT"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $AUDIT (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  10) echo "  FAIL  $AUDIT defines \`ald_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run ald_main in this shell"; echo "layer-debt-ledger: 1 FAILED"; exit 1 ;;
+  *) echo "  FAIL  $AUDIT carries the column-0 source guard but no \`ald_main() {\` line -- a respelled subject this fixture cannot drive"; echo "layer-debt-ledger: 1 FAILED"; exit 1 ;;
+esac
+inproc_load "$AUDIT" || { echo "FIXTURE BROKEN: sourcing $AUDIT defined nothing" >&2; exit 2; }
+ald() { inproc_run "$AUDIT" ald_main "$@"; }
 
 row() { # row <entry> <verdict> <reason> [owed-json] [closes-json]
   python3 - "$1" "$2" "$3" "${4:-}" "${5:-}" >>"$REG" <<'PY'
@@ -47,7 +70,7 @@ print(json.dumps(r))
 PY
 }
 
-run() { bash "$AUDIT" --register "$REG" 2>&1; }
+run() { ald --register "$REG" 2>&1; }
 
 # --- the corpus ---------------------------------------------------------------------------
 : >"$REG"
@@ -103,7 +126,7 @@ fi
 # --- 7. an ABSENT register is DISARMED, never 'no debts' -----------------------------------
 # The whole subject of this file is obligations that went invisible; a reader that reports
 # CLEAN on a register it could not open is the same failure one level up.
-miss_out="$(bash "$AUDIT" --register "$WORK/nope.jsonl" 2>&1)"; miss_rc=$?
+miss_out="$(ald --register "$WORK/nope.jsonl" 2>&1)"; miss_rc=$?
 if [ "$miss_rc" -eq 2 ] && grep -q 'DISARMED' <<<"$miss_out"; then
   ok "an unreadable register exits 2 DISARMED rather than reporting zero"
 else
@@ -132,7 +155,7 @@ print(json.dumps(dict(base, entry="extensions/s.md", reason="carries one that ge
 print(json.dumps(dict(base, entry="extensions/s.md", reason="and here it is paid",
                       closes_owed="OWED-STR-1")))
 PY
-str_out="$(bash "$AUDIT" --register "$STR_REG" 2>&1)"
+str_out="$(ald --register "$STR_REG" 2>&1)"
 if grep -q 'OWED-STR-1' <<<"$str_out"; then
   bad "a string-valued \`closes_owed\` did not close its debt — the id is iterated character by character and the debt is reported OPEN forever"
   sed 's/^/        /' <<<"$str_out"
@@ -178,7 +201,7 @@ print(json.dumps(dict(base, entry="extensions/y.md", subject_digest="c"*40,
                       verdict="still-additive", reason="declaring the migration",
                       owed={"id":"OWED-Y-SPLIT","what":"refile as an override"})))
 PY
-cc_out="$(bash "$AUDIT" --register "$CC_REG" 2>&1)"
+cc_out="$(ald --register "$CC_REG" 2>&1)"
 
 if grep -qE '^CONTRADICTS-CORE WITHOUT AN `owed` \(1\)' <<<"$cc_out" && grep -q 'x\.md' <<<"$cc_out"; then
   ok "a contradicts-core entry that declares no \`owed\` anywhere is reported"
@@ -251,7 +274,7 @@ r("extensions/c11.md", "declaring the second migration", {"id":"OWED-C","what":"
 print(json.dumps(dict(base, entry="extensions/c12.md", reason="Debt discharged.",
                       closes_owed=["OWED-C"])))
 PY
-cit_out="$(bash "$AUDIT" --register "$CIT_REG" 2>&1)"
+cit_out="$(ald --register "$CIT_REG" 2>&1)"
 cit_und="$(awk '/^UNDECLARED/,/^$/' <<<"$cit_out")"
 
 # 15 — the SUBJECT is acquitted. Absence-shaped, so arms 16 and 17 give it presence-shaped twins.
@@ -365,7 +388,7 @@ r("extensions/n13.md", "Filed elsewhere (not under OWED-CIT-X) and a narrowing i
 # passes for a reason that has nothing to do with the citation key.
 r("extensions/nd.md", "declaring the migration", {"id":"OWED-CIT-X","what":"split X out"})
 PY
-cn_out="$(bash "$AUDIT" --register "$CIT_NEG_REG" 2>&1)"
+cn_out="$(ald --register "$CIT_NEG_REG" 2>&1)"
 cn_und="$(awk '/^UNDECLARED/,/^$/' <<<"$cn_out")"
 cn_names() { grep -oE 'n[0-9]+\.md' <<<"$1" | sort -u | tr '\n' ' '; }
 CN_EXPECT='n1.md n10.md n12.md n13.md n2.md n4.md n5.md n6.md n8.md '
@@ -444,7 +467,7 @@ r("extensions/n7.md", "Not under OWED-CIT-X; the narrowing is owed under OWED-CI
 r("extensions/n11.md", "A narrowing is still owed here.")
 r("extensions/nd.md", "declaring the migration", {"id":"OWED-CIT-X","what":"split X out"})
 PY
-any_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(bash "$AUDIT" --register "$ANY_REG" 2>&1)")"
+any_und="$(awk '/^UNDECLARED/,/^$/' <<<"$(ald --register "$ANY_REG" 2>&1)")"
 any_got="$(cn_names "$any_und")"
 [ "$any_got" = "n11.md " ] \
   && { ok "one clean mention beside a denied one is a handle — the rule is per OCCURRENCE, and the row citing nothing is still reported"; } \
@@ -453,7 +476,7 @@ any_got="$(cn_names "$any_und")"
 # 45 — CONTROL FOR THIS SECTION, necessary and not sufficient, so it carries a POSITIVE
 # conjunct: the subject must exit 0 and report the exact baseline set. A subject replaced by
 # `exit 0` reports nothing and fails the set comparison.
-cnc_out="$(bash "$AUDIT" --register "$CIT_NEG_REG" 2>&1)"; cnc_rc=$?
+cnc_out="$(ald --register "$CIT_NEG_REG" 2>&1)"; cnc_rc=$?
 if [ "$cnc_rc" -eq 0 ] && [ "$(cn_names "$(awk '/^UNDECLARED/,/^$/' <<<"$cnc_out")")" = "$CN_EXPECT" ]; then
   ok "CONTROL: the subject exits 0 and reproduces the exact citation-negation baseline set"
 else
@@ -463,13 +486,34 @@ fi
 
 # 25 — CONTROL, necessary and not sufficient, so it carries a POSITIVE conjunct: the subject must
 # still NAME the baseline rows. A subject replaced by `exit 0` fails this.
-ctl_out="$(bash "$AUDIT" --register "$CIT_REG" 2>&1)"; ctl_rc=$?
+ctl_out="$(ald --register "$CIT_REG" 2>&1)"; ctl_rc=$?
 if [ "$ctl_rc" -eq 0 ] && grep -q 'c4\.md' <<<"$ctl_out" && grep -q 'OWED-CIT-X' <<<"$ctl_out"; then
   ok "CONTROL: the subject exits 0 on the citation register and still names the baseline rows"
 else
   bad "CONTROL: the subject did not reproduce the citation baseline (rc=$ctl_rc)"
   sed 's/^/        /' <<<"$ctl_out"
 fi
+
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome --------------------
+# Each is compared with the in-process call on the same input, stdout, stderr and exit separately, byte for byte,
+# and asserts its own exit and a string it must say, so two runs that both printed nothing cannot read as
+# equivalent. Outcomes: exit 0 (a report) and exit 2 (an absent register, DISARMED).
+EQ="$WORK"
+eq_cell() { # eq_cell <cell-id> <want rc> <must-say> <args...>
+  local id="$1" want="$2" say="$3"; shift 3
+  ald "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$AUDIT" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" \
+     && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" && [ "$(< "$EQ/$id.cl.rc")" = "$want" ] \
+     && grep -qF -- "$say" "$EQ/$id.cl.out" "$EQ/$id.cl.err"; then
+    ok "$id: the program answers exit $want exactly as the in-process call does (stdout, stderr, exit)"
+  else
+    bad "$id: in-process rc=$(< "$EQ/$id.ip.rc") / program rc=$(< "$EQ/$id.cl.rc") want $want, saying \"$say\""
+    sed -n '1,3s/^/          | /p' "$EQ/$id.ip.out" "$EQ/$id.cl.out" "$EQ/$id.ip.err" "$EQ/$id.cl.err"
+  fi
+}
+eq_cell cli-report 0 "OWED-CIT-X" --register "$CIT_REG"
+eq_cell cli-disarm 2 "DISARMED" --register "$WORK/nope.jsonl"
 
 echo ""
 report_end layer-debt-ledger "$EXPECTED_ASSERTIONS"

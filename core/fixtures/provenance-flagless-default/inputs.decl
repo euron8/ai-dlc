@@ -6,3 +6,5 @@
 core/fixtures/check-17-bypass/seed.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

@@ -5,6 +5,13 @@
 # BL-874 (PENDING kept): 404 / 163 / 52 -> 469 / 190 / 63, measured. The pending arm runs the rotator up to
 # three times (cells a, c, b) and is driven unmutated, in the mutant-control loop and against
 # mutation-pending-applied, whose twin (sha) also runs once; each rotator run also starts backlog-reverify.sh.
-97 *
-55 scripts/backlog-reverify.sh
-23 scripts/backlog-rotate.sh
+# BL-878 (in process, batch 258): 97 / 55 / 23 -> 21 / 9 / 2, from one counted run (scripts/seed-verdict-store.sh, the
+# judge's own J3 output). The subject starts are the four cli cells of cells.decl and the classifier children the two
+# rotator cli starts make (the nested row): 2 + 7 reverify, 2 rotate. The inproc rows are one fx_inproc pass per
+# rv_in / rt_in call, the rotator's in-process reverify children included (bl_shim), counted from the same tree's
+# .inproc log: 64 reverify, 25 rotate.
+21 *
+9 scripts/backlog-reverify.sh
+2 scripts/backlog-rotate.sh
+64 inproc:scripts/backlog-reverify.sh
+25 inproc:scripts/backlog-rotate.sh

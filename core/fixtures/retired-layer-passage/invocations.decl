@@ -1,4 +1,7 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-# Re-measured at slot sha 1a408b46e plus the m1-ii tip, armed through hermetic-run.sh (FXCOUNT_JUDGE, FXCOUNT_RC, FXCOUNT_DIR), two runs, identical counts (p1's rows replaced: * 73->71; core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh 10->8).
-24 *
-8 core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output). The detector's starts are
+# the four cli cells of cells.decl; the rest of `*` is run.sh, seed.sh, the bash -c lib.sh drives of the K and F cells,
+# and the tr and sed stubs. Every other drive is in process (BL-878).
+18 *
+4 core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
+# inproc rows are P2 units: one fx_inproc per call of rlp_main (7 of the real subject, 2 of its relocated copies).
+9 inproc:core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh

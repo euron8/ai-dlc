@@ -1,4 +1,13 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-44 *
-21 scripts/validate-backlog-size.sh
-22 scripts/backlog-reverify.sh
+# BL-878 (batch 258): 44 -> 8 *, 21 -> 3 validator, 22 -> 4 reverify. Every drive is in process; the subject starts are
+# the five cli cells of cells.decl plus the two reverify children of the started cli-size-ok and cli-size-fail (the
+# nested row; cli-size-env exits before starting one). inproc 24 validator = 21 run_v calls + 3 cli_size in-process
+# sides; inproc 26 reverify = the child shim's passes: 20 run_v calls that reach the oracle (b04 exits first), 2 of
+# the cli_size in-process sides, b15's rows, d00's --print-marker and the 2 cli_rv in-process sides. `*`, both subject
+# rows and the inproc total (50) read from one counted run (scripts/seed-verdict-store.sh, the judge's own J3/J7
+# output); the 24/26 split from fx_inproc's log of one plain run, summing to that total.
+8 *
+3 scripts/validate-backlog-size.sh
+4 scripts/backlog-reverify.sh
+24 inproc:scripts/validate-backlog-size.sh
+26 inproc:scripts/backlog-reverify.sh

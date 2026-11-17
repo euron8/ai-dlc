@@ -36,6 +36,51 @@ REG="$CONS/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
 CONTRACT="$DIST/core/skills/ai-dlc/layer-contract.yaml"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: sourcing lib/layout.sh failed" >&2; exit 2; }
+
+# IN PROCESS (BL-878). Every drive calls ld_main through inproc_run, which sources layer-drift.sh (its column-0
+# guard returns after defining ld_main) inside a subshell made to look like a fresh `bash layer-drift.sh`; this
+# shell never sources the subject, so no later opaque command word here reads as an unrouted pass. So the subject's `exit`, `set -uo pipefail`, `set -f` and EXIT trap stay there. No drive
+# here starts the subject as a program: layer-title-join owns layer-drift's cli equivalence cells.
+# THE MEMO. A program run sources lib.sh at BASH_SUBSHELL 0 and builds a private memo; a subshell does not, so
+# ld_eng hands each run a FRESH memo of its own, exactly as private as the program's, unless the caller exported one.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with neither its `ld_main() {` line nor the column-0 source
+# guard predates the wrap and reads SKIP (exit 0, never an ok); exactly one half is a respelled subject and FAILs;
+# a subject grep cannot READ (exit 2) is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$DRIFT" ld_main; g_ld=$?
+[ "$g_ld" != 2 ] || exit 2
+if [ "$g_ld" = 1 ]; then echo "layer-adjudication-tier: 1 FAILED"; exit 1; fi
+if [ "$g_ld" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+case "$DRIFT" in /*) ;; *) DRIFT="$(cd "$(dirname "$DRIFT")" && pwd)/${DRIFT##*/}" ;; esac
+ld_eng() { # <engine> [args...] -> what `bash <engine> [args...]` prints and exits with, in process
+  local _e="$1" _m _rc; shift
+  case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in
+    "declare -x"*) inproc_run "$_e" ld_main "$@"; return ;;
+  esac
+  _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
+  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$_e" ld_main "$@"; _rc=$?
+  rm -rf "$_m"
+  return "$_rc"
+}
+ld_ip() { ld_eng "$DRIFT" "$@"; }
 
 # ONE DRIFT RUN PER DISTINCT STATE. blocks/drifts/digest/hookdetail/spentnote each re-ran the whole
 # drift computation over a state a neighbour had just run. `dcf` keys a run on everything the engine
@@ -49,17 +94,17 @@ dcf() { # <cons> <reg> <engine> args... -> prints the file holding the run's std
   local k f
   k="$*|$(git -C "$cons" rev-parse HEAD 2>/dev/null)|$(git -C "$cons" status --porcelain 2>/dev/null)|$(cat "$cons"/.claude/skills/ai-dlc/extensions/* "$cons"/.claude/skills/ai-dlc/overrides/* "$reg" 2>/dev/null)|$([ -e "$reg" ] && echo reg-present)|$(git -C "$DIST" rev-parse HEAD 2>/dev/null)"
   f="$MEMO/$(printf '%s' "$k" | cksum | tr ' ' _)"
-  if [ ! -f "$f" ]; then bash "$@" > "$f.tmp" 2> "$f.err"; mv "$f.tmp" "$f"; echo x >> "$MEMO/.misses"; fi
+  if [ ! -f "$f" ]; then ld_eng "$@" > "$f.tmp" 2> "$f.err"; mv "$f.tmp" "$f"; echo x >> "$MEMO/.misses"; fi
   printf '%s' "$f"
 }
 dcat() { cat "$(dcf "$@")"; }
 
 
 run()    { dcat "$CONS" "$REG" "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS"; }
-run_raw(){ bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
+run_raw(){ ld_ip "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
 # Same drive against a consumer root given as an argument. Part 3b's third control needs a world
 # that is NOT a git repo, and a helper hard-coding $CONS cannot express one.
-run_at() { bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$1" 2>/dev/null; }
+run_at() { ld_ip "$DIST" "$BASE" "$THEIRS" "$1" 2>/dev/null; }
 blocks() { run | grep -c '^HARD-LAYER-ADJUDICATION-MISSING' || true; }
 drifts() { run | grep -c '^EXTENSION-HOOK-DRIFT'; }
 digest() { run | awk -F'\t' '$1 == "HARD-LAYER-ADJUDICATION-MISSING"' \
@@ -609,7 +654,7 @@ else
   mv "$DIST/core/schemas/x.json" "$DIST/core/schemas/layer-adjudication-register.json"
   git -C "$DIST" add -A && git -C "$DIST" commit -qm "mutate the verdict enum"
   THEIRS_M="$(git -C "$DIST" rev-parse --short HEAD)"
-  n="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS_M" "$CONS" 2>/dev/null | grep -c '^HARD-LAYER-ADJUDICATION-MISSING')"
+  n="$(ld_ip "$DIST" "$BASE" "$THEIRS_M" "$CONS" 2>/dev/null | grep -c '^HARD-LAYER-ADJUDICATION-MISSING')"
   if [ "$n" -ge 1 ]; then
     ok "the enum moved in the schema and 'retire' stopped discharging the duty — the vocabulary is read from the schema, not restated in the reader"
   else
@@ -633,7 +678,7 @@ else
   mv "$CONTRACT.mut" "$CONTRACT"
   git -C "$DIST" add -A && git -C "$DIST" commit -qm "flip LC-E4 to WARN"
   THEIRS_W="$(git -C "$DIST" rev-parse --short HEAD)"
-  w_out="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS_W" "$CONS" 2>/dev/null)"
+  w_out="$(ld_ip "$DIST" "$BASE" "$THEIRS_W" "$CONS" 2>/dev/null)"
   n="$(printf '%s\n' "$w_out" | grep -c '^HARD-LAYER-ADJUDICATION-MISSING')" || n=0
   d="$(printf '%s\n' "$w_out" | grep -c '^EXTENSION-HOOK-DRIFT')" || d=0
   if [ "$n" -eq 0 ] && [ "$d" -eq 1 ]; then
@@ -677,7 +722,7 @@ fi
 : > "$REG"
 abs_deg="$(run | grep -c 'could not be computed')" || abs_deg=0
 abs_hard="$(run | grep -c '^HARD-')" || abs_hard=0
-rel_out="$(cd "$CONS" && bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" . 2>/dev/null)"
+rel_out="$(cd "$CONS" && ld_ip "$DIST" "$BASE" "$THEIRS" . 2>/dev/null)"
 rel_deg="$(printf '%s\n' "$rel_out" | grep -c 'could not be computed')" || rel_deg=0
 rel_hard="$(printf '%s\n' "$rel_out" | grep -c '^HARD-')" || rel_hard=0
 if [ "$rel_deg" -eq "$abs_deg" ] && [ "$rel_hard" -eq "$abs_hard" ]; then
@@ -1004,7 +1049,7 @@ else
   git -C "$SWAPDIST" add -A >/dev/null 2>&1
   git -C "$SWAPDIST" commit -qm "swap the two adjudicable clauses' codes" >/dev/null 2>&1
   SWAPT="$(git -C "$SWAPDIST" rev-parse --short HEAD)"
-  swap_detail() { bash "$DRIFT" "$SWAPDIST" "$BASE" "$SWAPT" "$E14CONS" 2>/dev/null \
+  swap_detail() { ld_ip "$SWAPDIST" "$BASE" "$SWAPT" "$E14CONS" 2>/dev/null \
                   | awk -F'\t' -v e="$1" '$1=="HARD-LAYER-ADJUDICATION-MISSING" && $2==e {print $4; exit}'; }
   swap_anchor="$(swap_detail "$E14ENTRY")"
   swap_hook="$(swap_detail "$ENTRY")"
@@ -1200,7 +1245,7 @@ chmod +x "$P11W/bin/mktemp"
 p11_drive() {
   local eng="$1" td="$P11W/tmp-$2"; shift 2
   rm -rf "$td" "$td.calls"; mkdir -p "$td"
-  p11_out="$(PATH="$P11W/bin:$PATH" P11_TD="$td" TMPDIR="$td" bash "$eng" "$@" 2>"$P11W/stderr")"; p11_rc=$?
+  p11_out="$(PATH="$P11W/bin:$PATH" P11_TD="$td" TMPDIR="$td" ld_eng "$eng" "$@" 2>"$P11W/stderr")"; p11_rc=$?
   p11_err="$(cat "$P11W/stderr")"
   p11_tmp="$(ls -A "$td" | grep -c .)" || p11_tmp=0
 }
@@ -1439,7 +1484,7 @@ if [ -n "$P13D" ]; then
   else bad "R9: a content-free separator line cleared as entry evidence: HARD=$(p13_n)"; fi
   # R6: the listing answers as the gate does.
   p13_rec "$P13D" - > "$REG"
-  p13_lv="$(bash "$DRIFT" --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | awk -F'\t' -v d="$P13D" '$4==d {print $5; exit}')"
+  p13_lv="$(ld_ip --list-adjudications "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | awk -F'\t' -v d="$P13D" '$4==d {print $5; exit}')"
   case "$p13_lv" in
     "(recorded, not clearing: no read evidence for LC-E4)") ok "R6: the listing shows the R1 record as recorded and NOT clearing — it agrees with the gate rather than calling it adjudicated" ;;
     *) bad "R6: the listing's verdict cell for the R1 record is '$p13_lv'; the gate blocks on it, so the listing disagrees with the gate" ;;
@@ -1488,7 +1533,7 @@ printf -- '---\nshadows: steps/stable.md#Stable Section\nbase_sha: %s\nreason: f
 printf -- '---\nkind: check\nhooks: steps/stable.md\nreason: fixture extension matching a stable core title\n---\n\n## Stable Section\n\nThe consumer augmenting body that sits under the stable title.\n' > "$P13WC/$P13EX"
 git -C "$P13WC" init -q; git -C "$P13WC" config user.email f@x; git -C "$P13WC" config user.name f; git -C "$P13WC" add -A; git -C "$P13WC" commit -qm c
 P13REG="$P13WC/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
-p13w_run() { bash "$DRIFT" "$P13WD" "$P13B" "$P13T" "$P13WC" 2>/dev/null; }
+p13w_run() { ld_ip "$P13WD" "$P13B" "$P13T" "$P13WC" 2>/dev/null; }
 p13w_records() { # $1 core_line for both records
   jq -cn --arg d "$P13OD" --arg e "$P13OV" --arg c "$1" '{clause:"LC-O15",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:{entry_line:"The consumer replacement body for the stable section, long enough.",core_line:$c}}'
   jq -cn --arg d "$P13ED" --arg e "$P13EX" --arg c "$1" '{clause:"LC-E19",entry:$e,subject_digest:$d,verdict:"still-additive",recorded_utc:"2026-01-01T00:00:00Z",reason:"seeded",read:{entry_line:"The consumer augmenting body that sits under the stable title.",core_line:$c}}'
@@ -1561,7 +1606,7 @@ p14_entry '#Gamma review' '### 903. [ext:anchor-only] Consumer entry at anchor g
 p14_entry 'steps/demo.md#Gamma review' '### 904. [ext:file-anchor] Consumer entry at anchor grain.' > "$P14CONS/$P14B"
 git -C "$P14CONS" add -A >/dev/null 2>&1
 git -C "$P14CONS" commit -qm "seed the BL-711 pair" >/dev/null 2>&1
-p14_run() { bash "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$P14CONS" 2>/dev/null; }
+p14_run() { ld_eng "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$P14CONS" 2>/dev/null; }
 p14_dig() { # $1 entry -> its blocking row's digest, from an EMPTY register
   rm -f "$P14REG"
   p14_run | awk -F'\t' -v e="$1" '$1=="HARD-LAYER-ADJUDICATION-MISSING" && $2==e' \

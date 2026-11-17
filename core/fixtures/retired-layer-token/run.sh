@@ -34,10 +34,85 @@ trap 'rm -rf "$WORK"' EXIT
 TAB="$(printf '\t')"
 L=".claude/skills/ai-dlc"
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
 
 echo "retired-layer-token:"
-ok "resolved detector: $SCRIPT"
 echo "HERMETIC-CONSUMED $SCRIPT"
+
+# IN PROCESS (BL-878). retired-layer-token.sh is loadable: sourcing it defines rlt_main and returns at its column-0
+# guard. It is loaded ONCE (below) and `rlt_eng "$SCRIPT" <args>` answers what `bash "$SCRIPT" <args>` prints, in a
+# subshell made to look like a fresh bash. The orphan arm sources its copy inside its own subshell first, so the
+# rlt_main that runs there looks for setup-sites.md beside the copy exactly as the program did. A caller's `cd` and
+# prefix assignments reach the run as they reached the child.
+# THE BLOB MEMO. A CLI run sources lib.sh at the top of its own process and so builds a private memo for that one run;
+# in a subshell lib.sh does not (it keys on `$BASH_SUBSHELL` 0). So `rlt_eng` hands each run a FRESH memo, as private
+# to that run as the CLI's, unless the caller exported one (the memo cells do).
+# KEPT AS PROGRAMS, and why: the cli cells (one per distinct CLI outcome), the forced rename-map run under `ulimit -f`
+# (e2e), the driver emit-report.sh's two runs (e2e: the property is the driver reading the detector's exit as a
+# separate program; its detector child is the `nested` row), and the `env -i` run, which the counter cannot see (a
+# bare environment drops BASH_ENV) and whose property is that bare environment.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped subject, and
+# sourcing a pre-wrap subject would run its whole body in this shell. So the shape is checked first, on its two halves:
+# neither the `rlt_main() {` line nor the column-0 source guard is a subject that predates the wrap, which prints SKIP
+# and exits 0 -- never an ok. Exactly one half is a respelled subject this fixture can no longer drive, which FAILS.
+rlt_def=0; rlt_guard=0
+grep -q '^rlt_main() {$' "$SCRIPT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SCRIPT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rlt_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SCRIPT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SCRIPT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rlt_guard=1
+if [ "$rlt_def$rlt_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+if [ "$rlt_def" = 0 ]; then echo "   FAIL  $SCRIPT carries the column-0 source guard but no \`rlt_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "retired-layer-token: FAIL (1)" >&2; exit 1; fi
+if [ "$rlt_guard" = 0 ]; then echo "   FAIL  $SCRIPT defines \`rlt_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run rlt_main in this shell" >&2; echo "retired-layer-token: FAIL (1)" >&2; exit 1; fi
+# NOT core/fixtures/lib/inproc.sh: this fixture declares emit-report.sh, an UNGUARDED bash subject, and P2
+# (validate-fixture-invocations.sh) reads inproc.sh's opaque `. "$1"` as an unrouted source of it. So the subject is
+# sourced here by a literal-tail path, and `rlt_run` is inproc_run's fresh-bash subshell without the source: every
+# function but rlt_main and fx_inproc is removed, every UNEXPORTED variable a fresh bash does not start with is unset,
+# the options are a fresh bash's and the command hash is empty. Exported variables, prefix assignments included, stay.
+RLT_SRC="$(dirname "$SCRIPT")/retired-layer-token.sh"
+# shellcheck source=/dev/null
+. "$RLT_SRC" || { echo "FIXTURE BROKEN: sourcing $RLT_SRC failed" >&2; exit 2; }
+declare -F rlt_main >/dev/null || { echo "FIXTURE BROKEN: $RLT_SRC defined no rlt_main when sourced" >&2; exit 2; }
+rlt_run() { # [args...] -> rlt_main's stdout, stderr and status, in a subshell shaped like a fresh `bash <subject>`
+  ( IFS=$' \t\n'
+    _rr_p="$RLT_SRC"
+    _rr_x=" $(compgen -e) "; _rr_x="${_rr_x//$'\n'/ }"
+    for _rr_f in $(compgen -A function); do case "$_rr_f" in rlt_main|fx_inproc) ;; *) unset -f "$_rr_f" ;; esac; done
+    for _rr_v in $(compgen -v); do
+      case "$_rr_x" in *" $_rr_v "*) continue ;; esac
+      case "$_rr_v" in
+        _rr_p|_rr_x|_rr_v|_rr_f) continue ;;
+        BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
+        IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
+        SHLVL|TERM|UID|_) continue ;;
+      esac
+      unset "$_rr_v" 2>/dev/null
+    done
+    OPTIND=1
+    set +eufx +o pipefail
+    hash -r
+    unset _rr_x _rr_v _rr_f
+    fx_inproc "$_rr_p"; unset -f fx_inproc; unset _rr_p
+    rlt_main "$@" )
+}
+rlt_eng() { # <engine> [args...] -> what `bash <engine> [args...]` prints and exits with; <engine> must be $SCRIPT
+  local _m _rc
+  [ "$1" = "$SCRIPT" ] || { echo "rlt_eng: engine $1 is not the loaded subject" >&2; return 125; }
+  shift
+  case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in
+    "declare -x"*) rlt_run "$@"; return ;;
+  esac
+  _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
+  AI_DLC_RECONCILE_MEMO="$_m" rlt_run "$@"; _rc=$?
+  rm -rf "$_m"
+  return "$_rc"
+}
+
+ok "resolved detector: $SCRIPT"
 
 # --- the five worlds every scored script is driven through --------------------------------
 # EVERY drive names its own cwd. The predicates below must answer the same from the repo
@@ -49,7 +124,7 @@ BADREF=0000000000000000000000000000000000000000
 # rc could not tell the two apart, which is the same defect one level up.
 drive() {  # cwd script dist base theirs consumer out-prefix
   ( cd "$1" || exit 99
-    bash "$2" "$3" "$4" "$5" "$6" >"$7.out" 2>"$7.err"
+    rlt_eng "$2" "$3" "$4" "$5" "$6" >"$7.out" 2>"$7.err"
     echo $? > "$7.rc" ) &
 }
 snap() {  # 1=script 2=snapshot dir
@@ -138,8 +213,16 @@ q16() { rows_present "$1" && ! grep -qF 'mover.md' "$1/main.out"; }
 q17() { [ "$(rc_of "$1/badt.rc")" = "2" ] && [ ! -s "$1/badt.out" ] \
         && grep -qF 'could not read any rulebook token at theirs' "$1/badt.err"; }
 
-vec() { local v="" p; for p in q1 q2 q3 q4 q5 q6 q7 q8 q9 q10 q11 q12 q13 q14 q15 q16 q17; do
-          if "$p" "$1"; then v="${v}1"; else v="${v}0"; fi; done; printf '%s' "$v"; }
+# Each predicate is named literally, never through a variable command word: P2 (validate-fixture-invocations.sh) reads
+# a `"$p"` call after the subject's source as a possible unrouted in-process drive (fail-closed).
+vec() { local v="" b
+  for b in "$(q1 "$1" && echo 1 || echo 0)" "$(q2 "$1" && echo 1 || echo 0)" "$(q3 "$1" && echo 1 || echo 0)" \
+           "$(q4 "$1" && echo 1 || echo 0)" "$(q5 "$1" && echo 1 || echo 0)" "$(q6 "$1" && echo 1 || echo 0)" \
+           "$(q7 "$1" && echo 1 || echo 0)" "$(q8 "$1" && echo 1 || echo 0)" "$(q9 "$1" && echo 1 || echo 0)" \
+           "$(q10 "$1" && echo 1 || echo 0)" "$(q11 "$1" && echo 1 || echo 0)" "$(q12 "$1" && echo 1 || echo 0)" \
+           "$(q13 "$1" && echo 1 || echo 0)" "$(q14 "$1" && echo 1 || echo 0)" "$(q15 "$1" && echo 1 || echo 0)" \
+           "$(q16 "$1" && echo 1 || echo 0)" "$(q17 "$1" && echo 1 || echo 0)"; do v="$v$b"; done
+  printf '%s' "$v"; }
 
 CTL="$WORK/snap-control"
 snap "$SCRIPT" "$CTL"
@@ -217,13 +300,15 @@ q17 "$CTL" && ok "an unresolvable THEIRS refuses with exit 2 and no rows, where 
 # nothing. The exit code is the half the DRIVER reads: a 0 renders as `none`.
 mkdir -p "$WORK/orphan"
 cp "$SCRIPT" "$WORK/orphan/retired-layer-token.sh"
-ORPHERR="$( cd "$NEUTRAL" && bash "$WORK/orphan/retired-layer-token.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>&1 >/dev/null )"; ORPHRC=$?
+# In process: the copy is sourced inside this arm's own subshell, so the rlt_main it defines is the COPY's, whose
+# `${BASH_SOURCE[0]}` -- and so its setup-sites.md -- is the orphan directory; the location stays the property.
+ORPHERR="$( cd "$NEUTRAL" && . "$WORK/orphan/retired-layer-token.sh" && rlt_eng "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>&1 >/dev/null )"; ORPHRC=$?
 { grep -qF 'could not read the rulebook list from setup-sites.md' <<<"$ORPHERR" && [ "$ORPHRC" -eq 2 ]; } \
   && ok "a copy with no setup-sites.md beside it refuses, and exits 2" \
   || bad "an unreadable rulebook list produced no warning or did not exit 2 (rc=$ORPHRC) — the driver would render it as 'none'"
 
 # --- Assertion 15: a base ref that does not resolve is a REFUSAL, never the NOTE -----------
-BADERR="$( cd "$NEUTRAL" && bash "$SCRIPT" "$DIST" "$BADREF" "$THEIRS" "$CONSUMER" 2>&1 >/dev/null )"; BADRC=$?
+BADERR="$( cd "$NEUTRAL" && rlt_eng "$SCRIPT" "$DIST" "$BADREF" "$THEIRS" "$CONSUMER" 2>&1 >/dev/null )"; BADRC=$?
 { grep -qF 'could not read any rulebook token at base' <<<"$BADERR" \
   && ! grep -qF 'NOTE' <<<"$BADERR" && [ "$BADRC" -eq 2 ]; } \
   && ok "an unresolvable base ref refuses with exit 2, and does not print the retired-nothing NOTE" \
@@ -235,9 +320,12 @@ BADERR="$( cd "$NEUTRAL" && bash "$SCRIPT" "$DIST" "$BADREF" "$THEIRS" "$CONSUME
 # no refusal line, or the arm below would pass against a driver that refuses unconditionally.
 EMITSH="$(dirname "$SCRIPT")/emit-report.sh"
 if [ -f "$EMITSH" ]; then
+  echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/emit-report.sh"
   sect() { awk '/Retired status tokens reused/{f=1;next} f&&/^\*\*/{exit} f'; }
-  EM_OK="$( cd "$NEUTRAL" && bash "$EMITSH" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | sect )"
-  EM_BAD="$( cd "$NEUTRAL" && bash "$EMITSH" "$DIST" "$BASE" "$CONSUMER" "$BADREF" 2>/dev/null | sect )"
+  # KEPT END TO END (cells.decl e2e-emit-ok, e2e-emit-bad): the property is the DRIVER reading this detector's exit
+  # code as a separate program; the detector start each makes is covered by the `nested` row.
+  EM_OK="$( cd "$NEUTRAL" && FXCELL=e2e-emit-ok bash "$EMITSH" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | sect )"
+  EM_BAD="$( cd "$NEUTRAL" && FXCELL=e2e-emit-bad bash "$EMITSH" "$DIST" "$BASE" "$CONSUMER" "$BADREF" 2>/dev/null | sect )"
   { grep -qF 'overrides/body.md' <<<"$EM_OK" && ! grep -qF 'DETECTOR-REFUSED' <<<"$EM_OK"; } \
     && ok "the driver renders this detector's rows into its own section when the detector reports" \
     || bad "the driver rendered no row for a reporting detector — the refusal arm below cannot discriminate"
@@ -264,6 +352,26 @@ else
   bad "control: $CTLVEC -- expected 11111111111111111"
 fi
 
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome --------------------------
+# The outcomes: exit 0 with rows, and exit 2 with the refusal on stderr. One `FXCELL=<id> bash "$SCRIPT"` start per
+# outcome, from the same cwd and on the same input as the control snapshot's in-process `main` and `badt` worlds, and
+# compared with them: stdout, stderr and exit, byte for byte. Each also asserts its own outcome, so two runs that both
+# printed nothing cannot read as equivalent.
+( cd "$NEUTRAL" && FXCELL=cli-rows bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" > "$WORK/cli-rows.out" 2> "$WORK/cli-rows.err"; echo $? > "$WORK/cli-rows.rc" )
+if [ "$(rc_of "$WORK/cli-rows.rc")" = 0 ] && q1 "$CTL" && grep -qF 'RETIRED-LAYER-TOKEN' "$WORK/cli-rows.out" \
+   && cmp -s "$CTL/main.out" "$WORK/cli-rows.out" && cmp -s "$CTL/main.err" "$WORK/cli-rows.err" && cmp -s "$CTL/main.rc" "$WORK/cli-rows.rc"; then
+  ok "cli-rows: the program reports the retired-token rows exactly as the in-process call does (stdout, stderr, exit 0)"
+else
+  bad "cli-rows: the program (rc=$(rc_of "$WORK/cli-rows.rc"), $(grep -c . "$WORK/cli-rows.out") rows) and the in-process call (rc=$(rc_of "$CTL/main.rc"), $(grep -c . "$CTL/main.out") rows) differ, or the outcome is not exit 0 with rows"
+fi
+( cd "$NEUTRAL" && FXCELL=cli-refuse bash "$SCRIPT" "$DIST" "$BASE" "$BADREF" "$CONSUMER" > "$WORK/cli-refuse.out" 2> "$WORK/cli-refuse.err"; echo $? > "$WORK/cli-refuse.rc" )
+if [ "$(rc_of "$WORK/cli-refuse.rc")" = 2 ] && [ ! -s "$WORK/cli-refuse.out" ] && grep -qF 'could not read any rulebook token at theirs' "$WORK/cli-refuse.err" \
+   && cmp -s "$CTL/badt.out" "$WORK/cli-refuse.out" && cmp -s "$CTL/badt.err" "$WORK/cli-refuse.err" && cmp -s "$CTL/badt.rc" "$WORK/cli-refuse.rc"; then
+  ok "cli-refuse: the program refuses an unresolvable theirs exactly as the in-process call does (stdout, stderr, exit 2)"
+else
+  bad "cli-refuse: the program (rc=$(rc_of "$WORK/cli-refuse.rc"), err [$(head -1 "$WORK/cli-refuse.err")]) and the in-process call (rc=$(rc_of "$CTL/badt.rc"), err [$(head -1 "$CTL/badt.err")]) differ, or the outcome is not exit 2 with the refusal"
+fi
+
 # --- A RENAMED witness file is not a deleted one ---------------------------------------------
 # `show_at "$THEIRS" "$f"` on the base path returns empty for a deletion AND for a rename, and
 # the two want opposite conclusions: a deleted emitter witnesses the word, a renamed emitter
@@ -285,7 +393,7 @@ THEIRS3="$(git -C "$DIST3" rev-parse HEAD)"
 RENC="$WORK/rename-consumer"
 mkdir -p "$RENC/.claude/skills/ai-dlc/overrides"
 printf '# Override\n\nstock exits RENAMEDWORD when nothing was read\n' > "$RENC/.claude/skills/ai-dlc/overrides/o.md"
-r_out="$(bash "$SCRIPT" "$DIST3" "$BASE3" "$THEIRS3" "$RENC" 2>"$WORK/rename.err")"
+r_out="$(rlt_eng "$SCRIPT" "$DIST3" "$BASE3" "$THEIRS3" "$RENC" 2>"$WORK/rename.err")"
 if [ -z "$r_out" ] && grep -qE 'read as emphasis, not status: .*RENAMEDWORD' "$WORK/rename.err"; then
   ok "a witness file RENAMED at theirs that still prints the word does not retire it, and the NOTE names the word as acquitted"
 else
@@ -302,8 +410,8 @@ fi
 # NOTE). The warm HIT with nothing damaged must reproduce the control's rows, or the damaged cells
 # would be comparing against a memo that never served anything.
 rlt_memo_warm() { local m; m="$(mktemp -d "$WORK/rlt-memo.XXXXXX")" || return 1
-  ( cd "$NEUTRAL" && AI_DLC_RECONCILE_MEMO="$m" bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >/dev/null 2>&1 ); printf '%s' "$m"; }
-rlt_memo_run() { ( cd "$NEUTRAL" && AI_DLC_RECONCILE_MEMO="$1" bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$WORK/mm.out" 2>"$WORK/mm.err" ); echo $?; }
+  ( cd "$NEUTRAL" && AI_DLC_RECONCILE_MEMO="$m" rlt_eng "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >/dev/null 2>&1 ); printf '%s' "$m"; }
+rlt_memo_run() { ( cd "$NEUTRAL" && AI_DLC_RECONCILE_MEMO="$1" rlt_eng "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$WORK/mm.out" 2>"$WORK/mm.err" ); echo $?; }
 MM="$(rlt_memo_warm)"
 mm_rc="$(rlt_memo_run "$MM")"
 if [ "$mm_rc" = 0 ] && cmp -s "$WORK/mm.out" "$CTL/main.out" && [ -s "$WORK/mm.out" ]; then
@@ -360,7 +468,7 @@ git -C "$DIST4" mv "core/scripts/validate-café.sh" "core/scripts/validate-crèm
 git -C "$DIST4" add -A; git -C "$DIST4" -c user.email=f@f -c user.name=f commit -qm theirs
 THEIRS4="$(git -C "$DIST4" rev-parse HEAD)"
 c4_q="$(git -C "$DIST4" diff -M --name-status --diff-filter=R "$BASE4" "$THEIRS4" | grep -c '\\303')" || c4_q=0
-c4_out="$(bash "$SCRIPT" "$DIST4" "$BASE4" "$THEIRS4" "$RENC" 2>"$WORK/rename-cafe.err")"; c4_rc=$?
+c4_out="$(rlt_eng "$SCRIPT" "$DIST4" "$BASE4" "$THEIRS4" "$RENC" 2>"$WORK/rename-cafe.err")"; c4_rc=$?
 if [ "$c4_q" -lt 1 ]; then
   bad "FIXTURE BROKEN — this git did not C-quote the non-ASCII rename under the default core.quotePath, so the cell cannot express the defect"
 elif [ "$c4_rc" = 0 ] && [ -z "$c4_out" ] && grep -qE 'read as emphasis, not status: .*RENAMEDWORD' "$WORK/rename-cafe.err"; then
@@ -417,13 +525,16 @@ fi
 if [ "$r5_cal" != ok ]; then
   bad "FIXTURE BROKEN — calibration: under ulimit -f ${r5_lim:-?} (block ${r5_blk:-?} B) a ${r5_map}-byte here-string did not fail or a ${r5_ls}-byte write did not land whole, so the forced cell below cannot discriminate"
 else
-  r5_u="$(bash "$SCRIPT" "$DIST5" "$BASE5" "$THEIRS5" "$RENC" 2>"$WORK/r5-u.err")"; r5_urc=$?
+  r5_u="$(rlt_eng "$SCRIPT" "$DIST5" "$BASE5" "$THEIRS5" "$RENC" 2>"$WORK/r5-u.err")"; r5_urc=$?
   if [ "$r5_urc" = 0 ] && [ -z "$r5_u" ] && grep -qE 'read as emphasis, not status: .*RENAMEDWORD' "$WORK/r5-u.err"; then
     ok "unforced control: the ${r5_map}-byte rename map pairs the witness and the word is acquitted"
   else
     bad "FIXTURE BROKEN — unforced control: rc=$r5_urc rows='$(printf '%s' "$r5_u" | head -c 80)'; the forced cell has no healthy answer to accept"
   fi
-  r5_f="$(/bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; shift; exec /bin/bash "$@"' _ "$r5_lim" "$SCRIPT" "$DIST5" "$BASE5" "$THEIRS5" "$RENC" 2>"$WORK/r5-f.err")"; r5_frc=$?
+  # KEPT END TO END (cells.decl e2e-forced-map): the file-size limit binds every write of the process it is set in,
+  # and an in-process pass's fx_inproc append under it is lost (validate-fixture-invocations.sh, THE COUNTER). The tag
+  # is set inside the `-c` wrapper, just before the exec, so it lands on the subject's own start.
+  r5_f="$(/bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; FXCELL="$2"; export FXCELL; shift 2; exec /bin/bash "$@"' _ "$r5_lim" e2e-forced-map "$SCRIPT" "$DIST5" "$BASE5" "$THEIRS5" "$RENC" 2>"$WORK/r5-f.err")"; r5_frc=$?
   if { [ "$r5_frc" = 0 ] && [ -z "$r5_f" ] && grep -qE 'read as emphasis, not status: .*RENAMEDWORD' "$WORK/r5-f.err"; } \
      || { [ "$r5_frc" -ne 0 ] && [ "$r5_frc" -ne 97 ] && [ -z "$r5_f" ] && grep -q '^retired-layer-token: staging the rename map did not run' "$WORK/r5-f.err"; }; then
     ok "forced: a rename map that cannot be staged under ulimit -f $r5_lim gives the healthy answer or the named refusal (rc=$r5_frc)"

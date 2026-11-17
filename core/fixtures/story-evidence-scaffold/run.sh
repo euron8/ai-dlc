@@ -482,12 +482,25 @@ if gsel equiv; then
   eq_row ro-none-not ro_run "$RO_SH" none-reason 'see dev report'
   eq_row ss-mismatch ss_run "$SS_SH" story-status --ref "$(cat "$wy_/.T")" --root "$wy_" "$STORY"
   eq_row ss-untracked ss_run "$SS_SH" story-status --ref "$(cat "$WORK/world-untracked/.T")" --root "$WORK/world-untracked" "$STORY"
-  EQWANT='h-refuse 1 h-pass 0 h-uneval 2 s-refuse 1 s-pass 0 g2 0 lc 0 rd 0 rdc-refuse 1 sm 0 ro-paths-refuse 1 ro-paths-pass 0 ro-none-reason 0 ro-none-bare 1 ro-none-not 2 ss-mismatch 0 ss-untracked 0'
+  # rl-hit / rl-miss: render_dar's Full-collection label read is he_ro_label (the validator sources
+  # record-only-diff.sh and calls ro_main, no bash start); it must answer as `bash record-only-diff.sh label` does on
+  # a document whose label matches and on one where it does not (one cli cell per input).
+  printf '%s\n' '## QA Handoff Evidence' '' '- Full-collection run: `pytest -q` (12 passed)' > "$WORK/rl.hit"
+  printf '%s\n' '## QA Handoff Evidence' '' '- Smoke run: none, no runnable surface' > "$WORK/rl.miss"
+  for rl_k in hit miss; do
+    ( _UT_HE="$HECTL"; _UT_RO="$RO_SH"; _ut_fresh; fx_inproc "$_UT_HE" && . "$_UT_HE" || exit 2
+      he_ro_label "$_UT_RO" 'Full-collection run:' ) < "$WORK/rl.$rl_k" > "$WORK/eq.rl-$rl_k.u" 2>&1; urc=$?
+    FXCELL="cli-ro-label-$rl_k" bash "$RO_SH" label 'Full-collection run:' < "$WORK/rl.$rl_k" > "$WORK/eq.rl-$rl_k.c" 2>&1; crc=$?
+    if cmp -s "$WORK/eq.rl-$rl_k.u" "$WORK/eq.rl-$rl_k.c" && [ "$urc" = "$crc" ]; then echo "rl-$rl_k $urc" >> "$WORK/eq.rows"
+    else echo "rl-$rl_k DIFF($urc/$crc)" >> "$WORK/eq.rows"; fi
+  done
+  EQWANT='h-refuse 1 h-pass 0 h-uneval 2 s-refuse 1 s-pass 0 g2 0 lc 0 rd 0 rdc-refuse 1 sm 0 ro-paths-refuse 1 ro-paths-pass 0 ro-none-reason 0 ro-none-bare 1 ro-none-not 2 ss-mismatch 0 ss-untracked 0 rl-hit 0 rl-miss 1'
   got="$(tr '\n' ' ' < "$WORK/eq.rows")"; got="${got% }"
   if [ "$got" = "$EQWANT" ] && ! cmp -s "$WORK/eq.h-refuse.c" "$WORK/eq.h-pass.c" && ! cmp -s "$WORK/eq.s-refuse.c" "$WORK/eq.s-pass.c" \
      && ! cmp -s "$WORK/eq.ro-paths-refuse.c" "$WORK/eq.ro-paths-pass.c" && ! cmp -s "$WORK/eq.ss-mismatch.c" "$WORK/eq.ss-untracked.c" \
+     && grep -qxF '`pytest -q` (12 passed)' "$WORK/eq.rl-hit.c" \
      && grep -q '^REFUSED no-command ' "$WORK/eq.h-refuse.c" && grep -q '^row	ready-for-dev	' "$WORK/eq.ss-mismatch.c"; then
-    ok "EQUIV: in process and by CLI, byte-identical output and exit on every row, each refusal differing from its pass (handoff 1/0/2, strategy 1/0, --gate2, --list-captures, --render-dar and its --check refusal, --smoke; record-only-diff.sh paths 1/0 and none-reason 0/1/2; sprint-status.sh story-status twice)"
+    ok "EQUIV: in process and by CLI, byte-identical output and exit on every row, each refusal differing from its pass (handoff 1/0/2, strategy 1/0, --gate2, --list-captures, --render-dar and its --check refusal, --smoke; record-only-diff.sh paths 1/0 and none-reason 0/1/2; sprint-status.sh story-status twice; the validator's in-process record-only-diff.sh label read 0/1)"
   else
     bad "EQUIV: want [$EQWANT] with each refusal differing from its pass, got [$got]"
   fi

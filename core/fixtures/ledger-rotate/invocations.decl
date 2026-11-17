@@ -1,3 +1,4 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once; the warm push re-judges it.
-60 *
-49 core/skills/ai-dlc-update/reconcile/ledger-rotate.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output); subject starts are the cli cells of cells.decl, every other drive in process through `rot` (BL-878).
+14 *
+5 core/skills/ai-dlc-update/reconcile/ledger-rotate.sh
+56 inproc:core/skills/ai-dlc-update/reconcile/ledger-rotate.sh

@@ -106,6 +106,7 @@
 # Every exit code and message is unchanged by that. The union gate and the update skill never pass
 # the flag; a fixture that does passes it on purpose.
 #
+er_main() {
 set -uo pipefail
 # NO PATHNAME EXPANSION ANYWHERE IN THE CLOSURE: an unquoted expansion that globbed against the cwd
 # read consumer (or caller) paths no detector asked for. consumer-read.sh carries the reasoning.
@@ -141,7 +142,7 @@ THEIRS="${4:?}"
 
 # `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
 # `/x.sh` is `/`, which is what `dirname` answered.
-case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
 SELF="$(cd "$SELF" && pwd)"
 # Every consumer path this file reads goes through consumer-read.sh's door.
 . "$SELF/consumer-read.sh" || { echo "emit-report: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
@@ -1389,3 +1390,6 @@ else
   want="$(render | norm_dist)"
 fi
 er_compare
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+er_main "$@"

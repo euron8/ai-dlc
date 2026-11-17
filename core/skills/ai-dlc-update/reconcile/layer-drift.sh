@@ -180,6 +180,7 @@
 #   EXTENSION-OK                     hooked core file unchanged, OR it changed and the
 #                                    declared `extends:` span did not
 
+ld_main() {
 set -uo pipefail
 # GLOBBING OFF FOR THE WHOLE RUN. An unquoted expansion here word-splits on purpose (a `fixtures:`
 # list, the manifest's rulebook globs) and must never be pathname-expanded against the caller's
@@ -191,7 +192,7 @@ set -f
 # is resolved, which is the argument parse below.
 # `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
 # `/x.sh` is `/`, which is what `dirname` answered.
-case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
 SELF="$(cd "$SELF" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "layer-drift: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 
@@ -2954,3 +2955,7 @@ if [ "$MODE" = list ]; then
   ld_finish
 fi
 ld_finish
+}
+# Sourced (BL-878): define ld_main and return; run as a program: run it.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ld_main "$@"

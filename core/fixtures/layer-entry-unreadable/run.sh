@@ -70,6 +70,32 @@ _LDIR="$(cd "$(dirname "$LINTER")" && pwd)"
 echo "HERMETIC-CONSUMED ${_LDIR}/$(basename "$LINTER")"
 [ -f "${_LDIR}/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED ${_LDIR}/artifact-path-config.sh"
 
+# IN PROCESS (BL-878). The validator is SOURCED ONCE into this shell (its guard returns after defining vle_main), and
+# every drive calls vle_main inside the subshell of the `$( )` that captures it, so its `exit`, `set -u`, EXIT trap and
+# function definitions stay there. The sealed copy is sourced inside that same subshell, so its vle_main never replaces
+# the shipped one here. The validator starts as a program only in the cli cells (cells.decl). A CORE FIXTURE SHIPS
+# AHEAD OF ITS SUBJECT: a subject with neither its `vle_main() {` line nor the column-0 source guard predates the wrap
+# and reads SKIP (exit 0, never an ok); exactly one half is a respelled subject and FAILs; a subject grep cannot READ
+# (exit 2) is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$LINTER" vle_main; g_vle=$?
+[ "$g_vle" = 2 ] && exit 2
+[ "$g_vle" = 1 ] && { echo "layer-entry-unreadable: 1 FAILED"; exit 1; }
+[ "$g_vle" = 3 ] && { echo "SKIP: subject predates the in-process wrap"; exit 0; }
+
 ROOT="$(bash "$HERE/seed.sh")"
 [ -n "$ROOT" ] && [ -d "$ROOT" ] || { echo "FIXTURE BROKEN: seed produced no sandbox" >&2; exit 2; }
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/layer-entry-unreadable-mut.XXXXXX")"
@@ -109,6 +135,10 @@ cat "$CONS/.claude/skills/ai-dlc/extensions/current-a.md" >/dev/null 2>&1 || {
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+fx_inproc "$LINTER"
+. "$LINTER" || { echo "FIXTURE ERROR: sourcing $LINTER failed" >&2; exit 2; }
+declare -F vle_main > /dev/null || { echo "FIXTURE ERROR: sourcing $LINTER defined no vle_main" >&2; exit 2; }
 say() { if [ "$1" = 1 ]; then ok "$2"; else bad "$2"; fi; }
 
 # NO run() HELPER, deliberately. `OUT="$(run ...)"` evaluates the helper in a SUBSHELL, so an
@@ -140,7 +170,7 @@ echo "layer-entry-unreadable:"
 # --------------------------------------------------------------------------------------
 # Part 1 — an entry that cannot be READ produces a refusal and NO finding about it
 # --------------------------------------------------------------------------------------
-UNR_OUT="$(bash "$LINTER" "$UNR" 2>&1)"; UNR_RC=$?
+UNR_OUT="$( ( fx_inproc "$LINTER"; vle_main "$UNR" ) 2>&1)"; UNR_RC=$?
 # EXIT 2 IS UNMOVED AS A VERDICT AND MOVED AS AN EVENT, and both halves are asserted. The code
 # is the same one; what changed is that it is taken after every pass has run, so the footer is
 # now present on this tree where it used to be absent. Requiring the footer HERE is what stops
@@ -158,7 +188,7 @@ say "$([ "$(errs_naming "$UNR_OUT" 'extensions/subject.md')" -eq 0 ] && echo 1 |
 # --------------------------------------------------------------------------------------
 # A validator that refused every entry handed to it would satisfy Part 1 exactly. This is
 # the input that separates the two, and it differs from Part 1's by one chmod and one line.
-KEY_OUT="$(bash "$LINTER" "$KEY" 2>&1)"; KEY_RC=$?
+KEY_OUT="$( ( fx_inproc "$LINTER"; vle_main "$KEY" ) 2>&1)"; KEY_RC=$?
 say "$([ "$KEY_RC" -eq 1 ] && echo 1 || echo 0)" \
   "a genuinely keyless entry exits 1 — a finding, not a refusal"
 say "$(has "$KEY_OUT" "extensions/subject.md: missing 'conforms_to:'" && echo 1 || echo 0)" \
@@ -169,7 +199,7 @@ say "$(! grep -Fq 'could not READ' <<<"$KEY_OUT" && echo 1 || echo 0)" \
 # --------------------------------------------------------------------------------------
 # Part 3 — the baseline this all sits on
 # --------------------------------------------------------------------------------------
-CONS_OUT="$(bash "$LINTER" "$CONS" 2>&1)"; CONS_RC=$?
+CONS_OUT="$( ( fx_inproc "$LINTER"; vle_main "$CONS" ) 2>&1)"; CONS_RC=$?
 say "$([ "$CONS_RC" -eq 0 ] && [ "$(footer_field "$CONS_OUT" entries)" = 2 ] \
        && [ "$(footer_field "$CONS_OUT" errors)" = 0 ] && echo 1 || echo 0)" \
   "a readable, well-formed consumer exits 0 with the footer counting both its entries"
@@ -188,14 +218,14 @@ say "$([ "$(footer_field "$CONS_OUT" unreadable)" = 0 ] \
 # `contract_version` is made unreadable rather than the contract deleted: the validator
 # ERRORs, sets LC_CV empty and CARRIES ON, which is the reachable state in which the census
 # loop is skipped.
-OVR_OUT="$(bash "$LINTER" "$OVRT" 2>&1)"; OVR_RC=$?
+OVR_OUT="$( ( fx_inproc "$LINTER"; vle_main "$OVRT" ) 2>&1)"; OVR_RC=$?
 if [ "$OVR_RC" -eq 2 ] && fatal_for "$OVR_OUT" 'overrides/subject-ovr.md' \
    && [ "$(errs_naming "$OVR_OUT" 'overrides/subject-ovr.md')" -eq 0 ]; then
   ok "an unreadable OVERRIDE refuses too, with no E1 about frontmatter nobody read"
 else
   bad "an unreadable OVERRIDE refuses too, with no E1 about frontmatter nobody read"
 fi
-EXT_OUT="$(bash "$LINTER" "$EXTT" 2>&1)"; EXT_RC=$?
+EXT_OUT="$( ( fx_inproc "$LINTER"; vle_main "$EXTT" ) 2>&1)"; EXT_RC=$?
 if [ "$EXT_RC" -eq 2 ] && fatal_for "$EXT_OUT" 'extensions/subject-ext.md' \
    && ! has "$EXT_OUT" 'EMPTY resolvability set' \
    && [ "$(errs_naming "$EXT_OUT" 'extensions/subject-ext.md')" -eq 0 ]; then
@@ -233,7 +263,7 @@ for _p in aa zz; do
     bad "FIXTURE BROKEN: partial-$_p (second arm not run for the same reason)"
     continue
   fi
-  PT_OUT="$(bash "$LINTER" "$_pt" 2>&1)"; PT_RC=$?
+  PT_OUT="$( ( fx_inproc "$LINTER"; vle_main "$_pt" ) 2>&1)"; PT_RC=$?
   # `no-receipt.md` declares no conforms_to, so the CENSUS LOOP — the loop the first guarded
   # read sits in, and the one whose abort this entry is about — raises an E17 naming it. A
   # finding raised by a later pass would survive a fix that only repaired the census.
@@ -260,7 +290,7 @@ done
 # both its subject and its seed from `$HERE`. Re-run the same subject on the same tree from
 # `/` and require the identical verdict; a subject that resolved anything from the process
 # working directory answers differently here.
-CWD_OUT="$(cd / && bash "$LINTER" "$UNR" 2>&1)"; CWD_RC=$?
+CWD_OUT="$( ( cd / || exit 2; fx_inproc "$LINTER"; vle_main "$UNR" ) 2>&1)"; CWD_RC=$?
 say "$([ "$CWD_RC" -eq "$UNR_RC" ] && fatal_for "$CWD_OUT" 'extensions/subject.md' && echo 1 || echo 0)" \
   "the same verdict and the same FATAL when the subject is invoked from / — cwd-invariant"
 
@@ -290,8 +320,10 @@ nrows() {
   awk -v c="$2" -v p="$3" '$1 ~ /^(ERROR|WARN)$/ && $2 == c && index($0, p) > 0 { n++ } END { print n+0 }' <<<"$1"
 }
 # sr <script> <seal-keys> <tree> <seal-file> -- run, leaving SR_OUT/SR_RC. NOT via `X="$(sr …)"`,
-# which would evaluate the whole helper in a subshell and discard the rc it assigns.
-sr() { SR_OUT="$(FX_SEAL_FILE="$4" FX_SEAL_KEYS="$2" bash "$1" "$3" 2>&1)"; SR_RC=$?; }
+# which would evaluate the whole helper in a subshell and discard the rc it assigns. IN PROCESS: the
+# shipped subject is already sourced; any other <script> (the sealed copy) is sourced inside the
+# capturing subshell, so its vle_main and the FX_SEAL_* values it reads never reach this shell.
+sr() { SR_OUT="$( ( fx_inproc "$1"; if [ "$1" != "$LINTER" ]; then . "$1" || exit 2; fi; FX_SEAL_FILE="$4"; FX_SEAL_KEYS="$2"; vle_main "$3" ) 2>&1)"; SR_RC=$?; }
 
 # --- C1: the tree can EXPRESS the defect. Without this every arm below is vacuous. --------
 # The first probe of this defect seeded no `steps/retro.md`, so the entry took an E5 and
@@ -332,18 +364,23 @@ mkseal() { # mkseal <in> <out> -- fm() returns empty with rc 2 for one file and 
     { print }' < "$1" > "$2"
 }
 mkseal "$LINTER" "$TMP/sealed.sh"
+# The copy every sr call SOURCES carries the subject's own path suffix, so its in-process passes count on the
+# fixture's one `inproc:` row (J7). The parse check reads sealed.sh, whose name no subject row matches.
+SEALED="$TMP/core/scripts/validate-layer-entries.sh"
 SEAL_OK=0
 if cmp -s "$LINTER" "$TMP/sealed.sh"; then
   bad "SEAL: the injection matched nothing, so every arm below would run the shipped subject"
 elif ! bash -n "$TMP/sealed.sh" 2>/dev/null; then
   bad "SEAL: the sealed copy does not parse, so its silence would be a syntax error"
+elif ! { mkdir -p "$(dirname "$SEALED")" && cp "$TMP/sealed.sh" "$SEALED"; }; then
+  echo "FIXTURE BROKEN: could not place the sealed copy at $SEALED" >&2; exit 2
 else
   # --- C3: and it is INERT until armed. -------------------------------------------------
   # Compared on rc and the ERROR rows rather than on whole output: a copy resolves
   # `artifact-path-config.sh` from beside ITSELF, so W11's wording differs in every copy in
   # this directory. That difference reaches no arm, and asserting on it would fail here for
   # a reason that has nothing to do with the seal.
-  sr "$TMP/sealed.sh" '' "$PERM" ''
+  sr "$SEALED" '' "$PERM" ''
   say "$([ "$SR_RC" -eq 1 ] && [ "$(footer_field "$SR_OUT" errors)" = "$PERM_ERRS" ] \
          && [ "$(nrows "$SR_OUT" E11 'extensions/role-entry.md')" -eq 1 ] \
          && [ "$(nrows "$SR_OUT" E14 'extensions/role-entry.md')" -eq 1 ] && echo 1 || echo 0)" \
@@ -368,7 +405,7 @@ if [ "$SEAL_OK" = 1 ]; then
   # judgement on the sealed file — that second half is what the `unreadable=` field states, and
   # what P4 of the ledger receipt asserts separately in row terms.
   for _k in extends position gate_types; do
-    sr "$TMP/sealed.sh" "$_k" "$PERM" "$PERM_SUBJ"
+    sr "$SEALED" "$_k" "$PERM" "$PERM_SUBJ"
     if [ "$SR_RC" -eq 2 ] && fatal_for "$SR_OUT" 'extensions/role-entry.md' \
        && [ "$(footer_field "$SR_OUT" unreadable)" = 1 ]; then
       ok "a mid-run read failure on '$_k' REFUSES — exit 2, named, and a footer declaring unreadable=1"
@@ -381,7 +418,7 @@ if [ "$SEAL_OK" = 1 ]; then
   sr "$LINTER" '' "$CITE" ''
   say "$([ "$SR_RC" -eq 0 ] && [ "$(nrows "$SR_OUT" W12 'extensions/cite-ext.md')" -eq 0 ] && echo 1 || echo 0)" \
     "READABLE, the cited entry is ACQUITTED by its own shadows anchor — no W12, exit 0"
-  sr "$TMP/sealed.sh" shadows "$CITE" "$CITE_SUBJ"
+  sr "$SEALED" shadows "$CITE" "$CITE_SUBJ"
   if [ "$SR_RC" -eq 2 ] && fatal_for "$SR_OUT" 'extensions/cite-ext.md'; then
     ok "and a mid-run read failure on 'shadows' REFUSES rather than judging the citation"
   else
@@ -390,9 +427,34 @@ if [ "$SEAL_OK" = 1 ]; then
 fi
 
 # --------------------------------------------------------------------------------------
+# The cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome
+# this fixture reads (exit 2 the unreadable entry, exit 1 the keyless twin, exit 0 the clean
+# consumer), each compared byte for byte with the in-process call on the same input (stdout,
+# stderr and exit separately) and asserting its own outcome.
+# --------------------------------------------------------------------------------------
+EQ="$TMP/eq"; mkdir -p "$EQ" || exit 2
+eqv() { # eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two answers are identical
+  local id="$1"; shift
+  ( fx_inproc "$LINTER"; vle_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$LINTER" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(tail -2 "$EQ/$1.ip.out")" "$(head -2 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(tail -2 "$EQ/$1.cl.out")" "$(head -2 "$EQ/$1.cl.err")"; }
+if eqv cli-refuse "$UNR" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] && grep -qF 'could not READ' "$EQ/cli-refuse.cl.out" "$EQ/cli-refuse.cl.err"; then
+  ok "cli-refuse: the program refuses the unreadable entry exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 2 with its FATAL ($(eq_twin cli-refuse))"; fi
+if eqv cli-fail "$KEY" && [ "$(cat "$EQ/cli-fail.cl.rc")" = 1 ] && grep -qF "extensions/subject.md: missing 'conforms_to:'" "$EQ/cli-fail.cl.out"; then
+  ok "cli-fail: the program refuses the keyless entry exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-fail: the program and the in-process call differ, or the outcome is not exit 1 with the E17 row ($(eq_twin cli-fail))"; fi
+if eqv cli-pass "$CONS" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && grep -q '^LAYER_CONFORMANCE v1 .* errors=0 ' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program passes the clean consumer exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with errors=0 ($(eq_twin cli-pass))"; fi
+
+# --------------------------------------------------------------------------------------
 # ASSERTION FLOOR. An arm that never executes -- a helper that returned early -- leaves a
 # green report that reads exactly like a passing one.
 # --------------------------------------------------------------------------------------
-EXPECTED_ASSERTIONS=23
+EXPECTED_ASSERTIONS=26
 echo
 report_end layer-entry-unreadable "$EXPECTED_ASSERTIONS"

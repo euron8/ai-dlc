@@ -13,3 +13,4 @@ head
 find
 awk
 mv
+cmp

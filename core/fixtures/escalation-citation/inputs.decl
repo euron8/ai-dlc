@@ -4,3 +4,7 @@ core/scripts/validate-steering-budget.sh
 core/scripts/validate-suppression-lifetime.sh
 !core/scripts/validate-escalation-resolution.sh
 core/fixtures/lib/report.sh
+# The in-process drive (BL-878): run.sh sources these three before it loads the validator.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh

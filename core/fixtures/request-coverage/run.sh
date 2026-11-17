@@ -27,11 +27,37 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The validator is loaded ONCE with lib/inproc.sh's inproc_load (its source guard returns after
+# defining vrc_main) and every assertion asks vrc_main through inproc_run, in a subshell made to look like a fresh
+# `bash validate-request-coverage.sh`; the BL-327 copies are sourced inside their own subshell, so each locates its
+# sibling grammar and its root from its own file. The program runs only in the cli cells (cells.decl).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped validator, and
+# sourcing a pre-wrap validator would run its whole body. So the shape is checked first, on its two halves: neither the
+# `vrc_main() {` line nor the column-0 source guard is a validator that predates the wrap, which prints SKIP and exits 0
+# (FIXTURE BROKEN in the distribution) -- never an ok. Exactly one half is a respelled validator this fixture cannot
+# drive, which FAILS. An unreadable validator is FIXTURE ERROR.
+vrc_def=0; vrc_guard=0
+grep -qxF 'vrc_main() {' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable validator is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || vrc_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable validator is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || vrc_guard=1
+if [ "$vrc_def$vrc_guard" = 00 ]; then echo "SKIP: $VALIDATOR predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+if [ "$vrc_def$vrc_guard" != 11 ]; then
+  bad "$VALIDATOR carries one half of the in-process wrap (vrc_main line: $vrc_def, column-0 source guard: $vrc_guard) -- a respelled validator this fixture cannot drive"
+  report_end request-coverage
+fi
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$VALIDATOR" || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined nothing" >&2; exit 2; }
+declare -F vrc_main >/dev/null || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined no vrc_main" >&2; exit 2; }
 
 # Capture output AND exit code without a pipeline: the validator's exit code is the verdict,
 # and `run | grep` would replace it with grep's.
 OUT=""; RC=0
-run() { OUT="$(bash "$1" --requests "$2" --brief "$3" --sprint "${4:-42}" 2>&1)"; RC=$?; }
+run() { OUT="$(inproc_run "$1" vrc_main --requests "$2" --brief "$3" --sprint "${4:-42}" 2>&1)"; RC=$?; }
 
 echo "request-coverage:"
 
@@ -110,10 +136,10 @@ else
 fi
 
 # --- Assertion 9: --cite-sha pins the entry ----------------------------------
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "$SHA" 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "$SHA" 2>&1)"; RC=$?
 if [ "$RC" = "0" ]; then ok "--cite-sha resolves the routing record's hash to the captured entry"
 else bad "--cite-sha failed to resolve a hash that is present in the capture file (exit $RC)"; fi
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha deadbeef 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha deadbeef 2>&1)"; RC=$?
 if [ "$RC" = "2" ]; then ok "a hash resolving to no captured request exits 2 — a fabricated citation cannot pass"
 else bad "a fabricated --cite-sha did not fail closed (exit $RC) — the routing record could cite anything"; fi
 
@@ -122,27 +148,27 @@ else bad "a fabricated --cite-sha did not fail closed (exit $RC) — the routing
 # Exactly one literal `SHA256:` is stripped; every other shape stays refused. The dropped-brief
 # cell proves the labelled pin still reaches the coverage verdict rather than short-circuiting it,
 # and `SHA256:` alone must not fall through to the unpinned newest-entry path.
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:$SHA" 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:$SHA" 2>&1)"; RC=$?
 if [ "$RC" = "0" ]; then ok "--cite-sha SHA256:<hex> resolves as the bare hex does"
 else bad "--cite-sha SHA256:<hex> did not resolve (exit $RC) — a cite copied with its label is refused though its hex is captured"; fi
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:deadbeef" 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:deadbeef" 2>&1)"; RC=$?
 if [ "$RC" = "2" ]; then ok "--cite-sha SHA256:<fabricated> still resolves to nothing and exits 2"
 else bad "a labelled fabricated --cite-sha exited $RC instead of 2"; fi
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "foo:$SHA" 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "foo:$SHA" 2>&1)"; RC=$?
 if [ "$RC" = "2" ]; then ok "--cite-sha foo:<hex> exits 2 — only the literal SHA256: label is stripped"
 else bad "--cite-sha foo:<hex> exited $RC instead of 2 — the strip is wider than one literal label"; fi
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:" 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:" 2>&1)"; RC=$?
 if [ "$RC" = "2" ]; then ok "--cite-sha SHA256: with no digest exits 2 — it does not fall through to the newest entry"
 else bad "--cite-sha SHA256: alone exited $RC instead of 2 — an empty pin fell through to the unpinned path"; fi
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$DROPPED" --sprint 42 --cite-sha "SHA256:$SHA" 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$DROPPED" --sprint 42 --cite-sha "SHA256:$SHA" 2>&1)"; RC=$?
 if [ "$RC" = "1" ]; then ok "--cite-sha SHA256:<hex> against the dropped brief still FAILS (exit 1) — the labelled pin reaches the coverage verdict"
 else bad "--cite-sha SHA256:<hex> against the dropped brief exited $RC instead of 1"; fi
 # Exactly ONE label, and only the uppercase literal: a `while` strip and a case-folded strip both
 # resolve these two, and each passed every cell above.
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:SHA256:$SHA" 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "SHA256:SHA256:$SHA" 2>&1)"; RC=$?
 if [ "$RC" = "2" ]; then ok "--cite-sha SHA256:SHA256:<hex> exits 2 — the label is stripped once, not repeatedly"
 else bad "--cite-sha SHA256:SHA256:<hex> exited $RC instead of 2 — the strip repeats"; fi
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "sha256:$SHA" 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 --cite-sha "sha256:$SHA" 2>&1)"; RC=$?
 if [ "$RC" = "2" ]; then ok "--cite-sha sha256:<hex> exits 2 — the label match does not fold case"
 else bad "--cite-sha sha256:<hex> exited $RC instead of 2 — the strip folds case"; fi
 
@@ -184,7 +210,7 @@ fi
 
 # The pinned path is deliberate, so pointing it AT a machine event must be loud rather than
 # silently re-picked: the routing record asserts the operator asked for this.
-OUT="$(bash "$VALIDATOR" --requests "$HREQ" --brief "$DROPPED" --sprint 42         --cite-sha dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$HREQ" --brief "$DROPPED" --sprint 42         --cite-sha dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd 2>&1)"; RC=$?
 if [ "$RC" = "2" ] && grep -q 'HARNESS-RAISED' <<<"$OUT"; then
   ok "a routing record pinned to a harness-raised entry ERRORS by name, rather than being quietly re-picked"
 else
@@ -193,7 +219,7 @@ fi
 
 # CONTROL: the same file, pinned to the OPERATOR's entry, behaves exactly as before. Without
 # it, an implementation that rejected every --cite-sha would satisfy the assertion above.
-OUT="$(bash "$VALIDATOR" --requests "$HREQ" --brief "$COVERED" --sprint 42 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$HREQ" --brief "$COVERED" --sprint 42 2>&1)"; RC=$?
 if [ "$RC" = "0" ]; then
   ok "CONTROL: a covered brief still passes with the harness entry present — the filter selects, it does not reject"
 else
@@ -204,7 +230,7 @@ fi
 # That is the same zero the defect produced, reached from the other side.
 AHREQ="$WORK/requests-all-harness.md"
 { printf '# Operator Requests\n'; sed -n '/^## 2026-08-05T23:59:59Z/,$p' "$HREQ"; } > "$AHREQ"
-OUT="$(bash "$VALIDATOR" --requests "$AHREQ" --brief "$DROPPED" --sprint 42 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$AHREQ" --brief "$DROPPED" --sprint 42 2>&1)"; RC=$?
 if [ "$RC" = "2" ] && grep -q 'no operator in it' <<<"$OUT"; then
   ok "a capture holding ONLY harness-raised entries exits 2 — 'nothing was asked' and 'nothing was recorded' are different answers"
 else
@@ -220,14 +246,14 @@ fi
 # THE OFFENDER AND ITS ALLOW TWIN ARE ONE PROPERTY APART AND RUN IN THE SAME INVOCATION. An
 # arm asserting only that a missing session ERRORS passes identically against a build that
 # refuses every `--session` it is handed, which is the deny-without-its-allow shape.
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --session sess-absent 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 --session sess-absent 2>&1)"; RC=$?
 if [ "$RC" = "2" ] && grep -q 'no captured request for session sess-absent' <<<"$OUT"; then
   ok "a session with ZERO captured requests exits 2 NAMING that session, on a brief that otherwise passes — the miss is reported here rather than surfacing as an unresolvable SHA several steps later"
 else
   bad "a session absent from the capture exited $RC without naming it; a silent zero-capture session is BL-261's whole subject"
 fi
 
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 --session sess-1 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 --session sess-1 2>&1)"; RC=$?
 if [ "$RC" = "0" ]; then
   ok "ALLOW TWIN: a session the capture DOES hold passes the same command line — the arm reads its key rather than refusing every --session, and one property separates this run from the one above"
 else
@@ -236,7 +262,7 @@ fi
 
 # ...and the arm must stay silent for every caller that passes no --session at all. Check 33's
 # published invocation is one of them, so a fail-closed default here would wedge live work.
-OUT="$(bash "$VALIDATOR" --requests "$REQ" --brief "$COVERED" --sprint 42 2>&1)"; RC=$?
+OUT="$(inproc_run "$VALIDATOR" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 2>&1)"; RC=$?
 if [ "$RC" = "0" ] && ! grep -q 'no captured request for session' <<<"$OUT"; then
   ok "a caller passing no --session is unaffected — the arm is opt-in, so no existing invocation changes behaviour"
 else
@@ -269,13 +295,35 @@ else
   for _l in scripts scripts/ai-dlc; do
     cp "$VALIDATOR" "$CT/$_l/validate-request-coverage.sh"; cp "$ANCHOR_SRC" "$CT/$_l/validate-locked-anchor.sh"
   done
-  cons_rc() { ( cd "$CT/docs/sub" && bash "$CT/$1/validate-request-coverage.sh" --requests "$REQ" --brief "$COVERED" --sprint 42 ) >/dev/null 2>&1; echo $?; }
+  cons_rc() { ( cd "$CT/docs/sub" && inproc_run "$CT/$1/validate-request-coverage.sh" vrc_main --requests "$REQ" --brief "$COVERED" --sprint 42 ) >/dev/null 2>&1; echo $?; }
   NM="$(cons_rc scripts/ai-dlc)"; LG="$(cons_rc scripts)"
   [ "$NM" = 0 ] && ok "BL-327 near-miss: the scripts/ai-dlc/ copy in a consumer-shaped tree covers the brief (exit 0) from a subdirectory" \
                 || bad "BL-327 near-miss: the scripts/ai-dlc/ copy exited $NM — the consumer tree is not one the validator can run in, so the legacy arm below proves nothing"
   [ "$LG" = 0 ] && ok "BL-327: the pre-relocation scripts/ copy finds harness-origin.json by walking up and covers the brief (exit 0)" \
                 || bad "BL-327: the pre-relocation scripts/ copy exited $LG — its harness-origin lookup counts hops and lands above the project"
 fi
+
+# --- The cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome --------------------------
+# Each `FXCELL=<id> bash` start is compared with the in-process call on the same input: stdout, stderr and exit
+# separately, byte for byte. Outcomes: exit 0 PASS (cli-pass), exit 1 dropped identifiers (cli-fail), exit 2 on a
+# missing capture file (cli-error). Each cell also asserts its own exit code and a line of output, so two runs that
+# both printed nothing cannot read as equivalent.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # <cell-id> <requests> <brief> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  inproc_run "$VALIDATOR" vrc_main --requests "$2" --brief "$3" --sprint 42 > "$EQ/$1.ip.out" 2> "$EQ/$1.ip.err"; echo "$?" > "$EQ/$1.ip.rc"
+  FXCELL="$1" bash "$VALIDATOR" --requests "$2" --brief "$3" --sprint 42 > "$EQ/$1.cl.out" 2> "$EQ/$1.cl.err"; echo "$?" > "$EQ/$1.cl.rc"
+  cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.err" "$EQ/$1.cl.err" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -1 "$EQ/$1.ip.out")" "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+eq_cell() { # <cell-id> <want rc> <requests> <brief>
+  if eqv "$1" "$3" "$4" && [ "$(cat "$EQ/$1.cl.rc")" = "$2" ] && { [ -s "$EQ/$1.cl.out" ] || [ -s "$EQ/$1.cl.err" ]; }; then
+    ok "$1: the program answers exactly as the in-process call does (stdout, stderr, exit $2)"
+  else bad "$1: the program and the in-process call differ, or the exit is not $2 ($(eq_twin "$1"))"; fi
+}
+eq_cell cli-pass 0 "$REQ" "$COVERED"
+eq_cell cli-fail 1 "$REQ" "$DROPPED"
+eq_cell cli-error 2 "$WORK/nonexistent-requests.md" "$COVERED"
 
 echo
 report_end request-coverage

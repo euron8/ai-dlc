@@ -2,3 +2,6 @@
 # run.sh locates it as HERE/../../scripts/audit-layer-debt.sh and runs it.
 !core/scripts/audit-layer-debt.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/layout.sh

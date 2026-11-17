@@ -66,8 +66,8 @@ two wrong neighbours are invisible to the driver rather than to the assertions:
 - The hermeticity scrub unsets every `AI_DLC_*` name in the fixture's own process, so an
   `AI_DLC_`-prefixed environment back door into the acquittal is unobservable by construction,
   while an UNPREFIXED one is already caught by (a)/(g). (a4) therefore sets its name in the
-  INVOCATION — `env AI_DLC_PROVENANCE_ALLOW_MISSING=1 bash "$VALIDATOR" …` — which runs after
-  the scrub and touches only the child; the scrub is correct and stays. (a5) drives the two
+  INVOCATION — exported inside the in-process call's own subshell (`drive_env`) — which runs
+  after the scrub and touches only that call; the scrub is correct and stays. (a5) drives the two
   unprefixed spellings so the arm covers the class rather than one name.
 
 ## Layouts

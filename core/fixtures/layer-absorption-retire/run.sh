@@ -34,6 +34,8 @@ DRIFT="$(pick "${1:-}" "$HERE/../../skills/ai-dlc-update/reconcile/layer-drift.s
 # A MISSING SUBJECT IS NOT A PASS. Every assertion here is "did this row appear", so a run that
 # cannot invoke the classifier produces no rows and would score green on the negative arms.
 [ -n "$DRIFT" ] || { echo "FIXTURE ERROR: cannot locate layer-drift.sh" >&2; exit 2; }
+# Absolute, because the loaded ld_main locates its siblings from the path it was sourced by.
+case "$DRIFT" in /*) ;; *) DRIFT="$PWD/$DRIFT" ;; esac
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$DRIFT")" && pwd)/$(basename "$DRIFT")"
 
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/layer-absorption-retire.XXXXXX")"
@@ -41,7 +43,47 @@ trap 'rm -rf "$ROOT"' EXIT
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: sourcing lib/layout.sh failed" >&2; exit 2; }
 echo "layer-absorption-retire:"
+
+# IN PROCESS (BL-878). layer-drift.sh is SOURCED ONCE (its guard returns after defining ld_main) and every drive
+# is `ld_ip`, which runs ld_main through inproc_run in a subshell made to look like a fresh `bash layer-drift.sh`.
+# lib.sh builds its own memo only at BASH_SUBSHELL 0, which no subshell is, so each run is handed a fresh private
+# memo as private as the CLI's own; a caller that exports one (the memo cell below) keeps it. No cli cell here:
+# layer-title-join owns layer-drift's cli equivalence cells. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject
+# with neither the `ld_main() {` line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never
+# an ok); exactly one half is a respelled subject and FAILs; a subject grep cannot READ is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$DRIFT" ld_main; g_ld=$?
+[ "$g_ld" = 2 ] && exit 2
+if [ "$g_ld" = 1 ]; then echo "layer-absorption-retire: 1 FAILED"; exit 1; fi
+if [ "$g_ld" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+inproc_load "$DRIFT" || { echo "FIXTURE BROKEN: sourcing $DRIFT defined nothing" >&2; exit 2; }
+declare -F ld_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $DRIFT defined no ld_main" >&2; exit 2; }
+ld_ip() { # what `bash "$DRIFT" "$@"` gives, in process; a fresh private memo per run unless the caller exported one
+  local _m _rc
+  case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in "declare -x"*) inproc_run "$DRIFT" ld_main "$@"; return ;; esac
+  _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
+  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$DRIFT" ld_main "$@"; _rc=$?
+  rm -rf "$_m"; return "$_rc"
+}
 
 mkdir -p "$DIST/core/skills/ai-dlc/steps" "$DIST/core/schemas" "$CONS/.claude/skills/ai-dlc/extensions"
 git -C "$DIST" init -q 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -132,7 +174,7 @@ mkext RENUMBERED steps/widget.md <<'MD'
 The same check, carried under the consumer's own number.
 MD
 
-run_drift() { bash "${1:-$DRIFT}" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
+run_drift() { ld_ip "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
 OUT="$(run_drift)"
 st() { printf '%s\n' "$OUT" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
 
@@ -293,9 +335,10 @@ if [ "$b376_run" = 1 ]; then
   else
     ok "part 2 world: widget.md's base blob is unreadable in the copy while its tree entry and its theirs blob are intact"
 
-    # b376_drive <engine> <tag> <dist> <cons> -- one run, stdout/stderr/rc to files under $BW.
+    # b376_drive <engine> <tag> <dist> <cons> -- one in-process run, stdout/stderr/rc to files under $BW. <engine>
+    # is always the loaded $DRIFT (no copy is driven), kept as an argument so the call sites read as before.
     b376_drive() {
-      bash "$1" "$3" "$BB" "$BT" "$4" > "$BW/$2.out" 2> "$BW/$2.err"
+      ld_ip "$3" "$BB" "$BT" "$4" > "$BW/$2.out" 2> "$BW/$2.err"
       echo "$?" > "$BW/$2.rc"
     }
     b376_rc()  { cat "$BW/$1.rc" 2>/dev/null; }
@@ -360,12 +403,12 @@ fi
 # base read as no catalog and PREEXISTING's LC-E5 became LC-E6 -- "retire your copy" -- at rc 0. A
 # warm memo, the base blob of steps/widget.md emptied (`.s` and `.c`), and the refusal demanded.
 LM="$ROOT/lar-memo"; mkdir -p "$LM"
-AI_DLC_RECONCILE_MEMO="$LM" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.ctl" 2>/dev/null; lm_rc=$?
+AI_DLC_RECONCILE_MEMO="$LM" ld_ip "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.ctl" 2>/dev/null; lm_rc=$?
 lm_n=0
 for lm_f in "$LM"/"s "*" ${BASE}:core%2Fskills%2Fai-dlc%2Fsteps%2Fwidget.md.s"; do
   [ -f "$lm_f" ] || continue; lm_n=$((lm_n + 1)); : > "$lm_f"; : > "${lm_f%.s}.c"
 done
-AI_DLC_RECONCILE_MEMO="$LM" bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.out" 2> "$ROOT/lm.err"; lm_frc=$?
+AI_DLC_RECONCILE_MEMO="$LM" ld_ip "$DIST" "$BASE" "$THEIRS" "$CONS" > "$ROOT/lm.out" 2> "$ROOT/lm.err"; lm_frc=$?
 if [ "$lm_rc" != 0 ] || ! awk -F'\t' '$1=="EXTENSION-RESTATES-CORE" && $2 ~ /PREEXISTING\.md$/ {f=1} END {exit !f}' "$ROOT/lm.ctl" \
    || [ "$lm_n" -ne 1 ]; then
   bad "FIXTURE BROKEN — the base-catalog memo cell's warm run was rc=$lm_rc without PREEXISTING's LC-E5 row, or found $lm_n memo key(s) for the base blob (want 1)"

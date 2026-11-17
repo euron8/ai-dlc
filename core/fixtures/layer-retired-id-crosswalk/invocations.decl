@@ -1,4 +1,6 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-8 *
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output). The validator is
+# sourced once and called in process (inproc row); it starts only in its cli cells (cells.decl).
+4 *
 0 core/scripts/artifact-path-config.sh
-6 core/scripts/validate-layer-entries.sh
+2 core/scripts/validate-layer-entries.sh
+9 inproc:core/scripts/validate-layer-entries.sh

@@ -131,6 +131,7 @@
 #                                 scanned. HARD- because a scan that cannot run emits the
 #                                 same empty output as a tree with no drift, and the caller
 #                                 reads that as clean.
+ud_main() {
 set -uo pipefail
 # Globbing off for the whole run. The one unquoted word list, the `git log` sha list in
 # closest_ancestor_blob, holds 40-hex words that cannot glob; ls-files pathspecs and `case`
@@ -162,7 +163,7 @@ THEIRS="${4:-}"
 # unsourceable lib.sh degrades this to its pre-cache behavior.
 # `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
 # `/x.sh` is `/`, which is what `dirname` answered.
-case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
 SELF="$(cd "$SELF" && pwd)"
 . "$SELF/consumer-read.sh" || { echo "unregistered-drift: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
 . "$SELF/lib.sh" 2>/dev/null || true
@@ -529,7 +530,9 @@ ud_carry_derive() {
     # in are `preclassify.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER"` -- byte-identical to what the
     # else-branch computes, which the fixture asserts row-for-row rather than assuming.
     if [ -n "$THEIRS" ] && [ -f "$PRECLASSIFY_SRC" ] && [ -n "$CARRY_TMP" ]; then
-      eval "$(awk '/^machinery_paths\(\) \{/,/^\}/' "$PRECLASSIFY_SRC" 2>/dev/null)"
+      _ud_mp="$(awk '/^machinery_paths\(\) \{/,/^\}/' "$PRECLASSIFY_SRC" 2>/dev/null)"
+      _ud_q0='"$0"'; _ud_qp='"$PRECLASSIFY_SRC"'
+      eval "${_ud_mp//$_ud_q0/$_ud_qp}"; unset _ud_mp _ud_q0 _ud_qp
       if command -v machinery_paths >/dev/null 2>&1; then
         machinery_paths > "$CARRY_TMP/mach" 2>/dev/null || return 4
         if [ -n "$BUCKET_ROWS" ]; then
@@ -927,3 +930,6 @@ while IFS= read -r cp; do
 # script's: an empty scan set exited 1. A classifier exits 0 whatever it FOUND -- and 2 when what
 # it found did not all reach stdout, which only the emit counter can tell (`ud_finish`).
 ud_finish
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ud_main "$@"

@@ -1,0 +1,6 @@
+# consumer-machinery-inventory's starts of core/scripts/validate-layer-entries.sh (BL-879 grammar). Every other drive
+# is in process: run.sh sources the validator once and calls vle_main in a subshell. One cli cell per distinct CLI
+# outcome the fixture reads (exit 1 the seeded E18 inventory, exit 0 the segregated one), each started as
+# FXCELL=<id> bash "$VAL" in eqv() and compared byte for byte with the in-process call on the same input.
+cli core/scripts/validate-layer-entries.sh cli-fail
+cli core/scripts/validate-layer-entries.sh cli-pass

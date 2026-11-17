@@ -32,6 +32,36 @@ if [ -z "$WRITER" ]; then
 fi
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$WRITER")" && pwd)/$(basename "$WRITER")"
 
+# IN PROCESS (BL-878). Both subjects are asked in a subshell made to look like a fresh `bash <subject>` (lib/inproc.sh
+# inproc_run): `cpy` sources the file it is handed there -- the subject itself, or a copy placed in a world -- and
+# calls its entry, sp_main or pb_main, and the pass is counted as the subject the file copies. A function's
+# `${BASH_SOURCE[0]}` is the file it was defined in, so the root walk and every script-relative candidate start from
+# the copy exactly as `bash <copy>` would. The cli cells (cells.decl) run each subject as a program once per distinct
+# CLI outcome and compare stdout, stderr and exit byte for byte with the in-process call. A CORE FIXTURE SHIPS AHEAD
+# OF ITS SUBJECT: a subject with neither its `<p>_main() {` line nor the column-0 source guard predates the wrap and
+# reads SKIP (exit 0, never an ok); exactly one half is a respelled subject and FAILs; a subject grep cannot READ
+# (exit 2) is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+READER="$(dirname "$WRITER")/validate-provenance-block.sh"
+wrap_gate "$WRITER" sp_main; g_sp=$?
+wrap_gate "$READER" pb_main; g_pb=$?
+if [ "$g_sp" = 2 ] || [ "$g_pb" = 2 ]; then exit 2; fi
+if [ "$g_sp" = 1 ] || [ "$g_pb" = 1 ]; then echo "story-provenance: 1 FAILED"; exit 1; fi
+if [ "$g_sp" = 3 ] || [ "$g_pb" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 NM_EXTRA=""
 trap 'rm -rf "$ROOT" ${NM_EXTRA:+"$NM_EXTRA"}' EXIT
@@ -39,6 +69,20 @@ trap 'rm -rf "$ROOT" ${NM_EXTRA:+"$NM_EXTRA"}' EXIT
 REAL_TID="toolu_FIXTUREaaaaaaaa"
 # shellcheck source=/dev/null
 . "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $DIR" >&2; exit 2; }
+# ipc <counted subject> <file> <entry> [args...] -> <file>'s answer in process, counted as <counted subject>. Nothing
+# is loaded into this shell (INPROC_LOADED stays empty), so inproc_run sources <file> inside its own subshell after
+# every function is removed; naming the counted subject as INPROC_LOADED there makes a copy's pass the subject's.
+ipc() { local _c="$1" _f="$2"; shift 2; ( [ "$_f" = "$_c" ] || INPROC_LOADED="$_c"; inproc_run "$_f" "$@" ); }
+# cpy <file> [args...] -> the writer or the reader (or a copy of either, by basename) asked in process
+cpy() { local _f="$1"; shift
+  case "${_f##*/}" in
+    stamp-story-provenance.sh) ipc "$WRITER" "$_f" sp_main "$@" ;;
+    validate-provenance-block.sh) ipc "$READER" "$_f" pb_main "$@" ;;
+    *) echo "cpy: $_f is a copy of neither subject" >&2; return 125 ;;
+  esac
+}
 
 # $1 label  $2 want-exit  $3 want-substring (or "")  then command...
 expect() {
@@ -61,48 +105,48 @@ C="$ROOT/converged"
 
 # 1. --check on the pre-stamp stories (one missing block, one drifted) MUST report DRIFT.
 expect "converged: --check pre-stamp = DRIFT" 1 "DRIFT" \
-  bash "$WRITER" --series "$C/s1-stories-adversarial" --check "$C/stories/story-1.md" "$C/stories/story-2.md"
+  cpy "$WRITER" --series "$C/s1-stories-adversarial" --check "$C/stories/story-1.md" "$C/stories/story-2.md"
 
 # 2. Stamp for real.
 expect "converged: stamp" 0 "stamped 2 of 2" \
-  bash "$WRITER" --series "$C/s1-stories-adversarial" "$C/stories/story-1.md" "$C/stories/story-2.md"
+  cpy "$WRITER" --series "$C/s1-stories-adversarial" "$C/stories/story-1.md" "$C/stories/story-2.md"
 
 # 3. --check now passes (mechanical block matches; idempotent).
 expect "converged: --check post-stamp = OK" 0 "OK" \
-  bash "$WRITER" --series "$C/s1-stories-adversarial" --check "$C/stories/story-1.md" "$C/stories/story-2.md"
+  cpy "$WRITER" --series "$C/s1-stories-adversarial" --check "$C/stories/story-1.md" "$C/stories/story-2.md"
 
 # 4. Re-stamp writes nothing (idempotent).
 expect "converged: re-stamp idempotent" 0 "stamped 0 of 2" \
-  bash "$WRITER" --series "$C/s1-stories-adversarial" "$C/stories/story-1.md" "$C/stories/story-2.md"
+  cpy "$WRITER" --series "$C/s1-stories-adversarial" "$C/stories/story-1.md" "$C/stories/story-2.md"
 
 # 5. TAMPER: a field in a stamped block -> --check MUST fail. Proves the check is not vacuous.
 sed -i.bak 's/^findings_minor: 2/findings_minor: 9/' "$C/stories/story-1.md"
 expect "converged: tampered block = DRIFT" 1 "DRIFT" \
-  bash "$WRITER" --series "$C/s1-stories-adversarial" --check "$C/stories/story-1.md"
+  cpy "$WRITER" --series "$C/s1-stories-adversarial" --check "$C/stories/story-1.md"
 mv "$C/stories/story-1.md.bak" "$C/stories/story-1.md"
 
 # 6. TAMPER: the story BODY after stamping -> artifact_sha goes stale -> --check MUST fail.
 printf '\nedited after stamping.\n' >> "$C/stories/story-2.md"
 expect "converged: stale artifact_sha = DRIFT" 1 "DRIFT" \
-  bash "$WRITER" --series "$C/s1-stories-adversarial" --check "$C/stories/story-2.md"
+  cpy "$WRITER" --series "$C/s1-stories-adversarial" --check "$C/stories/story-2.md"
 
 P="$ROOT/placeholder"
 
 # 7. Placeholder terminal tool_use_id, NO override -> REFUSE (not a valid toolu_ id).
 expect "placeholder: refuse without override" 1 "not a valid toolu_ id" \
-  bash "$WRITER" --series "$P/s1-stories-adversarial" "$P/stories/story-1.md"
+  cpy "$WRITER" --series "$P/s1-stories-adversarial" "$P/stories/story-1.md"
 
 # 8. Placeholder terminal + --tool-use-id -> stamps AND backfills the SoR.
 expect "placeholder: stamp+backfill with override" 0 "backfilled tool_use_id" \
-  bash "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "$REAL_TID" "$P/stories/story-1.md"
+  cpy "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "$REAL_TID" "$P/stories/story-1.md"
 
 # 9. After backfill, --check runs override-free (SoR now holds the real id).
 expect "placeholder: --check override-free post-backfill = OK" 0 "OK" \
-  bash "$WRITER" --series "$P/s1-stories-adversarial" --check "$P/stories/story-1.md"
+  cpy "$WRITER" --series "$P/s1-stories-adversarial" --check "$P/stories/story-1.md"
 
 # 10. A garbage override is refused, not accepted.
 expect "placeholder: garbage override refused" 1 "not a valid toolu_ id" \
-  bash "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "nope" "$P/stories/story-1.md"
+  cpy "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "nope" "$P/stories/story-1.md"
 
 # 10a/10b. THE WRITER REFUSES WHAT THE READER REFUSES. Arm 10's `nope` is a CHARSET miss, so it
 # could never tell the pattern check from the forbidden check — and under the pattern alone the
@@ -111,15 +155,15 @@ expect "placeholder: garbage override refused" 1 "not a valid toolu_ id" \
 # and the decorated one is refused only under `forbidden_match: prefix_ci`. The two together are
 # what separates a writer that reads the field from one that restates a literal.
 expect "placeholder: bare forbidden literal refused" 1 "placeholder literal the schema forbids" \
-  bash "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "toolu_PLACEHOLDER" "$P/stories/story-1.md"
+  cpy "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "toolu_PLACEHOLDER" "$P/stories/story-1.md"
 expect "placeholder: DECORATED forbidden literal refused" 1 "placeholder literal the schema forbids" \
-  bash "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "toolu_PLACEHOLDER_LEAD_TO_FILL" "$P/stories/story-1.md"
+  cpy "$WRITER" --series "$P/s1-stories-adversarial" --tool-use-id "toolu_PLACEHOLDER_LEAD_TO_FILL" "$P/stories/story-1.md"
 
 U="$ROOT/unconverged"
 
 # 11. SAFETY: terminal verdict is not EXIT_CONDITION_MET -> refuse to stamp.
 expect "unconverged: refuse to stamp" 1 "not EXIT_CONDITION_MET" \
-  bash "$WRITER" --series "$U/s1-stories-adversarial" "$U/stories/story-1.md"
+  cpy "$WRITER" --series "$U/s1-stories-adversarial" "$U/stories/story-1.md"
 
 O="$ROOT/oneshot"
 
@@ -130,22 +174,22 @@ O="$ROOT/oneshot"
 
 # 12. THE DEFECT: the default profile cannot stamp a bug story at all.
 expect "oneshot: default profile refuses the bmad skill" 1 "expected 'ai-dlc-adversary-review'" \
-  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" "$O/stories/story-bug-1.md"
+  cpy "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" "$O/stories/story-bug-1.md"
 
 # 13. --check before the stamp is DRIFT (a bug story with no block is not silently fine).
 expect "oneshot: --check pre-stamp = DRIFT" 1 "DRIFT" \
-  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance --check \
+  cpy "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance --check \
     "$O/stories/story-bug-1.md"
 
 # 14. Stamp with the bug profile. The summary must NOT print a bare `None` where the verdict
 #     would be: a field the producer is forbidden to write reads as a parse failure otherwise.
 expect "oneshot: stamp under the bug profile" 0 "one-shot, no verdict" \
-  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance \
+  cpy "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance \
     "$O/stories/story-bug-1.md"
 
 # 15. --check now passes, and the block cites the skill Check 17's bug arm requires.
 expect "oneshot: --check post-stamp = OK" 0 "OK" \
-  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance --check \
+  cpy "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance --check \
     "$O/stories/story-bug-1.md"
 if grep -q '^skill: bmad-review$' "$O/stories/story-bug-1.md" \
    && grep -q '^lens: adversarial$' "$O/stories/story-bug-1.md" \
@@ -160,12 +204,12 @@ fi
 #     bug profile would be a hole through which an unconverged cycle reaches a story with its
 #     verdict silently dropped.
 expect "oneshot: verdict-bearing pass refused" 1 "must carry no verdict" \
-  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot-with-verdict.md" --profile bug-story-provenance \
+  cpy "$WRITER" --terminal "$O/s1-bug-fix-oneshot-with-verdict.md" --profile bug-story-provenance \
     "$O/stories/story-bug-1.md"
 
 # 17. An unknown profile is a usage error, not a silent fall-back to the default.
 expect "unknown profile is refused (exit 2)" 2 "is not a profile in the schema" \
-  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile no-such-profile \
+  cpy "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile no-such-profile \
     "$O/stories/story-bug-1.md"
 
 # ASK THE WRITER where its schema is; never walk up from it. The install mapping SPLITS the
@@ -176,7 +220,7 @@ expect "unknown profile is refused (exit 2)" 2 "is not a profile in the schema" 
 # a derivation the writer owns, and it made the fixture red on every consumer while staying
 # green here. Step 2 requires the derived fixtures green BEFORE the push, so that red was a
 # permanent stop on the self-update, not a nuisance.
-SCHEMA_SRC="$(bash "$WRITER" --print-schema 2>/dev/null)"
+SCHEMA_SRC="$(cpy "$WRITER" --print-schema 2>/dev/null)"
 if [ ! -f "$SCHEMA_SRC" ]; then
   bad "FIXTURE BROKEN: writer --print-schema resolved nothing (got: ${SCHEMA_SRC:-<empty>})"
 fi
@@ -196,7 +240,7 @@ mixed_world() { # -> a fresh world directory; each caller gets its own, never a 
   printf '%s\n' "$w"
 }
 # $1 world  $2 writer  then writer args. The writer is run from INSIDE the world.
-in_world() { local w="$1" wr="$2"; shift 2; ( cd "$w" && bash "$wr" "$@" ); }
+in_world() { local w="$1" wr="$2"; shift 2; ( cd "$w" && cpy "$wr" "$@" ); }
 # Stamp the world the way the two procedures do: the convergence stories through the series, the
 # folded story through ITS OWN per-bug one-shot. This stamp is itself arm M1/M2 on the real writer.
 S1C="s1/stories/story-1-feature.md"; S1U="s1/stories/story-3-unfolded.md"
@@ -259,12 +303,13 @@ fi
 # read s1/s1/...), so only the project-root base binds it. A fresh world, because MW's bug story
 # is already stamped and would print "stamped 0 of 1".
 RW="$(mixed_world)"
+# from_slot <world> <writer> [args...] -> the writer run from <world>/s1 under AI_DLC_PROJECT_ROOT=<world>
+from_slot() { local w="$1"; shift; ( cd "$w/s1" && AI_DLC_PROJECT_ROOT="$w" cpy "$@" ); }
 if [ -z "$RW" ] || [ ! -f "$RW/$ONESHOT" ]; then
   bad "FIXTURE BROKEN: seed.sh --mixed-into built no world (R)"
 else
   expect "mixed: bind resolves artifact via project root" 0 "stamped 1 of 1" \
-    env AI_DLC_PROJECT_ROOT="$RW" bash -c 'cd "$1/s1" && bash "$2" --terminal "$3" --profile "$4" "$5"' _ \
-      "$RW" "$WRITER" "${ONESHOT#s1/}" "$BUGP" "${S1B#s1/}"
+    from_slot "$RW" "$WRITER" --terminal "${ONESHOT#s1/}" --profile "$BUGP" "${S1B#s1/}"
 fi
 
 # --- F13: THE ALIAS IS READ-ONLY. A one-shot citing the pre-rename name is stamped onto its story
@@ -284,7 +329,7 @@ f13_stamp() {
   sed "s#^artifact:.*#artifact: $d/story.md#" "$2" > "$d/oneshot.md" || return 2
   # An empty root would leave the writer walking up for a marker the sandbox does not carry. The cell
   # dir holds no schemas/, so the writer falls to its script-relative copy: the shipped schema.
-  AI_DLC_PROJECT_ROOT="${4:-$d}" bash "$3" --terminal "$d/oneshot.md" --profile "$BUGP" "$d/story.md" > "$d/out" 2>&1; rc=$?
+  AI_DLC_PROJECT_ROOT="${4:-$d}" cpy "$3" --terminal "$d/oneshot.md" --profile "$BUGP" "$d/story.md" > "$d/out" 2>&1; rc=$?
   MX_OUT="$(cat "$d/story.md"; printf 'WRITER-RC=%s\n' "$rc"; [ "$rc" -eq 0 ] || sed 's/^/WRITER-OUT: /' "$d/out" | head -3)"
   [ "$rc" -eq 0 ] || return 1
   return 0
@@ -321,16 +366,15 @@ fi
 # That stamp is the shipped writer's stamp with its block rewritten to the pre-rename form: the skill
 # line put back to the old name and the lens line dropped. The shipped writer's --check and the
 # reader's pin both accept it.
-READER="$(dirname "$WRITER")/validate-provenance-block.sh"
 HD="$(mktemp -d "$ROOT/f13hist.XXXXXX")"
 if f13_stamp "$HD" "$F13_OLD" "$WRITER" "" \
    && sed 's/^skill: bmad-review$/skill: bmad-review-adversarial-general/' "$HD/story.md" | grep -v '^lens: adversarial$' > "$HD/story.hist" \
    && mv "$HD/story.hist" "$HD/story.md" \
    && grep -qx 'skill: bmad-review-adversarial-general' "$HD/story.md" \
    && ! grep -q '^lens:' "$HD/story.md" \
-   && bash "$WRITER" --terminal "$HD/oneshot.md" --profile "$BUGP" --check "$HD/story.md" > "$HD/chk" 2>&1 \
+   && cpy "$WRITER" --terminal "$HD/oneshot.md" --profile "$BUGP" --check "$HD/story.md" > "$HD/chk" 2>&1 \
    && grep -qF 'OK (1 story file(s) current)' "$HD/chk" \
-   && bash "$READER" "$HD/story.md" --require-skill bmad-review > "$HD/rd" 2>&1; then
+   && cpy "$READER" "$HD/story.md" --require-skill bmad-review > "$HD/rd" 2>&1; then
   ok "F13 historical read: a pre-rename stamp (old name, no lens) passes --check and --require-skill bmad-review"
 else
   bad "F13 historical read: a pre-rename stamp was refused on read ($(tail -1 "$HD/chk" 2>/dev/null) / $(tail -1 "$HD/rd" 2>/dev/null))"
@@ -374,22 +418,22 @@ cons_world() { # $1 "plain"|"near"  $2 extra script to place beside the pair (or
 # Each arm: $1 the script under test, by basename, placed beside the real pair (so it shares the
 # pair's install root). Answers 0 held, 1 failed, 2 FIXTURE BROKEN; prints its evidence to stderr.
 arm_ci() { local w out; w="$(cons_world plain "$2")" || return 2
-  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" bash "$w/t/scripts/ai-dlc/$1" --print-schema 2>&1)"
+  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" cpy "$w/t/scripts/ai-dlc/$1" --print-schema 2>&1)"
   [ -n "$out" ] && [ "$out" -ef "$w/t/.claude/schemas/$SCH" ] && return 0
   echo "        CI resolved: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)" >&2; return 1; }
 arm_ni() { local w out; w="$(cons_world near "$2")" || return 2
-  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" bash "$w/t/scripts/ai-dlc/$1" --print-schema 2>&1)"
+  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" cpy "$w/t/scripts/ai-dlc/$1" --print-schema 2>&1)"
   [ -n "$out" ] && [ "$out" -ef "$w/f/.claude/schemas/$SCH" ] && return 0
   echo "        NI resolved: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)" >&2; return 1; }
 # The stamp is always the REAL writer beside the pair.
 stamp_cons() { # $1 world
-  ( cd "$1/f" && AI_DLC_PROJECT_ROOT="$1/f" bash "$1/t/scripts/ai-dlc/stamp-story-provenance.sh" \
+  ( cd "$1/f" && AI_DLC_PROJECT_ROOT="$1/f" cpy "$1/t/scripts/ai-dlc/stamp-story-provenance.sh" \
       --terminal pass-p2.md stories/story-cons.md 2>&1 )
 }
 arm_cr() { local w st out rc; w="$(cons_world plain "$2")" || return 2
   st="$(stamp_cons "$w")"
   grep -qF "stamped 1 of 1" <<<"$st" || { echo "        CR stamp: $(printf '%s' "$st" | tr '\n' ' ' | cut -c1-200)" >&2; return 2; }
-  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" bash "$w/t/scripts/ai-dlc/$1" stories/story-cons.md \
+  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" cpy "$w/t/scripts/ai-dlc/$1" stories/story-cons.md \
       --require-skill ai-dlc-adversary-review 2>&1)"; rc=$?
   [ "$rc" -eq 0 ] && grep -qF "PASS (stories/story-cons.md, 1 block(s)" <<<"$out" && return 0
   echo "        CR reader rc=$rc: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)" >&2; return 1; }
@@ -398,7 +442,7 @@ arm_nr() { local w st out rc; w="$(cons_world near "$2")" || return 2
   grep -qF "stamped 1 of 1" <<<"$st" || { echo "        NR stamp: $(printf '%s' "$st" | tr '\n' ' ' | cut -c1-200)" >&2; return 2; }
   printf '\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: %s\ninvoked_at: 2026-01-02T03:04:05Z\ntool_use_id: %s\nmode: subagent\nlead_role: x.md\nartifact: stories/story-cons.md\nfindings_critical: 0\nfindings_major: 0\nfindings_minor: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n' \
     "$NEAR_SKILL" "$REAL_TID" >> "$w/f/stories/story-cons.md"
-  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" bash "$w/t/scripts/ai-dlc/$1" stories/story-cons.md \
+  out="$(cd "$w/f" && AI_DLC_PROJECT_ROOT="$w/f" cpy "$w/t/scripts/ai-dlc/$1" stories/story-cons.md \
       --require-skill ai-dlc-adversary-review 2>&1)"; rc=$?
   [ "$rc" -eq 0 ] && grep -qF "PASS (stories/story-cons.md, 2 block(s)" <<<"$out" && return 0
   echo "        NR reader rc=$rc: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-200)" >&2; return 1; }
@@ -452,8 +496,8 @@ for base in "$ROOT" /tmp; do
   mkdir -p "$cand_nm/scripts/ai-dlc" "$cand_nm/f/.claude"
   cp "$WRITER" "$cand_nm/scripts/ai-dlc/stamp-story-provenance.sh"
   cp "$READER" "$cand_nm/scripts/ai-dlc/validate-provenance-block.sh"
-  pre="$(cd "$cand_nm" && env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR \
-      bash "$cand_nm/scripts/ai-dlc/stamp-story-provenance.sh" --print-schema 2>&1)"; prc=$?
+  pre="$(cd "$cand_nm" && unset AI_DLC_PROJECT_ROOT CLAUDE_PROJECT_DIR \
+      && cpy "$cand_nm/scripts/ai-dlc/stamp-story-provenance.sh" --print-schema 2>&1)"; prc=$?
   if [ "$prc" -eq 2 ] && grep -qF "cannot resolve the project root" <<<"$pre"; then NM="$cand_nm"; break; fi
 done
 if [ -z "$NM" ]; then
@@ -462,9 +506,22 @@ else
   ok "arm G: sandbox has no root marker above it"
 fi
 ROOTSTAT=" -f /.claude/schemas/$SCH"
+# ARM G READS THE SUBJECT'S OWN XTRACE, so it is not asked through inproc_run, which clears -x (`set +eufx`) before
+# it calls the entry. The copy is sourced in a subshell and its entry called under `set -x` there instead: in process
+# all the same, one counted pass of the subject the copy copies.
 trace_of() { # $1 script basename in $NM/scripts/ai-dlc  then its args -> the xtrace
   local s="$1"; shift
-  ( cd "$NM" && AI_DLC_PROJECT_ROOT="$NM/f" PS4='+ ' bash -x "$NM/scripts/ai-dlc/$s" "$@" 2>&1 )
+  case "$s" in
+    stamp-story-provenance.sh)
+      ( cd "$NM" && export AI_DLC_PROJECT_ROOT="$NM/f" && PS4='+ ' || exit 2
+        fx_inproc "$WRITER"; . "$NM/scripts/ai-dlc/$s" || exit 126
+        set -x; sp_main "$@" ) 2>&1 ;;
+    validate-provenance-block.sh)
+      ( cd "$NM" && export AI_DLC_PROJECT_ROOT="$NM/f" && PS4='+ ' || exit 2
+        fx_inproc "$READER"; . "$NM/scripts/ai-dlc/$s" || exit 126
+        set -x; pb_main "$@" ) 2>&1 ;;
+    *) echo "trace_of: $s is a copy of neither subject" ;;
+  esac
 }
 [ -z "$NM" ] || printf '# probe\n' > "$NM/probe.md"
 # The two guarded scripts: the trace names the override candidate and never stats the filesystem root.
@@ -520,18 +577,18 @@ json.dump(s, open(sys.argv[2], "w"), indent=2)
 # -> "<DP><DS><DC>" for writer $1, each 0 held / 1 failed / 2 broken
 b302_vector() { local w out st rd rc v=""
   w="$(b302_world "$1")" || { echo 222; return; }
-  out="$(cd "$w/g" && AI_DLC_PROJECT_ROOT="$w/g" bash "$w/d/core/scripts/stamp-story-provenance.sh" --print-schema 2>&1)"
+  out="$(cd "$w/g" && AI_DLC_PROJECT_ROOT="$w/g" cpy "$w/d/core/scripts/stamp-story-provenance.sh" --print-schema 2>&1)"
   if [ -n "$out" ] && [ "$out" -ef "$w/g/.claude/schemas/$SCH" ]; then v="${v}0"; else v="${v}1"; fi
-  st="$(cd "$w/g" && AI_DLC_PROJECT_ROOT="$w/g" bash "$w/d/core/scripts/stamp-story-provenance.sh" \
+  st="$(cd "$w/g" && AI_DLC_PROJECT_ROOT="$w/g" cpy "$w/d/core/scripts/stamp-story-provenance.sh" \
         --terminal pass-p2.md stories/story-b302.md 2>&1)"
-  rd="$(cd "$w/g" && AI_DLC_PROJECT_ROOT="$w/g" bash "$w/d/core/scripts/validate-provenance-block.sh" \
+  rd="$(cd "$w/g" && AI_DLC_PROJECT_ROOT="$w/g" cpy "$w/d/core/scripts/validate-provenance-block.sh" \
         stories/story-b302.md --require-skill ai-dlc-adversary-review 2>&1)"; rc=$?
   if grep -qF "stamped 1 of 1" <<<"$st" && grep -qF "$B302_TID" "$w/g/stories/story-b302.md" \
      && [ "$rc" -eq 0 ] && grep -qF "PASS (stories/story-b302.md, 1 block(s)" <<<"$rd"; then v="${v}0"; else v="${v}1"; fi
   # The control drives a FRESH copy of the pass and story, with the override unset: the walk from
   # the world's cwd finds <d> through nothing, so the root comes from the writer's own install.
   cp "$w/g/pass-p2.md" "$w/d/pass-p2.md"; printf '# Story c\n' > "$w/d/story-c.md"
-  st="$(cd "$w/d" && env -u AI_DLC_PROJECT_ROOT -u CLAUDE_PROJECT_DIR bash "$w/d/core/scripts/stamp-story-provenance.sh" \
+  st="$(cd "$w/d" && unset AI_DLC_PROJECT_ROOT CLAUDE_PROJECT_DIR && cpy "$w/d/core/scripts/stamp-story-provenance.sh" \
         --terminal pass-p2.md story-c.md 2>&1)"
   if grep -qF "placeholder literal the schema forbids" <<<"$st" && ! grep -qF "$B302_TID" "$w/d/story-c.md"; then v="${v}0"; else v="${v}1"; fi
   printf '%s\n' "$v"
@@ -560,12 +617,12 @@ mk_pass "$B729/s-adversarial-p10.md" EXIT_CONDITION_MET "toolu_FIXTUREdddddddd"
 mk_pass "$B729/s-adversarial-p2-repair-p7.md" EXIT_CONDITION_MET "toolu_FIXTUREbbbbbbbb"
 mk_pass "$B729/s-adversarial-resolution-p11.md" EXIT_CONDITION_MET "toolu_FIXTUREcccccccc"
 printf '# Story b729\n' > "$B729/story.md"
-( cd "$B729" && AI_DLC_PROJECT_ROOT="$B729" bash "$WRITER" --terminal s-adversarial-p10.md story.md >/dev/null 2>&1 )
+( cd "$B729" && AI_DLC_PROJECT_ROOT="$B729" cpy "$WRITER" --terminal s-adversarial-p10.md story.md >/dev/null 2>&1 )
 # vector for writer $1: one digit per spelling (<stem>-adversarial, -adversarial-, -adversarial-p);
 # 0 = --check exit 0 (p3 resolved), 1 = anything else
 b729_vector() { local v="" pre
   for pre in s-adversarial s-adversarial- s-adversarial-p; do
-    if ( cd "$B729" && AI_DLC_PROJECT_ROOT="$B729" bash "$1" --series "$pre" --check story.md >/dev/null 2>&1 ); then v="${v}0"; else v="${v}1"; fi
+    if ( cd "$B729" && AI_DLC_PROJECT_ROOT="$B729" cpy "$1" --series "$pre" --check story.md >/dev/null 2>&1 ); then v="${v}0"; else v="${v}1"; fi
   done
   printf '%s\n' "$v"
 }
@@ -578,6 +635,66 @@ if [ "$B729_CTL" = 000 ] && grep -qF "tool_use_id: toolu_FIXTUREdddddddd" "$B729
 else
   printf -v _m '%-46s vector %s, want 000' "BL-729: three prefix spellings resolve p10" "$B729_CTL"; bad "$_m"
 fi
+
+# --- THE CLI CELLS (cells.decl): each subject run as a PROGRAM once per distinct CLI outcome -------------------
+# The writer: exit 0 (--check of a current stamp), exit 1 (--check of a drifted one), exit 2 (an unknown profile);
+# the reader: exit 0 on the historical stamp. Each is compared with the in-process answer on the same argv and cwd:
+# stdout, stderr and exit separately, byte for byte, and each asserts its own exit, so two runs that both printed
+# nothing cannot read as equivalent. Every input is read-only here (--check, the reader, a refused profile).
+EQ="$ROOT/eq"; mkdir -p "$EQ" || exit 2
+eqv() { # eqv <cell-id> <subject> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two answers are identical
+  local id="$1" sj="$2"; shift 2
+  cpy "$sj" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$sj" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_rc() { cat "$EQ/$1.cl.rc"; }
+eq_says() { cat "$EQ/$1.cl.out" "$EQ/$1.cl.err" | grep -qF -- "$2"; }
+if eqv w-cli-ok "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance --check "$O/stories/story-bug-1.md" \
+   && [ "$(eq_rc w-cli-ok)" = 0 ] && eq_says w-cli-ok "OK"; then
+  ok "w-cli-ok: the writer program passes a current stamp exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "w-cli-ok: the program and the in-process call differ, or the outcome is not exit 0 with OK (program rc=$(eq_rc w-cli-ok), in-process rc=$(cat "$EQ/w-cli-ok.ip.rc"))"; fi
+if eqv w-cli-drift "$WRITER" --series "$C/s1-stories-adversarial" --check "$C/stories/story-2.md" \
+   && [ "$(eq_rc w-cli-drift)" = 1 ] && eq_says w-cli-drift "DRIFT"; then
+  ok "w-cli-drift: the writer program reports a drifted stamp exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "w-cli-drift: the program and the in-process call differ, or the outcome is not exit 1 with DRIFT (program rc=$(eq_rc w-cli-drift), in-process rc=$(cat "$EQ/w-cli-drift.ip.rc"))"; fi
+if eqv w-cli-usage "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile no-such-profile "$O/stories/story-bug-1.md" \
+   && [ "$(eq_rc w-cli-usage)" = 2 ] && eq_says w-cli-usage "is not a profile in the schema"; then
+  ok "w-cli-usage: the writer program refuses an unknown profile exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "w-cli-usage: the program and the in-process call differ, or the outcome is not exit 2 naming the profile (program rc=$(eq_rc w-cli-usage), in-process rc=$(cat "$EQ/w-cli-usage.ip.rc"))"; fi
+if eqv r-cli-pass "$READER" "$HD/story.md" --require-skill bmad-review \
+   && [ "$(eq_rc r-cli-pass)" = 0 ] && eq_says r-cli-pass "VALIDATE-PROVENANCE-BLOCK: PASS"; then
+  ok "r-cli-pass: the reader program passes the historical stamp exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "r-cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with a PASS line (program rc=$(eq_rc r-cli-pass), in-process rc=$(cat "$EQ/r-cli-pass.ip.rc"))"; fi
+# THE ROOT WALK'S START POINT. A BL-302 world's writer copy sits at <w>/d/core/scripts/ under the <w>/d/core/skills/
+# ai-dlc marker. From cwd / with no override, the only route to a schema is ai_dlc_resolve_root walked up from the
+# writer's own directory, `${BASH_SOURCE[0]}` -- the defining file in process, the program file as a program -- so
+# both must print <w>/d/core/schemas/provenance-block.json, the root that walk alone can find.
+WW="$(b302_world "$WRITER")" || WW=""
+if [ -n "$WW" ] && ( unset AI_DLC_PROJECT_ROOT CLAUDE_PROJECT_DIR; cd / && eqv w-cli-walk "$WW/d/core/scripts/stamp-story-provenance.sh" --print-schema ) \
+   && [ "$(eq_rc w-cli-walk)" = 0 ] && [ "$(head -1 "$EQ/w-cli-walk.cl.out")" -ef "$WW/d/core/schemas/$SCH" ]; then
+  ok "w-cli-walk: from cwd / with no override, the writer program and the in-process call both walk up to the copy's own root"
+else bad "w-cli-walk: the program and the in-process call resolve different schemas from cwd /, or not the copy's own root (program rc=$(eq_rc w-cli-walk) out=[$(head -1 "$EQ/w-cli-walk.cl.out")], in-process out=[$(head -1 "$EQ/w-cli-walk.ip.out")])"; fi
+# The READER's walk, keyed on what only its walked root supplies: the known-skills extension is looked up under
+# PB_ROOT alone (no script-relative candidate), so a story citing a skill only <w>/d's extension registers passes
+# when the walk from the reader copy's own directory reaches <w>/d, and fails otherwise -- the in-process twin with
+# the extension removed must refuse, so the pass is about the walk's answer and not the block.
+WK="fixture-walk-only-skill"
+if [ -n "$WW" ] && mkdir -p "$WW/d/.claude/skills/ai-dlc/extensions" "$WW/d/stories" \
+   && printf '{"known_skills": ["%s"]}\n' "$WK" > "$WW/d/.claude/skills/ai-dlc/extensions/known-skills.json" \
+   && printf '# Story walk\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: %s\ninvoked_at: 2026-01-02T03:04:05Z\ntool_use_id: %s\nmode: subagent\nlead_role: x.md\nartifact: stories/story-walk.md\nfindings_critical: 0\nfindings_major: 0\nfindings_minor: 0\nSKILL_INVOCATION_PROVENANCE_END -->\n' \
+        "$WK" "$REAL_TID" > "$WW/d/stories/story-walk.md" \
+   && ( unset AI_DLC_PROJECT_ROOT CLAUDE_PROJECT_DIR; cd / && eqv r-cli-walk "$WW/d/core/scripts/validate-provenance-block.sh" "$WW/d/stories/story-walk.md" ) \
+   && [ "$(eq_rc r-cli-walk)" = 0 ] && eq_says r-cli-walk "VALIDATE-PROVENANCE-BLOCK: PASS"; then
+  mv "$WW/d/.claude/skills/ai-dlc/extensions/known-skills.json" "$WW/d/ks.off"
+  ( unset AI_DLC_PROJECT_ROOT CLAUDE_PROJECT_DIR; cd / && cpy "$WW/d/core/scripts/validate-provenance-block.sh" "$WW/d/stories/story-walk.md" ) > "$EQ/r-walk-twin.out" 2>&1; twin=$?
+  if [ "$twin" = 1 ] && grep -qF "$WK" "$EQ/r-walk-twin.out"; then
+    ok "r-cli-walk: from cwd / with no override, the reader program and the in-process call both walk up to the copy's own root and load its extension (twin without it: exit 1)"
+  else bad "r-cli-walk: the twin without the extension did not refuse the walk-only skill (exit $twin), so the pass says nothing about the walk"; fi
+else bad "r-cli-walk: the program and the in-process call differ from cwd /, or the walk-only skill was not accepted (program rc=$(eq_rc r-cli-walk) out=[$(tail -1 "$EQ/r-cli-walk.cl.out" 2>/dev/null)], in-process rc=$(cat "$EQ/r-cli-walk.ip.rc" 2>/dev/null))"; fi
+if [ "$(eq_rc w-cli-ok)$(eq_rc w-cli-drift)$(eq_rc w-cli-usage)" = 012 ]; then
+  ok "cli cells discriminate: the three writer argv give three different exits"
+else bad "cli cells do not discriminate: writer exits $(eq_rc w-cli-ok)/$(eq_rc w-cli-drift)/$(eq_rc w-cli-usage), want 0/1/2"; fi
 
 echo
 report_end story-provenance

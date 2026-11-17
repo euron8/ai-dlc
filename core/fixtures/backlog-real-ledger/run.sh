@@ -81,6 +81,61 @@ cleanup() {
 trap cleanup EXIT
 # shellcheck source=/dev/null
 . "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The ceiling (validate-backlog-size.sh) and the classifier (backlog-reverify.sh) are driven in
+# process: each pass cd's into its world, exports the env words the CLI would get, sources that world's copy and calls
+# vbs_main or brv_main in a `( )` subshell, one fx_inproc pass each (the inproc: rows). The separate-program starts
+# left are the cells of cells.decl: one cli cell per distinct CLI outcome of the two (eqv_s, eqv_v below, each
+# compared byte for byte with the in-process call), and the receipts validator's three runs, each ONE FXCELL-tagged
+# start per distinct state (run_r), whose worker re-starts and R9's classifier and ceiling children are covered by
+# the nested rows: that validator starts its own workers and R9's two readers as programs, which an in-process call
+# would leave untagged under run.sh.
+#
+# THE CHILD SHIM (BL-878). backlog-rotate.sh and validate-backlog-size.sh start backlog-reverify.sh as a CHILD program
+# (`bash "$REPO_ROOT/scripts/backlog-reverify.sh" ...`). Called in process, that child would be an untagged start of a
+# declared subject whose logged parent is run.sh, which no nested row can cover (C1). So, while a parent runs in
+# process, `bash` is this function: it answers a start of backlog-reverify.sh by sourcing that copy in a subshell and
+# calling brv_main (one fx_inproc pass each), and passes every other `bash` through. A started child sees none of its
+# parent's shell: reverify DERIVES what lib.sh adds by a before/after namespace diff (backlog-reverify.sh, the
+# _rv_added lines) and refuses when lib.sh is already loaded, and it unsets that set inside each receipt. So the
+# subshell is first reset to what a fresh `bash` has -- options, traps, unexported functions and unexported variables
+# -- by the same reset scripts/validate-enforcement-map.sh's vem_entry applies to its caller (its fresh-bash name list).
+# Here `bash` is defined only by bl_shim, which each in-process ceiling pass calls inside its own subshell, so the
+# fixture's own `bash` lines are never answered by it.
+bl_fresh() {
+  set +e +o pipefail +x +v +a +f +C +E +T
+  trap - ERR DEBUG RETURN
+  shopt -u nullglob failglob nocaseglob nocasematch dotglob extglob expand_aliases
+  IFS=$' \t\n'
+  bl_ls="$(compgen -e; echo :v:; compgen -v; echo :f:; declare -F)"
+  bl_x=' ' bl_m=e bl_p=
+  for bl_n in $bl_ls; do
+    case "$bl_m:$bl_n" in
+      ?:\:v:) bl_m=v ;;
+      ?:\:f:) bl_m=f ;;
+      e:*) bl_x="$bl_x$bl_n " ;;
+      v:bl_ls|v:bl_x|v:bl_m|v:bl_n|v:bl_p|v:bl_s) : ;;
+      v:BASH|v:BASH_*|v:COMP_WORDBREAKS|v:DIRSTACK|v:EUID|v:FUNCNAME|v:GROUPS|v:HISTCMD|v:HOSTNAME) : ;;
+      v:HOSTTYPE|v:IFS|v:LINENO|v:MACHTYPE|v:OPTERR|v:OPTIND|v:OSTYPE|v:PATH|v:PIPESTATUS|v:PPID) : ;;
+      v:PS4|v:PWD|v:RANDOM|v:SECONDS|v:SHELL|v:SHELLOPTS|v:SHLVL|v:TERM|v:UID|v:_) : ;;
+      v:*) case "$bl_x" in *" $bl_n "*) : ;; *) while declare -p "$bl_n" > /dev/null 2>&1 && unset -v "$bl_n" 2>/dev/null; do :; done ;; esac ;;
+      f:*) [ "$bl_p" != -f ] || unset -f "$bl_n" ;;
+    esac
+    bl_p="$bl_n"
+  done
+  unset bl_ls bl_x bl_m bl_n bl_p
+}
+bl_shim() {
+bash() {
+  case "${1:-}" in
+    */backlog-reverify.sh|backlog-reverify.sh)
+      ( bl_s="$1"; shift; fx_inproc "$bl_s"; bl_fresh; . "$bl_s" && brv_main "$@" ) ;;
+    *) command bash "$@" ;;
+  esac
+}
+}
 
 # --- j1's seed: a throwaway REPOSITORY, because the receipts validator checks each receipt out of
 # HEAD. It carries the validator, both reconcile files it loads, the classifier (R2's declared-empty
@@ -119,9 +174,9 @@ seed_r() { # seed_r <dir>
   [ -d "$d/.git" ] || { echo "FIXTURE BROKEN: the probe repository at $d has no .git" >&2; exit 2; }
 }
 # shellcheck disable=SC2086
-run_r() { # run_r <env-string-or-empty> <dir> [<extra-args>...]
-  local e="$1" d="$2"; shift 2
-  ( cd "$d" && env $e bash scripts/validate-backlog-receipts.sh "$@" 2>&1 )
+run_r() { # run_r <cell> <env-string-or-empty> <dir> [<extra-args>...] -- ONE FXCELL-tagged start (cells.decl)
+  local c="$1" e="$2" d="$3"; shift 3
+  ( cd "$d" && env FXCELL="$c" $e bash scripts/validate-backlog-receipts.sh "$@" 2>&1 )
 }
 
 # --- b16's seed: a plain tree with the ceiling validator, its library and the classifier.
@@ -134,10 +189,33 @@ seed_s() { # seed_s <dir>
   cp "$REVERIFY" "$d/scripts/backlog-reverify.sh"
   cp "$RLIB" "$d/scripts/backlog-receipt-lib.sh"
 }
+# --- CLI CELLS: one separate-program start per distinct outcome, equal to the in-process answer ----------------
+# eqv_s / eqv_v <id> <expected rc> <dir> <env words or -> <args...>: one vbs_main / brv_main call in <dir> and one
+# `FXCELL=<id> bash scripts/<subject>` start over the same untouched world must agree on stdout, stderr and exit
+# status byte for byte, and the exit status must be the one stated. The in-process side's output stays in
+# $EQ/<id>.ip.{out,err,rc} for the arm that reads it.
+EQ="$TMP/eq"; mkdir -p "$EQ"
+eqv_judge() { # eqv_judge <id> <want>
+  local id="$1" want="$2"
+  if [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" \
+     && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"; then ok "EQUIV $id: the in-process call and the program agree on stdout, stderr and exit $want"
+  else bad "EQUIV $id: in-process rc $(cat "$EQ/$id.ip.rc") vs program rc $(cat "$EQ/$id.cl.rc") (want $want), or their output differs"; fi
+}
 # shellcheck disable=SC2086
-run_s() { # run_s <env-string-or-empty> <dir> [<extra-args>...]
-  local e="$1" d="$2"; shift 2
-  ( cd "$d" && env $e bash scripts/validate-backlog-size.sh "$@" 2>&1 )
+eqv_s() {
+  local id="$1" want="$2" d="$3" e="$4"; shift 4; [ "$e" = - ] && e=""
+  ( cd "$d" || exit 2; for _w in $e; do export "$_w"; done; bl_shim
+    fx_inproc scripts/validate-backlog-size.sh; . scripts/validate-backlog-size.sh && vbs_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$d" && env FXCELL="$id" $e bash scripts/validate-backlog-size.sh "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  eqv_judge "$id" "$want"
+}
+# shellcheck disable=SC2086
+eqv_v() {
+  local id="$1" want="$2" d="$3" e="$4"; shift 4; [ "$e" = - ] && e=""
+  ( cd "$d" || exit 2; for _w in $e; do export "$_w"; done
+    fx_inproc scripts/backlog-reverify.sh; . scripts/backlog-reverify.sh && brv_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$d" && env FXCELL="$id" $e bash scripts/backlog-reverify.sh "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  eqv_judge "$id" "$want"
 }
 # Reads the count back out of the ceiling's OWN ok line; empty when the arm did not speak.
 bl_reported() { printf '%s\n' "$1" | sed -n 's|^OK: validate-backlog-size -- B1 \([0-9][0-9]*\)/[0-9]* entries in .*|\1|p'; }
@@ -168,13 +246,18 @@ printf '# Probe backlog\n\n## BL-803\n\nverify: sh grep -q %s probe/guarded.txt 
   > "$TMP/j1p/docs/backlog.md"
 ( cd "$TMP/j1p" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m zero >/dev/null 2>&1 )
 # shellcheck disable=SC2086
-j1p_zero_out="$(run_r "" "$TMP/j1p" $J1_ARGS)"
+j1p_zero_out="$(run_r j1p-zero "" "$TMP/j1p" $J1_ARGS)"
 j1p_zero="$(j1_read "$j1p_zero_out")"
 printf '## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'MARKJ1ANCHOR'" >> "$TMP/j1p/docs/backlog.md"
 ( cd "$TMP/j1p" && git add -A >/dev/null 2>&1 && git -c user.email=p@local -c user.name=p commit -q -m anchor >/dev/null 2>&1 )
 # shellcheck disable=SC2086
-j1p_anch_out="$(run_r "" "$TMP/j1p" $J1_ARGS)"
+j1p_anch_out="$(run_r j1p-anchor "" "$TMP/j1p" $J1_ARGS)"
 j1p_anch="$(j1_read "$j1p_anch_out")"
+# The classifier's row-mode CLI outcome (exit 0), on this small two-receipt ledger, so the cli twin costs two receipts.
+eqv_v cli-rv-rows 0 "$TMP/j1p" - docs/backlog.md
+grep -q "^[A-Z-]*"$'\t'"${J1_ANCHOR}"$'\t'"sh receipt exited" "$EQ/cli-rv-rows.ip.out" \
+  && ok "cli-rv-rows -- the classifier's in-process rows carry the anchor's sh-receipt row" \
+  || bad "cli-rv-rows -- the classifier's in-process rows carry no sh-receipt row for ${J1_ANCHOR}"
 if [ -z "$j1p_zero" ] && [ "${j1p_anch#* }" = 1 ]; then
   ok "j1 probe -- a zero-scored ledger yields no SUMMARY reading, and the same ledger plus the anchor yields scored=1"
 else
@@ -191,7 +274,9 @@ cp "$SIZE" "$TMP/j1/scripts/validate-backlog-size.sh"
 # A real ledger DECLARED EMPTY carries no `## BL-` entry by construction, so that half of the
 # precondition binds only when the classifier says the ledger is not declared empty; the anchor
 # then supplies the arm's whole population and the join below still runs.
-( cd "$TMP/j1" && bash scripts/backlog-reverify.sh --declared-empty docs/backlog.md >/dev/null 2>&1 ); j1_de=$?
+# The classifier's --declared-empty refusal (exit 1 on the snapshot, which carries entries) is its second CLI outcome.
+eqv_v cli-rv-de 1 "$TMP/j1" - --declared-empty docs/backlog.md
+j1_de="$(cat "$EQ/cli-rv-de.ip.rc")"
 if [ "$j1_de" -ne 0 ] && [ "$j1_de" -ne 1 ]; then
   bad "j1 -- backlog-reverify.sh --declared-empty exited $j1_de on the real ledger, an environment failure"
 fi
@@ -207,7 +292,7 @@ printf '\n## %s\n\nverify: sh grep -q %s probe/subject.txt\n\n' "$J1_ANCHOR" "'M
 # the M1-EXCLUDED count, never as R7 findings. The j1 commit, not the root: a root base would make every LANDED
 # entry of the snapshot an R8 close of this branch and run its receipt.
 # shellcheck disable=SC2086
-j1_out="$(run_r "" "$TMP/j1" $J1_ARGS --base "$(git -C "$TMP/j1" rev-parse HEAD)")"
+j1_out="$(run_r j1 "" "$TMP/j1" $J1_ARGS --base "$(git -C "$TMP/j1" rev-parse HEAD)")"
 j1_rd="$(j1_read "$j1_out")"
 j1_arm="${j1_rd%% *}"; j1_sc="${j1_rd#* }"
 if [ -z "$j1_rd" ] || [ "$j1_sc" -eq 0 ]; then
@@ -222,7 +307,7 @@ fi
 # ledger, which is the cost of this unit, and b16 below asks it for the same ledger minus the anchor.
 # Its rows are held here and b16 subtracts the anchor's row, a rule that is asserted to have removed
 # exactly one row so the subtraction cannot decay into a no-op.
-j1_rows="$( cd "$TMP/j1" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null )"
+j1_rows="$( cd "$TMP/j1" || exit 2; fx_inproc scripts/backlog-reverify.sh; . scripts/backlog-reverify.sh && brv_main docs/backlog.md 2>/dev/null )"
 j1_rev="$(printf '%s\n' "$j1_rows" | awk -F'\t' '$3 ~ /^sh receipt exited/ { print $2 }' | sort -u | grep -c . )"
 if [ -z "$j1_arm" ] || [ -z "$j1_rev" ]; then
   bad "j1 -- a side produced no value (arm='$j1_arm' reverify='$j1_rev')"
@@ -242,7 +327,13 @@ fi
 # and the classifier must emit exactly one DECLARED-EMPTY row. Which branch runs is decided by the
 # classifier's own --declared-empty on the real file, and each branch is presence-shaped.
 seed_s "$TMP/b16"; cp "$REAL_LEDGER" "$TMP/b16/docs/backlog.md"
-b16_out="$(run_s "AI_DLC_BACKLOG_MAX_ENTRIES=100000" "$TMP/b16")"
+# The ceiling's two CLI outcomes: under the ceiling (exit 0; this pass is b16's own reading) and over it (exit 1).
+eqv_s cli-size-ok 0 "$TMP/b16" "AI_DLC_BACKLOG_MAX_ENTRIES=100000"
+b16_out="$(cat "$EQ/cli-size-ok.ip.out" "$EQ/cli-size-ok.ip.err")"
+eqv_s cli-size-over 1 "$TMP/b16" "AI_DLC_BACKLOG_MAX_ENTRIES=1"
+grep -q '^FAIL: B1: .* against a ceiling of 1\.' "$EQ/cli-size-over.ip.err" \
+  && ok "cli-size-over -- the ceiling refuses the snapshot against a ceiling of 1 with its B1 FAIL line" \
+  || bad "cli-size-over -- the ceiling printed no B1 FAIL line against a ceiling of 1"
 b16_arm="$(bl_reported "$b16_out")"
 # The declared-empty answer for the real ledger was taken above on j1's byte-identical copy of it
 # (before the anchor was appended), so it is not asked again. A declared-empty ledger has no
@@ -250,7 +341,7 @@ b16_arm="$(bl_reported "$b16_out")"
 # are j1's with the anchor's single row removed.
 b16_de="$j1_de"
 if [ "$b16_de" -eq 0 ]; then
-  b16_rows="$( cd "$TMP/b16" && bash scripts/backlog-reverify.sh docs/backlog.md 2>/dev/null )"
+  b16_rows="$( cd "$TMP/b16" || exit 2; fx_inproc scripts/backlog-reverify.sh; . scripts/backlog-reverify.sh && brv_main docs/backlog.md 2>/dev/null )"
 else
   b16_rows="$(printf '%s\n' "$j1_rows" | awk -F'\t' -v a="$J1_ANCHOR" '$2 != a')"
   b16_gone=$(( $(printf '%s\n' "$j1_rows" | grep -c .) - $(printf '%s\n' "$b16_rows" | grep -c .) ))
