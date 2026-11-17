@@ -3441,3 +3441,13 @@ This entry carries three distinct claims. It expires only when all three do.
 Provenance: batch 258, C5; id allocated by the lead (ai-dlc-84).
 
 verify: manual
+
+## BL-1165 — plan-shape P10 is satisfied by a quoted one-liner anywhere in the file, not by the resume line at the top
+
+**NOTE.** OPEN. Filed 2026-11-17. Owner: unassigned (arm P10 of `scripts/validate-plan-shape.sh`).
+
+P10 of `scripts/validate-plan-shape.sh` greps the whole file for the `READ and FOLLOW docs/plans/<slug>.md` sentence. In `docs/plans/graph-ledger-full-drain.md` action 9 quotes that sentence (about line 1666), so deleting the resume line at the top (line 7) leaves P10 silent; P10 fires only when both are removed. Measured batch 258 action 6b on `2adaada45` with probe copies under the lead scratchpad (`6b-probe-line7.RUST` silent, `6b-probe-all.9ybu` fires, unmodified copy silent). Owed: bind P10 to the head window (the resume block), and re-measure the false-positive set across all `docs/plans/*.md` before shipping. NOTE tier; no consumer cost.
+
+Provenance: batch 258 close, action 6b fresh-resume check (lead ai-dlc-84).
+
+verify: manual
