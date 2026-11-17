@@ -89,6 +89,7 @@
 #       3  SCOPING FAILURE — no current sprint, or the current sprint contributed no
 #          corpus. Nothing was judged and nothing can be concluded from the empty
 #          worklist. This is the wrong-tree exit.
+rpf_main() {
 set -uo pipefail
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -562,3 +563,6 @@ if scope_fail:
 PYEOF
 
 exit $?
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rpf_main "$@"

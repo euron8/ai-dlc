@@ -1,0 +1,4 @@
+# layer-debt-due-and-discharge's starts of core/scripts/audit-layer-debt.sh (BL-879 grammar). Every other drive is in
+# process: run.sh's ald() is inproc_run of ald_main. One cli cell, for the one CLI outcome the fixture drives (exit 0,
+# a report), started as FXCELL=<id> bash "$AUDIT" in eq_cell() and compared byte for byte with the in-process call.
+cli core/scripts/audit-layer-debt.sh cli-report

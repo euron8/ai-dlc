@@ -33,19 +33,49 @@ echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 # The linter loads artifact-path-config.sh beside itself and FAILS OPEN (W11) when it is absent.
 [ -f "$(dirname "$LINTER")/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED core/scripts/artifact-path-config.sh"
 
+# IN PROCESS (BL-878). The validator is SOURCED ONCE into this shell (its guard returns after defining vle_main), and
+# the fixture's one state is one vle_main call inside a subshell, so its `exit`, `set -u`, EXIT trap and function
+# definitions stay there. It starts as a program only in the cli cell (cells.decl). A CORE FIXTURE SHIPS AHEAD OF ITS
+# SUBJECT: a subject with neither its `vle_main() {` line nor the column-0 source guard predates the wrap and reads
+# SKIP (exit 0, never an ok); exactly one half is a respelled subject and FAILs; a subject grep cannot READ (exit 2)
+# is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$LINTER" vle_main; g_vle=$?
+[ "$g_vle" = 2 ] && exit 2
+[ "$g_vle" = 1 ] && { echo "layer-artifact-path-prescriptions: 1 FAILED"; exit 1; }
+[ "$g_vle" = 3 ] && { echo "SKIP: subject predates the in-process wrap"; exit 0; }
+
 ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$ROOT"' EXIT
 CONS="$ROOT/consumer"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+fx_inproc "$LINTER"
+. "$LINTER" || { echo "FIXTURE ERROR: sourcing $LINTER failed" >&2; exit 2; }
+declare -F vle_main > /dev/null || { echo "FIXTURE ERROR: sourcing $LINTER defined no vle_main" >&2; exit 2; }
 
-run()  { bash "$LINTER" "$CONS" 2>/dev/null; }
-w11()  { run | grep '^WARN   W11' || true; }
+# ONE RUN, ONE STATE: every reader below reads the one in-process answer, by here-string.
+RUN_OUT="$( ( fx_inproc "$LINTER"; vle_main "$CONS" ) 2>/dev/null)"
+w11()  { grep '^WARN   W11' <<<"$RUN_OUT" || true; }
 # The count line the arm prints is its own control: this arm's answer is normally an absence,
 # and an absence is what a broken extractor and a conforming layer both print.
-seen() { run | sed -n 's/^ *\([0-9][0-9]*\) artifact-path prescription(s) read.*/\1/p' | head -1; }
-hit()  { run | sed -n 's/.*prescription(s) read across [0-9]* scan root(s); \([0-9][0-9]*\) non-conforming.*/\1/p' | head -1; }
-says() { w11 | grep -qF -- "$1"; }
+seen() { sed -n 's/^ *\([0-9][0-9]*\) artifact-path prescription(s) read.*/\1/p' <<<"$RUN_OUT" | head -1; }
+hit()  { sed -n 's/.*prescription(s) read across [0-9]* scan root(s); \([0-9][0-9]*\) non-conforming.*/\1/p' <<<"$RUN_OUT" | head -1; }
+says() { grep -qF -- "$1" <<<"$(w11)"; }
 
 echo "layer-artifact-path-prescriptions:"
 
@@ -124,6 +154,19 @@ if says 'docs/coding-conventions.md'; then
   bad "a path outside every scan root was reported. The corpus is the declared roots; anything else is not this clause's subject and the operator has no grammar to bring it into line with"
 else
   ok "SILENT: a path outside every declared scan root is not reported"
+fi
+
+# --- the cli cell (cells.decl): the validator run as a PROGRAM once, for the one CLI outcome this fixture reads --------
+# compared byte for byte with an in-process call on the same input (stdout, stderr and exit separately), and asserting
+# its own outcome: the three seeded W11 rows, so two runs that both printed nothing cannot read as equal.
+EQ="$ROOT/eq"; mkdir -p "$EQ" || exit 2
+( fx_inproc "$LINTER"; vle_main "$CONS" ) > "$EQ/ip.out" 2> "$EQ/ip.err"; echo "$?" > "$EQ/ip.rc"
+FXCELL=cli-fail bash "$LINTER" "$CONS" > "$EQ/cl.out" 2> "$EQ/cl.err"; echo "$?" > "$EQ/cl.rc"
+if cmp -s "$EQ/ip.out" "$EQ/cl.out" && cmp -s "$EQ/ip.err" "$EQ/cl.err" && cmp -s "$EQ/ip.rc" "$EQ/cl.rc" \
+   && [ "$(cat "$EQ/cl.rc")" = 1 ] && [ "$(grep -c "^WARN   W11" "$EQ/cl.out")" -ge 3 ]; then
+  ok "cli-fail: the program reports the seed exactly as the in-process call does (stdout, stderr, exit $(cat "$EQ/cl.rc"))"
+else
+  bad "cli-fail: the program and the in-process call differ, or the program printed fewer than 3 W11 rows: in-process rc=$(cat "$EQ/ip.rc") program rc=$(cat "$EQ/cl.rc")"
 fi
 
 echo

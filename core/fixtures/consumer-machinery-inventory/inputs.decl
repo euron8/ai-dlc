@@ -6,3 +6,4 @@ core/skills/ai-dlc/layer-contract.yaml
 core/skills/ai-dlc/core-manifest.md
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh

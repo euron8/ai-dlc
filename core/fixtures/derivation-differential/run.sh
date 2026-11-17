@@ -98,6 +98,38 @@ g() { # g <dir> <git args...> -- hermetic identity, no hooks, no signing
 }
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# IN PROCESS (BL-878). The subject is SOURCED once into this shell (its column-0 guard returns after defining dd_main),
+# and every drive calls dd_main in a subshell (`$( )` or `( )`), so the subject's own `exit`, `set -u`, `set -f` and its
+# EXIT trap stay there. The source is one fx_inproc pass, and so is every dd_main call (the inproc: row). The subject
+# reads no variable it does not assign except TMPDIR, AI_DLC_DD_OVERLAY_CAP and what vd_join sets, and calls no
+# function this fixture defines, so this shell's state does not reach its answer; the three cli cells hold the
+# in-process answer byte-identical to the program's. DDS spells the subject with a literal tail, so the in-process
+# judge (P2) resolves every source to it: lib/inproc.sh is not used, because its `. "$1"` is an operand P2 cannot
+# resolve, which it scores as a drive in a fixture declaring an unguarded subject (the validator and classifier).
+# The `nots` copy is sourced inside pw's own subshell, so its dd_main, and the template-sites.md it looks for beside
+# its `${BASH_SOURCE[0]}`, are the copy's.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped helper, and
+# sourcing a pre-wrap helper would run its whole body in this shell. So the shape is checked first, on its two halves:
+# neither the `dd_main() {` line nor the column-0 source guard is a subject that predates the wrap, which prints SKIP
+# and exits 0 -- never an ok. Exactly one half is a respelled subject this fixture can no longer drive, which FAILS.
+DDS="$(dirname "$SUBJ")/derivation-differential.sh"
+dd_def=0; dd_guard=0
+grep -q '^dd_main() {$' "$DDS"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $DDS (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || dd_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$DDS"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $DDS (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || dd_guard=1
+if [ "$dd_def$dd_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+if [ "$dd_def" = 0 ]; then echo "   FAIL  $DDS carries the column-0 source guard but no \`dd_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "derivation-differential: FAIL (1)" >&2; exit 1; fi
+if [ "$dd_guard" = 0 ]; then echo "   FAIL  $DDS defines \`dd_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run dd_main in this shell" >&2; echo "derivation-differential: FAIL (1)" >&2; exit 1; fi
+fx_inproc "$DDS"
+. "$DDS" || { echo "FIXTURE BROKEN: sourcing $DDS failed" >&2; exit 2; }
+declare -F dd_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $DDS defined no dd_main" >&2; exit 2; }
 # HERE-STRINGS, NEVER `printf | grep -q` (I54/I54b).
 ck() { if grep -qF -- "$2" <<<"$3"; then ok "$1"; else bad "$1 -- expected to find: $2"; printf '%s\n' "$3" | sed 's/^/        | /' | head -20; fi; }
 nk() { if grep -qF -- "$2" <<<"$3"; then bad "$1 -- must NOT contain: $2"; else ok "$1"; fi; }
@@ -208,7 +240,33 @@ build_consumer() {
 # with that dist's refs and never with the first's.
 dd() {
   local c="$1"; shift
-  OUT="$(cd / && TMPDIR="$DDTMP" bash "$SUBJ" "$(cat "$c/.D")" "$(cat "$c/.B")" "$c" "$(cat "$c/.T")" "$@" 2>&1)"; RC=$?
+  OUT="$(cd / && export TMPDIR="$DDTMP" && fx_inproc "$DDS" && dd_main "$(cat "$c/.D")" "$(cat "$c/.B")" "$c" "$(cat "$c/.T")" "$@" 2>&1)"; RC=$?
+}
+# ---- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome ----------------------
+# The outcomes are the exit codes: 1 with a NEWLY-FAILING verdict (A1, W1), 0 with the clear (A3, W2), 2 with a refusal
+# (A6, W1 under an empty --base-root). eqv IS that arm's one in-process run, with stdout and stderr kept apart, followed
+# by one `FXCELL=<id> bash "$SUBJ"` start on the same input, cwd and TMPDIR; the two are compared byte for byte (stdout,
+# stderr and exit separately). OUT is the in-process stdout then stderr: a run that writes no stderr (each of the three
+# cells asserts that) reads exactly as dd's `2>&1` would. Each cell also asserts its own outcome at its arm, so two runs
+# that both printed nothing cannot read as equivalent.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <consumer> [extra args...] -> sets OUT and RC as dd does; 0 when the program agrees
+  local id="$1" c="$2"; shift 2
+  (cd / && export TMPDIR="$DDTMP" && fx_inproc "$DDS" && dd_main "$(cat "$c/.D")" "$(cat "$c/.B")" "$c" "$(cat "$c/.T")" "$@") \
+    > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; RC=$?; echo "$RC" > "$EQ/$id.ip.rc"
+  OUT="$(cat "$EQ/$id.ip.out" "$EQ/$id.ip.err")"
+  (cd / && TMPDIR="$DDTMP" FXCELL="$id" bash "$SUBJ" "$(cat "$c/.D")" "$(cat "$c/.B")" "$c" "$(cat "$c/.T")" "$@") \
+    > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s rows=%s err=[%s] / program rc=%s rows=%s err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(grep -c . "$EQ/$1.ip.out")" \
+  "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(grep -c . "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+# eq_cell <cell-id> <want rc> <want row> <eqv status> <label>: the pair agreed, the program exited <want rc>, wrote no
+# stderr, and printed <want row>
+eq_cell() {
+  if [ "$4" = 0 ] && [ "$(cat "$EQ/$1.cl.rc")" = "$2" ] && [ ! -s "$EQ/$1.cl.err" ] && grep -qF -- "$3" "$EQ/$1.cl.out"; then
+    ok "$1: $5 exactly as the in-process call does (stdout, stderr, exit $2)"
+  else bad "$1: the program and the in-process call differ, or the outcome is not exit $2 with the expected row ($(eq_twin "$1"))"; fi
 }
 wtcount() { g "$1" worktree list 2>/dev/null | awk 'END { print NR + 0 }'; }
 
@@ -242,7 +300,8 @@ else
 fi
 
 # ---- A1: passes at base, fails after the apply -> exit 1, and it is NAMED --------------------
-dd "$W1"; OUT1="$OUT"; RC1="$RC"
+eqv cli-broke "$W1"; EQS=$?; OUT1="$OUT"; RC1="$RC"
+eq_cell cli-broke 1 "$(printf 'NEWLY-FAILING\t%s\t' "$K_ALPHA")" "$EQS" "the program names the broken derivation"
 rc_is "A1a a derivation broken by this apply -> exit 1" 1 "$RC1"
 ck "A1b the NEWLY-FAILING row names that derivation" "$(printf 'NEWLY-FAILING\t%s\t' "$K_ALPHA")" "$OUT1"
 n_nf="$(nrows NEWLY-FAILING "$OUT1")"
@@ -259,7 +318,8 @@ ck "A2c the summary counts it" "1 NEWLY-FAILING, 0 NEWLY-PASSING, 1 STALE-BOTH, 
 # ---- A3: the clean pair -> exit 0 ------------------------------------------------------------
 # The near-miss of A1: the same changed path, the same corpus, the same STALE-BOTH debt. Only
 # qqalpha surviving the apply differs.
-dd "$W2"; OUT2="$OUT"; RC2="$RC"
+eqv cli-clear "$W2"; EQS=$?; OUT2="$OUT"; RC2="$RC"
+eq_cell cli-clear 0 "$(printf 'VERDICT\t_bmad-output/\tzero NEWLY-FAILING')" "$EQS" "the program clears the clean pair"
 rc_is "A3a a clean pair -> exit 0" 0 "$RC2"
 rc_is "A3b no NEWLY-FAILING row" 0 "$(nrows NEWLY-FAILING "$OUT2")"
 ck "A3c the verdict is the clear" "$(printf 'VERDICT\t_bmad-output/\tzero NEWLY-FAILING')" "$OUT2"
@@ -281,7 +341,8 @@ rc_is "A5n near-miss: the same wrapper passing through -> exit 1, not a refusal"
 ck "A5o and it names the broken derivation" "$(printf 'NEWLY-FAILING\t%s\t' "$K_ALPHA")" "$OUT5P"
 
 # ---- A6/A7: an EMPTY --base-root and an EMPTY-DIRECTORY --base-root -> exit 2 ------------------
-dd "$W1" --base-root ""; OUT6="$OUT"; RC6="$RC"
+eqv cli-refuse "$W1" --base-root ""; EQS=$?; OUT6="$OUT"; RC6="$RC"
+eq_cell cli-refuse 2 "$(printf 'REFUSED\tbase-root\t--base-root is EMPTY')" "$EQS" "the program refuses an empty --base-root"
 rc_is "A6a an empty --base-root -> exit 2" 2 "$RC6"
 ck "A6b and the refusal says it is EMPTY" "$(printf 'REFUSED\tbase-root\t--base-root is EMPTY')" "$OUT6"
 EMPTYDIR="$WORK/empty-root"; mkdir -p "$EMPTYDIR"
@@ -503,9 +564,13 @@ if [ -z "$PL_FN" ]; then
   bad "A12t the subject defines no pid_live() -- its liveness test cannot be fed the refusal"
 else
   pl_dead=""
+  # The extracted text is sourced from a file of its own, never `eval`ed: P2 reads an `eval` of an opaque word after
+  # the subject's source as an unpaired in-process pass; the call of pid_live below is the pass, and is paired.
+  printf '%s\n' "$PL_FN" > "$WORK/pid_live.sh"
   for _p in "$$" "$DEADPID" 1; do
-    ( eval "$PL_FN"
+    ( . "$WORK/pid_live.sh"
       kill() { printf '%s\n' "$shim_err" >&2; return 126; }
+      fx_inproc "$DDS"
       pid_live "$_p" ) || pl_dead="$pl_dead $_p"
   done
   if [ -z "$pl_dead" ]; then
@@ -514,7 +579,7 @@ else
     bad "A12t pid_live reads the refused-ps answer as DEAD for:$pl_dead -- a refused probe would name a worktree"
   fi
 fi
-OUT12P="$(cd / && PATH="$PSHIM:$PATH" TMPDIR="$DDTMP" bash "$SUBJ" "$(cat "$W6/.D")" "$(cat "$W6/.B")" "$W6" "$(cat "$W6/.T")" 2>&1)"; RC12P=$?
+OUT12P="$(cd / && export PATH="$PSHIM:$PATH" TMPDIR="$DDTMP" && hash -r && fx_inproc "$DDS" && dd_main "$(cat "$W6/.D")" "$(cat "$W6/.B")" "$W6" "$(cat "$W6/.T")" 2>&1)"; RC12P=$?
 rc_is "A12u with ps refused the verdict is unchanged -> exit 1" 1 "$RC12P"
 ck "A12v with ps refused the DEAD run's worktree is still NAMED" "$(printf 'NOTE\tworktree\t%s is a registered worktree' "$LEAK")" "$OUT12P"
 nk "A12w near-miss with ps refused: the LIVE run's worktree is NOT named" "$LIVE" "$OUT12P"
@@ -1132,7 +1197,11 @@ pw() {
   esac
   (cd "$cwd" || exit 2
    [ -z "$cap" ] || { AI_DLC_DD_OVERLAY_CAP="$cap"; export AI_DLC_DD_OVERLAY_CAP; }
-   TMPDIR="$td" bash "$s" "$(cat "$d/.D")" "$(cat "$d/.B")" "$cons" "$(cat "$d/.T")" "$@") > "$o.out" 2>&1
+   export TMPDIR="$td"
+   # the nots copy is sourced here, inside this run's subshell, so its dd_main replaces the loaded one for this run only
+   fx_inproc "$DDS"
+   [ "$w" != nots ] || . "$P_NOTS/derivation-differential.sh" || exit 2
+   dd_main "$(cat "$d/.D")" "$(cat "$d/.B")" "$cons" "$(cat "$d/.T")" "$@") > "$o.out" 2>&1
   echo "$?" > "$o.rc"
   # what this run left in its TMPDIR, and how many worktrees its consumer lists, read right after it (Pi_two)
   find "$td" -mindepth 1 2>/dev/null | awk 'END { print NR + 0 }' > "$o.tmpleft"
@@ -1324,7 +1393,7 @@ else
 fi
 
 # THE ARMS, against the shipped subject and validator: one run per world.
-for _w in $P_RUNWORLDS; do pw tip "$_w" "$SUBJ" "$DDTMP"; done
+for _w in $P_RUNWORLDS; do pw tip "$_w" "$DDS" "$DDTMP"; done
 # nots: Pi's world driven by a copy of the helper whose directory holds its siblings but NO template-sites.md, so
 # the set of files the pull rewrites is unknown and the pass must fail closed (one named row per NEWLY-FAILING key)
 P_NOTS="$WORK/nots"; mkdir -p "$P_NOTS"
@@ -1439,6 +1508,12 @@ if pcell Px_unset tip; then ok "Px_unset the validator with AI_DLC_VD_FULL_OUT_D
 else pbad Px_unset "the validator with AI_DLC_VD_FULL_OUT_DIR unset is byte-identical to the opt-in stripped out, and writes no file"; fi
 if pcell Px_set tip; then ok "Px_set with it set: the same output, and one file per compared derivation (an empty one for no output, none for a refusal)"
 else pbad Px_set "with it set: the same output, and one file per compared derivation (an empty one for no output, none for a refusal)"; fi
+
+# ---- the cli cells discriminate: three inputs, three exits ----------------------------------------------------
+if ! cmp -s "$EQ/cli-broke.cl.rc" "$EQ/cli-clear.cl.rc" && ! cmp -s "$EQ/cli-clear.cl.rc" "$EQ/cli-refuse.cl.rc" \
+   && ! cmp -s "$EQ/cli-broke.cl.out" "$EQ/cli-refuse.cl.out"; then
+  ok "cli cells discriminate: the three inputs give three different exits and different stdout"
+else bad "cli cells do not discriminate: two of cli-broke, cli-clear and cli-refuse gave the same exit or stdout"; fi
 
 # ---- A10: the default base root leaves no worktree and no scratch behind --------------------
 # CONTROL FIRST: the counter must see a worktree when one exists, or a 1 below is a counter that

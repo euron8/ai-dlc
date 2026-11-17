@@ -1,0 +1,7 @@
+# derivation-differential's starts of core/skills/ai-dlc-update/reconcile/derivation-differential.sh (BL-879 grammar).
+# Every other drive is in process: run.sh loads the subject once (inproc_load) and calls dd_main through inproc_run.
+# One cli cell per distinct CLI outcome (exit 1 naming a NEWLY-FAILING derivation, exit 0 with the clear, exit 2 with
+# a refusal), each started as FXCELL=<id> bash "$SUBJ" in eqv() and compared byte for byte with the in-process call.
+cli core/skills/ai-dlc-update/reconcile/derivation-differential.sh cli-broke
+cli core/skills/ai-dlc-update/reconcile/derivation-differential.sh cli-clear
+cli core/skills/ai-dlc-update/reconcile/derivation-differential.sh cli-refuse

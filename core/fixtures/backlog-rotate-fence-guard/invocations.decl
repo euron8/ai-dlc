@@ -1,3 +1,7 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-50 *
-28 scripts/backlog-rotate.sh
+# BL-878: set from one counted run through scripts/seed-verdict-store.sh (core/scripts/hermetic-run.sh, the judge's own
+# J3/J7 output); base was * 50 and scripts/backlog-rotate.sh 28. The subject starts are the two cli cells of cells.decl.
+# The inproc row is one pass per brt_main call: run_rt's 28 drives and the two cli_eqv in-process sides. The rest of *
+# is run.sh and the rotator's own backlog-reverify.sh children, which stay separate programs (no subject here).
+26 *
+2 scripts/backlog-rotate.sh
+30 inproc:scripts/backlog-rotate.sh

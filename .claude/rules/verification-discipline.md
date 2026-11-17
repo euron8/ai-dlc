@@ -129,7 +129,7 @@ Record the narrowing that got it there, beside the arm.
 ## Resolve the repo root by walking up for a marker
 
 Never count `..` hops. `VERSION` exists only in the distribution, so a walk keyed on it cannot resolve an
-installed tree. Walk up the way `ai_dlc_resolve_root()` at `core/scripts/validate-provenance-block.sh:138`
+installed tree. Walk up the way `ai_dlc_resolve_root()` at `core/scripts/validate-provenance-block.sh:152`
 does; `core/fixtures/validator-path-resolution` holds both layouts to one answer.
 
 ## A glob that matches nothing must not report success

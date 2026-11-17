@@ -66,6 +66,7 @@
 #   0  merged (or, with --check, reported)
 #   1  bad arguments, unreadable inputs, or the merge produced invalid JSON
 
+sm_main() {
 set -u
 
 CONSUMER=""
@@ -253,3 +254,6 @@ if [ -n "$DECLARED_FAMILIES" ]; then
 elif [ "$MODEL_WINDOW_NEEDED" = yes ]; then
   echo "  no env.AI_DLC_MODEL_<FAMILY>_WINDOW declared; the sensor assumes a 200,000-token ceiling until one is (see --check)"
 fi
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+sm_main "$@"

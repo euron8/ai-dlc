@@ -53,8 +53,33 @@ R="$ROOT/rules"
 
 # shellcheck source=/dev/null
 . "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$DIR/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The validator is loaded ONCE (inproc_load: its column-0 guard returns after defining vbi_main)
+# and every drive is vbi, an inproc_run of vbi_main in a subshell made to look like a fresh `bash <validator>`; its
+# `exit` ends that subshell only, and a prefix assignment (EXT-ilseq's locale) reaches it exported, as it reaches the
+# program. It runs as a program only in its cli cells (cells.decl, at the end).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a validator with neither its `vbi_main() {` line nor the column-0 source
+# guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE BROKEN in
+# the distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+grep -q '^vbi_main() {$' "$V"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$V"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $V (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$DIR" ;;
+  10) echo "  FAIL  $V defines \`vbi_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vbi_main in this shell"; echo "bmad-invocation-resolve: 1 FAILED"; exit 1 ;;
+  *) echo "  FAIL  $V carries the column-0 source guard but no \`vbi_main() {\` line -- a respelled subject this fixture cannot drive"; echo "bmad-invocation-resolve: 1 FAILED"; exit 1 ;;
+esac
+inproc_load "$V" || { echo "FIXTURE BROKEN: sourcing $V defined nothing" >&2; exit 2; }
+vbi() { inproc_run "$V" vbi_main "$@"; }
+
 # Run, then read $?. Never `out=$(...)` for a verdict.
-rcof() { bash "$V" --skills-root "$S" --rules-root "$R" >/dev/null 2>&1; echo $?; }
+rcof() { vbi --skills-root "$S" --rules-root "$R" >/dev/null 2>&1; echo $?; }
 
 echo "bmad-invocation-resolve:"
 
@@ -67,7 +92,7 @@ g=$(rcof)
 # skill, so if any is enumerated the run above would already be red -- but assert
 # the names directly too, because "exited 0" and "did not enumerate it" are two
 # different claims and only the second one is what this arm fixes.
-OUT="$(bash "$V" --skills-root "$S" --rules-root "$R" 2>&1 || true)"
+OUT="$(vbi --skills-root "$S" --rules-root "$R" 2>&1 || true)"
 for seg in bmad-invocation-resolve bmad-line-start-path; do
   if grep -q -- "$seg" <<<"$OUT"; then
     bad "a /bmad-… PATH SEGMENT was enumerated as an invocation: '$seg'"
@@ -95,7 +120,7 @@ printf 'Invoke `/bmad-dead-shim` here.\n' > "$R/steps/shim.md"
 g=$(rcof)
 [ "$g" -eq 1 ] && { ok "a DEAD SHIM FAILS — directory and SKILL.md exist, LOAD target absent"; } \
                || bad "a dead shim exited $g, expected 1 — a directory-existence check would have passed it"
-if bash "$V" --skills-root "$S" --rules-root "$R" 2>&1 | grep -q 'is a loader for'; then
+if vbi --skills-root "$S" --rules-root "$R" 2>&1 | grep -q 'is a loader for'; then
   ok "the failure names the missing load target, not just the skill"
 else
   bad "the dead-shim failure did not name the absent load target"
@@ -117,9 +142,9 @@ printf '%s\n' 'Run /bmad-no-such-skill-b.' 'then /bmad-no-such-skill-c. Next' \
 # extrun <validator> <tag>: runs with the offenders seeded, then with the near-misses added too.
 extrun() {
   mv "$R/steps/ext-n.md" "$ROOT/ext-n.md"
-  bash "$1" --skills-root "$S" --rules-root "$R" > "$ROOT/$2-o.out" 2>&1; echo $? > "$ROOT/$2-o.rc"
+  vbi --skills-root "$S" --rules-root "$R" > "$ROOT/$2-o.out" 2>&1; echo $? > "$ROOT/$2-o.rc"
   mv "$ROOT/ext-n.md" "$R/steps/ext-n.md"
-  bash "$1" --skills-root "$S" --rules-root "$R" > "$ROOT/$2-n.out" 2>&1; echo $? > "$ROOT/$2-n.rc"
+  vbi --skills-root "$S" --rules-root "$R" > "$ROOT/$2-n.out" 2>&1; echo $? > "$ROOT/$2-n.rc"
 }
 # names_in <out file> <names>: prints each name that appears in an exact FAIL line.
 names_in() {
@@ -149,7 +174,7 @@ rm -f "$R/steps/ext-o.md" "$R/steps/ext-n.md"
 # files stream in. The locale is set on the invocation itself: the hermetic sandbox runs `env -i`,
 # i.e. the C locale, where the arm could not fire.
 printf 'caf\351 here\nInvoke /bmad-no-such-skill-h here.\n' > "$R/steps/ilseq.md"
-LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 bash "$V" --skills-root "$S" --rules-root "$R" > "$ROOT/ilseq.out" 2>&1
+LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 vbi --skills-root "$S" --rules-root "$R" > "$ROOT/ilseq.out" 2>&1
 il=$?
 grep -qF "FAIL: the pipeline invokes '/bmad-no-such-skill-h' and no such skill exists" "$ROOT/ilseq.out" && ilh=1 || ilh=0
 [ "$il" -eq 1 ] && [ "$ilh" = 1 ] \
@@ -166,7 +191,7 @@ rm -f "$R/steps/ilseq.md"
 # which carries a leading `x ` so the first name is not at line start (`x /a-/b`).
 adjrun() {  # <validator> <line> -> sets ADJ_RC and ADJ_NAMED (1 when adj-b is named in an exact FAIL line)
   printf '%s\n' "$2" > "$R/steps/adj.md"
-  bash "$1" --skills-root "$S" --rules-root "$R" > "$ROOT/adj.out" 2>&1
+  vbi --skills-root "$S" --rules-root "$R" > "$ROOT/adj.out" 2>&1
   ADJ_RC=$?
   grep -qF "FAIL: the pipeline invokes '/bmad-adj-b' and no such skill exists" "$ROOT/adj.out" && ADJ_NAMED=1 || ADJ_NAMED=0
   rm -f "$R/steps/adj.md"
@@ -192,7 +217,7 @@ printf 'Invoke `/bmad-deprecated-one` here.\n' > "$R/steps/dep.md"
 g=$(rcof)
 [ "$g" -eq 0 ] && ok "a DEPRECATED but resolving skill passes (a working pipeline is not blocked)" \
                || bad "a deprecated resolving skill exited $g, expected 0"
-if bash "$V" --skills-root "$S" --rules-root "$R" 2>&1 | grep -q 'DEPRECATED'; then
+if vbi --skills-root "$S" --rules-root "$R" 2>&1 | grep -q 'DEPRECATED'; then
   ok "the deprecation is REPORTED (a scheduled removal must not arrive unannounced)"
 else
   bad "a deprecated skill passed with no note — the removal deadline stays invisible"
@@ -200,12 +225,12 @@ fi
 rm -f "$R/steps/dep.md"
 
 # --- DISARM controls ----------------------------------------------------------
-bash "$V" --skills-root "$ROOT/no-such-dir" --rules-root "$R" >/dev/null 2>&1
+vbi --skills-root "$ROOT/no-such-dir" --rules-root "$R" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "FAIL-CLOSED: a missing skills root exits 2, not 0" \
              || bad "a missing skills root did not exit 2 — with nothing to resolve against every name would 'pass'"
 
 mkdir -p "$ROOT/empty-rules"
-bash "$V" --skills-root "$S" --rules-root "$ROOT/empty-rules" >/dev/null 2>&1
+vbi --skills-root "$S" --rules-root "$ROOT/empty-rules" >/dev/null 2>&1
 [ $? -eq 2 ] && ok "FAIL-CLOSED: zero enumerated call sites exits 2, not 0" \
              || bad "a rulebook with no /bmad-* call sites did not exit 2 — an empty scan prints the same clean line as a full one"
 
@@ -269,7 +294,7 @@ if ! grep -qx 'bmad-sprint-status' <<<"$gnames" && [ "$nfile" -ge 1 ]; then
 else
   bad "G611 independent: bmad-sprint-status in the derived list, or bmad-sprint-status.yaml absent from the rulebook copy (files carrying it: $nfile)"
 fi
-rg() { bash "$V" --skills-root "$GS" --rules-root "$1" > "$G/out" 2>&1; echo $?; }
+rg() { vbi --skills-root "$GS" --rules-root "$1" > "$G/out" 2>&1; echo $?; }
 g=$(rg "$GR")
 [ "$g" -eq 0 ] && [ "$nold" -eq 0 ] && grep -qF 'PASS (' "$G/out" \
   && ok "G611-clean: the shipped rulebook resolves on a 6.11 tree (rc 0, PASS, 0 removed names invoked)" \
@@ -311,6 +336,29 @@ g=$(rg "$GR")
   && ok "G611-gate: a sprint-planning with no readiness-gate.md -> rc 1 with the floor" \
   || bad "G611-gate: a gate-less sprint-planning gave rc=$g: $(grep -m1 FAIL "$G/out")"
 mv "$G/rg.md" "$GS/bmad-sprint-planning/references/readiness-gate.md"
+
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome --------------------
+# Each is compared with the in-process call on the same input, stdout, stderr and exit separately, byte for byte,
+# and asserts its own exit and a string it must say, so two runs that both printed nothing cannot read as
+# equivalent. Outcomes: exit 0 (PASS), exit 1 (a dangling name), exit 2 (no skills root, DISARMED).
+eq_cell() { # eq_cell <cell-id> <want rc> <must-say> <args...>
+  local id="$1" want="$2" say="$3"; shift 3
+  vbi "$@" > "$ROOT/$id.ip.out" 2> "$ROOT/$id.ip.err"; echo "$?" > "$ROOT/$id.ip.rc"
+  FXCELL="$id" bash "$V" "$@" > "$ROOT/$id.cl.out" 2> "$ROOT/$id.cl.err"; echo "$?" > "$ROOT/$id.cl.rc"
+  if cmp -s "$ROOT/$id.ip.out" "$ROOT/$id.cl.out" && cmp -s "$ROOT/$id.ip.err" "$ROOT/$id.cl.err" \
+     && cmp -s "$ROOT/$id.ip.rc" "$ROOT/$id.cl.rc" && [ "$(< "$ROOT/$id.cl.rc")" = "$want" ] \
+     && grep -qF -- "$say" "$ROOT/$id.cl.out" "$ROOT/$id.cl.err"; then
+    ok "$id: the program answers exit $want exactly as the in-process call does (stdout, stderr, exit)"
+  else
+    bad "$id: in-process rc=$(< "$ROOT/$id.ip.rc") / program rc=$(< "$ROOT/$id.cl.rc") want $want, saying \"$say\""
+    sed -n '1,3s/^/          | /p' "$ROOT/$id.ip.out" "$ROOT/$id.cl.out" "$ROOT/$id.ip.err" "$ROOT/$id.cl.err"
+  fi
+}
+eq_cell cli-pass 0 "PASS (2 invoked name(s)" --skills-root "$S" --rules-root "$R"
+printf 'Invoke `/bmad-no-such-skill` here.\n' > "$R/steps/dangling.md"
+eq_cell cli-fail 1 "FAIL: the pipeline invokes '/bmad-no-such-skill' and no such skill exists" --skills-root "$S" --rules-root "$R"
+rm -f "$R/steps/dangling.md"
+eq_cell cli-disarm 2 "DISARMED" --skills-root "$ROOT/no-such-dir" --rules-root "$R"
 
 echo
 report_end bmad-invocation-resolve

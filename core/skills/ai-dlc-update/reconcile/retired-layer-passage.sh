@@ -57,6 +57,7 @@
 #   0  always when it ran (a detector reports; the caller decides)
 #   2  a producer this detector reads did not run -- a refusal, never a finding or a clean
 
+rlp_main() {
 set -u
 # GLOBBING IS OFF FOR THE WHOLE FILE. The one list that was expanded unquoted (the rulebook
 # pathspecs in removed_raw) already ran under `set -f`; nothing here relies on pathname expansion.
@@ -77,7 +78,7 @@ CONSUMER="${4:?}"
 # so a rulebook file added upstream is covered by both detectors without editing either.
 # `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
 # `/x.sh` is `/`, which is what `dirname` answered.
-case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
 SELF="$(cd "$SELF" && pwd)"
 SITES="$SELF/setup-sites.md"
 rulebook_globs() {
@@ -230,3 +231,6 @@ if [ -n "$rows" ]; then
 else
   echo "retired-layer-passage: NOTE — $n_removed deleted rulebook line(s) checked against $scanned layer file(s); no match. $LIMIT" >&2
 fi
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rlp_main "$@"

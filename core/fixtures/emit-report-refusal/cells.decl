@@ -1,0 +1,7 @@
+# emit-report-refusal's starts of core/skills/ai-dlc-update/reconcile/emit-report.sh (BL-879 grammar). Every other
+# drive, the sibling seed's render included, is in process (lib/inproc.sh inproc_run of er_main). One cli cell per
+# distinct outcome this unit drives (A6's approval render, exit 0; a --verify refusing an unreadable region file,
+# exit 2), each started as FXCELL=<id> bash "$EMIT" in err_eqv() and compared byte for byte with the
+# in-process call on the same input.
+cli core/skills/ai-dlc-update/reconcile/emit-report.sh cli-a6-render
+cli core/skills/ai-dlc-update/reconcile/emit-report.sh cli-refuse

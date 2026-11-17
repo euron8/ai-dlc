@@ -27,18 +27,56 @@ DRIFT="$(pick "${2:-}" "$HERE/../../../core/skills/ai-dlc-update/reconcile/layer
                        "$HERE/../../skills/ai-dlc-update/reconcile/layer-drift.sh" \
                        "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/layer-drift.sh")"
 [ -n "$LINTER" ] || { echo "FIXTURE ERROR: cannot locate validate-layer-entries.sh" >&2; exit 2; }
+RELABEL="$(pick "${3:-}" "$HERE/../../skills/ai-dlc-update/reconcile/relabel-extension-checks.sh" \
+                         "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh" \
+                         "$HERE/../../../core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh")"
+
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found beside $HERE" >&2; exit 2; }
+
+# IN PROCESS (BL-878). Both subjects are driven in process: `vle_ip <args>` answers what `bash "$LINTER" <args>` gives,
+# in a subshell made to look like a fresh bash that sources the linter (its guard returns after defining vle_main) and
+# calls vle_main (core/fixtures/lib/inproc.sh); `rec_ip <args>` does the same for the relabeller and rec_main. Their cli equivalence cells live in layer-reference-resolution (the linter) and
+# relabel-theirs-collision (the relabeller), so this fixture starts neither as a program. A CORE FIXTURE SHIPS AHEAD OF
+# ITS SUBJECT: a subject with neither its `<p>_main() {` line nor the column-0 source guard predates the wrap and reads
+# SKIP (exit 0, never an ok); exactly one half is a respelled subject and FAILs; a subject grep cannot READ is FIXTURE
+# ERROR. A missing relabeller keeps its own Part 4b FIXTURE BROKEN line below.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$LINTER" vle_main; g_vle=$?
+g_rec=0; [ -z "$RELABEL" ] || { wrap_gate "$RELABEL" rec_main; g_rec=$?; }
+if [ "$g_vle" = 2 ] || [ "$g_rec" = 2 ]; then exit 2; fi
+if [ "$g_vle" = 1 ] || [ "$g_rec" = 1 ]; then echo "layer-catalog-collision: 1 FAILED" >&2; exit 1; fi
+if [ "$g_vle" = 3 ] || [ "$g_rec" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+# Neither subject is inproc_load-ed: inproc_run then sources each one inside its own subshell, so every pass is logged
+# under the path it sourced (a loaded subject would claim the other subject's passes as its own).
+vle_ip() { inproc_run "$LINTER" vle_main "$@"; }
+rec_ip() { inproc_run "$RELABEL" rec_main "$@"; }
 
 ROOT="$(bash "$HERE/seed.sh")"
 trap 'rm -rf "$ROOT"' EXIT
-
-. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
 echo "layer-catalog-collision:"
 
 # --- Part 1: the linter classifies the same-number states ---------------------
 echo "HERMETIC-CONSUMED $(rp "$LINTER")"
 [ -f "$(dirname "$LINTER")/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED $(rp "$(dirname "$LINTER")/artifact-path-config.sh")"
-out="$(bash "$LINTER" "$ROOT" 2>&1)"
+out="$(vle_ip "$ROOT" 2>&1)"
 
 grep -q "NUMBER COLLISION on '24\.'" <<<"$out" \
   && ok "E6 — 24 = COLLISION (core: adversarial convergence / ext: financial-display)" \
@@ -120,12 +158,12 @@ CONT_B='test strategy deliverable presence sprint review gate'                  
 extract() { # extract <file> <fn-name> — awk, not sed: BSD sed mis-parses the `{` in the address
   awk -v fn="$2" '$0 ~ "^" fn "\\(\\) \\{" {p=1} p {print} p && /^\}/ {exit}' "$1"
 }
+# IN PROCESS: the extracted definition is evaluated in a subshell with a fresh shell's -u and pipefail off (as the
+# `bash -c` worker it replaces ran it), and each call is one counted in-process pass of the file it came from.
 probe() { # probe <file> <fn-name> <a> <b> ; exit 0 = matched
   local f="$1" fn="$2" a="$3" b="$4"
-  bash -c "
-    $(extract "$f" "$fn")
-    ${fn} \"\$1\" \"\$2\"
-  " _ "$a" "$b" 2>/dev/null
+  ( set +u +o pipefail; eval "$(extract "$f" "$fn")"
+    fx_inproc "$f"; "$fn" "$a" "$b" ) 2>/dev/null
 }
 
 # The bold-anchor rule, extracted from BOTH files and run on the same input. It is a
@@ -139,10 +177,8 @@ echo "HERMETIC-CONSUMED $(rp "$DRIFT")"
 for spec in "$LINTER|validate-layer-entries.sh" "$DRIFT|layer-drift.sh"; do
   f="${spec%%|*}"; name="${spec##*|}"
   [ -n "$f" ] && [ -f "$f" ] || { bad "$name not found — cannot test its bold-anchor rule"; continue; }
-  got="$(bash -c "
-    $(extract "$f" bold_anchors_of_file)
-    bold_anchors_of_file \"\$1\"
-  " _ "$BOLD_IN" 2>/dev/null | sort -u | tr '\n' ' ')"
+  got="$( ( set +u +o pipefail; eval "$(extract "$f" bold_anchors_of_file)"
+            fx_inproc "$f"; bold_anchors_of_file "$BOLD_IN" ) 2>/dev/null | sort -u | tr '\n' ' ')"
   got="${got% }"
   if [ "$got" = "7a-post" ]; then
     ok "$name/bold_anchors_of_file: extracts the anchor and only the anchor ('7a-post')"
@@ -199,10 +235,6 @@ done
 # Measured on the reference consumer when W4 was written: EIGHT live collisions,
 # reported by nothing.
 
-RELABEL="$(pick "${3:-}" "$HERE/../../skills/ai-dlc-update/reconcile/relabel-extension-checks.sh" \
-                         "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh" \
-                         "$HERE/../../../core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh")"
-
 grep -q "RULE NUMBER COLLISION on 'Rule 29'" <<<"$out" \
   && ok "W4 — Rule 29 = COLLISION (core: steering budget / ext: split-dispatch)" \
   || bad "Rule 29 not reported — a bare 'Rule 29' in a gate log has two referents and nothing says so"
@@ -251,7 +283,7 @@ if [ -z "$RELABEL" ]; then
   bad "FIXTURE BROKEN — cannot locate relabel-extension-checks.sh; Part 4b would pass by not running"
 else
   echo "HERMETIC-CONSUMED $(rp "$RELABEL")"
-  rel_out="$(bash "$RELABEL" "$ROOT" 2>&1)"
+  rel_out="$(rec_ip "$ROOT" 2>&1)"
   grep -q '^  +  ## Rule 29 \[ext:rules\] -- ' <<<"$rel_out" \
     && ok "the relabeller writes '## Rule 29 [ext:rules] -- …' (label before the separator, integer unmoved)" \
     || bad "the relabeller cannot rewrite the heading the linter reports — the prescribed remedy does not run"
@@ -260,8 +292,8 @@ else
     && bad "the relabeller would rewrite the extension-only 'Rule 44' — it relabels headings core does not define" \
     || ok "  and leaves the extension-only rule 44 alone"
 
-  bash "$RELABEL" "$ROOT" --apply >/dev/null 2>&1
-  after="$(bash "$LINTER" "$ROOT" 2>&1)"
+  rec_ip "$ROOT" --apply >/dev/null 2>&1
+  after="$(vle_ip "$ROOT" 2>&1)"
   if grep -q "RULE NUMBER COLLISION" <<<"$after"; then
     bad "applying the relabeller did not clear the collision report — reporter and rewriter disagree about the heading"
   else
@@ -294,7 +326,7 @@ fi
 # satisfy another's assertion by going quiet.
 band_vector() { # band_vector <linter> <root> -> "<id>=<OOB|COLLIDED|-> …" over every seeded id
   local out cell v=''
-  out="$(bash "$1" "$2" 2>&1)"
+  out="$(inproc_run "$1" vle_main "$2" 2>&1)"
   for s in "5." "24." "30." "33." "40b." "933." "AP." "XQ." "0." "7a-post." \
            "Rule 8" "Rule 29" "Rule 30" "Rule 44" "Rule 931"; do
     cell='-'
@@ -305,7 +337,7 @@ band_vector() { # band_vector <linter> <root> -> "<id>=<OOB|COLLIDED|-> …" ove
   printf '%s' "$v"
 }
 band_remedies() { # band_remedies <linter> <root> -> every remedy it offers, sorted
-  bash "$1" "$2" 2>&1 | grep -oE "(rename to '[^']+'|renumber to 'Rule [0-9]+')" | sort -u | tr '\n' ' '
+  inproc_run "$1" vle_main "$2" 2>&1 | grep -oE "(rename to '[^']+'|renumber to 'Rule [0-9]+')" | sort -u | tr '\n' ' '
 }
 
 BAND_WANT="5=COLLIDED 24=COLLIDED 30=OOB 33=OOB 40b=OOB 933=- AP=OOB XQ=- 0=OOB 7a-post=COLLIDED Rule 8=COLLIDED Rule 29=COLLIDED Rule 30=COLLIDED Rule 44=OOB Rule 931=-"

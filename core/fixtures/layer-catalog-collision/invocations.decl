@@ -1,6 +1,9 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-20 *
+2 *
 0 core/scripts/artifact-path-config.sh
-4 core/scripts/validate-layer-entries.sh
+0 core/scripts/validate-layer-entries.sh
 0 core/skills/ai-dlc-update/reconcile/layer-drift.sh
-2 core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
+0 core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
+10 inproc:core/scripts/validate-layer-entries.sh
+2 inproc:core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
+6 inproc:core/skills/ai-dlc-update/reconcile/layer-drift.sh

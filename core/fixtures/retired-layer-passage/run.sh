@@ -30,10 +30,64 @@ trap 'rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# --- the in-process drive (BL-878) ------------------------------------------------------------------
+# A consumer runs its OWN installed detector, which can predate the wrap: neither half -> SKIP, never
+# an ok; one half -> FAIL naming it; an unreadable subject -> FIXTURE ERROR, never the SKIP.
+rlp_def=0; rlp_guard=0
+grep -q '^rlp_main() {$' "$SCRIPT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SCRIPT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rlp_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SCRIPT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SCRIPT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rlp_guard=1
+if [ "$rlp_def$rlp_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$rlp_def" = 0 ]; then echo "   FAIL  $SCRIPT carries the column-0 source guard but no \`rlp_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "retired-layer-passage: FAIL (1)" >&2; exit 1; fi
+if [ "$rlp_guard" = 0 ]; then echo "   FAIL  $SCRIPT defines \`rlp_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run rlp_main in this shell" >&2; echo "retired-layer-passage: FAIL (1)" >&2; exit 1; fi
+. "$SCRIPT" || { echo "FIXTURE BROKEN: sourcing $SCRIPT failed" >&2; exit 2; }
+declare -F rlp_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $SCRIPT defined no rlp_main" >&2; exit 2; }
+# One pass of the detector, in a subshell (its exits, `set -u`/`set -f` and lib.sh's composing `trap` end
+# there). lib.sh is sourced inside rlp_main, so in a subshell its memo is never built (BASH_SUBSHELL > 0,
+# BL-878 item 7): every lookup goes direct and uncached, which changes the cost and never the answer --
+# the cli cells below compare the two byte for byte. pipefail is off, as in the program.
+rlp_run() { ( set +o pipefail
+  fx_inproc "$SCRIPT"
+  rlp_main "$@" ); }
+# A relocated copy (a reconcile directory with one file changed) is sourced in its own subshell, so its
+# rlp_main reads its own directory and never replaces this shell's. Copies sit under the declared suffix.
+rlp_copy_run() { # rlp_copy_run <copy> <args...>
+  local c="$1"; shift
+  ( set +o pipefail
+    fx_inproc "$c"
+    . "$c" || exit 90
+    rlp_main "$@" ); }
+RLP_SUFFIX="core/skills/ai-dlc-update/reconcile"
+
+# --- the cli cells (cells.decl): the detector run as a PROGRAM once per distinct CLI outcome ----------
+# exit 0 with rows (cli-rows), exit 0 with the nothing-deleted NOTE (cli-noop), exit 0 with the
+# denominator NOTE (cli-den), exit 2 refusal (cli-refuse). Each is compared with the in-process call on
+# the same world: stdout, stderr and exit separately, byte for byte. The in-process half is the run the
+# assertions below read, so each state is driven once in process.
+EQ="$WORK/eq"; mkdir -p "$EQ" || exit 2
+eqv() { # <cell-id> <program> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" p="$2"; shift 2
+  if [ "$p" = "$SCRIPT" ]; then rlp_run "$@"; else rlp_copy_run "$p" "$@"; fi > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$p" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
 
 echo "retired-layer-passage:"
 
-OUT="$(bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+if eqv cli-rows "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" && [ "$(cat "$EQ/cli-rows.cl.rc")" = 0 ] \
+   && grep -q 'RETIRED-LAYER-PASSAGE' "$EQ/cli-rows.cl.out" && [ ! -s "$EQ/cli-rows.cl.err" ]; then
+  ok "cli-rows: the program reports the reproduced line exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-rows: the program and the in-process call differ, or the outcome is not exit 0 with a row and a silent stderr ($(eq_twin cli-rows))"; fi
+OUT="$(cat "$EQ/cli-rows.ip.out")"
 
 # --- Assertion 0: SANITY -------------------------------------------------------
 # Every negative assertion below would score a false pass against a detector emitting
@@ -76,8 +130,11 @@ grep -q 'overrides/inert.md' <<<"$OUT" \
 # false clean: it exits before opening any layer file, so its output must say so or it
 # reads exactly like a full scan that matched nothing.
 # ONE invocation feeds both streams: stdout and stderr of the same run, not two runs of the same arguments.
-bash "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" >"$WORK/noop.out" 2>"$WORK/noop.err"
-NOOP="$(cat "$WORK/noop.out")"; NOOPERR="$(cat "$WORK/noop.err")"
+if eqv cli-noop "$SCRIPT" "$DIST" "$BASE" "$BASE" "$CONSUMER" && [ "$(cat "$EQ/cli-noop.cl.rc")" = 0 ] \
+   && [ ! -s "$EQ/cli-noop.cl.out" ] && grep -q 'NO layer file was opened' "$EQ/cli-noop.cl.err"; then
+  ok "cli-noop: the program states it opened nothing exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-noop: the program and the in-process call differ, or the outcome is not exit 0 with the nothing-deleted NOTE ($(eq_twin cli-noop))"; fi
+NOOP="$(cat "$EQ/cli-noop.ip.out")"; NOOPERR="$(cat "$EQ/cli-noop.ip.err")"
 [ -z "$NOOP" ] && ok "a release that deletes nothing reports no finding" \
   || bad "the detector reported a finding when base and theirs are identical"
 
@@ -93,8 +150,11 @@ EMPTYC="$WORK/empty-consumer"
 mkdir -p "$EMPTYC/.claude/skills/ai-dlc/overrides"
 printf '# reproduces nothing core ever carried\n' > "$EMPTYC/.claude/skills/ai-dlc/overrides/x.md"
 # ONE invocation again: the denominator is on stderr and the empty finding set is on stdout of the same run.
-bash "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" >"$WORK/den.out" 2>"$WORK/den.err"
-DEN="$(cat "$WORK/den.err")"; DENOUT="$(cat "$WORK/den.out")"
+if eqv cli-den "$SCRIPT" "$DIST" "$BASE" "$THEIRS" "$EMPTYC" && [ "$(cat "$EQ/cli-den.cl.rc")" = 0 ] \
+   && [ ! -s "$EQ/cli-den.cl.out" ] && grep -q 'checked against' "$EQ/cli-den.cl.err"; then
+  ok "cli-den: the program states its denominator exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-den: the program and the in-process call differ, or the outcome is not exit 0 with the denominator NOTE ($(eq_twin cli-den))"; fi
+DEN="$(cat "$EQ/cli-den.ip.err")"; DENOUT="$(cat "$EQ/cli-den.ip.out")"
 grep -qE 'deleted rulebook line\(s\) checked against [1-9][0-9]* layer file\(s\)' <<<"$DEN" \
   && ok "a scanned-but-no-match run reports its denominator, so the zero has a control" \
   || bad "a scanned-but-no-match run reported no denominator — indistinguishable from opening nothing"
@@ -105,9 +165,17 @@ grep -qE 'deleted rulebook line\(s\) checked against [1-9][0-9]* layer file\(s\)
 # --- Assertion 7: an unreadable rulebook list WARNS, never reports clean --------
 # The corpus is read from setup-sites.md. If that read fails the retired set is empty and
 # the run would otherwise be indistinguishable from a release that deleted nothing.
-BADSCRIPT="$WORK/orphan.sh"
-cp "$SCRIPT" "$BADSCRIPT"          # a copy whose sibling setup-sites.md does not exist
-ORPHERR="$(bash "$BADSCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>&1 >/dev/null)"; ORPHRC=$?
+BADSCRIPT="$WORK/orphan/$RLP_SUFFIX/retired-layer-passage.sh"
+mkdir -p "${BADSCRIPT%/*}" && cp "$SCRIPT" "$BADSCRIPT" || exit 2   # a copy whose sibling setup-sites.md does not exist
+if eqv cli-refuse "$BADSCRIPT" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] \
+   && [ ! -s "$EQ/cli-refuse.cl.out" ] && grep -q 'refusing to report clean' "$EQ/cli-refuse.cl.err"; then
+  ok "cli-refuse: the program refuses exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not the exit-2 refusal ($(eq_twin cli-refuse))"; fi
+if ! cmp -s "$EQ/cli-rows.cl.out" "$EQ/cli-noop.cl.out" && ! cmp -s "$EQ/cli-noop.cl.err" "$EQ/cli-den.cl.err" \
+   && ! cmp -s "$EQ/cli-den.cl.err" "$EQ/cli-refuse.cl.err" && ! cmp -s "$EQ/cli-noop.cl.err" "$EQ/cli-refuse.cl.err"; then
+  ok "cli cells discriminate: the rows, the two NOTEs and the refusal give different output"
+else bad "cli cells do not discriminate: two outcomes gave the same output, so an equivalence there proves nothing"; fi
+ORPHERR="$(cat "$EQ/cli-refuse.ip.err")"; ORPHRC="$(cat "$EQ/cli-refuse.ip.rc")"
 # THE EXIT IS THE HALF THE DRIVER READS. `apply.sh` refuses on this detector's non-zero exit only,
 # so a refusal LINE beside exit 0 reached it as a clean run with no row -- the words were right and
 # the status contradicted them. Modelled on retired-layer-token's assertion 14.
@@ -125,7 +193,7 @@ RLP_SRC="$(cd "$(dirname "$SCRIPT")" && pwd)"
 rlp_unreadable() { # rlp_unreadable <reconcile-dir-copy> -> 0 when the copy refuses with exit 2 and no row
   local d="$1" out err rc
   rm -f "$d/setup-sites.md"; mkdir "$d/setup-sites.md" || return 1
-  out="$(bash "$d/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>"$WORK/rlp-unread.err")"; rc=$?
+  out="$(rlp_copy_run "$d/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>"$WORK/rlp-unread.err")"; rc=$?
   err="$(cat "$WORK/rlp-unread.err")"
   RLP_WHY="rc=$rc rows=$(printf '%s' "$out" | grep -c .) err=$(printf '%s' "$err" | head -1 | cut -c1-100)"
   [ "$rc" -eq 2 ] && [ -z "$out" ] && grep -q 'could not read the rulebook list from setup-sites.md' <<<"$err"
@@ -133,7 +201,7 @@ rlp_unreadable() { # rlp_unreadable <reconcile-dir-copy> -> 0 when the copy refu
 rlp_copy() { # rlp_copy <dir> -> a whole copy of the reconcile directory whose run still flags the row
   mkdir -p "$1" && cp -R "$RLP_SRC"/. "$1"/ && [ -f "$1/lib.sh" ] && [ -f "$1/setup-sites.md" ]
 }
-UNR="$WORK/unreadable-sites"
+UNR="$WORK/unreadable-sites/$RLP_SUFFIX"
 if ! rlp_copy "$UNR"; then
   bad "FIXTURE BROKEN — could not copy the reconcile directory for the unreadable-setup-sites.md arm"
 elif rlp_unreadable "$UNR"; then
@@ -211,26 +279,28 @@ TRSTUB
   fi
 fi
 if [ "$N_SKIP" = 0 ]; then
-  score_355() { # score_355 <reconcile-dir> -> failing cells, then `.`
-    local _r="" _o _rc
-    _o="$(env -u LANG LC_ALL=C bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"
+  # In process: each drive is a subshell carrying the caller environment the program run had (LANG unset,
+  # LC_ALL exported, and for N3 the stub's PATH and variables), so the detector's children inherit it.
+  score_355() { # score_355 -> failing cells, then `.`
+    local _r="" _o _rc _s _src
+    _o="$(unset LANG; export LC_ALL=C; rlp_run "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"
     grep -q 'extensions/samecase.md' <<<"$_o" || _r="${_r}N0"
-    _o="$(env -u LANG LC_ALL=en_US.UTF-8 bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"
+    _o="$(unset LANG; export LC_ALL=en_US.UTF-8; rlp_run "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"; _src=$?
     grep -q 'extensions/lowered.md' <<<"$_o" || _r="${_r}N1"
-    _o="$(env -u LANG LC_ALL=en_US.UTF-8 bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N2C" 2>/dev/null)"; _rc=$?
+    # N3 compares against this N1 run: one run per distinct state.
+    _s="$_o"
+    _o="$(unset LANG; export LC_ALL=en_US.UTF-8; rlp_run "$ND" "$NB" "$NT" "$N2C" 2>/dev/null)"; _rc=$?
     { [ "$_rc" -eq 0 ] && grep -q 'extensions/latin1.md' <<<"$_o"; } || _r="${_r}N2"
     # N3: the N1 run with the byte-wise stub first on PATH reads exactly what the system `tr` reads --
     # the same rows and the same exit (no red, no silent wrong match). Whether that verdict is the
     # RIGHT one is N1's; N3 owns only its independence from the `tr` implementation.
-    local _s _src
-    _s="$(env -u LANG LC_ALL=en_US.UTF-8 bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"; _src=$?
-    _o="$(env -u LANG LC_ALL=en_US.UTF-8 PATH="$NSTUB:$PATH" FX_REAL_TR="$N_REAL_TR" FX_TR_HITS="$NW/stub.hits" \
-      bash "$1/retired-layer-passage.sh" "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"; _rc=$?
+    _o="$(unset LANG; export LC_ALL=en_US.UTF-8 PATH="$NSTUB:$PATH" FX_REAL_TR="$N_REAL_TR" FX_TR_HITS="$NW/stub.hits"
+      rlp_run "$ND" "$NB" "$NT" "$N1C" 2>/dev/null)"; _rc=$?
     { [ "$_rc" -eq "$_src" ] && [ -n "$_o" ] && [ "$_o" = "$_s" ]; } || _r="${_r}N3"
     printf '%s.' "$_r"
   }
   : > "$NW/stub.hits"
-  got="$(score_355 "$RLP_SRC")"
+  got="$(score_355)"
   # POSITIVE CONTROL for N3: the subject's fold reached the stub, or N3 compared two system-tr runs.
   [ -s "$NW/stub.hits" ] || bad "FIXTURE BROKEN -- the byte-wise tr stub was never invoked, so N3 compared two system-tr runs"
   case "$got" in

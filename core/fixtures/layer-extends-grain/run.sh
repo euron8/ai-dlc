@@ -53,6 +53,30 @@ LINTER="$(pick "${2:-}" "$HERE/../../scripts/validate-layer-entries.sh" \
 echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 [ -f "$(dirname "$LINTER")/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED core/scripts/artifact-path-config.sh"
 
+# IN PROCESS (BL-878). The validator is SOURCED ONCE into this shell (its guard returns after defining vle_main), and
+# its one drive calls vle_main inside a subshell, so its `exit`, `set -u`, EXIT trap and function definitions stay
+# there. It starts as a program only in the cli cell (cells.decl). A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject
+# with neither its `vle_main() {` line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an
+# ok); exactly one half is a respelled subject and FAILs; a subject grep cannot READ (exit 2) is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$LINTER" vle_main; g_vle=$?
+[ "$g_vle" = 2 ] && exit 2
+[ "$g_vle" = 1 ] && { echo "layer-extends-grain: 1 FAILED"; exit 1; }
+[ "$g_vle" = 3 ] && { echo "SKIP: subject predates the in-process wrap"; exit 0; }
+
 ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$ROOT"' EXIT
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"
@@ -63,12 +87,16 @@ TIP="$(git -C "$DIST" rev-parse --short HEAD)"
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+fx_inproc "$LINTER"
+. "$LINTER" || { echo "FIXTURE ERROR: sourcing $LINTER failed" >&2; exit 2; }
+declare -F vle_main > /dev/null || { echo "FIXTURE ERROR: sourcing $LINTER defined no vle_main" >&2; exit 2; }
 
 # EXPECTED_ASSERTIONS is not bookkeeping: counting what actually ran is what stops an arm that
 # silently did not execute from reading as a short green run. The count has to be a literal
 # here rather than derived from the assertions, or it disappears with them.
 # 8 premises (2 span-changed + 6 section-identity) + 9 shipped arms + 1 textconv arm + 1 lint.
-EXPECTED_ASSERTIONS=19
+EXPECTED_ASSERTIONS=20
 
 echo "layer-extends-grain:"
 
@@ -181,12 +209,24 @@ fi
 # E11 rejects several `extends:` spellings. If the seed's entries were among them, the
 # whole table above would be describing classifier behaviour on input the authoring linter
 # forbids — green here, unreachable in any real consumer.
-LINT_OUT="$(bash "$LINTER" "$CONS" 2>&1)"
+LINT_OUT="$( ( fx_inproc "$LINTER"; vle_main "$CONS" ) 2>&1)"
 if grep -q '^ERROR' <<<"$LINT_OUT"; then
   bad "the seeded consumer draws authoring errors, so every verdict above is measured on entries no consumer could ship:
 $(printf '%s' "$LINT_OUT" | grep '^ERROR' | sed 's/^/        /')"
 else
   ok "the seeded consumer lints clean, so the classified entries are authorable"
+fi
+
+# THE CLI CELL (cells.decl): the validator run as a PROGRAM once, for the one CLI outcome this fixture reads (exit 0 on
+# the seeded consumer), compared byte for byte with an in-process call on the same input: stdout, stderr and exit.
+EQ="$ROOT/eq"; mkdir -p "$EQ" || exit 2
+( fx_inproc "$LINTER"; vle_main "$CONS" ) > "$EQ/ip.out" 2> "$EQ/ip.err"; echo "$?" > "$EQ/ip.rc"
+FXCELL=cli-pass bash "$LINTER" "$CONS" > "$EQ/cl.out" 2> "$EQ/cl.err"; echo "$?" > "$EQ/cl.rc"
+if cmp -s "$EQ/ip.out" "$EQ/cl.out" && cmp -s "$EQ/ip.err" "$EQ/cl.err" && cmp -s "$EQ/ip.rc" "$EQ/cl.rc" \
+   && [ "$(cat "$EQ/cl.rc")" = 0 ] && grep -q '^LAYER_CONFORMANCE v1 .* errors=0 ' "$EQ/cl.out"; then
+  ok "cli-pass: the program passes the seeded consumer exactly as the in-process call does (stdout, stderr, exit 0)"
+else
+  bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with errors=0: in-process rc=$(cat "$EQ/ip.rc") program rc=$(cat "$EQ/cl.rc")"
 fi
 
 echo

@@ -1,3 +1,6 @@
 !core/scripts/validate-stub-audit.sh
 core/scripts/core-paths.sh
 core/skills/ai-dlc/core-manifest.md
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/layout.sh

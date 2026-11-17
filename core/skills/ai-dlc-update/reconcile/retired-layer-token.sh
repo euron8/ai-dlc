@@ -100,6 +100,7 @@
 #   2  refused: a corpus could not be read, so nothing was examined. The driver renders
 #      DETECTOR-REFUSED for the section rather than `none`.
 
+rlt_main() {
 set -u
 # GLOBBING IS OFF FOR THE WHOLE FILE. Every unquoted word list here (the rulebook and program
 # globs) is a git PATHSPEC set matched against a tree listing, never a cwd pattern; the
@@ -117,7 +118,7 @@ CONSUMER="${4:?}"
 
 # `${0%/*}`, not `dirname`: no fork. A slashless `$0` (`bash x.sh` from this directory) is `.` and
 # `/x.sh` is `/`, which is what `dirname` answered.
-case "$0" in */*) SELF="${0%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
+case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" ;; *) SELF=. ;; esac
 SELF="$(cd "$SELF" && pwd)"
 # shellcheck source=lib.sh
 # NOT `|| exit 1`: every call site below falls back to a direct `git` call when the memo
@@ -457,3 +458,6 @@ else
   echo "retired-layer-token: NOTE — $(count_of "$RETIRED") retired status token(s) ($(listed "$RETIRED")) checked against $scanned layer file(s); no match.$ACQUIT $LIMIT" >&2
 fi
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rlt_main "$@"

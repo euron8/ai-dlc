@@ -24,9 +24,51 @@ BASECONTENT="$WORK/base.md"
 git -C "$DIST" show "$BASE:core/$REL" > "$BASECONTENT"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+
+# IN PROCESS (BL-878). unregistered-drift.sh is loadable: sourcing it defines ud_main and returns at its column-0
+# guard. It is loaded ONCE (core/fixtures/lib/inproc.sh) and `ud_eng <engine> <args>` answers what `bash <engine>
+# <args>` prints, in a subshell made to look like a fresh bash. <engine> is $SCRIPT, whose loaded definitions run, or
+# a copy of the reconcile/ directory (the broken-terminator ENGINE, the shimmed FC/ctl), sourced inside that run's own
+# subshell, so it locates its siblings (setup-sites.md, lib.sh, preclassify.sh) beside the copy exactly as the program
+# did. Prefix assignments (`PATH=<shim>:$PATH ud_eng`) reach the run as they reached the child.
+# THE BLOB MEMO. A CLI run sources lib.sh at the top of its own process and so builds a private memo for that one run;
+# in a subshell lib.sh does not (it keys on `$BASH_SUBSHELL` 0). So `ud_eng` hands each run a FRESH memo, as private to
+# that run as the CLI's, unless the caller exported one (the two memo cells do).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped subject, and
+# sourcing a pre-wrap subject would run its whole body in this shell. So the shape is checked first, on its two halves:
+# neither the `ud_main() {` line nor the column-0 source guard is a subject that predates the wrap, which prints SKIP
+# and exits 0 -- never an ok. Exactly one half is a respelled subject this fixture can no longer drive, which FAILS.
+ud_def=0; ud_guard=0
+grep -q '^ud_main() {$' "$SCRIPT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SCRIPT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || ud_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SCRIPT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SCRIPT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || ud_guard=1
+if [ "$ud_def$ud_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+if [ "$ud_def" = 0 ]; then echo "   FAIL  $SCRIPT carries the column-0 source guard but no \`ud_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "setup-config-drift: FAIL (1)" >&2; exit 1; fi
+if [ "$ud_guard" = 0 ]; then echo "   FAIL  $SCRIPT defines \`ud_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run ud_main in this shell" >&2; echo "setup-config-drift: FAIL (1)" >&2; exit 1; fi
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $HERE" >&2; exit 2; }
+inproc_load "$SCRIPT" || { echo "FIXTURE BROKEN: sourcing $SCRIPT defined nothing" >&2; exit 2; }
+declare -F ud_main >/dev/null || { echo "FIXTURE BROKEN: $SCRIPT defined no ud_main when sourced" >&2; exit 2; }
+ud_eng() { # <engine> [args...] -> what `bash <engine> [args...]` prints and exits with
+  local _m _rc
+  case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in
+    "declare -x"*) inproc_run "$1" ud_main "${@:2}"; return ;;
+  esac
+  _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
+  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$1" ud_main "${@:2}"; _rc=$?
+  rm -rf "$_m"
+  return "$_rc"
+}
 
 status_of() { # status_of [rel] -> the STATUS token unregistered-drift.sh emits for that core file
-  bash "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" 2>/dev/null \
+  ud_eng "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" 2>/dev/null \
     | awk -F'\t' -v f="${1:-$REL}" '$2==f {print $1; exit}'
 }
 
@@ -115,7 +157,7 @@ sed "s|next_heading: '## Responsibilities'|next_heading: '## NO SUCH TERMINATOR 
   "$SITES" > "$ENGINE/setup-sites.md"
 if ! cmp -s "$SITES" "$ENGINE/setup-sites.md"; then
   sed 's|- `src/` (application source code)|- `lib/` (this project keeps its source here)|' "$BASECONTENT" > "$CF"
-  s="$(bash "$ENGINE/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" 2>/dev/null \
+  s="$(ud_eng "$ENGINE/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" 2>/dev/null \
         | awk -F'\t' -v f="$REL" '$2==f {print $1; exit}')"
   [ "$s" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "an unresolvable terminator withholds the exemption (fail-closed), never widens the span to EOF" \
     || bad "with an unresolvable terminator the config edit classified '$s' — the span is being widened to EOF again, which exempts the whole rest of the file on one stale anchor"
@@ -136,14 +178,14 @@ git -C "$DIST" show "$BASE:core/$REL" > "$CF"   # restore
 # The pair below differ in ONE variable — which upstream blob the consumer's copy is anchored
 # at. Assertion 2 above is the other half of this differential and must stay green: a consumer
 # at base plus an edit is still DRIFT, because it best-matches base's own blob.
-ASSERT_STALE="$(bash "$SCRIPT" "$DIST" "$BASE" "$STALE" 2>/dev/null | awk -F'\t' -v f="$REL" '$2==f {print $1; exit}')"
+ASSERT_STALE="$(ud_eng "$SCRIPT" "$DIST" "$BASE" "$STALE" 2>/dev/null | awk -F'\t' -v f="$REL" '$2==f {print $1; exit}')"
 [ "$ASSERT_STALE" = "HARD-CORE-BEHIND" ] \
   && ok "a copy frozen at an ancestor of base, plus one line of its own → HARD-CORE-BEHIND (remedy is take-theirs, not refile-as-override)" \
   || bad "a stale copy classified '$ASSERT_STALE', expected HARD-CORE-BEHIND — upstream's own change since the old release is being read as consumer drift"
 
 # The DETAIL must carry both numbers. The disposition turns on their RATIO, and an operator
 # who sees only the base-relative one adjudicates a fork that is not there.
-D="$(bash "$SCRIPT" "$DIST" "$BASE" "$STALE" 2>/dev/null | awk -F'\t' -v f="$REL" '$2==f {print $3; exit}')"
+D="$(ud_eng "$SCRIPT" "$DIST" "$BASE" "$STALE" 2>/dev/null | awk -F'\t' -v f="$REL" '$2==f {print $3; exit}')"
 if grep -q 'differs from core@.* by [0-9]* lines, but from .* by only [0-9]*' <<<"$D"; then
   ok "the row states both distances — against base AND against the ancestor it is really anchored at"
 else
@@ -183,7 +225,7 @@ SHIM
 chmod +x "$WORK/shim-all/diff" "$WORK/shim-old/diff"
 
 drive() { # drive <script> <shim-dir> <rel> -> "STATUS<TAB>DETAIL" for rel, diff shimmed
-  PATH="$2:$PATH" bash "$1" "$DIST" "$BASE" "$CONSUMER" 2>/dev/null \
+  PATH="$2:$PATH" ud_eng "$1" "$DIST" "$BASE" "$CONSUMER" 2>/dev/null \
     | awk -F'\t' -v f="$3" '$2==f {print $1 "\t" $3; exit}'
 }
 
@@ -226,10 +268,11 @@ git -C "$DIST" show "$BASE:core/$REL" > "$CF"           # restore
 # staged with its status read; a 125 is `unregistered-drift: REFUSED`, exit 2, the memo named.
 cp "$BASECONTENT" "$CF"
 UM="$(mktemp -d "$WORK/ud-memo.XXXXXX")"
-AI_DLC_RECONCILE_MEMO="$UM" bash "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" > "$WORK/um.ctl" 2>/dev/null; um_rc=$?
+AI_DLC_RECONCILE_MEMO="$UM" ud_eng "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" > "$WORK/um.ctl" 2>/dev/null; um_rc=$?
 um_n=0
 for um_f in "$UM"/"s "*" ${BASE}:core%2Fteam-roles%2Fdev.md.s"; do [ -f "$um_f" ] || continue; um_n=$((um_n + 1)); : > "$um_f"; : > "${um_f%.s}.c"; done
-AI_DLC_RECONCILE_MEMO="$UM" bash "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" > "$WORK/um.out" 2> "$WORK/um.err"; um_frc=$?
+cp -R "$UM" "$WORK/ud-memo-cli"   # the cli-refuse cell's own copy of the emptied memo, taken before either run reads it
+AI_DLC_RECONCILE_MEMO="$UM" ud_eng "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" > "$WORK/um.out" 2> "$WORK/um.err"; um_frc=$?
 if [ "$um_rc" != 0 ] || ! grep -q "^CORE-OK	$REL	" "$WORK/um.ctl" || [ "$um_n" -ne 1 ]; then
   bad "FIXTURE BROKEN — the memo cell's warm run was rc=$um_rc with no CORE-OK row for $REL, or found $um_n memo key(s) for it (want 1)"
 elif [ "$um_frc" = 2 ] && grep -qF 'could not be served by the reconcile memo' "$WORK/um.err" \
@@ -239,6 +282,27 @@ else
   bad "a base blob the memo cannot serve gave rc=$um_frc and '$(awk -F'\t' -v f="$REL" '$2==f {print $1}' "$WORK/um.out")' for a byte-identical file — a lost cached object decided its row"
 fi
 
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome --------------------------
+# The outcomes: exit 0 with the classified rows, and exit 2 with the memo refusal on stderr. One `FXCELL=<id> bash
+# "$SCRIPT"` start per outcome, compared with the in-process answer on the same input: stdout, stderr and exit, byte
+# for byte. Each also asserts its own outcome, so two runs that both printed nothing cannot read as equivalent.
+# cli-refuse reads its own copy of the emptied memo (ud-memo-cli), so the in-process run above cannot have touched it.
+FXCELL=cli-refuse AI_DLC_RECONCILE_MEMO="$WORK/ud-memo-cli" bash "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" > "$WORK/um.cl.out" 2> "$WORK/um.cl.err"; um_crc=$?
+if [ "$um_crc" = 2 ] && [ "$um_frc" = 2 ] && grep -qF 'could not be served by the reconcile memo' "$WORK/um.cl.err" \
+   && cmp -s "$WORK/um.out" "$WORK/um.cl.out" && cmp -s "$WORK/um.err" "$WORK/um.cl.err"; then
+  ok "cli-refuse: the program refuses the unservable base blob exactly as the in-process call does (stdout, stderr, exit 2)"
+else
+  bad "cli-refuse: the program (rc=$um_crc, err [$(head -1 "$WORK/um.cl.err")]) and the in-process call (rc=$um_frc, err [$(head -1 "$WORK/um.err")]) differ, or the outcome is not exit 2 with the memo refusal"
+fi
+ud_eng "$SCRIPT" "$DIST" "$BASE" "$STALE" > "$WORK/rows.ip.out" 2> "$WORK/rows.ip.err"; rows_irc=$?
+FXCELL=cli-rows bash "$SCRIPT" "$DIST" "$BASE" "$STALE" > "$WORK/rows.cl.out" 2> "$WORK/rows.cl.err"; rows_crc=$?
+if [ "$rows_crc" = 0 ] && [ "$rows_irc" = 0 ] && grep -q "^HARD-CORE-BEHIND	$REL	" "$WORK/rows.cl.out" \
+   && cmp -s "$WORK/rows.ip.out" "$WORK/rows.cl.out" && cmp -s "$WORK/rows.ip.err" "$WORK/rows.cl.err"; then
+  ok "cli-rows: the program classifies the stale consumer exactly as the in-process call does (stdout, stderr, exit 0, a HARD-CORE-BEHIND row)"
+else
+  bad "cli-rows: the program (rc=$rows_crc, $(grep -c . "$WORK/rows.cl.out") rows) and the in-process call (rc=$rows_irc, $(grep -c . "$WORK/rows.ip.out") rows) differ, or the outcome is not exit 0 with a HARD-CORE-BEHIND row"
+fi
+
 # --- A MEMO THAT CANNOT SERVE AN ANCESTOR BLOB REFUSES; IT NEVER RE-ROUTES THE STALE COPY ---------
 # `closest_ancestor_blob` piped each candidate into `diff -`. A memo serve that failed EMPTY (125)
 # lost to diff's own 1 under pipefail, the candidate scored as wholly different, and the stale copy's
@@ -246,10 +310,10 @@ fi
 # The candidate is now staged with its read status read. Warm on the STALE consumer, then empty the
 # OLD-release blob's `.s` and `.c` -- the empty-serve mode; a full serve already propagated 125.
 AM="$(mktemp -d "$WORK/ud-anc-memo.XXXXXX")"
-AI_DLC_RECONCILE_MEMO="$AM" bash "$SCRIPT" "$DIST" "$BASE" "$STALE" > "$WORK/am.ctl" 2>/dev/null; am_rc=$?
+AI_DLC_RECONCILE_MEMO="$AM" ud_eng "$SCRIPT" "$DIST" "$BASE" "$STALE" > "$WORK/am.ctl" 2>/dev/null; am_rc=$?
 am_n=0
 for am_f in "$AM"/"s "*" ${OLD}:core%2Fteam-roles%2Fdev.md.s"; do [ -f "$am_f" ] || continue; am_n=$((am_n + 1)); : > "$am_f"; : > "${am_f%.s}.c"; done
-AI_DLC_RECONCILE_MEMO="$AM" bash "$SCRIPT" "$DIST" "$BASE" "$STALE" > "$WORK/am.out" 2> "$WORK/am.err"; am_frc=$?
+AI_DLC_RECONCILE_MEMO="$AM" ud_eng "$SCRIPT" "$DIST" "$BASE" "$STALE" > "$WORK/am.out" 2> "$WORK/am.err"; am_frc=$?
 if [ "$am_rc" != 0 ] || ! grep -q "^HARD-CORE-BEHIND	$REL	" "$WORK/am.ctl" || [ "$am_n" -ne 1 ]; then
   bad "FIXTURE BROKEN — the ancestor memo cell's warm run was rc=$am_rc with no HARD-CORE-BEHIND row for $REL, or found $am_n memo key(s) for its ancestor blob (want 1)"
 elif [ "$am_frc" = 2 ] && grep -qF 'could not be served by the reconcile memo' "$WORK/am.err" \
@@ -289,13 +353,16 @@ f_st() { awk -F'\t' -v f="$REL" '$2==f {print $1; exit}' "$1"; }
 if [ "$f_cal" != ok ]; then
   bad "FIXTURE BROKEN — calibration: under ulimit -f ${f_lim:-?} a ${f_blob}-byte here-string did not fail or a ${f_ls}-byte write did not land whole; the forced cell cannot discriminate"
 else
-  bash "$SCRIPT" "$FD/dist" "$FB" "$FD/cons" > "$FD/u.out" 2>/dev/null; f_urc=$?
+  ud_eng "$SCRIPT" "$FD/dist" "$FB" "$FD/cons" > "$FD/u.out" 2>/dev/null; f_urc=$?
   if [ "$f_urc" = 0 ] && [ "$(f_st "$FD/u.out")" = CORE-TEMPLATE-SUBSTITUTED ]; then
     ok "unforced control: the ownership edit on the ${f_blob}-byte role file reads CORE-TEMPLATE-SUBSTITUTED"
   else
     bad "FIXTURE BROKEN — unforced control rc=$f_urc status '$(f_st "$FD/u.out")'; the forced cell has no healthy answer"
   fi
-  /bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; shift; exec /bin/bash "$@"' _ "$f_lim" "$SCRIPT" "$FD/dist" "$FB" "$FD/cons" > "$FD/f.out" 2> "$FD/f.err"; f_frc=$?
+  # KEPT END TO END (cells.decl e2e-forced-blob, and e2e-forced-hunks below): the file-size limit binds every write of
+  # the process it is set in, and an in-process pass's fx_inproc append under it is lost (validate-fixture-invocations.sh,
+  # THE COUNTER). The tag is set inside the `-c` wrapper, just before the exec, so it lands on the subject's own start.
+  /bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; FXCELL="$2"; export FXCELL; shift 2; exec /bin/bash "$@"' _ "$f_lim" e2e-forced-blob "$SCRIPT" "$FD/dist" "$FB" "$FD/cons" > "$FD/f.out" 2> "$FD/f.err"; f_frc=$?
   if { [ "$f_frc" = 0 ] && [ "$(f_st "$FD/f.out")" = CORE-TEMPLATE-SUBSTITUTED ]; } \
      || { [ "$f_frc" -ne 0 ] && [ "$f_frc" -ne 97 ] && grep -q '^unregistered-drift: REFUSED' "$FD/f.err" && [ -z "$(f_st "$FD/f.out")" ]; }; then
     ok "forced: a base blob that cannot be staged under ulimit -f $f_lim gives the healthy row or the named refusal (rc=$f_frc)"
@@ -325,13 +392,13 @@ fi
 if [ "$h_cal" != ok ]; then
   bad "FIXTURE BROKEN — calibration: under ulimit -f ${h_lim:-?} (block ${f_blk:-?} B) a ${h_diff}-byte here-string did not fail, or the ${h_blob}-byte blob or ${h_ls}-byte listing does not fit; the hunks cell cannot discriminate"
 else
-  bash "$SCRIPT" "$DIST" "$BASE" "$FH/cons" > "$FH/u.out" 2>/dev/null; h_urc=$?
+  ud_eng "$SCRIPT" "$DIST" "$BASE" "$FH/cons" > "$FH/u.out" 2>/dev/null; h_urc=$?
   if [ "$h_urc" = 0 ] && [ "$(f_st "$FH/u.out")" = CORE-TEMPLATE-SUBSTITUTED ]; then
     ok "unforced control: a ${h_diff}-byte diff inside ## Ownership reads CORE-TEMPLATE-SUBSTITUTED"
   else
     bad "FIXTURE BROKEN — hunks unforced control rc=$h_urc status '$(f_st "$FH/u.out")'; the forced cell has no healthy answer"
   fi
-  /bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; shift; exec /bin/bash "$@"' _ "$h_lim" "$SCRIPT" "$DIST" "$BASE" "$FH/cons" > "$FH/f.out" 2> "$FH/f.err"; h_frc=$?
+  /bin/bash -c 'trap "" XFSZ; ulimit -f "$1" || exit 97; FXCELL="$2"; export FXCELL; shift 2; exec /bin/bash "$@"' _ "$h_lim" e2e-forced-hunks "$SCRIPT" "$DIST" "$BASE" "$FH/cons" > "$FH/f.out" 2> "$FH/f.err"; h_frc=$?
   if { [ "$h_frc" = 0 ] && [ "$(f_st "$FH/f.out")" = CORE-TEMPLATE-SUBSTITUTED ]; } \
      || { [ "$h_frc" -ne 0 ] && [ "$h_frc" -ne 97 ] && grep -q '^unregistered-drift: REFUSED' "$FH/f.err" && [ -z "$(f_st "$FH/f.out")" ]; }; then
     ok "forced: diff hunks that cannot be staged under ulimit -f $h_lim give the healthy row or the named refusal (rc=$h_frc)"

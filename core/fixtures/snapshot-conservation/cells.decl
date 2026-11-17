@@ -1,0 +1,7 @@
+# snapshot-conservation's starts of core/scripts/validate-snapshot-conservation.sh (BL-879 grammar). Every other drive
+# is in process: run.sh loads the validator once and asks vsc_main through inproc_run. One cli cell per distinct CLI
+# outcome (exit 0 conserved, exit 1 destroyed, exit 2 unparseable metrics), each started as FXCELL=<id> bash in eqv()
+# and compared byte for byte with the in-process call on the same case directory.
+cli core/scripts/validate-snapshot-conservation.sh cli-pass
+cli core/scripts/validate-snapshot-conservation.sh cli-fail
+cli core/scripts/validate-snapshot-conservation.sh cli-error

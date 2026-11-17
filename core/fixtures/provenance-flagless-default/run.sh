@@ -119,11 +119,42 @@ command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: python3 not on PATH
 echo "HERMETIC-CONSUMED core/scripts/validate-provenance-block.sh"
 echo "HERMETIC-CONSUMED core/schemas/provenance-block.json"
 
+# IN PROCESS (BL-878). The validator is SOURCED ONCE (inproc_load: its guard returns after defining pb_main) and every
+# cell asks pb_main in a subshell made to look like a fresh `bash validate-provenance-block.sh` (lib/inproc.sh). Its
+# root walk starts from the function's own `${BASH_SOURCE[0]}`, the file it was defined in -- the same path the
+# program run gets -- so the two resolve one schema. The three cli cells (cells.decl) run it as a program once per
+# distinct CLI outcome and compare stdout, stderr and exit byte for byte with the in-process call. A CORE FIXTURE
+# SHIPS AHEAD OF ITS SUBJECT: a subject with neither its `pb_main() {` line nor the column-0 source guard predates the
+# wrap and reads SKIP (exit 0, never an ok); exactly one half is a respelled subject and FAILs; a subject grep cannot
+# READ (exit 2) is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$VALIDATOR" pb_main; g_pb=$?
+if [ "$g_pb" = 2 ]; then exit 2; fi
+if [ "$g_pb" = 1 ]; then echo "provenance-flagless-default: 1 FAILED"; exit 1; fi
+if [ "$g_pb" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+
 WORK="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $HERE" >&2; exit 2; }
+inproc_load "$VALIDATOR" || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined nothing" >&2; exit 2; }
+declare -F pb_main >/dev/null || { echo "FIXTURE BROKEN: $VALIDATOR defined no pb_main when sourced" >&2; exit 2; }
 
 # ---------------------------------------------------------------------------
 # SEEDS
@@ -219,13 +250,12 @@ fi
 # ---------------------------------------------------------------------------
 OUTF="$WORK/out.txt"
 #
-# Invoked through `bash` rather than by path. A shipped file that reaches a consumer without
-# its executable bit answers rc 126, which is a permission denial and not a verdict — and
-# 126 is not one of the codes any arm below expects, so it would read as a regression in the
-# subject rather than as a packaging fault.
+# Asked IN PROCESS (BL-878): `inproc_run` calls pb_main in a subshell made to look like a fresh
+# `bash <validator>`, so an executable bit plays no part, as it played none under `bash "$v"`.
+# The cli cells at the end run the program and hold it to the in-process answer.
 drive() {  # drive <validator> <args...> -> prints rc, leaves combined output in $OUTF
   local v="$1"; shift
-  bash "$v" "$@" >"$OUTF" 2>&1
+  inproc_run "$v" pb_main "$@" >"$OUTF" 2>&1
   printf '%s\n' "$?"
 }
 
@@ -243,7 +273,7 @@ drive_rel() {  # drive_rel <cwd> <validator> <relative-args...> -> prints rc, ou
   d="$1"
   v="$2"
   shift 2
-  ( cd "$d" || exit 9; bash "$v" "$@" ) >"$OUTF" 2>&1
+  ( cd "$d" || exit 9; inproc_run "$v" pb_main "$@" ) >"$OUTF" 2>&1
   printf '%s\n' "$?"
 }
 
@@ -254,15 +284,16 @@ drive_rel() {  # drive_rel <cwd> <validator> <relative-args...> -> prints rc, ou
 # fixture: the scrub is a correct defence against adjudicating the operator's configuration, and
 # it doubles as a blindfold over the one acquittal shaped like the configuration it removes. A
 # non-prefixed twin is already caught by (a)/(g), which is the asymmetry that hides the prefixed
-# one. `env VAR=… bash …` sets it for the child only, after the scrub, so the rest of the file
-# keeps its hermeticity and this arm gets its subject.
+# one. `export VAR=…` inside the call's own subshell sets it for that call only, after the scrub (inproc_run keeps
+# exported variables, as a child bash would inherit them), so the rest of the file keeps its hermeticity and this
+# arm gets its subject.
 drive_env() {  # drive_env <VAR=VAL> <validator> <args...> -> prints rc, output in $OUTF
   local e
   local v
   e="$1"
   v="$2"
   shift 2
-  env "$e" bash "$v" "$@" >"$OUTF" 2>&1
+  ( export "${e?}"; inproc_run "$v" pb_main "$@" ) >"$OUTF" 2>&1
   printf '%s\n' "$?"
 }
 
@@ -360,8 +391,8 @@ fi
 # a reader honouring `AI_DLC_PROVENANCE_ALLOW_MISSING` scores identically to one that ignores it.
 # A non-prefixed twin is not invisible at all — arms (a) and (g) would already catch a reader
 # honouring a variable nobody set — and that asymmetry is exactly what hides the prefixed case.
-# So the variable is set IN THE INVOCATION, `env VAR=1 bash "$VALIDATOR" …`, which runs after the
-# scrub and touches only the child. (a5) drives the two unprefixed spellings for the same
+# So the variable is set IN THE INVOCATION, exported inside the call's own subshell (drive_env), which
+# runs after the scrub and touches only that call. (a5) drives the two unprefixed spellings for the same
 # property under names the scrub never reached, so the arm covers the whole class rather than the
 # one name.
 # ---------------------------------------------------------------------------
@@ -467,6 +498,36 @@ elif ! grep -q -- '--allow-missing' <<<"$g_out"; then
 else
   ok "g  an artifact with NO .md extension and no block is DENIED flagless (rc=1), naming --allow-missing — the rung is keyed on the declaration, not on the filename"; B_g=1
 fi
+
+# ---------------------------------------------------------------------------
+# THE CLI CELLS (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome --
+# exit 0 the seed control, exit 1 the flagless deny, exit 2 the contradictory flag pair. Each
+# is compared with the in-process answer on the same argv: stdout, stderr and exit separately,
+# byte for byte, and each asserts its own exit, so two runs that both printed nothing cannot
+# read as equivalent.
+# ---------------------------------------------------------------------------
+EQ="$WORK/eq"; mkdir -p "$EQ" || exit 2
+eqv() { # eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two answers are identical
+  local id="$1"; shift
+  inproc_run "$VALIDATOR" pb_main "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_rc() { cat "$EQ/$1.cl.rc"; }
+if eqv cli-pass "$ART/docs/valid.md" && [ "$(eq_rc cli-pass)" = 0 ] && grep -q '^VALIDATE-PROVENANCE-BLOCK: PASS' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program accepts the seed control exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with a PASS line (program rc=$(eq_rc cli-pass), in-process rc=$(cat "$EQ/cli-pass.ip.rc"))"; fi
+if eqv cli-deny "$ART/docs/prd.md" && [ "$(eq_rc cli-deny)" = 1 ] && grep -q -- '--allow-missing' "$EQ/cli-deny.cl.out" "$EQ/cli-deny.cl.err"; then
+  ok "cli-deny: the program denies the flagless blockless artifact exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-deny: the program and the in-process call differ, or the outcome is not exit 1 naming --allow-missing (program rc=$(eq_rc cli-deny), in-process rc=$(cat "$EQ/cli-deny.ip.rc"))"; fi
+if eqv cli-usage "$ART/docs/prd.md" --allow-missing --require-skill bmad-prd && [ "$(eq_rc cli-usage)" = 2 ] \
+   && grep -q 'contradicts --require-skill' "$EQ/cli-usage.cl.err"; then
+  ok "cli-usage: the program refuses the contradictory flag pair exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not exit 2 naming the contradiction (program rc=$(eq_rc cli-usage), in-process rc=$(cat "$EQ/cli-usage.ip.rc"))"; fi
+if [ "$(eq_rc cli-pass)$(eq_rc cli-deny)$(eq_rc cli-usage)" = 012 ] && ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-deny.cl.out"; then
+  ok "cli cells discriminate: the three argv give three different exits and the pass and the deny different stdout"
+else bad "cli cells do not discriminate: exits $(eq_rc cli-pass)/$(eq_rc cli-deny)/$(eq_rc cli-usage), or cli-pass and cli-deny gave the same stdout"; fi
+
 echo
 echo "provenance-flagless-default: layout $LAYOUT, subject ${VALIDATOR#$ROOT/}"
 report_end provenance-flagless-default

@@ -38,6 +38,7 @@
 # Usage: audit-layer-debt.sh [--register <file>] [--json]
 # Exit:  0 report produced (with or without findings) · 2 register unreadable / usage
 
+ald_main() {
 set -u
 
 REGISTER=""
@@ -733,3 +734,6 @@ if unowned:
 else:
     print("CONTRADICTS-CORE WITHOUT AN `owed` (0) — every contradicts-core entry declares its debt.")
 PY
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ald_main "$@"

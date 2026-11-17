@@ -44,6 +44,7 @@
 #         A scan that found no call sites prints the same clean line as a scan that
 #         found them all healthy, so it must not be able to exit 0.
 
+vbi_main() {
 set -u
 
 PROG="validate-bmad-invocations.sh"
@@ -281,3 +282,6 @@ if [ "$rc" -eq 0 ]; then
   echo "$PROG: PASS ($COUNT invoked name(s), $resolved resolved, $selfcontained self-contained, $deprecated deprecated)"
 fi
 exit $rc
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vbi_main "$@"

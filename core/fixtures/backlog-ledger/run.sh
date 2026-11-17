@@ -72,6 +72,76 @@ echo
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+
+# IN PROCESS (BL-878). Every drive of either engine SOURCES the copy it names in a `( )` subshell and calls its entry
+# function (brv_main, brt_main), one fx_inproc pass each (the inproc: rows). The only separate-program starts of the
+# two are the four cli cells of cells.decl (cli_eqv below), each compared byte for byte with the in-process call.
+#
+# THE CHILD SHIM. backlog-rotate.sh starts backlog-reverify.sh as a CHILD program. Called in process, that child would
+# be an untagged start of a declared subject whose logged parent is run.sh, which no nested row can cover (C1). So
+# inside rt_in, `bash` is bl_shim: it answers a start of backlog-reverify.sh by sourcing that copy in a subshell and
+# calling brv_main (one fx_inproc pass each), and passes every other `bash` through. A started child sees none of its
+# parent's shell: reverify DERIVES what lib.sh adds by a before/after namespace diff (backlog-reverify.sh, the
+# _rv_added lines) and refuses when lib.sh is already loaded, and it unsets that set inside each receipt. So the
+# subshell is first reset to what a fresh `bash` has -- options, traps, unexported functions and unexported
+# variables -- by the reset scripts/validate-enforcement-map.sh's vem_entry applies to its caller (its fresh-bash
+# name list). With DRIFT_LEDGER exported (the drift world, below) the shim also adds the one live row the drift
+# --check exists to catch, as the drift world's wrapper did when it was a separate program.
+bl_fresh() {
+  set +e +o pipefail +x +v +a +f +C +E +T
+  trap - ERR DEBUG RETURN
+  shopt -u nullglob failglob nocaseglob nocasematch dotglob extglob expand_aliases
+  IFS=$' \t\n'
+  bl_ls="$(compgen -e; echo :v:; compgen -v; echo :f:; declare -F)"
+  bl_x=' ' bl_m=e bl_p=
+  for bl_n in $bl_ls; do
+    case "$bl_m:$bl_n" in
+      ?:\:v:) bl_m=v ;;
+      ?:\:f:) bl_m=f ;;
+      e:*) bl_x="$bl_x$bl_n " ;;
+      v:bl_ls|v:bl_x|v:bl_m|v:bl_n|v:bl_p|v:bl_s) : ;;
+      v:BASH|v:BASH_*|v:COMP_WORDBREAKS|v:DIRSTACK|v:EUID|v:FUNCNAME|v:GROUPS|v:HISTCMD|v:HOSTNAME) : ;;
+      v:HOSTTYPE|v:IFS|v:LINENO|v:MACHTYPE|v:OPTERR|v:OPTIND|v:OSTYPE|v:PATH|v:PIPESTATUS|v:PPID) : ;;
+      v:PS4|v:PWD|v:RANDOM|v:SECONDS|v:SHELL|v:SHELLOPTS|v:SHLVL|v:TERM|v:UID|v:_) : ;;
+      v:*) case "$bl_x" in *" $bl_n "*) : ;; *) while declare -p "$bl_n" > /dev/null 2>&1 && unset -v "$bl_n" 2>/dev/null; do :; done ;; esac ;;
+      f:*) [ "$bl_p" != -f ] || unset -f "$bl_n" ;;
+    esac
+    bl_p="$bl_n"
+  done
+  unset bl_ls bl_x bl_m bl_n bl_p
+}
+# rv_in <copy> <args...>: one in-process run of a reverify copy, from a fresh namespace, exactly as a started one.
+rv_in() { ( bl_s="$1"; shift; fx_inproc "$bl_s"; bl_fresh; . "$bl_s" && brv_main "$@" ); }
+bl_shim() {
+  case "${1:-}" in
+    */backlog-reverify.sh)
+      local s="$1" o rc; shift
+      [ -n "${DRIFT_LEDGER:-}" ] || { rv_in "$s" "$@"; return; }
+      o="$(rv_in "$s" "$@")"; rc=$?
+      [ -n "$o" ] && printf '%s\n' "$o"
+      case " $* " in *" --"*) return "$rc" ;; esac
+      [ "${1:-}" = "$DRIFT_LEDGER" ] && printf 'STILL-LIVE\tBL-999\ta live row the rotation would lose, seeded by the fixture\n'
+      return "$rc" ;;
+    *) command bash "$@" ;;
+  esac
+}
+# rt_in <copy> <args...>: one in-process run of a rotate copy, its reverify children answered by bl_shim.
+rt_in() { ( bash() { bl_shim "$@"; }; bl_s="$1"; shift; fx_inproc "$bl_s"; . "$bl_s" && brt_main "$@" ); }
+# cli_eqv <id> <subject> <in-process fn> <args...>: one `FXCELL=<id> bash <copy>` start and one in-process call over the
+# same input, compared byte for byte (stdout, stderr, exit). Neither side may write: every cell is a report or a refusal.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+cli_eqv() {
+  local id="$1" s="$2" fn="$3"; shift 3
+  "$fn" "$s" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  env FXCELL="$id" bash "$s" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if [ -s "$EQ/$id.cl.out" ] && cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" \
+     && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"; then
+    ok2 "$id" "the command line and the in-process call agree byte for byte (exit $(cat "$EQ/$id.cl.rc"))"
+  else
+    bad2 "$id" "command line and in-process differ: exit $(cat "$EQ/$id.cl.rc") vs $(cat "$EQ/$id.ip.rc"), stdout $(cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && echo equal || echo DIFFERS), stderr $(cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && echo equal || echo DIFFERS)"
+  fi
+}
 # ok2/bad2 <arm> <detail>: one ok/bad line with the arm in an 18-column field.
 ok2()  { local m; printf -v m '%-18s %s' "$1" "${2-}"; ok "$m"; }
 bad2() { local m; printf -v m '%-18s %s' "$1" "${2-}"; bad "$m"; }
@@ -165,7 +235,8 @@ zz
 EOF
 EOM
 
-OUT="$(bash "$RV" "$LA" 2>&1)"
+OUT="$(rv_in "$RV" "$LA" 2>&1)"
+cli_eqv cli-rv-rows "$RV" rv_in "$LA"
 
 # POSITIVE CONTROL, FIRST. If the classifier emitted nothing, every `want` below would report
 # its own failure but the cause would read as fourteen unrelated regressions rather than one dead
@@ -275,7 +346,7 @@ route_ok() {
   return 0
 }
 
-COUT="$(bash "$RV" "$LC" 2>&1)"
+COUT="$(rv_in "$RV" "$LC" 2>&1)"
 if why="$(route_ok "$COUT")"; then
   ok2 "exit-9-routing" "exit 9 reads NEEDS-REVIEW unresolved:, beside 0 CLOSE-CANDIDATE and 1/126/bare-127 STILL-LIVE"
 else
@@ -324,7 +395,7 @@ stdin_ok() { # <output> — 0 when all four rows are present, once each, with th
   grep -qE '^STILL-LIVE	BL-134	'      <<<"$o" || { echo "BL-134 (lacks, anchor present) is not STILL-LIVE"; return 1; }
   return 0
 }
-DOUT="$(bash "$RV" "$LD" 2>&1)"
+DOUT="$(rv_in "$RV" "$LD" 2>&1)"
 if why="$(stdin_ok "$DOUT")"; then
   ok2 "stdin-receipt" "a receipt reading stdin leaves all four rows with their verdicts"
 else
@@ -390,9 +461,9 @@ leak_ok() {
 }
 leak_both() { # <engine> — both drives; prints the first failure
   local e="$1" o why
-  o="$(env -u AI_DLC_RECONCILE_MEMO bash "$e" "$LE" 2>&1)"
+  o="$( ( unset AI_DLC_RECONCILE_MEMO; rv_in "$e" "$LE" ) 2>&1)"
   why="$(leak_ok "$o")" || { echo "no inbound memo: $why"; return 1; }
-  o="$(AI_DLC_RECONCILE_MEMO="$INMEMO" bash "$e" "$LE" 2>&1)"
+  o="$( ( export AI_DLC_RECONCILE_MEMO="$INMEMO"; rv_in "$e" "$LE" ) 2>&1)"
   why="$(leak_ok "$o")" || { echo "caller-exported memo: $why"; return 1; }
   return 0
 }
@@ -446,7 +517,7 @@ cm_ok() {
   grep -qE '^STILL-LIVE	BL-155	' <<<"$o" || { echo "BL-155 (the subject's own command not found, exit 127) is not STILL-LIVE"; return 1; }
   return 0
 }
-FOUT="$(bash "$RV" "$LF" 2>&1)"
+FOUT="$(rv_in "$RV" "$LF" 2>&1)"
 if why="$(cm_ok "$FOUT")"; then
   ok2 "cant-measure" "missing helper and eval-time syntax error read NEEDS-REVIEW; three subject-side near-misses stay STILL-LIVE"
 else
@@ -497,7 +568,8 @@ The author writes **LANDED (vX.Y.Z, verified <sha>).** only once the receipt goe
 verify: lacks VERSION "."
 EOM
 
-ROT="$(bash "$RT" "$LB" --check 2>&1)"
+ROT="$(rt_in "$RT" "$LB" --check 2>&1)"
+cli_eqv cli-rt-check "$RT" rt_in "$LB" --check
 if grep -q "BL-202" <<<"$ROT"; then ok2 "rotate-moves" "the annotated entry is selected"
 else bad2 "rotate-moves" "the annotated entry was NOT selected: $ROT"; fi
 
@@ -510,7 +582,7 @@ fi
 if grep -q "check PASS" <<<"$ROT"; then ok2 "rotate-check" "the acceptance test passes on a correct rotation"
 else bad2 "rotate-check" "--check did not report PASS: $ROT"; fi
 
-bash "$RT" "$LB" --apply >/dev/null 2>&1
+rt_in "$RT" "$LB" --apply >/dev/null 2>&1
 if grep -q "BL-203" "$LB" && grep -q "BL-201" "$LB" && grep -q "must never move" "$LB"; then
   ok2 "rotate-preserves" "open entries and the preamble survive --apply"
 else
@@ -537,8 +609,8 @@ cat > "$LC" <<'EOM'
 
 verify: has VERSION "."
 EOM
-RVC="$(bash "$RV" "$LC" 2>&1)"
-RTC="$(bash "$RT" "$LC" 2>&1)"
+RVC="$(rv_in "$RV" "$LC" 2>&1)"
+RTC="$(rt_in "$RT" "$LC" 2>&1)"
 if grep -q '^ALREADY-CLOSED	BL-301' <<<"$RVC" && grep -q "nothing to move" <<<"$RTC"; then
   ok2 "subset" "reverify closes it, rotate refuses to move it — the predicates still differ"
 else
@@ -551,7 +623,8 @@ fi
 # The rotator is the single producer of the empty marker: it appends it after the conservation
 # check, only when the remainder parses to zero entries, with the text the classifier prints.
 # The marker is read from `--print-marker`, never typed here.
-MARK="$(bash "$RV" --print-marker 2>/dev/null)"
+MARK="$(rv_in "$RV" --print-marker 2>/dev/null)"
+cli_eqv cli-rv-marker "$RV" rv_in --print-marker
 [ -n "$MARK" ] && ok2 "marker-source" "backlog-reverify.sh --print-marker yields the marker" \
   || bad2 "marker-source" "backlog-reverify.sh --print-marker returned nothing; no arm below can be built"
 # B (above) rotated with entries remaining: no marker may have been written.
@@ -575,10 +648,10 @@ EOM
 cp "$LG" "$LG.orig"
 G_O="$(wc -l < "$LG.orig" | tr -d ' ')"
 G_P="$(awk '/^## BL-/ { print NR - 1; exit }' "$LG.orig")"
-GROT="$(bash "$RT" "$LG" --check 2>&1)"
+GROT="$(rt_in "$RT" "$LG" --check 2>&1)"
 if grep -q "check PASS" <<<"$GROT"; then ok2 "last-check" "--check passes when the last entry rotates"
 else bad2 "last-check" "--check did not PASS on the last entry: $(printf '%s' "$GROT" | tail -3 | tr '\n' ' ')"; fi
-bash "$RT" "$LG" --apply >/dev/null 2>&1
+rt_in "$RT" "$LG" --apply >/dev/null 2>&1
 G_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LG")"
 if [ -n "$MARK" ] && [ "$G_LAST" = "$MARK" ]; then ok2 "last-marker" "the marker is the last non-blank line after --apply"
 else bad2 "last-marker" "the last non-blank line is '$G_LAST', not the marker"; fi
@@ -596,19 +669,19 @@ if [ "$G_L" -eq $(( G_P + 2 )) ] && [ "$(head -n "$G_P" "$LG")" = "$(head -n "$G
 else
   bad2 "last-conserves" "conservation broken: ledger $G_L lines, want $(( G_P + 2 )); or a prefix/tail differs"
 fi
-GRV="$(bash "$RV" "$LG" 2>&1)"
+GRV="$(rv_in "$RV" "$LG" 2>&1)"
 if [ "$(printf '%s\n' "$GRV" | grep -c .)" -eq 1 ] && grep -qE '^DECLARED-EMPTY	' <<<"$GRV"; then
   ok2 "last-reverify" "the rotated ledger reads exactly one DECLARED-EMPTY row"
 else bad2 "last-reverify" "the rotated ledger reads: $(cut -f1 <<<"$GRV" | tr '\n' ' ')"; fi
 # The near-miss: the same remainder emptied BY HAND, no marker, is still unresolved.
 head -n "$G_P" "$LG.orig" > "$WORK/g/hand.md"
-GHV="$(bash "$RV" "$WORK/g/hand.md" 2>&1)"
+GHV="$(rv_in "$RV" "$WORK/g/hand.md" 2>&1)"
 if grep -qE '^INPUT-UNRESOLVED	.*ZERO entries' <<<"$GHV" && ! grep -q '^DECLARED-EMPTY' <<<"$GHV"; then
   ok2 "hand-emptied" "the same remainder emptied by hand reads INPUT-UNRESOLVED"
 else bad2 "hand-emptied" "a hand-emptied ledger reads: $(cut -f1 <<<"$GHV" | tr '\n' ' ')"; fi
 
-# THE ROTATOR DRIFT AND MARKER ARMS, in a root of their own. `scripts/backlog-reverify.sh` there is a WRAPPER
-# over a real copy that adds one live row for the ledger named in DRIFT_LEDGER, and only in row
+# THE ROTATOR DRIFT AND MARKER ARMS, in a root of their own. With DRIFT_LEDGER exported, bl_shim answers the rotator's
+# reverify child over a real copy and adds one live row for the ledger named in DRIFT_LEDGER, and only in row
 # mode: the drift --check exists to catch, which the shipped pair cannot produce (arm `subset`
 # pins rotate's closed set inside reverify's). Unset, it is a passthrough.
 RR="$WORK/rot-root"
@@ -616,24 +689,13 @@ mkdir -p "$RR/scripts" "$RR/core/skills/ai-dlc-update/reconcile"
 printf '0.0.0\n' > "$RR/VERSION"
 cp "$LR/core/skills/ai-dlc-update/reconcile/lib.sh" "$RR/core/skills/ai-dlc-update/reconcile/lib.sh"
 cp "$RLIB" "$RR/scripts/backlog-receipt-lib.sh"
-cp "$RV" "$RR/scripts/backlog-reverify.real.sh"
-cat > "$RR/scripts/backlog-reverify.sh" <<'EOW'
-#!/usr/bin/env bash
-H="$(cd "$(dirname "$0")" && pwd)"
-out="$(bash "$H/backlog-reverify.real.sh" "$@")"; rc=$?
-[ -n "$out" ] && printf '%s\n' "$out"
-case " $* " in *" --"*) exit "$rc" ;; esac
-if [ -n "${DRIFT_LEDGER:-}" ] && [ "${1:-}" = "$DRIFT_LEDGER" ]; then
-  printf 'STILL-LIVE\tBL-999\ta live row the rotation would lose, seeded by the fixture\n'
-fi
-exit "$rc"
-EOW
+cp "$RV" "$RR/scripts/backlog-reverify.sh"
 RRT="$RR/scripts/backlog-rotate.sh"
 mkdir -p "$WORK/h"; LH="$WORK/h/backlog.md"; cp "$LG.orig" "$LH"
 # CONTROL, FIRST: the unmutated rotator in this root must FAIL --check on the drift, and the root
 # must be live (its passthrough reads the last-entry seed as DECLARED-EMPTY after rotation).
 cp "$RT" "$RRT"
-HC="$(DRIFT_LEDGER="$LH" bash "$RRT" "$LH" --check 2>&1)"; HC_RC=$?
+HC="$( ( export DRIFT_LEDGER="$LH"; rt_in "$RRT" "$LH" --check ) 2>&1)"; HC_RC=$?
 if [ "$HC_RC" -eq 2 ] && grep -q "check FAIL" <<<"$HC" && grep -q "BL-999" <<<"$HC"; then
   ok2 "drift-control" "the unmutated rotator fails --check when the original carries a live row and the remainder is DECLARED-EMPTY"
 else
@@ -649,7 +711,7 @@ mkdir -p "$WORK/q"; LQ="$WORK/q/backlog.md"
   printf '## BL-601 — closed, the last live entry\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n'; } > "$LQ"
 cp "$LQ" "$LQ.orig"
 cp "$RT" "$RRT"
-bash "$RRT" "$LQ" --apply >/dev/null 2>&1
+rt_in "$RRT" "$LQ" --apply >/dev/null 2>&1
 Q_LAST="$(awk '/[^ \t]/ { l = $0 } END { print l }' "$LQ")"
 if [ -n "$MARK" ] && [ "$Q_LAST" = "$MARK" ]; then
   ok2 "quoted-marker" "a preamble quoting the marker still gets it appended as the last line"
@@ -672,8 +734,8 @@ J_SPELL_1='## `BL-501`'; J_SPELL_2='# BL-501'; J_SPELL_3=' ## BL-501'; J_SPELL_4
 for j_i in 1 2 3 4; do
   eval "j_sp=\"\$J_SPELL_$j_i\""
   LJ="$WORK/j/backlog-$j_i.md"; j_seed "$LJ" "$j_sp"; cp "$LJ" "$LJ.orig"
-  JC="$(bash "$RT" "$LJ" --check 2>&1)"; JC_RC=$?
-  bash "$RT" "$LJ" --apply --archive "$WORK/j/archive-$j_i.md" >/dev/null 2>&1; JA_RC=$?
+  JC="$(rt_in "$RT" "$LJ" --check 2>&1)"; JC_RC=$?
+  rt_in "$RT" "$LJ" --apply --archive "$WORK/j/archive-$j_i.md" >/dev/null 2>&1; JA_RC=$?
   if [ "$JC_RC" -eq 2 ] && grep -q "entry-like id lines" <<<"$JC" && grep -qF "BL-501" <<<"$JC" \
      && [ "$JA_RC" -eq 2 ] && cmp -s "$LJ" "$LJ.orig" && [ ! -e "$WORK/j/archive-$j_i.md" ]; then
     ok2 "census-$j_i" "'$j_sp' below the last parseable entry: --check exits 2 naming it, --apply writes nothing"
@@ -685,7 +747,7 @@ done
 mkdir -p "$WORK/jc"; cp "$LG.orig" "$WORK/jc/backlog.md"
 # Captured first and read from a here-string: `grep -q` fed by a pipe answers with the writer's
 # EPIPE under pipefail and reads NOT-FOUND on output that contains the pattern.
-JCC="$(bash "$RT" "$WORK/jc/backlog.md" --check 2>&1)"
+JCC="$(rt_in "$RT" "$WORK/jc/backlog.md" --check 2>&1)"
 if grep -q "check PASS" <<<"$JCC"; then
   ok2 "census-control" "a plain last-entry rotation still passes --check with the census in place"
 else bad2 "census-control" "the census fires on a plain last-entry rotation"; fi
@@ -696,7 +758,9 @@ mkdir -p "$WORK/k"; LK="$WORK/k/backlog.md"
 { printf '# Probe backlog\n\nHistory: BL-1 was the first entry ever filed.\n\n'
   printf '## BL-700 — closed, the last entry\n\n<br>**LANDED (v0.370.0, verified d4fd318).** Done.\n\nverify: has VERSION "."\n'; } > "$LK"
 cp "$LK" "$LK.orig"
-KA="$(bash "$RT" "$LK" --apply 2>&1)"; KA_RC=$?
+# The twins refuse before writing; the cmp in the arm below reads the ledger after all three runs.
+cli_eqv cli-rt-refuse "$RT" rt_in "$LK" --apply
+KA="$(rt_in "$RT" "$LK" --apply 2>&1)"; KA_RC=$?
 if [ "$KA_RC" -eq 2 ] && grep -q "declared-empty answers" <<<"$KA" && cmp -s "$LK" "$LK.orig" && [ ! -e "$WORK/k/backlog.archive.md" ]; then
   ok2 "apply-declares-valid" "--apply refuses a zero-entry remainder whose preamble carries a BL- id, and writes nothing"
 else bad2 "apply-declares-valid" "--apply exited $KA_RC on a remainder that cannot be declared; ledger $(cmp -s "$LK" "$LK.orig" && echo unchanged || echo CHANGED)"; fi
@@ -714,7 +778,7 @@ LS="$GS/backlog.md"
   printf '## BL-803 — prose before\n\nbody\n\n**LANDED (v0.370.0, verified %s).** Done.\n\nverify: manual\n\n' "$GSHA"
   printf '## BL-805 — dot inside the parens\n\nbody\n\n<br>**LANDED (v0.607.0, verified %s.)**\n\nverify: manual\n\n' "$GSHA"
   printf '## BL-804 — live\n\nbody\n\nverify: manual\n'; } > "$LS"
-SA="$(bash "$RT" "$LS" --check 2>&1)"
+SA="$(rt_in "$RT" "$LS" --check 2>&1)"
 n_res="$(grep -c "\[sha $GSHA resolves\]" <<<"$SA")" || n_res=0
 if [ "$n_res" -eq 4 ] &&! grep -q "DOES NOT RESOLVE" <<<"$SA"; then
   ok2 "sha-anchored" "all four LANDED lines resolve their OWN sha, including the one whose later prose says \"verified against\" and the archive form ending \"<sha>.)**\""
@@ -737,7 +801,7 @@ p_ok() { # p_ok <output> — 0 when the host keeps its receipt, the list entry p
   [ "$(grep -c '	' <<<"$1")" -eq 2 ] || { echo "$(grep -c '	' <<<"$1") rows, want 2"; return 1; }
   return 0
 }
-PO="$(bash "$RV" "$LP" 2>&1)"
+PO="$(rv_in "$RV" "$LP" 2>&1)"
 if pm="$(p_ok "$PO")"; then ok2 "phantom-bullet" "a '- **BL-632 is LANDED**' lead-in inside BL-150 opens no entry; BL-150 keeps its receipt and the list entry BL-151 parses (2 rows)"
 else bad2 "phantom-bullet" "$pm"; fi
 
@@ -756,10 +820,10 @@ sl_entry() { printf '## %s — closed\n\nbody\n\n**LANDED (v%s).** Done.\n\nveri
 { printf '# Probe\n\n'; sl_entry BL-811 0.990.0; sl_entry BL-815 0.991.0
   printf '## BL-814 — live\n\nbody\n\nverify: manual\n'; } > "$GSL/ref.md"
 arm_shaless() { local o rcv
-  o="$(bash "$RT" "$GSL/acc.md" --check 2>&1)"; rcv=$?
+  o="$(rt_in "$RT" "$GSL/acc.md" --check 2>&1)"; rcv=$?
   [ "$rcv" -eq 0 ] && grep -qF '[sha-less, v0.990.0]' <<<"$o" && grep -qF '[sha-less, v0.995.0]' <<<"$o" \
     && grep -qF 'BL-813  PENDING, not moved: v0.1000.0 is not yet released (VERSION 0.995.0)' <<<"$o" || return 1
-  o="$(bash "$RT" "$GSL/ref.md" --check 2>&1)"; rcv=$?
+  o="$(rt_in "$RT" "$GSL/ref.md" --check 2>&1)"; rcv=$?
   [ "$rcv" -eq 2 ] && grep -qF 'BL-815  sha-less LANDED v0.991.0 names no release in CHANGELOG.md or VERSION.' <<<"$o"; }
 if arm_shaless; then ok2 "shaless-bound" "sha-less LANDED lines: a CHANGELOG heading and VERSION accept, v0.1000.0 is PENDING, v0.991.0 is refused"
 else bad2 "shaless-bound" "the rotator did not give the three sha-less outcomes"; fi
@@ -778,16 +842,16 @@ arm_pending() { local d o rcv; d="$(mktemp -d "$WORK/pd.XXXXXX")"
   printf '# Changelog\n\n## [0.995.0] - 2026-11-02\n' > "$d/CHANGELOG.md"
   printf '# Archive\n\n## BL-800 — old\n\nbody\n' > "$d/a/backlog.archive.md"
   { printf '# Probe\n\n'; sl_entry BL-821 9.9.9; pd_live; } > "$d/a/backlog.md"
-  o="$(bash "$RT" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
+  o="$(rt_in "$RT" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
   [ "$rcv" -eq 0 ] && grep -qF 'BL-821  PENDING, not moved: v9.9.9 is not yet released (VERSION 0.995.0)' <<<"$o" \
     && grep -q '^## BL-821 ' "$d/a/backlog.md" && [ "$(pd_n "$d/a/backlog.archive.md")" = 1 ] || return 1
   { printf '# Probe\n\n'; sl_entry BL-821 9.9.9; sl_entry BL-822 0.995.0; pd_live; } > "$d/c/backlog.md"
-  o="$(bash "$RT" "$d/c/backlog.md" --check --apply 2>&1)"; rcv=$?
+  o="$(rt_in "$RT" "$d/c/backlog.md" --check --apply 2>&1)"; rcv=$?
   [ "$rcv" -eq 0 ] && grep -q '^## BL-821 ' "$d/c/backlog.md" && ! grep -q '^## BL-822 ' "$d/c/backlog.md" \
     && grep -q '^## BL-822 ' "$d/c/backlog.archive.md" && [ "$(pd_n "$d/c/backlog.archive.md")" = 1 ] || return 1
   printf '9.9.9\n' > "$d/VERSION"
   printf '# Changelog\n\n## [9.9.9] - 2026-11-03\n\n## [0.995.0] - 2026-11-02\n' > "$d/CHANGELOG.md"
-  o="$(bash "$RT" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
+  o="$(rt_in "$RT" "$d/a/backlog.md" --check --apply 2>&1)"; rcv=$?
   [ "$rcv" -eq 0 ] && ! grep -q '^## BL-821 ' "$d/a/backlog.md" && grep -q '^## BL-821 ' "$d/a/backlog.archive.md" \
     && [ "$(pd_n "$d/a/backlog.archive.md")" = 2 ]; }
 if arm_pending; then ok2 "pending-kept" "a v9.9.9 sha-less line is kept and reported PENDING under --check --apply; beside it a VERSION line moves alone; once VERSION and a heading reach v9.9.9 it moves"

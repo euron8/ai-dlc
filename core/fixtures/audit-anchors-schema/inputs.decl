@@ -5,3 +5,6 @@
 core/schemas/audit-anchors.json
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh

@@ -66,6 +66,7 @@
 #
 # Compatible with bash 3.2+ and Python 3 (standard on macOS).
 
+vrc_main() {
 set -u
 
 REQUESTS=""
@@ -160,7 +161,7 @@ fi
 
 # Resolve this script's directory so the sibling grammar is found in BOTH layouts
 # (core/scripts/ in the distribution, scripts/ai-dlc/ in a consumer).
-SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANCHOR="$SELF_DIR/validate-locked-anchor.sh"
 if [ ! -x "$ANCHOR" ] && [ ! -f "$ANCHOR" ]; then
     echo "ERROR: validate-locked-anchor.sh not found beside this script at $ANCHOR." >&2
@@ -482,3 +483,6 @@ if uncovered:
 print("PASS: every identifier the operator named is covered or dispositioned.")
 sys.exit(0)
 PYEOF
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vrc_main "$@"

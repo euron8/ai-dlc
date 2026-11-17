@@ -7,6 +7,7 @@
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/layout.sh
+core/fixtures/lib/mutant.sh
 # Shard a runs units rec and wr. wr drives the writer (reconcile/derivation-differential.sh, which lifts functions out of apply.sh and preclassify.sh beside itself; the reconcile files declared are those the sandbox trace read). It neither runs the living sweep (no sprint-status.sh) nor copies the reconcile directory (no receipt).
 !core/skills/ai-dlc-update/reconcile/derivation-differential.sh
 core/skills/ai-dlc-update/reconcile/apply.sh

@@ -11,3 +11,6 @@
 # Sourced first by run.sh; non-discriminating (the sandbox env is already scrubbed), declared because it is read.
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh

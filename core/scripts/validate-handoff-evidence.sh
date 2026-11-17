@@ -821,12 +821,20 @@ dar_strip() { LC_ALL=C awk "$DAR_STRIP_AWK"; }
 dar_span() {
   case "$1" in *'`'*) printf '`` %s ``' "$1" ;; *) printf '`%s`' "$1" ;; esac
 }
+# he_ro_label <record-only-diff.sh> <label>: stdout and exit status of `bash <record-only-diff.sh> label <label>` on
+# stdin, with no bash start. The file is sourced in a subshell with the label arguments: a copy ending in its source
+# guard defines ro_main and returns, and ro_main answers; a copy without the guard runs its own label branch, which
+# exits. An absent file answers 127, as bash does.
+he_ro_label() {
+  [ -e "$1" ] || return 127
+  ( . "$1" label "$2" && ro_main label "$2" )
+}
 # render_dar: sets DAR_RENDER (the block, no trailing newline) and DAR_NCOUNT (lines carrying a
 # count) for the story in $TEXT (stripped) at $FROZEN. In the current shell, never `$( )`.
 render_dar() {
   local caps p hdr rl cmd cnt fcv fcp ln
   caps="$(list_captures)"
-  fcv="$(bash "$HE_SELF/record-only-diff.sh" label 'Full-collection run:' <<<"$TEXT" 2>/dev/null)" || fcv=""
+  fcv="$(he_ro_label "$HE_SELF/record-only-diff.sh" 'Full-collection run:' <<<"$TEXT" 2>/dev/null)" || fcv=""
   fcp=""
   [ -z "$fcv" ] || fcp="$(cap_tokens 0 <<<"$fcv" | cap_resolve | awk -F'\t' '$3 != "" {print $3}')"
   DAR_RENDER="$DAR_OPEN"; DAR_NCOUNT=0; DAR_CCMDS=""

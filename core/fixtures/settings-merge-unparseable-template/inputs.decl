@@ -5,3 +5,4 @@ VERSION
 !core/skills/ai-dlc-update/reconcile/settings-merge.sh
 templates/settings.json.template
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh

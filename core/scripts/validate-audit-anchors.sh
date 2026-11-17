@@ -68,6 +68,7 @@
 # Compatible with bash 3.2+ and Python 3 stdlib (no PyYAML — hence JSON, and a line parser for
 # the flat YAML entry list).
 
+vaa_main() {
 set -uo pipefail
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -593,3 +594,7 @@ print(f"validate-audit-anchors: {mode} PASS — {len(entries)} "
       f"entr{'y' if len(entries) == 1 else 'ies'} validated in {file_path}")
 sys.exit(0)
 PY
+}
+# Loadable: sourcing defines vaa_main and runs nothing; run as a program, it runs vaa_main.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vaa_main "$@"

@@ -1,0 +1,5 @@
+# layer-extends-grain's starts of core/scripts/validate-layer-entries.sh (BL-879 grammar). Its one lint drive is in
+# process: run.sh sources the validator once and calls vle_main in a subshell. One cli cell for its one CLI outcome
+# (exit 0 on the seeded consumer), started as FXCELL=cli-pass bash "$LINTER" and compared byte for byte with an
+# in-process call on the same input.
+cli core/scripts/validate-layer-entries.sh cli-pass

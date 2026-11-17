@@ -10,3 +10,4 @@ mktemp
 rm
 sed
 tr
+cat

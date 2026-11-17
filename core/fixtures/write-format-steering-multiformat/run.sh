@@ -60,6 +60,29 @@ mkdir -p "$OUTDIR" || { echo "write-format-steering-multiformat: FIXTURE ERROR �
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The tree's validator is loaded ONCE (inproc_load: its column-0 guard returns after defining
+# vwfs_main), so every pass is counted under its path. Each world's own copy is driven by inproc_run, which sources
+# THAT copy in a subshell made to look like a fresh `bash <copy>` and calls vwfs_main there: BASH_SOURCE inside it is
+# the copy, so the world's layout is the one resolved, and its `exit` ends that subshell only. It runs as a program
+# only in its cli cells (cells.decl, at the end).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a validator with neither its `vwfs_main() {` line nor the column-0 source
+# guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE BROKEN in
+# the distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+grep -q '^vwfs_main() {$' "$VALIDATOR"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  10) echo "  FAIL  $VALIDATOR defines \`vwfs_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vwfs_main in this shell"; echo "write-format-steering-multiformat: 1 FAILED"; exit 1 ;;
+  *) echo "  FAIL  $VALIDATOR carries the column-0 source guard but no \`vwfs_main() {\` line -- a respelled subject this fixture cannot drive"; echo "write-format-steering-multiformat: 1 FAILED"; exit 1 ;;
+esac
+inproc_load "$VALIDATOR" || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined nothing" >&2; exit 2; }
 
 echo "write-format-steering-multiformat:"
 
@@ -77,7 +100,7 @@ drive() {   # <tag> <world-dir>
     printf '99\n' > "$OUTDIR/$tag.rc"
     return 0
   fi
-  AI_DLC_PROJECT_ROOT="$w" bash "$script" --report > "$OUTDIR/$tag.txt" 2>&1
+  AI_DLC_PROJECT_ROOT="$w" inproc_run "$script" vwfs_main --report > "$OUTDIR/$tag.txt" 2>&1
   printf '%s\n' "$?" > "$OUTDIR/$tag.rc"
 }
 rc_of()  { cat "$OUTDIR/$1.rc"; }
@@ -293,6 +316,26 @@ else
   bad "MUTANT 6: rc=$M6_RC anchor=[${M6_READ:-<absent>}] — a correctly-installed consumer is being reported, so MUTANT 5's failure was not about the broken pointer"
 fi
 
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome --------------------
+# Each is a world's own copy run with --report, compared with the in-process call on the same world, stdout, stderr
+# and exit separately, byte for byte, and asserts its own exit and a string it must say, so two runs that both
+# printed nothing cannot read as equivalent. Outcomes: exit 0 (the base world) and exit 1 (MUTANT 3's duplicate).
+eq_cell() { # eq_cell <cell-id> <want rc> <must-say> <world-dir>
+  local id="$1" want="$2" say="$3" w="$4" s="$4/core/scripts/validate-write-format-steering.sh"
+  AI_DLC_PROJECT_ROOT="$w" inproc_run "$s" vwfs_main --report > "$OUTDIR/$id.ip.out" 2> "$OUTDIR/$id.ip.err"; echo "$?" > "$OUTDIR/$id.ip.rc"
+  AI_DLC_PROJECT_ROOT="$w" FXCELL="$id" bash "$s" --report > "$OUTDIR/$id.cl.out" 2> "$OUTDIR/$id.cl.err"; echo "$?" > "$OUTDIR/$id.cl.rc"
+  if cmp -s "$OUTDIR/$id.ip.out" "$OUTDIR/$id.cl.out" && cmp -s "$OUTDIR/$id.ip.err" "$OUTDIR/$id.cl.err" \
+     && cmp -s "$OUTDIR/$id.ip.rc" "$OUTDIR/$id.cl.rc" && [ "$(< "$OUTDIR/$id.cl.rc")" = "$want" ] \
+     && grep -qF -- "$say" "$OUTDIR/$id.cl.out" "$OUTDIR/$id.cl.err"; then
+    ok "$id: the program answers exit $want exactly as the in-process call does (stdout, stderr, exit)"
+  else
+    bad "$id: in-process rc=$(< "$OUTDIR/$id.ip.rc") / program rc=$(< "$OUTDIR/$id.cl.rc") want $want, saying \"$say\""
+    sed -n '1,3s/^/          | /p' "$OUTDIR/$id.ip.out" "$OUTDIR/$id.cl.out" "$OUTDIR/$id.ip.err" "$OUTDIR/$id.cl.err"
+  fi
+}
+eq_cell cli-pass 0 "PASS —" "$W_BASE"
+eq_cell cli-fail 1 "same name and declared_in repeated" "$W_M3"
+
 echo
 # Liveness: a harness that silently stopped running assertions reads exactly like a clean pass.
-report_end write-format-steering-multiformat 14
+report_end write-format-steering-multiformat 16

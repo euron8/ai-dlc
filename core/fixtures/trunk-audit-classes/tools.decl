@@ -15,3 +15,5 @@ rm
 sed
 sort
 tr
+cmp
+cp

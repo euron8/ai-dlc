@@ -44,6 +44,24 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# The subject is driven IN PROCESS (BL-878): sourced once, `sm_main` called in a subshell per drive, each drive one
+# fx_inproc pass. This fixture is .dist-only, so the subject is always this tree's wrapped one; a subject missing
+# either half of the wrap is a broken fixture world, never a SKIP.
+grep -q '^sm_main() {$' "$MERGE"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $MERGE (grep exit $_gx)" >&2; exit 2; }
+[ "$_gx" -eq 0 ] || { echo "FIXTURE BROKEN: $MERGE carries no \`sm_main() {\` line, so it cannot be driven in process" >&2; exit 2; }
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$MERGE"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $MERGE (grep exit $_gx)" >&2; exit 2; }
+[ "$_gx" -eq 0 ] || { echo "FIXTURE BROKEN: $MERGE carries no column-0 source guard; sourcing it would run sm_main in this shell" >&2; exit 2; }
+. "$MERGE" || { echo "FIXTURE BROKEN: sourcing $MERGE failed" >&2; exit 2; }
+declare -F sm_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $MERGE defined no sm_main" >&2; exit 2; }
+sm_run() { ( set +o pipefail
+  fx_inproc "$MERGE"
+  sm_main "$@" ); }
 
 echo "settings-merge-documented-form:"
 
@@ -101,7 +119,7 @@ fi
 # The point of the whole fixture: a form that parses is not a form that works.
 if [ -n "$TMPL" ]; then
   printf '{"permissions":{"allow":[]}}\n' > "$WORK/settings.json"
-  out="$(bash "$MERGE" --consumer "$WORK/settings.json" --template "$TMPL" --check 2>&1)"
+  out="$(sm_run --consumer "$WORK/settings.json" --template "$TMPL" --check 2>&1)"
   rc=$?
   if [ "$rc" -eq 0 ] && grep -q 'model_window_needed=' <<<"$out"; then
     ok "the documented form runs and reports model_window_needed (--check writes nothing)"
@@ -119,7 +137,7 @@ fi
 
 # --- Assertion 4: the historical bare form must FAIL ---------------
 # If the bare form still exited 0, assertion 1 would be guarding nothing.
-bash "$MERGE" --check >/dev/null 2>&1
+sm_run --check >/dev/null 2>&1
 if [ "$?" -ne 0 ]; then
   ok "the bare '--check' form exits nonzero (assertion 1 guards a real failure)"
 else
@@ -141,21 +159,21 @@ if [ -n "$TMPL" ]; then
 
   # World 1: consumer declares 12000, template declares 8000 -> 12000 survives.
   printf '{"bashOutputMaxChars":12000,"permissions":{"allow":[]}}\n' > "$WORK/w1.json"
-  bash "$MERGE" --consumer "$WORK/w1.json" --template "$T_CAP" >/dev/null 2>&1
+  sm_run --consumer "$WORK/w1.json" --template "$T_CAP" >/dev/null 2>&1
   v="$(jq -r '.bashOutputMaxChars' "$WORK/w1.json")"
   if [ "$v" = "12000" ]; then ok "bashOutputMaxChars: consumer's 12000 survives a template declaring 8000"
   else bad "bashOutputMaxChars: consumer's 12000 was replaced (read $v) — the merge must never overwrite a consumer scalar"; fi
 
   # World 2: consumer silent, template declares 8000 -> 8000 lands.
   printf '{"permissions":{"allow":[]}}\n' > "$WORK/w2.json"
-  bash "$MERGE" --consumer "$WORK/w2.json" --template "$T_CAP" >/dev/null 2>&1
+  sm_run --consumer "$WORK/w2.json" --template "$T_CAP" >/dev/null 2>&1
   v="$(jq -r '.bashOutputMaxChars' "$WORK/w2.json")"
   if [ "$v" = "8000" ]; then ok "bashOutputMaxChars: template's 8000 lands on a consumer that declares none"
   else bad "bashOutputMaxChars: template value did not reach the consumer (read $v) — an installed tree stays uncapped"; fi
 
   # World 3: neither side declares it -> key absent, not null and not 0.
   printf '{"permissions":{"allow":[]}}\n' > "$WORK/w3.json"
-  bash "$MERGE" --consumer "$WORK/w3.json" --template "$T_NOCAP" >/dev/null 2>&1
+  sm_run --consumer "$WORK/w3.json" --template "$T_NOCAP" >/dev/null 2>&1
   v="$(jq -r 'has("bashOutputMaxChars")' "$WORK/w3.json")"
   if [ "$v" = "false" ]; then ok "bashOutputMaxChars: absent on both sides stays absent"
   else bad "bashOutputMaxChars: a key neither side declared appeared (has=$v) — the guard is gone"; fi
@@ -192,6 +210,49 @@ else
       || bad "6 a correct re-spelling of the template read '$(tpl_tiers "$TPL_RESPELL")', expected '$TPL_WANT'"
   fi
 fi
+
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome this fixture drives -----
+# The outcomes: exit 0 with the --check report on stdout, exit 1 with the usage line on stderr, and exit 0 with the
+# merge written and its confirmation on stdout. One `FXCELL=<id> bash "$MERGE"` start per outcome, each compared with
+# the in-process call on its own copy of the same world: stdout, stderr and exit separately, byte for byte, and for the
+# merge the written file too. Each cell also asserts its own outcome, and the cells must differ.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE BROKEN: cannot create $EQ" >&2; exit 2; }
+eqv() { # <cell-id> <seed-json or -> <args...>; the literal CONS in args names the cell's own consumer copy
+  local id="$1" seed="$2" a side; shift 2
+  for side in ip cl; do
+    [ "$seed" = - ] || printf '%s\n' "$seed" > "$EQ/$id.$side.json"
+    set --; for a in "${EQARGS[@]}"; do [ "$a" = CONS ] && a="$EQ/$id.$side.json"; set -- "$@" "$a"; done
+    if [ "$side" = ip ]; then sm_run "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    else FXCELL="$id" bash "$MERGE" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"; fi
+  done
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+    && { [ "$seed" = - ] || cmp -s "$EQ/$id.ip.json" "$EQ/$id.cl.json"; }
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -c 300 "$EQ/$1.ip.out")" "$(head -c 300 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -c 300 "$EQ/$1.cl.out")" "$(head -c 300 "$EQ/$1.cl.err")"; }
+if [ -n "$TMPL" ]; then
+  EQARGS=(--consumer CONS --template "$TMPL" --check)
+  if eqv cli-check '{"permissions":{"allow":[]}}' && [ "$(cat "$EQ/cli-check.cl.rc")" = 0 ] && grep -q '^model_window_needed=' "$EQ/cli-check.cl.out" \
+     && [ ! -s "$EQ/cli-check.cl.err" ]; then
+    ok "cli-check: the program's --check report is exactly the in-process call's (stdout, stderr, exit 0)"
+  else bad "cli-check: the program and the in-process call differ, or the outcome is not exit 0 with the report ($(eq_twin cli-check))"; fi
+  EQARGS=(--consumer CONS --template "$T_CAP")
+  if eqv cli-merge '{"permissions":{"allow":[]}}' && [ "$(cat "$EQ/cli-merge.cl.rc")" = 0 ] && grep -q '^settings.json reconciled' "$EQ/cli-merge.cl.out" \
+     && [ "$(jq -r '.bashOutputMaxChars' "$EQ/cli-merge.cl.json")" = 8000 ]; then
+    ok "cli-merge: the program writes and confirms the merge exactly as the in-process call does (stdout, stderr, exit 0, merged file)"
+  else bad "cli-merge: the program and the in-process call differ, or the outcome is not exit 0 with the merge written ($(eq_twin cli-merge))"; fi
+else
+  bad "FIXTURE STALE: templates/settings.json.template not found in either layout, so the cli-check and cli-merge cells cannot run"
+fi
+EQARGS=(--check)
+if eqv cli-usage - && [ "$(cat "$EQ/cli-usage.cl.rc")" = 1 ] && [ ! -s "$EQ/cli-usage.cl.out" ] \
+   && grep -q '^usage: settings-merge.sh --consumer' "$EQ/cli-usage.cl.err"; then
+  ok "cli-usage: the program refuses the bare form exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not the exit-1 usage refusal ($(eq_twin cli-usage))"; fi
+if [ -s "$EQ/cli-check.cl.out" ] && [ -s "$EQ/cli-merge.cl.out" ] && ! cmp -s "$EQ/cli-check.cl.out" "$EQ/cli-merge.cl.out" \
+   && ! cmp -s "$EQ/cli-check.cl.rc" "$EQ/cli-usage.cl.rc"; then
+  ok "cli cells discriminate: the report, the merge confirmation and the usage refusal give different output"
+else bad "cli cells do not discriminate: two outcomes read the same, so an equivalence over them proves nothing"; fi
 
 echo
 report_end settings-merge-documented-form

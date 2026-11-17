@@ -1,0 +1,10 @@
+# retired-layer-token's starts of core/skills/ai-dlc-update/reconcile/retired-layer-token.sh (BL-879 grammar). Every
+# other drive is in process: run.sh loads the subject once and calls rlt_main through inproc_run in a subshell. One cli
+# cell per distinct CLI outcome (exit 0 with rows, exit 2 with the refusal), each compared byte for byte with the
+# in-process call on the same input. The `env -i` run is no start the counter sees (a bare environment drops BASH_ENV).
+cli core/skills/ai-dlc-update/reconcile/retired-layer-token.sh cli-rows
+cli core/skills/ai-dlc-update/reconcile/retired-layer-token.sh cli-refuse
+e2e core/skills/ai-dlc-update/reconcile/retired-layer-token.sh e2e-forced-map why=the run is under ulimit -f, which binds every write of its process, and an in-process pass's fx_inproc append under the limit is lost
+e2e core/skills/ai-dlc-update/reconcile/emit-report.sh e2e-emit-ok why=the property is the driver reading the detector's exit code as a separate program; the reporting half
+e2e core/skills/ai-dlc-update/reconcile/emit-report.sh e2e-emit-bad why=the property is the driver reading the detector's exit code as a separate program; the refusing half
+nested core/skills/ai-dlc-update/reconcile/emit-report.sh core/skills/ai-dlc-update/reconcile/retired-layer-token.sh why=the driver runs the detector once per report

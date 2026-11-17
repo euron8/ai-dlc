@@ -171,6 +171,23 @@ MANIFEST="$(pick "$HERE/../../skills/ai-dlc/core-manifest.md" \
 [ -n "$MANIFEST" ] || { echo "FIXTURE ERROR: cannot locate core-manifest.md" >&2; exit 2; }
 READER="$(cd "$(dirname "$READER")" && pwd)/$(basename "$READER")"
 DIFFER="$(cd "$(dirname "$DIFFER")" && pwd)/$(basename "$DIFFER")"
+# THE WHOLE-FIXTURE ANSWER FOR A PRE-WRAP WRITER, taken before any assertion, in the shard that runs unit wr: a
+# writer carrying neither the `dd_main() {` line nor the column-0 source guard predates the in-process wrap, so
+# the fixture SKIPs through fx_skip_exit (exit 0 installed, FIXTURE BROKEN in the distribution), never a PASS.
+# One half alone, and the unit's own reads, are judged at unit wr below. (Spelled through _wgate, never as an
+# `if sg` line: those lines are the unit guards the coverage join derives.)
+_wgate=0; sg wr && _wgate=1
+if [ "$_wgate" = 1 ]; then
+  _wd="$(dirname "$DIFFER")/derivation-differential.sh"
+  grep -q '^dd_main() {$' "$_wd"; _wx=$?
+  [ "$_wx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_wd (grep exit $_wx) -- an unreadable writer is not one that predates the wrap" >&2; exit 2; }
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$_wd"; _wy=$?
+  [ "$_wy" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_wd (grep exit $_wy) -- an unreadable writer is not one that predates the wrap" >&2; exit 2; }
+  if [ "$_wx" -ne 0 ] && [ "$_wy" -ne 0 ]; then
+    echo "SKIP: $NAME -- the writer predates the in-process wrap. Nothing was asserted."
+    fx_skip_exit "$HERE"
+  fi
+fi
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -1099,6 +1116,37 @@ fi  # ---- end of unit lw
 
 if sg wr; then
 printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/derivation-differential.sh\n'
+# IN PROCESS (BL-878). The writer is SOURCED once, here inside the unit (so the shards that do not run it never read
+# its shape), and every drive calls dd_main in a subshell (`$( )` or `( )`), so the writer's own `exit`, `set -u`,
+# `set -f` and its EXIT trap stay there. The source is one fx_inproc pass, and so is every dd_main call (the inproc:
+# row). The writer reads no variable it does not assign except TMPDIR and what vd_join sets, and calls no function this
+# fixture defines; the cli cell holds the in-process answer byte-identical to the program's. DDS spells the writer
+# with a literal tail, so the in-process judge (P2) resolves the source to it: lib/inproc.sh is not used, because its
+# `. "$1"` is an operand P2 cannot resolve, which it scores as a drive in a fixture declaring an unguarded subject.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped writer, and
+# sourcing a pre-wrap writer would run its whole body in this shell. So the shape is checked first, on its two halves:
+# neither the `dd_main() {` line nor the column-0 source guard is a writer that predates the wrap, which prints SKIP for
+# this unit and asserts nothing in it -- never an ok. Exactly one half is a respelled writer this fixture can no longer
+# drive, which FAILS.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+DDS="$(dirname "$DIFFER")/derivation-differential.sh"
+dd_def=0; dd_guard=0
+grep -q '^dd_main() {$' "$DDS"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $DDS (grep exit $_gx) -- an unreadable writer is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || dd_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$DDS"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $DDS (grep exit $_gx) -- an unreadable writer is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || dd_guard=1
+if [ "$dd_def$dd_guard" = 10 ]; then echo "   FAIL  $DDS defines \`dd_main() {\` but carries no column-0 source guard -- a respelled writer; sourcing it would run dd_main in this shell" >&2; echo "$NAME: FAIL (1)" >&2; exit 1; fi
+if [ "$dd_def$dd_guard" = 01 ]; then echo "   FAIL  $DDS carries the column-0 source guard but no \`dd_main() {\` line -- a respelled writer this fixture cannot drive" >&2; echo "$NAME: FAIL (1)" >&2; exit 1; fi
+if [ "$dd_def$dd_guard" = 00 ]; then
+  echo "FIXTURE BROKEN: unit wr reached a pre-wrap writer, which the whole-fixture gate above answers before any assertion" >&2; exit 2
+else
+fx_inproc "$DDS"
+. "$DDS" || { echo "FIXTURE BROKEN: sourcing $DDS failed" >&2; exit 2; }
+declare -F dd_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $DDS defined no dd_main" >&2; exit 2; }
 # ---- W: the WRITER over the real differential, then the reader over ITS record --------------------
 DIST="$WORK/dist"; mkdir -p "$DIST/core/scripts"; g "$DIST" init -q
 printf 'qqprev\n' > "$DIST/core/scripts/toy.sh"; g "$DIST" add -A; g "$DIST" commit -qm prev
@@ -1125,10 +1173,23 @@ mkdir -p "$C/_bmad-output/planning-artifacts/s1/archive"
 K_WHIST="_bmad-output/planning-artifacts/s1/archive/old.md:4"
 g "$C" add -A; g "$C" commit -qm "pull to 1.0.0"
 g "$DIST" show "${THEIRS}:core/scripts/toy.sh" > "$C/scripts/ai-dlc/toy.sh"
-dd() { OUTD="$(cd / && TMPDIR="$WORK" bash "$DIFFER" "$DIST" "$BASE" "$C" "$THEIRS" "$@" 2>&1)"; RCD=$?; }
+dd() { OUTD="$(cd / && export TMPDIR="$WORK" && fx_inproc "$DDS" && dd_main "$DIST" "$BASE" "$C" "$THEIRS" "$@" 2>&1)"; RCD=$?; }
 OWED="$WORK/owed.tsv"
-dd; PRINTED_PLAIN="$OUTD"
+# THE cli CELL (cells.decl): W0's in-process run, stdout and stderr kept apart, is the in-process twin of the writer run
+# as a PROGRAM once, for the one CLI outcome this unit reaches (exit 1 naming the broken derivation), on the same input,
+# cwd and TMPDIR: stdout, stderr and exit compared separately, byte for byte, plus the outcome itself (and an empty
+# stderr, so OUTD -- stdout then stderr -- reads as dd's `2>&1` would), so two runs that printed nothing cannot agree.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+(cd / && export TMPDIR="$WORK" && fx_inproc "$DDS" && dd_main "$DIST" "$BASE" "$C" "$THEIRS") > "$EQ/ip.out" 2> "$EQ/ip.err"; RCD=$?; echo "$RCD" > "$EQ/ip.rc"
+OUTD="$(cat "$EQ/ip.out" "$EQ/ip.err")"; PRINTED_PLAIN="$OUTD"
 rc_is "W0 control: the differential finds the broken derivation -> exit 1" 1 "$RCD"
+(cd / && TMPDIR="$WORK" FXCELL=cli-broke bash "$DDS" "$DIST" "$BASE" "$C" "$THEIRS") > "$EQ/cl.out" 2> "$EQ/cl.err"; echo "$?" > "$EQ/cl.rc"
+if cmp -s "$EQ/ip.out" "$EQ/cl.out" && cmp -s "$EQ/ip.err" "$EQ/cl.err" && cmp -s "$EQ/ip.rc" "$EQ/cl.rc" && [ ! -s "$EQ/cl.err" ] \
+   && [ "$(cat "$EQ/cl.rc")" = 1 ] && grep -q "^NEWLY-FAILING${TAB}_bmad-output/story.md:4${TAB}" "$EQ/cl.out"; then
+  ok "cli-broke: the writer as a program names the broken derivation and exits 1 exactly as the in-process call does (stdout, stderr, exit)"
+else
+  bad "cli-broke: the program and the in-process call differ, or the outcome is not exit 1 naming the broken derivation (in-process rc=$(cat "$EQ/ip.rc") rows=$(grep -c . "$EQ/ip.out") / program rc=$(cat "$EQ/cl.rc") rows=$(grep -c . "$EQ/cl.out"))"
+fi
 rc_is "Wa without --record-owed NOTHING is written (no file named *owed* appears under the helper's TMPDIR)" 0 "$(find "$WORK" -maxdepth 1 -name '*owed*' | awk 'END { print NR + 0 }')"
 dd --record-owed "$OWED" --log-name reconcile-log-t1.md
 rc_is "Wb with --record-owed the exit is unchanged (1)" 1 "$RCD"
@@ -1158,6 +1219,7 @@ printf 'qqalpha\nqqgamma\n' > "$C/scripts/ai-dlc/toy.sh"
 rd "$C" "$OWED"
 rc_is "Wh once the tree reproduces the derivation again the writer's rows read closed -> exit 0" 0 "$RC"
 
+fi  # end of the wrapped-writer branch
 fi  # ---- end of unit wr
 
 # ---- B7: BL-706 -- the shipping apply.sh runs the differential on EVERY ordinary pull ------------------------

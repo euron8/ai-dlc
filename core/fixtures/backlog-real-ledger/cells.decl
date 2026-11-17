@@ -1,0 +1,18 @@
+# backlog-real-ledger's subject starts (BL-879 grammar). The ceiling and the classifier run in process (vbs_main,
+# brv_main, one fx_inproc pass each); their only separate-program starts are one cli cell per distinct CLI outcome,
+# each compared byte for byte with the in-process call by run.sh's eqv_s / eqv_v. The receipts validator starts its
+# own --score-one workers and R9's classifier and ceiling as programs, so each of its distinct states is ONE
+# FXCELL-tagged start (run.sh's run_r; the backlog-receipt-traced-removal shape, lead ruling (a), batch 256), and the
+# children are covered by the nested rows below. The ceiling's own classifier child (--marker-last) is covered by the
+# last nested row, under R9's ceiling start and under the two ceiling cli cells.
+cli scripts/validate-backlog-size.sh cli-size-ok
+cli scripts/validate-backlog-size.sh cli-size-over
+cli scripts/backlog-reverify.sh cli-rv-rows
+cli scripts/backlog-reverify.sh cli-rv-de
+e2e scripts/validate-backlog-receipts.sh j1p-zero why=the validator starts its own --score-one/--closed-one workers and R9's classifier and ceiling as programs, which an in-process call would leave untagged under run.sh (C1)
+e2e scripts/validate-backlog-receipts.sh j1p-anchor why=the validator starts its own --score-one/--closed-one workers and R9's classifier and ceiling as programs, which an in-process call would leave untagged under run.sh (C1)
+e2e scripts/validate-backlog-receipts.sh j1 why=the validator starts its own --score-one/--closed-one workers and R9's classifier and ceiling as programs, which an in-process call would leave untagged under run.sh (C1)
+nested scripts/validate-backlog-receipts.sh scripts/validate-backlog-receipts.sh why=worker re-starts of --score-one and --closed-one
+nested scripts/validate-backlog-receipts.sh scripts/backlog-reverify.sh why=R9's classifier start over the ledger
+nested scripts/validate-backlog-receipts.sh scripts/validate-backlog-size.sh why=R9's ceiling start over the ledger
+nested scripts/validate-backlog-size.sh scripts/backlog-reverify.sh why=the ceiling starts the classifier once per run for its marker-last answer

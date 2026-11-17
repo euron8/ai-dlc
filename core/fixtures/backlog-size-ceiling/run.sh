@@ -83,6 +83,8 @@ trap 'rm -rf "$TMP"' EXIT
 note() { printf '%s\n' "$*"; }
 # shellcheck source=/dev/null
 . "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 KC_OK=0; CC_OK=0
 
 # BL_K IS 7 AND ARBITRARY. What matters is that the seed writes exactly BL_K entries and the
@@ -112,9 +114,55 @@ seed() { # seed <dir> [<n-entries>]
 # The validator takes a whitespace-separated env list because some probes pin the ceiling.
 # The split is the point of the function, not an oversight.
 # shellcheck disable=SC2086
+# IN PROCESS (BL-878): the seed's copy is SOURCED in a subshell and vbs_main called there, so its `exit` and `cd` stay
+# inside it; the env words are exported in that subshell, as `env` put them in the started program's environment.
+# One fx_inproc pass per call (the inproc: row of invocations.decl).
 run_v() { # run_v <env-string-or-empty> <dir> [<extra-args>...]
   local e="$1" d="$2"; shift 2
-  ( cd "$d" && env $e bash scripts/validate-backlog-size.sh "$@" 2>&1 )
+  ( fx_inproc "$d/scripts/validate-backlog-size.sh"; cd "$d" && { [ -z "$e" ] || export $e; . scripts/validate-backlog-size.sh && vbs_main "$@"; } 2>&1 )
+}
+
+# THE CHILD SHIM (BL-878). backlog-rotate.sh and validate-backlog-size.sh start backlog-reverify.sh as a CHILD program
+# (`bash "$REPO_ROOT/scripts/backlog-reverify.sh" ...`). Called in process, that child would be an untagged start of a
+# declared subject whose logged parent is run.sh, which no nested row can cover (C1). So, while a parent runs in
+# process, `bash` is this function: it answers a start of backlog-reverify.sh by sourcing that copy in a subshell and
+# calling brv_main (one fx_inproc pass each), and passes every other `bash` through. A started child sees none of its
+# parent's shell: reverify DERIVES what lib.sh adds by a before/after namespace diff (backlog-reverify.sh, the
+# _rv_added lines) and refuses when lib.sh is already loaded, and it unsets that set inside each receipt. So the
+# subshell is first reset to what a fresh `bash` has -- options, traps, unexported functions and unexported variables
+# -- by the same reset scripts/validate-enforcement-map.sh's vem_entry applies to its caller (its fresh-bash name list).
+# In this fixture the shim also answers the fixture's OWN reverify drives (b15's rows, d00's --print-marker), which are
+# spelled `bash ...backlog-reverify.sh` below and so run in process through it. The cli cells start the programs with
+# `command bash`, which bypasses it.
+bl_fresh() {
+  set +e +o pipefail +x +v +a +f +C +E +T
+  trap - ERR DEBUG RETURN
+  shopt -u nullglob failglob nocaseglob nocasematch dotglob extglob expand_aliases
+  IFS=$' \t\n'
+  bl_ls="$(compgen -e; echo :v:; compgen -v; echo :f:; declare -F)"
+  bl_x=' ' bl_m=e bl_p=
+  for bl_n in $bl_ls; do
+    case "$bl_m:$bl_n" in
+      ?:\:v:) bl_m=v ;;
+      ?:\:f:) bl_m=f ;;
+      e:*) bl_x="$bl_x$bl_n " ;;
+      v:bl_ls|v:bl_x|v:bl_m|v:bl_n|v:bl_p|v:bl_s) : ;;
+      v:BASH|v:BASH_*|v:COMP_WORDBREAKS|v:DIRSTACK|v:EUID|v:FUNCNAME|v:GROUPS|v:HISTCMD|v:HOSTNAME) : ;;
+      v:HOSTTYPE|v:IFS|v:LINENO|v:MACHTYPE|v:OPTERR|v:OPTIND|v:OSTYPE|v:PATH|v:PIPESTATUS|v:PPID) : ;;
+      v:PS4|v:PWD|v:RANDOM|v:SECONDS|v:SHELL|v:SHELLOPTS|v:SHLVL|v:TERM|v:UID|v:_) : ;;
+      v:*) case "$bl_x" in *" $bl_n "*) : ;; *) while declare -p "$bl_n" > /dev/null 2>&1 && unset -v "$bl_n" 2>/dev/null; do :; done ;; esac ;;
+      f:*) [ "$bl_p" != -f ] || unset -f "$bl_n" ;;
+    esac
+    bl_p="$bl_n"
+  done
+  unset bl_ls bl_x bl_m bl_n bl_p
+}
+bash() {
+  case "${1:-}" in
+    */backlog-reverify.sh|backlog-reverify.sh)
+      ( bl_s="$1"; shift; fx_inproc "$bl_s"; bl_fresh; . "$bl_s" && brv_main "$@" ) ;;
+    *) command bash "$@" ;;
+  esac
 }
 
 # Reads the count back out of the arm's OWN ok line. Empty if the arm did not speak, which
@@ -408,6 +456,42 @@ ph_seed() { # ph_seed <dir> -- BL_K entries; the phantom bullet sits inside BL-0
   grep -qxF -- "$PH_BODY" "$1/docs/backlog.md" || { bad "p01 -- the phantom bullet was not seeded into $1"; return 1; }
 }
 ph_seed "$TMP/p01" && count_check "p01 a '- **BL-632 is LANDED**' lead-in inside an entry is not counted" "$TMP/p01" "" "$BL_K"
+
+# ===== CLI CELLS: one separate-program start per distinct outcome, equal to the in-process answer. ====
+# Each starts the seed's copy as `FXCELL=<id> command bash <copy>` (the shim above is bypassed) over a tree an arm
+# above already built and left untouched, and the in-process call over the same tree must agree on stdout, stderr
+# and exit status byte for byte; the exit status must be the one stated. A started validate-backlog-size.sh starts
+# its own backlog-reverify.sh child, covered by the nested row of cells.decl.
+EQ="$TMP/eq"; mkdir -p "$EQ"
+eqv_judge() { # eqv_judge <id> <want rc>
+  local id="$1" want="$2"
+  if [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" \
+     && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"; then ok "EQUIV $id: the in-process call and the program agree on stdout, stderr and exit $want"
+  else bad "EQUIV $id: in-process rc $(cat "$EQ/$id.ip.rc") vs program rc $(cat "$EQ/$id.cl.rc") (want $want), or their output differs"; fi
+}
+cli_size() { # cli_size <id> <want rc> <dir> <args...>
+  local id="$1" want="$2" d="$3"; shift 3
+  ( fx_inproc "$d/scripts/validate-backlog-size.sh"; cd "$d" && . scripts/validate-backlog-size.sh && vbs_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$d" && FXCELL="$id" command bash scripts/validate-backlog-size.sh "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  eqv_judge "$id" "$want"
+}
+cli_rv() { # cli_rv <id> <want rc> <dir> <args...> -- the in-process side is the shim's own pass
+  local id="$1" want="$2" d="$3"; shift 3
+  ( cd "$d" && bash scripts/backlog-reverify.sh "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$d" && FXCELL="$id" command bash scripts/backlog-reverify.sh "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  eqv_judge "$id" "$want"
+}
+cli_size cli-size-ok 0 "$TMP/control"
+cli_size cli-size-fail 1 "$TMP/b02"
+cli_size cli-size-env 2 "$TMP/b04"
+cli_rv cli-rv-rows 0 "$TMP/b15" docs/backlog.md
+cli_rv cli-rv-marker 0 "$TMP/control" --print-marker
+# Presence: each pair compared something, not two empty answers.
+grep -q '^OK: validate-backlog-size -- B1 7/104 ' "$EQ/cli-size-ok.cl.out" && grep -q '^FAIL: B1: ' "$EQ/cli-size-fail.cl.err" \
+  && grep -q 'is not a file' "$EQ/cli-size-env.cl.err" && [ "$(grep -c '	BL-' "$EQ/cli-rv-rows.cl.out")" = 12 ] \
+  && [ "$(cat "$EQ/cli-rv-marker.cl.out")" = "$EMPTY_MARKER" ] && [ -n "$EMPTY_MARKER" ] \
+  && ok "EQUIV presence: each cli cell printed its outcome's own line (OK, FAIL: B1, not a file, 12 rows, the marker)" \
+  || bad "EQUIV presence: a cli cell printed an empty or unexpected answer, so its equivalence compared nothing"
 
 
 report_end backlog-size-ceiling

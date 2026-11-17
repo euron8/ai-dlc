@@ -97,6 +97,7 @@
 #   2  bad arguments / (gate mode) an escalations path that exists but is not a regular
 #      file, or could not be read, or the in-force set was owed and could not be read (the
 #      sibling validate-suppression-lifetime.sh absent or refusing) -- `REFUSED:` on stderr
+ver_main() {
 set -u
 
 # A DIRECTORY IS NOT A CORPUS. `-d` answers whether the path EXISTS, never whether it holds
@@ -276,7 +277,7 @@ while [ $# -gt 0 ]; do
     --transcript-dir) TRANSCRIPT_DIR="${2:-}"; shift 2 ;;
     --any-authorized) ANY_AUTHORIZED=1; ESCALATIONS="${2:-}"; shift 2 ;;
 # MODE_DISPATCH_END
-    -h|--help)     sed -n '2,40p' "$0"; exit 0 ;;
+    -h|--help)     sed -n '2,40p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   [ $# -lt "$_argc" ] || { echo "REFUSED: $1 needs a value and none follows it; nothing was examined." >&2; exit 2; }
@@ -284,7 +285,7 @@ done
 
 # The sibling steering-budget validator owns THE genuine-operator predicate (--cite). Resolve it
 # relative to $0 so this works in the distribution (core/scripts/) and the consumer (scripts/).
-STEER_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-steering-budget.sh"
+STEER_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/validate-steering-budget.sh"
 
 if [ "$ANY_AUTHORIZED" -eq 1 ]; then
   [ -n "$ESCALATIONS" ] || { echo "FAIL: --any-authorized <pending.md> needs a path" >&2; exit 2; }
@@ -531,7 +532,7 @@ ER_INF_P=""; ER_INF_A=""
 if [ "$ANY_AUTHORIZED" -ne 1 ]; then
   ER_OWED="$(er_records 1)"
   if [ -n "$ER_OWED" ]; then
-    SUPP_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-suppression-lifetime.sh"
+    SUPP_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/validate-suppression-lifetime.sh"
     for ER_SIDE in P A; do
       case "$ER_OWED" in *"$ER_SIDE"*) ;; *) continue ;; esac
       ER_F="$ESCALATIONS"; [ "$ER_SIDE" = A ] && ER_F="$ESC_ARCH"
@@ -791,3 +792,7 @@ echo "OK: all ${CHECKED} S${SPRINT_NUM} RESOLVED/OVERRIDDEN/SUPPRESSED escalatio
 # absence is stated in words -- this line always carries a sentence.
 echo "      ${CITE_REPORT:-cite: the citation verifier named no corpus on this run.}"
 exit 0
+}
+# Loadable: sourcing defines ver_main and runs nothing; run as a program, it runs ver_main.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ver_main "$@"

@@ -40,6 +40,36 @@ ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 trap 'rm -rf "$ROOT"' EXIT
 # shellcheck source=/dev/null
 . "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The validator is loaded ONCE (core/fixtures/lib/inproc.sh `inproc_load`: its column-0 guard
+# returns after defining ver_main) and every drive below is `inproc_run "$v" ver_main ...`: a subshell that drops every
+# fixture function and unexported fixture variable, takes a fresh bash's shell options and calls ver_main, so its
+# `exit`, `set -u` and EXIT trap end with that subshell, and BASH_SOURCE inside it is the sourced file, so the siblings
+# (validate-steering-budget.sh, validate-suppression-lifetime.sh) resolve beside it as they do for the program. A
+# relocated copy (inf/inosib) is sourced inside its own subshell, so its location is still the property. The
+# program runs only in the cells of cells.decl: one cli cell per distinct CLI outcome (exit 0, 1, 2), each compared
+# byte for byte with the in-process call, and one e2e cell (sup/argv) whose bound is a `bash -x` trace.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a validator with neither its `ver_main() {` line nor the column-0 source
+# guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE BROKEN in the
+# distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+grep -q '^ver_main() {$' "$VALIDATOR"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$DIR" ;;
+  10) echo "  FAIL $VALIDATOR defines \`ver_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run ver_main in this shell"; echo "FAIL: 1 of 1 assertions wrong."; exit 1 ;;
+  *) echo "  FAIL $VALIDATOR carries the column-0 source guard but no \`ver_main() {\` line -- a respelled subject this fixture cannot drive"; echo "FAIL: 1 of 1 assertions wrong."; exit 1 ;;
+esac
+VALIDATOR="$(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
+. "$DIR/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$VALIDATOR" || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined nothing" >&2; exit 2; }
+declare -F ver_main >/dev/null || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined no ver_main" >&2; exit 2; }
+
 # okf/badf <format> [<arg>...]: one ok/bad line whose message is printf-formatted (the label columns).
 okf()  { local _m; printf -v _m "$@"; ok "$_m"; }
 badf() { local _m; printf -v _m "$@"; bad "$_m"; }
@@ -51,14 +81,14 @@ g() {
   local args=(--escalations "$ROOT/$f" --sprint "$sp")
   [ -n "$t" ] && args+=(--transcript "$ROOT/$t")
   local out got
-  out="$(bash "$v" "${args[@]}" 2>&1)"; got=$?
+  out="$(inproc_run "$v" ver_main "${args[@]}" 2>&1)"; got=$?
   if [ "$got" -eq "$want" ]; then okf '%-22s exit=%s  (%s)' "$f/${t:-none}" "$got" "$why"; return 0
   else badf '%-22s exit=%s want=%s  (%s)' "$f/${t:-none}" "$got" "$want" "$why"; printf '%s\n' "$out" | sed 's/^/       | /'; return 1; fi
 }
 says() {
   local f="$1" sp="$2" t="$3"; shift 3
   local out miss=""
-  out="$(bash "$VALIDATOR" --escalations "$ROOT/$f" --sprint "$sp" --transcript "$ROOT/$t" 2>&1)"
+  out="$(inproc_run "$VALIDATOR" ver_main --escalations "$ROOT/$f" --sprint "$sp" --transcript "$ROOT/$t" 2>&1)"
   local w; for w in "$@"; do grep -qF -- "$w" <<<"$out" || miss="$miss [$w]"; done
   if [ -z "$miss" ]; then okf '%-22s message names the cause' "$f(msg)"; return 0
   else badf '%-22s missing:%s' "$f(msg)" "$miss"; return 1; fi
@@ -88,7 +118,7 @@ gx() {
   [ -n "$t" ] && args+=(--transcript "$ROOT/$t")
   [ -n "$d" ] && args+=(--transcript-dir "$ROOT/$d")
   local out got
-  out="$(bash "$v" "${args[@]}" 2>&1)"; got=$?
+  out="$(inproc_run "$v" ver_main "${args[@]}" 2>&1)"; got=$?
   if [ "$got" -eq "$want" ]; then okf '%-26s exit=%s  (%s)' "$f" "$got" "$why"; return 0
   else badf '%-26s exit=%s want=%s  (%s)' "$f" "$got" "$want" "$why"; printf '%s\n' "$out" | sed 's/^/       | /'; return 1; fi
 }
@@ -114,7 +144,7 @@ gsx() {
   [ -n "$t" ] && args+=(--transcript "$ROOT/$t")
   [ -n "$d" ] && args+=(--transcript-dir "$ROOT/$d")
   local out got why=""
-  out="$(bash "$v" "${args[@]}" 2>&1)"; got=$?
+  out="$(inproc_run "$v" ver_main "${args[@]}" 2>&1)"; got=$?
   [ "$got" -eq "$want" ] || why="$why [exit=$got want=$want]"
   grep -qF -- "$yes" <<<"$out" || why="$why [missing: $yes]"
   grep -qF -- "$no"  <<<"$out" && why="$why [PRESENT but must not be: $no]"
@@ -180,7 +210,7 @@ g pending-space.md 50 real.jsonl 0 "(v) a space instead of T verifies unbounded 
 saysout() {  # $1 pending  $2 transcript  $3.. must-appear
   local f="$1" t="$2"; shift 2
   local out miss=""
-  out="$(bash "$VALIDATOR" --escalations "$ROOT/$f" --sprint 50 --transcript "$ROOT/$t" 2>/dev/null)"
+  out="$(inproc_run "$VALIDATOR" ver_main --escalations "$ROOT/$f" --sprint 50 --transcript "$ROOT/$t" 2>/dev/null)"
   local w; for w in "$@"; do grep -qF -- "$w" <<<"$out" || miss="$miss [$w]"; done
   if [ -z "$miss" ]; then okf '%-26s PASS line carries the count' "$f"; return 0
   else badf '%-26s missing:%s\n       | %s' "$f" "$miss" "$out"; return 1; fi
@@ -215,10 +245,10 @@ pass_corpus_pair() {  # $1 validator  -> 0 if the PASS output moves with the cor
   rm -f "$ROOT/corpus-live"/*.jsonl
   cp "$ROOT/corpus/spoke.jsonl" "$ROOT/corpus-live/spoke.jsonl"
   local md5a; md5a="$(md5 -q "$ROOT/pending-crosssession.md" 2>/dev/null || md5sum "$ROOT/pending-crosssession.md" | cut -d' ' -f1)"
-  a="$(bash "$v" --escalations "$ROOT/pending-crosssession.md" --sprint 50 --transcript-dir "$ROOT/corpus-live" 2>/dev/null)"; ra=$?
+  a="$(inproc_run "$v" ver_main --escalations "$ROOT/pending-crosssession.md" --sprint 50 --transcript-dir "$ROOT/corpus-live" 2>/dev/null)"; ra=$?
   cp "$ROOT/corpus/gate.jsonl" "$ROOT/corpus-live/gate.jsonl"
   local md5b; md5b="$(md5 -q "$ROOT/pending-crosssession.md" 2>/dev/null || md5sum "$ROOT/pending-crosssession.md" | cut -d' ' -f1)"
-  b="$(bash "$v" --escalations "$ROOT/pending-crosssession.md" --sprint 50 --transcript-dir "$ROOT/corpus-live" 2>/dev/null)"; rb=$?
+  b="$(inproc_run "$v" ver_main --escalations "$ROOT/pending-crosssession.md" --sprint 50 --transcript-dir "$ROOT/corpus-live" 2>/dev/null)"; rb=$?
   PCP_WHY=""
   # The two sides must differ in the INPUT before their outputs are compared, and the one input
   # this arm claims is unchanged must be provably unchanged -- otherwise a difference in the
@@ -242,7 +272,7 @@ fi
 # already had it. Counted, not grepped: presence is true under both.
 cite_lines() {  # $1 validator  -> how many corpus-report lines the FAIL output carries
   local v="$1" out n
-  out="$(bash "$v" --escalations "$ROOT/pending-crossfake.md" --sprint 50 --transcript-dir "$ROOT/corpus" 2>&1)"
+  out="$(inproc_run "$v" ver_main --escalations "$ROOT/pending-crossfake.md" --sprint 50 --transcript-dir "$ROOT/corpus" 2>&1)"
   n="$(grep -cF -- "cite: scanned" <<<"$out")" || n=0
   printf '%s' "$n"
 }
@@ -257,7 +287,7 @@ else badf '%-30s (y) the FAIL branch carries %s corpus-report line(s), not 1' "p
 # COUNT, because a reader rendering an empty default there prints a line that greps as nothing.
 vac_lines() {  # $1 validator  -> stdout line count of the nothing-in-scope PASS
   local v="$1" out
-  out="$(bash "$v" --escalations "$ROOT/pending-clean.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>/dev/null)"
+  out="$(inproc_run "$v" ver_main --escalations "$ROOT/pending-clean.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>/dev/null)"
   printf '%s' "$(printf '%s\n' "$out" | grep -c .)"
 }
 VL="$(vac_lines "$VALIDATOR")"
@@ -298,21 +328,21 @@ case "$EN_SRC_DIR" in */core/scripts) EN_IS_DIST=1 ;; esac
 EN_CELLS=""
 en_cells() {  # $1 validator -> sets EN_CELLS to six 0/1 characters, A..F
   local v="$1" o o2 e rc rc2 c=""
-  o="$(bash "$v" --escalations "$ROOT/pending-empty.md" --sprint 50 2>/dev/null)"; rc=$?
+  o="$(inproc_run "$v" ver_main --escalations "$ROOT/pending-empty.md" --sprint 50 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" --escalations "$ROOT/pending-blank.md" --sprint 50 2>/dev/null)"; rc=$?
+  o="$(inproc_run "$v" ver_main --escalations "$ROOT/pending-blank.md" --sprint 50 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" --escalations "$ROOT/pending-never-written.md" --sprint 50 2>/dev/null)"; rc=$?
+  o="$(inproc_run "$v" ver_main --escalations "$ROOT/pending-never-written.md" --sprint 50 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "no escalations file" <<<"$o" \
      && ! grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" --escalations "$ROOT/pending-heading.md" --sprint 50 2>/dev/null)"; rc=$?
-  o2="$(bash "$v" --escalations "$ROOT/pending-clean.md" --sprint 50 2>/dev/null)"; rc2=$?
+  o="$(inproc_run "$v" ver_main --escalations "$ROOT/pending-heading.md" --sprint 50 2>/dev/null)"; rc=$?
+  o2="$(inproc_run "$v" ver_main --escalations "$ROOT/pending-clean.md" --sprint 50 2>/dev/null)"; rc2=$?
   if [ "$rc" -eq 0 ] && [ "$rc2" -eq 0 ] && ! grep -qF "EXAMINED NOTHING" <<<"$o$o2" \
      && grep -qF "no S50 RESOLVED/OVERRIDDEN escalation requires" <<<"$o" \
      && grep -qF "no S50 RESOLVED/OVERRIDDEN escalation requires" <<<"$o2"; then c="${c}1"; else c="${c}0"; fi
-  e="$(bash "$v" --escalations "$ROOT/pending-missing.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>&1 >/dev/null)"; rc=$?
+  e="$(inproc_run "$v" ver_main --escalations "$ROOT/pending-missing.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>&1 >/dev/null)"; rc=$?
   if [ "$rc" -eq 1 ] && grep -qF "carries no 'Operator authorization:'" <<<"$e"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" --any-authorized "$ROOT/pending-empty.md" 2>/dev/null)"; rc=$?
+  o="$(inproc_run "$v" ver_main --any-authorized "$ROOT/pending-empty.md" 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 1 ] && grep -q '^NONE:' <<<"$o" && ! grep -qF "EXAMINED NOTHING" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
   EN_CELLS="$c"
 }
@@ -376,7 +406,7 @@ er_run() {  # <validator> <file> [stub-dir] -> ER_RC ER_O ER_E
   local p="$PATH"
   [ -n "${3:-}" ] && p="$3:$PATH"
   : > "$ER_STUB/LOG"
-  ER_O="$(PATH="$p" bash "$1" --escalations "$2" --sprint 50 --transcript "$ROOT/real.jsonl" 2>"$ER/err")"; ER_RC=$?
+  ER_O="$(PATH="$p" inproc_run "$1" ver_main --escalations "$2" --sprint 50 --transcript "$ROOT/real.jsonl" 2>"$ER/err")"; ER_RC=$?
   ER_E="$(cat "$ER/err")"
 }
 er_refused() { [ "$ER_RC" -eq 2 ] && [ -z "$ER_O" ] && grep -qE "^REFUSED: .*$1" <<<"$ER_E"; }
@@ -452,7 +482,7 @@ fi
 FL_CELLS=""
 fl_cells() {  # $1 directory holding the validator and its steering sibling -> FL_CELLS
   local d="$1" v="$1/$FL_BASE" s="$1/validate-steering-budget.sh" o rc c=""
-  fl_g() { o="$(bash "$v" --escalations "$ROOT/$1" --sprint 50 --transcript-dir "$ROOT/corpus-short" 2>&1)"; rc=$?; }
+  fl_g() { o="$(inproc_run "$v" ver_main --escalations "$ROOT/$1" --sprint 50 --transcript-dir "$ROOT/corpus-short" 2>&1)"; rc=$?; }
   fl_g pending-padded.md
   if [ "$rc" -eq 1 ] && grep -qF "(3 chars once whitespace is collapsed), too short" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
   fl_g pending-blankq.md
@@ -461,9 +491,9 @@ fl_cells() {  # $1 directory holding the validator and its steering sibling -> F
   if [ "$rc" -eq 0 ] && grep -qF "cite: scanned 2 transcript(s)" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
   fl_g pending-incident-short.md
   if [ "$rc" -eq 1 ] && grep -qF "(7 chars once whitespace is collapsed), too short" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" --any-authorized "$ROOT/pending-padded.md" 2>/dev/null)"; rc=$?
+  o="$(inproc_run "$v" ver_main --any-authorized "$ROOT/pending-padded.md" 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 1 ] && grep -q '^NONE: 1 RESOLVED/OVERRIDDEN' <<<"$o"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" --any-authorized "$ROOT/pending-incident-whole.md" 2>/dev/null)"; rc=$?
+  o="$(inproc_run "$v" ver_main --any-authorized "$ROOT/pending-incident-whole.md" 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 0 ] && grep -q '^AUTHORIZED: 1 of 1 ' <<<"$o"; then c="${c}1"; else c="${c}0"; fi
   o="$(bash "$s" --dir "$ROOT/corpus-short" --cite "            " 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 2 ] && [ "$o" = "NOMATCH-SHORT" ]; then c="${c}1"; else c="${c}0"; fi
@@ -481,9 +511,9 @@ fl_cells() {  # $1 directory holding the validator and its steering sibling -> F
   if [ "$rc" -eq 1 ] && grep -qE "\(3 chars once whitespace is collapsed\), too short|NOMATCH-SHORT: the cited quote is 3 character" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
   fl_g pending-nbsp-blank.md
   if [ "$rc" -eq 1 ] && grep -qE "\(0 chars once whitespace is collapsed\), too short|NOMATCH-SHORT: the cited quote is 0 character" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" --any-authorized "$ROOT/pending-nbsp-padded.md" 2>/dev/null)"; rc=$?
+  o="$(inproc_run "$v" ver_main --any-authorized "$ROOT/pending-nbsp-padded.md" 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 1 ] && grep -q '^NONE: 1 RESOLVED/OVERRIDDEN' <<<"$o"; then c="${c}1"; else c="${c}0"; fi
-  o="$(bash "$v" --any-authorized "$ROOT/pending-nbsp-blank.md" 2>/dev/null)"; rc=$?
+  o="$(inproc_run "$v" ver_main --any-authorized "$ROOT/pending-nbsp-blank.md" 2>/dev/null)"; rc=$?
   if [ "$rc" -eq 1 ] && grep -q '^NONE: 1 RESOLVED/OVERRIDDEN' <<<"$o"; then c="${c}1"; else c="${c}0"; fi
   # An EMPTY needle is still a citation. A build keying cite mode on the TEXT rather than on the
   # flag having been passed falls through to the checks mode, whose clean rc 0 a caller reads as
@@ -547,9 +577,9 @@ lr_cell() {  # $1 validator  $2 cell -> 0 when the cell holds
   local v="$1" c="$2" f o rc
   f="${c%-any}"
   if [ "$f" != "$c" ]; then
-    o="$(bash "$v" --any-authorized "$ROOT/lr/$f.md" 2>&1)"; rc=$?
+    o="$(inproc_run "$v" ver_main --any-authorized "$ROOT/lr/$f.md" 2>&1)"; rc=$?
   else
-    o="$(bash "$v" --escalations "$ROOT/lr/$f.md" --sprint 7 --transcript-dir "$ROOT/lr/t" 2>&1)"; rc=$?
+    o="$(inproc_run "$v" ver_main --escalations "$ROOT/lr/$f.md" --sprint 7 --transcript-dir "$ROOT/lr/t" 2>&1)"; rc=$?
   fi
   case "$c" in
     free)     [ "$rc" -eq 1 ] && grep -qF "which is not the exact answer body Strike LR-S7-2 or Reword LR-S7-2" <<<"$o" ;;
@@ -610,12 +640,14 @@ sv_cell() {  # $1 validator  $2 cell -> 0 when the cell holds
   local v="$1" o rc d="$ROOT/sup"
   case "$2" in
     sany|sanyres) local f=anyonly; [ "$2" = sanyres ] && f=anyres
-      o="$(bash "$v" --any-authorized "$d/$f/pending.md" 2>&1)"; rc=$? ;;
-    argv) ( ulimit -f 64; bash -x "$v" --escalations "$d/good/pending.md" --sprint 50 --any-authorized ) \
+      o="$(inproc_run "$v" ver_main --any-authorized "$d/$f/pending.md" 2>&1)"; rc=$? ;;
+    # e2e cell sup-argv (cells.decl): the bound is the program's own `bash -x` trace under `ulimit -f`; in process
+    # inproc_run resets xtrace, so a looping parser would be bounded by nothing.
+    argv) ( ulimit -f 64; FXCELL=sup-argv bash -x "$v" --escalations "$d/good/pending.md" --sprint 50 --any-authorized ) \
             </dev/null >"$MWORK/sv-argv.out" 2>"$MWORK/sv-argv.trace"; rc=$?
       o="$(cat "$MWORK/sv-argv.trace")" ;;
     *) local f="$2"; case "$2" in sbad) f=bad ;; sgood) f=good ;; esac
-      o="$(bash "$v" --escalations "$d/$f/pending.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>&1)"; rc=$? ;;
+      o="$(inproc_run "$v" ver_main --escalations "$d/$f/pending.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>&1)"; rc=$? ;;
   esac
   case "$2" in
     sbad|apop|aabs|aemp) [ "$rc" -eq 1 ] && grep -qF "appears in NO genuine" <<<"$o" ;;
@@ -673,7 +705,7 @@ if_cell() {  # $1 validator  $2 cell -> 0 when the cell holds
     mkdir -p "$MWORK/if-nosib" && cp "$SRC_DIR/validate-steering-budget.sh" "$MWORK/if-nosib/" && cp "$v" "$MWORK/if-nosib/validate-escalation-resolution.sh"
     v="$MWORK/if-nosib/validate-escalation-resolution.sh"
   fi
-  o="$(env AI_DLC_PROJECT_ROOT="$ROOT/inf/$f" bash "$v" --escalations "$ROOT/inf/$f/docs/escalations/pending.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>&1)"; rc=$?
+  o="$(AI_DLC_PROJECT_ROOT="$ROOT/inf/$f" inproc_run "$v" ver_main --escalations "$ROOT/inf/$f/docs/escalations/pending.md" --sprint 50 --transcript "$ROOT/real.jsonl" 2>&1)"; rc=$?
   case "$2" in
     ioff|inone|iarch|icur) [ "$rc" -eq 1 ] && grep -qF "appears in NO genuine" <<<"$o" ;;
     ioffg|icurg) [ "$rc" -eq 0 ] && grep -qF "OK: all 1 S50" <<<"$o" && grep -qF "SUPPRESSED 1)" <<<"$o" ;;
@@ -704,6 +736,39 @@ else
     else badf '%-30s in-force SUPPRESSED cell does not hold (cells=%s)' "inf/$c" "$IF_CELLS"; fi
   done
 fi
+
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome ---------------------
+# The outcomes this fixture reaches are exit 0 (a verified citation), exit 1 (a finding) and exit 2 (a refusal). One
+# `FXCELL=<id> bash "$VALIDATOR"` start per outcome, each compared with the in-process call on the same input: stdout,
+# stderr and exit separately, byte for byte. A cell also asserts its own outcome (a positive conjunct, so two runs that
+# both printed nothing cannot read as equivalent), and the cells must differ.
+echo
+echo "  -- the cli cells: the program answers exactly as the in-process call --"
+EQ="$MWORK/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"; shift
+  inproc_run "$VALIDATOR" ver_main "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+if eqv cli-pass --escalations "$ROOT/pending-real.md" --sprint 50 --transcript "$ROOT/real.jsonl" \
+   && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && grep -qF "OK: all 1 S50" "$EQ/cli-pass.cl.out"; then
+  okf '%-30s the program verifies the citation exactly as the in-process call does (stdout, stderr, exit 0)' "cli-pass"
+else badf '%-30s the program and the in-process call differ, or the outcome is not exit 0 with OK (%s)' "cli-pass" "$(eq_twin cli-pass)"; fi
+if eqv cli-finding --escalations "$ROOT/pending-missing.md" --sprint 50 --transcript "$ROOT/real.jsonl" \
+   && [ "$(cat "$EQ/cli-finding.cl.rc")" = 1 ] && grep -qF "carries no 'Operator authorization:'" "$EQ/cli-finding.cl.err"; then
+  okf '%-30s the program reports the missing citation exactly as the in-process call does (stdout, stderr, exit 1)' "cli-finding"
+else badf '%-30s the program and the in-process call differ, or the outcome is not exit 1 naming the missing citation (%s)' "cli-finding" "$(eq_twin cli-finding)"; fi
+if eqv cli-refused --escalations "$ER_DIR" --sprint 50 --transcript "$ROOT/real.jsonl" \
+   && [ "$(cat "$EQ/cli-refused.cl.rc")" = 2 ] && grep -q '^REFUSED: .*is not a regular file' "$EQ/cli-refused.cl.err"; then
+  okf '%-30s the program refuses a directory exactly as the in-process call does (stdout, stderr, exit 2)' "cli-refused"
+else badf '%-30s the program and the in-process call differ, or the outcome is not exit 2 REFUSED (%s)' "cli-refused" "$(eq_twin cli-refused)"; fi
+if ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-finding.cl.rc" && ! cmp -s "$EQ/cli-finding.cl.rc" "$EQ/cli-refused.cl.rc" \
+   && ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-finding.cl.out"; then
+  okf '%-30s the passing, finding and refusing inputs give different exits' "cli cells discriminate"
+else badf '%-30s two cli cells gave the same exit or stdout' "cli cells do not discriminate"; fi
 
 echo
 report_end escalation-citation

@@ -83,6 +83,7 @@
 # apart afterwards -- they are the same clean line otherwise, which is this repo's
 # recurring defect.
 
+vsc_main() {
 set -uo pipefail
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -134,7 +135,7 @@ while [ $# -gt 0 ]; do
     --warn-only)     WARN_ONLY=1; shift ;;
     --quiet)         QUIET=1; shift ;;
     -h|--help)
-      sed -n '2,86p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,85p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     *)
       echo "ERROR: unknown argument: $1" >&2
@@ -355,3 +356,6 @@ EOF
 
 [ "$WARN_ONLY" -eq 1 ] && exit 0
 exit 1
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vsc_main "$@"

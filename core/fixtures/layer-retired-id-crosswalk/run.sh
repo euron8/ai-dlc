@@ -39,19 +39,48 @@ LINTER="$(pick "${1:-}" "$HERE/../../scripts/validate-layer-entries.sh" \
 echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 [ -f "$(dirname "$LINTER")/artifact-path-config.sh" ] && echo "HERMETIC-CONSUMED core/scripts/artifact-path-config.sh"
 
+# IN PROCESS (BL-878). The validator is SOURCED ONCE into this shell (its guard returns after defining vle_main), and
+# every drive calls vle_main inside the subshell of the `$( )` that captures it, so its `exit`, `set -u`, EXIT trap and
+# function definitions stay there. It starts as a program only in the cli cells (cells.decl). A CORE FIXTURE SHIPS
+# AHEAD OF ITS SUBJECT: a subject with neither its `vle_main() {` line nor the column-0 source guard predates the wrap
+# and reads SKIP (exit 0, never an ok); exactly one half is a respelled subject and FAILs; a subject grep cannot READ
+# (exit 2) is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$LINTER" vle_main; g_vle=$?
+[ "$g_vle" = 2 ] && exit 2
+[ "$g_vle" = 1 ] && { echo "layer-retired-id-crosswalk: 1 FAILED"; exit 1; }
+[ "$g_vle" = 3 ] && { echo "SKIP: subject predates the in-process wrap"; exit 0; }
+
 ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
 trap 'rm -rf "$ROOT"' EXIT
 CONS="$ROOT/consumer"
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+fx_inproc "$LINTER"
+. "$LINTER" || { echo "FIXTURE ERROR: sourcing $LINTER failed" >&2; exit 2; }
+declare -F vle_main > /dev/null || { echo "FIXTURE ERROR: sourcing $LINTER defined no vle_main" >&2; exit 2; }
 
 # EXPECTED_ASSERTIONS is not bookkeeping: counting what actually ran is what stops an arm
 # that silently did not execute from reading as a short green run, and the count is a
 # literal here or it disappears with the assertions.
 # 2 premises + 1 pristine vector + 1 remedy + 2 shallow + 1 exit condition + 2 vacuity arms
 # (no entries vs entries-but-no-resolvable-set).
-EXPECTED_ASSERTIONS=9
+EXPECTED_ASSERTIONS=11
 
 echo "layer-retired-id-crosswalk:"
 
@@ -61,7 +90,7 @@ echo "layer-retired-id-crosswalk:"
 # values rather than the same silence.
 vector() {
   local out cell v=''
-  out="$(bash "$1" "$2" 2>&1)"
+  out="$( ( fx_inproc "$1"; vle_main "$2" ) 2>&1)"
   for id in 33 34 5 933; do
     cell='-'
     grep -qF "used to define '$id' and no longer does" <<<"$out" && cell=R
@@ -129,7 +158,7 @@ fi
 SH="$ROOT/shallow"; rm -rf "$SH"
 if git clone -q --depth 1 "file://$CONS" "$SH" 2>/dev/null && \
    [ "$(git -C "$SH" rev-parse --is-shallow-repository)" = true ]; then
-  SHOUT="$(bash "$LINTER" "$SH" 2>&1)"
+  SHOUT="$( ( fx_inproc "$LINTER"; vle_main "$SH" ) 2>&1)"
   if grep -q 'RETIRED-ID HISTORY UNREADABLE' <<<"$SHOUT"; then
     ok "on a SHALLOW clone the arm REFUSES rather than reporting the tree clean"
   else
@@ -168,7 +197,7 @@ git -C "$MIG" add -A >/dev/null 2>&1
 GIT_AUTHOR_DATE='2026-06-20T09:00:00+00:00' GIT_COMMITTER_DATE='2026-06-20T09:00:00+00:00' \
   git -C "$MIG" -c user.email=fixture@example.invalid -c user.name=fixture \
     commit -q --no-verify -m 'migrate every id into the band and file its crosswalk row' >/dev/null 2>&1
-MIGOUT="$(bash "$LINTER" "$MIG" 2>&1)"; MIGRC=$?
+MIGOUT="$( ( fx_inproc "$LINTER"; vle_main "$MIG" ) 2>&1)"; MIGRC=$?
 if [ "$MIGRC" -eq 0 ]; then
   ok "a consumer migrated to completion exits 0 — the standard is SATISFIABLE, not just enforced"
 else
@@ -197,7 +226,7 @@ fi
 NEW="$ROOT/new-consumer"
 mkdir -p "$NEW/.claude/skills/ai-dlc/extensions" "$NEW/.claude/skills/ai-dlc/overrides"
 cp "$CONS/.claude/skills/ai-dlc/layer-contract.yaml" "$NEW/.claude/skills/ai-dlc/layer-contract.yaml"
-NEWOUT="$(bash "$LINTER" "$NEW" 2>&1)"; NEWRC=$?
+NEWOUT="$( ( fx_inproc "$LINTER"; vle_main "$NEW" ) 2>&1)"; NEWRC=$?
 # ANCHORED TO THE FINDING LINE, NOT TO THE TOKEN. A bare `grep E16` is satisfied by the
 # LAYER_MEASURED census, which names every code every run — including `E16=LC-N6:0/0`, the
 # cell that says it did NOT fire. The first draft of this assertion did exactly that and
@@ -242,12 +271,31 @@ push_candidate: false
 This entry allocates no id of its own either, so together with its hooked core file
 the resolvability set comes out empty while an entry plainly exists.
 BEXT
-BLINDOUT="$(bash "$LINTER" "$BLIND" 2>&1)"; BLINDRC=$?
+BLINDOUT="$( ( fx_inproc "$LINTER"; vle_main "$BLIND" ) 2>&1)"; BLINDRC=$?
 if grep -qE '^ERROR[[:space:]]+E16' <<<"$BLINDOUT" && [ "$BLINDRC" -ne 0 ]; then
   ok "E16 — entries PRESENT and the resolvability set still empty is STILL an error (the guard was narrowed, not deleted)"
 else
   bad "E16 stayed silent on a consumer that HAS an entry and still built an empty resolvability set (rc=$BLINDRC). That is the unreadable case the arm exists for, and fixing the fresh-install false positive has taken it with it — every historical id would read as retired and the arm would report clean doing it."
 fi
+
+# The cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome this fixture reads (exit 1
+# the seeded consumer with its retired id, exit 0 the migrated one), each compared byte for byte with the in-process
+# call on the same input (stdout, stderr and exit separately) and asserting its own outcome.
+EQ="$ROOT/eq"; mkdir -p "$EQ" || exit 2
+eqv() { # eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two answers are identical
+  local id="$1"; shift
+  ( fx_inproc "$LINTER"; vle_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$LINTER" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(tail -2 "$EQ/$1.ip.out")" "$(head -2 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(tail -2 "$EQ/$1.cl.out")" "$(head -2 "$EQ/$1.cl.err")"; }
+if eqv cli-fail "$CONS" && [ "$(cat "$EQ/cli-fail.cl.rc")" = 1 ] && grep -qF "used to define '33' and no longer does" "$EQ/cli-fail.cl.out"; then
+  ok "cli-fail: the program reports the retired id exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-fail: the program and the in-process call differ, or the outcome is not exit 1 naming the retired '33' ($(eq_twin cli-fail))"; fi
+if eqv cli-pass "$MIG" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && grep -q '^LAYER_CONFORMANCE v1 .* errors=0 ' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program passes the migrated consumer exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with errors=0 ($(eq_twin cli-pass))"; fi
 
 echo
 report_end layer-retired-id-crosswalk "$EXPECTED_ASSERTIONS"

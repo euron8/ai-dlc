@@ -31,6 +31,28 @@ echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/setup-site-drift.sh"
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+
+# --- the pre-wrap consumer gate (BL-878): a consumer runs its OWN installed subject, which can predate the
+# in-process wrap. Neither half -> SKIP (never an ok); one half -> FAIL naming it; unreadable -> FIXTURE ERROR.
+ssd_def=0; ssd_guard=0
+grep -q '^ssd_main() {$' "$SSD"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SSD (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || ssd_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SSD"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SSD (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || ssd_guard=1
+if [ "$ssd_def$ssd_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; exit 0; fi
+if [ "$ssd_def" = 0 ]; then echo "   FAIL  $SSD carries the column-0 source guard but no \`ssd_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "setup-site-drift: FAIL (1)" >&2; exit 1; fi
+if [ "$ssd_guard" = 0 ]; then echo "   FAIL  $SSD defines \`ssd_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run ssd_main in this shell" >&2; echo "setup-site-drift: FAIL (1)" >&2; exit 1; fi
+. "$SSD" || { echo "FIXTURE BROKEN: sourcing $SSD failed" >&2; exit 2; }
+declare -F ssd_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $SSD defined no ssd_main" >&2; exit 2; }
+# One in-process pass: ssd_main in a subshell, so its exit, traps and `set` stay there.
+ssd_run() { (
+  fx_inproc "$SSD"
+  ssd_main "$@" ); }
 
 echo "setup-site-drift:"
 
@@ -114,7 +136,7 @@ seed_good() {
 }
 seed_good
 
-run() { bash "$SSD" "$DIST" "$CONS" "$THEIRS" 2>&1; }
+run() { ssd_run "$DIST" "$CONS" "$THEIRS" 2>&1; }
 
 # =============================================================================
 # 1. THE CLEAN CASE. Values filled in at every declared site, nothing else moved.
@@ -208,7 +230,7 @@ seed_nexth() {
     > "$CONS/.claude/team-roles/dev.md"
 }
 seed_nexth
-OUT="$(bash "$SSD" --file core/team-roles/dev.md "$DIST" "$CONS" "$NEXTH" 2>&1)"; RC=$?
+OUT="$(ssd_run --file core/team-roles/dev.md "$DIST" "$CONS" "$NEXTH" 2>&1)"; RC=$?
 if [ "$RC" -eq 1 ] && grep -qE 'SETUP-SITE-ANCHOR-LOST.*dev\.md#dev-ownership-paths.*next_heading' <<<"$OUT"; then
   ok "a theirs rename of a heading-block's next_heading is ANCHOR-LOST, exit 1"
 else
@@ -225,7 +247,7 @@ seed_defect_dv() {
 }
 seed_defect_dv
 OUT="$(run)"; RC=$?
-OUT_F="$(bash "$SSD" --file core/team-roles/dev.md "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
+OUT_F="$(ssd_run --file core/team-roles/dev.md "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
 if [ "$RC" -eq 1 ] && [ "$RC_F" -eq 0 ] && grep -q 'SETUP-SITE-OK.*team-roles/dev.md' <<<"$OUT_F" \
    && ! grep -q 'deploy-validate' <<<"$OUT_F"; then
   ok "--file answers for its file alone: dev.md OK (0) while the tree exits 1 on deploy-validate.md"
@@ -235,19 +257,50 @@ fi
 seed_good
 cp "$CONS/.claude/skills/ai-dlc/steps/deploy-validate.md" "$W/dv.drifted"
 printf 'a line theirs does not have\n' >> "$W/dv.drifted"
-OUT_F="$(bash "$SSD" --file core/skills/ai-dlc/steps/deploy-validate.md --ours "$W/dv.drifted" "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
-OUT_C="$(bash "$SSD" --file core/skills/ai-dlc/steps/deploy-validate.md "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_C=$?
+OUT_F="$(ssd_run --file core/skills/ai-dlc/steps/deploy-validate.md --ours "$W/dv.drifted" "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
+OUT_C="$(ssd_run --file core/skills/ai-dlc/steps/deploy-validate.md "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_C=$?
 if [ "$RC_F" -eq 1 ] && grep -q 'SETUP-SITE-DRIFT' <<<"$OUT_F" && [ "$RC_C" -eq 0 ]; then
   ok "--ours compares the named copy, not the consumer's (drifted copy 1, clean consumer 0)"
 else
   bad "--ours did not compare the named copy: --ours rc=$RC_F, consumer rc=$RC_C"
 fi
-OUT_F="$(bash "$SSD" --file core/team-roles/nonexistent.md "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
+OUT_F="$(ssd_run --file core/team-roles/nonexistent.md "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
 [ "$RC_F" -eq 2 ] && ok "--file naming an undeclared path is a usage error (2), never an OK" \
                   || bad "--file naming an undeclared path exited $RC_F"
-OUT_F="$(bash "$SSD" --ours "$W/dv.drifted" "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
+OUT_F="$(ssd_run --ours "$W/dv.drifted" "$DIST" "$CONS" "$THEIRS" 2>&1)"; RC_F=$?
 [ "$RC_F" -eq 2 ] && ok "--ours without --file is a usage error (2)" \
                   || bad "--ours without --file exited $RC_F"
+
+# =============================================================================
+# 5. THE cli CELLS (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome -- exit 0 (OK
+#    rows), exit 1 (a DRIFT row), exit 2 (a usage refusal on stderr) -- each compared with the in-process
+#    call on the same inputs: stdout, stderr and exit separately, byte for byte, plus its own outcome.
+# =============================================================================
+EQ="$W/eq"; mkdir -p "$EQ"
+eqv() { # <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1"; shift
+  ssd_run "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$SSD" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(cat "$EQ/$1.ip.out")" "$(cat "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(cat "$EQ/$1.cl.out")" "$(cat "$EQ/$1.cl.err")"; }
+seed_good
+if eqv cli-ok "$DIST" "$CONS" "$THEIRS" && [ "$(cat "$EQ/cli-ok.cl.rc")" = 0 ] && grep -q '^SETUP-SITE-OK' "$EQ/cli-ok.cl.out"; then
+  ok "cli-ok: the program passes a correct consumer exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-ok: the program and the in-process call differ, or the outcome is not exit 0 with an OK row ($(eq_twin cli-ok))"; fi
+seed_defect_dv
+if eqv cli-drift "$DIST" "$CONS" "$THEIRS" && [ "$(cat "$EQ/cli-drift.cl.rc")" = 1 ] && grep -q '^SETUP-SITE-DRIFT' "$EQ/cli-drift.cl.out"; then
+  ok "cli-drift: the program reports drift exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-drift: the program and the in-process call differ, or the outcome is not exit 1 with a DRIFT row ($(eq_twin cli-drift))"; fi
+if eqv cli-usage --ours "$W/dv.drifted" "$DIST" "$CONS" "$THEIRS" && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] \
+   && [ ! -s "$EQ/cli-usage.cl.out" ] && grep -q 'needs --file' "$EQ/cli-usage.cl.err"; then
+  ok "cli-usage: the program refuses a usage error exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-usage: the program and the in-process call differ, or the outcome is not the exit-2 refusal ($(eq_twin cli-usage))"; fi
+if ! cmp -s "$EQ/cli-ok.cl.out" "$EQ/cli-drift.cl.out" && ! cmp -s "$EQ/cli-drift.cl.rc" "$EQ/cli-usage.cl.rc" \
+   && ! cmp -s "$EQ/cli-ok.cl.rc" "$EQ/cli-drift.cl.rc"; then
+  ok "cli cells discriminate: OK, drift and the usage refusal give different output and exits"
+else bad "two cli cells gave identical output -- the cells do not discriminate"; fi
 
 echo
 report_end setup-site-drift

@@ -78,6 +78,7 @@
 #   2  no snapshot / no pipeline_variant, the audit could not run, or its output was
 #      not a form it emits. A FAIL, never a pass.
 
+vtag_main() {
 set -u
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -276,3 +277,7 @@ case "$RC" in
     echo "verdict  : FAIL -- the trunk audit exited ${RC}, which it does not emit."
     exit 2 ;;
 esac
+}
+# Loadable: sourcing defines vtag_main and runs nothing; run as a program, it runs vtag_main.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vtag_main "$@"

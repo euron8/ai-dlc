@@ -89,11 +89,17 @@ mkcase() { # mkcase <dir>  <seed on stdin>
   cp "$d/backlog.archive.md" "$d/pristine.archive"
 }
 
+# IN PROCESS (BL-878). Every drive SOURCES the rotator it names and calls brt_main in a subshell (its guard returns
+# after defining brt_main; its root is the sourced file's own, from BASH_SOURCE), so the subject's `exit` and `cd`
+# stay inside it. Each call is one fx_inproc pass (the inproc: row). The rotator's own `bash backlog-reverify.sh`
+# children stay separate programs: the reverifier is no subject of this fixture. The only separate-program starts of
+# the rotator are the cli cells of cells.decl, each compared byte for byte with the in-process call (cli_eqv below).
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 # run_rt <script> <case-dir> [args...] -> writes combined output to $LAST_OUT, rc to $LAST_RC
 LAST_OUT=""; LAST_RC=0
 run_rt() {
   local s="$1" d="$2"; shift 2
-  LAST_OUT="$(bash "$s" "$d/backlog.md" "$@" 2>&1)"
+  LAST_OUT="$( ( fx_inproc "$s"; . "$s" && brt_main "$d/backlog.md" "$@" ) 2>&1)"
   LAST_RC=$?
 }
 
@@ -1082,6 +1088,32 @@ if [ "$LAST_RC" -eq 0 ] && grep -q '^## BL-605 ' "$EFN/backlog.archive.md" && gr
 else
   badm "outcome-nearmiss" "exit $LAST_RC; an untagged close carrying the word efficiency in bold was refused or not archived"
 fi
+
+# ---------------------------------------------------------------------------------------
+# CLI CELLS: one separate-program start per distinct outcome, equal to the in-process answer.
+# cli_eqv <id> <expected rc> <case-dir> <args...>: one brt_main call and one `FXCELL=<id> bash "$RT"` start over the
+# same freshly reseeded case must agree byte for byte on stdout, stderr, exit status, and the ledger and archive each
+# leaves behind; the exit status must be the one stated. The same directory is reseeded between the two, because the
+# output names the ledger's path.
+# ---------------------------------------------------------------------------------------
+EQ="$WORK/eq"; mkdir -p "$EQ"
+cli_eqv() {
+  local id="$1" want="$2" dd="$3"; shift 3
+  reseed "$dd"
+  ( fx_inproc "$RT"; . "$RT" && brt_main "$dd/backlog.md" "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  cp "$dd/backlog.md" "$EQ/$id.ip.ledger"; cp "$dd/backlog.archive.md" "$EQ/$id.ip.archive"
+  reseed "$dd"
+  FXCELL="$id" bash "$RT" "$dd/backlog.md" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" \
+     && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" && cmp -s "$EQ/$id.ip.ledger" "$dd/backlog.md" \
+     && cmp -s "$EQ/$id.ip.archive" "$dd/backlog.archive.md"; then
+    okm "EQUIV $id" "the in-process call and the program agree on stdout, stderr, exit $want and the files written"
+  else
+    badm "EQUIV $id" "in-process rc $(cat "$EQ/$id.ip.rc") vs program rc $(cat "$EQ/$id.cl.rc") (want $want), or their output or files differ"
+  fi
+}
+cli_eqv cli-refuse 2 "$A" --apply
+cli_eqv cli-apply 0 "$SM" --apply
 
 echo
 report_end backlog-rotate-fence-guard

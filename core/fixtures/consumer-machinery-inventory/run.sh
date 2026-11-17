@@ -40,6 +40,30 @@ elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/validate-layer-entries.sh" ]; 
 else
   echo "FIXTURE ERROR: validate-layer-entries.sh not found in either layout" >&2; exit 2
 fi
+
+# IN PROCESS (BL-878). The validator is SOURCED ONCE into this shell (its guard returns after defining vle_main), and
+# every drive calls vle_main inside a subshell, so its `exit`, `set -u`, EXIT trap and function definitions stay there.
+# It starts as a program only in the cli cells (cells.decl). A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with
+# neither its `vle_main() {` line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an ok);
+# exactly one half is a respelled subject and FAILs; a subject grep cannot READ (exit 2) is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$VAL" vle_main; g_vle=$?
+[ "$g_vle" = 2 ] && exit 2
+[ "$g_vle" = 1 ] && { echo "consumer-machinery-inventory: 1 FAILED"; exit 1; }
+[ "$g_vle" = 3 ] && { echo "SKIP: subject predates the in-process wrap"; exit 0; }
 # The contract and manifest this fixture copies into its synthetic consumers, resolved in
 # BOTH layouts. install.sh splits what shares a parent in core/, so a fixture that knows only
 # the distribution path dies with exit 2 on every consumer — which the suite reports as a
@@ -58,6 +82,10 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+fx_inproc "$VAL"
+. "$VAL" || { echo "FIXTURE ERROR: sourcing $VAL failed" >&2; exit 2; }
+declare -F vle_main > /dev/null || { echo "FIXTURE ERROR: sourcing $VAL defined no vle_main" >&2; exit 2; }
 
 # Build a minimal consumer: the skill dir with the contract and the manifest, a home, and an
 # inventory whose contents each case supplies.
@@ -71,7 +99,7 @@ mk_consumer() { # $1 = dest, $2 = inventory body ("" = no inventory file at all)
     printf 'x\n```\n%s\n```\n' "$body" > "$d/.claude/skills/ai-dlc/machinery.md"
   fi
 }
-run_val() { bash "$VAL" "$1" 2>/dev/null; }
+run_val() { ( fx_inproc "$VAL"; vle_main "$1" ) 2>/dev/null; }
 
 # ---- 1 + 2: a declared path outside the home, and a declared path that does not exist
 C1="$WORK/c1"; mk_consumer "$C1" "scripts/audit-rule-exercise.sh
@@ -273,4 +301,23 @@ fi
 # ---- the run itself is a control: a validator that died prints nothing, and so does a clean tree
 [ -n "$out1" ] && ok "the validator produced output (the run is not a silent death)" \
                || bad "the validator printed NOTHING — every assertion above is vacuous"
+
+# ---- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome this fixture reads
+# (exit 1 on the seeded E18 inventory, exit 0 on the correctly segregated one), each compared byte for byte with the
+# in-process call on the same input: stdout, stderr and exit separately, and each asserting its own outcome.
+EQ="$WORK/eq"; mkdir -p "$EQ" || exit 2
+eqv() { # eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two answers are identical
+  local id="$1"; shift
+  ( fx_inproc "$VAL"; vle_main "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VAL" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(tail -2 "$EQ/$1.ip.out")" "$(head -2 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(tail -2 "$EQ/$1.cl.out")" "$(head -2 "$EQ/$1.cl.err")"; }
+if eqv cli-fail "$C1" && [ "$(cat "$EQ/cli-fail.cl.rc")" = 1 ] && grep -qE '^ERROR +E18' "$EQ/cli-fail.cl.out"; then
+  ok "cli-fail: the program refuses the seeded inventory exactly as the in-process call does (stdout, stderr, exit 1, an E18)"
+else bad "cli-fail: the program and the in-process call differ, or the outcome is not exit 1 with an E18 ($(eq_twin cli-fail))"; fi
+if eqv cli-pass "$C2" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && grep -q '^LAYER_CONFORMANCE v1 .* errors=0 ' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program passes the segregated inventory exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with errors=0 ($(eq_twin cli-pass))"; fi
 report_end consumer-machinery-inventory

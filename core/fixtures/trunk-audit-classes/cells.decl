@@ -1,0 +1,6 @@
+# trunk-audit-classes' starts of core/scripts/validate-cycle-commits.sh (BL-879 grammar). Every audit is in process:
+# run.sh loads the validator once (inproc_load) and calls vcc_main through inproc_run. One cli cell per distinct CLI
+# outcome (exit 0 a clean range, exit 1 a finding), each started as FXCELL=<id> bash "$VAL" in eqv() and compared byte
+# for byte with the in-process call on a fresh copy of the same world at the same path.
+cli core/scripts/validate-cycle-commits.sh cli-clean
+cli core/scripts/validate-cycle-commits.sh cli-finding

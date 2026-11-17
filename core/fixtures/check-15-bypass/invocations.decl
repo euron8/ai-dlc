@@ -1,3 +1,7 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-45 *
-4 core/scripts/validate-stub-audit.sh
+# Re-measured (BL-878, batch 258 C4) by one counted run: the validator runs in process through audit and eq_cell (inproc row); it starts only in
+# its cli cells (cells.decl). `*` moved 45 -> 46: the batched run left the start count (-1) and each cli cell repeats its state's per-path
+# core-paths.sh resolver start (+2, cli-finding and cli-clean audit one hot path each).
+46 *
+3 core/scripts/validate-stub-audit.sh
+4 inproc:core/scripts/validate-stub-audit.sh

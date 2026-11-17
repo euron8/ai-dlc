@@ -95,6 +95,7 @@
 # Usage: validate-backlog-size.sh [<ledger>] [--quiet]   (default: <repo-root>/docs/backlog.md)
 # Exit:  0 = under the ceiling, or zero entries and declared empty; 1 = over it, a zero parse
 #        not declared empty, or a stale empty marker (B1b); 2 = usage/environment.
+vbs_main() {
 set -uo pipefail
 
 QUIET=0
@@ -110,9 +111,9 @@ done
 # Resolve the root by walking UP for a marker, never by counting `..` hops -- this script must
 # give the same answer from the repo root, from a subdirectory, and from a fixture sandbox that
 # copied it, and the sandbox answer is the silent one.
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/VERSION" ]; do ROOT="$(dirname "$ROOT")"; done
-[ -f "$ROOT/VERSION" ] || { echo "validate-backlog-size: FAIL -- no VERSION marker above $0" >&2; exit 2; }
+[ -f "$ROOT/VERSION" ] || { echo "validate-backlog-size: FAIL -- no VERSION marker above ${BASH_SOURCE[0]}" >&2; exit 2; }
 
 LIB="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 [ -f "$LIB" ] || { echo "validate-backlog-size: FAIL -- reconcile/lib.sh missing; refusing to fall back to a private copy of the entry-boundary rule" >&2; exit 2; }
@@ -132,7 +133,7 @@ case "$MAX" in
 esac
 
 # The awk program is built OUTSIDE a command substitution, deliberately: bash 3.2's `$( )` parser
-# counts parentheses across a heredoc body and does not exempt it. See backlog-reverify.sh:87.
+# counts parentheses across a heredoc body and does not exempt it. See backlog-reverify.sh:88.
 AWKF="$(mktemp)" || { echo "validate-backlog-size: FAIL -- mktemp" >&2; exit 2; }
 trap 'rm -f "$AWKF"' EXIT
 
@@ -187,3 +188,6 @@ if [ "$QUIET" != "1" ]; then
   fi
 fi
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vbs_main "$@"

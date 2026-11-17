@@ -1,0 +1,10 @@
+# backlog-ledger's starts of its two subjects (BL-879 grammar). Every other drive is in process: run.sh sources the
+# copy it names in a subshell and calls brv_main or brt_main (rv_in, rt_in), and the rotator's own reverify children
+# are answered in process by bl_shim. One cli cell per distinct CLI outcome, each started as FXCELL=<id> bash <copy> in
+# cli_eqv() and compared byte for byte (stdout, stderr, exit) with the in-process call over the same input: the
+# classifier's rows and its --print-marker query, the rotator's --check report (exit 0) and its --apply refusal (exit 2).
+cli scripts/backlog-reverify.sh cli-rv-rows
+cli scripts/backlog-reverify.sh cli-rv-marker
+cli scripts/backlog-rotate.sh cli-rt-check
+cli scripts/backlog-rotate.sh cli-rt-refuse
+nested scripts/backlog-rotate.sh scripts/backlog-reverify.sh why=a cli start of the rotator starts the classifier as its own child (--closed-receipts, the --check BEFORE and AFTER rows, --declared-empty)

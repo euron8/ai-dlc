@@ -160,10 +160,90 @@ THEIRS="$(git -C "$DIST" rev-parse --short HEAD)"
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
+# IN PROCESS (BL-878), shard a's units (main, f). Every drive of readopt-override.sh, unregistered-drift.sh and
+# register-drift.sh there calls the subject's entry function (rov_main, ud_main, rd_main) through lib/inproc.sh's
+# inproc_run, in a subshell made to look like a fresh `bash <subject>`. No inproc_load: three subjects, so each pass
+# sources the path it runs and fx_inproc logs it under that path (the three `inproc:` rows). The command-line starts
+# left are the `cli` cells of cells.decl, one per distinct CLI outcome, each compared byte for byte with the in-process
+# call. The other shards' units (e2, c3, gh, j, sup) still start the subjects as programs: those shards' declarations
+# carry no subject row, and none of them is a row of scripts/fixture-inprocess-allowlist.txt.
+#
+# THE BLOB MEMO. A CLI run sources lib.sh at the top of its own process and builds a private memo for that run; in a
+# subshell lib.sh does not (it keys on `$BASH_SUBSHELL` 0). So `lrg_ip` hands each run a FRESH memo, as private to
+# that run as the CLI's, unless the caller exported one.
+#
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped subjects,
+# and sourcing a pre-wrap subject would run its whole body on inproc_run's arguments. So each subject's shape is
+# checked first, on its two halves: a subject with neither the `<p>_main() {` line nor the column-0 source guard
+# predates the wrap, which prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled subject this
+# fixture can no longer drive, which FAILS; a subject the gate cannot read is FIXTURE ERROR.
+if sg main || sg f; then
+  [ -f "$HERE/../lib/layout.sh" ] || { echo "FIXTURE ERROR: lib/layout.sh not found beside $HERE" >&2; exit 2; }
+  . "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: sourcing lib/layout.sh failed" >&2; exit 2; }
+  [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+  . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+  [ -f "$HERE/../lib/inproc.sh" ] || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
+  . "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
+  lrg_gate() { # <subject> <entry> -> returns on a wrapped subject; SKIP, FAIL or FIXTURE ERROR otherwise
+    local _s="$1" _e="$2" _def=0 _grd=0 _gx
+    grep -q "^$_e() {\$" "$_s"; _gx=$?
+    [ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_s (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+    [ "$_gx" -ne 0 ] || _def=1
+    grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$_s"; _gx=$?
+    [ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_s (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+    [ "$_gx" -ne 0 ] || _grd=1
+    if [ "$_def$_grd" = 00 ]; then echo "SKIP: subject $_s predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+    if [ "$_def" = 0 ]; then echo "   FAIL  $_s carries the column-0 source guard but no \`$_e() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "$NAME: FAIL (1)" >&2; exit 1; fi
+    if [ "$_grd" = 0 ]; then echo "   FAIL  $_s defines \`$_e() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $_e on inproc_run's arguments" >&2; echo "$NAME: FAIL (1)" >&2; exit 1; fi
+    return 0
+  }
+  lrg_gate "$READOPT" rov_main
+  lrg_gate "$UNREG" ud_main
+  [ -z "$REG" ] || lrg_gate "$REG" rd_main
+fi
+lrg_ip() { # <subject> <entry> [args...] -> what `bash <subject> [args...]` prints and exits with, in process
+  local _m _rc
+  case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in
+    "declare -x"*) inproc_run "$@"; return ;;
+  esac
+  _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
+  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$@"; _rc=$?
+  rm -rf "$_m"
+  return "$_rc"
+}
+ro() { lrg_ip "$READOPT" rov_main "$@"; }
+ud() { lrg_ip "$UNREG" ud_main "$@"; }
+rd() { lrg_ip "$REG" rd_main "$@"; }
+# THE cli CELLS (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome, on the same input as one
+# in-process call; stdout, stderr and exit are compared separately, byte for byte. Each caller also asserts the
+# outcome itself, so two runs that both printed nothing cannot read as equivalent. Only non-writing calls are cells.
+LRG_EQ="$(mktemp -d "${TMPDIR:-/tmp}/lrgate-eq.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+trap 'rm -rf "$LRG_EQ"' EXIT
+lrg_eqv() { # <cell-id> <subject> <entry> <subject args...> -> 0 when program and in-process call agree; files in $LRG_EQ/<id>.*
+  local _id="$1" _s="$2" _e="$3"; shift 3
+  lrg_ip "$_s" "$_e" "$@" > "$LRG_EQ/$_id.ip.out" 2> "$LRG_EQ/$_id.ip.err"; echo "$?" > "$LRG_EQ/$_id.ip.rc"
+  FXCELL="$_id" bash "$_s" "$@" > "$LRG_EQ/$_id.cl.out" 2> "$LRG_EQ/$_id.cl.err"; echo "$?" > "$LRG_EQ/$_id.cl.rc"
+  cmp -s "$LRG_EQ/$_id.ip.out" "$LRG_EQ/$_id.cl.out" && cmp -s "$LRG_EQ/$_id.ip.err" "$LRG_EQ/$_id.cl.err" \
+    && cmp -s "$LRG_EQ/$_id.ip.rc" "$LRG_EQ/$_id.cl.rc"
+}
+lrg_twin() { printf 'in-process rc=%s out=%s err=[%s] / program rc=%s out=%s err=[%s]' "$(cat "$LRG_EQ/$1.ip.rc")" \
+  "$(grep -c . "$LRG_EQ/$1.ip.out")" "$(head -1 "$LRG_EQ/$1.ip.err")" "$(cat "$LRG_EQ/$1.cl.rc")" \
+  "$(grep -c . "$LRG_EQ/$1.cl.out")" "$(head -1 "$LRG_EQ/$1.cl.err")"; }
+lrg_cell() { # <cell-id> <want rc> <want text on stdout+stderr> <label> -> ok/bad on the pair lrg_eqv just wrote
+  local _t
+  _t="$(cat "$LRG_EQ/$1.cl.out" "$LRG_EQ/$1.cl.err")"
+  if cmp -s "$LRG_EQ/$1.ip.out" "$LRG_EQ/$1.cl.out" && cmp -s "$LRG_EQ/$1.ip.err" "$LRG_EQ/$1.cl.err" \
+     && cmp -s "$LRG_EQ/$1.ip.rc" "$LRG_EQ/$1.cl.rc" && [ "$(cat "$LRG_EQ/$1.cl.rc")" = "$2" ] && grep -q -- "$3" <<<"$_t"; then
+    ok "$1: $4 -- the program and the in-process call agree (stdout, stderr, exit $2)"
+  else
+    bad "$1: the program and the in-process call differ, or the outcome is not exit $2 carrying '$3' ($(lrg_twin "$1"))"
+  fi
+}
+
 if sg main; then
 echo "== A. the stale-core-text gate fires on the real shape =="
 
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --check 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$OVR" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out"; then
   ok "--check RED: override body carries core text theirs no longer has"
 else
@@ -177,11 +257,13 @@ if grep -q 'more CRITICALs than pass N' <<<"$out"; then
 else
   bad "--check fired but did not identify the stale line"
 fi
+lrg_eqv cli-ro-stale "$READOPT" rov_main "$DIST" "$THEIRS" "$CONS" "$OVR" --check
+lrg_cell cli-ro-stale 1 'STALE-CORE-TEXT' "--check on a stale body"
 
 echo "== B. a bare re-stamp is REFUSED while the body is stale =="
 
 before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$OVR" | head -1)"
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp readopt 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp readopt 2>&1)"; rc=$?
 after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$OVR" | head -1)"
 
 if [ "$rc" -ne 0 ] && grep -q 'REFUSED' <<<"$out"; then
@@ -196,7 +278,7 @@ else
 fi
 
 echo "== B2. reaffirm without a note is REFUSED =="
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp reaffirm 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp reaffirm 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'REQUIRES --note' <<<"$out"; then
   ok "--stamp reaffirm demands a recorded reason"
 else
@@ -223,11 +305,13 @@ reports more CRITICALs IN THE SCOPE THE PRIOR PASS ALSO REVIEWED
 is injecting defects. CRITICALs in scope the sprint ADDED are NOT divergence.
 EOF
 
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --check 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$OVR" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then ok "--check green after a real re-adoption"
 else bad "--check still red after the body was re-adopted (rc=$rc)"; printf '%s\n' "$out" | sed 's/^/        /'; fi
+lrg_eqv cli-ro-green "$READOPT" rov_main "$DIST" "$THEIRS" "$CONS" "$OVR" --check
+lrg_cell cli-ro-green 0 'body carries no superseded core text' "--check on a re-adopted body"
 
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp readopt 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp readopt 2>&1)"; rc=$?
 new_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$OVR" | head -1)"
 if [ "$rc" -eq 0 ] && [ "$new_sha" = "$THEIRS" ]; then
   ok "--stamp readopt re-stamped base_sha $BASE -> $THEIRS"
@@ -260,7 +344,7 @@ reason: The core paragraph claims a thing that is
 ---
 Body.
 EOF
-bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$ML" --stamp reaffirm --note "still stands" >/dev/null 2>&1
+ro "$DIST" "$THEIRS" "$CONS" "$ML" --stamp reaffirm --note "still stands" >/dev/null 2>&1
 
 if grep -q 'reason: The core paragraph claims a thing that is$' "$ML"; then
   ok "the reason's first line is INTACT (note not spliced mid-sentence)"
@@ -302,7 +386,7 @@ reason: |
 ---
 Body.
 EOF
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$BL" 2>&1)"
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$BL" 2>&1)"
 if grep -q 'UNIQUE-BLOCK-SENTINEL' <<<"$out"; then
   ok "the dossier renders a block-scalar reason's text"
 else
@@ -323,7 +407,7 @@ reason: UNIQUE-INLINE-SENTINEL a single-line reason.
 ---
 Body.
 EOF
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$BL" 2>&1)"
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$BL" 2>&1)"
 if grep -q 'UNIQUE-INLINE-SENTINEL' <<<"$out"; then
   ok "an INLINE reason still renders (the block reader did not break the common path)"
 else
@@ -355,7 +439,7 @@ reason: PLAIN-FIRST-SENTINEL the first line of a plain scalar,
 ---
 Body.
 EOF
-pm_out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$PM" 2>&1)"
+pm_out="$(ro "$DIST" "$THEIRS" "$CONS" "$PM" 2>&1)"
 if grep -q 'PLAIN-FIRST-SENTINEL' <<<"$pm_out"; then
   ok "a PLAIN multi-line reason renders its first line"
 else
@@ -382,7 +466,7 @@ base_sha: ${BASE}
 ---
 Body.
 EOF
-pk_panel="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$PK" 2>&1 \
+pk_panel="$(ro "$DIST" "$THEIRS" "$CONS" "$PK" 2>&1 \
             | awk '/WHY THIS OVERRIDE EXISTS/{p=1;next} /^--- WHAT UPSTREAM/{p=0} p')"
 if grep -q 'PLAIN-STOP-CONT-SENTINEL' <<<"$pk_panel"; then
   ok "CONTROL: with a key BELOW it the reason's continuation line still renders (so the absence below is a real zero)"
@@ -419,7 +503,7 @@ CLIP="$CONS/.claude/skills/ai-dlc/overrides/SKILL__Clip.md"
   echo '---'
   echo 'Body.'
 } > "$CLIP"
-clip_out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$CLIP" 2>&1)"
+clip_out="$(ro "$DIST" "$THEIRS" "$CONS" "$CLIP" 2>&1)"
 if grep -q 'CLIP-HEAD-SENTINEL' <<<"$clip_out" && ! grep -q 'CLIP-TAIL-SENTINEL' <<<"$clip_out"; then
   ok "a long reason is still clipped (head shown, tail withheld) — the panel is bounded, which is what makes the notice necessary"
 else
@@ -444,7 +528,7 @@ reason: SHORT-HEAD-SENTINEL line one of a short plain scalar,
 ---
 Body.
 EOF
-short_out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$SHORT" 2>&1)"
+short_out="$(ro "$DIST" "$THEIRS" "$CONS" "$SHORT" 2>&1)"
 if grep -q 'SHORT-HEAD-SENTINEL' <<<"$short_out"; then
   ok "CONTROL: the short reason renders (so the notice's absence below is a real zero, not a dead run)"
 else
@@ -455,6 +539,8 @@ if grep -q 'NOT SHOWN' <<<"$short_out"; then
 else
   ok "  ...and carries NO clip notice: the announcement is a function of the input, not a line printed on every dossier"
 fi
+lrg_eqv cli-ro-dossier "$READOPT" rov_main "$DIST" "$THEIRS" "$CONS" "$SHORT"
+lrg_cell cli-ro-dossier 0 'SHORT-HEAD-SENTINEL' "the default dossier"
 rm -f "$SHORT"
 
 rm -f "$PM" "$CLIP"
@@ -484,7 +570,7 @@ panel_filter() { # stdin: a dossier -> just the upstream-change panel
   awk '/WHAT UPSTREAM CHANGED/{p=1} /SUPERSEDED CORE TEXT/{p=0} p'
 }
 panel_of() { # $1 override path -> just the upstream-change panel
-  bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$1" 2>&1 | panel_filter
+  ro "$DIST" "$THEIRS" "$CONS" "$1" 2>&1 | panel_filter
 }
 
 # -- QUIET DIRECTION: an anchor that did NOT drift. NO RUN OF ITS OWN: the panel span, from WHAT UPSTREAM CHANGED to
@@ -551,7 +637,7 @@ reports more CRITICALs than pass N, the repair step is injecting defects faster
 than review removes them; another pass only finds the next wave. STOP.
 EOF
 
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --merge 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$OVR" --merge 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ] && grep -q 'MERGED' <<<"$out"; then
   ok "--merge applied upstream's change with no hand edit"
 else
@@ -573,7 +659,7 @@ else
   ok "the superseded clause is gone"
 fi
 # And the merged body must now pass the gate it previously failed.
-bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --check >/dev/null 2>&1 \
+ro "$DIST" "$THEIRS" "$CONS" "$OVR" --check >/dev/null 2>&1 \
   && ok "--check green after --merge (stamp is now permitted)" \
   || bad "--check still red after --merge -- the merge did not actually clear the block"
 
@@ -612,7 +698,7 @@ than review removes them; another pass only finds the next wave. STOP.
 CONSUMER-DELTA-NINE kept exactly as written.
 EOF
 
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --merge 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$OVR" --merge 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then
   ok "--merge accepted a multi-anchor override (was: REFUSED, exit 2)"
 else
@@ -641,7 +727,7 @@ if grep -q 'IN THE SCOPE THE PRIOR PASS ALSO REVIEWED' "$OVR" \
 else
   bad "the drifted anchor did not merge correctly"
 fi
-bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --check >/dev/null 2>&1 \
+ro "$DIST" "$THEIRS" "$CONS" "$OVR" --check >/dev/null 2>&1 \
   && ok "--check green after the multi-anchor merge" \
   || bad "--check still red after the multi-anchor merge"
 
@@ -671,7 +757,7 @@ reports more CRITICALs than pass N, the repair step is injecting defects faster
 than review removes them; another pass only finds the next wave. STOP.
 EOF
 before_line10="$(sed -n '6p' "$OVR")"
-bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --merge >/dev/null 2>&1
+ro "$DIST" "$THEIRS" "$CONS" "$OVR" --merge >/dev/null 2>&1
 if [ "$(sed -n '5p' "$OVR")" = '---' ] && [ "$(sed -n '6p' "$OVR")" = "$before_line10" ]; then
   ok "no blank line invented after the frontmatter fence"
 else
@@ -686,7 +772,7 @@ fi
 echo "== C1. a stamp cannot outrun an unresolved CONFLICT =="
 
 printf '\n<<<<<<< override (yours)\nfoo\n=======\nbar\n>>>>>>> core\n' >> "$OVR"
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp readopt 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp readopt 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'conflict markers' <<<"$out"; then
   ok "--stamp readopt REFUSED while conflict markers remain"
 else
@@ -711,14 +797,16 @@ reason: anchor names no heading in core.
 Body that copies nothing and can be proven safe by nobody.
 EOF
 
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$GHOST" --check 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$GHOST" --check 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'UNDECIDABLE' <<<"$out"; then
   ok "--check on an unresolvable anchor: UNDECIDABLE, not 'clean'"
 else
   bad "--check reported an unresolvable anchor as clean (rc=$rc) -- a check that cannot fail"
 fi
+lrg_eqv cli-ro-undecidable "$READOPT" rov_main "$DIST" "$THEIRS" "$CONS" "$GHOST" --check
+lrg_cell cli-ro-undecidable 1 'UNDECIDABLE' "--check on an unresolvable anchor"
 
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$GHOST" --stamp readopt 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$GHOST" --stamp readopt 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] && grep -q 'REFUSED' <<<"$out"; then
   ok "--stamp readopt REFUSED on an unresolvable anchor"
 else
@@ -726,7 +814,7 @@ else
 fi
 
 # reaffirm --note is the sanctioned way past it: a human puts their name on it.
-out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$GHOST" --stamp reaffirm --note "anchor is legacy; override still stands" 2>&1)"; rc=$?
+out="$(ro "$DIST" "$THEIRS" "$CONS" "$GHOST" --stamp reaffirm --note "anchor is legacy; override still stands" 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ]; then ok "--stamp reaffirm --note is the recorded way past an undecidable anchor"
 else bad "reaffirm --note could not clear an undecidable anchor (rc=$rc) -- no path out means the gate gets routed around"; fi
 
@@ -734,7 +822,7 @@ rm -f "$GHOST"
 
 echo "== D. unregistered drift vs sanctioned template substitution =="
 
-tsv="$(bash "$UNREG" "$DIST" "$BASE" "$CONS" 2>&1)"
+tsv="$(ud "$DIST" "$BASE" "$CONS" 2>&1)"
 
 st() { printf '%s\n' "$tsv" | awk -F'\t' -v f="$1" '$2==f {print $1}'; }
 
@@ -755,6 +843,8 @@ if [ "$(st skills/ai-dlc/SKILL.md)" = "CORE-OK" ]; then
 else
   bad "untouched core file reported '$(st skills/ai-dlc/SKILL.md)' -- trailing-newline regression is back"
 fi
+lrg_eqv cli-ud-rows "$UNREG" ud_main "$DIST" "$BASE" "$CONS"
+lrg_cell cli-ud-rows 0 'HARD-UNREGISTERED-CORE-DRIFT' "the drift rows"
 
 echo "== E. register-drift pulls an in-place edit INTO the layer system =="
 
@@ -769,7 +859,10 @@ if [ -z "$REG" ]; then
   bad "cannot locate register-drift.sh"
 else
   echo "HERMETIC-CONSUMED $(cd "$(dirname "$REG")" && pwd -P)/$(basename "$REG")"
-  out="$(bash "$REG" "$DIST" "$BASE" "$CONS" team-roles/tea.md --apply 2>&1)"; rc=$?
+  # The dry run writes nothing, so the program and the in-process call read the same tree.
+  lrg_eqv cli-rd-dryrun "$REG" rd_main "$DIST" "$BASE" "$CONS" team-roles/tea.md
+  lrg_cell cli-rd-dryrun 0 'Test Architect' "the dry run prints the override it would write"
+  out="$(rd "$DIST" "$BASE" "$CONS" team-roles/tea.md --apply 2>&1)"; rc=$?
   NEW="$CONS/.claude/skills/ai-dlc/overrides/team-roles__tea__consumer-drift.md"
 
   if [ "$rc" -eq 0 ] && [ -f "$NEW" ]; then ok "authored the overrides/ entry"
@@ -794,16 +887,21 @@ else
   else bad "the consumer's text was not carried into the override -- it is now LOST"; fi
 
   # core reverted, so the drift is gone
-  if [ "$(bash "$UNREG" "$DIST" "$BASE" "$CONS" | awk -F'\t' '$2=="team-roles/tea.md"{print $1}')" = "CORE-OK" ]; then
+  if [ "$(ud "$DIST" "$BASE" "$CONS" | awk -F'\t' '$2=="team-roles/tea.md"{print $1}')" = "CORE-OK" ]; then
     ok "core reverted; tea.md is no longer unregistered drift"
   else
     bad "tea.md still reports drift after register-drift --apply"
   fi
 
   # A hook has no override grain. It must REFUSE, not invent one.
-  bash "$REG" "$DIST" "$BASE" "$CONS" hooks/ai-dlc-continue.sh --apply >/dev/null 2>&1
+  rd "$DIST" "$BASE" "$CONS" hooks/ai-dlc-continue.sh --apply >/dev/null 2>&1
   if [ $? -eq 2 ]; then ok "refuses a HOOK (no override grain exists for hooks)"
   else bad "register-drift invented an override for a hook -- overrides shadow headings, hooks have none"; fi
+  lrg_eqv cli-rd-refuse "$REG" rd_main "$DIST" "$BASE" "$CONS" hooks/ai-dlc-continue.sh --apply
+  lrg_cell cli-rd-refuse 2 'register-drift' "a hook is refused"
+  # tea.md is reverted now, so there is nothing left to register: the exit-1 outcome.
+  lrg_eqv cli-rd-none "$REG" rd_main "$DIST" "$BASE" "$CONS" team-roles/tea.md
+  lrg_cell cli-rd-none 1 'register-drift' "nothing to register"
 fi
 
 fi
@@ -1135,9 +1233,9 @@ echo "== F. upstream ABSORBED the consumer's in-place delta =="
 # "refile it as an override, or revert" — with nothing saying the revert was now the
 # RIGHT answer. It would have blocked forever on a delta core already carried.
 # (Live case: the reference consumer's handoff resume-prompt guard, v0.55.0.)
-st_theirs="$(bash "$UNREG" "$DIST" "$BASE" "$CONS" "$THEIRS" | awk -F'\t' '$2=="hooks/guard.sh"{print $1}')"
-st_base="$(bash "$UNREG" "$DIST" "$BASE" "$CONS" "$BASE"   | awk -F'\t' '$2=="hooks/guard.sh"{print $1}')"
-st_none="$(bash "$UNREG" "$DIST" "$BASE" "$CONS"           | awk -F'\t' '$2=="hooks/guard.sh"{print $1}')"
+st_theirs="$(ud "$DIST" "$BASE" "$CONS" "$THEIRS" | awk -F'\t' '$2=="hooks/guard.sh"{print $1}')"
+st_base="$(ud "$DIST" "$BASE" "$CONS" "$BASE"   | awk -F'\t' '$2=="hooks/guard.sh"{print $1}')"
+st_none="$(ud "$DIST" "$BASE" "$CONS"           | awk -F'\t' '$2=="hooks/guard.sh"{print $1}')"
 
 if [ "$st_theirs" = "HARD-CORE-DRIFT-ABSORBED" ]; then
   ok "upstream absorbed the delta -> HARD-CORE-DRIFT-ABSORBED (remedy: revert, not override)"
@@ -1183,7 +1281,28 @@ if [ -z "$DRIFT" ]; then
   bad "FIXTURE BROKEN — cannot locate layer-drift.sh; C3 would pass by not running"
 else
   echo "HERMETIC-CONSUMED $(cd "$(dirname "$DRIFT")" && pwd -P)/$(basename "$DRIFT")"
-  ld_out="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
+  # IN PROCESS (BL-878). The classifier is not started as a program: `inproc_run` sources it in a subshell made to look
+  # like a fresh bash (core/fixtures/lib/inproc.sh; its guard returns after defining ld_main) and calls ld_main. lib.sh
+  # builds its own blob memo only at BASH_SUBSHELL 0, which no subshell is, so the run gets a fresh private memo, as
+  # the program builds one per run. layer-title-join carries the cli equivalence cells. A CORE FIXTURE SHIPS AHEAD OF
+  # ITS SUBJECT, and this unit is shard c's first assertion: a classifier with neither the `ld_main() {` line nor the
+  # column-0 source guard predates the wrap and reads SKIP (exit 0, never an ok); exactly one half is a respelled
+  # subject and FAILs; a subject grep cannot READ is FIXTURE ERROR.
+  # A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+  . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+  . "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
+  . "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found beside $HERE" >&2; exit 2; }
+  grep -q '^ld_main() {$' "$DRIFT"; _gd=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$DRIFT"; _gg=$?
+  if [ "$_gd" -gt 1 ] || [ "$_gg" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $DRIFT (grep exit $_gd/$_gg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+  fi
+  [ "$_gd$_gg" != 11 ] || { echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; }
+  [ "$_gd" = 0 ] || { echo "  FAIL  $DRIFT carries the column-0 source guard but no \`ld_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "$NAME: FAIL (1)" >&2; exit 1; }
+  [ "$_gg" = 0 ] || { echo "  FAIL  $DRIFT defines \`ld_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run ld_main in this shell" >&2; echo "$NAME: FAIL (1)" >&2; exit 1; }
+  _ldm="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || { echo "FIXTURE ERROR: mktemp memo" >&2; exit 2; }
+  ld_out="$(AI_DLC_RECONCILE_MEMO="$_ldm" inproc_run "$DRIFT" ld_main "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
+  rm -rf "$_ldm"
   st_of() { printf '%s\n' "$ld_out" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
 
   if grep -qx OVERRIDE-DELEGATES-INTO-SHADOW <<<"$(st_of 'SKILL__Rule-10\.md$')"; then

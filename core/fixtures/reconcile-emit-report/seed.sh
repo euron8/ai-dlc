@@ -18,6 +18,33 @@ else
   exit 2
 fi
 
+# IN PROCESS (BL-878), ON THE CALLER'S REQUEST. reconcile-emit-report and emit-report-refusal run this seed as
+# `RER_SEED_INPROC=1 bash seed.sh`: the seed render is then a subshell that sources the subject and calls
+# er_main, one fx_inproc pass (lib/mutant.sh), never `bash emit-report.sh`. Not lib/inproc.sh: emit-report-refusal
+# declares an unguarded bash subject, and inproc.sh's own operand sources would read as unpaired P2 drives there.
+# Any other caller (procsub-staged-refusal-boot, which does not declare emit-report.sh) gets the program run.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT, and sourcing an emit-report.sh that predates the wrap would run its
+# whole body here, so in process its two halves are read first and the answer is this seed's exit code, which both
+# requesting callers map: neither the `er_main() {` line nor the column-0 source guard -> exit 3 (the caller prints
+# SKIP and never an ok); exactly one half -> exit 4 (the caller FAILs, naming it on this stderr); a subject the
+# gate cannot read -> exit 2.
+RER_INPROC=0
+if [ "${RER_SEED_INPROC:-}" = 1 ]; then
+  RER_INPROC=1
+  er_def=0; er_guard=0
+  grep -q '^er_main() {$' "$EMIT"; _gx=$?
+  [ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $EMIT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$_gx" -ne 0 ] || er_def=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$EMIT"; _gx=$?
+  [ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $EMIT (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$_gx" -ne 0 ] || er_guard=1
+  [ "$er_def$er_guard" != 00 ] || exit 3
+  if [ "$er_def" = 0 ]; then echo "   FAIL  $EMIT carries the column-0 source guard but no \`er_main() {\` line -- a respelled subject this fixture cannot drive" >&2; exit 4; fi
+  if [ "$er_guard" = 0 ]; then echo "   FAIL  $EMIT defines \`er_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run er_main in this shell" >&2; exit 4; fi
+  [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+  . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+fi
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-emit.XXXXXX")" || exit 2
 DIST="$WORK/dist"
 CONSUMER="$WORK/consumer"
@@ -181,7 +208,11 @@ printf '#!/bin/sh\nexit 0\n' > "$CONSUMER/scripts/ai-dlc/validate-keepprobe.sh"
 # them was red with nothing on the page but the verdict.
 REGION="$WORK/region.md"
 SEED_ERR="$WORK/seed-render.stderr"
-bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$REGION" 2>"$SEED_ERR"
+if [ "$RER_INPROC" = 1 ]; then
+  ( fx_inproc "$EMIT"; . "$EMIT" || exit 126; er_main "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ) > "$REGION" 2>"$SEED_ERR"
+else
+  bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$REGION" 2>"$SEED_ERR"
+fi
 
 # A SEED WHOSE CLASSIFIER REFUSED IS NOT A SEED. Every assertion in run.sh reads this region as
 # ground truth, and with preclassify refused its buckets, worklist, orientation, deletions and

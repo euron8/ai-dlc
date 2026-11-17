@@ -40,10 +40,11 @@
 #         Without --apply it REPORTS what would move and writes nothing.
 # Exit:   0 report or apply succeeded; 1 nothing to do is NOT an error and still exits 0;
 #         2 the ledger or the repo root could not be resolved, or --check found a difference.
+brt_main() {
 set -uo pipefail
 
 REPO_ROOT=""
-d="$(cd "$(dirname "$0")" && pwd)"
+d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [ "$d" != "/" ]; do
   if [ -f "$d/VERSION" ]; then REPO_ROOT="$d"; break; fi
   d="$(dirname "$d")"
@@ -677,3 +678,6 @@ cat "$AWKF.moved" >> "$ARCHIVE"
 cp "$AWKF.live" "$LEDGER"
 echo "  applied: $MOVED_COUNT entr(y|ies) appended to $ARCHIVE and removed from $LEDGER"
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+brt_main "$@"

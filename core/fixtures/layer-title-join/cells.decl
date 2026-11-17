@@ -1,0 +1,14 @@
+# layer-title-join's starts of core/skills/ai-dlc-update/reconcile/layer-drift.sh and apply.sh (BL-879 grammar). Every
+# other drive of layer-drift.sh is in process: run.sh sources it once and calls ld_main through inproc_run (ld_ip). One
+# cli cell per distinct CLI outcome of layer-drift.sh (classify exit 0, --adjudicated-codes exit 0, --list-adjudications
+# exit 0, an unresolvable ref exit 1, a usage error exit 2), each started as FXCELL=<id> bash "$DRIFT" in eqv() and
+# compared byte for byte with the in-process call on the same input.
+cli core/skills/ai-dlc-update/reconcile/layer-drift.sh cli-rows
+cli core/skills/ai-dlc-update/reconcile/layer-drift.sh cli-codes
+cli core/skills/ai-dlc-update/reconcile/layer-drift.sh cli-list
+cli core/skills/ai-dlc-update/reconcile/layer-drift.sh cli-refuse
+cli core/skills/ai-dlc-update/reconcile/layer-drift.sh cli-usage
+e2e core/skills/ai-dlc-update/reconcile/apply.sh ap-empty why=Part 6e asserts the WORKLIST row apply.sh writes, so apply.sh runs as the program a pull runs; it is not wrapped and is not a subject this fixture converts
+e2e core/skills/ai-dlc-update/reconcile/apply.sh ap-verdict why=Part 6e asserts the WORKLIST row apply.sh writes, so apply.sh runs as the program a pull runs; it is not wrapped and is not a subject this fixture converts
+e2e core/skills/ai-dlc-update/reconcile/apply.sh ap-spent why=Part 6e asserts the WORKLIST row apply.sh writes, so apply.sh runs as the program a pull runs; it is not wrapped and is not a subject this fixture converts
+nested core/skills/ai-dlc-update/reconcile/apply.sh core/skills/ai-dlc-update/reconcile/layer-drift.sh why=apply.sh runs layer-drift.sh as its own detector child, once per apply run

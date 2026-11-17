@@ -57,9 +57,10 @@
 #   4 = EXAMINED NOTHING. No path given was an in-scope hot-path file. Not a pass:
 #       the caller decides whether an empty subject set is legitimate at this gate
 
+vstub_main() {
 set -uo pipefail
 
-SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # The resolver is a SIBLING in both layouts -- `core/scripts/` in the distribution,
 # `scripts/ai-dlc/` on a consumer -- so it is found beside this file, never by walking
@@ -85,7 +86,7 @@ while [ $# -gt 0 ]; do
       CHANGED_FROM="$2"; shift 2
       if [ $# -ge 1 ] && [ "${1#-}" = "$1" ]; then CHANGED_TO="$1"; shift; fi ;;
     -h|--help)
-      sed -nE 's/^# ?//p' "$0" | sed -n '/^usage:/,/^$/p'; exit 0 ;;
+      sed -nE 's/^# ?//p' "${BASH_SOURCE[0]}" | sed -n '/^usage:/,/^$/p'; exit 0 ;;
     --*) die "unknown option '$1'" ;;
     *)   paths+=("$1"); shift ;;
   esac
@@ -129,7 +130,7 @@ fi
 # obvious `STUB_MARKER='\b(...)\b'` is a TOTAL DISARM that examines 0 markers over every
 # corpus file and passes `# stub, wire later` and `raise NotImplementedError()` alike. It
 # reads as a fix and reports as a clean tree. The cited precedent for `\b` is
-# `audit-layer-debt.sh:186`, which is a PYTHON `re.compile` run through `python3`, not
+# `audit-layer-debt.sh:187`, which is a PYTHON `re.compile` run through `python3`, not
 # something `[[ =~ ]]` can take.
 #
 # BOTH HALVES ARE LOAD-BEARING AND NEITHER COVERS THE OTHER. The boundary alone still
@@ -553,3 +554,6 @@ if [ "$n_audited" -eq 0 ]; then
 fi
 [ "$n_findings" -eq 0 ] || exit 1
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vstub_main "$@"

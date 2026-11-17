@@ -148,12 +148,34 @@ rer_phase() { # rer_phase <slug> -> 0 when this shard owns the phase and records
 }
 
 
-WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: cannot source lib/layout.sh" >&2; exit 2; }
+# The seed reads emit-report.sh's two wrap halves before it sources it (seed.sh says why): 3 is a subject
+# that predates the in-process wrap (SKIP, never an ok), 4 a subject carrying one half (FAIL).
+WORK="$(RER_SEED_INPROC=1 bash "$HERE/seed.sh")"; rer_seed_rc=$?
+case "$rer_seed_rc" in
+  0) ;;
+  3) echo "SKIP: reconcile-emit-report shard '$GROUP' -- subject predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  4) echo "FAIL: reconcile-emit-report shard '$GROUP' of '$SHARDS' -- emit-report.sh carries one half of the in-process wrap (the seed names it above)"; exit 1 ;;
+  *) echo "FIXTURE ERROR: seed failed" >&2; exit 2 ;;
+esac
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found beside $HERE" >&2; exit 2; }
+# IN PROCESS (BL-878). emit-report.sh is loaded once (inproc_load) and every render, seam and --verify
+# below is er_ip: inproc_run, a subshell made to look like a fresh `bash emit-report.sh`, its stdout, stderr
+# and exit the subject's. A path other than $EMIT (a copy of the reconcile dir with a stubbed or hooked
+# sibling) is sourced inside that subshell, so its er_main locates ITS siblings, and the pass is logged
+# under $EMIT (lib/inproc.sh). The command-line starts left are the cli cells (cells.decl), each compared
+# byte for byte with the in-process call on the same input.
+[ -f "$HERE/../lib/inproc.sh" ] || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
+inproc_load "$EMIT" || { echo "FIXTURE ERROR: sourcing $EMIT defined no er_main" >&2; exit 2; }
+er_ip() { # er_ip <emit-report.sh path> <args...> -> the subject's stdout, stderr and exit
+  local _e="$1"; shift
+  inproc_run "$_e" er_main "$@"
+}
 
 # --- THE COMPARISON SEAM, AND WHY THIS FILE RENDERS ALMOST NOTHING TWICE ------------------------
 # `emit-report.sh --verify --region-from <file>` skips the render and hands <file>'s bytes to the one
@@ -173,7 +195,7 @@ RER_SEAM_MARK='emit-report: --region-from: region supplied by caller; nothing wa
 mkdir -p "$WORK/seam"; : > "$WORK/seam.log"
 seam() {
   local t="${SEAM_TAG:-seam}"
-  bash "$1" --verify --region-from "$2" "$3" "$4" "$5" "$6" "$7" > "$WORK/seam/$t.out" 2> "$WORK/seam/$t.err"; RC=$?
+  er_ip "$1" --verify --region-from "$2" "$3" "$4" "$5" "$6" "$7" > "$WORK/seam/$t.out" 2> "$WORK/seam/$t.err"; RC=$?
   if [ "$(sed -n 1p "$WORK/seam/$t.out")" = "$RER_SEAM_MARK" ]; then echo "MARK $t" >> "$WORK/seam.log"
   else echo "NOMARK $t rc=$RC" >> "$WORK/seam.log"; fi
   return 0
@@ -182,7 +204,7 @@ seam() {
 # STDERR IS KEPT, in `$VERIFY_ERR`, overwritten by each call. It is read only by render_diag()
 # below, on a failing render arm -- discarded, a pool red printed the verdict and nothing else.
 VERIFY_ERR="$WORK/verify.stderr"
-verify() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>"$VERIFY_ERR"; RC=$?; }
+verify() { er_ip "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>"$VERIFY_ERR"; RC=$?; }
 
 # render_diag <tag> <rc> [<extra-stderr-file> <label>] -- WHY a render arm went red. Every pool
 # red this fixture had in batch 151 was a RENDER arm (assertion 1, the orientation pair, the
@@ -283,6 +305,47 @@ SEAM_TAG=a3 seam "$EMIT" "$REGION" "$REPORT_STALE" "$DIST" "$BASE" "$CONSUMER" "
 [ "$RC" -eq 1 ] && ok "--verify FAILS a region hand-edited to drop the HARD blocker (exit 1) — an edited render cannot hide a finding" \
   || bad "--verify did NOT catch a dropped-blocker edit (rc=$RC) — the region could still be doctored"
 
+# --- THE cli CELLS (cells.decl): emit-report.sh run as a PROGRAM once per distinct CLI outcome ---------
+# The outcomes: print mode exit 0 (the region on stdout), and through the seam exit 0 (present, current,
+# complete), 1 (stale or missing region), 3 (BLOCKERS-RESOLVED) and 2 (an unreadable region file, a
+# refusal). One `FXCELL=<id> bash "$EMIT"` start per outcome, each compared with the in-process call on the
+# same input: stdout, stderr and exit separately, byte for byte, and each asserting its own outcome, so two
+# runs that both printed nothing cannot read as equivalent. These are shard a's only starts of the subject.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+rer_eqv() { # <cell-id> <subject args...> -> 0 when the program and the in-process call agree byte for byte
+  local id="$1"; shift
+  er_ip "$EMIT" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$EMIT" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+rer_twin() { printf 'in-process rc=%s lines=%s err=[%s] / program rc=%s lines=%s err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(grep -c . "$EQ/$1.ip.out")" \
+  "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(grep -c . "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+if rer_eqv cli-render "$DIST" "$BASE" "$CONSUMER" "$THEIRS" && [ "$(cat "$EQ/cli-render.cl.rc")" = 0 ] \
+   && grep -q 'HARD-UNREGISTERED-CORE-DRIFT' "$EQ/cli-render.cl.out" && grep -qF 'BEGIN GENERATED: reconcile-mechanical' "$EQ/cli-render.cl.out"; then
+  ok "cli-render: the program renders the region carrying the HARD blocker exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-render: the program and the in-process call differ, or the render is not exit 0 with the HARD blocker ($(rer_twin cli-render))"; fi
+if rer_eqv cli-seam-pass --verify --region-from "$REGION" "$REPORT_GOOD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" && [ "$(cat "$EQ/cli-seam-pass.cl.rc")" = 0 ] \
+   && grep -qxF "emit-report: the report's mechanical region is present, current, and complete." "$EQ/cli-seam-pass.cl.out"; then
+  ok "cli-seam-pass: the program passes the sound report through the seam exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-seam-pass: the program and the in-process call differ, or the outcome is not exit 0 with the present-current-complete line ($(rer_twin cli-seam-pass))"; fi
+if rer_eqv cli-seam-stale --verify --region-from "$REGION" "$REPORT_STALE" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" && [ "$(cat "$EQ/cli-seam-stale.cl.rc")" = 1 ] \
+   && [ -s "$EQ/cli-seam-stale.cl.err" ]; then
+  ok "cli-seam-stale: the program fails the hand-edited report exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-seam-stale: the program and the in-process call differ, or the outcome is not exit 1 with a reason on stderr ($(rer_twin cli-seam-stale))"; fi
+grep -v 'HARD-UNREGISTERED-CORE-DRIFT' "$REGION" > "$EQ/region-cut.md"
+if rer_eqv cli-seam-resolved --verify --region-from "$EQ/region-cut.md" "$REPORT_GOOD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" && [ "$(cat "$EQ/cli-seam-resolved.cl.rc")" = 3 ] \
+   && [ -s "$EQ/cli-seam-resolved.cl.err" ]; then
+  ok "cli-seam-resolved: the program refuses a report carrying a row the supplied region lacks exactly as the in-process call does (stdout, stderr, exit 3)"
+else bad "cli-seam-resolved: the program and the in-process call differ, or the outcome is not exit 3 with a reason on stderr ($(rer_twin cli-seam-resolved))"; fi
+if rer_eqv cli-seam-refuse --verify --region-from "$WORK/no-such-region.md" "$REPORT_GOOD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" && [ "$(cat "$EQ/cli-seam-refuse.cl.rc")" = 2 ] \
+   && grep -qF 'cannot read the supplied region file' "$EQ/cli-seam-refuse.cl.err"; then
+  ok "cli-seam-refuse: the program refuses an unreadable region file exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-seam-refuse: the program and the in-process call differ, or the outcome is not exit 2 with the refusal line ($(rer_twin cli-seam-refuse))"; fi
+if ! cmp -s "$EQ/cli-seam-pass.cl.rc" "$EQ/cli-seam-stale.cl.rc" && ! cmp -s "$EQ/cli-seam-pass.cl.err" "$EQ/cli-seam-refuse.cl.err" \
+   && ! cmp -s "$EQ/cli-seam-stale.cl.rc" "$EQ/cli-seam-resolved.cl.rc"; then
+  ok "cli cells discriminate: the passing, stale, resolved and refusing inputs give different exits and stderr"
+else bad "cli cells do not discriminate: two of cli-seam-pass, -stale, -resolved and -refuse gave the same exit or stderr"; fi
+
 # --- S-AP: THE GATE NEVER TAKES THE SHORTCUT --------------------------------------------------
 # apply.sh's union gate must render: no non-comment line of it passes --region-from. The control is the
 # same reader finding the --for-apply --verify call itself, so a zero is not a file the reader missed.
@@ -359,7 +422,7 @@ ln -sf "$DIST" "$ALIAS" 2>/dev/null
 if [ -e "$ALIAS" ]; then
   # RENDER: conflicting-state -- at the ALIAS dist path; the dist path is embedded in the region, so this is the one input
   # the seed render cannot stand in for. The REPORT stays the one rendered at $DIST.
-  bash "$EMIT" "$ALIAS" "$BASE" "$CONSUMER" "$THEIRS" > "$WORK/region-alias.md" 2>/dev/null
+  er_ip "$EMIT" "$ALIAS" "$BASE" "$CONSUMER" "$THEIRS" > "$WORK/region-alias.md" 2>/dev/null
   if cmp -s "$WORK/region-alias.md" "$REGION" || ! grep -qF "$ALIAS" "$WORK/region-alias.md"; then
     bad "FIXTURE BROKEN — the alias render does not carry the alias path, so the two regions do not differ by the path and assertion 9 cannot discriminate"
   fi
@@ -538,7 +601,7 @@ world_at() { # world_at <what> <ref>
   fi
   return 0
 }
-verify_ref() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$2" >/dev/null 2>"$VERIFY_ERR"; RC=$?; }
+verify_ref() { er_ip "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$2" >/dev/null 2>"$VERIFY_ERR"; RC=$?; }
 core_tree_at() { git -C "$DIST" rev-parse "${1}:core" 2>/dev/null; }
 
 # --- THE WORLD GUARDS ARE THEMSELVES CHECKED, BEFORE ANY WORLD IS BUILT -------------------
@@ -831,11 +894,11 @@ b230_render() {
   if [ ! -s "$f" ]; then
     case "$2" in
       # RENDER: conflicting-state -- preclassify forced to exit 2 -- the hook's env changes what render() reads.
-      a) FX_B230_PC=rc2 bash "$1/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$f" 2>"$f.err" ;;
+      a) FX_B230_PC=rc2 er_ip "$1/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$f" 2>"$f.err" ;;
       # RENDER: conflicting-state -- preclassify forced to print nothing -- a different render input again.
-      b) FX_B230_PC=empty bash "$1/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$f" 2>"$f.err" ;;
+      b) FX_B230_PC=empty er_ip "$1/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$f" 2>"$f.err" ;;
       # RENDER: conflicting-state -- the near-miss world, its own dist and consumer (core/ untouched by the range).
-      n) bash "$1/emit-report.sh" "$NM_DIST" "$NM_BASE" "$NM_CONS" "$NM_THEIRS" > "$f" 2>"$f.err" ;;
+      n) er_ip "$1/emit-report.sh" "$NM_DIST" "$NM_BASE" "$NM_CONS" "$NM_THEIRS" > "$f" 2>"$f.err" ;;
     esac
   fi
   printf '%s\n' "$f"
@@ -979,7 +1042,7 @@ if rer_phase moved; then
 REGION_SYM="$WORK/region-symbolic.md"
 # RENDER: conflicting-state -- theirs spelled as the BRANCH $MOVEREF; the region names the spelling, so the seed render
 # (theirs as a sha) is a different input.
-bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_SYM" 2>/dev/null
+er_ip "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_SYM" 2>/dev/null
 REPORT_SYM="$WORK/report-symbolic.md"
 { echo "# Reconcile report (fixture)"; echo; cat "$REGION_SYM"; } > "$REPORT_SYM"
 # POSITIVE CONTROL, and it hard-exits. If the symbolic render is empty or missing the probe's
@@ -1026,7 +1089,7 @@ DGW "committing the core-move world" commit -m "upstream core content moves afte
 world_moved "the core-move world" "$MOVEREF" "$_pre_harm" || true
 REGION_HARM="$WORK/region-core-moved.md"
 # RENDER: conflicting-state -- the core-move world: upstream's core/ content moved under the same spelling.
-bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_HARM" 2>/dev/null
+er_ip "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_HARM" 2>/dev/null
 
 # THE DISCRIMINATION GUARD, and it runs BEFORE the verdict is read. If the move also shifted a
 # bucket, `--verify` would fail on the bucket and the arm would pass against a renderer with no
@@ -1078,7 +1141,7 @@ DGW "committing the docs-only world" commit -m "docs-only commit — core untouc
 world_moved "the docs-only world" "$MOVEREF" "$_pre_docs" || true
 REGION_DOCS="$WORK/region-docs-moved.md"
 # RENDER: conflicting-state -- the docs-only world: the ref moved by a commit that leaves core/ untouched.
-bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_DOCS" 2>"$WORK/region-docs-moved.stderr"
+er_ip "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$MOVEREF" > "$REGION_DOCS" 2>"$WORK/region-docs-moved.stderr"
 
 moved_to="$(git -C "$DIST" rev-parse "$MOVEREF" 2>/dev/null)"
 if [ "$moved_to" = "$THEIRS" ]; then
@@ -1185,7 +1248,7 @@ cp "$(dirname "$EMIT")"/*.md "$SHADSTUB/" 2>/dev/null
 printf '#!/usr/bin/env bash\nexit 2\n' > "$SHADSTUB/warn-shadowed-local-validators.sh"
 mut_region="$WORK/shadow-mut-region.txt"
 # RENDER: conflicting-state -- a copy whose shadowed-validator detector refuses (a different program for render()): a different program for render().
-bash "$SHADSTUB/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$mut_region" 2>/dev/null
+er_ip "$SHADSTUB/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$mut_region" 2>/dev/null
 if grep -q 'HARD-UNREGISTERED-CORE-DRIFT' "$mut_region" && grep -q 'Retired status tokens reused in a consumer layer file' "$mut_region" \
    && grep -qF 'END GENERATED: reconcile-mechanical' "$mut_region"; then
   ok "control: the stubbed sandbox copy still renders the HARD blocker and the retired-token section, so the refusal arm below measures the stub and not a broken sandbox"
@@ -1267,7 +1330,7 @@ T_SECT() { awk '/Template pre-classification/{f=1;next} f&&/^\*\*/{exit} f' "$1"
 # a verdict about emit-report.sh for a failure that was the fixture's own read. Stderr goes to
 # `<region-file>.stderr` so a refusal can quote it; a healthy render exits 0 in every world these
 # sites drive (the two refusal worlds included — they render DETECTOR-REFUSED at rc 0).
-t_stage() { bash "$2" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$1" 2> "$1.stderr"; }
+t_stage() { er_ip "$2" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$1" 2> "$1.stderr"; }
 # t_stage_why <region-file> <rc> — the refusal text: the status and the producer's last stderr line.
 t_stage_why() { local e; e="$(grep -v '^[[:space:]]*$' "$1.stderr" 2>/dev/null | tail -1 | cut -c1-160)"
   printf 'exited %s (%s)' "$2" "${e:-no stderr}"; }
@@ -1370,7 +1433,7 @@ else
   printf 'phantom consumer file\n' > "$CONSUMER/ZZ-PHANTOM.md"
   t_ph_region="$WORK/tpl-phantom-region.txt"
   # RENDER: conflicting-state -- S4: a manifest carrying a phantom entry, and a consumer carrying the phantom's file.
-  bash "$T_PHANTOM/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$t_ph_region" 2>/dev/null
+  er_ip "$T_PHANTOM/emit-report.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$t_ph_region" 2>/dev/null
   t_ph_sec="$(T_SECT "$t_ph_region")"
   rm -f "$CONSUMER/ZZ-PHANTOM.md"
   if grep -qF "TEMPLATE-UNCHANGED-NOOP  ZZ-PHANTOM.md  <- templates/ZZ-NO-SUCH-TEMPLATE-ZZ.template" <<<"$t_ph_sec" \
@@ -1571,7 +1634,7 @@ v_foreign() {
 v_approve() { # v_approve <world> <ref-to-render-at>
   local d="$VW/$1" x=""
   printf '%s\n' "$2" > "$d/ref"
-  bash "$EMIT" "$DIST" "$BASE" "$d/consumer" "$2" > "$d/region.md" 2>/dev/null
+  er_ip "$EMIT" "$DIST" "$BASE" "$d/consumer" "$2" > "$d/region.md" 2>/dev/null
   x="$(v_foreign "$d/region.md" "")"
   [ -n "$x" ] && bad "FIXTURE BROKEN — $1 approval's one render carried a refusal the seed world does not: $x — a detector refusing on this world and not on the seed is an engine defect or a broken world, never a transient to retry"
   { echo "# Reconcile report (fixture)"; echo; cat "$d/region.md"; } > "$d/approved.md"
@@ -1581,7 +1644,7 @@ v_approve() { # v_approve <world> <ref-to-render-at>
 # near-miss: the consumer's copy is put back to exactly what `git show "${base}:<path>"` holds, as
 # a real adjudication does.
 v_resolve() { git -C "$DIST" show "${BASE}:core/schemas/thing.json" > "$VW/$1/consumer/.claude/schemas/thing.json"; }
-v_render()  { local d="$VW/$1"; bash "${2:-$EMIT}" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" 2>/dev/null; }
+v_render()  { local d="$VW/$1"; er_ip "${2:-$EMIT}" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" 2>/dev/null; }
 # v_subst <region-file> <consumer-path> -> the region with the seed consumer's path replaced by <consumer-path>.
 v_subst() {
   RER_F="$CONSUMER" RER_T="$2" awk 'BEGIN { f = ENVIRON["RER_F"]; t = ENVIRON["RER_T"]; n = length(f) }
@@ -1643,7 +1706,7 @@ v_score() {
   local e="$1" d="$VW/$2" f="$VW/$2/stderr.$3" rc cause nres nuns c1 c2 x="" sok="" rf="$4"
   [ -f "${e%/*}/.stubbed" ] && read -r sok < "${e%/*}/.stubbed"
   # THE SEAM: compare against the world's ONE render (<rf>) instead of rendering again.
-  bash "$e" --verify --region-from "$rf" "$d/approved.md" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" >"$d/seam.$3.out" 2>"$f"
+  er_ip "$e" --verify --region-from "$rf" "$d/approved.md" "$DIST" "$BASE" "$d/consumer" "$(cat "$d/ref")" >"$d/seam.$3.out" 2>"$f"
   rc=$?
   if [ "$(sed -n 1p "$d/seam.$3.out")" = "$RER_SEAM_MARK" ]; then echo "MARK v-$2-$3" >> "$WORK/seam.log"
   else echo "NOMARK v-$2-$3 rc=$rc" >> "$WORK/seam.log"; fi
@@ -2118,7 +2181,7 @@ sb_cell() { # sb_cell <emit> <case> <tag> -> row | none | BROKEN
   local d="$SB/c/$3.$2" o
   mkdir -p "$d/.claude" || { echo BROKEN; return 0; }
   printf 'version: 1.0.0\ncommit: %s\n' "$(sb_stamp "$2")" > "$d/.claude/.ai-dlc-version"
-  o="$(bash "$1" "$SB/d" "$(sb_base "$2")" "$d" "$SB_T" 2>/dev/null)"
+  o="$(er_ip "$1" "$SB/d" "$(sb_base "$2")" "$d" "$SB_T" 2>/dev/null)"
   case "$o" in *'BEGIN GENERATED: reconcile-mechanical'*) : ;; *) echo BROKEN; return 0 ;; esac
   case "$o" in *'END GENERATED: reconcile-mechanical'*) : ;; *) echo BROKEN; return 0 ;; esac
   case "$o" in *"_stamp_ records"*) echo row ;; *) echo none ;; esac

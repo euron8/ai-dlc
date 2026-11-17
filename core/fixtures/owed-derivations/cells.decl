@@ -1,0 +1,5 @@
+# owed-derivations' starts of core/skills/ai-dlc-update/reconcile/derivation-differential.sh (BL-879 grammar), shard a.
+# Every other drive of the writer is in process: unit wr loads it once (inproc_load) and calls dd_main through
+# inproc_run. The one CLI outcome unit wr reaches (exit 1 naming the broken derivation) is one cli cell, started as
+# FXCELL=cli-broke bash "$DDS" and compared byte for byte with the in-process call on the same input.
+cli core/skills/ai-dlc-update/reconcile/derivation-differential.sh cli-broke

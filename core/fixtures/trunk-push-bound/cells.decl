@@ -1,0 +1,6 @@
+# trunk-push-bound's starts of core/scripts/validate-audit-anchors.sh (BL-879 grammar). Every other --trunk-push drive
+# is in process: run.sh sources the validator and calls vaa_main in a tpb_ip subshell. One cli cell per
+# distinct CLI outcome (exit 0 the licensed commit, a rejection of an unlicensed subject), each started as
+# FXCELL=<id> bash "$V" in eqv() and compared byte for byte with the in-process call on the same stdin.
+cli core/scripts/validate-audit-anchors.sh cli-pass
+cli core/scripts/validate-audit-anchors.sh cli-reject

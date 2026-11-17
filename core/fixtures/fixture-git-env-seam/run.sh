@@ -68,6 +68,8 @@ SEAM="$ROOT/core/fixtures/lib/preamble.sh"
 # this subject, so it is not co-maintained with the thing under test.
 SUBJECT="trunk-push-bound"
 [ -f "$ROOT/core/fixtures/$SUBJECT/run.sh" ] || broken "driven fixture $SUBJECT is absent"
+# The inner trunk-push-bound consumes the validator; its own HERMETIC-CONSUMED line is captured by this fixture.
+echo "HERMETIC-CONSUMED $ROOT/core/scripts/validate-audit-anchors.sh"
 
 WORK="$(mktemp -d)" || broken "mktemp failed"
 trap 'chmod -R u+rwX "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT

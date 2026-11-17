@@ -1,3 +1,4 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-48 *
-22 core/scripts/validate-request-coverage.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output); starts are run.sh, seed.sh, the cli cells of cells.decl and the validator's own validate-locked-anchor.sh child of every drive, every other drive of the validator in process (BL-878).
+31 *
+3 core/scripts/validate-request-coverage.sh
+27 inproc:core/scripts/validate-request-coverage.sh

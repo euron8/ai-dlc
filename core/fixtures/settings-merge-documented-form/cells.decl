@@ -1,0 +1,7 @@
+# settings-merge-documented-form's starts of core/skills/ai-dlc-update/reconcile/settings-merge.sh (BL-879 grammar).
+# Every other drive is in process: run.sh sources the subject once and calls sm_main in a subshell. One cli cell per
+# distinct CLI outcome it drives (exit 0 --check report, exit 0 merge written, exit 1 usage), each started as
+# FXCELL=<id> bash "$MERGE" in eqv() and compared byte for byte with the in-process call on the same world.
+cli core/skills/ai-dlc-update/reconcile/settings-merge.sh cli-check
+cli core/skills/ai-dlc-update/reconcile/settings-merge.sh cli-merge
+cli core/skills/ai-dlc-update/reconcile/settings-merge.sh cli-usage

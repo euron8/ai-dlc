@@ -75,6 +75,31 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/fanout-untracked.XXXXXX")" \
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The subject is loaded ONCE with lib/inproc.sh's inproc_load (its source guard returns after
+# defining rpf_main) and every arm asks rpf_main through inproc_run, in a subshell made to look like a fresh
+# `bash report-propagation-fanout.sh`. The program runs only in the cli cells (cells.decl).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped subject, and
+# sourcing a pre-wrap subject would run its whole body. So the shape is checked first, on its two halves: neither the
+# `rpf_main() {` line nor the column-0 source guard is a subject that predates the wrap, which prints SKIP and exits 0
+# (FIXTURE BROKEN in the distribution) -- never an ok. Exactly one half is a respelled subject this fixture cannot
+# drive, which FAILS. An unreadable subject is FIXTURE ERROR.
+rpf_def=0; rpf_guard=0
+grep -qxF 'rpf_main() {' "$SUBJ"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rpf_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJ"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rpf_guard=1
+if [ "$rpf_def$rpf_guard" = 00 ]; then echo "SKIP: $SUBJ predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+if [ "$rpf_def$rpf_guard" != 11 ]; then
+  bad "$SUBJ carries one half of the in-process wrap (rpf_main line: $rpf_def, column-0 source guard: $rpf_guard) -- a respelled subject this fixture cannot drive"
+  report_end fanout-untracked-corpus
+fi
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$SUBJ" || { echo "FIXTURE BROKEN: sourcing $SUBJ defined nothing" >&2; exit 2; }
+declare -F rpf_main >/dev/null || { echo "FIXTURE BROKEN: sourcing $SUBJ defined no rpf_main" >&2; exit 2; }
 
 # ============================================================================
 # THE TREES
@@ -149,7 +174,7 @@ fi
 # and a caller reading $? after a pipe would read the wrong program's status.
 run() {
   local subj="$1" tree="$2" base="$3" out rc
-  out="$( AI_DLC_PROJECT_ROOT="$tree" bash "$subj" "$base" 2>&1 )"; rc=$?
+  out="$( AI_DLC_PROJECT_ROOT="$tree" inproc_run "$subj" rpf_main "$base" 2>&1 )"; rc=$?
   printf '%s\nrc=%d\n' "$out" "$rc"
 }
 # Every predicate below reads a captured string with a here-string, never a pipe: `grep -q`
@@ -221,6 +246,50 @@ if has "$WOUT" "rc=3" && has "$WOUT" "SCOPING FAILURE"; then
 else
   bad "SCOPING FAILURE can no longer fire: the corpus fix made the wrong-tree exit unreachable, so an empty worklist off an unrelated repository now reads as a clean result. $(grep -o 'rc=[0-9]*' <<<"$WOUT")"
 fi
+
+# ============================================================================
+# 5. THE CLI CELLS (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome
+# ============================================================================
+# Each `FXCELL=<id> bash` start is compared with the in-process call on the same input: stdout, stderr and exit
+# separately, byte for byte. Outcomes: exit 0 with a worklist (cli-worklist), exit 3 SCOPING FAILURE (cli-scoping), and
+# exit 2 naming the root the subject RESOLVED (cli-root). Each cell also asserts its own outcome, so two runs that both
+# printed nothing cannot read as equivalent.
+#
+# cli-root IS THE ROOT-RESOLUTION CELL. The subject walks UP from `${BASH_SOURCE[0]}`'s directory for its root when
+# AI_DLC_PROJECT_ROOT is unset; in process, BASH_SOURCE[0] must still be the subject's own file, or the walk starts
+# from this fixture's directory and answers about another tree. A copy sits at <probe>/core/scripts/ under a probe
+# root marked by `.claude/` and holding no repository (GIT_CEILING_DIRECTORIES stops git's own walk at the work
+# directory), and both runs start from an unrelated directory: each must refuse naming <probe> as the root.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # <cell-id> <subject path> <tree or -> <base> -> $EQ/<id>.{ip,cl}.{out,err,rc}; tree `-` leaves the root unset
+  local id="$1" s="$2" t="$3" b="$4"
+  if [ "$t" = - ]; then
+    ( cd "$EQ" && GIT_CEILING_DIRECTORIES="$WORK_P" inproc_run "$s" rpf_main "$b" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    ( cd "$EQ" && GIT_CEILING_DIRECTORIES="$WORK_P" FXCELL="$id" bash "$s" "$b" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  else
+    AI_DLC_PROJECT_ROOT="$t" inproc_run "$s" rpf_main "$b" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    AI_DLC_PROJECT_ROOT="$t" FXCELL="$id" bash "$s" "$b" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  fi
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s err=[%s] / program rc=%s err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(head -1 "$EQ/$1.ip.err")" \
+  "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.err")"; }
+if eqv cli-worklist "$SUBJ" "$TREE" "$BASE" && [ "$(cat "$EQ/cli-worklist.cl.rc")" = 0 ] \
+   && grep -qF '_bmad-output/planning-artifacts/s306/story-1.md:1  ->  docs/architecture.md:16' "$EQ/cli-worklist.cl.out"; then
+  ok "cli-worklist: the program emits the mid-sprint worklist exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-worklist: the program and the in-process call differ, or the outcome is not exit 0 with the untracked row ($(eq_twin cli-worklist))"; fi
+if eqv cli-scoping "$SUBJ" "$WRONG" "$WBASE" && [ "$(cat "$EQ/cli-scoping.cl.rc")" = 3 ] \
+   && grep -qF 'SCOPING FAILURE' "$EQ/cli-scoping.cl.out"; then
+  ok "cli-scoping: the program exits 3 with SCOPING FAILURE on the wrong tree exactly as the in-process call does"
+else bad "cli-scoping: the program and the in-process call differ, or the outcome is not exit 3 with SCOPING FAILURE ($(eq_twin cli-scoping))"; fi
+WORK_P="$(cd "$WORK" && pwd -P)" || { echo "FIXTURE ERROR: cannot resolve WORK" >&2; exit 2; }
+PROBE="$WORK_P/probe"
+mkdir -p "$PROBE/.claude" "$PROBE/core/scripts" && cp "$SUBJ" "$PROBE/core/scripts/report-propagation-fanout.sh" \
+  || { echo "FIXTURE ERROR: could not build the root probe" >&2; exit 2; }
+if eqv cli-root "$PROBE/core/scripts/report-propagation-fanout.sh" - HEAD && [ "$(cat "$EQ/cli-root.cl.rc")" = 2 ] \
+   && grep -qxF "ERROR: $PROBE is not a git repository; this script derives its scope" "$EQ/cli-root.ip.err"; then
+  ok "cli-root: in process, the subject resolves its root from its own file (<probe>), exactly as the program does"
+else bad "cli-root: the in-process root is not the program's, or neither names <probe> as the root ($(eq_twin cli-root))"; fi
 
 echo
 report_end fanout-untracked-corpus

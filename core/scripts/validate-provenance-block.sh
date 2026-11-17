@@ -54,6 +54,7 @@
 # adds a transcript-file + byte-matched SHA citation for retro party-mode to narrow that
 # surface. Compatible with bash 3.2+ and Python 3 stdlib (no PyYAML — hence JSON).
 
+pb_main() {
 set -u
 
 USAGE="usage: ./scripts/ai-dlc/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]
@@ -1024,3 +1025,7 @@ print(
 )
 sys.exit(0)
 PYEOF
+}
+# Loadable: sourcing defines pb_main and runs nothing; run as a program, it runs pb_main.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+pb_main "$@"

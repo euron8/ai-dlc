@@ -1,0 +1,16 @@
+# layer-readopt-gate's starts of its three subjects (BL-879 grammar). Every other drive in shard a's units (main, f)
+# is in process: run.sh calls rov_main, ud_main and rd_main through lib/inproc.sh's inproc_run. One cli cell per
+# distinct CLI outcome, each started as FXCELL=<id> bash "<subject>" in lrg_eqv and compared byte for byte (stdout,
+# stderr, exit) with the in-process call on the same input.
+# readopt-override.sh: exit 1 stale body (--check), exit 0 clean body (--check), exit 0 the default dossier, exit 1
+# an unresolvable anchor (UNDECIDABLE).
+cli core/skills/ai-dlc-update/reconcile/readopt-override.sh cli-ro-stale
+cli core/skills/ai-dlc-update/reconcile/readopt-override.sh cli-ro-green
+cli core/skills/ai-dlc-update/reconcile/readopt-override.sh cli-ro-dossier
+cli core/skills/ai-dlc-update/reconcile/readopt-override.sh cli-ro-undecidable
+# unregistered-drift.sh: exit 0 with the drift rows.
+cli core/skills/ai-dlc-update/reconcile/unregistered-drift.sh cli-ud-rows
+# register-drift.sh: exit 0 the dry run, exit 2 a refused hook, exit 1 nothing to register.
+cli core/skills/ai-dlc-update/reconcile/register-drift.sh cli-rd-dryrun
+cli core/skills/ai-dlc-update/reconcile/register-drift.sh cli-rd-refuse
+cli core/skills/ai-dlc-update/reconcile/register-drift.sh cli-rd-none

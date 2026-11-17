@@ -792,11 +792,29 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 INPUT=$(cat)
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
-AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)
-TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
-FP=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+# One jq start reads the five fields. Each value is exactly what `$(printf '%s' "$INPUT" | jq -r
+# '<path> // empty' 2>/dev/null)` yields: per input document a present value is printed as `jq -r`
+# prints it plus a newline, an absent/null/false/unindexable one prints nothing, a NUL byte is
+# dropped (as command substitution drops it), and trailing newlines are stripped. Each field is
+# framed `+<value>` or `-`, NUL-terminated, five per document.
+SESSION_ID=""; TOOL_NAME=""; AGENT_ID=""; TRANSCRIPT=""; FP=""
+local _hp_i=0 _hp_f _hp_v
+while IFS= read -r -d '' _hp_f; do
+  case "$_hp_f" in +*) _hp_f="${_hp_f#+}"$'\n' ;; *) _hp_f="" ;; esac
+  case "$_hp_i" in
+    0) SESSION_ID="$SESSION_ID$_hp_f" ;;
+    1) TOOL_NAME="$TOOL_NAME$_hp_f" ;;
+    2) AGENT_ID="$AGENT_ID$_hp_f" ;;
+    3) TRANSCRIPT="$TRANSCRIPT$_hp_f" ;;
+    *) FP="$FP$_hp_f" ;;
+  esac
+  _hp_i=$(( (_hp_i + 1) % 5 ))
+done < <(printf '%s' "$INPUT" | jq -j 'def f(p): ([p // empty] | if length == 0 then "-" else "+", (.[0] | if type == "string" then split("\u0000") | join("") else . end) end), "\u0000"; f(.session_id), f(.tool_name), f(.agent_id), f(.transcript_path), f(.tool_input.file_path)' 2>/dev/null)
+for _hp_f in SESSION_ID TOOL_NAME AGENT_ID TRANSCRIPT FP; do
+  _hp_v="${!_hp_f}"
+  while :; do case "$_hp_v" in *$'\n') _hp_v="${_hp_v%$'\n'}" ;; *) break ;; esac; done
+  printf -v "$_hp_f" '%s' "$_hp_v"
+done
 
 # --- 1. Not an ai-dlc session. Free, and it precedes every directory read for the
 # reason `ai-dlc-acknowledge.sh:122-130` gives: this matcher is hot.

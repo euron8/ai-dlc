@@ -1,3 +1,6 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-157 *
-91 core/scripts/validate-escalation-resolution.sh
+# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run.
+# In process (BL-878): the 4 subject starts are the 4 cells of cells.decl (3 cli, 1 e2e); every other drive is an
+# inproc_run call of ver_main, one fx_inproc pass each (the 3 cli cells' in-process twins included).
+71 *
+4 core/scripts/validate-escalation-resolution.sh
+94 inproc:core/scripts/validate-escalation-resolution.sh

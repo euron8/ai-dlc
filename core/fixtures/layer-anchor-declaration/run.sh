@@ -35,10 +35,41 @@ done
 VLE_DIR="$(cd "$(dirname "$VLE")" && pwd)"
 printf 'HERMETIC-CONSUMED %s/validate-layer-entries.sh\n' "$VLE_DIR"
 [ -f "$VLE_DIR/artifact-path-config.sh" ] && printf 'HERMETIC-CONSUMED %s/artifact-path-config.sh\n' "$VLE_DIR"
+
+# IN PROCESS (BL-878). The validator is SOURCED ONCE into this shell (its guard returns after defining vle_main), and
+# every drive calls vle_main inside a subshell, so its `exit`, `set -u`, EXIT trap and function definitions stay there.
+# It starts as a program only in the cli cell (cells.decl). A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with
+# neither its `vle_main() {` line nor the column-0 source guard predates the wrap and reads SKIP (exit 0, never an ok);
+# exactly one half is a respelled subject and FAILs; a subject grep cannot READ (exit 2) is FIXTURE ERROR.
+wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 one half only (FAIL printed), 2 unreadable
+  local d g
+  grep -q "^$2() {\$" "$1"; d=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; g=$?
+  if [ "$d" -gt 1 ] || [ "$g" -gt 1 ]; then
+    echo "FIXTURE ERROR: cannot read $1 (grep exit $d/$g), so the in-process wrap cannot be judged; nothing was asserted" >&2
+    return 2
+  fi
+  [ "$d$g" = 00 ] && return 0
+  [ "$d$g" = 11 ] && return 3
+  if [ "$d" = 1 ]; then echo "  FAIL  $1 carries the column-0 source guard but no \`$2() {\` line -- a respelled subject this fixture cannot drive"
+  else echo "  FAIL  $1 defines \`$2() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run $2 in this shell"; fi
+  return 1
+}
+wrap_gate "$VLE" vle_main; g_vle=$?
+[ "$g_vle" = 2 ] && exit 2
+[ "$g_vle" = 1 ] && { echo "FAIL: 1 of 1 assertions wrong."; exit 1; }
+[ "$g_vle" = 3 ] && { echo "SKIP: subject predates the in-process wrap"; exit 0; }
+
 CONS="$(bash "$DIR/seed.sh")"
 trap 'rm -rf "$(dirname "$CONS")"' EXIT
 
-OUT="$(bash "$VLE" "$CONS" 2>&1)"
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+fx_inproc "$VLE"
+. "$VLE" || { echo "FIXTURE ERROR: sourcing $VLE failed" >&2; exit 2; }
+declare -F vle_main > /dev/null || { echo "FIXTURE ERROR: sourcing $VLE defined no vle_main" >&2; exit 2; }
+
+# One in-process run is the fixture's one state: its output feeds every row, its exit the counter guard.
+OUT="$( ( fx_inproc "$VLE"; vle_main "$CONS" ) 2>&1)"; rc=$?
 
 FAILURES=0
 ASSERTIONS=0
@@ -119,12 +150,25 @@ row "ok-extension.md"                  CLEAN \
 ASSERTIONS=$((ASSERTIONS + 1))
 lines="$(printf '%s\n' "$OUT" | grep -c '^ERROR' || true)"
 counted="$(printf '%s\n' "$OUT" | sed -n 's/^validate-layer-entries: \([0-9]*\) error(s).*/\1/p')"
-bash "$VLE" "$CONS" >/dev/null 2>&1; rc=$?
 if [ "$lines" = "$counted" ] && [ "$rc" -ne 0 ]; then
   printf '  ok    %-26s %s ERROR lines, footer says %s, exit %s\n' "count-matches-lines" "$lines" "$counted" "$rc"
 else
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-26s %s ERROR lines but footer says %s and exit is %s — a reported violation that does not block\n' "count-matches-lines" "$lines" "$counted" "$rc"
+fi
+
+# THE CLI CELL (cells.decl): the validator run as a PROGRAM once, for the one CLI outcome this fixture reads (exit 1 on
+# the seeded consumer), compared byte for byte with an in-process call on the same input: stdout, stderr and exit.
+ASSERTIONS=$((ASSERTIONS + 1))
+EQ="$(dirname "$CONS")/eq"; mkdir -p "$EQ" || exit 2
+( fx_inproc "$VLE"; vle_main "$CONS" ) > "$EQ/ip.out" 2> "$EQ/ip.err"; echo "$?" > "$EQ/ip.rc"
+FXCELL=cli-fail bash "$VLE" "$CONS" > "$EQ/cl.out" 2> "$EQ/cl.err"; echo "$?" > "$EQ/cl.rc"
+if cmp -s "$EQ/ip.out" "$EQ/cl.out" && cmp -s "$EQ/ip.err" "$EQ/cl.err" && cmp -s "$EQ/ip.rc" "$EQ/cl.rc" \
+   && [ "$(cat "$EQ/cl.rc")" = 1 ] && grep -q '^ERROR' "$EQ/cl.out"; then
+  printf '  ok    %-26s the program refuses the seed exactly as the in-process call does (stdout, stderr, exit 1)\n' "cli-fail"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-26s the program and the in-process call differ, or the outcome is not exit 1 with an ERROR: in-process rc=%s program rc=%s\n' "cli-fail" "$(cat "$EQ/ip.rc")" "$(cat "$EQ/cl.rc")"
 fi
 echo
 if [ "$FAILURES" -gt 0 ]; then

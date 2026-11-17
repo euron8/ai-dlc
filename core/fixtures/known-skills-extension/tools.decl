@@ -1,6 +1,9 @@
 bash
 cat
+cmp
 dirname
+grep
+mkdir
 mktemp
 python3
 rm

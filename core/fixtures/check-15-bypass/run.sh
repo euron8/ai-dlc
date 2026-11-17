@@ -74,12 +74,34 @@ if [ -z "$AUDIT" ]; then
 fi
 echo "HERMETIC-CONSUMED $AUDIT"
 
+# IN PROCESS (BL-878). The validator is loaded ONCE (inproc_load: its column-0 guard returns after defining
+# vstub_main) and every drive is inproc_run, which calls vstub_main in a subshell made to look like a fresh
+# `bash <validator>`; its `exit` ends that subshell only. It runs as a program only in its cli cells (cells.decl, at
+# the end).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a validator with neither its `vstub_main() {` line nor the column-0
+# source guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE
+# BROKEN in the distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+grep -q '^vstub_main() {$' "$AUDIT"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$AUDIT"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $AUDIT (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  10) echo "  FAIL  $AUDIT defines \`vstub_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vstub_main in this shell"; echo "FAIL  check-15-bypass: 1 assertion(s) wrong." >&2; exit 1 ;;
+  *) echo "  FAIL  $AUDIT carries the column-0 source guard but no \`vstub_main() {\` line -- a respelled subject this fixture cannot drive"; echo "FAIL  check-15-bypass: 1 assertion(s) wrong." >&2; exit 1 ;;
+esac
+inproc_load "$AUDIT" || { echo "FIXTURE BROKEN: sourcing $AUDIT defined nothing" >&2; exit 2; }
+
 # audit <path>... -> sets OUT to the validator's combined output and RC to its exit code.
 # NOT a printing function called through `$( )`: a command substitution runs in a
 # SUBSHELL, so an exit code assigned inside it never reaches the caller and every variant
 # reads as 0 — a driver that cannot fail, in the fixture written to prove one can.
 OUT=""; RC=0
-audit() { OUT="$(bash "$AUDIT" --root "$TREE" "$@" 2>&1)"; RC=$?; }
+audit() { OUT="$(inproc_run "$AUDIT" vstub_main --root "$TREE" "$@" 2>&1)"; RC=$?; }
 
 # verdict <output> <tree-relative-path> -> the token `flush_expects` compares: the element a
 # FINDING names, `exempt-upstream`, or `ok`. ONE parser for every arm.
@@ -271,6 +293,27 @@ expect tests/fixtures/check-15-bypass-local/seed.sh \
 
 flush_expects
 
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome ------------------
+# The three drives below are the cells: each runs the validator in process (that answer, stdout then stderr, is OUT
+# and its exit RC, which the assertion after it reads) and then as a program on the same input, compared stdout,
+# stderr and exit separately, byte for byte, asserting its own exit and a string it must say, so two runs that both
+# printed nothing cannot read as equivalent. Outcomes: exit 4 (EXAMINED NOTHING), exit 1 (a finding), exit 0 (clean).
+eq_cell() { # eq_cell <cell-id> <want rc> <must-say> <path>... -> OUT, RC from the in-process call
+  local id="$1" want="$2" say="$3" e="$WORK/eq"; shift 3
+  inproc_run "$AUDIT" vstub_main --root "$TREE" "$@" > "$e-$id.ip.out" 2> "$e-$id.ip.err"; echo "$?" > "$e-$id.ip.rc"
+  FXCELL="$id" bash "$AUDIT" --root "$TREE" "$@" > "$e-$id.cl.out" 2> "$e-$id.cl.err"; echo "$?" > "$e-$id.cl.rc"
+  OUT="$(< "$e-$id.ip.out")"$'\n'"$(< "$e-$id.ip.err")"; RC="$(< "$e-$id.ip.rc")"
+  if cmp -s "$e-$id.ip.out" "$e-$id.cl.out" && cmp -s "$e-$id.ip.err" "$e-$id.cl.err" \
+     && cmp -s "$e-$id.ip.rc" "$e-$id.cl.rc" && [ "$(< "$e-$id.cl.rc")" = "$want" ] \
+     && grep -qF -- "$say" "$e-$id.cl.out" "$e-$id.cl.err"; then
+    note "ok" "$id" "the program answers exit $want exactly as the in-process call does (stdout, stderr, exit)"
+  else
+    note "BAD" "$id" "in-process rc=$(< "$e-$id.ip.rc") / program rc=$(< "$e-$id.cl.rc") want $want, saying \"$say\""
+    sed -n '1,3s/^/          | /p' "$e-$id.ip.out" "$e-$id.cl.out" "$e-$id.ip.err" "$e-$id.cl.err"
+    fails=$((fails + 1))
+  fi
+}
+
 # --- THE EXIT MAPPING, in two independent assertions. Both drive the audited-nothing
 # case through a NON-HOT-PATH file rather than through an exempt one, so neither touches
 # the ownership resolve and no change to the exemption can reach them.
@@ -279,7 +322,7 @@ flush_expects
 # "examined nothing" are the two states every vacuously-green implementation of a gate
 # check has collapsed into one. The verdict token is the one declared at
 # enforcement-map.yaml `empty_subject_verdict:` and bound by validate-enforcement-map.sh I93.
-audit _bmad-output/planning-artifacts/carry-over-backlog.md; out="$OUT"
+eq_cell cli-nothing 4 "EXAMINED NOTHING" _bmad-output/planning-artifacts/carry-over-backlog.md; out="$OUT"
 case "$RC:$out" in
   4:*EXAMINED\ NOTHING*) note "ok" "vacuity floor" "a set with nothing in scope exits 4, not 0" ;;
   *) note "BAD" "vacuity floor" "a set with nothing in scope reported exit $RC without an EXAMINED NOTHING verdict"
@@ -288,7 +331,7 @@ esac
 
 # 2. A finding must reach the caller as a non-zero exit. The per-variant assertions above
 # read the report lines and would all still pass if every exit code were 0.
-audit src/v1_item_absent.py; out="$OUT"
+eq_cell cli-finding 1 "FINDING src/v1_item_absent.py:" src/v1_item_absent.py; out="$OUT"
 if [ "$RC" -eq 1 ]; then
   note "ok" "finding exits 1" "a rejected file exits 1"
 else
@@ -300,7 +343,7 @@ fi
 # what it found) and of the exemption (neither path is core, so the dropped count is 0
 # either way). A verdict with no counts cannot be told apart from one that compared
 # nothing, which is the whole reason this check stopped being a paragraph.
-audit _bmad-output/planning-artifacts/carry-over-backlog.md src/v5_honest.py; out="$OUT"
+eq_cell cli-clean 0 "1 audited," _bmad-output/planning-artifacts/carry-over-backlog.md src/v5_honest.py; out="$OUT"
 # Here-string, never a pipe: `grep -q` stops at its first match and a builtin still
 # pushing bytes takes EPIPE, so under pipefail the branch inverts on large input (I54).
 if grep -qE '^validate-stub-audit: 2 path\(s\) given, 1 hot-path, [0-9]+ dropped upstream-owned, [0-9]+ resolver-undetermined \(in scope\), 1 audited,' <<<"$out"; then

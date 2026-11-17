@@ -36,6 +36,31 @@ trap 'rm -rf "$WORK"' EXIT
 printf 'HERMETIC-CONSUMED %s\n' "$VALIDATOR"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The validator is loaded ONCE with lib/inproc.sh's inproc_load (its source guard returns after
+# defining vsc_main) and every case asks vsc_main through inproc_run, in a subshell made to look like a fresh
+# `bash validate-snapshot-conservation.sh`. The program runs only in the cli cells (cells.decl).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped validator, and
+# sourcing a pre-wrap validator would run its whole body. So the shape is checked first, on its two halves: neither the
+# `vsc_main() {` line nor the column-0 source guard is a validator that predates the wrap, which prints SKIP and exits 0
+# (FIXTURE BROKEN in the distribution) -- never an ok. Exactly one half is a respelled validator this fixture cannot
+# drive, which FAILS. An unreadable validator is FIXTURE ERROR.
+vsc_def=0; vsc_guard=0
+grep -qxF 'vsc_main() {' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable validator is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || vsc_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable validator is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || vsc_guard=1
+if [ "$vsc_def$vsc_guard" = 00 ]; then echo "SKIP: $VALIDATOR predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+if [ "$vsc_def$vsc_guard" != 11 ]; then
+  bad "$VALIDATOR carries one half of the in-process wrap (vsc_main line: $vsc_def, column-0 source guard: $vsc_guard) -- a respelled validator this fixture cannot drive"
+  report_end snapshot-conservation
+fi
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$VALIDATOR" || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined nothing" >&2; exit 2; }
+declare -F vsc_main >/dev/null || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined no vsc_main" >&2; exit 2; }
 
 LAST_OUT=""
 # Each case gets its own copy of the seeded repository, so a working-tree edit in one
@@ -51,7 +76,7 @@ case_dir() {
 # quotes it prints an empty string -- which reads like the validator said nothing.
 RC=""
 run_on() {
-  LAST_OUT="$(bash "$VALIDATOR" --root "$1" "${@:2}" 2>&1)"
+  LAST_OUT="$(inproc_run "$VALIDATOR" vsc_main --root "$1" "${@:2}" 2>&1)"
   RC="$?"
 }
 field() { printf '%s\n' "$LAST_OUT" | sed -n "s/^$1 *: *\([^ ]*\).*/\1/p" | head -1; }
@@ -227,6 +252,26 @@ if [ "$r" = "1" ]; then
 else
   bad "--floor 5 did not change the verdict (rc=$r) — the floor is not wired to the comparison: $LAST_OUT"
 fi
+
+# --- The cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome --
+# Each `FXCELL=<id> bash` start is compared with the in-process call on the same case directory: stdout, stderr and
+# exit separately, byte for byte. Outcomes: exit 0 conserved (cli-pass), exit 1 destroyed (cli-fail), exit 2 on an
+# unparseable metrics file (cli-error). Each cell also asserts its own exit code, so two runs that both printed nothing
+# cannot read as equivalent.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # <cell-id> <case dir> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  inproc_run "$VALIDATOR" vsc_main --root "$2" > "$EQ/$1.ip.out" 2> "$EQ/$1.ip.err"; echo "$?" > "$EQ/$1.ip.rc"
+  FXCELL="$1" bash "$VALIDATOR" --root "$2" > "$EQ/$1.cl.out" 2> "$EQ/$1.cl.err"; echo "$?" > "$EQ/$1.cl.rc"
+  cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.err" "$EQ/$1.cl.err" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -1 "$EQ/$1.ip.out")" "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+for _cell in cli-pass:moved:0 cli-fail:deleted:1 cli-error:unparseable:2; do
+  _id="${_cell%%:*}"; _rest="${_cell#*:}"; _case="${_rest%%:*}"; _want="${_rest#*:}"
+  if eqv "$_id" "$WORK/case-$_case" && [ "$(cat "$EQ/$_id.cl.rc")" = "$_want" ] && { [ -s "$EQ/$_id.cl.out" ] || [ -s "$EQ/$_id.cl.err" ]; }; then
+    ok "$_id: the program answers the $_case case exactly as the in-process call does (stdout, stderr, exit $_want)"
+  else bad "$_id: the program and the in-process call differ on the $_case case, or the exit is not $_want ($(eq_twin "$_id"))"; fi
+done
 
 echo
 report_end snapshot-conservation

@@ -93,12 +93,13 @@
 # Exit: 0 = reported or rotated (0 closed entries is a normal, affirmative result)
 #       1 = refused: an integrity check failed and nothing was written
 #       2 = usage
+lrot_main() {
 set -uo pipefail
 
 # ledger_entry_shape() — THE entry-boundary rule, from lib.sh. This block used to carry its own
 # copy, "lifted from ledger-reverify's parser unchanged"; within one release the label rule in
 # it had already drifted. There is one boundary now.
-SELF="$(cd "$(dirname "$0")" && pwd)"
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "ledger-rotate: cannot source $SELF/lib.sh" >&2; exit 1; }
 
@@ -617,3 +618,6 @@ cat "$TMPD/keep" > "$LEDGER"
 
 echo "ledger-rotate: moved ${n_move} closed entries (${l_move} lines) to ${ARCHIVE}; ledger is now ${l_keep} lines."
 sed 's/^/  /' "$TMPD/moved-names"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+lrot_main "$@"

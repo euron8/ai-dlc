@@ -19,3 +19,5 @@ sed
 sort
 tail
 tr
+cmp
+cp

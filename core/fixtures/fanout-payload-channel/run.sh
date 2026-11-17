@@ -127,6 +127,32 @@ mkdir -p "$A5_ROOT" && [ -d "$A5_ROOT" ] \
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { printf '  FIXTURE BROKEN  %s\n' "$1" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The subject is loaded ONCE with lib/inproc.sh's inproc_load (its source guard returns after
+# defining rpf_main) and every arm asks rpf_main through inproc_run, in a subshell made to look like a fresh
+# `bash report-propagation-fanout.sh`: its exports reach python3's environment exactly as the program's would, which is
+# what arms 2 and 3 read. The program runs only in the cli cells (cells.decl).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped subject, and
+# sourcing a pre-wrap subject would run its whole body. So the shape is checked first, on its two halves: neither the
+# `rpf_main() {` line nor the column-0 source guard is a subject that predates the wrap, which prints SKIP and exits 0
+# (FIXTURE BROKEN in the distribution) -- never an ok. Exactly one half is a respelled subject this fixture cannot
+# drive, which FAILS. An unreadable subject is FIXTURE ERROR.
+rpf_def=0; rpf_guard=0
+grep -qxF 'rpf_main() {' "$SUBJ"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rpf_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJ"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || rpf_guard=1
+if [ "$rpf_def$rpf_guard" = 00 ]; then echo "SKIP: $SUBJ predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+if [ "$rpf_def$rpf_guard" != 11 ]; then
+  bad "$SUBJ carries one half of the in-process wrap (rpf_main line: $rpf_def, column-0 source guard: $rpf_guard) -- a respelled subject this fixture cannot drive"
+  report_end fanout-payload-channel
+fi
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+inproc_load "$SUBJ" || broken "sourcing $SUBJ defined nothing"
+declare -F rpf_main >/dev/null || broken "sourcing $SUBJ defined no rpf_main"
 
 # ============================================================================
 # THE SIGNATURES
@@ -210,7 +236,7 @@ u_listed=$( cd "$SMALL" && "$REAL_GIT" ls-files --others --exclude-standard \
 # reading $? after a pipe would read the wrong program's status.
 run() {
   local subj="$1" tree="$2" base="$3" out rc
-  out="$( AI_DLC_PROJECT_ROOT="$tree" bash "$subj" "$base" 2>&1 )"; rc=$?
+  out="$( AI_DLC_PROJECT_ROOT="$tree" inproc_run "$subj" rpf_main "$base" 2>&1 )"; rc=$?
   printf '%s\nrc=%d\n' "$out" "$rc"
 }
 
@@ -223,7 +249,7 @@ capture() {
   printf '#!/bin/bash\ncat >/dev/null\nenv > "%s"\n' "$dest" > "$shimdir/python3" || return 2
   chmod +x "$shimdir/python3" || return 2
   ( cd "$tree" && PATH="$shimdir:$PATH" AI_DLC_PROJECT_ROOT="$tree" \
-      bash "$subj" "$base" ) >/dev/null 2>&1
+      inproc_run "$subj" rpf_main "$base" ) >/dev/null 2>&1
   [ -s "$dest" ]
 }
 
@@ -316,7 +342,7 @@ mkshim() { # mkshim <dir> <env-assignment-or-empty>
 }
 runshim() { # runshim <shimdir> <tree> <base>
   local out rc
-  out="$( cd "$2" && PATH="$1:$PATH" AI_DLC_PROJECT_ROOT="$2" bash "$SUBJ" "$3" 2>&1 )"; rc=$?
+  out="$( cd "$2" && PATH="$1:$PATH" AI_DLC_PROJECT_ROOT="$2" inproc_run "$SUBJ" rpf_main "$3" 2>&1 )"; rc=$?
   printf '%s\nrc=%d\n' "$out" "$rc"
 }
 mkshim "$WORK/passthru" ""                                          || broken "could not build the pass-through shim"
@@ -360,6 +386,33 @@ if [ "$after" -le "$before" ]; then
 else
   bad "5. the run left $(( after - before )) fanout.* directories behind — the cleanup trap is gone and every gate-loop invocation leaks a copy of the corpus"
 fi
+
+# ----------------------------------------------------------------------------
+# 6. THE CLI CELLS (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome
+# ----------------------------------------------------------------------------
+# Each `FXCELL=<id> bash` start is compared with the in-process call on the same input: stdout, stderr and exit
+# separately, byte for byte. Outcomes: exit 0 with a worklist (cli-worklist, through the pass-through shim) and exit 3
+# SCOPING FAILURE on an unreadable payload (cli-scoping, through the broken-payload shim). Each cell also asserts its
+# own outcome, so two runs that both printed nothing cannot read as equivalent.
+EQ="$WORK/eq"; mkdir -p "$EQ" || broken "mkdir eq"
+eqv() { # <cell-id> <shimdir> <tree> <base> -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" sd="$2" t="$3" b="$4"
+  ( cd "$t" && PATH="$sd:$PATH" AI_DLC_PROJECT_ROOT="$t" inproc_run "$SUBJ" rpf_main "$b" ) \
+    > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$t" && PATH="$sd:$PATH" AI_DLC_PROJECT_ROOT="$t" FXCELL="$id" bash "$SUBJ" "$b" ) \
+    > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s err=[%s] / program rc=%s err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(head -1 "$EQ/$1.ip.err")" \
+  "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.err")"; }
+if eqv cli-worklist "$WORK/passthru" "$SMALL" "$SBASE" && [ "$(cat "$EQ/cli-worklist.cl.rc")" = 0 ] \
+   && grep -qF "${SIG_UNTRACKED}.md" "$EQ/cli-worklist.cl.out"; then
+  ok "6a. cli-worklist: the program emits the worklist exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "6a. cli-worklist: the program and the in-process call differ, or the outcome is not exit 0 naming the untracked artifact ($(eq_twin cli-worklist))"; fi
+if eqv cli-scoping "$WORK/broken" "$SMALL" "$SBASE" && [ "$(cat "$EQ/cli-scoping.cl.rc")" = 3 ] \
+   && grep -qF 'SCOPING FAILURE' "$EQ/cli-scoping.cl.err"; then
+  ok "6b. cli-scoping: the program exits 3 with SCOPING FAILURE on an unreadable payload exactly as the in-process call does"
+else bad "6b. cli-scoping: the program and the in-process call differ, or the outcome is not exit 3 with SCOPING FAILURE ($(eq_twin cli-scoping))"; fi
 
 echo
 report_end fanout-payload-channel

@@ -5,3 +5,6 @@
 core/scripts/validate-locked-anchor.sh
 core/schemas/harness-origin.json
 core/fixtures/lib/report.sh
+core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

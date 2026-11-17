@@ -1,0 +1,6 @@
+# backlog-rotate-fence-guard's starts of scripts/backlog-rotate.sh (BL-879 grammar). Every other drive is in process:
+# run_rt sources the rotator and calls brt_main in a subshell. One cli cell per distinct CLI outcome (the fence guard's
+# refusal, exit 2; a clean apply, exit 0), each started as FXCELL=<id> bash "$RT" in cli_eqv() and compared byte for
+# byte (stdout, stderr, exit, the ledger and archive written) with the in-process call over the same reseeded case.
+cli scripts/backlog-rotate.sh cli-refuse
+cli scripts/backlog-rotate.sh cli-apply

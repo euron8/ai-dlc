@@ -64,6 +64,7 @@
 #   0  -- every declared file (under --file, that one file) equals theirs outside its declared spans
 #   1  -- drift outside a declared span, a lost anchor, or an unlocatable site
 #   2  -- usage error, or the declaration/theirs could not be read at all
+ssd_main() {
 set -uo pipefail
 
 PROG="setup-site-drift.sh"
@@ -380,3 +381,6 @@ if [ "$n_files" -eq 0 ]; then
 fi
 
 exit "$fail"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ssd_main "$@"
