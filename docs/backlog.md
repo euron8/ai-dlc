@@ -2760,7 +2760,7 @@ Count rows expected to move, which the lead ratchets: story-evidence-scaffold (a
 
 Item 6, the read-set re-trace, is run in two passes:
 - Plain pass: `bash core/scripts/derive-fixture-readsets.sh --list "<67 names>" --tracer sandbox`, main checkout detached at e93303f2c (0.1162.0), rc 0. All 67 fixtures are traced with non-zero path counts. The committed map `.ai-dlc-fixture-readsets.tsv` is byte-unchanged: every listed fixture has an `inputs.decl`, and the merge drops declared fixtures' rows (BL-897).
-- Declared pass: the same tool with `--declared-out`, over 69 names (the 67 plus layer-contract-conformance-b and check-24-adversarial-convergence), main checkout detached at 1a08915ab (tree = 0.1163.0, eba0dcd93), rc 0. 69 are judged, 68 accepted and 1 omitted: story-evidence-scaffold-b, "the stream dropped reports 12 time(s) in this window", owed a retake.
+- Declared pass: the same tool with `--declared-out`, over 69 names (the 67 plus layer-contract-conformance-b and check-24-adversarial-convergence), main checkout detached at 1a08915ab (tree = 0.1163.0, eba0dcd93), rc 0. 69 are judged, 68 accepted and 1 omitted: story-evidence-scaffold-b, "the stream dropped reports 12 time(s) in this window", owed a retake (retaken; see BL-1155).
 - The declared pass's results and its traced-but-undeclared ("+") and declared-but-unread ("-") findings are recorded under BL-1155. Windows and report: `~/.cache/ai-dlc/readset-windows/batch-258/` (outside the repo, beside the verdict store).
 - No declaration is changed by this item (lead ruling: the comparison is not the shipping join, and a decl edit moves verdicts).
 
