@@ -1047,8 +1047,6 @@ else
   # once per world and reads the separator of every pair in the artifact_sha list it wrote. One
   # subject world serves every drive: each output is moved aside, so the next drive writes afresh.
   # Expectations are hard-coded: `@` with every reader current, `=` in each old-reader world.
-  # The world is SHARED by every drive, so a parallel --matrix worker builds its own (mx_enqueue clears KE_SD and
-  # kearm calls ke_build): two rows driving one world at once read each other's output as already written.
   ke_build() {
     KE_SD="$(new_subj_world)" && {
       for k in $(cut -f1 "$(subj_root "$KE_SD")/subject.map"); do sshard "$KE_SD" "$k" 0 "$k"; done

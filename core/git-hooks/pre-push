@@ -925,11 +925,13 @@ readset_local_validate() { # <list> <out>
     b="${d%/}"; b="${b##*/}"
     [ -f "${FXROOT}${b}/inputs.decl" ] && printf '%s\n' "$b" >> "$out/.mapped.all"
   done < "$list"
-  while IFS= read -r d; do
-    b="${d%/}"; b="${b##*/}"
-    grep -qxF "$b" "$out/.mapped.all" && continue
-    readset_trace_add "$out" "$b" "$dsha"
-  done < "$list"
+  readset_unmapped "$list" "$out/.mapped.all" > "$out/.unm"
+  while IFS= read -r b; do readset_trace_add "$out" "$b" "$dsha"; done < "$out/.unm"
+}
+# The dispatch list's fixture names (`<dir>/` -> its last component) absent from <mapped>, in list order, one awk.
+readset_unmapped() { # <list> <mapped>
+  M="$2" awk 'BEGIN { while ((getline l < ENVIRON["M"]) > 0) m[l] = 1 }
+    { b = $0; sub(/\/$/, "", b); sub(/.*\//, "", b); if (!(b in m)) print b }' "$1"
 }
 
 # Queue <fixture> for the post-green trace, or hold it when its last three traces were discarded on
@@ -1468,6 +1470,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 786022459096dffaab204f2ccb876acf8a4f6d6f38fa1e237af948531f071c77 another fixture's inputs.decl is no longer keyed through a covering directory and a `<dir>/*/<name>` line expands to F rows (BL-1071); every row an existing entry carries keeps its value
 # VS-IDENTITY 1 f89e84291bd6c193454135df357f44d0c104e2cec7d76423cdbd7d1f138bee89 the tools.decl search path is walked with builtins, no fork per line (BL-1124); every parse row is byte-identical, so no entry changes meaning
 # VS-IDENTITY 1 65784a8c67e1cc03e26571fcc5442467221877352a6a29be7be13f9fd00fb91d readset_decl_parse folds its per-fixture awk and cat forks into one awk and takes an optional premap (BL-1124); every parse row is byte-identical, so no entry changes meaning
+# VS-IDENTITY 1 2344ea159b99335fe28e7862362a545b06d8b659e12f3fe4cb88ca7eb482582b BL-1124 (c) select cuts: the per-fixture grep loops are one awk each, readset_strip_keys backgrounds each bash -n without a subshell group, readset_decl_batch parses every declaration in one awk with the one premap/mapper join, readset_vs_want batches the per-candidate readers and the store scan stops at a foreign line-3 #fixture; every key, parse and digest row is byte-identical, so no entry changes meaning
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -1542,6 +1545,54 @@ readset_vs_entry() { # <entry> <digest input file>
 # Status 1 when it prints no row.
 readset_key_rows() { # <record>
   grep -vE '^#(format|state|tools|pending) ' "$1"
+}
+# MANY FIXTURES' DIGEST ROWS IN A FIXED NUMBER OF EXECS (readset_verdicts). For each <fx> line of <cand>, in order,
+# whose <keys dir>/<fx> holds a key row: `<fx>\tI\t` and readset_vs_inproc's row, `<fx>\tJ\t` and readset_vs_judge's
+# (FXCOUNT_JUDGE set and a row found), then `<fx>\tR\t` and each readset_key_rows row, under the project root `.`.
+# Byte-identical to those three readers, which stay the per-fixture API (hermetic-run.sh); a change to one of them
+# changes this reader with it. One shasum over every present cells.decl and one awk; without the FXCOUNT_KEYROWS
+# table, one judge call per candidate with a key row, the set the per-fixture loop called (each one a bash start).
+# <scratch prefix>.p, .s and .j are scratch files.
+readset_vs_want() { # <cand> <keys dir> <scratch prefix>
+  local fx d c r k="" a=""
+  local -a cf=()
+  while IFS= read -r fx; do
+    for d in core/fixtures tests/fixtures; do [ -d "$d/$fx" ] && break; done
+    if [ ! -f "$d/$fx/cells.decl" ]; then printf '%s\tn\t\n' "$fx"
+    else
+      case "$d/$fx" in
+        *\\*) c="$(shasum -a 256 < "$d/$fx/cells.decl" | cut -d' ' -f1)"; printf '%s\ts\t%s\n' "$fx" "$c" ;;
+        *) cf[${#cf[@]}]="$d/$fx/cells.decl"; printf '%s\tp\t%s\n' "$fx" "$d/$fx/cells.decl" ;;
+      esac
+    fi
+  done < "$1" > "$3.p" || return 1
+  : > "$3.s" || return 1
+  [ "${#cf[@]}" -eq 0 ] || shasum -a 256 -- "${cf[@]}" > "$3.s" 2>/dev/null
+  if [ -n "${FXCOUNT_JUDGE:-}" ]; then
+    if [ -n "${FXCOUNT_KEYROWS:-}" ] && [ -f "$FXCOUNT_KEYROWS" ]; then k="$FXCOUNT_KEYROWS"
+    else
+      k="$3.j"
+      while IFS= read -r fx; do
+        [ -f "$2/$fx" ] && readset_key_rows "$2/$fx" > /dev/null 2>&1 || continue
+        r="$(readset_vs_judge "$fx" .)" && printf '%s\t%s\n' "$fx" "$r" || :
+      done < "$1" > "$k" || return 1
+    fi
+  fi
+  [ -f scripts/fixture-inprocess-allowlist.txt ] && a=scripts/fixture-inprocess-allowlist.txt
+  VA="$a" VS="$3.s" VK="$k" VD="$2" awk -F'\t' '
+    BEGIN { if (ENVIRON["VA"] != "") while ((getline l < ENVIRON["VA"]) > 0) if (l !~ /^[[:space:]]*(#|$)/) { t = index(l, "\t"); L[t ? substr(l, 1, t - 1) : l] = 1 }
+      while ((getline l < ENVIRON["VS"]) > 0) if (substr(l, 65, 2) == "  ") S[substr(l, 67)] = substr(l, 1, 64)
+      vj = (ENVIRON["VK"] != "")
+      if (vj) while ((getline l < ENVIRON["VK"]) > 0) { t = index(l, "\t"); f = t ? substr(l, 1, t - 1) : l; if (f in J) continue
+        r = t ? substr(l, t + 1) : ""; t = index(r, "\t"); J[f] = t ? substr(r, 1, t - 1) : r }
+      kd = ENVIRON["VD"] }
+    { k = kd "/" $1; n = 0
+      while ((getline l < k) > 0) if (l !~ /^#(format|state|tools|pending) /) R[++n] = l
+      close(k)
+      if (!n) next
+      print $1 "\tI\t#inproc " (($1 in L) ? "listed" : "unlisted") " " (($2 == "n") ? "none" : ($2 == "s") ? $3 : (($3 in S) ? S[$3] : ""))
+      if (vj && ($1 in J) && substr(J[$1], 1, 8) == "#judge f") print $1 "\tJ\t" J[$1]
+      for (i = 1; i <= n; i++) print $1 "\tR\t" R[i] }' "$3.p"
 }
 # READSET_VS_END
 # RECORD_HOME_BEGIN
@@ -1644,39 +1695,88 @@ readset_section_of() {
 readset_tail_sha() { # <file>: the top-level lines after its last line that is exactly `}`, comments and blanks dropped
   awk '{ a[NR] = $0 } $0 == "}" { e = NR } END { for (i = e + 1; i <= NR; i++) print a[i] }' "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
 }
-readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix> [<premap>]
-  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" pm="${7:-}" t k p rq dp name found seen="|" ga gb gn gf ge xr fc=0 fg=0 xs="" xl
-  printf '%s\tN\n' "$fx"
-  # ONE AWK PER DECLARATION: the rows (`.n`), the unmapped five-field rows (`.r`), the mapper input (`.mi`, a D row
-  # with its `/`) and the flags (`.f`: `<core line> <F row spelling /*/>`), read back with builtins.
-  awk -v fx="$fx" -v pl="$w.p" -v rf="$w.r" -v mf="$w.mi" -v ff="$w.f" 'BEGIN { printf "" > pl; printf "" > rf; printf "" > mf }
+#   readset_decl_batch  <entries> <dist|cons> [<premap>] [m]: the inputs.decl parse of EVERY entry (`<fx>\t<inputs.decl>\t<scratch
+#     prefix>`) in ONE awk, so a declared set costs one start, not one per fixture. Each entry's fx and its `.p .r .mi .f`
+#     paths reach awk as assignment operands, escape-processed as a `-v` value is; `.n .m .b` are the raw prefix. Per
+#     entry it writes the rows (`.n`), the unmapped five-field rows (`.r`), the mapper input (`.mi`, a D row with its
+#     `/`), the `+` paths (`.p`), the flags (`.f`: `<core line> <F row spelling /*/>`) and `.b`: `<status> <joined>`,
+#     status 0, 3 (a refusal: `.n` holds the X rows), 2 (unreadable) or 4 (mapcount). THE ONE JOIN, consumer layout, a
+#     declaration with a core/ line: its mapped paths come from a PREMAP (`<mapper input>\t<mapper output>` rows, one
+#     mapper start for a whole list of fixtures) holding every mapper input, written to `.m`, or, with `m`, from the
+#     mapper's own `.m`, line by line, whose count must equal the rows'. The join rewrites `.r` and `.f` and `<joined>` is
+#     1; a premap lacking a line leaves `<joined>` 0 and readset_decl_parse starts the mapper for that fixture alone.
+readset_decl_batch() {
+  local en="$1" lay="$2" pm="" md="${4:-}" e1 e2 e3 n=0
+  [ -z "${3:-}" ] || [ ! -f "$3" ] || pm="$3"
+  printf '\n' > "$en.mk" || return 0
+  set --
+  while IFS=$'\t' read -r e1 e2 e3; do
+    n=$((n + 1))
+    if [ -r "$e2" ]; then set -- "$@" "fx=$e1" "pl=$e3.p" "rf=$e3.r" "mf=$e3.mi" "ff=$e3.f" ur=0 "$e2" "$en.mk"
+    else set -- "$@" "fx=$e1" "pl=$e3.p" "rf=$e3.r" "mf=$e3.mi" "ff=$e3.f" ur=1 "$en.mk"
+      # the open error the per-fixture awk printed for an unopenable inputs.decl, by an awk that opens it
+      awk '{ }' "$e2" < /dev/null > /dev/null; fi
+  done < "$en"
+  [ "$#" -gt 0 ] || return 0
+  RB_E="$en" RB_N="$n" RB_L="$lay" RB_M="$pm" RB_J="$md" awk 'BEGIN { en = ENVIRON["RB_E"]; mk = en ".mk"; lay = ENVIRON["RB_L"]; pmf = ENVIRON["RB_M"]
+      jm = (ENVIRON["RB_J"] == "m")
+      if (lay == "cons" && pmf != "") { pmok = 1; while ((g = (getline l < pmf)) > 0) { split(l, a, "\t"); PM[a[1]] = a[2] }
+        if (g < 0) pmok = 0; close(pmf) } }
+    function fin(   i, st, j, raw, w, t, nm, l, g, q, p, f2) {
+      raw = ""; getline raw < en; t = index(raw, "\t"); w = substr(raw, t + 1); w = substr(w, index(w, "\t") + 1)
+      printf "" > pl; for (i = 1; i <= np; i++) print PB[i] > pl; close(pl)
+      printf "" > rf; for (i = 1; i <= nn; i++) print NL[i] "\t" RB[i] > rf; close(rf)
+      printf "" > mf; for (i = 1; i <= nn; i++) print MI[i] > mf; close(mf)
+      printf "" > (w ".n"); for (i = 1; i <= no; i++) print OB[i] > (w ".n"); close(w ".n")
+      st = ur ? 2 : (bad ? 3 : 0); j = 0
+      if (!ur) { print (fc + 0) " " (fg + 0) > ff; close(ff) }
+      if (st == 0 && lay == "cons" && fc == 1) {
+        if (jm) { nm = 0; while ((g = (getline l < (w ".m"))) > 0) MM[++nm] = l; close(w ".m"); j = 1 }
+        else if (pmok) { j = 1; for (i = 1; i <= nn; i++) if (!(MI[i] in PM)) { j = 0; break }
+          if (j) { nm = nn; for (i = 1; i <= nn; i++) { MM[i] = PM[MI[i]]; print MM[i] > (w ".m") }; close(w ".m") } }
+        if (j && nm != nn) { st = 4; j = 0 }
+        else if (j) { f2 = 0
+          for (i = 1; i <= nn; i++) { split(NL[i], q, "\t"); p = MM[i]; sub(/\/+$/, "", p)
+            print q[1] "\t" q[2] "\t" p "\t" q[4] "\t" q[3] > rf; if (q[2] == "F" && index(p, "/*/")) f2 = 1 }
+          close(rf); print "1 " (f2 + 0) > ff; close(ff) } }
+      print st " " j > (w ".b"); close(w ".b")
+      bad = 0; fc = 0; fg = 0; nn = 0; np = 0; no = 0; nfin++ }
+    END { if (nfin != ENVIRON["RB_N"] + 0) printf "readset_decl_batch: %d of %d entries scanned\n", nfin, ENVIRON["RB_N"] > "/dev/stderr" }
+    FILENAME == mk { fin(); next }
     { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
       r = 0; x = 0; while ((c = substr($0, 1, 1)) == "!" || c == "+") { if (c == "!") r = 1; else x = 1; $0 = substr($0, 2) }
-      if (r && x) { print fx "\tX\tplusbang\t" $0; bad = 1; next }
-      if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) { print fx "\tX\tabs\t" $0; bad = 1; next }
+      if (r && x) { OB[++no] = fx "\tX\tplusbang\t" $0; bad = 1; next }
+      if ($0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/) { OB[++no] = fx "\tX\tabs\t" $0; bad = 1; next }
       k = "F"; if ($0 ~ /\/$/) { k = "D"; sub(/\/+$/, "") }
-      if (x && k == "D") { print fx "\tX\tplusdir\t" $0; bad = 1; next }
-      if (x && $0 != "") print $0 > pl
-      if ($0 != "") { print fx "\t" k "\t" $0 "\t" r; print fx "\t" k "\t" $0 "\t" r "\t" $0 > rf; print $0 ((k == "D") ? "/" : "") > mf
+      if (x && k == "D") { OB[++no] = fx "\tX\tplusdir\t" $0; bad = 1; next }
+      if (x && $0 != "") PB[++np] = $0
+      if ($0 != "") { nn++; NL[nn] = fx "\t" k "\t" $0 "\t" r; RB[nn] = $0; MI[nn] = $0 ((k == "D") ? "/" : ""); OB[++no] = NL[nn]
         if ($0 == "core" || index($0, "core/") == 1) fc = 1
-        if (k == "F" && index($0, "/*/")) fg = 1 } }
-    END { print (fc + 0) " " (fg + 0) > ff; exit bad ? 3 : 0 }' "$fd/inputs.decl" > "$w.n"
-  if [ $? -ne 0 ]; then awk -F'\t' '$2 == "X"' "$w.n"; return 0; fi
+        if (k == "F" && index($0, "/*/")) fg = 1 } }' "$@"
+}
+readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix> [<premap>] [pre]
+  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" pm="${7:-}" t k p rq dp name found seen="|" ga gb gn gf ge xr fc=0 fg=0 xs="" xl rb rj
+  printf '%s\tN\n' "$fx"
+  # `pre`: the caller already ran readset_decl_batch over an entry naming this fixture and <scratch prefix>.
+  if [ "${8:-}" != pre ]; then
+    printf '%s\t%s\t%s\n' "$fx" "$fd/inputs.decl" "$w" > "$w.e1"
+    readset_decl_batch "$w.e1" "$lay" "$pm"
+  fi
+  read -r rb rj < "$w.b" || { rb=2; rj=0; }
+  if [ "$rb" != 0 ]; then awk -F'\t' '$2 == "X"' "$w.n"; return 0; fi
   read -r fc fg < "$w.f" || { fc=0; fg=0; }
   if [ "$lay" = cons ] && [ "$fc" = 1 ]; then
     if [ -z "$mp" ] || [ ! -f "$mp" ]; then printf '%s\tX\tnomap\t%s\n' "$fx" "$mp"; return 0; fi
-    # A PREMAP (`<mapper input>\t<mapper output>` rows, one mapper start for a whole list of fixtures) answers every
-    # line it holds; a line it lacks, or no premap, starts the mapper for this fixture alone. The join keeps the
-    # mapper's own count check (mapcount) and rewrites `.r` and the glob flag on the mapped paths.
-    if [ -z "$pm" ] || [ ! -f "$pm" ] \
-      || ! awk -F'\t' 'FILENAME == ARGV[1] { M[$1] = $2; next } !($0 in M) { exit 5 } { print M[$0] }' "$pm" "$w.mi" > "$w.m" 2>/dev/null; then
+    # A declaration the premap did not answer whole starts the mapper for this fixture alone, and readset_decl_batch's
+    # one join (`m`) reads its output, with the mapper's own count check (mapcount).
+    if [ "$rj" != 1 ]; then
       bash "$mp" --map < "$w.mi" > "$w.m" 2> "$w.e" \
         || { printf '%s\tX\tmaprefuse\t%s\n' "$fx" "$(sed -n 1p "$w.e" | tr '\t' ' ')"; return 0; }
+      printf '%s\t%s\t%s\n' "$fx" "$fd/inputs.decl" "$w" > "$w.e1"
+      readset_decl_batch "$w.e1" "$lay" "" m
+      read -r rb rj < "$w.b" || rb=2
+      [ "$rb" = 0 ] || { printf '%s\tX\tmapcount\t-\n' "$fx"; return 0; }
     fi
-    awk -F'\t' -v ff="$w.f" 'FILENAME == ARGV[1] { m[FNR] = $0; nm = FNR; next }
-      { nn = FNR; p = m[FNR]; sub(/\/+$/, "", p); print $1 "\t" $2 "\t" p "\t" $4 "\t" $3; if ($2 == "F" && index(p, "/*/")) fg = 1 }
-      END { if (nm + 0 != nn + 0) exit 4; print "1 " (fg + 0) > ff }' "$w.m" "$w.n" > "$w.r" \
-      || { printf '%s\tX\tmapcount\t-\n' "$fx"; return 0; }
     read -r fc fg < "$w.f" || fg=0
   fi
   # A `<dir>/*/<name>` LINE expands here, after mapping, into one F row per file on disk matching it, each carrying the
@@ -1836,11 +1936,13 @@ readset_strip_keys() {
       printf "" > (b ".s"); print "rs_f() {" > (b ".wo"); print "rs_f() {" > (b ".ws")
       while ((getline l < f) > 0) { print l > (b ".wo"); if (l !~ /^[[:space:]]*(#|$)/) { print l > (b ".s"); print l > (b ".ws") } }
       print "}" > (b ".wo"); print "}" > (b ".ws"); close(f); close(b ".s"); close(b ".wo"); close(b ".ws") }' "$w/l"
-  ( while IFS= read -r p; do
+  ( r=""
+    while IFS= read -r p; do
       n=$((n + 1)); case "$p" in /*) f="$p" ;; *) f="$d/$p" ;; esac
-      { bash -n "$f" 2>/dev/null && : > "$w/$n.n"; } &
-      [ $((n % 8)) -ne 0 ] || wait
-    done < "$w/l"; wait ) > /dev/null 2>&1
+      bash -n "$f" 2>/dev/null & r="$r $n:$!"
+      [ $((n % 8)) -ne 0 ] || { for q in $r; do wait "${q#*:}" && : > "$w/${q%%:*}.n"; done; r=""; }
+    done < "$w/l"
+    for q in $r; do wait "${q#*:}" && : > "$w/${q%%:*}.n"; done ) > /dev/null 2>&1
   ( while IFS= read -r p; do
       n=$((n + 1))
       [ -s "$w/$n.s" ] && [ -f "$w/$n.n" ] || continue
@@ -1949,7 +2051,12 @@ readset_declared() { # <list> <out>
   fi
   while IFS= read -r d; do
     b="${d%/inputs.decl}"; b="${b##*/}"
-    readset_decl_parse "$b" "${FXROOT}${b}" "$lay" "$mp" "$xpd" "$out/.dp.$b" "$pm" >> "$out/.dparse"
+    printf '%s\t%s\t%s\n' "$b" "${FXROOT}${b}/inputs.decl" "$out/.dp.$b"
+  done < "$out/.dlist" > "$out/.dbatch"
+  [ ! -s "$out/.dbatch" ] || readset_decl_batch "$out/.dbatch" "$lay" "$pm"
+  while IFS= read -r d; do
+    b="${d%/inputs.decl}"; b="${b##*/}"
+    readset_decl_parse "$b" "${FXROOT}${b}" "$lay" "$mp" "$xpd" "$out/.dp.$b" "$pm" pre >> "$out/.dparse"
   done < "$out/.dlist"
   awk -F'\t' '$2 == "N" { print $1 }' "$out/.dparse" > "$out/.dfx"
   [ -s "$out/.dfx" ] || return 0
@@ -2072,18 +2179,19 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
       while ((getline l < ENVIRON["VQ"]) > 0) { t = index(l, "\t"); U[t ? substr(l, 1, t - 1) : l] = 1 } }
     $2 == "run" && ($4 == "k" || $4 == "u" || $4 == "s") && $1 != "" && ($1 in D) && !($1 in U) { print $1 }' \
     "$out/.kdec" > "$out/.vs.cand"
-  while IFS= read -r fx; do
-    [ -f "$out/.k/$fx" ] || continue
-    readset_key_rows "$out/.k/$fx" > "$out/.vs.rows" 2>/dev/null && [ -s "$out/.vs.rows" ] || continue
-    { readset_vs_inproc "$fx" . | awk -v f="$fx" '{ print f "\tI\t" $0 }'
-      [ -z "${FXCOUNT_JUDGE:-}" ] || readset_vs_judge "$fx" . | awk -v f="$fx" '{ print f "\tJ\t" $0 }'
-      awk -v f="$fx" '{ print f "\tR\t" $0 }' "$out/.vs.rows"; } >> "$out/.vs.want"
-  done < "$out/.vs.cand"
+  readset_vs_want "$out/.vs.cand" "$out/.k" "$out/.vs.b" > "$out/.vs.want" 2>/dev/null || : > "$out/.vs.want"
   [ -s "$out/.vs.want" ] || return 0
-  # ONE SCAN: the entries whose `#fixture` line names a candidate, then ONE matcher over all of them.
+  # ONE SCAN: the entries carrying a line `#fixture <candidate>`, then ONE matcher over all of them. An entry is read
+  # line by line and listed at its first such line; one whose line 3 is a `#fixture ` line naming no candidate is
+  # left there (the writer puts `#fixture` on line 3, and the matcher reads only that line's), and any other entry
+  # is read to its end.
   awk -F'\t' '$2 == "I" { print "#fixture " $1 }' "$out/.vs.want" > "$out/.vs.pat"
-  { find "$store" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null
-    [ -z "$vld" ] || find "$vld" -maxdepth 1 -type f ! -name '.tmp*' -print0 2>/dev/null; } | xargs -0 grep -l -x -F -f "$out/.vs.pat" -- 2>/dev/null > "$out/.vs.files"
+  { find "$store" -maxdepth 1 -type f ! -name '.tmp*' -print 2>/dev/null
+    [ -z "$vld" ] || find "$vld" -maxdepth 1 -type f ! -name '.tmp*' -print 2>/dev/null; } \
+    | VP="$out/.vs.pat" awk 'BEGIN { while ((getline l < ENVIRON["VP"]) > 0) P[l] = 1 }
+      { f = $0; n = 0
+        while ((getline l < f) > 0) { if (l in P) { print f; break }; if (++n == 3 && substr(l, 1, 9) == "#fixture ") break }
+        close(f) }' > "$out/.vs.files"
   [ -s "$out/.vs.files" ] || return 0
   tr '\n' '\000' < "$out/.vs.files" | VW="$out/.vs.want" VN="$out/.now" VR="${ident%% *}" VU="${ident#* }" VL="$rraw" VLU="$READSET_VS_LEGACY_UNIVERSE" VJ="$vj" VLD="$vld" VLOK="$vlok" \
     xargs -0 awk -v root="$FXROOT" '
@@ -2654,11 +2762,7 @@ apply_readset_skip() {
     else
       readset_age="UNTRACKED, age unknown"
     fi
-    : > "$out/.unmapped"
-    while IFS= read -r d; do
-      b="${d%/}"; b="${b##*/}"
-      grep -qxF "$b" "$out/.mapped.all" || printf '%s\n' "$b" >> "$out/.unmapped"
-    done < "$list"
+    readset_unmapped "$list" "$out/.mapped.all" > "$out/.unmapped"
     n_unmapped="$(grep -c . "$out/.unmapped" 2>/dev/null)"; case "$n_unmapped" in ''|*[!0-9]*) n_unmapped=0 ;; esac
     printf '   ..    read-set map: %s; %s of %s fixture dir(s) UNMAPPED (keyed on the whole tree)' "$readset_age" "$n_unmapped" "$n_all"
     if [ "$n_unmapped" -gt 0 ]; then
@@ -3470,10 +3574,12 @@ fi
 
 # A POOL WHOSE ONLY RED IS A REFUSAL EXITS 2, NOT 1 (BL-606). Written identically in both hooks, outside
 # the I66 block: POOL_REFUSED_ONLY is set inside it, FAIL_BEFORE_SUITE on the line before the suite step.
+# FIXTURE_EXIT_BEGIN
 if [ "$fail" -ne 0 ] && [ "${POOL_REFUSED_ONLY:-0}" = 1 ] && [ "${FAIL_BEFORE_SUITE:-1}" = 0 ]; then
   printf '\npre-push: REFUSED. A fixture unit made no progress and was killed; no verdict exists for it. Re-run the push once; a second REFUSED is handled as BLOCKED (steps/handoff.md step 3).\n\n'
   exit 2
 fi
+# FIXTURE_EXIT_END
 if [ "$fail" -ne 0 ]; then
   printf '\npre-push: BLOCKED. Fix the above. A pipeline agent does not bypass this hook: at a handoff, follow steps/handoff.md step 3 (pre-push hook refused) -- report the failing gate to the operator in one line, touch _bmad-output/pipeline-paused.flag, and stop.\n\n'
   exit 1

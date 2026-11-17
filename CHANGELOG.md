@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1164.0] - 2026-11-17
+
+### BL-1124 (c): the push's select phase cuts its per-fixture greps and readers; the memo sites are filed as BL-1163
+
+`readset_local_validate` and `apply_readset_skip` run one awk each in place of a `grep -qxF` per fixture; `readset_strip_keys` drops its per-fixture subshell group; `readset_decl_parse` folds its per-fixture awks into one batch awk; the READSET_VS per-candidate readers become one batch reader; and `readset_verdicts`' store scan stops at line 3 of each entry whose line 3 is a `#fixture` line naming no candidate, reading any other entry in full. Both hooks carry identical lines. Execs in a distribution push's select phase drop from 2467 to 943 (292 listed fixtures plus the 220-fixture consumer-layout pass), and in a consumer's own push from 1237 to 365. Every key row, parse row and `.vs.want` is byte-identical, and a `VS-IDENTITY 1` row pins the new span sha, so no stored verdict changes meaning. `readset_strip_keys`' in-process parsing and `readset_tools`' scan are BL-1163.
+
+### BL-583 (PARTIAL): I66 binds what runs after the fixture pool; BL-1161 filed
+
+- `scripts/validate-enforcement-map.sh` I66, pool shadowing: a non-comment line outside a pre-push hook's `FIXTURE_POOL` block that defines one of the pool's column-0 functions or assigns one of its column-0 globals fails the push. A `local` declaration does not count. `.githooks/pre-push`'s `ps_select` key-pass subshell (`:275-276`, the whole measured false-positive set) carries `# pool-shadow: subshell`. The marker is honoured only inside an open `( … )` block, which closes when its paren count returns to 0. A marked line outside a block fails, and so does any such marker in `core/git-hooks/pre-push`. A block still open at the end of a hook fails too, and the error names the hook and the opener line. Not covered, and owed under BL-1161:
+  - a name the pool only reads;
+  - the forms `NAME+=`, `for NAME in`, `read -r NAME`, `unset [-f|-v] NAME`, `function NAME {` without parens, `printf -v NAME`, `: ${NAME:=x}` and `: ${NAME=x}`, `eval "NAME=..."` and `alias NAME=`;
+  - an in-string ` #`, which truncates the comment strip;
+  - an unbalanced `)` inside a string in a marked subshell, which closes the block early, so a marked line still inside it is falsely flagged (this fails loud).
+- I66, refusal exit: each hook's REFUSED → exit 2 tail sits between `# FIXTURE_EXIT_BEGIN` and `# FIXTURE_EXIT_END`. I66 holds the span sound in both hooks and identical across them once comments are stripped. `core/fixtures/consumer-suite-pool` asserts exit 2 on the consumer hook, and I66 binds the distribution hook's tail to be identical to it.
+- `core/fixtures/adversarial-shard-merge`: the dead `MX_WORKER` guard in `lib.sh`'s `wc_get` and the stale `--matrix` comments are deleted.
+- BL-583's Owed list is re-derived at 619bfde94.
+- BL-1161 is filed with three claims: no fixture asserts the `pre-push: REFUSED.` banner line; I66's pool-shadow rule misses the forms above; and a string `)` mis-closes a marked subshell.
+- Consumer cost: the core/git-hooks/pre-push comment edit wakes 17 of the 220 shipping fixtures at a consumer's next pull — the 15 whose inputs.decl names core/git-hooks/pre-push (core-paths.sh maps git-hooks/ to .githooks/ in an installed tree; the 6 that also declare .githooks/pre-push are among them) plus hook-registration-join and retro-compliance-workflow, which have no inputs.decl. Measured on a scratch install of 619bfde94 (install.sh into an empty repo): hermetic-run.sh --key-only for consumer-suite-pool, which declares only the core/ spelling, moved when a comment was appended to the installed .githooks/pre-push, as did the readset-skip control. Counts derived from inputs.decl over core/fixtures at 619bfde94 (292 fixtures, 72 .dist-only).
+
 ## [0.1163.0] - 2026-11-17
 
 ### BL-1068: the read-set tracer traces layer-contract-conformance, -b and readset-skip-b completely; validate-enforcement-map's I64/I65 grep volume cut
