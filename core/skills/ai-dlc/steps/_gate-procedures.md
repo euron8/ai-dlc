@@ -29,6 +29,11 @@ zero or several lines (exit 2). Fix what it names and re-run the whole call. A t
 line to the history file first and removes it from the snapshot second. Every snapshot write in this
 procedure is a `snapshot-update.sh` op, never an Edit or Write.
 
+Consecutive snapshot writes made in the same turn with no other tool call and no notification between
+them are ONE call, ops in order: `snapshot-update.sh [--snapshot <path>] <op> [<op> ...]`, applied to one
+candidate, all-or-nothing. The op grammar is the script's header; do not run `--help` after a call that
+exited 0.
+
 When a step file says "run sub-step snapshot update", execute:
 
 1. Insert a one-line entry at the TOP of **Recent Activity** (newest first) naming the
@@ -697,7 +702,9 @@ when the artifact is two or more files ("Shard a multi-file artifact" below), or
 per section plus ONE cross-section shard when the artifact is one document that
 `partition-document.sh --map` partitions ("Shard a single document" below), or one shard per
 subject part plus ONE cross-part shard when the artifact is the requirements
-subject ("Shard the requirements subject" below). The cross shard is briefed
+subject ("Shard the requirements subject" below). A pass of two or more members (its shards
+plus the cross shard) is dispatched as Rule 28 "A wide round is run by a round-dispatcher." says;
+a one-member pass is dispatched by the lead. The cross shard is briefed
 `shard: cross/<K> g1/1 <ordinals>` with every ordinal 1..K of the map's K ("Validation cycle" item 1,
 "The cross agent"), writes `cross.md`, and goes out in the same waves as the parts.
 Agent tool, bound to `.claude/team-roles/adversary.md` per
@@ -1595,11 +1602,10 @@ carry the no-human-present additions:
    Halt any Agent-spawned teammate not bound to a task. Wait until every
    teammate has returned before proceeding. Record stopped teammates and
    in-flight artifacts in the snapshot's Open Items in Step 3, and set each
-   stopped teammate's **In-Flight Teammates** row `status` to `stopped` with
-   `snapshot-update.sh --row-status <agent> stopped` —
-   rewrite the row, never delete it. Record the `TaskStop` task id in each
-   stopped row's agent cell with
-   `snapshot-update.sh --row-replace <agent> <row>`. For each stopped row, run
+   stopped teammate's **In-Flight Teammates** row `status` to `stopped` and record the `TaskStop`
+   task id in its agent cell with one call, the replace first so the status op runs last,
+   `snapshot-update.sh --row-replace <agent> <row> --row-status <agent> stopped` —
+   rewrite the row, never delete it. For each stopped row, run
    `scripts/ai-dlc/join-remediator-shards.sh --agent-writes <task id>` and
    write its output into the snapshot's Open Items with
    `snapshot-update.sh --open-item-file <file>` as that agent's

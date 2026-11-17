@@ -599,8 +599,8 @@ wrote, so it first does every duty that reads no part file -- the Handoff
 Evidence Precondition, the one honest-green canonical run, every checklist item
 off the part-local list and its interaction findings -- and only then joins the
 part shard files itself with
-`AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`,
-backgrounded and re-armed as a Rule 29 beat is; without `--since` a part that
+`AI_DLC_WAIT_BEAT_SECS=540 AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`,
+each call in the foreground at the Bash `timeout: 600000`, re-called until every path is DELIVERED; without `--since` a part that
 finished during the canonical run reads as written before the join and never
 delivers. The first cross QA
 (`cross`, or `cross-1` of a per-group set written before Rule 28's one-cross rule) is the execution owner: it alone runs in the frozen

@@ -107,8 +107,8 @@
 #   P2  (BL-982 (b); static, --static-join, so validate-fixture-inprocess.sh FAILs it as a join E row whether or not
 #       the fixture is allowlisted, when its ratchet reads the row NEW against the push base; an owed row prints) in EVERY
 #       declared fixture, opted in or not, every in-process drive of a declared
-#       bash subject -- a call of a guarded subject's entry function, a source of an unguarded one -- is paired with an
-#       fx_inproc call. P2 SUBSUMES P1, the opted-in-only arm it replaces, and keeps P1's pairing rule; the id P1 is
+#       bash subject -- a call of a guarded or unguarded subject's entry function, a source of an unguarded one -- is
+#       paired with an fx_inproc call. P2 SUBSUMES P1, the opted-in-only arm it replaces, and keeps P1's pairing rule; the id P1 is
 #       retired. Counting unit, population, operands, masking, blind routes and false-positive floor: ARM P2 above
 #       fxc_p2_scan.
 #
@@ -198,6 +198,7 @@
 # FXC-IDENTITY 1 0889dc63e00b73cd2d67c4ddd77760a23176d8b7db276e28565303de8be1c90a the static join's `A` row for an absent or unopenable cli subject (BL-878); fxc_judge is unchanged, so no counted fixture's judgement moves
 # FXC-IDENTITY 1 23e7b1c0546c4cacfb343a221e840f02e5e1f7701eb0bf5343fae282ef207418 fxc_gen_rc writes a temp file and renames it onto fxcount.rc (BL-1119); the rc bytes are unchanged, so no fixture's judgement moves
 # FXC-IDENTITY 1 c4decebcf8a21abd7ecb63cd3b9a08414e3c1249ecf721e84aa4a7c513671316 remedy text only: FXC_CELLS_REMEDY no longer names the deleted readset-stage1-verdict (BL-915); no fixture's judgement moves
+# FXC-IDENTITY 1 fd008c2ff56b8bc1dab5920b0f6c1ad3dc45ce4d56da4ff622faf405d1f3c271 static P2 arm only: an unguarded shebang subject counts per call and fixture directory libs join the population (BL-1152, BL-1159); fxc_judge and the tag=0 fxc_req are unchanged, so no counted fixture's judgement moves
 set -u
 FXC_FORMAT=1
 
@@ -366,10 +367,11 @@ fxc_identity_check() {
 
 # fxc_req <inputs.decl>: the `!` (REQUIRED) FILE lines, markers stripped, one per line. A directory line is never one.
 # FXC_REQ_AWK is that parse, ONE program: with -v tag=0 it prints the `!` file lines of one file (fxc_req); with
-# -v tag=1, over many files, `<!|+>\t<file>\t<path>` for every FILE line, `!` marking a REQUIRED one (P2's population).
+# -v tag=1, over many files, `<!|+>\t<file>\t<path>` for every FILE line, `!` marking a REQUIRED one, and
+# `D\t<file>\t<path>` for every DIRECTORY line (P2's population). The tag=0 output is byte-identical to the file-line-only parse.
 FXC_REQ_AWK='{ sub(/\r$/, "") } $0 == "" || /^#/ { next }
       { r = 0; while ((ch = substr($0, 1, 1)) == "!" || ch == "+") { if (ch == "!") r = 1; $0 = substr($0, 2) }
-        if ($0 ~ /\/$/) next
+        if ($0 ~ /\/$/) { if (tag) print "D\t" FILENAME "\t" $0; next }
         if (!tag) { if (r) print; next }
         print (r ? "!" : "+") "\t" FILENAME "\t" $0 }'
 fxc_req() {
@@ -585,20 +587,25 @@ fxc_cells_judge() {
 # `E\t<fx>\t<file>:<line>\t<reason>` per unpaired DRIVE of one of the fixture's `!` bash subjects (fxc_subject_kind),
 # and fxc_static_join joins it as an `E <fx> P2` row, which validate-fixture-inprocess.sh FAILs allowlisted or not
 # when its P2 ratchet reads the row NEW against the push base, the merge-base of HEAD and origin/main, scanned with this same scan (p2_ratchet there); a row present at the base is OWED.
-#   POPULATION, per fixture: its run.sh, every `.sh` in its own directory, and every `.sh` under core/fixtures/ its
-#     inputs.decl names on any file line (`!`, `+` or bare: story-evidence-scaffold/he-inproc.sh for its declarers). A
+#   POPULATION, per fixture: its run.sh, every `.sh` in its own directory, every `.sh` under core/fixtures/ its
+#     inputs.decl names on a FILE line (`!`, `+` or bare: story-evidence-scaffold/he-inproc.sh for its declarers), and
+#     every `.sh` of a DIRECTORY line naming `core/fixtures/<x>/` or `core/fixtures/lib/` (one level under
+#     core/fixtures; expanded by an exec-free glob). A whole-tree directory line (`core/`, `core/fixtures/`,
+#     `scripts/`) contributes nothing: expanding `core/fixtures/` measured +236 cross-fixture phantom rows. A
 #     shard stub (fxc_impl_of) adds its IMPL run.sh and the IMPL directory's `.sh`, judged under the STUB's subjects.
 #   THE COUNTING UNIT, keyed on fxc_guarded (C5's predicate) over the union of every fixture's subjects:
-#     a GUARDED subject counts per command-position CALL of a function it defines at column 0 (`name()`) above its
-#       guard statement; sourcing it is not itself a drive. No callable function-definition parse existed (the two in
-#       the tree, validate-shell-portability.sh's S15 and validate-mutant-kills.sh, sit inside their own awk strings
-#       with no entry point), so this one is written once, here. The guard spelling is FXC_GUARD_A/B, shared.
-#     an UNGUARDED subject with a shebang counts per SOURCE (`.`/`source` in command position), as P1 had it.
+#     a subject with a shebang, guarded or not, counts per command-position CALL of a function it defines at column 0
+#       (`name()`; for a guarded subject above its guard statement); sourcing a guarded subject is not itself a drive.
+#       No callable function-definition parse existed (the two in the tree, validate-shell-portability.sh's S15 and
+#       validate-mutant-kills.sh, sit inside their own awk strings with no entry point), so this one is written once,
+#       here. The guard spelling is FXC_GUARD_A/B, shared.
+#     an UNGUARDED subject with a shebang ALSO counts its SOURCE (`.`/`source` in command position), as P1 had it; both
+#       are rows, and a row present before the per-call unit stays a row.
 #     a LIBRARY (no shebang, not guarded: lib/mutant.sh) is no drive. A guarded subject with no shebang is guarded.
 #     A declared subject absent from disk is read as unguarded with a shebang (fail-closed).
-#   ACTIVATION: a call counts only in a fixture whose population SOURCES that guarded subject (its basename), or
-#     sources an unresolvable operand (then every guarded subject of the fixture counts). A fixture that never sources
-#     a subject calls no entry of it in-process.
+#   ACTIVATION: a call counts only in a fixture whose population SOURCES that subject (its basename), or sources an
+#     unresolvable operand (then every guarded subject, and every unguarded one when the fixture declares one, counts).
+#     Activation is fixture-wide, not positional. A fixture that never sources a subject calls no entry of it in-process.
 #   OPERANDS: a literal operand, or one with a literal `/name` tail after its last `$`, is judged by basename. A bare
 #     `$VAR` is judged by EVERY same-file assignment of VAR (an empty one ignored): a literal tail by its basename; a
 #     value that is itself one `$OTHER` inherits OTHER's literal tails (one level). A POSITIONAL -- `$N`, `"$@"`,
@@ -622,17 +629,18 @@ fxc_cells_judge() {
 #     operand takes a pairing too, and a paired one inside a function body or a `( )`/`$( )` subshell COVERS the first
 #     entry call that follows it in that body (nested scopes included); every further call there needs its own
 #     fx_inproc. A paired source at file level covers nothing: its calls may run any number of times.
-#   THE fx_inproc UNIT (this header is its authority): for a GUARDED subject one in-process pass is one CALL of a
-#     function the subject defines, so fx_inproc goes on the line before each such call (or earlier on the same line);
-#     one fx_inproc on the line before the `.`/`source` of the subject covers the FIRST such call after it inside the
-#     same function body or `( )`/`$( )` subshell, and every further call needs its own. For an UNGUARDED subject with
-#     a shebang one pass is one SOURCE. P2 judges call SITES (static lines), while an `inproc:` row counts EXECUTIONS
-#     (one fx_inproc row per run of a paired line, judged by J3). lib/mutant.sh's own comment ("Call it once per pass, on the line before the
-#     `.`/`source` of the subject", citing P1) is SUPERSEDED by this text; the later remediation release updates it.
-#   A UNIT CHANGE, stated: until this arm lib/mutant.sh documented one fx_inproc per SOURCE. Fixtures converted on that
-#     documented unit -- ai-dlc-31's unit-change rows, its in-process conversions -- pair their sources exactly as it
-#     said; under the per-CALL unit those calls are OWED, and the ratchet carries them as owed against the push base
-#     they land on.
+#   THE fx_inproc UNIT (this header is its authority): for a subject with a shebang, guarded or not, one in-process pass
+#     is one CALL of a function the subject defines, so fx_inproc goes on the line before each such call (or earlier on
+#     the same line); one fx_inproc on the line before the `.`/`source` of the subject covers the FIRST such call after
+#     it inside the same function body or `( )`/`$( )` subshell, and every further call needs its own; a paired source
+#     at file level covers nothing. An UNGUARDED subject's SOURCE is also a drive and needs its own fx_inproc. P2 judges
+#     call SITES (static lines), while an `inproc:` row counts EXECUTIONS (one fx_inproc row per run of a paired line,
+#     judged by J3). lib/mutant.sh's own comment ("Call it once per pass, on the line before the `.`/`source` of the
+#     subject", citing P1) is SUPERSEDED by this text and stays as written until a release edits lib/mutant.sh for
+#     another reason.
+#   A UNIT CHANGE, stated: lib/mutant.sh documents one fx_inproc per SOURCE. Fixtures converted on that documented
+#     unit pair their sources exactly as it said; under the per-CALL unit those calls are OWED, and the ratchet carries
+#     them as owed against the push base they land on.
 #   MASKING: one cross-line quote stack. Single-quoted text is data across lines (a jq filter `else . end`), except
 #     the body of `bash -c '...'`/`sh -c "..."`, which is code run by a child bash and is scanned; a heredoc body is
 #     skipped through THE HEREDOC TRACKER; comments are dropped. The scan runs under LC_ALL=C (a UTF-8 locale made the
@@ -656,14 +664,14 @@ fxc_cells_judge() {
 #   an ALIAS of a subject entry (`alias gm=gmain; gm`) is read as the unknown word gm, not as gmain: aliases are not
 #   expanded, so a drive spelled through one reads QUIET;
 #   the helper gate is one level deep: a source of a file that sources a file that sources the subject gates nothing;
-# ROUTES LEFT OPEN, measured with scratch variants of this scan. The scan itself flags, at this release's combined
-#   tree, 348 rows over 116 sites in 25 fixtures after remediation (530 rows over 217 sites in 43 fixtures before it,
-#   on main 62a88119c with this change). The route lists below were measured on that main 62a88119c tree.
-#   THE B ROUTE, the LARGER open route (execution through an UNGUARDED subject's functions after its counted source
-#   is not counted): 312 call sites in 350 rows over 4 fixtures, against the 116 sites the scan flags --
-#   a since-deleted receipt-validator battery 221, story-evidence-receipts-mutants 75 and
-#   story-evidence-smoke-mutants 36 (story-evidence-receipts/run.sh), smoke-surface-ignored-mutants 18
-#   (smoke-surface-ignored/run.sh).
+# ROUTES LEFT OPEN, measured with scratch variants of this scan. The scan itself flags, at the per-call unit's tree,
+#   346 rows over 82 call sites ((fixture, site) pairs 293) in 13 fixtures, measured with `--static-join` on batch 258 C10's
+#   release tree (197 rows over 51 sites in 11 fixtures on its base, 619bfde94, before the per-call unit). The route lists below were measured on main 62a88119c.
+#   THE B ROUTE (execution through an UNGUARDED subject's functions after its counted source) is NARROWED, not closed:
+#   an unguarded subject with a shebang counts per CALL. RESIDUAL: a fixture that sources an unguarded subject and then
+#   runs a command word (`"$CMD" x`) reads quiet, because `egate` applies only after a GUARDED source. Whole-tree directory lines (`core/fixtures/`, `core/`, `scripts/`) are
+#   excluded from the population because including them measured +236 cross-fixture phantom rows that would wedge
+#   any future unresolvable source under core/fixtures/ in up to 17 unrelated fixtures.
 #   GATED unresolvable command words (a word that resolves to nothing literal, with no guarded source in scope),
 #   126 sites in 212 (fixture, site) rows. By file:line --
 #     adversarial-shard-merge/lib.sh:1045 apply-drift-after-write/run.sh:598,745 apply-restamp-theirs/run.sh:465
@@ -877,7 +885,7 @@ FILENAME == ARGV[1] { if ($1 == "G") GSUB[$2] = 1; else if ($1 == "M") MISS[$2] 
 FNR == 1 { OCC[FILENAME]++; o = OCC[FILENAME] - ((FILENAME in QSET) ? 1 : 0); POPF = (o <= 0) ? 0 : ((o == 1) ? 1 : 2); PH_STOP = 0
   if (POPF == 0) SHB[FILENAME] = (substr($0, 1, 2) == "#!")
   else if (POPF == 2) { FI = ++NPF; PIDX[FILENAME] = FI; PNAME[FI] = FILENAME; newfile() } }
-POPF == 0 { if (!(FILENAME in GSUB) || PH_STOP) next
+POPF == 0 { if (!((FILENAME in GSUB) || SHB[FILENAME]) || PH_STOP) next
   l = $0; sub(/\r$/, "", l); if (l == GA || l == GB) { PH_STOP = 1; next }
   if (l ~ /^[A-Za-z_][A-Za-z0-9_]*[[:blank:]]*\(\)/) { nm = l; sub(/[[:blank:]]*\(.*/, "", nm); FN[FILENAME, nm] = 1; FNU[nm] = 1 }
   next }
@@ -928,7 +936,7 @@ hd_body(s) { LASTSIG = FNR; next }
       w = opnd(s, q); if (casepat(q, OPEND)) continue
       f = func_of(scope_at(q)); addsite("E", q, w, opres_e(w, f), f, w) } }
   LASTSIG = FNR; CONT = (s ~ /\\$/) }
-function entry(fx, w,   k, p) { for (k = 1; k <= NSB[fx]; k++) { p = SBP[fx, k]; if (KD[p] == "G" && (ACTALL || (p in ACT)) && ((p SUBSEP w) in FN)) return p } return "" }
+function entry(fx, w,   k, p) { for (k = 1; k <= NSB[fx]; k++) { p = SBP[fx, k]; if ((KD[p] == "G" || KD[p] == "U") && (ACTALL || (p in ACT)) && ((p SUBSEP w) in FN)) return p } return "" }
 END {
   for (x = 1; x <= FXN; x++) { fx = FXS[x]; HASU = 0; HASG = 0; delete BK
     for (k = 1; k <= NSB[fx]; k++) { p = SBP[fx, k]; KD[p] = kindof(p); if (KD[p] == "U") HASU = 1; if (KD[p] == "G") HASG = 1; BK[base(p)] = BK[base(p)] " " p }
@@ -938,9 +946,9 @@ END {
     for (j = 1; j <= NJ[fx]; j++) { fi = PIDX[JP[fx, j]]; if (fi == "") continue
       for (k = 1; k <= NS[fi]; k++) { if (ST[fi, k] != "S") continue
         n = split(substr(sres(fi, k), 2), RB, " ")
-        for (r = 1; r <= n; r++) { if (RB[r] == "?") { if (HASG) ACTALL = 1; FG[fi] = 1; SSRC[fi, k] = 1; SSU[fi, k] = 1; continue }
+        for (r = 1; r <= n; r++) { if (RB[r] == "?") { if (HASG || HASU) ACTALL = 1; FG[fi] = 1; SSRC[fi, k] = 1; SSU[fi, k] = 1; continue }
           if (!(RB[r] in BK)) { SSRC[fi, k] = 1; continue }; m = split(BK[RB[r]], BP, " ")
-          for (i = 1; i <= m; i++) { FG[fi] = 1; if (KD[BP[i]] != "L") SSRC[fi, k] = 1; if (KD[BP[i]] == "G") { ACT[BP[i]] = 1; SSG[fi, k] = 1 } } } } }
+          for (i = 1; i <= m; i++) { FG[fi] = 1; if (KD[BP[i]] != "L") SSRC[fi, k] = 1; if (KD[BP[i]] == "G" || KD[BP[i]] == "U") { ACT[BP[i]] = 1 } if (KD[BP[i]] == "G") SSG[fi, k] = 1 } } } }
     # THE HELPER GATE, one level deep (fail-closed): a source whose operand resolves to another file of the
     # fixture population that itself sources a guarded subject (anywhere in it) gates as a guarded source (SSH2, read by egate).
     delete HSG; delete PBN; delete SSH2
@@ -955,15 +963,15 @@ END {
       delete DRV; delete USED; delete AVU; delete COV
       for (k = 1; k <= NS[fi]; k++) { L = SL[fi, k]; ty = ST[fi, k]; w = SW[fi, k]; drive = 0; cov = 0; why = ""
         if (ty == "S") { n = split(substr(sres(fi, k), 2), RB, " ")
-          for (r = 1; r <= n; r++) { if (RB[r] == "?") { cov = cov || HASG; if (HASU && why == "") { drive = 1; why = "the source of " w ", an operand no literal path, same-file assignment or caller in the population resolves, in a fixture declaring an unguarded bash subject" } continue }
+          for (r = 1; r <= n; r++) { if (RB[r] == "?") { cov = cov || HASG || HASU; if (HASU && why == "") { drive = 1; why = "the source of " w ", an operand no literal path, same-file assignment or caller in the population resolves, in a fixture declaring an unguarded bash subject" } continue }
             if (!(RB[r] in BK)) continue; m = split(BK[RB[r]], BP, " ")
-            for (i = 1; i <= m; i++) { if (KD[BP[i]] == "G") cov = 1; else if (KD[BP[i]] == "U") { drive = 1; why = "the source of unguarded bash subject " rdisp(BP[i]) " (" w ")" } } } }
-        else if (ty == "C") { p = shadowed(fi, k) ? "" : entry(fx, w); if (p != "") { drive = 1; why = "the call of " w ", an entry function of guarded subject " rdisp(p) } }
+            for (i = 1; i <= m; i++) { if (KD[BP[i]] == "G") cov = 1; else if (KD[BP[i]] == "U") { cov = 1; drive = 1; why = "the source of unguarded bash subject " rdisp(BP[i]) " (" w ")" } } } }
+        else if (ty == "C") { p = shadowed(fi, k) ? "" : entry(fx, w); if (p != "") { drive = 1; why = "the call of " w ", an entry function of " (KD[p] == "G" ? "guarded" : "unguarded") " subject " rdisp(p) } }
         else { n = split(substr(sres(fi, k), 2), RB, " "); ent = ""; unr = 0
           for (r = 1; r <= n; r++) { if (RB[r] == "?") unr = 1; else if (entry(fx, RB[r]) != "") { ent = RB[r]; break } }
           # N-prime: a word resolving to a guarded subject entry is a call, ungated; an unresolvable word is a drive only
           # after a source resolving to a guarded subject in an enclosing scope (egate).
-          if (ent != "") { drive = 1; why = "the command word " w ", which resolves to " ent ", an entry function of a guarded subject" }
+          if (ent != "") { drive = 1; why = "the command word " w ", which resolves to " ent ", an entry function of a " (KD[entry(fx, ent)] == "G" ? "guarded" : "unguarded") " subject" }
           else if (unr && egate(fi, k)) { drive = 1; why = "the command word " w ", which resolves to nothing literal, after a source of a guarded subject in an enclosing scope (fail-closed)" } }
         if (!drive && !cov) continue
         paired = 0
@@ -1026,7 +1034,7 @@ END {
 # awk over the plan, the subjects and the population. Returns 2 (REFUSED) when the scan awk exits non-zero or opened a
 # number of files other than the number listed: an awk that died on one file silently drops every file after it.
 fxc_p2_scan() {
-  local root="$1" w="$2" d fx f p mark impl T=$'\t' nq rc k v opened=""
+  local root="$1" w="$2" d fx f p q mark impl T=$'\t' nq rc k v opened=""
   : > "$w/p2.plan"; : > "$w/p2.subj"; : > "$w/p2.pop"; : > "$w/p2.raw"
   set --
   for d in "$root"/core/fixtures/*/; do
@@ -1042,6 +1050,12 @@ fxc_p2_scan() {
   done
   while IFS="$T" read -r mark f p; do
     d="${f%/inputs.decl}"; fx="${d##*/}"
+    if [ "$mark" = D ]; then
+      # A directory line one level under core/fixtures (`core/fixtures/<x>/`): its `*.sh` join the population. A whole-tree line contributes nothing.
+      case "$p" in core/fixtures/*/) q="${p#core/fixtures/}"; q="${q%/}"; case "$q" in ''|*/*) continue ;; esac ;; *) continue ;; esac
+      for q in "$root/$p"*.sh; do [ -f "$q" ] && printf 'J\t%s\t%s\n' "$fx" "$q" >> "$w/p2.plan" && printf '%s\n' "$q" >> "$w/p2.pop"; done
+      continue
+    fi
     case "$p" in core/fixtures/*.sh) [ -f "$root/$p" ] && printf 'J\t%s\t%s\n' "$fx" "$root/$p" >> "$w/p2.plan" && printf '%s\n' "$root/$p" >> "$w/p2.pop" ;; esac
     [ "$mark" = '!' ] || continue
     fxc_subject_kind "$root/$p"; [ "$FXC_KIND" = bash ] || continue

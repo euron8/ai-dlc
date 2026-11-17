@@ -353,7 +353,7 @@ drop_undeclared() { # <section dir>
     done < "$d/torun"; } 3>&1 > "$d/torun.kept"
   while IFS= read -r u; do printf '%s\n' "$u"; done < "$d/torun.kept" > "$d/torun"
 }
-seed_set() { # <section dir> <jobs> <unit count> <finding name> [<why nothing ran, when nothing does>]
+seed_set() { # <section dir> <jobs> <unit count> <finding name> [<why nothing ran, when nothing does>] [<ok line, when nothing ran because every unit is a reused pass>]
   local d="$1" j="$2" k="$3" s_rc s_red="" s_rec=0 s_ns=0 n r
   arm_start
   if [ "$k" -gt 0 ]; then
@@ -382,6 +382,9 @@ seed_set() { # <section dir> <jobs> <unit count> <finding name> [<why nothing ra
     printf '   FAIL: red:%s\n' "$s_red"
     red_print '^[A-Za-z0-9._-]+ rc=[0-9]+$|^counted store: ' 20 "$d/seed"
     note_fail "$4"
+  elif [ "$((k - s_ns))" -eq 0 ] && [ -n "${6:-}" ]; then
+    # Nothing ran because the prediction holds every selected unit as a reused counted pass: those are passes.
+    printf '   ok: %s\n' "$6"
   elif [ "$((k - s_ns))" -eq 0 ]; then
     # Nothing ran, so nothing passed: reported as section c reports an empty diff, never as ok and never as a finding.
     printf '   EXAMINED NOTHING -- %s' "${5:-no unit was left to run}"
@@ -489,7 +492,9 @@ else
     printf '   PREDICTION UNAVAILABLE (%s): running all %s\n' \
       "$( [ -f "$E_PRED" ] && { head -1 "$W/e/pred.err" 2>/dev/null; true; } || echo "no $E_PRED")" "$e_n"
   fi
-  seed_set "$W/e" "$E_JOBS" "$e_k" e:hook-fixtures
+  e_reused=""
+  [ "$P_OK" = 1 ] && e_reused="all $e_n selected unit(s) hold a counted pass on their current key rows (reused); 0 to run"
+  seed_set "$W/e" "$E_JOBS" "$e_k" e:hook-fixtures "" "$e_reused"
 fi
 
 # --- (f) every fixture the push would run that reaches a changed script (BL-1122, BL-1129) ----------------------

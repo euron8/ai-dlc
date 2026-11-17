@@ -118,6 +118,17 @@ not optional background:
   per-AC evidence, and the full list of cross-reference sites you updated. A
   silent idle is treated as no-delivery and re-requested.
 
+**A job you need the result of runs in the foreground.** Run it ITSELF in the foreground with the
+Bash `timeout: 600000`, never with `run_in_background` and never in a poll loop. Only a job that can
+exceed 600 seconds is started with `run_in_background: true`, as
+`<cmd> > <log> 2>&1; echo "rc=$?" > <sentinel>` (`<log>` and `<sentinel>` absolute paths outside
+your worktree, `<epoch>` the `date +%s` you read just before starting it), and waited on with
+`AI_DLC_WAIT_BEAT_SECS=540 bash scripts/ai-dlc/wait-for-deliverable.sh --since <epoch> <sentinel>`
+(no `--complete`, no `--dispatch`) at `timeout: 600000`, re-called until it prints
+`DELIVERED <sentinel>`; the job's output is then in `<log>`. You do not end your turn while a
+background job of yours is running. The `--complete` form is only for waiting on another
+agent's deliverable paths.
+
 ## Escalation
 
 Follow SKILL.md Rule 12. If the story contradicts an existing rule with no

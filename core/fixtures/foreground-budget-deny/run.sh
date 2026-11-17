@@ -45,8 +45,8 @@
 #               `done</dev/null;` and `done 2>/dev/null;`; the ci-local payload without
 #               `agent_id` -> deny
 #   SUBPOLL     a subagent's foreground POLL at 600000 -> deny with the poll reason (names the
-#               job's own `run_in_background: true` and `wait-for-deliverable.sh --complete`, and
-#               not the shorter-timeout remedy): `sleep 200; tail f`, `cd /x && sleep 200`,
+#               job's own foreground run at `timeout: 600000` and the `--since <epoch> <sentinel>`
+#               wait, and not the lead's background remedy or the shorter-timeout remedy): `sleep 200; tail f`, `cd /x && sleep 200`,
 #               `sleep 30`, `until grep -q EXIT f; do sleep 5; done`, the prefixed
 #               `S=/x; for ...; sleep 10; done`, and two loops whose CONDITION carries a `done`
 #               token (`grep -q '^done' f`, `[ -f $S/chain.done ]`). Its allow twins live in the arm owning each
@@ -214,6 +214,8 @@ arm_OVER() {
   case "$REASON_TXT" in *'run_in_background: true'*) ;; *) note REASON ;; esac
   case "$REASON_TXT" in *'starts with a git push'*) note REASON ;; esac
   case "$REASON_TXT" in *'do not poll it'*) note REASON ;; esac
+  # The lead's remedy is the background re-issue; the subagent remedy (SUBPOLL) must not leak here.
+  case "$REASON_TXT" in *'ITSELF in the foreground'*|*'--since <epoch>'*) note REASON ;; esac
 }
 
 arm_PUSHCHAIN() {
@@ -433,7 +435,9 @@ arm_SUBPOLL() {
             'S=/x; for i in $(seq 1 27); do [ -f $S/chain.done ] && break; sleep 20; done'; do
     call "$h" "$REAL" - "$(cmd_call "$_c" 'a1b2c3')"; chk_rc
     [ "$DEC" = deny ] || note SUBPOLL
-    case "$REASON_TXT" in *'re-issue the job itself with `run_in_background: true`'*'do not poll it'*'wait-for-deliverable.sh --complete'*) ;; *) note SUBPOLL ;; esac
+    case "$REASON_TXT" in *'ITSELF in the foreground with Bash `timeout: 600000`; never `run_in_background`'*'wait-for-deliverable.sh --since <epoch> <sentinel>'*'until the sentinel is DELIVERED'*) ;; *) note SUBPOLL ;; esac
+    case "$REASON_TXT" in *'act on its completion notification'*) note SUBPOLL ;; esac
+    case "$REASON_TXT" in *"To wait on ANOTHER agent's deliverable paths, run "'`AI_DLC_WAIT_BEAT_SECS=540 bash scripts/ai-dlc/wait-for-deliverable.sh --complete --since <epoch> <paths>`'*'re-called until each is DELIVERED.'*) ;; *) note SUBPOLL ;; esac
     case "$REASON_TXT" in *'declare a timeout of at most'*) note SUBPOLL ;; esac
   done
   # The beat wrapped in a sleep loop is a poll again: the dispatcher exception is the bare call only.

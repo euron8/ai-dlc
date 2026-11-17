@@ -193,10 +193,12 @@ wave sized from deliveries can over-dispatch slightly; the rejected-spawn
 rule below absorbs that. Every per-role site that fans out cites this
 paragraph and does not restate it.
 
-**A wide round is run by a round-dispatcher.** An adversarial-pass round
-(files, sections and subject axes, with its cross agent), an elicitation
-round, and a sharded party round (seats x parts, seats x sections, seats x
-subject-parts) may be run by ONE round-dispatcher. An unsharded party round
+**A wide round is run by a round-dispatcher.** An adversarial-pass round of
+two or more members (file, section or subject-axis shards, with its cross
+agent) IS run by ONE round-dispatcher; a one-member adversarial pass is
+lead-dispatched. An elicitation round and a sharded party round (seats x
+parts, seats x sections, seats x subject-parts) may be run by ONE
+round-dispatcher. An unsharded party round
 runs on the Skill and is not dispatcher-run. A sharded repair round (one
 remediator per part) may be run by ONE round-dispatcher too:
 `join-remediator-shards.sh` folds a nested writer into its parent only

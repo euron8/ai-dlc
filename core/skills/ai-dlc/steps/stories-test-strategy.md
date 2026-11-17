@@ -529,7 +529,7 @@ architecture doc (`dev.md`/`qa.md` Context Loading), per Rule 25.
 - Stories touching cross-cutting NFRs may list the current-state head anchor
   plus the specific NFR section(s).
 
-**Gate-2 HARD GATE mapping.** Before authoring a story, grep the HARD GATE item lines, not whole files, from the installed `team-roles/qa.md` and from every consumer `extensions/roles/qa-*.md` and `overrides/team-roles__qa__*.md`, and map each HARD GATE item that the story's diff class triggers to an AC or a strategy row; an unmapped triggered item blocks story authoring.
+**Gate-2 HARD GATE mapping.** Before authoring a story, read each HARD GATE item line AND that item's sub-bullet lines (the indented `- ` lines under it, each with its indented continuation lines, up to the next unindented line), not whole files, from the installed `team-roles/qa.md` and from every consumer `extensions/roles/qa-*.md` and `overrides/team-roles__qa__*.md`, by running `find .claude/team-roles .claude/skills/ai-dlc -type f \( -path .claude/team-roles/qa.md -o -path '.claude/skills/ai-dlc/extensions/roles/qa-*.md' -o -path '.claude/skills/ai-dlc/overrides/team-roles__qa__*.md' \) -exec awk 'FNR==1{p=0;c=0} /^- \[ \] \*\*.*\(HARD GATE/{p=1;c=0;print FILENAME":"FNR":"$0;next} /^[^ \t]/{p=0;c=0} p&&/^[ \t]+- /{c=1;print FILENAME":"FNR":"$0;next} p&&c&&/^[ \t]+[^ \t]/{print FILENAME":"FNR":"$0}' {} +` from the consumer root, and map each triggered item or triggered sub-bullet to an AC or a strategy row; an unmapped triggered item blocks story authoring.
 
 ### 3. Sprint Planning
 

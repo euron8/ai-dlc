@@ -1,6 +1,6 @@
 # self-update-gate and its three shard drivers (b, c, d, which exec the parent's run.sh --group) share ONE declaration shape;
-# apart from the c lines marked below (d declares the directory whole), the only line that differs is the pre-push hook: REQUIRED (!) in the shards whose units print its HERMETIC-CONSUMED
-# sentinel (b, c), and absent from the shards whose units never read it (a, the parent, and d), per their sandbox traces.
+# apart from the reconcile lines (d declares the directory whole), the pre-push hook is the line that differs: declared
+# (REQUIRED, !) in b and c, whose units print its HERMETIC-CONSUMED sentinel, and undeclared here and in d, whose sandbox traces never read it.
 # The gate under test reads its closure beside itself: self-update-gate.sh loads preclassify.sh, which sources
 # consumer-read.sh and lib.sh and reads setup-sites.md; run.sh's engine copies take those files by name (sg_copy).
 core/skills/ai-dlc-update/reconcile/self-update-gate.sh
