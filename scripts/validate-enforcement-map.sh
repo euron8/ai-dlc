@@ -5448,10 +5448,15 @@ if [ ! -f "$PP_DIST" ] || [ ! -f "$PP_CONS" ]; then
   err "I66 (tools span) could not read both pre-push hooks, so the span sentinels were not checked."
 else
   rt_tab="$(printf '\t')"
-  for rt_sn in READSET_TOOLS READSET_KEYROWS READSET_LOCK; do
+  for rt_sn in READSET_TOOLS READSET_KEYROWS READSET_LOCK FIXTURE_EXIT; do
     rt_out="$(rt_scan "$rt_sn" "$PP_DIST" "$PP_CONS")"
     while IFS="$rt_tab" read -r rt_f rt_r; do
-      [ -z "$rt_r" ] || err "I66 the ${rt_sn} span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. Its extractor reads it by those exact sentinel lines: the hermetic runner exits 2 on every declared fixture without READSET_TOOLS, --key-only exits 2 and a sandbox run records nothing without READSET_KEYROWS, and the read-set deriver runs every trace window unslotted without READSET_LOCK."
+      [ -n "$rt_r" ] || continue
+      if [ "$rt_sn" = FIXTURE_EXIT ]; then
+        err "I66 the FIXTURE_EXIT span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. The two hooks' refusal exits are compared through that span, so without exactly one sound pair of sentinel lines in each hook the comparison below reads nothing."
+      else
+        err "I66 the ${rt_sn} span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. Its extractor reads it by those exact sentinel lines: the hermetic runner exits 2 on every declared fixture without READSET_TOOLS, --key-only exits 2 and a sandbox run records nothing without READSET_KEYROWS, and the read-set deriver runs every trace window unslotted without READSET_LOCK."
+      fi
     done <<RT_EOF
 $rt_out
 RT_EOF
@@ -5463,8 +5468,97 @@ RT_EOF
     rl_diff="$(diff <(printf '%s\n' "$rl_d") <(printf '%s\n' "$rl_k") | sed -n '1,12p' | tr '\n' ' ')"
     err "I66 the two pre-push hooks' READSET_LOCK spans have forked. Diff (distribution expected, consumer actual): ${rl_diff:-<none>}. core/scripts/derive-fixture-readsets.sh sources this span from whichever hook it finds, so a consumer would write and judge the trace-window slot by different rules, and install.sh always overwrites the consumer hook. Bring core/git-hooks/pre-push's READSET_LOCK span byte-identical to the distribution's."
   fi
+  # FIXTURE_EXIT IDENTITY: the REFUSED -> exit 2 tail sits outside the pool, so the pool compare cannot see it.
+  # Compared with comments and blanks stripped as fx_pool_block strips them; the span names no fixture root.
+  fe_span() { awk '$0 == "# FIXTURE_EXIT_BEGIN" { p = 1 } p && $0 !~ /^[ \t]*#/ && $0 !~ /^[ \t]*$/ { print } $0 == "# FIXTURE_EXIT_END" { p = 0 }' "$1"; }
+  fe_d="$(fe_span "$PP_DIST")"; fe_k="$(fe_span "$PP_CONS")"
+  if [ "$fe_d" != "$fe_k" ]; then
+    fe_diff="$(diff <(printf '%s\n' "$fe_d") <(printf '%s\n' "$fe_k") | sed -n '1,12p' | tr '\n' ' ')"
+    err "I66 the two pre-push hooks' FIXTURE_EXIT spans have forked. Diff (distribution expected, consumer actual): ${fe_diff:-<none>}. A pool whose only red is a refusal must print 'pre-push: REFUSED.' and exit 2 in both hooks (steps/handoff.md step 3 branches on that line), and install.sh always overwrites the consumer hook. Bring core/git-hooks/pre-push's FIXTURE_EXIT span to the distribution's."
+  fi
+  # THE POOL'S OWN NAMES ARE NOT OVERRIDDEN OUTSIDE IT. The compare above holds the two FIXTURE_POOL blocks to
+  # one program, but a line after the block that reassigns one of its globals or redefines one of its functions
+  # changes what the suite runs or skips in that hook only. ONE awk reads both hooks: the pool's names are its
+  # column-0 `name()` definitions, `NAME=` assignments and `rec_home NAME` lines; every non-comment line outside
+  # the block that defines or assigns one of them is printed as `<file>\t<line>\t<kind>\t<name>`. A `local`
+  # declaration is stripped first. A line ending in `# pool-shadow: subshell` is exempt only inside an open
+  # `( ... )` block: one opened by a line matching `^[ \t]*\( ` and closed on the line where the count of `(` minus
+  # `)` since the opener returns to 0 (that line is the block's last; an opener that balances on its own line is a
+  # one-line block). Parentheses in strings or comments inside the block count too, so a block still open at the end
+  # of a hook prints `OPEN` with its opener line and fails closed; an unbalanced `)` in a string closes the block
+  # early and fails loud on a marked line still inside it (BL-1161). A marked line outside any block prints `MARKTOP`. The
+  # exemption is distribution-only: any `# pool-shadow:` line in the consumer hook prints `MARKER`. An empty name set
+  # prints `<file>\t0\tZERO` and fails closed.
+  # Measured before the marker: the two .githooks/pre-push lines of ps_select's key-pass subshell, consumer none.
+  # Not covered (owed under BL-1161): a name the pool only READS (assigns nowhere at column 0); the override forms
+  # `NAME+=`, `for NAME in`, `read -r NAME`, `unset [-f|-v] NAME`, `function NAME {` without parens, `printf -v NAME`,
+  # `: ${NAME:=x}` and `: ${NAME=x}`, `eval "NAME=..."` and `alias NAME=`; and a ` #` inside a string, which
+  # truncates the comment strip.
+  ps_out="$(awk '
+    function scan(   i, s, t, rest, pre, nm, kind, n, inblk, dep, u, here, op) {
+      if (nf == "") return
+      n = 0; pb = 0; pe = 0
+      for (i = 1; i <= nl; i++) {
+        if (L[i] == "# FIXTURE_POOL_BEGIN") pb = i
+        else if (L[i] == "# FIXTURE_POOL_END") pe = i
+      }
+      split("", F); split("", G)
+      for (i = pb + 1; pb && i < pe; i++) {
+        s = L[i]
+        if (match(s, /^[A-Za-z_][A-Za-z0-9_]*[ \t]*\(\)/)) { t = substr(s, 1, RLENGTH); sub(/[ \t]*\(\)$/, "", t); F[t] = 1; n++ }
+        else if (match(s, /^[A-Za-z_][A-Za-z0-9_]*=/)) { G[substr(s, 1, RLENGTH - 1)] = 1; n++ }
+        else if (match(s, /^rec_home[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) { t = substr(s, 1, RLENGTH); sub(/^rec_home[ \t]+/, "", t); G[t] = 1; n++ }
+      }
+      if (n == 0) { print nf "\t0\tZERO\t-"; return }
+      for (i = 1; i <= nl; i++) {
+        if (nf == cons && index(L[i], "# pool-shadow:")) print nf "\t" i "\tMARKER\t-"
+        s = L[i]
+        if (!inblk && s ~ /^[ \t]*\( /) { inblk = 1; dep = 0; op = i }
+        if (inblk) { u = s; dep += gsub(/\(/, "(", u); u = s; dep -= gsub(/\)/, ")", u) }
+        here = inblk; if (inblk && dep <= 0) inblk = 0
+        if (i >= pb && i <= pe) continue
+        if (s ~ /^[ \t]*#/) continue
+        if (s ~ /# pool-shadow: subshell$/) { if (!here && nf != cons) print nf "\t" i "\tMARKTOP\t-"; continue }
+        sub(/(^|[ \t])#.*$/, "", s)
+        gsub(/(^|[;&|({ \t])local[ \t][^;]*/, " ", s)
+        rest = " " s
+        while (match(rest, /[;&|({ \t][A-Za-z_][A-Za-z0-9_]*([ \t]*\(\)|=)/)) {
+          pre = (RSTART > 1) ? substr(rest, RSTART - 1, 1) : ""
+          t = substr(rest, RSTART + 1, RLENGTH - 1)
+          rest = substr(rest, RSTART + RLENGTH)
+          if (pre == "$") continue
+          if (t ~ /=$/) { nm = substr(t, 1, length(t) - 1); kind = "global"; if (!(nm in G)) continue }
+          else { nm = t; sub(/[ \t]*\(\)$/, "", nm); kind = "function"; if (!(nm in F)) continue }
+          print nf "\t" i "\t" kind "\t" nm
+        }
+        if (match(s, /(^|[;&|({ \t])rec_home[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
+          t = substr(s, RSTART, RLENGTH); sub(/.*rec_home[ \t]+/, "", t)
+          if (t in G) print nf "\t" i "\tglobal\t" t
+        }
+      }
+      if (inblk) print nf "\t" op "\tOPEN\t-"
+    }
+    FNR == 1 { scan(); nf = FILENAME; nl = 0 }
+    { L[++nl] = $0 }
+    END { scan() }' cons="$PP_CONS" "$PP_DIST" "$PP_CONS")"
+  while IFS="$rt_tab" read -r ps_f ps_l ps_k ps_n; do
+    [ -n "$ps_f" ] || continue
+    if [ "$ps_k" = OPEN ]; then
+      err "I66 ${ps_f#$REPO_ROOT/}: the '( ... )' block opened at line ${ps_l} never closes by its paren count before the end of the file. The pool-shadow marker is scoped by that count, so a block left open would exempt every marked line after it; an unbalanced paren inside a string in the block is the usual cause. Balance the block's parentheses."
+    elif [ "$ps_k" = MARKTOP ]; then
+      err "I66 ${ps_f#$REPO_ROOT/}:${ps_l} carries '# pool-shadow: subshell' outside any '( ... )' block. The marker exempts only a line inside an open subshell, where an override cannot outlive the block; at top level it would hide a real override of the pool. Move the line into a subshell or drop the marker."
+    elif [ "$ps_k" = MARKER ]; then
+      err "I66 ${ps_f#$REPO_ROOT/}:${ps_l} carries a '# pool-shadow:' marker. The consumer hook has no pool-shadow exemption: an override there changes what only a consumer's suite runs or skips. Remove the marker and move the override inside the pool."
+    elif [ "$ps_k" = ZERO ]; then
+      err "I66 derived ZERO top-level names from the FIXTURE_POOL block of ${ps_f#$REPO_ROOT/}, so no override outside the pool could be checked. The sentinels moved or the block lost its column-0 definitions; this check fails closed rather than reporting a clean scan of nothing."
+    else
+      err "I66 ${ps_f#$REPO_ROOT/}:${ps_l} overrides the FIXTURE_POOL's own ${ps_k} ${ps_n} outside the pool. The pool is held identical across both hooks, but an override after it changes what the suite runs or skips in one hook only. Move it inside the pool or scope it in a subshell and mark it."
+    fi
+  done <<PS_EOF
+$ps_out
+PS_EOF
   # The runner-extraction claim is SEPARATE: it is owed only when the hooks carry the spans at all,
-  # and a hooks-only scratch copy must therefore copy the runner too (validator-arm-selection's i66-onehook phase does).
+  # and a hooks-only scratch copy must therefore copy the runner too.
   if [ ! -f "$RT_RUNNER" ]; then
     err "I66 core/scripts/hermetic-run.sh is absent although the hooks carry the READSET_TOOLS span it extracts, so the runner's sentinel strings were not checked."
   else
