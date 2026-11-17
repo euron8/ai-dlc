@@ -233,9 +233,9 @@ The first cross shard (`cross`, or `cross-1` of a per-group set) runs the
 suite once in the frozen worktree and the RED replays for any anchor in no
 part's files, both before it reads any part file. It is dispatched in the same
 wave as the parts, so it then joins the part shard files its brief names with
-`AI_DLC_STATE_DIR=<the beat state directory your brief names>
+`AI_DLC_WAIT_BEAT_SECS=540 AI_DLC_STATE_DIR=<the beat state directory your brief names>
 scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,
-backgrounded and re-armed until each is DELIVERED. It then runs every handed-over replay in
+each call in the foreground at the Bash `timeout: 600000`, re-called until each is DELIVERED. It then runs every handed-over replay in
 the frozen worktree and records each as a column-0
 `handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>` line inside
 a `#### ` finding citing exactly the parts it ran replays for. A result other
@@ -829,6 +829,17 @@ without verbatim REPL trace.**
   stories (systemic issue, not just one PR).
 - Message **lead** (`SendMessage` `to: "main"`) if a PR is BLOCKED, explaining
   the risk.
+
+**A job you need the result of runs in the foreground.** Run it ITSELF in the foreground with the
+Bash `timeout: 600000`, never with `run_in_background` and never in a poll loop. Only a job that can
+exceed 600 seconds is started with `run_in_background: true`, as
+`<cmd> > <log> 2>&1; echo "rc=$?" > <sentinel>` (`<log>` and `<sentinel>` absolute paths outside
+your worktree, `<epoch>` the `date +%s` you read just before starting it), and waited on with
+`AI_DLC_WAIT_BEAT_SECS=540 bash scripts/ai-dlc/wait-for-deliverable.sh --since <epoch> <sentinel>`
+(no `--complete`, no `--dispatch`) at `timeout: 600000`, re-called until it prints
+`DELIVERED <sentinel>`; the job's output is then in `<log>`. You do not end your turn while a
+background job of yours is running. The `--complete` form is only for waiting on another
+agent's deliverable paths.
 
 ## Relationship to QA
 

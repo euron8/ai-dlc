@@ -43,8 +43,9 @@
 #
 # WHY IT CANNOT WEDGE. Every deny is satisfiable on the next call, by an action that is always
 # available. A budget deny: the same call with `run_in_background: true`, or with a timeout at
-# or under the budget; the poll reason names the first, and backgrounding the job itself rather
-# than the wait. A WAITER deny (DENY A, below): the same command without the `&`, with
+# or under the budget; the poll reason instead names the job itself run in the foreground at
+# `timeout: 600000`, a job past 600 s backgrounded behind a sentinel and waited on with a 540 s
+# foreground beat, and another agent's paths waited on with a foreground `--complete` beat. A WAITER deny (DENY A, below): the same command without the `&`, with
 # `run_in_background: true`. A SNAPSHOT deny (DENY B, below): the same change made with the Edit
 # or Write tool. A REPAIR-BEAT deny (DENY C, below): the same command with
 # `run_in_background: true`. Apart from those three command shapes, a call with no timeout, a
@@ -432,10 +433,11 @@ REASON="AI/DLC steering budget: this FOREGROUND Bash call declares timeout ${T} 
 # step reads, and a push held under the budget is SIGKILLed while the pre-push suite runs.
 if [ "$PUSHCHAIN" = 1 ]; then
   REASON="AI/DLC steering budget: this FOREGROUND Bash call starts with a git push and chains or pipes more commands after it, so it is not the bare push the pipeline exempts at timeout ${T} ms. Drop the chained commands: the push is the whole command, \`git push -u origin HEAD\` and nothing after it, at the same timeout and in the foreground. Read the push's exit code from the tool result; a \`; echo \$?\`, a \`| tail\` or a redirect-then-read is not needed, and a pipe replaces the push's exit code with the last command's."
-# A subagent's poll gets neither general remedy alone: a shorter timeout keeps the poll and only
-# cuts it off, and the wait it is spending belongs to a job that can notify on completion.
+# A subagent's poll gets neither general remedy: a shorter timeout keeps the poll and only cuts it
+# off, and a backgrounded job wakes the spawner with an interim notice. The poll reason names the
+# foreground run, the sentinel-and-beat form for a job past 600 s, and the --complete beat.
 elif [ "$POLL" = 1 ]; then
-  REASON="AI/DLC steering budget: this subagent's FOREGROUND Bash call is a poll (a loop that sleeps, or a sleep of 30 s or more) declaring timeout ${T} ms, over the ${B}s steering budget (${WHERE}). A foreground poll holds the agent idle, and the lead's steering-budget count never sees a subagent's call. Instead, re-issue the job itself with \`run_in_background: true\` and act on its completion notification; do not poll it. To wait on ANOTHER agent's paths use \`wait-for-deliverable.sh --complete\`, backgrounded."
+  REASON="AI/DLC steering budget: this subagent's FOREGROUND Bash call is a poll (a loop that sleeps, or a sleep of 30 s or more) declaring timeout ${T} ms, over the ${B}s steering budget (${WHERE}). A foreground poll holds the agent idle, and the lead's steering-budget count never sees a subagent's call. Run the job whose result you need ITSELF in the foreground with Bash \`timeout: 600000\`; never \`run_in_background\` and never a poll loop. Only a job that can exceed 600 s is started in the background as \`<cmd> > <log> 2>&1; echo \"rc=\$?\" > <sentinel>\` (\`<epoch>\` the \`date +%s\` you read just before starting it) and waited on with \`AI_DLC_WAIT_BEAT_SECS=540 bash scripts/ai-dlc/wait-for-deliverable.sh --since <epoch> <sentinel>\` at \`timeout: 600000\`, re-called until the sentinel is DELIVERED. To wait on ANOTHER agent's deliverable paths, run \`AI_DLC_WAIT_BEAT_SECS=540 bash scripts/ai-dlc/wait-for-deliverable.sh --complete --since <epoch> <paths>\` in the foreground at \`timeout: 600000\`, re-called until each is DELIVERED."
 fi
 
 jq -n --arg reason "$REASON" \

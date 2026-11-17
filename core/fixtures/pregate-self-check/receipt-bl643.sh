@@ -329,7 +329,7 @@ eskip=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches neither pre-pus
 fskip=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches no core/scripts/\*\.sh or scripts/\*\.sh path$' "$W/A.out" && fskip=yes
 mte=no; grep -qF '   triggered by: .githooks/pre-push ' "$W/Mt.out" && grep -qF '   4 fixture(s): 3 naming a hook or named by the ruling, 1 wrapper(s) in 2 round(s); ' "$W/Mt.out" \
   && grep -qF '   predict-push-set.sh: 4 of 4 hold a counted pass on their current key rows (reused); 0 to run' "$W/Mt.out" \
-  && grep -qxF '   EXAMINED NOTHING -- no unit was left to run (this is not a pass)' "$W/Mt.out" && mte=yes
+  && grep -qxF '   ok: all 4 selected unit(s) hold a counted pass on their current key rows (reused); 0 to run' "$W/Mt.out" && mte=yes
 # Ep: the predictor's subset runs (hookfx alone); Epall would read yes if the whole set ran, Epnone if none did.
 drive_member "$W/rootEp" "$W/Ep.out" base0; ep=$?
 epn=no; grep -qF '   predict-push-set.sh: 3 of 4 hold a counted pass on their current key rows (reused); 1 to run' "$W/Ep.out" \

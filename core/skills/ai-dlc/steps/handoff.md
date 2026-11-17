@@ -48,13 +48,13 @@ Execute this 5-step procedure in order:
    Halt any Agent-spawned teammate not bound to a task. Wait until every
    teammate has returned before proceeding. Record stopped teammates and
    in-flight artifacts in the snapshot's Open Items in Step 3, and set each
-   stopped teammate's **In-Flight Teammates** row `status` to `stopped` with
-   `snapshot-update.sh --row-status <agent> stopped`.
+   stopped teammate's **In-Flight Teammates** row `status` to `stopped`,
+   recording the `TaskStop` task id in the row's agent cell, with one call,
+   the replace first so the status op runs last:
+   `snapshot-update.sh --row-replace <agent> <row> --row-status <agent> stopped`.
    **Rewrite the row; do not delete it** — at a handoff the successor
    needs to know what was running, and a deleted row is
-   indistinguishable from a teammate that never existed. Record the
-   `TaskStop` task id in each stopped row's agent cell with
-   `snapshot-update.sh --row-replace <agent> <row>`. For each stopped
+   indistinguishable from a teammate that never existed. For each stopped
    row, run `scripts/ai-dlc/join-remediator-shards.sh --agent-writes
    <task id>` and write its output into the snapshot's Open Items as
    that agent's unrecorded partial edits with

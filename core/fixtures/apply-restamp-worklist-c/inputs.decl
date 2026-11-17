@@ -21,6 +21,7 @@ core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh
 core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
 core/skills/ai-dlc-update/reconcile/retired-layer-token.sh
 core/skills/ai-dlc-update/reconcile/retired-tokens.sh
+core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh
 core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
 core/skills/ai-dlc-update/reconcile/self-update-gate.sh
 core/skills/ai-dlc-update/reconcile/self-update-push.sh
@@ -35,7 +36,8 @@ core/git-hooks/pre-push
 !core/scripts/sync-transient-ignore.sh
 !core/schemas/pipeline-state-paths.json
 core/scripts/validate-hook-registration.sh
-# Shard c runs units t and vf; neither drives the answer-capture hook. The T inputs above are REQUIRED because unit t consumes them.
+# Shard c runs units t and vf; neither drives the answer-capture hook, but the guarded sandbox trace reads it, so it is declared (optional). The T inputs above are REQUIRED because unit t consumes them.
+core/hooks/ai-dlc-answer-capture.sh
 # The shard drivers exec the parent run.sh, and the parent's coverage join reads every driver. A fixture's OWN
 # run.sh is not declared by itself, but the siblings' are, so each shipped shard sandbox holds the shipped three (a, b, c).
 core/fixtures/apply-restamp-worklist/run.sh

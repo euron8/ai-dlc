@@ -162,8 +162,10 @@
 #     states its type (rr-recon-*, req-recon-*). The two §4 one-shot rows are led by text unique
 #     to their own line, so one site losing its lens cannot be covered by the other. Keep each
 #     pinned phrase on ONE line.
-#   - a wide leaf round may be run by ONE round-dispatcher (rule-28.md (a) and "A wide round is run
-#     by a round-dispatcher", _dispatch-protocol.md "Round-dispatcher brief"): code review and QA
+#   - an adversarial-pass round of two or more members IS run by ONE round-dispatcher, a one-member
+#     adversarial pass is lead-dispatched, and an elicitation round or a sharded party round may be
+#     (rule-28.md (a) and "A wide round is run by a round-dispatcher", _dispatch-protocol.md
+#     "Round-dispatcher brief"; r28-rd-scope-in, r28-rd-one-member, r28-rd-scope-may): code review and QA
 #     rounds stay lead-dispatched, each excluded in its own sentence so a scope inversion fails; a
 #     sharded repair round may be dispatcher-run, its members never folded into the dispatcher;
 #     the dispatcher joins in the FOREGROUND and ends in one return-file write; the lead joins that
@@ -449,6 +451,8 @@ party-seats-sections|S|steps/_gate-procedures.md|## Validation cycle|## Where a 
 party-early-write|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Every seat writes its file early and closes it with a completion line.**|para|Write the file's header first
 party-complete-line|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Every seat writes its file early and closes it with a completion line.**|para|Every beat that joins such a file passes `--complete`
 gp-snap-program|S|steps/_gate-procedures.md|## Sub-step snapshot update|## Bounded-join beat|**Write items 1–3 with ONE `bash scripts/ai-dlc/snapshot-update.sh` call**, never one Edit per row:|para|runs the write-time stamp check on the lines it added, and writes nothing on a finding
+gp-snap-one-call|S|steps/_gate-procedures.md|## Sub-step snapshot update|## Bounded-join beat|Consecutive snapshot writes made in the same turn|para|Consecutive snapshot writes made in the same turn with no other tool call and no notification between them are ONE call
+gp-adv-dispatch-rd|S|steps/_gate-procedures.md|## Adversarial review dispatch|## Divergence resolution dispatch|**Dispatch** ONE `adversary` per pass|para|A pass of two or more members (its shards plus the cross shard) is dispatched as Rule 28 "A wide round is run by a round-dispatcher." says; a one-member pass is dispatched by the lead.
 gp-beat-status|S|steps/_gate-procedures.md|## Bounded-join beat|## Gate-adjudication dispatch|**A progress check between beats is `scripts/ai-dlc/wait-for-deliverable.sh --complete --status <the wave's paths>`**|para|It is never a grep for `seat-complete:`, nor a listing or count of the shard directory
 party-one-writer|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|never back to a seat
 party-source|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|carries `source: <seat-file>#<finding-id>`
@@ -596,6 +600,7 @@ impl-dar-copy|S|steps/implementation.md|### 6. Orchestrate|### 7. All Gates Pass
 impl-dar-no-report|S|steps/implementation.md|||from the dev's completion report|absent
 sts-smoke-cite|S|steps/stories-test-strategy.md|### Story-Authoring Pre-Flight Checklist|### Story-AC Out-of-Scope Declaration Rule|Its surface is `gate-validation.md` Check 11, **Smoke surface.**|contains
 sts-hardgate-map|S|steps/stories-test-strategy.md|### 2b.|### 3. Sprint Planning|an unmapped triggered item blocks story authoring.|contains
+sts-hardgate-subbullets|S|steps/stories-test-strategy.md|### 2b.|### 3. Sprint Planning|map each triggered item or triggered sub-bullet to an AC or a strategy row|contains
 dv-lrcov-interp-struck|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|one struck or reworded is marked `descoped` quoting its `HARD_BLOCK` id and `descope` token
 dv-lrcov-interp-unanswered|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|one still unanswered at the checkpoint is a requirements-gate defect: report it and treat the bullet as deferred, owing its `HARD_BLOCK`.
 dv-lrcov-degraded|S|steps/deploy-validate.md|### 5. Production Validation Checkpoint|### 6. Wait for Human|**Locked-requirement coverage.**|para|An operator's acceptance of a degraded branch on a Tier 1 `requirement divergence` `HARD_BLOCK` (`qa.md` Validation Checklist) is a `descope` of the omitted action alone, never `delivered`: the bullet is marked `descoped`, and its line names that action and quotes the `HARD_BLOCK`'s id and its `descope` token.
@@ -675,7 +680,9 @@ r28-epoch-outside-round|S|rule-bodies/rule-28.md|**Waves: the harness caps concu
 r28-epoch-recorded|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**A rejected spawn is undelivered, and holding it is not a retry.**|**The round's epoch is written down before wave 1.**|para|The `<epoch>` is the one recorded before wave 1, never one minted at the beat.
 r28-serial-join|S|rule-bodies/rule-28.md|**A notification the live beat already covers is not a turn's work.**|**The join names what is missing, never what it counted.**|**The serial remediator's join is armed on the record it appends to.**|para|`**Join**`, with `--complete-repair` and `--dispatch` alone
 r28-rd-carveout|S|rule-bodies/rule-28.md||**Everything else is delegated.**|- **(a) Orchestration** --|para|may be delegated to ONE round-dispatcher; the round's epoch, its join program, the Rule 20 re-dispatch decision and the disposition stay with the lead.
-r28-rd-scope-in|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|An adversarial-pass round (files, sections and subject axes, with its cross agent), an elicitation round, and a sharded party round (seats x parts, seats x sections, seats x subject-parts) may be run by ONE round-dispatcher.
+r28-rd-scope-in|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|An adversarial-pass round of two or more members (file, section or subject-axis shards, with its cross agent) IS run by ONE round-dispatcher;
+r28-rd-one-member|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|a one-member adversarial pass is lead-dispatched.
+r28-rd-scope-may|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|An elicitation round and a sharded party round (seats x parts, seats x sections, seats x subject-parts) may be run by ONE round-dispatcher.
 r28-rd-party-skill|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|An unsharded party round runs on the Skill and is not dispatcher-run.
 r28-rd-repair-in|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|A sharded repair round (one remediator per part) may be run by ONE round-dispatcher too
 r28-rd-repair-member|S|rule-bodies/rule-28.md|**Waves: the harness caps concurrent subagents.**|**The round's epoch is written down before wave 1.**|**A wide round is run by a round-dispatcher.**|para|folds a nested writer into its parent only when the parent's own spawn has a spawn-ledger row
@@ -705,6 +712,14 @@ dp-rd-tpl-dispatch-each|S|steps/_dispatch-protocol.md|**Dispatch-prompt cache di
 dp-rd-tpl-notification|S|steps/_dispatch-protocol.md|**Dispatch-prompt cache discipline.**|**Dev-brief bug-class checklist.**|A member's task-notification is not a turn's work|para|Post no status line, restate none of its findings or counts, and re-check or read nothing
 dp-rd-repair|S|steps/_dispatch-protocol.md|**Dispatch-prompt cache discipline.**|**Dev-brief bug-class checklist.**|**A repair round through this brief.**|para|a member's own subagent folds into that member, never into the dispatcher
 dp-rd-tpl-notification-carve|S|steps/_dispatch-protocol.md|**Dispatch-prompt cache discipline.**|**Dev-brief bug-class checklist.**|A member's task-notification is not a turn's work|para|Three are acted on: one whose status is failed
+dev-fg-run|R|dev.md|## Communication|## Escalation Protocol|**A job you need the result of runs in the foreground.**|para|Run it ITSELF in the foreground with the Bash `timeout: 600000`, never with `run_in_background` and never in a poll loop.
+dev-fg-noend|R|dev.md|## Communication|## Escalation Protocol|**A job you need the result of runs in the foreground.**|para|You do not end your turn while a background job of yours is running.
+qa-fg-run|R|qa.md|## Communication|## Class Sweep (HARD GATE)|**A job you need the result of runs in the foreground.**|para|Run it ITSELF in the foreground with the Bash `timeout: 600000`, never with `run_in_background` and never in a poll loop.
+qa-fg-noend|R|qa.md|## Communication|## Class Sweep (HARD GATE)|**A job you need the result of runs in the foreground.**|para|You do not end your turn while a background job of yours is running.
+cr-fg-run|R|code-reviewer.md|## Communication|## Relationship to QA|**A job you need the result of runs in the foreground.**|para|Run it ITSELF in the foreground with the Bash `timeout: 600000`, never with `run_in_background` and never in a poll loop.
+cr-fg-noend|R|code-reviewer.md|## Communication|## Relationship to QA|**A job you need the result of runs in the foreground.**|para|You do not end your turn while a background job of yours is running.
+ppe-fg-run|R|protected-path-editor.md|## Communication|## Escalation|**A job you need the result of runs in the foreground.**|para|Run it ITSELF in the foreground with the Bash `timeout: 600000`, never with `run_in_background` and never in a poll loop.
+ppe-fg-noend|R|protected-path-editor.md|## Communication|## Escalation|**A job you need the result of runs in the foreground.**|para|You do not end your turn while a background job of yours is running.
 impl-cross-statedir|S|steps/implementation.md|### 6. Orchestrate|### 7.|**Gate-2 dispatch: the validation partitions by changed-file group too.**|para|a beat state directory of its own, given as an absolute path outside the shard directory, and never the lead's.
 adv-ls-files|R|adversary.md|## Constraints|## Escalation|- **List a code path your brief does not cite before you open it.**|para|list it with `git ls-files <dir-or-glob>` and read only what that returns.
 adv-grep-error|R|adversary.md|## Constraints|## Escalation|- **A search that errors found nothing, and nothing is not an absence.**|para|searched nothing, so its silence is not an absence
@@ -2052,12 +2067,12 @@ fi
 p_ho_step() { local t; t="$(step2_para "$1" | joined)"
   grep -qF 'ONE cross QA, briefed `shard: cross/<K> g1/1 <ordinals>` (K = N, `<ordinals>` every ordinal 1..K comma-joined without padding) with the whole map and the whole diff to read, writing `cross.md` there, is dispatched in the same wave as the part QAs, the first cross QA in the first wave whatever the cap leaves for the rest, and the first cross QA'"'"'s brief names the absolute path of every part shard file, the round'"'"'s epoch and a beat state directory of its own' <<<"$t" \
     && grep -qF 'the first cross QA in the first wave whatever the cap leaves for the rest' <<<"$t" \
-    && grep -qF 'and only then joins the part shard files itself with `AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`' <<<"$t" \
+    && grep -qF 'and only then joins the part shard files itself with `AI_DLC_WAIT_BEAT_SECS=540 AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`, each call in the foreground at the Bash `timeout: 600000`, re-called until every path is DELIVERED;' <<<"$t" \
     && grep -qF 'Once that join completes, the first cross QA reads every part shard file for `handover:` lines, runs each handed-over replay and records it as a `handover-run:` line' <<<"$t"; }
 p_ho_role() { local t; t="$(role_sect "$1" | joined)"
   grep -qF 'The hand-over finding goes under `### Important`, never under a `### Deferred` container, and carries exactly one column-0 `handover: <AC-id>` line beside its `parts:` line.' <<<"$t" \
     && grep -qF 'You are dispatched in the same wave as the part shards, so the part files may not exist yet.' <<<"$t" \
-    && grep -qF 'scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`, run in the background and re-armed until every path is DELIVERED.' <<<"$t" \
+    && grep -qF 'with `AI_DLC_WAIT_BEAT_SECS=540 AI_DLC_STATE_DIR=<the beat state directory your brief names> scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`, each call in the foreground at the Bash `timeout: 600000`, re-called until every path is DELIVERED.' <<<"$t" \
     && grep -qF 'Once the join completes, the cross shard reads every part shard `<ordinal>.md` its brief names for `handover:` lines, runs each handed-over replay in the frozen worktree after the project'"'"'s canonical dependency setup, and records each one as a column-0 `handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>` line' <<<"$t"; }
 p_ho_deliver() { local t; t="$(role_bullet "$1" Communication '- **Deliver before idle' | joined)"
   grep -qF 'The first cross shard (`cross`, or `cross-1` of a per-group set) delivers its shard file'"'"'s absolute path, its `shard-verdict:` value and the count of hand-overs it ran; its per-AC rows stay in the file.' <<<"$t"; }
@@ -2086,7 +2101,7 @@ p_cr_role() { local t; t="$(role_sect "$1" | joined)"
   ! grep -qi 'As a part shard you EXECUTE NOTHING' <<<"$t" \
     && grep -qF 'in your OWN detached worktree at the frozen sha (`git worktree add --detach <tmp> <sha>`), never in the shared frozen worktree' <<<"$t" \
     && grep -qF 'As a part shard you also carry one column-0 `handovers: <n>` line beside `reviewed-sha:`, `0` when you handed nothing over.' <<<"$t" \
-    && grep -qF 'scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`, backgrounded and re-armed until each is DELIVERED.' <<<"$t" \
+    && grep -qF 'with `AI_DLC_WAIT_BEAT_SECS=540 AI_DLC_STATE_DIR=<the beat state directory your brief names> scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`, each call in the foreground at the Bash `timeout: 600000`, re-called until each is DELIVERED.' <<<"$t" \
     && grep -qF '`handover-run: <ordinal> <AC-id> <RED|GREEN-SURVIVED|NO-BASELINE>`' <<<"$t"; }
 _s13=""
 p_cr_step "$STEP_MD" || _s13="$_s13 implementation.md-Gate-1-dispatch"

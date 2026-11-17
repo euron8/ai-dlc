@@ -378,8 +378,9 @@ For each completed task, verify:
   in the frozen worktree itself, refuses when that worktree is not at the frozen sha, and records the
   summary line, the exit code and the invocation in the lead's story record. Only the first cross
   shard (`cross` or `cross-1`) or the serial seat runs it; `cross-2` and later never do. It takes up
-  to about 25 minutes, longer than one foreground tool call, so start it in the background and block
-  on its exit. Copy its `RECORDED-RESULT:` value verbatim and alone into `Canonical result:`, with any
+  to about 25 minutes, longer than one foreground tool call, so start and wait on it as "A job you
+  need the result of runs in the foreground." (under Communication) says, and read its output from
+  that `<log>`. Copy its `RECORDED-RESULT:` value verbatim and alone into `Canonical result:`, with any
   commentary on the next line, and its `RECORDED-RUN:` invocation, inside one pair of backticks, into
   `Canonical run:`. The merge and `--check-serial` refuse a result or an invocation that differs from
   the recorded one, and a PASS with no recorded run.
@@ -507,6 +508,17 @@ For each completed task, verify:
   up to the frozen sha keyed that file under another index. A re-key made in planning, before
   the base, binds. `merge-review-shards.sh` STORY-BIND refuses any other
   story under that index.
+
+**A job you need the result of runs in the foreground.** Run it ITSELF in the foreground with the
+Bash `timeout: 600000`, never with `run_in_background` and never in a poll loop. Only a job that can
+exceed 600 seconds is started with `run_in_background: true`, as
+`<cmd> > <log> 2>&1; echo "rc=$?" > <sentinel>` (`<log>` and `<sentinel>` absolute paths outside
+your worktree, `<epoch>` the `date +%s` you read just before starting it), and waited on with
+`AI_DLC_WAIT_BEAT_SECS=540 bash scripts/ai-dlc/wait-for-deliverable.sh --since <epoch> <sentinel>`
+(no `--complete`, no `--dispatch`) at `timeout: 600000`, re-called until it prints
+`DELIVERED <sentinel>`; the job's output is then in `<log>`. You do not end your turn while a
+background job of yours is running. The `--complete` form is only for waiting on another
+agent's deliverable paths.
 
 ## Class Sweep (HARD GATE)
 
@@ -637,9 +649,9 @@ parts. You are dispatched in the same wave as the part shards, so the part
 files may not exist yet. Do every duty that reads no part file first: the
 precondition, the canonical run and every item above except the handed-over
 replays and the per-AC table. Then join the part shard files your brief names
-with `AI_DLC_STATE_DIR=<the beat state directory your brief names>
+with `AI_DLC_WAIT_BEAT_SECS=540 AI_DLC_STATE_DIR=<the beat state directory your brief names>
 scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,
-run in the background and re-armed until every path is DELIVERED. A path it reports
+each call in the foreground at the Bash `timeout: 600000`, re-called until every path is DELIVERED. A path it reports
 NON-DELIVERY goes to the lead in your shard as a finding, never a guess. Once
 the join completes, the cross shard reads every part shard
 `<ordinal>.md` its brief names for `handover:` lines, runs each handed-over

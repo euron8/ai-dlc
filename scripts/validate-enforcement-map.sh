@@ -2156,10 +2156,14 @@ EOF
   }
 
   # Forward: a clause's code is emitted somewhere its enforcer can attribute it.
+  _i64_sites_of=""; _i64_sites=""
   while IFS='|' read -r cid cenf ccode; do
     [ -n "$cid" ] || continue
     [ -f "$REPO_ROOT/$cenf" ] || continue          # I36 forward already errs on a missing enforcer
-    lc_i64_emitted="$(lc_i64_sites "$cenf")"
+    # LAST-FILE MEMO, assigned here and not inside the `$( )`, where an assignment is lost.
+    # The sites are a property of the enforcer, so every clause bound to it reuses one read.
+    if [ "$cenf" != "$_i64_sites_of" ]; then _i64_sites_of="$cenf"; _i64_sites="$(lc_i64_sites "$cenf")"; fi
+    lc_i64_emitted="$_i64_sites"
     if [ -z "$lc_i64_emitted" ]; then
       err "I64: found NO attributable emission sites in declared enforcer '$cenf'. Either that script changed shape or the extraction above no longer matches its vocabulary; a zero here silently retires this invariant for every clause bound to it, which is the state it exists to report."
       continue
@@ -2241,14 +2245,20 @@ EOF
     done
     [ -s "$TMPDIR_I65/drv" ] || return 0
 
-    # (b) which directories name each enforcer basename — one grep per enforcer, not per pair.
-    : > "$TMPDIR_I65/enf"
-    while IFS= read -r b; do
-      [ -n "$b" ] || continue
-      grep -rls -- "$b" "$root" > "$TMPDIR_I65/hits" 2>/dev/null || true
-      awk -v r="$root/" -v e="$b" '{ p=$0; sub("^" r, "", p); sub("/.*", "", p); print p "\t" e }' \
-        "$TMPDIR_I65/hits" | sort -u >> "$TMPDIR_I65/enf"
-    done < "$TMPDIR_I65/enfnames"
+    # (b) which directories name each enforcer basename. The basenames join the code
+    # vocabulary in ONE fixed-string sweep of the corpus, so (b) and (c) read it once; the
+    # enforcer join keeps comment lines, as the per-basename listing it replaces did.
+    cat "$TMPDIR_I65/codes" "$TMPDIR_I65/enfnames" > "$TMPDIR_I65/pats"
+    grep -rnF -f "$TMPDIR_I65/pats" "$root" \
+      > "$TMPDIR_I65/craw" 2>/dev/null || true
+    awk -v r="$root/" '
+      NR==FNR { enames[++ne]=$0; next }
+      {
+        path=$0; text=$0
+        sub("^[^:]*:[0-9]*:", "", text)
+        sub("^" r, "", path); sub("/.*", "", path)
+        for (i=1; i<=ne; i++) if (index(text, enames[i])) print path "\t" enames[i]
+      }' "$TMPDIR_I65/enfnames" "$TMPDIR_I65/craw" | sort -u > "$TMPDIR_I65/enf"
 
     # (c) which directories name each code AT AN ATTRIBUTABLE SITE — ONE grep for the whole
     # vocabulary, then the comment and `code:` exclusions applied in awk over only the lines
@@ -2268,8 +2278,6 @@ EOF
     # fixed-string lines, with `comm -23` scoring ZERO lines present under the ERE and absent
     # under `-F`, and 275 in the safe direction the awk then discards. A bare `cmp` says only
     # that the two differ, which is the reading that would have rejected this change.
-    grep -rnF -f "$TMPDIR_I65/codes" "$root" \
-      > "$TMPDIR_I65/craw" 2>/dev/null || true
     awk -v r="$root/" -F: '
       NR==FNR { codes[++nc]=$0; next }
       {
