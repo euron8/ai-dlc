@@ -2758,6 +2758,14 @@ fixture-git-env-seam drives the converted trunk-push-bound `run.sh` inside its o
 
 Count rows expected to move, which the lead ratchets: story-evidence-scaffold (a), `-c`, `-d` and `-g`, smoke-surface-ignored, and story-evidence-receipts, all from the record-only-diff label change. gate-transition's `*` row also moves, 380 -> 362, in a counted run on the combined tree. Unconfirmed and not reproduced: one counted run of emit-report-refusal under a non-default TMPDIR read 2 fewer `git-split/git` starts (parent layer-drift.sh, cell a5) than every default-TMPDIR log, so that count may depend on the TMPDIR path.
 
+Item 6, the read-set re-trace, is run in two passes:
+- Plain pass: `bash core/scripts/derive-fixture-readsets.sh --list "<67 names>" --tracer sandbox`, main checkout detached at e93303f2c (0.1162.0), rc 0. All 67 fixtures are traced with non-zero path counts. The committed map `.ai-dlc-fixture-readsets.tsv` is byte-unchanged: every listed fixture has an `inputs.decl`, and the merge drops declared fixtures' rows (BL-897).
+- Declared pass: the same tool with `--declared-out`, over 69 names (the 67 plus layer-contract-conformance-b and check-24-adversarial-convergence), main checkout detached at 1a08915ab (tree = 0.1163.0, eba0dcd93), rc 0. 69 are judged, 68 accepted and 1 omitted: story-evidence-scaffold-b, "the stream dropped reports 12 time(s) in this window", owed a retake.
+- The declared pass's results and its traced-but-undeclared ("+") and declared-but-unread ("-") findings are recorded under BL-1155. Windows and report: `~/.cache/ai-dlc/readset-windows/batch-258/` (outside the repo, beside the verdict store).
+- No declaration is changed by this item (lead ruling: the comparison is not the shipping join, and a decl edit moves verdicts).
+
+NOTE: `core/fixtures/fixture-git-env-seam/invocations.decl`'s header comment still describes the old `* 61->51` shape. Its rows were set at 0.1162.0 (`11 *`, `4 core/scripts/validate-audit-anchors.sh`, `20 inproc:core/scripts/validate-audit-anchors.sh`). The fix is comment-only.
+
 **Close condition.** The allowlist is empty and BL-879's check passes over the whole suite. The receipt runs that check in its completion mode, which exits non-zero while any allowlist row remains, so the entry cannot close the day the check lands. At the 0.986.0 base `bash scripts/validate-fixture-inprocess.sh --complete` exits 1 with `  INCOMPLETE  177 allowlist row(s) remain in scripts/fixture-inprocess-allowlist.txt`, so the receipt reads STILL-LIVE for that reason.
 
 The receipt's reads of `scripts/validate-enforcement-map.sh`, `scripts/validate-fixture-hygiene.sh` and `scripts/validate-fixture-invocations.sh` are guarded (W6-10): under `--complete`, an absent or unopenable input makes the driver exit 9, which R13 reads as could-not-measure. R13 still reads `core/fixtures/lib/mutant.sh`, `scripts/fixture-inprocess-allowlist.txt` and the ENUMERATED removal as unguarded (exit 1). Its ceiling is `DEFAULT_MAX_R13` in `scripts/validate-backlog-receipts.sh`, which the two-sided ratchet holds equal to that live count.
@@ -3301,6 +3309,25 @@ Owed:
 - Retake owed on the tip, verdicts withdrawn above: check-24-adversarial-convergence (100) and fixture-git-env-seam (104).
 - layer-contract-conformance-b: handed to C9. Window refused (149 drops, STAT LOSS 6). Assigned to C4's `--declared-out` pass; the retake stays owed.
   - FINDING (C9, BL-1068): its four removed lines, `.githooks/` (56877eb4d) and `templates/`, `patterns/`, `.claude/rules/` (13bb5e8c8), read 0 rows in two guarded traces: `--list "layer-contract-conformance layer-contract-conformance-b" --tracer sandbox` in the main checkout at 657080f87 (load 19.7-28.9) and at 72fc1fe45 during bundle 1's push (load 11.9-14.2). Each read 1933 paths with 0 drop notices, an empty canary and an empty `.statpair`, and the two read-sets are byte-identical. They hold 0 rows under each of the four prefixes (against 1929 under `core/`), and all 1933 paths fall under the still-declared `core/` and `scripts/`, so no path is restored. Both traces ran WITHOUT `--declared-out`, so this is a finding and not a decision: the lcc-b retake stays owed until a `--declared-out` window confirms it.
+
+**Progress (batch 258, C4; the entry stays PARTIAL, `verify:` unchanged).** Trace: `core/scripts/derive-fixture-readsets.sh --list <69 names> --tracer sandbox --declared-out`, main checkout detached at 1a08915ab (tree = 0.1163.0, eba0dcd93), rc 0; 69 judged, 68 accepted. story-evidence-scaffold-b is omitted (the stream dropped reports 12 times in its window); its retake, `--declared-out --list story-evidence-scaffold-b --tracer sandbox` with the main checkout detached at 2c1ff77f8 (0.1164.0), rc 0, is accepted (105 paths).
+- The five owed after C4 are accepted. emit-report-refusal, reconcile-emit-report-b and reconcile-emit-report-c match their `inputs.decl` exactly. backlog-real-ledger (1 "+", 2 "-") and owed-derivations (1 "+", 2 "-") mismatch.
+- Also accepted, with mismatches: layer-contract-conformance-b (0 "+", 1 "-"), check-24-adversarial-convergence (0 "+", 6 "-") and fixture-git-env-seam (1 "+", 0 "-"). These are the windows the three retakes above are owed. The traced tree postdates e93303f2c, and `git diff --name-only eba0dcd93 2c1ff77f8` lists no file under any of the three fixtures' directories or `core/fixtures/lib/` (control, same diff: `docs/backlog.md` is listed).
+- Lead ruling, batch 258: these windows, with story-evidence-scaffold-b's retake at 2c1ff77f8, discharge the owed retakes; the decision for each against its inputs.decl, using the shipping comparator, stays owed.
+- FINDING, not a fix: these traced-but-undeclared ("+") rows are owed a decision with the shipping comparator:
+  - backlog-real-ledger and backlog-size-ceiling: `scripts/backlog-rotate.sh`;
+  - fixture-git-env-seam: `core/fixtures/lib/inproc.sh`; declaring `core/fixtures/lib/inproc.sh` in the seam fails P2 at `inproc.sh:51` and `:96` (BL-1164);
+  - gate-transition: 86 paths, an apparent directory scan;
+  - h2-attest-scripts-dir: 16, including `lib/hook-drive.sh`, `inproc.sh`, `layout.sh` and `mutant.sh`;
+  - layer-readopt-gate-b, -c, -d and -e: `reconcile/layer-drift.sh` and/or `register-drift.sh`;
+  - owed-derivations: `reconcile/template-sites.md`;
+  - story-evidence-scaffold-b, -c, -d and -g: 80 each, an apparent directory scan.
+- Caveat: the comparison against each inputs.decl was made by the owner's own script, not the shipping join: it drops directories, nonexistent-path lookups and the fixture's own directory, matches `dir/` declaration lines as prefixes and does not expand globs; its mismatches are hypotheses.
+- Windows and report copied to `~/.cache/ai-dlc/readset-windows/batch-258/` (outside the repo, beside the verdict store), each cmp-verified:
+  - `declared-out.tsv`, md5 8824f6fed316ef312eda8ab0380048cf (4555 rows, the 69-fixture pass);
+  - `declared-out-seb.tsv`, md5 ad12cf2286eb7c3526c5dd541cb2a1b5 (105 rows, the retake);
+  - `c4-declared-out-report.tsv`, md5 5e0969f22e33f46a0bcfa5e49156ceca;
+  - `dsum2/` holds the per-fixture `.und3` ("+") and `.unr` ("-") lists (344 files).
 
 Provenance: batch 257, wave 12, W12-16 (ai-dlc-68), split out of BL-1144 on landing; id allocated by the lead.
 
