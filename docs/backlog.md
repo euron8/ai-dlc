@@ -1313,6 +1313,7 @@ Still owed: `procedure`, `open` and text's hours on s322; item 3's closing graph
 - **Window.** The transcript readers open only files created at or before 2026-11-12T14:41Z and modified at or after 2026-11-09T00:00Z, and stop at the first record stamped after the end: 173 files without the window, 14 with it (1 appended after the end, read to the end only), 16 born after the end never opened. The first versions of two census readers opened all 173 and filtered by record timestamp; re-derived windowed, their figures are unchanged (10,215 tool_use, 494 Edit and Write, 6,397 Bash, 63 sleep).
 - **No REMOVE is taken**; no code or text change follows, and nothing is owed from these three classes. Still owed, unchanged: item 3's closing graph sprint (s323) and L3 on BL-912's outcome line.
 - Stale citations fixed here: `bl912_counts.py` now names its path, and the W9-18 note that extract.py "is held by another unit" points to the W12-06 script that did the split.
+- **Batch 259 (cluster C4b), s323 PROVISIONAL** at `EXTRACT_WIN_END=2026-11-18T17:54:00Z` (planning complete, sprint open; not an outcome line). Lead calls inside the four planning steps: s321 2,729, s322 4,287, s323 4,623. Lead active hours there: 19.5, 16.3, 20.4. The `other` class: 1,237 calls and 3.2 h, 2,010 and 5.7 h, 1,932 and 9.1 h. Step re-reads 55, 220, 292; compaction-recovery calls 19, 179, 198. Compactions per elapsed hour over the sprint: 0.5, 1.1, 1.6 (57 in 111.0 h, 72 in 66.4 h, 75 in 45.8 h, monotone clock). The lead-active hours include waits on subagents shorter than 300 s, so they are not lead work; the call counts are the like-for-like figures. Planning less operator wait was 36.8, 30.0 and 27.0 h, and a subagent was running for 30.4, 22.1 and 17.7 h of it (`poles_allroles.txt`, `busy`), which leaves at least 6.4, 7.9 and 9.3 h with only the lead working. Source: `docs/analysis/pipeline-efficiency-s323-provisional-b259/out/s323_provisional.txt`.
 
 Step: pipeline
 
@@ -1351,6 +1352,8 @@ Progress (batch 256, item 3, the OLD engine's full-width behaviour on s322; s322
 Progress (batch 256, invocation budget): `core/fixtures/adversarial-shard-merge/invocations.decl` moves `*` 2789 -> 3101 (+312), `merge-adversarial-shards.sh` 31 -> 53 (+22) and `content-seal.sh` 474 -> 503 (+29), from two agreeing counted runs at the final fixture text. The engine's per-merge `--part-sha` start runs in process (`partition-document.sh` sourced, `pdoc_main --part-sha`), so no document or subject merge starts a bash for it. The +312 is counted from the per-start log, segmented by its marker starts; a segment holding more than one arm is named as mixed, never split. New first-run arm segments, 199: PCSR 40, PCR 26, NDP 23, NDC 23, mixed 20, the 80/260 world 17, PCMV 13, the 3/20 world 12, mixed 7, PCS 6, PCKm 5, mixed 4, PCT 3, PCN2 0. New mutant segments, 103. Residue +10: arm N's document self-probe adds one `--derived-set` start to each bound gate run in the pre-existing arms (11 counted), and -1 is unsplittable. 199 + 103 + 10 = 312. `divergence-hard-block` moves `*` 415 -> 424 (+9), one extra `--derived-set` start in each of the 9 gate runs that reach a bound arm N. Wall, LOADED figures only (a cost recorded under the pool is not comparable with a solo run): adversarial-shard-merge's stored duration is 978 s loaded. Matrix evidence: a MUTANT-MATRIX row records only `decides=` and `twins=`; the fixture's counted run at the release tip shows all 87 declared mutants killed by their deciding arm with the twin holding, by name, and its second run is byte-identical in start order. A partial `--matrix` pass was run and stopped by decision: 540 rows (the control and 5 mutants × 90 arms), and every one of the 5 compared clean against its declared row; it is supporting evidence only. Caveat: the merge, partitioner and validator changed, so cells not recorded in a row were not re-measured at this tip.
 Still owed: the `Outcome measured:` line. The first graph sprint whose document and subject series run under the new era token reports, for each series, adversary spawns per pass at or after p2 against the changed-part count plus the cited parts plus the cross shard, and whether any series ran past p3; a files-mode series reports spawns against the derived part count plus one.
 Progress (batch 257): blocked: no bound sprint yet; s323 is the first. On graph's first-parent, `git log --first-parent -S'narrows by part content' -- .claude/skills/ai-dlc/steps/_gate-procedures.md` puts the era sentence's arrival at c915745e6 (2026-11-12 23:37 -0500, #1323), after s322 planning, so s323 is the first sprint whose series it binds; the same search for an absent token returns 0 commits. s323 holds 0 adversarial pass files on every ref of a scratch `file://` clone at 6c30b864f and in every graph worktree, only carry-over-evaluation party repair p1; control in the same scan: s322 holds 62 adversarial pass files on those refs. The entry stays PARTIAL with `verify: manual`.
+
+Progress (batch 259, cluster C4b; s323 PROVISIONAL at `EXTRACT_WIN_END=2026-11-18T17:54:00Z`, planning complete and the sprint open; not the `Outcome measured:` line, because this counts adversary spawns by the pass label in the spawn description and does not join them to changed-part counts). Graph ran 0.1101.0 to 0.1164.0 in s323, all after 0.1096.0. Adversary spawns by pass label (`docs/analysis/pipeline-efficiency-s323-provisional-b259/out/seats_adversary.txt`): requirements p1 15, p2 15; architecture p1 5, p2 5; carry-over evaluation p1 4, p2 5, p3 4; stories-test-strategy 38 unlabelled and 1 at p2. No adversary pass is labelled past p3. Pass 2 is as wide as pass 1 in the three labelled series, which is the correct width if every part changed; the changed-part count was not joined, so this does not say the narrowing failed. Planning on a monotone clock was 39.6 h elapsed and 27.0 h less operator wait. Owed: the same count joined to each series' changed parts, at the s323 close.
 
 Baseline: s321
 Step: stories-test-strategy
@@ -1458,6 +1461,8 @@ Not discharged by a measurement, a decision record, a prose instruction or a WAR
 - Fixtures run once by the unit's hand: snapshot-edit-deny PASS 14, inflight-row-hook PASS 16.
 - Cost: none. These are two printed strings, with no exec and no branch. Catch on record: s322's 100 `--help` calls and the 49 pairs that follow a `say_unwritten` refusal (the owed lines above). Who would notice it gone: the consumer lead, who reads both texts and would go back to one `--help` call and one separate row call per refusal.
 - Still owed for the close: the `Outcome measured:` line on a sprint that runs this release.
+
+**Progress (batch 259, cluster C4b; s323 PROVISIONAL, the sprint is open; figures only, not an `Outcome measured:` line and no verdict).** Pin `EXTRACT_WIN_END=2026-11-18T17:54:00Z`. The one-call rule (0.1163.0) reached graph with the 0.1164.0 reconcile at 2026-11-18T02:05Z, so it is read on the stories step and implementation only. Lead calls in the snapshot class, stories-test-strategy: s323 110 of 1,596 lead calls (7%) and 0.29 active h, against s322 198 of 1,348 (15%) and 0.28 h. Implementation to the pin: 175 of 1,491 (12%) and 0.56 h, against s322's whole step at 322 of 2,261 (14%) and 0.72 h. Calls fell; lead time in the class did not. Source: `classes.jsonl` of the pinned extraction, summed per step (`docs/analysis/pipeline-efficiency-s323-provisional-b259.md`).
 
 Baseline: s321
 Step: stories-test-strategy
@@ -3096,6 +3101,7 @@ Still owed:
 1. The `Outcome measured:` reading on a complete s323. s323 has 40 ledger rows, all on 2026-11-13. graph has no s323 close on any ref, against s322's close at `f7e60625b`.
 2. The contact shape on BL-994's evidence. BL-994 found a non-blocking route, a plain-text question that ends the turn, and the re-rule is the operator's. The lead put it to the operator separately (batch 257). Rule 11(a) and the batch-256 ruling stand until then.
 3. Batch 259 (cluster C4), s322 complete at `EXTRACT_WIN_END=2026-11-12T14:41:00Z`: 25 asks, 10.3 h of operator wait, 0 asks with a held lane, 587.4 of 614.1 ask minutes (95.7%) with no lane active, 8 of 25 asks with a dispatch at the ask (`docs/analysis/pipeline-efficiency-s317-s322-b259/out/ask_split.txt`). s322 ran on 0.1028.0–0.1061.0, before the dispatch-then-ask rule (0.1092.0) reached graph, so this is a second pre-rule reading and not the outcome line. Owed with the mechanism: the split of each sprint's asks by origin (found at planning, or mid-implementation), which decides whether operator-owned decisions can be declared as checkpoints at planning and asked as one batch at the step boundary (BMAD's build guidance fixes human checkpoints on each ticket at planning). The transcripts were available and the split was not taken.
+4. Batch 259 (cluster C4b), s323 PROVISIONAL at `EXTRACT_WIN_END=2026-11-18T17:54:00Z` (s323 open: planning complete, 7 of 18 stories closed; not an `Outcome measured:` line). The reading ran on 0.1101.0 to 0.1164.0: the 0.1092.0 half of the rule was live throughout and the 0.1145.0 half from the 2026-11-16T18:25Z reconcile. Pipeline asks only (the reader, `docs/analysis/pipeline-efficiency-s323-provisional-b259/out/ask_split.txt`, also lists 8 `pre-step` asks in update sessions for s323 and 11 for s322 at this pin, excluded on both sides): 15 asks, 13.1 h of answer wait, 0 with a held lane, 6 of 15 with a dispatch at the ask (2 of 6 before 0.1145.0, 4 of 9 after) against s322's 19 asks, 9.4 h, 0 held and 8 of 19. Three asks of 148, 200 and 300 minutes hold 10.8 h; each had lanes running (2, 1 and 14) that finished inside the wait. Asks with a lane finishing inside are 676 of 783 minutes (86%) against 44 of 562 (8%) in s322. The lanes-idle share was not recomputed for the 15. No held lane on any ask, a third time; the dispatched share is on too few asks to read.
 
 verify: manual
 
@@ -3652,72 +3658,19 @@ verify: manual
 
 ## BL-1169 — the BMAD readiness check is invoked three times a sprint, once before epics exist, and the sprint-planning intent writes a file no program reads
 
-**DEFECT (efficiency).** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/architecture.md` §3 and `core/skills/ai-dlc/steps/stories-test-strategy.md` §1 and §3.
-
-Read from the step text at `origin/main` 0.1164.0:
-
-- `steps/architecture.md:262` invokes `/bmad-sprint-planning intent=readiness`. Lines 266–271 state that epics and stories do not exist yet and that its missing-epic findings are expected.
-- `steps/stories-test-strategy.md:18` invokes it again once the PRD and architecture are complete.
-- `steps/stories-test-strategy.md:542` invokes `intent=sprint-planning`, which "runs the readiness gate again".
-- The BMAD-format `sprint-status.yaml` that intent writes is moved to `s<N>/bmad-sprint-status.yaml` (`steps/route.md:587`). `grep -rl bmad-sprint-status core/` names `sprint-status.sh` (the mover), `validate-bmad-invocations.sh`, `route.md` and four fixture files. `core/scripts/sprint-status.sh:589` compares the moved file's bytes to decide the move; no program uses its sprint data. Line 542 says the intent also selects the sprint's stories; whether anything consumes that selection is unread. The `carry-over-single` intensity already skips the intent (`stories-test-strategy.md:538–540`).
-
-Only the stories §1 call has a catch on record (s317, 1 CRITICAL and 2 MAJOR, `docs/analysis/step-value-s317-s319.md:140`). The per-call cost of the three calls is not on record; it was available from the spawn ledger and not taken.
-
-Fix: read the three calls' spawns and findings on s321 and s322. A call with no finding that reached a fix on either sprint goes: the architecture-time call is dropped or narrowed to a design-coherence read with no skill run, the §3 re-run happens only when §1 returned CONCERNS or FAIL, and `intent=sprint-planning` is not invoked if nothing consumes its story selection or its file.
-
-"A step with no measured value goes" (`.claude/rules/operator-rulings.md`) decides each of the three calls on that reading.
-
-Baseline: s322 — three readiness runs and one unread file per sprint by the step text (0.1164.0); per-call cost unread.
-
-Expected movement: one readiness run per sprint when §1 passes; an estimated 0.3–0.7 h and $3 a sprint for two dropped calls, on the assumption of 10–20 minutes and the $1.50 spawn average per call, to be replaced by the measured figures.
-
-Provenance: batch 259, cluster C4, from the BMAD documentation comparison (https://docs.bmad-method.org, read 2026-11-18); id allocated by lead ai-dlc-64.
-
-Step: stories-test-strategy
+Folded into BL-1175 as work item 3 (batch 259, cluster C4b, 2026-11-18; operator ruling: one backlog entry for the planning cycle). Every owed item is carried in BL-1175's text. This is not a close and nothing here shipped; the heading stays until a versioned release stamps and rotates it as superseded by BL-1175.
 
 verify: manual
 
 ## BL-1170 — the planning-time trace run feeds a gate leg the step text itself calls disarmed by construction
 
-**DEFECT (efficiency).** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/stories-test-strategy.md` (the test-design and trace section, lines 677–700) and `steps/sprint-review.md`.
-
-`steps/stories-test-strategy.md:697` states that Check 30's `--trace-verdict` leg is "DISARMED by construction" at planning: no test exists, coverage is 0 and every criterion is planned. The step still runs `bmad-testarch-trace` there. BMAD's guidance is that test design and trace are not the default generation path and that generation works from code that already exists. The earlier step-value ruling merged trace into step 5.1 (`docs/analysis/step-value-s317-s319.md:141`, BL-568) and did not move it.
-
-The criterion-to-test matrix the trace produces is also the closing leg for `CAP-` ids, so the planning step still needs a check that every criterion maps to a case. The trace run's cost per sprint is not on record; it was available from the spawn ledger and not taken.
-
-Fix: at planning, derive the criterion-to-case matrix with a deterministic check that fails on an unmapped criterion, and run the trace once at sprint review, where its gate decision is real.
-
-"A step with no measured value goes" (`.claude/rules/operator-rulings.md`): a gate leg that cannot fail has no measured value at planning.
-
-Baseline: s322 — one trace run at planning whose gate leg cannot fail by the step text (0.1164.0); cost unread.
-
-Expected movement: the planning trace spawn goes and the sprint-review trace carries a verdict that can read FAIL. Hours and dollars: the planning run's measured cost, to be read from s321 and s322 before the change.
-
-Provenance: batch 259, cluster C4, from the BMAD documentation comparison; id allocated by lead ai-dlc-64.
-
-Step: stories-test-strategy
+Folded into BL-1175 as work item 4 (batch 259, cluster C4b, 2026-11-18; operator ruling: one backlog entry for the planning cycle). Every owed item is carried in BL-1175's text. This is not a close and nothing here shipped; the heading stays until a versioned release stamps and rotates it as superseded by BL-1175.
 
 verify: manual
 
 ## BL-1171 — every story takes the full party, elicitation and adversarial cycle whatever its risk, and a small sprint pays the whole planning charge
 
-**DEFECT (efficiency).** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/stories-test-strategy.md` and `steps/requirements.md`.
-
-Population: graph s318–s322, read only, at `EXTRACT_WIN_END=2026-11-12T14:41:00Z`, in-session time only. Planning (carry-over evaluation, requirements, architecture, stories-test-strategy) cost $1,073, $1,203, $1,160 and $1,297 in s318–s321, and $890 and 44.0 h in s322 for 8 stories. Per story that is $52 in s321 and $111 in s322. The charge barely scales with story count. In s321 the stories step's rounds cost $187 (party), $149 (elicitation) and $104 (adversarial), about $7.49 and $5.96 a story for the first two (`docs/analysis/step-value-stories-adversarial-s321.md`).
-
-Per-story party and elicitation hold named catches (39 unique survivors in s321, including its one CRITICAL), so neither is proposed for removal. The step already carries a routing tag per story (`steps/stories-test-strategy.md:30`). Whether the survivors cluster in capital-path and security-tagged stories has not been read; the step-value files hold the data.
-
-Fix, in order: (1) classify the s320, s321 and s322 survivors by story routing tag from the existing record, with no new run; (2) if survivors cluster in tagged stories, untagged stories take adversarial pass 1 only and tagged stories keep the full cycle; (3) if they do not cluster, close this entry with that reading.
-
-"A step with no measured value goes" (`.claude/rules/operator-rulings.md`) is read here per story class and not per round: the rounds keep their catches, and the question is which stories they come from.
-
-Baseline: s321, $13.45 of per-story party and elicitation on each of 25 stories; s322, planning at $111 and 5.5 h per story.
-
-Expected movement: if 40% of stories are untagged (an assumption until step 1), about $134 a sprint at s321's 25 stories. Wall clock moves little, because the rounds are parallel (24 seats in 25.4 minutes in s322).
-
-Provenance: batch 259, cluster C4, from the s322-complete re-take and the BMAD documentation comparison ("too much planning costs documents nobody reads"); id allocated by lead ai-dlc-64.
-
-Step: stories-test-strategy
+Folded into BL-1175 as work item 2 (batch 259, cluster C4b, 2026-11-18; operator ruling: one backlog entry for the planning cycle). Every owed item is carried in BL-1175's text. This is not a close and nothing here shipped; the heading stays until a versioned release stamps and rotates it as superseded by BL-1175.
 
 verify: manual
 
@@ -3739,5 +3692,167 @@ Expected movement: none on wall clock or dollars; an upgrade to the docs' genera
 Provenance: batch 259, cluster C4, from the BMAD documentation comparison; id allocated by lead ai-dlc-64.
 
 Step: pipeline
+
+verify: manual
+
+## BL-1174 — the efficiency extractor's segment clock charges an out-of-order record twice, so every published sprint-hours figure is overstated
+
+**DEFECT (efficiency).** OPEN. Filed 2026-11-18. Owner: `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` (`scan()`, the `prev_t` assignment) and every committed output and report derived from its `segs.jsonl`.
+
+`scan()` measured each interval from the previous record whatever its timestamp. A record stamped earlier than its predecessor charged 0, and the next record then charged the whole interval again. `Classer.interval()` in the same file is monotone, which is why `roll.py --classes` prints an "out-of-order overcount" line. s323's transcripts replay a burst of `attachment` records stamped before an operator pause after the record that ends it: in lead 68cf8de7 one 4.73 h pause was charged about fifteen times and requirements read 89.6 h.
+
+Measured with `EXTRACT_MONOTONE_SEGS=1` at pin `2026-11-18T17:54:00Z` (the default-clock s317–s322 `TOTAL` lines at that pin are identical to those at `2026-11-12T14:41:00Z`), pipeline bucket, elapsed hours, published against monotone: s317 80.8 and 72.8; s318 74.8 and 59.6; s319 110.0 and 94.0; s320 117.8 and 99.2; s321 120.5 and 111.0; s322 77.1 and 66.4; s323 to the pin 141.2 and 45.8. s323's four lead sessions span 45.8 h first record to last. Token-equivalent dollars, API dollars and lead calls are equal between the two clocks for every sprint. Source: `docs/analysis/pipeline-efficiency-s323-provisional-b259/out/s323_provisional.txt`.
+
+Shipped in batch 259 (C4b): the opt-in switch `EXTRACT_MONOTONE_SEGS=1`, default off, with `roll.txt` and `roll_classes.txt` at the old pin `cmp`-identical to the committed b259 outputs after the edit; and a dated correction note at the top of the three published reports.
+
+Fix, at the s323-close re-take and once: make the monotone clock the default; regenerate every committed output that reads `segs.jsonl` or `steps.csv` hours under `docs/analysis/pipeline-efficiency-s317-s320/`, `-s317-s322/` and `-s317-s322-b259/`; restate the hours in `pipeline-efficiency-s317-s322.md` and `pipeline-efficiency-s317-s322-b259.md`; re-run `pipeline-efficiency-s317-s318.md`'s own extractor copy, which has the same clock and was not measured; and correct each backlog `Outcome measured:` or progress line that quotes sprint or step hours from the old clock, listing them by entry.
+
+Not read: which backlog entries' verdicts rest on an hours figure that the correction moves across the entry's own threshold. The entries were available.
+
+Baseline: s322 — 77.1 h published for the sprint, 66.4 h on the monotone clock.
+
+Expected movement: no pipeline hours or dollars move ($0, 0 h a sprint); every published hours figure falls to its monotone value, 8% to 20% lower for s317 to s322.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), ranks steps on hours and dollars read from this clock, so the hours it reads have to be right.
+
+Provenance: batch 259, cluster C4b (ai-dlc session of 2026-11-18), found while taking the provisional s323 reading the operator asked for; id allocated by lead ai-dlc-64.
+
+Step: pipeline
+
+verify: manual
+
+## BL-1175 — PLANNING, the one entry: planning costs about 40 hours and $900 to $1,300 whatever the sprint is, and every planning-cycle fix is a work item here
+
+**DEFECT (efficiency).** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/route.md` (the intensity classification, lines 527–543), `core/skills/ai-dlc/SKILL.md` Rule 8 (the intensity table, lines 238–253), and the four planning step files (`carry-over-evaluation.md`, `requirements.md`, `architecture.md`, `stories-test-strategy.md`).
+
+**This is the single entry for the cost of the planning cycle, by operator ruling of 2026-11-18.** No other entry is filed for it. A new planning finding becomes a work item below. BL-1169, BL-1170 and BL-1171 are folded in as work items 3, 4 and 2. The entry is done when every work item is shipped or closed on its reading AND a complete graph sprint meets the target; it is never split, and an item is never moved to another entry.
+
+### What is wrong
+
+`route.md:531` assigns `full` to any sprint with three or more stories touching service code paths, and `SKILL.md:250–253` gives each tier a minimum cycle per planning artifact. One tier is recorded for the whole sprint. Nothing reads what kind of change a story is, so a story that extends existing behaviour or fixes a bug takes the same four document steps and the same review and repair series as a new subsystem, and one story that needs the full cycle puts every story through it.
+
+Measured on graph, read only, in-session time only, the four planning steps with their gates, on the monotone segment clock (`EXTRACT_MONOTONE_SEGS=1`, BL-1174) with the default clock beside it. The intensity is the `validation_intensity` line of graph's `_bmad-output/pipeline-snapshot.md` at each ref.
+
+| Sprint | Graph ref | Intensity | Stories | Planning h, monotone (default) | Less operator wait | Token-eq $ (API $) |
+|---|---|---|--:|--:|--:|--:|
+| s321 | `ec443477d` | `full` | 25 | 40.8 (43.0) | 36.8 | 1,298 (1,279) |
+| s322 | `f7e60625b` | `carry-over-single` | 8 | 36.9 (44.0) | 30.0 | 889 (720) |
+| s323, PROVISIONAL | `e70a344c0` | `full` | 18 | 39.6 (133.1) | 27.0 | 1,071 (876) |
+
+s323 is open: its four planning gates have passed and the figures are at pin `EXTRACT_WIN_END=2026-11-18T17:54:00Z`; s321 and s322 are complete. Source: `docs/analysis/pipeline-efficiency-s323-provisional-b259/out/s323_provisional.txt`.
+
+- The charge does not follow the work. 8, 18 and 25 stories each paid 37 to 41 hours.
+- The reduced tier does not reduce it. s322 ran `carry-over-single` and paid 36.9 h and $889.
+- Planning is most of a sprint. In s322 it was 36.9 of 66.4 h and $889 of $1,348; implementing all eight stories took 13.0 h and $223.
+
+The planning rounds hold named catches (39 unique survivors in the s321 stories rounds, including that sprint's one CRITICAL, `docs/analysis/step-value-stories-adversarial-s321.md`), so the work below matches depth to the change and removes no round that holds a catch.
+
+### Work items
+
+Each item states its own acceptance. Items 1 and 2 wait on item 0; items 3 to 5 do not.
+
+0. **The reading that sizes items 1 and 2. No code, no new run.** From graph's s321 to s323 planning artifacts and the step-value files: classify each story as carrying a new requirement, a new architecture decision, both or neither; count the surviving requirements-step, architecture-step and stories-step findings raised against each class and against each routing tag. Also read what the requirements and architecture steps' cost scales with (in-scope stories, document parts, shards per pass), because their hours so far do not follow story count: requirements was 11.1, 9.9 and 13.5 h and architecture 10.0, 5.8 and 5.2 h for 25, 8 and 18 stories. That decides what item 1 saves in a mixed sprint. Done when both tables are in this entry.
+1. **Tier per story on what the story changes, not per sprint on story count** (`route.md:527–543`, `SKILL.md` Rule 8). A story carrying neither a new requirement nor a new architecture decision does not enter the requirements or architecture review series: those documents name it as out of scope and it enters at the stories step. A sprint made only of such stories runs carry-over evaluation and the stories step. Ships only if item 0 shows such stories hold few or no surviving requirements or architecture findings; otherwise it is closed here with that reading. Ceiling on s323, if no story needed either step: 18.7 h (13.5 + 5.2, of which 6.2 h was operator wait) and $447 ($274 + $173).
+2. **Tier the per-story party and elicitation rounds inside the stories step by the routing tag the step already carries** (`stories-test-strategy.md:30`; was BL-1171). Untagged stories take adversarial pass 1 only; capital-path and security-tagged stories keep the full cycle. Ships only if item 0 shows survivors cluster in tagged stories. Estimate: $134 a sprint if 40% of 25 stories are untagged, at s321's $7.49 and $5.96 a story; wall clock moves little because the rounds are parallel.
+3. **One readiness run when the first passes, and no file nobody reads** (`architecture.md:262`, `stories-test-strategy.md:18` and `:542`; was BL-1169). Read the three calls' spawns and findings on s321 and s322; a call with no finding that reached a fix goes. The `intent=sprint-planning` output is not produced when nothing consumes its sprint data. Estimate: 0.5 to 1.2 h and $5 to $11 a sprint, on 10 to 20 minutes and $1.50 a call, to be replaced by the measured figures.
+4. **The planning-time trace gate that cannot fail moves to sprint review** (`stories-test-strategy.md:677–700`; was BL-1170). At planning, a deterministic check fails on a criterion with no mapped case; the trace runs once at sprint review, where its verdict can read FAIL. Hours and dollars: the planning run's measured cost, read from s321 and s322 before the change.
+5. **Pass 2 no wider than what the pass-1 repair changed.** The mechanism is BL-911's and stays there; this item is its planning outcome. On s323 the adversary ran 15 spawns at requirements p1 and 15 at p2, 5 and 5 at architecture, 4, 5 and 4 at carry-over. Join each series' pass-2 width to its changed-part count; if pass 2 is wider than the changed parts plus the cited parts plus one, the defect is reported to BL-911 and fixed there, and this item closes when a sprint shows the narrowed width.
+
+### Carried text for work items 2, 3 and 4
+
+In the carried text below, "this entry" and "close this entry" mean the work item it was folded into, never BL-1175.
+
+**Work item 2, the full text of BL-1171 as it stood before the fold** (heading: "BL-1171 — every story takes the full party, elicitation and adversarial cycle whatever its risk, and a small sprint pays the whole planning charge"). Every citation, figure and fix detail a builder needs for item 2 is here; where it and the item's summary above differ, this text governs.
+
+> **DEFECT (efficiency).** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/stories-test-strategy.md` and `steps/requirements.md`.
+>
+> Population: graph s318–s322, read only, at `EXTRACT_WIN_END=2026-11-12T14:41:00Z`, in-session time only. Planning (carry-over evaluation, requirements, architecture, stories-test-strategy) cost $1,073, $1,203, $1,160 and $1,297 in s318–s321, and $890 and 44.0 h in s322 for 8 stories. Per story that is $52 in s321 and $111 in s322. The charge barely scales with story count. In s321 the stories step's rounds cost $187 (party), $149 (elicitation) and $104 (adversarial), about $7.49 and $5.96 a story for the first two (`docs/analysis/step-value-stories-adversarial-s321.md`).
+>
+> Per-story party and elicitation hold named catches (39 unique survivors in s321, including its one CRITICAL), so neither is proposed for removal. The step already carries a routing tag per story (`steps/stories-test-strategy.md:30`). Whether the survivors cluster in capital-path and security-tagged stories has not been read; the step-value files hold the data.
+>
+> Fix, in order: (1) classify the s320, s321 and s322 survivors by story routing tag from the existing record, with no new run; (2) if survivors cluster in tagged stories, untagged stories take adversarial pass 1 only and tagged stories keep the full cycle; (3) if they do not cluster, close this entry with that reading.
+>
+> "A step with no measured value goes" (`.claude/rules/operator-rulings.md`) is read here per story class and not per round: the rounds keep their catches, and the question is which stories they come from.
+>
+> Baseline: s321, $13.45 of per-story party and elicitation on each of 25 stories; s322, planning at $111 and 5.5 h per story.
+>
+> Expected movement: if 40% of stories are untagged (an assumption until step 1), about $134 a sprint at s321's 25 stories. Wall clock moves little, because the rounds are parallel (24 seats in 25.4 minutes in s322).
+>
+> Provenance: batch 259, cluster C4, from the s322-complete re-take and the BMAD documentation comparison ("too much planning costs documents nobody reads"); id allocated by lead ai-dlc-64.
+>
+> Step: stories-test-strategy
+>
+> verify: manual
+
+**Work item 3, the full text of BL-1169 as it stood before the fold** (heading: "BL-1169 — the BMAD readiness check is invoked three times a sprint, once before epics exist, and the sprint-planning intent writes a file no program reads"). Every citation, figure and fix detail a builder needs for item 3 is here; where it and the item's summary above differ, this text governs.
+
+> **DEFECT (efficiency).** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/architecture.md` §3 and `core/skills/ai-dlc/steps/stories-test-strategy.md` §1 and §3.
+>
+> Read from the step text at `origin/main` 0.1164.0:
+>
+> - `steps/architecture.md:262` invokes `/bmad-sprint-planning intent=readiness`. Lines 266–271 state that epics and stories do not exist yet and that its missing-epic findings are expected.
+> - `steps/stories-test-strategy.md:18` invokes it again once the PRD and architecture are complete.
+> - `steps/stories-test-strategy.md:542` invokes `intent=sprint-planning`, which "runs the readiness gate again".
+> - The BMAD-format `sprint-status.yaml` that intent writes is moved to `s<N>/bmad-sprint-status.yaml` (`steps/route.md:587`). `grep -rl bmad-sprint-status core/` names `sprint-status.sh` (the mover), `validate-bmad-invocations.sh`, `route.md` and four fixture files. `core/scripts/sprint-status.sh:589` compares the moved file's bytes to decide the move; no program uses its sprint data. Line 542 says the intent also selects the sprint's stories; whether anything consumes that selection is unread. The `carry-over-single` intensity already skips the intent (`stories-test-strategy.md:538–540`).
+>
+> Only the stories §1 call has a catch on record (s317, 1 CRITICAL and 2 MAJOR, `docs/analysis/step-value-s317-s319.md:140`). The per-call cost of the three calls is not on record; it was available from the spawn ledger and not taken.
+>
+> Fix: read the three calls' spawns and findings on s321 and s322. A call with no finding that reached a fix on either sprint goes: the architecture-time call is dropped or narrowed to a design-coherence read with no skill run, the §3 re-run happens only when §1 returned CONCERNS or FAIL, and `intent=sprint-planning` is not invoked if nothing consumes its story selection or its file.
+>
+> "A step with no measured value goes" (`.claude/rules/operator-rulings.md`) decides each of the three calls on that reading.
+>
+> Baseline: s322 — three readiness runs and one unread file per sprint by the step text (0.1164.0); per-call cost unread.
+>
+> Expected movement: one readiness run per sprint when §1 passes; an estimated 0.3–0.7 h and $3 a sprint for two dropped calls, on the assumption of 10–20 minutes and the $1.50 spawn average per call, to be replaced by the measured figures.
+>
+> Provenance: batch 259, cluster C4, from the BMAD documentation comparison (https://docs.bmad-method.org, read 2026-11-18); id allocated by lead ai-dlc-64.
+>
+> Step: stories-test-strategy
+>
+> verify: manual
+
+**Work item 4, the full text of BL-1170 as it stood before the fold** (heading: "BL-1170 — the planning-time trace run feeds a gate leg the step text itself calls disarmed by construction"). Every citation, figure and fix detail a builder needs for item 4 is here; where it and the item's summary above differ, this text governs.
+
+> **DEFECT (efficiency).** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/stories-test-strategy.md` (the test-design and trace section, lines 677–700) and `steps/sprint-review.md`.
+>
+> `steps/stories-test-strategy.md:697` states that Check 30's `--trace-verdict` leg is "DISARMED by construction" at planning: no test exists, coverage is 0 and every criterion is planned. The step still runs `bmad-testarch-trace` there. BMAD's guidance is that test design and trace are not the default generation path and that generation works from code that already exists. The earlier step-value ruling merged trace into step 5.1 (`docs/analysis/step-value-s317-s319.md:141`, BL-568) and did not move it.
+>
+> The criterion-to-test matrix the trace produces is also the closing leg for `CAP-` ids, so the planning step still needs a check that every criterion maps to a case. The trace run's cost per sprint is not on record; it was available from the spawn ledger and not taken.
+>
+> Fix: at planning, derive the criterion-to-case matrix with a deterministic check that fails on an unmapped criterion, and run the trace once at sprint review, where its gate decision is real.
+>
+> "A step with no measured value goes" (`.claude/rules/operator-rulings.md`): a gate leg that cannot fail has no measured value at planning.
+>
+> Baseline: s322 — one trace run at planning whose gate leg cannot fail by the step text (0.1164.0); cost unread.
+>
+> Expected movement: the planning trace spawn goes and the sprint-review trace carries a verdict that can read FAIL. Hours and dollars: the planning run's measured cost, to be read from s321 and s322 before the change.
+>
+> Provenance: batch 259, cluster C4, from the BMAD documentation comparison; id allocated by lead ai-dlc-64.
+>
+> Step: stories-test-strategy
+>
+> verify: manual
+
+### What is counted here and owned elsewhere
+
+Counted in the target and owned elsewhere, because each spans every step and has shipped code and its own outcome line: the single-lane remediator (BL-716: 9.5 h alone in s323's planning, the largest serial role in every planning step), the lead's own call volume (BL-819: 4,623 lead calls and at least 9.3 h with no subagent running in s323's planning), and operator answer wait (BL-972: 12.6 h of s323's planning, excluded from the target below). If the target is missed with items 0 to 5 done, the next work item here names which of those three held it.
+
+### Done, and what to expect
+
+Baseline: s322 — 36.9 h (30.0 h less operator wait) and $889 of planning for 8 stories at `carry-over-single`; s323 (PROVISIONAL) 39.6 h (27.0 h) and $1,071 for 18 at `full`.
+
+Expected movement: on the first complete graph sprint that runs items 1 to 5 and in which NO story carries a new requirement or a new architecture decision, planning less operator wait at or below 15 h and at or below $600, against 27.0 to 36.8 h and $889 to $1,298 in s321 to s323. These are PROPOSED figures awaiting the operator. Item 1's ceiling on s323 is 12.5 h less operator wait and $447, which leaves 14.5 h and $624 from s323's 27.0 h and $1,071; reaching $600 therefore needs items 2 to 5 as well. For a MIXED sprint the saving is unread: the two steps' cost has not followed story count, so removing some stories from them may save little until item 0 shows what their cost scales with. Item 0 replaces the proposed figures with derived ones for both cases.
+
+Two checks, in this order. BUILD DONE: items 0 to 5 are each shipped or closed on a reading, which is checkable in the batch that builds them, with no graph sprint needed. OUTCOME MEASURED: the movement above, read on the first complete graph sprint that runs the build. The entry closes on the second; the first is reported when it is reached.
+
+Progress is reported as items done of six, each with its measured hours and dollars. Nothing here is PARTIAL-and-parked: an item is open, shipped, or closed on its reading.
+
+Scope: this entry replaces BL-1169, BL-1170 and BL-1171. It does not own the implementation gates (BL-1166) or the efficiency instrument (BL-1174).
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), applied per story class: a step is kept for a class of story only on findings raised against that class.
+
+Provenance: batch 259, cluster C4b (ai-dlc session of 2026-11-18), from the provisional s323 reading and the BMAD documentation comparison. Operator, 2026-11-18: the time spent in planning is out of proportion for a consumer that extends an existing application and fixes bugs; one backlog item for planning, so it is known when it is done and when to expect improvement. Id allocated by lead ai-dlc-64.
+
+Step: requirements
 
 verify: manual

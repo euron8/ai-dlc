@@ -1,0 +1,93 @@
+== sprint totals, pipeline bucket: default segs clock | monotone segs clock (EXTRACT_MONOTONE_SEGS=1)
+   dollars and calls must not move between the clocks; the DIFF column asserts it
+s317: elapsed   80.8 h |   72.8 h (-10%)   active  48.7 |  44.0   op-wait  10.4 |  10.4   agent-wait  21.8 |  18.4   token-eq $1587 API $1401 lead calls 6156 compactions 35   $/calls EQUAL
+s318: elapsed   74.8 h |   59.6 h (-20%)   active  32.2 |  29.5   op-wait  14.3 |  14.0   agent-wait  28.3 |  16.0   token-eq $1721 API $1720 lead calls 4412 compactions 24   $/calls EQUAL
+s319: elapsed  110.0 h |   94.0 h (-15%)   active  54.8 |  48.8   op-wait  17.0 |  17.0   agent-wait  38.2 |  28.2   token-eq $2234 API $2234 lead calls 6374 compactions 44   $/calls EQUAL
+s320: elapsed  117.8 h |   99.2 h (-16%)   active  42.9 |  38.2   op-wait  47.9 |  47.6   agent-wait  27.0 |  13.4   token-eq $1623 API $1623 lead calls 4926 compactions 36   $/calls EQUAL
+s321: elapsed  120.5 h |  111.0 h (-8%)   active  57.0 |  51.3   op-wait  24.9 |  24.9   agent-wait  38.6 |  34.8   token-eq $2388 API $2367 lead calls 7127 compactions 57   $/calls EQUAL
+s322: elapsed   77.1 h |   66.4 h (-14%)   active  38.8 |  36.4   op-wait  10.3 |  10.3   agent-wait  28.0 |  19.7   token-eq $1348 API $989 lead calls 9304 compactions 72   $/calls EQUAL
+s323: elapsed  141.2 h |   45.8 h (-68%)   active  30.2 |  26.6   op-wait  12.5 |  12.5   agent-wait  98.5 |   6.7   token-eq $1304 API $1033 lead calls 6412 compactions 75   $/calls EQUAL
+
+== per step (step plus its own gate), MONOTONE clock: elapsed h = active + op-wait + agent-wait | token-eq $ (API $) | lead calls | spawns
+carry-over-evaluation
+   s320:  23.8 h =  3.7 + 18.1 +  2.0 | $  191 ($  191) |   423 |  135   [default clock  24.8 h]
+   s321: -
+   s322:  13.7 h =  3.9 +  5.7 +  4.2 | $  231 ($  191) |  1050 |  112   [default clock  19.5 h]
+   s323:  11.8 h =  4.3 +  6.3 +  1.2 | $  207 ($  173) |   828 |   89   [default clock  25.7 h]
+requirements
+   s320:   5.7 h =  3.3 +  1.3 +  1.2 | $  210 ($  210) |   397 |  142   [default clock   7.3 h]
+   s321:  11.1 h =  6.2 +  1.9 +  3.1 | $  314 ($  314) |   813 |  168   [default clock  12.5 h]
+   s322:   9.9 h =  5.3 +  1.2 +  3.4 | $  297 ($  250) |  1202 |  128   [default clock  10.7 h]
+   s323:  13.5 h =  5.2 +  6.2 +  2.1 | $  274 ($  224) |  1178 |  179   [default clock  90.0 h]
+architecture
+   s320:  22.9 h =  1.6 + 20.3 +  0.9 | $  132 ($  132) |   269 |   86   [default clock  28.7 h]
+   s321:  10.0 h =  4.1 +  0.0 +  5.8 | $  306 ($  306) |   560 |  122   [default clock  10.4 h]
+   s322:   5.8 h =  2.9 +  0.0 +  2.9 | $  140 ($  110) |   687 |   68   [default clock   6.0 h]
+   s323:   5.2 h =  3.8 +  0.0 +  1.4 | $  173 ($  130) |  1021 |   67   [default clock   6.0 h]
+stories-test-strategy
+   s320:  13.0 h =  8.9 +  1.3 +  2.8 | $  627 ($  627) |  1087 |  386   [default clock  15.2 h]
+   s321:  19.7 h =  9.2 +  2.1 +  8.3 | $  678 ($  660) |  1356 |  431   [default clock  20.1 h]
+   s322:   7.5 h =  4.3 +  0.0 +  3.3 | $  221 ($  169) |  1348 |  125   [default clock   7.8 h]
+   s323:   9.1 h =  7.2 +  0.0 +  1.9 | $  416 ($  348) |  1596 |  264   [default clock  11.5 h]
+implementation
+   s320:  19.8 h = 13.7 +  3.2 +  2.8 | $  269 ($  269) |  1710 |  212   [default clock  25.2 h]
+   s321:  22.4 h = 17.9 +  2.3 +  2.2 | $  638 ($  638) |  2508 |  280   [default clock  28.2 h]
+   s322:  13.0 h =  9.5 +  2.0 +  1.5 | $  223 ($  137) |  2261 |  107   [default clock  16.1 h]
+   s323:   4.9 h =  4.9 +  0.0 +  0.0 | $  200 ($  135) |  1491 |  151   [default clock   6.5 h]
+sprint-review
+   s320:   1.7 h =  0.6 +  0.2 +  0.9 | $   20 ($   20) |    97 |    6   [default clock   2.1 h]
+   s321:   2.9 h =  2.9 +  0.0 +  0.0 | $  236 ($  236) |   396 |  169   [default clock   3.5 h]
+   s322:   2.3 h =  1.7 +  0.0 +  0.6 | $  101 ($   82) |   498 |   65   [default clock   2.3 h]
+   s323: -
+deploy-validate
+   s320:   6.2 h =  3.7 +  2.2 +  0.4 | $  128 ($  128) |   530 |  111   [default clock   7.3 h]
+   s321:  29.0 h =  8.2 + 18.2 +  2.6 | $  177 ($  177) |  1021 |   45   [default clock  29.9 h]
+   s322:   3.5 h =  1.8 +  0.8 +  1.0 | $   27 ($    5) |   543 |    3   [default clock   3.6 h]
+   s323: -
+retro
+   s320:   2.3 h =  1.4 +  0.8 +  0.2 | $   29 ($   29) |   187 |   18   [default clock   3.4 h]
+   s321:   3.1 h =  1.0 +  0.0 +  2.1 | $   18 ($   18) |   170 |   14   [default clock   3.1 h]
+   s322:   5.3 h =  3.4 +  0.4 +  1.4 | $   51 ($   18) |   896 |   31   [default clock   5.5 h]
+   s323: -
+handoff
+   s320:   3.2 h =  0.8 +  0.1 +  2.3 | $   10 ($   10) |   147 |    0   [default clock   3.3 h]
+   s321:  12.0 h =  1.4 +  0.0 + 10.6 | $   13 ($   11) |   209 |    0   [default clock  12.0 h]
+   s322:   2.8 h =  1.6 +  0.1 +  1.1 | $   13 ($    0) |   322 |    1   [default clock   2.8 h]
+   s323:   0.6 h =  0.4 +  0.0 +  0.2 | $    3 ($    0) |    74 |    0   [default clock   0.6 h]
+route
+   s320:   0.4 h =  0.4 +  0.0 +  0.0 | $    3 ($    3) |    47 |    0   [default clock   0.5 h]
+   s321:   0.4 h =  0.2 +  0.1 +  0.0 | $    3 ($    3) |    56 |    0   [default clock   0.4 h]
+   s322:   0.9 h =  0.8 +  0.1 +  0.0 | $    5 ($    0) |   180 |    0   [default clock   0.9 h]
+   s323:   0.4 h =  0.4 +  0.0 +  0.0 | $    4 ($    0) |   124 |    0   [default clock   0.4 h]
+pre-step
+   s320:   0.1 h =  0.1 +  0.0 +  0.0 | $    3 ($    3) |    21 |    5   [default clock   0.1 h]
+   s321:   0.3 h =  0.1 +  0.2 +  0.0 | $    4 ($    4) |    33 |    4   [default clock   0.4 h]
+   s322:   0.1 h =  0.1 +  0.0 +  0.0 | $    1 ($    0) |    27 |   11   [default clock   0.1 h]
+   s323:   0.1 h =  0.1 +  0.0 +  0.0 | $    2 ($    1) |    13 |    7   [default clock   0.1 h]
+ui-direction
+   s320:   0.1 h =  0.1 +  0.0 +  0.0 | $    1 ($    1) |    11 |    1   [default clock   0.1 h]
+   s321:   0.1 h =  0.1 +  0.0 +  0.0 | $    1 ($    1) |     5 |    1   [default clock   0.1 h]
+   s322: -
+   s323:   0.3 h =  0.3 +  0.0 +  0.0 | $   24 ($   20) |    87 |    8   [default clock   0.5 h]
+
+== planning (the four planning steps and their gates), MONOTONE clock; per PLANNED story {320: 13, 321: 25, 322: 8, 323: 18}
+s320:  65.4 h (less op-wait  24.4 h; active 17.5) token-eq $1160 API $1160 lead calls 2176 spawns 749 | per story: 5.03 h, less op-wait 1.88 h, $89.2, API $89.2, 167 lead calls   [default clock  75.9 h]
+s321:  40.8 h (less op-wait  36.8 h; active 19.5) token-eq $1298 API $1279 lead calls 2729 spawns 721 | per story: 1.63 h, less op-wait 1.47 h, $51.9, API $51.2, 109 lead calls   [default clock  43.0 h]
+s322:  36.9 h (less op-wait  30.0 h; active 16.3) token-eq $889 API $720 lead calls 4287 spawns 433 | per story: 4.61 h, less op-wait 3.75 h, $111.1, API $90.0, 536 lead calls   [default clock  44.0 h]
+s323:  39.6 h (less op-wait  27.0 h; active 20.4) token-eq $1071 API $876 lead calls 4623 spawns 599 | per story: 2.20 h, less op-wait 1.50 h, $59.5, API $48.6, 257 lead calls   [default clock 133.1 h]
+
+== lead call classes inside planning (classes.jsonl, already on a monotone clock in both runs): calls / active h
+   other               s320  1028 /  2.0 h | s321  1237 /  3.2 h | s322  2010 /  5.7 h | s323  1932 /  9.1 h
+   merge               s320   502 /  1.7 h | s321   762 /  2.6 h | s322  1031 /  2.0 h | s323  1438 /  3.1 h
+   snapshot            s320   310 /  1.9 h | s321   374 /  1.8 h | s322   576 /  1.0 h | s323   395 /  1.1 h
+   step-reread         s320    53 /  0.2 h | s321    55 /  0.2 h | s322   220 /  0.4 h | s323   292 /  0.8 h
+   compaction-recovery s320    13 /  0.1 h | s321    19 /  0.1 h | s322   179 /  0.4 h | s323   198 /  0.7 h
+   gate-run            s320    95 /  0.5 h | s321   146 /  0.7 h | s322    86 /  0.2 h | s323   156 /  0.5 h
+   dispatch            s320   133 /  0.8 h | s321    93 /  0.7 h | s322   141 /  0.7 h | s323   123 /  1.0 h
+   repair              s320    42 /  0.3 h | s321    43 /  0.3 h | s322    44 /  0.2 h | s323    89 /  0.6 h
+   idle-wait           s320     0 / 10.1 h | s321     0 /  9.9 h | s322     0 /  5.7 h | s323     0 /  3.6 h
+   total               s320  2176 / 17.5 h | s321  2729 / 19.5 h | s322  4287 / 16.3 h | s323  4623 / 20.4 h
+
+== control: s323 lead session spans (first to last record, pipeline sessions that entered a step) against the monotone total
+   4 lead sessions, span sum 45.8 h; monotone s323 total 45.8 h; default-clock s323 total 141.2 h
+   a total above the span sum counts some second twice; the default clock does, the monotone clock cannot

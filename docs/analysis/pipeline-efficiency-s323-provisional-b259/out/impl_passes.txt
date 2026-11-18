@@ -1,0 +1,12 @@
+s321: 154 spawns, unparsed 34; gate-1 CR story count 24; passes per story(gate1 CR): [(1, 8), (2, 10), (3, 4), (4, 1), (7, 1)]
+   $ by pass#: {1: 141, 2: 57, 3: 14, 4: 3, 5: 4, 6: 1, 7: 1}  kinds: {'qa': 60, 'cr': 71, 'closing': 23}
+   by gate/kind: {('1', 'cr'): 71, ('2', 'qa'): 60, ('?', 'closing'): 23}
+   gate1 CR shards/pass: mean 1.4 max 5
+s322: 53 spawns, unparsed 12; gate-1 CR story count 8; passes per story(gate1 CR): [(1, 2), (2, 3), (3, 1), (4, 2)]
+   $ by pass#: {1: 31, 2: 13, 3: 2, 4: 2}  kinds: {'cr': 26, 'qa': 20, 'closing': 7}
+   by gate/kind: {('1', 'cr'): 26, ('2', 'qa'): 15, ('?', 'closing'): 7, ('?', 'qa'): 5}
+   gate1 CR shards/pass: mean 1.4 max 5
+s323: 39 spawns, unparsed 20; gate-1 CR story count 6; passes per story(gate1 CR): [(1, 3), (2, 3)]
+   $ by pass#: {1: 43, 2: 8}  kinds: {'cr': 15, 'qa': 17, 'closing': 7}
+   by gate/kind: {('1', 'cr'): 15, ('2', 'qa'): 4, ('?', 'closing'): 7, ('?', 'qa'): 13}
+   gate1 CR shards/pass: mean 2.1 max 5
