@@ -1,0 +1,146 @@
+ask	q	sprint	ask_start	step	wait_min	lanes_running	header	why	rule_cited	answer_kind	reason
+1	1	s321	2026-10-30T00:25:38.093Z	route	9	0	Sprint scope	INFO	-	unbadged:first-option	Operator's intended scope choice
+2	1	s321	2026-10-30T02:18:09.536Z	requirements	19	1	Zero reserve	RULE	operator-owned value	unbadged:first-option	money threshold owned by operator
+2	2	s321	2026-10-30T02:18:09.536Z	requirements	19	1	Reserve rule	AMBIG	LR-S321-8	unbadged:first-option	which reading of locked requirement
+2	3	s321	2026-10-30T02:18:09.536Z	requirements	19	1	Base deploy	AMBIG	LR-S321-9	unbadged:first-option	option text versus later requirement wording conflict
+2	4	s321	2026-10-30T02:18:09.536Z	requirements	19	1	Reserve value	RULE	operator-owned value	unbadged:free-text	operator said they supply such values
+3	1	s321	2026-10-30T02:38:16.251Z	requirements	33	0	Halt scope	INFO	-	unbadged:first-option	Operator's intent on halt behavior
+3	2	s321	2026-10-30T02:38:16.251Z	requirements	33	0	Absent Base	INFO	-	unbadged:other-option	Operator's preference for deploy gate
+3	3	s321	2026-10-30T02:38:16.251Z	requirements	33	0	B6 and DASH	INFO	-	unbadged:first-option	Operator's choice on carry-over items
+3	4	s321	2026-10-30T02:38:16.251Z	requirements	33	0	Pin boundary	RULE	byte-pin owned	unbadged:first-option	Byte-pin is the operator's to own
+4	1	s321	2026-10-30T03:12:11.828Z	requirements	2	0	Report timing	AMBIG	-	unbadged:other-option	spec and requirements text conflict on timing
+4	2	s321	2026-10-30T03:12:11.828Z	requirements	2	0	Native HODL	RULE	-	unbadged:first-option	operator scope: widens money paths
+4	3	s321	2026-10-30T03:12:11.828Z	requirements	2	0	CLAUDE.md and idle	RULE	-	unbadged:first-option	CLAUDE.md is operator's standing file
+4	4	s321	2026-10-30T03:12:11.828Z	requirements	2	0	Pinned finding	RULE	-	unbadged:first-option	decides whether pin blocks enable
+5	1	s321	2026-10-30T03:20:41.139Z	requirements	4	0	Native HODL	INFO	-	unbadged:first-option	Operator's intent for new money-path code
+6	1	s321	2026-10-30T05:17:29.724Z	requirements	9	1	Base service	INFO	-	unbadged:free-text	earlier answers silent on service ordering
+6	2	s321	2026-10-30T05:17:29.724Z	requirements	9	1	Capital limit	RULE	-	unbadged:first-option	money cap owned by operator
+6	3	s321	2026-10-30T05:17:29.724Z	requirements	9	1	Idle health	NONE	-	unbadged:first-option	ordinary design judgment on alarm handling
+6	4	s321	2026-10-30T05:17:29.724Z	requirements	9	1	Gas ceiling	RULE	operator-owned maximum	unbadged:free-text	operator-owned gas ceiling gating
+7	1	s321	2026-10-30T05:28:06.585Z	requirements	4	1	Gas ceiling	RULE	operator-owned value	unbadged:first-option	Money threshold, value yours to veto
+7	2	s321	2026-10-30T05:28:06.585Z	requirements	4	1	Create file	ACT	-	unbadged:other-option	Write to live volume
+7	3	s321	2026-10-30T05:28:06.585Z	requirements	4	1	Native HODL	INFO	-	unbadged:free-text	Operator's intent on which token
+7	4	s321	2026-10-30T05:28:06.585Z	requirements	4	1	Exec mode	INFO	-	unbadged:first-option	Operator's preference per instance or global
+8	1	s321	2026-10-30T05:32:56.000Z	requirements	3	1	CLAUDE.md line	AMBIG	-	unbadged:first-option	earlier answer did not name this line
+8	2	s321	2026-10-30T05:32:56.000Z	requirements	3	1	Unknown chain	NONE	-	unbadged:other-option	ordinary engineering choice
+8	3	s321	2026-10-30T05:32:56.000Z	requirements	3	1	HR-10	RULE	HR-10	unbadged:first-option	conflict with recorded safety invariant
+8	4	s321	2026-10-30T05:32:56.000Z	requirements	3	1	SPEC wording	NONE	-	unbadged:first-option	wording choice, no rule cited
+9	1	s321	2026-10-30T05:45:30.189Z	requirements	6	0	HODL build	INFO	-	unbadged:free-text	Operator's intent on build
+9	2	s321	2026-10-30T05:45:30.189Z	requirements	6	0	Zero reserve	INFO	-	unbadged:free-text	Operator's preference on rejection location
+9	3	s321	2026-10-30T05:45:30.189Z	requirements	6	0	Deploy wording	AMBIG	-	unbadged:free-text	SPEC and PRD wording conflict
+9	4	s321	2026-10-30T05:45:30.189Z	requirements	6	0	Staged payload	INFO	-	unbadged:free-text	Operator's preference on staged payload
+10	1	s321	2026-10-30T16:30:39.121Z	gate-validation[requirements]	9	0	Check 32	RULE	-	unbadged:free-text	waiving gate check is operator authority
+10	2	s321	2026-10-30T16:30:39.121Z	gate-validation[requirements]	9	0	Check 2	RULE	-	unbadged:free-text	waiving gate check is operator authority
+11	1	s321	2026-10-30T16:40:44.621Z	gate-validation[requirements]	1	0	Check 32	RULE	waiver authority	unbadged:free-text	Waiving a gate check is operator's authority
+11	2	s321	2026-10-30T16:40:44.621Z	gate-validation[requirements]	1	0	Check 2	RULE	waiver authority	unbadged:other-option	Waiving a gate check is operator's authority
+12	1	s321	2026-10-30T18:14:58.305Z	requirements	12	0	Land L2 fix	ACT	-	took-recommended	merge and deploy restarts live rebalancer
+13	1	s321	2026-11-03T03:34:07.848Z	route	2	0	Gate hold	RULE	operator hold	unbadged:first-option	Hold was set by operator's words
+14	1	s321	2026-11-03T03:40:54.689Z	requirements	0	0	Check 2	RULE	-	unbadged:other-option	suppression entry needs operator authorization
+15	1	s321	2026-11-04T13:20:36.492Z	stories-test-strategy	4	5	Elicitation	DEFECT	6-beat wait limit	took-recommended	Wait limit exhausted
+16	1	s321	2026-11-06T01:24:28.432Z	stories-test-strategy	1	0	Resolution	NONE	-	took-recommended	no locked requirement touched
+17	1	s321	2026-11-06T01:51:18.240Z	stories-test-strategy	53	0	Resolution	DEFECT	exit ceiling	took-recommended	Review pass cap reached
+18	1	s321	2026-11-06T04:23:35.950Z	gate-validation[implementation]	84	7	Matic stall	NONE	-	unbadged:free-text	choice of read-only checks
+19	1	s321	2026-11-06T06:00:29.996Z	gate-validation[implementation]	3	5	Manual sweeps	INFO	-	unbadged:first-option	Only operator knows if they ran sweeps
+19	2	s321	2026-11-06T06:00:29.996Z	gate-validation[implementation]	3	5	Next read	NONE	-	took-recommended	Lead recommends read-only next step
+20	1	s321	2026-11-06T08:00:48.847Z	implementation	13	5	1.2 fixture	NONE	-	took-recommended	engineering rework choice
+21	1	s321	2026-11-06T08:17:50.043Z	implementation	3	4	Permit2 pin	RULE	hash re-baseline	unbadged:other-option	Pinned hash re-baseline is operator's
+22	1	s321	2026-11-06T09:01:20.207Z	implementation	3	1	Gate refusal	DEFECT	-	other-option	gate script refuses merged review file
+23	1	s321	2026-11-06T15:41:37.011Z	implementation	1	0	Release hold	NONE	-	took-recommended	Lead recommends probe then release
+24	1	s321	2026-11-06T18:48:56.088Z	implementation	3	0	1.2 gate 2	DEFECT	-	took-recommended	installed script defect; upstream fix not allowed
+25	1	s321	2026-11-07T00:00:08.641Z	implementation	8	1	Check 9	RULE	-	unbadged:first-option	Waiving a gate check
+26	1	s321	2026-11-07T10:37:48.360Z	implementation	65	0	Story 5.6	NONE	-	took-recommended	story disposition, lead recommends
+27	1	s321	2026-11-07T14:21:58.529Z	gate-validation[sprint-review]	9	4	Check 915	DEFECT	CLAUDE.md Rule (b)	took-recommended	Gate check literally fails
+28	1	s321	2026-11-07T14:42:12.881Z	deploy-validate	1	0	Push + PR	ACT	Rule (b)	took-recommended	push branch and open PR
+29	1	s321	2026-11-07T14:48:59.714Z	deploy-validate	4	0	Merge PR 1303	ACT	-	unbadged:first-option	Merge approval
+30	1	s321	2026-11-07T15:41:25.918Z	deploy-validate	7	0	Fix PR	ACT	-	took-recommended	push branch and open PR
+30	2	s321	2026-11-07T15:41:25.918Z	deploy-validate	7	0	CDK deploys	ACT	-	unbadged:first-option	cdk deploys are operator-fired
+31	1	s321	2026-11-07T15:52:10.919Z	deploy-validate	0	0	Base DB first	INFO	-	unbadged:first-option	Base DB credentials are operator's
+32	1	s321	2026-11-07T16:06:16.077Z	deploy-validate	3	1	Base config	ACT	-	unbadged:first-option	live write to config volume
+32	2	s321	2026-11-07T16:06:16.077Z	deploy-validate	3	1	Merge #1304	ACT	-	took-recommended	merge PR
+33	1	s321	2026-11-07T16:22:49.933Z	deploy-validate	2	0	Monitoring	ACT	-	took-recommended	Fire MonitoringStack deploy
+34	1	s321	2026-11-07T17:24:57.710Z	deploy-validate	0	0	Save symptom	INFO	-	unbadged:other-option	needs operator's observed UI behavior
+35	1	s321	2026-11-07T18:07:52.630Z	deploy-validate	4	0	V4 Quoter	RULE	operator-owned value	unbadged:first-option	Value is yours to set
+35	2	s321	2026-11-07T18:07:52.630Z	deploy-validate	4	0	V3 + wallet	RULE	-	unbadged:first-option	Wallet config not set without say
+35	3	s321	2026-11-07T18:07:52.630Z	deploy-validate	4	0	Gas ceiling	RULE	operator-owned value	unbadged:first-option	Gas ceiling is yours
+35	4	s321	2026-11-07T18:07:52.630Z	deploy-validate	4	0	Live write	ACT	-	unbadged:first-option	Live config PUT
+36	1	s321	2026-11-07T18:48:19.270Z	deploy-validate	2	0	Push + merge	ACT	-	took-recommended	push, PR, merge and deploy
+37	1	s321	2026-11-07T18:54:12.523Z	deploy-validate	264	0	Merge #1305	ACT	-	took-recommended	Merge PR
+38	1	s321	2026-11-08T00:35:42.937Z	deploy-validate	2	0	Base PUT	ACT	-	unbadged:first-option	live config PUT and restart
+38	2	s321	2026-11-08T00:35:42.937Z	deploy-validate	2	0	Base UI save	INFO	-	unbadged:first-option	needs operator to perform UI save
+38	3	s321	2026-11-08T00:35:42.937Z	deploy-validate	2	0	Base 2e flag	RULE	-	unbadged:first-option	relaxes production check, operator say-so
+38	4	s321	2026-11-08T00:35:42.937Z	deploy-validate	2	0	LR-S321-1	RULE	LR-S321-1	unbadged:free-text	locked requirement disposition
+39	1	s321	2026-11-08T01:09:09.034Z	deploy-validate	83	0	Base save	INFO	-	unbadged:first-option	Only operator can save on UI
+39	2	s321	2026-11-08T01:09:09.034Z	deploy-validate	83	0	LR-S321-1 router	ACT	-	unbadged:other-option	On-chain spend and router deploy
+40	1	s321	2026-11-08T03:06:37.548Z	deploy-validate	17	1	Push+merge	ACT	-	took-recommended	push, merge and redeploy
+40	2	s321	2026-11-08T03:06:37.548Z	deploy-validate	17	1	Base ETH	RULE	operator-owned value	unbadged:first-option	operator's capital and reserve value
+41	1	s321	2026-11-08T04:02:44.823Z	deploy-validate	4	1	Router PUT	ACT	-	took-recommended	Live security-config PUT
+41	2	s321	2026-11-08T04:02:44.823Z	deploy-validate	4	1	LR-S321-1	RULE	LR-S321-1	unbadged:first-option	Locked requirement disposition
+42	1	s321	2026-11-08T04:10:08.253Z	deploy-validate	0	0	Deploy key	ACT	-	unbadged:first-option	on-chain deploy signing key choice
+43	1	s321	2026-11-08T04:34:54.469Z	deploy-validate	645	0	Router PUT	ACT	-	unbadged:first-option	Live security-config write
+43	2	s321	2026-11-08T04:34:54.469Z	deploy-validate	645	0	Enable Base	ACT	-	unbadged:first-option	Enable Base live
+44	1	s321	2026-11-08T15:39:38.615Z	deploy-validate	24	0	Base first row	ACT	-	unbadged:other-option	real capital used for first mint
+45	1	s321	2026-11-08T16:24:12.837Z	deploy-validate	0	1	TEL transfer	INFO	-	unbadged:first-option	Only operator knows if they sent it
+46	1	s322	2026-11-09T00:06:56.605Z	route	8	0	Roll fix	NONE	-	free-text	lead recommends overwrite
+46	2	s322	2026-11-09T00:06:56.605Z	route	8	0	Sprint scope	RULE	-	unbadged:first-option	sprint scope is operator's
+47	1	s322	2026-11-09T06:25:18.876Z	carry-over-evaluation	340	1	Scope re-conf	RULE	operator's scope	unbadged:first-option	Scope is the operator's decision
+48	1	s322	2026-11-09T19:13:39.000Z	requirements	22	2	Join cure	RULE	-	took-recommended	procedure requires explicit operator approval
+49	1	s322	2026-11-09T20:18:03.004Z	handoff	0	2	Push blocked	DEFECT	-	took-recommended	Pre-push gate blocked by missing module
+50	1	s322	2026-11-09T21:51:37.580Z	requirements	3	1	AC5 predicate	AMBIG	LR-S322-2	unbadged:other-option	spec SHALL conflicts with locked requirement
+51	1	s322	2026-11-09T22:21:07.317Z	requirements	10	0	SQL form	AMBIG	-	unbadged:first-option	Answer names literal, not SQL form
+52	1	s322	2026-11-09T23:51:31.501Z	requirements	16	0	AC5 predicate	RULE	operator-owned value	unbadged:first-option	predicate choice operator's alone
+53	1	s322	2026-11-10T01:14:42.526Z	requirements	19	0	Resolution	DEFECT	-	took-recommended	Review pass cap reached
+54	1	s322	2026-11-10T02:13:15.641Z	gate-validation[requirements]	7	0	Check 32	RULE	-	took-recommended	suppression needs operator authorization
+55	1	s322	2026-11-10T18:24:12.396Z	stories-test-strategy	2	0	J3 REOPEN	DEFECT	Check 24	took-recommended	Validator cannot close finding
+55	2	s322	2026-11-10T18:24:12.396Z	stories-test-strategy	2	0	Veto lines	NONE	-	unbadged:first-option	Veto prompt on lead decisions
+56	1	s322	2026-11-10T22:49:29.829Z	implementation	13	1	Stopgap	RULE	operator-owned value	unbadged:other-option	value is operator's to set
+56	2	s322	2026-11-10T22:49:29.829Z	implementation	13	1	Fix scope	NONE	-	took-recommended	lead recommends repair then cap
+56	3	s322	2026-11-10T22:49:29.829Z	implementation	13	1	Crash data	INFO	-	unbadged:free-text	needs operator's lost crash table
+57	1	s322	2026-11-11T00:24:33.157Z	implementation	75	0	Gate 2	DEFECT	-	took-recommended	Checker cannot certify gate
+58	1	s322	2026-11-11T03:41:25.901Z	gate-validation[implementation]	10	0	Check 32	RULE	-	took-recommended	suppression authorization lapsed
+58	2	s322	2026-11-11T03:41:25.901Z	gate-validation[implementation]	10	0	Veto lines	NONE	-	unbadged:first-option	veto line for lead decisions
+59	1	s322	2026-11-11T06:45:14.618Z	handoff	1	0	Push block	RULE	handoff.md BLOCKED	free-text	Blocked findings are operator's disposition
+60	1	s322	2026-11-11T07:15:36.419Z	implementation	2	0	Host relief	ACT	-	took-recommended	patching venvs on operator machine
+60	2	s322	2026-11-11T07:15:36.419Z	implementation	2	0	AWS tooling	INFO	-	took-recommended	operator must install tooling and log in
+61	1	s322	2026-11-11T07:25:05.678Z	gate-validation[implementation]	7	1	AWS login	INFO	-	free-text	Needs operator password and SSO login
+62	1	s322	2026-11-11T07:41:47.654Z	bug-investigation	2	1	D-4 value	INFO	-	unbadged:first-option	value pending operator, D-4
+63	1	s322	2026-11-11T11:28:43.194Z	handoff	1	0	Push blockers	NONE	-	took-recommended	Lead recommends fixing both
+64	1	s322	2026-11-12T01:15:12.199Z	gate-validation[implementation]	24	1	D-1 source	RULE	D-1	unbadged:other-option	decision operator alone owns
+64	2	s322	2026-11-12T01:15:12.199Z	gate-validation[implementation]	24	1	Safeguard 5000	INFO	-	unbadged:first-option	only operator knows if change was theirs
+65	1	s323	2026-11-13T08:19:24.746Z	route	1	0	Sprint scope	NONE	-	unbadged:first-option	Lead states resolved scope
+66	1	s323	2026-11-13T09:33:59.782Z	carry-over-evaluation	148	2	22060 ceiling	NONE	-	took-recommended	engineering choice, lead recommends
+66	2	s323	2026-11-13T09:33:59.782Z	carry-over-evaluation	148	2	Failure path	NONE	-	took-recommended	engineering choice, lead recommends
+66	3	s323	2026-11-13T09:33:59.782Z	carry-over-evaluation	148	2	Wall split	AMBIG	-	unbadged:first-option	boundary from operator's words unclear
+66	4	s323	2026-11-13T09:33:59.782Z	carry-over-evaluation	148	2	Allowlist fire	ACT	Rule 916	took-recommended	live security-state mutation
+67	1	s323	2026-11-13T12:04:02.167Z	carry-over-evaluation	3	0	Card semantics	NONE	-	took-recommended	Design choice, lead recommends
+67	2	s323	2026-11-13T12:04:02.167Z	carry-over-evaluation	3	0	Single pool	NONE	-	took-recommended	Lead recommends accepting
+67	3	s323	2026-11-13T12:04:02.167Z	carry-over-evaluation	3	0	S298 deferral	RULE	DEFERRAL_REQUEST ratify	took-recommended	Needs operator ratify-or-reopen
+68	1	s323	2026-11-13T12:07:21.361Z	carry-over-evaluation	1	0	mTLS gate	ACT	Rule 916	unbadged:first-option	security config change operator fires
+68	2	s323	2026-11-13T12:07:21.361Z	carry-over-evaluation	1	0	Base alerts	RULE	-	took-recommended	deferral re-decision is operator's
+69	1	s323	2026-11-13T12:10:36.601Z	carry-over-evaluation	0	1	2-6-AC2 close	NONE	-	took-recommended	Lead recommends close
+69	2	s323	2026-11-13T12:10:36.601Z	carry-over-evaluation	0	1	2-7-AC5 re-decide	RULE	-	took-recommended	Re-decision is yours
+70	1	s323	2026-11-13T12:32:15.081Z	carry-over-evaluation	20	0	8453 address	RULE	operator-owned value	unbadged:first-option	contract address on money path
+70	2	s323	2026-11-13T12:32:15.081Z	carry-over-evaluation	20	0	Veto lines	NONE	-	unbadged:first-option	veto list of lead decisions
+71	1	s323	2026-11-17T01:22:31.311Z	carry-over-evaluation	12	0	Closer	AMBIG	-	unbadged:other-option	Close signal conflicts with prior decision
+72	1	s323	2026-11-17T03:43:16.584Z	carry-over-evaluation	200	1	Byte-guard pin	RULE	ADR-S311-5	unbadged:first-option	pin moves only with operator sign-off
+72	2	s323	2026-11-17T03:43:16.584Z	carry-over-evaluation	200	1	Fire order	NONE	-	unbadged:first-option	derived order, veto offered
+72	3	s323	2026-11-17T03:43:16.584Z	carry-over-evaluation	200	1	Proxy cert	NONE	-	unbadged:other-option	design choice on header forwarding
+73	1	s323	2026-11-17T07:36:58.864Z	requirements	300	14	Header premise	RULE	-	took-recommended	Requirement boundary is yours
+73	2	s323	2026-11-17T07:36:58.864Z	requirements	300	14	Veto lines	NONE	Rule 12 Tier 2	took-recommended	Veto line, lead recommends
+74	1	s323	2026-11-17T13:03:34.095Z	requirements	25	0	Merkl ceiling	RULE	-	unbadged:other-option	requirement boundary operator sets
+74	2	s323	2026-11-17T13:03:34.095Z	requirements	25	0	Gas read scope	RULE	-	unbadged:other-option	gas ceiling scope operator's
+74	3	s323	2026-11-17T13:03:34.095Z	requirements	25	0	Leg 2 retry	AMBIG	LR-S323-12	unbadged:other-option	retry wording versus escalation unclear
+74	4	s323	2026-11-17T13:03:34.095Z	requirements	25	0	Skip scope	RULE	LR-S323-3	unbadged:first-option	scope of locked requirement
+75	1	s323	2026-11-17T13:43:54.128Z	requirements	19	0	Leg 2 budget	INFO	-	unbadged:first-option	Operator did not state a number
+75	2	s323	2026-11-17T13:43:54.128Z	requirements	19	0	Batch branch	INFO	-	unbadged:first-option	Operator's scope intent
+75	3	s323	2026-11-17T13:43:54.128Z	requirements	19	0	S18 SKIP count	AMBIG	-	unbadged:first-option	Unclear whether S18 SKIP counts
+76	1	s323	2026-11-17T14:26:44.858Z	requirements	7	1	Veto lines	NONE	-	unbadged:first-option	veto list of lead decisions
+76	2	s323	2026-11-17T14:26:44.858Z	requirements	7	1	Check 928 AC	NONE	-	unbadged:first-option	undefined observable, ordinary spec choice
+76	3	s323	2026-11-17T14:26:44.858Z	requirements	7	1	10.md CRITICAL	NONE	-	unbadged:first-option	story scope confirmation
+77	1	s323	2026-11-17T16:20:31.957Z	requirements	21	1	ALB (ii) verdict	AMBIG	-	unbadged:first-option	Ruling unclear on negative verdict
+77	2	s323	2026-11-17T16:20:31.957Z	requirements	21	1	FR-19 ship/hold	AMBIG	-	unbadged:first-option	Ruling unclear on aggregator shipping
+77	3	s323	2026-11-17T16:20:31.957Z	requirements	21	1	8th site	RULE	operator-owned value	unbadged:first-option	Gas ceiling is yours
+77	4	s323	2026-11-17T16:20:31.957Z	requirements	21	1	Widen line	RULE	-	took-recommended	Line is yours to confirm
+78	1	s323	2026-11-17T16:43:33.793Z	requirements	7	0	Retry scope	AMBIG	LR-S323-12	unbadged:other-option	operator's words silent on other sites
+79	1	s323	2026-11-17T18:41:05.660Z	requirements	19	0	Ceiling scope	RULE	operator-owned value	unbadged:first-option	Money-path value is yours
+79	2	s323	2026-11-17T18:41:05.660Z	requirements	19	0	LR-37	NONE	-	unbadged:first-option	Lead recommends confirming
+79	3	s323	2026-11-17T18:41:05.660Z	requirements	19	0	Veto list	NONE	-	unbadged:first-option	Informational veto list

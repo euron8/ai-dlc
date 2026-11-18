@@ -1,0 +1,60 @@
+questions 145; asks 79; wait minutes 2770
+
+== how the operator answered (mechanical)
+unbadged:first-option 67, took-recommended 41, unbadged:other-option 19, unbadged:free-text 14, free-text 3, other-option 1
+questions with a recommended option 45; operator took it 41; other option 1; free text 3
+asks in which every answer was the recommended option: 23 asks, 859 min (31%)
+not taken: [('22', '1', 'DEFECT', 'other-option', 'Gate refusal'), ('46', '1', 'NONE', 'free-text', 'Roll fix'), ('59', '1', 'RULE', 'free-text', 'Push block'), ('61', '1', 'INFO', 'free-text', 'AWS login')]
+
+== what stopped the lead (judgment), with the wait on asks made only of that class
+RULE: 46 questions (32%); only-RULE asks 11 waiting 409 min (15%); in 23 more asks beside other classes | s321 6 asks 23 min, s322 5 asks 386 min, s323 0 asks 0 min
+ACT: 23 questions (16%); only-ACT asks 11 waiting 964 min (35%); in 9 more asks beside other classes | s321 11 asks 964 min, s322 0 asks 0 min, s323 0 asks 0 min
+NONE: 29 questions (20%); only-NONE asks 8 waiting 173 min (6%); in 14 more asks beside other classes | s321 5 asks 164 min, s322 1 asks 1 min, s323 2 asks 8 min
+INFO: 24 questions (17%); only-INFO asks 7 waiting 22 min (1%); in 11 more asks beside other classes | s321 5 asks 13 min, s322 2 asks 9 min, s323 0 asks 0 min
+AMBIG: 14 questions (10%); only-AMBIG asks 4 waiting 32 min (1%); in 8 more asks beside other classes | s321 0 asks 0 min, s322 2 asks 13 min, s323 2 asks 19 min
+DEFECT: 9 questions (6%); only-DEFECT asks 8 waiting 166 min (6%); in 1 more asks beside other classes | s321 5 asks 72 min, s322 3 asks 94 min, s323 0 asks 0 min
+
+== class by sprint
+s321: RULE 25, ACT 20, NONE 9, INFO 17, AMBIG 5, DEFECT 5
+s322: RULE 9, ACT 1, NONE 5, INFO 5, AMBIG 2, DEFECT 4
+s323: RULE 12, ACT 2, NONE 15, INFO 2, AMBIG 7, DEFECT 0
+
+== class by reader (odd asks one reader, even asks the other)
+odd: RULE 19, ACT 9, NONE 11, INFO 17, AMBIG 6, DEFECT 7
+even: RULE 27, ACT 14, NONE 18, INFO 7, AMBIG 8, DEFECT 2
+
+== class by answer kind
+RULE: unbadged:first-option 24, took-recommended 8, unbadged:other-option 7, unbadged:free-text 6, free-text 1
+ACT: took-recommended 11, unbadged:first-option 9, unbadged:other-option 3
+NONE: took-recommended 13, unbadged:first-option 12, unbadged:other-option 2, unbadged:free-text 1, free-text 1
+INFO: unbadged:first-option 14, unbadged:free-text 6, unbadged:other-option 2, took-recommended 1, free-text 1
+AMBIG: unbadged:first-option 8, unbadged:other-option 5, unbadged:free-text 1
+DEFECT: took-recommended 8, other-option 1
+
+== combinations
+NONE: 29 questions; asks made only of them 8 waiting 173 min (6%); partly 14
+NONE or DEFECT: 38 questions; asks made only of them 17 waiting 341 min (12%); partly 13
+NONE, or any class answered with the recommended option: 57 questions; asks made only of them 28 waiting 963 min (35%); partly 15
+INFO or AMBIG: 38 questions; asks made only of them 13 waiting 79 min (3%); partly 15
+
+== NONE questions not answered with the recommended or the first option
+ask 8.2 s321 requirements [Unknown chain] unbadged:other-option
+ask 18.1 s321 gate-validation[implementation] [Matic stall] unbadged:free-text
+ask 46.1 s322 route [Roll fix] free-text
+ask 72.3 s323 carry-over-evaluation [Proxy cert] unbadged:other-option
+
+== rules the questions cite as the reason to ask (reader's reading; '-' means none named)
+operator-owned value 11, waiver authority 2, LR-S321-1 2, Rule 916 2, LR-S323-12 2, LR-S321-8 1, LR-S321-9 1, byte-pin owned 1, operator-owned maximum 1, HR-10 1, operator hold 1, 6-beat wait limit 1, exit ceiling 1, hash re-baseline 1, CLAUDE.md Rule (b) 1, Rule (b) 1, operator's scope 1, LR-S322-2 1, Check 24 1, handoff.md BLOCKED 1, D-1 1, DEFERRAL_REQUEST ratify 1, ADR-S311-5 1, Rule 12 Tier 2 1, LR-S323-3 1
+RULE questions naming no rule: 20 of 46
+
+== the ten asks over 60 minutes
+ask 18 s321 gate-validation[implementation] 84 min: NONE/unbadged:free-text
+ask 26 s321 implementation 65 min: NONE/took-recommended
+ask 37 s321 deploy-validate 264 min: ACT/took-recommended
+ask 39 s321 deploy-validate 83 min: INFO/unbadged:first-option; ACT/unbadged:other-option
+ask 43 s321 deploy-validate 645 min: ACT/unbadged:first-option; ACT/unbadged:first-option
+ask 47 s322 carry-over-evaluation 340 min: RULE/unbadged:first-option
+ask 57 s322 implementation 75 min: DEFECT/took-recommended
+ask 66 s323 carry-over-evaluation 148 min: NONE/took-recommended; NONE/took-recommended; AMBIG/unbadged:first-option; ACT/took-recommended
+ask 72 s323 carry-over-evaluation 200 min: RULE/unbadged:first-option; NONE/unbadged:first-option; NONE/unbadged:other-option
+ask 73 s323 requirements 300 min: RULE/took-recommended; NONE/took-recommended
