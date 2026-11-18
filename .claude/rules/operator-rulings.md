@@ -1,13 +1,12 @@
-<!-- unconditional: standing rulings about authority and cost bind from the first turn, before any file is read, and must reach subagents. -->
+<!-- unconditional: rulings on authority and cost bind from the first turn and must reach subagents. -->
 
 # Operator standing rulings
 
-Decisions the operator has already made. They hold across sessions; a repeated instruction is confirmation.
+Standing decisions; a repeated instruction is confirmation.
 
 ## Merges are preapproved
 
-No plan and no task stops to ask for merge authorization. Cut the branch, run the gate, merge it. Where a
-branch carries more than one release the release-version validator says so; that constrains branch shape.
+No plan and no task stops to ask for merge authorization. Cut the branch, run the gate, merge it.
 
 ## The build process is CLAUDE.md's "Build process", and nothing more
 
@@ -36,7 +35,7 @@ question to the operator; `busy` in `ListAgents` is a reason to look further, ne
 
 A measurement may choose the MECHANISM; only the operator chooses whether the GOAL survives. Never narrow a
 goal, drop an item or scale work down on your own authority. Deliver the whole scope and say what was blocked
-and why. Partial delivery reported as completion is the failure this prevents.
+and why.
 
 ## The output of a flawed process is UNTRUSTED
 
@@ -45,7 +44,9 @@ green because it looks fine.
 
 ## Optimize wall clock where something waits, dollars where nothing does
 
-Spawn agents liberally and in parallel; background anything long. Where something waits on the answer, wall
+Spawn agents liberally and in parallel; background anything long. Hands run locally as background agents,
+never in the cloud: writing hands pass `isolation: "worktree"`, read-only hands none (enforcer: P15,
+`scripts/validate-plan-shape.sh`). Where something waits on the answer, wall
 clock rules; where nothing does, cheaper tokens win even if slower. Profile the SCHEDULE per unit first:
 measurement decides the ORDER, never the membership. A hand verifies ONLY its own change: `bash -n`, its
 discriminating probe, and CLAUDE.md's builder steps; the gate runs everything else. Never message a
@@ -53,13 +54,11 @@ discriminating probe, and CLAUDE.md's builder steps; the gate runs everything el
 
 ## The lead orchestrates the box's load
 
-Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule. Every run other than a merge goes
-in parallel; merges are ordered.
+Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule.
 
 ## No needless timing runs
 
-Cost evidence for a routine change is the counts the gate records: invocations.decl, exec, fork and render
-counts. Where the stated goal IS wall clock or box load, the push gate that delivers the change is the
+Cost evidence for a routine change is the gate's recorded counts (invocations.decl, exec, fork, render). Where the stated goal IS wall clock or box load, the push gate that delivers the change is the
 measurement. Take no hand timing run before it, and never re-measure a quantity already on record (a gate log, the
 durations record, a verdict). Decide what to change from the code and that record. A brief, dispatch or
 instruction to another session carries no step this file forbids its executor: delegating a forbidden action is
@@ -81,16 +80,16 @@ widened bound, a retry or fewer jobs.
 
 ## Valid measurements are never thrown away
 
-Record every fixture, census or gate verdict in the shared, content-keyed verdict store (`AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`), keyed on what the run read, in the store a later matching run reads: a push reads only `counted-<vk>`, which `scripts/seed-verdict-store.sh` writes. A stopped or red run keeps every pass it recorded. Never record a verdict in a per-clone, per-worktree or mktemp location, or in a store no run reads, and never build a measurement whose results are discarded. Enforcer: `scripts/validate-verdict-identity.sh` arm W1.
+Record every fixture, census or gate verdict in the shared content-keyed store (`AI_DLC_VERDICT_STORE`, default `~/.cache/ai-dlc/verdicts`), keyed on what the run read; a push reads only `counted-<vk>`, written by `scripts/seed-verdict-store.sh`. A stopped or red run keeps every pass it recorded. Never record a verdict where no later run reads it (per-clone, per-worktree, mktemp), and never build a measurement whose results are discarded. Enforcer: `scripts/validate-verdict-identity.sh` arm W1.
 
 ## A release never waits for another release's landing
 
-A release never waits for another release's landing to build, rebase, verify or push; only its merge is ordered behind earlier merges. Bundle READY releases into one gate only when that cuts overall wall clock.
+It never waits to build, rebase, verify or push; only its merge is ordered behind earlier merges. Bundle READY releases into one gate only when that cuts overall wall clock.
 
 ## Read-set traces use the sandbox tracer, and the session runs them
 
 Run every read-set trace as `bash core/scripts/derive-fixture-readsets.sh --list "<names>" --tracer sandbox`,
-from a normal account with no `sudo`, in the main checkout detached at the commit to trace. A session owing a
+with no `sudo`, in the main checkout detached at the commit to trace. A session owing a
 trace runs it and commits the map. `fs_usage` and `--tracer both` are for the operator alone.
 
 ## A command handed to the operator states its runtime and its odds
@@ -100,7 +99,7 @@ to succeed, from evidence. If the plan's precondition for it is unmet, say that 
 
 ## A wall clock is a defect until it is justified
 
-A fixture or gate that takes tens of minutes is doing more work than its checks need. Report a cost that grew
+A fixture or gate taking tens of minutes does more work than its checks need. Report a cost that grew
 under your own change, with before and after; never quote a long wall clock as normal.
 
 ## A step with no measured value goes
@@ -109,6 +108,13 @@ A pipeline step, round or sub-step is kept only on evidence: a named failure cas
 other round catches that survive to the shipped artifact. Without that the batch removes or merges it; it is
 never put to the operator as a choice. Judge a rare high-consequence catch on consequence, not frequency. Every
 efficiency ranking states hours removed AND dollars; a finding with no dollar figure is still a filed row.
+
+## One backlog entry per goal
+
+One entry per improvement goal, with a numbered work list and one done condition; fold siblings, never file
+one per finding. An efficiency goal carries a baseline, the measured waste per fix, and the
+outcome against it; never a target number. Baseline and outcome:
+`scripts/validate-backlog-receipts.sh` E1, E2, E3b.
 
 ## Handoff gaps are out of scope for efficiency analysis
 

@@ -61,7 +61,7 @@ by the same rule. `/Users/n8/git/graph`, the consumer: read it, never write it, 
 without an explicit operator grant, not even a read-only question. Learn about consumer activity from the process table
 and block on its pid.
 
-**Every hand brief carries these lines.** `isolation: "remote"`; a `mktemp -d` under the scratchpad; no `rm -rf` on a
+**Every hand brief carries these lines.** A local background hand, `isolation: "worktree"` if it writes and none if it only reads; a `mktemp -d` under the scratchpad; no `rm -rf` on a
 variable path; no load generator; `--no-verify` on every push the hand makes; no work under
 `/Users/n8/git/ai-dlc/.claude/worktrees/`. **Never `pkill`, `killall` or kill by pattern**: stop only processes you
 started, by the pid or process group recorded when you started them. A batch-217 hand's `pkill -f hermetic-run.sh` was

@@ -669,11 +669,62 @@ for f in "${FILES[@]}"; do
     [ -n "$hit" ] || continue
     warn "$rel" "line ${hit%%:*} is an opt-out inside an instruction: a comment that maps an outcome to NOT doing the work ('${hit#*:}'). If the action is conditional, put the condition in the numbered action list where the executor decides it; beside the instruction it reads as permission to skip."
   done < <(grep -nE '^[[:space:]]*#.*(->|→).*([Ss]top|[Ss]kip|do not|don.t|nothing to (do|rotate)|no [A-Za-z-]+ (target|subject))' "$f" | cut -c1-200)
+
+  # --- P15: no cloud spawn (the block above the loop) -- every plan outside the archive, spent ones too.
+  case "$rel" in docs/plans/archive/*) ;; *) p15_scan "$rel" ;; esac
 done
+
+# --- P15, the rulebook pass: no-argument runs only, and an empty corpus is refused.
+if [ "$#" -eq 0 ]; then
+  p15_n=0
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    p15_n=$((p15_n+1)); p15_scan "$f"
+  done < <(find .claude/rules -name '*.md' 2>/dev/null | sort)
+  [ "$p15_n" -gt 0 ] || err ".claude/rules" "P15 examined no .claude/rules/*.md file, so its rulebook pass checked nothing. A glob that matches nothing must not report success."
+fi
 
 echo "validate-plan-shape: ${#FILES[@]} plan(s) checked, $errs error(s), $warns warning(s)."
 [ "$errs" -eq 0 ] || exit 1
 exit 0
+}
+
+# ===================================================================================
+# P15 -- NO INSTRUCTION SPAWNS A HAND IN THE CLOUD.
+#
+# THE RULING. Hands run on this machine as background agents: a writing hand gets worktree
+# isolation, a read-only hand none. The cloud isolation value is never an instruction.
+#
+# THE DEFECT. A misread operator sentence was written into a plan and a rulebook as "every
+# spawn passes the cloud isolation value", then copied into five more plans, so every later
+# lead read it as standing policy. docs/context-hardening-notes.md R40 carries the episode.
+#
+# THE GRAMMAR. `isolation` followed within four non-letters by `remote` catches the keyed form
+# in any quoting; a quoted or backticked `remote` alone catches the bare value, which the
+# drain plan spelled on wrapped lines with no `isolation:` beside it. Per-line matching
+# suffices because the quoted token never wraps. A bare-word match is NOT used: unquoted
+# `remote` is git vocabulary (`git remote`, `ls-remote`) across this corpus. There is NO
+# negation exemption: the drain plan's offending lines sat beside negation words. Corrected
+# text names "the cloud isolation value" and never spells the token.
+#
+# SCOPE. Every plan in the run's corpus outside docs/plans/archive/, live AND spent: three
+# spent plans carried the instruction, and a spent plan is still read and copied, so the call
+# in vps_main's loop is NOT behind the discharge-banner guard P9-P14 share. Plus, in the
+# default no-argument run only, every `.claude/rules/` file as a separate pass that refuses
+# an empty corpus; an argv run is a question about named plans and never scans rulebooks.
+#
+# DEFINED HERE, BELOW vps_main, so the arm moves no line that other files cite by number.
+#
+# THE FALSE-POSITIVE SET IS EMPTY, measured at the commit that shipped this arm by running it
+# over its whole scope after the twelve offending lines it found there were rewritten.
+# ERROR tier.
+# ===================================================================================
+p15_scan() { # p15_scan <file> -- one ERROR per offending line, through vps_main's err()
+  local hit re="isolation[^a-z]{0,4}[\"'\`]?remote|[\"'\`]remote[\"'\`]"
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    err "$1" "line ${hit%%:*} instructs a cloud spawn ('${hit#*:}'). Hands run on this machine as background agents: a writing hand passes isolation \"worktree\", a read-only hand passes none, and the cloud isolation value is never used."
+  done < <(grep -niE "$re" "$1" | cut -c1-200)
 }
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0
 vps_main "$@"
