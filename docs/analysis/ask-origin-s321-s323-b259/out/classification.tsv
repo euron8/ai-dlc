@@ -1,0 +1,146 @@
+ask	q	sprint	ask_start	step	wait_min	lanes_running	dispatched	header	class	blocking	reason
+1	1	s321	2026-10-30T00:25:38.093Z	route	9	0	0	Sprint scope	P	Y	Scope choice from request and carry-over items
+2	1	s321	2026-10-30T02:18:09.536Z	requirements	19	1	1	Zero reserve	P	N	Reserve validation policy; one of four questions
+2	2	s321	2026-10-30T02:18:09.536Z	requirements	19	1	1	Reserve rule	P	N	Requirement behaviour choice for the locked requirement
+2	3	s321	2026-10-30T02:18:09.536Z	requirements	19	1	1	Base deploy	P	N	Scope clause from earlier operator answer
+2	4	s321	2026-10-30T02:18:09.536Z	requirements	19	1	1	Reserve value	P	N	Config value the operator owns
+3	1	s321	2026-10-30T02:38:16.251Z	requirements	33	0	0	Halt scope	P	N	Open question OQ-1 in the spec
+3	2	s321	2026-10-30T02:38:16.251Z	requirements	33	0	0	Absent Base	P	N	Deploy gate policy for an absent instance
+3	3	s321	2026-10-30T02:38:16.251Z	requirements	33	0	0	B6 and DASH	P	N	Known carry-over items B6 and DASH
+3	4	s321	2026-10-30T02:38:16.251Z	requirements	33	0	0	Pin boundary	P	N	Pin boundary policy from the spec
+4	1	s321	2026-10-30T03:12:11.828Z	requirements	2	0	0	Report timing	P	N	Report timing; spec and requirements text disagree
+4	2	s321	2026-10-30T03:12:11.828Z	requirements	2	0	0	Native HODL	P	N	Scope of a money path
+4	3	s321	2026-10-30T03:12:11.828Z	requirements	2	0	0	CLAUDE.md and idle	P	N	Scope of updating CLAUDE.md
+4	4	s321	2026-10-30T03:12:11.828Z	requirements	2	0	0	Pinned finding	P	N	Policy for pinned-span findings
+5	1	s321	2026-10-30T03:20:41.139Z	requirements	4	0	0	Native HODL	E	Y	Code reading showed no native transfer path
+6	1	s321	2026-10-30T05:17:29.724Z	requirements	9	1	1	Base service	P	N	Deploy design choice, foreseeable from the brief
+6	2	s321	2026-10-30T05:17:29.724Z	requirements	9	1	1	Capital limit	P	N	Capital limit policy with two instances
+6	3	s321	2026-10-30T05:17:29.724Z	requirements	9	1	1	Idle health	P	N	Health alarm policy for an idle instance
+6	4	s321	2026-10-30T05:17:29.724Z	requirements	9	1	1	Gas ceiling	P	N	Known carry-over item gating the Base enable
+7	1	s321	2026-10-30T05:28:06.585Z	requirements	4	1	1	Gas ceiling	E	N	Derived value from live data needs a veto
+7	2	s321	2026-10-30T05:28:06.585Z	requirements	4	1	1	Create file	P	N	Policy on who writes live config
+7	3	s321	2026-10-30T05:28:06.585Z	requirements	4	1	1	Native HODL	E	N	Code reading showed which HODL token is native
+7	4	s321	2026-10-30T05:28:06.585Z	requirements	4	1	1	Exec mode	P	N	Product behaviour of execution mode
+8	1	s321	2026-10-30T05:32:56.000Z	requirements	3	1	1	CLAUDE.md line	P	N	Scope of one more CLAUDE.md edit
+8	2	s321	2026-10-30T05:32:56.000Z	requirements	3	1	1	Unknown chain	P	N	Startup check policy for unknown chains
+8	3	s321	2026-10-30T05:32:56.000Z	requirements	3	1	1	HR-10	P	N	Known conflict between request and rule HR-10
+8	4	s321	2026-10-30T05:32:56.000Z	requirements	3	1	1	SPEC wording	P	N	SPEC wording decision
+9	1	s321	2026-10-30T05:45:30.189Z	requirements	6	0	0	HODL build	E	N	Pool data showed token0 is native
+9	2	s321	2026-10-30T05:45:30.189Z	requirements	6	0	0	Zero reserve	P	N	Requirement choice on where zero is rejected
+9	3	s321	2026-10-30T05:45:30.189Z	requirements	6	0	0	Deploy wording	E	N	Conflict between SPEC and PRD wording
+9	4	s321	2026-10-30T05:45:30.189Z	requirements	6	0	0	Staged payload	E	N	Stale staged payload found against operator value
+10	1	s321	2026-10-30T16:30:39.121Z	gate-validation[requirements]	9	0	0	Check 32	M	Y	Gate check failure; waive or restore
+10	2	s321	2026-10-30T16:30:39.121Z	gate-validation[requirements]	9	0	0	Check 2	M	Y	Gate check failure; fresh waiver or fix
+11	1	s321	2026-10-30T16:40:44.621Z	gate-validation[requirements]	1	0	0	Check 32	M	Y	Gate check treatment, waive or hold
+11	2	s321	2026-10-30T16:40:44.621Z	gate-validation[requirements]	1	0	0	Check 2	M	Y	Gate check treatment, waive or hold
+12	1	s321	2026-10-30T18:14:58.305Z	requirements	12	0	0	Land L2 fix	A	N	Merge and deploy restarts live rebalancer
+13	1	s321	2026-11-03T03:34:07.848Z	route	2	0	0	Gate hold	M	Y	Release gate holds after the pull
+14	1	s321	2026-11-03T03:40:54.689Z	requirements	0	0	0	Check 2	M	Y	Suppression entry for a validator defect
+15	1	s321	2026-11-04T13:20:36.492Z	stories-test-strategy	4	5	1	Elicitation	M	Y	Elicitation shards slow; wait limit used up
+16	1	s321	2026-11-06T01:24:28.432Z	stories-test-strategy	1	0	0	Resolution	M	Y	Review pass ceiling reached; resolution kind
+17	1	s321	2026-11-06T01:51:18.240Z	stories-test-strategy	53	0	0	Resolution	M	Y	Second stalled review cycle; resolution kind
+18	1	s321	2026-11-06T04:23:35.950Z	gate-validation[implementation]	84	7	1	Matic stall	E	N	Live reading found a stall in the Matic rebalancer
+19	1	s321	2026-11-06T06:00:29.996Z	gate-validation[implementation]	3	5	1	Manual sweeps	E	N	Live reading found unexplained manual sweeps
+19	2	s321	2026-11-06T06:00:29.996Z	gate-validation[implementation]	3	5	1	Next read	E	N	Next read follows from a live reading
+20	1	s321	2026-11-06T08:00:48.847Z	implementation	13	5	1	1.2 fixture	E	Y	Reviewer finding on a test helper
+21	1	s321	2026-11-06T08:17:50.043Z	implementation	3	4	1	Permit2 pin	E	N	Reviewer finding touches a byte-pinned span
+22	1	s321	2026-11-06T09:01:20.207Z	implementation	3	1	1	Gate refusal	M	Y	Gate script refuses merged review file
+23	1	s321	2026-11-06T15:41:37.011Z	implementation	1	0	0	Release hold	M	Y	Release hold on gate script after the pull
+24	1	s321	2026-11-06T18:48:56.088Z	implementation	3	0	0	1.2 gate 2	M	Y	Gate script defect blocks the story
+25	1	s321	2026-11-07T00:00:08.641Z	implementation	8	1	1	Check 9	M	N	Gate check conflict; waive or hold
+26	1	s321	2026-11-07T10:37:48.360Z	implementation	65	0	0	Story 5.6	E	N	Story cannot run before deploy; dead filter found
+27	1	s321	2026-11-07T14:21:58.529Z	gate-validation[sprint-review]	9	4	1	Check 915	M	N	Gate check fails literally; how to record
+28	1	s321	2026-11-07T14:42:12.881Z	deploy-validate	1	0	0	Push + PR	A	Y	Permission to push the branch and open the PR
+29	1	s321	2026-11-07T14:48:59.714Z	deploy-validate	4	0	0	Merge PR 1303	A	Y	Approval to merge the sprint PR
+30	1	s321	2026-11-07T15:41:25.918Z	deploy-validate	7	0	0	Fix PR	A	N	Permission to push a fix-forward PR
+30	2	s321	2026-11-07T15:41:25.918Z	deploy-validate	7	0	0	CDK deploys	A	Y	Cdk deploys of live stacks
+31	1	s321	2026-11-07T15:52:10.919Z	deploy-validate	0	0	0	Base DB first	E	Y	Missing secret found before ServicesStack deploy
+32	1	s321	2026-11-07T16:06:16.077Z	deploy-validate	3	1	1	Base config	A	Y	Live config write needs go-ahead
+32	2	s321	2026-11-07T16:06:16.077Z	deploy-validate	3	1	1	Merge #1304	A	N	Approval to merge a PR
+33	1	s321	2026-11-07T16:22:49.933Z	deploy-validate	2	0	0	Monitoring	A	N	Permission to fire MonitoringStack
+34	1	s321	2026-11-07T17:24:57.710Z	deploy-validate	0	0	0	Save symptom	E	Y	Asks for live symptom to diagnose a defect
+35	1	s321	2026-11-07T18:07:52.630Z	deploy-validate	4	0	0	V4 Quoter	P	N	Operator-owned config value, quoter address
+35	2	s321	2026-11-07T18:07:52.630Z	deploy-validate	4	0	0	V3 + wallet	P	N	Operator-owned config values to set
+35	3	s321	2026-11-07T18:07:52.630Z	deploy-validate	4	0	0	Gas ceiling	P	N	Operator-owned gas ceiling value
+35	4	s321	2026-11-07T18:07:52.630Z	deploy-validate	4	0	0	Live write	A	Y	Authorizing a live config write
+36	1	s321	2026-11-07T18:48:19.270Z	deploy-validate	2	0	0	Push + merge	A	Y	Permission to push, open and merge a PR
+37	1	s321	2026-11-07T18:54:12.523Z	deploy-validate	264	0	0	Merge #1305	E	Y	Pre-push hook green does not cover the fix
+38	1	s321	2026-11-08T00:35:42.937Z	deploy-validate	2	0	0	Base PUT	A	Y	Authorize live config PUT and restart
+38	2	s321	2026-11-08T00:35:42.937Z	deploy-validate	2	0	0	Base UI save	P	N	Operator action to discharge a known requirement
+38	3	s321	2026-11-08T00:35:42.937Z	deploy-validate	2	0	0	Base 2e flag	M	N	Whether to relax a production check flag
+38	4	s321	2026-11-08T00:35:42.937Z	deploy-validate	2	0	0	LR-S321-1	E	Y	Base has no verifiable router; disposition
+39	1	s321	2026-11-08T01:09:09.034Z	deploy-validate	83	0	0	Base save	P	N	Operator action to discharge a known requirement
+39	2	s321	2026-11-08T01:09:09.034Z	deploy-validate	83	0	0	LR-S321-1 router	E	Y	Derived router finding; spend and risk disposition
+40	1	s321	2026-11-08T03:06:37.548Z	deploy-validate	17	1	1	Push+merge	A	N	Permission to push, open and merge a PR
+40	2	s321	2026-11-08T03:06:37.548Z	deploy-validate	17	1	1	Base ETH	E	N	Wallet balance found below the reserve
+41	1	s321	2026-11-08T04:02:44.823Z	deploy-validate	4	1	1	Router PUT	A	U	Deploy and PUT config on live Base; who executes
+41	2	s321	2026-11-08T04:02:44.823Z	deploy-validate	4	1	1	LR-S321-1	P	U	Locked requirement disposition, known open item
+42	1	s321	2026-11-08T04:10:08.253Z	deploy-validate	0	0	0	Deploy key	A	Y	Which key signs an on-chain deploy
+43	1	s321	2026-11-08T04:34:54.469Z	deploy-validate	645	0	0	Router PUT	A	Y	Live security-config PUT permission
+43	2	s321	2026-11-08T04:34:54.469Z	deploy-validate	645	0	0	Enable Base	A	U	Enabling live Base trading; operator-owned flag
+44	1	s321	2026-11-08T15:39:38.615Z	deploy-validate	24	0	0	Base first row	E	U	S6 failure blocks first row; decide closure
+45	1	s321	2026-11-08T16:24:12.837Z	deploy-validate	0	1	1	TEL transfer	E	Y	Unexplained outgoing transfer discovered by ops
+46	1	s322	2026-11-09T00:06:56.605Z	route	8	0	0	Roll fix	M	Y	Roll refused; views split, blocks every step
+46	2	s322	2026-11-09T00:06:56.605Z	route	8	0	0	Sprint scope	P	U	Sprint scope confirmation from known inputs
+47	1	s322	2026-11-09T06:25:18.876Z	carry-over-evaluation	340	1	1	Scope re-conf	E	U	Scope premise proven false by pipeline evidence
+48	1	s322	2026-11-09T19:13:39.000Z	requirements	22	2	1	Join cure	M	Y	Join ledger failure; hand-assemble approval needed
+49	1	s322	2026-11-09T20:18:03.004Z	handoff	0	2	1	Push blocked	M	Y	Pre-push gate blocked by missing yaml module
+50	1	s322	2026-11-09T21:51:37.580Z	requirements	3	1	1	AC5 predicate	E	U	Review finding: spec versus locked requirement conflict
+51	1	s322	2026-11-09T22:21:07.317Z	requirements	10	0	0	SQL form	E	U	Follow-up finding: SQL forms select different rows
+52	1	s322	2026-11-09T23:51:31.501Z	requirements	16	0	0	AC5 predicate	E	U	Earlier premise falsified; predicate choice reopened
+53	1	s322	2026-11-10T01:14:42.526Z	requirements	19	0	0	Resolution	M	U	Review pass cap reached; resolution choice
+54	1	s322	2026-11-10T02:13:15.641Z	gate-validation[requirements]	7	0	0	Check 32	M	Y	Check 32 validator defect blocks gate
+55	1	s322	2026-11-10T18:24:12.396Z	stories-test-strategy	2	0	0	J3 REOPEN	M	Y	Validator cannot name finding; REOPEN authorization
+55	2	s322	2026-11-10T18:24:12.396Z	stories-test-strategy	2	0	0	Veto lines	E	N	Veto list of lead decisions made
+56	1	s322	2026-11-10T22:49:29.829Z	implementation	13	1	1	Stopgap	M	N	Env var stopgap for tooling crash
+56	2	s322	2026-11-10T22:49:29.829Z	implementation	13	1	1	Fix scope	E	U	Measured crash footprint determines fix scope
+56	3	s322	2026-11-10T22:49:29.829Z	implementation	13	1	1	Crash data	E	N	Conflicting crash data needs resolution
+57	1	s322	2026-11-11T00:24:33.157Z	implementation	75	0	0	Gate 2	M	Y	Checker refuses gate 2; waiver needed
+58	1	s322	2026-11-11T03:41:25.901Z	gate-validation[implementation]	10	0	0	Check 32	M	Y	Check 32 suppression expired; gate stays red
+58	2	s322	2026-11-11T03:41:25.901Z	gate-validation[implementation]	10	0	0	Veto lines	E	N	Veto list of lead decisions
+59	1	s322	2026-11-11T06:45:14.618Z	handoff	1	0	0	Push block	M	Y	Pre-push hook blocks handoff push
+60	1	s322	2026-11-11T07:15:36.419Z	implementation	2	0	0	Host relief	M	U	Venvs unpatched cause crash; seats held
+60	2	s322	2026-11-11T07:15:36.419Z	implementation	2	0	0	AWS tooling	M	N	Workstation lacks AWS tooling
+61	1	s322	2026-11-11T07:25:05.678Z	gate-validation[implementation]	7	1	1	AWS login	M	N	AWS login needs operator; other work continues
+62	1	s322	2026-11-11T07:41:47.654Z	bug-investigation	2	1	1	D-4 value	E	N	Reviewer blocks story; variable value unassigned
+63	1	s322	2026-11-11T11:28:43.194Z	handoff	1	0	0	Push blockers	M	Y	Pre-push blockers before handoff finishing
+64	1	s322	2026-11-12T01:15:12.199Z	gate-validation[implementation]	24	1	1	D-1 source	E	N	Live read surfaced deploy timestamp mismatch
+64	2	s322	2026-11-12T01:15:12.199Z	gate-validation[implementation]	24	1	1	Safeguard 5000	E	N	Unexpected live config change found by read
+65	1	s323	2026-11-13T08:19:24.746Z	route	1	0	0	Sprint scope	P	Y	Sprint scope confirmation from listed items
+66	1	s323	2026-11-13T09:33:59.782Z	carry-over-evaluation	148	2	1	22060 ceiling	P	N	Known carry-over item design question
+66	2	s323	2026-11-13T09:33:59.782Z	carry-over-evaluation	148	2	1	Failure path	P	N	Requirement behaviour choice for known item
+66	3	s323	2026-11-13T09:33:59.782Z	carry-over-evaluation	148	2	1	Wall split	P	N	Scope split of known carry-over item
+66	4	s323	2026-11-13T09:33:59.782Z	carry-over-evaluation	148	2	1	Allowlist fire	A	N	Live security-state mutation sequencing
+67	1	s323	2026-11-13T12:04:02.167Z	carry-over-evaluation	3	0	0	Card semantics	P	N	Product behaviour of known bug item
+67	2	s323	2026-11-13T12:04:02.167Z	carry-over-evaluation	3	0	0	Single pool	P	N	Design assumption for carry-over item
+67	3	s323	2026-11-13T12:04:02.167Z	carry-over-evaluation	3	0	0	S298 deferral	P	N	Ratify known deferral escalation
+68	1	s323	2026-11-13T12:07:21.361Z	carry-over-evaluation	1	0	0	mTLS gate	A	N	Security config fire under Rule 916
+68	2	s323	2026-11-13T12:07:21.361Z	carry-over-evaluation	1	0	0	Base alerts	P	N	Known deferred item re-decision
+69	1	s323	2026-11-13T12:10:36.601Z	carry-over-evaluation	0	1	1	2-6-AC2 close	P	N	Known carry-over close signal
+69	2	s323	2026-11-13T12:10:36.601Z	carry-over-evaluation	0	1	1	2-7-AC5 re-decide	P	N	Known carry-over monitor re-decision
+70	1	s323	2026-11-13T12:32:15.081Z	carry-over-evaluation	20	0	0	8453 address	P	N	Contract address choice for known item
+70	2	s323	2026-11-13T12:32:15.081Z	carry-over-evaluation	20	0	0	Veto lines	E	N	Veto list of lead adjudications
+71	1	s323	2026-11-17T01:22:31.311Z	carry-over-evaluation	12	0	0	Closer	E	N	Adversarial pass flagged duplicate story claims
+72	1	s323	2026-11-17T03:43:16.584Z	carry-over-evaluation	200	1	1	Byte-guard pin	E	N	Fix touches byte-guarded span; sign-off
+72	2	s323	2026-11-17T03:43:16.584Z	carry-over-evaluation	200	1	1	Fire order	E	N	Derived fire order has consequence found
+72	3	s323	2026-11-17T03:43:16.584Z	carry-over-evaluation	200	1	1	Proxy cert	E	N	Proxy header gap found; scope decision
+73	1	s323	2026-11-17T07:36:58.864Z	requirements	300	14	1	Header premise	E	U	Architect seats found unconfirmed premise
+73	2	s323	2026-11-17T07:36:58.864Z	requirements	300	14	1	Veto lines	E	N	Veto lines for lead decisions
+74	1	s323	2026-11-17T13:03:34.095Z	requirements	25	0	0	Merkl ceiling	E	U	Review found unceiled signing path
+74	2	s323	2026-11-17T13:03:34.095Z	requirements	25	0	0	Gas read scope	E	U	Found uncapped read; widen scope?
+74	3	s323	2026-11-17T13:03:34.095Z	requirements	25	0	0	Leg 2 retry	E	U	Escalation asks retry budget; conflicting wording
+74	4	s323	2026-11-17T13:03:34.095Z	requirements	25	0	0	Skip scope	P	U	Scope of known test conversion
+75	1	s323	2026-11-17T13:43:54.128Z	requirements	19	0	0	Leg 2 budget	E	U	Prior answer lacked number; repair gap
+75	2	s323	2026-11-17T13:43:54.128Z	requirements	19	0	0	Batch branch	E	U	Newly found batch-collect signing site
+75	3	s323	2026-11-17T13:43:54.128Z	requirements	19	0	0	S18 SKIP count	E	U	Skip-count scoping ambiguity found
+76	1	s323	2026-11-17T14:26:44.858Z	requirements	7	1	1	Veto lines	E	N	Veto lines for lead decisions
+76	2	s323	2026-11-17T14:26:44.858Z	requirements	7	1	1	Check 928 AC	E	U	Undefined observable flagged by adjudication
+76	3	s323	2026-11-17T14:26:44.858Z	requirements	7	1	1	10.md CRITICAL	E	U	Critical finding closure confirmation
+77	1	s323	2026-11-17T16:20:31.957Z	requirements	21	1	1	ALB (ii) verdict	E	U	Ruling ambiguity found during requirements
+77	2	s323	2026-11-17T16:20:31.957Z	requirements	21	1	1	FR-19 ship/hold	E	U	Ruling ambiguity on aggregator change
+77	3	s323	2026-11-17T16:20:31.957Z	requirements	21	1	1	8th site	E	U	Newly found eighth signing site
+77	4	s323	2026-11-17T16:20:31.957Z	requirements	21	1	1	Widen line	E	U	Repair join flagged unstated line
+78	1	s323	2026-11-17T16:43:33.793Z	requirements	7	0	0	Retry scope	E	U	Repair round left sites without retry
+79	1	s323	2026-11-17T18:41:05.660Z	requirements	19	0	0	Ceiling scope	E	U	Three further uncapped reads found
+79	2	s323	2026-11-17T18:41:05.660Z	requirements	19	0	0	LR-37	E	U	Lead wording mislabeled as quote
+79	3	s323	2026-11-17T18:41:05.660Z	requirements	19	0	0	Veto list	E	N	Veto list of applied decisions

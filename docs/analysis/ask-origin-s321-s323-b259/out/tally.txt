@@ -1,0 +1,57 @@
+questions 145; asks 79; wait minutes 2770
+
+== questions by class
+s321: P 30 (37%), E 20 (25%), M 15 (19%), A 16 (20%); total 81
+s322: P 1 (4%), E 11 (42%), M 14 (54%), A 0 (0%); total 26
+s323: P 12 (32%), E 24 (63%), M 0 (0%), A 2 (5%); total 38
+all: P 43 (30%), E 55 (38%), M 29 (20%), A 18 (12%); total 145
+
+== questions by sprint, phase and class
+s321 planning: P 24, E 6, M 9, A 1; total 40
+s321 implementation: P 0, E 6, M 4, A 0; total 10
+s321 after: P 6, E 8, M 2, A 15; total 31
+s322 planning: P 1, E 5, M 5, A 0; total 11
+s322 implementation: P 0, E 5, M 6, A 0; total 11
+s322 after: P 0, E 1, M 3, A 0; total 4
+s323 planning: P 12, E 24, M 0, A 2; total 38
+
+== ask wait minutes by the classes an ask carries (an ask with any P question is 'has P')
+s321: 45 asks, 1425 min | P only 6 asks 75 min | has P 12 asks 178 min (12%) | no P: E-led 12 asks 477 min, M only 12 asks 94 min, A only 9 asks 676 min
+s322: 19 asks, 562 min | P only 0 asks 0 min | has P 1 asks 8 min (1%) | no P: E-led 9 asks 420 min, M only 9 asks 134 min, A only 0 asks 0 min
+s323: 15 asks, 783 min | P only 3 asks 4 min | has P 7 asks 198 min (25%) | no P: E-led 8 asks 585 min, M only 0 asks 0 min, A only 0 asks 0 min
+all: 79 asks, 2770 min | P only 9 asks 79 min | has P 20 asks 384 min (14%) | no P: E-led 29 asks 1482 min, M only 21 asks 228 min, A only 9 asks 676 min
+
+== ask wait minutes for asks carrying a P or an A question (what a checkpoint declared at planning could name)
+s321: has P or A 22 asks 871 of 1425 min (61%); only P and A questions 17 asks 759 min (53%)
+s322: has P or A 1 asks 8 of 562 min (1%); only P and A questions 0 asks 0 min (0%)
+s323: has P or A 7 asks 198 of 783 min (25%); only P and A questions 5 asks 153 min (20%)
+all: has P or A 30 asks 1077 of 2770 min (39%); only P and A questions 22 asks 912 min (33%)
+
+== M questions asked in a planning step, per sprint (s323 has planning only)
+s321 9, s322 5, s323 0
+
+== blocking flag by classifier half (asks 1-40 one reader, 41-79 the other)
+asks 1-40 (s321): Y 27, N 47, U 0
+asks 41-79 (s321/s322/s323): Y 13, N 29, U 29
+
+== asks that waited over 60 minutes
+ask 18 s321 gate-validation[implementation]: 84 min, classes E, lanes running at ask 7, headers ['Matic stall']
+ask 26 s321 implementation: 65 min, classes E, lanes running at ask 0, headers ['Story 5.6']
+ask 37 s321 deploy-validate: 264 min, classes E, lanes running at ask 0, headers ['Merge #1305']
+ask 39 s321 deploy-validate: 83 min, classes E+P, lanes running at ask 0, headers ['Base save', 'LR-S321-1 router']
+ask 43 s321 deploy-validate: 645 min, classes A, lanes running at ask 0, headers ['Router PUT', 'Enable Base']
+ask 47 s322 carry-over-evaluation: 340 min, classes E, lanes running at ask 1, headers ['Scope re-conf']
+ask 57 s322 implementation: 75 min, classes M, lanes running at ask 0, headers ['Gate 2']
+ask 66 s323 carry-over-evaluation: 148 min, classes A+P, lanes running at ask 2, headers ['22060 ceiling', 'Failure path', 'Wall split', 'Allowlist fire']
+ask 72 s323 carry-over-evaluation: 200 min, classes E, lanes running at ask 1, headers ['Byte-guard pin', 'Fire order', 'Proxy cert']
+ask 73 s323 requirements: 300 min, classes E, lanes running at ask 14, headers ['Header premise', 'Veto lines']
+over-60 asks: 10 holding 2204 of 2770 min; with a P question 2; with a P or A question 3
+
+== class by blocking flag (Y the text says nothing can continue, N other work continues, U cannot tell)
+P: Y 2, N 38, U 3
+E: Y 8, N 25, U 22
+M: Y 21, N 6, U 2
+A: Y 9, N 7, U 2
+
+== veto-style questions (the lead already decided and asks only for a veto): reason or header contains 'veto'
+7 questions in 7 asks; wait of those asks 362 min
