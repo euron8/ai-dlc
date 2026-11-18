@@ -8,6 +8,9 @@
 #                                                   the rows of that mode's map this pass OWES
 #                                                   (THE DERIVED SET); a flag, in any position
 #   merge-adversarial-shards.sh --derived-set <pass file>   the set a merged pass owed (arm N)
+#   merge-adversarial-shards.sh --repair-introduced <pass file>
+#                                                   THE REPAIR-INTRODUCED CLASS re-derived; writes
+#                                                   nothing (arm R)
 #   merge-adversarial-shards.sh --map <shard-dir>   print `<ordinal>\t<basename>`, one per story,
 #                                                   for the lead to put in each shard brief
 #   merge-adversarial-shards.sh --document <path> <shard-dir>
@@ -231,7 +234,8 @@
 #   The merge then REFUSES a shard outside the derived set and a missing derived shard, notarizes the
 #   disk sha of EVERY stem (dispatched or not) so F4, REVERT_REPAIR and sha_key see a whole list, and
 #   writes `shard_set_derived_from: <predecessor basename>`. A files-mode first pass, elicitation, and a
-#   files-mode tree whose rulebook lacks the token are unchanged byte for byte; a document or subject
+#   files-mode tree whose rulebook lacks the token are unchanged byte for byte (a later convergence pass
+#   carries THE REPAIR-INTRODUCED CLASS's header lines in every mode and era); a document or subject
 #   convergence pass ALWAYS carries `part_sha:` and `part_run:`, in every era, first pass included.
 #   THE ERA is the convergence validator's era_resolve, extracted (d_era_load), keyed on the series'
 #   FIRST pass: the merge narrows exactly where arm N binds, and a LEGACY series keeps the full map. The
@@ -424,6 +428,8 @@
 #   outside a fence, citing ordinals from `--map`. A per-ordinal shard may cite ONLY its own
 #   ordinal; a cross shard only findings citing two or more DISTINCT ordinals (the owner rule
 #   above). Every cited ordinal must be within 1..K.
+#   A CRITICAL or MAJOR finding also carries one or more `quote:` lines (THE REPAIR-INTRODUCED CLASS owns
+#   their grammar); one with none is never refused, it is unjoinable and blocks.
 #   Per shard, the CRITICAL-heading count must equal `findings_critical` and the MAJOR-heading
 #   count `findings_major` -- otherwise the partition is checked over findings that are not
 #   the ones the counts describe.
@@ -515,7 +521,8 @@
 #                            (validate-adversarial-convergence.sh, `prior -gt PREV_CRIT`, with PREV_CRIT
 #                            rolled only over passes whose count reads), applied to the sum no shard saw;
 #     EXIT_CONDITION_MET     iff summed critical <= CRITICAL_EXIT_CEILING and summed blocking
-#                            MAJOR (major - underived) <= MAJOR_EXIT_CEILING;
+#                            MAJOR (the validator's blocking_major: major - max(underived,
+#                            repair_introduced)) <= MAJOR_EXIT_CEILING;
 #     EXIT_CONDITION_NOT_MET otherwise.
 #   Both ceilings are READ from validate-adversarial-convergence.sh, never restated here. So are the
 #   pieces of the summed-divergence walk: `order_key` (the `(pass|p)N` key), `block_field` and
@@ -579,6 +586,7 @@ phase_barrier() { [ "$DRY_N" -eq 0 ] || exit 2; }
 # /  R <line of the first unfenced `### ` heading under `## Findings` with no severity word, 0 none>
 # /  K <line> <severity><TAB><id>, one per finding heading the id rule keys (none for a keyless one)
 # /  Z <line of the fence still open at end of file, 0 none>
+# /  Q <finding line> <value>, one per `quote:` line of a finding (THE REPAIR-INTRODUCED CLASS)
 # /  S <line> <shard file>, one per unfenced `## Shard: ` line outside the block: the shard file J3 keys what follows under
 # Reads $CITE and $OTHER, which every caller sets first.
 parse_shard() {
@@ -638,6 +646,8 @@ parse_shard() {
     infind && fl > 0 && index($0, cite ":") == 1 {
       fn++; v = substr($0, length(cite) + 2); sub(/^[ \t]*/, "", v); gsub(/[ \t]+/, "", v); fst = v; next
     }
+    # THE QUOTE LINE (THE REPAIR-INTRODUCED CLASS): `Q <finding line> <value>`, value trimmed at both ends.
+    infind && fl > 0 && index($0, "quote:") == 1 { v = substr($0, 7); sub(/^[ \t]+/, "", v); sub(/[ \t\r]+$/, "", v); printf "Q %d %s\n", fl, v; next }
     infind && fl > 0 && other != "" && index($0, other ":") == 1 { if (wrong == 0) wrong = NR; next }
     END { flush(); printf "B %d %d\n", starts + 0, ends + 0; printf "Y %d\n", wrong + 0; printf "H %d\n", hline + 0; printf "R %d\n", rline + 0; printf "Z %d\n", (fence ? fo : 0) }
   ' cite="$CITE" other="$OTHER" "$1"
@@ -1425,6 +1435,235 @@ derived_set_main() {
   return 0
 }
 
+# ---- THE REPAIR-INTRODUCED CLASS (BL-1175 item 6) ------------------------------------------------
+# A MAJOR of pass M is REPAIR-INTRODUCED when the repair that ran between the series predecessor (d_pred:
+# the highest k < M, never any earlier pass) and pass M wrote every span it quotes. It is computed here,
+# never taken from the adversary's label, and a finding that cannot be joined BLOCKS (fail closed).
+#   SNAPSHOT   a convergence merge (never --elicitation, --dry-run or --repair-introduced) writes the bytes
+#              it notarized to `<sprint dir>/adversarial-snapshots/<sha256>`, one per stem, only when the
+#              sha256 of the copy equals the notarized sha; otherwise none. The directory is untracked (its
+#              own `.gitignore` reads `*`). The join reads snapshots only, never git: a pass merged by an
+#              older engine, a fresh clone or a deleted snapshot has none, so its successor joins nothing.
+#   QUOTE      a finding carries one or more `quote:` lines (parse_shard's Q line), outside a fence, inside
+#              its `### ` finding, the line opening at column 1 with `quote:`. Read: drop `quote:`, then any
+#              whitespace, and any trailing whitespace; in files and subject mode the text up to the FIRST
+#              `:` is <stem> (the artifact_sha stem: the story basename without `.md`, or the subject stem)
+#              and one space after that `:` is dropped; in document mode the whole rest is the span. So
+#              `quote: <stem>: <span>` (files, subject) and `quote: <span>` (document). The span is copied
+#              VERBATIM from ONE line of pass M's artifact, never joining two, no surrounding quotes or
+#              backticks, at least 20 bytes. A C/M finding with no quote line is never refused (the
+#              rulebook arrives after the engine): it is UNJOINABLE.
+#   NEW        a span is NEW iff it occurs exactly once in pass M's snapshot of its stem and 0 times in the
+#              predecessor's snapshot of that stem (a stem absent from the predecessor holds it 0 times).
+#              More than once in M, absent from M, an unknown stem or a span under 20 bytes: UNJOINABLE.
+#   ALL RULE   a MAJOR is repair-introduced iff it carries a key (`<shard file>#<id>`, J3's key) and EVERY
+#              quote is NEW. One old quote: not repair-introduced. One unjoinable quote, or none, or no
+#              finding id: UNJOINABLE. CRITICALs are classed and printed too, and always block.
+#   ABSENT     no predecessor (the first pass): r=0, nothing to join. A predecessor whose artifact_sha
+#              names no sha, or ANY snapshot of pass M or of the predecessor absent or unreadable: EVERY
+#              MAJOR is UNJOINABLE and the share below is not computed (never an absent file read as empty).
+#   CEILING    per stem, the changed-byte share = bytes of M lines not in the predecessor (line multiset,
+#              each line counted with its newline) / bytes of M. Any stem above 25%: EVERY MAJOR of pass M
+#              counts unjoined, and the merge says why.
+#   FORMULA    blocking = blocking_major, declared ONCE in validate-adversarial-convergence.sh beside
+#              MAJOR_EXIT_CEILING and loaded here (ri_formula_load, as d_era_load loads era_resolve). A
+#              failed load is r=0 -- today's rule, never an open exit -- and a NOTE says why.
+#   HEADER     `findings_major_repair_introduced: <r>`, `findings_major_unjoined: <u>` and, when r > 0,
+#              `repair_introduced_keys: <key> ...` (convergence axis, never on a first pass, which stays
+#              byte-identical). A NOTE on stderr counts the C/M findings carrying no quote line (pass 2+).
+#   --repair-introduced <pass file> re-derives the three from pass M's own bytes and the snapshots on disk
+#              and writes nothing: `REPAIR-INTRODUCED\t<r>\t<u>\t<keys>` exit 0; `PENDING\t<why>` exit 3
+#              when a snapshot is absent; exit 2 refused. Then the per-finding and per-stem rows.
+#   Calibration of the 25% ceiling, measured with ri_derive's own share loop on graph blobs (read-only):
+#   the arm R header in validate-adversarial-convergence.sh.
+# THE SNAPSHOT LOCATION, declared once: `<sprint dir>/<RI_SNAPS>/<64-hex sha256>`, no extension.
+RI_SNAPS=adversarial-snapshots
+ri_formula_load() {
+  local v n
+  RI_FORMULA=0; RI_LOAD_WHY=""
+  v="$(cd "$(dirname "$MERGE_SELF")" && pwd)/validate-adversarial-convergence.sh"
+  [ -f "$v" ] || { RI_LOAD_WHY="$v is absent"; return 0; }
+  n="$(grep -c '^blocking_major() {' "$v")" || n=0
+  [ "$n" = 1 ] || { RI_LOAD_WHY="found $n 'blocking_major() {' definitions in $v (want exactly 1)"; return 0; }
+  eval "$(awk 'index($0, "blocking_major() {") == 1 { on = 1 } on { print } on && /^}/ { exit }' "$v")"
+  declare -F blocking_major > /dev/null || { RI_LOAD_WHY="blocking_major did not load from $v"; return 0; }
+  RI_FORMULA=1
+}
+# ri_pairs <artifact_sha value> -> `<stem>\t<sha>` per pair; one bare sha256 (document mode) is stem `-`.
+ri_pairs() {
+  local x
+  x="$(printf '%s' "$1" | tr 'A-F' 'a-f')"; x="${x#"${x%%[! ]*}"}"; x="${x%"${x##*[! ]}"}"
+  if [[ $x =~ $RE_SHA ]]; then printf -- '-\t%s\n' "$x"; else d_pairs "$1"; fi
+}
+# ri_derive <text> <pass basename> <pass-M pairs file> <sprint dir> <artifact> <M> <pass-M snapshot dir>
+#   -> RI_STATE first|derived|pending, RI_WHY, RI_R, RI_UNJ, RI_UNQ, RI_KEYS, RI_CEIL.
+#   The predecessor's snapshots are read from <sprint dir>/adversarial-snapshots only.
+ri_derive() {
+  local txt="$1" pb="$2" np="$3" sd="$4" art="$5" m="$6" nd="$7" st sh miss="" allunj=0
+  local ocite="$CITE" oother="$OTHER"
+  RI_STATE=derived; RI_WHY=""; RI_R=0; RI_UNJ=0; RI_UNQ=0; RI_KEYS=""; RI_CEIL=""
+  CITE=stories; OTHER=""
+  parse_shard "$txt" > "$T/ri.p" || { CITE="$ocite"; OTHER="$oother"; RI_STATE=pending; RI_WHY="$pb did not parse"; return 0; }
+  : > "$T/ri.man"
+  d_pred "$sd" "$art" "$m"
+  if [ -z "$D_PRED" ]; then
+    RI_STATE=first; allunj=1
+  else
+    CITE=stories; OTHER=""
+    parse_shard "$D_PRED" > "$T/ri.pp" || miss="$miss $(basename "$D_PRED") did not parse;"
+    ri_pairs "$(field "$T/ri.pp" artifact_sha)" > "$T/ri.o"
+    [ -s "$np" ] || miss="$miss $pb names no artifact_sha;"
+    [ -s "$T/ri.o" ] || miss="$miss $(basename "$D_PRED") names no artifact_sha;"
+    while IFS="$(printf '\t')" read -r st sh; do
+      if [ -f "$nd/$sh" ] && [ -r "$nd/$sh" ]; then printf 'N\t%s\t%s\n' "$st" "$nd/$sh" >> "$T/ri.man"
+      else miss="$miss $pb $st snapshot $sh absent;"; fi
+    done < "$np"
+    while IFS="$(printf '\t')" read -r st sh; do
+      if [ -f "$sd/$RI_SNAPS/$sh" ] && [ -r "$sd/$RI_SNAPS/$sh" ]; then printf 'O\t%s\t%s\n' "$st" "$sd/$RI_SNAPS/$sh" >> "$T/ri.man"
+      else miss="$miss $(basename "$D_PRED") $st snapshot $sh absent;"; fi
+    done < "$T/ri.o"
+    if [ -n "$miss" ]; then RI_STATE=pending; RI_WHY="${miss# }"; allunj=1; : > "$T/ri.man"; fi
+  fi
+  CITE="$ocite"; OTHER="$oother"
+  awk -v allunj="$allunj" -v pb="$pb" -v first="$([ "$RI_STATE" = first ] && echo 1 || echo 0)" '
+    function occ(stem, span, side, cap,   i, n, s, p, c) {
+      c = 0; n = (side == "N") ? NN[stem] : ON[stem]
+      for (i = 1; i <= n; i++) {
+        s = (side == "N") ? NL[stem, i] : OL[stem, i]
+        while ((p = index(s, span)) > 0) { c++; if (c >= cap) return c; s = substr(s, p + 1) }
+      }
+      return c
+    }
+    FILENAME == ARGV[1] {
+      split($0, a, "\t"); st = a[2]; n = 0
+      while ((gs = (getline l < a[3])) > 0) { n++; if (a[1] == "N") NL[st, n] = l; else { OL[st, n] = l; OC[st, l]++ } }
+      if (gs < 0) { bad = bad " " a[3] " unreadable;" }
+      close(a[3])
+      if (a[1] == "N") { NN[st] = n; ns[++nst] = st } else { ON[st] = n; OS[st] = 1 }
+      next
+    }
+    $1 == "X" { fl[++nf] = $2; fsev[$2] = $3; next }
+    $1 == "K" { kid[$2] = $4; next }
+    $1 == "S" { sl[++nsl] = $2; sf[nsl] = $3; next }
+    $1 == "Q" { v = $0; sub(/^Q [0-9]+ /, "", v); nq[$2]++; qv[$2, nq[$2]] = v; next }
+    END {
+      if (bad != "") { allunj = 1; print "E\t" bad }
+      ceil = ""
+      if (!allunj) {
+        for (j = 1; j <= nst; j++) {
+          st = ns[j]; ch = 0; tot = 0
+          for (i = 1; i <= NN[st]; i++) {
+            l = NL[st, i]; tot += length(l) + 1
+            if ((st in OS) && OC[st, l] > 0) OC[st, l]--; else ch += length(l) + 1
+          }
+          print "H\t" st "\t" (tot > 0 ? int(ch * 1000 / tot) / 10 : 0) "%\t" ch "\t" tot
+          if (tot > 0 && ch * 4 > tot) ceil = ceil " " st "=" int(ch * 1000 / tot) / 10 "%"
+        }
+      }
+      if (ceil != "") print "C\t" substr(ceil, 2)
+      doc = (nst == 1 && ns[1] == "-")
+      for (f = 1; f <= nf; f++) {
+        x = fl[f]; s = fsev[x]
+        if (s != "CRITICAL" && s != "MAJOR") continue
+        sh = pb
+        for (i = 1; i <= nsl; i++) if (sl[i] + 0 < x + 0) sh = sf[i]
+        key = (x in kid) ? sh "#" kid[x] : sh ":" x
+        if (nq[x] + 0 == 0) unq++
+        if (first) { print "F\t" key "\t" s "\tFIRST\tno predecessor"; continue }
+        why = ""
+        if (allunj) why = "a snapshot is absent"
+        else if (ceil != "") why = "the 25% rewrite ceiling"
+        else if (nq[x] + 0 == 0) why = "no quote line"
+        else if (!(x in kid)) why = "no finding id"
+        cls = (why == "") ? "NEW" : "UNJ"
+        for (q = 1; cls != "UNJ" && q <= nq[x]; q++) {
+          v = qv[x, q]
+          if (doc) { st = "-"; sp = v }
+          else { p = index(v, ":"); if (p < 2) { cls = "UNJ"; why = "quote " q " names no <stem>:"; break }
+            st = substr(v, 1, p - 1); sp = substr(v, p + 1); if (substr(sp, 1, 1) == " ") sp = substr(sp, 2) }
+          if (!(st in NN)) { cls = "UNJ"; why = "quote " q " stem " st " is not in artifact_sha"; break }
+          if (length(sp) < 20) { cls = "UNJ"; why = "quote " q " is under 20 bytes"; break }
+          c = occ(st, sp, "N", 2)
+          if (c != 1) { cls = "UNJ"; why = "quote " q " occurs " (c > 1 ? "more than once" : "0 times") " in this pass"; break }
+          if ((st in OS) && occ(st, sp, "O", 1) > 0) { cls = "OLD"; why = why " quote " q " predates the repair;" }
+        }
+        if (cls == "NEW") why = "every quote written by the repair"
+        print "F\t" key "\t" s "\t" cls "\t" why
+        if (s != "MAJOR") continue
+        if (cls == "UNJ") unj++
+        else if (cls == "NEW") { nr++; print "K\t" key }
+      }
+      print "R\t" nr + 0; print "U\t" unj + 0; print "Q\t" unq + 0
+    }' "$T/ri.man" "$T/ri.p" > "$T/ri.out" || { RI_STATE=pending; RI_WHY="the join did not run"; return 0; }
+  RI_R="$(awk -F'\t' '$1 == "R" { print $2 }' "$T/ri.out")"
+  RI_UNJ="$(awk -F'\t' '$1 == "U" { print $2 }' "$T/ri.out")"
+  RI_UNQ="$(awk -F'\t' '$1 == "Q" { print $2 }' "$T/ri.out")"
+  RI_KEYS="$(awk -F'\t' '$1 == "K" { printf " %s", $2 }' "$T/ri.out")"
+  RI_CEIL="$(awk -F'\t' '$1 == "C" { print $2 }' "$T/ri.out")"
+  if grep -q '^E' "$T/ri.out"; then RI_STATE=pending; RI_WHY="$(awk -F'\t' '$1 == "E" { print $2 }' "$T/ri.out")"; fi
+  [ -n "$RI_R" ] || { RI_STATE=pending; RI_WHY="the join printed no count"; RI_R=0; RI_KEYS=""; }
+  return 0
+}
+# ri_stage <N pairs file> <dir>: copy each stem's bytes into <dir>/<sha> when the copy hashes to the notarized sha.
+ri_stage() {
+  local st sh src
+  mkdir -p "$2" || return 0
+  while IFS="$(printf '\t')" read -r st sh; do
+    if [ -n "$DOCUMENT" ]; then src="$DOCUMENT"
+    elif [ -n "$SUBJECT" ]; then src="$SUBJ_ROOT/$(awk -v s="$st" '$1 == "file:" && $2 == s { print $3; exit }' "$T/mfiles")"
+    else src="$STORIES_DIR/$st.md"; fi
+    [ -f "$src" ] || continue
+    cp "$src" "$2/$sh.tmp" 2> /dev/null || continue
+    if [ "$(sha_of "$2/$sh.tmp")" = "$sh" ]; then mv "$2/$sh.tmp" "$2/$sh"; else rm -f "$2/$sh.tmp"; fi
+  done < "$1"
+  return 0
+}
+# ri_publish <staged dir>: each staged snapshot into <sprint dir>/adversarial-snapshots, replacing a differing one.
+# The directory is UNTRACKED: it carries its own `.gitignore` reading `*` (which ignores itself too), written
+# only when absent and never overwritten, so the consumer's own .gitignore is never edited.
+ri_publish() {
+  local f d="$SPRINT_DIR/$RI_SNAPS"
+  for f in "$1"/*; do
+    [ -f "$f" ] || continue
+    case "$f" in *.tmp) continue ;; esac
+    mkdir -p "$d" 2> /dev/null
+    [ -e "$d/.gitignore" ] || printf '*\n' > "$d/.gitignore" 2> /dev/null \
+      || printf 'NOTE: %s/.gitignore was not written\n' "$d" >&2
+    [ -f "$d/${f##*/}" ] && cmp -s "$f" "$d/${f##*/}" && continue
+    { cp "$f" "$d/${f##*/}.tmp.$$" && mv "$d/${f##*/}.tmp.$$" "$d/${f##*/}"; } \
+      || printf 'NOTE: snapshot %s was not written; the next pass of this series joins nothing\n' "${f##*/}" >&2
+  done
+  return 0
+}
+# --repair-introduced <pass file>: THE REPAIR-INTRODUCED CLASS re-derived from pass M's own bytes; writes nothing.
+repair_introduced_main() {
+  local pf="$1" b art m
+  [ -f "$pf" ] || { printf 'REFUSED: %s is not a pass file\n' "$pf"; return 2; }
+  T="$(mktemp -d "${TMPDIR:-/tmp}/merge-adversarial-shards.XXXXXX")" || { printf 'REFUSED: mktemp failed\n'; return 2; }
+  trap 'rm -rf "$T"' EXIT
+  SPRINT_DIR="$(dirname -- "$pf")"; case "$SPRINT_DIR" in /*) ;; *) SPRINT_DIR="./$SPRINT_DIR" ;; esac
+  SPRINT_DIR="$(cd "$SPRINT_DIR" && pwd)" || return 2
+  b="$(basename -- "$pf")"; art="${b%-adversarial-p*}"; m="${b##*-adversarial-p}"; m="${m%.md}"
+  case "$m" in ""|*[!0-9]*) printf 'REFUSED: %s is not <artifact>-adversarial-p<M>.md\n' "$b"; return 2 ;; esac
+  m=$((10#$m))
+  CITE=stories; OTHER=""
+  parse_shard "$pf" > "$T/rp" || return 2
+  ri_pairs "$(field "$T/rp" artifact_sha)" > "$T/rn"
+  ri_derive "$pf" "$b" "$T/rn" "$SPRINT_DIR" "$art" "$m" "$SPRINT_DIR/$RI_SNAPS"
+  ri_formula_load
+  if [ "$RI_FORMULA" -ne 1 ]; then
+    printf 'NOTE: the blocking formula did not load (%s); repair-introduced reads 0, today'"'"'s rule\n' "$RI_LOAD_WHY" >&2
+    RI_R=0; RI_KEYS=""
+  fi
+  # The status row first; then one `F\t<key>\t<severity>\tNEW|OLD|UNJ|FIRST\t<why>` per CRITICAL and MAJOR,
+  # one `H\t<stem>\t<share>\t<changed bytes>\t<bytes>` per stem, and `C\t<stems over 25%>` when any is.
+  if [ "$RI_STATE" = pending ]; then printf 'PENDING\t%s\n' "$RI_WHY"
+  else printf 'REPAIR-INTRODUCED\t%s\t%s\t%s\n' "$RI_R" "$RI_UNJ" "${RI_KEYS# }"; fi
+  [ ! -f "$T/ri.out" ] || awk -F'\t' '$1 == "F" || $1 == "H" || $1 == "C"' "$T/ri.out"
+  [ "$RI_STATE" != pending ] || return 3
+  return 0
+}
+
 # ---- THE PHASES, asked in process (core/fixtures/content-seal/merge-arms.sh). Each is a pure move of
 # the lines that stood at its call site below; the call sites run them in the same order.
 merge_locate() {
@@ -1651,6 +1890,9 @@ case "${1:-}" in
   --derived-set)
     [ $# -eq 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --derived-set <planning>/s<N>/<artifact>-adversarial-p<M>.md"; exit 2; }
     derived_set_main "$2"; exit $? ;;
+  --repair-introduced)
+    [ $# -eq 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --repair-introduced <planning>/s<N>/<artifact>-adversarial-p<M>.md"; exit 2; }
+    repair_introduced_main "$2"; exit $? ;;
   --subject)
     [ $# -ge 2 ] || refuse "$USAGE"
     SUBJECT="${2#s}"; shift 2
@@ -2567,7 +2809,44 @@ if grep -q 'SKILL_INVOCATION_PROVENANCE' "$T/body"; then
   refuse "a shard body mentions SKILL_INVOCATION_PROVENANCE outside its block; the merged file must carry exactly one"
 fi
 
+# THE REPAIR-INTRODUCED CLASS (header above): staged from the bytes this merge notarized, joined to the
+# series predecessor's snapshots, and the blocking formula loaded from the validator. Convergence axis only.
+RI_R=0; RI_UNJ=0; RI_KEYS=""; RI_STATE=""; RI_SNAP_WHY=""
 BLOCKING=$((S_MAJOR - S_UNDER))
+if [ "$ELICIT" -eq 0 ]; then
+  if [ -n "$SUBJECT" ]; then ri_pairs "$SUBJ_SHA_LIST" > "$T/ri.np"
+  elif [ -n "$DOCUMENT" ]; then ri_pairs "$DOC_SHA" > "$T/ri.np"
+  else ri_pairs "$SHA_LIST" > "$T/ri.np"; fi
+  ri_stage "$T/ri.np" "$T/ri.snap"
+  ri_derive "$T/body" "$(basename "$OUT")" "$T/ri.np" "$SPRINT_DIR" "$ARTIFACT" "$PASS" "$T/ri.snap"
+  # A RE-MERGE AFTER A SNAPSHOT IS GONE (untracked: a fresh clone or another checkout has none). When the
+  # stored pass already carries the three lines and this derivation is PENDING only because a snapshot is
+  # absent or unreadable, the stored r, unjoined and keys stand, so an identical re-merge answers UNCHANGED.
+  RI_SNAP_WHY=""; _ri_stood=0
+  if [ "$RI_STATE" = pending ]; then
+    case "$RI_WHY" in *"did not parse"*|*"names no artifact_sha"*|*"the join"*) ;;
+      *" snapshot "*" absent;"*|*" unreadable;"*) RI_SNAP_WHY="$RI_WHY" ;; esac
+  fi
+  if [ -n "$RI_SNAP_WHY" ] && [ -f "$OUT" ]; then
+    read -r _sr _su _sk < <(awk '/SKILL_INVOCATION_PROVENANCE v1/ { i = 1 } /SKILL_INVOCATION_PROVENANCE_END/ { i = 0 }
+      i && sub(/^findings_major_repair_introduced: /, "") { r = $0 } i && sub(/^findings_major_unjoined: /, "") { u = $0 }
+      i && sub(/^repair_introduced_keys:/, "") { k = $0 } END { print r " " u " " k }' "$OUT")
+    if [[ $_sr =~ ^[0-9]+$ ]] && [[ $_su =~ ^[0-9]+$ ]]; then
+      RI_R="$_sr"; RI_UNJ="$_su"; RI_KEYS="${_sk:+ $_sk}"; _ri_stood=1
+      printf 'NOTE: %s stands as stored (findings_major_repair_introduced: %s): %s; arm R reports PENDING\n' "$OUT" "$RI_R" "${RI_SNAP_WHY%;}" >&2
+    fi
+  fi
+  [ "$RI_STATE" != pending ] || [ "$_ri_stood" -eq 1 ] || printf 'NOTE: every MAJOR of this pass is unjoinable: %s\n' "$RI_WHY" >&2
+  [ -z "$RI_CEIL" ] || printf 'NOTE: every MAJOR of this pass counts blocking: the repair rewrote more than 25%% of %s\n' "$RI_CEIL" >&2
+  [ "${RI_UNQ:-0}" -eq 0 ] || [ "$RI_STATE" = first ] || printf 'NOTE: %s CRITICAL/MAJOR finding(s) carry no quote: line; each is unjoinable and blocks\n' "$RI_UNQ" >&2
+  ri_formula_load
+  if [ "$RI_FORMULA" -eq 1 ]; then
+    blocking_major "$S_MAJOR" "$S_UNDER" "$RI_R"; BLOCKING="$BLOCKING_MAJOR"
+  else
+    printf 'NOTE: the blocking formula did not load (%s); repair-introduced reads 0, today'"'"'s rule\n' "$RI_LOAD_WHY" >&2
+    RI_R=0; RI_KEYS=""
+  fi
+fi
 if [ "$ANY_DIVERGENT" -eq 1 ]; then VERDICT="DIVERGENT_HARD_BLOCK"
 elif [ "$S_CRIT" -le "$CRIT_CEIL" ] && [ "$BLOCKING" -le "$MAJOR_CEIL" ]; then VERDICT="EXIT_CONDITION_MET"
 else VERDICT="EXIT_CONDITION_NOT_MET"; fi
@@ -2645,6 +2924,11 @@ fi
   printf 'findings_critical_prior_scope: %s\n' "$S_PRIOR"
   printf 'findings_major: %s\n' "$S_MAJOR"
   printf 'findings_major_underived: %s\n' "$S_UNDER"
+  if [ "$ELICIT" -eq 0 ] && [ "$RI_STATE" != first ]; then
+    printf 'findings_major_repair_introduced: %s\n' "$RI_R"
+    printf 'findings_major_unjoined: %s\n' "$RI_UNJ"
+    [ -z "$RI_KEYS" ] || printf 'repair_introduced_keys:%s\n' "$RI_KEYS"
+  fi
   printf 'findings_minor: %s\n' "$S_MINOR"
   [ "$RESOLVES_SET" -eq 1 ] && printf 'resolves_divergence: %s\n' "$RESOLVES"
   [ -z "$DERIVED_FROM" ] || printf 'shard_set_derived_from: %s\n' "$DERIVED_FROM"
@@ -2658,26 +2942,36 @@ fi
 # "differs": a live series is not wedged by the fields this release adds. A pass carrying either line in
 # its block can never equal the stripped output (the stripped block holds neither, and the merge refuses a
 # body mentioning SKILL_INVOCATION_PROVENANCE, so there is no second block), so it matches only byte for byte.
+# The same for a pass merged before THE REPAIR-INTRODUCED CLASS: its block carries none of the three lines
+# this release adds, so it is compared with this output minus them (and minus part_* where those apply).
 out_matches() {
   cmp -s "$T/out" "$OUT" && return 0
+  awk '/SKILL_INVOCATION_PROVENANCE v1/ { i = 1 } /SKILL_INVOCATION_PROVENANCE_END/ { i = 0 } i && /^(findings_major_repair_introduced|findings_major_unjoined|repair_introduced_keys):/ { next } { print }' "$T/out" > "$T/out.ri" || return 1
+  cmp -s "$T/out.ri" "$OUT" && return 0
   [ -n "$PART_SHA_LIST" ] || return 1
   awk '/SKILL_INVOCATION_PROVENANCE v1/ { i = 1 } /SKILL_INVOCATION_PROVENANCE_END/ { i = 0 } i && /^part_(sha|run):/ { next } { print }' "$T/out" > "$T/out.old" || return 1
+  cmp -s "$T/out.old" "$OUT" && return 0
+  awk '/SKILL_INVOCATION_PROVENANCE v1/ { i = 1 } /SKILL_INVOCATION_PROVENANCE_END/ { i = 0 } i && /^part_(sha|run):/ { next } { print }' "$T/out.ri" > "$T/out.old" || return 1
   cmp -s "$T/out.old" "$OUT"
 }
+DIFFERS="$OUT already exists and differs from this merge; a pass file is never overwritten"
+[ -z "$RI_SNAP_WHY" ] || DIFFERS="$DIFFERS (the repair-introduced join of this merge is PENDING: $RI_SNAP_WHY)"
 if [ "$DRY" -eq 1 ]; then
   # --dry-run writes nothing: an existing output that differs still refuses at once, as below.
   if [ -e "$OUT" ] && ! out_matches; then
-    refuse "$OUT already exists and differs from this merge; a pass file is never overwritten"
+    refuse "$DIFFERS"
   fi
   printf 'DRY-RUN: clean\n'; exit 0
 fi
 if [ -e "$OUT" ]; then
   if out_matches; then
+    [ "$ELICIT" -eq 1 ] || ri_publish "$T/ri.snap"
     printf 'UNCHANGED: %s verdict=%s\n' "$OUT" "$VERDICT"; exit 0
   fi
-  refuse "$OUT already exists and differs from this merge; a pass file is never overwritten"
+  refuse "$DIFFERS"
 fi
 cp "$T/out" "$OUT.merge-tmp.$$" && mv "$OUT.merge-tmp.$$" "$OUT" || refuse "writing $OUT failed"
+[ "$ELICIT" -eq 1 ] || ri_publish "$T/ri.snap"
 # The program's own seal row, RECORD-ONLY: the pass file is outside the sealed set. This merge reads an
 # existing pass file twice: the `cmp -s` above (which refuses any byte difference), and an EARLIER
 # pass's findings_critical for the summed-divergence stamp. LIMIT: a Bash edit of a prior pass's count

@@ -19,6 +19,19 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1174.0] - 2026-11-18
+
+### BL-1175 (advances, stays PARTIAL): repair-introduced MAJORs no longer block the next adversarial pass
+
+- Item 6 (passes per series). Each CRITICAL/MAJOR finding in an adversary shard now carries a `quote:` line, an exact string from the reviewed document. The shard merge snapshots the bytes it reviewed and joins each finding's quotes against the immediately preceding pass's snapshot only. A MAJOR whose quotes ALL occur exactly once in this pass and 0 times in the predecessor is repair-introduced: it still gets its targeted fix, but it no longer counts toward NOT_MET. blocking = major - max(underived, repair_introduced). A CRITICAL always blocks. A finding with no quote, no id or an unjoinable quote blocks.
+- New header fields on passes 2 and later: `findings_major_repair_introduced`, `findings_major_unjoined`, and `repair_introduced_keys` (only when the count is above 0). A first pass stays byte-identical. `merge-adversarial-shards.sh --repair-introduced <pass>` re-derives the count and writes nothing.
+- Snapshots are UNTRACKED, at `s<N>/adversarial-snapshots/<sha256>`. The directory carries its own `.gitignore` and nothing in it is committed. Expect roughly 270-280 KB on disk per pass per document.
+- An already-merged pass keeps its recorded count; arm R reports PENDING and does not block, so a lost snapshot degrades to the recorded count and never refuses. A pass merged after its predecessor's snapshot is lost finds every finding unjoinable and blocks. The first pass after this pull has no predecessor snapshot either, so it behaves as it does today. Arm R counts only merge-written passes (those carrying `shard_tool_use_ids:`, as arms B and E do), and a re-merge of an existing pass whose predecessor's snapshot is lost keeps the stored count and answers UNCHANGED. A stem with more than 25% of its lines changed between passes also leaves every finding blocking.
+- J3 (repaired-only): a key listed in `repair_introduced_keys` closes only as REPAIRED, never DEFERRED. The new gate-only arm R re-derives the count through the merge and fails on a count or key mismatch when both snapshots are readable.
+- The 25% ceiling on the record: s321 architecture p3 to p4 18.2%, s321 test-strategy p4 to p5 10.6%, s323 coe p1 to p2 16.5%, s322 spine p1 to p2 49.7%. The last is over the ceiling, so all its findings stay blocking.
+- Honest numbers. Measured removal is 0 of 7 passes on today's grammar and 0 of 3 measurable under the ALL rule. The 7 passes, about 4.4 h and about $97 over s321-s323 is a CEILING (estimate), not a forecast. The real joinable share is first measurable on graph's first sprint after the pull, because the quote grammar arrives with the reconcile PR.
+- BL-1175 stays OPEN (PARTIAL): item 5 is open until s323 closes, and the outcome measurement on a complete graph sprint is owed.
+
 ## [0.1173.0] - 2026-11-18
 
 ### Serial-routed findings are dealt to read-only adjudicators (BL-716, batch 259 C8)

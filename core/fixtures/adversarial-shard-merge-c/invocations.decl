@@ -3,8 +3,8 @@
 # judge's own J3 output), the counter armed as .githooks/pre-push fxcount_arm arms it. Every shard pays the seed, the harness, the MX0 control and
 # the base-pass fills of the arms it does not own (bf_fill), so the four * rows sum above the unsharded 3125; the merge row's four values sum to the
 # unsharded 53. The older measurement history above belongs to the unsharded fixture.
-487 *
-8 core/scripts/merge-adversarial-shards.sh
-82 core/scripts/content-seal.sh
+548 *
+22 core/scripts/merge-adversarial-shards.sh
+99 core/scripts/content-seal.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
-105 inproc:core/scripts/merge-adversarial-shards.sh
+116 inproc:core/scripts/merge-adversarial-shards.sh

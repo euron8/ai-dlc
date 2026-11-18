@@ -689,7 +689,7 @@ strategy.
    `gate-validation.md` Check 21 resolves each of those rows to a test on disk.
 2. **Converge the test strategy.** Review and repair `test-strategy.md` until the
    series exits on the standard ladder in `team-roles/adversary.md` — 0 CRITICAL
-   and at most three derived MAJOR — with every pass writing its verdict envelope.
+   and at most three blocking MAJOR — with every pass writing its verdict envelope.
    - **Review passes:** `_gate-procedures.md`, "Adversarial review dispatch" — ai-dlc-native,
      no Skill. The strategy is one document, so each pass is sharded by section, or is one
      adversary when `partition-document.sh --map` reports it SERIAL (Rule 28, "Split

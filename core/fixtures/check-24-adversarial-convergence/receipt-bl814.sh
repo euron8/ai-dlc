@@ -14,6 +14,8 @@
 #   undeferred   coe, 1.md#F-1 and cross-1.md#F-1 MAJOR, no record            FAIL (J3), exit 1
 #   deferred     coe, both keys deferred to requirements                       J3 silent, exit 0
 #   deferbold    the same, bold labels, backticks, a pass-qualified token      J3 silent, exit 0
+#   rideferred   deferred's bytes plus `repair_introduced_keys: 1.md#F-1` (BL-1175 item 6): that key, deferred,
+#                stays open; cross-1.md#F-1's deferral still closes it          FAIL (J3), exit 1
 #   wrongstep    coe, both deferred to architecture                            FAIL (J3), exit 1
 #   repaired     architecture, both named by a repair entry linked from the notarized sha   silent, 0
 #   dirrepaired  graph s320 stories-p4's shape: a directory artifact, a `<stem>@<sha>` list, per-story
@@ -102,6 +104,7 @@ pass() {
     printf '\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: %s\ntool_use_id: toolu_receipt_%s%s\n' "$at" "$st" "$n"
     printf 'mode: subagent\nlead_role: analyst\nartifact: %s\nartifact_sha: %s\n' "$D/$art" "$s"
     [ -z "${PASS_IDS:-}" ] || printf 'shard_tool_use_ids: %s\n' "$PASS_IDS"
+    [ -z "${PASS_RI:-}" ] || printf 'repair_introduced_keys: %s\n' "$PASS_RI"
     printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: %s\nfindings_major_underived: %s\nfindings_minor: 0\n' "$mj" "$un"
     printf 'verdict: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$v"; } > "$B/$w/$D/$st-adversarial-p$n.md"
 }
@@ -128,6 +131,9 @@ build() {
   coe_world undeferred 2026-09-29T11:00:00Z 2 0 "$TWO" "$TWOX" || return 1
   coe_world deferred 2026-09-29T11:00:00Z 2 0 "$TWO" "$TWOX" || return 1
   defer "$B/deferred/$D/coe-deferral-p1.md" requirements 1.md#F-1 cross-1.md#F-1
+  # rideferred: deferred's bytes plus `repair_introduced_keys: 1.md#F-1` (deferred is its ALLOW twin).
+  PASS_RI="1.md#F-1" coe_world rideferred 2026-09-29T11:00:00Z 2 0 "$TWO" "$TWOX" || return 1
+  defer "$B/rideferred/$D/coe-deferral-p1.md" requirements 1.md#F-1 cross-1.md#F-1
   coe_world deferbold 2026-09-29T11:00:00Z 2 0 "$TWO" "$TWOX" || return 1
   printf '# deferral record\n\n- **source:** `coe-p1/1.md#F-1`\n- **deferred-to:** `requirements` (restated in requirements-context.md)\n\n- source: _bmad-output/planning-artifacts/s1/shards/coe-p1/cross-1.md#F-1\n- _deferred-to:_ requirements\n' \
     > "$B/deferbold/$D/coe-deferral-p1.md"
@@ -294,6 +300,9 @@ run pxp2 coe;       nj && [[ "$OUT" != *"FAIL (ORDER)"* ]] || bad="$bad pxp2(rc=
 run ptxt coe;       nj && [[ "$OUT" != *"FAIL (ORDER)"* ]] || bad="$bad ptxt(rc=$RC)"
 run deferred coe;   [ "$RC" -eq 0 ] && nj || bad="$bad deferred(rc=$RC)"
 run deferbold coe;  [ "$RC" -eq 0 ] && nj || bad="$bad deferbold(rc=$RC)"
+run rideferred coe; [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (J3 -- OPEN MAJOR)"* ]] \
+  && [[ "$OUT" == *"  1.md#F-1: repair-introduced (repair_introduced_keys), so non-blocking at MET only on its targeted repair; deferred to requirements, which never closes it"* ]] \
+  && [[ "$OUT" != *"cross-1.md#F-1:"* ]] || bad="$bad rideferred(rc=$RC)"
 run wrongstep coe;  [ "$RC" -eq 1 ] && [[ "$OUT" == *"deferred to architecture, not to requirements"* ]] || bad="$bad wrongstep(rc=$RC)"
 run repaired architecture;  [ "$RC" -eq 0 ] && nj || bad="$bad repaired(rc=$RC)"
 run dirrepaired architecture; [ "$RC" -eq 0 ] && nj || bad="$bad dirrepaired(rc=$RC)"

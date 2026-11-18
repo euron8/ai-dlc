@@ -258,6 +258,9 @@ including at pass 1.** The residue that decides it: `team-roles/adversary.md`.
 Pass 2+ reviews the REPAIR, not the document again, and verifies the prior
 pass's findings landed.
 
+**A MAJOR whose every quoted span the previous repair wrote does not block the exit, and is
+still repaired, never deferred:** `team-roles/adversary.md`, "The verdict".
+
 **Divergence is a HARD_BLOCK, not a reason for another pass.** Pass N+1's
 `findings_critical_prior_scope` above pass N's `findings_critical` means the repair
 is injecting defects. STOP and escalate. A blocking MAJOR count above

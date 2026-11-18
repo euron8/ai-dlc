@@ -650,6 +650,12 @@ SKILL_INVOCATION_PROVENANCE_END -->
    Check 24 reads (Rule 8). False-positive cost: one pass and its repair per round until the
    exit. Removal condition: repairs that measurably stop writing defects, and a Rule 8 that no
    longer counts an exit.
+
+   **A MAJOR whose every `quote:` span the previous repair wrote does not block
+   `EXIT_CONDITION_MET`.** The merge classes it and writes `findings_major_repair_introduced:`,
+   `findings_major_unjoined:` and `repair_introduced_keys:` into the pass header beside
+   `findings_major_underived:`. The rule, the blocking count and its closure as `repaired`,
+   never `DEFERRED`: `team-roles/adversary.md`, "The verdict".
 4. Append the step's changelog ("Where a changelog is written" below), then proceed to
    the step's next action.
 
@@ -986,6 +992,9 @@ and the merge stamps `shard_set_derived_from:`.
       the digest does not name. A series with no row there (stories, architecture) closes its
       MAJORs only by repair.
    Otherwise dispatch another pass in this series.
+
+   **A key the pass header lists in `repair_introduced_keys:` closes only by way 1, REPAIRED**;
+   a deferral naming it does not close it (`team-roles/adversary.md`, "The verdict").
 
    **THE AMENDMENT PROCEDURE — a notarized artifact that must move after MET.** Check 24 arm J2
    compares the file the terminal MET pass notarized against the bytes on disk. Amend it one of
