@@ -1,7 +1,8 @@
 # Measured by a counted run through scripts/seed-verdict-store.sh (core/scripts/hermetic-run.sh, the judge's own J3/J7 output).
 # BL-878 (batch 259, C3e; * 102->46, hook 58->2): every drive runs ack_main in process (run.sh ack_ip); the 2 hook
-# starts are the cli cells of cells.decl.
+# starts are the cli cells of cells.decl. BL-1164 (batch 259 C3b; inproc 61->60): ack_ip is lib/inproc.sh's
+# inproc_run, and the load is inproc_load, which logs no pass.
 46 *
 2 core/hooks/ai-dlc-acknowledge.sh
 0 core/hooks/ai-dlc-dispatch-guard.sh
-61 inproc:core/hooks/ai-dlc-acknowledge.sh
+60 inproc:core/hooks/ai-dlc-acknowledge.sh

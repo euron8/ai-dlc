@@ -201,6 +201,7 @@
 # FXC-IDENTITY 1 fd008c2ff56b8bc1dab5920b0f6c1ad3dc45ce4d56da4ff622faf405d1f3c271 static P2 arm only: an unguarded shebang subject counts per call and fixture directory libs join the population (BL-1152, BL-1159); fxc_judge and the tag=0 fxc_req are unchanged, so no counted fixture's judgement moves
 # FXC-IDENTITY 1 c7866870c9fc05fae058d1bf5fb35bc9f474f41af7b9a637bcad6d1504b21555 static P2 arm only: the two source sites of lib/inproc.sh are judged at each inproc_load/inproc_run call, and an unresolvable command word after a source of an unguarded subject is a drive (BL-1164, BL-1152 item 3); fxc_judge and the tag=0 fxc_req are unchanged, so no counted fixture's judgement moves
 # FXC-IDENTITY 1 06ebe5e1e7ca5b54a66a90709d4951f8be83b6eaf9a247a913968705652a23b8 nested-cell attribution (BL-1164): an inner fixture's declared cells credit only a tag whose start has that fixture's run.sh among its logged ancestors, so the judge can only move a fixture from FAIL to pass; every recorded pass stays valid
+# FXC-IDENTITY 1 76851c1313b10778fef27862ae33216f89ffabfa6398bd73a9c22c7b4dc4c930 nested-cell credit is opt-in (BL-1164): a fixture declares drives <inner> in its cells.decl for an inner fixture's cells to credit a tag, a drives row naming itself, its own shard parent or a fixture with no cells.decl is a C2 error, the ancestry match is anchored on the judged root, and the credit only narrows; no recorded pass carried a credited tag (the one fixture that had one, the seam, is an allowlist row and not judged)
 set -u
 FXC_FORMAT=1
 
@@ -501,6 +502,9 @@ fxc_census() {
 #   e2e <subject> <cell-id> why=<reason>         a cell that stays end to end, the reason non-empty
 #   nested <parent-subject> <child-subject> why=<reason>   every start of <child> whose logged parent is a start of
 #                                                <parent> is covered (a subject that starts another counted script)
+#   drives <fixture>                             this fixture runs <fixture>'s run.sh as a child (not a shard stub's
+#                                                exec or spawn of its parent): a tag the inner run emits is credited to
+#                                                <fixture>'s own cells.decl, which the sandbox must also hold (inputs.decl)
 # `#` comments and blank lines ignored. A cell id matches [A-Za-z0-9_.-]+ and is unique within the file. A missing
 # cells.decl reads as an EMPTY one (lead ruling): a fixture that starts no subject passes with nothing to tag.
 # THE EMISSION SITE: the fixture starts a subject as `FXCELL=<id> bash <subject>`. The counter rc logs `${FXCELL:-}`
@@ -516,7 +520,9 @@ fxc_cells_parse() {
   awk 'FNR == 1 { print "F\t" FILENAME; delete ID }
     { sub(/\r$/, "") } $0 ~ /^[[:blank:]]*$/ || $0 ~ /^[[:blank:]]*#/ { next }
     { raw = $0; k = $1
-      if (k != "cli" && k != "e2e" && k != "nested") { print "E\t" FILENAME "\t" FNR "\tC2\tunknown row kind " k " (want cli, e2e or nested)\t" raw; next }
+      if (k == "drives") { if (NF != 2 || $2 !~ /^[A-Za-z0-9_.-]+$/) { print "E\t" FILENAME "\t" FNR "\tC2\ta drives row is exactly `drives <fixture>`\t" raw; next }
+        print "R\t" FILENAME "\tdrives\t" $2 "\t-\t\t" FNR; next }
+      if (k != "cli" && k != "e2e" && k != "nested") { print "E\t" FILENAME "\t" FNR "\tC2\tunknown row kind " k " (want cli, e2e, nested or drives)\t" raw; next }
       if (k == "cli") { if (NF != 3) { print "E\t" FILENAME "\t" FNR "\tC2\ta cli row is exactly `cli <subject> <cell-id>`\t" raw; next } why = "" }
       else {
         if (NF < 4 || substr($4, 1, 4) != "why=") { print "E\t" FILENAME "\t" FNR "\tC2\tan " k " row ends in why=<reason>\t" raw; next }
@@ -530,6 +536,19 @@ fxc_cells_parse() {
         ID[$3] = FNR
       }
       print "R\t" FILENAME "\t" k "\t" $2 "\t" $3 "\t" why "\t" FNR }' "$@"
+}
+
+# fxc_drives_check <root> <fixture> <cells parse rows file>: one `E\t<file>\t<line>\tC2\t<reason>\t<raw>` row per `drives` row
+# that names the fixture itself, its own shard parent (fxc_impl_of: a stub is no driver of its parent) or a fixture with no
+# readable cells.decl under <root> (no such fixture included). The reason's second word is the named fixture.
+fxc_drives_check() {
+  local root="$1" fx="$2" rows="$3" impl=""
+  impl="$(fxc_impl_of "$root/core/fixtures/$fx/run.sh" 2>/dev/null | awk -F'\t' '{ print $2 }')"
+  awk -F'\t' -v fx="$fx" -v impl="$impl" -v root="$root" '$1 == "R" && $3 == "drives" { x = $4; r = ""
+      if (x == fx) r = "names the fixture itself"
+      else if (impl != "" && impl != "!" && x == impl) r = "names its own shard parent (a shard stub exec or spawn of its parent is not a drive)"
+      else { c = root "/core/fixtures/" x "/cells.decl"; if ((getline t < c) < 0) r = "names a fixture with no cells.decl under the root"; else close(c) }
+      if (r != "") print "E\t" $2 "\t" $7 "\tC2\tdrives " x " " r "\tdrives " x }' "$rows"
 }
 
 # fxc_guarded <file>...: C5's predicate, one awk. Prints `G\t<file>` for a file carrying the BASH_SOURCE source guard
@@ -558,7 +577,8 @@ fxc_guarded() {
 # the start that was live when the child logged. KNOWN ROUTE: a parent that is itself unlogged (a start under its own
 # `env -i`) is absent, so its child reads as having no parent.
 fxc_cells_judge() {
-  awk -F'\t' -v outer="${4:-}" 'function nrm(s,   lead, n, a, i, k, o, r) {
+  awk -F'\t' -v outer="${4:-}" -v root="${5:-}" 'function strip(p) { sub(/^\/private\//, "/", p); return p }
+    function nrm(s,   lead, n, a, i, k, o, r) {
       lead = (substr(s, 1, 1) == "/"); n = split(s, a, "/"); k = 0
       for (i = 1; i <= n; i++) {
         if (a[i] == "" || a[i] == ".") continue
@@ -569,14 +589,16 @@ fxc_cells_judge() {
       return (lead ? "/" : "") r
     }
     FILENAME == ARGV[1] { if ($0 != "" && $0 != "*") T[++nt] = $0; next }
-    FILENAME == ARGV[2] { if ($1 == "R") { if ($3 == "nested") N[$4 SUBSEP $5] = 1; else if ($3 == "inner") { x = $2; sub(/\/cells\.decl$/, "", x); sub(/.*\//, "", x); IN[$4 SUBSEP $5 SUBSEP x] = 1 } else C[$4 SUBSEP $5] = 0 } next }
+    FILENAME == ARGV[2] { if ($1 == "R") { if ($3 == "nested") N[$4 SUBSEP $5] = 1; else if ($3 == "drives") { } else if ($3 == "inner") { x = $2; sub(/\/cells\.decl$/, "", x); sub(/.*\//, "", x); IN[$4 SUBSEP $5 SUBSEP x] = 1 } else C[$4 SUBSEP $5] = 0 } next }
     # innerok: a tag is an INNER run tag only when a start in its parent chain is the run.sh of another fixture X (not the
     # judged one) whose cells.decl declares it for this subject: credited to the process that emitted it, by the start log.
     # A pid whose FIRST logged start is the judged fixture run.sh and which later logs another run.sh is that fixture exec of
     # its parent (a shard stub), never a drive of it: it credits nothing. Paths are normalised before the match.
-    function innerok(s, t, p,   h, q, x, f0) {
-      for (h = 0; h < 64 && p != ""; h++) { q = nrm(PA[p]); f0 = nrm(PA0[p])
-        if (q ~ /(^|\/)core\/fixtures\/[^\/]+\/run\.sh$/ && f0 !~ ("(^|/)core/fixtures/" outer "/run[.]sh$")) { x = q; sub(/\/run\.sh$/, "", x); sub(/.*\//, "", x); if (x != outer && ((s SUBSEP t SUBSEP x) in IN)) return 1 }
+    function innerok(s, t, p,   h, q, x, f0, rt) {
+      if (root == "") return 0
+      rt = strip(nrm(root)) "/core/fixtures/"
+      for (h = 0; h < 64 && p != ""; h++) { q = strip(nrm(PA[p])); f0 = strip(nrm(PA0[p]))
+        if (substr(q, 1, length(rt)) == rt && substr(q, length(rt) + 1) ~ /^[^\/]+\/run\.sh$/ && f0 !~ ("(^|/)core/fixtures/" outer "/run[.]sh$")) { x = substr(q, length(rt) + 1); sub(/\/run\.sh$/, "", x); if (x != outer && ((s SUBSEP t SUBSEP x) in IN)) return 1 }
         p = PP[p] }
       return 0 }
     { f = ($1 ~ /(^|\/)\.\.?(\/|$)/ || index($1, "//") > 0) ? nrm($1) : $1; s = ""; best = 0
@@ -1204,6 +1226,7 @@ fxc_static_join() {
     if [ ! -f "$d/inputs.decl" ]; then printf 'O\t%s\tno inputs.decl\n' "$fx"; continue; fi
     cf="$d/cells.decl"
     if [ -f "$cf" ]; then fxc_cells_parse "$cf" > "$w/c"; else : > "$w/c"; fi
+    fxc_drives_check "$root" "$fx" "$w/c" > "$w/dc"; cat "$w/dc" >> "$w/c"
     : > "$w/r"; [ -f "$d/invocations.decl" ] && fxc_decl_rows "$d/invocations.decl" > "$w/r"
     : > "$w/n"
     while IFS="$T" read -r c k g tgt raw; do
@@ -1219,6 +1242,7 @@ fxc_static_join() {
       FILENAME == ARGV[2] { G[$1] = $2; next }
       FILENAME == ARGV[3] { if ($1 == "E" && $2 == fx) { print "E\t" fx "\tP2\t" $3 "\t" $4 "\t" $5; bad = 1 } next }
       $1 == "E" { print "E\t" fx "\t" $4 "\t" $3 "\t" $5; bad = 1; next }
+      $1 == "R" && $3 == "drives" { next }
       $1 == "R" { if (!($4 in N)) { print "E\t" fx "\tC2\t" $7 "\t" $3 " row names " $4 ", which is no path row of invocations.decl"; bad = 1 }
                   if ($3 == "nested") { if (!($5 in N)) { print "E\t" fx "\tC2\t" $7 "\tnested row names child " $5 ", which is no path row of invocations.decl"; bad = 1 } else NEST[$5] = 1 }
                   else CC[$4]++
@@ -1361,17 +1385,20 @@ EOF
   if [ "$FXC_CELLS" = 1 ] && [ -f "$decl" ]; then
     local cf="$fd/cells.decl" ck="${fd##*/}" nf ne n5 sum
     if [ -f "$cf" ]; then fxc_cells_parse "$cf" > "$w/cells"; else : > "$w/cells"; fi
-    # A fixture whose inputs.decl names ANOTHER fixture's run.sh drives it as an inner run: the FXCELL tags that inner run
+    # A fixture whose cells.decl declares `drives <X>` runs fixture X as an inner run (opt-in): the FXCELL tags that inner run
     # emits are the inner fixture's declared cells. They are added as `inner` rows, which let a tag pass C2 and are never
     # counted by C3 (the inner fixture judges its own). A tag is credited ONLY when the start log
     # shows a run.sh start of that inner fixture among the tagged start's ancestors (fxc_cells_judge, innerok); a tag the
     # judged fixture emits itself, or one in neither cells.decl, still FAILs C2.
-    awk '{ l = $0; sub(/^[!+]/, "", l); if (l ~ /^core\/fixtures\/[^\/]+\/run\.sh$/) { sub(/^core\/fixtures\//, "", l); sub(/\/run\.sh$/, "", l); print l } }' "$inp" > "$w/inner" 2>/dev/null
+    # A drives row naming the fixture itself, its own shard parent or a fixture with no cells.decl is a C2 FAIL and credits nothing.
+    fxc_drives_check "$root" "$ck" "$w/cells" > "$w/dce"
+    awk -F'\t' -v fx="$fx" '{ print fx ": FAIL (C2): " $5 }' "$w/dce" > "$w/dcp"; [ "$(awk 'END { print NR }' "$w/dcp")" -eq 0 ] || { cat "$w/dcp"; rc=1; }
+    awk -F'\t' 'FILENAME == ARGV[1] { split($5, a, " "); bad[a[2]] = 1; next } $1 == "R" && $3 == "drives" && !($4 in bad) { print $4 }' "$w/dce" "$w/cells" > "$w/inner"
     while IFS= read -r p; do
       [ -n "$p" ] && [ "$p" != "$ck" ] && [ -f "$root/core/fixtures/$p/cells.decl" ] || continue
       fxc_cells_parse "$root/core/fixtures/$p/cells.decl" | awk -F'\t' -v OFS='\t' '$1 == "R" && ($3 == "cli" || $3 == "e2e") { $3 = "inner"; print }' >> "$w/cells"
     done < "$w/inner"
-    fxc_cells_judge "$w/tgts" "$w/cells" "$jl" "$ck" > "$w/cj"
+    fxc_cells_judge "$w/tgts" "$w/cells" "$jl" "$ck" "$root" > "$w/cj"
     nf="$(grep -cE '^C[123]	' "$w/cj")" || nf=0
     ne="$(grep -c '^E	' "$w/cells")" || ne=0
     awk -F'\t' '$1 == "R" && $3 == "cli" { print $4 }' "$w/cells" | LC_ALL=C sort -u > "$w/cli"

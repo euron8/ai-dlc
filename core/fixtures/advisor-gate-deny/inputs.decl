@@ -4,6 +4,7 @@
 !core/hooks/ai-dlc-advisor-gate.sh
 !core/hooks/ai-dlc-context-provenance.sh
 !core/hooks/ai-dlc-advisor-detect.sh
+core/fixtures/lib/inproc.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/world.sh
 core/fixtures/lib/layout.sh

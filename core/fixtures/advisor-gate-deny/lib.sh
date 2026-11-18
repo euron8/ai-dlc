@@ -180,11 +180,14 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # `unset` in a subshell around the call. The hook's one wait is its poll's external `sleep`, resolved through the PATH
 # the call is given, so the counting shim below is that clock in process as it was for the program. One cli cell per
 # distinct CLI outcome, in run.sh.
-# NOT lib/inproc.sh (BL-1164): this fixture declares the unguarded bash library ai-dlc-advisor-detect.sh as a `!`
-# input, and P2 then reads inproc.sh's own source lines (:51, :96) as unrouted drives. So the source is paired with
-# fx_inproc here, without inproc_run's caller-variable reset: the hook assigns every variable it reads before reading
-# it (the scan's `read -r GRANT ...`, the payload's `TP=""; AID=""; ...` line), and the cli twins in run.sh are the
-# equivalence evidence.
+# THROUGH lib/inproc.sh (BL-1164): inproc_load once, inproc_run per cell. THE OPERAND IS A LITERAL TAIL,
+# "${1%/*}/ai-dlc-advisor-gate.sh": this fixture declares the unguarded bash library ai-dlc-advisor-detect.sh as a `!`
+# input, and arm P2 of scripts/validate-fixture-invocations.sh rows an inproc_load or inproc_run whose operand no
+# literal path resolves in such a fixture (the producing line, :1013, "the operand of ... which no literal path,
+# same-file assignment or caller in the population resolves", and :1026, which never pairs an unresolvable operand
+# and never pairs a load). inproc.sh's own source lines are exempt at the library (the INPX block), never the cause.
+# adg_ip refuses (125) a path whose basename is not the hook's, so the tail can never substitute a sibling. The cli
+# twins in run.sh are the equivalence evidence.
 [ -f "$LIBDIR/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $LIBDIR" >&2; exit 2; }
 . "$LIBDIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh" >&2; exit 2; }
 # A hook without the wrap would RUN when sourced -- read this shell's stdin and `exit 0` it, a silent green -- so both
@@ -202,20 +205,14 @@ case "$_pw_d$_pw_g" in
   00) echo "SKIP: advisor-gate-deny: $HOOK predates the in-process wrap"; fx_skip_exit "$LIBDIR" ;;
   *) echo "  FAIL  $HOOK carries one half of the in-process wrap (adg_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive" >&2; echo "advisor-gate-deny: 1 assertion(s) FAILED" >&2; exit 1 ;;
 esac
-fx_inproc "$HOOK"
-. "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK failed" >&2; exit 2; }
+. "$LIBDIR/../lib/inproc.sh" || { echo "FIXTURE ERROR: cannot source lib/inproc.sh" >&2; exit 2; }
+case "$HOOK" in */ai-dlc-advisor-gate.sh) ;; *) echo "FIXTURE BROKEN: $HOOK is not an ai-dlc-advisor-gate.sh" >&2; exit 2 ;; esac
+inproc_load "${HOOK%/*}/ai-dlc-advisor-gate.sh" || { echo "FIXTURE BROKEN: sourcing $HOOK defined nothing" >&2; exit 2; }
 declare -F adg_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no adg_main" >&2; exit 2; }
-adg_ip() { # <hook> -- $HOOK runs the loaded adg_main; another path (a copy) is sourced in the subshell first
-  ( set +eufx +o pipefail; hash -r
-    if [ "$1" != "$HOOK" ]; then
-      # A copy's pass is a pass of the subject it copies, logged under the subject's path (as lib/inproc.sh logs it).
-      fx_inproc "$HOOK"
-      . "$1" || exit 126
-      adg_main
-    else
-      fx_inproc "$1"
-      adg_main
-    fi )
+adg_ip() { # <hook> -- $HOOK runs the loaded adg_main; another path (a copy) is sourced in inproc_run's subshell, its
+  # pass logged under INPROC_LOADED, the subject it copies
+  case "$1" in */ai-dlc-advisor-gate.sh) ;; *) echo "FIXTURE BROKEN: adg_ip was handed $1, not an ai-dlc-advisor-gate.sh" >&2; return 125 ;; esac
+  inproc_run "${1%/*}/ai-dlc-advisor-gate.sh" adg_main
 }
 
 OUTF="$W/out"; ERRF="$W/err"; VF="$W/verdict"

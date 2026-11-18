@@ -46,8 +46,12 @@ set -u
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 # Arm W asks scripts/validate-fixture-git-env.sh IN PROCESS (BL-878) through vf_ip, each pass paired with fx_inproc.
-# NOT lib/inproc.sh (BL-1164): declaring it lets the inner setup-config-drift (cell B) run past its inproc.sh source,
-# and its own in-process passes then land in this fixture's count.
+# vf_ip is a hand source, not lib/inproc.sh's inproc_run, for a reason that no longer holds. This file once read
+# that declaring the library let the inner setup-config-drift (cell B) run past its inproc.sh source, landing its
+# in-process passes in this count. Since 0.1165.0 inputs.decl declares lib/inproc.sh, the inner run reaches its end,
+# and invocations.decl counts those passes (the unregistered-drift.sh inproc: row). Moving vf_ip onto inproc_run is
+# owed under BL-878, with this fixture's other owed item: its scripts/fixture-inprocess-allowlist.txt row stays
+# until arm R of scripts/validate-fixture-inprocess.sh credits a declared inner fixture's cells.decl.
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 fail() { bad "$1"; }
@@ -232,9 +236,8 @@ fi
 # B1. SEAM INTACT on the `git -C` form (its init is in a seed.sh the run.sh never makes; the seam reaches it by inheritance).
 cell B; SV_B="$(printf '%s' "$VERD")"; DET_B="$DET"
 # B0. THE INNER RUN REACHED ITS INIT. setup-config-drift's run.sh:16 runs seed.sh, whose `git -C "$DIST" init` is the
-# form B exists for, and prints its HERMETIC-CONSUMED line at :20 only once that seed exited 0. In this sandbox the
-# inner run stops later, at its lib/inproc.sh source (:56, undeclared here), so the line is what proves the armed init
-# ran; without it an INTACT victim would describe a run that never reached git.
+# form B exists for, and prints its HERMETIC-CONSUMED line at :20 only once that seed exited 0, so the line is what
+# proves the armed init ran; without it an INTACT victim would describe a run that never reached git.
 if grep -qxF 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/unregistered-drift.sh' "$WORK/v_cell.stdout" 2>/dev/null; then
   ok "B0 $SUBJECT_C ran its seed.sh (the \`git -C\` init) to exit 0 under the armed GIT_DIR: its post-seed line appeared"
 else

@@ -69,14 +69,18 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# IN PROCESS (BL-878). The hook is SOURCED ONCE (its column-0 guard returns after defining ack_main) and every drive
-# is `ack_ip`, which runs ack_main in a subshell with the payload on stdin and a fresh bash's shell options (this
-# shell's `pipefail` would otherwise reach a hook that sets only `-u`). One cli cell per distinct CLI outcome, at the end.
-# NOT lib/inproc.sh (BL-1164): this fixture declares the unguarded bash program ai-dlc-dispatch-guard.sh as a `!`
-# input, and P2 then reads inproc.sh's own source lines (:51, :96) as unrouted drives. So the source is paired with
-# fx_inproc here, without inproc_run's caller-variable reset: the hook assigns every variable it reads before reading
-# it except AGENT_ID, FP, SPRINT_N, HOME and CLAUDE_PROJECT_DIR, which it reads with defaults and this file never sets
-# globally, and the cli twins below are the equivalence evidence.
+# IN PROCESS (BL-878). The hook is SOURCED ONCE (inproc_load; its column-0 guard returns after defining ack_main) and
+# every drive is `ack_ip`, which runs ack_main through lib/inproc.sh's inproc_run, a fresh-bash subshell, with the
+# payload on stdin (this shell's `pipefail` would otherwise reach a hook that sets only `-u`). One cli cell per
+# distinct CLI outcome, at the end.
+# THE OPERAND IS A LITERAL TAIL, "${HOOK%/*}/ai-dlc-acknowledge.sh" (BL-1164): this fixture declares the unguarded bash
+# program ai-dlc-dispatch-guard.sh as a `!` input, and arm P2 of scripts/validate-fixture-invocations.sh rows an
+# inproc_load or inproc_run whose operand no literal path resolves in such a fixture (the producing line, :1013, "the
+# operand of ... which no literal path, same-file assignment or caller in the population resolves", and :1026, which
+# never pairs an unresolvable operand and never pairs a load). route-read-required drives the same hook through
+# `inproc_run "$HOOK"` with no P2 row only because it declares no unguarded subject. inproc.sh's own source lines are
+# exempt at the library (the INPX block), never the cause. A HOOK whose basename is not the hook's is refused below,
+# so the tail can never substitute a sibling.
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 # A hook without the wrap would RUN when sourced -- read this shell's stdin and `exit 0` it, a silent green -- so both
@@ -94,10 +98,11 @@ case "$_pw_d$_pw_g" in
   00) echo "SKIP: updater-session-signals: $HOOK predates the in-process wrap"; fx_skip_exit "$HERE" ;;
   *) bad "$HOOK carries one half of the in-process wrap (ack_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive"; report_end updater-session-signals; exit 1 ;;
 esac
-fx_inproc "$HOOK"
-. "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK failed" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+case "$HOOK" in */ai-dlc-acknowledge.sh) ;; *) echo "FIXTURE BROKEN: $HOOK is not an ai-dlc-acknowledge.sh" >&2; exit 2 ;; esac
+inproc_load "${HOOK%/*}/ai-dlc-acknowledge.sh" || { echo "FIXTURE BROKEN: sourcing $HOOK defined nothing" >&2; exit 2; }
 declare -F ack_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no ack_main" >&2; exit 2; }
-ack_ip() { ( set +eufx +o pipefail; hash -r; fx_inproc "$HOOK"; ack_main ); }
+ack_ip() { inproc_run "${HOOK%/*}/ai-dlc-acknowledge.sh" ack_main; }
 
 # A PAUSED project with a live pipeline and no adversarial series: the tree that reaches
 # Check 3, which is the check under test. The sprint resolves and its slot exists, so
