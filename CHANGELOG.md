@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1170.0] - 2026-11-18
+
+### BL-1167 (advances, stays PARTIAL): the consumer pre-push runs its tree-level steps concurrently
+
+`core/git-hooks/pre-push` now runs the consumer's tree-level steps concurrently under the fifo pool and prints `step elapsed` for each. The `PRESUITE_UNITS` span is ported from BL-1091's and held byte-identical across both hooks by I66. A step still queued at the trailer fails the push, and the span forces `run` for a declared file absent from the manifest.
+
+No consumer step is keyed or skipped: `PS_DECL_ROOT` and `PS_SKIP_OK` are set outside the span, and `AI_DLC_PRESUITE_SKIP` is inert on a consumer. Keying the three keyable steps (taught schema, rule-file audit, shell syntax) stays open until a consumer's first `step elapsed` figures are read.
+
+Coverage: the shipping fixture `consumer-presuite-steps`, which asserts no timing and no load-dependent value (BL-868) and is FIXTURE BROKEN in the distribution when its subject is absent.
+
 ## [0.1169.0] - 2026-11-18
 
 ### BL-1175 (advances): planning readiness runs under `intent=readiness`; the planning-time trace run is removed

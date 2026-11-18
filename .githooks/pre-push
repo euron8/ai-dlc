@@ -220,6 +220,10 @@ fail=0
 RED_STEPS=""
 # AI_DLC_PRESUITE_SKIP=1 skips every check before the fixture suite: for a re-push of a tree
 # whose checks already passed. The suite and its judges still run. The operator's switch.
+# The two names below are the layout- and policy-dependent inputs of the span that follows (held identical to the
+# consumer hook's by I66): the declaration root, and whether that switch is honoured at all.
+PS_DECL_ROOT="scripts/presuite/"
+PS_SKIP_OK=1
 #
 # PRESUITE_UNITS_BEGIN
 # PRE-SUITE STEPS ARE UNITS OF THE FIXTURE MECHANISM. A `step` before PRESUITE_DONE is QUEUED, never run where it is
@@ -234,7 +238,10 @@ RED_STEPS=""
 # refs, ls-files, log) declares nothing: a declared file cannot express it. Nor does one that reads a git-ignored path
 # (agent definitions: .claude/settings.json) or walks the whole tree (stray party-mode: a new top-level file).
 # `slug` is the title lower-cased with every run of non-alphanumerics a single `-`, cut at 80.
-# AI_DLC_PRESUITE_SKIP=1 skips every step before the suite except one queued with PS_ALWAYS=1.
+# AI_DLC_PRESUITE_SKIP=1 skips every step before the suite except one queued with PS_ALWAYS=1, and only where the hook
+# set PS_SKIP_OK=1 outside this span. PS_DECL_ROOT, also set outside it, is the directory holding the declarations
+# (<root><slug>/inputs.decl); a root that does not exist keys no step, so every step runs on every push.
+# A step whose declaration names a file the manifest does not list (git-ignored) runs: that file cannot move the key.
 # AI_DLC_FIXTURE_NO_SKIP=1 runs every step. The width is FIXTURE_JOBS (two in a nested pool).
 PS_N=0; PS_W=""; PS_ALWAYS=0
 ps_slug() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//' | cut -c1-80; }
@@ -258,29 +265,52 @@ ps_run() { # <n>: one queued step in a forked subshell (a fork, never a new bash
   echo $((SECONDS - s)) > "$PS_W/$n.sec"
 }
 ps_select() { # decides every keyed step in the runlist from the fixture mechanism's own key pass; a skip leaves `<n>.keyskip`
-  local c="$PS_W/k" n slug kd h keyed=0
+  local c="$PS_W/k" n slug kd h keyed=0 dl df forced
   PS_KD=""
   mkdir -p "$c" || return 0
   : > "$c/.list"; : > "$c/.mapped.all"; : > "$c/.kdec"
   for n in $(cat "$PS_W/runlist"); do
     slug="$(ps_slug "$(cat "$PS_W/$n.title")")"; printf '%s' "$slug" > "$PS_W/$n.slug"
-    [ -f "scripts/presuite/$slug/inputs.decl" ] || continue
-    printf 'scripts/presuite/%s/\n' "$slug" >> "$c/.list"; printf '%s\n' "$slug" >> "$c/.mapped.all"; keyed=1
+    [ -f "${PS_DECL_ROOT}${slug}/inputs.decl" ] || continue
+    printf '%s%s/\n' "$PS_DECL_ROOT" "$slug" >> "$c/.list"; printf '%s\n' "$slug" >> "$c/.mapped.all"; keyed=1
   done
   [ "$keyed" = 1 ] || return 0
   rec_home kd presuite-keys
   PS_KD="$kd"
   # THE MARK precedes the key pass, so a declared input changed after it is either in the keys or newer than the mark.
   : > "$c/.mark" 2>/dev/null
-  ( KEYS_DIR="$kd"; FXROOT="scripts/presuite/"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; VERIFIED_RECORD=/dev/null # pool-shadow: subshell
+  ( KEYS_DIR="$kd"; FXROOT="$PS_DECL_ROOT"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; VERIFIED_RECORD=/dev/null # pool-shadow: subshell
     readset_drop_excluded() { cat; } # pool-shadow: subshell
     readset_manifest "$c"
     [ -s "$c/.now" ] || exit 1
     : > "$c/.local.valid"
     readset_keys "$c/.list" "$c" ) > "$c/.log" 2>&1 || { : > "$c/.kdec"; printf '   ..    pre-suite keys: the step keys could not be built (%s) -- every step runs\n' "$(sed -n 1p "$c/.log")"; }
   [ "${AI_DLC_FIXTURE_NO_SKIP:-}" != 1 ] || return 0
+  # A DECLARED FILE THE MANIFEST DOES NOT LIST CANNOT MOVE THE KEY (a git-ignored file is dropped from `.now`), so a step
+  # declaring one runs. One builtin pass collects `<slug>\t<file>` for every declared file on disk; one awk names the
+  # slugs whose file is absent from `.now`.
+  : > "$c/.dfiles"
   for n in $(cat "$PS_W/runlist"); do
     slug="$(cat "$PS_W/$n.slug")"
+    [ -f "${PS_DECL_ROOT}${slug}/inputs.decl" ] || continue
+    while IFS= read -r dl || [ -n "$dl" ]; do
+      case "$dl" in ''|'#'*|*/|*\**) continue ;; '!'*|'+'*) dl="${dl#?}" ;; esac
+      [ -f "$dl" ] && printf '%s\t%s\n' "$slug" "$dl" >> "$c/.dfiles"
+    done < "${PS_DECL_ROOT}${slug}/inputs.decl"
+  done
+  forced="$(awk -F'\t' 'NR == FNR { now[$1] = 1; next } !($2 in now) && !($1 in seen) { seen[$1] = 1; print $1 "\t" $2 }' "$c/.now" "$c/.dfiles")"
+  while IFS=$'\t' read -r df dl; do
+    [ -n "$df" ] || continue
+    printf '%s\trun\tdeclares %s, which the manifest does not list (git-ignored)\n' "$df" "$dl" >> "$c/.kdec"
+  done <<PS_FORCED_EOF
+$forced
+PS_FORCED_EOF
+  for n in $(cat "$PS_W/runlist"); do
+    slug="$(cat "$PS_W/$n.slug")"
+    case "
+$forced
+" in *"
+$slug"$'\t'*) continue ;; esac
     if awk -F'\t' -v s="$slug" '$1 == s && $2 == "skip" { f = 1 } END { exit f ? 0 : 1 }' "$c/.kdec"; then : > "$PS_W/$n.keyskip"; continue; fi
     # A STEP RUN ONLY BECAUSE ITS KEY ROWS DIFFER FROM <slug>.key (unrecorded, changed, tools changed) SKIPS ON A PASS
     # KEPT UNDER ITS ROWS' OWN NAME (ps_keep): every tree sharing the keys dir writes the one <slug>.key, so another
@@ -348,7 +378,7 @@ ps_flush() {
   n=0
   while [ "$n" -lt "$PS_N" ]; do
     n=$((n + 1))
-    if [ "${AI_DLC_PRESUITE_SKIP:-0}" = 1 ] && [ "$(cat "$PS_W/$n.always")" != 1 ]; then : > "$PS_W/$n.skipped"; continue; fi
+    if [ "${AI_DLC_PRESUITE_SKIP:-0}" = 1 ] && [ "${PS_SKIP_OK:-0}" = 1 ] && [ "$(cat "$PS_W/$n.always")" != 1 ]; then : > "$PS_W/$n.skipped"; continue; fi
     printf '%s\n' "$n" >> "$PS_W/runlist"
   done
   ps_select

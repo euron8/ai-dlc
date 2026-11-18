@@ -5448,12 +5448,14 @@ if [ ! -f "$PP_DIST" ] || [ ! -f "$PP_CONS" ]; then
   err "I66 (tools span) could not read both pre-push hooks, so the span sentinels were not checked."
 else
   rt_tab="$(printf '\t')"
-  for rt_sn in READSET_TOOLS READSET_KEYROWS READSET_LOCK FIXTURE_EXIT; do
+  for rt_sn in READSET_TOOLS READSET_KEYROWS READSET_LOCK FIXTURE_EXIT PRESUITE_UNITS; do
     rt_out="$(rt_scan "$rt_sn" "$PP_DIST" "$PP_CONS")"
     while IFS="$rt_tab" read -r rt_f rt_r; do
       [ -n "$rt_r" ] || continue
       if [ "$rt_sn" = FIXTURE_EXIT ]; then
         err "I66 the FIXTURE_EXIT span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. The two hooks' refusal exits are compared through that span, so without exactly one sound pair of sentinel lines in each hook the comparison below reads nothing."
+      elif [ "$rt_sn" = PRESUITE_UNITS ]; then
+        err "I66 the PRESUITE_UNITS span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. The byte-identity compare below reads the span by those exact sentinel lines, and the consumer's pool-shadow marker exemption is scoped by them."
       else
         err "I66 the ${rt_sn} span of ${rt_f#$REPO_ROOT/} is unsound: ${rt_r}. Its extractor reads it by those exact sentinel lines: the hermetic runner exits 2 on every declared fixture without READSET_TOOLS, --key-only exits 2 and a sandbox run records nothing without READSET_KEYROWS, and the read-set deriver runs every trace window unslotted without READSET_LOCK."
       fi
@@ -5476,6 +5478,17 @@ RT_EOF
     fe_diff="$(diff <(printf '%s\n' "$fe_d") <(printf '%s\n' "$fe_k") | sed -n '1,12p' | tr '\n' ' ')"
     err "I66 the two pre-push hooks' FIXTURE_EXIT spans have forked. Diff (distribution expected, consumer actual): ${fe_diff:-<none>}. A pool whose only red is a refusal must print 'pre-push: REFUSED.' and exit 2 in both hooks (steps/handoff.md step 3 branches on that line), and install.sh always overwrites the consumer hook. Bring core/git-hooks/pre-push's FIXTURE_EXIT span to the distribution's."
   fi
+  # PRESUITE_UNITS IDENTITY, WHOLE SPAN, comments included: the queue, the key pass and the flush that run every pre-suite
+  # step concurrently are one program in both hooks. What differs by layout or policy (PS_DECL_ROOT, PS_SKIP_OK) is set
+  # OUTSIDE the span. An empty extraction on either end fails closed; two empty spans compare equal.
+  pu_span() { sed -n '/^# PRESUITE_UNITS_BEGIN$/,/^# PRESUITE_UNITS_END$/p' "$1"; }
+  pu_d="$(pu_span "$PP_DIST")"; pu_k="$(pu_span "$PP_CONS")"
+  if [ -z "$pu_d" ] || [ -z "$pu_k" ]; then
+    err "I66 parsed ZERO lines out of the PRESUITE_UNITS span in $( [ -z "$pu_d" ] && echo '.githooks/pre-push' || echo 'core/git-hooks/pre-push' ). The sentinels moved or are missing; an empty span compares equal to an empty span, so this invariant fails closed."
+  elif [ "$pu_d" != "$pu_k" ]; then
+    pu_diff="$(diff <(printf '%s\n' "$pu_d") <(printf '%s\n' "$pu_k") | sed -n '1,12p' | tr '\n' ' ')"
+    err "I66 the two pre-push hooks' PRESUITE_UNITS spans have forked. Diff (distribution expected, consumer actual): ${pu_diff:-<none>}. The consumer runs its tree-level steps through the same queue and flush as the distribution, and install.sh always overwrites the consumer hook. Bring core/git-hooks/pre-push's PRESUITE_UNITS span byte-identical to the distribution's; layout and policy values belong outside it."
+  fi
   # THE POOL'S OWN NAMES ARE NOT OVERRIDDEN OUTSIDE IT. The compare above holds the two FIXTURE_POOL blocks to
   # one program, but a line after the block that reassigns one of its globals or redefines one of its functions
   # changes what the suite runs or skips in that hook only. ONE awk reads both hooks: the pool's names are its
@@ -5488,7 +5501,8 @@ RT_EOF
   # comment), so `echo ")"` inside a marked subshell stays quiet; an unbalanced `(` outside quotes leaves a block
   # open at the end of a hook and prints `OPEN` with its opener line, failing closed. A marked line outside any
   # block prints `MARKTOP`. The exemption is distribution-only: any `# pool-shadow:` line in the consumer hook
-  # prints `MARKER`. An empty name set prints `<file>\t0\tZERO` and fails closed.
+  # prints `MARKER`, except between its PRESUITE_UNITS sentinels (a span held byte-identical to the distribution's
+  # by the compare above, so the marker there is the distribution's own). An empty name set prints `<file>\t0\tZERO` and fails closed.
   # Override forms read off a line outside the pool, over the pool's global and function names: `NAME=`, `NAME+=`,
   # `NAME()`, `rec_home NAME`, `for NAME in`, `read [-r] NAME`, `unset [-f|-v] NAME`, `function NAME`, `printf -v NAME`,
   # `${NAME:=x}` / `${NAME=x}` (so `: ${NAME:=x}` too), `eval ...NAME=...` and `alias NAME=`. A ` #` inside a string
@@ -5533,10 +5547,12 @@ RT_EOF
     }
     function scan(   i, s, t, rest, pre, nm, kind, n, inblk, dep, u, here, op, r, b, x) {
       if (nf == "") return
-      n = 0; pb = 0; pe = 0; QS = ""; inblk = 0
+      n = 0; pb = 0; pe = 0; ub = 0; ue = 0; QS = ""; inblk = 0
       for (i = 1; i <= nl; i++) {
         if (L[i] == "# FIXTURE_POOL_BEGIN") pb = i
         else if (L[i] == "# FIXTURE_POOL_END") pe = i
+        else if (L[i] == "# PRESUITE_UNITS_BEGIN") ub = i
+        else if (L[i] == "# PRESUITE_UNITS_END") ue = i
       }
       split("", F); split("", G)
       for (i = pb + 1; pb && i < pe; i++) {
@@ -5547,7 +5563,7 @@ RT_EOF
       }
       if (n == 0) { print nf "\t0\tZERO\t-"; return }
       for (i = 1; i <= nl; i++) {
-        if (nf == cons && index(L[i], "# pool-shadow:")) print nf "\t" i "\tMARKER\t-"
+        if (nf == cons && index(L[i], "# pool-shadow:") && !(ub && ue > ub && i > ub && i < ue)) print nf "\t" i "\tMARKER\t-"
         s = L[i]
         cut(s); r = RAW; b = BLK
         if (!inblk && s ~ /^[ \t]*\( /) { inblk = 1; dep = 0; op = i }

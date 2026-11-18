@@ -206,6 +206,7 @@ core_manifest:
   - fixtures/check5-anchor-base/**
   - fixtures/check-22-spawn-ledger/**
   - fixtures/ci-gates-resolution/**
+  - fixtures/consumer-presuite-steps/**
   - fixtures/consumer-suite-pool/**
   - fixtures/readset-skip/**
   - fixtures/readset-skip-b/**

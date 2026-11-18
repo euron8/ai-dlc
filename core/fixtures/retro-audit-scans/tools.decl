@@ -22,3 +22,5 @@ cksum
 mkfifo
 git
 head
+tr
+cut

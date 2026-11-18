@@ -60,10 +60,240 @@ PUSH_REFS=""
 [ -t 0 ] || PUSH_REFS="$(cat)"
 
 fail=0
-step() {
-  printf '\n── %s\n' "$1"; shift
-  if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+RED_STEPS=""
+# THE TWO INPUTS OF THE SPAN BELOW THAT DIFFER FROM THE DISTRIBUTION'S, set here and never inside it. The span is held
+# byte-identical to the distribution hook's by I66.
+#   PS_DECL_ROOT  where a step's inputs.decl would live. A consumer ships none, so this names a directory that does not
+#                 exist and no step is keyed: every step runs on every push.
+#   PS_SKIP_OK    0: AI_DLC_PRESUITE_SKIP=1 does not skip a step here. A consumer's tree-level checks are its gate.
+PS_DECL_ROOT="scripts/ai-dlc/.no-presuite-decls/"
+PS_SKIP_OK=0
+# PRESUITE_UNITS_BEGIN
+# PRE-SUITE STEPS ARE UNITS OF THE FIXTURE MECHANISM. A `step` before PRESUITE_DONE is QUEUED, never run where it is
+# written; ps_flush (called once, at PRESUITE_DONE) decides every queued step from ONE key pass and runs the steps that
+# must run CONCURRENTLY, then prints each step's title, output, verdict and elapsed seconds in declaration order, so a
+# gate log reads as a serial one. The key pass is the fixture mechanism's own: a step that declares its inputs in
+# scripts/presuite/<slug>/inputs.decl (the inputs.decl grammar, directories allowed) is keyed by readset_manifest,
+# readset_declared and readset_keys with FXROOT=scripts/presuite/, exactly as cl_select keys the consumer layout, and
+# its pass is a record under <verdict store base>/presuite-keys/<root commit>, published the moment the step passes, and
+# kept a second time under its rows' own name (ps_keep), which a step run only on moved keys skips on (ps_select). A
+# step with no declaration has no key and runs on every push. A step that reads git state (HEAD, origin/main, the push
+# refs, ls-files, log) declares nothing: a declared file cannot express it. Nor does one that reads a git-ignored path
+# (agent definitions: .claude/settings.json) or walks the whole tree (stray party-mode: a new top-level file).
+# `slug` is the title lower-cased with every run of non-alphanumerics a single `-`, cut at 80.
+# AI_DLC_PRESUITE_SKIP=1 skips every step before the suite except one queued with PS_ALWAYS=1, and only where the hook
+# set PS_SKIP_OK=1 outside this span. PS_DECL_ROOT, also set outside it, is the directory holding the declarations
+# (<root><slug>/inputs.decl); a root that does not exist keys no step, so every step runs on every push.
+# A step whose declaration names a file the manifest does not list (git-ignored) runs: that file cannot move the key.
+# AI_DLC_FIXTURE_NO_SKIP=1 runs every step. The width is FIXTURE_JOBS (two in a nested pool).
+PS_N=0; PS_W=""; PS_ALWAYS=0
+ps_slug() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//' | cut -c1-80; }
+ps_enqueue() { # <title> <cmd...>
+  local n
+  if [ -z "$PS_W" ]; then PS_W="$(mktemp -d "${TMPDIR:-/tmp}/presuite.XXXXXX")" || PS_W=""; fi
+  if [ -z "$PS_W" ]; then
+    printf '\n── %s\n' "$1"; shift
+    if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+    return 0
+  fi
+  PS_N=$((PS_N + 1)); n=$PS_N
+  printf '%s' "$1" > "$PS_W/$n.title"; printf '%s\n' "$PS_ALWAYS" > "$PS_W/$n.always"
+  shift; printf '%s\0' "$@" > "$PS_W/$n.argv"
 }
+ps_run() { # <n>: one queued step in a forked subshell (a fork, never a new bash start): output, verdict and seconds into $PS_W
+  local n="$1" s="$SECONDS" a
+  set --; while IFS= read -r -d '' a; do set -- "$@" "$a"; done < "$PS_W/$n.argv"
+  ( "$@" ) > "$PS_W/$n.out" 2>&1 < /dev/null 7>&-
+  echo $? > "$PS_W/$n.rc"
+  echo $((SECONDS - s)) > "$PS_W/$n.sec"
+}
+ps_select() { # decides every keyed step in the runlist from the fixture mechanism's own key pass; a skip leaves `<n>.keyskip`
+  local c="$PS_W/k" n slug kd h keyed=0 dl df forced
+  PS_KD=""
+  mkdir -p "$c" || return 0
+  : > "$c/.list"; : > "$c/.mapped.all"; : > "$c/.kdec"
+  for n in $(cat "$PS_W/runlist"); do
+    slug="$(ps_slug "$(cat "$PS_W/$n.title")")"; printf '%s' "$slug" > "$PS_W/$n.slug"
+    [ -f "${PS_DECL_ROOT}${slug}/inputs.decl" ] || continue
+    printf '%s%s/\n' "$PS_DECL_ROOT" "$slug" >> "$c/.list"; printf '%s\n' "$slug" >> "$c/.mapped.all"; keyed=1
+  done
+  [ "$keyed" = 1 ] || return 0
+  rec_home kd presuite-keys
+  PS_KD="$kd"
+  # THE MARK precedes the key pass, so a declared input changed after it is either in the keys or newer than the mark.
+  : > "$c/.mark" 2>/dev/null
+  ( KEYS_DIR="$kd"; FXROOT="$PS_DECL_ROOT"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; VERIFIED_RECORD=/dev/null # pool-shadow: subshell
+    readset_drop_excluded() { cat; } # pool-shadow: subshell
+    readset_manifest "$c"
+    [ -s "$c/.now" ] || exit 1
+    : > "$c/.local.valid"
+    readset_keys "$c/.list" "$c" ) > "$c/.log" 2>&1 || { : > "$c/.kdec"; printf '   ..    pre-suite keys: the step keys could not be built (%s) -- every step runs\n' "$(sed -n 1p "$c/.log")"; }
+  [ "${AI_DLC_FIXTURE_NO_SKIP:-}" != 1 ] || return 0
+  # A DECLARED FILE THE MANIFEST DOES NOT LIST CANNOT MOVE THE KEY (a git-ignored file is dropped from `.now`), so a step
+  # declaring one runs. One builtin pass collects `<slug>\t<file>` for every declared file on disk; one awk names the
+  # slugs whose file is absent from `.now`.
+  : > "$c/.dfiles"
+  for n in $(cat "$PS_W/runlist"); do
+    slug="$(cat "$PS_W/$n.slug")"
+    [ -f "${PS_DECL_ROOT}${slug}/inputs.decl" ] || continue
+    while IFS= read -r dl || [ -n "$dl" ]; do
+      case "$dl" in ''|'#'*|*/|*\**) continue ;; '!'*|'+'*) dl="${dl#?}" ;; esac
+      [ -f "$dl" ] && printf '%s\t%s\n' "$slug" "$dl" >> "$c/.dfiles"
+    done < "${PS_DECL_ROOT}${slug}/inputs.decl"
+  done
+  forced="$(awk -F'\t' 'NR == FNR { now[$1] = 1; next } !($2 in now) && !($1 in seen) { seen[$1] = 1; print $1 "\t" $2 }' "$c/.now" "$c/.dfiles")"
+  while IFS=$'\t' read -r df dl; do
+    [ -n "$df" ] || continue
+    printf '%s\trun\tdeclares %s, which the manifest does not list (git-ignored)\n' "$df" "$dl" >> "$c/.kdec"
+  done <<PS_FORCED_EOF
+$forced
+PS_FORCED_EOF
+  for n in $(cat "$PS_W/runlist"); do
+    slug="$(cat "$PS_W/$n.slug")"
+    case "
+$forced
+" in *"
+$slug"$'\t'*) continue ;; esac
+    if awk -F'\t' -v s="$slug" '$1 == s && $2 == "skip" { f = 1 } END { exit f ? 0 : 1 }' "$c/.kdec"; then : > "$PS_W/$n.keyskip"; continue; fi
+    # A STEP RUN ONLY BECAUSE ITS KEY ROWS DIFFER FROM <slug>.key (unrecorded, changed, tools changed) SKIPS ON A PASS
+    # KEPT UNDER ITS ROWS' OWN NAME (ps_keep): every tree sharing the keys dir writes the one <slug>.key, so another
+    # tree's pass at other content must not cost this tree its own. Any other run reason runs.
+    awk -F'\t' -v s="$slug" '$1 == s && $2 == "run" && ($3 == "unrecorded" || $3 == "tools changed" || index($3, "changed ") == 1) { f = 1 } END { exit f ? 0 : 1 }' "$c/.kdec" || continue
+    h="$(ps_rowkey "$c/.k/$slug")" && [ -f "$kd/$slug.$h.key" ] || continue
+    touch "$kd/$slug.$h.key" 2>/dev/null; : > "$PS_W/$n.keyskip"
+  done
+}
+# ps_rowkey <record>: the first 16 hex of the sha256 of a key record's rows (its `#` header lines left out). Rows are
+# root-relative, so two trees whose declared inputs hold the same bytes print the same name.
+ps_rowkey() {
+  local h
+  [ -s "$1" ] || return 1
+  h="$(grep -v '^#' "$1" | shasum -a 256 | cut -c1-16)"
+  case "$h" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) printf '%s' "$h" ;; *) return 1 ;; esac
+}
+# ps_keep <record> <slug> <keys dir>: keeps a passed step's record as <slug>.<rowkey>.key beside <slug>.key, and prunes
+# that step's kept records to the 16 newest (a skip on one touches it).
+ps_keep() {
+  local h f
+  h="$(ps_rowkey "$1")" || return 0
+  cp "$1" "$3/$2.$h.key.tmp.$$" 2>/dev/null && mv "$3/$2.$h.key.tmp.$$" "$3/$2.$h.key" 2>/dev/null
+  ls -t "$3/$2".*.key 2>/dev/null | sed 1,16d | while IFS= read -r f; do rm -f "$f"; done
+  return 0
+}
+# ps_moved <key record> <mark>: prints the first row path of the record whose inode changed after the mark was written,
+# and returns 0. A row path now absent is judged on its nearest existing parent. A missing mark, an unreadable record or
+# a find that fails counts as moved. Content keys taken BEFORE the steps cannot see a declared input that a writer
+# changed and restored while they ran (a rewrite put back, a file created and removed, an mtime reset); its inode change
+# time can, because nothing in this hook resets an atime or a ctime.
+ps_moved() {
+  local rec="$1" mark="$2" l q tab out
+  [ -f "$mark" ] && [ -r "$rec" ] || { printf '%s' "${rec##*/} (no mark or record)"; return 0; }
+  tab="$(printf '\t')"
+  set --
+  while IFS= read -r l; do
+    case "$l" in '#'*|'') continue ;; esac
+    q="${l%%"$tab"*}"; q="${q%/}"
+    while [ -n "$q" ] && [ "$q" != . ] && [ ! -e "$q" ] && [ ! -L "$q" ]; do
+      case "$q" in */*) q="${q%/*}" ;; *) q=. ;; esac
+    done
+    [ -n "$q" ] || q=.
+    case "$q" in .) set -- "$@" . ;; *) set -- "$@" "./$q" ;; esac
+  done < "$rec"
+  [ "$#" -gt 0 ] || return 1
+  out="$(find "$@" -prune -cnewer "$mark" -print 2>/dev/null)" || { printf '%s' "${rec##*/} (find failed)"; return 0; }
+  [ -n "$out" ] || return 1
+  out="${out%%
+*}"
+  printf '%s' "${out#./}"
+}
+ps_stop() { # <exit status>: an interrupted flush stops the step forks it started, by their recorded pids
+  local p
+  trap '' INT TERM HUP
+  for p in $PS_PIDS; do kill -TERM "$p" 2>/dev/null; done
+  wait $PS_PIDS
+  case "$PS_W" in */presuite.*) rm -rf -- "$PS_W" ;; esac
+  exit "$1"
+}
+ps_flush() {
+  local n slug title jobs why rc ps_nskip=0 p mv_p
+  [ "$PS_N" -gt 0 ] || return 0
+  : > "$PS_W/runlist"
+  n=0
+  while [ "$n" -lt "$PS_N" ]; do
+    n=$((n + 1))
+    if [ "${AI_DLC_PRESUITE_SKIP:-0}" = 1 ] && [ "${PS_SKIP_OK:-0}" = 1 ] && [ "$(cat "$PS_W/$n.always")" != 1 ]; then : > "$PS_W/$n.skipped"; continue; fi
+    printf '%s\n' "$n" >> "$PS_W/runlist"
+  done
+  ps_select
+  for n in $(cat "$PS_W/runlist"); do [ -f "$PS_W/$n.keyskip" ] || printf '%s\n' "$n"; done > "$PS_W/runlist.run"
+  jobs="$FIXTURE_JOBS"; case "$jobs" in ''|*[!0-9]*|0) jobs=2 ;; esac
+  # THE POOL: fd 7 is a fifo holding $jobs tokens. A step starts only on a token it read, and its fork writes the token
+  # back when the step ends, so at most $jobs steps are live and a freed slot is taken the moment it frees; nothing
+  # polls and no elapsed time decides admission. Without a fifo the steps run one after another, and the hook says so.
+  PS_PIDS=""
+  if mkfifo "$PS_W/slots" 2>/dev/null && exec 7<>"$PS_W/slots"; then
+    p=0; while [ "$p" -lt "$jobs" ]; do printf 't\n' >&7; p=$((p + 1)); done
+    trap 'ps_stop 130' INT; trap 'ps_stop 143' TERM; trap 'ps_stop 129' HUP
+    for n in $(cat "$PS_W/runlist.run"); do
+      read -r -u 7 p
+      { ps_run "$n"; printf 't\n' >&7; } &
+      PS_PIDS="$PS_PIDS $!"
+    done
+    wait $PS_PIDS
+    trap - INT TERM HUP
+    exec 7>&-
+  else
+    printf '   ..    pre-suite pool OFF: no fifo under %s -- the steps run one after another\n' "$PS_W"
+    for n in $(cat "$PS_W/runlist.run"); do ps_run "$n"; done
+  fi
+  n=0
+  while [ "$n" -lt "$PS_N" ]; do
+    n=$((n + 1))
+    title="$(cat "$PS_W/$n.title")"
+    printf '\n── %s\n' "$title"
+    if [ -f "$PS_W/$n.skipped" ]; then printf '   SKIPPED (AI_DLC_PRESUITE_SKIP=1)\n'; continue; fi
+    if [ -f "$PS_W/$n.keyskip" ]; then
+      printf '   skipped on a recorded pass: none of its declared inputs changed\n   PASS\n'; ps_nskip=$((ps_nskip + 1)); continue
+    fi
+    why="$(awk -F'\t' -v s="$(cat "$PS_W/$n.slug" 2>/dev/null)" '$1 == s && $2 == "run" { print $3; exit }' "$PS_W/k/.kdec" 2>/dev/null)"
+    [ -z "$why" ] || printf '   ..    runs: %s\n' "$why"
+    if [ ! -f "$PS_W/$n.rc" ]; then printf '   no verdict was recorded for this step\n   FAIL\n'; rc=1
+    else cat "$PS_W/$n.out"; rc="$(cat "$PS_W/$n.rc")"; if [ "$rc" = 0 ]; then printf '   PASS\n'; else printf '   FAIL\n'; fi; fi
+    [ "$rc" = 0 ] || { fail=1; RED_STEPS="$RED_STEPS
+     $title"; }
+    slug="$(cat "$PS_W/$n.slug" 2>/dev/null)"
+    # A PASS IS RECORDED ONLY ON THE TREE IT WAS KEYED ON: a step whose key rows moved after the mark passes this push and
+    # leaves no record, so the next push runs it.
+    if [ "$rc" = 0 ] && [ -n "$PS_KD" ] && [ -n "$slug" ] && [ -f "$PS_W/k/.k/$slug" ] && mv_p="$(ps_moved "$PS_W/k/.k/$slug" "$PS_W/k/.mark")"; then
+      printf '   ..    not recorded: %s changed while the pre-suite steps ran\n' "$mv_p"
+    elif [ "$rc" = 0 ]; then printf '%s\n' "$slug" >> "$PS_W/k/.passed"; fi
+    printf '   ..    step elapsed %ss\n' "$(cat "$PS_W/$n.sec" 2>/dev/null || echo 0)"
+  done
+  # A PASS IS PUBLISHED THROUGH THE FIXTURE MECHANISM'S OWN WRITER: a verdict file named for the step, then readset_keys_write.
+  if [ -n "$PS_KD" ] && [ -s "$PS_W/k/.passed" ]; then
+    while IFS= read -r slug; do printf ok > "$PS_W/k/$slug"; done < "$PS_W/k/.passed"
+    readset_keys_write "$PS_W/k" "$PS_KD"
+    while IFS= read -r slug; do ps_keep "$PS_W/k/.k/$slug" "$slug" "$PS_KD"; done < "$PS_W/k/.passed"
+  fi
+  printf '\n   ..    pre-suite keys: %s of %s step(s) skipped on a recorded pass\n' "$ps_nskip" "$PS_N"
+  case "$PS_W" in */presuite.*) rm -rf -- "$PS_W" ;; esac
+  PS_N=0; PS_W=""
+}
+step() {
+  if [ "${PRESUITE_DONE:-0}" = 0 ]; then ps_enqueue "$@"; return 0; fi
+  printf '\n── %s\n' "$1"
+  # RED_STEPS names every step that went red, for fixture_suite_step to print before the suite runs.
+  local st_f0="$fail" st_t="$1" st_s="$SECONDS"
+  fail=0
+  shift
+  if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+  [ "$fail" -eq 0 ] || RED_STEPS="$RED_STEPS
+     $st_t"
+  [ "$st_f0" -eq 0 ] || fail=1
+  printf '   ..    step elapsed %ss\n' "$((SECONDS - st_s))"
+  return 0
+}
+# PRESUITE_UNITS_END
 
 # 0. THE ONLY ARM HERE THAT JUDGES THE PUSH RATHER THAN THE TREE, and the header's "only
 #    TREE-LEVEL checks" line is written to admit it. The distinction that line was drawing is
@@ -77,8 +307,12 @@ step() {
 #    It bounds that commit; it does not police the trunk. See the schema's
 #    `$backfill_commit_comment` for what is deliberately left alone and why.
 trunk_push() { printf '%s' "$PUSH_REFS" | bash scripts/ai-dlc/validate-audit-anchors.sh --trunk-push; }
+# RUN WHERE IT IS WRITTEN, never queued: it runs before the delete-only exit below, and every queued step waits for the
+# flush that precedes the fixture suite.
 if [ -f scripts/ai-dlc/validate-audit-anchors.sh ]; then
+  PRESUITE_DONE=1
   step "trunk push (the Step 5b backfill commit is the only one this arm bounds)" trunk_push
+  PRESUITE_DONE=0
 fi
 
 # PUSH_DELETE_BEGIN
@@ -3718,6 +3952,12 @@ applying_guard() {
 MSG
   return 1
 }
+# EVERY TREE-LEVEL STEP ABOVE IS QUEUED, and runs here, concurrently, before anything below reads its result. The flush
+# sits after every function it calls (readset_*, rec_home) is defined, and before the applying guard and the fixture
+# suite, which run in this order whether or not tests/fixtures exists. A step queued after this point would never run.
+ps_flush
+PRESUITE_DONE=1
+FAIL_BEFORE_SUITE="$fail"
 # A push issued from a LINKED WORKTREE has git export GIT_DIR (pointed at that
 # worktree's private `.git/worktrees/<name>` dir) into this hook's process
 # environment; a push from the primary checkout does not. A `git` invocation
@@ -3745,6 +3985,11 @@ elif [ -d tests/fixtures ]; then
   step "fixture suite (${FIXTURE_JOBS}-way)" run_fixtures
 fi
 
+# A STEP STILL QUEUED HERE WAS NEVER RUN, and its absence from the output would read as a pass.
+if [ "${PS_N:-0}" -gt 0 ]; then
+  printf '\npre-push: BLOCKED. %s tree-level step(s) were queued and never run; the flush before the fixture suite did not execute them.\n\n' "$PS_N"
+  exit 1
+fi
 # A POOL WHOSE ONLY RED IS A REFUSAL EXITS 2, NOT 1 (BL-606). Written identically in both hooks, outside
 # the I66 block: POOL_REFUSED_ONLY is set inside it, FAIL_BEFORE_SUITE on the line before the suite step.
 # FIXTURE_EXIT_BEGIN
