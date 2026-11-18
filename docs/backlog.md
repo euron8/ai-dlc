@@ -3725,7 +3725,7 @@ verify: manual
 
 **DEFECT (efficiency).** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/route.md` (the intensity classification, lines 527–543), `core/skills/ai-dlc/SKILL.md` Rule 8 (the intensity table, lines 238–253), and the four planning step files (`carry-over-evaluation.md`, `requirements.md`, `architecture.md`, `stories-test-strategy.md`).
 
-**This is the single entry for the cost of the planning cycle, by operator ruling of 2026-11-18.** No other entry is filed for it. A new planning finding becomes a work item below. BL-1169, BL-1170 and BL-1171 are folded in as work items 3, 4 and 2. The entry is done when every work item is shipped or closed on its reading AND a complete graph sprint meets the target; it is never split, and an item is never moved to another entry.
+**This is the single entry for the cost of the planning cycle, by operator ruling of 2026-11-18.** No other entry is filed for it. A new planning finding becomes a work item below. BL-1169, BL-1170 and BL-1171 are folded in as work items 3, 4 and 2. There is no target number, by operator ruling of 2026-11-18: gains come from removing waste that an honest reading finds, not from a figure chosen in advance. The entry is done when every work item is shipped or closed on its reading AND a complete graph sprint has been measured against the baseline; it is never split, and an item is never moved to another entry.
 
 ### What is wrong
 
@@ -3835,15 +3835,15 @@ In the carried text below, "this entry" and "close this entry" mean the work ite
 
 ### What is counted here and owned elsewhere
 
-Counted in the target and owned elsewhere, because each spans every step and has shipped code and its own outcome line: the single-lane remediator (BL-716: 9.5 h alone in s323's planning, the largest serial role in every planning step), the lead's own call volume (BL-819: 4,623 lead calls and at least 9.3 h with no subagent running in s323's planning), and operator answer wait (BL-972: 12.6 h of s323's planning, excluded from the target below). If the target is missed with items 0 to 5 done, the next work item here names which of those three held it.
+Part of planning's hours and owned elsewhere, because each spans every step and has shipped code and its own outcome line: the single-lane remediator (BL-716: 9.5 h alone in s323's planning, the largest serial role in every planning step), the lead's own call volume (BL-819: 4,623 lead calls and at least 9.3 h with no subagent running in s323's planning), and operator answer wait (BL-972: 12.6 h of s323's planning, reported separately from machine time below). The outcome reading states how much of planning each of the three still holds.
 
 ### Done, and what to expect
 
 Baseline: s322 — 36.9 h (30.0 h less operator wait) and $889 of planning for 8 stories at `carry-over-single`; s323 (PROVISIONAL) 39.6 h (27.0 h) and $1,071 for 18 at `full`.
 
-Expected movement: on the first complete graph sprint that runs items 1 to 5 and in which NO story carries a new requirement or a new architecture decision, planning less operator wait at or below 15 h and at or below $600, against 27.0 to 36.8 h and $889 to $1,298 in s321 to s323. These are PROPOSED figures awaiting the operator. Item 1's ceiling on s323 is 12.5 h less operator wait and $447, which leaves 14.5 h and $624 from s323's 27.0 h and $1,071; reaching $600 therefore needs items 2 to 5 as well. For a MIXED sprint the saving is unread: the two steps' cost has not followed story count, so removing some stories from them may save little until item 0 shows what their cost scales with. Item 0 replaces the proposed figures with derived ones for both cases.
+Expected movement: no figure is set in advance. Each work item removes what its own reading measures, and the outcome reading on the first complete graph sprint that runs items 1 to 5 reports planning hours (with and without operator wait) and dollars against s321 to s323's 27.0 to 36.8 h less operator wait and $889 to $1,298, item by item. What is known now: item 1's ceiling on s323 is 12.5 h less operator wait and $447, reached only if no story needs the requirements or architecture step; for a mixed sprint the saving is unread, because those two steps' cost has not followed story count, and item 0 sizes it. Items 2 to 4 carry their own estimates above, each marked as an estimate. If the outcome reading finds waste the items did not remove, it is added here as a further work item with its measured size.
 
-Two checks, in this order. BUILD DONE: items 0 to 5 are each shipped or closed on a reading, which is checkable in the batch that builds them, with no graph sprint needed. OUTCOME MEASURED: the movement above, read on the first complete graph sprint that runs the build. The entry closes on the second; the first is reported when it is reached.
+Two checks, in this order. BUILD DONE: items 0 to 5 are each shipped or closed on a reading, which is checkable in the batch that builds them, with no graph sprint needed. OUTCOME MEASURED: planning read on the first complete graph sprint that runs the build, against the baseline, item by item. The entry closes on the second when no work item is open; the first is reported when it is reached.
 
 Progress is reported as items done of six, each with its measured hours and dollars. Nothing here is PARTIAL-and-parked: an item is open, shipped, or closed on its reading.
 
