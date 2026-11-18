@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1169.0] - 2026-11-18
+
+### BL-1175 (advances): planning readiness runs under `intent=readiness`; the planning-time trace run is removed
+
+- Item 3. `core/skills/ai-dlc/steps/stories-test-strategy.md` §3 and `core/skills/ai-dlc/steps/bug-investigation.md` §5 invoke `/bmad-sprint-planning intent=readiness` and do not create or modify `sprint-status.yaml`, in place of `intent=sprint-planning`; re-invoke-once and HARD_BLOCK are kept, and `carry-over-single` still skips the §3 invocation. §3 says the lead writes the sprint's `stories:` entries beside `planned_close`, and `gate-validation.md` Check 5's remedy names that site instead of `/bmad-sprint-planning`. The BMAD-format file that intent wrote had no reader. The installed skill's sprint-planning intent is the readiness gate plus tracking-file generation, so the swap keeps the catch (s321 p2 C-1 and C-2 MAJOR came from the readiness gate). Movement: 0 h and $0 (same gate run); the unread file is no longer written. The "§3 only when §1 returned CONCERNS" half was not built: s321's p2 re-run caught C-1 and C-2 on epics that did not exist at §1.
+- Item 4. `stories-test-strategy.md` test-design step 1 takes no `/bmad-testarch-trace` run. The `AC → test` leg is carried by the step-2 convergence review, the step-3 `## Strategy Test IDs` binding and Check 21 at sprint review. The carry-over-single paragraph, `gate-validation.md` Check 30's `--trace-verdict` paragraph and `SKILL.md` Rule 30 (digest re-rendered) follow. The planning trace read NOT_EVALUATED with `allow_gate=false` in every sprint read. No AC-to-case check and no sprint-review trace run are added. Cost removed: not attributable (no spawn-ledger row), no estimate.
+- `core/fixtures/process-rule-pins`: `sts-plan-intent` and `bug-plan-intent` move to the readiness spelling; `sts-plan-nostatus` and `bug-plan-nostatus` added.
+- Item 6 (passes per series) is contracted and ships in a following C5 release.
+- BL-1175 stays OPEN (PARTIAL): item 5 is open until s323 closes (outcome owned by BL-911), item 6 is contracted and ships in a following C5 release, and the outcome measurement on a complete graph sprint is owed. Items 1 and 2 closed on the reading by operator ruling, with nothing built.
+
+### BL-1169, BL-1170 and BL-1171 CLOSED: superseded by BL-1175
+
+- Each was folded into BL-1175 (work items 3, 4 and 2) and is carried there in full. BL-1169 and BL-1170 are discharged by the item 3 and item 4 changes above; BL-1171 closes on the reading with nothing built.
+
+### BL-1173 (advances, stays PARTIAL): the BMAD invocation probe runs at upgrade time
+
+- Part 2. `core/skills/ai-dlc-update/SKILL.md` step 7z runs `scripts/ai-dlc/validate-bmad-invocations.sh` after Apply and before step 8 Deliver. Exit 1 surfaces each FAIL line as a delivery finding naming the BMAD floor and the remedy `npx bmad-method install`; exit 2 surfaces as SKIP; it never blocks. `core/skills/ai-dlc/enforcement-map.yaml` check 32 gains the call site.
+- Part 1 closed on the reading with no edit: the consumer's installed bmm 6.12.4 adversarial lens (`lens-adversarial.md:5,8,19`) matches `_gate-procedures.md:693–698`. Owed: a blocking upgrade-time check; BL-1173 stays OPEN (PARTIAL).
+
 ## [0.1168.0] - 2026-11-18
 
 ### BL-1168 (advances): `validate-spawn-ledger.sh` no longer forks `jq` per in-sprint row

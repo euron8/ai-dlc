@@ -46606,3 +46606,21 @@ Provenance: batch 258, cluster C4 (BL-878), reported by the h1, h3 and h4 hands;
 verify: manual
 
 
+## BL-1169 — the BMAD readiness check is invoked three times a sprint, once before epics exist, and the sprint-planning intent writes a file no program reads
+
+**LANDED (v0.1169.0).** **CLOSED — superseded by BL-1175.** (batch 259, C5.) Folded into BL-1175 as work item 3 (batch 259, cluster C4b, 2026-11-18; operator ruling: one backlog entry for the planning cycle). This entry is superseded by BL-1175, where its item is carried in full (BL-1175's "Carried text for work item 3") and where its outcome is recorded: the readiness swap shipped in batch 259, C5 (BL-1175, Progress, item 3).
+
+verify: manual
+
+## BL-1170 — the planning-time trace run feeds a gate leg the step text itself calls disarmed by construction
+
+**LANDED (v0.1169.0).** **CLOSED — superseded by BL-1175.** (batch 259, C5.) Folded into BL-1175 as work item 4 (batch 259, cluster C4b, 2026-11-18; operator ruling: one backlog entry for the planning cycle). This entry is superseded by BL-1175, where its item is carried in full (BL-1175's "Carried text for work item 4") and where its outcome is recorded: the planning-time trace run was removed in batch 259, C5 (BL-1175, Progress, item 4).
+
+verify: manual
+
+## BL-1171 — every story takes the full party, elicitation and adversarial cycle whatever its risk, and a small sprint pays the whole planning charge
+
+**LANDED (v0.1169.0).** **CLOSED — superseded by BL-1175.** (batch 259, C5.) Folded into BL-1175 as work item 2 (batch 259, cluster C4b, 2026-11-18; operator ruling: one backlog entry for the planning cycle). This entry is superseded by BL-1175, where its item is carried in full (BL-1175's "Carried text for work item 2") and where its outcome is recorded: item 2 closed on the reading, by operator ruling, with nothing built (BL-1175, Progress, items 1 and 2).
+
+verify: manual
+

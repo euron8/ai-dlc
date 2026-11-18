@@ -17,7 +17,7 @@ and test strategy with full validation cycle.
 
 Invoke `/bmad-sprint-planning intent=readiness` and do not create or modify sprint-status.yaml.
 It validates that PRD + architecture have everything needed for stories. State both at the call:
-the skill's full flow generates the tracking file after a PASS, and §3 below owns that write. Dispatch the `pm` (PRD gaps) and the
+the skill's full flow generates the tracking file after a PASS, and only the `readiness` intent stops at the verdict. Dispatch the `pm` (PRD gaps) and the
 `architect` (architecture gaps), role-bound per Rule 19, to fix them directly
 in the source artifacts. The lead owns the routing, not the edit.
 
@@ -539,13 +539,16 @@ and place all carry-over stories in a single sprint. Carry-over items are
 already scoped and ≤2 stories are trivially plannable; the sprint-planning
 sub-skill adds overhead without value. Proceed to Story Validation Cycle.
 
-Invoke `/bmad-sprint-planning intent=sprint-planning` — select stories for the sprint. The
-`sprint-planning` intent runs the readiness gate again and generates sprint-status.yaml only on
-PASS. A CONCERNS or FAIL verdict is a finding, never an operator question: route each finding to
+Invoke `/bmad-sprint-planning intent=readiness` and do not create or modify sprint-status.yaml.
+It is the post-epics readiness gate: it validates the PRD and architecture against the epics and
+stories authored above. State both at the call: the skill's full flow generates the tracking file
+after a PASS, and only the `readiness` intent stops at the verdict. A CONCERNS or FAIL verdict is a finding, never an operator question: route each finding to
 the `pm` or the `architect` as §1 does, then re-invoke ONCE after they land; a second CONCERNS or FAIL verdict is a HARD_BLOCK the lead routes.
 
-The lead writes `planned_close: <ISO-8601 UTC>` into the canonical
-sprint-status yaml's sprint block.
+The lead, not the skill, writes the sprint into the canonical sprint-status yaml:
+`planned_close: <ISO-8601 UTC>` in its sprint block, and one entry per story under its
+`stories:` mapping, the story id as the key, carrying `status:` plus `file:` wherever the path
+is not derivable from the key.
 
 **Multi-sprint phasing check (Rule 14):** If the total story count exceeds
 what can be delivered in a single sprint (typically 3-5 stories), or if
@@ -669,35 +672,21 @@ made about this pipeline's consolidation byproducts.
 (in step 1 below) and derive the test strategy directly from the story
 acceptance criteria. Test strategy for ≤2 already-scoped stories is
 covered by the story validation cycle; the TEA sub-skill adds overhead
-without value. Still run step 1's `/bmad-testarch-trace` and the step-2
-adversarial review on the derived strategy.
+without value. Still run the step-2 adversarial review on the derived
+strategy.
 
 **Execute back-to-back without pausing:**
 
 1. `/bmad-testarch-test-design` then select test strategy — risk-based test
-   strategy for the sprint. Then `/bmad-testarch-trace` — generate the
-   requirements-to-tests traceability matrix and its quality gate decision
-   (PASS / CONCERNS / FAIL / WAIVED).
-   This closes the last leg of the chain, `AC → test`, against the same
-   `CAP-<n>` IDs the spec and the PRD carry.
+   strategy for the sprint.
 
-   **This run does NOT produce a gate decision, and no `--trace-verdict` is passed
-   at this step.** The trace runs here at PLANNING phase, before any story is
-   implemented, so collected coverage is 0 by construction — zero tests exist yet
-   and every AC is `PLANNED`. The tool answers that by setting `allow_gate=false`
-   for the run, recording `decision: NOT_EVALUATED`, and writing no
-   `gate-decision.json`. Its own summary states the absence is correct. A zero
-   here is not a coverage defect and MUST NOT be read as one.
-
-   What the run DOES produce is the traceability matrix and
-   `e2e-trace-summary.json`, which it writes unconditionally. Read the summary's
-   `gate` object for the recorded rationale rather than inferring one from the
-   missing file.
-
-   **Check 30's `--trace-verdict` leg is therefore DISARMED by construction at
-   this gate, not dormant.** It could only carry a real verdict from a trace run
-   taken AFTER implementation, when tests exist; the pipeline takes no such run
-   today. Do not synthesise `gate-decision.json` to arm it.
+   **The last leg of the chain, `AC → test`, is carried by the strategy and by
+   Check 21, not by a requirements-to-tests trace.** No story is implemented at
+   planning and no test exists, so this step takes no trace. At planning the leg
+   is closed in the strategy itself: step 2's convergence review holds every
+   acceptance criterion to a case, and step 3 binds every case to a row of the
+   owning story's `## Strategy Test IDs` table. At the sprint-review gate,
+   `gate-validation.md` Check 21 resolves each of those rows to a test on disk.
 2. **Converge the test strategy.** Review and repair `test-strategy.md` until the
    series exits on the standard ladder in `team-roles/adversary.md` — 0 CRITICAL
    and at most three derived MAJOR — with every pass writing its verdict envelope.

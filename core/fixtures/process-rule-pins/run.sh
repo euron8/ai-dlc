@@ -154,10 +154,10 @@
 #     against the redeployed instance and records that run as the `playwright` evidence (the ff-specs
 #     rows, para pins: the §4 list is ONE paragraph whose lead is its first line).
 #   - the BMAD 6.11 call-site spellings that Check 32 cannot score, because it reads skill NAMES
-#     only: each readiness site (architecture.md §3, stories-test-strategy.md §1) states
-#     `intent=readiness` AND "do not create or modify sprint-status.yaml" (the *-ready-* rows, two
-#     line-mode `contains` pins on the one line, neither lead a prefix of the other); each
-#     sprint-planning site states `intent=sprint-planning` (sts-plan-intent, bug-plan-intent); each one-shot dispatch site names the adversarial
+#     only: each readiness site (architecture.md §3, stories-test-strategy.md §1 and §3,
+#     bug-investigation.md §5) states `intent=readiness` AND "do not create or modify
+#     sprint-status.yaml" (the *-ready-* and *-plan-* rows, two line-mode `contains` pins on the
+#     one line, neither lead a prefix of the other); each one-shot dispatch site names the adversarial
 #     lens (bug-2c-lens, bug-4-lens-*, srev-lens, arch-role-fold-lens); and each deep-recon call
 #     states its type (rr-recon-*, req-recon-*). The two §4 one-shot rows are led by text unique
 #     to their own line, so one site losing its lens cannot be covered by the other. Keep each
@@ -767,7 +767,8 @@ arch-ready-intent|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|Invoke 
 arch-ready-nostatus|S|steps/architecture.md|### 3. Solutioning Gate|### 4.|and do not create or modify sprint-status.yaml.|contains
 sts-ready-intent|S|steps/stories-test-strategy.md|### 1. Implementation Readiness|### Story Routing Tags|Invoke `/bmad-sprint-planning intent=readiness`|contains
 sts-ready-nostatus|S|steps/stories-test-strategy.md|### 1. Implementation Readiness|### Story Routing Tags|and do not create or modify sprint-status.yaml.|contains
-sts-plan-intent|S|steps/stories-test-strategy.md|### 3. Sprint Planning|### 3a.|Invoke `/bmad-sprint-planning intent=sprint-planning`|contains
+sts-plan-intent|S|steps/stories-test-strategy.md|### 3. Sprint Planning|### 3a.|Invoke `/bmad-sprint-planning intent=readiness`|contains
+sts-plan-nostatus|S|steps/stories-test-strategy.md|### 3. Sprint Planning|### 3a.|and do not create or modify sprint-status.yaml.|contains
 sts-lac-dbl-names|S|steps/stories-test-strategy.md|### Layered AC Verification Accounting|**Intensity gate|**A test double is named with what it changes.**|para|names the double and every request field it rewrites, drops or defaults relative to the request the code sends.
 sts-lac-dbl-liveops|S|steps/stories-test-strategy.md|### Layered AC Verification Accounting|**Intensity gate|**A test double is named with what it changes.**|para|the story carries one `live_ops` AC that observes, read-only, the real system's handling of exactly those fields; the AC's own layer does not change.
 sts-lac-dbl-deferred|S|steps/stories-test-strategy.md|### Layered AC Verification Accounting|**Intensity gate|**A test double is named with what it changes.**|para|is listed in the story's `deferred_acs` at gate 3 with a `deploy-pending` predicate unless gate 3 recorded the real system's response to it, so `deploy-validate.md` §4b owes its discharge.
@@ -780,7 +781,8 @@ sts-lac-net-order|S|steps/stories-test-strategy.md|### Layered AC Verification A
 sts-lac-mm-caught|S|steps/stories-test-strategy.md|### Layered AC Verification Accounting|**Intensity gate|**Minimum mechanism (Rule 26(c)).**|para|Failure caught: an AC passed against a test double that dropped a request field the real external system rejects
 sts-lac-mm-fp|S|steps/stories-test-strategy.md|### Layered AC Verification Accounting|**Intensity gate|**Minimum mechanism (Rule 26(c)).**|para|False-positive cost: one `live_ops` AC per named double and one per request kind
 sts-lac-mm-removal|S|steps/stories-test-strategy.md|### Layered AC Verification Accounting|**Intensity gate|**Minimum mechanism (Rule 26(c)).**|para|Removal condition: retire once the gate-3 adjudicator diffs every double's request
-bug-plan-intent|S|steps/bug-investigation.md|### 5. Sprint Setup|### 6.|Run `/bmad-sprint-planning intent=sprint-planning`|contains
+bug-plan-intent|S|steps/bug-investigation.md|### 5. Sprint Setup|### 6.|Run `/bmad-sprint-planning intent=readiness`|contains
+bug-plan-nostatus|S|steps/bug-investigation.md|### 5. Sprint Setup|### 6.|and do not create or modify sprint-status.yaml.|contains
 bug-2c-lens|S|steps/bug-investigation.md|### 2c.|### 3.|Rule 19) to run `/bmad-review lenses=adversarial` on|prefix
 bug-4-lens-adv|S|steps/bug-investigation.md|### 4. Validation|### 5. Sprint Setup|per SKILL.md Rule 19) to run `/bmad-review lenses=adversarial` on the fix story|prefix
 bug-4-lens-arch|S|steps/bug-investigation.md|### 4. Validation|### 5. Sprint Setup|1. Runs `/bmad-review lenses=adversarial` on the fix story, scoped to|prefix

@@ -988,9 +988,8 @@ Claude Code delivers a queued operator message only at a tool-call boundary, so 
 
 Specification artifacts MUST be produced by the BMAD workflows that own them and
 MUST NOT be reimplemented in this rulebook: the spec kernel by `bmad-spec`, the
-design spine by `bmad-architecture`, epics and the FR coverage map by
-`bmad-create-epics-and-stories`, the traceability matrix by
-`bmad-testarch-trace`. BMAD is a prerequisite; a second implementation of a
+design spine by `bmad-architecture`, and epics and the FR coverage map by
+`bmad-create-epics-and-stories`. BMAD is a prerequisite; a second implementation of a
 workflow it ships is a parallel path beside a proven one and violates Rule 26(b).
 
 **A BMAD finding is not a BMAD verdict.** `lint_spine.py` exits 0

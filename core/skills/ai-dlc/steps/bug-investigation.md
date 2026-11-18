@@ -248,9 +248,10 @@ the cross-check.
 
 ### 5. Sprint Setup
 
-Run `/bmad-sprint-planning intent=sprint-planning` to set up a single-story sprint. The
-`sprint-planning` intent runs the readiness gate first and generates sprint-status.yaml only on
-PASS. A CONCERNS or FAIL verdict is a finding, never an operator question: route each finding to
+Run `/bmad-sprint-planning intent=readiness` and do not create or modify sprint-status.yaml.
+It is the readiness gate for the single-story sprint. State both at the call: the skill's full
+flow generates the tracking file after a PASS, and only the `readiness` intent stops at the
+verdict. A CONCERNS or FAIL verdict is a finding, never an operator question: route each finding to
 the `pm` or the `architect`, role-bound per Rule 19, then re-invoke ONCE after they land; a second CONCERNS or FAIL verdict is a HARD_BLOCK the lead routes.
 
 ### 6. Gate Validation and Proceed
