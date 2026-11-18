@@ -4,6 +4,12 @@ Measured 2026-10-14 against the graph consumer's own Claude Code transcripts. Pu
 where the AI/DLC pipeline spends wall clock and tokens, step by step, with each step's stated
 reason for existing, so optimisation targets can be chosen from data.
 
+> **Correction, 2026-11-18 (batch 259, C4b).** This report's hours come from its own copy of the extractor
+> (`pipeline-efficiency-s317-s318/scripts/extract.py`), whose segment clock charges an out-of-order record's
+> interval twice. The later extractor, run on a monotone clock, reads s317 at 72.8 h against 80.8 h and s318 at
+> 59.6 h against 74.8 h. This report's own figures were not re-run; the run was available. Tokens and dollars
+> are not affected. Owed under BL-1174.
+
 **Follow-up.** [`pipeline-efficiency-s317-s322.md`](pipeline-efficiency-s317-s322.md) measures
 sprints 319–322, reports which of the ranked defects' fixes had their intended effect, and corrects
 two readings in this file: 25–41% of the "Lead active" column is idle waiting on subagents, and

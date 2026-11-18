@@ -4,8 +4,30 @@ Measured 2026-11-18. This updates [`pipeline-efficiency-s317-s322.md`](pipeline-
 which read s322 while it was partial (3 of 8 stories done). Scripts and raw output are in
 [`pipeline-efficiency-s317-s322-b259/`](pipeline-efficiency-s317-s322-b259/). Nothing was written to graph.
 
+> **Correction, 2026-11-18 (batch 259, C4b).** Every hours figure in this report is overstated. The extractor's
+> segment clock charged an out-of-order record's interval twice. Sprint totals on a monotone clock are in the
+> table below; per-step hours move too. Tokens, dollars and call counts are unchanged, and the sprint ordering
+> does not change. Derivation: `extract.py` with `EXTRACT_MONOTONE_SEGS=1` at pin `2026-11-18T17:54:00Z`; the
+> default-clock s317–s322 totals at that pin are identical to those at this report's pin, so the pin moves no
+> figure here. The figures in this report are not regenerated; that is owed under BL-1174 at the
+> s323-close re-take. Detail: [`pipeline-efficiency-s323-provisional-b259.md`](pipeline-efficiency-s323-provisional-b259.md).
+>
+> | Sprint | Published | Monotone clock |
+> |---|--:|--:|
+> | s318 | 74.8 h | 59.6 h |
+> | s319 | 110.0 h | 94.0 h |
+> | s320 | 117.8 h | 99.2 h |
+> | s321 | 120.5 h | 111.0 h |
+> | s322 | 77.1 h | 66.4 h |
+>
+> Hours per story on the monotone clock: s318 4.6, s319 4.7, s320 7.6, s321 4.4, s322 8.3 (published 5.8, 5.5,
+> 9.1, 4.8, 9.6).
+
 **Sprints updated with: s322 only, now complete.** s323 is in progress and, by standing operator ruling, no
 s323 reading is taken until it completes. There is no newer complete sprint.
+
+The operator has since asked for a provisional reading of s323's completed steps:
+[`pipeline-efficiency-s323-provisional-b259.md`](pipeline-efficiency-s323-provisional-b259.md).
 
 ## Answer
 
@@ -314,7 +336,8 @@ python3 -I $D/operator_asks_pinned.py; python3 -I $D/advisor_server_tool_use.py
 python3 -I $C/outcome_row.py $OUT 322 321 319
 ```
 
-For s323, once it has closed: add its edge to `EDGES` in `extract.py` and its story count to `STORIES` in
-`roll.py`, move the pin past its last lead record, and run the block. `roll.py`, `decompose.py`, `seats.py` and
+For s323, once it has closed: `EDGES` in `extract.py` already ends s322 at 2026-11-13T08:00Z and `FALLBACK` in
+`roll.py` already prices s323's local lead; add its story count to `STORIES` in `roll.py`, move the pin past
+its last lead record, set `EXTRACT_MONOTONE_SEGS=1` (BL-1174), and run the block. `roll.py`, `decompose.py`, `seats.py` and
 `impl_passes.py` read only `$OUT`; the scripts under `$D` and the listed `$C` readers drop records past the
 pin themselves.

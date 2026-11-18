@@ -1,0 +1,1135 @@
+root /Users/n8/.claude/projects/-Users-n8-git-graph; transcripts 7121; window 2026-10-05T14:00:00Z .. 2026-11-18T17:54:00Z
+s317 lead: Bash wall 5.3 h
+   git push                                       88 calls   0.71 h      29 s/call
+   sleep                                          88 calls   0.60 h      25 s/call
+   until                                          99 calls   0.46 h      17 s/call
+   cd                                            910 calls   0.25 h       1 s/call
+   validate-artifact-derivations.sh               60 calls   0.22 h      13 s/call
+   emit-report.sh                                 30 calls   0.20 h      24 s/call
+   validate-spawn-ledger.sh                       41 calls   0.19 h      17 s/call
+   verdict.sh                                    124 calls   0.13 h       4 s/call
+   hard-blockers.sh                               15 calls   0.12 h      28 s/call
+   wait-for-deliverable.sh                       489 calls   0.10 h       1 s/call
+   gate-checkpoint.sh                            147 calls   0.08 h       2 s/call
+   run.sh                                         49 calls   0.08 h       6 s/call
+   sprint-status.sh                               55 calls   0.07 h       5 s/call
+   while                                          37 calls   0.07 h       7 s/call
+   python -m pytest                               22 calls   0.07 h      11 s/call
+   git status                                    256 calls   0.07 h       1 s/call
+   validate-escalation-resolution.sh              25 calls   0.06 h       9 s/call
+   validate-stub-audit.sh                         23 calls   0.06 h      10 s/call
+   git commit                                    260 calls   0.06 h       1 s/call
+   validate-provenance-block.sh                   20 calls   0.06 h      11 s/call
+   export                                          9 calls   0.06 h      22 s/call
+   apply.sh                                       24 calls   0.06 h       8 s/call
+   check-orphaned-fn.sh                            2 calls   0.05 h      95 s/call
+   tail                                          136 calls   0.05 h       1 s/call
+   gh                                             36 calls   0.05 h       5 s/call
+   git diff                                      147 calls   0.05 h       1 s/call
+   layer-drift.sh                                  7 calls   0.05 h      25 s/call
+   RPC=$(aws                                      15 calls   0.05 h      11 s/call
+   n.sh                                            3 calls   0.05 h      54 s/call
+   grep                                          400 calls   0.04 h       0 s/call
+   python3                                        85 calls   0.04 h       2 s/call
+   hermetic-run.sh                                13 calls   0.04 h      12 s/call
+   git log                                       179 calls   0.04 h       1 s/call
+   git worktree                                   56 calls   0.04 h       2 s/call
+   git fetch                                      52 calls   0.04 h       3 s/call
+   validate-locked-anchor.sh                      11 calls   0.04 h      12 s/call
+   push-drain.sh                                   8 calls   0.03 h      16 s/call
+   migrate-artifact-paths.sh                       1 calls   0.03 h     120 s/call
+   self-update-gate.sh                            34 calls   0.03 h       3 s/call
+   validate-gate-adjudication.sh                  87 calls   0.03 h       1 s/call
+   preclassify.sh                                 24 calls   0.03 h       4 s/call
+   settings-merge.sh                              14 calls   0.03 h       7 s/call
+   validate-ac-falsifiability.sh                  12 calls   0.03 h       8 s/call
+   audit-layer-debt.sh                            13 calls   0.02 h       7 s/call
+   date                                           58 calls   0.02 h       1 s/call
+   validate-escalation-status-vocabulary.sh        8 calls   0.02 h      10 s/call
+   validate-artifact-budget.sh                    74 calls   0.02 h       1 s/call
+   ai-dlc-context-sensor.sh                        2 calls   0.02 h      39 s/call
+   ledger-reverify.sh                             13 calls   0.02 h       6 s/call
+   wc                                             25 calls   0.02 h       3 s/call
+   validate-audit-anchors.sh                       4 calls   0.02 h      17 s/call
+   ls                                            121 calls   0.02 h       0 s/call
+   decide.sh                                       1 calls   0.02 h      56 s/call
+   for                                            59 calls   0.02 h       1 s/call
+   validate-steering-budget.sh                    11 calls   0.02 h       5 s/call
+   pytest                                         35 calls   0.02 h       2 s/call
+   validate-h2-attestation.sh                     15 calls   0.01 h       4 s/call
+   scratchpad;                                    83 calls   0.01 h       1 s/call
+   ai-dlc;                                        16 calls   0.01 h       3 s/call
+   sed                                           121 calls   0.01 h       0 s/call
+   adopt-extension-checks.sh                       2 calls   0.01 h      24 s/call
+   ps                                             21 calls   0.01 h       2 s/call
+   cat                                           145 calls   0.01 h       0 s/call
+   merge-review-shards.sh                         37 calls   0.01 h       1 s/call
+   retired-tokens.sh                               5 calls   0.01 h       8 s/call
+   echo                                           63 calls   0.01 h       1 s/call
+   aws                                            38 calls   0.01 h       1 s/call
+   git                                            94 calls   0.01 h       0 s/call
+   derivation-differential.sh                     13 calls   0.01 h       3 s/call
+   ledger-rotate.sh                               11 calls   0.01 h       3 s/call
+   rm                                             29 calls   0.01 h       1 s/call
+   gate-side-exclude.sh                           18 calls   0.01 h       2 s/call
+   stories-elicitation-repair-p1.md;               1 calls   0.01 h      28 s/call
+   validate-gate-manifest.sh                       9 calls   0.01 h       3 s/call
+   PW=$(aws                                        6 calls   0.01 h       4 s/call
+   jq                                              5 calls   0.01 h       5 s/call
+   merge-adversarial-shards.sh                    33 calls   0.01 h       1 s/call
+   validate-snapshot-conservation.sh               3 calls   0.01 h       7 s/call
+   DSN=$(aws                                      15 calls   0.01 h       1 s/call
+   git merge                                      27 calls   0.01 h       1 s/call
+s317 sub: Bash wall 22.3 h
+   until                                          92 calls   5.40 h     211 s/call
+   sleep                                          76 calls   3.01 h     143 s/call
+   python3 -m pytest                             534 calls   2.68 h      18 s/call
+   grep                                         8016 calls   2.61 h       1 s/call
+   validate-mutation-red.sh                      716 calls   1.36 h       7 s/call
+   pytest                                        399 calls   1.17 h      11 s/call
+   git                                          3059 calls   0.64 h       1 s/call
+   date                                          152 calls   0.56 h      13 s/call
+   validate-spawn-ledger.sh                       56 calls   0.51 h      33 s/call
+   cd                                           2896 calls   0.50 h       1 s/call
+   git diff                                      720 calls   0.44 h       2 s/call
+   sed                                          2608 calls   0.42 h       1 s/call
+   git status                                    238 calls   0.25 h       4 s/call
+   validate-artifact-derivations.sh              536 calls   0.25 h       2 s/call
+   shasum                                        287 calls   0.22 h       3 s/call
+   python -m pytest                              120 calls   0.19 h       6 s/call
+   sprint-status.sh                               91 calls   0.18 h       7 s/call
+   test-aws-smoke.sh                             121 calls   0.16 h       5 s/call
+   python3                                       230 calls   0.15 h       2 s/call
+   wait-for-deliverable.sh                        32 calls   0.15 h      16 s/call
+   while                                          37 calls   0.14 h      14 s/call
+   validate-escalation-resolution.sh              39 calls   0.13 h      12 s/call
+   ls                                            425 calls   0.12 h       1 s/call
+   validate-stub-audit.sh                         35 calls   0.11 h      11 s/call
+   awk                                           428 calls   0.09 h       1 s/call
+   git worktree                                   50 calls   0.08 h       6 s/call
+   validate-ac-falsifiability.sh                 132 calls   0.08 h       2 s/call
+   tail                                          236 calls   0.07 h       1 s/call
+   vitest                                          6 calls   0.05 h      30 s/call
+   git commit                                    112 calls   0.04 h       1 s/call
+   git log                                       222 calls   0.04 h       1 s/call
+   validate-locked-anchor.sh                     101 calls   0.04 h       2 s/call
+   arms.sh                                         3 calls   0.04 h      48 s/call
+   cp                                             14 calls   0.03 h       7 s/call
+   python                                         21 calls   0.03 h       5 s/call
+   node                                           13 calls   0.03 h       7 s/call
+   treecopy                                        1 calls   0.02 h      77 s/call
+   validate-layer-entries.sh                       2 calls   0.02 h      37 s/call
+   f=$(ls                                          1 calls   0.02 h      69 s/call
+   verdict.sh                                     33 calls   0.02 h       2 s/call
+   s317-composed.diff;                            98 calls   0.02 h       1 s/call
+   validate-gate-adjudication.sh                 190 calls   0.02 h       0 s/call
+   run-floor-verify.sh                            77 calls   0.01 h       1 s/call
+   run_fix_arms.sh                                 2 calls   0.01 h      24 s/call
+   cat                                           117 calls   0.01 h       0 s/call
+   npm                                             1 calls   0.01 h      47 s/call
+   ci-local.sh                                   207 calls   0.01 h       0 s/call
+   core-paths.sh                                  45 calls   0.01 h       1 s/call
+   env                                             6 calls   0.01 h       6 s/call
+   for                                            49 calls   0.01 h       1 s/call
+   scratchpad;                                    19 calls   0.01 h       2 s/call
+   test-s317-4-1-check-928-not-evaluated.sh       85 calls   0.01 h       0 s/call
+   jq                                             24 calls   0.01 h       1 s/call
+   merge-adversarial-shards.sh                    30 calls   0.01 h       1 s/call
+   hashlib.sh                                     20 calls   0.01 h       1 s/call
+   validate-provenance-block.sh                   16 calls   0.01 h       1 s/call
+   run-exec-health.sh                             40 calls   0.01 h       1 s/call
+   run.sh                                          1 calls   0.01 h      19 s/call
+   echo                                          111 calls   0.01 h       0 s/call
+   test-audit-rule-files.sh                        6 calls   0.00 h       3 s/call
+   ecs-deploy.sh                                  38 calls   0.00 h       0 s/call
+   head                                           55 calls   0.00 h       0 s/call
+   wc                                             40 calls   0.00 h       0 s/call
+   ln                                              4 calls   0.00 h       4 s/call
+   mkdir                                          28 calls   0.00 h       0 s/call
+   git merge                                      28 calls   0.00 h       0 s/call
+   test-s289-3-ci-gates.sh                         3 calls   0.00 h       4 s/call
+   printf                                         45 calls   0.00 h       0 s/call
+   python -m py_compile                            4 calls   0.00 h       3 s/call
+   find                                           33 calls   0.00 h       0 s/call
+   merge-review-shards.sh                         69 calls   0.00 h       0 s/call
+   rm                                             14 calls   0.00 h       1 s/call
+   npx vitest                                      3 calls   0.00 h       3 s/call
+   sha1sum                                         3 calls   0.00 h       3 s/call
+   validate-artifact-budget.sh                     3 calls   0.00 h       3 s/call
+   timeout                                         1 calls   0.00 h       8 s/call
+   story-4-3b-fixture-precondition-predicate.      1 calls   0.00 h       8 s/call
+   docker                                          3 calls   0.00 h       2 s/call
+   story-2-2-failed-subscribe-marker-survives      2 calls   0.00 h       3 s/call
+   partition-document.sh                          53 calls   0.00 h       0 s/call
+s318 lead: Bash wall 5.4 h
+   git commit                                    162 calls   1.77 h      39 s/call
+   git push                                       20 calls   0.48 h      87 s/call
+   git                                            27 calls   0.37 h      50 s/call
+   verdict.sh                                    111 calls   0.37 h      12 s/call
+   cd                                            774 calls   0.25 h       1 s/call
+   ls                                             72 calls   0.17 h       9 s/call
+   sleep                                         139 calls   0.16 h       4 s/call
+   validate-artifact-derivations.sh              101 calls   0.12 h       4 s/call
+   wait-for-deliverable.sh                       582 calls   0.10 h       1 s/call
+   sweep-tea.sh                                   37 calls   0.09 h       9 s/call
+   grep                                          176 calls   0.09 h       2 s/call
+   tail                                           81 calls   0.07 h       3 s/call
+   until                                          18 calls   0.07 h      13 s/call
+   validate-spawn-ledger.sh                       12 calls   0.07 h      20 s/call
+   apply.sh                                       14 calls   0.06 h      16 s/call
+   emit-report.sh                                 20 calls   0.06 h      11 s/call
+   git status                                    111 calls   0.06 h       2 s/call
+   validate-ac-falsifiability.sh                  23 calls   0.06 h       9 s/call
+   migrate-artifact-paths.sh                       3 calls   0.05 h      60 s/call
+   report-propagation-fanout.sh                    2 calls   0.04 h      73 s/call
+   git fetch                                      30 calls   0.04 h       5 s/call
+   setup-site-drift.sh                             4 calls   0.04 h      36 s/call
+   validate-locked-anchor.sh                      11 calls   0.04 h      12 s/call
+   check-orphaned-fn.sh                            3 calls   0.04 h      44 s/call
+   gh                                             23 calls   0.04 h       6 s/call
+   layer-drift.sh                                  5 calls   0.04 h      25 s/call
+   git pull                                        2 calls   0.03 h      61 s/call
+   validate-provenance-block.sh                   63 calls   0.03 h       2 s/call
+   retro-replay-harness.sh                         8 calls   0.03 h      14 s/call
+   hard-blockers.sh                                7 calls   0.03 h      15 s/call
+   validate-artifact-budget.sh                    27 calls   0.03 h       4 s/call
+   git log                                       145 calls   0.03 h       1 s/call
+   validate-escalation-resolution.sh              12 calls   0.03 h       8 s/call
+   while                                          19 calls   0.02 h       4 s/call
+   validate-cycle-commits.sh                       2 calls   0.02 h      36 s/call
+   git diff                                       78 calls   0.02 h       1 s/call
+   for                                            41 calls   0.02 h       2 s/call
+   validate-stub-audit.sh                          8 calls   0.02 h       8 s/call
+   cat                                           114 calls   0.02 h       1 s/call
+   self-update-gate.sh                            14 calls   0.02 h       4 s/call
+   push-drain.sh                                   3 calls   0.02 h      18 s/call
+   join-remediator-shards.sh                      55 calls   0.01 h       1 s/call
+   validate-snapshot-conservation.sh               3 calls   0.01 h      16 s/call
+   preclassify.sh                                  9 calls   0.01 h       5 s/call
+   ledger-reverify.sh                              9 calls   0.01 h       5 s/call
+   echo                                          103 calls   0.01 h       0 s/call
+   merge-adversarial-shards.sh                    65 calls   0.01 h       1 s/call
+   ai-dlc;                                         6 calls   0.01 h       6 s/call
+   rotate-snapshot-archive.sh                      8 calls   0.01 h       5 s/call
+   audit-layer-debt.sh                             7 calls   0.01 h       5 s/call
+   ai-dlc-derivation-capture.sh                    1 calls   0.01 h      35 s/call
+   gate-checkpoint.sh                             53 calls   0.01 h       1 s/call
+   validate-scope-confirmation.sh                  2 calls   0.01 h      17 s/call
+   validate-adversarial-convergence.sh            31 calls   0.01 h       1 s/call
+   validate-audit-anchors.sh                       4 calls   0.01 h       8 s/call
+   git worktree                                   15 calls   0.01 h       2 s/call
+   merge-review-shards.sh                         24 calls   0.01 h       1 s/call
+   validate-steering-budget.sh                    16 calls   0.01 h       1 s/call
+   partition-review-diff.sh                       28 calls   0.01 h       1 s/call
+   jq                                              1 calls   0.01 h      21 s/call
+   sed                                            66 calls   0.01 h       0 s/call
+   rm                                             17 calls   0.00 h       1 s/call
+   python3                                        52 calls   0.00 h       0 s/call
+   s.sh                                            1 calls   0.00 h      16 s/call
+   validate-gate-adjudication.sh                  36 calls   0.00 h       0 s/call
+   head                                           15 calls   0.00 h       1 s/call
+   partition-subject.sh                           10 calls   0.00 h       1 s/call
+   git merge                                      14 calls   0.00 h       1 s/call
+   run.sh                                         15 calls   0.00 h       1 s/call
+   gate-slice.sh                                  14 calls   0.00 h       1 s/call
+   partition-document.sh                          48 calls   0.00 h       0 s/call
+   python3 -m pytest                               3 calls   0.00 h       4 s/call
+   pytest                                         15 calls   0.00 h       1 s/call
+   validate-spec-join.sh                           6 calls   0.00 h       2 s/call
+   stamp-story-provenance.sh                      11 calls   0.00 h       1 s/call
+   cp                                              2 calls   0.00 h       5 s/call
+   scratchpad;                                    35 calls   0.00 h       0 s/call
+   validate-request-coverage.sh                    2 calls   0.00 h       4 s/call
+   sprint-status.sh                               31 calls   0.00 h       0 s/call
+   stories-party-repair-p1.md                      1 calls   0.00 h       8 s/call
+s318 sub: Bash wall 12.9 h
+   sleep                                          51 calls   3.88 h     274 s/call
+   python -m pytest                              236 calls   1.02 h      16 s/call
+   until                                          45 calls   1.02 h      81 s/call
+   python3 -m pytest                             181 calls   1.02 h      20 s/call
+   grep                                        17272 calls   0.94 h       0 s/call
+   git status                                    160 calls   0.80 h      18 s/call
+   cd                                           2456 calls   0.67 h       1 s/call
+   validate-mutation-red.sh                      428 calls   0.52 h       4 s/call
+   validate-artifact-derivations.sh              958 calls   0.33 h       1 s/call
+   git                                          2602 calls   0.32 h       0 s/call
+   git diff                                      802 calls   0.26 h       1 s/call
+   pytest                                        455 calls   0.22 h       2 s/call
+   sed                                          3183 calls   0.15 h       0 s/call
+   recheck-aurora2.sh                              1 calls   0.14 h     501 s/call
+   recheck-logs.sh                                 1 calls   0.14 h     491 s/call
+   git worktree                                   67 calls   0.12 h       7 s/call
+   while                                          67 calls   0.12 h       6 s/call
+   layer-drift.sh                                 31 calls   0.09 h      10 s/call
+   validate-escalation-resolution.sh              20 calls   0.09 h      16 s/call
+   validate-stub-audit.sh                         66 calls   0.08 h       4 s/call
+   validate-spawn-ledger.sh                       12 calls   0.07 h      21 s/call
+   python3                                       197 calls   0.06 h       1 s/call
+   npm test                                        6 calls   0.06 h      33 s/call
+   aws                                            55 calls   0.05 h       3 s/call
+   test-audit-rule-files.sh                      196 calls   0.04 h       1 s/call
+   shasum                                        429 calls   0.03 h       0 s/call
+   cat                                           219 calls   0.03 h       0 s/call
+   ls                                            665 calls   0.03 h       0 s/call
+   python                                        155 calls   0.03 h       1 s/call
+   gate-slice.sh                                  35 calls   0.03 h       3 s/call
+   mkdir                                          36 calls   0.03 h       3 s/call
+   ci-local.sh                                   252 calls   0.02 h       0 s/call
+   core-paths.sh                                  67 calls   0.02 h       1 s/call
+   awk                                           496 calls   0.02 h       0 s/call
+   git log                                       280 calls   0.02 h       0 s/call
+   tail                                          236 calls   0.02 h       0 s/call
+   validate-provenance-block.sh                   54 calls   0.02 h       1 s/call
+   validate-ac-falsifiability.sh                  80 calls   0.02 h       1 s/call
+   partition-document.sh                         458 calls   0.02 h       0 s/call
+   python3 -m venv                                 2 calls   0.02 h      28 s/call
+   test-aws-smoke.sh                              63 calls   0.01 h       1 s/call
+   git commit                                     66 calls   0.01 h       1 s/call
+   jq                                             34 calls   0.01 h       1 s/call
+   psql                                            8 calls   0.01 h       6 s/call
+   run-exec-health.sh                            292 calls   0.01 h       0 s/call
+   head                                           88 calls   0.01 h       1 s/call
+   date                                          258 calls   0.01 h       0 s/call
+   recheck-aurora3.sh                              1 calls   0.01 h      44 s/call
+   vitest                                          4 calls   0.01 h      11 s/call
+   read_live.sh                                    1 calls   0.01 h      42 s/call
+   verdict.sh                                     27 calls   0.01 h       1 s/call
+   validate-adversarial-convergence.sh             6 calls   0.01 h       6 s/call
+   validate-layer-entries.sh                       2 calls   0.01 h      19 s/call
+   validate-artifact-budget.sh                    21 calls   0.01 h       2 s/call
+   sprint-status.sh                              139 calls   0.01 h       0 s/call
+   PYTHONDONTWRITEBYTECODE=1                       6 calls   0.01 h       6 s/call
+   run-floor-verify.sh                             6 calls   0.01 h       6 s/call
+   npm install                                     2 calls   0.01 h      14 s/call
+   validate-gate-manifest.sh                      60 calls   0.01 h       0 s/call
+   scratchpad;                                    49 calls   0.01 h       1 s/call
+   before.sh                                       1 calls   0.01 h      27 s/call
+   cap.sh                                          4 calls   0.01 h       7 s/call
+   wc                                            121 calls   0.01 h       0 s/call
+   gate-log-corpus.sh                             25 calls   0.01 h       1 s/call
+   mut.sh                                          1 calls   0.01 h      23 s/call
+   validate-locked-anchor.sh                      27 calls   0.01 h       1 s/call
+   scratchpad                                     11 calls   0.01 h       2 s/call
+   npx playwright                                  6 calls   0.01 h       4 s/call
+   audit-rule-exercise.sh                         80 calls   0.01 h       0 s/call
+   npx vite                                        5 calls   0.01 h       4 s/call
+   phase-aurora.sh                                 1 calls   0.01 h      20 s/call
+   validate-gate-adjudication.sh                 136 calls   0.01 h       0 s/call
+   audit-rule-files.sh                            53 calls   0.00 h       0 s/call
+   find                                           88 calls   0.00 h       0 s/call
+   driver-902e-3d2179975.sh                        1 calls   0.00 h      17 s/call
+   printf                                        103 calls   0.00 h       0 s/call
+   npx vitest                                      4 calls   0.00 h       4 s/call
+   merge-adversarial-shards.sh                    94 calls   0.00 h       0 s/call
+   rm                                             12 calls   0.00 h       1 s/call
+   run902e.sh                                      1 calls   0.00 h      11 s/call
+s319 lead: Bash wall 5.6 h
+   git push                                       67 calls   0.79 h      43 s/call
+   verdict.sh                                    212 calls   0.35 h       6 s/call
+   layer-drift.sh                                 61 calls   0.29 h      17 s/call
+   sleep                                          93 calls   0.29 h      11 s/call
+   validate-spawn-ledger.sh                       16 calls   0.23 h      51 s/call
+   git status                                    245 calls   0.21 h       3 s/call
+   wait-for-deliverable.sh                       822 calls   0.17 h       1 s/call
+   validate-steering-budget.sh                    16 calls   0.14 h      31 s/call
+   validate-stub-audit.sh                         13 calls   0.13 h      37 s/call
+   self-update-gate.sh                            43 calls   0.12 h      10 s/call
+   validate-artifact-derivations.sh               45 calls   0.12 h      10 s/call
+   git log                                       181 calls   0.11 h       2 s/call
+   cd                                            335 calls   0.11 h       1 s/call
+   python3                                       150 calls   0.11 h       3 s/call
+   until                                          58 calls   0.10 h       6 s/call
+   check-orphaned-fn.sh                           11 calls   0.10 h      33 s/call
+   gh                                             53 calls   0.09 h       6 s/call
+   emit-report.sh                                 61 calls   0.09 h       6 s/call
+   while                                          41 calls   0.09 h       8 s/call
+   git diff                                      109 calls   0.08 h       3 s/call
+   grep                                          333 calls   0.08 h       1 s/call
+   apply.sh                                       70 calls   0.08 h       4 s/call
+   push-drain.sh                                  22 calls   0.07 h      11 s/call
+   hard-blockers.sh                               31 calls   0.07 h       8 s/call
+   gate-checkpoint.sh                             87 calls   0.07 h       3 s/call
+   sprint-status.sh                               36 calls   0.07 h       7 s/call
+   join-remediator-shards.sh                     105 calls   0.07 h       2 s/call
+   cat                                           306 calls   0.06 h       1 s/call
+   git fetch                                      67 calls   0.06 h       3 s/call
+   preclassify.sh                                 38 calls   0.06 h       6 s/call
+   merge-adversarial-shards.sh                    64 calls   0.06 h       3 s/call
+   validate-provenance-block.sh                   19 calls   0.06 h      11 s/call
+   git commit                                    195 calls   0.05 h       1 s/call
+   validate-carried-findings.sh                   42 calls   0.04 h       4 s/call
+   tail                                          214 calls   0.04 h       1 s/call
+   scratchpad;                                   249 calls   0.04 h       1 s/call
+   self-update-push.sh                            10 calls   0.03 h      12 s/call
+   predicate-differential.sh                       2 calls   0.03 h      62 s/call
+   migrate-artifact-paths.sh                       6 calls   0.03 h      20 s/call
+   validate-layer-entries.sh                       6 calls   0.03 h      19 s/call
+   validate-escalation-resolution.sh              14 calls   0.03 h       8 s/call
+   merge-review-shards.sh                         67 calls   0.03 h       1 s/call
+   git worktree                                   37 calls   0.03 h       2 s/call
+   validate-artifact-budget.sh                    42 calls   0.03 h       2 s/call
+   core-paths.sh                                  11 calls   0.02 h       8 s/call
+   run.sh                                         24 calls   0.02 h       3 s/call
+   setup-site-drift.sh                             8 calls   0.02 h      10 s/call
+   stamp-story-provenance.sh                      23 calls   0.02 h       3 s/call
+   validate-handoff-evidence.sh                   47 calls   0.02 h       2 s/call
+   ledger-reverify.sh                             10 calls   0.02 h       7 s/call
+   adopt-extension-checks.sh                       7 calls   0.02 h      10 s/call
+   validate-ac-falsifiability.sh                  12 calls   0.02 h       6 s/call
+   sync-taught-schema.sh                           6 calls   0.02 h      11 s/call
+   audit-rule-exercise.sh                          2 calls   0.02 h      31 s/call
+   validate-gate-adjudication.sh                  50 calls   0.02 h       1 s/call
+   for                                            44 calls   0.02 h       1 s/call
+   git pull                                       11 calls   0.01 h       5 s/call
+   date                                          108 calls   0.01 h       0 s/call
+   ls                                             92 calls   0.01 h       1 s/call
+   sed                                           105 calls   0.01 h       0 s/call
+   validate-request-coverage.sh                    9 calls   0.01 h       6 s/call
+   audit-layer-debt.sh                            15 calls   0.01 h       3 s/call
+   git                                            56 calls   0.01 h       1 s/call
+   partition-document.sh                          65 calls   0.01 h       1 s/call
+   retired-layer-passage.sh                        3 calls   0.01 h      15 s/call
+   validate-escalation-status-vocabulary.sh       13 calls   0.01 h       3 s/call
+   audit-rule-files.sh                             3 calls   0.01 h      14 s/call
+   test-aws-smoke.sh                              16 calls   0.01 h       3 s/call
+   S=$((                                           2 calls   0.01 h      20 s/call
+   readopt-override.sh                            19 calls   0.01 h       2 s/call
+   validate-snapshot-conservation.sh               4 calls   0.01 h       9 s/call
+   test-check18-debt-audit.sh                      1 calls   0.01 h      35 s/call
+   validate-cycle-commits.sh                       1 calls   0.01 h      35 s/call
+   run-exec-health.sh                              5 calls   0.01 h       6 s/call
+   rotate-snapshot-archive.sh                     13 calls   0.01 h       2 s/call
+   git merge                                      29 calls   0.01 h       1 s/call
+   validate-gate-manifest.sh                       8 calls   0.01 h       4 s/call
+   validate-adversarial-convergence.sh            34 calls   0.01 h       1 s/call
+   partition-review-diff.sh                       59 calls   0.01 h       0 s/call
+   relabel-extension-checks.sh                     1 calls   0.01 h      24 s/call
+s319 sub: Bash wall 17.1 h
+   grep                                        14122 calls   2.98 h       1 s/call
+   cd                                           5104 calls   1.81 h       1 s/call
+   validate-mutation-red.sh                     1313 calls   1.58 h       4 s/call
+   python -m pytest                              233 calls   0.92 h      14 s/call
+   npx vitest                                    103 calls   0.92 h      32 s/call
+   git                                          5298 calls   0.80 h       1 s/call
+   sed                                          3552 calls   0.69 h       1 s/call
+   validate-artifact-derivations.sh              987 calls   0.63 h       2 s/call
+   git diff                                     1319 calls   0.51 h       1 s/call
+   validate-spawn-ledger.sh                       43 calls   0.50 h      42 s/call
+   partition-document.sh                         975 calls   0.41 h       2 s/call
+   pytest                                        301 calls   0.35 h       4 s/call
+   python3 -m pytest                             112 calls   0.32 h      10 s/call
+   git status                                    273 calls   0.30 h       4 s/call
+   wait-for-deliverable.sh                      1139 calls   0.28 h       1 s/call
+   s319-2-1;                                      12 calls   0.26 h      79 s/call
+   validate-stub-audit.sh                         45 calls   0.26 h      21 s/call
+   curl                                           48 calls   0.25 h      19 s/call
+   git commit                                    167 calls   0.22 h       5 s/call
+   python3                                       254 calls   0.21 h       3 s/call
+   cat                                           531 calls   0.20 h       1 s/call
+   git worktree                                   85 calls   0.19 h       8 s/call
+   ls                                            731 calls   0.17 h       1 s/call
+   validate-escalation-resolution.sh              22 calls   0.16 h      26 s/call
+   validate-handoff-evidence.sh                  343 calls   0.16 h       2 s/call
+   until                                          93 calls   0.15 h       6 s/call
+   vitest                                         28 calls   0.13 h      17 s/call
+   echo                                           97 calls   0.11 h       4 s/call
+   for                                            73 calls   0.11 h       6 s/call
+   sleep                                          60 calls   0.11 h       7 s/call
+   npm ci                                         56 calls   0.09 h       6 s/call
+   merge-review-shards.sh                        853 calls   0.09 h       0 s/call
+   run-exec-health.sh                            323 calls   0.08 h       1 s/call
+   git log                                       350 calls   0.07 h       1 s/call
+   date                                          279 calls   0.07 h       1 s/call
+   G=ServicesStack-RebalancerTaskrebalancerLo      2 calls   0.07 h     121 s/call
+   while                                          64 calls   0.05 h       3 s/call
+   aws                                            71 calls   0.05 h       3 s/call
+   wc                                            123 calls   0.05 h       1 s/call
+   python                                         42 calls   0.05 h       4 s/call
+   shasum                                        489 calls   0.04 h       0 s/call
+   validate-ac-falsifiability.sh                 102 calls   0.04 h       1 s/call
+   git merge                                      72 calls   0.04 h       2 s/call
+   npx                                             3 calls   0.04 h      47 s/call
+   awk                                           402 calls   0.03 h       0 s/call
+   partition-subject.sh                           73 calls   0.03 h       2 s/call
+   rm                                             39 calls   0.03 h       3 s/call
+   sprint-status.sh                              156 calls   0.03 h       1 s/call
+   find                                           30 calls   0.03 h       4 s/call
+   validate-artifact-budget.sh                    67 calls   0.03 h       2 s/call
+   ecs-switch-preset.sh                          125 calls   0.02 h       1 s/call
+   printf                                         58 calls   0.02 h       1 s/call
+   verdict.sh                                     37 calls   0.02 h       2 s/call
+   test-aws-smoke.sh                             129 calls   0.02 h       1 s/call
+   join-remediator-shards.sh                      79 calls   0.02 h       1 s/call
+   merge-adversarial-shards.sh                   167 calls   0.02 h       0 s/call
+   validate-provenance-block.sh                   33 calls   0.02 h       2 s/call
+   core-paths.sh                                  38 calls   0.02 h       1 s/call
+   check-preset-drift.sh                          60 calls   0.02 h       1 s/call
+   tail                                          249 calls   0.01 h       0 s/call
+   npm install                                    13 calls   0.01 h       4 s/call
+   test-deploy-validate-runners.sh                70 calls   0.01 h       1 s/call
+   {                                              10 calls   0.01 h       4 s/call
+   mkdir                                          46 calls   0.01 h       1 s/call
+   head                                          149 calls   0.01 h       0 s/call
+   npx playwright                                 11 calls   0.01 h       3 s/call
+   validate-layer-entries.sh                       1 calls   0.01 h      32 s/call
+   check-owed-derivations.sh                       2 calls   0.01 h      16 s/call
+   validate-carried-findings.sh                  122 calls   0.01 h       0 s/call
+   validate-gate-adjudication.sh                 198 calls   0.01 h       0 s/call
+   mut.sh                                          2 calls   0.01 h      14 s/call
+   reds.sh                                         1 calls   0.01 h      26 s/call
+   npm                                             6 calls   0.01 h       4 s/call
+   mut2.sh                                         1 calls   0.01 h      23 s/call
+   uv                                             34 calls   0.01 h       1 s/call
+   npx vite                                        8 calls   0.01 h       2 s/call
+   upload-config.sh                                1 calls   0.00 h      16 s/call
+   story-4-4-collect-rewards-button-in-collec      1 calls   0.00 h      16 s/call
+   ci-local.sh                                    46 calls   0.00 h       0 s/call
+   PGOPTIONS='-c                                   3 calls   0.00 h       5 s/call
+s320 lead: Bash wall 21.2 h
+   join-remediator-shards.sh                     136 calls   8.53 h     226 s/call
+   while                                          27 calls   8.50 h    1133 s/call
+   grep                                          291 calls   1.00 h      12 s/call
+   check-owed-derivations.sh                      19 calls   0.25 h      48 s/call
+   layer-drift.sh                                 36 calls   0.20 h      20 s/call
+   wait-for-deliverable.sh                       718 calls   0.20 h       1 s/call
+   git push                                       40 calls   0.16 h      14 s/call
+   cd                                            288 calls   0.15 h       2 s/call
+   verdict.sh                                    151 calls   0.14 h       3 s/call
+   git log                                       131 calls   0.12 h       3 s/call
+   validate-spawn-ledger.sh                       16 calls   0.12 h      26 s/call
+   merge-adversarial-shards.sh                    57 calls   0.11 h       7 s/call
+   ai-dlc-dist;                                   42 calls   0.08 h       7 s/call
+   validate-escalation-resolution.sh              24 calls   0.08 h      13 s/call
+   run-floor-verify.sh                             3 calls   0.08 h     100 s/call
+   gh                                             40 calls   0.06 h       6 s/call
+   rotate-gate-adjudication.sh                     9 calls   0.05 h      21 s/call
+   git status                                    164 calls   0.05 h       1 s/call
+   validate-suppression-lifetime.sh               22 calls   0.05 h       8 s/call
+   gate-checkpoint.sh                             75 calls   0.05 h       2 s/call
+   hard-blockers.sh                               11 calls   0.05 h      15 s/call
+   git commit                                    156 calls   0.04 h       1 s/call
+   audit-layer-debt.sh                            10 calls   0.04 h      16 s/call
+   until                                          32 calls   0.04 h       5 s/call
+   adopt-extension-checks.sh                       8 calls   0.04 h      19 s/call
+   validate-gate-adjudication.sh                  47 calls   0.04 h       3 s/call
+   post-write-gates.sh                             9 calls   0.04 h      15 s/call
+   sleep                                          35 calls   0.04 h       4 s/call
+   python3                                       100 calls   0.04 h       1 s/call
+   git diff                                       99 calls   0.04 h       1 s/call
+   settings-merge.sh                              19 calls   0.04 h       7 s/call
+   validate-h2-attestation.sh                      9 calls   0.03 h      14 s/call
+   emit-report.sh                                 33 calls   0.03 h       4 s/call
+   export                                         26 calls   0.03 h       5 s/call
+   sed                                           140 calls   0.03 h       1 s/call
+   validate-handoff-evidence.sh                   90 calls   0.03 h       1 s/call
+   validate-artifact-derivations.sh               39 calls   0.03 h       3 s/call
+   sprint-status.sh                               37 calls   0.03 h       3 s/call
+   validate-provenance-block.sh                   13 calls   0.03 h       7 s/call
+   scratchpad;                                   151 calls   0.02 h       1 s/call
+   for                                            30 calls   0.02 h       2 s/call
+   git worktree                                   34 calls   0.02 h       2 s/call
+   validate-steering-budget.sh                     9 calls   0.02 h       8 s/call
+   push-drain.sh                                   8 calls   0.02 h       9 s/call
+   validate-layer-entries.sh                       4 calls   0.02 h      18 s/call
+   preclassify.sh                                 16 calls   0.02 h       4 s/call
+   git                                            56 calls   0.02 h       1 s/call
+   git fetch                                      41 calls   0.02 h       2 s/call
+   party-final-join.sh                             2 calls   0.02 h      34 s/call
+   tail                                          168 calls   0.02 h       0 s/call
+   validate-artifact-budget.sh                    16 calls   0.02 h       4 s/call
+   apply.sh                                       31 calls   0.02 h       2 s/call
+   self-update-gate.sh                            17 calls   0.01 h       3 s/call
+   git merge                                      19 calls   0.01 h       2 s/call
+   validate-stub-audit.sh                          4 calls   0.01 h      10 s/call
+   echo                                           11 calls   0.01 h       4 s/call
+   validate-snapshot-conservation.sh               5 calls   0.01 h       8 s/call
+   self-update-push.sh                             4 calls   0.01 h       9 s/call
+   python3 -m pytest                               3 calls   0.01 h      12 s/call
+   ssm-tunnel.sh                                   6 calls   0.01 h       6 s/call
+   merge-review-shards.sh                         33 calls   0.01 h       1 s/call
+   party-status.sh                                 1 calls   0.01 h      35 s/call
+   readopt-override.sh                             9 calls   0.01 h       4 s/call
+   pytest                                         23 calls   0.01 h       1 s/call
+   cat                                           131 calls   0.01 h       0 s/call
+   graph-s320-story-3-1;                           1 calls   0.01 h      31 s/call
+   head                                           34 calls   0.01 h       1 s/call
+   validate-cycle-commits.sh                       1 calls   0.01 h      28 s/call
+   run.sh                                         26 calls   0.01 h       1 s/call
+   validate-ac-falsifiability.sh                   7 calls   0.01 h       4 s/call
+   ledger-reverify.sh                              4 calls   0.01 h       6 s/call
+   ls                                             71 calls   0.01 h       0 s/call
+   relabel-extension-checks.sh                     2 calls   0.01 h      12 s/call
+   validate-locked-anchor.sh                       7 calls   0.01 h       3 s/call
+   validate-audit-anchors.sh                       4 calls   0.01 h       5 s/call
+   hermetic-run.sh                                16 calls   0.01 h       1 s/call
+   validate-escalation-status-vocabulary.sh        2 calls   0.00 h       8 s/call
+   retro-replay-harness.sh                         4 calls   0.00 h       4 s/call
+   validate-adversarial-convergence.sh            32 calls   0.00 h       0 s/call
+   gate-slice.sh                                  17 calls   0.00 h       1 s/call
+s320 sub: Bash wall 6.9 h
+   grep                                        11064 calls   0.91 h       0 s/call
+   validate-mutation-red.sh                      311 calls   0.53 h       6 s/call
+   validate-artifact-derivations.sh             1220 calls   0.49 h       1 s/call
+   cd                                           2816 calls   0.49 h       1 s/call
+   validate-spawn-ledger.sh                       45 calls   0.46 h      37 s/call
+   git                                          4092 calls   0.46 h       0 s/call
+   python -m pytest                              271 calls   0.35 h       5 s/call
+   python3 -m pytest                             114 calls   0.33 h      10 s/call
+   partition-document.sh                        1035 calls   0.24 h       1 s/call
+   npx vitest                                     22 calls   0.23 h      38 s/call
+   sed                                          3459 calls   0.20 h       0 s/call
+   validate-escalation-resolution.sh              22 calls   0.16 h      27 s/call
+   git diff                                      780 calls   0.16 h       1 s/call
+   aws                                           124 calls   0.14 h       4 s/call
+   python3                                       154 calls   0.11 h       3 s/call
+   sleep                                          62 calls   0.09 h       5 s/call
+   wait-for-deliverable.sh                      1047 calls   0.09 h       0 s/call
+   jq                                             41 calls   0.07 h       6 s/call
+   join-remediator-shards.sh                     327 calls   0.06 h       1 s/call
+   vitest                                         14 calls   0.06 h      14 s/call
+   validate-stub-audit.sh                         23 calls   0.06 h       9 s/call
+   git commit                                    126 calls   0.05 h       1 s/call
+   node_modules                                    4 calls   0.05 h      46 s/call
+   probe-aggregator.sh                             1 calls   0.05 h     180 s/call
+   agg.sh                                          1 calls   0.05 h     180 s/call
+   cw.sh                                           1 calls   0.04 h     158 s/call
+   run-exec-health.sh                            107 calls   0.04 h       1 s/call
+   validate-handoff-evidence.sh                  201 calls   0.04 h       1 s/call
+   aurora.sh                                       7 calls   0.04 h      19 s/call
+   merge-review-shards.sh                        249 calls   0.04 h       1 s/call
+   validate-ac-falsifiability.sh                 156 calls   0.03 h       1 s/call
+   git worktree                                   40 calls   0.03 h       3 s/call
+   mkdir                                          24 calls   0.03 h       5 s/call
+   ci-local.sh                                   211 calls   0.03 h       1 s/call
+   validate-provenance-block.sh                   79 calls   0.03 h       1 s/call
+   while                                          34 calls   0.03 h       3 s/call
+   git status                                    160 calls   0.03 h       1 s/call
+   run_paired.sh                                   3 calls   0.03 h      33 s/call
+   npx playwright                                  8 calls   0.03 h      11 s/call
+   ls                                            470 calls   0.03 h       0 s/call
+   npx vite                                       12 calls   0.02 h       7 s/call
+   git log                                       265 calls   0.02 h       0 s/call
+   check-owed-derivations.sh                       6 calls   0.02 h      14 s/call
+   pytest                                        255 calls   0.02 h       0 s/call
+   npm run build                                   7 calls   0.02 h      11 s/call
+   verdict.sh                                     31 calls   0.02 h       3 s/call
+   validate-suppression-lifetime.sh               11 calls   0.02 h       6 s/call
+   awk                                           279 calls   0.02 h       0 s/call
+   shasum                                        646 calls   0.02 h       0 s/call
+   sprint-status.sh                              147 calls   0.02 h       0 s/call
+   date                                          494 calls   0.02 h       0 s/call
+   until                                         159 calls   0.01 h       0 s/call
+   test-aws-smoke.sh                             219 calls   0.01 h       0 s/call
+   tail                                          141 calls   0.01 h       0 s/call
+   head                                           65 calls   0.01 h       1 s/call
+   merge-adversarial-shards.sh                   233 calls   0.01 h       0 s/call
+   find                                           30 calls   0.01 h       1 s/call
+   run_remaining_pnl.sh                            1 calls   0.01 h      39 s/call
+   for                                            42 calls   0.01 h       1 s/call
+   npx eslint                                      1 calls   0.01 h      37 s/call
+   core-paths.sh                                  83 calls   0.01 h       0 s/call
+   validate-locked-anchor.sh                     128 calls   0.01 h       0 s/call
+   ln                                             25 calls   0.01 h       1 s/call
+   npm                                            16 calls   0.01 h       2 s/call
+   validate-gate-adjudication.sh                 191 calls   0.01 h       0 s/call
+   cat                                           162 calls   0.01 h       0 s/call
+   lsof                                           36 calls   0.01 h       1 s/call
+   validate-layer-entries.sh                       1 calls   0.01 h      26 s/call
+   run-psql.sh                                    14 calls   0.01 h       2 s/call
+   probe-graphnode.sh                              1 calls   0.01 h      24 s/call
+   run_read.sh                                     3 calls   0.01 h       8 s/call
+   run_pdd2.sh                                     1 calls   0.01 h      24 s/call
+   wc                                             82 calls   0.01 h       0 s/call
+   ecs-deploy.sh                                  85 calls   0.01 h       0 s/call
+   npm run preview                                 1 calls   0.00 h      17 s/call
+   aurora_remaining.sh                             2 calls   0.00 h       8 s/call
+   run_pdd.sh                                      1 calls   0.00 h      14 s/call
+   refresh-live-shape-fixture.sh                  87 calls   0.00 h       0 s/call
+   probe-aurora.sh                                 1 calls   0.00 h      11 s/call
+   probe-rebalancer-hooks.sh                       1 calls   0.00 h      11 s/call
+s321 lead: Bash wall 6.1 h
+   snapshot-update.sh                            756 calls   0.69 h       3 s/call
+   sleep                                          71 calls   0.59 h      30 s/call
+   gate-transition.sh                            149 calls   0.42 h      10 s/call
+   git push                                       39 calls   0.40 h      37 s/call
+   wait-for-deliverable.sh                       922 calls   0.30 h       1 s/call
+   push-drain.sh                                   9 calls   0.18 h      72 s/call
+   git worktree                                   76 calls   0.16 h       8 s/call
+   gh                                             47 calls   0.15 h      12 s/call
+   git                                           112 calls   0.15 h       5 s/call
+   validate-spawn-ledger.sh                       16 calls   0.14 h      32 s/call
+   retro-replay-harness.sh                        20 calls   0.14 h      25 s/call
+   verdict.sh                                    103 calls   0.11 h       4 s/call
+   validate-artifact-derivations.sh               76 calls   0.11 h       5 s/call
+   git diff                                      204 calls   0.11 h       2 s/call
+   cd                                            529 calls   0.11 h       1 s/call
+   join-remediator-shards.sh                     135 calls   0.10 h       3 s/call
+   layer-drift.sh                                 15 calls   0.09 h      21 s/call
+   check-orphaned-fn.sh                           21 calls   0.08 h      15 s/call
+   echo                                           29 calls   0.08 h      10 s/call
+   gate-log.md;                                    5 calls   0.08 h      60 s/call
+   git commit                                    171 calls   0.08 h       2 s/call
+   check-owed-derivations.sh                      24 calls   0.08 h      12 s/call
+   git status                                    203 calls   0.08 h       1 s/call
+   sprint-status.sh                               48 calls   0.07 h       5 s/call
+   while                                          38 calls   0.07 h       6 s/call
+   git log                                       185 calls   0.06 h       1 s/call
+   python3                                        88 calls   0.06 h       2 s/call
+   validate-snapshot-conservation.sh               9 calls   0.05 h      21 s/call
+   gate-checkpoint.sh                            109 calls   0.05 h       2 s/call
+   hard-blockers.sh                                9 calls   0.05 h      21 s/call
+   validate-steering-budget.sh                    20 calls   0.05 h       8 s/call
+   gate-side-exclude.sh                            4 calls   0.05 h      41 s/call
+   t.sh                                            2 calls   0.04 h      80 s/call
+   grep                                          441 calls   0.04 h       0 s/call
+   gate-slice.sh                                  42 calls   0.04 h       4 s/call
+   validate-escalation-resolution.sh              13 calls   0.04 h      12 s/call
+   validate-gate-adjudication.sh                  77 calls   0.04 h       2 s/call
+   ls                                            138 calls   0.04 h       1 s/call
+   scratchpad                                     12 calls   0.04 h      11 s/call
+   core-paths.sh                                  13 calls   0.03 h       9 s/call
+   migrate-artifact-paths.sh                       1 calls   0.03 h     120 s/call
+   validate-stub-audit.sh                         14 calls   0.03 h       9 s/call
+   post-write-gates.sh                            11 calls   0.03 h      11 s/call
+   git merge                                      39 calls   0.03 h       3 s/call
+   merge-review-shards.sh                        100 calls   0.03 h       1 s/call
+   validate-artifact-budget.sh                    32 calls   0.02 h       3 s/call
+   merge-adversarial-shards.sh                    51 calls   0.02 h       2 s/call
+   validate-layer-entries.sh                       3 calls   0.02 h      29 s/call
+   validate-adversarial-convergence.sh            53 calls   0.02 h       2 s/call
+   validate-suppression-lifetime.sh               18 calls   0.02 h       5 s/call
+   tail                                          169 calls   0.02 h       1 s/call
+   ssm-tunnel.sh                                  15 calls   0.02 h       6 s/call
+   validate-ac-falsifiability.sh                   9 calls   0.02 h      10 s/call
+   validate-h2-attestation.sh                     18 calls   0.02 h       5 s/call
+   for                                            36 calls   0.02 h       2 s/call
+   sed                                           174 calls   0.02 h       0 s/call
+   git fetch                                      49 calls   0.02 h       2 s/call
+   scratchpad;                                   214 calls   0.02 h       0 s/call
+   join.sh                                         1 calls   0.02 h      65 s/call
+   partition-document.sh                          36 calls   0.02 h       2 s/call
+   run.sh                                         18 calls   0.02 h       3 s/call
+   LG=ServicesStack-RebalancerTaskrebalancerL     12 calls   0.02 h       5 s/call
+   ai-dlc-dist;                                   33 calls   0.02 h       2 s/call
+   .run-instrumented-profile.sh                    5 calls   0.02 h      11 s/call
+   report-propagation-fanout.sh                    8 calls   0.01 h       7 s/call
+   python -m pytest                               26 calls   0.01 h       2 s/call
+   adopt-extension-checks.sh                       4 calls   0.01 h      12 s/call
+   ledger-reverify.sh                             14 calls   0.01 h       3 s/call
+   until                                          54 calls   0.01 h       1 s/call
+   rotate-snapshot-archive.sh                      6 calls   0.01 h       7 s/call
+   preclassify.sh                                 17 calls   0.01 h       2 s/call
+   cat                                           181 calls   0.01 h       0 s/call
+   emit-report.sh                                 21 calls   0.01 h       2 s/call
+   pytest                                         20 calls   0.01 h       2 s/call
+   head                                           26 calls   0.01 h       1 s/call
+   self-update-gate.sh                            17 calls   0.01 h       2 s/call
+   validate-request-coverage.sh                    1 calls   0.01 h      36 s/call
+   aws                                            24 calls   0.01 h       1 s/call
+   validate-handoff-evidence.sh                   12 calls   0.01 h       3 s/call
+   derivation-differential.sh                      2 calls   0.01 h      15 s/call
+s321 sub: Bash wall 16.2 h
+   validate-mutation-red.sh                     1010 calls   3.08 h      11 s/call
+   python -m pytest                              459 calls   1.38 h      11 s/call
+   grep                                        14173 calls   1.18 h       0 s/call
+   git                                          5983 calls   1.05 h       1 s/call
+   validate-spawn-ledger.sh                       76 calls   0.88 h      42 s/call
+   cd                                           4895 calls   0.84 h       1 s/call
+   test-chain-cache-retention-ecs.sh              84 calls   0.75 h      32 s/call
+   pytest                                        511 calls   0.60 h       4 s/call
+   validate-artifact-derivations.sh             1359 calls   0.55 h       1 s/call
+   python3 -m pytest                             139 calls   0.35 h       9 s/call
+   wait-for-deliverable.sh                       925 calls   0.35 h       1 s/call
+   git diff                                     1208 calls   0.30 h       1 s/call
+   git commit                                    262 calls   0.30 h       4 s/call
+   sleep                                          69 calls   0.28 h      15 s/call
+   sed                                          3887 calls   0.28 h       0 s/call
+   test-ssm-tunnel.sh                            104 calls   0.27 h       9 s/call
+   test-rebalancer-idle.sh                       171 calls   0.23 h       5 s/call
+   test_s253_2_deploy_path_guard.sh               43 calls   0.20 h      17 s/call
+   test-s321-3-3-script-dispositions.sh          101 calls   0.19 h       7 s/call
+   validate-handoff-evidence.sh                  308 calls   0.18 h       2 s/call
+   until                                         114 calls   0.17 h       5 s/call
+   test-ecs-deploy-preflight.sh                   38 calls   0.16 h      15 s/call
+   git worktree                                   92 calls   0.14 h       5 s/call
+   node                                           29 calls   0.13 h      17 s/call
+   test-deploy-validate-runners.sh                16 calls   0.12 h      26 s/call
+   git status                                    235 calls   0.11 h       2 s/call
+   aws                                           216 calls   0.11 h       2 s/call
+   ls                                            592 calls   0.10 h       1 s/call
+   ci-local.sh                                   161 calls   0.08 h       2 s/call
+   npx vitest                                     28 calls   0.08 h      10 s/call
+   ssm-tunnel.sh                                 206 calls   0.08 h       1 s/call
+   python3                                       307 calls   0.08 h       1 s/call
+   merge-review-shards.sh                        376 calls   0.07 h       1 s/call
+   npx cdk                                        23 calls   0.07 h      11 s/call
+   validate-stub-audit.sh                         90 calls   0.07 h       3 s/call
+   run.sh                                          9 calls   0.07 h      27 s/call
+   sprint-status.sh                              182 calls   0.07 h       1 s/call
+   t.sh                                            2 calls   0.06 h     111 s/call
+   npx jest                                       31 calls   0.05 h       6 s/call
+   rebalancer-idle.sh                            185 calls   0.05 h       1 s/call
+   head                                           75 calls   0.05 h       2 s/call
+   jq                                             51 calls   0.05 h       3 s/call
+   git log                                       408 calls   0.04 h       0 s/call
+   while                                          84 calls   0.04 h       2 s/call
+   test-aws-smoke.sh                             201 calls   0.04 h       1 s/call
+   test-base-deploy-staging.sh                    67 calls   0.04 h       2 s/call
+   for                                            93 calls   0.04 h       2 s/call
+   cat                                           379 calls   0.04 h       0 s/call
+   swapped.sh                                      1 calls   0.04 h     143 s/call
+   join-remediator-shards.sh                     328 calls   0.03 h       0 s/call
+   verdict.sh                                     63 calls   0.03 h       2 s/call
+   ecs-deploy.sh                                 420 calls   0.03 h       0 s/call
+   test-ecs-write-rebalancer-base-config.sh       45 calls   0.03 h       2 s/call
+   scratchpad;                                    65 calls   0.03 h       1 s/call
+   shasum                                        471 calls   0.02 h       0 s/call
+   run-post-ff4.sh                                 5 calls   0.02 h      16 s/call
+   playwright                                      4 calls   0.02 h      18 s/call
+   run-post-ff3.sh                                 5 calls   0.02 h      14 s/call
+   wc                                             72 calls   0.02 h       1 s/call
+   awk                                           414 calls   0.02 h       0 s/call
+   validate-escalation-resolution.sh               7 calls   0.02 h       9 s/call
+   docker                                          4 calls   0.02 h      14 s/call
+   validate-gate-adjudication.sh                 361 calls   0.02 h       0 s/call
+   python                                         82 calls   0.02 h       1 s/call
+   run3b-recheck.sh                                3 calls   0.01 h      16 s/call
+   run-watch.sh                                    2 calls   0.01 h      24 s/call
+   tail                                          179 calls   0.01 h       0 s/call
+   run902e-recheck.sh                              4 calls   0.01 h      11 s/call
+   merge-adversarial-shards.sh                   121 calls   0.01 h       0 s/call
+   ecs-write-rebalancer-base-config.sh           136 calls   0.01 h       0 s/call
+   date                                          247 calls   0.01 h       0 s/call
+   ecs-switch-preset.sh                          180 calls   0.01 h       0 s/call
+   validate-carried-findings.sh                  106 calls   0.01 h       0 s/call
+   validate-locked-anchor.sh                      47 calls   0.01 h       1 s/call
+   cast                                           54 calls   0.01 h       1 s/call
+   validate-layer-entries.sh                       1 calls   0.01 h      28 s/call
+   chain_cache_retention_ecs.sh                  126 calls   0.01 h       0 s/call
+   ecs-start-all.sh                               78 calls   0.01 h       0 s/call
+   pairs.sh                                        1 calls   0.01 h      24 s/call
+   router-win-monitor.sh                         127 calls   0.01 h       0 s/call
+s322 lead: Bash wall 3.5 h
+   git push                                       48 calls   0.76 h      57 s/call
+   snapshot-update.sh                           1057 calls   0.36 h       1 s/call
+   gate-transition.sh                             69 calls   0.30 h      16 s/call
+   sleep                                          64 calls   0.22 h      12 s/call
+   wait-for-deliverable.sh                       460 calls   0.21 h       2 s/call
+   until                                          31 calls   0.10 h      12 s/call
+   check-owed-derivations.sh                      18 calls   0.10 h      20 s/call
+   layer-drift.sh                                 11 calls   0.10 h      32 s/call
+   migrate-artifact-paths.sh                      12 calls   0.07 h      20 s/call
+   grep                                          795 calls   0.07 h       0 s/call
+   git commit                                    197 calls   0.07 h       1 s/call
+   gh                                             50 calls   0.06 h       4 s/call
+   join-remediator-shards.sh                     142 calls   0.06 h       1 s/call
+   validate-snapshot-conservation.sh              11 calls   0.06 h      18 s/call
+   verdict.sh                                     49 calls   0.05 h       4 s/call
+   ls                                            202 calls   0.04 h       1 s/call
+   git                                           137 calls   0.04 h       1 s/call
+   readopt-override.sh                            11 calls   0.04 h      12 s/call
+   validate-artifact-budget.sh                    21 calls   0.04 h       6 s/call
+   emit-report.sh                                 22 calls   0.03 h       6 s/call
+   merge-adversarial-shards.sh                    76 calls   0.03 h       2 s/call
+   sprint-status.sh                               16 calls   0.03 h       7 s/call
+   gate-checkpoint.sh                            105 calls   0.03 h       1 s/call
+   cd                                            372 calls   0.03 h       0 s/call
+   git status                                    126 calls   0.03 h       1 s/call
+   audit-rule-files.sh                            28 calls   0.02 h       3 s/call
+   hard-blockers.sh                                9 calls   0.02 h      10 s/call
+   audit-layer-debt.sh                             5 calls   0.02 h      17 s/call
+   pytest                                         41 calls   0.02 h       2 s/call
+   git log                                       123 calls   0.02 h       1 s/call
+   test-pytest-admission.sh                        2 calls   0.02 h      35 s/call
+   sed                                           257 calls   0.02 h       0 s/call
+   validate-spawn-ledger.sh                        2 calls   0.02 h      29 s/call
+   git fetch                                      25 calls   0.01 h       2 s/call
+   tail                                          209 calls   0.01 h       0 s/call
+   merge-review-shards.sh                         58 calls   0.01 h       1 s/call
+   git diff                                       51 calls   0.01 h       1 s/call
+   cat                                           182 calls   0.01 h       0 s/call
+   ai-dlc-dist;                                   28 calls   0.01 h       1 s/call
+   git merge                                      22 calls   0.01 h       2 s/call
+   while                                          33 calls   0.01 h       1 s/call
+   docker                                          4 calls   0.01 h       9 s/call
+   validate-steering-budget.sh                     8 calls   0.01 h       4 s/call
+   validate-artifact-derivations.sh               15 calls   0.01 h       2 s/call
+   retro-replay-harness.sh                         8 calls   0.01 h       4 s/call
+   run.sh                                         24 calls   0.01 h       1 s/call
+   validate-provenance-block.sh                   12 calls   0.01 h       3 s/call
+   trim-snapshot.sh                                2 calls   0.01 h      14 s/call
+   validate-h2-attestation.sh                      7 calls   0.01 h       4 s/call
+   validate-escalation-resolution.sh               9 calls   0.01 h       3 s/call
+   for                                            53 calls   0.01 h       0 s/call
+   validate-layer-entries.sh                       2 calls   0.01 h      12 s/call
+   date                                           88 calls   0.01 h       0 s/call
+   python3                                        78 calls   0.01 h       0 s/call
+   scratchpad;                                    65 calls   0.01 h       0 s/call
+   ledger-reverify.sh                             17 calls   0.01 h       1 s/call
+   wc                                             78 calls   0.01 h       0 s/call
+   rotate-gate-adjudication.sh                     3 calls   0.01 h       7 s/call
+   validate-gate-adjudication.sh                  37 calls   0.01 h       1 s/call
+   audit-rule-exercise.sh                          1 calls   0.01 h      19 s/call
+   scratchpad                                     53 calls   0.01 h       0 s/call
+   derivation-differential.sh                      5 calls   0.01 h       4 s/call
+   validate-stub-audit.sh                         16 calls   0.01 h       1 s/call
+   preclassify.sh                                 10 calls   0.00 h       2 s/call
+   awsr(){                                        11 calls   0.00 h       2 s/call
+   rotate-snapshot-archive.sh                     10 calls   0.00 h       2 s/call
+   awk                                            57 calls   0.00 h       0 s/call
+   git worktree                                    8 calls   0.00 h       2 s/call
+   core-paths.sh                                  18 calls   0.00 h       1 s/call
+   validate-adversarial-convergence.sh            29 calls   0.00 h       0 s/call
+   head                                           53 calls   0.00 h       0 s/call
+   rm                                             44 calls   0.00 h       0 s/call
+   validate-ac-falsifiability.sh                   9 calls   0.00 h       1 s/call
+   unregistered-drift.sh                           1 calls   0.00 h      11 s/call
+   validate-artifact-paths.sh                     12 calls   0.00 h       1 s/call
+   partition-document.sh                          34 calls   0.00 h       0 s/call
+   addrows.sh                                      1 calls   0.00 h      10 s/call
+   s.sh                                            1 calls   0.00 h       9 s/call
+   s322-worktrees.sh                               1 calls   0.00 h       9 s/call
+   apply.sh                                       22 calls   0.00 h       0 s/call
+s322 sub: Bash wall 5.1 h
+   wait-for-deliverable.sh                       502 calls   0.91 h       7 s/call
+   cd                                           3862 calls   0.40 h       0 s/call
+   test-pytest-admission.sh                       53 calls   0.38 h      26 s/call
+   validate-spawn-ledger.sh                       35 calls   0.34 h      35 s/call
+   pytest                                        643 calls   0.33 h       2 s/call
+   grep                                         3861 calls   0.32 h       0 s/call
+   validate-mutation-red.sh                      177 calls   0.29 h       6 s/call
+   git worktree                                   37 calls   0.22 h      22 s/call
+   validate-artifact-derivations.sh              514 calls   0.18 h       1 s/call
+   git                                          1146 calls   0.16 h       0 s/call
+   python -m pytest                               72 calls   0.13 h       6 s/call
+   git diff                                      587 calls   0.13 h       1 s/call
+   git commit                                     74 calls   0.10 h       5 s/call
+   sed                                          1475 calls   0.09 h       0 s/call
+   join-remediator-shards.sh                     203 calls   0.07 h       1 s/call
+   ci-local.sh                                   449 calls   0.07 h       1 s/call
+   git status                                    156 calls   0.06 h       1 s/call
+   aws                                            27 calls   0.05 h       6 s/call
+   python3 -m pytest                              27 calls   0.04 h       6 s/call
+   validate-layer-entries.sh                       2 calls   0.04 h      80 s/call
+   jq                                             22 calls   0.04 h       7 s/call
+   python3                                       124 calls   0.04 h       1 s/call
+   scratchpad;                                    16 calls   0.03 h       8 s/call
+   merge-review-shards.sh                        169 calls   0.03 h       1 s/call
+   capture-aws-git.sh                              1 calls   0.03 h     118 s/call
+   verdict.sh                                     38 calls   0.03 h       3 s/call
+   git log                                       320 calls   0.03 h       0 s/call
+   validate-stub-audit.sh                         31 calls   0.03 h       3 s/call
+   validate-handoff-evidence.sh                   61 calls   0.03 h       2 s/call
+   validate-gate-adjudication.sh                 336 calls   0.03 h       0 s/call
+   validate-cycle-commits.sh                       7 calls   0.03 h      13 s/call
+   validate-escalation-resolution.sh               9 calls   0.02 h       9 s/call
+   ls                                            301 calls   0.02 h       0 s/call
+   validate-artifact-budget.sh                     5 calls   0.02 h      13 s/call
+   validate-ac-falsifiability.sh                  83 calls   0.02 h       1 s/call
+   test-s239-2-check26-discrimination.sh         107 calls   0.02 h       1 s/call
+   python3 -m venv                                 9 calls   0.01 h       6 s/call
+   test-aws-smoke.sh                              51 calls   0.01 h       1 s/call
+   sleep                                          34 calls   0.01 h       1 s/call
+   pip                                             3 calls   0.01 h      14 s/call
+   gate-side-exclude.sh                          198 calls   0.01 h       0 s/call
+   ecs-deploy.sh                                 135 calls   0.01 h       0 s/call
+   core-paths.sh                                  65 calls   0.01 h       0 s/call
+   cat                                           133 calls   0.01 h       0 s/call
+   ln                                              4 calls   0.01 h       7 s/call
+   validate-carried-findings.sh                   49 calls   0.01 h       1 s/call
+   merge-adversarial-shards.sh                   102 calls   0.01 h       0 s/call
+   meta-gate.sh                                  117 calls   0.01 h       0 s/call
+   shasum                                        127 calls   0.01 h       0 s/call
+   awk                                           116 calls   0.01 h       0 s/call
+   base-tunnel.sh                                  3 calls   0.01 h       7 s/call
+   date                                           96 calls   0.01 h       0 s/call
+   s322-1-7-build-ac2.sh                          11 calls   0.01 h       2 s/call
+   sprint-status.sh                               47 calls   0.01 h       0 s/call
+   while                                          42 calls   0.01 h       0 s/call
+   carry-over-evaluation.md;                      62 calls   0.01 h       0 s/call
+   validate-adversarial-convergence.sh            21 calls   0.01 h       1 s/call
+   lock-reread.sh                                  1 calls   0.01 h      20 s/call
+   python -m pip                                   8 calls   0.01 h       2 s/call
+   aurora-ac4-lock.sh                              2 calls   0.01 h      10 s/call
+   tail                                           52 calls   0.00 h       0 s/call
+   validate-locked-anchor.sh                      56 calls   0.00 h       0 s/call
+   aurora-reads.sh                                 1 calls   0.00 h      17 s/call
+   docker                                          5 calls   0.00 h       3 s/call
+   run.sh                                         42 calls   0.00 h       0 s/call
+   until                                          44 calls   0.00 h       0 s/call
+   git merge                                      58 calls   0.00 h       0 s/call
+   python -m playwright                            1 calls   0.00 h      14 s/call
+   wc                                             45 calls   0.00 h       0 s/call
+   for                                            43 calls   0.00 h       0 s/call
+   base-config-read.sh                             1 calls   0.00 h      12 s/call
+   matic-tunnel.sh                                 1 calls   0.00 h      12 s/call
+   ecs-switch-preset.sh                            5 calls   0.00 h       2 s/call
+   validate-provenance-block.sh                   15 calls   0.00 h       1 s/call
+   find                                           27 calls   0.00 h       0 s/call
+   lock-reread2.sh                                 1 calls   0.00 h      10 s/call
+   validate-spec-join.sh                          10 calls   0.00 h       1 s/call
+   ecs-write-rebalancer-base-config.sh             8 calls   0.00 h       1 s/call
+   head                                           39 calls   0.00 h       0 s/call
+   ai-dlc-protect.sh                              43 calls   0.00 h       0 s/call
+s323 lead: Bash wall 2.5 h
+   sleep                                          49 calls   0.38 h      28 s/call
+   gate-transition.sh                             61 calls   0.25 h      15 s/call
+   git push                                       27 calls   0.23 h      30 s/call
+   snapshot-update.sh                            500 calls   0.20 h       1 s/call
+   layer-drift.sh                                 10 calls   0.09 h      31 s/call
+   wait-for-deliverable.sh                       325 calls   0.08 h       1 s/call
+   hard-blockers.sh                                7 calls   0.07 h      38 s/call
+   validate-artifact-derivations.sh               37 calls   0.07 h       7 s/call
+   cd                                            636 calls   0.06 h       0 s/call
+   validate-snapshot-conservation.sh              25 calls   0.05 h       7 s/call
+   git commit                                     83 calls   0.05 h       2 s/call
+   join-remediator-shards.sh                     188 calls   0.04 h       1 s/call
+   verdict.sh                                     61 calls   0.04 h       3 s/call
+   run.sh                                         36 calls   0.04 h       4 s/call
+   while                                          31 calls   0.04 h       4 s/call
+   readopt-override.sh                             8 calls   0.04 h      17 s/call
+   validate-artifact-budget.sh                    13 calls   0.04 h      10 s/call
+   ledger-reverify.sh                             12 calls   0.04 h      11 s/call
+   validate-escalation-status-vocabulary.sh        7 calls   0.03 h      18 s/call
+   self-update-push.sh                             5 calls   0.03 h      25 s/call
+   test-pytest-admission.sh                        2 calls   0.03 h      60 s/call
+   validate-escalation-resolution.sh              10 calls   0.03 h      12 s/call
+   check-owed-derivations.sh                       9 calls   0.03 h      12 s/call
+   tail                                           92 calls   0.03 h       1 s/call
+   grep                                          352 calls   0.03 h       0 s/call
+   git log                                        57 calls   0.02 h       1 s/call
+   gh                                             22 calls   0.02 h       4 s/call
+   relabel-extension-checks.sh                     3 calls   0.02 h      25 s/call
+   emit-report.sh                                 31 calls   0.02 h       2 s/call
+   validate-steering-budget.sh                     5 calls   0.02 h      14 s/call
+   validate-gate-adjudication.sh                  57 calls   0.02 h       1 s/call
+   git fetch                                      20 calls   0.02 h       3 s/call
+   git status                                     74 calls   0.02 h       1 s/call
+   retro-replay-harness.sh                         7 calls   0.02 h       9 s/call
+   gate-checkpoint.sh                             84 calls   0.02 h       1 s/call
+   merge-adversarial-shards.sh                    38 calls   0.01 h       1 s/call
+   gate-slice.sh                                  31 calls   0.01 h       1 s/call
+   pytest                                         27 calls   0.01 h       1 s/call
+   cat                                           100 calls   0.01 h       0 s/call
+   git diff                                       49 calls   0.01 h       1 s/call
+   post-write-gates.sh                             6 calls   0.01 h       6 s/call
+   push-drain.sh                                  10 calls   0.01 h       4 s/call
+   preclassify.sh                                 13 calls   0.01 h       3 s/call
+   python3                                       103 calls   0.01 h       0 s/call
+   validate-adversarial-convergence.sh            37 calls   0.01 h       1 s/call
+   validate-layer-entries.sh                       2 calls   0.01 h      15 s/call
+   derivation-differential.sh                      4 calls   0.01 h       7 s/call
+   validate-stub-audit.sh                          5 calls   0.01 h       6 s/call
+   for                                            26 calls   0.01 h       1 s/call
+   unregistered-drift.sh                           1 calls   0.01 h      27 s/call
+   ls                                             91 calls   0.01 h       0 s/call
+   until                                          19 calls   0.01 h       1 s/call
+   hermetic-run.sh                                 8 calls   0.01 h       3 s/call
+   sed                                           103 calls   0.01 h       0 s/call
+   partition-document.sh                          32 calls   0.01 h       1 s/call
+   git                                            51 calls   0.01 h       0 s/call
+   validate-ac-falsifiability.sh                   4 calls   0.01 h       5 s/call
+   merge-review-shards.sh                         21 calls   0.01 h       1 s/call
+   scratchpad;                                    62 calls   0.01 h       0 s/call
+   validate-provenance-block.sh                   11 calls   0.00 h       1 s/call
+   trim-snapshot.sh                                1 calls   0.00 h      13 s/call
+   ai-dlc-dist;                                   21 calls   0.00 h       1 s/call
+   scratchpad                                     43 calls   0.00 h       0 s/call
+   git merge                                      17 calls   0.00 h       1 s/call
+   .object.sh                                      7 calls   0.00 h       2 s/call
+   apply.sh                                       20 calls   0.00 h       1 s/call
+   partition-subject.sh                           12 calls   0.00 h       1 s/call
+   validate-bmad-invocations.sh                    1 calls   0.00 h      10 s/call
+   tool.sh                                         1 calls   0.00 h      10 s/call
+   repair-conservation.sh                          1 calls   0.00 h       9 s/call
+   date                                           35 calls   0.00 h       0 s/call
+   ledger-rotate.sh                                4 calls   0.00 h       2 s/call
+   wc                                             29 calls   0.00 h       0 s/call
+   dist-clone.sh                                  18 calls   0.00 h       0 s/call
+   resolve-cited-paths.sh                         13 calls   0.00 h       1 s/call
+   head                                           30 calls   0.00 h       0 s/call
+   audit-upstream-routing.sh                       7 calls   0.00 h       1 s/call
+   validate-spec-join.sh                           5 calls   0.00 h       1 s/call
+   echo                                           18 calls   0.00 h       0 s/call
+   sprint-status.sh                               13 calls   0.00 h       0 s/call
+s323 sub: Bash wall 11.2 h
+   wait-for-deliverable.sh                       765 calls   6.32 h      30 s/call
+   pytest                                        243 calls   1.02 h      15 s/call
+   sleep                                          34 calls   0.50 h      53 s/call
+   validate-spawn-ledger.sh                       30 calls   0.43 h      51 s/call
+   grep                                         4812 calls   0.33 h       0 s/call
+   validate-artifact-derivations.sh              561 calls   0.32 h       2 s/call
+   cd                                           3122 calls   0.31 h       0 s/call
+   aws                                            40 calls   0.27 h      25 s/call
+   npx vitest                                     34 calls   0.21 h      22 s/call
+   while                                          65 calls   0.11 h       6 s/call
+   validate-mutation-red.sh                       89 calls   0.10 h       4 s/call
+   npm install                                    13 calls   0.09 h      26 s/call
+   git diff                                      286 calls   0.09 h       1 s/call
+   git worktree                                   23 calls   0.09 h      14 s/call
+   join-remediator-shards.sh                     356 calls   0.08 h       1 s/call
+   sed                                          1136 calls   0.07 h       0 s/call
+   python3 -m pytest                              27 calls   0.07 h       9 s/call
+   git                                           856 calls   0.06 h       0 s/call
+   pw-browsers                                     1 calls   0.05 h     180 s/call
+   check-owed-derivations.sh                      16 calls   0.04 h       9 s/call
+   validate-gate-adjudication.sh                 432 calls   0.04 h       0 s/call
+   merge-adversarial-shards.sh                   140 calls   0.04 h       1 s/call
+   merge-review-shards.sh                         95 calls   0.03 h       1 s/call
+   python -m pytest                               37 calls   0.03 h       3 s/call
+   verdict.sh                                     39 calls   0.03 h       3 s/call
+   ls                                            238 calls   0.02 h       0 s/call
+   npx cdk                                         1 calls   0.02 h      79 s/call
+   validate-ac-falsifiability.sh                  69 calls   0.02 h       1 s/call
+   validate-stub-audit.sh                         22 calls   0.02 h       3 s/call
+   python3                                        99 calls   0.02 h       1 s/call
+   git status                                    114 calls   0.02 h       1 s/call
+   node_modules                                    2 calls   0.02 h      31 s/call
+   node                                            1 calls   0.02 h      61 s/call
+   validate-handoff-evidence.sh                   52 calls   0.01 h       1 s/call
+   git commit                                     42 calls   0.01 h       1 s/call
+   npm test                                        6 calls   0.01 h       8 s/call
+   awk                                           249 calls   0.01 h       0 s/call
+   shasum                                        208 calls   0.01 h       0 s/call
+   git log                                       108 calls   0.01 h       0 s/call
+   head                                           28 calls   0.01 h       2 s/call
+   validate-cycle-commits.sh                       7 calls   0.01 h       6 s/call
+   cat                                           189 calls   0.01 h       0 s/call
+   python3 -m venv                                 4 calls   0.01 h       9 s/call
+   test-aws-smoke.sh                             121 calls   0.01 h       0 s/call
+   validate-adversarial-convergence.sh            19 calls   0.01 h       2 s/call
+   ci-local.sh                                    88 calls   0.01 h       0 s/call
+   date                                          127 calls   0.01 h       0 s/call
+   P=$(pgrep                                       1 calls   0.01 h      23 s/call
+   until                                          41 calls   0.01 h       0 s/call
+   sprint-status.sh                               52 calls   0.01 h       0 s/call
+   find                                           51 calls   0.01 h       0 s/call
+   mutations.sh                                    1 calls   0.01 h      18 s/call
+   npx vite                                        2 calls   0.01 h       9 s/call
+   validate-spec-join.sh                          28 calls   0.00 h       1 s/call
+   validate-spec-adoption.sh                       4 calls   0.00 h       4 s/call
+   tail                                           67 calls   0.00 h       0 s/call
+   validate-escalation-resolution.sh               1 calls   0.00 h      12 s/call
+   read-base-config.sh                             1 calls   0.00 h      12 s/call
+   wc                                             49 calls   0.00 h       0 s/call
+   carry-over-evaluation.md;                      29 calls   0.00 h       0 s/call
+   cp                                              8 calls   0.00 h       1 s/call
+   python                                         40 calls   0.00 h       0 s/call
+   scratchpad;                                    37 calls   0.00 h       0 s/call
+   npx playwright                                  5 calls   0.00 h       2 s/call
+   run-exec-health.sh                             41 calls   0.00 h       0 s/call
+   validate-carried-findings.sh                   16 calls   0.00 h       0 s/call
+   npx jest                                        2 calls   0.00 h       4 s/call
+   validate-locked-anchor.sh                      12 calls   0.00 h       1 s/call
+   for                                            18 calls   0.00 h       0 s/call
+   ecs-deploy.sh                                  26 calls   0.00 h       0 s/call
+   01-pre-deploy-az-lookup.sh                      3 calls   0.00 h       2 s/call
+   ps                                             16 calls   0.00 h       0 s/call
+   uv                                             32 calls   0.00 h       0 s/call
+   git merge                                       4 calls   0.00 h       1 s/call
+   stories;                                       11 calls   0.00 h       0 s/call
+   F=$(find                                        5 calls   0.00 h       1 s/call
+   mkdir                                          13 calls   0.00 h       0 s/call
+   hashlib.sh                                     13 calls   0.00 h       0 s/call
+   validate-provenance-block.sh                    9 calls   0.00 h       0 s/call
+   jq                                             13 calls   0.00 h       0 s/call

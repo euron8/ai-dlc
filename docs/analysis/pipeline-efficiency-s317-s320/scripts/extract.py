@@ -37,6 +37,12 @@ WIN_START = (sys.argv[2] if len(sys.argv) > 2 else os.environ.get("EXTRACT_WIN_S
 # WIN_END pins a snapshot: argv[3], else $EXTRACT_WIN_END, else unbounded. A record whose timestamp is LATER
 # than it is dropped, compared as an instant (not as a string, so fractional seconds order correctly).
 WIN_END = (sys.argv[3] if len(sys.argv) > 3 else os.environ.get("EXTRACT_WIN_END")) or None
+# EXTRACT_MONOTONE_SEGS=1 measures the segs interval on a MONOTONE clock, as Classer.interval() already does: an
+# out-of-order record charges 0 and does not move the clock back. Unset, segs keeps the clock it always had
+# (prev_t = this record), so every committed output reproduces byte for byte. The switch exists because s323's
+# transcripts replay a burst of `attachment` records stamped BEFORE an operator pause after the record that ends
+# it; the old clock then counts the one pause once per replayed record (lead 68cf8de7: a 4.73 h pause read as 75 h).
+MONOTONE_SEGS = os.environ.get("EXTRACT_MONOTONE_SEGS") == "1"
 os.makedirs(OUT, exist_ok=True)
 
 STEP_RE = re.compile(r"skills/ai-dlc(?:-update)?/steps/([A-Za-z0-9_.-]+)\.md")
@@ -360,7 +366,7 @@ def scan(path, kind, meta):
             if gap <= 300: pass
             elif (typ == "user" and human_prompt(r)) or any(v[0] == "AskUserQuestion" for v in pend.values()): S["op_wait"] += gap
             else: S["agent_wait"] += gap
-        prev_t = tt
+        prev_t = max(prev_t, tt) if (MONOTONE_SEGS and prev_t is not None) else tt
         if K: K.interval(step, tt)
         if r.get("isCompactSummary"):
             compactions += 1; S["compactions"] += 1

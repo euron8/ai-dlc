@@ -6,6 +6,17 @@ and [`pipeline-efficiency-s317-s320/`](pipeline-efficiency-s317-s320/README.md) 
 and their raw output are in [`pipeline-efficiency-s317-s322/`](pipeline-efficiency-s317-s322/).
 Nothing was written to graph.
 
+> **Correction, 2026-11-18 (batch 259, C4b).** Every hours figure in this report is overstated. The extractor's
+> segment clock charged an out-of-order record's interval twice. Tokens, dollars and call counts are unchanged,
+> and the sprint ordering does not change. In-session hours for the sprints whose published total the later
+> run reproduces, published against a monotone clock: s318 74.8 and 59.6; s319 110.0 and 94.0; s320 117.8 and
+> 99.2; s321 120.5 and 111.0. Per-step hours move too. Derivation: `extract.py` with `EXTRACT_MONOTONE_SEGS=1`
+> at pin `2026-11-18T17:54:00Z`, whose default-clock totals for those four sprints equal the figures published
+> here. Not re-measured: this report's s317 (112.8 h, a different window from the later 80.8 h) and its s322
+> (56.6 h, a partial sprint, superseded by the batch 259 update, where s322 complete reads 66.4 h against
+> 77.1 h). The figures in this report are not regenerated; that is owed under BL-1174 at the s323-close
+> re-take. Detail: [`pipeline-efficiency-s323-provisional-b259.md`](pipeline-efficiency-s323-provisional-b259.md).
+
 ## Answer
 
 1. **The implementation-step fixes worked.** Implementation plus its gate fell from 2.09 h and $41.3
