@@ -1275,6 +1275,6 @@ that resolves in this tree can resolve nowhere in an installed one.
 - `scripts/validate-enforcement-map.sh` — Steps 5-7. `set -u` at `:155`, `REPO_ROOT` at `:157`,
   the stale 1582-fork budget at `:173-177`, `in_lines`/`in_body` at `:192-215`, `lc_file` at
   `:599`, I65's per-enforcer tree walk at `:1166-1177`, `i87_readable` at `:5620-5626`
-- `scripts/render-invariant-index.sh:76-148` — `EXTRACT_AWK`, **the only correct arm grammar**
+- `scripts/render-invariant-index.sh:105-190` — `EXTRACT_AWK`, **the only correct arm grammar**
   (96 header-shaped lines against a column-0 grep's 83), and the self-probe posture to copy
 - `core/fixtures/suite-dispatch-order/run.sh` — where Step 1 is proven and its mutant lives

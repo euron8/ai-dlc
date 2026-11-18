@@ -60,6 +60,7 @@ want() { [ -z "$CELLS" ] && return 0; case " $CELLS " in *" $1 "*) return 0 ;; e
 # ran <cell>: printed inside each want-gated block, once per cell whose assertion that block evaluates.
 ran() { echo "RAN $1"; }
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/world.sh" || { echo "REFUSED: lib/world.sh is not beside this receipt's fixtures" >&2; exit 9; }
 [ -f "$(dirname "$HE")/record-only-diff.sh" ] || { echo "REFUSED: no record-only-diff.sh beside $HE" >&2; exit 9; }
 # With RCPT_WORLD set (run.sh's rcpt_run), the world is seeded ONCE into that directory and every later call
 # reads it (no call writes into it: the validator reads its repository and writes only under its own mktemp).
@@ -70,7 +71,7 @@ else
   trap 'rm -rf "$R"' EXIT
 fi
 W="$R/w"
-g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$W" -c user.name=r -c user.email=r@example.invalid \
+g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$W" -c user.name=r -c user.email=r@example.invalid \
   -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 if [ -f "$R/.seeded" ]; then
   B="$(cat "$R/.B")"; T="$(cat "$R/.T")"

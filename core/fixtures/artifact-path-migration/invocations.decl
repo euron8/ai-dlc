@@ -1,3 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-240 *
-26 core/scripts/migrate-artifact-paths.sh
+# Re-measured (BL-878, batch 259 C3) by one counted run: the subject runs in process through mig/inproc_run (inproc row); it starts only in its cli cells (cells.decl).
+239 *
+4 core/scripts/migrate-artifact-paths.sh
+30 inproc:core/scripts/migrate-artifact-paths.sh

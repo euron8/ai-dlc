@@ -22,6 +22,7 @@ set -uo pipefail
 case "${BASH_SOURCE[0]}" in */*) _rl="${BASH_SOURCE[0]%/*}/../lib" ;; *) _rl=../lib ;; esac
 ok() { :; }; bad() { :; }
 . "$_rl/mutant.sh" || { echo "FIXTURE BROKEN: cannot source $_rl/mutant.sh" >&2; exit 2; }
+. "$_rl/world.sh" || { echo "FIXTURE BROKEN: cannot source $_rl/world.sh" >&2; exit 2; }
 unset -f ok bad; unset _rl
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 [ "$#" -eq 1 ] && [ -f "$1" ] && [ "$(basename "$1")" = record-only-diff.sh ] \
@@ -35,7 +36,7 @@ G() { git -c user.name=receipt -c user.email=receipt@example.invalid -c commit.g
 R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl885-frozen.XXXXXX")" || exit 9
 trap 'rm -rf "$R"' EXIT
 T="$(cd -P "$R" && pwd -P)/repo"
-mkdir -p "$T/stories" && G init -q "$T" \
+mkdir -p "$T/stories" && world_git init -q "$T" \
   && printf -- '---\nstatus: review\n---\n# S\n' > "$T/stories/s.md" && G -C "$T" add -A && G -C "$T" commit -q -m base \
   && B="$(G -C "$T" rev-parse HEAD)" \
   && printf -- '---\nstatus: review\n---\n# N\n' > "$T/stories/new.md" \

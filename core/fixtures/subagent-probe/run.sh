@@ -20,6 +20,29 @@ echo "HERMETIC-CONSUMED core/hooks/ai-dlc-subagent-probe.sh"
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-usage-tokens.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# IN PROCESS (BL-878). The hook is SOURCED ONCE (inproc_load; its column-0 guard returns after defining sap_main) and
+# every fire is `sap_ip`, which answers what `bash "$HOOK"` gives, in a subshell made to look like a fresh bash
+# (core/fixtures/lib/inproc.sh), with the payload on stdin. One cli cell per distinct CLI outcome, at the end.
+# A literal-tail path, never `. "$VAR"`: an opaque source reads as a drive.
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+# A hook without the wrap would RUN when sourced -- read this shell's stdin and `exit 0` it, a silent green -- so both
+# halves are required before the load: the `sap_main() {` line and the column-0 source guard.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A hook with neither half predates the wrap: SKIP and exit 0 on a consumer,
+# FIXTURE BROKEN in the distribution (lib/layout.sh fx_skip_exit), never an ok. Exactly one half is a respelled hook
+# this fixture cannot drive, which FAILS. An unreadable hook is FIXTURE ERROR.
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+[ -r "$HOOK" ] || { echo "FIXTURE ERROR: cannot read $HOOK -- an unreadable hook is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'sap_main() {' "$HOOK" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: subagent-probe: $HOOK predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$HOOK carries one half of the in-process wrap (sap_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive"; report_end subagent-probe; exit 1 ;;
+esac
+inproc_load "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK defined nothing" >&2; exit 2; }
+declare -F sap_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no sap_main" >&2; exit 2; }
+sap_ip() { inproc_run "$HOOK" sap_main; }
 chk() { [ "$2" = "$3" ] && ok "$1" || bad "$1 -- expected '$3', got '$2'"; }
 
 OUT="$PROJ/_bmad-output/subagent-context.jsonl"
@@ -73,7 +96,7 @@ fire() {
   jq -nc --arg t "$_f_lead" --arg a "$_f_aid" \
     '{transcript_path:$t, agent_id:$a, hook_event_name:"SubagentStop"}' \
     | jq -c --arg m "${FIRE_MSG:-}" "${FIRE_EXTRA:-.}" \
-    | CLAUDE_PROJECT_DIR="$_f_proj" bash "$HOOK" 2>/dev/null
+    | CLAUDE_PROJECT_DIR="$_f_proj" sap_ip 2>/dev/null
 }
 last() { tail -1 "$OUT" 2>/dev/null | jq -r "$1 // empty" 2>/dev/null; }
 # `last` CANNOT SEE THE DIFFERENCE BETWEEN null AND "", which is the distinction two
@@ -309,7 +332,7 @@ for _sig_a in sig-calm sig-crowded; do
   jq -nc --arg t "$SIGLEAD" --arg a "$_sig_a" \
     '{transcript_path:$t, agent_id:$a, hook_event_name:"SubagentStop"}' \
     > "$WORKDIR/sig-payload.json"
-  CLAUDE_PROJECT_DIR="$PROJ" bash "$HOOK" < "$WORKDIR/sig-payload.json" 2>/dev/null
+  CLAUDE_PROJECT_DIR="$PROJ" sap_ip < "$WORKDIR/sig-payload.json" 2>/dev/null
 done
 chk "7a two teammates under ONE lead: both rows written" \
   "$(wc -l < "$OUT" | tr -d ' ')" "2"
@@ -490,6 +513,45 @@ chk "9e CONTROL: with the directory writable again the same fire writes" "$(cat 
 chk "9f CONTROL: the directory holds final files (else the count below is vacuous)" \
   "$([ "$(/usr/bin/find "$FDIR" -name '*.txt' | wc -l | tr -d ' ')" -gt 0 ] && echo some || echo none)" "some"
 chk "9f no .tmp.* file remains in .subagent-final after successful writes" "$(/usr/bin/find "$FDIR" "$RO/_bmad-output/.subagent-final" -name '.tmp.*' | wc -l | tr -d ' ')" "0"
+
+# --- the cli cells (cells.decl): the hook run as a PROGRAM once per distinct CLI outcome ---------------------------
+# The hook exits 0 with nothing on stdout on every path, so its outcomes are what it leaves: a telemetry row (a
+# pipeline tree) or none (no snapshot). One `FXCELL=<id> bash "$HOOK"` start per outcome, on the same payload as the
+# in-process call: stdout, stderr and exit compared byte for byte, and the row it appended (ts deleted, the one
+# wall-clock field) and the final-message file it wrote compared too. Each cell also asserts its own outcome.
+EQ="$WORKDIR/eq"; mkdir -p "$EQ" || { echo "FIXTURE BROKEN: mkdir $EQ" >&2; exit 2; }
+eq_side() { # <project> <agent_id> <rows before> <dest prefix> -> the appended row (ts deleted) and the final file, moved aside
+  local f="$1/_bmad-output/subagent-context.jsonl" fin="$1/_bmad-output/.subagent-final/$2.txt" n
+  n="$(wc -l < "$f" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
+  if [ "$n" -gt "$3" ]; then tail -n "+$(($3 + 1))" "$f" | jq -c 'del(.ts)' > "$4.row"; else : > "$4.row"; fi
+  if [ -f "$fin" ]; then mv "$fin" "$4.fin"; else : > "$4.fin"; fi
+}
+eqv() { # <cell-id> <project> <seed> -> $EQ/<id>.{ip,cl}.{out,err,rc,row,fin}; 0 when the two agree byte for byte
+  local id="$1" proj="$2" aid="eq-$1" lead="$EQ/$1-lead.jsonl" r0 s
+  printf '%s\n' '{"timestamp":"2020-01-01T00:00:00Z","isSidechain":false,"type":"user","message":{"role":"user","content":"eq lead"}}' > "$lead"
+  mkdir -p "$EQ/$id-lead/subagents" && cp "$WORKDIR/$3" "$EQ/$id-lead/subagents/agent-$aid.jsonl" || return 1
+  jq -nc --arg t "$lead" --arg a "$aid" '{transcript_path:$t, agent_id:$a, hook_event_name:"SubagentStop", last_assistant_message:"eq words"}' > "$EQ/$id.in"
+  for s in ip cl; do
+    r0="$(wc -l < "$proj/_bmad-output/subagent-context.jsonl" 2>/dev/null | tr -d ' ')"; r0="${r0:-0}"
+    if [ "$s" = ip ]; then CLAUDE_PROJECT_DIR="$proj" sap_ip < "$EQ/$id.in" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    else CLAUDE_PROJECT_DIR="$proj" FXCELL="$id" bash "$HOOK" < "$EQ/$id.in" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"; fi
+    eq_side "$proj" "$aid" "$r0" "$EQ/$id.$s"
+  done
+  for s in out err rc row fin; do cmp -s "$EQ/$id.ip.$s" "$EQ/$id.cl.$s" || return 1; done
+}
+eq_twin() { local s o=""; for s in out err rc row fin; do o="$o $s=$(wc -c < "$EQ/$1.ip.$s" | tr -d ' ')/$(wc -c < "$EQ/$1.cl.$s" | tr -d ' ')B"; done; printf 'in-process/program%s' "$o"; }
+if eqv cli-row "$PROJ" calm.jsonl && [ "$(cat "$EQ/cli-row.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-row.cl.out" ] \
+   && [ "$(jq -r .peak_tokens "$EQ/cli-row.cl.row")" = 60000 ] && [ "$(cat "$EQ/cli-row.cl.fin")" = "eq words" ]; then
+  ok "cli-row: the program writes the same row and final file as the in-process call (stdout, stderr, exit 0)"
+else
+  bad "cli-row: the program and the in-process call differ, or the outcome is not one row with peak 60000 ($(eq_twin cli-row))"
+fi
+if eqv cli-noop "$NOPIPE" calm.jsonl && [ "$(cat "$EQ/cli-noop.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-noop.cl.out" ] \
+   && [ ! -s "$EQ/cli-noop.cl.row" ] && [ "$(cat "$EQ/cli-noop.cl.fin")" = "eq words" ]; then
+  ok "cli-noop: with no snapshot the program writes no row, as the in-process call does (its final file still lands)"
+else
+  bad "cli-noop: the program and the in-process call differ, or the no-snapshot outcome wrote a row ($(eq_twin cli-noop))"
+fi
 
 echo
 report_end subagent-probe

@@ -10,7 +10,9 @@
 # s318/s319 passes' deltas held only review records, story records and captures (RECORDS). The Rule A
 # seeds are graph s319's: 1-1-b added an 18-line live smoke test to server/test_live_smoke.py (SMOKE),
 # 2-3a-a and 3-1-c changed only records and captures (RECORDS_QA).
-rr_G() { git -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
+rr_G() { world_git -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 rr_commit() { # <repo> <message> -> prints the new sha
   rr_G -C "$1" add -A >/dev/null 2>&1 && rr_G -C "$1" commit -q -m "$2" >/dev/null 2>&1 && rr_G -C "$1" rev-parse HEAD
 }

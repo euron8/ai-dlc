@@ -62,6 +62,7 @@
 #    "matcher": "Agent|Task|Skill|TaskCreate|Write|Edit|MultiEdit|NotebookEdit"
 # 4. Restart Claude Code; verify with /hooks
 
+ack_main() {
 set -u
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
@@ -75,8 +76,8 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 # THE ACTOR. The harness sets this only on a tool call made INSIDE a dispatched teammate (an
-# `Agent` child); the lead's own calls carry none. `ai-dlc-gate-remediation-guard.sh:797` and
-# `ai-dlc-context-sensor.sh:164` read the same field for the same question. Read here, beside
+# `Agent` child); the lead's own calls carry none. `ai-dlc-gate-remediation-guard.sh:812` and
+# `ai-dlc-context-sensor.sh:182` read the same field for the same question. Read here, beside
 # the transcript path, because the two are a PAIR on a teammate's call: the path is the LEAD's
 # session file, never the teammate's own -- see Check 2z below.
 AGENT_ID=$(echo "$INPUT" | jq -r '.agent_id // empty')
@@ -280,7 +281,7 @@ esac
 # a role file; the router is not its step to read. The check fired on teammates anyway from the
 # day it shipped, by an accident of the harness: on a teammate's tool call `transcript_path` is
 # the LEAD's session file, not the teammate's own (`<session>/subagents/agent-<id>.jsonl`, see
-# `ai-dlc-subagent-probe.sh:126-151`), so `AIDLC_SESSION` is read off the lead's `/ai-dlc`
+# `ai-dlc-subagent-probe.sh:190-194` and `:236`), so `AIDLC_SESSION` is read off the lead's `/ai-dlc`
 # marker while the router Read the teammate DID make sits in a file this scan never opens.
 # Measured on the reference consumer (`PC-S308-AI-DLC-ACKNOWLEDGE-ROUTE-DENIED-SUBAGENT-CANNOT-
 # CLEAR`): a teammate read `steps/route.md`, was denied twice in the two minutes after, and the
@@ -998,3 +999,6 @@ jq -n \
   }'
 
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ack_main "$@"

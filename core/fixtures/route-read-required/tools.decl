@@ -17,3 +17,6 @@ sed
 tail
 touch
 cp
+cmp
+wc
+tr

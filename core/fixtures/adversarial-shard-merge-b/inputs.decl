@@ -40,3 +40,4 @@ core/fixtures/adversarial-shard-merge/seed.story-1-rebalancer-il-accuracy.md
 core/fixtures/adversarial-shard-merge-b/run.sh
 core/fixtures/adversarial-shard-merge-c/run.sh
 core/fixtures/adversarial-shard-merge-d/run.sh
+core/fixtures/lib/world.sh

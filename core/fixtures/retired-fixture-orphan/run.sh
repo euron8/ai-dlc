@@ -64,6 +64,7 @@ trap 'rm -rf "$WORK"' EXIT
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: sourcing lib/mutant.sh failed" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+. "$HERE/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 
 # --- the pre-wrap consumer gate (BL-878): a consumer runs its OWN installed detector, which can predate the
 # in-process wrap. Neither half -> SKIP (never an ok); one half -> FAIL naming it; unreadable -> FIXTURE ERROR.
@@ -89,7 +90,7 @@ rf_run() { # <detector copy> <args...>
     declare -F rf_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $_c defined no rf_main" >&2; exit 2; }
     rf_main "$@" ); }
 
-git_q() { git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}" >/dev/null 2>&1; }
+git_q() { world_git -C "$1" -c user.email=f@x -c user.name=f -c commit.gpgsign=false "${@:2}" >/dev/null 2>&1; }
 
 # ---------------------------------------------------------------- the scratch distribution
 # A real git repo, because arm B's whole predicate is a history question and a fake one

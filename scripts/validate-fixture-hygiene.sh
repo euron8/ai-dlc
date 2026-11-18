@@ -387,14 +387,14 @@
 #     THE REMAINDER the grammar does not read, each re-derived at 619bfde94 by an uncommitted instrumented copy of this
 #     scan (its controls: hits on the known `gitq -C … init` and `G init` lines): wrapper-function inits, a command-
 #     position word other than git/world_git followed by `init`, 129 code lines in 29 fixtures, 19 of them with no
-#     arm row; variable-held git, 2 lines (`"$REAL_GIT" init`, fanout-payload-channel run.sh:156 and fanout-untracked-
+#     arm row (now READ by the wrapper clause below, BL-1162); variable-held git, 2 lines (`"$REAL_GIT" init`, fanout-payload-channel run.sh:156 and fanout-untracked-
 #     corpus run.sh:96), neither an arm row; heredoc-body inits, 11 lines in fixture-invocation-budget,
 #     prepush-worktree-env-scrub and shell-portability, each also an arm row through a code line, so no fixture is
 #     heredoc-only (gate-remediation-deny seed.sh:212 and ledger-reverify-dist-only-reach run.sh:82 are CODE lines and
 #     arm rows); script-string inits, 5 lines (fixture-git-env-seam run.sh:272/295/325, review-shard-merge
 #     receipt-bl980.sh:114, shell-portability run.sh:433); `git clone` worlds, 27 code lines in 13 fixtures; `cp -R`/
 #     `-r`/`-a` in command position, 311 lines in 82 fixtures, an upper bound (not each copies a git world). The
-#     wrapper-rewrite escape: a hand init rewritten through a local wrapper (`g() { git "$@"; }; g init`) clears H14.
+#     wrapper-rewrite escape: a hand init rewritten through a local wrapper (`g() { git "$@"; }; g init`) cleared H14.
 #     COST, execs counted by a PATH-front logging shim over one check run of the real tree: 88 at 619bfde94, 97 with
 #     H14 (its list cp, judge awk, sort, N14 grep, count awk, grep -c, grep -qE, and H14-M4's git rev-parse and cat-file
 #     on the SKIP path); once origin/main carries the list, m4's git show, awk and sort make it 100. No new corpus pass.
@@ -409,6 +409,30 @@
 #     a `#` comment, an echo string, a heredoc body, `git log --grep=init`, `git commit -m init` and a wrapper defined
 #     as `git -c init.defaultBranch=main "$@"` stay quiet; `git -C "$d" -c init.defaultBranch=main init -q` in a lib.sh
 #     FAILs.
+#     THE WRAPPER CLAUSE (BL-1162; `wr14` in the scan, the WD/WU join in the judge): a WRAPPER is a function defined in
+#     the fixture's own .sh population (`name() {` or `function name`, any indentation, one-line, multi-line or nested
+#     body, tracked by brace depth) whose body has a command-position `git` (line start, after `;` `&` `|` `(` `{` `!`
+#     `then`/`do`/`else`, past `command`/`exec`/`env`/`-u X`/NAME=value prefixes); `world_git` never counts (the `_`
+#     before `git`). A HIT is a code line (masked: no comment, string or heredoc body) whose command-position word
+#     (after an `if`/`elif`/`while`/`until`/`then`/`do`/`else`/`!` run) is a wrapper DEFINED IN THE SAME FIXTURE
+#     (any of its files), followed by an option run (`-C <w>`, `-c <k=v>`, `--git-dir=`, `--work-tree=`, `--no-pager`,
+#     `-P`, `--bare`, `-q`) and/or up to two dir-first words, then the whole word `init`; one count per line, the
+#     fixture's first such line is its H14 row. Keywords, builtins and undefined words are excluded by requiring the
+#     definition; core/fixtures/lib is out of the population, so a wrapper defined only there is read by no fixture.
+#     NAMED BLIND ROUTES (the entry stays open): variable-held git (`"$REAL_GIT"`, in a wrapper body or a call; a body
+#     of only `"$REAL_GIT"` is no wrapper), a wrapper body that is a subshell (`g() ( git "$@" )`), a wrapper whose body reaches git only after `if`/`elif`/`while`/`until`/`time` (`g() { if git "$@"; then :; fi; }`), a wrapper that
+#     reaches git only through another wrapper, an alias, `eval`, and a wrapper call whose option run is longer than
+#     the grammar. At 747f89054 the clause reads 133 code lines in 30 fixtures (the census hand's figure; the entry's
+#     129/29 was taken at 619bfde94), 19 fixtures with no allowlist row, 11 listed; controls: 31 `gitq ... init` in
+#     procsub-staged-refusal, 20 `G init` (review-shard-merge 16, carried-findings 4). FP SET: 0. Every one of the 133
+#     lines was read: 11 listed fixtures by hand, 19 as the migration targets. How it reached 0 (the misses, not
+#     false hits, were the error): a first definition closure on `}` read 124 lines in 27 fixtures (an indented
+#     definition lost its name, and a definition nested in an open function was never read); the brace-depth stack
+#     reads all 133. Proved by hand at authoring: `g(){ git "$@"; }; g -C "$d" init`, a nested
+#     `f() { if ...; then g -c a=b --no-pager init -q "$1" "$2"; fi; }`, a `function g {` multi-line, a cross-file
+#     definition (lib.sh) and a `g` after a `#` line carrying `<<EOT` (no phantom heredoc) FIRE; `g(){ world_git "$@"; }`,
+#     `echo "g init"`, `echo init`, `# g init`, a heredoc body, an undefined `ok init`, a `"$REAL_GIT"` body and a wrapper
+#     defined only in core/fixtures/lib stay quiet. COST: no exec added (the scan awk and the judge awk already run).
 #
 # ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
 # rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
@@ -878,9 +902,51 @@ function gi14(i,   s, t) {
   t = trim(O[i]); gsub(/\t/, " ", t)
   print "GI\t" FX "\t" REL ":" i ": " substr(t, 1, 160)
 }
+# wr14 <line>: the wrapper-rewrite escape. A function DEFINED in this fixture's own .sh population (`name() {` or
+# `function name`, a one-line or a multi-line body) whose body has a command-position `git` is a git wrapper: it emits
+# `WD <fx> <name>`. A code line whose command-position word is followed by an option run and/or up to two dir-first
+# words and then the whole word `init` emits `WU <fx> <word> <file>:<line>: <text>`; the judge counts a WU row only
+# when its fixture holds a WD row of that word (so a keyword, a builtin and any undefined word stay quiet). `git` and
+# `world_git` are never a WU word. A `"$REAL_GIT"` body is not a command-position `git`: variable-held git is out.
+function brc(t,   n, off, o, c) {
+  n = 0; off = 0; o = 0; c = 0
+  while (match(substr(t, off + 1), /(^|[[:space:];&|(])\{([[:space:]]|$)/)) { o++; off += RSTART + RLENGTH - 1 }
+  off = 0
+  while (match(substr(t, off + 1), /(^|[[:space:];&|)])\}([[:space:];&|)]|$)/)) { c++; off += RSTART + RLENGTH - 1 }
+  W14O = o; W14C = c
+}
+function wr14(i,   s, t, nm, off, m, w, gre, ure, k, isdef) {
+  s = M[i]; t = s; isdef = 0
+  gre = "(^|[;&|({!]|[[:space:]]then|[[:space:]]do|[[:space:]]else)[[:space:]]*(((command|exec|env)|-u[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*git([[:space:]]|$)"
+  if (s ~ /^[[:space:]]*function[[:space:]]+[A-Za-z_][A-Za-z0-9_.:-]*/ || s ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_.:-]*[[:space:]]*\(\)/) {
+    t = s; sub(/^[[:space:]]*function[[:space:]]+/, "", t); sub(/^[[:space:]]+/, "", t)
+    nm = t; sub(/[^A-Za-z0-9_.:-].*$/, "", nm)
+    sub(/^[A-Za-z_][A-Za-z0-9_.:-]*[[:space:]]*(\(\))?/, "", t)
+    ND++; DNM[ND] = nm; DST[ND] = BD; DGT[ND] = 0; DOP[ND] = 0; DLN[ND] = 0; isdef = 1
+  }
+  if (t ~ gre) for (k = 1; k <= ND; k++) DGT[k] = 1
+  brc(t); BD += W14O - W14C
+  for (k = 1; k <= ND; k++) { DLN[k]++; if (BD > DST[k] || (isdef && k == ND && W14O > 0)) DOP[k] = 1 }
+  while (ND > 0 && ((DOP[ND] && BD <= DST[ND]) || (!DOP[ND] && DLN[ND] > 1))) {
+    if (DOP[ND] && DGT[ND]) print "WD\t" FX "\t" DNM[ND]
+    ND--
+  }
+  if (!index(s, "init")) return
+  ure = "(^|[;&|({])[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*[A-Za-z_][A-Za-z0-9_.:-]*([[:space:]]+(-[cC][[:space:]]+[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare|-q))*([[:space:]]+[^-[:space:];&|()<>][^[:space:];&|()<>]*)?([[:space:]]+[^-[:space:];&|()<>][^[:space:];&|()<>]*)?[[:space:]]+init([[:space:]]|$)"
+  off = 0
+  while (match(substr(s, off + 1), ure)) {
+    m = substr(s, off + RSTART, RLENGTH); off += RSTART + RLENGTH - 2
+    sub(/^[;&|({]*[[:space:]]*/, "", m)
+    while (sub(/^(if|elif|while|until|then|do|else|!)[[:space:]]+/, "", m)) ;
+    w = m; sub(/[[:space:]].*$/, "", w)
+    if (w == "git" || w == "world_git" || w == "init") continue
+    t = trim(O[i]); gsub(/\t/, " ", t)
+    print "WU\t" FX "\t" w "\t" REL ":" i ": " substr(t, 1, 160)
+  }
+}
 function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h, k, re, w2, pe) {
   if (FX != "" && FX != "lib") prep6()
-  R12 = ""; split("", S12); split("", MV12)
+  R12 = ""; split("", S12); split("", MV12); ND = 0; BD = 0
   for (i = 1; i <= NL; i++) {
     s = M[i]
     # H1
@@ -941,7 +1007,7 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
       if (t8 ~ /hooks\/ai-dlc|\$HOOK/) { HK8[FX] = 1; print "HK8\t" FX "\t" REL ":" i }
     }
     if (ISF12) ps13(i)
-    if (ISF12 && !HDL[i]) gi14(i)
+    if (ISF12 && !HDL[i]) { gi14(i); wr14(i) }
     if (!HDL[i]) { h6(i); if (ISRUN || ISL12 || ISF12) h12(i) }
     # H10/H11 facts (the fixture contract's skeleton): a run.sh code line DEFINING ok or bad, and a run.sh code line
     # whose command-position `bash` runs a pre-push hook. Both read the masked line, so a comment, a string (a
@@ -1095,7 +1161,10 @@ FILENAME == ARGV[1] {
 }
 $1 == "F" { n = split($2, a, "/"); if (n == 4 && a[4] == "run.sh" && a[3] != "lib") FXS[a[3]] = 1; next }
 $1 == "GI" { N14++; if (!(($2) in HIT)) HIT[$2] = $3; next }
+$1 == "WD" { DEF[$2, $3] = 1; next }
+$1 == "WU" { WN++; WFX[WN] = $2; WNM[WN] = $3; WWH[WN] = $4; next }
 END {
+  for (k = 1; k <= WN; k++) if ((WFX[k], WNM[k]) in DEF && !(WWH[k] in WSEEN)) { WSEEN[WWH[k]] = 1; N14++; if (!(WFX[k] in HIT)) HIT[WFX[k]] = WWH[k] }
   for (f in HIT) print ((f in LISTED) ? "H14LISTED\t" f : "H14\t" f "\t" HIT[f])
   for (x in LISTED) {
     if (!(x in FXS)) { print "H14STALE\t" x "\tno core/fixtures/" x "/run.sh is tracked"; continue }

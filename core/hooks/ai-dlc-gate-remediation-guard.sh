@@ -43,7 +43,7 @@
 # disposition can reach -- not a permitted path, not a lift arm, not a log. That
 # is stronger than reading the disposition and rejecting it, because there is no
 # parser to get wrong and no new phrasing to argue with. Same register as
-# `ai-dlc-acknowledge.sh:345` ("Clearing the pause flag does NOT lift this") and
+# `ai-dlc-acknowledge.sh:556` ("Clearing the pause flag does NOT lift this") and
 # `gate-validation.md:1962-1965` (Rule 19: "`DECIDED_AUTONOMOUSLY` does NOT clear
 # this, and that exclusion is the point: it is the lead dispositioning its own
 # violation").
@@ -91,7 +91,7 @@
 #   THE GUARD ARMS FAIL OPEN, WITH A TRACE.
 #   Arms 0, 4 and the unparseable-verdict path all allow. A hook that wedges every
 #   artifact edit on its own JSON-parse bug gets switched off, and a switched-off
-#   hook watches nothing at all -- `ai-dlc-acknowledge.sh:293-296` states this in
+#   hook watches nothing at all -- `ai-dlc-acknowledge.sh:496-499` states this in
 #   the same words for the same reason. Where the state was PRESENT but
 #   UNREADABLE (a verdict file that exists and does not parse; jq missing while a
 #   gate directory exists) the allow is LOUD: `GATE_STATE_UNADJUDICABLE` goes to
@@ -159,13 +159,13 @@
 # than no hook, and each of these is a mutation the rulebook REQUIRES the lead to
 # make while a gate is failing:
 #   - `pipeline-snapshot.md` and `pipeline-snapshot-history.md` -- state records,
-#     and Rule 25(a)'s trim needs both halves (`ai-dlc-acknowledge.sh:426-459`).
+#     and Rule 25(a)'s trim needs both halves (`ai-dlc-acknowledge.sh:791-824`).
 #   - `validation-cycle-log.md`, `pipeline-continuation-log.md` -- the loop's logs.
 #   - any `sprint-status.yaml` -- both homes (`sprint-status.sh:255-256`) and the
 #     `s<N>/` form.
 #   - `docs/escalations/**` -- the escalation IS the sanctioned exit from a stalled
 #     gate (Rule 12 HARD_BLOCK). Denying it would deny the way out, which is the
-#     resolution-record deadlock `ai-dlc-acknowledge.sh:413-424` describes.
+#     resolution-record deadlock `ai-dlc-acknowledge.sh:778-789` describes.
 #   - `*-resolution-p*.md` -- the adversarial resolution record, same reason.
 #   - `_bmad-output/ai-dlc-update/**` -- a different skill with no gate to fail.
 # Git operations are Bash and never reach this matcher; they are unaffected.
@@ -330,7 +330,7 @@
 # `divergence-hard-block/run.sh:211-229` records: touching an old verdict -- a
 # re-read, an editor, a `git checkout` -- would make a settled pass the live one.
 # Non-conforming filenames are filtered INSIDE the pick, never picked and then
-# rejected (`ai-dlc-acknowledge.sh:221-231`).
+# rejected (`ai-dlc-acknowledge.sh:401-411`).
 #
 # OUTPUT
 # - Appends to: _bmad-output/pipeline-continuation-log.md
@@ -473,7 +473,7 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 # `AI_DLC_STATE_DIR` may be absolute or relative; the role files and
 # `_gate-procedures.md:153` both write it as `${AI_DLC_STATE_DIR:-_bmad-output}`.
 # The NAME is what the path patterns below match on (payload paths arrive both
-# absolute and relative, exactly as `ai-dlc-acknowledge.sh:403` handles them).
+# absolute and relative, exactly as `ai-dlc-acknowledge.sh:776` handles them).
 _STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
 STATE_DIR_NAME="$(basename "$_STATE_DIR")"
 case "$_STATE_DIR" in
@@ -817,7 +817,7 @@ for _hp_f in SESSION_ID TOOL_NAME AGENT_ID TRANSCRIPT FP; do
 done
 
 # --- 1. Not an ai-dlc session. Free, and it precedes every directory read for the
-# reason `ai-dlc-acknowledge.sh:122-130` gives: this matcher is hot.
+# reason `ai-dlc-acknowledge.sh:143-151` gives: this matcher is hot.
 [ -f "$SNAPSHOT_FILE" ] || exit 0
 
 # --- 1b. A REMEDIATOR DOES NOT WRITE THE ESCALATION RECORD. Header: "ARM 1b". Evaluated
@@ -2015,7 +2015,7 @@ auth_lifts() { # -> 0 when THIS pass's authorization verifies
     if [ -n "$TRANSCRIPT" ] && steer_dir_has_transcript "$(dirname "$TRANSCRIPT")"; then
       # THE DIRECTORY, not the file. An authorization outlives the session that
       # recorded it; `transcript_path` is always THIS session, never the one the
-      # operator spoke in. Same reasoning as `ai-dlc-acknowledge.sh:268-272`.
+      # operator spoke in. Same reasoning as `ai-dlc-acknowledge.sh:470-473`.
       STEER_FLAG="--dir"; STEER_ARG="$(dirname "$TRANSCRIPT")"
     elif [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
       STEER_FLAG="--transcript"; STEER_ARG="$TRANSCRIPT"

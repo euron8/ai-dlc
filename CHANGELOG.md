@@ -19,6 +19,58 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1165.0] - 2026-11-18
+
+### BL-1164 (advances, stays PARTIAL): P2 judges `lib/inproc.sh` at the call, six fixtures return to `inproc_run`; BL-1152 owed item 3 built (PARTIAL)
+
+- `scripts/validate-fixture-invocations.sh`: P2 no longer judges `lib/inproc.sh:51` and `:96`. Each `inproc_load`/`inproc_run` call in a fixture whose population holds the library is a site of its own, its first operand resolved at the call; an unguarded or unresolvable operand (the latter only where an unguarded subject is declared) is a row at the caller's line. The exemption holds only while each of the two functions has exactly one source site, so a fixture-local `inproc_run` or a renamed copy is judged as any source.
+- Nested-cell attribution: `fxc_judge` adds, as `inner` rows, the cells.decl cells of every fixture whose `run.sh` the judged fixture's `inputs.decl` names. An FXCELL tag passes C2 against them only when the start log shows that inner fixture's `run.sh` start among the tagged start's ancestors, so a tag the outer run emits itself, or a sibling shard's cell, still FAILs; it is never counted by C3. The judge reads the inner `cells.decl` from the hermetic sandbox, so the outer fixture must declare its inners' `cells.decl` in its `inputs.decl` for the credit to apply. A shard stub's same-pid exec of its parent is not a drive and credits nothing, and the seam keeps its allowlist row this release: static arm R in `validate-fixture-inprocess.sh` does not yet credit an outer fixture's inner `cells.decl` (owed).
+- The six fixtures drive through `inproc_load`/`inproc_run`; `rlt_run` and `tpb_ip` are deleted. `--static-join` reads 346 P2 rows before and after with identical row sets. BL-1164 stays PARTIAL: advisor-gate-deny, updater-session-signals and gate-resume (BL-878, batch 259 C3) still use the bypass shape and are owed onto `inproc_run`. The `inproc:` counts of layer-title-join, derivation-differential and owed-derivations move by one each (19 to 18, 60 to 59, 4 to 3), read from the code and not yet counted.
+- BL-1152 (PARTIAL): owed item 3 is built, the command-word residual after a source that resolves to an unguarded subject (`SSUG`, `egateU`), with 0 false positives measured on the 292-fixture tree. Item 2, the `lib/mutant.sh` comment pair, stays open.
+
+### BL-1162: H14 binds the wrapper-rewrite escape; 19 fixtures migrated to `world_git` (PARTIAL)
+
+- `scripts/validate-fixture-hygiene.sh` H14 reads a hand `git init` through a fixture-local wrapper (`g() { git "$@"; }; g init`) as an H14 row: 133 code lines in 30 fixtures at 747f89054, 19 with no allowlist row, false-positive set 0. No allowlist row was added.
+- The 19 no-row fixtures build their git worlds through `core/fixtures/lib/world.sh` `world_git` (review-shard-merge's 16 `G init -q` lines among them; `G` stays a literal wrapper because arm GM1 counts `git maintenance run` children through it). The arm reads zero on the combined tree.
+- The other five sets (variable-held git, heredoc-body, script-string, `git clone`, `cp -R`) and the wrapper clause's named blind routes stay OPEN.
+
+### BL-583: `review-shard-merge` `receipt-bl988` retired (PARTIAL)
+
+- `receipt-bl988.sh`, its call site and cell `wr-receipt` in `p_wrap`, and its `inputs.decl` line in shards c, d, e, f and g are deleted; `receipt-bl980.sh` no longer names it. The same arm `p_wrap` keeps its other `wr-*` cells. No catch on record. The entry stays open for its other owed rows.
+
+### BL-819: the s322 `procedure`, `open` and text-hours classes are decided, and the three owed readings run (PARTIAL)
+
+- `procedure` MERGE into step-reread and compaction-recovery (both KEEP); `open` split by what each cell is. Text hours (4.160 h on the sprint) are split under extract.py's clock: 2.23 h closed by queue-operation records (the lead waiting for a notification) MERGE into the subagent-wait owners; 1.91 h of lead turn time MERGE into the lead turn count (BL-975); 0.4% is an operator prompt.
+- The three owed readings, run on s322 only: (A) 44 of 1,071 procedure touches are covered Reads (4.1%), below the 10% threshold, so the MERGE stands; (B) of 923 project, mixed and no-family reads, 1 strict duplicate, so the 1,016-call MERGE stands. No REMOVE is taken, and nothing is owed from these three classes.
+- The transcript readers are windowed (173 files without the window, 14 with it); two census readers' figures are unchanged. Stale citations fixed (`bl912_counts.py` path, the W9-18 note now pointing at `lead_other_split.py`). Item 3's closing graph sprint (s323) and L3 on BL-912's outcome line stay owed. Reasoning in `docs/analysis/pipeline-efficiency-s317-s322/lead-classes-decisions-s322.md`.
+
+### BL-1133: the remaining `<fx>@consumer` twin set is weighed; no removal ships (PARTIAL)
+
+- 221 recorded green `@consumer` twins, 7995 loaded seconds, up to 666 s of wall clock per push at width 12 (loaded, upper bound). Catches are parsed from the 21 failure-record files: 20 `@consumer` units failed, all in one record (pw2, one cause), 13 with a green plain twin; pw2's shape is covered by the shipped `.dunres` refusal, and no red `@consumer` is on record since the d-skip shipped (a floor, as the pushes 0.1150.0 to 0.1164.0 have no per-unit log). No removal ships in this release; the operator rules whether the remaining twin set stays.
+
+### BL-878 (PARTIAL): twenty more fixtures run their subjects in process; the allowlist drops from 86 to 66
+
+- Seventeen subjects are made loadable by the `<p>_main` wrap behind the column-0 guard. Their `$0` self-reads move to `${BASH_SOURCE[0]}`, and each non-pure deviation is named in the entry (`migrate-artifact-paths.sh` and `gate-slice.sh` `--help` ranges, the `${BASH_SOURCE[0]:-$0}` fallback in `sync-transient-ignore.sh`). The CLI output of every wrapped subject is byte-identical to base on each outcome its cli cell exercises.
+  - Shipped: `migrate-artifact-paths.sh`, `validate-spec-join.sh`, `validate-mutation-red.sh`, `validate-h2-attestation.sh`, `gate-checkpoint.sh`, `gate-slice.sh`, `sync-transient-ignore.sh`, and the hooks `ai-dlc-advisor-gate.sh`, `ai-dlc-subagent-probe.sh` and `ai-dlc-acknowledge.sh`.
+  - Distribution only: `validate-shell-portability.sh`, `render-invariant-index.sh`, `render-vocabulary-index.sh`, `validate-fixture-git-env.sh`, `validate-plan-shape.sh`, `plan-rotate.sh` and `census-hermetic-coverage.sh`.
+- Twenty fixtures drive those subjects in process, each with one cli cell per distinct CLI outcome compared byte for byte with the in-process call: release-version-triple, shell-portability, invariant-index, vocabulary-index, artifact-path-migration, spec-join-integrity, advisor-gate-deny, subagent-probe, route-read-required, updater-session-signals, mutation-red-replay, h2-attest-scripts-dir, plan-rotate, plan-shape, readset-skip, `-b` and `-c`, census-hermetic-coverage, gate-resume and transient-ignore-block. `scripts/fixture-inprocess-allowlist.txt` is regenerated by `--derive` and loses exactly their 20 rows.
+- fixture-git-env-seam: its validator's starts are cells, and its new arm B0 asserts that the inner setup-config-drift reached its seed. On this tree it declares the inner run's unregistered-drift.sh starts. Its allowlist row stays. A trial that also declared the inner fixtures' `cells.decl` read `ok C: 10 subject start(s), 10 tagged` without the row, but then arm R of `validate-fixture-inprocess.sh` failed, because R counts only the seam's own cells. Owed: R credits a declared inner fixture's `cells.decl`; then the two inputs are added and the row is deleted.
+- `sync-transient-ignore.sh` returns early only when sourced. `apply.sh:3846` runs it as a file, and its answer is unchanged.
+- Cost: subject starts fall in 17 of the 21 fixtures (spec-join-integrity's `*` 218 -> 28, advisor-gate-deny's 268 -> 21). census-hermetic-coverage's `*` rises by 42, through its PATH shim, and the seam's by 13. Catch on record: B0 fails over an inner seed replaced by `exit 1` while B1 stays ok. Who would notice it gone: the push's fixture pool, which pays each removed start on every run.
+
+### BL-1165: plan-shape P10 reads the resume line in the head window (closed)
+
+- P10 of `scripts/validate-plan-shape.sh` seeks `READ and FOLLOW <slug>` in the first twelve lines, the window its liveness test reads, not the whole file. False-positive set: 53 plans, 4 live, 0 with the resume line below the window. Cost: none (2484 execs before and after). Catch on record: the batch-258 fresh-resume probe, where deleting `graph-ledger-full-drain.md`'s line 7 left P10 silent. Who would notice it gone: the session resuming a plan whose top resume line was deleted.
+
+### BL-1148 (OPEN): the pregate's "N to run" excludes undeclared units; BL-912 (PARTIAL): the snapshot hooks' owed lines
+
+- `scripts/pregate-self-check.sh` section f runs `drop_undeclared` before its count line, so "N to run" no longer counts units it then drops (probe: 2 to run, against 3 before). Catch on record: BL-1148's batch-258 paragraph. Who would notice it gone: the builder and lead sizing a pregate. The stall subject stays open, for the operator.
+- `ai-dlc-snapshot-edit-deny.sh` drops "--help prints the full grammar." `ai-dlc-inflight-row.sh` `say_unwritten` tells the lead to fold the printed op into its next `snapshot-update.sh` call. Cost: none, two printed strings. Catch on record: s322's 100 `--help` calls and the 49 pairs after a refusal. Who would notice it gone: the consumer lead.
+
+### Batch 259 C4: pipeline efficiency analysis (s317-s322)
+
+- `docs/analysis/pipeline-efficiency-s317-s322-b259.md` re-takes the pipeline efficiency analysis at s322 complete and files BL-1166, BL-1167, BL-1168, BL-1169, BL-1170, BL-1171 and BL-1173; one line each is added to BL-972, BL-812 and BL-819. The s323 readings are deferred to s323's close by standing ruling.
+
 ## [0.1164.0] - 2026-11-17
 
 ### BL-1124 (c): the push's select phase cuts its per-fixture greps and readers; the memo sites are filed as BL-1163

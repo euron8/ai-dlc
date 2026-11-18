@@ -1,5 +1,5 @@
 # window: EXTRACT_WIN_END=2026-11-12T14:41:00Z (s322 complete). Command: EXTRACT_WIN_END=2026-11-12T14:41:00Z python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s318/scripts/analyze.py $OUT && python3 -I docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py $OUT --classes  (full output; out/classes_summary.txt is the 2026-11-11T10:30:00Z window filtered by grep -E 'other share|all steps')
-class tokens == segs tok (in, cw, cr, out, calls per model) on 446 of 446 (lead unit, step) pairs
+class tokens == segs tok (in, cw, cr, out, calls per model) on 450 of 450 (lead unit, step) pairs
 idle-wait rows carrying calls or tokens: 0
 per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the monotone clock; lead $ token-equivalent and API; STORIES = {317: 21, 318: 13, 319: 20, 320: 13, 321: 25, 322: 8}
 == s317 (21 stories)
@@ -14,17 +14,17 @@ per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the mon
      other                active  0.108 h  gap  0.150 h  calls   20.9  tok   3.79M  lead token-eq $1.14 API $0.49
      idle-wait            active  0.033 h  gap  0.144 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
      other share: active 52%, calls 60%, $ 58%
-  -- gate[implementation]: segs active 9.68 h, class-sum active 8.14 h, out-of-order overcount 1.54 h
+  -- gate[implementation]: segs active 9.42 h, class-sum active 7.87 h, out-of-order overcount 1.54 h
      dispatch             active  0.014 h  gap  0.000 h  calls    0.9  tok   0.18M  lead token-eq $0.08 API $0.02
-     merge                active  0.092 h  gap  0.000 h  calls   15.6  tok   2.36M  lead token-eq $0.92 API $0.19
+     merge                active  0.091 h  gap  0.000 h  calls   15.5  tok   2.31M  lead token-eq $0.91 API $0.17
      repair               active  0.003 h  gap  0.000 h  calls    0.1  tok   0.03M  lead token-eq $0.02 API $0.00
-     gate-run             active  0.077 h  gap  0.000 h  calls   11.3  tok   1.96M  lead token-eq $0.69 API $0.25
+     gate-run             active  0.077 h  gap  0.000 h  calls   11.3  tok   1.94M  lead token-eq $0.68 API $0.25
      step-reread          active  0.006 h  gap  0.000 h  calls    1.5  tok   0.22M  lead token-eq $0.08 API $0.02
      compaction-recovery  active  0.007 h  gap  0.000 h  calls    0.3  tok   0.02M  lead token-eq $0.03 API $0.00
-     snapshot             active  0.056 h  gap  0.126 h  calls    8.6  tok   1.75M  lead token-eq $0.61 API $0.26
-     other                active  0.087 h  gap  0.000 h  calls   13.3  tok   2.58M  lead token-eq $0.83 API $0.34
-     idle-wait            active  0.045 h  gap  0.004 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
-     other share: active 22%, calls 26%, $ 26%
+     snapshot             active  0.055 h  gap  0.126 h  calls    8.3  tok   1.66M  lead token-eq $0.58 API $0.24
+     other                active  0.085 h  gap  0.000 h  calls   12.2  tok   2.16M  lead token-eq $0.74 API $0.24
+     idle-wait            active  0.036 h  gap  0.004 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
+     other share: active 23%, calls 24%, $ 24%
   -- gate[sprint-review]: segs active 0.95 h, class-sum active 0.81 h, out-of-order overcount 0.14 h
      dispatch             active  0.001 h  gap  0.000 h  calls    0.1  tok   0.02M  lead token-eq $0.01 API $0.00
      merge                active  0.016 h  gap  0.000 h  calls    3.2  tok   0.50M  lead token-eq $0.16 API $0.00
@@ -44,16 +44,16 @@ per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the mon
      other                active  0.000 h  gap  0.000 h  calls    0.3  tok   0.08M  lead token-eq $0.02 API $0.02
      idle-wait            active  0.006 h  gap  0.000 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
      other share: active 3%, calls 17%, $ 13%
-  -- handoff: segs active 3.37 h, class-sum active 3.22 h, out-of-order overcount 0.15 h
+  -- handoff: segs active 3.63 h, class-sum active 3.48 h, out-of-order overcount 0.15 h
      dispatch             active  0.000 h  gap  0.000 h  calls    0.0  tok   0.01M  lead token-eq $0.00 API $0.00
-     merge                active  0.013 h  gap  0.000 h  calls    2.1  tok   0.43M  lead token-eq $0.12 API $0.05
-     gate-run             active  0.002 h  gap  0.000 h  calls    0.0  tok   0.03M  lead token-eq $0.01 API $0.01
+     merge                active  0.013 h  gap  0.000 h  calls    2.3  tok   0.48M  lead token-eq $0.13 API $0.07
+     gate-run             active  0.002 h  gap  0.000 h  calls    0.1  tok   0.05M  lead token-eq $0.01 API $0.01
      step-reread          active  0.000 h  gap  0.000 h  calls    0.0  tok   0.01M  lead token-eq $0.00 API $0.00
      compaction-recovery  active  0.000 h  gap  0.000 h  calls    0.1  tok   0.01M  lead token-eq $0.02 API $0.02
-     snapshot             active  0.025 h  gap  0.000 h  calls    4.5  tok   0.97M  lead token-eq $0.32 API $0.23
-     other                active  0.073 h  gap  0.022 h  calls   12.9  tok   2.52M  lead token-eq $0.78 API $0.63
-     idle-wait            active  0.040 h  gap  0.035 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
-     other share: active 48%, calls 65%, $ 63%
+     snapshot             active  0.025 h  gap  0.000 h  calls    4.7  tok   1.06M  lead token-eq $0.34 API $0.25
+     other                active  0.076 h  gap  0.022 h  calls   14.0  tok   2.94M  lead token-eq $0.87 API $0.73
+     idle-wait            active  0.049 h  gap  0.035 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
+     other share: active 46%, calls 66%, $ 63%
   -- implementation: segs active 18.01 h, class-sum active 16.90 h, out-of-order overcount 1.11 h
      dispatch             active  0.026 h  gap  0.000 h  calls    3.5  tok   0.58M  lead token-eq $0.27 API $0.08
      merge                active  0.198 h  gap  0.039 h  calls   43.8  tok   7.37M  lead token-eq $2.42 API $1.03
@@ -192,16 +192,15 @@ per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the mon
      other                active  0.002 h  gap  0.000 h  calls    1.4  tok   0.34M  lead token-eq $0.08 API $0.08
      idle-wait            active  0.007 h  gap  0.000 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
      other share: active 14%, calls 40%, $ 34%
-  -- gate[sprint-review]: segs active 1.08 h, class-sum active 0.98 h, out-of-order overcount 0.10 h
+  -- gate[sprint-review]: segs active 0.76 h, class-sum active 0.68 h, out-of-order overcount 0.08 h
      dispatch             active  0.007 h  gap  0.000 h  calls    0.5  tok   0.13M  lead token-eq $0.12 API $0.12
-     merge                active  0.021 h  gap  0.000 h  calls    1.5  tok   0.52M  lead token-eq $0.13 API $0.13
-     gate-run             active  0.015 h  gap  0.000 h  calls    1.4  tok   0.40M  lead token-eq $0.14 API $0.14
-     step-reread          active  0.001 h  gap  0.000 h  calls    0.3  tok   0.05M  lead token-eq $0.02 API $0.02
-     compaction-recovery  active  0.000 h  gap  0.000 h  calls    0.1  tok   0.01M  lead token-eq $0.02 API $0.02
-     snapshot             active  0.015 h  gap  0.129 h  calls    1.2  tok   0.46M  lead token-eq $0.13 API $0.13
-     other                active  0.013 h  gap  0.038 h  calls    3.4  tok   0.94M  lead token-eq $0.33 API $0.33
-     idle-wait            active  0.004 h  gap  0.027 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
-     other share: active 17%, calls 40%, $ 38%
+     merge                active  0.014 h  gap  0.000 h  calls    0.8  tok   0.23M  lead token-eq $0.06 API $0.06
+     gate-run             active  0.015 h  gap  0.000 h  calls    1.3  tok   0.37M  lead token-eq $0.13 API $0.13
+     step-reread          active  0.001 h  gap  0.000 h  calls    0.2  tok   0.04M  lead token-eq $0.02 API $0.02
+     snapshot             active  0.006 h  gap  0.129 h  calls    0.5  tok   0.16M  lead token-eq $0.06 API $0.06
+     other                active  0.006 h  gap  0.000 h  calls    1.8  tok   0.45M  lead token-eq $0.11 API $0.11
+     idle-wait            active  0.004 h  gap  0.000 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
+     other share: active 12%, calls 36%, $ 23%
   -- gate[stories-test-strategy]: segs active 0.44 h, class-sum active 0.37 h, out-of-order overcount 0.07 h
      dispatch             active  0.000 h  gap  0.000 h  calls    0.1  tok   0.03M  lead token-eq $0.01 API $0.01
      merge                active  0.002 h  gap  0.000 h  calls    0.8  tok   0.30M  lead token-eq $0.07 API $0.07
@@ -212,12 +211,15 @@ per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the mon
      other                active  0.007 h  gap  0.010 h  calls    1.5  tok   0.51M  lead token-eq $0.14 API $0.14
      idle-wait            active  0.007 h  gap  0.000 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
      other share: active 25%, calls 28%, $ 31%
-  -- handoff: segs active 0.72 h, class-sum active 0.70 h, out-of-order overcount 0.03 h
-     merge                active  0.006 h  gap  0.000 h  calls    1.9  tok   0.54M  lead token-eq $0.22 API $0.22
-     snapshot             active  0.010 h  gap  0.000 h  calls    2.0  tok   0.62M  lead token-eq $0.34 API $0.34
-     other                active  0.014 h  gap  0.066 h  calls    4.8  tok   1.36M  lead token-eq $0.30 API $0.30
-     idle-wait            active  0.023 h  gap  0.027 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
-     other share: active 26%, calls 55%, $ 35%
+  -- handoff: segs active 1.04 h, class-sum active 0.99 h, out-of-order overcount 0.05 h
+     merge                active  0.014 h  gap  0.000 h  calls    2.7  tok   0.83M  lead token-eq $0.29 API $0.29
+     gate-run             active  0.000 h  gap  0.000 h  calls    0.1  tok   0.03M  lead token-eq $0.01 API $0.01
+     step-reread          active  0.000 h  gap  0.000 h  calls    0.1  tok   0.01M  lead token-eq $0.00 API $0.00
+     compaction-recovery  active  0.000 h  gap  0.000 h  calls    0.1  tok   0.01M  lead token-eq $0.02 API $0.02
+     snapshot             active  0.018 h  gap  0.000 h  calls    2.7  tok   0.93M  lead token-eq $0.41 API $0.41
+     other                active  0.021 h  gap  0.104 h  calls    6.4  tok   1.85M  lead token-eq $0.53 API $0.53
+     idle-wait            active  0.023 h  gap  0.054 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
+     other share: active 27%, calls 53%, $ 42%
   -- implementation: segs active 6.94 h, class-sum active 6.03 h, out-of-order overcount 0.92 h
      dispatch             active  0.014 h  gap  0.000 h  calls    3.6  tok   0.86M  lead token-eq $0.31 API $0.31
      merge                active  0.079 h  gap  0.000 h  calls   26.2  tok   6.05M  lead token-eq $1.56 API $1.56
@@ -813,37 +815,37 @@ per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the mon
      other                active  0.049 h  gap  0.000 h  calls   14.1  tok   2.20M  lead token-eq $0.53 API $0.00
      idle-wait            active  0.040 h  gap  0.043 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
      other share: active 35%, calls 41%, $ 39%
-  -- carry-over-evaluation: segs active 3.70 h, class-sum active 3.49 h, out-of-order overcount 0.21 h
+  -- carry-over-evaluation: segs active 3.74 h, class-sum active 3.52 h, out-of-order overcount 0.22 h
      dispatch             active  0.015 h  gap  0.000 h  calls    4.0  tok   0.65M  lead token-eq $0.24 API $0.00
-     merge                active  0.070 h  gap  0.000 h  calls   30.0  tok   4.51M  lead token-eq $1.17 API $0.00
+     merge                active  0.070 h  gap  0.000 h  calls   30.2  tok   4.53M  lead token-eq $1.17 API $0.00
      repair               active  0.004 h  gap  0.000 h  calls    1.4  tok   0.21M  lead token-eq $0.06 API $0.00
      gate-run             active  0.001 h  gap  0.000 h  calls    0.6  tok   0.05M  lead token-eq $0.01 API $0.00
-     step-reread          active  0.008 h  gap  0.000 h  calls    4.2  tok   0.43M  lead token-eq $0.12 API $0.00
-     compaction-recovery  active  0.006 h  gap  0.000 h  calls    1.8  tok   0.08M  lead token-eq $0.05 API $0.00
-     snapshot             active  0.034 h  gap  0.000 h  calls   17.2  tok   2.34M  lead token-eq $0.62 API $0.00
-     other                active  0.133 h  gap  0.708 h  calls   53.9  tok   7.84M  lead token-eq $1.92 API $0.00
+     step-reread          active  0.008 h  gap  0.000 h  calls    4.4  tok   0.44M  lead token-eq $0.12 API $0.00
+     compaction-recovery  active  0.006 h  gap  0.000 h  calls    1.9  tok   0.09M  lead token-eq $0.06 API $0.00
+     snapshot             active  0.034 h  gap  0.000 h  calls   17.4  tok   2.34M  lead token-eq $0.63 API $0.00
+     other                active  0.136 h  gap  0.708 h  calls   55.8  tok   7.95M  lead token-eq $1.96 API $0.00
      idle-wait            active  0.165 h  gap  0.523 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
-     other share: active 30%, calls 48%, $ 46%
-  -- deploy-validate: segs active 1.80 h, class-sum active 1.73 h, out-of-order overcount 0.07 h
+     other share: active 31%, calls 48%, $ 46%
+  -- deploy-validate: segs active 1.83 h, class-sum active 1.75 h, out-of-order overcount 0.07 h
      dispatch             active  0.002 h  gap  0.000 h  calls    0.5  tok   0.08M  lead token-eq $0.03 API $0.00
      merge                active  0.055 h  gap  0.000 h  calls   27.1  tok   4.34M  lead token-eq $1.04 API $0.00
      repair               active  0.001 h  gap  0.000 h  calls    0.2  tok   0.03M  lead token-eq $0.01 API $0.00
      gate-run             active  0.000 h  gap  0.000 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
-     step-reread          active  0.002 h  gap  0.000 h  calls    1.8  tok   0.15M  lead token-eq $0.04 API $0.00
-     compaction-recovery  active  0.002 h  gap  0.078 h  calls    0.9  tok   0.05M  lead token-eq $0.04 API $0.00
+     step-reread          active  0.003 h  gap  0.000 h  calls    2.1  tok   0.17M  lead token-eq $0.05 API $0.00
+     compaction-recovery  active  0.003 h  gap  0.078 h  calls    1.1  tok   0.06M  lead token-eq $0.04 API $0.00
      snapshot             active  0.011 h  gap  0.000 h  calls    6.5  tok   1.16M  lead token-eq $0.26 API $0.00
-     other                active  0.080 h  gap  0.114 h  calls   29.2  tok   4.61M  lead token-eq $1.24 API $0.00
+     other                active  0.081 h  gap  0.114 h  calls   30.2  tok   4.67M  lead token-eq $1.25 API $0.00
      idle-wait            active  0.063 h  gap  0.029 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
-     other share: active 37%, calls 44%, $ 47%
-  -- gate[architecture]: segs active 1.01 h, class-sum active 0.95 h, out-of-order overcount 0.05 h
+     other share: active 37%, calls 45%, $ 47%
+  -- gate[architecture]: segs active 1.00 h, class-sum active 0.95 h, out-of-order overcount 0.05 h
      dispatch             active  0.006 h  gap  0.000 h  calls    1.0  tok   0.15M  lead token-eq $0.06 API $0.00
      merge                active  0.017 h  gap  0.000 h  calls    7.0  tok   1.18M  lead token-eq $0.29 API $0.00
      repair               active  0.003 h  gap  0.000 h  calls    0.2  tok   0.05M  lead token-eq $0.02 API $0.00
-     gate-run             active  0.003 h  gap  0.000 h  calls    1.5  tok   0.25M  lead token-eq $0.06 API $0.00
+     gate-run             active  0.003 h  gap  0.000 h  calls    1.4  tok   0.24M  lead token-eq $0.06 API $0.00
      step-reread          active  0.007 h  gap  0.000 h  calls    3.4  tok   0.56M  lead token-eq $0.14 API $0.00
-     compaction-recovery  active  0.003 h  gap  0.000 h  calls    1.4  tok   0.08M  lead token-eq $0.05 API $0.00
+     compaction-recovery  active  0.003 h  gap  0.000 h  calls    1.2  tok   0.08M  lead token-eq $0.05 API $0.00
      snapshot             active  0.009 h  gap  0.000 h  calls    4.5  tok   0.83M  lead token-eq $0.20 API $0.00
-     other                active  0.053 h  gap  0.000 h  calls    7.1  tok   1.19M  lead token-eq $0.38 API $0.00
+     other                active  0.053 h  gap  0.000 h  calls    6.9  tok   1.17M  lead token-eq $0.37 API $0.00
      idle-wait            active  0.018 h  gap  0.040 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
      other share: active 44%, calls 27%, $ 31%
   -- gate[bug-investigation]: segs active 0.10 h, class-sum active 0.10 h, out-of-order overcount 0.00 h
@@ -854,17 +856,16 @@ per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the mon
      other                active  0.001 h  gap  0.000 h  calls    0.8  tok   0.15M  lead token-eq $0.03 API $0.00
      idle-wait            active  0.008 h  gap  0.000 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
      other share: active 6%, calls 43%, $ 40%
-  -- gate[carry-over-evaluation]: segs active 3.02 h, class-sum active 2.84 h, out-of-order overcount 0.17 h
-     dispatch             active  0.018 h  gap  0.000 h  calls    3.1  tok   0.52M  lead token-eq $0.19 API $0.00
-     merge                active  0.041 h  gap  0.000 h  calls   22.6  tok   3.64M  lead token-eq $0.90 API $0.00
-     repair               active  0.002 h  gap  0.000 h  calls    0.5  tok   0.08M  lead token-eq $0.03 API $0.00
+  -- gate[carry-over-evaluation]: segs active 0.39 h, class-sum active 0.33 h, out-of-order overcount 0.06 h
+     dispatch             active  0.006 h  gap  0.000 h  calls    0.5  tok   0.08M  lead token-eq $0.04 API $0.00
+     merge                active  0.009 h  gap  0.000 h  calls    4.1  tok   0.69M  lead token-eq $0.18 API $0.00
+     repair               active  0.001 h  gap  0.000 h  calls    0.1  tok   0.01M  lead token-eq $0.01 API $0.00
      gate-run             active  0.005 h  gap  0.000 h  calls    2.2  tok   0.39M  lead token-eq $0.09 API $0.00
-     step-reread          active  0.007 h  gap  0.000 h  calls    4.4  tok   0.52M  lead token-eq $0.15 API $0.00
-     compaction-recovery  active  0.009 h  gap  0.000 h  calls    3.4  tok   0.18M  lead token-eq $0.11 API $0.00
-     snapshot             active  0.020 h  gap  0.000 h  calls   11.5  tok   1.53M  lead token-eq $0.39 API $0.00
-     other                active  0.128 h  gap  0.179 h  calls   35.2  tok   5.11M  lead token-eq $1.31 API $0.00
-     idle-wait            active  0.126 h  gap  0.299 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
-     other share: active 36%, calls 42%, $ 41%
+     step-reread          active  0.002 h  gap  0.000 h  calls    1.9  tok   0.21M  lead token-eq $0.07 API $0.00
+     compaction-recovery  active  0.002 h  gap  0.000 h  calls    0.2  tok   0.01M  lead token-eq $0.02 API $0.00
+     snapshot             active  0.003 h  gap  0.000 h  calls    0.8  tok   0.14M  lead token-eq $0.03 API $0.00
+     other                active  0.013 h  gap  0.000 h  calls    5.8  tok   1.01M  lead token-eq $0.27 API $0.00
+     other share: active 33%, calls 37%, $ 38%
   -- gate[implementation]: segs active 4.13 h, class-sum active 3.62 h, out-of-order overcount 0.51 h
      dispatch             active  0.032 h  gap  0.000 h  calls    5.9  tok   0.98M  lead token-eq $0.38 API $0.00
      merge                active  0.079 h  gap  0.000 h  calls   28.2  tok   4.40M  lead token-eq $1.18 API $0.00
@@ -897,16 +898,16 @@ per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the mon
      snapshot             active  0.003 h  gap  0.000 h  calls    0.9  tok   0.18M  lead token-eq $0.04 API $0.00
      other                active  0.017 h  gap  0.000 h  calls    6.6  tok   1.17M  lead token-eq $0.28 API $0.00
      other share: active 31%, calls 41%, $ 39%
-  -- gate[sprint-review]: segs active 0.59 h, class-sum active 0.55 h, out-of-order overcount 0.04 h
+  -- gate[sprint-review]: segs active 0.57 h, class-sum active 0.53 h, out-of-order overcount 0.04 h
      dispatch             active  0.002 h  gap  0.000 h  calls    0.2  tok   0.04M  lead token-eq $0.02 API $0.00
      merge                active  0.019 h  gap  0.000 h  calls   10.5  tok   1.73M  lead token-eq $0.42 API $0.00
      repair               active  0.002 h  gap  0.000 h  calls    0.2  tok   0.05M  lead token-eq $0.02 API $0.00
      gate-run             active  0.010 h  gap  0.000 h  calls    4.1  tok   0.64M  lead token-eq $0.16 API $0.00
-     step-reread          active  0.003 h  gap  0.000 h  calls    1.2  tok   0.13M  lead token-eq $0.05 API $0.00
-     compaction-recovery  active  0.002 h  gap  0.000 h  calls    0.4  tok   0.02M  lead token-eq $0.01 API $0.00
+     step-reread          active  0.002 h  gap  0.000 h  calls    0.9  tok   0.10M  lead token-eq $0.04 API $0.00
+     compaction-recovery  active  0.001 h  gap  0.000 h  calls    0.1  tok   0.01M  lead token-eq $0.01 API $0.00
      snapshot             active  0.009 h  gap  0.000 h  calls    5.9  tok   0.91M  lead token-eq $0.22 API $0.00
-     other                active  0.022 h  gap  0.000 h  calls    8.8  tok   1.30M  lead token-eq $0.31 API $0.00
-     other share: active 32%, calls 28%, $ 26%
+     other                active  0.021 h  gap  0.000 h  calls    7.8  tok   1.24M  lead token-eq $0.29 API $0.00
+     other share: active 32%, calls 26%, $ 25%
   -- gate[stories-test-strategy]: segs active 0.39 h, class-sum active 0.38 h, out-of-order overcount 0.01 h
      dispatch             active  0.002 h  gap  0.000 h  calls    0.1  tok   0.02M  lead token-eq $0.01 API $0.00
      merge                active  0.006 h  gap  0.000 h  calls    3.2  tok   0.37M  lead token-eq $0.11 API $0.00
@@ -916,17 +917,17 @@ per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the mon
      snapshot             active  0.003 h  gap  0.000 h  calls    2.5  tok   0.32M  lead token-eq $0.09 API $0.00
      other                active  0.023 h  gap  0.000 h  calls    9.1  tok   1.55M  lead token-eq $0.38 API $0.00
      other share: active 48%, calls 43%, $ 46%
-  -- handoff: segs active 1.48 h, class-sum active 1.44 h, out-of-order overcount 0.03 h
+  -- handoff: segs active 1.61 h, class-sum active 1.58 h, out-of-order overcount 0.03 h
      dispatch             active  0.002 h  gap  0.000 h  calls    0.1  tok   0.03M  lead token-eq $0.05 API $0.00
-     merge                active  0.022 h  gap  0.000 h  calls    6.0  tok   1.02M  lead token-eq $0.25 API $0.00
+     merge                active  0.023 h  gap  0.000 h  calls    6.6  tok   1.06M  lead token-eq $0.26 API $0.00
      repair               active  0.001 h  gap  0.000 h  calls    0.4  tok   0.08M  lead token-eq $0.02 API $0.00
      gate-run             active  0.003 h  gap  0.000 h  calls    0.8  tok   0.12M  lead token-eq $0.03 API $0.00
      step-reread          active  0.003 h  gap  0.000 h  calls    1.1  tok   0.15M  lead token-eq $0.03 API $0.00
-     compaction-recovery  active  0.004 h  gap  0.000 h  calls    1.5  tok   0.08M  lead token-eq $0.04 API $0.00
-     snapshot             active  0.014 h  gap  0.000 h  calls    4.4  tok   0.76M  lead token-eq $0.18 API $0.00
-     other                active  0.103 h  gap  0.021 h  calls   19.2  tok   3.16M  lead token-eq $0.83 API $0.00
-     idle-wait            active  0.028 h  gap  0.057 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
-     other share: active 57%, calls 57%, $ 58%
+     compaction-recovery  active  0.004 h  gap  0.000 h  calls    1.8  tok   0.10M  lead token-eq $0.05 API $0.00
+     snapshot             active  0.014 h  gap  0.000 h  calls    5.2  tok   0.83M  lead token-eq $0.20 API $0.00
+     other                active  0.116 h  gap  0.042 h  calls   24.2  tok   3.60M  lead token-eq $0.94 API $0.00
+     idle-wait            active  0.031 h  gap  0.108 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
+     other share: active 59%, calls 60%, $ 59%
   -- implementation: segs active 6.33 h, class-sum active 5.92 h, out-of-order overcount 0.41 h
      dispatch             active  0.045 h  gap  0.000 h  calls    9.5  tok   1.49M  lead token-eq $0.51 API $0.00
      merge                active  0.111 h  gap  0.000 h  calls   41.0  tok   5.65M  lead token-eq $1.45 API $0.00
@@ -942,17 +943,17 @@ per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the mon
      snapshot             active  0.000 h  gap  0.000 h  calls    0.2  tok   0.01M  lead token-eq $0.00 API $0.00
      other                active  0.016 h  gap  0.000 h  calls    3.1  tok   0.12M  lead token-eq $0.10 API $0.00
      other share: active 99%, calls 93%, $ 98%
-  -- requirements: segs active 2.57 h, class-sum active 2.52 h, out-of-order overcount 0.05 h
-     dispatch             active  0.015 h  gap  0.000 h  calls    1.8  tok   0.29M  lead token-eq $0.19 API $0.00
-     merge                active  0.024 h  gap  0.000 h  calls   13.8  tok   2.32M  lead token-eq $0.61 API $0.00
-     repair               active  0.005 h  gap  0.000 h  calls    0.5  tok   0.10M  lead token-eq $0.04 API $0.00
+  -- requirements: segs active 5.02 h, class-sum active 4.86 h, out-of-order overcount 0.15 h
+     dispatch             active  0.027 h  gap  0.000 h  calls    4.4  tok   0.72M  lead token-eq $0.34 API $0.00
+     merge                active  0.055 h  gap  0.000 h  calls   31.4  tok   5.20M  lead token-eq $1.32 API $0.00
+     repair               active  0.006 h  gap  0.000 h  calls    0.9  tok   0.17M  lead token-eq $0.05 API $0.00
      gate-run             active  0.006 h  gap  0.000 h  calls    2.2  tok   0.36M  lead token-eq $0.08 API $0.00
-     step-reread          active  0.008 h  gap  0.000 h  calls    3.2  tok   0.39M  lead token-eq $0.10 API $0.00
-     compaction-recovery  active  0.006 h  gap  0.000 h  calls    3.6  tok   0.22M  lead token-eq $0.10 API $0.00
-     snapshot             active  0.010 h  gap  0.000 h  calls    6.0  tok   0.97M  lead token-eq $0.24 API $0.00
-     other                active  0.101 h  gap  0.094 h  calls   42.4  tok   5.63M  lead token-eq $1.58 API $0.00
-     idle-wait            active  0.140 h  gap  0.064 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
-     other share: active 32%, calls 58%, $ 54%
+     step-reread          active  0.012 h  gap  0.000 h  calls    5.6  tok   0.69M  lead token-eq $0.18 API $0.00
+     compaction-recovery  active  0.012 h  gap  0.000 h  calls    6.4  tok   0.37M  lead token-eq $0.19 API $0.00
+     snapshot             active  0.026 h  gap  0.000 h  calls   15.8  tok   2.29M  lead token-eq $0.57 API $0.00
+     other                active  0.199 h  gap  0.252 h  calls   65.0  tok   9.17M  lead token-eq $2.48 API $0.00
+     idle-wait            active  0.264 h  gap  0.311 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
+     other share: active 33%, calls 49%, $ 48%
   -- retro: segs active 3.18 h, class-sum active 2.99 h, out-of-order overcount 0.19 h
      dispatch             active  0.011 h  gap  0.000 h  calls    0.6  tok   0.10M  lead token-eq $0.04 API $0.00
      merge                active  0.074 h  gap  0.024 h  calls   26.4  tok   4.18M  lead token-eq $1.02 API $0.00
@@ -981,15 +982,15 @@ per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the mon
      other                active  0.064 h  gap  0.000 h  calls   13.9  tok   1.94M  lead token-eq $0.47 API $0.00
      idle-wait            active  0.033 h  gap  0.074 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
      other share: active 45%, calls 43%, $ 40%
-  -- stories-test-strategy: segs active 4.14 h, class-sum active 3.89 h, out-of-order overcount 0.26 h
+  -- stories-test-strategy: segs active 4.15 h, class-sum active 3.89 h, out-of-order overcount 0.26 h
      dispatch             active  0.019 h  gap  0.000 h  calls    5.8  tok   0.94M  lead token-eq $0.34 API $0.00
      merge                active  0.041 h  gap  0.000 h  calls   28.4  tok   4.29M  lead token-eq $1.02 API $0.00
      repair               active  0.002 h  gap  0.000 h  calls    1.1  tok   0.16M  lead token-eq $0.04 API $0.00
-     gate-run             active  0.003 h  gap  0.000 h  calls    1.9  tok   0.23M  lead token-eq $0.06 API $0.00
+     gate-run             active  0.003 h  gap  0.000 h  calls    2.0  tok   0.24M  lead token-eq $0.06 API $0.00
      step-reread          active  0.007 h  gap  0.000 h  calls    4.2  tok   0.56M  lead token-eq $0.14 API $0.00
-     compaction-recovery  active  0.012 h  gap  0.000 h  calls    7.0  tok   0.48M  lead token-eq $0.22 API $0.00
+     compaction-recovery  active  0.012 h  gap  0.000 h  calls    7.1  tok   0.49M  lead token-eq $0.22 API $0.00
      snapshot             active  0.031 h  gap  0.000 h  calls   22.2  tok   3.71M  lead token-eq $0.92 API $0.00
-     other                active  0.210 h  gap  0.018 h  calls   76.4  tok  11.04M  lead token-eq $2.86 API $0.00
+     other                active  0.210 h  gap  0.018 h  calls   76.6  tok  11.06M  lead token-eq $2.87 API $0.00
      idle-wait            active  0.160 h  gap  0.389 h  calls    0.0  tok   0.00M  lead token-eq $0.00 API $0.00
      other share: active 43%, calls 52%, $ 51%
   s322 all steps: dispatch 0.20 h token-eq $2.4 API $0.0, merge 0.66 h token-eq $11.2 API $0.0, repair 0.06 h token-eq $0.6 API $0.0, gate-run 0.14 h token-eq $1.5 API $0.0, step-reread 0.11 h token-eq $1.6 API $0.0, compaction-recovery 0.09 h token-eq $1.2 API $0.0, snapshot 0.32 h token-eq $6.0 API $0.0, other 1.79 h token-eq $20.4 API $0.0, idle-wait 1.19 h token-eq $0.0 API $0.0

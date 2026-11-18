@@ -65,6 +65,7 @@
 #         defines ZERO capabilities. A zero-capability spec closes every join
 #         vacuously and prints the same line as a spec that closes them for real.
 
+vsj_main() {
 set -u
 
 PROG="validate-spec-join.sh"
@@ -919,7 +920,7 @@ if [ -n "$LOCKED_REQS" ]; then
   # dependency -- validate-locked-anchor.sh is Check 3b's own hard-blocking enforcer and 18
   # shipped validators already require it -- but a tree that has lost python3 fails Check 3b
   # first, and that is the diagnosis to act on.
-  LR_SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+  LR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   LR_ANCHOR="$LR_SELF_DIR/validate-locked-anchor.sh"
   if [ ! -f "$LR_ANCHOR" ]; then
     echo "$PROG: DISARMED — validate-locked-anchor.sh not found beside this script at $LR_ANCHOR. It owns the LOCKED_REQUIREMENTS block grammar and this join extracts the declared population through its --emit-blocks mode; re-deriving those markers here would be a third grammar in a third file. Fix the install rather than matching markers locally." >&2
@@ -1447,3 +1448,6 @@ if [ "$rc" -eq 0 ]; then
   echo "  trace-verdict: ${TRACE:-(none given)}"
 fi
 exit $rc
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vsj_main "$@"

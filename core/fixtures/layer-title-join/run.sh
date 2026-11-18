@@ -49,11 +49,10 @@ echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 
 echo "layer-title-join:"
 
-# IN PROCESS (BL-878). layer-drift.sh is SOURCED ONCE (its column-0 guard returns after defining ld_main) and every
-# drive calls ld_main through ld_run, in a subshell made to look like a fresh `bash layer-drift.sh` (the strip
-# core/fixtures/lib/inproc.sh's inproc_run makes, inlined: this fixture declares the unguarded apply.sh, and P2 reads
-# inproc.sh's opaque `. "$1"` there as an unrouted source), so its `exit`, `set -uo pipefail`, `set -f` and EXIT trap
-# stay there. lib.sh builds its own memo only at BASH_SUBSHELL 0,
+# IN PROCESS (BL-878). layer-drift.sh is SOURCED ONCE (inproc_load: its column-0 guard returns after defining ld_main) and
+# every drive calls ld_main through ld_run, which is core/fixtures/lib/inproc.sh's inproc_run: a subshell made to look like a
+# fresh `bash layer-drift.sh`, so its `exit`, `set -uo pipefail`, `set -f` and EXIT trap stay there. Each inproc_run is one
+# fx_inproc pass (the inproc: row). lib.sh builds its own memo only at BASH_SUBSHELL 0,
 # which no subshell is, so ld_ip hands each run a FRESH private memo, exactly as private as the program's, unless the
 # caller exported one (Part 9's cells hand theirs explicitly, as they did to the program). The only command-line runs
 # left are the five cli cells (cells.decl), one per distinct CLI outcome, each compared byte for byte with ld_ip;
@@ -81,34 +80,12 @@ if [ "$g_ld" = 1 ]; then echo "layer-title-join: 1 FAILED"; exit 1; fi
 if [ "$g_ld" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
 LDDIR="$(cd "$(dirname "$DRIFT")" && pwd)" || { echo "FIXTURE BROKEN: cannot resolve the directory of $DRIFT" >&2; exit 2; }
 DRIFT="$LDDIR/layer-drift.sh"
-# A literal-tail path, never `. "$VAR"`: P2 reads an opaque source as a drive. The source is one pass (the inproc: row).
-fx_inproc "$LDDIR/layer-drift.sh"
-. "$LDDIR/layer-drift.sh" || { echo "FIXTURE BROKEN: sourcing $DRIFT failed" >&2; exit 2; }
+[ -f "$HERE/../lib/inproc.sh" ] || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/inproc.sh"
+inproc_load "$LDDIR/layer-drift.sh" || { echo "FIXTURE BROKEN: sourcing $DRIFT defined nothing" >&2; exit 2; }
 declare -F ld_main >/dev/null || { echo "FIXTURE BROKEN: sourcing $DRIFT defined no ld_main" >&2; exit 2; }
-ld_run() { # <args> -> ld_main's stdout, stderr and exit, in a subshell holding only the subject's function, the
-  # exported variables and bash's own, a fresh bash's options and an empty command hash
-  (
-    IFS=$' \t\n'
-    _ld_p="$LDDIR/layer-drift.sh"
-    _ld_x=" $(compgen -e) "; _ld_x="${_ld_x//$'\n'/ }"
-    for _ld_f in $(compgen -A function); do case "$_ld_f" in ld_main|fx_inproc) ;; *) unset -f "$_ld_f" ;; esac; done
-    for _ld_v in $(compgen -v); do
-      case "$_ld_x" in *" $_ld_v "*) continue ;; esac
-      case "$_ld_v" in
-        _ld_x|_ld_v|_ld_p|BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
-        IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
-        SHLVL|TERM|UID|_) continue ;;
-      esac
-      unset "$_ld_v" 2>/dev/null
-    done
-    unset _ld_x _ld_v _ld_f
-    OPTIND=1
-    set +eufx +o pipefail
-    hash -r
-    fx_inproc "$_ld_p"; unset -f fx_inproc; unset _ld_p
-    ld_main "$@"
-  )
-}
+ld_run() { inproc_run "$LDDIR/layer-drift.sh" ld_main "$@"; } # ld_main's stdout, stderr and exit: one in-process pass
 ld_ip() { # what `bash "$DRIFT" "$@"` gives, in process
   local _m _rc
   case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in "declare -x"*) ld_run "$@"; return ;; esac

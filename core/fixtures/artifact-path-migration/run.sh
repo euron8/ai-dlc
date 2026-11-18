@@ -54,7 +54,64 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$MIG")" && pwd -P)/$(basename "$MIG")"
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 has() { [ -f "$1/$2" ]; }
+
+# IN PROCESS (BL-878). The subject is loaded ONCE (inproc_load: its column-0 guard returns after defining map_main)
+# and every drive is inproc_run, which calls map_main in a subshell made to look like a fresh `bash <subject>`; the
+# subject's `exit` and its EXIT trap end that subshell only. It runs as a program only in its cli cells (cells.decl,
+# at the end). A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject with neither its `map_main() {` line nor the
+# column-0 source guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok;
+# FIXTURE BROKEN in the distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
+grep -q '^map_main() {$' "$MIG"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$MIG"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $MIG (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  10) echo "  FAIL  $MIG defines \`map_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run map_main in this shell"; echo "artifact-path-migration: 1 FAILED"; exit 1 ;;
+  *) echo "  FAIL  $MIG carries the column-0 source guard but no \`map_main() {\` line -- a respelled subject this fixture cannot drive"; echo "artifact-path-migration: 1 FAILED"; exit 1 ;;
+esac
+inproc_load "$MIG" || { echo "FIXTURE BROKEN: sourcing $MIG defined nothing" >&2; exit 2; }
+mig() { inproc_run "$MIG" map_main "$@"; }
+
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome --------------------
+# Each is compared with the in-process call on the same input, stdout, stderr and exit separately, byte for byte,
+# and asserts its own exit and a string it must say, so two runs that both printed nothing cannot read as
+# equivalent. Outcomes: exit 0 (a dry-run plan), 1 (an --apply abort), 2 (a usage error), 3 (nothing to migrate).
+# EQ_PREP, when set, names a function run before EACH of the two runs, so a run that mutates its tree (--apply)
+# meets the same tree at the same path both times.
+EQ="$(mktemp -d "${TMPDIR:-/tmp}/apmig-eq-XXXXXX")" || exit 2
+EQ_PREP=""
+eq_cell() { # eq_cell <cell-id> <want rc> <must-say> <args...>
+  local id="$1" want="$2" say="$3"; shift 3
+  [ -z "$EQ_PREP" ] || "$EQ_PREP" || { bad "$id: the cell's tree could not be prepared"; return; }
+  mig "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  [ -z "$EQ_PREP" ] || "$EQ_PREP" || { bad "$id: the cell's tree could not be prepared"; return; }
+  FXCELL="$id" bash "$MIG" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" \
+     && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" && [ "$(< "$EQ/$id.cl.rc")" = "$want" ] \
+     && grep -qF -- "$say" "$EQ/$id.cl.out" "$EQ/$id.cl.err"; then
+    ok "$id: the program answers exit $want exactly as the in-process call does (stdout, stderr, exit)"
+  else
+    bad "$id: in-process rc=$(< "$EQ/$id.ip.rc") / program rc=$(< "$EQ/$id.cl.rc") want $want, saying \"$say\""
+    sed -n '1,3s/^/          | /p' "$EQ/$id.ip.out" "$EQ/$id.cl.out" "$EQ/$id.ip.err" "$EQ/$id.cl.err"
+  fi
+}
+
+# --help reads the subject's own header through ${BASH_SOURCE[0]}, ending at the `map_main() {` line: it prints the
+# header and none of the wrap. Asserted in process; its CLI twin is the wrap's one-time equivalence proof.
+HELP_OUT="$(mig --help 2>&1)"; HELP_RC=$?
+if [ "$HELP_RC" -eq 0 ] && grep -qF 'PROGRESS goes to STDERR, so stdout stays the report it always was.' <<<"$HELP_OUT" \
+   && ! grep -qE 'map_main|set -uo pipefail' <<<"$HELP_OUT"; then
+  ok "--help prints the subject's own header (exit 0) and none of the in-process wrap"
+else
+  bad "--help rc=$HELP_RC: the header is missing, or the wrap line leaked into it"
+fi
 
 echo "artifact-path-migration:"
 
@@ -75,7 +132,7 @@ clone_world() {
 # =============================================================================
 W="$(clone_world)"
 BEFORE="$(cd "$W" && git status --porcelain | wc -l | tr -d ' ')"
-OUT="$(bash "$MIG" --root "$W" 2>&1)"; RC=$?
+OUT="$(mig --root "$W" 2>&1)"; RC=$?
 AFTER="$(cd "$W" && git status --porcelain | wc -l | tr -d ' ')"
 [ "$RC" -eq 0 ] && ok "dry run exits 0 when there is work to do" \
                 || bad "dry run exited $RC, expected 0"
@@ -98,7 +155,7 @@ esac
 # =============================================================================
 # 2. APPLY — every transform property, asserted against the TREE.
 # =============================================================================
-OUT="$(bash "$MIG" --root "$W" --apply 2>&1)"; RC=$?
+OUT="$(mig --root "$W" --apply 2>&1)"; RC=$?
 [ "$RC" -eq 0 ] && ok "apply exits 0" || { bad "apply exited $RC"; printf '%s\n' "$OUT" | tail -5 | sed 's/^/        /'; }
 
 # $1 label  $2 destination that MUST exist  $3 source that MUST be gone  $4 why
@@ -333,8 +390,12 @@ _lsfn="$(mktemp "${TMPDIR:-/tmp}/lsfn-XXXXXX")"
 sed -n '/^legacy_story() {/,/^}/p' "$MIG" > "$_lsfn"
 # shellcheck disable=SC1090
 . "$_lsfn"
-if legacy_story "_bmad-output/planning-artifacts/stories/cooldown-sentinel-followbait.md" \
-   && ! legacy_story "_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md"; then
+# Each call of the extracted shipping function is one in-process pass of the subject (fx_inproc, the inproc: row).
+fx_inproc "$MIG"
+legacy_story "_bmad-output/planning-artifacts/stories/cooldown-sentinel-followbait.md"; _ls_bait=$?
+fx_inproc "$MIG"
+legacy_story "_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md"; _ls_conf=$?
+if [ "$_ls_bait" -eq 0 ] && [ "$_ls_conf" -ne 0 ]; then
   ok "$(printf '%-26s %s\n' "follow-bound-reaches" "the follow-bait IS legacy, so it reaches the recovery the arm guards")"
 else
   bad "$(printf '%-26s %s\n' "follow-bound-reaches" "the follow-bait is not legacy (or the control is): the arm never reaches the recovery")"
@@ -366,7 +427,9 @@ N_BEFORE="$(cd "$W" && git ls-files | wc -l | tr -d ' ')"
 # 5. IDEMPOTENT. A second run must find nothing, or the transform is not a function.
 # =============================================================================
 (cd "$W" && git add -A && git commit -q -m migrated)
-bash "$MIG" --root "$W" >/dev/null 2>&1; RC=$?
+# The second run is the exit-3 cli cell's in-process half, read once for both.
+eq_cell cli-nothing 3 "VERDICT: nothing migratable" --root "$W"
+RC="$(< "$EQ/cli-nothing.ip.rc")"
 [ "$RC" -eq 3 ] && ok "a second run exits 3 (nothing to migrate) — the transform is idempotent" \
                 || bad "a second run exited $RC, expected 3; the first run left work behind"
 rm -rf "$W"
@@ -390,7 +453,7 @@ rm -rf "$W"
 wi="$(clone_world)"
 
 # ARM A — nothing declared, which is the state the reference consumer was in.
-a_out="$(bash "$MIG" --root "$wi" 2>&1)"
+a_out="$(mig --root "$wi" 2>&1)"
 grep -q "_bmad-output/brainstorming" <<<"$(sed -n '/AREAS INFERRED/,/^$/p' <<<"$a_out")" \
   && ok "undeclared area is reported as inferred" \
   || bad "an undeclared area was NOT reported as inferred — the remaining arms cannot be attributed"
@@ -413,7 +476,7 @@ cat > "$wi/.claude/skills/ai-dlc/artifact-paths.md" <<'EOF'
 areas:
   _bmad-output/brainstorming
 EOF
-b_inf="$(sed -n '/AREAS INFERRED/,/^$/p' <<<"$(bash "$MIG" --root "$wi" 2>&1)")"
+b_inf="$(sed -n '/AREAS INFERRED/,/^$/p' <<<"$(mig --root "$wi" 2>&1)")"
 if grep -q "_bmad-output/brainstorming" <<<"$b_inf"; then
   bad "declaring the area in the consumer's file did NOT stop it being inferred — the remedy is inert"
 elif ! grep -q "party-verdicts-retro" <<<"$b_inf"; then
@@ -433,7 +496,7 @@ cat > "$wi/.claude/skills/ai-dlc/artifact-paths.md" <<'EOF'
 area: _bmad-output/brainstorming
 area: _bmad-output/test-artifacts
 EOF
-b2_out="$(bash "$MIG" --root "$wi" 2>&1)"
+b2_out="$(mig --root "$wi" 2>&1)"
 if grep -q "UNREADABLE DECLARATION" <<<"$b2_out"; then
   ok "an 'area:'-per-line declaration is reported as UNREADABLE, not silently ignored"
 else
@@ -455,7 +518,7 @@ An `area:` is a durable root; declare each one under the block below.
 areas:
   _bmad-output/brainstorming
 EOF
-if grep -q "UNREADABLE DECLARATION" <<<"$(bash "$MIG" --root "$wi" 2>&1)"; then
+if grep -q "UNREADABLE DECLARATION" <<<"$(mig --root "$wi" 2>&1)"; then
   bad "a READABLE areas: block was reported as unreadable because the prose mentions 'area:' — the predicate is not the conjunction and every compliant file is a false positive"
 else
   ok "  and a readable block that mentions 'area:' in prose stays silent"
@@ -510,10 +573,10 @@ remedy_names_a() {
   fi
 }
 remedy_names_a "migrate-remedy-override" \
-  "$(cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" bash "$MIG" --root "$ra" 2>&1)" \
+  "$(cd "$ra" && AI_DLC_PROJECT_ROOT="$rb" mig --root "$ra" 2>&1)" \
   "AI_DLC_PROJECT_ROOT at tree B: the migration's remedy still names tree A's declared file"
 remedy_names_a "migrate-remedy-unset" \
-  "$(cd "$ra" && env -u AI_DLC_PROJECT_ROOT bash "$MIG" --root "$ra" 2>&1)" \
+  "$(cd "$ra" && unset AI_DLC_PROJECT_ROOT && mig --root "$ra" 2>&1)" \
   "override unset: the same tree-A file, not the resolver's own install tree's"
 if [ -n "$VAL" ]; then
   remedy_names_a "validate-noarea-override" \
@@ -575,7 +638,7 @@ done
 fork_count() {
   local log n m
   log="$(mktemp "${TMPDIR:-/tmp}/apmig-shlog-XXXXXX")" || return 2
-  APMIG_SHIM_LOG="$log" PATH="$SHIMS:$PATH" bash "$1" --root "$2" > "$log.out" 2>&1
+  APMIG_SHIM_LOG="$log" PATH="$SHIMS:$PATH" inproc_run "$1" map_main --root "$2" > "$log.out" 2>&1
   n="$(wc -l < "$log")"; m="$(sed -n 's/^  moves planned: *//p' "$log.out")"
   rm -f "$log" "$log.out"
   printf '%s %s\n' "$((n + 0))" "${m:-none}"
@@ -608,7 +671,7 @@ apply_count() {
   local t g s m
   t="$(mktemp -d "${TMPDIR:-/tmp}/apmig-apc-XXXXXX")" || return 2
   mkdir -p "$t/w" && cp -R "$2/." "$t/w" || return 2
-  APMIG_SHIM_LOG="$t/log" PATH="$SHIMA:$PATH" bash "$1" --root "$t/w" --apply > "$t/out" 2>&1
+  APMIG_SHIM_LOG="$t/log" PATH="$SHIMA:$PATH" inproc_run "$1" map_main --root "$t/w" --apply > "$t/out" 2>&1
   g="$(grep -c '^git$' "$t/log")" || g=0
   s="$(grep -c '^shasum$' "$t/log")" || s=0
   m="$(sed -n 's/^VERDICT: \([0-9]*\) of \([0-9]*\) planned move(s) applied.*/\1\/\2/p' "$t/out")"
@@ -687,7 +750,7 @@ AB_LINE_stage='migrate-artifact-paths.sh: FAIL — git update-index refused to s
 abort_run() {
   local t; t="$(mktemp -d "$ABW/r-XXXXXX")" || return 2
   mkdir "$t/w" && cp -R "$ABW/$2/." "$t/w" || return 2
-  bash "$1" --root "$t/w" --apply > "$t/out" 2> "$t/err"; AB_RC=$?
+  inproc_run "$1" map_main --root "$t/w" --apply > "$t/out" 2> "$t/err"; AB_RC=$?
   git -C "$t/w" status --porcelain=v1 -z -- _bmad-output > "$t/st" 2>/dev/null
   git -C "$t/w" ls-files -s -- _bmad-output > "$t/ls" 2>/dev/null
   ( cd "$t/w" && find _bmad-output -print ) > "$t/tr0"; LC_ALL=C sort "$t/tr0" > "$t/tr"
@@ -719,6 +782,15 @@ for _w in read exists verify stage; do
   [ "$AB_LINE" = "$_l" ] && ok "abort-$_w: stderr's FAIL line is the expected text" || bad "abort-$_w: stderr's FAIL line was: $AB_LINE"
   [ "$AB_OBS" = "$_e" ] && [ "$AB_LINE" = "$_l" ]; echo "$?" > "$ABW/prim-A-$_w.rc"
 done
+# The exit-1 cli cell: the `read` abort world, copied afresh to ONE path before each of the two runs (--apply
+# mutates it), so both runs meet the same tree at the same path and their output can be compared byte for byte.
+eq_abort_prep() {
+  [ ! -e "$ABW/eqw" ] || mv "$ABW/eqw" "$(mktemp -d "$ABW/eqold-XXXXXX")/" || return 1
+  mkdir "$ABW/eqw" && cp -R "$ABW/read/." "$ABW/eqw"
+}
+EQ_PREP=eq_abort_prep
+eq_cell cli-abort 1 "Aborting after 279 move(s)." --root "$ABW/eqw" --apply
+EQ_PREP=""
 abort_run "$MIG" crlf
 crlf_blob_ok && ok "crlf-rename: a CRLF file committed before text=auto stages under its own blob ($CRLF_BLOB)" \
   || bad "crlf-rename: rc=$AB_RC, staged blob '$AB_DEST' against the source's '$CRLF_BLOB'"
@@ -778,7 +850,7 @@ quote_run() {
   QN_RC=99; QN_ROWS=0; QN_UNSAFE=0; QN_STAY=0; QN_NAMED=0; QN_QUIET=0
   t="$(mktemp -d "$ABW/q-XXXXXX")" || return 2
   quote_build "$t/w" || return 2
-  bash "$1" --root "$t/w" --apply > "$t/out" 2> "$t/err"; QN_RC=$?
+  inproc_run "$1" map_main --root "$t/w" --apply > "$t/out" 2> "$t/err"; QN_RC=$?
   git -C "$t/w" diff --cached -M --name-status -z > "$t/ns" 2>/dev/null
   git -C "$t/w" ls-files -s -z -- _bmad-output > "$t/post" 2>/dev/null
   : > "$t/rows"
@@ -838,13 +910,15 @@ printf '%s\n' "migrate-artifact-paths.sh: PROGRESS plan: 5 tracked file(s) to sc
 cp "$PGD/exp.plan" "$PGD/exp.apply"
 printf '%s\n' "migrate-artifact-paths.sh: PROGRESS apply: 2 move(s) to apply" \
   "migrate-artifact-paths.sh: PROGRESS apply: moved 2 of 2" >> "$PGD/exp.apply"
-bash "$MIG" --root "$PW" > "$PGD/out0" 2> "$PGD/err0"; rc0=$?
-AI_DLC_MIGRATE_PROGRESS_EVERY=2 bash "$MIG" --root "$PW" > "$PGD/out1" 2> "$PGD/err1"; rc1=$?
+# The unset run is the exit-0 cli cell's in-process half, read once for both.
+eq_cell cli-plan 0 "DRY RUN — nothing was written." --root "$PW"
+cp "$EQ/cli-plan.ip.out" "$PGD/out0"; cp "$EQ/cli-plan.ip.err" "$PGD/err0"; rc0="$(< "$EQ/cli-plan.ip.rc")"
+AI_DLC_MIGRATE_PROGRESS_EVERY=2 mig --root "$PW" > "$PGD/out1" 2> "$PGD/err1"; rc1=$?
 # progress_hold <script> -> 0 when a dry run every 2 files prints exactly the plan lines on stderr
 # and the stdout of the unset run, byte for byte.
 progress_hold() {
   local t; t="$(mktemp -d "$PGD/h-XXXXXX")" || return 2
-  AI_DLC_MIGRATE_PROGRESS_EVERY=2 bash "$1" --root "$PW" > "$t/o" 2> "$t/e"
+  AI_DLC_MIGRATE_PROGRESS_EVERY=2 inproc_run "$1" map_main --root "$PW" > "$t/o" 2> "$t/e"
   cmp -s "$t/e" "$PGD/exp.plan" && cmp -s "$t/o" "$PGD/out0"
 }
 [ "$rc0" -eq 0 ] && [ "$rc1" -eq 0 ] && [ ! -s "$PGD/err0" ] \
@@ -873,24 +947,27 @@ fi
 # APPLY, on its own copy so the dry-run world stays pristine. Run with the cadence,
 # reset, run without it: the move loop's lines are on stderr and stdout is unchanged.
 PWA="$(mktemp -d "${TMPDIR:-/tmp}/apmig-pwa-XXXXXX")" && cp -R "$PW/." "$PWA"
-AI_DLC_MIGRATE_PROGRESS_EVERY=2 bash "$MIG" --root "$PWA" --apply > "$PGD/aout1" 2> "$PGD/aerr1"; arc1=$?
+AI_DLC_MIGRATE_PROGRESS_EVERY=2 mig --root "$PWA" --apply > "$PGD/aout1" 2> "$PGD/aerr1"; arc1=$?
 git -C "$PWA" reset -q --hard
-bash "$MIG" --root "$PWA" --apply > "$PGD/aout0" 2> "$PGD/aerr0"; arc0=$?
+mig --root "$PWA" --apply > "$PGD/aout0" 2> "$PGD/aerr0"; arc0=$?
 [ "$arc1" -eq 0 ] && [ "$arc0" -eq 0 ] && cmp -s "$PGD/aerr1" "$PGD/exp.apply" && [ ! -s "$PGD/aerr0" ] \
   && ok "progress: --apply prints the plan lines, then 2 move(s) to apply and moved 2 of 2, on stderr" \
   || bad "progress: --apply rc=$arc1/$arc0, or its stderr was not the expected five lines: $(tr '\n' '|' < "$PGD/aerr1")"
 cmp -s "$PGD/aout1" "$PGD/aout0" && grep -q 'VERDICT: 2 of 2 planned move(s) applied' "$PGD/aout0" \
   && ok "progress: --apply stdout is byte-identical to the run without the variable" \
   || bad "progress: --apply stdout CHANGED when progress was on, or the moves were not applied"
+# `abc` is the exit-2 cli cell; its in-process half is the run the loop reads for that value.
+AI_DLC_MIGRATE_PROGRESS_EVERY=abc eq_cell cli-usage 2 "AI_DLC_MIGRATE_PROGRESS_EVERY must be a positive integer" --root "$PW"
 for _v in 0 01 abc; do
-  AI_DLC_MIGRATE_PROGRESS_EVERY="$_v" bash "$MIG" --root "$PW" > "$PGD/vo" 2> "$PGD/ve"; _rc=$?
+  if [ "$_v" = abc ]; then cp "$EQ/cli-usage.ip.out" "$PGD/vo"; cp "$EQ/cli-usage.ip.err" "$PGD/ve"; _rc="$(< "$EQ/cli-usage.ip.rc")"
+  else AI_DLC_MIGRATE_PROGRESS_EVERY="$_v" mig --root "$PW" > "$PGD/vo" 2> "$PGD/ve"; _rc=$?; fi
   [ "$_rc" -eq 2 ] && [ ! -s "$PGD/vo" ] && grep -q 'AI_DLC_MIGRATE_PROGRESS_EVERY must be a positive integer' "$PGD/ve" \
     && ok "progress: AI_DLC_MIGRATE_PROGRESS_EVERY=$_v is a usage error, exit 2" \
     || bad "progress: AI_DLC_MIGRATE_PROGRESS_EVERY=$_v exited $_rc (want 2, empty stdout and the usage message)"
 done
 rm -rf "$PWA"
 
-rm -rf "$ra" "$rb" "$FW1" "$FW2" "$PW" "$PGD" "$SHIMS" "$SHIMA" "$ABW"
+rm -rf "$ra" "$rb" "$FW1" "$FW2" "$PW" "$PGD" "$SHIMS" "$SHIMA" "$ABW" "$EQ"
 rm -rf "$TPL"
 echo
 report_end artifact-path-migration

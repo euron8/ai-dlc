@@ -7,6 +7,7 @@
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/layout.sh
+core/fixtures/lib/world.sh
 # Shard b runs unit lw. S10 copies the reader the way apply.sh does, beside the REAL sprint-status.sh and its schema. The writer is only resolved (the fixture ships ahead of its subject and skips loudly when it is absent), never run, so it is optional here.
 !core/scripts/sprint-status.sh
 !core/schemas/sprint-status.json

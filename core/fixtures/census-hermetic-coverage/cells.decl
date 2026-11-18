@@ -1,0 +1,9 @@
+# census-hermetic-coverage's starts of scripts/census-hermetic-coverage.sh (BL-879 grammar). Every other drive is in
+# process: run.sh loads the census once and calls census_main through inproc_run, and pair-worker.sh answers each
+# pool worker of an in-process run (one fx_inproc pass each). One cli cell per distinct CLI outcome, each started as
+# FXCELL=<id> bash <census> in eqv() and compared byte for byte (stdout, stderr, exit) with the in-process run over the
+# same input: exit 0 (a LOW-RES row), exit 1 (a BOTH-FAIL row), exit 2 (the scratch-base preflight refusal).
+cli scripts/census-hermetic-coverage.sh cli-pass
+cli scripts/census-hermetic-coverage.sh cli-mismatch
+cli scripts/census-hermetic-coverage.sh cli-refuse
+nested scripts/census-hermetic-coverage.sh scripts/census-hermetic-coverage.sh why=a cli start of the census starts its pool, one `bash <census> --pair <i> <fx>` per listed fixture through xargs, as its own children

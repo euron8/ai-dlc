@@ -1,4 +1,7 @@
-# plan-shape reads ONE file outside its own directory: the validator under test.
-# run.sh locates it at HERE/../../../scripts/validate-plan-shape.sh and runs it against seeded plans.
+# plan-shape reads the validator under test and the libraries it sources from core/fixtures/lib/.
+# run.sh locates the validator at HERE/../../../scripts/validate-plan-shape.sh, loads it in process
+# (lib/inproc.sh, which sources lib/mutant.sh) and asks it about seeded plans.
 !scripts/validate-plan-shape.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

@@ -199,6 +199,8 @@
 # FXC-IDENTITY 1 23e7b1c0546c4cacfb343a221e840f02e5e1f7701eb0bf5343fae282ef207418 fxc_gen_rc writes a temp file and renames it onto fxcount.rc (BL-1119); the rc bytes are unchanged, so no fixture's judgement moves
 # FXC-IDENTITY 1 c4decebcf8a21abd7ecb63cd3b9a08414e3c1249ecf721e84aa4a7c513671316 remedy text only: FXC_CELLS_REMEDY no longer names the deleted readset-stage1-verdict (BL-915); no fixture's judgement moves
 # FXC-IDENTITY 1 fd008c2ff56b8bc1dab5920b0f6c1ad3dc45ce4d56da4ff622faf405d1f3c271 static P2 arm only: an unguarded shebang subject counts per call and fixture directory libs join the population (BL-1152, BL-1159); fxc_judge and the tag=0 fxc_req are unchanged, so no counted fixture's judgement moves
+# FXC-IDENTITY 1 c7866870c9fc05fae058d1bf5fb35bc9f474f41af7b9a637bcad6d1504b21555 static P2 arm only: the two source sites of lib/inproc.sh are judged at each inproc_load/inproc_run call, and an unresolvable command word after a source of an unguarded subject is a drive (BL-1164, BL-1152 item 3); fxc_judge and the tag=0 fxc_req are unchanged, so no counted fixture's judgement moves
+# FXC-IDENTITY 1 06ebe5e1e7ca5b54a66a90709d4951f8be83b6eaf9a247a913968705652a23b8 nested-cell attribution (BL-1164): an inner fixture's declared cells credit only a tag whose start has that fixture's run.sh among its logged ancestors, so the judge can only move a fixture from FAIL to pass; every recorded pass stays valid
 set -u
 FXC_FORMAT=1
 
@@ -556,7 +558,7 @@ fxc_guarded() {
 # the start that was live when the child logged. KNOWN ROUTE: a parent that is itself unlogged (a start under its own
 # `env -i`) is absent, so its child reads as having no parent.
 fxc_cells_judge() {
-  awk -F'\t' 'function nrm(s,   lead, n, a, i, k, o, r) {
+  awk -F'\t' -v outer="${4:-}" 'function nrm(s,   lead, n, a, i, k, o, r) {
       lead = (substr(s, 1, 1) == "/"); n = split(s, a, "/"); k = 0
       for (i = 1; i <= n; i++) {
         if (a[i] == "" || a[i] == ".") continue
@@ -567,15 +569,24 @@ fxc_cells_judge() {
       return (lead ? "/" : "") r
     }
     FILENAME == ARGV[1] { if ($0 != "" && $0 != "*") T[++nt] = $0; next }
-    FILENAME == ARGV[2] { if ($1 == "R") { if ($3 == "nested") N[$4 SUBSEP $5] = 1; else C[$4 SUBSEP $5] = 0 } next }
+    FILENAME == ARGV[2] { if ($1 == "R") { if ($3 == "nested") N[$4 SUBSEP $5] = 1; else if ($3 == "inner") { x = $2; sub(/\/cells\.decl$/, "", x); sub(/.*\//, "", x); IN[$4 SUBSEP $5 SUBSEP x] = 1 } else C[$4 SUBSEP $5] = 0 } next }
+    # innerok: a tag is an INNER run tag only when a start in its parent chain is the run.sh of another fixture X (not the
+    # judged one) whose cells.decl declares it for this subject: credited to the process that emitted it, by the start log.
+    # A pid whose FIRST logged start is the judged fixture run.sh and which later logs another run.sh is that fixture exec of
+    # its parent (a shard stub), never a drive of it: it credits nothing. Paths are normalised before the match.
+    function innerok(s, t, p,   h, q, x, f0) {
+      for (h = 0; h < 64 && p != ""; h++) { q = nrm(PA[p]); f0 = nrm(PA0[p])
+        if (q ~ /(^|\/)core\/fixtures\/[^\/]+\/run\.sh$/ && f0 !~ ("(^|/)core/fixtures/" outer "/run[.]sh$")) { x = q; sub(/\/run\.sh$/, "", x); sub(/.*\//, "", x); if (x != outer && ((s SUBSEP t SUBSEP x) in IN)) return 1 }
+        p = PP[p] }
+      return 0 }
     { f = ($1 ~ /(^|\/)\.\.?(\/|$)/ || index($1, "//") > 0) ? nrm($1) : $1; s = ""; best = 0
       for (i = 1; i <= nt; i++) { p = T[i]; lp = length(p)
         if ((f == p || f == "/" p || (length(f) > lp + 1 && substr(f, length(f) - lp) == "/" p)) && lp > best) { best = lp; s = p } }
       par = ($4 != "" && ($4 in LP)) ? LP[$4] : ""
-      LP[$2] = s
+      LP[$2] = s; if (!($2 in PA0)) PA0[$2] = $1; PA[$2] = $1; if ($4 != $2) PP[$2] = $4
       if (s == "") { if ($3 != "") print "C2\t-\t" $3 "\t" $1; next }
       ns++
-      if ($3 != "") { if ((s SUBSEP $3) in C) { C[s SUBSEP $3]++; nt2++ } else print "C2\t" s "\t" $3 "\t" $1; next }
+      if ($3 != "") { if ((s SUBSEP $3) in C) { C[s SUBSEP $3]++; nt2++ } else if (innerok(s, $3, $4)) nt2++; else print "C2\t" s "\t" $3 "\t" $1; next }
       if (par != "" && ((par SUBSEP s) in N)) { nn++; next }
       print "C1\t" s "\t" $1 "\t" (par == "" ? "-" : par) }
     END { for (k in C) if (C[k] != 1) { split(k, a, SUBSEP); print "C3\t" a[1] "\t" a[2] "\t" C[k] }
@@ -668,8 +679,22 @@ fxc_cells_judge() {
 #   346 rows over 82 call sites ((fixture, site) pairs 293) in 13 fixtures, measured with `--static-join` on batch 258 C10's
 #   release tree (197 rows over 51 sites in 11 fixtures on its base, 619bfde94, before the per-call unit). The route lists below were measured on main 62a88119c.
 #   THE B ROUTE (execution through an UNGUARDED subject's functions after its counted source) is NARROWED, not closed:
-#   an unguarded subject with a shebang counts per CALL. RESIDUAL: a fixture that sources an unguarded subject and then
-#   runs a command word (`"$CMD" x`) reads quiet, because `egate` applies only after a GUARDED source. Whole-tree directory lines (`core/fixtures/`, `core/`, `scripts/`) are
+#   an unguarded subject with a shebang counts per CALL, and an unresolvable command word (`"$CMD" x`) after a source that
+#   RESOLVES to an unguarded subject, in an enclosing scope, is a drive too (`egateU`, BL-1152 item 3). Its false-positive
+#   set is EMPTY: 0 rows added on the 292-fixture tree (346 rows before and after, the row sets identical, measured with
+#   `--static-join`); offender `. "$ROOT/core/scripts/sub.sh"; CMD="$1"; "$CMD" x` fires; `CMD=echo; "$CMD" x`, no source,
+#   and a source inside a closed subshell are quiet. THE NARROWING that reached 0: arming on an UNRESOLVABLE source in a
+#   fixture declaring an unguarded subject too measured 25 phantom rows; only a source resolving to an unguarded subject arms.
+#   LIB/INPROC.SH (BL-1164): the two source sites of core/fixtures/lib/inproc.sh (`inproc_load`, `inproc_run`) are not
+#   judged at the library. Each `inproc_load`/`inproc_run` call word in a fixture whose population holds lib/inproc.sh is a
+#   site of its own, whose first operand is resolved at the CALL with the same resolver and depth as a source: an
+#   operand resolving to an unguarded subject (inproc_load) or to no literal path in a fixture declaring an unguarded
+#   subject (either) is a row AT THE CALLER LINE; an inproc_run on a resolved operand is paired by the fx_inproc inside it,
+#   an inproc_load never is. The exemption is keyed on the path lib/inproc.sh AND the enclosing function, and holds only
+#   while each of the two functions has exactly ONE source site (a second source site in one function re-judges that function sites; the other function stays exempt). A fixture-local
+#   `inproc_run(){ . "$1"; ...; }` or a renamed copy of the library is judged as any source. A population that holds the
+#   library and no inproc_* call word (no caller) judges nothing: nothing drives through it. BLIND: an indirect call
+#   (`"$f" subject entry` with f=inproc_run) is read as an unknown word. Whole-tree directory lines (`core/fixtures/`, `core/`, `scripts/`) are
 #   excluded from the population because including them measured +236 cross-fixture phantom rows that would wedge
 #   any future unresolvable source under core/fixtures/ in up to 17 unrelated fixtures.
 #   GATED unresolvable command words (a word that resolves to nothing literal, with no guarded source in scope),
@@ -808,9 +833,17 @@ function isanc(fi, a, c) { while (c > 0 && c != a) c = SPAR[fi, c]; return c == 
 function egate(fi, k,   j) {
   for (j = 1; j < k; j++) if ((((fi SUBSEP j) in SSG) || ((fi SUBSEP j) in SSH2)) && isanc(fi, SC[fi, j], SC[fi, k])) return 1
   return 0 }
+# egateU <file index> <site>: the same scope test over a source resolving to an UNGUARDED subject of the fixture (SSUG).
+function egateU(fi, k,   j) {
+  for (j = 1; j < k; j++) if (((fi SUBSEP j) in SSUG) && isanc(fi, SC[fi, j], SC[fi, k])) return 1
+  return 0 }
+# inpx <file index> <site>: a source inside core/fixtures/lib/inproc.sh itself, which ARM P2 does not judge at the library
+# (INPX, built once in END): the inproc_load/inproc_run operand is judged at the call line instead, by an I site, which
+# counts only in a fixture whose population holds lib/inproc.sh (HASINP), as the library own sites did.
+function inpx(fi, k) { return ((fi SUBSEP k) in INPX) }
 function shadowed(fi, k,   d, j, a, sub_) { d = SDEF[fi, k] + 0; if (d == 0) return 0
   for (j = 1; j <= NS[fi]; j++) {
-    if (!((fi SUBSEP j) in SSRC) || SL[fi, j] <= d || SL[fi, j] > SL[fi, k]) continue
+    if (!((fi SUBSEP j) in SSRC)|| SL[fi, j] <= d || SL[fi, j] > SL[fi, k]) continue
     sub_ = 0; a = SC[fi, j]
     while (a > 0 && !isanc(fi, a, SC[fi, k])) { if (SKND[fi, a] ~ /^[PQWV]$/) { sub_ = 1; break } a = SPAR[fi, a] }
     if (!sub_) return 0 }
@@ -917,17 +950,18 @@ hd_body(s) { LASTSIG = FNR; next }
     f = func_of(scope_at(q)); addsite("S", q, o, opres(o), f, o) }
   # command-position words: subject entries, local functions, eval, command/builtin, expansions
   hit = 0; nw = split(M, WW, /[^A-Za-z0-9_]+/)
-  for (k = 1; k <= nw; k++) if ((WW[k] in FNU) || (WW[k] in DEFN) || WW[k] == "eval" || WW[k] == "command" || WW[k] == "builtin") { hit = 1; break }
+  for (k = 1; k <= nw; k++) if ((WW[k] in FNU) || (WW[k] in DEFN) || WW[k] == "eval" || WW[k] == "command" || WW[k] == "builtin" || WW[k] == "inproc_load" || WW[k] == "inproc_run") { hit = 1; break }
   if (hit) { p = 0
     while (match(substr(M, p + 1), /[A-Za-z_][A-Za-z0-9_]*/)) { q = p + RSTART; w = substr(M, q, RLENGTH); p = q + RLENGTH - 1
       if (q > 1 && substr(M, q - 1, 1) !~ BND) continue
       nx = substr(M, p + 1, 1); if (nx == "=" || nx == "(" || nx == "." || nx == "/" || nx == "-") continue
-      if (!((w in FNU) || (w in DEFN) || w == "eval" || w == "command" || w == "builtin")) continue
+      if (!((w in FNU) || (w in DEFN) || w == "eval" || w == "command" || w == "builtin" || w == "inproc_load" || w == "inproc_run")) continue
       if (!cmdpos(M, q) || casepat(q, p + 1)) continue
       if (w == "command" || w == "builtin") { if (match(substr(M, p + 1), /^[[:blank:]]+[A-Za-z_][A-Za-z0-9_]*/)) { w = substr(M, p + 1, RLENGTH); sub(/^[[:blank:]]+/, "", w); if (w in FNU) { NEXTDEF = LDL[FI, w] + 0; addsite("C", q, w, "", ""); NEXTDEF = 0 } } continue }
       if (w == "eval") { v = opnd(s, p + 1); sub(/^[[:blank:]]+/, "", v); sub(/[[:blank:]].*/, "", v)
         f = func_of(scope_at(q)); addsite("E", q, "eval " v, (v == "") ? "R ?" : opres_e(v, f), f, v); continue }
       if (w in DEFN) { GCN[w]++; gn = GCN[w]; GC_FI[w, gn] = FI; GC_L[w, gn] = FNR; GC_P[w, gn] = p + 1; GC_F[w, gn] = func_of(scope_at(q)); LTXT[FI, FNR] = s }
+      if (w == "inproc_load" || w == "inproc_run") { v = opnd(s, p + 1); f = func_of(scope_at(q)); addsite("I", q, w " " v, (v == "") ? "R ?" : opres(v), f, v); SIR[FI, NS[FI]] = (w == "inproc_run") }
       if (w in FNU) { NEXTDEF = LDL[FI, w] + 0; addsite("C", q, w, "", ""); NEXTDEF = 0 } } }
   if (index(M, "$")) { p = 0
     while (match(substr(M, p + 1), /"?\$[{A-Za-z_]/)) { q = p + RSTART; p = q + RLENGTH - 1
@@ -938,17 +972,24 @@ hd_body(s) { LASTSIG = FNR; next }
   LASTSIG = FNR; CONT = (s ~ /\\$/) }
 function entry(fx, w,   k, p) { for (k = 1; k <= NSB[fx]; k++) { p = SBP[fx, k]; if ((KD[p] == "G" || KD[p] == "U") && (ACTALL || (p in ACT)) && ((p SUBSEP w) in FN)) return p } return "" }
 END {
+  # INPX: core/fixtures/lib/inproc.sh source sites, exempt from judgement AT THE LIBRARY. Keyed on that path AND the
+  # enclosing function (inproc_load, inproc_run), and only while each of those functions holds exactly ONE source site: a
+  # second source site in one of them re-judges that function sites, the other stays exempt. A fixture-local inproc_run, or a renamed copy of the library, is not this file.
+  for (fi = 1; fi <= NPF; fi++) { if (disp(PNAME[fi]) != "lib/inproc.sh") continue
+    delete ICN; for (k = 1; k <= NS[fi]; k++) if (ST[fi, k] == "S" && (SFN[fi, k] == "inproc_load" || SFN[fi, k] == "inproc_run")) ICN[SFN[fi, k]]++
+    for (k = 1; k <= NS[fi]; k++) if (ST[fi, k] == "S" && (SFN[fi, k] == "inproc_load" || SFN[fi, k] == "inproc_run") && ICN[SFN[fi, k]] == 1) INPX[fi, k] = 1 }
   for (x = 1; x <= FXN; x++) { fx = FXS[x]; HASU = 0; HASG = 0; delete BK
     for (k = 1; k <= NSB[fx]; k++) { p = SBP[fx, k]; KD[p] = kindof(p); if (KD[p] == "U") HASU = 1; if (KD[p] == "G") HASG = 1; BK[base(p)] = BK[base(p)] " " p }
     if (!HASU && !HASG) continue
-    ACTALL = 0; delete ACT; delete FG; delete SSRC; delete SSG; delete SSU; delete PJSET; delete SRM
-    for (j = 1; j <= NJ[fx]; j++) { fi = PIDX[JP[fx, j]]; if (fi != "") PJSET[fi] = 1 }
+    ACTALL = 0; delete ACT; delete FG; delete SSRC; delete SSG; delete SSUG; delete SSU; delete PJSET; delete SRM
+    HASINP = 0
+    for (j = 1; j <= NJ[fx]; j++) { fi = PIDX[JP[fx, j]]; if (fi != "") { PJSET[fi] = 1; if (disp(PNAME[fi]) == "lib/inproc.sh") HASINP = 1 } }
     for (j = 1; j <= NJ[fx]; j++) { fi = PIDX[JP[fx, j]]; if (fi == "") continue
-      for (k = 1; k <= NS[fi]; k++) { if (ST[fi, k] != "S") continue
+      for (k = 1; k <= NS[fi]; k++) { if ((ST[fi, k] != "S" && ST[fi, k] != "I") || inpx(fi, k) || (ST[fi, k] == "I" && !HASINP)) continue
         n = split(substr(sres(fi, k), 2), RB, " ")
         for (r = 1; r <= n; r++) { if (RB[r] == "?") { if (HASG || HASU) ACTALL = 1; FG[fi] = 1; SSRC[fi, k] = 1; SSU[fi, k] = 1; continue }
           if (!(RB[r] in BK)) { SSRC[fi, k] = 1; continue }; m = split(BK[RB[r]], BP, " ")
-          for (i = 1; i <= m; i++) { FG[fi] = 1; if (KD[BP[i]] != "L") SSRC[fi, k] = 1; if (KD[BP[i]] == "G" || KD[BP[i]] == "U") { ACT[BP[i]] = 1 } if (KD[BP[i]] == "G") SSG[fi, k] = 1 } } } }
+          for (i = 1; i <= m; i++) { FG[fi] = 1; if (KD[BP[i]] != "L") SSRC[fi, k] = 1; if (KD[BP[i]] == "G" || KD[BP[i]] == "U") { ACT[BP[i]] = 1 } if (KD[BP[i]] == "G" && ST[fi, k] == "S") SSG[fi, k] = 1; if (KD[BP[i]] == "U" && ST[fi, k] == "S") SSUG[fi, k] = 1 } } } }
     # THE HELPER GATE, one level deep (fail-closed): a source whose operand resolves to another file of the
     # fixture population that itself sources a guarded subject (anywhere in it) gates as a guarded source (SSH2, read by egate).
     delete HSG; delete PBN; delete SSH2
@@ -961,21 +1002,29 @@ END {
           for (i = 1; i <= m; i++) if ((BP[i] in HSG) && BP[i] != fi) SSH2[fi, k] = 1 } } }
     for (j = 1; j <= NJ[fx]; j++) { fi = PIDX[JP[fx, j]]; if (fi == "") continue
       delete DRV; delete USED; delete AVU; delete COV
-      for (k = 1; k <= NS[fi]; k++) { L = SL[fi, k]; ty = ST[fi, k]; w = SW[fi, k]; drive = 0; cov = 0; why = ""
+      for (k = 1; k <= NS[fi]; k++) { L = SL[fi, k]; ty = ST[fi, k]; w = SW[fi, k]; drive = 0; cov = 0; why = ""; iq = 0
+        if ((ty == "S" && inpx(fi, k)) || (ty == "I" && !HASINP)) continue
         if (ty == "S") { n = split(substr(sres(fi, k), 2), RB, " ")
           for (r = 1; r <= n; r++) { if (RB[r] == "?") { cov = cov || HASG || HASU; if (HASU && why == "") { drive = 1; why = "the source of " w ", an operand no literal path, same-file assignment or caller in the population resolves, in a fixture declaring an unguarded bash subject" } continue }
             if (!(RB[r] in BK)) continue; m = split(BK[RB[r]], BP, " ")
             for (i = 1; i <= m; i++) { if (KD[BP[i]] == "G") cov = 1; else if (KD[BP[i]] == "U") { cov = 1; drive = 1; why = "the source of unguarded bash subject " rdisp(BP[i]) " (" w ")" } } } }
         else if (ty == "C") { p = shadowed(fi, k) ? "" : entry(fx, w); if (p != "") { drive = 1; why = "the call of " w ", an entry function of " (KD[p] == "G" ? "guarded" : "unguarded") " subject " rdisp(p) } }
+        else if (ty == "I") { n = split(substr(sres(fi, k), 2), RB, " ")
+          for (r = 1; r <= n; r++) { if (RB[r] == "?") { iq = 1; if (HASU && why == "") { drive = 1; why = "the operand of " w ", which no literal path, same-file assignment or caller in the population resolves, in a fixture declaring an unguarded bash subject" } continue }
+            if (!(RB[r] in BK)) continue; m = split(BK[RB[r]], BP, " ")
+            for (i = 1; i <= m; i++) if (KD[BP[i]] == "U") { drive = 1; why = "the in-process " (SIR[fi, k] ? "run" : "load") " of unguarded bash subject " rdisp(BP[i]) " (" w ")" } } }
         else { n = split(substr(sres(fi, k), 2), RB, " "); ent = ""; unr = 0
           for (r = 1; r <= n; r++) { if (RB[r] == "?") unr = 1; else if (entry(fx, RB[r]) != "") { ent = RB[r]; break } }
           # N-prime: a word resolving to a guarded subject entry is a call, ungated; an unresolvable word is a drive only
           # after a source resolving to a guarded subject in an enclosing scope (egate).
           if (ent != "") { drive = 1; why = "the command word " w ", which resolves to " ent ", an entry function of a " (KD[entry(fx, ent)] == "G" ? "guarded" : "unguarded") " subject" }
-          else if (unr && egate(fi, k)) { drive = 1; why = "the command word " w ", which resolves to nothing literal, after a source of a guarded subject in an enclosing scope (fail-closed)" } }
+          else if (unr && egate(fi, k)) { drive = 1; why = "the command word " w ", which resolves to nothing literal, after a source of a guarded subject in an enclosing scope (fail-closed)" }
+          else if (unr && egateU(fi, k)) { drive = 1; why = "the command word " w ", which resolves to nothing literal, after a source of an unguarded subject in an enclosing scope (fail-closed)" } }
         if (!drive && !cov) continue
         paired = 0
-        if (SNF[fi, k] > USED[L] + 0) { USED[L]++; paired = 1 }
+        # An inproc_run caller is paired by the fx_inproc inside inproc_run, unless its operand is unresolvable; an inproc_load is never paired.
+        if (ty == "I") paired = (SIR[fi, k] && !iq)
+        else if (SNF[fi, k] > USED[L] + 0) { USED[L]++; paired = 1 }
         else { P = PREV[fi, L]; if (!(L in AVU) && P > 0 && ((fi SUBSEP P) in FXL) && !(P in DRV)) { AVU[L] = 1; paired = 1 } }
         DRV[L]++
         if (cov && paired && SC[fi, k] > 0 && !(SC[fi, k] in COV)) COV[SC[fi, k]] = 1
@@ -1312,7 +1361,17 @@ EOF
   if [ "$FXC_CELLS" = 1 ] && [ -f "$decl" ]; then
     local cf="$fd/cells.decl" ck="${fd##*/}" nf ne n5 sum
     if [ -f "$cf" ]; then fxc_cells_parse "$cf" > "$w/cells"; else : > "$w/cells"; fi
-    fxc_cells_judge "$w/tgts" "$w/cells" "$jl" > "$w/cj"
+    # A fixture whose inputs.decl names ANOTHER fixture's run.sh drives it as an inner run: the FXCELL tags that inner run
+    # emits are the inner fixture's declared cells. They are added as `inner` rows, which let a tag pass C2 and are never
+    # counted by C3 (the inner fixture judges its own). A tag is credited ONLY when the start log
+    # shows a run.sh start of that inner fixture among the tagged start's ancestors (fxc_cells_judge, innerok); a tag the
+    # judged fixture emits itself, or one in neither cells.decl, still FAILs C2.
+    awk '{ l = $0; sub(/^[!+]/, "", l); if (l ~ /^core\/fixtures\/[^\/]+\/run\.sh$/) { sub(/^core\/fixtures\//, "", l); sub(/\/run\.sh$/, "", l); print l } }' "$inp" > "$w/inner" 2>/dev/null
+    while IFS= read -r p; do
+      [ -n "$p" ] && [ "$p" != "$ck" ] && [ -f "$root/core/fixtures/$p/cells.decl" ] || continue
+      fxc_cells_parse "$root/core/fixtures/$p/cells.decl" | awk -F'\t' -v OFS='\t' '$1 == "R" && ($3 == "cli" || $3 == "e2e") { $3 = "inner"; print }' >> "$w/cells"
+    done < "$w/inner"
+    fxc_cells_judge "$w/tgts" "$w/cells" "$jl" "$ck" > "$w/cj"
     nf="$(grep -cE '^C[123]	' "$w/cj")" || nf=0
     ne="$(grep -c '^E	' "$w/cells")" || ne=0
     awk -F'\t' '$1 == "R" && $3 == "cli" { print $4 }' "$w/cells" | LC_ALL=C sort -u > "$w/cli"
@@ -1601,7 +1660,10 @@ fxc_inproc_self_probe() {
   pw fG "$G" sex.sh '. "$X"' 'fn=gmain' '"$fn"'
   pw fGq "$G" sex.sh '. "$X"' '"$Y"'
   pw fG "$G" sm4g.sh '. "$d/core/scripts/g.sh"' '"$Z" "$@"'
-  pw fUq "$U" sm4.sh 'fx_inproc u' '. "$d/core/scripts/u.sh"' 'fn=umain' '"$fn" "$@"' '"$Z" "$@"'
+  pw fUq "$U" sm4.sh 'fx_inproc u' '. "$d/core/scripts/u.sh"' 'fn=umain' '"$fn" "$@"'
+  # BL-1152 item 3: an unresolvable command word after a source resolving to an UNGUARDED subject FIRES; a literal word does not.
+  pw fU "$U" sm4u.sh 'fx_inproc u' '. "$d/core/scripts/u.sh"' '"$Z" "$@"'
+  pw fUq "$U" sm4q.sh 'fx_inproc u' '. "$d/core/scripts/u.sh"' 'CMD=echo' '"$CMD" x'
   # OPTION S: a positional reads the union of every caller argument, whatever its index and whatever shift precedes it.
   # FIRES: "$@" (sns), a loop whose read sits above its shift (srl), ${@:N} (ssl) and a "$@" forwarded to another
   # function (sfw), none of them behind a source in their file. QUIET: the same loop, and a shifted read, whose every
@@ -1649,7 +1711,7 @@ fxc_inproc_self_probe() {
   # back to C and the cell cannot fail on the pin: a stated limit, not a pass.
   o1="$(LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 fxc_static_join "$PR")"; r1=$?
   g="$(awk -F'\t' '$1 == "E" && $3 == "P2" { print $2 ":" $4 }' <<<"$o1" | LC_ALL=C sort | tr '\n' ' ')"
-  local want="fG:fG/helper.sh:2 fG:fG/run.sh:3 fG:fG/s2.sh:6 fG:fG/s2.sh:7 fG:fG/s2a.sh:3 fG:fG/s3.sh:11 fG:fG/s3.sh:13 fG:fG/s3.sh:15 fG:fG/s3.sh:23 fG:fG/s3.sh:25 fG:fG/s3.sh:5 fG:fG/s3.sh:9 fG:fG/s3c.sh:3 fG:fG/s3c.sh:4 fG:fG/s6a.sh:3 fG:fG/s6b.sh:4 fG:fG/s6f.sh:3 fG:fG/s9.sh:2 fG:fG/s9.sh:3 fG:fG/s9.sh:4 fG:fG/s9.sh:5 fG:fG/s9.sh:6 fG:fG/scase.sh:3 fG:fG/scase.sh:5 fG:fG/scl.sh:2 fG:fG/scu.sh:2 fG:fG/sdef.sh:3 fG:fG/sex.sh:3 fG:fG/sfw.sh:1 fG:fG/shh.sh:2 fG:fG/sloc.sh:2 fG:fG/sm4g.sh:2 fG:fG/snc.sh:2 fG:fG/sns.sh:1 fG:fG/srl.sh:4 fG:fG/ssl.sh:1 fG:fG/sst.sh:4 fG:fG/svx.sh:6 fG:fG/swv.sh:2 fG:fG/swv.sh:4 fG:fG/sxa.sh:1 fL:fL/run.sh:4 fL:fL/s6.sh:3 fU:fU/run.sh:3 fU:fU/s1.sh:1 fU:fU/s1b.sh:1 fU:fU/s8.sh:2 sstub:simpl/run.sh:1 "
+  local want="fG:fG/helper.sh:2 fG:fG/run.sh:3 fG:fG/s2.sh:6 fG:fG/s2.sh:7 fG:fG/s2a.sh:3 fG:fG/s3.sh:11 fG:fG/s3.sh:13 fG:fG/s3.sh:15 fG:fG/s3.sh:23 fG:fG/s3.sh:25 fG:fG/s3.sh:5 fG:fG/s3.sh:9 fG:fG/s3c.sh:3 fG:fG/s3c.sh:4 fG:fG/s6a.sh:3 fG:fG/s6b.sh:4 fG:fG/s6f.sh:3 fG:fG/s9.sh:2 fG:fG/s9.sh:3 fG:fG/s9.sh:4 fG:fG/s9.sh:5 fG:fG/s9.sh:6 fG:fG/scase.sh:3 fG:fG/scase.sh:5 fG:fG/scl.sh:2 fG:fG/scu.sh:2 fG:fG/sdef.sh:3 fG:fG/sex.sh:3 fG:fG/sfw.sh:1 fG:fG/shh.sh:2 fG:fG/sloc.sh:2 fG:fG/sm4g.sh:2 fG:fG/snc.sh:2 fG:fG/sns.sh:1 fG:fG/srl.sh:4 fG:fG/ssl.sh:1 fG:fG/sst.sh:4 fG:fG/svx.sh:6 fG:fG/swv.sh:2 fG:fG/swv.sh:4 fG:fG/sxa.sh:1 fL:fL/run.sh:4 fL:fL/s6.sh:3 fU:fU/run.sh:3 fU:fU/s1.sh:1 fU:fU/s1b.sh:1 fU:fU/s8.sh:2 fU:fU/sm4u.sh:3 sstub:simpl/run.sh:1 "
   [ "$r1" = 0 ] && [ "$g" = "$want" ] && grep -qF 'bash -c worker' <<<"$(awk -F'\t' '$2 == "fG" && $4 == "fG/s3.sh:23"' <<<"$o1")" \
     && sp_ok "P2 FIRES on every seeded drive and names arm P2: a call after f(){ . \"\$1\"; } (1), two of three calls after one paired source (2), a drive after a heredoc, a <<- heredoc, a here-string, \$((1<<k)) and (( << )), inside a bash -c worker and after a multibyte byte (3), a shard stub under its own subjects (4), a guarded no-shebang subject (5), a resolved \$V and an unresolvable two-assignment operand (6), a fixture-local helper (7), an unguarded source (8) and one reached through a positional its same-file caller resolves to that subject (P2-U), a call in \$( ) and in ( export; ), an expansion, an eval and command X (9), vin with no fx_inproc, a subject function another file of the fixture defines (sloc.sh beside sdef.sh), a local definition followed by a source of the subject before the call (sdef.sh), and a file-level paired source feeding two call sites" \
     || sp_bad "P2 the fired set (rc $r1) was [$g], want [$want]"

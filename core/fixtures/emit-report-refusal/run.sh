@@ -63,18 +63,21 @@ RDIR="$(dirname "$EMIT")"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/emit-report.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
-# IN PROCESS (BL-878). Every render and --verify below is er_ip: a subshell that sources the engine copy it is
-# handed and calls its er_main, so the subject's `exit`, traps and `set` stay there, and a copy of reconcile/ finds
-# ITS stubbed siblings beside itself. `hash -r` empties the inherited command hash, so a `PATH=<shim>:$PATH er_ip`
-# prefix reaches the shim as it reached a fresh `bash emit-report.sh`. Each pass is one fx_inproc logged under
-# $EMIT (the inproc: row). NOT lib/inproc.sh's inproc_run: this fixture declares an unguarded bash subject
-# (validate-hook-registration.sh), and inproc.sh's own operand sources then read as unpaired P2 drives here.
+# IN PROCESS (BL-878). Every render and --verify below is er_ip: core/fixtures/lib/inproc.sh's inproc_run on the engine
+# copy it is handed, in a subshell made to look like a fresh `bash emit-report.sh` (the subject's `exit`, traps and `set`
+# stay there, a copy of reconcile/ finds ITS stubbed siblings beside itself, and the empty command hash lets a
+# `PATH=<shim>:$PATH er_ip` prefix reach the shim). The real engine is loaded once, so every pass, a copy's included, is
+# one fx_inproc logged under $EMIT (the inproc: row).
 # The two cli cells (cells.decl) are the only command-line starts, each compared byte for byte.
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+[ -f "$HERE/../lib/inproc.sh" ] || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
+inproc_load "$RDIR/emit-report.sh" || { echo "FIXTURE BROKEN: sourcing $EMIT defined nothing" >&2; exit 2; }
 er_ip() { # er_ip <emit-report.sh path> <args...> -> the subject's stdout, stderr and exit
-  local _e="$1"; shift
-  ( fx_inproc "$EMIT"; . "$_e" || exit 126; hash -r; er_main "$@" )
+  local _d="${1%/*}"; shift
+  # A literal-tail operand: the path is rebuilt from its directory so P2 resolves it (an opaque `"$1"` reads as a drive).
+  inproc_run "$_d/emit-report.sh" er_main "$@"
 }
 echo "emit-report-refusal:"
 

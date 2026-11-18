@@ -1,0 +1,8 @@
+# artifact-path-migration's starts of core/scripts/migrate-artifact-paths.sh (BL-879 grammar). Every other drive is in
+# process: run.sh's mig() is inproc_run of map_main. One cli cell per distinct CLI outcome (exit 0 dry-run plan,
+# exit 1 --apply abort, exit 2 usage error, exit 3 nothing to migrate), each started as FXCELL=<id> bash "$MIG" in
+# eq_cell() and compared byte for byte with the in-process call.
+cli core/scripts/migrate-artifact-paths.sh cli-plan
+cli core/scripts/migrate-artifact-paths.sh cli-abort
+cli core/scripts/migrate-artifact-paths.sh cli-usage
+cli core/scripts/migrate-artifact-paths.sh cli-nothing

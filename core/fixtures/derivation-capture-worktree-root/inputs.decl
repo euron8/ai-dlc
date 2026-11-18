@@ -6,3 +6,4 @@
 # run.sh sources the shared preamble (the GIT_DIR scrub) before any git call.
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/world.sh

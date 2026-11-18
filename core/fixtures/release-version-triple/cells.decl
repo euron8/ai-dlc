@@ -1,0 +1,6 @@
+# release-version-triple's starts of scripts/validate-release-version.sh (BL-879 grammar). Every other drive is in
+# process: drive_src sources the validator and calls its arm functions, rv_ip sources it and calls rv_main. One cli
+# cell per distinct CLI outcome (exit 0 on an agreeing commit, exit 1 on the real defect), each started as
+# FXCELL=<id> bash in eqv() and compared byte for byte with rv_ip on the same commit.
+cli scripts/validate-release-version.sh cli-pass
+cli scripts/validate-release-version.sh cli-fail

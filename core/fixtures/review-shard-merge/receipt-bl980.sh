@@ -83,7 +83,7 @@ r_drive() {
 # r_gwords <receipt>: how many of its non-comment lines name a `git` word.
 r_gwords() { local n; n="$(grep -v '^[[:space:]]*#' "$1" | grep -cE '(^|[^A-Za-z0-9_.-])git([^A-Za-z0-9_-]|$)')" || n=0; printf '%s' "$n"; }
 # THE NOGIT RULE, both conjuncts on its one line: a receipt is outside the population (listed <receipt>:nogit) only
-# when its drive made no commit, its trace holds NO git command at all (receipt-bl988.sh asks a sourced parser only),
+# when its drive made no commit, its trace holds NO git command at all (a receipt that asks a sourced parser only),
 # AND its non-comment text names no `git` word. The text conjunct is what stops a receipt that DOES run git from
 # reading nogit because its git never reached the trace (under `env -i`, or with GIT_TRACE2_EVENT redirected); the
 # trace conjunct is what stops a receipt with no `git` word that runs git through a helper. Each is held by the

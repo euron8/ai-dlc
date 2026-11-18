@@ -63,6 +63,11 @@
 # the world, which a clean exit deletes) and reaps every group in it after this world returns, however it ended:
 # the EXIT trap below never runs on a SIGKILL, and the groups are not this shell's group, so a KILL of this world
 # alone leaves every one of them alive. Run standalone, the record is $W/pgids.
+# THE CELL TAGS (BL-879). Every deriver this world starts is a start of the subject, kept a PROCESS because the slot's
+# holder is the deriver's `$$` and its reap is by the deriver's process group. With SW_CELL set, deriver A of scenario
+# <s> is started as FXCELL=<SW_CELL>.<s> and deriver B as FXCELL=<SW_CELL>.<s>.b, each an `e2e` cell of the caller's
+# cells.decl. The tag is exported by the exec'd `bash -c` after its own start has logged, and by fa's `env` word, so
+# neither wrapper carries it. Run standalone (SW_CELL unset) every tag is empty.
 # NO FORK-TO-RECORD WINDOW REMAINS: a KILL of this world before a child's record leaves a child that has started
 # nothing, and that child then records itself, finds its world dead, and exits; a KILL after its liveness check
 # finds its record already on disk before the world died, so before the caller's reap. What remains is outside the
@@ -217,7 +222,7 @@ if [ -n "${SW_B_MODE:-}" ]; then
     stalemark) m="$SW_DEADPID:$AI_DLC_READSET_SLOT" ;;
     foreign)   m="$SW_LIVEPID:$AI_DLC_READSET_SLOT" ;;
   esac
-  ( cd "$SW_R" && exec env READSET_SLOT_HOLDER="$m" STUB_FEED="$SW_FEEDB" AI_DLC_READSET_TRACE_ROOT="$SW_TRB" \
+  ( cd "$SW_R" && exec env READSET_SLOT_HOLDER="$m" FXCELL="${SW_CELLB:-}" STUB_FEED="$SW_FEEDB" AI_DLC_READSET_TRACE_ROOT="$SW_TRB" \
       bash core/scripts/derive-fixture-readsets.sh --list fb --tracer sandbox --in-pool "$SW_IPB" ) > "$SW_BOUT" 2>&1 </dev/null &
   echo "$!" > "$SW_BPID"
   while :; do
@@ -280,8 +285,8 @@ run_a() {
       AI_DLC_READSET_TRACE_ROOT="$d/trA" SW_ORDER="$d/order" SW_B_MODE="$bm" SW_R="$R" SW_FEEDB="$d/feedB" \
       SW_TRB="$d/trB" SW_IPB="$d/ipB" SW_BOUT="$d/bout" SW_BPID="$d/bpid" SW_DEADPID="$DEAD" SW_LIVEPID="$LIVE" \
       SW_SLEEPS="$d/sleeps" SW_SLEEP_MARK="$M" SW_SLEEP_CAP="$C" SW_AOUT="$d/aout" SW_HOLD="$H" AI_DLC_READSET_SLOT="${SW_SLOT_AT:-$d/slot}" \
-      SW_REC="$SW_GROUPS" SW_APID="$d/apid" \
-      bash -c 'echo $$ >> "$SW_REC"; echo $$ > "$SW_APID"; kill -0 $PPID 2>/dev/null || exit 0; : > "$SW_APID.checked"; exec bash "$@"' sw-deriver \
+      SW_REC="$SW_GROUPS" SW_APID="$d/apid" SW_CELLA="${SW_CELL:+$SW_CELL.$s}" SW_CELLB="${SW_CELL:+$SW_CELL.$s.b}" \
+      bash -c 'echo $$ >> "$SW_REC"; echo $$ > "$SW_APID"; kill -0 $PPID 2>/dev/null || exit 0; : > "$SW_APID.checked"; export FXCELL="$SW_CELLA"; exec bash "$@"' sw-deriver \
       core/scripts/derive-fixture-readsets.sh "$@" ) > "$d/aout" 2>&1 </dev/null &
   APID=$!
   set +m

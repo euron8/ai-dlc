@@ -41,6 +41,30 @@ LIBDIR="$(cd "$DIR/../lib" 2>/dev/null && pwd)"
 [ -f "$LIBDIR/settled-net.sh" ] || { echo "FIXTURE ERROR: lib/settled-net.sh not found beside $DIR" >&2; exit 2; }
 . "$LIBDIR/settled-net.sh"
 echo "HERMETIC-CONSUMED core/fixtures/lib/settled-net.sh"
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$DIR/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The subject is loaded ONCE (inproc_load: its column-0 guard returns after defining vsj_main)
+# and every drive is inproc_run, which calls vsj_main in a subshell made to look like a fresh `bash <subject>`; the
+# subject's `exit` ends that subshell only. A relocated copy ($R/lr-no-anchor) is driven as `inproc_run <copy>`,
+# which sources the copy in that subshell, so its ${BASH_SOURCE[0]} sibling lookup reads the copy's directory. It runs
+# as a program only in its cli cells (cells.decl, at the end). A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a subject
+# with neither its `vsj_main() {` line nor the column-0 source guard predates the wrap and reads SKIP through
+# fx_skip_exit (exit 0 on a consumer, never an ok; FIXTURE BROKEN in the distribution); exactly one half FAILs; an
+# unreadable one is FIXTURE ERROR.
+grep -q '^vsj_main() {$' "$V"; _wd=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$V"; _wg=$?
+if [ "$_wd" -gt 1 ] || [ "$_wg" -gt 1 ]; then
+  echo "FIXTURE ERROR: cannot read $V (grep exit $_wd/$_wg), so the in-process wrap cannot be judged; nothing was asserted" >&2; exit 2
+fi
+case "$_wd$_wg" in
+  00) ;;
+  11) echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$DIR" ;;
+  10) echo "  FAIL  $V defines \`vsj_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vsj_main in this shell"; echo "spec-join-integrity: 1 FAILED"; exit 1 ;;
+  *) echo "  FAIL  $V carries the column-0 source guard but no \`vsj_main() {\` line -- a respelled subject this fixture cannot drive"; echo "spec-join-integrity: 1 FAILED"; exit 1 ;;
+esac
+inproc_load "$V" || { echo "FIXTURE BROKEN: sourcing $V defined nothing" >&2; exit 2; }
 
 # --- capture: the subject is run ONCE per distinct (program, argument list) --------------------
 # Every seed under $R is written by seed.sh before the first call and never changed afterwards, so
@@ -58,7 +82,7 @@ cap() { # cap <program> <args...> -> CAPRC, CAPOUT (stdout+stderr), from the cap
     i=$((i + 1))
   done
   shift
-  CAPOUT="$(bash "$prog" "$@" 2>&1)"; CAPRC=$?
+  CAPOUT="$(inproc_run "$prog" vsj_main "$@" 2>&1)"; CAPRC=$?
   CAP_RUNS=$((CAP_RUNS + 1))
   CAP_N=$((CAP_N + 1))
   CAP_KEY[$CAP_N]="$k"; CAP_RC[$CAP_N]="$CAPRC"; CAP_OUT[$CAP_N]="$CAPOUT"
@@ -153,7 +177,8 @@ want 0 "gate_status PASS passes" \
 want 2 "DISARM: a trace file with no gate_status exits 2, never 0 (NOT_EVALUATED)" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-notevaluated.json"
 
-if bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-concerns.json" 2>&1 | grep -q 'note'; then
+cap "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-concerns.json"
+if grep -q 'note' <<<"$CAPOUT"; then
   ok "CONCERNS is RECORDED with the matrix cited, not dropped"
 else
   bad "a CONCERNS trace verdict passed with no note — the concern is silently discarded"
@@ -216,7 +241,7 @@ says "trichotomy: key EMPTY says the field IS present" \
 
 # The over-fire control for the sentence above: the empty case must NOT be told the
 # field is missing. That is the exact false statement this release removes.
-ASSERT_OUT="$(bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty.md" 2>&1)"
+cap "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty.md"; ASSERT_OUT="$CAPOUT"
 if grep -qF "carries no 'capabilities:' frontmatter field at all" <<<"$ASSERT_OUT"; then
   bad "trichotomy: the EMPTY case is still told the field is absent — the false diagnosis survives"
 elif ! grep -qF "The field IS present" <<<"$ASSERT_OUT"; then
@@ -368,8 +393,8 @@ fi
 
 discriminates() { # <label> <quiet-spec-dir> <offender-spec-dir> <prd>
   local lab="$1" q="$2" o="$3" pr="$4" a b
-  bash "$V" --spec "$q" --prd "$pr" >/dev/null 2>&1; a=$?
-  bash "$V" --spec "$o" --prd "$pr" >/dev/null 2>&1; b=$?
+  inproc_run "$V" vsj_main --spec "$q" --prd "$pr" >/dev/null 2>&1; a=$?
+  inproc_run "$V" vsj_main --spec "$o" --prd "$pr" >/dev/null 2>&1; b=$?
   if [ "$a" -eq 0 ] && [ "$b" -eq 2 ]; then ok "$lab"
   else bad "$lab (pin exited $a and offender exited $b — expected 0 and 2 in the same run)"; fi
 }
@@ -413,7 +438,13 @@ run_metered() { # <log> <script> <args...> -- 0 the subject exited; 2 its tree s
   # stdout+stderr land in <log>.out; the shim's records in <log>.
   local log="$1" prog="$2" pid r; shift 2
   : > "$log"
-  ( ulimit -t "$SJ_CPU_BUDGET"; SJ_SHIM_LOG="$log" PATH="$SJ_SHIM:$PATH" exec bash "$prog" "$@" ) > "$log.out" 2>&1 &
+  # The subject runs IN PROCESS inside the metered subshell: `ulimit -t`, the PATH shim and the tree poll all hold for a
+  # subshell exactly as for a program; only the net's stub scripts are started as programs.
+  if [ "$prog" = "$V" ]; then
+    ( ulimit -t "$SJ_CPU_BUDGET"; SJ_SHIM_LOG="$log" PATH="$SJ_SHIM:$PATH" inproc_run "$V" vsj_main "$@" ) > "$log.out" 2>&1 &
+  else
+    ( ulimit -t "$SJ_CPU_BUDGET"; SJ_SHIM_LOG="$log" PATH="$SJ_SHIM:$PATH" exec bash "$prog" "$@" ) > "$log.out" 2>&1 &
+  fi
   pid=$!
   st_net "$pid" "$log"; r=$?
   if [ "$r" = 2 ]; then st_reap "$pid"; fi
@@ -729,7 +760,7 @@ n_says "NARROWNESS: the capability it names still FAILS join (2a)" \
 # capability it in fact binds -- the contradiction reported one arm down, restated as an
 # excuse.
 NEW_ARMS=$((NEW_ARMS+1))
-BW_OUT="$(bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md" 2>&1)"
+cap "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-stale.md"; BW_OUT="$CAPOUT"
 if grep -qF "CAP-2 is dispositioned No-AD in" <<<"$BW_OUT"; then
   bad "BOUND WINS: a BOUND capability was also reported as dispositioned No-AD — the hatch runs above the bound check"
 elif ! grep -qF "disposition for 'CAP-2' AND an architecture decision that binds it" <<<"$BW_OUT"; then
@@ -1275,7 +1306,7 @@ u_says "UNINDENT (kernel): a wrapped declaration is echoed with ONE space at the
 # indented form is GONE, and an absence needs the presence stated in the same run or it
 # passes against a subject that emits nothing.
 U_ARMS=$((U_ARMS+1))
-U_OUT="$(bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md" 2>&1)"
+cap "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-noad-wrapped.md"; U_OUT="$CAPOUT"
 if grep -qF "establishes and   introduces" <<<"$U_OUT"; then
   bad "UNINDENT: the source indentation is STILL embedded in the note"
 elif ! grep -qF "establishes and introduces" <<<"$U_OUT"; then
@@ -1410,7 +1441,7 @@ j_says "DECLARED: and the failing requirement is NAMED, so the declared populati
 # it passing against a subject that emits nothing — an absence and a silence are the same
 # bytes.
 LRJ_ARMS=$((LRJ_ARMS+1))
-LRJ_OUT="$(bash "$V" --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md" 2>&1)"
+cap "$V" --spec "$R/lr-decl-orphan" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"; LRJ_OUT="$CAPOUT"
 if grep -qF "LR-S999-9" <<<"$LRJ_OUT"; then
   bad "DISCRIMINATION: the absent-id CONTROL TOKEN is STILL reported under a declared population — the defect survives"
 elif ! grep -qF "LR-S303-2 appears in the memlog but no capability entry cites it" <<<"$LRJ_OUT"; then
@@ -1544,14 +1575,14 @@ p_want() { # <prog> <expected-rc> <label> <args...>
   local prog="$1" exp="$2" lab="$3"; shift 3
   LRJ_ARMS=$((LRJ_ARMS+1))
   # NOT captured: the sibling is restored beside $prog between calls, so one argument list is two states.
-  bash "$prog" "$@" >/dev/null 2>&1
+  inproc_run "$prog" vsj_main "$@" >/dev/null 2>&1
   local g=$?
   [ "$g" -eq "$exp" ] && ok "$lab" || bad "$lab (expected rc=$exp, got rc=$g)"
 }
 p_says() { # <prog> <label> <must-contain> <args...>
   local prog="$1" lab="$2" want_s="$3"; shift 3
   LRJ_ARMS=$((LRJ_ARMS+1))
-  local out; out="$(bash "$prog" "$@" 2>&1)"
+  local out; out="$(inproc_run "$prog" vsj_main "$@" 2>&1)"
   if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
   else bad "$lab (message missing: \"$want_s\")"; fi
 }
@@ -1709,10 +1740,10 @@ sj_ident_holds() {
   SJ_IDENT_WHY=""
   a="$(sj_ident_corpus)" || { SJ_IDENT_WHY="could not build corpus A"; return 1; }
   b="$(sj_ident_corpus)" || { SJ_IDENT_WHY="could not build corpus B"; return 1; }
-  oa="$(bash "$v" --spec "$a/spec" --prd "$a/prd.md" --story "$a/story.md" \
+  oa="$(inproc_run "$v" vsj_main --spec "$a/spec" --prd "$a/prd.md" --story "$a/story.md" \
           --spine "$a/spine.md" --spine-lint "$a/lint.json" \
           --trace-verdict "$a/trace.json" 2>&1)"; ra=$?
-  ob="$(bash "$v" --spec "$b/spec" --prd "$b/prd.md" --story "$b/story.md" \
+  ob="$(inproc_run "$v" vsj_main --spec "$b/spec" --prd "$b/prd.md" --story "$b/story.md" \
           --spine "$b/spine.md" --spine-lint "$b/lint.json" \
           --trace-verdict "$b/trace.json" 2>&1)"; rb=$?
   if [ "$ra" != "0" ] || [ "$rb" != "0" ]; then
@@ -1750,6 +1781,29 @@ else
   bad "IDENTITY: the PASS line carries no corpus identity — $SJ_IDENT_WHY. A join against another sprint's spec reports the same green tally as one against this sprint's"
 fi
 
+# --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome --------------------
+# Each is compared with the in-process call on the same input, stdout, stderr and exit separately, byte for byte,
+# and asserts its own exit and a string it must say, so two runs that both printed nothing cannot read as
+# equivalent. Outcomes: exit 0 (PASS, through --locked-requirements, so the ${BASH_SOURCE[0]} sibling lookup is on
+# both sides), exit 1 (an orphan LR) and exit 2 (a zero-capability kernel, DISARMED).
+EQ="$R/eq"; mkdir -p "$EQ" || broken "could not create the cli-cell directory"
+eq_cell() { # eq_cell <cell-id> <want rc> <must-say> <args...>
+  local id="$1" want="$2" say="$3"; shift 3
+  inproc_run "$V" vsj_main "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$V" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" \
+     && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" && [ "$(< "$EQ/$id.cl.rc")" = "$want" ] \
+     && grep -qF -- "$say" "$EQ/$id.cl.out" "$EQ/$id.cl.err"; then
+    ok "$id: the program answers exit $want exactly as the in-process call does (stdout, stderr, exit)"
+  else
+    bad "$id: in-process rc=$(< "$EQ/$id.ip.rc") / program rc=$(< "$EQ/$id.cl.rc") want $want, saying \"$say\""
+    sed -n '1,3s/^/          | /p' "$EQ/$id.ip.out" "$EQ/$id.cl.out" "$EQ/$id.ip.err" "$EQ/$id.cl.err"
+  fi
+}
+eq_cell cli-pass 0 "join (1) reads 3 locked requirement(s) from" \
+  --spec "$R/lr-decl" --prd "$R/prd-ok.md" --locked-requirements "$R/lr-decl.md"
+eq_cell cli-fail 1 "FAIL" --spec "$R/orphan-lr" --prd "$R/prd-ok.md"
+eq_cell cli-disarm 2 "DISARM" --spec "$R/no-caps" --prd "$R/prd-ok.md"
 
 ok "CAPTURE: the subject ran $CAP_RUNS time(s) for $CAP_N distinct argument list(s); $CAP_SERVED assertion read(s) were served from a capture"
 

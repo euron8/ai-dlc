@@ -5,10 +5,13 @@
 !core/scripts/gate-slice.sh
 !core/scripts/gate-checkpoint.sh
 !core/schemas/gate-adjudication-verdict.json
-# The core/hooks/ and core/scripts/ rows are narrowed to the files the fixture reads (seed.sh:26,36,41, and the HED/RGATE loop beside them; run.sh:489-499 and arm G3, which drives the recover-gate PreToolUse and the handoff-entry PostToolUse hooks); the list is derived from those reads.
+# The core/hooks/ and core/scripts/ rows are narrowed to the files the fixture reads (seed.sh:26,36,41, and the HED/RGATE loop beside them; run.sh's _mkconsumer and fire_recover in arm G, and arm G3, which drives the recover-gate PreToolUse and the handoff-entry PostToolUse hooks); the list is derived from those reads.
 # The recover hook's two same-directory libraries, copied into each scratch consumer.
 core/hooks/ai-dlc-handoff-pending.sh
 core/hooks/ai-dlc-context-provenance.sh
-# core/skills/ai-dlc/ stays whole: gate-slice.sh os.walk()s its overrides/ and extensions/ (gate-slice.sh:260-266, 318-319, 329-330).
+# core/skills/ai-dlc/ stays whole: gate-slice.sh os.walk()s its overrides/ and extensions/ (gate-slice.sh:261-267, 320, 331).
 core/skills/ai-dlc/
 core/fixtures/lib/report.sh
+# fx_inproc, which logs each in-process pass (the inproc: rows), and fx_skip_exit for the pre-wrap consumer gate.
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

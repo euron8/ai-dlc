@@ -4,4 +4,4 @@
 0 core/scripts/sprint-status.sh
 0 core/scripts/validate-artifact-derivations.sh
 3 core/skills/ai-dlc-update/reconcile/derivation-differential.sh
-60 inproc:core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+59 inproc:core/skills/ai-dlc-update/reconcile/derivation-differential.sh

@@ -46550,3 +46550,18 @@ verify: manual
 
 
 
+## BL-1165 — plan-shape P10 is satisfied by a quoted one-liner anywhere in the file, not by the resume line at the top
+
+**NOTE.** OPEN. Filed 2026-11-17. Owner: unassigned (arm P10 of `scripts/validate-plan-shape.sh`).
+
+P10 of `scripts/validate-plan-shape.sh` greps the whole file for the `READ and FOLLOW docs/plans/<slug>.md` sentence. In `docs/plans/graph-ledger-full-drain.md` action 9 quotes that sentence (about line 1666), so deleting the resume line at the top (line 7) leaves P10 silent; P10 fires only when both are removed. Measured batch 258 action 6b on `2adaada45` with probe copies under the lead scratchpad (`6b-probe-line7.RUST` silent, `6b-probe-all.9ybu` fires, unmodified copy silent). Owed: bind P10 to the head window (the resume block), and re-measure the false-positive set across all `docs/plans/*.md` before shipping. NOTE tier; no consumer cost.
+
+Provenance: batch 258 close, action 6b fresh-resume check (lead ai-dlc-84).
+
+**LANDED (v0.1165.0).** batch 259, C3 (units a and h). Both owed clauses are built.
+- P10 seeks the `READ and FOLLOW <slug>` sentence in `head -12`, the same window its liveness test reads (`scripts/validate-plan-shape.sh:435`), not the whole file. Its error now says the one-liner is missing from the head window, its first twelve lines (`:436`).
+- False-positive set, re-measured on the combined tree by a loop over `docs/plans/*.md` that applies P10's own liveness test (the `DISCHARGE_BANNER` alternation, `:333`, over `head -12`): 53 plans, 4 live, every live plan's resume line inside the window, 0 below it. The four first matches are `consumer-context-footprint.md:5`, `graph-ledger-full-drain.md:7`, `hermetic-fixtures-poc.md:5` and `pre-push-wall-clock.md:7`. Control in the same loop: each live plan also quotes the sentence below the window (`:247`, `:1666`, `:291`, `:674`), so a whole-file search would still have matched every one. `bash scripts/validate-plan-shape.sh` on that tree: `53 plan(s) checked, 0 error(s), 0 warning(s)`, rc 0. The arm header records the set (`:421`).
+- Probe and mutant, run once by hand (unit a's and h's commit messages): on a copy of `graph-ledger-full-drain.md` with line 7 deleted, base P10 is silent and tip P10 fires; restoring the whole-file search makes the same probe silent again, and the plan-shape fixture's new below-window cell kills that mutant (1 FAIL).
+- Cost: none measured. `validate-plan-shape.sh` over the real corpus makes 2484 execs before and after (unit h, PATH shim). Catch on record: the batch-258 action 6b probe, where deleting line 7 of `graph-ledger-full-drain.md` left P10 silent. Who would notice it gone: the operator and the fresh session that resumes a plan with `READ and FOLLOW docs/plans/<slug>.md`. With the whole-file search back, a plan whose top resume line was deleted reads green while that session meets no resume block.
+
+verify: manual

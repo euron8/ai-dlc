@@ -1,0 +1,57 @@
+== per step, elapsed h / token-eq $, step plus gate[step]; STORIES {317: 21, 318: 13, 319: 20, 320: 13, 321: 25, 322: 8}
+carry-over-evaluation               - |   2.8 /  132 |   3.2 /  110 |  24.8 /  191 |            - |  19.5 /  231
+requirements                        - |   6.3 /  335 |   9.1 /  286 |   7.3 /  210 |  12.5 /  314 |  10.7 /  298
+architecture                        - |   4.9 /  191 |  14.9 /  221 |  28.7 /  132 |  10.4 /  305 |   6.0 /  140
+stories-test-strategy     12.1 /  401 |  25.6 /  415 |  16.9 /  586 |  15.1 /  627 |  20.2 /  678 |   7.8 /  221
+implementation            42.2 /  774 |  11.8 /  423 |  41.8 /  825 |  25.2 /  270 |  28.2 /  638 |  16.1 /  223
+sprint-review              7.1 /  311 |   5.6 /  143 |   2.7 /  117 |   2.1 /   20 |   3.5 /  236 |   2.4 /  101
+deploy-validate           10.8 /   42 |   5.5 /   25 |   4.9 /   33 |   7.3 /  128 |  29.9 /  177 |   3.6 /   27
+retro                      1.1 /   20 |   3.8 /   19 |   8.9 /   25 |   3.4 /   29 |   3.1 /   18 |   5.5 /   51
+bug-investigation                   - |            - |            - |            - |            - |   1.6 /   39
+handoff                    4.9 /   29 |   3.3 /   16 |   5.3 /   17 |   3.3 /   10 |  12.0 /   13 |   2.8 /   13
+route                      0.2 /    3 |   0.0 /    3 |   0.2 /    4 |   0.5 /    3 |   0.4 /    3 |   0.9 /    5
+pre-step                   2.4 /    7 |   0.2 /    1 |   2.0 /    7 |   0.1 /    3 |   0.4 /    4 |   0.1 /    1
+
+== lead call classes per planned story: active h | calls | token-eq $   (x STORIES for the sprint total)
+dispatch             s318 0.066   12.1 $  1.2 | s319 0.136   14.8 $  1.8 | s320 0.163   22.2 $  2.3 | s321 0.092   12.8 $  1.2 | s322 0.201   38.6 $  2.4
+merge                s318 0.291   87.9 $  5.7 | s319 0.273   76.9 $  5.4 | s320 0.416  103.4 $  7.4 | s321 0.342   85.9 $  6.0 | s322 0.658  290.3 $ 11.2
+repair               s318 0.011    2.6 $  0.3 | s319 0.019    2.5 $  0.3 | s320 0.034    4.6 $  0.4 | s321 0.016    2.2 $  0.2 | s322 0.055    9.4 $  0.6
+gate-run             s318 0.132   21.5 $  1.5 | s319 0.146   21.0 $  1.6 | s320 0.181   27.9 $  2.1 | s321 0.125   21.7 $  1.6 | s322 0.142   40.3 $  1.5
+step-reread          s318 0.028    5.0 $  0.3 | s319 0.024    6.5 $  0.6 | s320 0.031    7.8 $  0.6 | s321 0.018    4.9 $  0.3 | s322 0.112   49.9 $  1.6
+compaction-recovery  s318 0.009    1.9 $  0.5 | s319 0.007    2.2 $  0.6 | s320 0.029    2.6 $  0.8 | s321 0.009    2.2 $  0.6 | s322 0.091   35.8 $  1.2
+snapshot             s318 0.246   50.9 $  4.6 | s319 0.258   48.0 $  4.1 | s320 0.353   67.7 $  5.6 | s321 0.257   55.8 $  4.4 | s322 0.317  156.3 $  6.0
+other                s318 0.445  157.6 $  9.3 | s319 0.500  146.9 $  9.2 | s320 0.465  143.5 $  9.0 | s321 0.397   99.4 $  6.1 | s322 1.784  542.0 $ 20.4
+idle-wait            s318 1.035    0.0 $  0.0 | s319 1.071    0.0 $  0.0 | s320 1.265    0.0 $  0.0 | s321 0.789    0.0 $  0.0 | s322 1.191    0.0 $  0.0
+sprint total lead class-sum active h: {318: 29.4, 319: 48.7, 320: 38.2, 321: 51.1, 322: 36.4}
+
+== stories party round: roles sm,tea,dev,architect in stories-test-strategy; cluster = starts with no >10 min gap
+s318: seats 81, sessions 3, clusters (seats, min) [(19, 66.4), (19, 42.0), (3, 39.8), (19, 28.9), (19, 130.1), (2, 6.5)], largest 19 seats 66.4 min, starts spread in it 0.6 min, $ 165.4 = 12.72/planned story
+s319: seats 103, sessions 3, clusters (seats, min) [(25, 25.0), (25, 47.6), (25, 27.5), (25, 35.7), (1, 9.3), (2, 3.8)], largest 25 seats 25.0 min, starts spread in it 0.8 min, $ 108.9 = 5.45/planned story
+s320: seats 77, sessions 2, clusters (seats, min) [(76, 79.4), (1, 6.6)], largest 76 seats 79.4 min, starts spread in it 12.4 min, $ 132.3 = 10.17/planned story
+s321: seats 106, sessions 2, clusters (seats, min) [(1, 12.5), (104, 27.7), (1, 9.0)], largest 104 seats 27.7 min, starts spread in it 13.5 min, $ 124.4 = 4.98/planned story
+s322: seats 24, sessions 1, clusters (seats, min) [(24, 25.4)], largest 24 seats 25.4 min, starts spread in it 2.1 min, $ 30.3 = 3.79/planned story
+
+== s322 longest AskUserQuestion waits (min), from ask_split
+   (340.0, '2026-11-09T06:25', 'RUNNING-NO-FINISH', 'carry-over-evaluation')
+   (75.0, '2026-11-11T00:24', 'RUNNING-NO-FINISH', 'implementation')
+   (24.0, '2026-11-12T01:15', 'FINISHED-INSIDE', 'gate-validation[implementation]')
+   (23.0, '2026-11-11T13:22', 'NONE-RUNNING', 'pre-step')
+   (22.0, '2026-11-09T19:13', 'RUNNING-NO-FINISH', 'requirements')
+   (19.0, '2026-11-10T01:14', 'RUNNING-NO-FINISH', 'requirements')
+   asks: 25 over 60 min: 2
+
+== s322 longest subagent first-to-last spans (min; includes resume idle), role, step, description
+    341.6 remediator         carry-over-evaluation          coe serial lane p2  $2.2
+    110.0 dev                bug-investigation              Dev story 1.8 admission controls  $6.8
+    104.5 adversary          stories-test-strategy          Elicitation cross shard (all stories)  $12.2
+    103.8 code-reviewer      gate-validation[implementation Gate-1 pass 2 review story 6  $0.6
+     88.9 adversary          stories-test-strategy          Elicitation shard 5 (story 1.5)  $10.9
+     86.6 adversary          carry-over-evaluation          coe p2 cross  $11.4
+     73.4 remediator         requirements                   Repair part 8 brief  $1.6
+     73.3 remediator         requirements                   Repair part 4 brief  $1.4
+
+== controls
+(c1) segment tokens 24709666393 vs per-transcript (units) tokens 24709666393: EQUAL
+(c2) subagents joined to a parent step: 6158 of 6158 (spawns rows 6158)
+(b1) max timestamp in units/segs/spawns 2026-11-12T14:40:12.223Z; pin 2026-11-12T14:41:00Z; fields past pin 0+0+0
+(b2) records in the corpus past the pin (top-level timestamp): {('lead', 'after edge'): 45034, ('lead', 'pin..edge'): 2870, ('sub', 'after edge'): 112815, ('sub', 'pin..edge'): 376}

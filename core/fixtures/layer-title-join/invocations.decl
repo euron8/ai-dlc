@@ -2,4 +2,4 @@
 30 *
 8 core/skills/ai-dlc-update/reconcile/layer-drift.sh
 3 core/skills/ai-dlc-update/reconcile/apply.sh
-19 inproc:core/skills/ai-dlc-update/reconcile/layer-drift.sh
+18 inproc:core/skills/ai-dlc-update/reconcile/layer-drift.sh

@@ -31,6 +31,12 @@ T="$(mktemp -d "${TMPDIR:-/tmp}/plan-shape.XXXXXX")"
 trap 'rm -rf "$T"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# IN PROCESS (BL-878): the validator is loaded once and every cell asks vps_main in a subshell made to look like a
+# fresh `bash "$V"` (lib/inproc.sh). It starts as a program only in the three cli cells of cells.decl, below.
+# shellcheck source=../lib/inproc.sh
+. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $HERE" >&2; exit 2; }
+inproc_load "$V" || { echo "FIXTURE BROKEN: sourcing $V defined nothing" >&2; exit 2; }
+declare -F vps_main >/dev/null || { echo "FIXTURE BROKEN: $V defined no vps_main when sourced" >&2; exit 2; }
 
 echo "plan-shape:"
 
@@ -85,7 +91,7 @@ Evidence: `scripts/validate-plan-shape.sh:1` is the subject of this fixture.
 MD
 }
 
-run() { bash "$V" "$1" 2>&1; }
+run() { inproc_run "$V" vps_main "$1" 2>&1; }
 
 conforming good.md > "$T/good.md"
 out="$(run "$T/good.md")"
@@ -215,7 +221,7 @@ grep -q 'LIVE plan carrying no resolving' <<<"$(run "$T/p9b.md")" \
 # well formed once you are reading the right part of it; this one checks what happens before
 # that, when a fresh session opens the file at the top and acts on what it meets first.
 conforming p10.md | grep -v 'READ and FOLLOW' > "$T/p10.md"
-grep -q 'does not carry its own resume one-liner' <<<"$(run "$T/p10.md")" \
+grep -q 'resume one-liner is missing from the head window' <<<"$(run "$T/p10.md")" \
   && ok "P10 fires on a live plan with no resume one-liner" \
   || bad "P10 silent on a plan that never says how to resume it — the operator's one-line prompt has no landing point"
 
@@ -223,14 +229,24 @@ grep -q 'does not carry its own resume one-liner' <<<"$(run "$T/p10.md")" \
 # plan copied from another plan inherits the ancestor's resume line and sends the session to
 # the wrong file. A bare presence check would pass that.
 conforming p10b.md | sed 's|docs/plans/p10b\.md|docs/plans/SOME-ANCESTOR.md|' > "$T/p10b.md"
-grep -q 'does not carry its own resume one-liner' <<<"$(run "$T/p10b.md")" \
+grep -q 'resume one-liner is missing from the head window' <<<"$(run "$T/p10b.md")" \
   && ok "  and on one whose resume line names a DIFFERENT plan — an inherited line is the real defect" \
   || bad "P10 accepts a resume line pointing at another file; a copied plan sends the session elsewhere"
+
+# THE HEAD WINDOW IS THE SCOPE OF THE SEARCH, not the whole file. The resume line moved below line 12 is still in
+# the plan, and a fresh session that opens the file at the top never meets it.
+conforming p10w.md | grep -v '^Resume with:' > "$T/p10w.md"
+grep -h '^Resume with:' <(conforming p10w.md) >> "$T/p10w.md"
+[ "$(grep -c 'READ and FOLLOW docs/plans/p10w\.md' "$T/p10w.md")" -eq 1 ] && ! grep -q 'READ and FOLLOW docs/plans/p10w\.md' <<<"$(head -12 "$T/p10w.md")" \
+  || bad "FIXTURE STALE: the below-window seed does not carry its own resume line exactly once, below line 12"
+grep -q 'resume one-liner is missing from the head window' <<<"$(run "$T/p10w.md")" \
+  && ok "  and on one whose own resume line sits below the head window, where a fresh session never meets it" \
+  || bad "P10 accepts a resume line below the first twelve lines; the session that opens the file at the top never reads it"
 
 # THE SCOPING CONTROL, the same shape as P9b. A discharged plan is a record and nobody
 # resumes it; bolting a resume line onto a spent file would be fabrication.
 { printf -- '# Some plan — DISCHARGED\n'; conforming p10c.md | tail -n +2 | grep -v 'READ and FOLLOW'; } > "$T/p10c.md"
-grep -q 'does not carry its own resume one-liner' <<<"$(run "$T/p10c.md")" \
+grep -q 'resume one-liner is missing from the head window' <<<"$(run "$T/p10c.md")" \
   && bad "P10 fired on a DISCHARGED plan — a spent record is not resumable and must not be a backlog item" \
   || ok "  and it exempts a banner-marked plan, so only live plans owe the sentence"
 
@@ -549,16 +565,43 @@ p14 "$T/p14kc.md" \
 # --- empty corpus is not a pass ---------------------------------------------------
 # `for f in docs/plans/*.md` over an empty directory reads exactly like a clean run.
 mkdir -p "$T/empty/docs/plans" "$T/empty/scripts"
-# COPY UNDER THE CANONICAL BASENAME, never `cp "$V" dir/`. The line below invokes
-# `scripts/validate-plan-shape.sh` by name, so driving this fixture with an
-# alternately-named copy of the validator
-# left nothing at that path and the arm exited 127. A 127 scored as "the empty corpus did
-# not exit 2", so a harness failure read as the defect this arm exists to catch.
+# COPY UNDER THE CANONICAL BASENAME, never `cp "$V" dir/`. The cli-empty cell below names
+# `$T/empty/scripts/validate-plan-shape.sh`, so driving this fixture with an
+# alternately-named copy of the validator would leave nothing at that path and the arm would exit 127,
+# scored as "the empty corpus did not exit 2": a harness failure read as the defect this arm exists to catch.
 cp "$V" "$T/empty/scripts/validate-plan-shape.sh"
-( cd "$T/empty" && bash scripts/validate-plan-shape.sh >/dev/null 2>&1 ); rc=$?
+
+# --- the cli cells: one program run per distinct CLI outcome ----------------------
+# Each cell starts the validator once as `FXCELL=<id> bash <validator>` and compares its stdout, stderr and exit
+# byte for byte with the in-process answer on the same input: exit 0 (the conforming plan), exit 1 (a P10 finding)
+# and exit 2 (the empty corpus, through the copy under $T/empty). A copy is asked in process by inproc_run sourcing
+# it in the subshell, so its root is the copy's own, and the pass is logged as one of $V. The empty-corpus arm
+# reads the in-process side of cli-empty, its one run of that state.
+EQ="$T/eq"; mkdir -p "$EQ" || { echo "FIXTURE BROKEN: cannot create $EQ" >&2; exit 2; }
+eqv() { # eqv <cell-id> <validator path> [plan...] -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two answers are identical
+  local id="$1" vp="$2"; shift 2
+  ( cd "$T" && inproc_run "$vp" vps_main "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err" ); echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$T" && FXCELL="$id" bash "$vp" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err" ); echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eqv cli-empty "$T/empty/scripts/validate-plan-shape.sh"; eq_empty=$?
+rc="$(cat "$EQ/cli-empty.ip.rc")"
 [ "$rc" -eq 2 ] \
   && ok "an empty docs/plans/ exits 2, not 0 — no corpus is not the same as no findings" \
   || bad "an empty corpus exited $rc; a repo that lost its plans would report a clean run"
+
+if eqv cli-pass "$V" "$T/good.md" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && grep -q '0 error(s)' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program accepts the conforming plan exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with 0 errors (program rc=$(cat "$EQ/cli-pass.cl.rc"), in-process rc=$(cat "$EQ/cli-pass.ip.rc"))"; fi
+if eqv cli-fail "$V" "$T/p10.md" && [ "$(cat "$EQ/cli-fail.cl.rc")" = 1 ] && grep -q 'resume one-liner is missing from the head window' "$EQ/cli-fail.cl.out"; then
+  ok "cli-fail: the program refuses the plan with no resume line exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-fail: the program and the in-process call differ, or the outcome is not exit 1 naming P10 (program rc=$(cat "$EQ/cli-fail.cl.rc"), in-process rc=$(cat "$EQ/cli-fail.ip.rc"))"; fi
+if [ "$eq_empty" -eq 0 ] && [ "$(cat "$EQ/cli-empty.cl.rc")" = 2 ] && grep -q 'EXAMINED NOTHING' "$EQ/cli-empty.cl.err"; then
+  ok "cli-empty: the program refuses the empty corpus exactly as the in-process call does (stdout, stderr, exit 2)"
+else bad "cli-empty: the program and the in-process call differ, or the outcome is not exit 2 with EXAMINED NOTHING (program rc=$(cat "$EQ/cli-empty.cl.rc"), in-process rc=$(cat "$EQ/cli-empty.ip.rc"))"; fi
+if ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-fail.cl.out" && ! cmp -s "$EQ/cli-pass.cl.rc" "$EQ/cli-fail.cl.rc" && ! cmp -s "$EQ/cli-fail.cl.rc" "$EQ/cli-empty.cl.rc"; then
+  ok "cli cells discriminate: the passing, refusing and empty-corpus runs give different stdout or exit"
+else bad "cli cells do not discriminate: two of cli-pass, cli-fail and cli-empty gave the same stdout or exit"; fi
 
 echo ""
 report_end plan-shape

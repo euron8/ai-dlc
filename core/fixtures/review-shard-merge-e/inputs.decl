@@ -17,7 +17,6 @@ core/fixtures/review-shard-merge/receipt-bl885.sh
 core/fixtures/review-shard-merge/receipt-bl904.sh
 core/fixtures/review-shard-merge/receipt-bl956.sh
 core/fixtures/review-shard-merge/receipt-bl980.sh
-core/fixtures/review-shard-merge/receipt-bl988.sh
 core/fixtures/review-shard-merge-b/run.sh
 core/fixtures/review-shard-merge-c/run.sh
 core/fixtures/review-shard-merge-d/run.sh
@@ -35,6 +34,7 @@ core/team-roles/qa.md
 core/schemas/sprint-status.json
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/world.sh
 # The coverage join reads each DIST_SHARDS shard's .dist-only marker (present, non-empty) in the distribution.
 core/fixtures/review-shard-merge-f/.dist-only
 core/fixtures/review-shard-merge-g/.dist-only

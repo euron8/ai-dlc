@@ -54,15 +54,15 @@ if [ "$ud_def" = 0 ]; then echo "   FAIL  $SCRIPT carries the column-0 source gu
 if [ "$ud_guard" = 0 ]; then echo "   FAIL  $SCRIPT defines \`ud_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run ud_main in this shell" >&2; echo "setup-config-drift: FAIL (1)" >&2; exit 1; fi
 # shellcheck source=/dev/null
 . "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $HERE" >&2; exit 2; }
-inproc_load "$SCRIPT" || { echo "FIXTURE BROKEN: sourcing $SCRIPT defined nothing" >&2; exit 2; }
+inproc_load "${SCRIPT%/*}/unregistered-drift.sh" || { echo "FIXTURE BROKEN: sourcing $SCRIPT defined nothing" >&2; exit 2; }
 declare -F ud_main >/dev/null || { echo "FIXTURE BROKEN: $SCRIPT defined no ud_main when sourced" >&2; exit 2; }
 ud_eng() { # <engine> [args...] -> what `bash <engine> [args...]` prints and exits with
   local _m _rc
   case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in
-    "declare -x"*) inproc_run "$1" ud_main "${@:2}"; return ;;
+    "declare -x"*) inproc_run "${1%/*}/unregistered-drift.sh" ud_main "${@:2}"; return ;;
   esac
   _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
-  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$1" ud_main "${@:2}"; _rc=$?
+  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "${1%/*}/unregistered-drift.sh" ud_main "${@:2}"; _rc=$?
   rm -rf "$_m"
   return "$_rc"
 }

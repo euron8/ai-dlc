@@ -4,6 +4,7 @@
 # lib rows derived from run.sh:2,156 (preamble.sh, report.sh); reconcile-emit-report row from run.sh:135,514 (seed.sh only).
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/world.sh
 core/skills/ai-dlc-update/reconcile/
 core/fixtures/reconcile-emit-report/seed.sh
 core/fixtures/procsub-staged-refusal-boot-b/run.sh

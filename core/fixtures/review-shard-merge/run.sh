@@ -169,9 +169,11 @@ echo "  [J0] coverage join: $_ndecl units derived from the sg guards, dealt disj
 [ "$RSM_DEAL" = 0 ] || exit 0
 # I10 reads run.sh, not lib.sh, for the ambient-env scrub; this is the same scrub lib.sh performs.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+. "$(cd "$HERE/../lib" && pwd)/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 . "$HERE/lib.sh"
 # fx_inproc (the in-process pass logger).
 . "$(cd "$HERE/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/world.sh"
 echo "HERMETIC-CONSUMED core/scripts/partition-review-diff.sh"
 echo "HERMETIC-CONSUMED core/scripts/merge-review-shards.sh"
 echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"

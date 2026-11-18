@@ -271,7 +271,7 @@ BL980_CTL=""
 bl980_ctl() {
   [ -z "$BL980_CTL" ] || return 0
   if ! gm_has_maint; then gm_vacuous; BL980_CTL=vacuous; return 0; fi
-  G init -q "$WORK/gm-repo-ctl" || { echo "FIXTURE BROKEN: the BL-980 control repository was not built" >&2; exit 2; }
+  world_git init -q "$WORK/gm-repo-ctl" || { echo "FIXTURE BROKEN: the BL-980 control repository was not built" >&2; exit 2; }
   BL980_CTL="$(gm_children gm_raw "$WORK/gm-repo-ctl" 2)" || BL980_CTL=""
   [ "$BL980_CTL" = 1 ] || { echo "FIXTURE BROKEN: the BL-980 control, one commit through raw $(command -v git), spawned '${BL980_CTL}' maintenance children (want 1): this git cannot show the defect, so a 0 read beside it would pass whatever G or a receipt sets" >&2; exit 2; }
 }
@@ -298,7 +298,7 @@ p_gmaint() { # GM1: a G commit spawns 0 maintenance children; raw git spawns 1 (
   WHY=""
   # Each drive commits into a FRESH repository of its own, so the control's detached maintenance child cannot race G's
   # counted commit.
-  G init -q "$r" || { WHY=" the probe repository was not built"; return 1; }
+  world_git init -q "$r" || { WHY=" the probe repository was not built"; return 1; }
   fx="$(gm_children G "$r" 1)" || fx=""
   bl980_ctl
   [ "$fx" = 0 ] || { WHY=" a commit through G spawned '${fx}' git maintenance run child(ren), want 0"; return 1; }
@@ -330,7 +330,7 @@ OLD_ENGINE="$WORK/old-engine.sh"
 grep -vF '# MARK-KEY-WRITER v1' "$WFD_SRC" > "$OLD_ENGINE"
 new_repo() { # <dir> [old|new] -> base commit holding the artifact-path grammar, and the engine named
   mkdir -p "$1/core/skills/ai-dlc" || return 1
-  G init -q "$1" || return 1
+  world_git init -q "$1" || return 1
   cp "$GRAMMAR" "$1/core/skills/ai-dlc/artifact-path-grammar.md"
   printf 'seed\n' > "$1/README"
   case "${2:-}" in
@@ -474,7 +474,7 @@ printf 'evidence/s1/cap1.txt\nevidence/s1/cap2.txt\nevidence/s1/cap3.txt\neviden
 # ${CLAUDE_PROJECT_DIR}/scripts/ai-dlc/content-seal.sh; its ledger is MAIN's own state dir. LW is a
 # linked worktree of MAIN, whose shards' rows go to MAIN's ledger, never to LW/_bmad-output.
 MAIN="$WORK/main"; LW="$WORK/lw"
-mkdir -p "$MAIN/scripts/ai-dlc" && G init -q "$MAIN" && cp "$SEAL_SRC" "$MAIN/scripts/ai-dlc/content-seal.sh" \
+mkdir -p "$MAIN/scripts/ai-dlc" && world_git init -q "$MAIN" && cp "$SEAL_SRC" "$MAIN/scripts/ai-dlc/content-seal.sh" \
   && printf 'main\n' > "$MAIN/README" && G -C "$MAIN" add README scripts && G -C "$MAIN" commit -q -m main \
   && [ -d "$MAIN/.git" ] && G -C "$MAIN" worktree add -q --detach "$LW" HEAD 2>/dev/null \
   && mkdir -p "$MAIN/docs/reviews" "$LW/docs/reviews" \
@@ -482,7 +482,7 @@ mkdir -p "$MAIN/scripts/ai-dlc" && G init -q "$MAIN" && cp "$SEAL_SRC" "$MAIN/sc
 LEDGER="$MAIN/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
 # DMAIN: the same shape in the DISTRIBUTION layout (core/scripts/), with its own linked worktree DLW.
 DMAIN="$WORK/dmain"; DLW="$WORK/dlw"
-mkdir -p "$DMAIN/core/scripts" && G init -q "$DMAIN" && cp "$SEAL_SRC" "$DMAIN/core/scripts/content-seal.sh" \
+mkdir -p "$DMAIN/core/scripts" && world_git init -q "$DMAIN" && cp "$SEAL_SRC" "$DMAIN/core/scripts/content-seal.sh" \
   && printf 'dmain\n' > "$DMAIN/README" && G -C "$DMAIN" add README core && G -C "$DMAIN" commit -q -m dmain \
   && [ -d "$DMAIN/.git" ] && G -C "$DMAIN" worktree add -q --detach "$DLW" HEAD 2>/dev/null \
   || { echo "FIXTURE ERROR: the distribution-layout tree $DMAIN could not be built" >&2; exit 2; }
@@ -498,7 +498,7 @@ ln -s "$MAIN/docs" "$ALIAS" || { echo "FIXTURE ERROR: cannot create the alias $A
 wdir() { # -> a fresh <tree>/docs/reviews/s9<digits>/shards, the tree $WROOT (default MAIN); or WSLOT's fresh repository
   local w r n=0
   if [ -n "${WSLOT:-}" ]; then
-    if [ -n "${WSLOT_IN:-}" ]; then r="$WSLOT_IN"; else r="$(mktemp -d "$WORK/slot.XXXXXX")" && G init -q "$r" || return 1; fi
+    if [ -n "${WSLOT_IN:-}" ]; then r="$WSLOT_IN"; else r="$(mktemp -d "$WORK/slot.XXXXXX")" && world_git init -q "$r" || return 1; fi
     w="$r/docs/reviews/s$WSLOT" && mkdir -p "$w/shards" || return 1
     printf '%s' "$w/shards"; return 0
   fi
@@ -2153,7 +2153,7 @@ p_first_ts() {
   local sd="$1" ft f p l t1 t2 r
   WHY=""
   ft="$(mktemp -d "$WORK/ft.XXXXXX")" || return 1
-  mkdir -p "$ft/scripts/ai-dlc" && G init -q "$ft" && cp "$SEAL_SRC" "$ft/scripts/ai-dlc/content-seal.sh" && [ -d "$ft/.git" ] \
+  mkdir -p "$ft/scripts/ai-dlc" && world_git init -q "$ft" && cp "$SEAL_SRC" "$ft/scripts/ai-dlc/content-seal.sh" && [ -d "$ft/.git" ] \
     || { WHY="FIXTURE ERROR: the tree $ft was not built"; return 1; }
   f="$ft/docs/reviews/s1/shards/1-code-review-$B_SHA12/1.md"; mkdir -p "$(dirname "$f")" && printf '# shard\n' > "$f"
   fire "$f" agent Write "$ft" || { WHY="the recorder wrote no review row"; return 1; }
@@ -2816,7 +2816,7 @@ cr_view() { # <story-1-1 status> [<story-1-2 status>] -> the implementation view
     [ -z "${2:-}" ] || printf '  story-1-2:\n    status: %s\n    file: stories/story-1-2-y.md\n' "$2"; } > "$CR_REPO/$CR_VIEW"
 }
 mkdir -p "$CR_REPO/$CR_SDIR" "$CR_REPO/${CR_VIEW%/*}" "$CR_REPO/tests" "$CR_REPO/docs/reviews/s1" "$CR_REPO/test-results" \
-  && G init -q "$CR_REPO" && printf -- '---\nstatus: ready-for-dev\n---\n# Story 1\n' > "$CR_REPO/$CR_STORY" && printf 'def test_a(): pass\n' > "$CR_REPO/tests/test_a.py" \
+  && world_git init -q "$CR_REPO" && printf -- '---\nstatus: ready-for-dev\n---\n# Story 1\n' > "$CR_REPO/$CR_STORY" && printf 'def test_a(): pass\n' > "$CR_REPO/tests/test_a.py" \
   && cr_view ready-for-dev && G -C "$CR_REPO" add -A && G -C "$CR_REPO" commit -q -m base || { echo "FIXTURE ERROR: the canonical-run repo was not seeded" >&2; exit 2; }
 CR_BASE="$(G -C "$CR_REPO" rev-parse HEAD)"
 printf -- '---\nstatus: review\n---\n# Story 1\nFull-collection run: none, record-only\n' > "$CR_REPO/$CR_STORY"; printf '# r\n' > "$CR_REPO/docs/reviews/s1/1-qa-validation.md"; printf '$ x\n' > "$CR_REPO/test-results/h.txt"; cr_view review
@@ -3129,7 +3129,7 @@ mkdir -p "$CR_REPO/docs/reviews/s2" "$CR_REPO/docs/reviews/s4" "$CR_REPO/docs/re
   && cr_vs 4 story-1-2 story-1-2-n.md && CR_RMD="$(cr_lc rm-d)" \
   && printf -- '---\nstatus: review\n---\n# Z4\n' > "$CR_REPO/$CR_S4Z" && cr_vs 4 story-1-2 story-1-2-n.md story-1-1 story-1-1-z4.md && CR_RMF="$(cr_lc rm-f)" \
   && G -C "$CR_REPO" checkout -q "$cr_home" \
-  && mkdir -p "$CR_GWO/$CR_SDIR" "$CR_GWO/${CR_VIEW%/*}" && G init -q "$CR_GWO" \
+  && mkdir -p "$CR_GWO/$CR_SDIR" "$CR_GWO/${CR_VIEW%/*}" && world_git init -q "$CR_GWO" \
   && printf -- '---\nstatus: review\n---\n# Story 2\n' > "$CR_GWO/$CR_STORY2" \
   && printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-2:\n    status: review\n    file: stories/story-1-2-y.md\n' > "$CR_GWO/$CR_VIEW" \
   && G -C "$CR_GWO" add -A && G -C "$CR_GWO" commit -q -m base && CR_GWB="$(G -C "$CR_GWO" rev-parse HEAD)" \
@@ -3160,7 +3160,7 @@ fi # seed gate CR
 # SEED GATE: PROJ_CRS is read by units bl885 and canon only.
 if sg bl885 || sg canon; then
 PROJ_CRS="$WORK/proj-crs"
-mkdir -p "$PROJ_CRS/core/skills/ai-dlc/steps" "$PROJ_CRS/core/team-roles" "$PROJ_CRS/docs/reviews/s1" && G init -q "$PROJ_CRS" \
+mkdir -p "$PROJ_CRS/core/skills/ai-dlc/steps" "$PROJ_CRS/core/team-roles" "$PROJ_CRS/docs/reviews/s1" && world_git init -q "$PROJ_CRS" \
   && cp "$PROJ/core/skills/ai-dlc/steps/gate-validation.md" "$PROJ_CRS/core/skills/ai-dlc/steps/" \
   && grep -vF 'column-0 `Canonical run:`' "$QA_MD" > "$PROJ_CRS/core/team-roles/qa.md" || { echo "FIXTURE ERROR: the legacy serial root was not seeded" >&2; exit 2; }
 _crs0="$(grep -cF 'column-0 `Canonical run:`' "$PROJ_CRS/core/team-roles/qa.md")" || _crs0=0
@@ -4259,7 +4259,7 @@ lr_view() { printf 'sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    
 lr_review() { lr_st review && lr_view review; }
 # SEED GATE: REPO_LR is read by units bl885 and wv955 only.
 if sg bl885 || sg wv955; then
-mkdir -p "$REPO_LR/.claude/team-roles" "$REPO_LR/$CR_SDIR" "$REPO_LR/${CR_VIEW%/*}" "$REPO_LR/docs/reviews/s1" && G init -q "$REPO_LR" \
+mkdir -p "$REPO_LR/.claude/team-roles" "$REPO_LR/$CR_SDIR" "$REPO_LR/${CR_VIEW%/*}" "$REPO_LR/docs/reviews/s1" && world_git init -q "$REPO_LR" \
   && grep -vF -e "$LR_RSENT" -e 'column-0 `Canonical run:`' "$QA_MD" > "$REPO_LR/.claude/team-roles/qa.md" && lr_st ready-for-dev && lr_view ready-for-dev \
   && LR_OLD="$(lr_c old)" && cp "$QA_MD" "$REPO_LR/.claude/team-roles/qa.md" && LR_D="$(lr_c dispatch)" \
   && lr_review && lines "$REPO_LR/test-results/a1.txt" 5 a1 && lines "$REPO_LR/test-results/b1.txt" 5 b1 && LR_F="$(lr_c go)" \
@@ -4486,7 +4486,7 @@ lr_done() { rm -f "$o"; [ -z "${LR_PATH:-}" ] || rm -f "$LR_PATH"; LR_PATH=""; }
 lr_sw() { # LR_S (a lead checkout), LR_SW (a dev worktree added from it) and LR_SCLONE (a --shared clone of it), built once
   [ -z "${LR_SW:-}" ] || return 0
   LR_S="$WORK/lr-s"; LR_SW="$WORK/lr-sw"; LR_SCLONE="$WORK/lr-sclone"
-  G init -q "$LR_S" && printf 's\n' > "$LR_S/README" && G -C "$LR_S" add README && G -C "$LR_S" commit -q -m s \
+  world_git init -q "$LR_S" && printf 's\n' > "$LR_S/README" && G -C "$LR_S" add README && G -C "$LR_S" commit -q -m s \
     && G -C "$LR_S" worktree add -q --detach "$LR_SW" HEAD 2> /dev/null && G clone -q --shared "$LR_S" "$LR_SCLONE" 2> /dev/null \
     && [ -f "$LR_SW/.git" ] || { WHY="$WHY FIXTURE ERROR: the a2 lead checkout, its dev worktree or the seat's clone was not built"; LR_SW=""; return 1; }
 }
@@ -5180,14 +5180,6 @@ p_wrap() {
   WHY=""; pv="$(printf '## Verdict\nPASS')"
   printf '%s\n' "$WR_CONV" > "$cv" && printf -- '- canonical: `pytest suite/tests` and `<venv>/bin/python -m pytest -m unit`\n' > "$nd" \
     && printf '%s\n' "$WR_C1" > "$c1" || { WHY="$WHY FIXTURE ERROR: the BL-988 conventions files were not written"; return 1; }
-  # wr-receipt: BL-988's receipt (receipt-bl988.sh, its header), run beside this fixture over the script directory's
-  # record-only-diff.sh (receipt-bl980.sh drives a dist-only-shard receipt in exactly the "$sd/<file>" form its call
-  # site names).
-  if cell wr-receipt; then
-    o="$(bash "$LIB_DIR/receipt-bl988.sh" "$sd/record-only-diff.sh" 2>&1)"; rc=$?
-    [ "$rc" = 0 ] && [ "$(grep -c '^  ok    receipt-bl988 R[0-4] ' <<<"$o")" = 5 ] \
-      || WHY="$WHY wr-receipt{rc=$rc $(grep FAIL <<<"$o" | tr '\n' ' ')}"
-  fi
   # RUN-FILTER and RUN-SHAPE asked directly (the function every caller asks). wr-ok: the declared wrapper with its three
   # options and a declared payload passes both; wr-undecl, the same payload under scripts/other.py, reads exactly as
   # without a wrapper (the base reading). wr-pos (B1): a positional before the bare -- is refused naming it, as

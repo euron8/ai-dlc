@@ -1,4 +1,4 @@
-# shell-portability copies the validator under test into every seeded sandbox corpus (seed(), run.sh:105).
+# shell-portability copies the validator under test into every seeded sandbox corpus (seed(), run.sh:115).
 # VERSION is the marker both run.sh (lines 86-90) and the validator walk up for; plain, so the walk
 # resolves inside the sandbox. lib/ holds the sourced preamble.
 !scripts/validate-shell-portability.sh
@@ -10,3 +10,6 @@ VERSION
 scripts/presuite-metadata-allowlist.txt
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+# inproc_load and inproc_run (lib/inproc.sh), which sources lib/mutant.sh for fx_inproc.
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

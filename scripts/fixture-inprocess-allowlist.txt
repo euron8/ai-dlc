@@ -8,7 +8,6 @@ adversarial-shard-merge	core/scripts/merge-adversarial-shards.sh runs outside a 
 adversarial-shard-merge-b	core/scripts/content-seal.sh runs outside a declared cell
 adversarial-shard-merge-c	core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/scripts/content-seal.sh runs outside a declared cell
 adversarial-shard-merge-d	core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/scripts/content-seal.sh runs outside a declared cell
-advisor-gate-deny	core/hooks/ai-dlc-advisor-gate.sh runs outside a declared cell
 answer-handoff-routing	core/hooks/ai-dlc-answer-capture.sh runs outside a declared cell; core/hooks/ai-dlc-pause.sh runs outside a declared cell
 apply-drift-after-write	core/skills/ai-dlc-update/reconcile/apply.sh runs outside a declared cell
 apply-machinery-stamp	core/skills/ai-dlc-update/reconcile/apply.sh runs outside a declared cell
@@ -19,15 +18,13 @@ apply-restamp-worklist-b	core/hooks/ai-dlc-answer-capture.sh runs outside a decl
 apply-restamp-worklist-c	core/skills/ai-dlc-update/reconcile/apply.sh runs outside a declared cell
 apply-restamp-worklist-d	core/skills/ai-dlc-update/reconcile/apply.sh runs outside a declared cell
 artifact-derivations	core/scripts/validate-artifact-derivations.sh runs outside a declared cell
-artifact-path-migration	core/scripts/migrate-artifact-paths.sh runs outside a declared cell
 budget-summary-verdict	core/scripts/validate-artifact-budget.sh runs outside a declared cell; core/scripts/verdict.sh runs outside a declared cell; core/scripts/wait-for-deliverable.sh runs outside a declared cell
-census-hermetic-coverage	scripts/census-hermetic-coverage.sh runs outside a declared cell
 check-24-adversarial-convergence-b	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell
 check-24-adversarial-convergence-c	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell
 content-seal	core/scripts/join-remediator-shards.sh runs outside a declared cell; core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/hooks/ai-dlc-content-seal.sh runs outside a declared cell; core/scripts/validate-gate-adjudication.sh runs outside a declared cell; core/scripts/wait-for-deliverable.sh runs outside a declared cell; core/scripts/content-seal.sh runs outside a declared cell
 core-paths-audit-diff	core/scripts/core-paths.sh runs outside a declared cell
 dispatch-model-guard	core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/scripts/validate-spawn-ledger.sh runs outside a declared cell; core/scripts/validate-gate-adjudication.sh runs outside a declared cell
-fixture-git-env-seam	scripts/validate-fixture-git-env.sh runs outside a declared cell
+fixture-git-env-seam	core/skills/ai-dlc-update/reconcile/unregistered-drift.sh runs outside a declared cell; core/scripts/validate-audit-anchors.sh runs outside a declared cell
 fixture-hygiene	scripts/validate-fixture-invocations.sh runs outside a declared cell; scripts/validate-fixture-hygiene.sh runs outside a declared cell
 fixture-invocation-budget	scripts/validate-fixture-invocations.sh runs outside a declared cell; scripts/collect-counted-stores.sh runs outside a declared cell; core/scripts/hermetic-run.sh runs outside a declared cell
 fold-architect-ledger-join	core/scripts/validate-spawn-ledger.sh runs outside a declared cell
@@ -35,58 +32,41 @@ gate-adjudication	core/scripts/validate-gate-adjudication.sh runs outside a decl
 gate-adjudication-rotate	core/scripts/rotate-gate-adjudication.sh runs outside a declared cell; core/hooks/ai-dlc-gate-remediation-guard.sh runs outside a declared cell
 gate-remediation-deny	core/hooks/ai-dlc-gate-remediation-guard.sh runs outside a declared cell
 gate-repair-record	core/scripts/validate-gate-adjudication.sh runs outside a declared cell
-gate-resume	core/scripts/gate-checkpoint.sh runs outside a declared cell; core/scripts/gate-slice.sh runs outside a declared cell
 gate-series-rung	core/scripts/validate-gate-adjudication.sh runs outside a declared cell
-h2-attest-scripts-dir	core/scripts/validate-h2-attestation.sh runs outside a declared cell
 handoff-completion-assertion	core/hooks/ai-dlc-recover.sh runs outside a declared cell; core/hooks/ai-dlc-continue.sh runs outside a declared cell
 handoff-record-carries-return	core/scripts/wait-for-deliverable.sh runs outside a declared cell
 handoff-resume-guard	core/hooks/ai-dlc-continue.sh runs outside a declared cell
 held-stories	core/scripts/sprint-status.sh runs outside a declared cell; core/scripts/validate-artifact-budget.sh runs outside a declared cell; core/scripts/validate-held-stories.sh runs outside a declared cell; core/scripts/snapshot-update.sh runs outside a declared cell
 implementation-join-yield	core/hooks/ai-dlc-continue.sh runs outside a declared cell
 inflight-row-shape	core/scripts/validate-artifact-budget.sh runs outside a declared cell
-invariant-index	scripts/render-invariant-index.sh runs outside a declared cell
 layer-crosswalk-home	core/skills/ai-dlc-update/reconcile/apply.sh runs outside a declared cell; core/scripts/validate-layer-entries.sh runs outside a declared cell
 ledger-reverify	core/skills/ai-dlc-update/reconcile/ledger-reverify.sh runs outside a declared cell
 ledger-reverify-b	core/skills/ai-dlc-update/reconcile/ledger-reverify.sh runs outside a declared cell
 ledger-reverify-c	core/skills/ai-dlc-update/reconcile/ledger-reverify.sh runs outside a declared cell
-mutation-red-replay	core/scripts/validate-mutation-red.sh runs outside a declared cell
 operator-request-capture	core/hooks/ai-dlc-pause.sh runs outside a declared cell
 owed-derivations-c	core/skills/ai-dlc-update/reconcile/derivation-differential.sh runs outside a declared cell; core/skills/ai-dlc-update/reconcile/apply.sh runs outside a declared cell; core/scripts/validate-artifact-derivations.sh runs outside a declared cell
 pause-hook-origin	core/hooks/ai-dlc-pause.sh runs outside a declared cell
 pause-question-in-prose	core/hooks/ai-dlc-continue.sh runs outside a declared cell
-plan-rotate	scripts/plan-rotate.sh runs outside a declared cell; scripts/validate-plan-shape.sh runs outside a declared cell
-plan-shape	scripts/validate-plan-shape.sh runs outside a declared cell
 postcompact-rulebook-recovery	core/hooks/ai-dlc-recover-gate.sh runs outside a declared cell; core/hooks/ai-dlc-recover.sh runs outside a declared cell; core/scripts/verdict.sh runs outside a declared cell; core/scripts/validate-reattach-budget.sh runs outside a declared cell; core/hooks/ai-dlc-postcompact.sh runs outside a declared cell
 pregate-self-check	core/fixtures/pregate-self-check/receipt-bl643.sh runs outside a declared cell; scripts/pregate-self-check.sh runs outside a declared cell; scripts/seed-verdict-store.sh runs outside a declared cell
 prepush-worktree-env-scrub	.githooks/pre-push runs outside a declared cell
 process-rule-pins	core/scripts/wait-for-deliverable.sh runs outside a declared cell
-readset-skip	core/scripts/derive-fixture-readsets.sh runs outside a declared cell
-readset-skip-b	core/scripts/derive-fixture-readsets.sh runs outside a declared cell
-readset-skip-c	core/scripts/derive-fixture-readsets.sh runs outside a declared cell
-release-version-triple	scripts/validate-release-version.sh runs outside a declared cell
 remediator-shard-join	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell; core/scripts/join-remediator-shards.sh runs outside a declared cell; core/scripts/serial-remediation-worklist.sh runs outside a declared cell; core/hooks/ai-dlc-derivation-capture.sh runs outside a declared cell; core/hooks/ai-dlc-gate-remediation-guard.sh runs outside a declared cell; core/scripts/content-seal.sh runs outside a declared cell; core/scripts/wait-for-deliverable.sh runs outside a declared cell
 remediator-shard-join-b	core/scripts/join-remediator-shards.sh runs outside a declared cell; core/scripts/serial-remediation-worklist.sh runs outside a declared cell; core/hooks/ai-dlc-gate-remediation-guard.sh runs outside a declared cell; core/scripts/validate-artifact-derivations.sh runs outside a declared cell
 review-shard-merge	core/scripts/merge-review-shards.sh runs outside a declared cell; core/scripts/partition-review-diff.sh runs outside a declared cell; core/hooks/ai-dlc-content-seal.sh runs outside a declared cell; core/scripts/wait-for-deliverable.sh runs outside a declared cell; core/scripts/content-seal.sh runs outside a declared cell
 review-shard-merge-c	core/scripts/content-seal.sh runs outside a declared cell
 review-shard-merge-f	core/scripts/content-seal.sh runs outside a declared cell
-route-read-required	core/hooks/ai-dlc-acknowledge.sh runs outside a declared cell
 scope-confirmation	core/hooks/ai-dlc-answer-capture.sh runs outside a declared cell; core/scripts/validate-scope-confirmation.sh runs outside a declared cell
 serial-remediation-worklist	core/scripts/partition-subject.sh runs outside a declared cell; core/scripts/serial-remediation-worklist.sh runs outside a declared cell; core/scripts/partition-document.sh runs outside a declared cell
-shell-portability	scripts/validate-shell-portability.sh runs outside a declared cell
 snapshot-archive-rotate	core/hooks/ai-dlc-continue.sh runs outside a declared cell; core/scripts/rotate-snapshot-archive.sh runs outside a declared cell; core/hooks/ai-dlc-pause.sh runs outside a declared cell
 snapshot-evidence-cell	core/scripts/sprint-status.sh runs outside a declared cell; core/scripts/validate-artifact-budget.sh runs outside a declared cell; core/scripts/check-owed-derivations.sh runs outside a declared cell
 snapshot-section-schema	core/scripts/validate-artifact-budget.sh runs outside a declared cell
 snapshot-supersession-marker	core/scripts/validate-artifact-budget.sh runs outside a declared cell
 snapshot-update-stamps	core/hooks/ai-dlc-recover.sh runs outside a declared cell; core/hooks/ai-dlc-continue.sh runs outside a declared cell; core/scripts/validate-artifact-budget.sh runs outside a declared cell; core/scripts/snapshot-update.sh runs outside a declared cell; core/scripts/validate-mandatory-rules.sh runs outside a declared cell
-spec-join-integrity	core/scripts/validate-spec-join.sh runs outside a declared cell
 sprint-status-lifecycle	core/scripts/sprint-status.sh runs outside a declared cell
-subagent-probe	core/hooks/ai-dlc-subagent-probe.sh runs outside a declared cell
 subject-partition	core/scripts/partition-subject.sh runs outside a declared cell; core/scripts/partition-document.sh runs outside a declared cell
 suppression-lifetime	core/scripts/validate-suppression-lifetime.sh runs outside a declared cell; core/scripts/verdict.sh runs outside a declared cell
-transient-ignore-block	core/scripts/sync-transient-ignore.sh runs outside a declared cell
-updater-session-signals	core/hooks/ai-dlc-acknowledge.sh runs outside a declared cell
 validate-mandatory-rules-revive	core/scripts/validate-retro-evidence.sh runs outside a declared cell; core/scripts/validate-mandatory-rules.sh runs outside a declared cell
 verdict-pass-content	core/scripts/validate-artifact-budget.sh runs outside a declared cell; core/scripts/verdict.sh runs outside a declared cell
-vocabulary-index	scripts/render-vocabulary-index.sh runs outside a declared cell
 wait-beat-liveness	core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/scripts/wait-for-deliverable.sh runs outside a declared cell
 whole-read-pool	core/scripts/validate-artifact-budget.sh runs outside a declared cell

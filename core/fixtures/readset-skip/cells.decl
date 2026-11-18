@@ -1,0 +1,26 @@
+# readset-skip (shard a)'s starts of core/scripts/derive-fixture-readsets.sh (BL-879 grammar). Every one is a deriver
+# the slot unit's slot-world.sh starts, tagged FXCELL=<SW_CELL>.<scenario> (deriver A) and <SW_CELL>.<scenario>.b
+# (deriver B, started by fixture fa inside A's window); the world itself runs in process (run.sh slot_score). Each stays
+# a process: the trace-window slot's holder is the deriver's own `$$` (readset_lock_write records it, rs_slot_release
+# and readset_lock_stale judge it) and a deriver is reaped by its own process group, so two derivers in one process
+# would share the identity the slot exists to separate.
+e2e core/scripts/derive-fixture-readsets.sh slot.order why=deriver A of the order scenario: the slot holder is the deriver's own pid, so it must be a process
+e2e core/scripts/derive-fixture-readsets.sh slot.order.b why=deriver B of the order scenario, a sibling that must wait on A's slot by pid
+e2e core/scripts/derive-fixture-readsets.sh slot.nested why=deriver A of the nested scenario: the slot holder is the deriver's own pid, so it must be a process
+e2e core/scripts/derive-fixture-readsets.sh slot.nested.b why=deriver B of the nested scenario, which inherits A's live pid marker and must not wait
+e2e core/scripts/derive-fixture-readsets.sh slot.stalemark why=deriver A of the stalemark scenario: the slot holder is the deriver's own pid, so it must be a process
+e2e core/scripts/derive-fixture-readsets.sh slot.stalemark.b why=deriver B of the stalemark scenario, whose marker names a dead pid it must judge by process
+e2e core/scripts/derive-fixture-readsets.sh slot.foreign why=deriver A of the foreign scenario: the slot holder is the deriver's own pid, so it must be a process
+e2e core/scripts/derive-fixture-readsets.sh slot.foreign.b why=deriver B of the foreign scenario, whose marker names a live pid the slot's pid file does not
+e2e core/scripts/derive-fixture-readsets.sh slot.stale why=the slot is pre-held by a dead pid, which the deriver breaks by judging that pid as a process
+e2e core/scripts/derive-fixture-readsets.sh slot.beat why=the slot is pre-held by a live pid, and the waiting deriver's heartbeat is judged against it
+e2e core/scripts/derive-fixture-readsets.sh slot.plain why=the slot is pre-held by a live pid, and a plain run must not wait on it
+e2e core/scripts/derive-fixture-readsets.sh slot.file why=the fail-open path on a file at the slot path, run in a deriver process group the world reaps
+e2e core/scripts/derive-fixture-readsets.sh slot.stray why=the fail-open path on a stray file in an old slot dir, run in a deriver process group the world reaps
+e2e core/scripts/derive-fixture-readsets.sh slot.noparent why=the fail-open path on a missing slot parent, run in a deriver process group the world reaps
+e2e core/scripts/derive-fixture-readsets.sh slot.rebreak why=a dead holder's pid file it breaks every poll, judged by process liveness
+e2e core/scripts/derive-fixture-readsets.sh slot.oldempty why=the control for an old empty slot dir, run in a deriver process group the world reaps
+e2e core/scripts/derive-fixture-readsets.sh slot.hold why=deriver A is SIGKILLed by process group with its stream stub live, which needs its own group
+e2e core/scripts/derive-fixture-readsets.sh slot-kill.hold why=the slot-kill world is SIGKILLed mid-hold and its deriver's recorded process group is censused
+e2e core/scripts/derive-fixture-readsets.sh slot-fork.hold why=the slot-forkkill world is SIGKILLed after the deriver recorded its own process group
+e2e core/scripts/derive-fixture-readsets.sh slot-shk.hold why=the hook's pool_kill_tree tears the world down and the deriver's process group is censused

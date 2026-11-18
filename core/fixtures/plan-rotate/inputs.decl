@@ -1,7 +1,10 @@
-# Reads the subject and the shape validator at the repo root (not core/scripts), and walks up from
-# its own directory for a VERSION marker (run.sh:26-32). VERSION is outside the hook's key universe.
+# Reads the subject and the shape validator at the repo root (not core/scripts), the libraries it sources from
+# core/fixtures/lib/ (inproc.sh, which sources mutant.sh), and walks up from its own directory for a VERSION
+# marker (run.sh:26-32). VERSION is outside the hook's key universe.
 # copy-only: core/fixtures/plan-rotate/run.sh:29 run.sh walks up for the marker; nothing reads its content
 VERSION
 core/fixtures/lib/report.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
 !scripts/plan-rotate.sh
 !scripts/validate-plan-shape.sh

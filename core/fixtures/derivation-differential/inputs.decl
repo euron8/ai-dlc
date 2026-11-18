@@ -16,3 +16,5 @@ core/skills/ai-dlc-update/reconcile/consumer-read.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/layout.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/world.sh

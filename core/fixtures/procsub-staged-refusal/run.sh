@@ -159,11 +159,13 @@ trap 'chmod -R u+rwX "$W" 2>/dev/null; rm -rf "$W"' EXIT
 
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")/../lib" && pwd)/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 # A stub function an arm leaves defined is dropped by run_arm's stub_clear after the arm, and by mkstub before it
 # builds the next stub.
 skip() { printf '  SKIP  %s\n' "$1"; }
 
-gitq() { git -c user.email=f@x -c user.name=fixture -c commit.gpgsign=false "$@"; }
+gitq() { world_git -c user.email=f@x -c user.name=fixture -c commit.gpgsign=false "$@"; }
 
 # ------------------------------------------------------------------------------------------------
 # THE STUB. mkstub <tool> <case-pattern> <fail-index, 0 = every claimed call> <exit status>

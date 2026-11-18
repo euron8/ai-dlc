@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
+. "$(cd "$(dirname "$0")/../lib" && pwd)/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 # carried-findings/run.sh -- validate-carried-findings.sh, the Check 1 arm that makes a gate-1
 # re-review answer every Critical and Important finding of the pass before it.
 #
@@ -307,7 +308,7 @@ run() { own "$1"; out="$(set +o pipefail; fx_inproc "$1" && vcf_main "$2" "$3" 2
 # ---- the topology repository ----------------------------------------------------------------------
 G() { git -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 R="$WORK/main"; mkdir -p "$R" || exit 2
-G init -q "$R" || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
+world_git init -q "$R" || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
 [ -d "$R/.git" ] || { echo "FIXTURE ERROR: $R is not a repository after init" >&2; exit 2; }
 printf 'x\n' > "$R/a"; G -C "$R" add -A && G -C "$R" commit -qm base || exit 2
 C0="$(G -C "$R" rev-parse HEAD)" || exit 2
@@ -369,7 +370,7 @@ VS="$WS/scripts/ai-dlc/validate-carried-findings.sh"; VD="$WR/scripts/ai-dlc/val
 # I: a consumer that gitignores scripts/ai-dlc/: the program sits in the checkout and no commit
 # adds it. N: the same with the program absent (the PENDING near-miss of I).
 RI="$WORK/ign"; mkdir -p "$RI" || exit 2
-G init -q "$RI" || exit 2
+world_git init -q "$RI" || exit 2
 printf 'scripts/ai-dlc/\n' > "$RI/.gitignore"; G -C "$RI" add -A && G -C "$RI" commit -qm base || exit 2
 mkdir -p "$RI/scripts/ai-dlc" "$RI/docs/reviews/s5" || exit 2
 cp "$S/merged.md" "$RI/docs/reviews/s5/1-code-review.md"; cp "$S/miss.md" "$RI/docs/reviews/s5/1-code-review-p2.md"
@@ -386,7 +387,7 @@ VH="$WORK/shallow/scripts/ai-dlc/validate-carried-findings.sh"; VF="$WORK/full/s
 # then qa.md WITH it (QB), then a QA p1 and three p2 files, each p2's reviewed-sha naming the qa.md
 # it ran against. The QA files take qa.md's Findings Template containers.
 RQ="$WORK/qa"; mkdir -p "$RQ/scripts/ai-dlc" "$RQ/.claude/team-roles" "$RQ/docs/reviews/s6" || exit 2
-G init -q "$RQ" || exit 2
+world_git init -q "$RQ" || exit 2
 cp "$V" "$RQ/scripts/ai-dlc/validate-carried-findings.sh"
 printf '# QA\n\n## Finding Class\n\nClass: CODE | TEST | EVIDENCE | BOOKKEEPING\n\n## Validation Checklist\n' > "$RQ/.claude/team-roles/qa.md"
 G -C "$RQ" add -A && G -C "$RQ" commit -qm "pull: qa.md without the section" || exit 2
@@ -445,7 +446,7 @@ G -C "$RQ" add -A && G -C "$RQ" commit -qm "QA passes" || exit 2
 # section. Both carry the s10 pair (unresolvable reviewed-sha, Q2 dropped).
 for w_ in noqa oldqa; do
   mkdir -p "$WORK/$w_/scripts/ai-dlc" "$WORK/$w_/docs/reviews/s1" || exit 2
-  G init -q "$WORK/$w_" || exit 2
+  world_git init -q "$WORK/$w_" || exit 2
   cp "$V" "$WORK/$w_/scripts/ai-dlc/validate-carried-findings.sh" || exit 2
   cp "$RQ/docs/reviews/s10/6-qa-validation.md" "$RQ/docs/reviews/s10/6-qa-validation-p2.md" "$WORK/$w_/docs/reviews/s1/" || exit 2
 done

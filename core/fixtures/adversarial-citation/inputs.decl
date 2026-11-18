@@ -11,3 +11,4 @@ core/scripts/merge-adversarial-shards.sh
 # lib/mutant.sh defines fx_inproc, which counts each in-process call of the validator.
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/layout.sh
+core/fixtures/lib/world.sh

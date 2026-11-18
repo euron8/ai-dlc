@@ -98,20 +98,22 @@ g() { # g <dir> <git args...> -- hermetic identity, no hooks, no signing
 }
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+[ -f "$HERE/../lib/world.sh" ] || { echo "FIXTURE ERROR: lib/world.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/world.sh" || { echo "FIXTURE ERROR: sourcing lib/world.sh failed" >&2; exit 2; }
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$HERE/../lib/inproc.sh" ] || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
 
 # IN PROCESS (BL-878). The subject is SOURCED once into this shell (its column-0 guard returns after defining dd_main),
 # and every drive calls dd_main in a subshell (`$( )` or `( )`), so the subject's own `exit`, `set -u`, `set -f` and its
-# EXIT trap stay there. The source is one fx_inproc pass, and so is every dd_main call (the inproc: row). The subject
+# EXIT trap stay there. Every dd_main call is one fx_inproc pass (the inproc: row). The subject
 # reads no variable it does not assign except TMPDIR, AI_DLC_DD_OVERLAY_CAP and what vd_join sets, and calls no
 # function this fixture defines, so this shell's state does not reach its answer; the three cli cells hold the
-# in-process answer byte-identical to the program's. DDS spells the subject with a literal tail, so the in-process
-# judge (P2) resolves every source to it: lib/inproc.sh is not used, because its `. "$1"` is an operand P2 cannot
-# resolve, which it scores as a drive in a fixture declaring an unguarded subject (the validator and classifier).
-# The `nots` copy is sourced inside pw's own subshell, so its dd_main, and the template-sites.md it looks for beside
-# its `${BASH_SOURCE[0]}`, are the copy's.
+# in-process answer byte-identical to the program's. The subject is loaded by core/fixtures/lib/inproc.sh (inproc_load)
+# and every drive is its inproc_run. The `nots` copy is the path inproc_run is handed in pw's own subshell, so its
+# dd_main, and the template-sites.md it looks for beside its `${BASH_SOURCE[0]}`, are the copy's.
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped helper, and
 # sourcing a pre-wrap helper would run its whole body in this shell. So the shape is checked first, on its two halves:
 # neither the `dd_main() {` line nor the column-0 source guard is a subject that predates the wrap, which prints SKIP
@@ -127,8 +129,7 @@ grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$DDS"; _gx=$?
 if [ "$dd_def$dd_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
 if [ "$dd_def" = 0 ]; then echo "   FAIL  $DDS carries the column-0 source guard but no \`dd_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "derivation-differential: FAIL (1)" >&2; exit 1; fi
 if [ "$dd_guard" = 0 ]; then echo "   FAIL  $DDS defines \`dd_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run dd_main in this shell" >&2; echo "derivation-differential: FAIL (1)" >&2; exit 1; fi
-fx_inproc "$DDS"
-. "$DDS" || { echo "FIXTURE BROKEN: sourcing $DDS failed" >&2; exit 2; }
+inproc_load "$DDS" || { echo "FIXTURE BROKEN: sourcing $DDS defined nothing" >&2; exit 2; }
 declare -F dd_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $DDS defined no dd_main" >&2; exit 2; }
 # HERE-STRINGS, NEVER `printf | grep -q` (I54/I54b).
 ck() { if grep -qF -- "$2" <<<"$3"; then ok "$1"; else bad "$1 -- expected to find: $2"; printf '%s\n' "$3" | sed 's/^/        | /' | head -20; fi; }
@@ -150,7 +151,7 @@ seed_cls() {
 # ---- the distribution ---------------------------------------------------------------------
 DIST="$WORK/dist"
 mkdir -p "$DIST/core/scripts"
-g "$DIST" init -q
+world_git init -q "$DIST"
 printf 'qqprev\n' > "$DIST/core/scripts/toy.sh"
 seed_cls "$DIST"
 g "$DIST" add -A && g "$DIST" commit -qm prev
@@ -188,7 +189,7 @@ g "$DIST" merge-base --is-ancestor "$PREV" "$BASE" && ! g "$DIST" merge-base --i
 build_consumer() {
   local c="$1" t="$2" applied="$3" vkind="$4" sk="${5:-$BASE}"
   mkdir -p "$c/scripts/ai-dlc" "$c/.claude" "$c/_bmad-output"
-  g "$c" init -q
+  world_git init -q "$c"
   cp "$VALIDATOR" "$c/scripts/ai-dlc/validate-artifact-derivations.sh"
   # the OLDER install, one commit down the first-parent chain
   printf 'qqprev\n' > "$c/scripts/ai-dlc/toy.sh"
@@ -240,7 +241,7 @@ build_consumer() {
 # with that dist's refs and never with the first's.
 dd() {
   local c="$1"; shift
-  OUT="$(cd / && export TMPDIR="$DDTMP" && fx_inproc "$DDS" && dd_main "$(cat "$c/.D")" "$(cat "$c/.B")" "$c" "$(cat "$c/.T")" "$@" 2>&1)"; RC=$?
+  OUT="$(cd / && export TMPDIR="$DDTMP" && inproc_run "$DDS" dd_main "$(cat "$c/.D")" "$(cat "$c/.B")" "$c" "$(cat "$c/.T")" "$@" 2>&1)"; RC=$?
 }
 # ---- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome ----------------------
 # The outcomes are the exit codes: 1 with a NEWLY-FAILING verdict (A1, W1), 0 with the clear (A3, W2), 2 with a refusal
@@ -252,7 +253,7 @@ dd() {
 EQ="$WORK/eq"; mkdir -p "$EQ"
 eqv() { # <cell-id> <consumer> [extra args...] -> sets OUT and RC as dd does; 0 when the program agrees
   local id="$1" c="$2"; shift 2
-  (cd / && export TMPDIR="$DDTMP" && fx_inproc "$DDS" && dd_main "$(cat "$c/.D")" "$(cat "$c/.B")" "$c" "$(cat "$c/.T")" "$@") \
+  (cd / && export TMPDIR="$DDTMP" && inproc_run "$DDS" dd_main "$(cat "$c/.D")" "$(cat "$c/.B")" "$c" "$(cat "$c/.T")" "$@") \
     > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; RC=$?; echo "$RC" > "$EQ/$id.ip.rc"
   OUT="$(cat "$EQ/$id.ip.out" "$EQ/$id.ip.err")"
   (cd / && TMPDIR="$DDTMP" FXCELL="$id" bash "$SUBJ" "$(cat "$c/.D")" "$(cat "$c/.B")" "$c" "$(cat "$c/.T")" "$@") \
@@ -369,7 +370,7 @@ ck "A8n near-miss: with the apply in the tree the control passes and says so" "$
 # fails at base. Without the zero-pass refusal the run reads STALE-BOTH everywhere and exits 0.
 BROKEN="$WORK/broken-root"
 mkdir -p "$BROKEN/.claude"
-g "$BROKEN" init -q
+world_git init -q "$BROKEN"
 printf 'version: 1.0.0\ncommit: %s\nskill_commit: %s\n' "$BASE" "$BASE" > "$BROKEN/.claude/.ai-dlc-version"
 g "$BROKEN" add -A && g "$BROKEN" commit -qm stamp-only
 dd "$W1" --base-root "$BROKEN"; OUT9="$OUT"; RC9="$RC"
@@ -389,7 +390,7 @@ nk "A9c and does not clear it" "zero NEWLY-FAILING" "$OUT9"
 # than refusing. The near-miss is the same world whose derivation names an UNCHANGED machinery path.
 DIST2="$WORK/dist2"
 mkdir -p "$DIST2/core/scripts" "$DIST2/core/rules"
-g "$DIST2" init -q
+world_git init -q "$DIST2"
 printf 'qqsu\n' > "$DIST2/core/scripts/su.sh"; printf 'qqkeep\n' > "$DIST2/core/scripts/keep.sh"
 printf 'rule-a\n' > "$DIST2/core/rules/su.md"
 seed_cls "$DIST2"
@@ -407,7 +408,7 @@ THEIRS2="$(g "$DIST2" rev-parse HEAD)"
 build_su() {
   local c="$1" kind="$2" suk="${3:-theirs}" presk="${4:-$BASE2}"
   mkdir -p "$c/scripts/ai-dlc" "$c/.claude/rules" "$c/_bmad-output"
-  g "$c" init -q
+  world_git init -q "$c"
   cp "$VALIDATOR" "$c/scripts/ai-dlc/validate-artifact-derivations.sh"
   g "$DIST2" show "${BASE2}:core/scripts/su.sh" > "$c/scripts/ai-dlc/su.sh"
   g "$DIST2" show "${BASE2}:core/scripts/keep.sh" > "$c/scripts/ai-dlc/keep.sh"
@@ -579,7 +580,7 @@ else
     bad "A12t pid_live reads the refused-ps answer as DEAD for:$pl_dead -- a refused probe would name a worktree"
   fi
 fi
-OUT12P="$(cd / && export PATH="$PSHIM:$PATH" TMPDIR="$DDTMP" && hash -r && fx_inproc "$DDS" && dd_main "$(cat "$W6/.D")" "$(cat "$W6/.B")" "$W6" "$(cat "$W6/.T")" 2>&1)"; RC12P=$?
+OUT12P="$(cd / && export PATH="$PSHIM:$PATH" TMPDIR="$DDTMP" && inproc_run "$DDS" dd_main "$(cat "$W6/.D")" "$(cat "$W6/.B")" "$W6" "$(cat "$W6/.T")" 2>&1)"; RC12P=$?
 rc_is "A12u with ps refused the verdict is unchanged -> exit 1" 1 "$RC12P"
 ck "A12v with ps refused the DEAD run's worktree is still NAMED" "$(printf 'NOTE\tworktree\t%s is a registered worktree' "$LEAK")" "$OUT12P"
 nk "A12w near-miss with ps refused: the LIVE run's worktree is NOT named" "$LIVE" "$OUT12P"
@@ -844,7 +845,7 @@ nk "S3e and the CURRENT file is not named out-of-scope" "$(printf 'INFO\tout-of-
 # distribution whose THEIRS keeps the classifier, and it reaches W1's verdict.
 DIST3="$WORK/dist3"
 mkdir -p "$DIST3/core/scripts"
-g "$DIST3" init -q
+world_git init -q "$DIST3"
 printf 'qqprev\n' > "$DIST3/core/scripts/toy.sh"; seed_cls "$DIST3"
 g "$DIST3" add -A && g "$DIST3" commit -qm prev3
 PREV3="$(g "$DIST3" rev-parse HEAD)"
@@ -1000,7 +1001,7 @@ ov_seed() {
       mkdir -p "$c/src/__pycache__"; printf 'qqtok cached\n' > "$c/src/__pycache__/a.cpython-311.pyc"
       case "$k" in
         sym) ln -s ../a.txt "$c/src/__pycache__/l.pyc" ;;
-        nest) mkdir -p "$c/src/__pycache__/sub"; g "$c/src/__pycache__/sub" init -q; printf 'qqtok nested\n' > "$c/src/__pycache__/sub/n.txt" ;;
+        nest) mkdir -p "$c/src/__pycache__/sub"; world_git init -q "$c/src/__pycache__/sub"; printf 'qqtok nested\n' > "$c/src/__pycache__/sub/n.txt" ;;
       esac ;;
     root:tracked|root:after|noop:tracked|noop:after) : ;;
     noop:fences)
@@ -1030,7 +1031,7 @@ psf() { case "$1" in long) printf '_bmad-output/%s/story.md' "$P_LONGDIR" ;; *) 
 build_ov() {
   local c="$1" t="$2" k="$3"
   mkdir -p "$c/scripts/ai-dlc" "$c/.claude" "$c/_bmad-output"
-  g "$c" init -q
+  world_git init -q "$c"
   cp "$VALIDATOR" "$c/scripts/ai-dlc/validate-artifact-derivations.sh"
   # the scope classifier as the installer places it: --record-owed classifies each row it records with it
   mkdir -p "$c/.claude/schemas"
@@ -1198,10 +1199,9 @@ pw() {
   (cd "$cwd" || exit 2
    [ -z "$cap" ] || { AI_DLC_DD_OVERLAY_CAP="$cap"; export AI_DLC_DD_OVERLAY_CAP; }
    export TMPDIR="$td"
-   # the nots copy is sourced here, inside this run's subshell, so its dd_main replaces the loaded one for this run only
-   fx_inproc "$DDS"
-   [ "$w" != nots ] || . "$P_NOTS/derivation-differential.sh" || exit 2
-   dd_main "$(cat "$d/.D")" "$(cat "$d/.B")" "$cons" "$(cat "$d/.T")" "$@") > "$o.out" 2>&1
+   # the nots copy is the path inproc_run sources inside this run's subshell, so its dd_main replaces the loaded one for this run only
+   _dd_s="$DDS"; [ "$w" != nots ] || _dd_s="$P_NOTS/derivation-differential.sh"
+   inproc_run "$_dd_s" dd_main "$(cat "$d/.D")" "$(cat "$d/.B")" "$cons" "$(cat "$d/.T")" "$@") > "$o.out" 2>&1
   echo "$?" > "$o.rc"
   # what this run left in its TMPDIR, and how many worktrees its consumer lists, read right after it (Pi_two)
   find "$td" -mindepth 1 2>/dev/null | awk 'END { print NR + 0 }' > "$o.tmpleft"

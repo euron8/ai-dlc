@@ -73,6 +73,7 @@
 # INSTALL: wired by templates/settings.json.template (SubagentStop); upserted by
 #   reconcile/settings-merge.sh on pull.
 
+sap_main() {
 set -u
 
 command -v jq >/dev/null 2>&1 || exit 0
@@ -518,3 +519,6 @@ jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   >> "$OUT" 2>/dev/null || true
 
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+sap_main "$@"

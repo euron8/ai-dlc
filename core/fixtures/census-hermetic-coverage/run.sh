@@ -45,6 +45,9 @@
 #   incomplete s-selfkill leaves its root; the summary names it by path and counts it, and it is on disk.
 # STORE: the census leaves $HOME/.cache/ai-dlc/verdicts empty and every hermetic pass prints the runner's store-OFF line;
 #   control: hermetic-run run directly with AI_DLC_VERDICT_STORE naming that HOME's store writes there.
+# IN PROCESS: every census run is census_main through inproc_run, its pool workers answered by pair-worker.sh (THE
+#   IN-PROCESS DRIVE, below). The CLI runs left are the three cli cells of cells.decl, one per exit code, each compared
+#   byte for byte with the in-process run over the same input (eqv).
 # Exit: 0 = every assertion holds, 1 = an assertion failed, 2 = the fixture could not run.
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 set -uo pipefail
@@ -92,7 +95,27 @@ done
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+inproc_load "$CENSUS" || { echo "FIXTURE BROKEN: $CENSUS is not loadable (no census_main behind its source guard)" >&2; exit 2; }
 echo "census-hermetic-coverage:"
+
+# THE IN-PROCESS DRIVE. Every census run below is census_main through inproc_run. Its pool still starts one
+# `bash <census> --pair <i> <fx>` per listed fixture through xargs, a separate process the subshell cannot hold; with
+# $SHIM first on the PATH that `bash` is a bash shim (its shebang the real bash, by absolute path) that answers exactly
+# that argv shape by sourcing pair-worker.sh, which sources the census and calls census_main (one fx_inproc pass), and
+# passes every other `bash` (the hermetic pass's runner start) through to the real one by exec. The plain side's
+# `env -i` PATH holds no shim. The cli cells run without the shim, so their pool workers are real census starts (the
+# nested row).
+CHC_REAL_BASH="$(command -v bash)" || { echo "FIXTURE ERROR: no bash on PATH" >&2; exit 2; }
+case "$CHC_REAL_BASH" in /*) ;; *) echo "FIXTURE ERROR: bash resolves to '$CHC_REAL_BASH', not an absolute path" >&2; exit 2 ;; esac
+CHC_CENSUS="$CENSUS"; CHC_WORKER="$HERE/pair-worker.sh"
+[ -f "$CHC_WORKER" ] || { echo "FIXTURE ERROR: $CHC_WORKER is absent" >&2; exit 2; }
+export CHC_REAL_BASH CHC_CENSUS CHC_WORKER
+SHIM="$WORK/shim"; mkdir -p "$SHIM" || exit 2
+printf '%s\n' "#!$CHC_REAL_BASH" \
+  'if [ "$#" -eq 4 ] && [ "$1" = "$CHC_CENSUS" ] && [ "$2" = --pair ]; then . "$CHC_WORKER" "$@"; exit; fi' \
+  'exec "$CHC_REAL_BASH" "$@"' > "$SHIM/bash" && chmod +x "$SHIM/bash" || exit 2
 
 # --- worlds -------------------------------------------------------------------------------------
 XD="$WORK/xp"; mkdir -p "$XD" && printf '#!/bin/bash\necho farm-ran\n' > "$XD/b223tool" && chmod +x "$XD/b223tool" || exit 2
@@ -214,11 +237,41 @@ commit_world "$WB"
 C_RC=0; C_ERR=""; C_TSV=""; C_N=0
 # C_KEEP and C_SCR are read by every call: --keep or nothing, and the --scratch base.
 C_KEEP=--keep; C_SCR="$SCR/keep"
-# census <script> <world> <list> <jobs>: sets C_RC, C_ERR (stderr text), C_TSV (the --out file)
+# census <world> <list> <jobs>: one in-process run; sets C_RC, C_ERR (stderr text), C_TSV (the --out file)
 census() {
   C_N=$((C_N + 1)); C_TSV="$WORK/c$C_N.tsv"; mkdir -p "$WORK/cw$C_N" "$WORK/home$C_N"
-  C_ERR="$(cd "$2" && HOME="$WORK/home$C_N" bash "$1" --root "$2" --list "$3" --jobs "$4" --work "$WORK/cw$C_N" --scratch "$C_SCR" $C_KEEP --out "$C_TSV" 2>&1 >/dev/null)"; C_RC=$?
+  C_ERR="$(cd "$1" && HOME="$WORK/home$C_N" PATH="$SHIM:$PATH" inproc_run "$CENSUS" census_main --root "$1" --list "$2" --jobs "$3" --work "$WORK/cw$C_N" --scratch "$C_SCR" $C_KEEP --out "$C_TSV" 2>&1 >/dev/null)"; C_RC=$?
   [ -f "$C_TSV" ] || : > "$C_TSV"
+}
+# THE CLI CELLS, one per distinct CLI outcome (exit 0, 1, 2). eqv <cell> <world> <list> <jobs> runs the census as
+# `FXCELL=<cell> bash <census>` and in process over the same input, with no --keep and no --out so stdout carries the
+# TSV, and compares stdout, stderr and exit byte for byte after ONE substitution: each side's own mktemp'd work dir,
+# read off its `work dir` line, becomes <WORK>. It then sets C_RC, C_ERR and C_TSV from the in-process side, so the
+# arms after it read the in-process answer.
+eqv() {
+  local cell="$1" w s side
+  C_N=$((C_N + 1)); mkdir -p "$WORK/cw$C_N" "$WORK/home$C_N"
+  ( cd "$2" && HOME="$WORK/home$C_N" FXCELL="$cell" bash "$CENSUS" --root "$2" --list "$3" --jobs "$4" --work "$WORK/cw$C_N" --scratch "$C_SCR" ) \
+    > "$WORK/e$C_N.cli.out" 2> "$WORK/e$C_N.cli.err" < /dev/null; echo "$?" > "$WORK/e$C_N.cli.rc"
+  ( cd "$2" && HOME="$WORK/home$C_N" PATH="$SHIM:$PATH" inproc_run "$CENSUS" census_main --root "$2" --list "$3" --jobs "$4" --work "$WORK/cw$C_N" --scratch "$C_SCR" ) \
+    > "$WORK/e$C_N.ip.out" 2> "$WORK/e$C_N.ip.err" < /dev/null; echo "$?" > "$WORK/e$C_N.ip.rc"
+  for side in cli ip; do
+    w="$(sed -n 's/^census-hermetic-coverage: root .* work dir //p' "$WORK/e$C_N.$side.err" | head -1)"
+    for s in out err; do
+      if [ -n "$w" ]; then
+        awk -v w="$w" '{ while ((i = index($0, w)) > 0) $0 = substr($0, 1, i - 1) "<WORK>" substr($0, i + length(w)); print }' \
+          "$WORK/e$C_N.$side.$s" > "$WORK/e$C_N.$side.$s.n"
+      else cp "$WORK/e$C_N.$side.$s" "$WORK/e$C_N.$side.$s.n"; fi
+    done
+  done
+  if cmp -s "$WORK/e$C_N.cli.out.n" "$WORK/e$C_N.ip.out.n" && cmp -s "$WORK/e$C_N.cli.err.n" "$WORK/e$C_N.ip.err.n" \
+     && cmp -s "$WORK/e$C_N.cli.rc" "$WORK/e$C_N.ip.rc"; then
+    ok "eqv $cell: the CLI and in-process census agree byte for byte (stdout, stderr, exit $(cat "$WORK/e$C_N.ip.rc"))"
+  else
+    bad "eqv $cell: the CLI and in-process census differ (exit $(cat "$WORK/e$C_N.cli.rc") vs $(cat "$WORK/e$C_N.ip.rc"))"
+    diff "$WORK/e$C_N.cli.err.n" "$WORK/e$C_N.ip.err.n" | head -10 >&2; diff "$WORK/e$C_N.cli.out.n" "$WORK/e$C_N.ip.out.n" | head -10 >&2
+  fi
+  C_RC="$(cat "$WORK/e$C_N.ip.rc")"; C_ERR="$(cat "$WORK/e$C_N.ip.err")"; C_TSV="$WORK/e$C_N.ip.out"
 }
 chc_count() { find "$1" -mindepth 1 -maxdepth 1 -name 'chc.??????' | wc -l | tr -d ' '; } # <scratch base>
 cell() { awk -F'\t' -v f="$1" -v c="$2" '$1 == f { print $c; exit }' "$C_TSV"; } # <fixture> <column>
@@ -229,7 +282,7 @@ has() { if grep -qF -- "$3" <<<"$2"; then ok "$1"; else bad "$1 (absent: $3)"; f
 # --- control: the census over world A ---------------------------------------------------
 rm -f "$WORK/flaky.count"
 PROBE_OK='self-probe: ok (21 cases)'
-census "$CENSUS" "$WA" "s-quiet s-skip s-digit s-silent s-low s-absent s-flaky s-bothfail s-rc2 s-volatile s-mixed s-repeat s-flicker s-overlap s-pathlen" 3
+census "$WA" "s-quiet s-skip s-digit s-silent s-low s-absent s-flaky s-bothfail s-rc2 s-volatile s-mixed s-repeat s-flicker s-overlap s-pathlen" 3
 if ! grep -qF "$PROBE_OK" <<<"$C_ERR" || [ "$(cell s-quiet 2)" != EQUAL ]; then
   echo "FIXTURE BROKEN: the census did not run cleanly over world A (rc=$C_RC); no verdict below would mean anything" >&2
   printf '%s\n' "$C_ERR" | head -20 >&2; cat "$C_TSV" >&2
@@ -286,28 +339,32 @@ np="$(find "$SCR/keep" -name h.raw -type f -exec grep -lE ': rc=0 sandbox_files=
 no="$(find "$SCR/keep" -name h.raw -type f -exec grep -lF 'verdict store OFF: an unarmed distribution run' {} + 2>/dev/null | wc -l | tr -d ' ')"
 if [ "$np" -gt 0 ] && [ "$no" = "$np" ]; then ok "store: every hermetic pass ($np) printed the runner's unarmed-distribution store-OFF line"; else bad "store: $no of $np hermetic passes printed the store-OFF line, so the empty HOME proves nothing"; fi
 mkdir -p "$WORK/home-direct"
+# End to end by design: this start is the world's COPY of hermetic-run.sh, no subject of this fixture, and the property
+# is the runner writing a store named by its environment as a program of its own, as the census starts it.
 ( cd "$WA" && HOME="$WORK/home-direct" AI_DLC_VERDICT_STORE="$WORK/home-direct/.cache/ai-dlc/verdicts" bash "$WA/core/scripts/hermetic-run.sh" --root "$WA" s-low ) >/dev/null 2>&1
 n="$(find "$WORK/home-direct/.cache/ai-dlc/verdicts" -type f 2>/dev/null | wc -l | tr -d ' ')"
 if [ "$n" -gt 0 ]; then ok "store control: a direct hermetic-run naming the HOME store writes under HOME"; else bad "store control: a direct hermetic-run naming the HOME store wrote nothing under HOME, so the store arm cannot fire"; fi
 
 # --- world B: a plain run that changes the root's git state stops the census ----------------------
-census "$CENSUS" "$WB" "s-dirty s-after" 1
+census "$WB" "s-dirty s-after" 1
 eq "gitstate: the census exits 2" "$C_RC" 2
 eq "gitstate: s-dirty reads REFUSED" "$(vd s-dirty)" "REFUSED -"
 eq "gitstate: s-dirty's note names the status snapshot" "$(cell s-dirty 12)" "gitstate:status"
 eq "gitstate: s-after, behind it, reads NOT-RUN" "$(cell s-after 2)" "NOT-RUN"
 
-census "$CENSUS" "$WA" "s-rc2 s-absent" 2
+census "$WA" "s-rc2 s-absent" 2
 has "split control: the summary splits fixture-rc-2 from a runner refusal" "$C_ERR" "REFUSED=1 fixture-rc-2=1"
 
 # Exit test: EQUIVALENT passes the census, BOTH-FAIL fails it. Each control is one verdict apart from EQUAL.
-census "$CENSUS" "$WA" "s-bothfail" 1
+eqv cli-mismatch "$WA" "s-bothfail" 1
 eq "exit: a census holding a BOTH-FAIL row exits 1" "$C_RC/$(cell s-bothfail 2)" "1/BOTH-FAIL"
 
 # --- the scratch root: links, cleanup, and the marker walk ------------------------------------------
 # A non-keep run removes every physical chc.* root it made. s-volatile is re-paired, so it makes two.
 C_KEEP=""; C_SCR="$SCR/nokeep"
-census "$CENSUS" "$WA" "s-quiet s-volatile" 2
+eqv cli-pass "$WA" "s-low" 1
+eq "exit: a census whose only row is LOW-RES exits 0" "$C_RC/$(cell s-low 2)" "0/LOW-RES"
+census "$WA" "s-quiet s-volatile" 2
 eq "cleanup: a non-keep run exits 0 and leaves no chc.* root under the scratch base" "$C_RC/$(chc_count "$SCR/nokeep")" "0/0"
 eq "exit: a census whose only non-EQUAL row is EQUIVALENT exits 0" "$C_RC/$(cell s-volatile 2)" "0/EQUIVALENT"
 n="$(chc_count "$SCR/keep")"
@@ -317,14 +374,14 @@ C_KEEP=--keep
 # Preflight: a marker above the scratch base refuses the census before any fixture runs.
 mkdir -p "$SCR/pre/.claude" || exit 2
 C_SCR="$SCR/pre/base"
-census "$CENSUS" "$WA" "s-low" 1
+eqv cli-refuse "$WA" "s-low" 1
 eq "walk: a .claude above the scratch base refuses the census (exit 2)" "$C_RC" 2
 has "walk: the refusal names the marker" "$C_ERR" "has a project marker above it ($SCR/pre/.claude)"
 eq "walk: no fixture ran" "$(cell s-low 2)" ""
 
 # End walk: s-marker writes a .claude above the scratch base during its own run; s-low beside it is the control.
 C_SCR="$SCR/mark"
-census "$CENSUS" "$WA" "s-low s-marker" 1
+census "$WA" "s-low s-marker" 1
 eq "walk: a marker appearing during the run fails the census (exit 2)" "$C_RC" 2
 has "walk: the end-of-run walk names it" "$C_ERR" "a project marker appeared above the scratch base during the run ($SCR/mark/.claude)"
 eq "walk: the rows still read (s-marker EQUAL)" "$(vd s-marker)" "EQUAL -"
@@ -332,7 +389,7 @@ eq "walk: the rows still read (s-marker EQUAL)" "$(vd s-marker)" "EQUAL -"
 # Incomplete run: s-selfkill kills its own worker on the plain side, so no row is written and the worker's
 # cleanup never runs. The summary must name the physical root it left, by path, and count it.
 mkdir -p "$SCR/inc" || exit 2; C_SCR="$SCR/inc"; C_KEEP=""
-census "$CENSUS" "$WA" "s-selfkill" 1
+census "$WA" "s-selfkill" 1
 has "incomplete: the run reports itself incomplete, naming s-selfkill" "$C_ERR" "the run is incomplete"
 has "incomplete: no row for s-selfkill" "$C_ERR" "no row for: s-selfkill"
 eq "incomplete: one chc.* root is left on disk" "$(chc_count "$SCR/inc")" 1

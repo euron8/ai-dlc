@@ -246,7 +246,7 @@ say_unwritten() {  # $1 = why; exit 2 (header: EXIT SEMANTICS)
   {
     printf 'AI/DLC in-flight row NOT written for dispatch %s. The dispatch ran and the agent is running: do NOT re-dispatch it.\n' "$CELL"
     printf 'Why: %s\n' "$1"
-    printf 'Write the row with this one call:\n'
+    printf 'Fold this op into your next snapshot-update.sh call, as one call with ops in order (snapshot-update.sh [--snapshot <path>] <op> [<op> ...]):\n'
     case "$1" in
       # --row-add refuses an existing row that carries this id with different cells, and a repeat of it loops.
       *--row-replace*) printf "  bash %s --row-replace <agent: the first word of the existing row> '%s | %s | %s | %s | %s'\n" "$SU_SHOW" "$CELL" "$ROLE" "${DL:-<deliverable path>}" "${TS:-<wait-for-deliverable.sh --dispatch-ts $TUI>}" "$STATUS" ;;

@@ -4,3 +4,6 @@
 !core/hooks/ai-dlc-subagent-probe.sh
 !core/hooks/ai-dlc-usage-tokens.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

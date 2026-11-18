@@ -1,0 +1,7 @@
+# spec-join-integrity's starts of core/scripts/validate-spec-join.sh (BL-879 grammar). Every other drive is in process:
+# run.sh's cap(), discriminates(), run_metered(), p_want/p_says (the relocated copy) and sj_ident_holds() call
+# inproc_run of vsj_main. One cli cell per distinct CLI outcome (exit 0 PASS, exit 1 an orphan, exit 2 DISARMED), each
+# started as FXCELL=<id> bash "$V" in eq_cell() and compared byte for byte with the in-process call.
+cli core/scripts/validate-spec-join.sh cli-pass
+cli core/scripts/validate-spec-join.sh cli-fail
+cli core/scripts/validate-spec-join.sh cli-disarm

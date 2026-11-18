@@ -110,6 +110,40 @@ cap_probe
 cap_guard >&2 || exit 2
 # CAPCALL-END
 
+# --- THE SUBJECT IS ASKED IN PROCESS (BL-878) -------------------------------------------------------
+# validate-mutation-red.sh is loadable: sourcing it defines vmr_main and returns at its column-0 guard. It is
+# loaded ONCE here (core/fixtures/lib/inproc.sh), and `vmr <validator> <args>` answers what `bash <validator>
+# <args>` prints and exits with, in a subshell made to look like a fresh bash. <validator> is $VALIDATOR, whose
+# loaded definitions are used, or the relocated copy ($CTL_DIR/control.sh), which is sourced inside that run's own
+# subshell, so its `$ ` line (${BASH_SOURCE[0]}) names the copy's path. Each call is one fx_inproc pass (the
+# inproc: row). The validator's EXIT trap and its `exit` end that subshell only, as they end the CLI process.
+#
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped
+# validator, and sourcing a pre-wrap subject would run its whole body in this shell. So the shape is checked
+# first, on its two halves: neither the `vmr_main() {` line nor the column-0 source guard is a subject that
+# predates the wrap, which prints SKIP and exits 0 on a consumer -- never an ok. Exactly one half is a respelled
+# subject this fixture can no longer drive, which FAILS. An unreadable subject is FIXTURE ERROR.
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+vmr_def=0; vmr_guard=0
+grep -q '^vmr_main() {$' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || vmr_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || vmr_guard=1
+if [ "$vmr_def$vmr_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+if [ "$vmr_def" = 0 ]; then echo "   FAIL  $VALIDATOR carries the column-0 source guard but no \`vmr_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "mutation-red-replay: FAIL (1)" >&2; exit 1; fi
+if [ "$vmr_guard" = 0 ]; then echo "   FAIL  $VALIDATOR defines \`vmr_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run vmr_main in this shell" >&2; echo "mutation-red-replay: FAIL (1)" >&2; exit 1; fi
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $HERE" >&2; exit 2; }
+inproc_load "$VALIDATOR" || { echo "FIXTURE BROKEN: sourcing $VALIDATOR defined nothing" >&2; exit 2; }
+declare -F vmr_main >/dev/null || { echo "FIXTURE BROKEN: $VALIDATOR defined no vmr_main when sourced" >&2; exit 2; }
+vmr() { inproc_run "$1" vmr_main "${@:2}"; } # <validator> [args...] -> what `bash <validator> [args...]` gives
+
 MUTATED="value() { printf '99\n'; }"   # a real change to line 2's value
 SUT="$WORK/sut.sh"
 BEFORE="$(cksum < "$SUT")"
@@ -118,13 +152,13 @@ cp "$SUT" "$WORK/sut.orig"
 # replay <validator> <line> <replacement> <test> -> sets $rc and $out
 replay() {
   local v="$1" line="$2" repl="$3" test="$4"
-  out="$(bash "$v" "$SUT" "$line" "$repl" bash "$test" 2>&1)"
+  out="$(vmr "$v" "$SUT" "$line" "$repl" bash "$test" 2>&1)"
   rc=$?
 }
 # vrun <validator> <args...> -> sets $rc and $out (stdout and stderr together)
 vrun() {
   local v="$1"; shift
-  out="$(bash "$v" "$@" 2>&1)"
+  out="$(vmr "$v" "$@" 2>&1)"
   rc=$?
 }
 SH_BROKEN='value() {'                       # does not parse: bash -n fails, the run fails
@@ -373,7 +407,7 @@ arm_s8() {  # skip-gated: baseline skips all, the mutation un-skips a failing te
 }
 arm_s9() {  # -qq suppresses the summary: all-skipped -> 1 with the note on STDOUT (fail open)
   local d; d="$(skworld "s9-$2" "$M_F" "$T_SKIP")"
-  out="$(bash "$1" "$d/m.py" 2 '    return 3' "${PYTEST_QQ[@]}" "$d/test_m.py" 2>/dev/null)"; rc=$?
+  out="$(vmr "$1" "$d/m.py" 2 '    return 3' "${PYTEST_QQ[@]}" "$d/test_m.py" 2>/dev/null)"; rc=$?
   why="exit $rc"
   [ "$rc" -eq 1 ] && grep -q "$SKIP_NOTE_LINE" <<<"$out"
 }
@@ -395,7 +429,7 @@ arm_stub_note() {   # the stub pytest prints no summary: the check stands down a
 # U8 (a UTF-8 locale for s11 and case E) is set by cap_probe, in the call region above.
 arm_s11() { # an all-skipped run whose log carries a non-UTF-8 byte (\xff under -s) -> 2
   local d; d="$(skworld "s11-$2" "$M_F" 'import sys, pytest\nfrom m import f\nsys.stdout.buffer.write(b"\\xff\\n"); sys.stdout.flush()\n@pytest.mark.skip(reason="x")\ndef test_f():\n    assert f() == 2\n')"
-  out="$(LC_ALL="$U8" bash "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" -s "$d/test_m.py" 2>&1)"; rc=$?
+  out="$(LC_ALL="$U8" vmr "$1" "$d/m.py" 2 '    return 3' "${PYTEST[@]}" -s "$d/test_m.py" 2>&1)"; rc=$?
   why="exit $rc"
   [ "$rc" -eq 2 ] && grep -qF 'UNEVALUABLE (no test ran)' <<<"$out"
 }
@@ -410,7 +444,7 @@ rt_join()  { printf '%s\037' "$@"; }
 rt_case() {
   local want="$1" v="$2" o first tl rc; shift 2
   rt_why=""
-  o="$(bash "$v" "$@" 2>/dev/null)"; rc=$?
+  o="$(vmr "$v" "$@" 2>/dev/null)"; rc=$?
   [ "$rc" -eq "$want" ] || rt_why="$rt_why rc=$rc"
   first=""; IFS= read -r first <<<"$o"
   case "$first" in
@@ -430,7 +464,7 @@ rt_case() {
 rt_refusal() {
   local want="$1" v="$2" o rc; shift 2
   rt_why=""
-  o="$(bash "$v" "$@" 2>/dev/null)"; rc=$?
+  o="$(vmr "$v" "$@" 2>/dev/null)"; rc=$?
   [ "$rc" -eq "$want" ] || rt_why="$rt_why rc=$rc"
   if grep -q '^\$ ' <<<"$o"; then rt_why="$rt_why dollar-on-refusal"
   elif [ -n "$o" ]; then rt_why="$rt_why stdout-not-empty"; fi
@@ -484,7 +518,7 @@ HW
 rt_case_e() { # <validator> -> sets $rt_why
   local v="$1" o rc n
   rt_why=""
-  o="$(LC_ALL="$U8" bash "$v" "$SUT" 2 "value() { printf '99\n'; }  # — é" bash "$WORK/disc.sh" 2>/dev/null)"; rc=$?
+  o="$(LC_ALL="$U8" vmr "$v" "$SUT" 2 "value() { printf '99\n'; }  # — é" bash "$WORK/disc.sh" 2>/dev/null)"; rc=$?
   [ "$rc" -eq 0 ] || rt_why="rc=$rc"
   n="$(grep -E '^(\$ |  test:)' <<<"$o" | LC_ALL=C grep -c '[^ -~]')" || n=0
   [ "$n" -eq 0 ] || rt_why="$rt_why non-ascii"
@@ -735,6 +769,68 @@ cp "$VALIDATOR" "$CTL_DIR/control.sh"
 arm_argv_roundtrip "$CTL_DIR/control.sh" copy \
   && ok "arm_argv_roundtrip holds on the validator invoked from \$CTL_DIR, \`\$ \` naming the path as invoked" \
   || bad "arm_argv_roundtrip fails on the validator invoked from \$CTL_DIR ($why) — the \`\$ \` line does not name the path as invoked"
+
+# --- the cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome ------------------------
+# The outcomes are its four exits: 0 PROVEN, 1 UNPROVEN, 2 UNEVALUABLE (a RED baseline, refused before any mutation)
+# and 3 HARD (the restore did not verify). One `FXCELL=<id> bash "$VALIDATOR"` start per outcome, each compared with
+# the in-process call on the same input: stdout, stderr and exit separately, byte for byte. Each cell also asserts its
+# own outcome (a positive conjunct, so two runs that both printed nothing cannot read as equivalent); the PROVEN and
+# UNPROVEN stdout carries the `$ ` line, so the ${BASH_SOURCE[0]} port is held to the CLI's `$0` there. The HARD world
+# destroys itself, so each of its two runs is handed the same fresh world at the same path; its stderr prints the
+# validator's own mktemp backup path, which differs between any two runs, so that one line is compared after the path
+# is replaced by a token, and each run's printed path must hold the pre-mutation bytes.
+EQ="$WORK/eq"; mkdir -p "$EQ/hw"
+cat > "$EQ/hw/test.sh" <<HW
+#!/usr/bin/env bash
+n=\$(cat "$EQ/hw/count")
+n=\$((n + 1))
+printf '%s\n' "\$n" > "$EQ/hw/count"
+[ "\$n" -ge 2 ] && rm -rf "$EQ/hw/hard"
+exit 0
+HW
+eq_hard_seed() { mkdir -p "$EQ/hw/hard" "$EQ/hw/tmp" && cp "$SUT" "$EQ/hw/hard/sut.sh" && printf '0\n' > "$EQ/hw/count"; }
+eqv() { # <cell-id> <validator args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; status 0 when the two answers are byte-identical
+  local id="$1"; shift
+  [ "$id" != cli-hard ] || eq_hard_seed
+  vmr "$VALIDATOR" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  [ "$id" != cli-hard ] || eq_hard_seed
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(awk 'NR == 1' "$EQ/$1.ip.out")" \
+  "$(awk 'NR == 1' "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(awk 'NR == 1' "$EQ/$1.cl.out")" "$(awk 'NR == 1' "$EQ/$1.cl.err")"; }
+eq_dollar() { # <cell-id> <test path>: line 1 of the program's stdout is a `$ ` line naming the validator as invoked
+  local first=""; IFS= read -r first < "$EQ/$1.cl.out"
+  case "$first" in "\$ $VALIDATOR $SUT 2 "*" bash $2") return 0 ;; esac
+  return 1
+}
+if eqv cli-proven "$SUT" 2 "$MUTATED" bash "$WORK/disc.sh" && [ "$(cat "$EQ/cli-proven.cl.rc")" = 0 ] \
+   && grep -q '^PROVEN:' "$EQ/cli-proven.cl.out" && eq_dollar cli-proven "$WORK/disc.sh" && [ "$(cksum < "$SUT")" = "$BEFORE" ]; then
+  ok "cli-proven: the program's PROVEN replay matches the in-process call (stdout with its \`\$ \` line, stderr, exit 0, target restored)"
+else bad "cli-proven: the program and the in-process call differ, or the outcome is not exit 0 PROVEN with a \`\$ \` line naming the validator ($(eq_twin cli-proven))"; fi
+if eqv cli-unproven "$SUT" 2 "$MUTATED" bash "$WORK/nondisc.sh" && [ "$(cat "$EQ/cli-unproven.cl.rc")" = 1 ] \
+   && grep -q 'stayed GREEN under a real mutation' "$EQ/cli-unproven.cl.err" && eq_dollar cli-unproven "$WORK/nondisc.sh"; then
+  ok "cli-unproven: the program's UNPROVEN replay matches the in-process call (stdout with its \`\$ \` line, stderr, exit 1)"
+else bad "cli-unproven: the program and the in-process call differ, or the outcome is not exit 1 UNPROVEN ($(eq_twin cli-unproven))"; fi
+if eqv cli-refuse "$SUT" 2 "$MUTATED" bash "$WORK/red.sh" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] \
+   && grep -q 'not GREEN before the mutation' "$EQ/cli-refuse.cl.err" && [ ! -s "$EQ/cli-refuse.cl.out" ]; then
+  ok "cli-refuse: the program's RED-baseline refusal matches the in-process call (empty stdout, stderr, exit 2)"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 2 with the RED-baseline refusal ($(eq_twin cli-refuse))"; fi
+EQ_BK='s@pre-mutation bytes are at: .*@pre-mutation bytes are at: <BACKUP>@'
+TMPDIR="$EQ/hw/tmp" eqv cli-hard "$EQ/hw/hard/sut.sh" 2 "$MUTATED" bash "$EQ/hw/test.sh"
+eq_hbk_ip="$(sed -n 's@.*pre-mutation bytes are at: @@p' "$EQ/cli-hard.ip.err")"
+eq_hbk_cl="$(sed -n 's@.*pre-mutation bytes are at: @@p' "$EQ/cli-hard.cl.err")"
+if cmp -s "$EQ/cli-hard.ip.out" "$EQ/cli-hard.cl.out" && cmp -s "$EQ/cli-hard.ip.rc" "$EQ/cli-hard.cl.rc" \
+   && [ "$(sed "$EQ_BK" "$EQ/cli-hard.ip.err")" = "$(sed "$EQ_BK" "$EQ/cli-hard.cl.err")" ] \
+   && [ "$(cat "$EQ/cli-hard.cl.rc")" = 3 ] && [ ! -s "$EQ/cli-hard.cl.out" ] && grep -q 'did NOT restore byte-identical' "$EQ/cli-hard.cl.err" \
+   && [ -n "$eq_hbk_ip" ] && [ -n "$eq_hbk_cl" ] && [ "$eq_hbk_ip" != "$eq_hbk_cl" ] \
+   && [ "$(cksum < "$eq_hbk_ip")" = "$BEFORE" ] && [ "$(cksum < "$eq_hbk_cl")" = "$BEFORE" ]; then
+  ok "cli-hard: the program's HARD refusal matches the in-process call (empty stdout, stderr up to its own backup path, exit 3; each backup intact)"
+else bad "cli-hard: the program and the in-process call differ, or the outcome is not exit 3 HARD with an intact backup ($(eq_twin cli-hard))"; fi
+if ! cmp -s "$EQ/cli-proven.cl.rc" "$EQ/cli-unproven.cl.rc" && ! cmp -s "$EQ/cli-unproven.cl.rc" "$EQ/cli-refuse.cl.rc" \
+   && ! cmp -s "$EQ/cli-refuse.cl.rc" "$EQ/cli-hard.cl.rc" && ! cmp -s "$EQ/cli-proven.cl.rc" "$EQ/cli-hard.cl.rc"; then
+  ok "the cli cells are distinct outcomes (exits 0, 1, 2 and 3 differ)"
+else bad "the cli cells do not discriminate: two of them read the same exit"; fi
 
 echo
 report_end mutation-red-replay

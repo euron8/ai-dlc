@@ -58,6 +58,7 @@ trap 'rm -rf "$WORK"' EXIT
 WORK="$(cd "$WORK" && pwd -P)"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 broken() { echo "FIXTURE BROKEN: $1" >&2; exit 2; }
 
 g() { # g <dir> <git args...> -- hermetic identity, no hooks, no signing
@@ -77,7 +78,7 @@ build_main() {
   printf '0.0.0\n' > "$m/VERSION"
   # Tracked, so notes/ exists in every worktree checked out from this commit.
   printf 'notes\n' > "$m/notes/README"
-  g "$m" init -q 2>/dev/null || return 1
+  world_git -C "$m" init -q 2>/dev/null || return 1
   [ -d "$m/.git" ] || return 1
   g "$m" add -A && g "$m" commit -qm base || return 1
 }
@@ -166,7 +167,7 @@ else bad "A3 worktree inside the project dir: expected rc 0 and no output, got r
 # the project root, which is where a file in another repository must still be judged.
 NEST="$MAIN/nested"
 mkdir -p "$NEST/notes" && printf 'alpha\nalpha\n' > "$NEST/data.txt" || broken "mkdir nested"
-g "$NEST" init -q 2>/dev/null && [ -d "$NEST/.git" ] && g "$NEST" add -A && g "$NEST" commit -qm nested \
+world_git -C "$NEST" init -q 2>/dev/null && [ -d "$NEST/.git" ] && g "$NEST" add -A && g "$NEST" commit -qm nested \
   || broken "could not build the nested repository"
 art_one 1 "$NEST/notes/n.md"
 fire "$HOOK" "$MAIN" "$NEST/notes/n.md"
@@ -206,7 +207,7 @@ cp "$SRC_HOOK" "$SUB_PROJ/.claude/hooks/ai-dlc-derivation-capture.sh" || broken 
 cp "$SRC_VALIDATOR" "$SUB_PROJ/scripts/ai-dlc/validate-artifact-derivations.sh" || broken "cp validator (subdir)"
 printf 'alpha\nbeta\n' > "$SUB_PROJ/data.txt"; printf 'notes\n' > "$SUB_PROJ/notes/README"
 printf '0.0.0\n' > "$SUB_PROJ/VERSION"; printf 'alpha\nalpha\n' > "$SUB_REPO/data.txt"
-g "$SUB_REPO" init -q 2>/dev/null && [ -d "$SUB_REPO/.git" ] && g "$SUB_REPO" add -A && g "$SUB_REPO" commit -qm base \
+world_git -C "$SUB_REPO" init -q 2>/dev/null && [ -d "$SUB_REPO/.git" ] && g "$SUB_REPO" add -A && g "$SUB_REPO" commit -qm base \
   || broken "could not build the subdirectory-project repository"
 g "$SUB_REPO" worktree add -q -b story-sub "$SUB_WT" 2>/dev/null && [ -d "$SUB_WT/app/notes" ] \
   || broken "could not add the subdirectory-project worktree"

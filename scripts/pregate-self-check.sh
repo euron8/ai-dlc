@@ -573,11 +573,13 @@ else
   cut -f1 "$W/f/sel" | awk 'FILENAME == ARGV[1] { D[$0] = 1; next } !($0 in D)' "$W/f/done" - > "$W/f/torun"
   f_k="$(awk 'END { print NR }' "$W/f/torun")"
   F_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
+  # The drop runs before the count line, so "to run" excludes undeclared units; its lines print after the selection.
+  drop_undeclared "$W/f" > "$W/f/undeclared"
   printf '   predict-push-set.sh: %s of %s RUN unit(s) reach a changed script (DIR %s, DECLFILE %s, NAME %s); %s already run in section e; %s to run, %s-way\n' \
     "$f_sel" "$f_run" "$(grep -c 'DIR:' "$W/f/sel")" "$(grep -c 'DECLFILE:' "$W/f/sel")" "$(grep -c 'NAME:' "$W/f/sel")" \
-    "$((f_sel - f_k))" "$f_k" "$F_JOBS"
+    "$((f_sel - f_k))" "$((f_k - u_drop))" "$F_JOBS"
   awk -F'\t' '{ printf "     %s  %s\n", $1, $2 }' "$W/f/sel"
-  drop_undeclared "$W/f"
+  while IFS= read -r u_line; do printf '%s\n' "$u_line"; done < "$W/f/undeclared"
   f_why="no RUN unit that reaches a changed script is left to run"
   [ "$u_drop" -eq 0 ] || f_why="every selected unit is undeclared and runs plain in the push"
   seed_set "$W/f" "$F_JOBS" "$((f_k - u_drop))" f:reached-fixtures "$f_why"

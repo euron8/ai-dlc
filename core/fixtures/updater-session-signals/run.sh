@@ -60,6 +60,8 @@ pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; ret
                                "$HERE/../../../core/hooks/ai-dlc-acknowledge.sh")"
 [ -n "$HOOK" ] && [ -f "$HOOK" ] \
   || { echo "FIXTURE ERROR: cannot locate ai-dlc-acknowledge.sh" >&2; exit 2; }
+# Canonical, so every in-process pass is logged under the subject's own path, never a `../..` spelling of it.
+HOOK="$(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required" >&2; exit 2; }
 
@@ -67,18 +69,50 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# IN PROCESS (BL-878). The hook is SOURCED ONCE (its column-0 guard returns after defining ack_main) and every drive
+# is `ack_ip`, which runs ack_main in a subshell with the payload on stdin and a fresh bash's shell options (this
+# shell's `pipefail` would otherwise reach a hook that sets only `-u`). One cli cell per distinct CLI outcome, at the end.
+# NOT lib/inproc.sh (BL-1164): this fixture declares the unguarded bash program ai-dlc-dispatch-guard.sh as a `!`
+# input, and P2 then reads inproc.sh's own source lines (:51, :96) as unrouted drives. So the source is paired with
+# fx_inproc here, without inproc_run's caller-variable reset: the hook assigns every variable it reads before reading
+# it except AGENT_ID, FP, SPRINT_N, HOME and CLAUDE_PROJECT_DIR, which it reads with defaults and this file never sets
+# globally, and the cli twins below are the equivalence evidence.
+[ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE BROKEN: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+# A hook without the wrap would RUN when sourced -- read this shell's stdin and `exit 0` it, a silent green -- so both
+# halves are required before the load: the `ack_main() {` line and the column-0 source guard.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A hook with neither half predates the wrap: SKIP and exit 0 on a consumer,
+# FIXTURE BROKEN in the distribution (lib/layout.sh fx_skip_exit), never an ok. Exactly one half is a respelled hook
+# this fixture cannot drive, which FAILS. An unreadable hook is FIXTURE ERROR.
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+[ -r "$HOOK" ] || { echo "FIXTURE ERROR: cannot read $HOOK -- an unreadable hook is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'ack_main() {' "$HOOK" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: updater-session-signals: $HOOK predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$HOOK carries one half of the in-process wrap (ack_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive"; report_end updater-session-signals; exit 1 ;;
+esac
+fx_inproc "$HOOK"
+. "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK failed" >&2; exit 2; }
+declare -F ack_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no ack_main" >&2; exit 2; }
+ack_ip() { ( set +eufx +o pipefail; hash -r; fx_inproc "$HOOK"; ack_main ); }
 
 # A PAUSED project with a live pipeline and no adversarial series: the tree that reaches
 # Check 3, which is the check under test. The sprint resolves and its slot exists, so
 # Check 2a finds no series and logs nothing -- an UNADJUDICABLE line here would mean this
 # fixture is exercising the divergence guard instead of the pause guard.
+# Built ONCE into $WORK/.pristine and copied per arm (fixture-mutants.md clause 4).
+mkdir -p "$WORK/.pristine/_bmad-output/planning-artifacts/s7" "$WORK/.pristine/scripts/ai-dlc" || { echo "FIXTURE BROKEN: mkdir pristine" >&2; exit 2; }
+: > "$WORK/.pristine/_bmad-output/pipeline-snapshot.md"
+: > "$WORK/.pristine/_bmad-output/pipeline-paused.flag"
+printf '#!/bin/bash\necho 7\n' > "$WORK/.pristine/scripts/ai-dlc/sprint-status.sh"
+chmod +x "$WORK/.pristine/scripts/ai-dlc/sprint-status.sh" || { echo "FIXTURE BROKEN: chmod pristine" >&2; exit 2; }
 seed() {
-  local w="$WORK/$1"; shift
-  mkdir -p "$w/_bmad-output/planning-artifacts/s7" "$w/scripts/ai-dlc"
-  : > "$w/_bmad-output/pipeline-snapshot.md"
-  : > "$w/_bmad-output/pipeline-paused.flag"
-  printf '#!/bin/bash\necho 7\n' > "$w/scripts/ai-dlc/sprint-status.sh"
-  chmod +x "$w/scripts/ai-dlc/sprint-status.sh"
+  local w="$WORK/$1"
+  # A name seeded twice keeps its tree, as the per-arm mkdir -p did: copying into an existing directory would nest it.
+  [ -d "$w" ] || cp -R "$WORK/.pristine" "$w" || { echo "FIXTURE BROKEN: cannot copy the pristine tree to $w" >&2; exit 2; }
   printf '%s' "$w"
 }
 
@@ -168,7 +202,7 @@ drive() { # <work> <tool> <transcript> [skill] [file_path] [agent_id] [subagent_
      '{session_id:"t",transcript_path:$tr,tool_name:$t,tool_input:$ti}
       + (if $ag == "" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)
       + (if $at == "" then {} else {agent_type:$at} end)' \
-    | HOME="$w/.home" CLAUDE_PROJECT_DIR="$w" bash "$HOOK" 2>/dev/null
+    | HOME="$w/.home" CLAUDE_PROJECT_DIR="$w" ack_ip 2>/dev/null
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
 # A DENY THAT IS THE PAUSE's, by value. Check 2z denies the same tools with a different reason, and a
@@ -568,6 +602,38 @@ if grep -q 'ADVERSARIAL_STATE_UNADJUDICABLE' "$W/_bmad-output/pipeline-continuat
   bad "FIXTURE BROKEN: the seed is unadjudicable to Check 2a, so these arms exercised the divergence guard"
 else
   ok "the seed reaches Check 3: no UNADJUDICABLE line, so the pause carve-out is what answered"
+fi
+
+# --- the cli cells (cells.decl): the hook run as a PROGRAM once per distinct CLI outcome ---------------------------
+# The hook exits 0 on every path, so its outcomes here are output classes: Check 3's Rule 29 pause deny on stdout for
+# a routed pipeline lead's Write, and silence for the typed /ai-dlc-update session's same Write. One
+# `FXCELL=<id> bash "$HOOK"` start per outcome, on the same payload as the in-process call and on its own copy of the
+# pristine paused tree: stdout, stderr and exit compared byte for byte, and the continuation log each side leaves,
+# its `## <UTC stamp>` heading normalised (the one wall-clock field). Each cell also asserts its own outcome.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE BROKEN: mkdir $EQ" >&2; exit 2; }
+eqv() { # <cell-id> <transcript> -> $EQ/<id>.{ip,cl}.{out,err,rc,log}; 0 when the two agree byte for byte
+  local id="$1" s w
+  jq -nc --arg tr "$2" '{session_id:"t",transcript_path:$tr,tool_name:"Write",tool_input:{file_path:"/w/_bmad-output/planning-artifacts/s7/x.md"}}' > "$EQ/$id.in"
+  for s in ip cl; do
+    w="$EQ/$id.$s.tree"; cp -R "$WORK/.pristine" "$w" || return 1
+    if [ "$s" = ip ]; then HOME="$w/.home" CLAUDE_PROJECT_DIR="$w" ack_ip < "$EQ/$id.in" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    else HOME="$w/.home" CLAUDE_PROJECT_DIR="$w" FXCELL="$id" bash "$HOOK" < "$EQ/$id.in" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"; fi
+    sed -E 's/^## [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z /## <ts> /' "$w/_bmad-output/pipeline-continuation-log.md" > "$EQ/$id.$s.log" 2>/dev/null || : > "$EQ/$id.$s.log"
+  done
+  for s in out err rc log; do cmp -s "$EQ/$id.ip.$s" "$EQ/$id.cl.$s" || return 1; done
+}
+eq_twin() { local s o=""; for s in out err rc log; do o="$o $s=$(wc -c < "$EQ/$1.ip.$s" | tr -d ' ')/$(wc -c < "$EQ/$1.cl.$s" | tr -d ' ')B"; done; printf 'in-process/program%s' "$o"; }
+if eqv cli-deny "$TR_PIPE_ROUTED" && [ "$(cat "$EQ/cli-deny.cl.rc")" = 0 ] && paused_deny "$(cat "$EQ/cli-deny.cl.out")" \
+   && grep -q -- '-- ACK_DENIED$' "$EQ/cli-deny.cl.log"; then
+  ok "cli-deny: the program pause-denies the pipeline lead's Write and logs ACK_DENIED exactly as the in-process call does"
+else
+  bad "cli-deny: the program and the in-process call differ, or the outcome is not the Rule 29 deny ($(eq_twin cli-deny))"
+fi
+if eqv cli-allow "$TR_TYPED" && [ "$(cat "$EQ/cli-allow.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-allow.cl.out" ] \
+   && ! grep -q 'ACK_DENIED' "$EQ/cli-allow.cl.log"; then
+  ok "cli-allow: the program allows the updater session's Write in silence, as the in-process call does"
+else
+  bad "cli-allow: the program and the in-process call differ, or the updater's Write was not allowed in silence ($(eq_twin cli-allow))"
 fi
 
 echo

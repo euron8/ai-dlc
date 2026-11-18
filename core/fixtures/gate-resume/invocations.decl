@@ -1,8 +1,13 @@
-# Set from one counted run (scripts/seed-verdict-store.sh) after the batteries were removed; every row is exact.
-# Re-measured for BL-1032 from one counted seed-verdict-store.sh run, 308 -> 309 (+1): world forced-statedir runs the real chain under AI_DLC_STATE_DIR and gains one more start.
-309 *
+# Set from one counted run (scripts/seed-verdict-store.sh) on the converted tree (BL-878); every row is exact.
+# Subject starts are the cells of cells.decl: 2 cli and 1 e2e (--self-probe) per subject, plus the self-probes'
+# own child starts, which the nested rows cover (gate-slice.sh 3, gate-checkpoint.sh 65). Every other drive of the
+# two subjects is in process, one inproc: pass each. The hooks run end to end from world copies under .claude/hooks/,
+# which are no start of a declared core/hooks/ path.
+236 *
 0 core/hooks/ai-dlc-recover.sh
 0 core/hooks/ai-dlc-handoff-entry.sh
 0 core/hooks/ai-dlc-recover-gate.sh
-116 core/scripts/gate-checkpoint.sh
-18 core/scripts/gate-slice.sh
+68 core/scripts/gate-checkpoint.sh
+6 core/scripts/gate-slice.sh
+68 inproc:core/scripts/gate-checkpoint.sh
+17 inproc:core/scripts/gate-slice.sh

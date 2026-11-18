@@ -14,3 +14,4 @@ mv
 rm
 sed
 tr
+env

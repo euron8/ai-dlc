@@ -40,6 +40,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
   || { echo "REFUSED: usage: bash receipt-bl843.sh <path to validate-handoff-evidence.sh> [<cells>]" >&2; exit 9; }
 HE="$1"; CELLS="${2:-}"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/world.sh" || { echo "REFUSED: lib/world.sh is not beside this receipt's fixtures" >&2; exit 9; }
 want() { [ -z "$CELLS" ] && return 0; case " ctl $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
 # ran <cell>: printed inside each want-gated block, once per cell whose assertion that block evaluates.
 ran() { echo "RAN $1"; }
@@ -53,7 +54,7 @@ else
   trap 'rm -rf "$R"' EXIT
 fi
 W="$R/w"; W2="$R/w2"
-gw() { local d="$1"; shift; GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$d" -c user.name=r -c user.email=r@example.invalid \
+gw() { local d="$1"; shift; GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$d" -c user.name=r -c user.email=r@example.invalid \
   -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 LABELS='Dependency setup: none, system pytest.'
 hdr() { printf -- '---\nstatus: review\n---\n# %s\n\n%s\n' "$1" "$LABELS"; }

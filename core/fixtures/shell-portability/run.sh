@@ -95,6 +95,16 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 note() { printf '%s\n' "$*"; }
 # shellcheck source=/dev/null
 . "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# IN PROCESS (BL-878). The validator is loaded ONCE (its column-0 source guard returns after defining vsp_main), and
+# every world's answer is lib/inproc.sh's inproc_run of vsp_main from that world's own COPY: the validator resolves
+# its root by walking up from BASH_SOURCE, so each world sources the copy `seed` put in its scripts/, by the same
+# relative path the program run used. The only program runs left are the three cli cells below (cells.decl).
+# shellcheck source=/dev/null
+. "$DIR/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$VALIDATOR" || { echo "FIXTURE BROKEN: inproc_load of $VALIDATOR defined no function" >&2; exit 2; }
+declare -F vsp_main >/dev/null 2>&1 || { echo "FIXTURE BROKEN: $VALIDATOR defines no vsp_main" >&2; exit 2; }
+# vsp <world> [args...] -> the validator's stdout, stderr and status for that world, in process (stdin /dev/null).
+vsp() { local d="$1"; shift; ( cd "$d" && inproc_run scripts/validate-shell-portability.sh vsp_main "$@" </dev/null ); }
 PRE_DIR="$TMP/pre"; mkdir -p "$PRE_DIR"
 
 
@@ -172,7 +182,7 @@ mw_txt() { # mw_txt <name> <relpath> <line...>   (the lines only, no shebang)
 # an empty file list grep reads STDIN -- so a subject whose corpus is empty blocks forever
 # instead of reporting. Under the suite's 16-way pool stdin is a live descriptor, so the hang is
 # real there and invisible in an interactive run, which happens to get EOF.
-run_v() { ( cd "$1" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null ); }
+run_v() { vsp "$1" 2>&1; }
 # The validator's output over a solo world, run ONCE per distinct world and cached on disk.
 pre_out() { # pre_out <dir>
   local f
@@ -286,7 +296,9 @@ else
 awk '{ sub(/[[:space:]]*[—–-][[:space:]].*$/, "", s) }' f
   cid="$(printf '%s' "$h" | sed -E 's/[[:space:]]*[.—]$//')"
 X7EOF
-  x7_out="$( cd "$TMP/x7" && LC_ALL="$UTF8_LOCALE" LANG="$UTF8_LOCALE" bash scripts/validate-shell-portability.sh 2>&1 </dev/null )"
+  # The caller's locale reaches the in-process run as it reaches a child: exported prefix assignments, which
+  # inproc_run keeps.
+  x7_out="$( export LC_ALL="$UTF8_LOCALE" LANG="$UTF8_LOCALE"; vsp "$TMP/x7" 2>&1 )"
   if grep -q "^FAIL: S10:" <<<"$x7_out"; then
     ok "x7 S10 multibyte class is reported as a corpus finding under $UTF8_LOCALE"
   else
@@ -299,7 +311,7 @@ fi
 # the rest of its file list at an unopenable one, so a tracked file deleted from the worktree
 # made S12 and S13 report PASS over a partial corpus. Control first: the same tree, file present,
 # PASSES -- so the refusal below is the deletion and not the seed.
-r1_run() { ( cd "$1" && bash scripts/validate-shell-portability.sh 2>&1 </dev/null; echo "rc=$?" ); }
+r1_run() { vsp "$1" 2>&1; echo "rc=$?"; }
 seed "$TMP/r1"
 printf '%s\n' '#!/usr/bin/env bash' 'echo listed' > "$TMP/r1/scripts/a0.sh"
 ( cd "$TMP/r1" && git add -A >/dev/null 2>&1 )
@@ -320,6 +332,33 @@ if [ "$r1_ok" -ne 1 ]; then
 else
   ok "r1 unopenable listed file -- refused rc 2 naming S12, S13 and S14 (control PASS rc 0)"
 fi
+
+# --- The cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome -----------------------
+# Exit 0 PASS over the clean control world (cli-pass), exit 1 FAIL over m8's emptied shell corpus (cli-fail), exit 2
+# REFUSED over r1's unopenable file (cli-refused). Each `FXCELL=<id> bash` start, from the world's root by the same
+# relative path the in-process call sources, is compared with that call on the same world: stdout, stderr and exit
+# separately, byte for byte. Each cell also asserts its own exit code and a line of the output, so two runs that both
+# printed nothing cannot read as equivalent.
+EQ="$TMP/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # <cell-id> <world> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the three pairs are byte-identical
+  vsp "$2" > "$EQ/$1.ip.out" 2> "$EQ/$1.ip.err"; echo "$?" > "$EQ/$1.ip.rc"
+  ( cd "$2" && FXCELL="$1" bash scripts/validate-shell-portability.sh > "$EQ/$1.cl.out" 2> "$EQ/$1.cl.err" </dev/null
+    echo "$?" > "$EQ/$1.cl.rc" )
+  cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.err" "$EQ/$1.cl.err" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -1 "$EQ/$1.ip.out")" "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+if eqv cli-pass "$TMP/control" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] \
+   && grep -q '^validate-shell-portability: PASS' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: the program passes the clean world exactly as the in-process call does (stdout, stderr, exit 0)"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with its PASS line ($(eq_twin cli-pass))"; fi
+if eqv cli-fail "$TMP/m8" && [ "$(cat "$EQ/cli-fail.cl.rc")" = 1 ] && refused_for "$(cat "$EQ/cli-fail.cl.err")" SHELL; then
+  ok "cli-fail: the program fails closed on the emptied SHELL corpus exactly as the in-process call does (exit 1)"
+else bad "cli-fail: the program and the in-process call differ, or the outcome is not exit 1 naming the SHELL corpus ($(eq_twin cli-fail))"; fi
+if eqv cli-refused "$TMP/r1" && [ "$(cat "$EQ/cli-refused.cl.rc")" = 2 ] \
+   && grep -q '^validate-shell-portability: REFUSED' "$EQ/cli-refused.cl.err"; then
+  ok "cli-refused: the program refuses the unopenable file exactly as the in-process call does (exit 2)"
+else bad "cli-refused: the program and the in-process call differ, or the outcome is not exit 2 with its REFUSED line ($(eq_twin cli-refused))"; fi
 
 # --- THE MERGED WORLD: every seed its own file, one validator run ---------------------------
 seed "$MW"

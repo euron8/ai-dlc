@@ -5,6 +5,7 @@ cat
 cmp
 cp
 dirname
+env
 git
 grep
 head

@@ -41,6 +41,7 @@
 #
 # Usage: validate-shell-portability.sh [--quiet]
 # Exit:  0 = clean, 1 = at least one finding, 2 = usage/environment.
+vsp_main() {
 set -uo pipefail
 export LC_ALL=C
 
@@ -48,14 +49,14 @@ QUIET=0
 case "${1:-}" in
   "") : ;;
   --quiet) QUIET=1 ;;
-  *) echo "usage: $(basename "$0") [--quiet]" >&2; exit 2 ;;
+  *) echo "usage: $(basename "${BASH_SOURCE[0]}") [--quiet]" >&2; exit 2 ;;
 esac
 
 # Walk UP for the marker, never count `..` hops, so this answers identically from the repo
 # root, from a subdirectory, and from a fixture sandbox that copied it.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/VERSION" ]; do ROOT="$(dirname "$ROOT")"; done
-[ -f "$ROOT/VERSION" ] || { echo "validate-shell-portability: no VERSION marker above $0" >&2; exit 2; }
+[ -f "$ROOT/VERSION" ] || { echo "validate-shell-portability: no VERSION marker above ${BASH_SOURCE[0]}" >&2; exit 2; }
 cd "$ROOT" || exit 2
 
 fail=0
@@ -201,7 +202,7 @@ S9_WHY="\`\\b\` or \`\\s\` in a \`git grep -E\` expression. git's ERE is not thi
 #      its `=`, and a raw-string continuation line carries no context token at all), so a
 #      `r"…"` alternative here was structurally unreachable and is not kept. What the SKIP
 #      reaches is one shape: a SHELL regex tool editing or quoting a python line, which this
-#      corpus's own fixtures do (`check-3b-locked-anchor/run.sh:292`). It keys on any `re.<fn>(`
+#      corpus's own fixtures do (`layer-debt-ledger/run.sh:445`). It keys on any `re.<fn>(`
 #      call rather than `re.compile(` alone, because a `re.sub(r"…[—]…")` on such a line is the
 #      same program and would otherwise be reported. The fixture's x6 empties it and proves it
 #      load-bearing on exactly that shape.
@@ -233,7 +234,7 @@ S8_WHY="a git rev-path in shipped instruction text whose ref placeholder is not 
 # THE CORPUS IS `doc` -- `core/*` MINUS `*.sh` -- AND THAT SUBTRACTION IS THE WHOLE NARROWING.
 # Measured over `git ls-files 'core/*'` minus this validator's own battery: 37 lines in `.sh`
 # files carry this pattern (39 with the battery's two comment lines), every one of them in a
-# bash script where the form works -- fixture seeds and `reconcile/emit-report.sh:726` -- and
+# bash script where the form works -- fixture seeds and `reconcile/emit-report.sh:727` -- and
 # 0 lines in the non-`.sh` files. A `.sh` subject is run by bash; a `.md` subject is retyped by a
 # model or an operator into whatever shell they hold, and on this machine that is zsh. The
 # subtraction is a CORPUS rather than a SKIP: a skip keyed on `\.sh:` would subtract every shell
@@ -1455,3 +1456,6 @@ if [ "$fail" -eq 0 ]; then
   say "validate-shell-portability: PASS -- $n_shell shell file(s) + $n_instr core file(s) ($n_doc non-shell) + $n_fixture fixture shell file(s), $n_arms arms (S1 sed -i, S2 mapfile, S3 declare -A, S4 setsid, S5/S6 backslash-s, S7 awk backreference, S8 unquoted rev-path, S8b unbraced \$VAR: rev-path in non-shell text, S9 git-grep ERE escape, S10 multibyte bracket class, S11 unguarded cd in a fixture script, S12 GNU escape reaching [[ =~ ]], S13 command substitution bash 3.2 closes early or misreads, S14 a heredoc-in-\$( ) file /bin/bash 3.2 cannot parse), plus S15 (an unlisted metadata-only test in the pre-suite closure: $s15_nseed seeds, $(s15_col COUNTS 4 "$s15_out") closure files, $(s15_col COUNTS 5 "$s15_out") sites, $s15_rows allowlist rows)."
 fi
 exit "$fail"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vsp_main "$@"

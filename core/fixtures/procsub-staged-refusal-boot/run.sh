@@ -154,6 +154,7 @@ PSB_DONE=0
 trap 'rm -rf "$WORK"; [ -n "$EW" ] && rm -rf "$EW"; [ "$PSB_DONE" = 1 ] || { echo "FIXTURE BROKEN: procsub-staged-refusal-boot stopped before its verdict" >&2; exit 2; }' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/report.sh is absent" >&2; exit 2; }
+. "$HERE/../lib/world.sh" || { echo "FIXTURE BROKEN: core/fixtures/lib/world.sh is absent" >&2; exit 2; }
 # ---------------------------------------------------------------------------- shards ----
 # THIS FILE IS THREE SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
 # BOUNDARY. Every assertion-bearing section below is a UNIT guarded by `if sg <unit>; then ... fi`, or, for
@@ -312,7 +313,7 @@ ap_stub() {
   stub "$1" bash "$REAL_BASH" "*'/$2.sh '*" "$LOGF; echo 'ZZ-PSB-STDERR-$2 forced refusal' >&2; exit 2"
 }
 
-gi() { git -C "$1" -c user.email=f@f -c user.name=fixture -c commit.gpgsign=false "${@:2}"; }
+gi() { world_git -C "$1" -c user.email=f@f -c user.name=fixture -c commit.gpgsign=false "${@:2}"; }
 
 # === WORLD lr: ledger-reverify ====================================================================
 # One core subject that upstream ships and moves (validate-thing.sh), and `aaa-first.md`, which

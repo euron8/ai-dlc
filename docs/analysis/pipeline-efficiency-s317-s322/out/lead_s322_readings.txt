@@ -1,0 +1,26 @@
+# Command (from docs/analysis/pipeline-efficiency-s317-s322/): python3 -I scripts/lead_s322_readings.py ; window 2026-11-09T00:00:00Z to 2026-11-12T14:41:00Z; self-test: python3 -I scripts/lead_s322_readings.py --self-test (exit 0)
+window: files without window 173 with window 14 (of which appended after E, read to E only: 1)
+== (B) read-search by (kind, family): n, strict-duplicate, loose-duplicate, covered, strict-or-covered
+('read', 'delegate') 775 1 10 30 30
+('read', 'mixed') 575 0 0 0 0
+('read', 'none') 45 1 15 0 1
+('read', 'procedure') 1047 1 1 44 44
+('read', 'project') 303 0 0 2 2
+('read', 'state') 406 2 7 17 17
+('search', 'none') 185 0 0 0 0
+GROUP project+mixed+none (read kind): {'n': 923, 'strict': 1, 'loose': 15, 'covered': 2, 'strict_or_covered': 3} control total read-search calls 3336
+== (A) procedure-target touches by class: {'FIRST': 261, 'SAME-EPOCH': 192, 'SAME-EPOCH-NEW-RANGE': 374, 'AFTER-COMPACTION': 244} total 1071
+== (C) text-class active hours by closing-record kind (h, intervals); gap h excluded
+  queue-operation/enqueue      2.001 h 332
+  assistant                    1.355 h 1526
+  queue-operation/remove       0.326 h 213
+  system/stop_hook_summary     0.290 h 774
+  api-request                  0.156 h 720
+  system/compact_boundary      0.125 h 17
+  user/other                   0.051 h 133
+  queue-operation/dequeue      0.019 h 616
+  user/human                   0.018 h 616
+  attachment                   0.017 h 782
+  pr-link                      0.012 h 39
+  system/turn_duration         0.001 h 678
+  total active 4.372 h; gap (>300 s) 1.991 h

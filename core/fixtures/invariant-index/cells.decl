@@ -1,0 +1,7 @@
+# invariant-index's starts of scripts/render-invariant-index.sh (BL-879 grammar). Every other drive is in process:
+# run.sh calls rii_main through inproc_run on each world's renderer copy (drive). One cli cell per distinct CLI
+# outcome (exit 0 in sync on stdout, exit 1 missing index on stderr, exit 2 usage on stderr), each started as
+# FXCELL=<id> bash <copy> in eqv() and compared byte for byte with the in-process drive of the same id.
+cli scripts/render-invariant-index.sh cli-ok
+cli scripts/render-invariant-index.sh cli-missing
+cli scripts/render-invariant-index.sh cli-usage

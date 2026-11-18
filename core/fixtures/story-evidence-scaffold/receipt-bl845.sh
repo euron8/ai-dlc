@@ -84,6 +84,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
   || { echo "REFUSED: usage: bash receipt-bl845.sh <path to validate-handoff-evidence.sh> [<worlds dir> [<cells>]]" >&2; exit 9; }
 HE="$1"; CELLS="${3:-}"
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/world.sh" || { echo "REFUSED: lib/world.sh is not beside this receipt's fixtures" >&2; exit 9; }
 # No <cells>: every cell runs (the `[ -z ] ||` form returned 1 there, so the full call asserted no cell at all).
 want() { [ -z "$CELLS" ] && return 0; case " clean $CELLS " in *" $1 "*) return 0 ;; esac; return 1; }
 # Every gated block and gating helper prints RAN <cell> after its want check; run.sh holds the full call's RAN
@@ -97,7 +98,7 @@ else
   trap 'rm -rf "$R"' EXIT
 fi
 W=""
-g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$W" -c user.name=r -c user.email=r@example.invalid \
+g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$W" -c user.name=r -c user.email=r@example.invalid \
   -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 S320='None. `scripts/test-aws-smoke.sh` asserts no HODL surface (`grep -c -i '"'"'hodl'"'"' scripts/test-aws-smoke.sh` returns 0; the control `grep -c -i '"'"'rebalancer'"'"' scripts/test-aws-smoke.sh` returns 70).'
 # seed <cell> <surface at base | -> <surface at frozen | => <ui|srv|gen> <section body>; the body's lines are
