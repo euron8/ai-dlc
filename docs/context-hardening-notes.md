@@ -1979,3 +1979,28 @@ discards the cycle rather than committing locally, with the reason kept.
 sites, on the reading that a clause the rule needs should not be cut. These six fail the
 clause test: the rule reads the same without the history, so the history belongs here. The
 seven `Measured:` calibrations stay, because the rule reads as arbitrary without them.
+
+## R40 — a misread operator sentence became standing cloud-spawn policy (batch 259)
+
+**The misreading.** At batch 108's close a hand had been spawned in process, and the operator
+said "I want them locally running but remote", meaning a local hand running in the background
+rather than in the lead's own process. It was written down as `isolation: "remote"` on every
+`Agent` spawn, read-only or writing, first in `.claude/rules/plan-shape.md` and the drain plan's
+EVERY HAND paragraph (which explicitly overrode the read-only-hands-need-no-worktree
+distinction), then copied into five more plans. Every later lead read it as policy.
+
+**The ruling (batch 259).** Asked directly, the operator answered "Local, background": hands run
+on this machine as background agents, not in-process; writing hands get worktree isolation,
+read-only hands none; and asked that it be documented so the same confusion is not reintroduced.
+The rule text now lives in `.claude/rules/operator-rulings.md` and `plan-shape.md`, and arm P15
+of `scripts/validate-plan-shape.sh` refuses the cloud isolation value, keyed or bare, in every
+plan outside `docs/plans/archive/` and every `.claude/rules/` file. The rule text names it only
+as "the cloud isolation value", so the arm never matches the prose that states the prohibition;
+there is no negation exemption, because the original offending lines sat beside negation words.
+
+**Two companion rulings in the same batch**, recorded in `operator-rulings.md`: ONE backlog entry
+per improvement goal, carrying a numbered work list and one done condition, folding sibling
+entries rather than filing one per finding (no enforcer exists); and "there is no 'target
+number'" for efficiency goals, which carry a baseline, the measured waste per fix and the outcome
+against the baseline (baseline and outcome held by `scripts/validate-backlog-receipts.sh` arms
+E1, E2 and E3b; the absence of a target number is not mechanized).

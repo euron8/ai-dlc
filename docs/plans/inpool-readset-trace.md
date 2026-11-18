@@ -93,7 +93,7 @@ record comes from that fixture's own passing run.
 - **Coordination.** Send `GATE START` / `LANDED` to every live `ai-dlc-*` session around any gated push. Never kill a
   process by pattern; only a pid or group you recorded. Point every run that can reach `hermetic-run.sh` at
   `AI_DLC_VERDICT_STORE="$(mktemp -d)"`.
-- **Every `Agent` spawn passes `isolation: "remote"`**, works in its own `mktemp -d`, never runs `rm -rf` on a
+- **Every hand runs locally as a background `Agent`** (`isolation: "worktree"` if it writes, none if it only reads), works in its own `mktemp -d`, never runs `rm -rf` on a
   variable path, and returns findings as text.
 - **Ping the operator** (PushNotification) on any question, any decision, and on completion or an early stop.
 

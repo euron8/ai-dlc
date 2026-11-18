@@ -21,7 +21,7 @@ Time matters here: do not spend time that can be avoided, and the earlier a corr
 - The operator rulings in `docs/plans/fixture-unit-tests-handoff.md` `## Operator rulings that
   bind this work` bind you: no de-scoping, no timing runs, no process counts, no verdicts, and no
   load-dependent test (BL-868).
-- You build through hands only (Agent tool, `isolation: "remote"`, one hand per unit, all spawned
+- You build through hands only (local background Agent, `isolation: "worktree"`, one hand per unit, all spawned
   in one block). You make no edits yourself. Each hand clones under `mktemp -d`, works only on its
   named branch, and pushes nothing. Every brief opens with the time sentence above.
 - A hand verifies only its own change: `bash -n`, its fixture once from the repo root, its

@@ -152,14 +152,15 @@ it was handed off:
   Accumulation is not merely disk: `.claude/worktrees/` is gitignored, so a read-set derivation
   taken while they exist records them into a TRACKED map (`BL-264` — 8512 of 32107 rows), and
   any count over the shipped `.sh` set moves with how many agents happen to be live.
-- **Every `Agent` spawn, read-only or writing, passes `isolation: "remote"`.** Operator
-  instruction at batch 108's close: a hand was spawned in-process/local, the operator said so
-  explicitly ("I want them locally running but remote") and asked that this apply to the plan
-  and to future plans, not just the one spawn. This SUPERSEDES the older per-hand distinction
-  elsewhere in this file and in the "model by cost" section — "a read-only hand does not need
-  isolation" governed `worktree` specifically, for the write-collision reason stated there; it
-  does not license skipping `remote`. Every dispatch action's spawn instructions name
-  `isolation: "remote"` for every hand regardless of job.
+- **Every hand runs on this machine as a background `Agent`.** A writing hand passes
+  `isolation: "worktree"`; a read-only hand passes no isolation. The cloud isolation value is
+  never used. Every dispatch action's spawn instructions say so. Carried by **P15** of
+  `scripts/validate-plan-shape.sh`, over every plan outside `docs/plans/archive/` and every
+  `.claude/rules/` file.
+- **Before any read-set derivation (`core/scripts/derive-fixture-readsets.sh`), clear the hands'
+  worktrees.** Writing hands leave them under `.claude/worktrees/agent-*`: record
+  `git status --porcelain` for each, then `git worktree remove` the clean ones, never with
+  `--force`. The hazard is the worktree-accumulation bullet above.
 
 None of that is about writing quality. Each one makes the file produce WRONG WORK when
 followed literally, which is the only thing a handoff is for.

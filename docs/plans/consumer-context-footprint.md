@@ -28,7 +28,8 @@ by the handoff action's one-liner rather than by the operator, take your own mea
 the choice in your first ping, and continue. It removes the wait, never the reporting. Scope stays
 the operator's: a blocked item is reported as blocked, never dropped.
 
-**Delegate.** Every `Agent` spawn, read-only or writing, passes `isolation: "remote"`. Every
+**Delegate.** Every hand runs locally as a background `Agent`: a writing hand passes
+`isolation: "worktree"`, a read-only hand passes none. Every
 brief tells its hand to work in `mktemp -d` under the scratchpad, never to `rm -rf` a variable
 path, and never to leave worktrees in place; the lead runs `git worktree remove` over
 `.claude/worktrees/` at collection.

@@ -139,8 +139,8 @@ suite; expect the pole-bound wall clock, not a selective run. Confirm the ref mo
 grepping `core/fixtures/*/run.sh` for it** — five fixtures `sed` the hooks' FIXTURE_POOL block, and
 a moved anchor reads as a regression on the gated push.
 
-**Spawned hands:** every `Agent` spawn passes `isolation: "remote"` where the base commit is on
-GitHub; while the base exists only in the local clone a hand is local, and its brief says why. A
+**Spawned hands:** every hand runs locally as a background `Agent`; a writing hand passes
+`isolation: "worktree"`, a read-only hand passes none. A
 hand works in a `mktemp -d` under the scratchpad and never deletes it; no `rm -rf` on a variable
 path; no load generator. Builders never run the suite or a heavy fixture while another session
 holds a gate; the lead asks that session for its window first. Remove every worktree a hand leaves
