@@ -59,6 +59,18 @@
 #           `gate: skip`, `manifest: none`, `route: skip GATE1-SKIP`, no shard line, `rule-a-base: gate1 <G1> ...`, a
 #           next: gate-2 line. control: G3C, the same world with the g3 plan naming RSHA (the remedy gate 3 asked for
 #           at the sha it judged): `gate: 1` and the remedy gate-log line.
+#   G2K     GATE 2 AFTER A GATE-3 REWORK (BL-1030): gate 2 pass 2 over the rework worktree whose QA prior PASSed at G1, the
+#           g3 p1 plan naming RSHA (strictly between G1 and the frozen RSHA2) and the delta G1..RSHA2 a docs .md only: exit 0,
+#           `gate: skip`, `manifest: none`, `route: skip GATE2-SKIP`, no shard line, a g3-base line, a next: gate-3 line
+#           (never close). Each refusal control changes one input and must read `gate: 2` with a gate-log line naming
+#           its own arm: G2R1 a comment-only code edit after the g3 sha (Rule A's line filter skips it, the strict code
+#           class does not), G2R2 GO -> code C -> g3 -> records with an APPROVED gate-1 review at C (Rule A's base is C and
+#           sees only the records; the delta from GO carries the code), G2R3 the frozen sha is the g3 sha, G2R4 the QA sha
+#           is not an ancestor of the g3 sha, G2R5 the QA prior reads NEEDS_REWORK, G2R6 a story-file edit outside its
+#           Dev Agent Record, G2R7 no g3 plan. G2D is the positive control for G2R6: an edit inside the Dev Agent Record
+#           skips. G2W1 and G2W2 are the prior_file wedge: pass 3 after a GATE2-SKIP (gate 2) or GATE1-SKIP (gate 1) at
+#           pass 2 finds the pass-1 file and writes a plan, with no refusal naming the missing pass-2 file. G2W3 is their control:
+#           a pass 2 that was DISPATCHED (plan `gate: 2`) and left no file stops the walk, and pass 3 refuses prior-validation.
 #   G3X     gate 3 with one refusing arm exits 1, writes no g3 plan and leaves OPEN byte-identical.
 #           control: G3.
 #   G3      gate 3 with every arm passing exits 0, its plan carries `nonce: <N>`, and OPEN now reads <N>.
@@ -471,6 +483,124 @@ st_g3c() { # gate 3 judged RSHA itself, so gate 1 at RSHA is the remedy gate 3 a
     && grep -q '^gate-log: Rule A at gate 1: .* a re-review gate 3 asked for, so it runs$' "$WD/g3c.plan" && V_G3C=1
   V_OPEN=$OPEN_SAME
 }
+# --- gate 2 after a gate-3 rework (BL-1030) -------------------------------------------------------------------
+# seed_g2g3 : worktrees off RSHA (the records-only commit after G1's code line), one frozen sha each: WR2 adds a docs .md
+# (RSHA2), WRC a comment-only line in src/b.py, WRS a story-file edit outside its Dev Agent Record, WRD one inside it.
+# The QA role file the merge's --read-verdict --gate qa lifts its verdict set from joins the lead checkout.
+seed_g2g3() {
+  local c q=""
+  for c in "$_d/core/team-roles/qa.md" "$_d/.claude/team-roles/qa.md"; do [ -f "$c" ] && { q="$c"; break; }; done
+  [ -n "$q" ] && cp "$q" "$L/.claude/team-roles/qa.md" || return 1
+  WR2="$WD/wr2"; WRC="$WD/wrc"; WRS="$WD/wrs"; WRD="$WD/wrd"
+  for c in "$WR2" "$WRC" "$WRS" "$WRD"; do gitw "$L" worktree add -q --detach "$c" "$RSHA" || return 1; done
+  printf '# n2\n' > "$WR2/docs/n2.md" && gitw "$WR2" add docs/n2.md && gitw "$WR2" commit -qm n2 || return 1
+  RSHA2="$(gitw "$WR2" rev-parse HEAD)" || return 1
+  printf '# note\ndef b():\n    return 1\n' > "$WRC/src/b.py" && gitw "$WRC" commit -qam comment || return 1
+  RSC="$(gitw "$WRC" rev-parse HEAD)" || return 1
+  awk '/^## Dev Agent Record$/ { print "## Acceptance Criteria\n\nAC1 reworded.\n" } { print }' "$WRS/$STORY" > "$WD/story.ac" && cp "$WD/story.ac" "$WRS/$STORY" && gitw "$WRS" commit -qam ac || return 1
+  RSS="$(gitw "$WRS" rev-parse HEAD)" || return 1
+  awk '/^## Dev Agent Record$/ { print; print ""; print "Rework note."; next } { print }' "$WRD/$STORY" > "$WD/story.dar" && cp "$WD/story.dar" "$WRD/$STORY" && gitw "$WRD" commit -qam dar || return 1
+  RSD="$(gitw "$WRD" rev-parse HEAD)" || return 1
+  # The shape the arms need: G1 < RSHA < each frozen sha; the strict code class separates WK..RSHA2 (G1's code) from G1..RSHA2.
+  { gitw "$WRA" merge-base --is-ancestor "$G1" "$RSHA" && gitw "$WRA" merge-base --is-ancestor "$RSHA" "$RSHA2" \
+    && ! gitw "$WRA" merge-base --is-ancestor "$G1" "$WK"; } || return 1
+}
+qa_one() { # <file> <reviewed sha> <verdict> : a serial QA validation file
+  printf '# QA Validation: %s\n\nreviewed-sha: %s\n\n## Verdict\n\n%s\n\n## Findings\n\nNone.\n' "${1##*/}" "$2" "$3" > "$1"
+}
+# g2g3run <cell> <gt> <tag> <idx> <worktree> <QA prior sha> <g3 sha or -> [verdict] : gate 2 pass 2 over <worktree>.
+g2g3run() {
+  local wt0="$WT" i="$4"
+  qa_one "$RV/$i-qa-validation.md" "$6" "${8:-PASS}"
+  [ "$7" = - ] || printf 'story: %s\ngate: 3\npass: 1\nsha: %s\n' "$i" "$7" > "$P/$i-g3-p1.plan"
+  WT="$5"; gtrun "$1" "$2" "$3" 2 - "$i" 2 --pass 2; WT="$wt0"
+  rm -f "$WD/$3.plan"; [ ! -f "$P/$i-g2-p2.plan" ] || cp "$P/$i-g2-p2.plan" "$WD/$3.plan"
+}
+# g2full <tag> <gate-log regex> : the pass wrote a gate-2 plan, no skip, and the gate-log line names the arm's own reason.
+g2full() {
+  [ "$RC" = 0 ] && grep -qx 'gate: 2' "$WD/$1.plan" && ! grep -q '^route: skip' "$WD/$1.plan" && grep -qE "^gate-log: Rule A at gate 2: .*$2" "$WD/$1.plan"
+}
+st_sk() { # QA PASS at G1, g3 at RSHA, frozen RSHA2, records only: G2K
+  g2g3run "$1" "$2" sk 12-1 "$WR2" "$G1" "$RSHA"
+  V_G2K=0
+  [ "$RC" = 0 ] && grep -qx 'gate: skip' "$WD/sk.plan" && grep -qx 'manifest: none' "$WD/sk.plan" \
+    && grep -q '^route: skip GATE2-SKIP: ROUTE: ' "$WD/sk.plan" && [ "$(nshards "$WD/sk.plan")" = 0 ] \
+    && grep -qxF "g3-base: gate2 go=$G1 g3=$RSHA p1" "$WD/sk.plan" && grep -q '^next: gate-transition.sh 12-1 3 ' "$WD/sk.plan" \
+    && ! grep -q '^next:.* close' "$WD/sk.plan" && V_G2K=1
+  V_OPEN=$OPEN_SAME
+}
+st_sr1() { # a comment-only code edit after the g3 sha: G2R1
+  g2g3run "$1" "$2" sr1 12-2 "$WRC" "$G1" "$RSHA"
+  V_G2R1=0; g2full sr1 'FULL: .*changes 1 code path\(s\), first src/b.py' && V_G2R1=1
+  V_OPEN=$OPEN_SAME
+}
+st_sr2() { # GO -> code C -> g3 -> records -> frozen, an APPROVED gate-1 review at C: Rule A sees only the records: G2R2
+  g1f "$RV/12-3-code-review.md" APPROVED "$G1"
+  g2g3run "$1" "$2" sr2 12-3 "$WR2" "$WK" "$RSHA"
+  V_G2R2=0
+  g2full sr2 'FULL: .*changes 1 code path\(s\), first src/a.py' && grep -qxF "rule-a-base: gate1 $G1 $RV/12-3-code-review.md" "$WD/sr2.plan" && ! grep -qx 'gate: rerun' "$WD/sr2.plan" && V_G2R2=1
+  V_OPEN=$OPEN_SAME
+}
+st_sr3() { # the frozen sha is the sha gate 3 judged: G2R3
+  g2g3run "$1" "$2" sr3 12-4 "$WR2" "$G1" "$RSHA2"
+  V_G2R3=0; g2full sr3 'FULL: the frozen sha is the sha gate 3 judged' && V_G2R3=1
+  V_OPEN=$OPEN_SAME
+}
+st_sr4() { # the QA sha is not an ancestor of the g3 sha: G2R4
+  g2g3run "$1" "$2" sr4 12-5 "$WR2" "$G1" "$WK"
+  V_G2R4=0; g2full sr4 'FULL: the go-signal sha .* is not an ancestor of the gate-3 sha' && V_G2R4=1
+  V_OPEN=$OPEN_SAME
+}
+st_sr5() { # the QA prior reads NEEDS_REWORK: G2R5
+  g2g3run "$1" "$2" sr5 12-6 "$WR2" "$G1" "$RSHA" NEEDS_REWORK
+  V_G2R5=0; g2full sr5 'QA file .* is not read as PASS' && V_G2R5=1
+  V_OPEN=$OPEN_SAME
+}
+st_sr6() { # a story-file edit outside its Dev Agent Record: G2R6
+  g2g3run "$1" "$2" sr6 12-7 "$WRS" "$G1" "$RSHA"
+  V_G2R6=0; g2full sr6 'FULL: the story file .* changes outside its Dev Agent Record' && V_G2R6=1
+  V_OPEN=$OPEN_SAME
+}
+st_sr7() { # no g3 plan: G2R7
+  g2g3run "$1" "$2" sr7 12-8 "$WR2" "$G1" -
+  V_G2R7=0
+  [ "$RC" = 0 ] && grep -qx 'gate: 2' "$WD/sr7.plan" && ! grep -q '^route: skip' "$WD/sr7.plan" && ! grep -q 'Rule A at gate 2' "$WD/sr7.plan" && [ ! -e "$P/12-8-g3-p1.plan" ] && V_G2R7=1
+  V_OPEN=$OPEN_SAME
+}
+st_sd() { # a story-file edit inside its Dev Agent Record, the canonical copy folded: G2D, G2R6's control
+  local c0="$WD/story.canon"
+  cp "$L/$STORY" "$c0" && cp "$WRD/$STORY" "$L/$STORY"
+  g2g3run "$1" "$2" sd 12-9 "$WRD" "$G1" "$RSHA"
+  cp "$c0" "$L/$STORY"
+  V_G2D=0
+  [ "$RC" = 0 ] && grep -qx 'gate: skip' "$WD/sd.plan" && grep -q '^route: skip GATE2-SKIP: ' "$WD/sd.plan" && V_G2D=1
+  V_OPEN=$OPEN_SAME
+}
+st_sw1() { # pass 3 at gate 2 after the GATE2-SKIP at pass 2 (12-1): the prior is the pass-1 file: G2W1
+  local wt0="$WT"
+  WT="$WR2"; gtrun "$1" "$2" sw1 2 - 12-1 2 --pass 3; WT="$wt0"
+  rm -f "$WD/sw1.plan"; [ ! -f "$P/12-1-g2-p3.plan" ] || cp "$P/12-1-g2-p3.plan" "$WD/sw1.plan"
+  V_G2W1=0
+  [ "$RC" = 0 ] && ! grep -q 'REFUSED prior-validation' "$WD/sw1.err" && grep -qxF "prior: $RV/12-1-qa-validation.md" "$WD/sw1.plan" && grep -qx 'gate: skip' "$WD/sw1.plan" && V_G2W1=1
+  V_OPEN=$OPEN_SAME
+}
+st_sw2() { # pass 3 at gate 1 after the GATE1-SKIP at pass 2 (10-1, G3K): the prior is the pass-1 file: G2W2
+  local wt0="$WT"
+  WT="$WRA"; gtrun "$1" "$2" sw2 2 - 10-1 1 --pass 3; WT="$wt0"
+  rm -f "$WD/sw2.plan"; [ ! -f "$P/10-1-g1-p3.plan" ] || cp "$P/10-1-g1-p3.plan" "$WD/sw2.plan"
+  V_G2W2=0
+  [ "$RC" = 0 ] && ! grep -q 'REFUSED prior-review' "$WD/sw2.err" && grep -qxF "prior: $RV/10-1-code-review.md" "$WD/sw2.plan" && grep -qx 'gate: skip' "$WD/sw2.plan" && V_G2W2=1
+  V_OPEN=$OPEN_SAME
+}
+st_sw3() { # pass 3 at gate 2 after a DISPATCHED pass 2 (plan gate: 2) that left no QA file: the walk stops, prior-validation refuses: G2W3
+  local wt0="$WT"
+  qa_one "$RV/12-10-qa-validation.md" "$G1" PASS
+  printf 'story: 12-10\ngate: 2\npass: 2\n' > "$P/12-10-g2-p2.plan"
+  WT="$WR2"; gtrun "$1" "$2" sw3 2 - 12-10 2 --pass 3; WT="$wt0"
+  V_G2W3=0
+  [ "$RC" = 1 ] && grep -q 'REFUSED prior-validation' "$WD/sw3.err" && [ ! -e "$P/12-10-g2-p3.plan" ] && V_G2W3=1
+  V_OPEN=$OPEN_SAME
+}
 st_g3x() { # gate 3, the H2 arm refusing: G3X
   gtrun "$1" "$2" g3x 2 validate-h2-attestation.sh 1-1 3 --transcript-dir "$WD/td"
   V_G3X=0
@@ -672,6 +802,28 @@ st_g3k g3k "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
 st_g3c g3c "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
 [ "$V_G3C" = 1 ] && ok "G3K control: the same pass at the sha gate 3 judged is the remedy gate 3 asked for: gate: 1, a seat" \
   || bad "G3K control rc=$RC: $(grep -E '^(gate|route|gate-log):' "$WD/g3c.plan" 2> /dev/null | tr '\n' ' ' | cut -c1-400) $(head -3 "$WD/g3c.err" | tr '\n' ' ' | cut -c1-300)"
+seed_g2g3 || { echo "FIXTURE BROKEN: the gate-2-after-gate-3 world did not build (qa.md, the four worktrees off RSHA, or G1 < RSHA < RSHA2 and G1 not below WK)" >&2; exit 2; }
+st_sk sk "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+[ "$V_G2K" = 1 ] && ok "G2K gate 2 pass 2 after a gate-3 rework over a records-only delta from the QA sha: gate: skip, route: skip GATE2-SKIP, no shard line, next: names gate 3" \
+  || bad "G2K rc=$RC: $(grep -E '^(gate|route|g3-base|next|gate-log):' "$WD/sk.plan" 2> /dev/null | tr '\n' ' ' | cut -c1-400) $(head -3 "$WD/sk.err" | tr '\n' ' ' | cut -c1-300)"
+for s in sr1:G2R1:"a comment-only code edit after the g3 sha" sr2:G2R2:"GO -> code -> g3 -> records with an APPROVED gate-1 review at the code commit (the delta from GO carries the code)" \
+         sr3:G2R3:"the frozen sha is the g3 sha" sr4:G2R4:"the QA sha is not an ancestor of the g3 sha" sr5:G2R5:"the QA prior reads NEEDS_REWORK" \
+         sr6:G2R6:"a story-file edit outside its Dev Agent Record" sr7:G2R7:"no g3 plan" sd:G2D:"a story-file edit inside its Dev Agent Record (G2R6's control) skips"; do
+  t="${s%%:*}"; r="${s#*:}"; a="${r%%:*}"; w="${r#*:}"
+  "st_$t" "$t" "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+  eval "v=\$V_$a"
+  if [ "$v" = 1 ]; then ok "$a gate 2 pass 2 after a gate-3 rework, $w: $(grep -E '^(gate|route):' "$WD/$t.plan" 2> /dev/null | tr '\n' ' ' | cut -c1-120)"
+  else bad "$a rc=$RC ($w): $(grep -E '^(gate|route|rule-a-base|gate-log: Rule A at gate 2)' "$WD/$t.plan" 2> /dev/null | tr '\n' ' ' | cut -c1-300) $(grep -o 'Rule A at gate 2.*' "$WD/$t.plan" 2> /dev/null | cut -c1-400) $(head -3 "$WD/$t.err" | tr '\n' ' ' | cut -c1-300)"; fi
+done
+st_sw1 sw1 "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+[ "$V_G2W1" = 1 ] && ok "G2W1 gate 2 pass 3 after a GATE2-SKIP at pass 2 reads the pass-1 QA file: no prior-validation refusal, a gate: skip plan naming that file" \
+  || bad "G2W1 rc=$RC: $(grep -E '^(gate|prior):' "$WD/sw1.plan" 2> /dev/null | tr '\n' ' ') $(head -3 "$WD/sw1.err" | tr '\n' ' ' | cut -c1-300)"
+st_sw2 sw2 "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+[ "$V_G2W2" = 1 ] && ok "G2W2 gate 1 pass 3 after a GATE1-SKIP at pass 2 reads the pass-1 review file: no prior-review refusal, a gate: skip plan naming that file" \
+  || bad "G2W2 rc=$RC: $(grep -E '^(gate|prior):' "$WD/sw2.plan" 2> /dev/null | tr '\n' ' ') $(head -3 "$WD/sw2.err" | tr '\n' ' ' | cut -c1-300)"
+st_sw3 sw3 "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
+[ "$V_G2W3" = 1 ] && ok "G2W3 gate 2 pass 3 after a dispatched pass 2 with no QA file while the pass-1 file exists: exit 1, REFUSED prior-validation, no plan" \
+  || bad "G2W3 rc=$RC: $(head -3 "$WD/sw3.err" | tr '\n' ' ' | cut -c1-300) plan $([ -e "$P/12-10-g2-p3.plan" ] && echo present || echo absent)"
 [ "$O12" = 1 ] && ok "OPEN12 the live OPEN is byte-identical across every gate-1 and gate-2 run" || bad "OPEN12 a gate-1 or gate-2 run moved the live OPEN"
 
 st_g3x g3x "$GT3"

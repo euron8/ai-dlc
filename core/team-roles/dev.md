@@ -276,6 +276,15 @@ Before starting any task, read these files in order:
           real-process runs, every one clean, with the command and all
           results logged in the story file. Mocked-timing unit tests and a
           single live run do not satisfy the AC; mocked tests MAY supplement.
+- Before reporting to gate 1, dispatch exactly one `pre-reviewer` with the
+  `Agent` tool: `subagent_type: pre-reviewer`, no `name`, and a brief that
+  carries the standing line *"Your operating contract is
+  `.claude/team-roles/pre-reviewer.md`. Read it and follow it as your FIRST
+  action before any other work."*, the story's acceptance criteria, and
+  `git diff <story base>..HEAD` from your worktree. The brief carries no
+  `shard:` line. Repair each finding in the same session, or record in the
+  Dev Agent Record why you did not. This check is part of your own
+  assignment, not a re-delegation of it. Gate 1 is unchanged.
 - When a story requires a validation evaluation (`/bmad-party-mode`,
   `/bmad-advanced-elicitation`, `/bmad-review lenses=adversarial`,
   `/bmad-prd`, or the native `ai-dlc-adversary-review` convergence

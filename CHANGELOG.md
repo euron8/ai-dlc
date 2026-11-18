@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1168.0] - 2026-11-18
+
+### BL-1168 (advances): `validate-spawn-ledger.sh` no longer forks `jq` per in-sprint row
+
+- `core/scripts/validate-spawn-ledger.sh` joins the probe effort in its single RECORDS projection and memoises the model pin per role. `jq` execs per call no longer grow with in-sprint rows: 3 per row before, a constant 9 after (measured on synthetic worlds: 65 to 9 at 20 in-sprint rows, 605 to 9 at 200). Output, stderr and exit are byte-identical before and after, including a world with legacy rows, an effort mismatch, a `__REFUSED__` row and duplicate probe ids.
+- `core/scripts/wait-for-deliverable.sh` is unchanged. graph s321 and s322 transcripts show 70 to 90 percent of its seconds are the wait it exists for, and its checking branch refuses (2 of 900 mark calls in s321, 16 of 528 in s322).
+- Baseline for the outcome: s322, 35 s a call for `validate-spawn-ledger.sh`. The fix removes the per-row `jq` execs; the result is read against that baseline on graph's next complete sprint. No target number is set.
+- Consumer cost: none. The script is machinery and arrives with the pull.
+
+### BL-1166 (advances): new role `pre-reviewer`, one cheap review before gate 1
+
+- New role `pre-reviewer` (sonnet, low effort, `omitClaudeMd`). The dev seat dispatches one before gate 1 over its own diff and the story's acceptance criteria. The spawn is ledgered with the dev as parent and judged by Check 22.
+- Consumer cost: one `aiDlcRoles` settings key (arrives through `settings-merge.sh`; a consumer's own entry for the role wins), one role file, one rendered agent definition (arrives through the renderer), and one reviewer spawn per story, estimated below the $0.64 s322 sonnet code-reviewer mean.
+- Reading it rests on: 35 of 53 s321 and s322 gate-1 pass-1 code-review findings were raisable from the diff plus the acceptance criteria. That is a ceiling, not a yield. The outcome (gate-1 passes per story) is read against the baseline on graph's next complete sprint; no target number is set.
+
+### BL-1030 (advances): gate 2 records GATE2-SKIP after a records-only gate-3 rework
+
+- After a gate-3 rework, gate 2 records GATE2-SKIP and dispatches no QA seat, only when all three hold: QA pass M-1 read PASS; nothing but records changed since the sha QA reviewed; and the story file changed only inside its Dev Agent Record.
+- `prior_file` walks past `gate: skip` passes at gates 1 and 2, so a second rework after a skip no longer refuses.
+- The `Outcome measured:` line stays open; it is read on the next complete graph sprint.
+- Consumer cost: none beyond the pull; the lead and gate-transition changes ship with the engine and step prose.
+
 ## [0.1167.0] - 2026-11-18
 
 

@@ -53,6 +53,11 @@
       "model": "opus",
       "effort": "medium"
     },
+    "pre-reviewer": {
+      "model": "sonnet",
+      "effort": "low",
+      "omitClaudeMd": true
+    },
     "protected-path-editor": {
       "model": "sonnet",
       "effort": "medium"
