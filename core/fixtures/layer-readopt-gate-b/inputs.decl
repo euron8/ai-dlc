@@ -16,3 +16,4 @@ core/fixtures/layer-readopt-gate-e/run.sh
 core/fixtures/layer-readopt-gate-d/.dist-only
 core/fixtures/layer-readopt-gate-e/.dist-only
 core/fixtures/lib/report.sh
+core/skills/ai-dlc-update/reconcile/layer-drift.sh

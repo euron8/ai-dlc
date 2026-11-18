@@ -1860,6 +1860,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 f89e84291bd6c193454135df357f44d0c104e2cec7d76423cdbd7d1f138bee89 the tools.decl search path is walked with builtins, no fork per line (BL-1124); every parse row is byte-identical, so no entry changes meaning
 # VS-IDENTITY 1 65784a8c67e1cc03e26571fcc5442467221877352a6a29be7be13f9fd00fb91d readset_decl_parse folds its per-fixture awk and cat forks into one awk and takes an optional premap (BL-1124); every parse row is byte-identical, so no entry changes meaning
 # VS-IDENTITY 1 2344ea159b99335fe28e7862362a545b06d8b659e12f3fe4cb88ca7eb482582b BL-1124 (c) select cuts: the per-fixture grep loops are one awk each, readset_strip_keys backgrounds each bash -n without a subshell group, readset_decl_batch parses every declaration in one awk with the one premap/mapper join, readset_vs_want batches the per-candidate readers and the store scan stops at a foreign line-3 #fixture; every key, parse and digest row is byte-identical, so no entry changes meaning
+# VS-IDENTITY 1 dd6b4948a04c22742669aac0b53351884194a2f4805d85d7efb2a9f7660ce48c BL-1124 (c) readset_decl_parse per-fixture span, section and git.decl execs: readset_decl_spans parses spans.decl with builtins and readset_decl_spansbatch takes every fixture span presence and hash in one mapper start, one awk and one shasum, the `+` rows are collected by the row loop and hashed by readset_decl_hashes in one shasum for the whole pre-pass, readset_decl_ranges splits its paths with builtins, the glob expansion no longer moves a scratch file; every parse row is byte-identical, so no entry changes meaning
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -2151,8 +2152,38 @@ readset_decl_batch() {
         if ($0 == "core" || index($0, "core/") == 1) fc = 1
         if (k == "F" && index($0, "/*/")) fg = 1 } }' "$@"
 }
+#   readset_decl_hashes  <entries>: after readset_decl_batch over the same entries, the sha256 of every `+` file those
+#     parses will hash, taken in ONE shasum and written to each `+`-declaring entry's `<scratch prefix>.h` as
+#     `<path>\t<sha256>`; readset_decl_parse (`pre`) reads its path there and hashes alone any path the file lacks.
+#     A shasum whose output does not name the listed paths in order leaves every `.h` empty.
+readset_decl_hashes() {
+  local en="$1" e1 e2 e3 t k p rq dp q pl u=$'\n' list=$'\n' n=0 o hc="" l
+  while IFS=$'\t' read -r e1 e2 e3; do
+    : > "$e3.h"
+    [ -s "$e3.p" ] || continue
+    pl=$u; while IFS= read -r q || [ -n "$q" ]; do pl="$pl$q$u"; done < "$e3.p"
+    while IFS=$'\t' read -r t k p rq dp; do
+      [ "$k" = F ] || continue
+      case "$pl" in *"$u$dp$u"*) ;; *) continue ;; esac
+      case "$p" in *"$u"*) continue ;; esac
+      [ -f "$p" ] || continue
+      case "$list" in *"$u$p$u"*) ;; *) list="$list$p$u"; n=$((n + 1)) ;; esac
+    done < "$e3.r"
+  done < "$en"
+  [ "$n" -gt 0 ] || return 0
+  set --; while IFS= read -r p; do [ -z "$p" ] || set -- "$@" "$p"; done <<<"$list"
+  o="$(shasum -a 256 -- "$@" 2>/dev/null)" || return 0
+  while IFS= read -r l; do
+    [ "$#" -gt 0 ] && [ "${l:66}" = "$1" ] || return 0
+    hc="$hc$1"$'\t'"${l%% *}"$'\n'; shift
+  done <<<"$o"
+  [ "$#" -eq 0 ] || return 0
+  while IFS=$'\t' read -r e1 e2 e3; do
+    [ ! -s "$e3.p" ] || printf '%s' "$hc" > "$e3.h"
+  done < "$en"
+}
 readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix> [<premap>] [pre]
-  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" pm="${7:-}" t k p rq dp name found seen="|" ga gb gn gf ge xr fc=0 fg=0 xs="" xl rb rj
+  local fx="$1" fd="$2" lay="$3" mp="$4" xpd="$5" w="$6" pm="${7:-}" t k p rq dp name found seen="|" ga gb gn gf ge xr fc=0 fg=0 xs="" xl rb rj gx="" pl="" pfl="" hp hh
   printf '%s\tN\n' "$fx"
   # `pre`: the caller already ran readset_decl_batch over an entry naming this fixture and <scratch prefix>.
   if [ "${8:-}" != pre ]; then
@@ -2180,35 +2211,46 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
   # line as its declared spelling. A fixture that reads every fixture's inputs.decl declares `core/fixtures/*/inputs.decl`.
   # Any other `*` spelling, or one matching nothing, stays one row and is refused absf below.
   if [ "$fg" = 1 ]; then
-    while IFS="$(printf '\t')" read -r t k p rq dp; do
+    while IFS=$'\t' read -r t k p rq dp; do
       ga="${p%%/\**}"; gb="${p##*/}"; gn=0
       if [ "$k" = F ] && [ -n "$ga" ] && [ "$p" = "$ga/*/$gb" ]; then case "$ga$gb" in *\**) ;; *)
         case $- in *f*) gf=1; set +f ;; *) gf=0 ;; esac
-        for ge in "$ga"/*/"$gb"; do [ -f "$ge" ] || continue; printf '%s\tF\t%s\t%s\t%s\n' "$t" "$ge" "$rq" "$dp"; gn=$((gn + 1)); done
+        for ge in "$ga"/*/"$gb"; do [ -f "$ge" ] || continue; printf -v xl '%s\tF\t%s\t%s\t%s\n' "$t" "$ge" "$rq" "$dp"; gx="$gx$xl"; gn=$((gn + 1)); done
         [ "$gf" = 0 ] || set -f ;; esac; fi
-      [ "$gn" -gt 0 ] || printf '%s\t%s\t%s\t%s\t%s\n' "$t" "$k" "$p" "$rq" "$dp"
-    done < "$w.r" > "$w.g"
-    mv -f "$w.g" "$w.r"
+      [ "$gn" -gt 0 ] || { printf -v xl '%s\t%s\t%s\t%s\t%s\n' "$t" "$k" "$p" "$rq" "$dp"; gx="$gx$xl"; }
+    done < "$w.r"
+    printf '%s' "$gx" > "$w.r"
   fi
   # The rows, then the refusals of the rows absent ON DISK under the root (the cwd): -f for a file, -d for a
   # directory. A path on disk but outside the universe (an excluded top, a git-ignored file) is NOT refused; it
   # simply has no key row. One builtin pass prints both, rows first, so no fork prints `.r`.
-  while IFS="$(printf '\t')" read -r t k p rq dp; do
+  if [ -s "$w.p" ]; then
+    pl=$'\n'; while IFS= read -r p || [ -n "$p" ]; do pl="$pl$p"$'\n'; done < "$w.p"
+  fi
+  while IFS=$'\t' read -r t k p rq dp; do
     printf '%s\t%s\t%s\t%s\t%s\n' "$t" "$k" "$p" "$rq" "$dp"
     if [ "$k" = D ]; then [ -d "$p" ] || { printf -v xl '%s\tX\tabsd\t%s\t%s\n' "$fx" "$p" "$dp"; xs="$xs$xl"; }
     else [ -f "$p" ] || { printf -v xl '%s\tX\tabsf\t%s\t%s\n' "$fx" "$p" "$dp"; xs="$xs$xl"; }; fi
+    if [ -n "$pl" ] && [ "$k" = F ]; then case "$pl" in *$'\n'"$dp"$'\n'*) pfl="$pfl$p"$'\t'"$dp"$'\n' ;; esac; fi
   done < "$w.r"
   printf '%s' "$xs"
   # THE `+` ROWS, keyed on the declared spelling (field 5) so a mapped path still finds its marker. An absent file
-  # is already refused (absf) above and gets no row.
+  # is already refused (absf) above and gets no row. `.pf` is the `+` rows of `.r`, collected by the loop above.
   if [ -s "$w.p" ]; then
-    awk -F'\t' 'NR == FNR { m[$0] = 1; next } $2 == "F" && ($5 in m) { print $3 "\t" $5 }' "$w.p" "$w.r" > "$w.pf"
-    while IFS="$(printf '\t')" read -r p dp; do
+    printf '%s' "$pfl" > "$w.pf"
+    while IFS=$'\t' read -r p dp; do
       [ -f "$p" ] || continue
-      t="$(readset_section_of "$fd" "$dp")"
+      t=""; [ ! -f "$fd/section.decl" ] || t="$(readset_section_of "$fd" "$dp")"
       if [ "$t" = '!' ]; then printf '%s\tX\tplussect\t%s\n' "$fx" "$p"; continue
       elif [ -n "$t" ]; then dp="$(readset_section "$p" "$t" | shasum -a 256 | cut -d' ' -f1)"
-      else dp="$(shasum -a 256 -- "$p" 2>/dev/null | cut -d' ' -f1)"; fi
+      else
+        # the hash readset_decl_hashes took for this path in the one shasum of the pre-pass, else its own
+        dp=""
+        if [ "${8:-}" = pre ] && [ -s "$w.h" ]; then
+          while IFS=$'\t' read -r hp hh; do [ "$hp" != "$p" ] || { dp="$hh"; break; }; done < "$w.h"
+        fi
+        if [ -z "$dp" ]; then dp="$(shasum -a 256 -- "$p" 2>/dev/null)"; dp="${dp%% *}"; fi
+      fi
       if [ "${#dp}" -eq 64 ]; then printf '%s\tP\t%s\t%s\n' "$fx" "$p" "$dp"; else printf '%s\tX\tplushash\t%s\n' "$fx" "$p"; fi
     done < "$w.pf"
   fi
@@ -2247,29 +2289,157 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
 #   `#` and blank lines dropped, a trailing CR stripped; a core/ path is mapped onto the consumer layout as in
 #   inputs.decl. Refusals: spanbad (not exactly two fields, or NAME outside [A-Z0-9_]), abs, spandir (a directory),
 #   absf (the file is absent), spanabsent (no `# NAME_BEGIN` or no `# NAME_END` line, so the key would hash nothing).
-readset_decl_spans() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <scratch prefix>
-  local fx="$1" fd="$2" lay="$3" mp="$4" w="$5" p n dp
-  awk -v fx="$fx" -v d="$w.s" 'BEGIN { printf "" > d } { sub(/\r$/, ""); if ($0 == "" || $0 ~ /^#/) next
-      if (NF != 2 || $2 !~ /^[A-Z0-9_]+$/) { print fx "\tX\tspanbad\t" $0; next }
-      if ($1 ~ /^\// || $1 ~ /(^|\/)\.\.(\/|$)/) { print fx "\tX\tabs\t" $1; next }
-      if ($1 ~ /\/$/) { print fx "\tX\tspandir\t" $1; next }
-      print $1 "\t" $2 > d }' "$fd/spans.decl"
-  [ -s "$w.s" ] || return 0
-  if [ "$lay" = cons ] && awk -F'\t' '$1 == "core" || index($1, "core/") == 1 { f = 1 } END { exit f ? 0 : 1 }' "$w.s"; then
-    if [ -z "$mp" ] || [ ! -f "$mp" ]; then printf '%s\tX\tnomap\t%s\n' "$fx" "$mp"; return 0; fi
-    cut -f1 "$w.s" | bash "$mp" --map 2> "$w.e" > "$w.sm" \
-      || { printf '%s\tX\tmaprefuse\t%s\n' "$fx" "$(sed -n 1p "$w.e" | tr '\t' ' ')"; return 0; }
-    [ "$(awk 'END { print NR }' "$w.sm")" = "$(awk 'END { print NR }' "$w.s")" ] || { printf '%s\tX\tmapcount\t-\n' "$fx"; return 0; }
-  else
-    cut -f1 "$w.s" > "$w.sm"
+readset_tsv_get() { # <file> <key>: the rest of the first line of <file> opening with `<key>` and a tab, in RS_V; 1 when none
+  local l k="$2"$'\t'
+  RS_V=""
+  while IFS= read -r l || [ -n "$l" ]; do case "$l" in "$k"*) RS_V="${l#"$k"}"; return 0 ;; esac; done < "$1"
+  return 1
+}
+readset_span_scan() { # <rows `<i>\t<path>\t<NAME>`> <scratch prefix> <out>: `<i>\t<1 if the file has a NAME_BEGIN and a NAME_END line>` to <out>, each BEGIN..END span's text to <prefix>.sp.<i>
+  awk -F'\t' -v w="$2" '{ i = $1; p = $2; B = "# " $3 "_BEGIN"; E = "# " $3 "_END"; hb = 0; he = 0; on = 0; f = w ".sp." i; printf "" > f; n = 0; lp = 0; c = 0
+      while ((g = (getline l < p)) > 0) { n++; if (l == B) hb = 1; if (l == E) he = 1
+        if (on) { printf "%s%s", (c++ ? "\n" : ""), l > f; lp = n; if (l == E) on = 0 } else if (l == B) { printf "%s%s", (c++ ? "\n" : ""), l > f; lp = n; on = 1 } }
+      close(p); RS = "\001"; z = ""; while ((getline r < p) > 0) z = r; close(p); RS = "\n"
+      if (c && !(lp == n && z != "" && substr(z, length(z)) != "\n")) printf "\n" > f
+      close(f); print i "\t" ((hb && he) ? 1 : 0) }' "$1" > "$3"
+}
+#   readset_decl_spansbatch  <entries> <dist|cons> <mapper, or empty>: the spans.decl work of EVERY entry's fixture at once, after
+#     readset_decl_batch: one mapper start over the paths of the fixtures that declare a core/ span (consumer layout), one awk
+#     and one shasum over every (file, NAME) present. `<entries>.spm` is `<declared path>\t<mapped path>` and `<entries>.spc`
+#     `<mapped path>\t<NAME>\t<1|0>\t<sha256>`; readset_decl_spans (RS_SPC naming `<entries>`) reads them, and does the work
+#     itself for a fixture any of whose rows they lack. A refused mapper, a count that differs or a shasum that does not
+#     name the listed files in order leaves the cache without those rows.
+readset_decl_spansbatch() {
+  local en="$1" lay="$2" mp="$3" e1 e2 e3 fd ln a b c u=$'\n' tb=$'\t' ul="" pr="" pc=0 fl row i k m="" nm=0 nq=0 q="" hs hl nh ni nl=0
+  local -a ua ub
+  : > "$en.spm"; : > "$en.spc"
+  while IFS=$'\t' read -r e1 e2 e3; do
+    fd="${e2%/inputs.decl}"; [ -f "$fd/spans.decl" ] || continue
+    row=""; pc=0
+    while IFS= read -r ln || [ -n "$ln" ]; do
+      ln="${ln%$'\r'}"
+      case "$ln" in ''|'#'*) continue ;; esac
+      read -r a b c <<<"$ln"
+      case "$b" in ''|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) continue ;; esac
+      [ -z "$c" ] || continue
+      case "$a" in /*|..|../*|*/../*|*/..|*/) continue ;; esac
+      row="$row$a$tb$b$u"
+      case "$a" in core|core/*) pc=1 ;; esac
+    done < "$fd/spans.decl"
+    [ -n "$row" ] || continue
+    fl=0
+    if [ "$lay" = cons ] && [ "$pc" = 1 ]; then
+      fl=1
+      while IFS=$'\t' read -r a b; do [ -z "$a" ] || case "$ul" in *"$u$a$u"*) ;; *) ul="$ul$a$u" ;; esac; done <<<"$row"
+    fi
+    while IFS=$'\t' read -r a b; do [ -z "$a" ] || pr="$pr$fl$tb$a$tb$b$u"; done <<<"$row"
+  done < "$en"
+  [ -n "$pr" ] || return 0
+  if [ -n "$ul" ] && [ -n "$mp" ] && [ -f "$mp" ]; then
+    printf '%s' "${ul#"$u"}" | bash "$mp" --map 2>/dev/null > "$en.spmo" || : > "$en.spmo"
+    nm=0; while IFS= read -r ln || [ -n "$ln" ]; do ua[$nm]="$ln"; nm=$((nm + 1)); done < "$en.spmo"
+    nl=0; while IFS= read -r ln; do [ -z "$ln" ] || nl=$((nl + 1)); done <<<"$ul"
+    if [ "$nm" = "$nl" ]; then
+      i=0; while IFS= read -r ln; do [ -z "$ln" ] || { printf '%s\t%s\n' "$ln" "${ua[$i]}" >> "$en.spm"; i=$((i + 1)); }; done <<<"$ul"
+    fi
   fi
-  awk -F'\t' 'NR == FNR { m[FNR] = $0; next } { print m[FNR] "\t" $2 "\t" $1 }' "$w.sm" "$w.s" > "$w.sr"
-  while IFS="$(printf '\t')" read -r p n dp; do
+  : > "$en.spq"; m="$u"
+  while IFS=$'\t' read -r fl a b; do
+    [ -n "$fl" ] || continue
+    if [ "$fl" = 1 ]; then readset_tsv_get "$en.spm" "$a" || continue; a="$RS_V"; fi
+    [ -f "$a" ] || continue
+    case "$m" in *"$u$a$tb$b$u"*) continue ;; esac
+    m="$m$a$tb$b$u"; printf '%s\t%s\t%s\n' "$nq" "$a" "$b" >> "$en.spq"; nq=$((nq + 1))
+  done <<<"$pr"
+  [ "$nq" -gt 0 ] || return 0
+  readset_span_scan "$en.spq" "$en" "$en.spk"
+  set --
+  while IFS=$'\t' read -r i k; do [ "$k" != 1 ] || { ub[$#]="$i"; set -- "$@" "$en.sp.$i"; }; done < "$en.spk"
+  if [ "$#" -gt 0 ]; then
+    hs="$(shasum -a 256 -- "$@" 2>/dev/null)" || return 0
+    k=0
+    while IFS= read -r hl; do
+      [ -n "$hl" ] || continue
+      [ "$k" -lt "$#" ] && [ "${hl:66}" = "$en.sp.${ub[$k]}" ] || return 0
+      q="$q${ub[$k]}$tb${hl%% *}$u"; k=$((k + 1))
+    done <<<"$hs"
+    [ "$k" = "$#" ] || return 0
+  fi
+  while IFS=$'\t' read -r i a b; do
+    nh=""
+    while IFS=$'\t' read -r ni hl; do [ "$ni" != "$i" ] || { nh="$hl"; break; }; done <<<"$q"
+    if [ -n "$nh" ]; then printf '%s\t%s\t1\t%s\n' "$a" "$b" "$nh" >> "$en.spc"; else printf '%s\t%s\t0\t\n' "$a" "$b" >> "$en.spc"; fi
+  done < "$en.spq"
+}
+readset_decl_spans() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <scratch prefix>
+  local fx="$1" fd="$2" lay="$3" mp="$4" w="$5" p n dp ln a b c i nv=0 nm=0 core=0 hs hl cached=0 cb="${RS_SPC:-}"
+  local -a sp sn sm sk sh sq
+  while IFS= read -r ln || [ -n "$ln" ]; do
+    ln="${ln%$'\r'}"
+    case "$ln" in ''|'#'*) continue ;; esac
+    read -r a b c <<<"$ln"
+    case "$b" in ''|*[!ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) printf '%s\tX\tspanbad\t%s\n' "$fx" "$ln"; continue ;; esac
+    [ -z "$c" ] || { printf '%s\tX\tspanbad\t%s\n' "$fx" "$ln"; continue; }
+    case "$a" in /*|..|../*|*/../*|*/..) printf '%s\tX\tabs\t%s\n' "$fx" "$a"; continue ;; esac
+    case "$a" in */) printf '%s\tX\tspandir\t%s\n' "$fx" "$a"; continue ;; esac
+    sp[$nv]="$a"; sn[$nv]="$b"; nv=$((nv + 1))
+    case "$a" in core|core/*) core=1 ;; esac
+  done < "$fd/spans.decl"
+  [ "$nv" -gt 0 ] || return 0
+  if [ "$lay" = cons ] && [ "$core" = 1 ]; then
+    if [ -z "$mp" ] || [ ! -f "$mp" ]; then printf '%s\tX\tnomap\t%s\n' "$fx" "$mp"; return 0; fi
+    # the pre-pass's mapper start (readset_decl_spansbatch) answered every path of this fixture, or the mapper starts here
+    nm=0
+    if [ -n "$cb" ] && [ -s "$cb.spm" ]; then
+      for ((i = 0; i < nv; i++)); do readset_tsv_get "$cb.spm" "${sp[$i]}" || break; sm[$i]="$RS_V"; nm=$((nm + 1)); done
+    fi
+    if [ "$nm" != "$nv" ]; then
+      nm=0
+      printf '%s\n' "${sp[@]}" | bash "$mp" --map 2> "$w.e" > "$w.sm" \
+        || { printf '%s\tX\tmaprefuse\t%s\n' "$fx" "$(sed -n 1p "$w.e" | tr '\t' ' ')"; return 0; }
+      while IFS= read -r ln || [ -n "$ln" ]; do sm[$nm]="$ln"; nm=$((nm + 1)); done < "$w.sm"
+      [ "$nm" = "$nv" ] || { printf '%s\tX\tmapcount\t-\n' "$fx"; return 0; }
+    fi
+  else
+    sm=("${sp[@]}")
+  fi
+  # The presence, and the span's sha, of every present file: from the pre-pass's one awk and one shasum when it holds every
+  # row of this fixture, else ONE awk reads every present file of this declaration (whether it carries a `# NAME_BEGIN` and
+  # a `# NAME_END` line, anywhere, and the BEGIN..END span text to `<scratch prefix>.sp.<i>`) and ONE shasum hashes those spans.
+  cached=0
+  if [ -n "$cb" ] && [ -s "$cb.spc" ]; then
+    cached=1
+    for ((i = 0; i < nv; i++)); do
+      sk[$i]=0
+      [ -f "${sm[$i]}" ] || continue
+      readset_tsv_get "$cb.spc" "${sm[$i]}"$'\t'"${sn[$i]}" || { cached=0; break; }
+      if [ "${RS_V%%$'\t'*}" = 1 ]; then sk[$i]=1; sh[$i]="${RS_V#*$'\t'}"; fi
+    done
+  fi
+  if [ "$cached" != 1 ]; then
+  : > "$w.sv"
+  for ((i = 0; i < nv; i++)); do
+    sk[$i]=0
+    [ -f "${sm[$i]}" ] || continue
+    printf '%s\t%s\t%s\n' "$i" "${sm[$i]}" "${sn[$i]}" >> "$w.sv"
+  done
+  if [ -s "$w.sv" ]; then
+    readset_span_scan "$w.sv" "$w" "$w.sk"
+    set --
+    while IFS=$'\t' read -r i a; do [ "$a" != 1 ] || { sk[$i]=1; sq[$#]="$i"; set -- "$@" "$w.sp.$i"; }; done < "$w.sk"
+    if [ "$#" -gt 0 ]; then
+      hs="$(shasum -a 256 -- "$@")"; nm=0
+      while IFS= read -r hl || [ -n "$hl" ]; do sh[${sq[$nm]}]="${hl%% *}"; nm=$((nm + 1)); done <<<"$hs"
+    fi
+  fi
+  fi
+  for ((i = 0; i < nv; i++)); do
+    p="${sm[$i]}"; n="${sn[$i]}"; dp="${sp[$i]}"
     [ -f "$p" ] || { printf '%s\tX\tabsf\t%s\t%s\n' "$fx" "$p" "$dp"; continue; }
-    grep -q "^# ${n}_BEGIN\$" "$p" && grep -q "^# ${n}_END\$" "$p" || { printf '%s\tX\tspanabsent\t%s#%s\n' "$fx" "$p" "$n"; continue; }
+    [ "${sk[$i]}" = 1 ] || { printf '%s\tX\tspanabsent\t%s#%s\n' "$fx" "$p" "$n"; continue; }
     printf '%s\tF\t%s\t0\t%s#%s\n' "$fx" "$p" "$dp" "$n"
-    printf '%s\tP\t%s#%s\t%s\n' "$fx" "$p" "$n" "$(readset_span_sha "$p" "$n" raw)"
-  done < "$w.sr"
+    printf '%s\tP\t%s#%s\t%s\n' "$fx" "$p" "$n" "${sh[$i]}"
+  done
 }
 # readset_decl_ranges: each `range` line of a fixture's git.decl -> one G row, or one X row carrying the line.
 #   range <ref-expr> <path>...   <ref-expr> is `<rev>..<rev>`, or `@<file>`: a bare file name in the fixture's own
@@ -2285,14 +2455,16 @@ readset_decl_spans() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <scra
 #   one HEAD gains commits later, and its key moves then.
 #   Every command here reads /dev/null, never the git.decl the loop is reading.
 readset_decl_ranges() { # <fx> <fixture dir> <scratch prefix>
-  local fx="$1" fd="$2" w="$3" line kw ex rest out p b t der n=0
+  local fx="$1" fd="$2" w="$3" line kw ex rest out p b t der n=0 ga
+  local -a gw
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in range|'range '*) ;; *) continue ;; esac
     n=$((n + 1)); kw=""; ex=""; rest=""; der=0
     read -r kw ex rest <<<"$line"
     [ -n "$rest" ] || { printf '%s\tX\trnopath\t%s\n' "$fx" "$line"; continue; }
-    printf '%s\n' "$rest" | tr -s ' \t' '\n\n' > "$w.gp"
-    if awk '/^\// || /(^|\/)\.\.(\/|$)/ || /^-/ { f = 1 } END { exit f ? 0 : 1 }' "$w.gp"; then printf '%s\tX\trabs\t%s\n' "$fx" "$line"; continue; fi
+    read -r -a gw <<<"$rest"; printf '%s\n' "${gw[@]}" > "$w.gp"; ga=0
+    for p in "${gw[@]}"; do case "$p" in /*|-*|..|../*|*/../*|*/..) ga=1 ;; esac; done
+    if [ "$ga" = 1 ]; then printf '%s\tX\trabs\t%s\n' "$fx" "$line"; continue; fi
     case "$ex" in
       @*) p="${ex#@}"; out=""; der=1
           case "$p" in ''|*/*|.*) printf '%s\tX\trderive\t%s\n' "$fx" "$line"; continue ;; esac
@@ -2303,10 +2475,10 @@ readset_decl_ranges() { # <fx> <fixture dir> <scratch prefix>
     b="${ex%%..*}"; t="${ex#*..}"
     b="$(git rev-parse -q --verify "${b}^{commit}" < /dev/null 2>/dev/null)" && t="$(git rev-parse -q --verify "${t}^{commit}" < /dev/null 2>/dev/null)" \
       || { printf '%s\tX\trref\t%s\n' "$fx" "$line"; continue; }
-    set --; while IFS= read -r p; do [ -z "$p" ] || set -- "$@" "$p"; done < "$w.gp"
+    set --; for p in "${gw[@]}"; do [ -z "$p" ] || set -- "$@" "$p"; done
     GIT_LITERAL_PATHSPECS=1 git rev-list "${b}..${t}" -- "$@" < /dev/null > "$w.gl" 2>/dev/null || { printf '%s\tX\trref\t%s\n' "$fx" "$line"; continue; }
     [ -s "$w.gl" ] || [ "$der" = 1 ] || { printf '%s\tX\trempty\t%s\n' "$fx" "$line"; continue; }
-    p="$(shasum -a 256 < "$w.gl" | cut -d' ' -f1)"
+    p="$(shasum -a 256 < "$w.gl")"; p="${p%% *}"
     printf '%s\tG\tgit-range:%s\t%s\t%s\t%s\n' "$fx" "$n" "$p" "$b" "$t"
   done < "$fd/git.decl"
 }
@@ -2421,6 +2593,7 @@ readset_tools() { # <out>
 readset_declared() { # <list> <out>
   local list="$1" out="$2" d b p lay mp="" xp xpd pm=""
   : > "$out/.dparse"; : > "$out/.dfx"; : > "$out/.dunres"; : > "$out/.dkeys"; : > "$out/.dtools"
+  RS_SPC=""
   lay=cons; [ -d core/scripts ] && lay=dist
   for p in scripts/ai-dlc/core-paths.sh core/scripts/core-paths.sh; do [ -f "$p" ] && { mp="$p"; break; }; done
   xp="$READSET_TOOL_XP"; [ -n "$xp" ] || xp="$(readset_git_exec_path)"; xpd="$xp:$READSET_TOOL_DIRS"
@@ -2450,7 +2623,7 @@ readset_declared() { # <list> <out>
     b="${d%/inputs.decl}"; b="${b##*/}"
     printf '%s\t%s\t%s\n' "$b" "${FXROOT}${b}/inputs.decl" "$out/.dp.$b"
   done < "$out/.dlist" > "$out/.dbatch"
-  [ ! -s "$out/.dbatch" ] || readset_decl_batch "$out/.dbatch" "$lay" "$pm"
+  [ ! -s "$out/.dbatch" ] || { readset_decl_batch "$out/.dbatch" "$lay" "$pm"; readset_decl_hashes "$out/.dbatch"; readset_decl_spansbatch "$out/.dbatch" "$lay" "$mp"; RS_SPC="$out/.dbatch"; }
   while IFS= read -r d; do
     b="${d%/inputs.decl}"; b="${b##*/}"
     readset_decl_parse "$b" "${FXROOT}${b}" "$lay" "$mp" "$xpd" "$out/.dp.$b" "$pm" pre >> "$out/.dparse"

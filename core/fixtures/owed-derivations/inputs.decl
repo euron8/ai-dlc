@@ -20,3 +20,4 @@ core/skills/ai-dlc-update/reconcile/consumer-read.sh
 core/fixtures/owed-derivations/run.sh
 core/fixtures/owed-derivations-b/run.sh
 core/fixtures/owed-derivations-c/run.sh
+core/skills/ai-dlc-update/reconcile/template-sites.md

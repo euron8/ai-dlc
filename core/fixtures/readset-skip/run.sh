@@ -1376,7 +1376,7 @@ else
   # `tests/fixtures/` in the consumer's, which is the one an installed tree resolves first. Read off
   # the resolved block's own glob, the way the deriver reads it, and the world is seeded under it;
   # seeded only under core/fixtures/ the consumer run found no fixtures and every arm here went red.
-  rf_drive() { # <pool> <name> <setup>; prints "<rc>|<lock held at return>|<invoked>|<verified>|<stashed>|<row>|<args>"
+  rf_drive() { # <pool> <name> <setup>; prints "<rc>|<lock held>|<invoked>|<verified>|<stashed>|<row>|<args>"; <lock held> is sampled at return under STUB_GO, and after lt_wait (the trace released its lock) otherwise
     local p="$1" t o
     t="$(lt_fresh "rf.$2")"; o="$WORK/rfo.$2"; mkdir -p "$o"
     if [ "$FXROOT" != core/fixtures ]; then
@@ -1392,9 +1392,18 @@ else
       . "$p" 2>/dev/null
       printf '%s\n' "${POOL_STALL:-}" > "$o/stall"
       run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc"
-      if [ -d "$GITDIR/ai-dlc-fixture-readsets.local.lock" ]; then echo yes > "$o/held"; else echo no > "$o/held"; fi
-      [ -n "${STUB_GO:-}" ] && : > "$STUB_GO"
+      # `held` IS SAMPLED BEFORE lt_wait ONLY UNDER STUB_GO: the stub holds the trace there, so held=yes is
+      # deterministic (arm (a): the launch returns with the lock held). Everywhere else it is sampled AFTER
+      # lt_wait, where `no` means the trace released its lock; sampled at return it raced the trace on a red
+      # push (arm RR).
+      if [ -n "${STUB_GO:-}" ]; then
+        if [ -d "$GITDIR/ai-dlc-fixture-readsets.local.lock" ]; then echo yes > "$o/held"; else echo no > "$o/held"; fi
+        : > "$STUB_GO"
+      fi
       lt_wait "$GITDIR/ai-dlc-fixture-readsets.local.lock"
+      if [ -z "${STUB_GO:-}" ]; then
+        if [ -d "$GITDIR/ai-dlc-fixture-readsets.local.lock" ]; then echo yes > "$o/held"; else echo no > "$o/held"; fi
+      fi
     )
     printf '%s|%s|%s|%s|%s|%s|%s' "$(cat "$o/rc")" "$(cat "$o/held")" "$([ -f "$o/args" ] && echo invoked || echo not)" \
       "$([ -s "$t/.git/ai-dlc-fixture-verified" ] && echo verified || echo none)" \
