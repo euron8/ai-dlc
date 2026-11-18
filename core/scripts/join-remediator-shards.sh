@@ -393,6 +393,7 @@ lane_name() {
 SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
 SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""; SRC_MORE=""; RERUN=""; AGENTMODE=0; AGENT_ID=""
 PARTMODE=0; CHKPART=""; CP_PATH=""; CP_STATE=""
+FP_ROWS=""; FP_PRESENT=0; FP_N=0
 # --- THE DISPOSITION KEY (BL-823). ONE predicate, read by every site that recognises the key: src_check,
 # contract_check (whose `dfull` BADDISP reads), checks_field's no-edit-line and repaired counts, the
 # --escalations entry count, part_cites and esc_cites. Each awk takes it as `-v DK="$DISP_KEY_ERE"` and
@@ -1009,6 +1010,25 @@ src_probe() {
 #       FANIN and ADJUDICATE line, and the counts) is also written, byte for byte, to
 #       `<shard dir>/.join-plan`, and the join's LAST line is `PLAN-FILE: <shard dir>/.join-plan`.
 #       Read the plan from that file; a join over an existing record refuses and names it.
+#   (4d) THE ROUTE FILE (BL-716), PARTS MODE, ROUND ONE ONLY. The lead writes
+#       `<shard dir>/.findings-partition` before dispatching the shards: line 1 is exactly
+#       `# findings-partition v1`, then one line per SERIAL-ROUTED finding, `serial<TAB><key><TAB><files>`,
+#       <key> one token `<shard file>.md#<id>` (a leading directory is cut to its basename and the
+#       ordinal read numerically, so `01.md#F-1` equals `1.md#F-1`), <files> space-separated
+#       project-relative paths, or `-` when unknown. No file: the output is byte-identical to a join
+#       with no such feature. A file that exists is validated BEFORE anything is written, and refused
+#       (exit 2, `REFUSED:`, no record, no plan file) on a bad header, a line without three TAB fields,
+#       a first field other than `serial`, a bad key, a duplicate key, an empty files field, an absolute
+#       path or a `..`. A lane round's join (`--artifact <name>-serial`) refuses the file in its own dir.
+#       Printed: `CROSS-COUNT: <n>` right after SERIAL-REQUIRED, and each row as `LANE-ITEM: <n> CROSS:
+#       <key> files: <files>` when its files are exactly one lane's, else `FANIN: CROSS: <key> files:
+#       <files> (lanes <ls>)` (two or more lanes, a file in no lane, or `-`; lanes never merge on one).
+#       CROSS items are dealt with every other item (4b). With LANE-COUNT 0 the FANIN lines are the
+#       whole serial plan and nothing is dealt. `--sources` and `--escalations` locate round one's file
+#       from the first record's name (`<dir>/shards/<record stem>/.findings-partition`) and print
+#       `CROSS-OPEN: <key>` for each key no `source:` token of any record passed carries (every token
+#       on a `source:` line covers; a path-qualified token is cut to its basename), then
+#       `CROSS-OPEN-COUNT: <n>` -- reported, never refused; no file, nothing printed.
 #   (6) THE DISPOSITION KEY AND ITS VOCABULARY (BL-542). Every check above keys on an entry's
 #       `disposition:` line, so an entry that spells the key otherwise escaped all of them: graph's
 #       s319 requirements-d-answers-fold.md renamed it `outcome:` on six entries and joined at exit
@@ -1857,6 +1877,25 @@ spec_render_probe() {
 }
 # record_tail <record> -- the entry contract over one record no join wrote, then its escalations:
 # shared by --sources and --escalations, so each line below exists once.
+# fp_open <record>... -- COVERAGE of the route file (header 4d). Round one's `<state>/planning-artifacts/s<N>/shards/<record stem>/.findings-partition`
+# is located from the FIRST record's name; each key no `source:` token of any record passed carries (ordinals compared numerically) prints
+# `CROSS-OPEN: <key>`, then `CROSS-OPEN-COUNT: <n>`. Reported, never refused; an absent or unreadable file prints nothing.
+fp_open() {
+  local _fp="${1%/*}/shards/${1##*/}"; [ "${1%/*}" != "$1" ] || _fp="./shards/${1##*/}"
+  _fp="${_fp%.md}/.findings-partition"
+  [ -f "$_fp" ] || return 0
+  awk -F'\t' -v fp="$_fp" '
+    function nk(k,   f, id, b) { f = k; sub(/#.*/, "", f); id = substr(k, length(f) + 2); sub(/^.*\//, "", f); b = f; sub(/\.md$/, "", b)
+      if (b ~ /^[0-9]+$/) return (b + 0) ".md#" id; return f "#" id }
+    BEGIN { c = 0; while ((getline l < fp) > 0) { c++; if (c == 1) { if (l != "# findings-partition v1") { bad = 1; break }; continue }
+        if (split(l, q, "\t") == 3 && q[1] == "serial") { ord[++no] = q[2]; nrm[no] = nk(q[2]) } }
+      close(fp); }
+    /^[ \t]*-?[ \t]*[*_`]*source[*_`]*:/ { x = $0; sub(/^[^:]*:/, "", x)
+      while (match(x, /[A-Za-z0-9][A-Za-z0-9_.-]*\.md#[A-Za-z0-9][A-Za-z0-9._-]*/)) { t = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH)
+        sub(/[.-]+$/, "", t); have[nk(t)] = 1 } }
+    END { n = 0; for (i = 1; i <= no; i++) if (!(nrm[i] in have)) { print "CROSS-OPEN: " ord[i]; n++ }
+      if (no > 0 || !bad) print "CROSS-OPEN-COUNT: " n }' "$@"
+}
 record_tail() {  # <record> [<lane round's record>...] -- closure is positional across them, in this order
   local _r _sp=0
   contract_probe
@@ -1895,6 +1934,7 @@ record_tail() {  # <record> [<lane round's record>...] -- closure is positional 
   printf '%s' "$ESC_LINES"
   printf '%s' "$ESC_CLOSED"
   echo "ESCALATED-COUNT: ${ESC_N} (${ESC_X} closed by a later repaired entry's closes: line)"
+  fp_open "$@"
   # The supersedes chains (3b) and the gap-fill tripwire (7) REPORT: neither gates the count above.
   printf '%s' "$CHAIN_LINES"
   printf '%s' "$GAP_LINES"
@@ -2533,6 +2573,52 @@ resolve_cites() {
       if (n == 1) print h }' | sort -u
 }
 
+# --- THE ROUTE FILE (BL-716; the header's arm 4d). fp_norm_key <key> -> the key with its shard ordinal
+# read numerically and a path-qualified file part cut to its basename, so `01.md#F-1`, `1.md#F-1` and `dir/1.md#F-1` are one key. fp_check <file> validates the lead's
+# `<shard dir>/.findings-partition` and refuses (nothing is written yet) on any malformed line; on a clean
+# file FP_ROWS holds one `R<TAB><key><TAB><files>` row per line and FP_N their count.
+fp_norm_key() {
+  local f="${1%%#*}" b nb
+  f="${f##*/}"; b="${f%.md}"
+  case "$b" in ''|*[!0-9]*) printf '%s' "${f}#${1#*#}"; return 0 ;; esac
+  nb="$b"; while [ "${nb#0}" != "$nb" ] && [ "${#nb}" -gt 1 ]; do nb="${nb#0}"; done
+  printf '%s' "${nb}.md#${1#*#}"
+}
+fp_check() {
+  local f="$1" line n=0 t key rest files kf ki b nk seen="" bad tb=$'\t' nl=$'\n'
+  FP_ROWS=""; FP_N=0
+  IFS= read -r line < "$f" || :
+  if [ "$line" != "# findings-partition v1" ]; then
+    refuse "${f}: line 1 is not exactly '# findings-partition v1'; a malformed route file is never dealt from: fix it, or delete it and brief those findings to the writer by hand"
+    return 0
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    n=$((n + 1)); [ "$n" -gt 1 ] || continue
+    t="${line//[^$tb]/}"
+    if [ "${#t}" != 2 ]; then refuse "${f}:${n}: a route line is exactly three TAB-separated fields: serial, key, files"; continue; fi
+    rest="${line#*$tb}"; key="${rest%%$tb*}"; files="${rest#*$tb}"; bad=""
+    [ "${line%%$tb*}" = serial ] || bad="the first field is not 'serial'"
+    kf="${key%%#*}"; ki="${key#*#}"; b="${kf##*/}"; b="${b%.md}"
+    case "${kf%/*}" in *[!A-Za-z0-9._/-]*|*..*) bad="the key '${key}' has a directory part outside [A-Za-z0-9._/-] or holding '..'" ;; esac
+    case "$kf" in *.md) ;; *) bad="the key '${key}' is not <shard file>.md#<id>" ;; esac
+    case "$b" in ''|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) bad="the key '${key}' is not <shard file>.md#<id>" ;; esac
+    case "$ki" in ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) bad="the key '${key}' is not <shard file>.md#<id>" ;; esac
+    [ "${kf}#${ki}" = "$key" ] || bad="the key '${key}' is not <shard file>.md#<id>"
+    if [ -z "$files" ]; then bad="the files field is empty (write - when the files are unknown)"
+    elif [ "$files" != "-" ]; then
+      case " ${files} " in *"  "*|*" - "*) bad="the files field '${files}' has an empty or '-' member" ;; esac
+      case "$files" in /*|*" /"*|*..*) bad="the files field '${files}' holds an absolute path or a '..'" ;; esac
+    fi
+    if [ -z "$bad" ]; then
+      nk="$(fp_norm_key "$key")"
+      case "${nl}${seen}" in *"${nl}${nk}${nl}"*) bad="the key '${key}' repeats an earlier line (ordinals compare numerically)" ;; esac
+      seen="${seen}${nk}${nl}"
+    fi
+    if [ -n "$bad" ]; then refuse "${f}:${n}: ${bad}"; continue; fi
+    FP_ROWS="${FP_ROWS}R${tb}${key}${tb}${files}${nl}"; FP_N=$((FP_N + 1))
+  done < "$f"
+}
+
 # --- SERIAL LANES (BL-716; the header's arm 4b). Printed after SERIAL-REQUIRED on a written record.
 # esc_cites <part> -> "<part> <heading>\t<token>" for every token an ESCALATED entry's `edit:` names,
 # and "<part> <heading>\t-" for one naming none. The heading is contract_check's own `cur` spelling,
@@ -2617,6 +2703,7 @@ LPEOF
     printf '%s' "$CITES"
     printf '%s' "$_e"
     printf '%s' "$ESC_LINES" | sed -n 's/^ESCALATED: /S\t/p'
+    printf '%s' "$FP_ROWS"
     if [ "$DOCMODE$SUBJMODE" = 00 ]; then printf 'F\t%s\n' "$_wl"
     elif [ "$_wrc" = 0 ]; then printf '%s\n' "$_wl" | sed 's/^/W\t/'
     else printf 'U\texit %s: %s\n' "$_wrc" "$(printf '%s\n' "$_wl" | grep -m1 -E '^(UNASSESSABLE|ERROR)' || printf '%s\n' "$_wl" | head -1)"; fi
@@ -2646,6 +2733,7 @@ LPEOF
                 if ($2 in first) uni(first[$2], k); else first[$2] = k; next }
     $1 == "T" { et[$2] = et[$2] SUBSEP ($3 == "-" ? "" : $3); if ($4 == "1") onDisk[$3] = 1; next }
     $1 == "S" { es[++ne] = $2; next }
+    $1 == "R" { rk[++nrow] = $2; rf[nrow] = $3; next }
     $1 == "F" { edges = "files, by edit set (" $2 ")"; next }
     $1 == "U" { unassessed = $2; next }
     $1 == "W" { wl[++nwl] = $2; if ($2 ~ /^MOVED-CITE /) { split($2, m, " "); sub(/:[0-9]+$/, "", m[2]); sub(/:[0-9,-]+$/, "", m[3])
@@ -2700,6 +2788,14 @@ LPEOF
       # Escalations: one lane when every file it names is that lane`s; otherwise the fan-in.
       for (i = 1; i <= ne; i++) { ls = (es[i] in et) ? lanes_of(et[es[i]]) : "out"
         if (ls ~ /^[0-9]+$/) item[ls] = item[ls] "LANE-ITEM: " ls " ESCALATED: " es[i] "\n"; else fan = fan "FANIN: ESCALATED: " es[i] " (lanes " ls ")\n" }
+      # SERIAL-ROUTED FINDINGS (the route file, arm 4d): one CROSS item per row, by the lanes its files are in. Lanes never merge
+      # on one: exactly one lane makes it that lane`s item; two or more, a file in no lane, or `-` make it a FANIN item.
+      for (i = 1; i <= nrow; i++) { cl = ""
+        if (rf[i] == "-") cl = SUBSEP
+        else { nm = split(rf[i], cf, " "); for (j = 1; j <= nm; j++) cl = cl SUBSEP cf[j] }
+        ls = lanes_of(cl)
+        if (ls ~ /^[0-9]+$/) item[ls] = item[ls] "LANE-ITEM: " ls " CROSS: " rk[i] " files: " rf[i] "\n"
+        else fan = fan "FANIN: CROSS: " rk[i] " files: " rf[i] " (lanes " ls ")\n" }
       if (nl >= 2) fan = fan "FANIN: sweep -- after every lane, grep -rn -F the text each lane replaced over the assembled files; a lane edit can leave a hit in another lane\n"
       print "LANE-EDGES: " edges
       for (l = 1; l <= nl; l++) { s = lp[l]; ns = split(s, sp, " "); for (i = 2; i <= ns; i++) { v = sp[i]; for (j = i - 1; j >= 1 && sp[j] > v; j--) sp[j + 1] = sp[j]; sp[j + 1] = v }
@@ -3467,6 +3563,16 @@ if [ -e "$OUT" ]; then
   fi
 fi
 
+# THE ROUTE FILE (header 4d), read only by a round-one parts-mode join, and BEFORE anything is written.
+FP_FILE="${SHARD_DIR}/.findings-partition"
+if [ -e "$FP_FILE" ]; then
+  if [ "${ARTIFACT%-serial}" != "$ARTIFACT" ]; then
+    refuse "${FP_FILE} exists in a lane round's shard dir: the route file belongs to round one's dir and is never read by a lane join; delete it here"
+  else
+    FP_PRESENT=1; fp_check "$FP_FILE"
+  fi
+fi
+
 [ "$refuse_n" -eq 0 ] || exit 2
 
 # --- document mode: assemble BEFORE the record. A refusal here writes nothing -- the assembler
@@ -3568,6 +3674,7 @@ printf '%s' "$ESC_LINES"
 echo "ESCALATED-COUNT: ${ESC_N}"
 printf '%s' "$GAP_LINES"
 echo "SERIAL-REQUIRED: ${SERIAL_N}"
+[ "$FP_PRESENT" = 0 ] || echo "CROSS-COUNT: ${FP_N}"
 [ "${ARTIFACT%-serial}" = "$ARTIFACT" ] && lane_report
 [ -z "$SPEC_LINE" ] || printf '%s\n' "$SPEC_LINE"
 )"; _prc=$?

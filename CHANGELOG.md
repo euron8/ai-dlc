@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1173.0] - 2026-11-18
+
+### Serial-routed findings are dealt to read-only adjudicators (BL-716, batch 259 C8)
+
+- The lead now writes `<shard dir>/.findings-partition` (header `# findings-partition v1`, one `serial<TAB><key><TAB><files | ->` line per finding it routes serial) before dispatching a parts-mode repair's shards. `join-remediator-shards.sh` validates it fail-closed (a malformed file exits 2, `REFUSED:`, nothing written), prints `CROSS-COUNT:` after `SERIAL-REQUIRED:`, and routes each line as `LANE-ITEM: <n> CROSS: ...` when its files resolve to one lane, else `FANIN: CROSS: ...`. The existing `ADJUDICATE:` deal and the four-item threshold are unchanged. A `-serial` lane join refuses the file. With the file absent, the join's output is unchanged.
+- `--escalations` and `--sources` print `CROSS-OPEN: <key>` and `CROSS-OPEN-COUNT:` for a routed key no entry's `source:` carries. These lines are reported, never refused.
+- The serial remediators are dispatched when SERIAL-REQUIRED, ESCALATED-COUNT or CROSS-COUNT is above 0, and whenever the lead routed any finding serial. A round with `LANE-COUNT: 0` and a fan-in gets ONE serial remediator briefed from round one's `.join-plan`; the fan-in remediator is briefed with round one's `FANIN:` lines.
+- `remediator.md`: an adjudicator handed a `CROSS:` item decides it with the existing `repair | no change | escalate` vocabulary. The writer applies decisions, adjudicates any `escalate`, missing or undealt finding itself, and re-runs `validate-artifact-derivations.sh` after the lanes before applying a fan-in CROSS decision.
+- `remediator.md`: a writer's entry for a serial-routed CROSS finding carries `- source: <key>` in every round.
+- Known gaps, recorded in BL-716: D1 (two route keys sharing a basename collide in the basename-keyed cover check) and D3 (no coverage backstop beyond the reported CROSS-OPEN line).
+- Consumer note: the engine half is live from step 3 of a delivering pull; the rulebook half waits for the reconcile PR merge. Until then the route file is never written and nothing changes.
+
 ## [0.1172.0] - 2026-11-18
 
 

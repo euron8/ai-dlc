@@ -393,7 +393,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    `--expect-sha` the sha256 the lead recorded for the document before wave 1, and joined with
    `join-remediator-shards.sh --document <doc> <that dir>`. The requirements subject case is
    below. A finding citing two or more parts goes to the serial remediator after the join, whose
-   brief carries `shard: none (authoring-chain)`, and
+   brief carries `shard: none (authoring-chain)`, listed in `.findings-partition` ("Route file") before the seats' shards go out, and
    the lead then runs `scripts/ai-dlc/join-remediator-shards.sh --sources <the joined record> --sprint <N>`
    over the record with its appended entries, adding `--sources <its -serial-repair record>` after it
    when the serial work ran in lanes. The remediator brief also carries `revised-seats:`:
@@ -462,7 +462,7 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    shas as the expected bytes. The joined record is
    `_bmad-output/planning-artifacts/s<N>/requirements-party-repair.md`, and the join resolves
    every entry's `source:` as above. A finding citing two or more parts goes to the serial
-   remediator after assembly, whose brief carries `shard: none (authoring-chain)`, and `--sources` then checks the record with its appended entries.
+   remediator after assembly, whose brief carries `shard: none (authoring-chain)`, listed in `.findings-partition` ("Route file"), and `--sources` then checks the record with its appended entries.
    A subject that maps to one part is not sharded: no seats x parts round and no party shard dir.
    It is the unsharded round above: the party repair is ONE remediator that writes
    `_bmad-output/planning-artifacts/s<N>/requirements-party-repair.md` itself, and `--sources`
@@ -1078,7 +1078,7 @@ their `edit:` targets name. A finding touching one file goes to that file's shar
 shard edits its files IN PLACE, never a copy. A finding citing more than one file goes to ONE
 serial remediator dispatched after the join, which is dispatched as "Every escalated entry
 reaches the serial remediator" says, not only for such a finding, and its brief carries
-`shard: none (authoring-chain)` (Rule 28 exception 3). A single-file artifact is sharded by section
+`shard: none (authoring-chain)` (Rule 28 exception 3), and the lead lists every such finding in `.findings-partition` ("Route file") before the shards go out. A single-file artifact is sharded by section
 (below). Each shard's brief carries `shard: <i>/<N> <files>` and the parts path
 `_bmad-output/planning-artifacts/s<N>/shards/<artifact>-repair-p<M>/<i>.md`. Every `edit:` line
 cites the project-relative path in the ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`)
@@ -1102,17 +1102,24 @@ opening its entries with its own `- artifact:` / `- artifact_sha_before:` /
 agents ever append to one record. The join never overwrites a record, so it is run before the serial
 remediators and never after them.
 
+**Route file.** In every parts mode (files, sections, subject, and a party or elicitation round), the lead writes `<shard dir>/.findings-partition` BEFORE dispatching the round's shards, listing every finding it routes to the serial remediator under the partitions above: a finding citing two or more files or parts, or whose fix lies outside its shard's files. Line 1 is exactly `# findings-partition v1`. Then one line per such finding, `serial<TAB><key><TAB><file>[ <file>]...`, or `serial<TAB><key><TAB>-` when its files are unknown. `<key>` is ONE whitespace-free token: `<shard-file>#<id>` for an adversarial round (`cross.md`, `cross-<g>.md` or `<n>.md`), `<seat-basename>.md#<id>` for a party or elicitation round; a finding carrying several tokens is one line per token. Each `<file>` is a project-relative path the fix touches, spelled as an `edit:` line spells it: the assembled document in document mode, the subject file in subject mode, the story or epic file in files mode. A finding the lead gave to one part's shard gets no line, and the file records the lead's ROUTE, never the review's citations. A gate-failure repair, whose findings carry no parts, never gets the file, and a lane round's shard dir never holds one (the `-serial` join refuses it). The round-one join validates the file before it writes anything and refuses (exit 2, `REFUSED:`, nothing written) a malformed one, which is never dealt from. A file written after the join's plan exists is ignored: brief those findings to the serial remediator by hand.
+
 **Every escalated entry reaches the serial remediator.** A shard whose fix lies partly outside
 its files writes two entries with one `source:` token, `repaired` and `escalated`. The join, in
 every parts mode, prints one `ESCALATED: <part> <entry>` line per escalated entry, then
 `ESCALATED-COUNT: <n>`, then `SERIAL-REQUIRED: <n>`, the count of `repaired` entries with a
-real edit, each of which owes the cross-file sibling grep and moved-cite check below. In every
-mode (files, sections, subject), dispatch the serial remediators after the join whenever
-SERIAL-REQUIRED or ESCALATED-COUNT is above 0, whether or not any finding cited two files or
-parts. The join partitions that work into LANES of FILES and prints them after SERIAL-REQUIRED:
+real edit, each of which owes the cross-file sibling grep and moved-cite check below, then,
+only where `.findings-partition` exists, `CROSS-COUNT: <n>`, one per routed line. In every
+mode (files, sections, subject), dispatch the serial remediators after the join whenever SERIAL-REQUIRED or ESCALATED-COUNT is above 0, whenever CROSS-COUNT is above 0, and whenever the lead routed any
+finding serial, whether or not the route file exists and whether or not any finding cited two
+files or parts. The join partitions that work into LANES of FILES and prints them after
+CROSS-COUNT (SERIAL-REQUIRED where there is none):
 `LANE-EDGES:`, one `LANE: <n> files: <file>... parts: <part>...` per lane with its
 `LANE-ITEM: <n> <item>` lines, one `FANIN: <item>` line per item no single lane owns, then
-`LANE-COUNT:` and `FANIN-COUNT:`. One part's files are one lane, and a `MOVED-CITE` the join's own
+`LANE-COUNT:` and `FANIN-COUNT:`. A routed line is the item `CROSS: <key> files: <files | ->`: it is
+`LANE-ITEM: <n> CROSS: ...` when its files resolve to exactly one lane, and otherwise
+`FANIN: CROSS: ... (lanes <ls>)`, covering two or more lanes, a file in no lane and `-`; it never
+joins lanes. One part's files are one lane, and a `MOVED-CITE` the join's own
 `serial-remediation-worklist.sh --keep` run finds (sections and subject mode; files mode has no
 worklist) joins the two files it links. A `HIT` never joins lanes, and neither does an escalation:
 one standing in, or naming files of, two or more lanes, or naming no lane's file, is a `FANIN`
@@ -1141,9 +1148,9 @@ join and the fan-in. Beat-join the lanes with `--complete`
 and run the same join over them, files mode, `--artifact <lane artifact> --pass <M>
 --artifact-path <path>` (`<path>` copied from `LANE-ARTIFACT-PATH:`), so a file two lanes wrote, or one no lane cites, refuses exactly as in round
 one; it writes `s<N>/<lane artifact>-repair-p<M>.md` and prints no `LANE:` line. Then dispatch
-ONE fan-in serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` line and every `ESCALATED:` line the
+ONE fan-in serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` line of ROUND ONE's `.join-plan` and every `ESCALATED:` line the
 lane join printed, which appends to that record as above. A round whose join prints `LANE-COUNT: 1` and `FANIN-COUNT: 0`
-is one lane with no fan-in. In `--sources` mode the
+is one lane with no fan-in. A round whose join prints `LANE-COUNT: 0` and a `FANIN-COUNT` above 0 has no lane round, no lane remediator and no adjudicator: ONE serial remediator, briefed with the same `shard: none (authoring-chain)` line and every `FANIN:` and `ESCALATED:` line of round one's `.join-plan`, appends to round one's record. In `--sources` mode the
 `ESCALATED:` lines are the lead's to adjudicate, never a re-dispatch of the serial remediator:
 that record may be the serial remediator's own, so no SERIAL-REQUIRED line is printed there, and
 no `LANE:` or `FANIN:` line. An
@@ -1156,14 +1163,17 @@ round one's record FIRST, because a lane closes round one's escalations in its o
 closure is read in order; the join refuses a round-one record whose lane record is on disk and
 not passed after it. It reads the `closes:` lines with no `party-mode/s<N>/` directory and prints
 every escalation still open; each open one is the lead's to adjudicate. A party record takes
-`--sources` the same way, which does the same. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the
+`--sources` the same way, which does the same. Where round one's `.findings-partition` lies beside its
+shard dir (found from the record's name), either call also prints `CROSS-OPEN: <key>` for each routed key no
+entry's `source:` token carries across the records passed, then `CROSS-OPEN-COUNT: <n>`; each is
+the lead's to adjudicate, as an open escalation is, and is never a refusal. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the
 fix aside as outside the shard or not required without naming a hand-off, and, in every parts
 mode, a `repaired` entry with an edit whose `siblings:` field is absent or in none of its four
 forms, and a siblings fence whose control text is not in the file it names.
 
 **Adjudicators decide, one writer writes.** After `FANIN-COUNT:` the round-one join prints one
 `ADJUDICATE: <n | fanin> <b>/<k> <item>` line per item of every lane (`<n>`) and of the fan-in that
-holds four or more items, dealt into `<k>` batches, then `ADJUDICATOR-COUNT:`. For each such lane
+holds four or more items, a `CROSS:` item among them, dealt into `<k>` batches, then `ADJUDICATOR-COUNT:`. For each such lane
 and for the fan-in, dispatch its `<k>` adjudicators in parallel, at the same time as every lane
 remediator of a lane that has none: each a `remediator` dispatch whose brief carries
 `shard: <b>/<k> <lane artifact> <n | fanin>`, the line `adjudicator: read-only`, and its batch's
@@ -1175,7 +1185,10 @@ adjudicator, else `scripts/ai-dlc`;
 beat-join them with `--complete`. A lane with adjudicators then gets its lane remediator,
 briefed as above plus every adjudicator file of that lane; the fan-in remediator gets every
 `fanin-b<b>.md`. Each is the one writer of its files and applies those decisions as
-`remediator.md` says. Run the lane join only after every adjudicator has delivered, with `--since`
+`remediator.md` says: it owns every serial-routed finding, so any `CROSS:` item whose decision is `escalate`
+or missing, and any routed finding with no item, is the writer's to adjudicate, and the fan-in writer re-runs
+`validate-artifact-derivations.sh` on the assembled files after every lane has joined before it applies a
+fan-in `CROSS:` decision. Run the lane join only after every adjudicator has delivered, with `--since`
 taken from the FIRST adjudicator dispatch, so its window arms see an adjudicator's write; its
 read-only arm also refuses, over the whole write ledger, an adjudicator whose batch file is on disk
 and that wrote anything else. `ADJUDICATOR-COUNT: 0` is the round as before.
@@ -1231,7 +1244,7 @@ document in place. Otherwise, in this order:
    to that section's shard; a finding citing two or more goes to ONE serial remediator after
    assembly (step 4), which is dispatched as "Every escalated entry reaches the serial
    remediator" says, not only for such a finding, and whose brief carries
-   `shard: none (authoring-chain)`. Each shard's brief carries `shard: <ordinal>/<K> <heading>`, the full path of
+   `shard: none (authoring-chain)`; the lead lists every such finding in `.findings-partition` ("Route file") before the shards go out. Each shard's brief carries `shard: <ordinal>/<K> <heading>`, the full path of
    its section file, that part's first-line offset from the map (a finding's document line `L` is
    line `L - first + 1` of the section file), and the part path `<that dir>/<ordinal>.md`. A shard
    edits ONLY its section file, never the document, and every `edit:` line cites that section
@@ -1279,7 +1292,8 @@ in this order:
 2. **Parts.** Partition the findings by their `sections:` line. A finding citing one part goes
    to that part's shard; a finding citing two or more goes to ONE serial remediator after
    assembly, which is dispatched as "Every escalated entry reaches the serial remediator"
-   says, not only for such a finding, and whose brief carries `shard: none (authoring-chain)`.
+   says, not only for such a finding, and whose brief carries `shard: none (authoring-chain)`;
+   the lead lists every such finding in `.findings-partition` ("Route file") before the shards go out.
    A section part's shard edits ONLY its section file, as "Shard by section" step 2
    describes. A whole-file part's shard edits its file in place. The SPEC part's shard never
    edits `SPEC.md` by hand: it appends a `(decision)` entry to the spec's `.memlog.md` and

@@ -157,7 +157,7 @@ Then, per finding:
 
 ```
 ### <finding id> — <CRITICAL|MAJOR|MINOR>
-- source: <seat-file>#<finding-id> [<seat-file>#<finding-id> ...]   (a party repair only)
+- source: <seat-file>#<finding-id> [<seat-file>#<finding-id> ...]   (a party repair, and an entry for a `CROSS:` item)
 - disposition: repaired | escalated | skipped (nit)
 - edit: <artifact file:line(s)>
 - siblings:   (every `repaired` entry whose edit is not n/a, in ONE of four forms; the paragraph below)
@@ -259,6 +259,17 @@ apply them, and never edit a batch file: make each repair's edit where its `old`
 as above, taking its claim and derivation from the adjudicator's. Decide an item yourself only when
 its `old` text no longer matches. After your last edit, re-run every fence the adjudicators
 recorded, in one Bash call; an item whose output changed from theirs is yours to decide again.
+
+**An item that carries `CROSS: <key> files: <files | ->`** is a finding the lead routed serial. As an
+adjudicator you read the finding from the file its key names (`<shard-file>#<id>` or
+`<seat-basename>.md#<id>`), re-read its cited text in the assembled files, may run the read-only
+`validate-artifact-derivations.sh`, and decide it with the vocabulary above: `repair` with its `old`
+and `new` fences, `no change`, or `escalate` for an item you cannot settle. As the writer you own every
+serial-routed finding: you apply the decisions, and you adjudicate yourself any finding whose decision is
+`escalate`, missing, or never dealt as an item. As the fan-in writer, run
+`scripts/ai-dlc/validate-artifact-derivations.sh` on the assembled files after every lane has joined,
+and before you apply any fan-in `CROSS:` decision, because the fan-in adjudicators ran while the
+lanes were still changing bytes. The sibling grep, the moved-cite check and the sweep stay yours. The writer's entry for a serial-routed finding carries `- source: <key>`, the item's key copied verbatim from its `CROSS:` line, in every round, adversarial rounds included; `join-remediator-shards.sh --escalations` and `--sources` read that line for `CROSS-OPEN`.
 
 An `escalated` entry of yours that restates a part's escalation, carrying the same open
 decision forward, carries one `- supersedes: <part> <heading>` line per escalation it restates,

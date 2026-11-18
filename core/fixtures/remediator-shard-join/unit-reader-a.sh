@@ -402,6 +402,17 @@ if p_lanerec "$JOIN"; then ok "LN6: --escalations reads the lane round's record 
 else bad "LN6: the lane round's record was not read with round 1 (rc=$RC): $(cat "$JO")"; fi
 p_lanename "$JOIN" && ok "LN8: the subject party join prints LANE-ARTIFACT: requirements-party-serial --pass 1, derived from its record" \
   || bad "LN8: the lane round's name was not derived from the record (rc=$RC): $(grep -E '^LANE-ARTIFACT' "$JO")"
+# ---- BL-716 route file (header 4d): serial-routed findings dealt as CROSS items; LN18-LN22. Every older arm above is an absent-file run and asserts no CROSS byte.
+if p_xdeal "$JOIN"; then ok "LN18: a route file -> CROSS-COUNT right after SERIAL-REQUIRED; one lane's CROSS items dealt (2 batches), a two-lane file and a - file FANIN items, lanes unmerged; the plan file carries them"
+else bad "LN18: the route file was not dealt (rc=$RC): $(grep -E '^(CROSS|LANE|FANIN|ADJ)' "$JO")"; fi
+p_xrefuse "$JOIN" && ok "LN19: a bad header, field count, key grammar, 01.md/1.md duplicate, .. path, absolute path, empty files field or non-serial first field -> exit 2, its own REFUSED text, no record and no .join-plan" \
+  || bad "LN19: a malformed route file did not refuse as expected (rc=$RC): $(grep -m2 REFUSED "$JO")"
+p_xzero "$JOIN" && ok "LN20: a zero-lane round with one routed finding -> the FANIN CROSS line, LANE-COUNT: 0, ADJUDICATOR-COUNT: 0" \
+  || bad "LN20: the zero-lane route case failed (rc=$RC): $(cat "$JO")"
+p_xlane "$JOIN" && ok "LN21: the lane round's join REFUSES a route file in its shard dir, writing nothing" \
+  || bad "LN21: the lane round read or ignored a route file (rc=$RC): $(cat "$JO")"
+p_xcover "$JOIN" && ok "LN22: --escalations prints CROSS-OPEN for a route key no source: carries, silent for a covered one (03.md = 3.md), count 0 once a later record covers it, nothing new with no file" \
+  || bad "LN22: the CROSS-OPEN coverage failed (rc=$RC): $(cat "$JO")"
 fi
 
 # ------------------------------------------------------------------------- LP: the lane path
