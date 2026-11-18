@@ -1119,6 +1119,18 @@ if [ -f "$LEDGER" ]; then
       # tool_use_id -> model, LAST probe row per id winning, as in probe_effort.
       ( reduce ($probe[] | select(type == "object") | select((.tool_use_id // "") != ""))
           as $r ({}; .[$r.tool_use_id | tostring] = $r.model) ) as $pm
+      # tool_use_id -> the observed value of the EFFORT ARM, from the LAST probe row per id (string ids
+      # only, as probe_effort compared): the __REFUSED__ rule for a pinned-effort model below
+      # transcript version 2.1.267, else effort. A jq error in the rule reads as empty, as it did
+      # when probe_effort ran jq per row.
+      | def effobs: try (
+          if ((.model // "") | test("opus-4-7|opus-4-8|fable-5"))
+             and (((.transcript_version // "0") | split(".") | map(tonumber? // 0)) < [2,1,267])
+          then "__REFUSED__"
+          else ((.effort // "") | if type == "string" then . else tojson end) end
+        ) catch "";
+      ( reduce ($probe[] | select(type == "object") | select((.tool_use_id | type) == "string" and .tool_use_id != ""))
+          as $r ({}; .[$r.tool_use_id] = ($r | effobs)) ) as $pe
       | range(0; length) as $ix | .[$ix]
       | select(type == "object")
       | . + {"__ix": $ix}
@@ -1164,7 +1176,12 @@ if [ -f "$LEDGER" ]; then
           # `claude-sonnet-5-5`), so the tier arm also accepts a transcript model matching this.
           (.model_pinned | tok),
           # THE ROW INDEX IN LEDGER LINE ORDER, the key a REMEDIATED pair from shard_scan joins on.
-          (.__ix | tostring) ]
+          (.__ix | tostring),
+          # THE OBSERVED VALUE OF THE EFFORT ARM, joined here by exact tool_use_id; __NOJOIN__ when no
+          # probe row carries the id, __NONE__ for a joined row recording no effort. Both mean empty.
+          ((.tool_use_id // "" | tostring) as $t
+           | if $t == "" or ($pe | has($t) | not) then "__NOJOIN__"
+             else ($pe[$t] | if . == "" then "__NONE__" else . end) end) ]
       | @tsv
     ' "$LEDGER" 2>/dev/null || true)"
 fi
@@ -1354,6 +1371,20 @@ probe_effort() {  # tool_use_id
 # in ten minutes, where the base validator takes 29s. The projection carries the joined model
 # as the record's last column (`tiermodel`), LAST probe row per id winning as in `probe_effort`.
 
+# `pin_key_memo <role>` -> PK_RES: `pin_key` once per distinct role, not per row (it forks jq up to
+# twice). The cache is a newline-delimited string, no `declare -A`; `pin_key` itself is untouched (I56).
+PK_CACHE=""
+PK_RES=""
+pin_key_memo() {
+  pkm_rest="${PK_CACHE#*"${NL}$1	"}"
+  if [ "$pkm_rest" != "$PK_CACHE" ]; then
+    PK_RES="${pkm_rest%%"${NL}"*}"
+  else
+    PK_RES="$(pin_key "$SETTINGS" "$1")"
+    PK_CACHE="${PK_CACHE}${NL}$1	${PK_RES}"
+  fi
+}
+
 # THE SHARD ARM AND THE REMEDIATION JOIN RUN BEFORE THE LOOP, so the loop can suppress a remediated
 # class. Its lines are reported after COUNTS, as before; an unreadable ledger exits 2 there.
 SHARD_PASSDIR="$(dirname "$LEDGER")/planning-artifacts/s${SPRINT_NUM}"
@@ -1379,7 +1410,7 @@ remediated() {
 REMEDIATED_N=0
 PENDING_REMEDY=0
 
-while IFS="$(printf '\t')" read -r name role bound requested cited readable schema defbound effortbound tui tierpin tiermodel modelpin rix; do
+while IFS="$(printf '\t')" read -r name role bound requested cited readable schema defbound effortbound tui tierpin tiermodel modelpin rix effjoin; do
   [ -n "$name" ] || continue
   [ "$name" = "__NONE__" ] && name="<unnamed>"
   [ "$role" = "__NONE__" ] && role=""
@@ -1478,7 +1509,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
   # this loop for why neither `model_bound` nor today's settings can be the FAIL side.
   if [ "$tierpin" != "__ABSENT__" ]; then
     TIER_ROWS=$((TIER_ROWS + 1))
-    tier_now="$(pin_key "$SETTINGS" "$role")"
+    pin_key_memo "$role"; tier_now="$PK_RES"
     tier_at_dispatch=""
     [ "$tierpin" = "__NONE__" ] || tier_at_dispatch="$tierpin"
     if [ "$tier_now" != "$tier_at_dispatch" ]; then
@@ -1543,7 +1574,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
   # a seed that never did. Unchanged: the only pin it can be judged against is today's.
   # EXPECT is a global because `matches_pin` reads one -- it is the guard's
   # function verbatim and closes over the same name there.
-  EXPECT="$(pin_key "$SETTINGS" "$role")"
+  pin_key_memo "$role"; EXPECT="$PK_RES"
   if [ -z "$EXPECT" ]; then
     # A role with no pin, or a key mapping to nothing, binds no model. A party persona's
     # model is optional (a persona without one is spawned on whatever /bmad-party-mode
@@ -1601,7 +1632,9 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
     # whose every row bound nothing read exactly like one where every row was verified.
     EFFORT_UNDECLARED=$((EFFORT_UNDECLARED + 1))
   else
-    EFF_OBSERVED="$(probe_effort "$tui")"
+    # Joined in the RECORDS projection (`effjoin`); no jq per row.
+    EFF_OBSERVED="$effjoin"
+    case "$EFF_OBSERVED" in __NOJOIN__|__NONE__) EFF_OBSERVED="" ;; esac
     if [ "$EFF_OBSERVED" = "__REFUSED__" ]; then
       echo "PENDING: [$name] ran on a pinned-effort model against a transcript below"
       echo "      CC 2.1.267, where the recorded \`effort\` is not evidence about what"

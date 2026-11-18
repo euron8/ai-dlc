@@ -75,6 +75,19 @@
 #       not a docstring (THE LINE FILTER), else `GATE1-SKIP: <reason>`; exit 0 for both. Any
 #       other exit (2 on a refusal) means re-run: the step text keys on `GATE1-SKIP` alone.
 #
+#   partition-review-diff.sh --route-g3 <worktree> <go-sha> <g3-sha> <frozen-sha> <story file, relative to the
+#                            worktree top> [--exclude-captures <file>]
+#       GATE 2 AFTER A GATE-3 REWORK (gate-transition.sh g2_after_g3). <go-sha> is the reviewed-sha of the PASSED
+#       QA pass M-1, <g3-sha> the sha the story's newest gate-3 plan judged. stdout ONE line. `ROUTE: <reason>`,
+#       exit 0, ONLY when ALL hold: the three shas name commits; <go-sha> is an ancestor of or equal to <g3-sha>;
+#       <g3-sha> is a STRICT ancestor of <frozen-sha> (equal is FULL: the gate-3 judged sha is the re-validation gate 3
+#       asked for); `git diff --name-status <go-sha>..<frozen-sha>` is non-empty and carries no CODE path under the strict
+#       CODE_CLASS_AWK (the --route classifier, not --gate1-rerun's line filter: a comment edit in code is CODE here);
+#       and the story file differs between <go-sha> and <frozen-sha> only inside its `## Dev Agent Record` section
+#       (the heading line stays in the compared text, the body to the next level-1 or level-2 heading is dropped
+#       from both sides; a story file absent at one end and present at the other differs). Every other outcome is
+#       `FULL: <reason>`, exit 1. A bad argument or an unusable worktree is REFUSED, exit 2.
+#
 #   THE CODE CLASS (both modes). A path in the range is CODE unless it is under a scan root (as
 #   above), ends in `.md`, ends in `.txt`/`.log`/`.out` with no path component that is a test
 #   directory (`test`, `tests`, `__tests__`, `spec`, `specs`, `e2e`, `fixtures`), or is a
@@ -352,10 +365,50 @@ gate1_rerun_mode() {
   exit 0
 }
 
+# ---- --route-g3 (header: GATE 2 AFTER A GATE-3 REWORK) ---------------------------------------------
+# dar_strip <file>: the story text with the body of its `## Dev Agent Record` section dropped (the heading stays).
+dar_strip() { awk '/^## Dev Agent Record([[:space:]]|$)/ { print; on = 1; next } on && /^##?[[:space:]]/ { on = 0 } !on { print }'; }
+route_g3_mode() {
+  GW=""; GGO=""; GG3=""; GS=""; GSTORY=""; GX=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --exclude-captures) [ "$#" -ge 2 ] || refuse "--exclude-captures needs a file"; GX="$2"; shift 2 ;;
+      --*) refuse "unknown flag $1" ;;
+      *) if [ -z "$GW" ]; then GW="$1"; elif [ -z "$GGO" ]; then GGO="$1"; elif [ -z "$GG3" ]; then GG3="$1"; elif [ -z "$GS" ]; then GS="$1"; elif [ -z "$GSTORY" ]; then GSTORY="$1"; else refuse "unexpected argument $1"; fi; shift ;;
+    esac
+  done
+  [ -n "$GSTORY" ] || refuse "usage: partition-review-diff.sh --route-g3 <worktree> <go-sha> <g3-sha> <frozen-sha> <story file> [--exclude-captures <file>]"
+  [ -z "$GX" ] || { [ -f "$GX" ] && [ -r "$GX" ]; } || refuse "--exclude-captures file $GX is not a readable file"
+  mode_setup "$GW" || refuse "$MS_WHY"
+  full_sha_ok "$GS" || refuse "frozen sha '$GS' is not a full lowercase hex object name"
+  GS_FULL="$(git -C "$WT_ABS" rev-parse --verify --quiet "${GS}^{commit}")" || full "frozen sha $GS names no commit in $WT_ABS"
+  GO_FULL="$(git -C "$WT_ABS" rev-parse --verify --quiet "${GGO}^{commit}")" || full "the go-signal sha '$GGO' names no commit in $WT_ABS"
+  G3_FULL="$(git -C "$WT_ABS" rev-parse --verify --quiet "${GG3}^{commit}")" || full "the gate-3 sha '$GG3' names no commit in $WT_ABS"
+  git -C "$WT_ABS" merge-base --is-ancestor "$GO_FULL" "$G3_FULL" || full "the go-signal sha $GO_FULL is not an ancestor of the gate-3 sha $G3_FULL; gate 3 did not judge a rework of what QA passed"
+  [ "$G3_FULL" != "$GS_FULL" ] || full "the frozen sha is the sha gate 3 judged, no new commit: a re-validation gate 3 asked for"
+  git -C "$WT_ABS" merge-base --is-ancestor "$G3_FULL" "$GS_FULL" || full "the gate-3 sha $G3_FULL is not an ancestor of the frozen sha $GS_FULL"
+  git -C "$WT_ABS" -c core.quotePath=false diff --name-status --no-renames --no-textconv --no-ext-diff \
+    "${GO_FULL}..${GS_FULL}" > "$T/delta" 2>/dev/null || full "git diff ${GO_FULL}..${GS_FULL} failed in $WT_ABS"
+  grep -q . "$T/delta" || full "the delta ${GO_FULL}..${GS_FULL} is empty; nothing reworked is nothing to route"
+  : > "$T/xcap"; [ -z "$GX" ] || cp "$GX" "$T/xcap" || full "cannot read $GX"
+  awk -F'\t' "$CODE_CLASS_AWK" "$T/roots" "$T/xcap" "$T/delta" > "$T/code" || full "classifying the delta failed"
+  ncode="$(grep -c . "$T/code")" || ncode=0
+  [ "$ncode" -eq 0 ] || full "the delta ${GO_FULL:0:12}..${GS_FULL:0:12} changes $ncode code path(s), first $(awk -F'\t' 'NR == 1 { print $2 }' "$T/code"); a rework that edits code or tests is re-validated in full"
+  if ! git -C "$WT_ABS" show "${GO_FULL}:${GSTORY}" > "$T/story.a" 2>/dev/null; then : > "$T/story.a"; fi
+  if ! git -C "$WT_ABS" show "${GS_FULL}:${GSTORY}" > "$T/story.b" 2>/dev/null; then : > "$T/story.b"; fi
+  if ! cmp -s "$T/story.a" "$T/story.b"; then
+    dar_strip < "$T/story.a" > "$T/story.a2"; dar_strip < "$T/story.b" > "$T/story.b2"
+    cmp -s "$T/story.a2" "$T/story.b2" || full "the story file $GSTORY changes outside its Dev Agent Record between ${GO_FULL:0:12} and ${GS_FULL:0:12}; the rework moved the acceptance text"
+  fi
+  printf 'ROUTE: the gate-3 rework %s..%s (%s path(s)) carries no code path and no story change outside the Dev Agent Record\n' \
+    "${GO_FULL:0:12}" "${GS_FULL:0:12}" "$(grep -c . "$T/delta")"
+  exit 0
+}
+
 prd_main() {
 export LC_ALL=C
 
-USAGE="usage: partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K] [--shard-dir <dir>] [--exclude-captures <file>] [--narrow-from <prior-review-file>] | --route <worktree> <prior-review-file> <frozen-sha> [--exclude-captures <file>] | --narrow <worktree> <prior-review-file> <frozen-sha> [--exclude-captures <file>] | --gate1-rerun <worktree> <base> <frozen-sha> [--exclude-captures <file>]"
+USAGE="usage: partition-review-diff.sh --map <worktree> <base> <frozen-sha> [--min-files N] [--max-parts K] [--shard-dir <dir>] [--exclude-captures <file>] [--narrow-from <prior-review-file>] | --route <worktree> <prior-review-file> <frozen-sha> [--exclude-captures <file>] | --narrow <worktree> <prior-review-file> <frozen-sha> [--exclude-captures <file>] | --gate1-rerun <worktree> <base> <frozen-sha> [--exclude-captures <file>] | --route-g3 <worktree> <go-sha> <g3-sha> <frozen-sha> <story file> [--exclude-captures <file>]"
 
 # ---- shared by --route and --gate1-rerun (header: THE CODE CLASS, THE LINE FILTER) -----------------
 # THE TEST NAME: the three basename expressions of THE PART SET step 3, the one test grammar here.
@@ -416,6 +469,7 @@ case "${1:-}" in
   --route) shift; route_mode "$@" ;;
   --narrow) shift; narrow_mode "$@" ;;
   --gate1-rerun) shift; gate1_rerun_mode "$@" ;;
+  --route-g3) shift; route_g3_mode "$@" ;;
   *) refuse "$USAGE" ;;
 esac
 

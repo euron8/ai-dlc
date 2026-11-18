@@ -252,6 +252,10 @@ Instruct all teammates:
     and never writes, because a gate that edits the artifact it is validating
     can pass a tree it just changed. An undeclared list is a worklist line and
     exit 0, so a project that has not adopted this is unaffected.
+- Before reporting to gate 1, the dev dispatches one `pre-reviewer`
+  (`.claude/team-roles/dev.md`, item 15) over its diff and the story's
+  acceptance criteria. Its spawn is ledgered under the dev as parent; it
+  writes no file and is not a gate review.
 - On story transition to `done`, the closing writer (item 4 of section 3)
   closes out any upstream source item the story satisfies, in the closing
   commit — do not defer to retro:
@@ -538,6 +542,16 @@ command with the next QA pass. A gate-1 pass at the very sha gate 3 judged (the 
 asked for), or after a pass M-1 review that does not read APPROVED, is not asked and runs as a
 re-review. That answer, `GATE1-RERUN:` and any refusal are each a `gate-log:` line in the plan,
 which the lead records, and the pass goes on as a re-review.
+
+**Gate 2 after a gate-3 rework (GATE2-SKIP).** At gate 2, pass M >= 2, when the story has a g3 plan
+and the QA pass M-1 file reads PASS, `gate-transition.sh <story> 2 --pass M <flags>` asks
+`partition-review-diff.sh --route-g3` from that file's reviewed-sha. `GATE2-SKIP` answers when the
+g3 plan's sha is a strict ancestor of the frozen sha and the delta carries no code or test path and
+no story-file change outside its Dev Agent Record: the plan reads `gate: skip`, `manifest: none`, no
+shard line, and authorizes no seat. The lead records the plan's `route:` line in the story's gate
+log and runs the plan's `next:` gate-3 command, never close. Any other answer is a `gate-log:` line
+in the plan, and the pass is a full validation. A later pass at either gate takes its prior review
+file from the newest earlier pass that has one, past each pass whose plan reads `gate: skip`.
 
 **Handoff preflight before every gate-2 dispatch.** Before every gate-2
 dispatch, including one that follows `GATE1-SKIP:`, the program runs the `--gate2` arm of the
