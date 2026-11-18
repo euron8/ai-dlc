@@ -3598,25 +3598,6 @@ verify: manual
 
 
 
-## BL-1163 — the push re-pays `readset_strip_keys` and `readset_tools`' scan on every key-missing run, though their answers depend only on file bytes
-
-**DEFECT.** OPEN. Filed 2026-11-17. Owner: `.githooks/pre-push` and `core/git-hooks/pre-push` (`readset_strip_keys`, `readset_tools`; I66 binds the two).
-
-BL-1124 (c) cut the select phase's fork counts. Two sites remain whose cost is in-process parsing, not forks. Both are re-paid on every push that misses the whole-suite key. At 619bfde94, both layouts: exec counts by a PATH shim; MB and file counts from the file sizes over each set (the diagnosis read them, no shim):
-- `readset_strip_keys` runs one `bash -n` per declared fixture (290 in the distribution, 218 in a tree built by `scripts/install.sh`). It sources each `run.sh` twice and re-prints it with `declare -f`: about 2 x 10.4 MB of shell in the distribution and 2 x 8.7 MB installed. One Perl shasum then hashes about 3 x 10 MB. The stripped key depends only on the `run.sh` bytes and the bash that judges them.
-- `readset_tools` runs one awk that word-splits every `.sh` (636 files, 22.7 MB, in the distribution; 514 files, 18.5 MB, installed). `.ftools` feeds only the undeclared fixtures (2 of 292).
-
-Fix:
-- Memoize `readset_strip_keys` on `<run.sh sha> + <bash identity>` → the stripped sha or `whole`. A steady-state push then costs about 0.
-- Memoize `readset_tools`' scan per `.sh` content sha plus the `.pathcmds` hash. Narrowing the scan to the undeclared fixtures' paths fails on the consumer-layout pass, where both are unmapped and keyed on the whole tree.
-- Both memos stay byte-identical on `.dkeys`, `hermetic-run.sh --key-only` output and `.ftools`.
-
-Owed: a contract adversary when this is picked. A memo is a new cached-value trust root.
-
-Provenance: batch 258, cluster C3 (ai-dlc-84 lead), split from BL-1124 (c) on the lead's ruling; id allocated by the lead.
-
-verify: manual
-
 ## BL-1161 — no fixture asserts the pre-push `REFUSED.` banner, I66's pool-shadow rule misses several override forms, and a string `)` mis-closes a marked subshell
 
 **NOTE.** OPEN. Filed 2026-11-17. Owner: unassigned (`.githooks/pre-push` and `core/git-hooks/pre-push`, the `FIXTURE_EXIT` span at `.githooks/pre-push:4545-4550` and `core/git-hooks/pre-push:3750-3755`; the pool-shadow rule in the I66 unit of `scripts/validate-enforcement-map.sh`, the awk opened at `:5503`).

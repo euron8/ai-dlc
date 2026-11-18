@@ -1706,6 +1706,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 65784a8c67e1cc03e26571fcc5442467221877352a6a29be7be13f9fd00fb91d readset_decl_parse folds its per-fixture awk and cat forks into one awk and takes an optional premap (BL-1124); every parse row is byte-identical, so no entry changes meaning
 # VS-IDENTITY 1 2344ea159b99335fe28e7862362a545b06d8b659e12f3fe4cb88ca7eb482582b BL-1124 (c) select cuts: the per-fixture grep loops are one awk each, readset_strip_keys backgrounds each bash -n without a subshell group, readset_decl_batch parses every declaration in one awk with the one premap/mapper join, readset_vs_want batches the per-candidate readers and the store scan stops at a foreign line-3 #fixture; every key, parse and digest row is byte-identical, so no entry changes meaning
 # VS-IDENTITY 1 dd6b4948a04c22742669aac0b53351884194a2f4805d85d7efb2a9f7660ce48c BL-1124 (c) readset_decl_parse per-fixture span, section and git.decl execs: readset_decl_spans parses spans.decl with builtins and readset_decl_spansbatch takes every fixture span presence and hash in one mapper start, one awk and one shasum, the `+` rows are collected by the row loop and hashed by readset_decl_hashes in one shasum for the whole pre-pass, readset_decl_ranges splits its paths with builtins, the glob expansion no longer moves a scratch file; every parse row is byte-identical, so no entry changes meaning
+# VS-IDENTITY 1 f9b807a1a25300e88515d3dd0b540b78d83247360d76ba0c357b745c18a52df3 BL-1163 memoizes readset_strip_keys and readset_tools' scan under the readset-memo record, off unless a depth-0 push entry; every key row, .dkeys, .ftools and .tools is byte-identical, so no stored entry changes meaning
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -1864,10 +1865,15 @@ VERIFIED_FORMAT="$VERIFIED_RECORD.format"
 rec_home KEYS_DIR fixture-keys
 CL_KEYS_DIR="$REC_OFF"
 # RECORD_HOME_END
+READSET_MEMO=""
+readset_memo_on() { # the memo is on only at depth 0 (BL-1163); a hook a fixture starts is deeper and reads no store
+  [ "$POOL_DEPTH_IN" -ne 0 ] || { rec_home READSET_MEMO readset-memo; [ "$READSET_MEMO" != "$REC_OFF" ] || READSET_MEMO=""; }
+}
 # A DECLARED FIXTURE'S KEY ROWS, ONE COMPOSER. This hook and hermetic-run.sh both source this span -- the runner at
 # top level, the way it sources READSET_TOOLS -- so the declaration is parsed, and the key rows composed, by ONE
-# implementation: there is no second composer to hold equal by a census. A code change here bumps READSET_VS_FORMAT
-# (the `verdict-store identity` step), so a verdict-store entry written under one composer is never reused under the next.
+# implementation: there is no second composer to hold equal by a census. A code change here adds a `# VS-IDENTITY` row under
+# the current READSET_VS_FORMAT when stored entries keep their meaning, or bumps READSET_VS_FORMAT when they do not (the
+# `verdict-store identity` step), so an entry written under one composer is never reused under the next.
 #   readset_span_sha  <file> <NAME>: the sha256 of the `# NAME_BEGIN`..`# NAME_END` span with every comment line (first
 #     non-blank character `#`) and blank line dropped, so a comment edit moves no key and no identity.
 #   readset_decl_parse  ONE fixture's inputs.decl and tools.decl -> rows `<fx>\t<kind>\t...`:
@@ -2335,13 +2341,22 @@ readset_decl_tool_hashes() { # <parse rows> <tool hash file, appended>
 #     bash -n alone cannot see that case, since deleting such a line still parses. The wrappers are sourced only in a
 #     subshell, and bash -n reads no BASH_ENV, so a counted run starts no extra bash.
 readset_strip_keys() {
-  local d="$1" w="$4.d" n=0 p f
+  local d="$1" w="$4.d" n=0 p f mf=""
   rm -rf "$w" && mkdir -p "$w" && : > "$4" || return 0
-  awk -F'\t' -v r="$2" '$2 == "N" { print r $1 "/run.sh" }' "$3" > "$w/l"
+  : > "$w/all"; : > "$w/res"; : > "$w/l"; : > "$w/ms"; : > "$w/keep"; : > "$w/new"; : > "$w/ne"
+  [ -z "${6:-}" ] || [ -z "${7:-}" ] || [ ! -s "${5:-}" ] || mf="$6/strip.${2//\//_}"
+  RS_N="${5:-}" RS_M="$mf" RS_I="${7:-}" RS_W="$w" awk -F'\t' -v r="$2" 'BEGIN { w = ENVIRON["RS_W"]; id = ENVIRON["RS_I"]
+      if (ENVIRON["RS_M"] != "") {
+        while ((getline l < ENVIRON["RS_N"]) > 0) { t = index(l, "\t"); NS[substr(l, 1, t - 1)] = substr(l, t + 1) }
+        while ((getline l < ENVIRON["RS_M"]) > 0) { k = split(l, a, "\t")
+          if (k == 4 && a[4] == "end" && a[2] == id && length(a[1]) == 64 && a[1] ~ /^[0-9a-f]+$/ && (a[3] == "whole" || (length(a[3]) == 64 && a[3] ~ /^[0-9a-f]+$/))) M[a[1]] = a[3] } } }
+    $2 == "N" { p = r $1 "/run.sh"; print p > (w "/all"); s = (p in NS) ? NS[p] : ""
+      if (s != "" && (s in M)) { print p "\t" M[s] > (w "/res"); if (!(s in KS)) { KS[s] = 1; print s "\t" id "\t" M[s] "\tend" > (w "/keep") } }
+      else { print p > (w "/l"); if (s != "") print p "\t" s > (w "/ms") } }' "$3"
   RS_D="$d" RS_W="$w" awk '{ n++; f = (substr($0, 1, 1) == "/") ? $0 : ENVIRON["RS_D"] "/" $0; b = ENVIRON["RS_W"] "/" n
       printf "" > (b ".s"); print "rs_f() {" > (b ".wo"); print "rs_f() {" > (b ".ws")
       while ((getline l < f) > 0) { print l > (b ".wo"); if (l !~ /^[[:space:]]*(#|$)/) { print l > (b ".s"); print l > (b ".ws") } }
-      print "}" > (b ".wo"); print "}" > (b ".ws"); close(f); close(b ".s"); close(b ".wo"); close(b ".ws") }' "$w/l"
+      print "}" > (b ".wo"); print "}" > (b ".ws"); close(f); close(b ".s"); close(b ".wo"); close(b ".ws"); print n > (ENVIRON["RS_W"] "/pd") }' "$w/l"
   ( r=""
     while IFS= read -r p; do
       n=$((n + 1)); case "$p" in /*) f="$p" ;; *) f="$d/$p" ;; esac
@@ -2351,22 +2366,39 @@ readset_strip_keys() {
     for q in $r; do wait "${q#*:}" && : > "$w/${q%%:*}.n"; done ) > /dev/null 2>&1
   ( while IFS= read -r p; do
       n=$((n + 1))
-      [ -s "$w/$n.s" ] && [ -f "$w/$n.n" ] || continue
-      unset -f rs_f; . "$w/$n.wo" 2>/dev/null && declare -f rs_f > "$w/$n.o" || continue
-      unset -f rs_f; . "$w/$n.ws" 2>/dev/null && declare -f rs_f > "$w/$n.p" && printf '%s\t%s\n' "$n" "$p"
+      [ -f "$w/$n.n" ] || continue
+      [ -s "$w/$n.s" ] || { printf '%s\n' "$n" >> "$w/ne"; continue; }
+      unset -f rs_f; . "$w/$n.wo" 2>/dev/null && declare -f rs_f > "$w/$n.o" || { printf '%s\n' "$n" >> "$w/ne"; continue; }
+      unset -f rs_f; . "$w/$n.ws" 2>/dev/null && declare -f rs_f > "$w/$n.p" && printf '%s\t%s\n' "$n" "$p" || printf '%s\n' "$n" >> "$w/ne"
     done < "$w/l" ) > "$w/ok" 2>/dev/null
-  [ -s "$w/ok" ] || return 0
-  awk -F'\t' -v w="$w" '{ print w "/" $1 ".o"; print w "/" $1 ".p"; print w "/" $1 ".s" }' "$w/ok" | tr '\n' '\000' \
-    | xargs -0 shasum -a 256 -- 2>/dev/null > "$w/sums"
-  awk -F'\t' -v w="$w" 'NR == FNR { q = $0; sub(/^[0-9a-f]+  /, "", q); H[q] = substr($0, 1, 64); next }
-    { b = w "/" $1; if (((b ".o") in H) && ((b ".p") in H) && ((b ".s") in H) && H[b ".o"] == H[b ".p"]) print $2 "\t" H[b ".s"] }' "$w/sums" "$w/ok" > "$4"
+  if [ -s "$w/l" ]; then
+    awk -F'\t' -v w="$w" '{ print w "/" $1 ".o"; print w "/" $1 ".p"; print w "/" $1 ".s" }' "$w/ok" > "$w/hl"
+    [ -z "$mf" ] || awk -v d="$d" '{ f = (substr($0, 1, 1) == "/") ? $0 : d "/" $0; print f }' "$w/l" >> "$w/hl"
+    [ ! -s "$w/hl" ] || tr '\n' '\000' < "$w/hl" | xargs -0 shasum -a 256 -- 2>/dev/null > "$w/sums"
+  fi
+  RS_W="$w" RS_D="$d" RS_I="${7:-}" awk -F'\t' 'BEGIN { w = ENVIRON["RS_W"]; d = ENVIRON["RS_D"]; id = ENVIRON["RS_I"]
+      while ((getline l < (w "/sums")) > 0) { q = l; sub(/^[0-9a-f]+  /, "", q); H[q] = substr(l, 1, 64) }
+      while ((getline l < (w "/ok")) > 0) { t = index(l, "\t"); OK[substr(l, 1, t - 1)] = 1 }
+      while ((getline l < (w "/res")) > 0) { t = index(l, "\t"); V[substr(l, 1, t - 1)] = substr(l, t + 1) }
+      while ((getline l < (w "/ms")) > 0) { t = index(l, "\t"); MS[substr(l, 1, t - 1)] = substr(l, t + 1) }
+      while ((getline l < (w "/ne")) > 0) NE[l] = 1
+      while ((getline l < (w "/pd")) > 0) PD[l] = 1
+      while ((getline l < (w "/l")) > 0) { n++; b = w "/" n; v = "whole"; pos = 0
+        if (n in NE) pos = 1
+        if ((n in OK) && ((b ".o") in H) && ((b ".p") in H) && ((b ".s") in H)) { pos = 1; if (H[b ".o"] == H[b ".p"]) v = H[b ".s"] }
+        V[l] = v; f = (substr(l, 1, 1) == "/") ? l : d "/" l
+        if (pos && (n in PD) && (l in MS) && (f in H) && H[f] == MS[l] && !(MS[l] in DONE)) { DONE[MS[l]] = 1; print MS[l] "\t" id "\t" v "\tend" > (w "/new") } }
+      while ((getline l < (w "/all")) > 0) if ((l in V) && V[l] != "whole") print l "\t" V[l] }' > "$4"
+  [ -s "$w/new" ] || return 0
+  { mkdir -p "${mf%/*}" && awk '{ print }' "$w/keep" "$w/new" > "$mf.tmp.$$" && mv "$mf.tmp.$$" "$mf"; } 2>/dev/null || rm -f "$mf.tmp.$$" 2>/dev/null
+  return 0
 }
-readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture root, with its trailing />
+readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture root, with its trailing /> [<memo dir> <memo identity>: the hook only]
   local rk_r="" rk_p rk_d="${HR_ROOT:-.}"
   for rk_p in core/scripts/hermetic-run.sh scripts/ai-dlc/hermetic-run.sh; do
     [ -f "$rk_d/$rk_p" ] && rk_r="$rk_r$rk_p $(readset_span_sha "$rk_d/$rk_p" HR_SANDBOX) $(readset_tail_sha "$rk_d/$rk_p");"
   done
-  readset_strip_keys "$rk_d" "$5" "$3" "$4.sk"
+  readset_strip_keys "$rk_d" "$5" "$3" "$4.sk" "$1" "${6:-}" "${7:-}"
   RK_R="$rk_r" RK_L="$2" RK_P="$3" RK_T="$4" RK_S="$4.sk" awk -F'\t' -v root="$5" '
     function out(f, k, v) { if (!((f SUBSEP k) in S)) { S[f SUBSEP k] = 1; print f "\t" k "\t" v } }
     BEGIN {
@@ -2398,19 +2430,80 @@ readset_decl_keys() { # <now> <ls.now> <parse rows> <tool hash file> <fixture ro
           while ((i2 = match(r, /\/[^\/]*$/)) > 0) { r = substr(r, 1, i2 - 1); out(a[j], r "/", ((r "/") in LS) ? LS[r "/"] : "-"); if (r == q) break } } } }' "$1"
 }
 # READSET_KEYROWS_END
+# THE MEMO IDENTITY (BL-1163). `readset_strip_keys` and `readset_tools` memoize per file content under READSET_MEMO
+# (<base>/readset-memo/<root>; empty = memo off). An entry is valid only under the identity of the programs that
+# computed it: the bash that judges (`bash -n`), the bash that prints (`declare -f`, $BASH), the awk, the text of the
+# function itself, the runtime locale, and for the tools scan the hash of `.pathcmds`. All of it is content
+# (never a path, version or mtime), taken from builtins plus ONE shasum exec per pass. An empty result turns the memo
+# off for that pass.
+READSET_MEMO_STRIP=""
+READSET_MEMO_TOOLS=""
+readset_memo_id() { # <out>: sets READSET_MEMO_STRIP and READSET_MEMO_TOOLS
+  local out="$1" b="" a="" loc h s_b s_B s_a s_fs s_ft s_pc
+  READSET_MEMO_STRIP=""; READSET_MEMO_TOOLS=""
+  [ -n "${READSET_MEMO:-}" ] && [ -n "${BASH:-}" ] || return 0
+  command -v bash > "$out/.mid.b" 2>/dev/null; command -v awk > "$out/.mid.a" 2>/dev/null
+  IFS= read -r b < "$out/.mid.b"; IFS= read -r a < "$out/.mid.a"
+  case "$b" in /*) ;; *) return 0 ;; esac
+  case "$a" in /*) ;; *) return 0 ;; esac
+  loc="LC_ALL=${LC_ALL-}|LC_CTYPE=${LC_CTYPE-}|LANG=${LANG-}"
+  case "$loc" in *$'\t'*|*$'\n'*) return 0 ;; esac
+  declare -f readset_strip_keys > "$out/.mid.fs"; declare -f readset_tools > "$out/.mid.ft"
+  shasum -a 256 -- "$b" "$BASH" "$a" "$out/.mid.fs" "$out/.mid.ft" "$out/.pathcmds" > "$out/.mid.h" 2>/dev/null
+  { read -r s_b _; read -r s_B _; read -r s_a _; read -r s_fs _; read -r s_ft _; read -r s_pc _; } < "$out/.mid.h"
+  for h in "$s_b" "$s_B" "$s_a" "$s_fs" "$s_ft" "$s_pc"; do
+    case "$h" in ''|*[!0-9a-f]*) return 0 ;; esac
+    [ "${#h}" -eq 64 ] || return 0
+  done
+  READSET_MEMO_STRIP="$s_b:$s_B:$s_a:$s_fs:$loc"
+  READSET_MEMO_TOOLS="$s_a:$s_ft:$s_pc:$loc"
+}
 readset_tools() { # <out>
-  local out="$1" xp="$READSET_TOOL_XP"
+  local out="$1" xp="$READSET_TOOL_XP" tf="" sc="$1/.ftools" ml="$1/.rt.sh" fr="${FXROOT:-}" rt_rc=0
   [ -n "$xp" ] || xp="$(readset_git_exec_path)"
   ( IFS=:; for p in $xp:$READSET_TOOL_DIRS; do
       [ -d "$p" ] && ls -1 "$p" 2>/dev/null | awk -v d="$p" '{ print d "\t" $0 }'
     done ) > "$out/.pathcmds"
-  grep '\.sh$' "$out/.files" | tr '\n' '\000' | RT_CMDS="$out/.pathcmds" xargs -0 awk '
+  readset_memo_id "$out"
+  grep '\.sh$' "$out/.files" > "$out/.rt.sh"
+  [ -z "$READSET_MEMO_TOOLS" ] || [ ! -s "$out/.now" ] || tf="$READSET_MEMO/tools.${fr//\//_}"
+  if [ -n "$tf" ]; then
+    sc="$out/.rt.new"; ml="$out/.rt.miss"
+    : > "$out/.rt.hit"; : > "$out/.rt.miss"; : > "$out/.rt.ms"; : > "$out/.rt.keep"; : > "$out/.rt.new"
+    RT_W="$out" RT_N="$out/.now" RT_M="$tf" RT_I="$READSET_MEMO_TOOLS" awk -F'\t' 'BEGIN { w = ENVIRON["RT_W"]; id = ENVIRON["RT_I"]
+        while ((getline l < ENVIRON["RT_N"]) > 0) { t = index(l, "\t"); NS[substr(l, 1, t - 1)] = substr(l, t + 1) }
+        while ((getline l < ENVIRON["RT_M"]) > 0) { k = split(l, a, "\t"); ok = (k >= 4 && a[k] == "end" && a[2] == id && length(a[1]) == 64 && a[1] ~ /^[0-9a-f]+$/ && a[3] == (k - 4) "")
+          for (i = 4; ok && i < k; i++) if (a[i] !~ /^\//) ok = 0
+          if (ok) M[a[1]] = l }
+        while ((getline l < (w "/.rt.sh")) > 0) { s = (l in NS) ? NS[l] : ""
+          if (s != "" && (s in M)) { k = split(M[s], a, "\t"); for (i = 4; i < k; i++) print l "\t" a[i] > (w "/.rt.hit")
+            if (!(s in KS)) { KS[s] = 1; print M[s] > (w "/.rt.keep") } }
+          else { print l > (w "/.rt.miss"); if (s != "") print l "\t" s > (w "/.rt.ms") } } }'
+  fi
+  tr '\n' '\000' < "$ml" | RT_CMDS="$out/.pathcmds" xargs -0 awk '
     BEGIN { while ((getline l < ENVIRON["RT_CMDS"]) > 0) { t = index(l, "\t"); n = substr(l, t + 1); if (!(n in cmd)) cmd[n] = substr(l, 1, t - 1) "/" n } }
     FNR == 1 { delete seen }
     /^[[:space:]]*#/ { next }
     { n = split($0, w, /[^A-Za-z0-9_.+-]+/)
       for (i = 1; i <= n; i++) if ((w[i] in cmd) && !(w[i] in seen)) { seen[w[i]] = 1; print FILENAME "\t" cmd[w[i]] } }' \
-    > "$out/.ftools" 2>/dev/null
+    > "$sc" 2>/dev/null
+  rt_rc="${PIPESTATUS[1]}"
+  if [ -n "$tf" ]; then
+    : > "$out/.rt.sums"; : > "$out/.rt.add"
+    # An awk that exited non-zero (a file gone before the scan, a spawn failure) skipped the rest of its argv: store nothing.
+    [ "$rt_rc" -eq 0 ] || : > "$out/.rt.ms"
+    [ ! -s "$out/.rt.miss" ] || tr '\n' '\000' < "$out/.rt.miss" | xargs -0 shasum -a 256 -- 2>/dev/null > "$out/.rt.sums"
+    RT_W="$out" RT_I="$READSET_MEMO_TOOLS" awk -F'\t' 'BEGIN { w = ENVIRON["RT_W"]; id = ENVIRON["RT_I"]
+        while ((getline l < (w "/.rt.hit")) > 0) { t = index(l, "\t"); p = substr(l, 1, t - 1); C[p] = C[p] "\t" substr(l, t + 1); N[p]++ }
+        while ((getline l < (w "/.rt.new")) > 0) { t = index(l, "\t"); p = substr(l, 1, t - 1); C[p] = C[p] "\t" substr(l, t + 1); N[p]++ }
+        while ((getline l < (w "/.rt.sums")) > 0) { q = l; sub(/^[0-9a-f]+  /, "", q); H[q] = substr(l, 1, 64) }
+        while ((getline l < (w "/.rt.ms")) > 0) { t = index(l, "\t"); MS[substr(l, 1, t - 1)] = substr(l, t + 1) }
+        while ((getline l < (w "/.rt.miss")) > 0) if ((l in MS) && (l in H) && H[l] == MS[l] && !(MS[l] in DONE)) { DONE[MS[l]] = 1; print MS[l] "\t" id "\t" (N[l] + 0) C[l] "\tend" > (w "/.rt.add") }
+        while ((getline l < (w "/.rt.sh")) > 0) { n = split(C[l], a, "\t"); for (i = 2; i <= n; i++) print l "\t" a[i] } }' > "$out/.ftools"
+    if [ -s "$out/.rt.add" ]; then
+      { mkdir -p "${tf%/*}" && awk '{ print }' "$out/.rt.keep" "$out/.rt.add" > "$tf.tmp.$$" && mv "$tf.tmp.$$" "$tf"; } 2>/dev/null || rm -f "$tf.tmp.$$" 2>/dev/null
+    fi
+  fi
   cut -f2 "$out/.ftools" | LC_ALL=C sort -u | tr '\n' '\000' | xargs -0 shasum -a 256 -- 2>/dev/null \
     | awk '{ p = $0; sub(/^[0-9a-f]+  /, "", p); print p "\t" $1 }' > "$out/.tools"
 }
@@ -2484,7 +2577,7 @@ readset_declared() { # <list> <out>
   # `.dtools` (`<fx>\t<tool path>`) is a VIEW of the parse for diagnostics and probes; the decision reads `.dkeys`.
   awk -F'\t' '$2 == "T" { print $1 "\t" $3 }' "$out/.dparse" > "$out/.dtools"
   readset_decl_tool_hashes "$out/.dparse" "$out/.tools"
-  HR_ROOT=. readset_decl_keys "$out/.now" "$out/.ls.now" "$out/.dparse" "$out/.tools" "$FXROOT" > "$out/.dkeys"
+  HR_ROOT=. readset_decl_keys "$out/.now" "$out/.ls.now" "$out/.dparse" "$out/.tools" "$FXROOT" "${READSET_MEMO:-}" "${READSET_MEMO_STRIP:-}" > "$out/.dkeys"
 }
 
 # THE RECORD, `$KEYS_DIR/<fx>.key`: `#format k1`, `#state ok|stale|seeded`, `#tools canonical`
@@ -3982,6 +4075,8 @@ elif [ -d tests/fixtures ]; then
   [ -f scripts/ai-dlc/validate-fixture-drivability.sh ] &&
     step "fixture drivability (a skipped fixture reads like one that passed)" drivability
   FAIL_BEFORE_SUITE="$fail"
+  # The readset memo (BL-1163) is on only for a push at depth 0; a hook started by a fixture runs at depth 1 or more.
+  readset_memo_on
   step "fixture suite (${FIXTURE_JOBS}-way)" run_fixtures
 fi
 
