@@ -5484,20 +5484,56 @@ RT_EOF
   # declaration is stripped first. A line ending in `# pool-shadow: subshell` is exempt only inside an open
   # `( ... )` block: one opened by a line matching `^[ \t]*\( ` and closed on the line where the count of `(` minus
   # `)` since the opener returns to 0 (that line is the block's last; an opener that balances on its own line is a
-  # one-line block). Parentheses in strings or comments inside the block count too, so a block still open at the end
-  # of a hook prints `OPEN` with its opener line and fails closed; an unbalanced `)` in a string closes the block
-  # early and fails loud on a marked line still inside it (BL-1161). A marked line outside any block prints `MARKTOP`. The
-  # exemption is distribution-only: any `# pool-shadow:` line in the consumer hook prints `MARKER`. An empty name set
-  # prints `<file>\t0\tZERO` and fails closed.
-  # Measured before the marker: the two .githooks/pre-push lines of ps_select's key-pass subshell, consumer none.
-  # Not covered (owed under BL-1161): a name the pool only READS (assigns nowhere at column 0); the override forms
-  # `NAME+=`, `for NAME in`, `read -r NAME`, `unset [-f|-v] NAME`, `function NAME {` without parens, `printf -v NAME`,
-  # `: ${NAME:=x}` and `: ${NAME=x}`, `eval "NAME=..."` and `alias NAME=`; and a ` #` inside a string, which
-  # truncates the comment strip.
+  # one-line block). Only parentheses OUTSIDE quotes and comments count (cut() blanks quoted spans and drops the
+  # comment), so `echo ")"` inside a marked subshell stays quiet; an unbalanced `(` outside quotes leaves a block
+  # open at the end of a hook and prints `OPEN` with its opener line, failing closed. A marked line outside any
+  # block prints `MARKTOP`. The exemption is distribution-only: any `# pool-shadow:` line in the consumer hook
+  # prints `MARKER`. An empty name set prints `<file>\t0\tZERO` and fails closed.
+  # Override forms read off a line outside the pool, over the pool's global and function names: `NAME=`, `NAME+=`,
+  # `NAME()`, `rec_home NAME`, `for NAME in`, `read [-r] NAME`, `unset [-f|-v] NAME`, `function NAME`, `printf -v NAME`,
+  # `${NAME:=x}` / `${NAME=x}` (so `: ${NAME:=x}` too), `eval ...NAME=...` and `alias NAME=`. A ` #` inside a string
+  # no longer truncates the line: the comment strip is quote-aware.
+  # Measured at the tip over both hooks: zero hits for every form. NOT covered, by measurement: a name the pool only
+  # READS. Its candidate set (`$NAME` read in the pool, assigned nowhere at column 0) was 77 hits over the two hooks,
+  # all legitimate top-level locals and configuration (`n`, `out`, `rc`, `q`, `sp`, `FXCOUNT_*`, `AI_DLC_*` ...);
+  # it is not an override set. Also not covered: `(( NAME++ ))`, `let NAME=`, `NAME[i]=`, `declare -n`.
+  # The quote state is CARRIED across lines (cut() blanks a multi-line string as a whole, so the line that closes an
+  # `awk '`...`'` string is not read as an opening quote) and resets only at the start of each hook. A hook that ends
+  # inside a quote prints `QUOTE`, so an ODD-parity desync fails closed instead of blanking the rest of the file. An
+  # EVEN number of stray quotes (BL-1176: `"$(grep '^"' f)"`, the inner `"` flips the state) resyncs by itself and is
+  # silent, blinding the quote-blanked forms until the next stray `"`; none sits outside the pool at this tip.
   ps_out="$(awk '
-    function scan(   i, s, t, rest, pre, nm, kind, n, inblk, dep, u, here, op) {
+    function cut(s,   i, n, c, q, p) {
+      RAW = ""; BLK = ""; q = QS; n = length(s)
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (q == "\047") { RAW = RAW c; if (c == "\047") { q = ""; BLK = BLK c } continue }
+        if (q == "\042") {
+          RAW = RAW c
+          if (c == "\\") { i++; RAW = RAW substr(s, i, 1); continue }
+          if (c == "\042") { q = ""; BLK = BLK c }
+          continue
+        }
+        if (c == "\\") { RAW = RAW c substr(s, i + 1, 1); BLK = BLK c substr(s, i + 1, 1); i++; continue }
+        if (c == "\047" || c == "\042") { q = c; RAW = RAW c; BLK = BLK c; continue }
+        if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[ \t]/)) break
+        RAW = RAW c; BLK = BLK c
+      }
+      QS = q
+    }
+    function hit(i, nm, how,   k) {
+      if (nm in G) k = "global"; else if (nm in F) k = "function"; else return
+      print nf "\t" i "\t" k "\t" nm (how == "" ? "" : " [" how "]")
+    }
+    function idents(i, str, how,   t) {
+      gsub(/\$\{?[A-Za-z_][A-Za-z0-9_]*/, " ", str)
+      sub(/[;&|)<>].*$/, "", str)
+      gsub(/(^|[ \t])-[A-Za-z]+/, " ", str)
+      while (match(str, /[A-Za-z_][A-Za-z0-9_]*/)) { t = substr(str, RSTART, RLENGTH); str = substr(str, RSTART + RLENGTH); hit(i, t, how) }
+    }
+    function scan(   i, s, t, rest, pre, nm, kind, n, inblk, dep, u, here, op, r, b, x) {
       if (nf == "") return
-      n = 0; pb = 0; pe = 0
+      n = 0; pb = 0; pe = 0; QS = ""; inblk = 0
       for (i = 1; i <= nl; i++) {
         if (L[i] == "# FIXTURE_POOL_BEGIN") pb = i
         else if (L[i] == "# FIXTURE_POOL_END") pe = i
@@ -5513,30 +5549,65 @@ RT_EOF
       for (i = 1; i <= nl; i++) {
         if (nf == cons && index(L[i], "# pool-shadow:")) print nf "\t" i "\tMARKER\t-"
         s = L[i]
+        cut(s); r = RAW; b = BLK
         if (!inblk && s ~ /^[ \t]*\( /) { inblk = 1; dep = 0; op = i }
-        if (inblk) { u = s; dep += gsub(/\(/, "(", u); u = s; dep -= gsub(/\)/, ")", u) }
+        if (inblk) { u = b; dep += gsub(/\(/, "(", u); u = b; dep -= gsub(/\)/, ")", u) }
         here = inblk; if (inblk && dep <= 0) inblk = 0
         if (i >= pb && i <= pe) continue
         if (s ~ /^[ \t]*#/) continue
         if (s ~ /# pool-shadow: subshell$/) { if (!here && nf != cons) print nf "\t" i "\tMARKTOP\t-"; continue }
-        sub(/(^|[ \t])#.*$/, "", s)
-        gsub(/(^|[;&|({ \t])local[ \t][^;]*/, " ", s)
-        rest = " " s
-        while (match(rest, /[;&|({ \t][A-Za-z_][A-Za-z0-9_]*([ \t]*\(\)|=)/)) {
+        gsub(/(^|[;&|({ \t])local[ \t][^;]*/, " ", r)
+        gsub(/(^|[;&|({ \t])local[ \t][^;]*/, " ", b)
+        rest = " " r
+        while (match(rest, /[;&|({ \t][A-Za-z_][A-Za-z0-9_]*([ \t]*\(\)|\+?=)/)) {
           pre = (RSTART > 1) ? substr(rest, RSTART - 1, 1) : ""
           t = substr(rest, RSTART + 1, RLENGTH - 1)
           rest = substr(rest, RSTART + RLENGTH)
           if (pre == "$") continue
-          if (t ~ /=$/) { nm = substr(t, 1, length(t) - 1); kind = "global"; if (!(nm in G)) continue }
+          if (t ~ /=$/) { nm = t; sub(/\+?=$/, "", nm); kind = "global"; if (!(nm in G)) continue }
           else { nm = t; sub(/[ \t]*\(\)$/, "", nm); kind = "function"; if (!(nm in F)) continue }
           print nf "\t" i "\t" kind "\t" nm
         }
-        if (match(s, /(^|[;&|({ \t])rec_home[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
-          t = substr(s, RSTART, RLENGTH); sub(/.*rec_home[ \t]+/, "", t)
+        if (match(r, /(^|[;&|({ \t])rec_home[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
+          t = substr(r, RSTART, RLENGTH); sub(/.*rec_home[ \t]+/, "", t)
           if (t in G) print nf "\t" i "\tglobal\t" t
+        }
+        rest = b
+        while (match(rest, /(^|[;&|({ \t])for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in([ \t]|$)/)) {
+          t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
+          sub(/^[^a-z]*for[ \t]+/, "", t); sub(/[ \t]+in[ \t]*$/, "", t); hit(i, t, "for")
+        }
+        rest = b
+        while (match(rest, /(^|[;&|({ \t])(read|unset)[ \t]/)) {
+          x = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
+          idents(i, rest, x ~ /read/ ? "read" : "unset")
+        }
+        if (match(b, /(^|[;&|({ \t])printf[ \t]+-v[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
+          t = substr(b, RSTART, RLENGTH); sub(/.*-v[ \t]+/, "", t); hit(i, t, "printf -v")
+        }
+        rest = b
+        while (match(rest, /(^|[;&|({ \t])function[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
+          t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH); sub(/.*function[ \t]+/, "", t); hit(i, t, "function")
+        }
+        rest = b
+        while (match(rest, /(^|[;&|({ \t])alias[ \t]+[A-Za-z_][A-Za-z0-9_]*=/)) {
+          t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH); sub(/.*alias[ \t]+/, "", t); sub(/=$/, "", t); hit(i, t, "alias")
+        }
+        rest = r
+        while (match(rest, /\$\{[A-Za-z_][A-Za-z0-9_]*:?=/)) {
+          t = substr(rest, RSTART + 2, RLENGTH - 2); rest = substr(rest, RSTART + RLENGTH); sub(/:?=$/, "", t); hit(i, t, "${:=}")
+        }
+        if (match(r, /(^|[;&|({ \t])eval[ \t]/)) {
+          rest = substr(r, RSTART + RLENGTH)
+          while (match(rest, /[A-Za-z_][A-Za-z0-9_]*(\+?=|[ \t]*\(\))/)) {
+            t = substr(rest, RSTART, RLENGTH); pre = (RSTART > 1) ? substr(rest, RSTART - 1, 1) : ""; rest = substr(rest, RSTART + RLENGTH)
+            if (pre == "$") continue
+            sub(/(\+?=|[ \t]*\(\))$/, "", t); hit(i, t, "eval")
+          }
         }
       }
       if (inblk) print nf "\t" op "\tOPEN\t-"
+      if (QS != "") print nf "\t" nl "\tQUOTE\t-"
     }
     FNR == 1 { scan(); nf = FILENAME; nl = 0 }
     { L[++nl] = $0 }
@@ -5544,11 +5615,13 @@ RT_EOF
   while IFS="$rt_tab" read -r ps_f ps_l ps_k ps_n; do
     [ -n "$ps_f" ] || continue
     if [ "$ps_k" = OPEN ]; then
-      err "I66 ${ps_f#$REPO_ROOT/}: the '( ... )' block opened at line ${ps_l} never closes by its paren count before the end of the file. The pool-shadow marker is scoped by that count, so a block left open would exempt every marked line after it; an unbalanced paren inside a string in the block is the usual cause. Balance the block's parentheses."
+      err "I66 ${ps_f#$REPO_ROOT/}: the '( ... )' block opened at line ${ps_l} never closes by its paren count before the end of the file. The pool-shadow marker is scoped by that count, so a block left open would exempt every marked line after it. Balance the block's parentheses outside quotes and comments."
     elif [ "$ps_k" = MARKTOP ]; then
       err "I66 ${ps_f#$REPO_ROOT/}:${ps_l} carries '# pool-shadow: subshell' outside any '( ... )' block. The marker exempts only a line inside an open subshell, where an override cannot outlive the block; at top level it would hide a real override of the pool. Move the line into a subshell or drop the marker."
     elif [ "$ps_k" = MARKER ]; then
       err "I66 ${ps_f#$REPO_ROOT/}:${ps_l} carries a '# pool-shadow:' marker. The consumer hook has no pool-shadow exemption: an override there changes what only a consumer's suite runs or skips. Remove the marker and move the override inside the pool."
+    elif [ "$ps_k" = QUOTE ]; then
+      err "I66 ${ps_f#$REPO_ROOT/}: the pool-shadow scan ended inside an unclosed quote (last line ${ps_l}), so every line after the quote opened was blanked and no override there could be seen. Close the quote, or an apostrophe in an unquoted heredoc body desynchronised the scan: quote it or reword it."
     elif [ "$ps_k" = ZERO ]; then
       err "I66 derived ZERO top-level names from the FIXTURE_POOL block of ${ps_f#$REPO_ROOT/}, so no override outside the pool could be checked. The sentinels moved or the block lost its column-0 definitions; this check fails closed rather than reporting a clean scan of nothing."
     else

@@ -16,3 +16,16 @@ core/fixtures/lib/report.sh
 core/fixtures/lib/inproc.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/layout.sh
+core/fixtures/lib/README.md
+core/fixtures/lib/hook-drive.sh
+core/fixtures/lib/pool-span.sh
+core/fixtures/lib/settled-net.sh
+core/fixtures/lib/world.sh
+core/schemas/audit-anchors.json
+core/schemas/gate-adjudication-verdict.json
+core/schemas/harness-origin.json
+core/schemas/layer-adjudication-register.json
+core/schemas/pause-routing.json
+core/schemas/pipeline-state-paths.json
+core/schemas/sprint-status.json
+core/schemas/write-format-steering.json

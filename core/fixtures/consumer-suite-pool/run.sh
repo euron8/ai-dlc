@@ -800,7 +800,8 @@ if st_refused "$WORK/stall.out" gh && [ "$gh_live" = 0 ]; then
 else
   bad "(gh) a hung cross-group grandchild was not refused and reaped (live recorded members $gh_live)"
 fi
-if [ "$rc" = 1 ] && grep -q '^   FAIL  f$' "$WORK/stall.out" && ! st_refused "$WORK/stall.out" f; then
+if [ "$rc" = 1 ] && grep -q '^   FAIL  f$' "$WORK/stall.out" && ! st_refused "$WORK/stall.out" f \
+   && ! grep -q '^pre-push: REFUSED\.' "$WORK/stall.out"; then
   ok "(f) a unit that exits 1 is FAIL, not REFUSED, and a real FAIL beside a refusal exits 1"
 else
   bad "(f) exit 1 did not read FAIL with the push at 1 (rc=$rc)"
@@ -811,8 +812,11 @@ T="$WORK/stall2"; st_world "$T" "$HOOK" h
 mkfx_g "$T" alpha 0
 rc="$(st_drive "$T" "$WORK/stall2.out")"
 h2_live="$(st_alive "$T" h)"
-if [ "$rc" = 2 ] && st_refused "$WORK/stall2.out" h && grep -q '^   ok    alpha$' "$WORK/stall2.out" && [ "$h2_live" = 0 ]; then
-  ok "a refusal with no FAIL beside it exits 2: the absence of a verdict, not a red verdict"
+if [ "$rc" = 2 ] && st_refused "$WORK/stall2.out" h && grep -q '^   ok    alpha$' "$WORK/stall2.out" && [ "$h2_live" = 0 ] \
+   && ! grep -q '^pre-push: REFUSED\. A fixture unit made no progress and was killed;' "$WORK/stall2.out"; then
+  bad "a lone refusal exited 2 but the hook did not print the pre-push: REFUSED. banner steps/handoff.md step 3 branches on"
+elif [ "$rc" = 2 ] && st_refused "$WORK/stall2.out" h && grep -q '^   ok    alpha$' "$WORK/stall2.out" && [ "$h2_live" = 0 ]; then
+  ok "a refusal with no FAIL beside it exits 2 and prints the pre-push: REFUSED. banner handoff.md step 3 branches on"
 else
   bad "a lone refusal did not exit 2 (rc=$rc, live recorded members $h2_live)"
 fi
