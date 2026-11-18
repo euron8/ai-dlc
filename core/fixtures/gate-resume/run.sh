@@ -34,14 +34,20 @@ skip() { # skip <what> <why>
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
 # shellcheck source=/dev/null
 . "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
 
-# IN PROCESS (BL-878). gate-slice.sh and gate-checkpoint.sh are asked through gsl_f / gck_f: a subshell that sources
-# the file it is handed (the subject, or a copy placed in a world) and calls its entry function, logged by fx_inproc
-# under the subject's own path (the two `inproc:` rows). lib/inproc.sh is not used: this fixture declares three
-# unguarded bash subjects (the hooks), and P2 reads inproc.sh's own sources as unpaired drives of them (BL-878,
-# "Not using lib/inproc.sh"). No caller-variable reset: both entry functions assign every variable they read
-# before reading it, and the cli cells below are the equivalence evidence. The programs run only in the cells of
-# cells.decl.
+# IN PROCESS (BL-878, BL-1164). gate-slice.sh and gate-checkpoint.sh are asked through gsl_f / gck_f, which hand the
+# file (the subject, or a copy placed in a world) to lib/inproc.sh's inproc_run: nothing is loaded into this shell, so
+# inproc_run sources the file inside its own fresh-bash subshell and calls the entry function there, logged under
+# INPROC_LOADED, which names the subject for a copy's pass (story-provenance's ipc form), so a copy's pass is a pass of
+# the subject it copies (the two `inproc:` rows). THE OPERAND IS A LITERAL TAIL, "${_f%/*}/gate-slice.sh": this fixture
+# declares unguarded bash subjects (the hooks), and arm P2 of scripts/validate-fixture-invocations.sh rows an inproc_run
+# whose operand no literal path resolves in such a fixture (the producing line, :1013, "the operand of ... which no
+# literal path, same-file assignment or caller in the population resolves", and :1026, which never pairs an
+# unresolvable operand). inproc.sh's own source lines are exempt at the library (the INPX block), never the cause. The
+# wrapper refuses (125) a file whose basename is not the subject's, so the tail can never substitute a sibling. The
+# programs run only in the cells of cells.decl.
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present subject with neither the `<p>_main() {` line nor the column-0
 # source guard predates the wrap, and sourcing it would run its whole body: SKIP and exit 0 (FIXTURE BROKEN in the
 # distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
@@ -71,11 +77,13 @@ done
 if [ -n "$_gr_pre" ]; then echo "SKIP: gate-resume:$_gr_pre predate(s) the in-process wrap"; fx_skip_exit "$HERE"; fi
 gsl_f() { # gsl_f <file> [args...] -> gsl_main's stdout, stderr and exit, logged as a pass of $SLICE
   local _f="$1"; shift
-  ( fx_inproc "$SLICE"; set +eufx +o pipefail; hash -r; . "$_f" || exit 126; gsl_main "$@" )
+  case "$_f" in */gate-slice.sh) ;; *) echo "FIXTURE BROKEN: gsl_f was handed $_f, not a gate-slice.sh" >&2; return 125 ;; esac
+  ( [ "$_f" = "$SLICE" ] || INPROC_LOADED="$SLICE"; inproc_run "${_f%/*}/gate-slice.sh" gsl_main "$@" )
 }
 gck_f() { # gck_f <file> [args...] -> gck_main's stdout, stderr and exit, logged as a pass of $CKPT
   local _f="$1"; shift
-  ( fx_inproc "$CKPT"; set +eufx +o pipefail; hash -r; . "$_f" || exit 126; gck_main "$@" )
+  case "$_f" in */gate-checkpoint.sh) ;; *) echo "FIXTURE BROKEN: gck_f was handed $_f, not a gate-checkpoint.sh" >&2; return 125 ;; esac
+  ( [ "$_f" = "$CKPT" ] || INPROC_LOADED="$CKPT"; inproc_run "${_f%/*}/gate-checkpoint.sh" gck_main "$@" )
 }
 gsl() { gsl_f "$SLICE" "$@"; }
 gck() { gck_f "$CKPT" "$@"; }

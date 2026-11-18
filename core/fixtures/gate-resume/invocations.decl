@@ -2,7 +2,8 @@
 # Subject starts are the cells of cells.decl: 2 cli and 1 e2e (--self-probe) per subject, plus the self-probes'
 # own child starts, which the nested rows cover (gate-slice.sh 3, gate-checkpoint.sh 65). Every other drive of the
 # two subjects is in process, one inproc: pass each. The hooks run end to end from world copies under .claude/hooks/,
-# which are no start of a declared core/hooks/ path.
+# which are no start of a declared core/hooks/ path. BL-1164 (batch 259 C3b): each in-process drive is lib/inproc.sh's
+# inproc_run, which logs one pass per call as the hand-rolled source did; no load, so no row moves.
 236 *
 0 core/hooks/ai-dlc-recover.sh
 0 core/hooks/ai-dlc-handoff-entry.sh

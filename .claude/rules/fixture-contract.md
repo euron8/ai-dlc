@@ -67,7 +67,8 @@ change. Building good arms is `fixture-mutants.md`'s; shipping is `fixture-ship-
   (`fx_inproc` passes), `<c>+<k>x<glob>` (a corpus count); every row exact, set from a counted run. Enforcer:
   `scripts/validate-fixture-invocations.sh` J3, J4, J6.
 - **C17** `cells.decl`: `cli <subject> <id>`, `e2e <subject> <id> why=<reason>`,
-  `nested <parent> <child> why=<reason>`; every start of a subject carries an `FXCELL` tag. Enforcer:
+  `nested <parent> <child> why=<reason>`, `drives <fixture>` (this fixture runs that fixture's `run.sh` as a child; never
+  itself, its own shard parent or a fixture with no `cells.decl`); every start of a subject carries an `FXCELL` tag. Enforcer:
   `scripts/validate-fixture-invocations.sh` C1, C2, C3; `scripts/validate-fixture-inprocess.sh` C4, C5.
 - **C18** `git.decl`: `seed`, `pin <sha>`, `pin? <sha>`, `range <ref-expr> <path>...`. Enforcer:
   `core/scripts/hermetic-run.sh` HR_SANDBOX.

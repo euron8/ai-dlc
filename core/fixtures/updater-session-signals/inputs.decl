@@ -2,5 +2,6 @@
 !core/hooks/ai-dlc-acknowledge.sh
 !core/hooks/ai-dlc-dispatch-guard.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/inproc.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/layout.sh

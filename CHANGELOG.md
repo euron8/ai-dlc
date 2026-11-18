@@ -19,6 +19,21 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1166.0] - 2026-11-18
+
+### Nested FXCELL credit is opt-in (`drives`); part of BL-1164's close
+
+- The BL-1164 close lands with C3b in this same release; its entry text is C3b's. This section is the nested-cell credit rule that close cites.
+- `scripts/validate-fixture-invocations.sh`: a fixture's own `cells.decl` may carry `drives <fixture>`. The judge credits an inner fixture's `cells.decl` cells to a tag only when the judged fixture declares `drives <that fixture>` AND the start log shows a distinct-pid `run.sh` start of that fixture among the tagged start's ancestors (the same-pid exec of a shard stub and the `..` spelling rules are unchanged). An outer fixture therefore needs both `drives <inner>` and the inner's `cells.decl` in its `inputs.decl` (the judge reads it inside the sandbox).
+- The hole it closes: before this change the credit followed any `inputs.decl` line naming another fixture's `run.sh`, so a shard stub that SPAWNS its parent (`reconcile-emit-report-b` and `-c` run `bash "$IMPL" --group <x>` as a child) had a parent-cell tag credited. Measured on a real armed log of `reconcile-emit-report-b` with `cli-render` injected under the spawned parent `run.sh`: the validator before this change (cad8cfd8a) read `ok C` (credited), while the validator without any nested credit (747f89054, control) FAILed C2. Latent: the real stub run emits 0 subject starts and no tags, so no recorded pass changed. No fixture carries a `drives` row in this release; the seam keeps its allowlist row.
+- `fxc_cells_parse` reads the new row kind and the static join skips it; an unknown kind still reports C2. A `drives` row is a C2 error, in the static join and in the judge, when it names the fixture itself, the fixture's own shard parent (`fxc_impl_of`), or a fixture with no readable `cells.decl` under the root (no such fixture included); the row then credits nothing. The ancestry match is anchored on the judged root's own `core/fixtures/<X>/run.sh`, so a copy of that path elsewhere (a probe world under `mktemp`) is not credited. `.claude/rules/fixture-contract.md` C17 lists the new row kind.
+
+### BL-1164 (closes): gate-resume, advisor-gate-deny and updater-session-signals drive their subjects through `lib/inproc.sh`
+
+- The three fixtures that batch 259 C3 landed in the bypass shape (a hand subshell source paired with `fx_inproc`) now use `inproc_load`/`inproc_run`, each with a literal-tail operand (`"${_f%/*}/gate-slice.sh"`, `"${1%/*}/ai-dlc-advisor-gate.sh"`, `"${HOOK%/*}/ai-dlc-acknowledge.sh"`). Each wrapper refuses a path whose basename is not the subject's. Each `inputs.decl` declares `core/fixtures/lib/inproc.sh`. gate-resume, which has two subjects, names the subject as `INPROC_LOADED` only for a world copy's call (story-provenance's form).
+- The fixtures' comments named the wrong P2 cause (`inproc.sh:51`/`:96`, which are exempt at the library). The measured cause was a bare `"$var"` operand in a fixture declaring an unguarded subject, read as a drive by `scripts/validate-fixture-invocations.sh:1013` and left unpaired by `:1026`. With a bare operand P2 reads 3 rows; with the literal tail it reads 0. BL-878's batch-259 C3 paragraph is corrected to match, and its stale-citation list is replaced by a re-read of the four files 83f315dd7 fixed.
+- Cost: no new start. `inproc:` rows go advisor-gate-deny 256 -> 255 and updater-session-signals 61 -> 60, because `inproc_load` logs no pass; every other row is unchanged. Catch on record: C2's P2 rows on these three under a bare operand. Who would notice it gone: the next editor of the three fixtures, who would again need a hand-rolled source without `inproc_run`'s fresh-bash strip.
+
 ## [0.1165.0] - 2026-11-18
 
 ### BL-1164 (advances, stays PARTIAL): P2 judges `lib/inproc.sh` at the call, six fixtures return to `inproc_run`; BL-1152 owed item 3 built (PARTIAL)
