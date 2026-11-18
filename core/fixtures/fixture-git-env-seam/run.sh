@@ -45,6 +45,11 @@ set -u
 
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "$0")/../lib" && pwd)/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# Arm W asks scripts/validate-fixture-git-env.sh IN PROCESS (BL-878) through vf_ip, each pass paired with fx_inproc.
+# NOT lib/inproc.sh (BL-1164): declaring it lets the inner setup-config-drift (cell B) run past its inproc.sh source,
+# and its own in-process passes then land in this fixture's count.
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")/../lib" && pwd)/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 fail() { bad "$1"; }
 broken() { printf 'FIXTURE BROKEN: %s\n' "$1"; exit 9; }
 
@@ -70,6 +75,8 @@ SUBJECT="trunk-push-bound"
 [ -f "$ROOT/core/fixtures/$SUBJECT/run.sh" ] || broken "driven fixture $SUBJECT is absent"
 # The inner trunk-push-bound consumes the validator; its own HERMETIC-CONSUMED line is captured by this fixture.
 echo "HERMETIC-CONSUMED $ROOT/core/scripts/validate-audit-anchors.sh"
+# The inner setup-config-drift (cell B) consumes its subject; its own HERMETIC-CONSUMED line is captured likewise.
+echo "HERMETIC-CONSUMED $ROOT/core/skills/ai-dlc-update/reconcile/unregistered-drift.sh"
 
 WORK="$(mktemp -d)" || broken "mktemp failed"
 trap 'chmod -R u+rwX "$WORK" 2>/dev/null; rm -rf "$WORK"' EXIT
@@ -137,7 +144,7 @@ drive() { # drive <tree> <victim-root> [fixture] [armed: yes|no] -> "<n> <yes|no
   local tree="$1" v="$2" who="${3:-$SUBJECT}" armed="${4:-yes}" admin urc=-
   admin="$(new_victim "$v")" || return 1
   if [ "$armed" = yes ]; then
-    ( cd "$tree" && GIT_DIR="$admin" bash "core/fixtures/$who/run.sh" ) >/dev/null 2>&1
+    ( cd "$tree" && GIT_DIR="$admin" bash "core/fixtures/$who/run.sh" ) > "$v.stdout" 2>/dev/null
   else
     ( cd "$tree" && "$U_RUNNER" -u GIT_DIR bash "core/fixtures/$who/run.sh" ) >/dev/null 2>&1
     urc=$?
@@ -224,6 +231,15 @@ else
 fi
 # B1. SEAM INTACT on the `git -C` form (its init is in a seed.sh the run.sh never makes; the seam reaches it by inheritance).
 cell B; SV_B="$(printf '%s' "$VERD")"; DET_B="$DET"
+# B0. THE INNER RUN REACHED ITS INIT. setup-config-drift's run.sh:16 runs seed.sh, whose `git -C "$DIST" init` is the
+# form B exists for, and prints its HERMETIC-CONSUMED line at :20 only once that seed exited 0. In this sandbox the
+# inner run stops later, at its lib/inproc.sh source (:56, undeclared here), so the line is what proves the armed init
+# ran; without it an INTACT victim would describe a run that never reached git.
+if grep -qxF 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/unregistered-drift.sh' "$WORK/v_cell.stdout" 2>/dev/null; then
+  ok "B0 $SUBJECT_C ran its seed.sh (the \`git -C\` init) to exit 0 under the armed GIT_DIR: its post-seed line appeared"
+else
+  fail "B0 $SUBJECT_C never printed its post-seed line: the armed run did not reach the seed.sh init, so B1 below measures nothing"
+fi
 if [ "$SV_B" = INTACT ]; then
   ok "B1 $SUBJECT_C (git -C form, init in its seed.sh) with the seam: index 40, repo yes, bare not true, sentinel intact"
 else
@@ -381,8 +397,18 @@ if [ ! -f "$V_SRC" ]; then
 else
   echo "HERMETIC-CONSUMED scripts/validate-fixture-git-env.sh"
   build_probe "$Wp" || broken "could not build the validator probe tree"
-  w_out="$( AI_DLC_PROJECT_ROOT="$Wp" bash "$Wp/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1)"
-  w_rc=$?
+  # Every W pass is in process: vf_ip sources the validator in a subshell (its column-0 guard returns before
+  # vfge_main runs) and calls vfge_main against the probe root. The program runs left are the two cli cells
+  # (cells.decl), one per CLI outcome this fixture reaches, each compared byte for byte with vf_ip.
+  EQ="$WORK/eq"; mkdir -p "$EQ" || broken "mktemp eq dir"
+  vf_ip() { # vf_ip <tag> [args...] -> vfge_main's stdout, stderr and exit in $EQ/<tag>.ip.{out,err,rc}
+    local t="$1"; shift
+    ( fx_inproc "$V_SRC"; set +eufx +o pipefail; hash -r; export AI_DLC_PROJECT_ROOT="$Wp"; . "$V_SRC" || exit 126; vfge_main "$@" ) > "$EQ/$t.ip.out" 2> "$EQ/$t.ip.err"
+    echo "$?" > "$EQ/$t.ip.rc"
+  }
+  vf_ip w --max-unscrubbed 0
+  w_rc="$(cat "$EQ/w.ip.rc")"
+  w_out="$(cat "$EQ/w.ip.out" "$EQ/w.ip.err")"
 
   # W0. THE OUTPUT MUST NAME THE PROBE TREE. A validator that resolved its own root
   # answers about the distribution, and its verdict would read identically.
@@ -463,6 +489,33 @@ else
       ok "W11 the same two-hop shape with the seam ABOVE the sourcing line stays acquitted: the unscrubbed count is exactly the ${n_off} offender trees, and it is not among them -- W10 discriminates on position, not on the shape" ;;
     *) fail "W11 the unscrubbed count is not the ${n_off} offender trees this probe built: $(printf '%s\n' "$w_out" | grep -F 'fixture run.sh build' | head -1)" ;;
   esac
+
+  # THE CLI CELLS (cells.decl), taken on the unmodified probe before W9 extends it. cli-refuse is the program run on
+  # vf_ip w's input (ceiling 0, exit 1); cli-pass is one in-process pass and one program run at a ceiling above the
+  # offender count (exit 0). Each cell must match its in-process twin on stdout, stderr and exit, and the two cells
+  # must differ from each other, so an equality that holds for every input is not read as equivalence.
+  vf_ip pass --max-unscrubbed 99
+  vf_cli() { # vf_cli <cell> [args...] -> the program's stdout, stderr and exit in $EQ/<cell>.cl.{out,err,rc}
+    local c="$1"; shift
+    AI_DLC_PROJECT_ROOT="$Wp" FXCELL="$c" bash "$Wp/scripts/validate-fixture-git-env.sh" "$@" > "$EQ/$c.cl.out" 2> "$EQ/$c.cl.err"
+    echo "$?" > "$EQ/$c.cl.rc"
+  }
+  vf_cli cli-refuse --max-unscrubbed 0
+  vf_cli cli-pass --max-unscrubbed 99
+  for _p in "refuse w" "pass pass"; do
+    _c="cli-${_p%% *}"; _t="${_p#* }"
+    if cmp -s "$EQ/$_c.cl.out" "$EQ/$_t.ip.out" && cmp -s "$EQ/$_c.cl.err" "$EQ/$_t.ip.err" && cmp -s "$EQ/$_c.cl.rc" "$EQ/$_t.ip.rc"; then
+      ok "$_c the program and the in-process pass agree byte for byte on stdout, stderr and exit ($(cat "$EQ/$_c.cl.rc"))"
+    else
+      fail "$_c the program and the in-process pass differ (exit $(cat "$EQ/$_c.cl.rc") vs $(cat "$EQ/$_t.ip.rc"))"
+    fi
+  done
+  if [ "$(cat "$EQ/cli-refuse.cl.rc")" = 1 ] && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && ! cmp -s "$EQ/cli-refuse.cl.err" "$EQ/cli-pass.cl.err" \
+     && grep -qF 'validate-fixture-git-env: ok' "$EQ/cli-pass.cl.out"; then
+    ok "cli cells discriminate: the refusing ceiling exits 1 with a FAIL, the passing one exits 0 with an ok line"
+  else
+    fail "cli cells do not discriminate: cli-refuse exit $(cat "$EQ/cli-refuse.cl.rc"), cli-pass exit $(cat "$EQ/cli-pass.cl.rc")"
+  fi
   # W9. AN UNRESOLVABLE INIT SITE IS REPORTED, NOT ACQUITTED. A member joins the
   # population by running an init somewhere in its directory, so a site resolving
   # to nothing means run.sh reaches it by a route this reader cannot see, and the
@@ -476,7 +529,8 @@ else
   printf '#!/usr/bin/env bash\ngit -C "$1" init -q\n' > "$ud/seed.sh"
   chmod +x "$ud/run.sh" "$ud/seed.sh"
   ( cd "$Wp" && git add -A -f ) >/dev/null 2>&1 || broken "W9 could not track the seeded case; git grep would not see it and the arm would pass vacuously"
-  u_out="$( AI_DLC_PROJECT_ROOT="$Wp" bash "$Wp/scripts/validate-fixture-git-env.sh" --max-unscrubbed 0 2>&1)"
+  vf_ip u --max-unscrubbed 0
+  u_out="$(cat "$EQ/u.ip.out" "$EQ/u.ip.err")"
   case "$u_out" in
     *"unresolved-site/run.sh(init-site-unresolved)"*) ok "W9 a member whose init site resolves by NEITHER route is REPORTED as (init-site-unresolved) — an unreadable file is not acquitted, and a comment naming seed.sh is not a call" ;;
     *"unresolved-site"*) fail "W9 the unresolvable member is reported, but not as (init-site-unresolved) — some other branch fired and the refusal branch is untested." ;;

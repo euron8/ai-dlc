@@ -1,4 +1,5 @@
 import json,collections,re,sys
+from datetime import datetime
 S=sys.argv[1]
 # Sprints are an argument (argv[2], comma list), default every sprint the extractor assigned.
 SPRINTS=tuple(int(x) for x in sys.argv[2].split(',')) if len(sys.argv)>2 else (314,315,316,317,318,319,320)
@@ -15,11 +16,20 @@ for l in open(S+"/spawns.jsonl"):
     if not s['role'].startswith(('code-reviewer','qa')): continue
     d=s['description']
     story=re.search(r'(?<![\d.])(\d{1,2}\.\d{1,2})(?![\d.])',d)
-    g=re.search(r'(?:[Gg]ate[- ]?|\bG)(\d)',d)
+    g=re.search(r'(?:[Gg]ate[- ]?|\bG|\bg(?=\d [a-z]))(\d)',d)
     kind='closing' if 'losing' in d else ('delta' if 'delta' in d.lower() else ('qa' if 'QA' in d or s['role'].startswith('qa') else 'cr'))
-    rows.append(dict(sp=s['sprint'],story=story.group(1) if story else '?',gate=g.group(1) if g else '?',ps=pass_of(d),kind=kind,usd=s['usd'],d=d,start=s['start'],role=s['role']))
+    sk=None
+    if not story:
+        # s322 spells a story `story N` (every s322 story is 1.N); a story-less spawn is keyed below by start time.
+        m=re.search(r'\bstory (\d{1,2})\b',d)
+        sk='1.'+m.group(1) if m else None
+    rows.append(dict(sp=s['sprint'],story=story.group(1) if story else (sk or '?'),gate=g.group(1) if g else '?',ps=pass_of(d),kind=kind,usd=s['usd'],d=d,start=s['start'],role=s['role']))
+def _t(r): return datetime.fromisoformat(r['start'].replace('Z','+00:00')).timestamp()
 for n in SPRINTS:
     R=[r for r in rows if r['sp']==n]
+    keyed=[r for r in R if r['story']!='?']
+    for r in R:
+        if r['story']=='?' and keyed and r['gate']=='1' and r['kind']!='qa': r['story']=min(keyed,key=lambda q:abs(_t(q)-_t(r)))['story']
     unparsed=sum(1 for r in R if r['story']=='?' or r['gate']=='?')
     passes=collections.defaultdict(set); shards=collections.Counter(); usd=collections.Counter()
     for r in R:

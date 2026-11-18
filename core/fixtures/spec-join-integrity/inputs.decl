@@ -4,3 +4,6 @@
 core/scripts/validate-locked-anchor.sh
 core/fixtures/lib/settled-net.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/layout.sh

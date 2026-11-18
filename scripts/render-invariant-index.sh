@@ -50,6 +50,7 @@
 #        render-invariant-index.sh --arm-lines [<validator>]
 #                                              print `<line>\t<ids>` per arm header
 # Exit:  0 = written / in sync, 1 = drift or a totality failure, 2 = usage or environment.
+rii_main() {
 set -uo pipefail
 
 MODE=write
@@ -58,7 +59,7 @@ case "${1:-}" in
   "")           MODE=write     ;;
   --check)      MODE=check     ;;
   --arm-lines)  MODE=armlines; ARM_SRC="${2:-}" ;;
-  *) echo "usage: $(basename "$0") [--check|--arm-lines [<validator>]]" >&2; exit 2 ;;
+  *) echo "usage: $(basename "${BASH_SOURCE[0]}") [--check|--arm-lines [<validator>]]" >&2; exit 2 ;;
 esac
 
 # AN EXPLICIT SOURCE EXISTS FOR ONE MEASURED REASON, and it is not convenience. The seeded
@@ -75,10 +76,10 @@ if [ "$MODE" = armlines ] && [ -n "$ARM_SRC" ]; then
 else
   # ROOT BY WALKING UP FOR A MARKER, never by counting `..` hops, so this answers identically
   # from the repo root, from a subdirectory, and from a fixture sandbox that copies it.
-  ROOT="$(cd "$(dirname "$0")" && pwd)"
+  ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   while [ ! -f "$ROOT/VERSION" ] && [ "$ROOT" != "/" ]; do ROOT="$(dirname "$ROOT")"; done
   if [ ! -f "$ROOT/VERSION" ]; then
-    echo "render-invariant-index: no VERSION marker above $(dirname "$0") — cannot locate the repo root." >&2
+    echo "render-invariant-index: no VERSION marker above $(dirname "${BASH_SOURCE[0]}") — cannot locate the repo root." >&2
     exit 2
   fi
 
@@ -397,3 +398,6 @@ fi
 render > "$OUT"
 echo "OK: wrote docs/invariant-index.md — $N_ID invariant(s) across $N_ARM arm(s), $N_CALL emitter call(s), 0 orphaned, 0 silent."
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rii_main "$@"

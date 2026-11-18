@@ -41,6 +41,7 @@
 #   0  attested / verified
 #   1  a fixture failed, no valid attestation, or input unreadable
 
+vh2_main() {
 set -u
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -641,3 +642,6 @@ echo "Nothing else about the line may change."
 echo ""
 echo "H2_ATTESTED v1 sprint=${SPRINT} digest=${DIGEST} at=${STAMP} items=1,2,3 mechanical=check-17-bypass:PASS"
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vh2_main "$@"

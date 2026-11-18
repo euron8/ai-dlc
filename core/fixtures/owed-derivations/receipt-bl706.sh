@@ -37,6 +37,8 @@ GROUPS_RUN="${3:-a bd c e f g h i j k}"
 RECON="$(cd "$RECON" && pwd)"; RD="$(cd "$(dirname "$RD")" && pwd)/$(basename "$RD")"; VAL="$(cd "$(dirname "$VAL")" && pwd)/$(basename "$VAL")"
 D="$(mktemp -d "${TMPDIR:-/tmp}/bl706rcpt.XXXXXX")" || exit 9
 [ -d "$D" ] || exit 9
+[ -f "$H/../lib/world.sh" ] || exit 9
+. "$H/../lib/world.sh" || exit 9
 g() { local d="$1"; shift; git -C "$d" -c user.name=r -c user.email=r@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 stub() { printf '#!/usr/bin/env bash\n[ "${1:-}" = sprint-id ] || exit 2\nshift; r=""; [ "${1:-}" = --root ] && r="${2:-}"\n[ -f "$r/.sprint-id" ] || exit 1\ncat "$r/.sprint-id"\n' > "$1/sprint-status.sh"; }
 REC=_bmad-output/ai-dlc-update/owed-derivations.tsv
@@ -47,7 +49,7 @@ cell() { # <id> <0|1 holds> <what>
 rows() { awk -F'\t' -v a="$2" -v b="$3" '$1 == a && ($2 == b || b == "") { n++ } END { print n + 0 }' <<<"$1"; }
 
 # ---- the distribution: toy.sh changes in the range (qqalpha -> qqgamma); stable.sh and relo.sh do not --------------
-DIST="$D/dist"; mkdir -p "$DIST/core/scripts" || exit 9; g "$DIST" init -q || exit 9
+DIST="$D/dist"; mkdir -p "$DIST/core/scripts" || exit 9; world_git init -q "$DIST" || exit 9
 printf '1.0.0\n' > "$DIST/VERSION"
 printf 'qqalpha\n' > "$DIST/core/scripts/toy.sh"; printf 'qqx\n' > "$DIST/core/scripts/stable.sh"
 printf 'qqold\n' > "$DIST/core/scripts/relo.sh"; printf '#!/usr/bin/env bash\necho v\n' > "$DIST/core/scripts/validate-synthetic.sh"
@@ -58,7 +60,7 @@ g "$DIST" add -A; g "$DIST" commit -qm theirs
 THEIRS="$(g "$DIST" rev-parse HEAD)"
 [ -n "$BASE" ] && [ -n "$THEIRS" ] && [ "$BASE" != "$THEIRS" ] || exit 9
 # DIST2: the same range plus a new core file the consumer's .gitignore ignores, so an apply writes ONLY an ignored path.
-DIST2="$D/dist2"; mkdir -p "$DIST2/core/scripts" || exit 9; g "$DIST2" init -q || exit 9
+DIST2="$D/dist2"; mkdir -p "$DIST2/core/scripts" || exit 9; world_git init -q "$DIST2" || exit 9
 printf '1.0.0\n' > "$DIST2/VERSION"
 printf 'qqalpha\n' > "$DIST2/core/scripts/toy.sh"; printf 'qqx\n' > "$DIST2/core/scripts/stable.sh"
 printf 'qqold\n' > "$DIST2/core/scripts/relo.sh"; printf '#!/usr/bin/env bash\necho v\n' > "$DIST2/core/scripts/validate-synthetic.sh"
@@ -74,7 +76,7 @@ THEIRS2="$(g "$DIST2" rev-parse HEAD)"
 #   | relo (fence on the legacy path scripts/relo.sh, which the apply deletes) | atheirs (the apply writes no tracked path)
 mkc() {
   local c="$1" v="$2" stamp="${3:-$BASE}"
-  mkdir -p "$c/scripts/ai-dlc" "$c/.claude" "$c/_bmad-output" || return 1; g "$c" init -q || return 1
+  mkdir -p "$c/scripts/ai-dlc" "$c/.claude" "$c/_bmad-output" || return 1; world_git init -q "$c" || return 1
   cp "$RD" "$c/scripts/ai-dlc/check-owed-derivations.sh" && stub "$c/scripts/ai-dlc" || return 1
   printf '#!/usr/bin/env bash\nexit 0\n' > "$c/scripts/ai-dlc/validate-hook-registration.sh"; chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh"
   # the installed validator is a wrapper that logs each start beside the world, then runs the real one

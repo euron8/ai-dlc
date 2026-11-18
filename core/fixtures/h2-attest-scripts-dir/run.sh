@@ -89,6 +89,27 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT, so this gate runs BEFORE inproc_load: a validator with neither the
+# `vh2_main() {` line nor the column-0 source guard predates the wrap, and sourcing it would run its whole body. SKIP
+# and exit 0 on a consumer, FIXTURE BROKEN in the distribution (lib/layout.sh fx_skip_exit), never an ok. Exactly
+# one half is a respelled subject this fixture cannot drive, which FAILS. An unreadable subject is FIXTURE ERROR.
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+[ -r "$SUT" ] || { echo "FIXTURE ERROR: cannot read $SUT -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'vh2_main() {' "$SUT" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUT" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: h2-attest-scripts-dir: $SUT predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$SUT carries one half of the in-process wrap (vh2_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled subject this fixture cannot drive"; report_end h2-attest-scripts-dir; exit 1 ;;
+esac
+# THE SUBJECT IS ASKED IN PROCESS. validate-h2-attestation.sh is loadable (vh2_main behind its source guard); it is
+# loaded ONCE here (core/fixtures/lib/inproc.sh), and `h2ip <script> <args>` answers what `bash <script> <args>` would,
+# in a subshell reset to a fresh bash's state. Each call is one fx_inproc pass (the inproc: row). The only program runs
+# of the subject left are the cli cells at the end (cells.decl), each compared byte for byte with h2ip on its input.
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$SUT" || { echo "FIXTURE BROKEN: sourcing $SUT defined nothing" >&2; exit 2; }
+h2ip() { inproc_run "$1" vh2_main "${@:2}"; }
 
 # --- a FAITHFUL installed consumer ---------------------------------------------
 # .git is the walk-up marker. The core validators go to scripts/ai-dlc/ and NOWHERE
@@ -156,7 +177,7 @@ echo "                 tests/fixtures/ (3 fixture dirs plus lib), no core/, no t
 echo ""
 
 # --- D. the fixture set resolves at all, in a consumer --------------------------
-DIG_OUT="$( cd "$WORK" && bash "$SUT" --digest 2>&1 )"
+DIG_OUT="$( cd "$WORK" && h2ip "$SUT" --digest 2>&1 )"
 DIG_RC=$?
 if [ "$DIG_RC" -eq 0 ] && grep -qE '^[0-9a-f]{16}$' <<<"$DIG_OUT"; then
   ok "--digest resolves a fixture set in a consumer root ($DIG_OUT)"
@@ -169,8 +190,8 @@ fi
 # PRESENCE-shaped: the default digest must EQUAL the digest over $WORK/tests/fixtures and must
 # DIFFER from the digest over the distribution's fixtures. The two explicit digests are shown to
 # differ first, so equality with one side is evidence about the other.
-D_CONS="$( bash "$SUT" --digest --fixtures "$WORK/tests/fixtures" 2>&1 )"; D_CONS_RC=$?
-D_DIST="$( bash "$SUT" --digest --fixtures "$FIXSRC" 2>&1 )"; D_DIST_RC=$?
+D_CONS="$( h2ip "$SUT" --digest --fixtures "$WORK/tests/fixtures" 2>&1 )"; D_CONS_RC=$?
+D_DIST="$( h2ip "$SUT" --digest --fixtures "$FIXSRC" 2>&1 )"; D_DIST_RC=$?
 if [ "$D_CONS_RC" -ne 0 ] || [ "$D_DIST_RC" -ne 0 ] \
    || ! grep -qE '^[0-9a-f]{16}$' <<<"$D_CONS" || ! grep -qE '^[0-9a-f]{16}$' <<<"$D_DIST"; then
   echo "FIXTURE ERROR: an explicit --fixtures digest was not well-formed (rc=$D_CONS_RC/$D_DIST_RC)" >&2; exit 2
@@ -187,7 +208,7 @@ fi
 # --- A. THE ASSERTION. --attest must drive the fixture end to end ---------------
 # This is the run that failed in every consumer for the life of the derivation. It is
 # also this fixture's only real cost: one full check-17-bypass drive.
-ATT_OUT="$( cd "$WORK" && bash "$SUT" --attest --sprint 999 2>&1 )"
+ATT_OUT="$( cd "$WORK" && h2ip "$SUT" --attest --sprint 999 2>&1 )"
 ATT_RC=$?
 if grep -q 'FIXTURE BROKEN: cannot source' <<<"$ATT_OUT"; then
   bad "HARNESS BROKEN: the copied check-17-bypass could not source its lib file, so --attest never drove it — the consumer tree lacks tests/fixtures/lib/, not a finding about H2"
@@ -217,7 +238,7 @@ fi
 # $WORK/core/scripts is precisely what the shipped derivation computed in a consumer,
 # and it does not exist. If A passed while this also passes, A proves nothing about
 # locating the validators — the drive would be succeeding regardless.
-B_OUT="$( cd "$WORK" && bash "$SUT" --attest --sprint 999 --scripts "$WORK/core/scripts" 2>&1 )"
+B_OUT="$( cd "$WORK" && h2ip "$SUT" --attest --sprint 999 --scripts "$WORK/core/scripts" 2>&1 )"
 B_RC=$?
 if [ "$B_RC" -ne 0 ]; then
   ok "CONTROL: a wrong explicit --scripts is fatal (so A's pass is about resolution)"
@@ -282,7 +303,7 @@ else
     echo "FIXTURE ERROR: the cell and column-1 seeds are byte-identical" >&2; exit 2; }
 
   v_run() {  # v_run <seed> -> sets V_RC, V_OUT
-    V_OUT="$( cd "$WORK" && bash "$SUT" --verify --sprint 311 --gate-log "$VLOG/$1.md" 2>&1 )"
+    V_OUT="$( cd "$WORK" && h2ip "$SUT" --verify --sprint 311 --gate-log "$VLOG/$1.md" 2>&1 )"
     V_RC=$?
   }
 
@@ -347,7 +368,7 @@ else
   # Every predicate below takes the SCRIPT as its argument, so the same predicate is the
   # arm against the subject.
   vx() {
-    ( cd "$WORK" && bash "$1" --verify --sprint "$3" --gate-log "$VLOG/$2.md" ) \
+    ( cd "$WORK" && h2ip "$1" --verify --sprint "$3" --gate-log "$VLOG/$2.md" ) \
       >"$WORK/vx.out" 2>"$WORK/vx.err"
     X_RC=$?
     X_OUT="$(cat "$WORK/vx.out")"; X_ERR="$(cat "$WORK/vx.err")"
@@ -760,7 +781,7 @@ The attestation above is void: digest=0000000000000000 predates the reconcile."
       && grep -qF "$VLOG/$2.md:$3 REVOKES the H2 attestation for sprint 311 accepted at line $4." <<<"$X_OUT"
   }
   p_sprint_rx() {
-    ( cd "$WORK" && bash "$1" --verify --sprint '.*' --gate-log "$VLOG/col1.md" ) >"$WORK/vx.out" 2>"$WORK/vx.err"
+    ( cd "$WORK" && h2ip "$1" --verify --sprint '.*' --gate-log "$VLOG/col1.md" ) >"$WORK/vx.out" 2>"$WORK/vx.err"
     X_RC=$?; X_OUT="$(cat "$WORK/vx.out")"; X_ERR="$(cat "$WORK/vx.err")"
     [ "$X_RC" -eq 1 ] && ! grep -q '^PASS' <<<"$X_OUT" && grep -q 'digits only' <<<"$X_ERR"
   }
@@ -770,7 +791,7 @@ The attestation above is void: digest=0000000000000000 predates the reconcile."
     [ "$X_RC" -eq 1 ] && grep -q 'could not read' <<<"$X_ERR" && ! grep -q 'first gate' <<<"$X_OUT$X_ERR"
   }
   vxl() {  # vxl <script> <seed> <locale>
-    ( cd "$WORK" && LC_ALL="$3" bash "$1" --verify --sprint 311 --gate-log "$VLOG/$2.md" ) \
+    ( cd "$WORK" && LC_ALL="$3" h2ip "$1" --verify --sprint 311 --gate-log "$VLOG/$2.md" ) \
       >"$WORK/vx.out" 2>"$WORK/vx.err"
     X_RC=$?; X_OUT="$(cat "$WORK/vx.out")"; X_ERR="$(cat "$WORK/vx.err")"
   }
@@ -828,6 +849,44 @@ b351-star|1|inside other text"
   [ -n "$U8" ] || echo "  skip  UTF-8 half of the cp1252 cell: no UTF-8 locale on this host"
   if p_cp1252 "$SUT"; then ok "--verify: a cp1252 byte is located, and its neighbour verifies, under C${U8:+ and $U8}"
   else bad "--verify on the cp1252 seeds (rc=$X_RC) differs by locale or lost the location"; vx_show; fi
+
+  # --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome ------------------------
+  # The outcomes are exit x stream: 0 with the digest on stdout, 0 with the PASS verdict and citation on stdout, 1 with
+  # a RE-DRIVE verdict on stdout (first gate), 1 with a refusal on stderr (--sprint not digits). One `FXCELL=<id> bash
+  # "$SUT"` start per outcome, from $WORK as every drive above runs, compared with h2ip on the same arguments: stdout,
+  # stderr and exit separately, byte for byte. Each cell also asserts its own outcome, so two runs that both printed
+  # nothing cannot read as equivalent. --attest has no cli cell: its stdout carries a `date -u` stamp to the second,
+  # so two runs are not byte-comparable, and its in-process drive (A, B above) reaches the same vh2_main.
+  EQ="$WORK/eq"; mkdir -p "$EQ" || exit 2
+  eqv() { # <cell-id> <subject args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the two answers are byte-identical
+    local id="$1"; shift
+    ( cd "$WORK" && h2ip "$SUT" "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    ( cd "$WORK" && FXCELL="$id" bash "$SUT" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+    cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+  }
+  eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+    "$(sed -n 1p "$EQ/$1.ip.out")" "$(sed -n 1p "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(sed -n 1p "$EQ/$1.cl.out")" \
+    "$(sed -n 1p "$EQ/$1.cl.err")"; }
+  if eqv cli-digest --digest && [ "$(cat "$EQ/cli-digest.cl.rc")" = 0 ] && [ "$(cat "$EQ/cli-digest.cl.out")" = "$DIG_OUT" ] \
+     && [ ! -s "$EQ/cli-digest.cl.err" ]; then
+    ok "cli-digest: the program's --digest prints the consumer digest exactly as the in-process call does (stdout, stderr, exit 0)"
+  else bad "cli-digest: the program and the in-process call differ, or the outcome is not exit 0 with the digest ($(eq_twin cli-digest))"; fi
+  if eqv cli-verify-pass --verify --sprint 311 --gate-log "$VLOG/col1.md" && [ "$(cat "$EQ/cli-verify-pass.cl.rc")" = 0 ] \
+     && grep -q '^PASS  H2 attested for sprint 311' "$EQ/cli-verify-pass.cl.out" && grep -qxF "$V_OK" "$EQ/cli-verify-pass.cl.out"; then
+    ok "cli-verify-pass: the program's --verify grants and cites a column-1 attestation exactly as the in-process call does (exit 0)"
+  else bad "cli-verify-pass: the program and the in-process call differ, or the outcome is not exit 0 with PASS ($(eq_twin cli-verify-pass))"; fi
+  if eqv cli-verify-first --verify --sprint 311 --gate-log "$VLOG/cb-none.md" && [ "$(cat "$EQ/cli-verify-first.cl.rc")" = 1 ] \
+     && grep -q "this is the sprint's first gate" "$EQ/cli-verify-first.cl.out" && [ ! -s "$EQ/cli-verify-first.cl.err" ]; then
+    ok "cli-verify-first: the program's first-gate RE-DRIVE verdict on stdout matches the in-process call (exit 1, stderr empty)"
+  else bad "cli-verify-first: the program and the in-process call differ, or the outcome is not exit 1 first-gate ($(eq_twin cli-verify-first))"; fi
+  if eqv cli-sprint-refuse --verify --sprint '.*' --gate-log "$VLOG/col1.md" && [ "$(cat "$EQ/cli-sprint-refuse.cl.rc")" = 1 ] \
+     && grep -q 'digits only' "$EQ/cli-sprint-refuse.cl.err" && [ ! -s "$EQ/cli-sprint-refuse.cl.out" ]; then
+    ok "cli-sprint-refuse: the program's --sprint refusal on stderr matches the in-process call (exit 1, stdout empty)"
+  else bad "cli-sprint-refuse: the program and the in-process call differ, or the outcome is not exit 1 on stderr ($(eq_twin cli-sprint-refuse))"; fi
+  if ! cmp -s "$EQ/cli-digest.cl.out" "$EQ/cli-verify-pass.cl.out" && ! cmp -s "$EQ/cli-verify-pass.cl.rc" "$EQ/cli-verify-first.cl.rc" \
+     && ! cmp -s "$EQ/cli-verify-first.cl.out" "$EQ/cli-sprint-refuse.cl.out"; then
+    ok "the cli cells are distinct outcomes (digest and PASS differ in output; exits 0 and 1 differ; stdout and stderr refusals differ)"
+  else bad "the cli cells do not discriminate: two of them read the same outcome"; fi
 
 fi
 

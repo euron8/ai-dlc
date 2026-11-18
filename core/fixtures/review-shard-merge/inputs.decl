@@ -18,6 +18,7 @@ core/team-roles/qa.md
 core/schemas/sprint-status.json
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
+core/fixtures/lib/world.sh
 # BL-906: the coverage join (J0) reads shard b's driver, which must carry `--group b`.
 core/fixtures/review-shard-merge-b/run.sh
 core/fixtures/review-shard-merge-c/run.sh

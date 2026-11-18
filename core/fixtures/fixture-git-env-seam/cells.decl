@@ -1,0 +1,6 @@
+# fixture-git-env-seam's starts of scripts/validate-fixture-git-env.sh (BL-879 grammar). Every arm-W pass is in
+# process: vf_ip sources the validator in a subshell paired with fx_inproc and calls vfge_main against the probe root. One cli
+# cell per distinct CLI outcome (exit 1 over the ceiling, exit 0 under it), each started as FXCELL=<id> bash on the
+# probe's copy in vf_cli and compared byte for byte with vf_ip on the same arguments.
+cli scripts/validate-fixture-git-env.sh cli-refuse
+cli scripts/validate-fixture-git-env.sh cli-pass

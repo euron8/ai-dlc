@@ -18,7 +18,7 @@
 #
 # ------------------------------------------------------------------------------------------
 # WHY `core/skills/ai-dlc-update/reconcile/lib.sh` IS NOT SOURCED HERE, AND DO NOT "FIX" THIS.
-# `backlog-rotate.sh:66` sources it and REFUSES to run without it, because the LEDGER entry
+# `backlog-rotate.sh:71` sources it and REFUSES to run without it, because the LEDGER entry
 # BOUNDARY is single-sourced across three readers of `docs/backlog.md`. Neither half of that
 # argument reaches a plan:
 #
@@ -26,12 +26,12 @@
 #      returns EMPTY on every line of a plan file, so importing it would buy a boundary rule
 #      with no subject. There is no second reader of a plan's section boundary to drift from.
 #   2. lib.sh's FENCE GRADER DISAGREES WITH CommonMark ON THIS EXACT FILE, and
-#      `backlog-rotate.sh:115` says so in as many words: `ledger_entry_shape()` strips the WHOLE
+#      `backlog-rotate.sh:120` says so in as many words: `ledger_entry_shape()` strips the WHOLE
 #      leading indent before its delimiter tests, where CommonMark stops honouring a delimiter
 #      past column three. Measured on `graph-ledger-full-drain.md`: that rule finds 36
 #      delimiters against this file's 17 real fence pairs. Importing it imports the
 #      disagreement, and a rotator that cuts at a line CommonMark reads as fenced is exactly the
-#      corruption `backlog-rotate.sh:71` refuses its own input over.
+#      corruption `backlog-rotate.sh:76` refuses its own input over.
 #
 # So the grader below is STANDALONE and implements the CommonMark info-string rule directly.
 # That is a deliberate second implementation of a fence reader, taken with its eyes open,
@@ -127,13 +127,14 @@
 #           acceptance test found a difference, the ceiling is unreachable, the plan is over
 #           the ceiling with no archivable span of any class, or the pointed live file would
 #           land over the ceiling.
+prt_main() {
 set -uo pipefail
 
 # RESOLVE THE ROOT BY WALKING UP FOR `VERSION`, NEVER BY COUNTING `..` HOPS. A validator that
 # counts hops answers differently from the repo root, from a subdirectory, and from a fixture
 # sandbox that copied it -- and the sandbox answer is the silent one.
 REPO_ROOT=""
-d="$(cd "$(dirname "$0")" && pwd)"
+d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [ "$d" != "/" ]; do
   if [ -f "$d/VERSION" ]; then REPO_ROOT="$d"; break; fi
   d="$(dirname "$d")"
@@ -483,7 +484,7 @@ LC_ALL=C awk -v G="$GRADE" -v CEIL="$CEILING" -v LIVE="$LIVEF" -v MOVED="$MOVEDF
     # --- REFUSE A CUT THAT LANDS INSIDE A FENCE ----------------------------------------------
     # Every span boundary is a cut. A cut at a fenced line splits the fence, leaving an
     # unterminated one in the archive and an orphan closer in the live file -- corruption at
-    # exit 0. Refuse rather than guess, in `backlog-rotate.sh:88` s spirit.
+    # exit 0. Refuse rather than guess, in `backlog-rotate.sh:92` s spirit.
     for (k = 1; k <= nc; k++) {
       if (st[cs[k]] == "F") printf "fencecut\t%d\tspan start\n", cs[k] > "/dev/stderr"
       if (ce[k] < NL && st[ce[k] + 1] == "F") printf "fencecut\t%d\tspan end\n", ce[k] + 1 > "/dev/stderr"
@@ -678,7 +679,7 @@ LC_ALL=C awk -F'\t' '$1=="moving"{printf "    lines %s..%s  %s bytes  (%s)\n", $
 #
 # It runs on EVERY invocation, not only under `--check`, and not inside either branch. A guard
 # reachable only by `--check` is bypassed by omitting the flag, and one inside `--apply` is
-# bypassed by running `--check`; `backlog-rotate.sh:339` records that exact siting mistake.
+# bypassed by running `--check`; `backlog-rotate.sh:477` records that exact siting mistake.
 # ---------------------------------------------------------------------------------------------
 ORIG_B="$(wc -c < "$PLAN" | tr -d ' ')"
 ORIG_L="$(wc -l < "$PLAN" | tr -d ' ')"
@@ -1030,7 +1031,7 @@ cp "$WORK/pointed.md" "$PLAN"
 # gone. Rewritten on every apply as ONE line that carries every earlier rotation's ranges followed
 # by this one's, so a second rotation neither stacks a second pointer nor erases the first range.
 #
-# A PLAIN PATH STRING, NEVER A `path:line` CITATION. `validate-plan-shape.sh:138` harvests
+# A PLAIN PATH STRING, NEVER A `path:line` CITATION. `validate-plan-shape.sh:306` harvests
 # `path:line` tokens and errors when one does not resolve; a citation into an archive that a
 # later rotation re-numbers would fail P4 on a correct rotation. The path alone carries the
 # reader there and is stable under re-rotation.
@@ -1042,7 +1043,7 @@ cp "$WORK/pointed.md" "$PLAN"
 # pointer the same string whichever way the tool was invoked.
 # ---------------------------------------------------------------------------------------------
 # AND IT MUST NOT SPELL A DISCHARGE TOKEN, WHICH THE FIRST VERSION OF THIS LINE DID.
-# `validate-plan-shape.sh:165` is `DISCHARGE_BANNER='DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED'`,
+# `validate-plan-shape.sh:333` is `DISCHARGE_BANNER='DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED'`,
 # read case-INSENSITIVELY over `head -12` by six sites. The pointer goes at line 3, so a pointer
 # opening "**Spent sections are archived at" put a discharge token inside that window and made
 # every rotated plan read as SPENT -- silencing P9, P10, P11, P12 and P13 on the very file the
@@ -1061,3 +1062,6 @@ cp "$WORK/pointed.md" "$PLAN"
 FINAL_B="$(wc -c < "$PLAN" | tr -d ' ')"
 echo "  applied: $NMOVED span(s) appended to $ARCHIVE; $PLAN is now $FINAL_B bytes (was $ORIG_B)."
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+prt_main "$@"

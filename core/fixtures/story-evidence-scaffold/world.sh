@@ -11,6 +11,8 @@ SE_WDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # he_run / he_run_env / ro_run / ss_run: the subjects asked in process (header of he-inproc.sh).
 # shellcheck source=/dev/null
 . "$SE_WDIR/he-inproc.sh"
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 
 locate() { # <core-relative path under core/> -> the first layout that has it
   local rel="$1" cand
@@ -41,7 +43,7 @@ SSH=""
 # seed1 committed.
 # Each offender world is CLEAN plus one commit carrying exactly one defect.
 gitw() { local d="$1"; shift; GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
-  git -C "$d" -c user.name=fx -c user.email=fx@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+  world_git -C "$d" -c user.name=fx -c user.email=fx@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 STORY=stories/story-1.md
 IMPLY_DIR=_bmad-output/implementation-artifacts
 PLANY_DIR=_bmad-output/planning-artifacts

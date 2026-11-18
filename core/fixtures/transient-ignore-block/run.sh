@@ -75,6 +75,32 @@ echo "HERMETIC-CONSUMED core/schemas/pipeline-state-paths.json"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
+# IN PROCESS (BL-878). The renderer is loaded ONCE with lib/inproc.sh's inproc_load (its source guard returns after
+# defining sti_main) and every arm asks sti_main through inproc_run, in a subshell made to look like a fresh
+# `bash sync-transient-ignore.sh`. Arm 9's consumer-layout copy is sourced by inproc_run itself, so its own location
+# decides its schema candidates, and the pass is logged as one of the subject's. The program runs only in the cli
+# cells (cells.decl).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped renderer,
+# and sourcing a pre-wrap renderer would run its whole body. So the shape is checked first, on its two halves: neither
+# the `sti_main() {` line nor the column-0 source guard is a renderer that predates the wrap, which prints SKIP and
+# exits 0 (FIXTURE BROKEN in the distribution) -- never an ok. Exactly one half is a respelled renderer this fixture
+# cannot drive, which FAILS. An unreadable renderer is FIXTURE ERROR.
+sti_def=0; sti_guard=0
+grep -qxF 'sti_main() {' "$SUBJECT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJECT (grep exit $_gx) -- an unreadable renderer is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || sti_def=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJECT"; _gx=$?
+[ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJECT (grep exit $_gx) -- an unreadable renderer is not one that predates the wrap" >&2; exit 2; }
+[ "$_gx" -ne 0 ] || sti_guard=1
+if [ "$sti_def$sti_guard" = 00 ]; then echo "  SKIP: $SUBJECT predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+if [ "$sti_def$sti_guard" != 11 ]; then
+  bad "$SUBJECT carries one half of the in-process wrap (sti_main line: $sti_def, column-0 source guard: $sti_guard) -- a respelled renderer this fixture cannot drive"
+  report_end transient-ignore-block
+fi
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$SUBJECT" || { echo "FIXTURE BROKEN: sourcing $SUBJECT defined nothing" >&2; exit 2; }
+declare -F sti_main >/dev/null || { echo "FIXTURE BROKEN: sourcing $SUBJECT defined no sti_main" >&2; exit 2; }
+
 BEGIN="$(jq -r '.block_begin' "$SCHEMA")"
 END="$(jq -r '.block_end' "$SCHEMA")"
 TRANSIENT="$(jq -r '.paths[] | select(.transient) | .ignore' "$SCHEMA")"
@@ -101,10 +127,10 @@ fresh_project() {
   printf '%s\n' "$w"
 }
 
-# render <subject> <work> [extra args...] -> run the renderer against that project.
+# render <subject> <work> [extra args...] -> ask the renderer, in process, against that project.
 render() {
   local subj="$1" w="$2"; shift 2
-  AI_DLC_STATE_PATHS_SCHEMA="$SCHEMA" bash "$subj" --root "$w/project" "$@" 2>&1
+  AI_DLC_STATE_PATHS_SCHEMA="$SCHEMA" inproc_run "$subj" sti_main --root "$w/project" "$@" 2>&1
 }
 
 block_of() { # <gitignore> -> the marker-bounded block, or nothing
@@ -205,7 +231,7 @@ arm_fails_closed_on_empty_marker() {
   local w="$1" subj="$2" before after rc
   jq '.block_begin = ""' "$SCHEMA" > "$w/broken.json" || return 1
   before="$(md5 -q "$w/project/.gitignore" 2>/dev/null || md5sum "$w/project/.gitignore" | cut -d' ' -f1)"
-  AI_DLC_STATE_PATHS_SCHEMA="$w/broken.json" bash "$subj" --root "$w/project" >/dev/null 2>&1
+  AI_DLC_STATE_PATHS_SCHEMA="$w/broken.json" inproc_run "$subj" sti_main --root "$w/project" >/dev/null 2>&1
   rc=$?
   after="$(md5 -q "$w/project/.gitignore" 2>/dev/null || md5sum "$w/project/.gitignore" | cut -d' ' -f1)"
   [ "$rc" -ne 0 ] && [ "$before" = "$after" ]
@@ -300,14 +326,16 @@ arm_install_fallback() {
   cp "$subj" "$c/scripts/ai-dlc/sync-transient-ignore.sh" || return 1
   [ ! -e "$c/scripts/schemas" ] || return 1
   printf 'node_modules/\n' > "$f/.gitignore"
-  out="$( cd "$c/docs" && bash "$c/scripts/ai-dlc/sync-transient-ignore.sh" --check --root "$f" 2>&1 )"; rc=$?
+  # The COPY is what inproc_run sources here (it is not the loaded path), so the copy's own directory is the one its
+  # schema walk starts from.
+  out="$( cd "$c/docs" && inproc_run "$c/scripts/ai-dlc/sync-transient-ignore.sh" sti_main --check --root "$f" 2>&1 )"; rc=$?
   [ "$rc" -eq 1 ] || return 1
   grep -q 'not found' <<<"$out" && return 1
   grep -qF -- "$f" <<<"$out" || return 1
   # Near-miss: the consumer's own declaration, written then checked.
   printf 'node_modules/\n' > "$c/.gitignore"
-  ( cd "$c/docs" && bash "$c/scripts/ai-dlc/sync-transient-ignore.sh" --root "$c" ) >/dev/null 2>&1 || return 1
-  out="$( cd "$c/docs" && bash "$c/scripts/ai-dlc/sync-transient-ignore.sh" --check --root "$c" 2>&1 )" || return 1
+  ( cd "$c/docs" && inproc_run "$c/scripts/ai-dlc/sync-transient-ignore.sh" sti_main --root "$c" ) >/dev/null 2>&1 || return 1
+  out="$( cd "$c/docs" && inproc_run "$c/scripts/ai-dlc/sync-transient-ignore.sh" sti_main --check --root "$c" 2>&1 )" || return 1
   grep -q 'transient-state block current' <<<"$out" || return 1
   return 0
 }
@@ -336,7 +364,8 @@ run_arms() { # <subject> -> prints "<name>:<0|1>" per arm, each on its own proje
   # arm reads state another left behind. An arm that formerly rendered first could only fail on a
   # failed first render, which base_rc now reports for all of them.
   # exit inside $( ) would end only the subshell, so a failed seed is reported as every arm failing.
-  if w0="$(fresh_project)"; then render "$subj" "$w0" >/dev/null 2>&1; base_rc=$?; else base_rc=99; w0="$WORLDS"; fi
+  # The unrendered seed is kept once, as $WORLDS/pristine, for the cli cells below.
+  if w0="$(fresh_project)" && cp -R "$w0" "$WORLDS/pristine"; then render "$subj" "$w0" >/dev/null 2>&1; base_rc=$?; else base_rc=99; w0="$WORLDS"; fi
   for name in $arms; do
     # Arms 1, 2 and 10 only READ the rendered block, so they share the one render with no copy;
     # every other arm writes into its world and gets its own cp -R.
@@ -374,6 +403,42 @@ done <<EOF
 $LIVE
 EOF
 
+# ---------------------------------------------------------------------------------------
+# The cli cells (cells.decl): the renderer run as a PROGRAM once per distinct CLI outcome -- exit 0 (the write path),
+# exit 1 (--check over a project with no block) and exit 2 (an empty block marker, refused) -- each compared with the
+# in-process call: stdout, stderr and exit separately, byte for byte. The write twins run on two copies of the
+# unrendered seed and their .gitignore files must also agree; the other two inputs are read-only and both twins read
+# one world. Each cell also asserts its own exit code and a line of output, so two runs that both printed nothing
+# cannot read as equivalent. This is also the shape apply.sh runs the consumer's installed copy in: `bash <file>
+# --check --root <consumer>`, a file run, where the guard's BASH_SOURCE[0] equals $0 and the body runs.
+# ---------------------------------------------------------------------------------------
+EQ="$WORLDS/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # <cell-id> <in-process project> <program project> <schema> [args...] -> $EQ/<id>.{ip,cl}.{out,err,rc}
+  local id="$1" pi="$2" pc="$3" sc="$4"; shift 4
+  AI_DLC_STATE_PATHS_SCHEMA="$sc" inproc_run "$SUBJECT" sti_main --root "$pi" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  AI_DLC_STATE_PATHS_SCHEMA="$sc" FXCELL="$id" bash "$SUBJECT" --root "$pc" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(sed -n 1p "$EQ/$1.ip.out")" "$(sed -n 1p "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(sed -n 1p "$EQ/$1.cl.out")" "$(sed -n 1p "$EQ/$1.cl.err")"; }
+_P="$WORLDS/pristine/project"
+if [ -d "$_P" ] && cp -R "$WORLDS/pristine" "$WORLDS/eq-wi" && cp -R "$WORLDS/pristine" "$WORLDS/eq-wc"; then
+  if eqv cli-write "$WORLDS/eq-wi/project" "$WORLDS/eq-wc/project" "$SCHEMA" && [ "$(cat "$EQ/cli-write.cl.rc")" = 0 ] \
+     && grep -q 'transient-state block written' "$EQ/cli-write.cl.out" && cmp -s "$WORLDS/eq-wi/project/.gitignore" "$WORLDS/eq-wc/project/.gitignore"; then
+    ok "cli-write: the program writes the block, exit 0, with the same output and the same .gitignore as the in-process call"
+  else bad "cli-write: the program and the in-process call differ, or the outcome is not exit 0 writing the block ($(eq_twin cli-write))"; fi
+  if eqv cli-check-missing "$_P" "$_P" "$SCHEMA" --check && [ "$(cat "$EQ/cli-check-missing.cl.rc")" = 1 ] \
+     && grep -q 'carries no AI/DLC transient-state block' "$EQ/cli-check-missing.cl.out"; then
+    ok "cli-check-missing: --check over a project with no block exits 1 naming it, exactly as the in-process call does"
+  else bad "cli-check-missing: the program and the in-process call differ, or the outcome is not exit 1 naming the missing block ($(eq_twin cli-check-missing))"; fi
+  jq '.block_begin = ""' "$SCHEMA" > "$WORLDS/eq-broken.json" || { echo "FIXTURE ERROR: jq broken schema" >&2; exit 2; }
+  if eqv cli-refuse "$_P" "$_P" "$WORLDS/eq-broken.json" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] \
+     && grep -q 'declares an empty block marker' "$EQ/cli-refuse.cl.err" && [ ! -s "$EQ/cli-refuse.cl.out" ]; then
+    ok "cli-refuse: an empty block marker is refused on stderr, exit 2, exactly as the in-process call does"
+  else bad "cli-refuse: the program and the in-process call differ, or the outcome is not the exit-2 refusal ($(eq_twin cli-refuse))"; fi
+else
+  bad "FIXTURE BROKEN: the unrendered seed was not kept at $WORLDS/pristine, so the cli cells have no input"
+fi
 
 echo "  $fails failed"
 report_end transient-ignore-block

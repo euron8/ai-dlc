@@ -12,6 +12,7 @@
 # deliberate construction. That keeps the base-ref-resolution assertion the only one that reads
 # the manifest source, instead of shifting the classification under all of them.
 set -uo pipefail
+. "$(dirname "$0")/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 
 WORK="$(mktemp -d)" || exit 2
 PROJ="$WORK/proj"
@@ -23,7 +24,7 @@ export GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@example.invalid
 g() { git -C "$PROJ" "$@"; }
 commit() { g add -A >/dev/null 2>&1; g commit -q -m "$1" >/dev/null 2>&1 || return 1; }
 
-g init -q >/dev/null 2>&1 || exit 2
+world_git -C "$PROJ" init -q >/dev/null 2>&1 || exit 2
 g config commit.gpgsign false >/dev/null 2>&1
 
 # --- pre-layer-split commit: no stamp, no overrides/, no extensions/ ----------

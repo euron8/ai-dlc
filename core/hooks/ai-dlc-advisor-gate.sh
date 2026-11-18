@@ -67,20 +67,20 @@
 #     `if`/`for`/`while`/`{ }` bodies, `git -c "a b" push`, `VAR="a b" git push`, and the string
 #     argument of `bash -c`/`sh -c` (one level, re-split). Wrapper words strip in a LOOP, so any
 #     stacking of them is one spelling.
-#       steps/_gate-procedures.md:990 auto-handoff push      -- touchpoint I, :992
-#       steps/handoff.md:56 handoff push                     -- touchpoint I, :58
-#       steps/retro.md:1285 6b push                          -- touchpoint I, :1215
+#       steps/_gate-procedures.md:1622 auto-handoff push     -- touchpoint I, :1624
+#       steps/handoff.md:73 handoff push                     -- touchpoint I, :75
+#       steps/retro.md:1337 6b push                          -- touchpoint I, :1267
 #   - `gh [-R|--repo <r>] pr merge`, and any MCP tool named `mcp__<server>__merge_pull_request`
 #     (the settings template matches the same regex, `mcp__.*__merge_pull_request`):
-#       steps/retro.md:1375 7a merge                         -- touchpoint I, :1352
+#       steps/retro.md:1427 7a merge                         -- touchpoint I, :1404
 #   - `gate-checkpoint.sh ... close` (NOT `record`: G1, N records, G2, close is the sequence):
-#       steps/gate-validation.md:206                         -- touchpoint G2, :207
+#       steps/gate-validation.md:210                         -- touchpoint G2, :211
 #   - the Check 12 append to `gate-log.md`, keyed on the ENTRY, not the path: an Edit/MultiEdit
 #     that adds a `## Gate Log:` heading, a Write whose content holds more such headings than the
 #     file on disk, or a Bash `>`/`>>`/`tee` onto `gate-log.md` whose command carries one:
-#       steps/gate-validation.md:820 (heading grammar :838) -- touchpoint G1, :167
-#     The retro 7a-post rotation (`git mv`, then a header-only `# Gate Log`, retro.md:1449-1461)
-#     and the in-sprint rotation (gate-validation.md:933, which REMOVES entries) are not gated.
+#       steps/gate-validation.md:955 (heading grammar :970) -- touchpoint G1, :167
+#     The retro 7a-post rotation (`git mv`, then a header-only `# Gate Log`, retro.md:1521-1530)
+#     and the in-sprint rotation (gate-validation.md:1065, which REMOVES entries) are not gated.
 #   THE UPDATE SKILL, measured against core/skills/ai-dlc-update/SKILL.md (a bootstrapping file:
 #   the delivering pull runs its steps 1-2 on the old text and steps 3-8 on the new, after the
 #   step-2 re-invoke; hooks are live from step 2's working-tree write -- reasoned from the step-2
@@ -131,11 +131,11 @@
 #   A TEAMMATE (hook input carries `agent_id`): a verdict or repair-record write through
 #   Edit/Write/MultiEdit, judged on its own transcript:
 #       team-roles/gate-adjudicator.md:32 `<gate_nonce>.verdict.json`, :51 `.part-<i>of<N>.jsonl`
-#       steps/_gate-procedures.md:414 `<artifact>-adversarial-p<M>.md`, :261 and :462 shard parts
-#       team-roles/remediator.md:65 `<artifact>-repair-p<M>.md`, :31 and :678 shard parts,
-#         the party and elicitation repair records (_gate-procedures.md:285, :334)
-#       team-roles/qa.md:325 `-qa-validation*.md`, steps/implementation.md:349 its shard dir
-#       team-roles/code-reviewer.md:92 `-code-review.md`, steps/implementation.md:296 its shards
+#       steps/_gate-procedures.md:737 `<artifact>-adversarial-p<M>.md`, :759 and :814 shard parts
+#       team-roles/remediator.md:97 `<artifact>-repair-p<M>.md`, :31 and :56 shard parts,
+#         the party and elicitation repair records (_gate-procedures.md:390, :556)
+#       team-roles/qa.md:487 `-qa-validation*.md`, steps/implementation.md:567 its shard dir
+#       team-roles/code-reviewer.md:101 `-code-review.md`, steps/implementation.md:390 its shards
 #     Each role file's advisor paragraph says "again before you write your deliverable or
 #     verdict". So a re-write of a path this agent already wrote un-denied is NOT a new gated
 #     action: one call covers one deliverable, and a Write followed by fixing Edits costs one
@@ -223,7 +223,7 @@
 #     result is `is_error: true` with none of them (measured on this repo's own transcript), so it
 #     is removed. A push whose transport dropped after the remote moved (exit 141 with
 #     `* [new branch]` in its output) SHIPPED, and stays a gated action; so does a `gh pr merge
-#     --delete-branch` (retro.md:1375) that merged and then failed to delete the local branch.
+#     --delete-branch` (retro.md:1427) that merged and then failed to delete the local branch.
 #     Every other kind is removed on `is_error` alone. The text is read from a string or from a
 #     `text`-block array. Every PreToolUse deny is one shape of this: the
 #     harness persists the denied `tool_use` and an `is_error` result opening
@@ -316,6 +316,7 @@
 #
 # Compatible with bash 3.2.
 
+adg_main() {
 set -uo pipefail
 
 say() { printf 'ai-dlc-advisor-gate: %s\n' "$1" >&2; }
@@ -753,3 +754,6 @@ if [ "${GRANT:-none}" != on ]; then
   deny "ai-dlc-advisor-gate: DENIED -- call mcp__advisor__consult in a message of its own, read its answer, then retry the same command. This ${_what} is a SKILL.md Rule 32 touchpoint, and this agent has no built-in advisor grant but holds mcp__advisor__consult, with no consult since its last ${_what}. Each kind (push, PR merge, gate close, gate-log append, verdict write) owes its own consult; one consult covers the next action of every kind. Any consult clears this, including one that errors. This is not a push or merge failure: do not record it as one."
 fi
 deny "ai-dlc-advisor-gate: DENIED -- call the advisor in a message of its own, read its answer, then retry the same command. This ${_what} is a SKILL.md Rule 32 touchpoint, and this agent holds the advisor tool with no advisor attempt since its last ${_what}. Each kind (push, PR merge, gate close, gate-log append, verdict write) owes its own call; one call covers the next action of every kind. Any attempt clears this, including one that errors; if the advisor answers 'unavailable' the gate drops to a warning. This is not a push or merge failure: do not record it as one. This agent holds the built-in advisor tool, so call the built-in advisor tool itself; a call to mcp__advisor__consult does not clear this gate."
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+adg_main "$@"

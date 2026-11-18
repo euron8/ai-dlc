@@ -61,7 +61,8 @@ rec() { # <shard file under $P/_bmad-output/planning-artifacts/s9/shards/<dir>/>
 W="$(mktemp -d "${TMPDIR:-/tmp}/subject-receipt.XXXXXX")" || exit 9
 trap 'rm -rf "$W"' EXIT
 P="$W/p"; PA="$P/_bmad-output/planning-artifacts"
-g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$P" -c user.name=r -c user.email=r@example.invalid -c core.hooksPath=/dev/null "$@"; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/world.sh" || { echo "receipt: lib/world.sh is not beside this fixture" >&2; exit 9; }
+g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$P" -c user.name=r -c user.email=r@example.invalid -c core.hooksPath=/dev/null "$@"; }
 lorem() { local i; for i in $(seq 1 "$2"); do printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
 {
   mkdir -p "$PA/s9" "$P/_bmad-output/specs/s9/kernel" "$P/.claude" || exit 9

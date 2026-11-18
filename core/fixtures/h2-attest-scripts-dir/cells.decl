@@ -1,0 +1,8 @@
+# h2-attest-scripts-dir's starts of core/scripts/validate-h2-attestation.sh (BL-879 grammar). Every other drive is in
+# process: run.sh loads the subject once and calls vh2_main through `h2ip` in a subshell. One cli cell per distinct CLI
+# outcome (exit 0 digest, exit 0 PASS verdict, exit 1 first-gate verdict on stdout, exit 1 refusal on stderr), each
+# started as FXCELL=<id> bash "$SUT" in eqv() and compared byte for byte with the in-process call on the same input.
+cli core/scripts/validate-h2-attestation.sh cli-digest
+cli core/scripts/validate-h2-attestation.sh cli-verify-pass
+cli core/scripts/validate-h2-attestation.sh cli-verify-first
+cli core/scripts/validate-h2-attestation.sh cli-sprint-refuse

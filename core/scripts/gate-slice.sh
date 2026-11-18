@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+gsl_main() {
 set -euo pipefail
 
 # gate-slice.sh -- emit the READ PLAN for a gate type's required check set.
@@ -91,7 +92,7 @@ while [ $# -gt 0 ]; do
     --format) FORMAT="${2:-}"; shift 2 ;;
     --self-probe) PROBE=1; shift ;;
     -h|--help)
-      sed -n '36,48p' "$0" >&2; exit 2 ;;
+      sed -n '37,49p' "${BASH_SOURCE[0]}" >&2; exit 2 ;;
     *) echo "gate-slice: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -139,7 +140,7 @@ if [ "$PROBE" = "1" ]; then
   } > "$_pf"
 
   _fail=0
-  _out="$("$0" --type planning --file "$_pf" --format plan 2>/dev/null)" || _fail=1
+  _out="$("${BASH_SOURCE[0]}" --type planning --file "$_pf" --format plan 2>/dev/null)" || _fail=1
   if [ "$_fail" != "0" ]; then
     echo "gate-slice SELF-PROBE FAIL: a well-formed seed did not produce a plan." >&2; exit 2
   fi
@@ -162,7 +163,7 @@ if [ "$PROBE" = "1" ]; then
   # Direction 2: a required id whose anchor is deleted must REFUSE, not shorten.
   _bad="${_pt}/bad.md"
   grep -v '^<!-- CHECK_LOADED: 7 -->$' "$_pf" > "$_bad"
-  if "$0" --type planning --file "$_bad" --format plan >/dev/null 2>&1; then
+  if "${BASH_SOURCE[0]}" --type planning --file "$_bad" --format plan >/dev/null 2>&1; then
     echo "gate-slice SELF-PROBE FAIL: a required id with no anchor produced a plan instead of exit 2." >&2
     exit 2
   fi
@@ -174,7 +175,7 @@ if [ "$PROBE" = "1" ]; then
   [ "$_first" = "1" ] || { echo "gate-slice SELF-PROBE FAIL: the plan's first row starts at ${_first}, not 1 -- the preamble is not planned." >&2; exit 2; }
   # Direction 4: an unknown gate type must REFUSE. A slicer that accepts an unknown
   # type emits the universal row alone and reads as a working narrow slice.
-  if "$0" --type qqq-absent --file "$_pf" --format plan >/dev/null 2>&1; then
+  if "${BASH_SOURCE[0]}" --type qqq-absent --file "$_pf" --format plan >/dev/null 2>&1; then
     echo "gate-slice SELF-PROBE FAIL: an unknown gate type produced a plan instead of exit 2." >&2
     exit 2
   fi
@@ -449,3 +450,6 @@ for e, ids in ext_loads:
     sys.stderr.write(
         "gate-slice: ALSO LOAD (extension, separate file): %s -- checks %s\n" % (e, ",".join(ids)))
 PYEOF
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+gsl_main "$@"

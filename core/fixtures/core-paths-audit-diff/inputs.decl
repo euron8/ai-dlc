@@ -3,3 +3,4 @@
 # The citation arm delegates to this sibling; seed.sh copies it beside the control copy.
 core/scripts/validate-escalation-resolution.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/world.sh

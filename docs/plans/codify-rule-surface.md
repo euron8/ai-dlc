@@ -419,7 +419,7 @@ Each has a live corpus and no general statement anywhere. All go to `verificatio
    story is unfinished.
 3. **Resolve the repo root by walking up for a marker, never by counting `..` hops** — so a
    validator answers identically from the repo root and from a fixture sandbox.
-4. **A glob that matches nothing must not report success** — `scripts/validate-plan-shape.sh:47`.
+4. **A glob that matches nothing must not report success** — `scripts/validate-plan-shape.sh:48`.
 5. **A calibration is a property of its text, not of its divisor** — a bytes-per-token figure
    measured on one population under-counts on another, and was carried backwards for four
    releases.

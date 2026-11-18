@@ -292,7 +292,7 @@ The 13 transient ones are what action 3 renders. The classification is not a jud
 made here: invariant `I95` (`scripts/validate-enforcement-map.sh:5356` in the distribution)
 re-derives the population from the hooks and scripts themselves and fails the distribution's
 push if any path is unclassified. The renderer's `--check` mode, which reports whether the
-block is current without writing anything, is at `core/scripts/sync-transient-ignore.sh:35`.
+block is current without writing anything, is at `core/scripts/sync-transient-ignore.sh:37`.
 
 **A blanket `_bmad-output/.*` rule was considered and rejected**, and this project is the
 reason. It tracks `_bmad-output/.audit-accepted-exceptions` deliberately, and the distribution

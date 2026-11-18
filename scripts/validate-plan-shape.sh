@@ -36,9 +36,10 @@
 # Usage: validate-plan-shape.sh [<plan-file>...]     (default: docs/plans/*.md)
 # Exit:  0 = every plan conforms (warnings may print), 1 = at least one ERROR,
 #        2 = bad usage / no corpus to check.
+vps_main() {
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
 if [ "$#" -gt 0 ]; then
@@ -417,6 +418,7 @@ for f in "${FILES[@]}"; do
   # the set is EXACTLY THE TWO LIVE PLANS, both named, both fixed in the same commit.
   # Control in the same invocation: `READ and FOLLOW` appeared in 0 of 25 files, so the
   # zero was a real absence rather than a search that missed.
+  # HEAD-WINDOW NARROWING, FALSE-POSITIVE SET at 3942456d5 over docs/plans/*.md: 53 plans, 4 live, 0 with the resume line below the window.
   #
   # THE MATCH IS ON THE BASENAME, NOT THE FULL PATH, and that is deliberate. A plan may
   # legitimately cite itself as `docs/plans/x.md` or as `x.md` depending on the sentence,
@@ -427,8 +429,11 @@ for f in "${FILES[@]}"; do
     # HERE-STRING, NOT A PIPE (I54b), for the reason P6 and P9 both record: `grep -q` leaves
     # at its first match while the writer is still pushing, and under pipefail the pipeline
     # answers with the writer's EPIPE -- reporting NOT-FOUND on a file that contains it.
-    if ! grep -qiE "READ and FOLLOW.*${plan_base}" <<<"$(cat "$f")"; then
-      err "$rel" "is a LIVE plan that does not carry its own resume one-liner. The operator resumes with exactly 'READ and FOLLOW $rel' and nothing else, so that sentence has to appear IN the plan, naming THIS file -- an inherited one from an ancestor plan sends the session somewhere else. Put it at the top, above the history, with the current state and the numbered next actions beside it."
+    # THE SENTENCE IS SOUGHT IN THE SAME HEAD WINDOW THE LIVENESS TEST READS, never the whole
+    # file. A later action that QUOTES the one-liner satisfied a whole-file grep after the
+    # resume line at the top was deleted, which is the line a fresh session actually meets.
+    if ! grep -qiE "READ and FOLLOW.*${plan_base}" <<<"$(head -12 "$f")"; then
+      err "$rel" "is a LIVE plan whose resume one-liner is missing from the head window (its first twelve lines). The operator resumes with exactly 'READ and FOLLOW $rel' and nothing else, so that sentence has to appear IN those lines, naming THIS file -- an inherited one from an ancestor plan sends the session somewhere else. Put it at the top, above the history, with the current state and the numbered next actions beside it."
     fi
   fi
 
@@ -669,3 +674,6 @@ done
 echo "validate-plan-shape: ${#FILES[@]} plan(s) checked, $errs error(s), $warns warning(s)."
 [ "$errs" -eq 0 ] || exit 1
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vps_main "$@"

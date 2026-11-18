@@ -11,6 +11,7 @@
 # harness-owned transcript, using THE genuine-operator predicate (shared with Check B).
 set -eu
 ROOT="$(mktemp -d)"
+. "$(dirname "$0")/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 
 # A pass artifact carrying a SKILL_INVOCATION_PROVENANCE block.
 pass() { # file n crit major minor verdict sha [resolves] [invoked_at]
@@ -205,7 +206,7 @@ bl_k2() { # <world> <shard ids | "">
   mkdir -p "$1/.claude" || return 1
   printf 'version: 0.665.0\n' > "$1/.claude/.ai-dlc-version"
   printf '# PRD\n\n## One\n\nalpha alpha\n\n## Two\n\nbravo bravo\n\n## Three\n\ncharlie charlie\n\n## Four\n\ndelta delta\n' > "$1/prd.md"
-  blg "$1" init -q . >/dev/null && blg "$1" add .claude/.ai-dlc-version && blcommit "$1" 2026-09-29T10:00:00Z stamp || return 1
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$1" init -q . >/dev/null && blg "$1" add .claude/.ai-dlc-version && blcommit "$1" 2026-09-29T10:00:00Z stamp || return 1
   {
     printf '# prd -- adversarial pass 1\n\n'
     printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
@@ -231,7 +232,7 @@ BL_PA=_bmad-output/planning-artifacts
 bl_k3() { # <world> accept|refuse
   local w="$1" pa="$1/$BL_PA" o ids="" k g i sl sep
   mkdir -p "$pa/s9" "$w/_bmad-output/specs/s9/kernel" "$w/.claude" || return 1
-  blg "$w" init -q . >/dev/null && blg "$w" checkout -q -b main || return 1
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$w" init -q . >/dev/null && blg "$w" checkout -q -b main || return 1
   { printf '# Brief\n\n## Vision\n\n'; bllorem vision 10; } > "$pa/product-brief.md"
   { printf '# PRD\n\n## Current state\n\n'; bllorem current 20; printf '\n## Sprint 8\n\n'; bllorem s8 20; printf '\n'; } > "$pa/prd.md"
   printf -- '- FR-S8-1: architecture_impact: none\n' > "$pa/s9/architecture-impact.md"
@@ -301,7 +302,7 @@ bl_l() { # <world> accept|refuse
     bl_lprov "$w/s9/stories-elicitation.md"
   fi
   printf 'version: 0.781.0\n' > "$w/.claude/.ai-dlc-version"
-  blg "$w" init -q . >/dev/null && blg "$w" add -A && blcommit "$w" 2026-10-01T00:00:00Z stamp-0.781.0 || return 1
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$w" init -q . >/dev/null && blg "$w" add -A && blcommit "$w" 2026-10-01T00:00:00Z stamp-0.781.0 || return 1
   printf 'version: 0.782.0\n' > "$w/.claude/.ai-dlc-version"
   blg "$w" add -A && blcommit "$w" 2026-10-05T00:00:00Z stamp-0.782.0
 }

@@ -8,3 +8,6 @@
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/layout.sh
+# inproc_load / inproc_run, and the fx_inproc they log each in-process pass with (the inproc: row).
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

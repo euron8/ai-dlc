@@ -1,3 +1,5 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-15 *
-10 core/scripts/sync-transient-ignore.sh
+# Set from one counted run (scripts/seed-verdict-store.sh) on the converted tree (BL-878): the starts are run.sh,
+# seed.sh and the three cli cells of cells.decl; every other drive of the renderer is in process, one inproc: pass each.
+5 *
+3 core/scripts/sync-transient-ignore.sh
+16 inproc:core/scripts/sync-transient-ignore.sh

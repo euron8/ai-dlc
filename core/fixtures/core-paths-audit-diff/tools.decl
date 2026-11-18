@@ -5,6 +5,7 @@ cmp
 cp
 cut
 dirname
+env
 git
 grep
 mkdir

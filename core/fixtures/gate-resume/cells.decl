@@ -1,0 +1,16 @@
+# gate-resume's starts of core/scripts/gate-slice.sh and core/scripts/gate-checkpoint.sh (BL-879 grammar). Every other
+# drive is in process: run.sh asks gsl_main and gck_main through gsl_f / gck_f. One cli cell per distinct CLI outcome
+# of each subject (exit 0, the exit-2 refusal), each started as FXCELL=<id> bash in eqv() and compared byte for byte
+# with the in-process call on the same input.
+cli core/scripts/gate-slice.sh cli-slice-plan
+cli core/scripts/gate-slice.sh cli-slice-refuse
+cli core/scripts/gate-checkpoint.sh cli-ckpt-done
+cli core/scripts/gate-checkpoint.sh cli-ckpt-refuse
+# The self-probes stay end to end, and their child starts are covered by the nested rows.
+e2e core/scripts/gate-slice.sh e2e-slice-probe why=--self-probe starts the slicer as a program on its probe seed, and a nested row covers those starts only when their logged parent is a start of the slicer, which an in-process probe is not
+e2e core/scripts/gate-checkpoint.sh e2e-ckpt-probe why=--self-probe starts the checkpoint as a program once per direction, and a nested row covers those starts only when their logged parent is a start of the checkpoint, which an in-process probe is not
+nested core/scripts/gate-slice.sh core/scripts/gate-slice.sh why=--self-probe re-runs the slicer as a program on its own seed, once per probed direction
+nested core/scripts/gate-checkpoint.sh core/scripts/gate-checkpoint.sh why=--self-probe re-runs the checkpoint as a program once per probed action, including twenty concurrent writers
+# The three hooks take no row: each runs end to end as the program the harness starts (no source guard, and this
+# conversion does not edit them), and its starts are of world copies under .claude/hooks/, no start of a declared
+# core/hooks/ path (invocations.decl's 0 rows). Their item-7 reason is written beside arm G in run.sh.

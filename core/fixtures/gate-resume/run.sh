@@ -30,19 +30,68 @@ skip() { # skip <what> <why>
   if [ "${IS_DIST:-0}" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
 }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+
+# IN PROCESS (BL-878). gate-slice.sh and gate-checkpoint.sh are asked through gsl_f / gck_f: a subshell that sources
+# the file it is handed (the subject, or a copy placed in a world) and calls its entry function, logged by fx_inproc
+# under the subject's own path (the two `inproc:` rows). lib/inproc.sh is not used: this fixture declares three
+# unguarded bash subjects (the hooks), and P2 reads inproc.sh's own sources as unpaired drives of them (BL-878,
+# "Not using lib/inproc.sh"). No caller-variable reset: both entry functions assign every variable they read
+# before reading it, and the cli cells below are the equivalence evidence. The programs run only in the cells of
+# cells.decl.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present subject with neither the `<p>_main() {` line nor the column-0
+# source guard predates the wrap, and sourcing it would run its whole body: SKIP and exit 0 (FIXTURE BROKEN in the
+# distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
+# unreadable subject is FIXTURE ERROR. An ABSENT subject keeps this fixture's own absent path (seed.sh resolves it
+# to "", and every arm naming it reports SKIP).
+gr_halves() { # gr_halves <file> <entry> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_gr_pre=""
+for _gr in "$SLICE:gsl_main" "$CKPT:gck_main"; do
+  [ -n "${_gr%%:*}" ] || continue
+  _gh="$(gr_halves "${_gr%%:*}" "${_gr##*:}")" || exit 2
+  case "$_gh" in
+    11) : ;;
+    00) _gr_pre="$_gr_pre ${_gr%%:*}" ;;
+    *) bad "${_gr%%:*} carries one half of the in-process wrap (${_gr##*:} line, column-0 source guard: $_gh) -- a respelled subject this fixture cannot drive"
+       report_end gate-resume ;;
+  esac
+done
+if [ -n "$_gr_pre" ]; then echo "SKIP: gate-resume:$_gr_pre predate(s) the in-process wrap"; fx_skip_exit "$HERE"; fi
+gsl_f() { # gsl_f <file> [args...] -> gsl_main's stdout, stderr and exit, logged as a pass of $SLICE
+  local _f="$1"; shift
+  ( fx_inproc "$SLICE"; set +eufx +o pipefail; hash -r; . "$_f" || exit 126; gsl_main "$@" )
+}
+gck_f() { # gck_f <file> [args...] -> gck_main's stdout, stderr and exit, logged as a pass of $CKPT
+  local _f="$1"; shift
+  ( fx_inproc "$CKPT"; set +eufx +o pipefail; hash -r; . "$_f" || exit 126; gck_main "$@" )
+}
+gsl() { gsl_f "$SLICE" "$@"; }
+gck() { gck_f "$CKPT" "$@"; }
 
 echo "gate-resume:"
 
 # ============================================================================
 # 0. CWD INVARIANCE. CLAUDE.md: a fixture that is green only from the repo root may be
-# asserting nothing (core/fixtures/check-3b-locked-anchor/run.sh:125). HERE and WORK are
+# asserting nothing (core/fixtures/check-3b-locked-anchor/run.sh:105). HERE and WORK are
 # resolved from $0 and mktemp, never from $PWD; prove a real subject call agrees driven
 # from two different working directories before trusting anything else below.
 # ============================================================================
 if [ -n "$SLICE" ]; then
   echo "HERMETIC-CONSUMED core/scripts/gate-slice.sh"
-  _cwd_a="$(cd "$ROOT" && bash "$SLICE" --type planning --file "$GATEFILE" --format plan 2>/dev/null)"
-  _cwd_b="$(cd "$HERE" && bash "$SLICE" --type planning --file "$GATEFILE" --format plan 2>/dev/null)"
+  _cwd_a="$(cd "$ROOT" && gsl --type planning --file "$GATEFILE" --format plan 2>/dev/null)"
+  _cwd_b="$(cd "$HERE" && gsl --type planning --file "$GATEFILE" --format plan 2>/dev/null)"
   if [ -n "$_cwd_a" ] && [ "$_cwd_a" = "$_cwd_b" ]; then
     ok "gate-slice.sh's plan is byte-identical driven from the repo root and from this fixture's own directory"
   else
@@ -55,14 +104,17 @@ fi
 # ============================================================================
 # A. SELF-PROBES, and the control that a real call still refuses on real bad input.
 # ============================================================================
+# Both self-probes stay END TO END (cells.decl e2e rows): each starts its own subject as a program on its probe seed,
+# and a nested row covers those child starts only when their logged parent is a start of the subject, which an
+# in-process probe is not.
 if [ -n "$SLICE" ]; then
-  if bash "$SLICE" --self-probe >/dev/null 2>&1; then
+  if FXCELL=e2e-slice-probe bash "$SLICE" --self-probe >/dev/null 2>&1; then
     ok "gate-slice.sh --self-probe exits 0 (its own two-direction probe passed)"
   else
     bad "gate-slice.sh --self-probe FAILED -- every derived-plan assertion below is unproven"
   fi
   _empty="$WORK/empty-gate.md"; : > "$_empty"
-  bash "$SLICE" --type planning --file "$_empty" >/dev/null 2>&1; _rc=$?
+  gsl --type planning --file "$_empty" >/dev/null 2>&1; _rc=$?
   if [ "$_rc" -eq 2 ]; then
     ok "control: gate-slice.sh --type planning --file <empty> exits 2 -- the self-probe's PASS above is not \"the tool exits 0 no matter what\" (the probe builds its own seed)"
   else
@@ -74,7 +126,7 @@ fi
 
 if [ -n "$CKPT" ]; then
   echo "HERMETIC-CONSUMED core/scripts/gate-checkpoint.sh"
-  if bash "$CKPT" --self-probe >/dev/null 2>&1; then
+  if FXCELL=e2e-ckpt-probe bash "$CKPT" --self-probe >/dev/null 2>&1; then
     ok "gate-checkpoint.sh --self-probe exits 0 (its own thirteen-direction probe passed)"
   else
     bad "gate-checkpoint.sh --self-probe FAILED -- every checkpoint assertion below is unproven"
@@ -176,7 +228,7 @@ PY
 if [ -n "$SLICE" ]; then
   for t in planning story implementation sprint-review retro; do
     _derived="$(python3 "$WORK/derive.py" required "$GATEFILE" "$t")"
-    _real_json="$(bash "$SLICE" --type "$t" --format json 2>/dev/null)"
+    _real_json="$(gsl --type "$t" --format json 2>/dev/null)"
     _real="$(printf '%s' "$_real_json" | python3 -c 'import json,sys;print(",".join(sorted(json.load(sys.stdin)["required"])))' 2>/dev/null)"
     if [ -n "$_real" ] && [ "$_derived" = "$_real" ]; then
       ok "gate-slice.sh's required set for '${t}' equals universal ∪ ${t} parsed independently ($(printf '%s' "$_real" | tr ',' ' '))"
@@ -205,13 +257,13 @@ fi
 # ignored, exit 0.
 # ============================================================================
 if [ -n "$SLICE" ]; then
-  _req="$(bash "$SLICE" --type planning --format json 2>/dev/null | python3 -c 'import json,sys;print("\n".join(json.load(sys.stdin)["required"]))')"
+  _req="$(gsl --type planning --format json 2>/dev/null | python3 -c 'import json,sys;print("\n".join(json.load(sys.stdin)["required"]))')"
   _id1="$(printf '%s\n' "$_req" | sed -n 1p)"
   _id2="$(printf '%s\n' "$_req" | sed -n 2p)"
   if [ -z "$_id1" ] || [ -z "$_id2" ]; then
     bad "FIXTURE STALE: the planning row has fewer than 2 required ids; the --done arm needs two"
   else
-    _dout="$(bash "$SLICE" --type planning --done "${_id1},${_id2},zzz-bogus-id" --format json 2>"$WORK/done.stderr")"; _drc=$?
+    _dout="$(gsl --type planning --done "${_id1},${_id2},zzz-bogus-id" --format json 2>"$WORK/done.stderr")"; _drc=$?
     _planned="$(printf '%s' "$_dout" | python3 -c 'import json,sys;print(",".join(sorted(json.load(sys.stdin)["planned"])))' 2>/dev/null)"
     # LC_ALL=C: Python's sorted() (used on $_planned above) orders by byte value, where
     # uppercase 'H' (0x48) sorts before lowercase 'f' (0x66). The locale-aware `sort`
@@ -246,26 +298,26 @@ if [ -n "$CKPT" ]; then
 
   # current with NOTHING opened yet is empty, exit 0 -- even though this nonce's ledger
   # does not exist yet either, this is the state before 'open' is ever called.
-  _ecur0="$(bash "$CKPT" --root "$_eroot" current 2>/dev/null)"; _ercc0=$?
+  _ecur0="$(gck --root "$_eroot" current 2>/dev/null)"; _ercc0=$?
   if [ -z "$_ecur0" ] && [ "$_ercc0" -eq 0 ]; then
     ok "'current' before any 'open' call is empty, exit 0"
   else
     bad "'current' before any open returned '${_ecur0}' rc=${_ercc0}, expected empty/0"
   fi
 
-  bash "$CKPT" --root "$_eroot" --nonce "$_n1" open >/dev/null 2>&1
-  _ecur="$(bash "$CKPT" --root "$_eroot" current 2>/dev/null)"
+  gck --root "$_eroot" --nonce "$_n1" open >/dev/null 2>&1
+  _ecur="$(gck --root "$_eroot" current 2>/dev/null)"
   if [ "$_ecur" = "$_n1" ]; then
     ok "'current' names the OPENED nonce (${_n1})"
   else
     bad "'current' returned '${_ecur}', expected '${_n1}' after 'open ${_n1}'"
   fi
 
-  bash "$CKPT" --root "$_eroot" --nonce "$_n1" record 1 PASS    >/dev/null 2>&1
-  bash "$CKPT" --root "$_eroot" --nonce "$_n1" record 2 SKIP "ui n/a" >/dev/null 2>&1
-  bash "$CKPT" --root "$_eroot" --nonce "$_n1" record 3 FAIL "bad"    >/dev/null 2>&1
-  bash "$CKPT" --root "$_eroot" --nonce "$_n1" record 4 PENDING >/dev/null 2>&1
-  _edone="$(bash "$CKPT" --root "$_eroot" --nonce "$_n1" done 2>/dev/null)"
+  gck --root "$_eroot" --nonce "$_n1" record 1 PASS    >/dev/null 2>&1
+  gck --root "$_eroot" --nonce "$_n1" record 2 SKIP "ui n/a" >/dev/null 2>&1
+  gck --root "$_eroot" --nonce "$_n1" record 3 FAIL "bad"    >/dev/null 2>&1
+  gck --root "$_eroot" --nonce "$_n1" record 4 PENDING >/dev/null 2>&1
+  _edone="$(gck --root "$_eroot" --nonce "$_n1" done 2>/dev/null)"
   if [ "$_edone" = "1,2" ]; then
     ok "recording PASS,SKIP,FAIL,PENDING at one nonce: 'done' returns exactly the PASS and SKIP ids (1,2)"
   else
@@ -273,7 +325,7 @@ if [ -n "$CKPT" ]; then
   fi
 
   _n2="planning-20260101T000001Z"
-  _edone2="$(bash "$CKPT" --root "$_eroot" --nonce "$_n2" done 2>/dev/null)"
+  _edone2="$(gck --root "$_eroot" --nonce "$_n2" done 2>/dev/null)"
   if [ -z "$_edone2" ]; then
     ok "a fresh nonce's 'done' is empty"
   else
@@ -287,13 +339,13 @@ if [ -n "$CKPT" ]; then
   # mtime and the unopened one a newer one, and the order is asserted before the arm reads it, so
   # the arm discriminates against an mtime scan however long each record took. `-c` never creates
   # a file, so a wrong ledger path is caught by the order check rather than stamped into being.
-  bash "$CKPT" --root "$_eroot" --nonce "$_n2" record 9 PASS >/dev/null 2>&1
+  gck --root "$_eroot" --nonce "$_n2" record 9 PASS >/dev/null 2>&1
   _eld="$_eroot/_bmad-output/.gate-checkpoint"
   touch -c -t 202601010000.00 "$_eld/${_n1}.tsv"; touch -c -t 202601010001.00 "$_eld/${_n2}.tsv"
   if ! [ "$_eld/${_n2}.tsv" -nt "$_eld/${_n1}.tsv" ]; then
     echo "FIXTURE BROKEN: the stamped ledgers ${_n1}.tsv/${_n2}.tsv under $_eld are not in mtime order, so the arm below cannot tell the OPEN marker from an mtime scan" >&2; exit 2
   fi
-  _ecur_after="$(bash "$CKPT" --root "$_eroot" current 2>/dev/null)"
+  _ecur_after="$(gck --root "$_eroot" current 2>/dev/null)"
   if [ "$_ecur_after" = "$_n1" ]; then
     ok "'current' still names ${_n1} after an unopened newer ledger (${_n2}) is written"
   else
@@ -301,15 +353,15 @@ if [ -n "$CKPT" ]; then
   fi
 
   # close: only the nonce that is open may close it.
-  bash "$CKPT" --root "$_eroot" --nonce "$_n2" close >/dev/null 2>&1; _wrongclose_rc=$?
+  gck --root "$_eroot" --nonce "$_n2" close >/dev/null 2>&1; _wrongclose_rc=$?
   if [ "$_wrongclose_rc" -eq 2 ]; then
     ok "closing a nonce that is not the open one refuses, exit 2"
   else
     bad "closing the wrong nonce exited ${_wrongclose_rc}, expected 2"
   fi
 
-  bash "$CKPT" --root "$_eroot" --nonce "$_n1" close >/dev/null 2>&1
-  _ecur_closed="$(bash "$CKPT" --root "$_eroot" current 2>/dev/null)"
+  gck --root "$_eroot" --nonce "$_n1" close >/dev/null 2>&1
+  _ecur_closed="$(gck --root "$_eroot" current 2>/dev/null)"
   if [ -z "$_ecur_closed" ]; then
     ok "'current' is empty after 'close ${_n1}'"
   else
@@ -322,7 +374,7 @@ if [ -n "$CKPT" ]; then
   fi
 
   _eroot2="$WORK/ckpt-e-empty"; mkdir -p "$_eroot2/_bmad-output"
-  _ecur2="$(bash "$CKPT" --root "$_eroot2" current 2>/dev/null)"; _ercc2=$?
+  _ecur2="$(gck --root "$_eroot2" current 2>/dev/null)"; _ercc2=$?
   if [ -z "$_ecur2" ] && [ "$_ercc2" -eq 0 ]; then
     ok "'current' against a directory with no ledger prints nothing and exits 0"
   else
@@ -336,14 +388,14 @@ fi
 # F. REFUSALS, each rc=2.
 # ============================================================================
 if [ -n "$SLICE" ]; then
-  bash "$SLICE" --type qqq-unknown --file "$GATEFILE" >/dev/null 2>&1; _rc=$?
+  gsl --type qqq-unknown --file "$GATEFILE" >/dev/null 2>&1; _rc=$?
   [ "$_rc" -eq 2 ] && ok "an unknown gate type exits 2" || bad "unknown gate type exited ${_rc}, expected 2"
 
-  bash "$SLICE" --type universal --file "$GATEFILE" >/dev/null 2>&1; _rc=$?
+  gsl --type universal --file "$GATEFILE" >/dev/null 2>&1; _rc=$?
   [ "$_rc" -eq 2 ] && ok "'universal' as a declared --type exits 2 (it is the always-loaded row, never a declarable type)" \
     || bad "--type universal exited ${_rc}, expected 2"
 
-  bash "$SLICE" --file "$GATEFILE" >/dev/null 2>&1; _rc=$?
+  gsl --file "$GATEFILE" >/dev/null 2>&1; _rc=$?
   [ "$_rc" -eq 2 ] && ok "an omitted --type exits 2" || bad "omitted --type exited ${_rc}, expected 2"
 else
   skip "gate-slice.sh refusals (unknown type / universal / empty type)" "gate-slice.sh is not present in this tree"
@@ -351,13 +403,13 @@ fi
 
 if [ -n "$CKPT" ]; then
   _froot="$WORK/ckpt-f"; mkdir -p "$_froot/_bmad-output"
-  bash "$CKPT" --root "$_froot" --nonce f1 record 1 PROBABLY >/dev/null 2>&1; _rc=$?
+  gck --root "$_froot" --nonce f1 record 1 PROBABLY >/dev/null 2>&1; _rc=$?
   [ "$_rc" -eq 2 ] && ok "an unknown verdict token exits 2" || bad "unknown verdict token exited ${_rc}, expected 2"
 
-  bash "$CKPT" --root "$_froot" --nonce f1 record 1 >/dev/null 2>&1; _rc=$?
+  gck --root "$_froot" --nonce f1 record 1 >/dev/null 2>&1; _rc=$?
   [ "$_rc" -eq 2 ] && ok "a verdictless record exits 2" || bad "verdictless record exited ${_rc}, expected 2"
 
-  bash "$CKPT" --root "$_froot" --nonce "a/b" record 1 PASS >/dev/null 2>&1; _rc=$?
+  gck --root "$_froot" --nonce "a/b" record 1 PASS >/dev/null 2>&1; _rc=$?
   [ "$_rc" -eq 2 ] && ok "a nonce carrying a slash exits 2" || bad "slash-nonce exited ${_rc}, expected 2"
 else
   skip "gate-checkpoint.sh refusals (unknown verdict / verdictless / slash-nonce)" "gate-checkpoint.sh is not present in this tree"
@@ -374,14 +426,14 @@ fi
 # the strict form; the 2 non-canonical opens are true positives.
 # ============================================================================
 f2_canon_open() { # f2_canon_open <ckpt> <root> -> rc of a canonical sprint-review open
-  bash "$1" --root "$2" --nonce "sprint-review-20261011T083048Z" open >/dev/null 2>&1
+  gck_f "$1" --root "$2" --nonce "sprint-review-20261011T083048Z" open >/dev/null 2>&1
 }
 if [ -n "$CKPT" ]; then
   _f2root="$WORK/ckpt-f2"; mkdir -p "$_f2root/_bmad-output"
   _f2ctl="implementation-20261011T083048Z"
-  bash "$CKPT" --root "$_f2root" --nonce "$_f2ctl" open >/dev/null 2>&1
-  _f2err="$(bash "$CKPT" --root "$_f2root" --nonce "implementation-2026-10-11T083048Z" open 2>&1 >/dev/null)"; _f2rc=$?
-  _f2cur="$(bash "$CKPT" --root "$_f2root" current 2>/dev/null)"
+  gck --root "$_f2root" --nonce "$_f2ctl" open >/dev/null 2>&1
+  _f2err="$(gck --root "$_f2root" --nonce "implementation-2026-10-11T083048Z" open 2>&1 >/dev/null)"; _f2rc=$?
+  _f2cur="$(gck --root "$_f2root" current 2>/dev/null)"
   case "$_f2err" in
     *'<gate_type>-YYYYMMDDTHHMMSSZ'*'date -u +%Y%m%dT%H%M%SZ'*) _f2named=1 ;;
     *) _f2named=0 ;;
@@ -392,19 +444,19 @@ if [ -n "$CKPT" ]; then
     bad "BL-518 (a): hyphenated-date open rc=${_f2rc} (want 2), names-canonical=${_f2named} (want 1), current='${_f2cur}' (want ${_f2ctl})"
   fi
 
-  bash "$CKPT" --root "$_f2root" --nonce "deploy-validate-s304-20260822T005500Z" open >/dev/null 2>&1; _rc=$?
+  gck --root "$_f2root" --nonce "deploy-validate-s304-20260822T005500Z" open >/dev/null 2>&1; _rc=$?
   [ "$_rc" -eq 2 ] && ok "BL-518 (b): 'open' refuses a nonce whose gate type is outside the schema's closed list (deploy-validate-s304-...), exit 2" \
     || bad "BL-518 (b): deploy-validate-s304-20260822T005500Z open exited ${_rc}, expected 2"
 
   f2_canon_open "$CKPT" "$_f2root"; _rc=$?
-  _f2cur="$(bash "$CKPT" --root "$_f2root" current 2>/dev/null)"
+  _f2cur="$(gck --root "$_f2root" current 2>/dev/null)"
   if [ "$_rc" -eq 0 ] && [ "$_f2cur" = "sprint-review-20261011T083048Z" ]; then
     ok "BL-518 (c): a canonical nonce with a hyphenated gate type (sprint-review-...) opens, exit 0, and becomes current"
   else
     bad "BL-518 (c): canonical sprint-review open rc=${_rc} current='${_f2cur}', expected 0 and that nonce"
   fi
 
-  bash "$CKPT" --root "$_f2root" --nonce f1 record 1 PASS >/dev/null 2>&1; _rc=$?
+  gck --root "$_f2root" --nonce f1 record 1 PASS >/dev/null 2>&1; _rc=$?
   [ "$_rc" -eq 0 ] && ok "BL-518 (d): 'record' at a non-canonical nonce (f1) still exits 0 -- only 'open' is gated" \
     || bad "BL-518 (d): non-canonical record exited ${_rc}, expected 0 (the refusal must not reach record)"
 
@@ -436,6 +488,11 @@ fi
 # ai-dlc-recover.sh with source=compact, and assert the resume text names the nonce and
 # gate-slice.sh, under the 10000-char cliff. Control: no ledger dir -> "no gate in flight".
 # ============================================================================
+# THE HOOK RUNS STAY END TO END (arms G, G2, G3 and BL-457), item 7: why=the three hooks carry no source guard and
+# this conversion does not edit them, so each is started as the program the harness starts, reading its payload on
+# stdin and its siblings, and the world's own scripts/ai-dlc/gate-checkpoint.sh, from the world it is copied into.
+# Those starts are of world copies under .claude/hooks/, which are no start of a declared core/hooks/ path (the
+# decl's 0 rows), so they take no cells.decl row. Every checkpoint call this fixture makes itself is in process.
 # The recover hook sources its two libraries from ITS OWN directory, so they are copied from
 # beside $HOOK, which seed.sh resolved in both layouts. A `${ROOT}/core/hooks/` source exists
 # only in the distribution: on a consumer the copy failed silently, the hook fell back to its
@@ -481,10 +538,10 @@ except Exception: pass'
 
   _groot="$WORK/e2e"; _mkconsumer "$_groot"
   _gnonce="planning-20260921T120000Z"
-  bash "$CKPT" --root "$_groot" --nonce "$_gnonce" open >/dev/null 2>&1
-  bash "$CKPT" --root "$_groot" --nonce "$_gnonce" record 1 PASS >/dev/null 2>&1
-  bash "$CKPT" --root "$_groot" --nonce "$_gnonce" record 2 PASS >/dev/null 2>&1
-  bash "$CKPT" --root "$_groot" --nonce "$_gnonce" record 3 PASS >/dev/null 2>&1
+  gck --root "$_groot" --nonce "$_gnonce" open >/dev/null 2>&1
+  gck --root "$_groot" --nonce "$_gnonce" record 1 PASS >/dev/null 2>&1
+  gck --root "$_groot" --nonce "$_gnonce" record 2 PASS >/dev/null 2>&1
+  gck --root "$_groot" --nonce "$_gnonce" record 3 PASS >/dev/null 2>&1
   _ctx="$(fire_recover "$_groot")"
 
   if grep -qF "$_gnonce" <<<"$_ctx" && grep -q 'gate-slice\.sh' <<<"$_ctx"; then
@@ -545,7 +602,7 @@ if [ -n "$CKPT" ] && grep -q 'GATE_LEFT' "$HOOK"; then
     for w in ${3:-left live return wholeM record other nolines older handoff route}; do
       d="$WORK/g2-$tag-$w"; _mkconsumer "$d"
       cp "$hook" "$d/.claude/hooks/ai-dlc-recover.sh"
-      bash "$CKPT" --root "$d" --nonce "$_gl_nonce" open >/dev/null 2>&1
+      gck --root "$d" --nonce "$_gl_nonce" open >/dev/null 2>&1
       if [ "$w" = nolines ]; then
         printf '{"type":"assistant","timestamp":"2026-09-21T13:05:00.000Z","message":{"content":[{"type":"text","text":"no tool"}]}}\n' > "$d/t.jsonl"
       else
@@ -575,7 +632,7 @@ try: print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])
 except Exception: pass')"
       r=n; grep -q 'RESUME it, do not restart it' <<<"$c" && r=y
       k=n; grep -q 'A gate left open was closed' <<<"$c" && grep -qF "$_gl_nonce" <<<"$c" && k=y
-      m=n; [ "$(bash "$CKPT" --root "$d" current 2>/dev/null)" = "$_gl_nonce" ] && m=y
+      m=n; [ "$(gck --root "$d" current 2>/dev/null)" = "$_gl_nonce" ] && m=y
       out="$out $w:$r$k$m"
     done
     printf '%s' "${out# }"
@@ -699,7 +756,7 @@ if [ -z "$_G3_SKIP" ]; then
     case "$c" in *'RESUME it, do not restart it'*) r=y ;; esac
     printf 'N%sR%s' "$n" "$r"
   }
-  g3_ck() { local d="$1"; shift; AI_DLC_STATE_DIR="$_g3_sd" bash "$d/scripts/ai-dlc/gate-checkpoint.sh" --root "$d" "$@" >/dev/null 2>&1; }
+  g3_ck() { local d="$1"; shift; AI_DLC_STATE_DIR="$_g3_sd" gck_f "$d/scripts/ai-dlc/gate-checkpoint.sh" --root "$d" "$@" >/dev/null 2>&1; }
   g3_ol() { # g3_ol <dir> -> O<y|n|x>L<y|n|x>: OPEN / LEFT name N (y), are absent (n), or name another (x)
     local g="$1/${_g3_sd:-_bmad-output}/.gate-checkpoint" o=n l=n v="" rest
     if [ -f "$g/OPEN" ]; then read -r v < "$g/OPEN"; if [ "$v" = "$_g3N" ]; then o=y; else o=x; fi; fi
@@ -891,8 +948,8 @@ if [ -n "$SLICE" ]; then
   mkdir -p "$_hroot/scripts/ai-dlc" "$_hroot/.claude/skills/ai-dlc/steps"
   cp "$SLICE" "$_hroot/scripts/ai-dlc/gate-slice.sh"; chmod +x "$_hroot/scripts/ai-dlc/gate-slice.sh"
   cp "$GATEFILE" "$_hroot/.claude/skills/ai-dlc/steps/gate-validation.md"
-  _out_dist="$(bash "$SLICE" --type planning --file "$GATEFILE" --format plan 2>/dev/null)"
-  _out_cons="$(AI_DLC_PROJECT_ROOT="$_hroot" bash "$_hroot/scripts/ai-dlc/gate-slice.sh" --type planning --format plan 2>/dev/null)"
+  _out_dist="$(gsl --type planning --file "$GATEFILE" --format plan 2>/dev/null)"
+  _out_cons="$(AI_DLC_PROJECT_ROOT="$_hroot" gsl_f "$_hroot/scripts/ai-dlc/gate-slice.sh" --type planning --format plan 2>/dev/null)"
   if [ -n "$_out_dist" ] && [ "$_out_dist" = "$_out_cons" ]; then
     ok "gate-slice.sh produces byte-identical plans run from core/scripts/ here and copied to a consumer's scripts/ai-dlc/ + .claude/skills/ai-dlc/steps/ layout"
   else
@@ -932,7 +989,7 @@ fi
 # ============================================================================
 # WC_MARGIN (BL-735): the author-time headroom WC demands below the 10000 cliff. What it
 # protects is the sidecar note, the compacted lead's one pointer to the pre-compaction branch
-# and gate-log tail. ai-dlc-recover.sh:639-641 drops that note once ${#BARE} + WRAP_OVERHEAD
+# and gate-log tail. ai-dlc-recover.sh:752-754 drops that note once ${#BARE} + WRAP_OVERHEAD
 # reaches CONTEXT_LIMIT, and the emission then FALLS by the note's ~225 bytes -- so a bound on
 # the length alone never sees the drop, and WC asserts the note itself as well. Measured on
 # this world by one direct fire: 9976 emitted with the note at bf0b3f0bf (24 bytes from the
@@ -951,7 +1008,7 @@ if [ -n "$CKPT" ]; then
       printf '\n## Sprint Context\nsprint_id: 300\n'
     } > "$1/_bmad-output/pipeline-snapshot.md"
     [ "$4" = yes ] && printf '# precompact sidecar\nbranch: main\n' > "$1/_bmad-output/pipeline-snapshot.precompact.md"
-    [ -n "$5" ] && bash "$CKPT" --root "$1" --nonce "$5" open >/dev/null 2>&1
+    [ -n "$5" ] && gck --root "$1" --nonce "$5" open >/dev/null 2>&1
     return 0
   }
   # _fire457 <dir> [reserve] -> "<emitted-len> <injected_bytes> <degraded> <sidecar-note:0|1> <excerpt:0|1> <gate-section:0|1>"
@@ -1092,9 +1149,52 @@ else
 fi
 
 # ============================================================================
-# 41, plus the gate-left assertion (G2) and the 30 gate-leave assertions (G3) when their subjects are
+# THE CLI CELLS (cells.decl): each subject run as a PROGRAM once per distinct CLI outcome, exit 0 and the exit-2
+# refusal, each compared with the in-process call on the same input: stdout, stderr and exit, byte for byte. Every
+# input is read-only (a plan, a `done` with no LEFT, an `open` refused before any write), so both twins read one
+# world. Each cell also asserts its own exit code and a line of output, so two runs that both printed nothing cannot
+# read as equivalent.
+# ============================================================================
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # eqv <cell-id> <file> <in-process fn> [args...] -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when all three agree
+  local id="$1" f="$2" fn="$3"; shift 3
+  "$fn" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$f" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -1 "$EQ/$1.ip.out")" "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+_GR_EQ=0
+if [ -n "$SLICE" ]; then
+  _GR_EQ=$((_GR_EQ + 2))
+  if eqv cli-slice-plan "$SLICE" gsl --type planning --file "$GATEFILE" --format plan && [ "$(cat "$EQ/cli-slice-plan.cl.rc")" = 0 ] \
+     && [ "$(head -1 "$EQ/cli-slice-plan.cl.out" | cut -f1)" = 1 ] && grep -q '^gate-slice: planning gate' "$EQ/cli-slice-plan.cl.err"; then
+    ok "cli-slice-plan: the program emits the planning plan from line 1 and its summary line, exit 0, exactly as the in-process call does"
+  else bad "cli-slice-plan: the program and the in-process call differ, or the outcome is not exit 0 with a plan ($(eq_twin cli-slice-plan))"; fi
+  if eqv cli-slice-refuse "$SLICE" gsl --type qqq-unknown --file "$GATEFILE" --format plan && [ "$(cat "$EQ/cli-slice-refuse.cl.rc")" = 2 ] \
+     && [ -s "$EQ/cli-slice-refuse.cl.err" ] && [ ! -s "$EQ/cli-slice-refuse.cl.out" ]; then
+    ok "cli-slice-refuse: the program refuses an unknown gate type on stderr with no plan, exit 2, exactly as the in-process call does"
+  else bad "cli-slice-refuse: the program and the in-process call differ, or the outcome is not exit 2 on stderr alone ($(eq_twin cli-slice-refuse))"; fi
+fi
+if [ -n "$CKPT" ]; then
+  _GR_EQ=$((_GR_EQ + 2))
+  _qroot="$WORK/ckpt-eq"; mkdir -p "$_qroot/_bmad-output"; _qn="story-20261113T010000Z"
+  gck --root "$_qroot" --nonce "$_qn" open >/dev/null 2>&1
+  gck --root "$_qroot" --nonce "$_qn" record 1 PASS >/dev/null 2>&1
+  gck --root "$_qroot" --nonce "$_qn" record 2 SKIP >/dev/null 2>&1
+  if eqv cli-ckpt-done "$CKPT" gck --root "$_qroot" --nonce "$_qn" done && [ "$(cat "$EQ/cli-ckpt-done.cl.rc")" = 0 ] \
+     && [ "$(cat "$EQ/cli-ckpt-done.cl.out")" = "1,2" ]; then
+    ok "cli-ckpt-done: the program answers 'done' with the settled ids (1,2), exit 0, exactly as the in-process call does"
+  else bad "cli-ckpt-done: the program and the in-process call differ, or the outcome is not exit 0 printing 1,2 ($(eq_twin cli-ckpt-done))"; fi
+  if eqv cli-ckpt-refuse "$CKPT" gck --root "$_qroot" --nonce "story-2026-11-13T010000Z" open && [ "$(cat "$EQ/cli-ckpt-refuse.cl.rc")" = 2 ] \
+     && grep -q 'refusing to open non-canonical nonce' "$EQ/cli-ckpt-refuse.cl.err" && [ "$(gck --root "$_qroot" current 2>/dev/null)" = "$_qn" ]; then
+    ok "cli-ckpt-refuse: the program refuses a non-canonical open on stderr, exit 2, exactly as the in-process call does, and the open gate is unchanged"
+  else bad "cli-ckpt-refuse: the program and the in-process call differ, or the outcome is not the exit-2 refusal ($(eq_twin cli-ckpt-refuse))"; fi
+fi
+
+# 41, plus the gate-left assertion (G2), the 30 gate-leave assertions (G3) and the cli cells when their subjects are
 # present and the arms ran.
-EXPECTED_ASSERTIONS=$((41 +${_GL_N:-0} + ${_G3_N:-0}))
+EXPECTED_ASSERTIONS=$((41 + ${_GL_N:-0} + ${_G3_N:-0} + _GR_EQ))
 echo
 if [ $((oks + fails)) -lt "$EXPECTED_ASSERTIONS" ]; then
   bad "only $((oks + fails)) assertion(s) ran, below the ${EXPECTED_ASSERTIONS}-assertion floor -- an arm silently failed to fire rather than to pass"

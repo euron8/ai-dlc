@@ -1,0 +1,8 @@
+# plan-rotate's starts of scripts/plan-rotate.sh (BL-879 grammar). Every other drive is in process: run.sh loads the
+# rotator once (lib/inproc.sh) and asks prt_main of each sandbox root's copy in a subshell, inproc_run sourcing the
+# copy there. One cli cell per distinct CLI outcome (exit 0 a report that would move spans, exit 2 a refusal), each
+# started as FXCELL=<id> bash <copy> in pr_eqv() and compared byte for byte (stdout, stderr, exit, and the plan and
+# archive left unwritten) with the in-process call on the same seed. scripts/validate-plan-shape.sh starts nowhere:
+# its two passes are in process (vps_ip), and its CLI outcomes are proven equal in plan-shape's cli cells.
+cli scripts/plan-rotate.sh cli-report
+cli scripts/plan-rotate.sh cli-refuse

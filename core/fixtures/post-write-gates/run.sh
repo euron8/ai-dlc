@@ -34,6 +34,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 . "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 PWG="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/post-write-gates.sh" \
@@ -127,7 +128,7 @@ printf '%s\n' '# Implementation' '' '- Dev teammates run live smoke tests' \
 moved() { printf '# Moved step\n\nowner: %s\npad line one, unchanged across the range.\npad line two, unchanged across the range.\nrule: %s\n' "$1" "$2"; }
 moved '{project_name}' base-text > "$RD/core/skills/ai-dlc/steps/moved.md"
 gd() { git -C "$RD" -c user.email=f@f -c user.name=fixture "$@" >/dev/null 2>&1; }
-gd init -q && gd add -A && gd commit -q -m base || { echo "FIXTURE BROKEN: could not commit the world's base" >&2; exit 2; }
+world_git -C "$RD" init -q && gd add -A && gd commit -q -m base || { echo "FIXTURE BROKEN: could not commit the world's base" >&2; exit 2; }
 R_BASE="$(git -C "$RD" rev-parse HEAD)"
 moved '{project_name}' theirs-text > "$RD/core/skills/ai-dlc/steps/moved.md"
 gd add -A && gd commit -q -m theirs || { echo "FIXTURE BROKEN: could not commit the world's theirs" >&2; exit 2; }

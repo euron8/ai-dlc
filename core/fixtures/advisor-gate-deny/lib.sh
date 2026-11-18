@@ -174,6 +174,50 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
+# IN PROCESS (BL-878). The hook is SOURCED ONCE (its column-0 guard returns after defining adg_main) and every cell is
+# `adg_ip`, which runs adg_main in a subshell with the cell's payload on stdin and a fresh bash's shell options, so the
+# hook's `exit`, `set -uo pipefail` and variables end with that subshell; an `env -u <knob>` of the program run is an
+# `unset` in a subshell around the call. The hook's one wait is its poll's external `sleep`, resolved through the PATH
+# the call is given, so the counting shim below is that clock in process as it was for the program. One cli cell per
+# distinct CLI outcome, in run.sh.
+# NOT lib/inproc.sh (BL-1164): this fixture declares the unguarded bash library ai-dlc-advisor-detect.sh as a `!`
+# input, and P2 then reads inproc.sh's own source lines (:51, :96) as unrouted drives. So the source is paired with
+# fx_inproc here, without inproc_run's caller-variable reset: the hook assigns every variable it reads before reading
+# it (the scan's `read -r GRANT ...`, the payload's `TP=""; AID=""; ...` line), and the cli twins in run.sh are the
+# equivalence evidence.
+[ -f "$LIBDIR/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $LIBDIR" >&2; exit 2; }
+. "$LIBDIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: cannot source lib/mutant.sh" >&2; exit 2; }
+# A hook without the wrap would RUN when sourced -- read this shell's stdin and `exit 0` it, a silent green -- so both
+# halves are required before the load: the `adg_main() {` line and the column-0 source guard.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A hook with neither half predates the wrap: SKIP and exit 0 on a consumer,
+# FIXTURE BROKEN in the distribution (lib/layout.sh fx_skip_exit), never an ok. Exactly one half is a respelled hook
+# this fixture cannot drive, which FAILS. An unreadable hook is FIXTURE ERROR.
+. "$LIBDIR/../lib/layout.sh" || { echo "FIXTURE ERROR: cannot source lib/layout.sh" >&2; exit 2; }
+[ -r "$HOOK" ] || { echo "FIXTURE ERROR: cannot read $HOOK -- an unreadable hook is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'adg_main() {' "$HOOK" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: advisor-gate-deny: $HOOK predates the in-process wrap"; fx_skip_exit "$LIBDIR" ;;
+  *) echo "  FAIL  $HOOK carries one half of the in-process wrap (adg_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive" >&2; echo "advisor-gate-deny: 1 assertion(s) FAILED" >&2; exit 1 ;;
+esac
+fx_inproc "$HOOK"
+. "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK failed" >&2; exit 2; }
+declare -F adg_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no adg_main" >&2; exit 2; }
+adg_ip() { # <hook> -- $HOOK runs the loaded adg_main; another path (a copy) is sourced in the subshell first
+  ( set +eufx +o pipefail; hash -r
+    if [ "$1" != "$HOOK" ]; then
+      # A copy's pass is a pass of the subject it copies, logged under the subject's path (as lib/inproc.sh logs it).
+      fx_inproc "$HOOK"
+      . "$1" || exit 126
+      adg_main
+    else
+      fx_inproc "$1"
+      adg_main
+    fi )
+}
+
 OUTF="$W/out"; ERRF="$W/err"; VF="$W/verdict"
 
 # --- transcript lines, in the shapes the harness writes (measured on this repo's transcripts) ---
@@ -232,8 +276,8 @@ PARTX="$SPRINT/_bmad-output/gate-adjudication/implementation-20261006T120000Z.pa
 ADVP="$SPRINT/_bmad-output/planning-artifacts/s3/prd-adversarial-p2.md"
 REPR="$SPRINT/_bmad-output/planning-artifacts/s3/prd-repair-p2.md"
 ARTF="$SPRINT/_bmad-output/planning-artifacts/s3/prd.md"
-# The review deliverables under their real names (code-reviewer.md:92, qa.md:325), and a file in
-# each review's shard directory (implementation.md:296, :349).
+# The review deliverables under their real names (code-reviewer.md:101, qa.md:487), and a file in
+# each review's shard directory (implementation.md:390, :567).
 REVCR="$SPRINT/docs/reviews/s3/SR1-code-review.md"
 REVQA="$SPRINT/docs/reviews/s3/SR2-qa-validation.md"
 REVSHQ="$SPRINT/docs/reviews/s3/shards/SR2-qa-validation-0123456789ab/1.md"
@@ -272,7 +316,7 @@ mk "$P1/apok.jsonl"     "$GRANT" "$ADV" "$PUSHL" "$OK1"
 MERGE9="$(tu t9 mcp__github__merge_pull_request '{"owner":"o","repo":"r","pullNumber":1056}')"
 mk "$P1/f404.jsonl"     "$GRANT" "$ADV" "$OKRES" "$MERGE9" "$(tr_ t9 true 'failed to merge pull request: PUT https://api.github.com/repos/euron8/ai-dlc/pulls/1056/merge: 404 Not Found []')"
 mk "$P1/fmergeok.jsonl" "$GRANT" "$ADV" "$OKRES" "$MERGE9" "$(tr_ t9 false 'Pull request successfully merged')"
-# gh merged, then the local branch delete failed (retro.md:1375 instructs --delete-branch): the
+# gh merged, then the local branch delete failed (retro.md:1427 instructs --delete-branch): the
 # result is is_error:true and the merge HAPPENED. Twin: an errored gh merge that did not (404).
 GHMERGE9="$(tu t9 Bash '{"command":"gh pr merge 1056 --squash --delete-branch"}')"
 mk "$P1/fmergedel.jsonl" "$GRANT" "$ADV" "$OKRES" "$GHMERGE9" "$(tr_ t9 true 'Exit code 1
@@ -1035,9 +1079,9 @@ score() {
         [ ! -f "$CELLS/$n.net" ] || rnet="$(cat "$CELLS/$n.net")"
         [ ! -f "$CELLS/$n.fast" ] || { rnet="$(cat "$CELLS/$n.fast")"; spath="$SLEEP_SHIM:$PATH"; : > "$SLEEP_LOG"; }
         if [ -n "$rnet" ]; then
-          PATH="$spath" ADG_SLEEP_LOG="$SLEEP_LOG" ADG_APPEND_AT="$aat" ADG_APPEND_SRC="$add" ADG_APPEND_TGT="$tgt" env -u ADVISOR_GATE_REREADS ADVISOR_GATE_NET="$rnet" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+          ( unset ADVISOR_GATE_REREADS; PATH="$spath" ADG_SLEEP_LOG="$SLEEP_LOG" ADG_APPEND_AT="$aat" ADG_APPEND_SRC="$add" ADG_APPEND_TGT="$tgt" ADVISOR_GATE_NET="$rnet" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" adg_ip "$h" ) < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
         else
-          PATH="$spath" ADG_SLEEP_LOG="$SLEEP_LOG" ADG_APPEND_AT="$aat" ADG_APPEND_SRC="$add" ADG_APPEND_TGT="$tgt" env -u ADVISOR_GATE_REREADS -u ADVISOR_GATE_NET ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+          ( unset ADVISOR_GATE_REREADS ADVISOR_GATE_NET; PATH="$spath" ADG_SLEEP_LOG="$SLEEP_LOG" ADG_APPEND_AT="$aat" ADG_APPEND_SRC="$add" ADG_APPEND_TGT="$tgt" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" adg_ip "$h" ) < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
         fi
         [ ! -f "$CELLS/$n.fast" ] || { nsl="$(grep -c . "$SLEEP_LOG")" || nsl=0; }
         if [ "$nsl" != 0 ]; then
@@ -1045,7 +1089,7 @@ score() {
           continue
         fi
       else
-        ADVISOR_GATE_REREADS="$rrk" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+        ADVISOR_GATE_REREADS="$rrk" ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" adg_ip "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
       fi
     elif [ -f "$CELLS/$n.seq" ]; then
       # A two-step sequence on ONE path in ONE judged transcript: step 1 runs, its tool_use and
@@ -1056,7 +1100,7 @@ score() {
       if ! cp "$add" "$tgt"; then
         printf '%s\n' "$id" >> "$log"; case " $failed " in *" $arm "*) ;; *) failed="$failed $arm" ;; esac; continue
       fi
-      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$s1" > "$OUTF" 2> "$ERRF" || exitbad=1
+      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" adg_ip "$h" < "$s1" > "$OUTF" 2> "$ERRF" || exitbad=1
       s1v=SILENT
       if [ -s "$OUTF" ]; then
         jq -r "$DECIDE" "$OUTF" > "$VF" 2>/dev/null || printf 'OTHER\t-\n' > "$VF"
@@ -1065,11 +1109,11 @@ score() {
       jq -c '{type:"assistant",message:{content:[{type:"tool_use",id:"s1w",name:.tool_name,input:.tool_input}]}}' "$s1" >> "$tgt"
       if [ "$s1v" = DENY ]; then tr_ s1w true 'PreToolUse:Write hook error: ai-dlc-advisor-gate: DENIED' >> "$tgt"
       else tr_ s1w false 'File created successfully' >> "$tgt"; fi
-      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" adg_ip "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
     elif [ -f "$CELLS/$n.win" ]; then
-      env -u ADVISOR_GATE_WINDOW ADVISOR_GATE_REREADS=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      ( unset ADVISOR_GATE_WINDOW; ADVISOR_GATE_REREADS=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" adg_ip "$h" ) < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
     else
-      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" bash "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
+      ADVISOR_GATE_REREADS=0 ADVISOR_GATE_WINDOW=0 HOME="$W" CLAUDE_PROJECT_DIR="$cpd" adg_ip "$h" < "$CELLS/$n.json" > "$OUTF" 2> "$ERRF" || exitbad=1
     fi
     if [ ! -s "$OUTF" ]; then V=SILENT; REASON_TXT=""
     else
@@ -1090,11 +1134,12 @@ score() {
     fi
   done 3< "$MAN"
   # BL-752 NETDEF: the cap the hook USES with ADVISOR_GATE_NET unset is read, not waited out. The knob
-  # block (first `_netcap=` line through its `esac`) runs in a scratch shell and must leave 300; rr-never
-  # runs at a shortened net, so it cannot see the default. Fails REREAD, as a wrong default is a net bug.
+  # block (first `_netcap=` line through its `esac`) runs in a subshell with the knob unset and must leave 300;
+  # rr-never runs at a shortened net, so it cannot see the default. Fails REREAD, as a wrong default is a net bug.
+  # The block is the hook's own text, so its evaluation is one in-process pass of the hook (the inproc: row).
   local nd_cap=""
   awk '/^_netcap=/ { on = 1 } on { print } on && /^esac/ { exit }' "$h" > "$W/netdef.sh" 2>/dev/null
-  if [ -s "$W/netdef.sh" ]; then nd_cap="$(env -u ADVISOR_GATE_NET bash -c '. "$1"; printf "%s" "$_netcap"' _ "$W/netdef.sh" 2>/dev/null)"; fi
+  if [ -s "$W/netdef.sh" ]; then nd_cap="$( { unset ADVISOR_GATE_NET; fx_inproc "$h"; . "$W/netdef.sh"; printf '%s' "$_netcap"; } 2>/dev/null )"; fi
   if [ "$nd_cap" != 300 ]; then
     printf '%s\n' netdef >> "$log"; case " $failed " in *" REREAD "*) ;; *) failed="$failed REREAD" ;; esac
   fi

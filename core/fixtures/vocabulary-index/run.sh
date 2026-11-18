@@ -104,6 +104,22 @@ trap 'rm -rf "$TMP"' EXIT
 note() { printf '%s\n' "$*"; }
 # shellcheck source=/dev/null
 . "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+# IN PROCESS (BL-878). Every drive is inproc_run of the world's own renderer COPY, which defines rvi_main and
+# returns at its column-0 source guard; inproc_run sources it in a subshell made to look like a fresh
+# `bash <copy>` and calls rvi_main there, so `${BASH_SOURCE[0]}` names the copy and the root walk resolves the
+# world, as the program does. The renderer runs as a program only in its three cli cells (cells.decl):
+# cli-ok (exit 0, the seam render), cli-missing (exit 1, m2 --check) and cli-usage (exit 2, --bogus), each
+# compared byte for byte (stdout, stderr, exit) with the in-process run the assertion above it read.
+# THE WRAP IS THIS FIXTURE'S PRECONDITION: a renderer missing either half is FIXTURE BROKEN (.dist-only: the
+# subject is always present, so there is no consumer SKIP).
+grep -q '^rvi_main() {$' "$RENDERER"; g_def=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$RENDERER"; g_guard=$?
+if [ "$g_def" != 0 ] || [ "$g_guard" != 0 ]; then
+  echo "FIXTURE BROKEN: $RENDERER lacks the \`rvi_main() {\` line (grep $g_def) or the column-0 source guard (grep $g_guard)" >&2
+  exit 2
+fi
 
 # ---------------------------------------------------------------------------------------
 # The synthetic seed: a whole miniature repo the renderer can answer about.
@@ -325,15 +341,52 @@ EOF
 
 # VI_FAST=1 drives the renderer with its --skip-selfprobe test seam. The self-probes read only their
 # own seeds under the renderer's PROBE_DIR, never the corpus, so every world below that varies the
-# CORPUS gets the same probe verdict as controlB. They are paid in full by controlB, the seam
-# arm, m1 (the one kill end to end) and n1 (the one green end to end): one per distinct outcome.
+# CORPUS gets the same probe verdict as controlB. They are paid in full, in process, by controlB,
+# seam-env, m1 (the one kill with the probes run) and n1 (the one green with the probes run).
 # Everything after the probes is the same code, called unchanged.
 VI_FAST=0
-render_in() { ( cd "$1" && if [ "$VI_FAST" = 1 ]; then bash scripts/render-vocabulary-index.sh --skip-selfprobe 2>&1; else bash scripts/render-vocabulary-index.sh 2>&1; fi ); }
-check_in()  { ( cd "$1" && if [ "$VI_FAST" = 1 ]; then bash scripts/render-vocabulary-index.sh --check --skip-selfprobe 2>&1; else bash scripts/render-vocabulary-index.sh --check 2>&1; fi ); }
+# vi_run <world> [args...]: the world's renderer copy, in process, from cwd <world>, stderr merged into stdout.
+vi_run() { local w="$1"; shift; ( cd "$w" && inproc_run "$w/scripts/render-vocabulary-index.sh" rvi_main "$@" 2>&1 ); }
+render_in() { if [ "$VI_FAST" = 1 ]; then vi_run "$1" --skip-selfprobe; else vi_run "$1"; fi; }
+check_in()  { if [ "$VI_FAST" = 1 ]; then vi_run "$1" --check --skip-selfprobe; else vi_run "$1" --check; fi; }
+
+# THE CLI-CELL DRIVES. vi_cap <id> <world> [args...] is vi_run with stdout, stderr and exit kept apart in
+# $EQ/<id>.ip.{out,err,rc}; DOUT/DRC carry the text and status the assertion reads. eqv <id> <world> <want rc>
+# [args...] is the cell's one `FXCELL=<id> bash <copy>` start, invoked by the same absolute path the in-process
+# side sourced, from the same cwd, compared byte for byte with those three files; the exit must also be <want>.
+EQ="$TMP/eq"; mkdir -p "$EQ"
+DOUT=""; DRC=0
+vi_cap() {
+  local id="$1" w="$2"; shift 2
+  ( cd "$w" && inproc_run "$w/scripts/render-vocabulary-index.sh" rvi_main "$@" ) \
+    > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"
+  DRC=$?; echo "$DRC" > "$EQ/$id.ip.rc"
+  DOUT="$(<"$EQ/$id.ip.out")"$'\n'"$(<"$EQ/$id.ip.err")"
+}
+eqv() {
+  local id="$1" w="$2" want="$3"; shift 3
+  [ -f "$EQ/$id.ip.rc" ] || { echo "FIXTURE BROKEN: cli cell $id has no in-process run to compare" >&2; exit 2; }
+  ( cd "$w" && FXCELL="$id" bash "$w/scripts/render-vocabulary-index.sh" "$@" ) \
+    > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"
+  echo "$?" > "$EQ/$id.cl.rc"
+  if [ "$(<"$EQ/$id.cl.rc")" = "$want" ] && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+     && cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err"; then
+    ok "$id -- the program and the in-process call agree byte for byte (stdout, stderr, exit $want)"
+  else
+    bad "$id -- program vs in-process differ, or exit is not $want (rc $(<"$EQ/$id.cl.rc") vs $(<"$EQ/$id.ip.rc"))"
+    diff "$EQ/$id.ip.out" "$EQ/$id.cl.out" | sed 's/^/      /' | head -5
+    diff "$EQ/$id.ip.err" "$EQ/$id.cl.err" | sed 's/^/      /' | head -5
+  fi
+}
+
+# THE WORLDS ARE BUILT ONCE AND COPIED (fixture-mutants clause 4): the seed is written into $SEED a single time
+# and every world below is a `cp -R` of it, so each world differs from the seed only by the edit it names.
+SEED="$TMP/seed"
+seed "$SEED"
+world() { cp -R "$SEED" "$1" || { echo "FIXTURE BROKEN: cannot copy the seed to $1" >&2; exit 2; }; }
 
 # --- controlB: the synthetic seed renders and round-trips --------------------
-seed "$TMP/controlB"
+world "$TMP/controlB"
 outB="$(render_in "$TMP/controlB")"
 if ! grep -q "14 cross-file vocabular(ies), 1 schema enum(s)" <<<"$outB"; then
   note "FIXTURE BROKEN: the synthetic seed did not render 14 vocabularies and 1 schema enum."
@@ -434,9 +487,9 @@ fi
 # A fast render of the same seed must print the not-a-verdict banner as stdout line 1 and write a
 # byte-identical index (the same functions run after the probes). A seam that rendered something
 # else would turn every fast world below into a different subject.
-seed "$TMP/seam"
-VI_FAST=1; outS="$(render_in "$TMP/seam")"; VI_FAST=0
-if [ "$(printf '%s\n' "$outS" | sed -n 1p | cut -c1-14)" = "NOT-A-VERDICT:" ] \
+world "$TMP/seam"
+vi_cap cli-ok "$TMP/seam" --skip-selfprobe; outS="$DOUT"
+if [ "$DRC" = 0 ] && [ "$(printf '%s\n' "$outS" | sed -n 1p | cut -c1-14)" = "NOT-A-VERDICT:" ] \
    && cmp -s "$TMP/seam/docs/vocabulary-index.md" "$TMP/controlB/docs/vocabulary-index.md"; then
   ok "seam -- --skip-selfprobe prints the not-a-verdict banner first and renders the byte-identical index"
 else
@@ -454,8 +507,8 @@ fi
 # The seam reads one variable, SKIP_SELFPROBE, and the renderer initialises it to 0 before it reads
 # argv. An inherited SKIP_SELFPROBE=1 with no flag must therefore NOT skip the probes: no banner, and
 # the output equals the plain render of the same seed.
-seed "$TMP/seamenv"
-outE="$( cd "$TMP/seamenv" && env SKIP_SELFPROBE=1 bash scripts/render-vocabulary-index.sh 2>&1 )"
+world "$TMP/seamenv"
+outE="$( export SKIP_SELFPROBE=1; vi_run "$TMP/seamenv" )"
 if [ "$(printf '%s\n' "$outE" | sed -n 1p | cut -c1-14)" != "NOT-A-VERDICT:" ] && [ "$outE" = "$outB" ]; then
   ok "seam-env -- an inherited SKIP_SELFPROBE=1 with no flag does not skip the probes: no banner, output equals the plain render"
 else
@@ -544,18 +597,27 @@ edit_file() { # edit_file <file> <sed-expr> ; edits a seeded world's file in pla
 MAP='scripts/validate-enforcement-map.sh'
 
 # m1 -- a stale index
-seed "$TMP/m1"; render_in "$TMP/m1" >/dev/null
+world "$TMP/m1"; render_in "$TMP/m1" >/dev/null
 printf '| ghost | `x` | `y` | I801 | `z` |\n' >> "$TMP/m1/docs/vocabulary-index.md"
 kill_check "m1  drift          stale index" "$TMP/m1" "docs/vocabulary-index.md is STALE"
 VI_FAST=1
 
 # m2 -- no index at all
-seed "$TMP/m2"; render_in "$TMP/m2" >/dev/null
-rm -f "$TMP/m2/docs/vocabulary-index.md"
-kill_check "m2  missing        index absent" "$TMP/m2" "does not exist"
+# The seed never rendered, so m2's index is absent without a render-then-delete.
+world "$TMP/m2"
+vi_cap cli-missing "$TMP/m2" --check --skip-selfprobe
+refuse "m2  missing        index absent" "$DRC" "$DOUT" "$TMP/m2/docs/vocabulary-index.md does not exist"
+
+# The usage refusal, in process: exit 2 and the usage line naming the renderer by its own file name.
+vi_cap cli-usage "$TMP/m2" --bogus
+if [ "$DRC" = 2 ] && grep -qF "usage: render-vocabulary-index.sh [--check] [--skip-selfprobe]" <<<"$DOUT"; then
+  ok "usage -- an unknown flag refuses with exit 2 and the usage line"
+else
+  bad "usage -- an unknown flag exited $DRC or printed no usage line"
+fi
 
 # m3 -- a marker naming an extractor nobody implements
-seed "$TMP/m3"
+world "$TMP/m3"
 edit_file "$TMP/m3/$MAP" 's|^# vocabulary-extract: ledger-statuses$|# vocabulary-extract: no-such-slug|'
 kill_check "m3  bad-slug       extractor not implemented" "$TMP/m3" "implements no such extractor" render
 
@@ -564,44 +626,44 @@ kill_check "m3  bad-slug       extractor not implemented" "$TMP/m3" "implements 
 # THE HEADER IS REWORDED IN THE SAME EDIT, and that is not cosmetic. Deleting only the
 # marker leaves a header still reading "the syntax glob vocabulary is one set", which the
 # DEMAND arm catches first -- so the world would be refused by the wrong arm.
-seed "$TMP/m4"
+world "$TMP/m4"
 edit_file "$TMP/m4/$MAP" '
     s|^# --- I806: the syntax glob vocabulary is one set.*|# --- I806: an arm about globs ---|
     /^# vocabulary: syntax globs$/,/^# vocabulary-readers: readers\/hook.md$/d'
 kill_check "m4  dead-extractor slug declared nowhere" "$TMP/m4" "no marker in" render
 
 # m5 -- a vocabulary-shaped header with no marker at all
-seed "$TMP/m5"
+world "$TMP/m5"
 printf '# --- I809: the doohickey vocabulary is one set ---\nerr "I809 fired"\n' >> "$TMP/m5/$MAP"
 kill_check "m5  demand         vocabulary header, no marker" "$TMP/m5" "carry no" render
 
 # m6 -- the marker grammar matches nothing
-seed "$TMP/m6"
+world "$TMP/m6"
 edit_file "$TMP/m6/$MAP" 's|^# vocabulary|# VOCABULARY|'
 kill_check "m6  zero-markers   grammar matches nothing" "$TMP/m6" "parsed ZERO vocabulary markers" render
 
 # m7 -- a citation the invariant index does not carry
-seed "$TMP/m7"
+world "$TMP/m7"
 edit_file "$TMP/m7/$MAP" 's|^# vocabulary-invariant: I801$|# vocabulary-invariant: I899|'
 kill_check "m7  dead-id        citation not in the index" "$TMP/m7" "docs/invariant-index.md does not list it" render
 
 # m8 -- an owner that does not exist
-seed "$TMP/m8"
+world "$TMP/m8"
 edit_file "$TMP/m8/$MAP" 's|^# vocabulary-owner: owners/kinds.sh$|# vocabulary-owner: owners/gone.sh|'
 kill_check "m8  no-owner       owner file absent" "$TMP/m8" "which does not exist. An extraction over a missing file" render
 
 # m9 -- a reader that does not exist
-seed "$TMP/m9"
+world "$TMP/m9"
 edit_file "$TMP/m9/$MAP" 's|^# vocabulary-readers: readers/kinds.md$|# vocabulary-readers: readers/gone.md|'
 kill_check "m9  no-reader      reader file absent" "$TMP/m9" "names reader" render
 
 # m10 -- an owner whose shape the extractor no longer matches
-seed "$TMP/m10"
+world "$TMP/m10"
 edit_file "$TMP/m10/owners/kinds.sh" 's|LAYER_KINDS=|OTHER_KINDS=|'
 kill_check "m10 empty-set      extractor yields nothing" "$TMP/m10" "extracted ZERO members" render
 
 # m11 -- both declaration shapes at once
-seed "$TMP/m11"
+world "$TMP/m11"
 edit_file "$TMP/m11/$MAP" 's|^# vocabulary-owner: (consumer-owned) the set lives in THEIRS and is read through git show$|# vocabulary-owner: (consumer-owned) the set lives in THEIRS\n# vocabulary-extract: extension-kinds|'
 kill_check "m11 both-shapes    consumer-owned AND an extractor" "$TMP/m11" "AND names an extractor" render
 
@@ -610,20 +672,20 @@ kill_check "m11 both-shapes    consumer-owned AND an extractor" "$TMP/m11" "AND 
 # NOT the empty-subject row: the sentinel is CORRECT there, so the edit has to move it
 # somewhere it is wrong. The ledger owner is a shell script declaring MEMBERS and nothing
 # about who reads them, which is precisely the case the literal form exists for.
-seed "$TMP/m12"
+world "$TMP/m12"
 edit_file "$TMP/m12/$MAP" 's|^# vocabulary-readers: readers/ledger.md$|# vocabulary-readers: @owner-declares|'
 kill_check "m12 bad-sentinel   derive from a slug with no path extractor" "$TMP/m12" "implements no path extractor" render
 
 # m13 -- the owner's derived list emptied. An empty column renders as an em dash, which reads
 # exactly like a vocabulary nobody reads, so ZERO derived paths must be a failure.
-seed "$TMP/m13"
+world "$TMP/m13"
 edit_file "$TMP/m13/owners/emap.yaml" '/^    - readers\/emap.md$/d'
 kill_check "m13 empty-derived  owner declares no readers" "$TMP/m13" "got ZERO paths" render
 
 # m14 -- a DERIVED path that does not exist. m9 covers the literal form; this is the same
 # duty on the other shape, and without it the sentinel would be the one way into this index
 # that skips the existence check.
-seed "$TMP/m14"
+world "$TMP/m14"
 edit_file "$TMP/m14/owners/emap.yaml" 's|^    - owners/emap-emitter.sh$|    - owners/gone.sh|'
 kill_check "m14 derived-absent derived emitter file absent" "$TMP/m14" "names emitters" render
 
@@ -645,7 +707,7 @@ kill_check "m14 derived-absent derived emitter file absent" "$TMP/m14" "names em
 # a `# vocabulary:` line, reports a duplicate here and is wrong. The unedited seed cannot
 # see that second shape: every block in it is bounded by an arm header, so the two
 # implementations render it identically.
-seed "$TMP/n1"
+world "$TMP/n1"
 VI_FAST=0
 edit_file "$TMP/n1/$MAP" '/^# --- I802: the kind vocabulary is one set/d'
 green_check "n1  block-scope    two adjacent blocks, one field each" "$TMP/n1" \
@@ -658,7 +720,7 @@ VI_FAST=1
 # exits 0 -- which is the defect, and is what makes this arm a real one rather than a
 # restatement of m9.
 DUP_R_A='readers/kinds.md'; DUP_R_B='readers/ledger.md'
-seed "$TMP/m15"
+world "$TMP/m15"
 if [ ! -f "$TMP/m15/$DUP_R_A" ] || [ ! -f "$TMP/m15/$DUP_R_B" ]; then
   bad "SKIP  m15 -- the seed no longer carries $DUP_R_A and $DUP_R_B"
 else
@@ -673,7 +735,7 @@ fi
 # cannot tell it from a complete one. The second owner is a copy of the first, so the
 # extractor yields the same members and the world cannot be refused by m8's or m10's arm.
 DUP_O_A='owners/ledger.sh'; DUP_O_B='owners/ledger-copy.sh'
-seed "$TMP/m16"
+world "$TMP/m16"
 if ! cp "$TMP/m16/$DUP_O_A" "$TMP/m16/$DUP_O_B" 2>/dev/null; then
   bad "SKIP  m16 -- the seed no longer carries $DUP_O_A"
 else
@@ -691,7 +753,7 @@ fi
 # catches it. With the empty declaration SECOND both implementations fire and the arm would
 # discriminate nothing.
 DUP_E='owners/kinds.sh'
-seed "$TMP/m17"
+world "$TMP/m17"
 edit_file "$TMP/m17/$MAP" \
   "s|^# vocabulary-owner: ${DUP_E}\$|# vocabulary-owner:\\n# vocabulary-owner: ${DUP_E}|"
 # THE `!declares no` CLAUSE IS WHAT MAKES THIS ARM ITS OWN. m17 is the only duplicate world
@@ -706,7 +768,7 @@ kill_check_all "m17 dup-empty      an empty declaration still counts" "$TMP/m17"
 # renderer that overwrites, the row cites the second and nothing anywhere records that the
 # arm was ever bound to the first.
 DUP_I_A='I801'; DUP_I_B='I808'
-seed "$TMP/m18"
+world "$TMP/m18"
 if ! grep -q "| ${DUP_I_B} |" "$TMP/m18/docs/invariant-index.md"; then
   bad "SKIP  m18 -- the seeded invariant index no longer lists ${DUP_I_B}"
 else
@@ -722,7 +784,7 @@ fi
 # for `vocabulary-owner:` (m11) while it must refuse it here too. The fourth of the five
 # fields, and the only one the seed declares as a sentinel.
 DUP_M_A='@owner-declares'; DUP_M_B='owners/emap-emitter.sh'
-seed "$TMP/m19"
+world "$TMP/m19"
 if [ ! -f "$TMP/m19/$DUP_M_B" ]; then
   bad "SKIP  m19 -- the seed no longer carries $DUP_M_B"
 else
@@ -739,7 +801,7 @@ fi
 # arm instead of this one. So the value is repeated verbatim -- and that makes this the arm
 # that separates a refusal keyed on the DECLARATION from one keyed on the DISAGREEMENT.
 DUP_X='ledger-statuses'
-seed "$TMP/m20"
+world "$TMP/m20"
 edit_file "$TMP/m20/$MAP" \
   "s|^# vocabulary-extract: ${DUP_X}\$|# vocabulary-extract: ${DUP_X}\\n# vocabulary-extract: ${DUP_X}|"
 kill_check_all "m20 dup-same-value  a field repeated verbatim" "$TMP/m20" render \
@@ -765,7 +827,7 @@ kill_check_all "m20 dup-same-value  a field repeated verbatim" "$TMP/m20" render
 # THE READABILITY PRECONDITION IS ASSERTED, NOT ASSUMED. Under a uid that ignores the mode
 # bits -- root, or a suite run in a container as root -- `chmod 000` leaves the file readable
 # and the arm would assert nothing, so it is refused rather than tolerated.
-seed "$TMP/m21"
+world "$TMP/m21"
 chmod 000 "$TMP/m21/$MAP"
 if [ -r "$TMP/m21/$MAP" ]; then
   chmod 644 "$TMP/m21/$MAP"
@@ -793,7 +855,7 @@ fi
 # THE INSERTED READER IS A COPY UNDER ITS OWN NAME, for m16's reason and one more: the token
 # has to occur exactly ONCE in the corpus or the gap is measured between the wrong two lines.
 DUP_N_ANCHOR='I803'; DUP_N_A='readers/contract-alt.md'; DUP_N_B='readers/contract.md'
-seed "$TMP/m22"
+world "$TMP/m22"
 if ! cp "$TMP/m22/$DUP_N_B" "$TMP/m22/$DUP_N_A" 2>/dev/null; then
   bad "SKIP  m22 -- the seed no longer carries $DUP_N_B"
 else
@@ -823,27 +885,27 @@ fi
 # only with the previous block cannot pass it.
 
 # m23 -- one vocabulary NAME declared by two blocks that are not adjacent.
-seed "$TMP/m23"
+world "$TMP/m23"
 edit_file "$TMP/m23/$MAP" 's|^# vocabulary: adjudicated codes$|# vocabulary: ledger statuses|'
 kill_check_all "m23 dup-name     one vocabulary name in two blocks" "$TMP/m23" render \
   'same vocabulary NAME' "'ledger statuses'"
 
 # n2 -- two names sharing a PREFIX must both render.
-seed "$TMP/n2"
+world "$TMP/n2"
 edit_file "$TMP/n2/$MAP" 's|^# vocabulary: adjudicated codes$|# vocabulary: ledger statuses two|'
 green_check "n2  name-prefix    two names sharing a prefix" "$TMP/n2" \
   "14 cross-file vocabular(ies), 1 schema enum(s)" '| ledger statuses |' '| ledger statuses two |'
 
 # m24 -- one JSON object repeating the `enum` key. json.load keeps the LAST copy, so without
 # the refusal the index renders SECONDDECL and FIRSTDECL vanishes at exit 0.
-seed "$TMP/m24"
+world "$TMP/m24"
 printf '%s\n' '{"fields": [{"name": "verdict", "enum": ["FIRSTDECL"], "enum": ["SECONDDECL"]}]}' \
   > "$TMP/m24/core/schemas/seeded.json"
 kill_check_all "m24 dup-key      one JSON object repeating enum" "$TMP/m24" render \
   'repeats a key inside one JSON object' 'seeded.json' '!OK: wrote'
 
 # n3 -- `enum` and `enum2` in one object plus `enum` in a SIBLING object: no repeat anywhere.
-seed "$TMP/n3"
+world "$TMP/n3"
 printf '%s\n' '{"fields": [{"name": "verdict", "enum": ["YES", "NO"], "enum2": ["X"]}, {"name": "other", "enum": ["UP"]}]}' \
   > "$TMP/n3/core/schemas/seeded.json"
 # The backtick is built, not typed: I85 scans for one inside a quoted operator-facing string.
@@ -852,5 +914,10 @@ green_check "n3  key-prefix     enum/enum2 in one object, enum in a sibling" "$T
   "14 cross-file vocabular(ies), 2 schema enum(s)" \
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}verdict${N3_BT} | ${N3_BT}YES${N3_BT} ${N3_BT}NO${N3_BT} |" \
   "| ${N3_BT}seeded.json${N3_BT} | ${N3_BT}other${N3_BT} | ${N3_BT}UP${N3_BT} |"
+
+# --- the cli cells: one program run per distinct CLI outcome ------------------
+eqv cli-ok      "$TMP/seam" 0 --skip-selfprobe
+eqv cli-missing "$TMP/m2"   1 --check --skip-selfprobe
+eqv cli-usage   "$TMP/m2"   2 --bogus
 
 report_end vocabulary-index

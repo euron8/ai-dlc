@@ -26,6 +26,7 @@ set -uo pipefail
 case "${BASH_SOURCE[0]}" in */*) _rl="${BASH_SOURCE[0]%/*}/../lib" ;; *) _rl=../lib ;; esac
 ok() { :; }; bad() { :; }
 . "$_rl/mutant.sh" || { echo "FIXTURE BROKEN: cannot source $_rl/mutant.sh" >&2; exit 2; }
+. "$_rl/world.sh" || { echo "FIXTURE BROKEN: cannot source $_rl/world.sh" >&2; exit 2; }
 unset -f ok bad; unset _rl
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 [ "$#" -ge 1 ] && [ "$#" -le 2 ] && [ -f "$1" ] && [ "$(basename "$1")" = merge-review-shards.sh ] \
@@ -50,7 +51,7 @@ view() { # [<key naming story-1-6-x.md>] [<key-only row>]
   printf 'sprint: 3\nstatus: in_progress\nstories:\n  story-3-1:\n    status: review\n    file: stories/story-1-1-a.md\n' > "$T/$V"
   [ -z "${1:-}" ] || printf '  %s:\n    status: review\n    file: stories/story-1-6-x.md\n' "$1" >> "$T/$V"
   [ -z "${2:-}" ] || printf '  %s:\n    status: review\n' "$2" >> "$T/$V"; }
-mkdir -p "$T/$SD" "$T/${V%/*}" "$T/docs/reviews/s3" && G init -q "$T" \
+mkdir -p "$T/$SD" "$T/${V%/*}" "$T/docs/reviews/s3" && world_git init -q "$T" \
   && printf -- '---\nstatus: review\n---\n# Story 1.1\n' > "$T/$SD/story-1-1-a.md" && view \
   && G -C "$T" add -A && G -C "$T" commit -q -m base && BASE="$(G -C "$T" rev-parse HEAD)" \
   && printf -- '---\nstatus: review\n---\n# Story 1.6\n' > "$T/$ST" && view story-3-6 \

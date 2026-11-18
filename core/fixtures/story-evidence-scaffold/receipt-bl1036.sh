@@ -15,11 +15,12 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 HE="$1"
 grep -q 'Full-collection run:' "$HE" || { echo "REFUSED: $HE carries no Full-collection run arm" >&2; exit 9; }
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/he-inproc.sh" || { echo "REFUSED: he-inproc.sh is not beside this receipt" >&2; exit 9; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/world.sh" || { echo "REFUSED: lib/world.sh is not beside this receipt's fixtures" >&2; exit 9; }
 [ -f "$(dirname "$HE")/record-only-diff.sh" ] || { echo "REFUSED: no record-only-diff.sh beside $HE" >&2; exit 9; }
 R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl1036.XXXXXX")" || exit 9
 trap 'rm -rf "$R"' EXIT
 W="$R/w"
-gw() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$W" -c user.name=r -c user.email=r@example.invalid \
+gw() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$W" -c user.name=r -c user.email=r@example.invalid \
   -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 mkdir -p "$W/stories" "$W/tests" "$W/server" || exit 9
 gw init -q || exit 9

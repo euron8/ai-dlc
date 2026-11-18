@@ -49,6 +49,14 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/seeds" "$WORK/roots"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found beside $HERE" >&2; exit 2; }
+# IN PROCESS (BL-878). The subject is loaded once (lib/inproc.sh) so its passes are logged under its own path, and
+# every drive asks prt_main of the sandbox root's COPY in a subshell made to look like a fresh `bash <copy>`:
+# inproc_run sources the copy inside that subshell, so the copy's own path decides its root, as a program run's
+# would. It starts as a program only in the two cli cells of cells.decl (pr_eqv, below).
+# shellcheck source=../lib/inproc.sh
+. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE ERROR: core/fixtures/lib/inproc.sh absent beside $HERE" >&2; exit 2; }
+inproc_load "$SUBJ" || { echo "FIXTURE ERROR: sourcing $SUBJ defined nothing" >&2; exit 2; }
+declare -F prt_main >/dev/null || { echo "FIXTURE ERROR: $SUBJ defined no prt_main when sourced" >&2; exit 2; }
 echo "plan-rotate fixture"
 echo "  subject: $SUBJ"
 echo "HERMETIC-CONSUMED $SUBJ"
@@ -412,7 +420,7 @@ drive() { # drive <root> <seedfile> <slug> [args...]
   LAST_ARCH="$r/docs/plans/archive/$sl.md"
   cp "$sf" "$LAST_PLAN" || broken "could not seed $LAST_PLAN"
   rm -f "$LAST_ARCH"
-  LAST_OUT="$(bash "$r/scripts/plan-rotate.sh" "$LAST_PLAN" "$@" 2>&1)"
+  LAST_OUT="$(inproc_run "$r/scripts/plan-rotate.sh" prt_main "$LAST_PLAN" "$@" 2>&1)"
   LAST_RC=$?
   # THE WROTE-NOTHING VERDICT IS SNAPSHOTTED HERE, NOT TESTED LATER, AND THIS IS A MEASURED
   # DEFECT IN THIS FILE'S FIRST CUT. A root is driven twice — two seeds into one root —
@@ -682,7 +690,7 @@ if has "RETRO-SEVEN-SENTINEL" "$(cat "$LAST_ARCH" 2>/dev/null)"; then
 fi
 FIRST_B="$(wc -c < "$LAST_PLAN" | tr -d ' ')"
 CEIL_STEP2=$((FIRST_B - SPAN2_B / 2))
-SECOND_OUT="$(bash "$PR/scripts/plan-rotate.sh" "$LAST_PLAN" --ceiling "$CEIL_STEP2" --apply 2>&1)"
+SECOND_OUT="$(inproc_run "$PR/scripts/plan-rotate.sh" prt_main "$LAST_PLAN" --ceiling "$CEIL_STEP2" --apply 2>&1)"
 SECOND_RC=$?
 PTR_N2="$(LC_ALL=C grep -cF "$PTR_KEY" "$LAST_PLAN")" || PTR_N2=0
 PTR_2="$(LC_ALL=C grep -F "$PTR_KEY" "$LAST_PLAN")"
@@ -726,7 +734,7 @@ fi
 #
 # THE DEFECT THIS ARM EXISTS FOR, AND THE FIRST CUT OF THIS FIXTURE COULD NOT HAVE CAUGHT IT.
 # The rotator's pointer opened `**Spent sections are archived at`, and
-# `validate-plan-shape.sh:165` is `DISCHARGE_BANNER='DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED'`,
+# `validate-plan-shape.sh:333` is `DISCHARGE_BANNER='DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED'`,
 # read case-INSENSITIVELY over `head -12` by six sites. The pointer lands at line 3. So every
 # rotation wrote a discharge token into its own output, and the rotated plan read as SPENT --
 # silencing P9, P10, P11, P12 and P13 on the very file the rotation was performed to keep
@@ -772,20 +780,32 @@ ROTATED="$LAST_PLAN"
 # P10's OWN sentence, not `rc`. The rotated probe seed trips other arms of the validator for
 # reasons that have nothing to do with this claim -- it is a minimal plan, not a conforming one --
 # so an rc-keyed assertion would read those as evidence about P10. Anchored on the emitted text.
-P10_SAYS='does not carry its own resume one-liner'
-p10_hits() { # p10_hits <root> -> prints the number of P10 findings over the default corpus
-  local n out
-  out="$( cd "$1" && bash scripts/validate-plan-shape.sh 2>&1 )"
-  n="$(LC_ALL=C grep -cF -- "$P10_SAYS" <<<"$out")" || n=0
+P10_SAYS='resume one-liner is missing from the head window'
+# vps_ip <root>: the root's validator COPY asked in process over its default corpus, stdout and stderr together.
+# inproc_run sources the copy in its subshell, so the copy's path decides the root; INPROC_LOADED names $VPS for
+# that one call so fx_inproc logs the pass as one of the validator it copies, then goes back to the rotator.
+vps_ip() {
+  local _keep="$INPROC_LOADED" _rc
+  INPROC_LOADED="$VPS"
+  ( cd "$1" && inproc_run "$1/scripts/validate-plan-shape.sh" vps_main 2>&1 ); _rc=$?
+  INPROC_LOADED="$_keep"
+  return "$_rc"
+}
+p10_hits() { # p10_hits <validator output> -> prints the number of P10 findings in it
+  local n
+  n="$(LC_ALL=C grep -cF -- "$P10_SAYS" <<<"$1")" || n=0
   printf '%s' "$n"
 }
+# ONE RUN PER DISTINCT STATE: the rotated root before the offender edit answers both the corpus-depth arm and the
+# near-miss direction below.
+LV_OUT="$(vps_ip "$LV")"
 
 # THE CORPUS IS DEPTH-1, SO THE ARCHIVE IS STRUCTURALLY OUTSIDE IT, AND THAT IS ASSERTED RATHER
-# THAN ASSUMED. `validate-plan-shape.sh:52` is `find docs/plans -maxdepth 1`. The archive file
+# THAN ASSUMED. `validate-plan-shape.sh:53` is `find docs/plans -maxdepth 1`. The archive file
 # DELIBERATELY keeps `Spent sections rotated out of ...` in its own header -- it genuinely is a
 # spent record -- so an arm written carelessly would flag it, and a validator whose corpus ever
 # went recursive would start reading a discharge banner off a file that is allowed to carry one.
-EXAMINED="$( cd "$LV" && bash scripts/validate-plan-shape.sh 2>&1 | LC_ALL=C sed -n 's/^validate-plan-shape: \([0-9][0-9]*\) plan(s) checked.*/\1/p' )"
+EXAMINED="$(LC_ALL=C sed -n 's/^validate-plan-shape: \([0-9][0-9]*\) plan(s) checked.*/\1/p' <<<"$LV_OUT")"
 ARCH_SPENT="$(LC_ALL=C grep -ciE 'DISCHARGED|SPENT|DO NOT EXECUTE|SUPERSEDED' "$LAST_ARCH")" || ARCH_SPENT=0
 if [ "$EXAMINED" = "1" ] && [ "$ARCH_SPENT" -gt 0 ]; then
   pr_ok "archive-outside-corpus" "the validator examined 1 plan, not 2, while the archive carries $ARCH_SPENT discharge token(s) of its own — a spent record is allowed to say so, and the depth-1 corpus is why"
@@ -812,7 +832,7 @@ else
 fi
 
 # THE NEAR-MISS DIRECTION: the rotated plan keeps its own resume line, so P10 has nothing to say.
-NM_HITS="$(p10_hits "$LV")"
+NM_HITS="$(p10_hits "$LV_OUT")"
 
 # THE OFFENDER DIRECTION: repoint the resume line at an ancestor. This is the discriminating
 # mutant, and it is seeded on the property P10 actually keys on — the BASENAME the sentence
@@ -822,7 +842,7 @@ if cmp -s "$WORK/rotated-offender.md" "$ROTATED"; then
   broken "the resume-line mutation matched nothing in the rotated plan, so the offender direction has no subject"
 fi
 cp "$WORK/rotated-offender.md" "$ROTATED"
-OFF_HITS="$(p10_hits "$LV")"
+OFF_HITS="$(p10_hits "$(vps_ip "$LV")")"
 
 if [ "$OFF_HITS" -ge 1 ] && [ "$NM_HITS" -eq 0 ]; then
   pr_ok "rotated-plan-stays-live" "P10 FIRES on the rotated plan when its resume line names an ancestor ($OFF_HITS hit) and stays silent when it names itself — the rotation did not silence the liveness arms"
@@ -846,6 +866,40 @@ elif ! has "would move" "$LAST_OUT"; then
   pr_bad "report-mode" "the bare report run wrote nothing and also said nothing: $LAST_OUT"
 else
   pr_ok "report-mode" "a bare run reports what would move and leaves both files untouched"
+fi
+
+# --- THE CLI CELLS: one program run per distinct CLI outcome ----------------------------------
+# Each starts the root's copy once as `FXCELL=<id> bash <copy>` and compares its stdout, stderr and exit byte for
+# byte with the in-process call on the same seed: exit 0 (a report that would move spans) and exit 2 (a refusal).
+# Both write nothing, which each cell asserts, so the second run reads the state the first one read.
+EQ="$WORK/eq"; mkdir -p "$EQ" || broken "could not create $EQ"
+pr_eqv() { # pr_eqv <cell-id> <root> <seed> [args...] -> 0 when the two answers are identical and neither wrote
+  local id="$1" r="$2" sf="$3" pl; shift 3
+  pl="$r/docs/plans/probe.md"
+  cp "$sf" "$pl" || broken "could not seed $pl"
+  rm -f "$r/docs/plans/archive/probe.md"
+  inproc_run "$r/scripts/plan-rotate.sh" prt_main "$pl" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  cmp -s "$pl" "$sf" && [ ! -f "$r/docs/plans/archive/probe.md" ] || return 1
+  FXCELL="$id" bash "$r/scripts/plan-rotate.sh" "$pl" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$pl" "$sf" && [ ! -f "$r/docs/plans/archive/probe.md" ] || return 1
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+if pr_eqv cli-report "$RR" "$WORK/seeds/base.md" --ceiling "$CEIL" && [ "$(cat "$EQ/cli-report.cl.rc")" = 0 ] \
+   && LC_ALL=C grep -qF "would move" "$EQ/cli-report.cl.out"; then
+  pr_ok "cli-report" "the program reports what would move exactly as the in-process call does (stdout, stderr, exit 0), writing nothing"
+else
+  pr_bad "cli-report" "the program and the in-process call differ, one of them wrote, or the outcome is not exit 0 with 'would move' (program rc=$(cat "$EQ/cli-report.cl.rc" 2>/dev/null), in-process rc=$(cat "$EQ/cli-report.ip.rc" 2>/dev/null))"
+fi
+if pr_eqv cli-refuse "$RR" "$WORK/seeds/nodecl.md" --ceiling 200 --apply && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] \
+   && LC_ALL=C grep -qF "$S_NODECL" "$EQ/cli-refuse.cl.out" "$EQ/cli-refuse.cl.err"; then
+  pr_ok "cli-refuse" "the program refuses the undeclared plan exactly as the in-process call does (stdout, stderr, exit 2), writing nothing"
+else
+  pr_bad "cli-refuse" "the program and the in-process call differ, one of them wrote, or the outcome is not exit 2 with the no-declaration finding (program rc=$(cat "$EQ/cli-refuse.cl.rc" 2>/dev/null), in-process rc=$(cat "$EQ/cli-refuse.ip.rc" 2>/dev/null))"
+fi
+if ! cmp -s "$EQ/cli-report.cl.out" "$EQ/cli-refuse.cl.out" && ! cmp -s "$EQ/cli-report.cl.rc" "$EQ/cli-refuse.cl.rc"; then
+  pr_ok "cli-discriminate" "the report and the refusal give different stdout and exit"
+else
+  pr_bad "cli-discriminate" "cli-report and cli-refuse gave the same stdout or exit"
 fi
 
 # --- THE CEILING BOUNDARY DISCRIMINATES -------------------------------------------------------
@@ -1033,7 +1087,7 @@ batch_run() {
   mkdir -p "$r/docs/plans/archive" || broken "could not create $r/docs/plans/archive"
   cp "$WORK/seeds/batch.md" "$B_PLAN" || broken "could not seed $B_PLAN"
   printf '%s\n' "$ARCH_PREFIX" > "$B_ARCH"
-  B_OUT="$(bash "$r/scripts/plan-rotate.sh" "$B_PLAN" --ceiling "$3" --apply 2>&1)"
+  B_OUT="$(inproc_run "$r/scripts/plan-rotate.sh" prt_main "$B_PLAN" --ceiling "$3" --apply 2>&1)"
   B_RC=$?
   B_LIVE="$(cat "$B_PLAN")"
   tail -c +"$((ARCH_PREFIX_B + 1))" "$B_ARCH" > "$r/growth.md"
@@ -1126,11 +1180,11 @@ quiet_under_ceiling "quiet-real-opener" "$WORK/seeds/real-opener.md"
 # =============================================================================================
 CW="$(mkroot cwd)" || broken "could not build the cwd sandbox root"
 cp "$WORK/seeds/base.md" "$CW/docs/plans/probe.md"
-CWD_A="$( cd "$REPO_ROOT" && bash "$CW/scripts/plan-rotate.sh" "$CW/docs/plans/probe.md" --ceiling "$CEIL" 2>&1 )"
+CWD_A="$( cd "$REPO_ROOT" && inproc_run "$CW/scripts/plan-rotate.sh" prt_main "$CW/docs/plans/probe.md" --ceiling "$CEIL" 2>&1 )"
 CWD_A_RC=$?
-CWD_B="$( cd / && bash "$CW/scripts/plan-rotate.sh" "$CW/docs/plans/probe.md" --ceiling "$CEIL" 2>&1 )"
+CWD_B="$( cd / && inproc_run "$CW/scripts/plan-rotate.sh" prt_main "$CW/docs/plans/probe.md" --ceiling "$CEIL" 2>&1 )"
 CWD_B_RC=$?
-CWD_C="$( cd "$CW/docs/plans" && bash "$CW/scripts/plan-rotate.sh" "$CW/docs/plans/probe.md" --ceiling "$CEIL" 2>&1 )"
+CWD_C="$( cd "$CW/docs/plans" && inproc_run "$CW/scripts/plan-rotate.sh" prt_main "$CW/docs/plans/probe.md" --ceiling "$CEIL" 2>&1 )"
 CWD_C_RC=$?
 if [ "$CWD_A_RC" -ne 0 ]; then
   pr_bad "cwd-invariance" "the subject failed from the repo root (exit $CWD_A_RC): $CWD_A"

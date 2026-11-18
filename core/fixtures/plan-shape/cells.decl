@@ -1,0 +1,8 @@
+# plan-shape's starts of scripts/validate-plan-shape.sh (BL-879 grammar). Every other drive is in process: run.sh
+# loads the validator once (lib/inproc.sh) and asks vps_main in a subshell; the empty-corpus copy is sourced by
+# inproc_run inside that subshell. One cli cell per distinct CLI outcome (exit 0 the conforming plan, exit 1 a P10
+# finding, exit 2 the empty corpus), each started as FXCELL=<id> bash <validator> in eqv() and compared byte for
+# byte (stdout, stderr, exit) with the in-process call on the same input.
+cli scripts/validate-plan-shape.sh cli-pass
+cli scripts/validate-plan-shape.sh cli-fail
+cli scripts/validate-plan-shape.sh cli-empty

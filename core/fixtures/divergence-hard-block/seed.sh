@@ -23,6 +23,7 @@ set -eu
 
 CASE="${1:?case}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 
 pick_one() { for c in "$@"; do [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 VALIDATOR="$(pick_one "$HERE/../../scripts/validate-adversarial-convergence.sh" \
@@ -140,7 +141,7 @@ cap_git() { # <iso date> <message> -- commit the scripts and the installed ruleb
   ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
     g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$WORK" -c user.name=f -c user.email=f@example.invalid \
           -c core.hooksPath=/dev/null -c commit.gpgsign=false -c maintenance.auto=false "$@"; }
-    [ -d "$WORK/.git" ] || g init -q . || exit 1
+    [ -d "$WORK/.git" ] || GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$WORK" init -q . || exit 1
     g add scripts .claude || exit 1
     GIT_COMMITTER_DATE="$1" GIT_AUTHOR_DATE="$1" g commit -q -m "$2" || exit 1 ) >/dev/null 2>&1 \
     || { echo "FIXTURE ERROR: git could not commit the $2 world" >&2; exit 2; }
@@ -286,7 +287,7 @@ case "$CASE" in
       g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$WORK" -c user.name=f -c user.email=f@example.invalid \
             -c core.hooksPath=/dev/null -c commit.gpgsign=false -c maintenance.auto=false "$@"; }
       at() { GIT_COMMITTER_DATE="$1" GIT_AUTHOR_DATE="$1" g "${@:2}"; }
-      g init -q . && g checkout -q -b main && g add scripts .claude && at 2026-07-01T00:00:00Z commit -q -m engine-update \
+      GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$WORK" init -q . && g checkout -q -b main && g add scripts .claude && at 2026-07-01T00:00:00Z commit -q -m engine-update \
         && g checkout -q -b sprint || exit 1
       g checkout -q main && cap_rulebook token && g add .claude && at 2026-07-05T00:00:00Z commit -q -m rulebook-reconcile || exit 1
       g checkout -q sprint && printf 'sprint work\n' > "$WORK/sprint-note" && g add sprint-note \

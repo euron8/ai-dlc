@@ -18,3 +18,5 @@ sed
 tail
 tr
 awk
+cmp
+wc

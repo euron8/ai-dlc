@@ -67,6 +67,8 @@ pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; ret
                                "$HERE/../../../core/hooks/ai-dlc-acknowledge.sh")"
 [ -n "$HOOK" ] && [ -f "$HOOK" ] \
   || { echo "FIXTURE ERROR: cannot locate ai-dlc-acknowledge.sh" >&2; exit 2; }
+# Canonical, so every in-process pass is logged under the subject's own path, never a `../..` spelling of it.
+HOOK="$(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
 printf 'HERMETIC-CONSUMED %s/%s\n' "$(cd "$(dirname "$HOOK")" && pwd)" "$(basename "$HOOK")"
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required" >&2; exit 2; }
 
@@ -74,6 +76,29 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# IN PROCESS (BL-878). The hook is SOURCED ONCE (inproc_load; its column-0 guard returns after defining ack_main) and
+# every drive is `ack_ip`, which answers what `bash "$HOOK"` gives, in a subshell made to look like a fresh bash
+# (core/fixtures/lib/inproc.sh), with the payload on stdin. One cli cell per distinct CLI outcome, at the end.
+# A literal-tail path, never `. "$VAR"`: an opaque source reads as a drive.
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+# A hook without the wrap would RUN when sourced -- read this shell's stdin and `exit 0` it, a silent green -- so both
+# halves are required before the load: the `ack_main() {` line and the column-0 source guard.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A hook with neither half predates the wrap: SKIP and exit 0 on a consumer,
+# FIXTURE BROKEN in the distribution (lib/layout.sh fx_skip_exit), never an ok. Exactly one half is a respelled hook
+# this fixture cannot drive, which FAILS. An unreadable hook is FIXTURE ERROR.
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+[ -r "$HOOK" ] || { echo "FIXTURE ERROR: cannot read $HOOK -- an unreadable hook is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'ack_main() {' "$HOOK" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: route-read-required: $HOOK predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$HOOK carries one half of the in-process wrap (ack_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive"; report_end route-read-required; exit 1 ;;
+esac
+inproc_load "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK defined nothing" >&2; exit 2; }
+declare -F ack_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no ack_main" >&2; exit 2; }
+ack_ip() { inproc_run "$HOOK" ack_main; }
 
 # -----------------------------------------------------------------------------
 # THE TREE. A live pipeline, NOT PAUSED, and no adversarial series.
@@ -87,17 +112,24 @@ trap 'rm -rf "$WORK"' EXIT
 # The sprint resolves and its slot exists so Check 2a finds no series and logs nothing; the
 # closing arm asserts that, because an UNADJUDICABLE line would mean these arms read the
 # divergence guard rather than the router guard.
-seed() { # <name> [nosnapshot|paused] -> absolute tree path
-  local w="$WORK/$1"; shift
-  mkdir -p "$w/_bmad-output/planning-artifacts/s7" "$w/scripts/ai-dlc"
-  printf '#!/bin/bash\necho 7\n' > "$w/scripts/ai-dlc/sprint-status.sh"
-  chmod +x "$w/scripts/ai-dlc/sprint-status.sh"
-  case "${1:-}" in
+# Each variant is built ONCE into $WORK/.pristine-<variant> and copied per arm (fixture-mutants.md clause 4).
+for _pv in live nosnapshot paused; do
+  _pw="$WORK/.pristine-$_pv"
+  mkdir -p "$_pw/_bmad-output/planning-artifacts/s7" "$_pw/scripts/ai-dlc" || { echo "route-read-required: FIXTURE BROKEN: mkdir $_pw" >&2; exit 2; }
+  printf '#!/bin/bash\necho 7\n' > "$_pw/scripts/ai-dlc/sprint-status.sh"
+  chmod +x "$_pw/scripts/ai-dlc/sprint-status.sh" || { echo "route-read-required: FIXTURE BROKEN: chmod in $_pw" >&2; exit 2; }
+  case "$_pv" in
     nosnapshot) ;;
-    paused)  : > "$w/_bmad-output/pipeline-snapshot.md"
-             : > "$w/_bmad-output/pipeline-paused.flag" ;;
-    *)       : > "$w/_bmad-output/pipeline-snapshot.md" ;;
+    paused)  : > "$_pw/_bmad-output/pipeline-snapshot.md"
+             : > "$_pw/_bmad-output/pipeline-paused.flag" ;;
+    *)       : > "$_pw/_bmad-output/pipeline-snapshot.md" ;;
   esac
+done
+seed() { # <name> [nosnapshot|paused] -> absolute tree path
+  local w="$WORK/$1" v="${2:-live}"
+  case "$v" in nosnapshot|paused) ;; *) v=live ;; esac
+  # A name seeded twice keeps its tree, as the per-arm mkdir -p did: copying into an existing directory would nest it.
+  [ -d "$w" ] || cp -R "$WORK/.pristine-$v" "$w" || { echo "route-read-required: FIXTURE BROKEN: cannot copy the $v tree to $w" >&2; exit 2; }
   printf '%s' "$w"
 }
 
@@ -153,7 +185,7 @@ drive() { # <tree> <tool> <transcript> [file_path] [agent_id] -> stdout
       + (if $ag == "" then {}
          elif $ag == "TYPE-ONLY" then {agent_type:"Explore"}
          else {agent_id:$ag,agent_type:"general-purpose"} end)' \
-    | CLAUDE_PROJECT_DIR="$w" bash "$HOOK" 2>/dev/null
+    | CLAUDE_PROJECT_DIR="$w" ack_ip 2>/dev/null
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
 # WHICH deny, not merely THAT one. Two checks in this hook deny a `Write`, and a fixture that
@@ -477,7 +509,7 @@ nb() { # <tree> [agent_id] -> stdout
   jq -nc --arg tr "$TR_ROUTED" --arg p "$1/_bmad-output/analysis.ipynb" --arg ag "${2:-}" \
      '{session_id:"rrr-session",transcript_path:$tr,tool_name:"NotebookEdit",tool_input:{notebook_path:$p,new_source:"x"}}
       + (if $ag == "" then {} else {agent_id:$ag,agent_type:"general-purpose"} end)' \
-    | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null
+    | CLAUDE_PROJECT_DIR="$1" ack_ip 2>/dev/null
 }
 OUT="$(nb "$LW")"
 if denied "$OUT" && is_pause_deny "$OUT"; then
@@ -501,6 +533,39 @@ elif grep -q 'ACK_TEAMMATE_WRITE' "$UW/_bmad-output/pipeline-continuation-log.md
   bad "UNPAUSED teammate: an ACK_TEAMMATE_WRITE row was written with no pause flag — the row no longer means a pause was up"
 else
   ok "UNPAUSED teammate: with no pause flag the teammate's Write is allowed and records no ACK_TEAMMATE_WRITE row"
+fi
+
+# --- the cli cells (cells.decl): the hook run as a PROGRAM once per distinct CLI outcome ---------------------------
+# The hook exits 0 on every path, so its outcomes here are output classes: Check 2z's route deny on stdout, and
+# silence for the routed twin. One `FXCELL=<id> bash "$HOOK"` start per outcome, on the same payload as the in-process
+# call and on its own copy of one seeded tree: stdout, stderr and exit compared byte for byte, and the continuation
+# log each side leaves, its `## <UTC stamp>` heading normalised (the one wall-clock field). Each cell also asserts its
+# own outcome, so two runs that both printed nothing cannot read as equal.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE BROKEN: mkdir $EQ" >&2; exit 2; }
+EQT="$(seed eqtree)"
+eqv() { # <cell-id> <transcript> -> $EQ/<id>.{ip,cl}.{out,err,rc,log}; 0 when the two agree byte for byte
+  local id="$1" s w
+  jq -nc --arg tr "$2" '{session_id:"rrr-session",transcript_path:$tr,tool_name:"Write",tool_input:{file_path:"/w/_bmad-output/planning-artifacts/s7/prd.md"}}' > "$EQ/$id.in"
+  for s in ip cl; do
+    w="$EQ/$id.$s.tree"; cp -R "$EQT" "$w" || return 1
+    if [ "$s" = ip ]; then CLAUDE_PROJECT_DIR="$w" ack_ip < "$EQ/$id.in" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    else CLAUDE_PROJECT_DIR="$w" FXCELL="$id" bash "$HOOK" < "$EQ/$id.in" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"; fi
+    sed -E 's/^## [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z /## <ts> /' "$w/_bmad-output/pipeline-continuation-log.md" > "$EQ/$id.$s.log" 2>/dev/null || : > "$EQ/$id.$s.log"
+  done
+  for s in out err rc log; do cmp -s "$EQ/$id.ip.$s" "$EQ/$id.cl.$s" || return 1; done
+}
+eq_twin() { local s o=""; for s in out err rc log; do o="$o $s=$(wc -c < "$EQ/$1.ip.$s" | tr -d ' ')/$(wc -c < "$EQ/$1.cl.$s" | tr -d ' ')B"; done; printf 'in-process/program%s' "$o"; }
+if eqv cli-deny "$TR_BYPASS" && [ "$(cat "$EQ/cli-deny.cl.rc")" = 0 ] && is_route_deny "$(cat "$EQ/cli-deny.cl.out")" \
+   && grep -q -- '-- ROUTE_DENIED$' "$EQ/cli-deny.cl.log"; then
+  ok "cli-deny: the program route-denies the unrouted Write and logs ROUTE_DENIED exactly as the in-process call does"
+else
+  bad "cli-deny: the program and the in-process call differ, or the outcome is not the route deny ($(eq_twin cli-deny))"
+fi
+if eqv cli-allow "$TR_ROUTED" && [ "$(cat "$EQ/cli-allow.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-allow.cl.out" ] \
+   && ! grep -q 'ROUTE_DENIED' "$EQ/cli-allow.cl.log"; then
+  ok "cli-allow: the program allows the routed twin in silence, as the in-process call does"
+else
+  bad "cli-allow: the program and the in-process call differ, or the routed twin was not allowed in silence ($(eq_twin cli-allow))"
 fi
 
 echo

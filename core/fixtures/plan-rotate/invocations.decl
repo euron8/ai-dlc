@@ -1,4 +1,10 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-32 *
-27 scripts/plan-rotate.sh
-3 scripts/validate-plan-shape.sh
+# BL-878: set from one counted run through scripts/seed-verdict-store.sh (core/scripts/hermetic-run.sh, the judge's own
+# J3/J7 output); base was * 32, scripts/plan-rotate.sh 27 and scripts/validate-plan-shape.sh 3. The rotator starts
+# only in the two cli cells of cells.decl; the validator starts nowhere. The inproc rows are one pass per prt_main or
+# vps_main call of a sandbox root's copy (drive, the second pointer step, batch_run, the three cwd runs and the two
+# pr_eqv in-process sides; vps_ip's two calls). The rest of * is run.sh and its one missing-subject re-invocation.
+4 *
+2 scripts/plan-rotate.sh
+0 scripts/validate-plan-shape.sh
+29 inproc:scripts/plan-rotate.sh
+2 inproc:scripts/validate-plan-shape.sh

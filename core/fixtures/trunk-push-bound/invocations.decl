@@ -1,6 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output). The subject's 2 starts are
 # the 2 cli cells of cells.decl; every other --trunk-push drive is in process, and the inproc row counts the fx_inproc
-# passes (one per tpb_ip call of vaa_main: 8 assertion drives plus the 2 in-process sides of the cli cells). `*` is
+# passes (one per inproc_run call of vaa_main: 8 assertion drives plus the 2 in-process sides of the cli cells). `*` is
 # run.sh and the 2 cli starts.
 3 *
 2 core/scripts/validate-audit-anchors.sh

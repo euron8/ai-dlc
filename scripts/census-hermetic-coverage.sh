@@ -41,7 +41,7 @@
 #             TMPDIR=<pair>/ptmp/<run>/tmp AI_DLC_PROJECT_ROOT=<root> PREPUSH_POOL_DEPTH=<same> bash
 #             <fixtures>/<fx>/run.sh`, where <run> is the kept sandbox's own `hermetic-run.XXXXXX` basename, so
 #             HOME and TMPDIR are as long as the sandbox's `<pair>/htmp/<run>/home` and `.../tmp`. The env is
-#             the sandbox's own invocation (hermetic-run.sh:569-571) with the root moved AND the PATH widened:
+#             the sandbox's own invocation (hermetic-run.sh:675-677) with the root moved AND the PATH widened:
 #             the sandbox's PATH is the declared farm alone, so an undeclared tool is `command not found`
 #             there, while the plain PATH puts READSET_TOOL_DIRS ahead of that farm and finds it. The TOOL FARM
 #             is hermetic-run's own kept `bin/`, so a declared tool resolved off git's exec-path or a
@@ -94,6 +94,7 @@
 #
 # It writes nothing to `.git/ai-dlc-fixture-durations`, nothing to the real verdict store except a consumer
 # root's hermetic passes, and nothing under the root: every scratch path is under the work dir.
+census_main() {
 set -u
 # An inherited GIT_DIR (a hook run from a linked worktree exports it) would redirect every git call below,
 # including the git-state snapshot, onto the caller's repository.
@@ -363,7 +364,7 @@ census_pair_once() {
   for k in "$T"/htmp/hermetic-run.*; do [ -d "$k" ] && { n=$((n + 1)); K="$k"; }; done
   [ "$n" = 1 ] || K=""
   if [ -n "$K" ]; then K="$(cd "$K" && pwd -P)"; B="$K/bin"; SB="$K/sb"; else B="$T/no-farm"; SB="-"; fi
-  # The plain HOME and TMPDIR mirror the sandbox's `$HR_WORK/home` and `$HR_WORK/tmp` (hermetic-run.sh:569)
+  # The plain HOME and TMPDIR mirror the sandbox's `$HR_WORK/home` and `$HR_WORK/tmp` (hermetic-run.sh:675)
   # LENGTH FOR LENGTH: `ptmp` is as long as `htmp`, and the runner's own mktemp basename is reused; with no
   # kept sandbox, `hermetic-run.NOFARM` is as long as `hermetic-run.XXXXXX`.
   # Measured: with `$T/ptmp` and `$T/phome` the plain paths were 24 characters shorter, and three fixtures that
@@ -622,3 +623,6 @@ elif [ -n "$MISSING" ]; then say "work dir kept, the run is incomplete: $CENSUS_
   say "$LEFT physical scratch root(s) left under $CENSUS_SCRATCH (recorded in $CENSUS_WORK/scratch.list); clear each by the path above"
 else case "$CENSUS_WORK" in */census.*|*/census-hermetic.*) rm -rf "$CENSUS_WORK" ;; esac; fi
 exit "$RC"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+census_main "$@"

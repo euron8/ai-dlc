@@ -1,3 +1,4 @@
-# Measured by an armed run through core/scripts/hermetic-run.sh (the judge J2/J3 output) at the committed tip, then verified by a second armed run.
-48 *
-9 scripts/validate-shell-portability.sh
+# Measured by one counted run through scripts/seed-verdict-store.sh (core/scripts/hermetic-run.sh, the judge J3/J7 output) on the final tree.
+42 *
+3 scripts/validate-shell-portability.sh
+12 inproc:scripts/validate-shell-portability.sh

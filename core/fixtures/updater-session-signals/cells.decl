@@ -1,0 +1,7 @@
+# updater-session-signals' starts of core/hooks/ai-dlc-acknowledge.sh (BL-879 grammar). Every other drive is in
+# process: run.sh sources the hook once and pipes each payload into ack_main through ack_ip. The hook
+# exits 0 on every path, so the cli cells are output classes (Check 3's Rule 29 pause deny, silence for the updater
+# session), each started as FXCELL=<id> bash "$HOOK" in eqv() and compared byte for byte with the in-process call:
+# stdout, stderr, exit and the continuation log with its stamp normalised.
+cli core/hooks/ai-dlc-acknowledge.sh cli-deny
+cli core/hooks/ai-dlc-acknowledge.sh cli-allow

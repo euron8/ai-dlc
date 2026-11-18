@@ -1,0 +1,8 @@
+# readset-skip-c's starts of core/scripts/derive-fixture-readsets.sh (BL-879 grammar). Every other drive of the deriver
+# in this shard is in process (readset-skip/run.sh inproc, rs_drive). One cli cell per distinct CLI outcome of the
+# tracer unit's equivalence cell (readset-skip/run.sh eq_cli), each started as FXCELL=<id> bash <deriver> and compared
+# with the in-process drive of the same world: stdout (say() stamps masked), stderr, exit and the written set.
+#   eq-l  the lossy stream world: fxa OMITTED (LOSS CANARY, STAT LOSS)
+#   eq-w  the whole stream world: fxa MAPPED
+cli core/scripts/derive-fixture-readsets.sh eq-l
+cli core/scripts/derive-fixture-readsets.sh eq-w

@@ -51,6 +51,7 @@
 #   migrate-artifact-paths.sh: PROGRESS apply: moved <i> of <N>
 # every AI_DLC_MIGRATE_PROGRESS_EVERY files (default 1000; a positive integer, anything else is
 # exit 2). A phase with fewer files than that prints nothing at all.
+map_main() {
 set -uo pipefail
 
 PROG="migrate-artifact-paths.sh"
@@ -65,7 +66,7 @@ while [ $# -gt 0 ]; do
     # For REHEARSING the migration before the pull that installs the grammar, and for the
     # fixture. The normal path resolves the consumer's own installed copy.
     --grammar) GRAMMAR_ARG="${2:-}"; [ -n "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar needs a file" >&2; exit 2; }; shift 2 ;;
-    -h|--help) sed -n '2,/^set -uo pipefail$/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^map_main() {$/p' "${BASH_SOURCE[0]}" | sed -e '$d' -e 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "$PROG: unknown option '$1'" >&2
        echo "usage: $PROG [--root <dir>] [--grammar <file>] [--apply]" >&2
        exit 2 ;;
@@ -1085,3 +1086,6 @@ echo "  Citations into the old paths no longer resolve; that is accepted, and th
 echo "  convention is the guide to where to look."
 [ "$MOVED" -eq "$N_PLAN" ] || exit 1
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+map_main "$@"

@@ -27,6 +27,7 @@ set -uo pipefail
 case "${BASH_SOURCE[0]}" in */*) _rl="${BASH_SOURCE[0]%/*}/../lib" ;; *) _rl=../lib ;; esac
 ok() { :; }; bad() { :; }
 . "$_rl/mutant.sh" || { echo "FIXTURE BROKEN: cannot source $_rl/mutant.sh" >&2; exit 2; }
+. "$_rl/world.sh" || { echo "FIXTURE BROKEN: cannot source $_rl/world.sh" >&2; exit 2; }
 unset -f ok bad; unset _rl
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 [ "$#" -eq 1 ] && [ -f "$1" ] && [ "$(basename "$1")" = record-only-diff.sh ] \
@@ -41,7 +42,7 @@ R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl885.XXXXXX")" || exit 9
 trap 'rm -rf "$R"' EXIT
 RP="$(cd -P "$R" && pwd -P)" && mkdir "$RP/phys" && ln -s "$RP/phys" "$RP/lnk" || { echo "REFUSED: the link was not built" >&2; exit 9; }
 P="$RP/phys/repo"; T="$RP/lnk/repo"
-mkdir -p "$P/stories" && G init -q "$P" \
+mkdir -p "$P/stories" && world_git init -q "$P" \
   && printf -- '---\nstatus: review\n---\n# S\n' > "$P/stories/s.md" && G -C "$P" add -A && G -C "$P" commit -q -m base \
   && B="$(G -C "$P" rev-parse HEAD)" \
   && printf -- '---\nstatus: review\n---\n# S\nFull-collection run: none, record-only\n' > "$P/stories/s.md" \

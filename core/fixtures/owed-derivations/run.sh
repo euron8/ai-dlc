@@ -215,6 +215,8 @@ printf 'HERMETIC-CONSUMED core/skills/ai-dlc/core-manifest.md\n'
 
 g() { local d="$1"; shift; git -C "$d" -c user.name=fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+[ -f "$HERE/../lib/world.sh" ] || { echo "FIXTURE ERROR: lib/world.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/world.sh" || { echo "FIXTURE ERROR: sourcing lib/world.sh failed" >&2; exit 2; }
 ck() { if grep -qF -- "$2" <<<"$3"; then ok "$1"; else bad "$1 -- expected to find: $2"; printf '%s\n' "$3" | sed 's/^/        | /' | head -12; fi; }
 nk() { if grep -qF -- "$2" <<<"$3"; then bad "$1 -- must NOT contain: $2"; else ok "$1"; fi; }
 rc_is() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 -- exit was $3, expected $2"; fi; }
@@ -827,7 +829,7 @@ C13F='cd scripts && echo ai-dlc'
 { printf '# PRD\n\n'
   for c in "$C11A" "$C11B" "$C11C" "$C11N1" "$C11N2" "$C12A" "$C12B" "$C12C" "$C12D" "$C12E" "$C12N1" "$C12N2" "$C13A" "$C13N" "$C13B" "$C13C" "$C13D" "$C13E" "$C13F"; do lfence "$c" 999; printf '\n'; done
 } > "$LS11/$LPRD"
-g "$LS11" init -q; g "$LS11" add -A; g "$LS11" commit -qm seed
+world_git init -q "$LS11"; g "$LS11" add -A; g "$LS11" commit -qm seed
 k11() { printf '%s:%s' "$LPRD" "$(line_of "$LS11/$LPRD" "\$ $1")"; }
 K_11A="$(k11 "$C11A")"; K_11B="$(k11 "$C11B")"; K_11C="$(k11 "$C11C")"; K_11N1="$(k11 "$C11N1")"; K_11N2="$(k11 "$C11N2")"
 K_12A="$(k11 "$C12A")"; K_12B="$(k11 "$C12B")"; K_12C="$(k11 "$C12C")"; K_12D="$(k11 "$C12D")"; K_12E="$(k11 "$C12E")"
@@ -896,7 +898,7 @@ mkdir -p "$LS15/scripts/ai-dlc/sub"; ln -s scripts/ai-dlc/sub "$LS15/lnk"
 { printf '# PRD\n\n'
   for c in "$LCMD" "$CG1" "$CG2" "$CRP1" "$CRP2" "$CSL1" "$CSL2" "$CCD1" "$CCD2" "$CRP3" "$CRP4" "$CRP5" "$CPP" "$CDD1" "$CDD2" "$CDD3" "$CDD4" "$CDD5"; do lfence "$c" 999; printf '\n'; done
 } > "$LS15/$LPRD"
-g "$LS15" init -q; g "$LS15" add -A; g "$LS15" commit -qm seed
+world_git init -q "$LS15"; g "$LS15" add -A; g "$LS15" commit -qm seed
 k15() { printf '%s:%s' "$LPRD" "$(line_of "$LS15/$LPRD" "\$ $1")"; }
 K_GC="$(k15 "$LCMD")"; K_G1="$(k15 "$CG1")"; K_G2="$(k15 "$CG2")"; K_RP1="$(k15 "$CRP1")"; K_RP2="$(k15 "$CRP2")"
 K_SL1="$(k15 "$CSL1")"; K_SL2="$(k15 "$CSL2")"; K_CD1="$(k15 "$CCD1")"; K_CD2="$(k15 "$CCD2")"
@@ -1118,11 +1120,9 @@ if sg wr; then
 printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/derivation-differential.sh\n'
 # IN PROCESS (BL-878). The writer is SOURCED once, here inside the unit (so the shards that do not run it never read
 # its shape), and every drive calls dd_main in a subshell (`$( )` or `( )`), so the writer's own `exit`, `set -u`,
-# `set -f` and its EXIT trap stay there. The source is one fx_inproc pass, and so is every dd_main call (the inproc:
-# row). The writer reads no variable it does not assign except TMPDIR and what vd_join sets, and calls no function this
-# fixture defines; the cli cell holds the in-process answer byte-identical to the program's. DDS spells the writer
-# with a literal tail, so the in-process judge (P2) resolves the source to it: lib/inproc.sh is not used, because its
-# `. "$1"` is an operand P2 cannot resolve, which it scores as a drive in a fixture declaring an unguarded subject.
+# `set -f` and its EXIT trap stay there. Every dd_main call is one fx_inproc pass (the inproc: row). The writer reads no variable it does not assign except TMPDIR and what vd_join sets, and calls no function this
+# fixture defines; the cli cell holds the in-process answer byte-identical to the program's. The writer is loaded by
+# core/fixtures/lib/inproc.sh (inproc_load) and every drive is its inproc_run, so each dd_main call is one pass.
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer can receive this file one pull before the wrapped writer, and
 # sourcing a pre-wrap writer would run its whole body in this shell. So the shape is checked first, on its two halves:
 # neither the `dd_main() {` line nor the column-0 source guard is a writer that predates the wrap, which prints SKIP for
@@ -1131,6 +1131,8 @@ printf 'HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/derivation-differe
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+[ -f "$HERE/../lib/inproc.sh" ] || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
 DDS="$(dirname "$DIFFER")/derivation-differential.sh"
 dd_def=0; dd_guard=0
 grep -q '^dd_main() {$' "$DDS"; _gx=$?
@@ -1144,18 +1146,17 @@ if [ "$dd_def$dd_guard" = 01 ]; then echo "   FAIL  $DDS carries the column-0 so
 if [ "$dd_def$dd_guard" = 00 ]; then
   echo "FIXTURE BROKEN: unit wr reached a pre-wrap writer, which the whole-fixture gate above answers before any assertion" >&2; exit 2
 else
-fx_inproc "$DDS"
-. "$DDS" || { echo "FIXTURE BROKEN: sourcing $DDS failed" >&2; exit 2; }
+inproc_load "$DDS" || { echo "FIXTURE BROKEN: sourcing $DDS defined nothing" >&2; exit 2; }
 declare -F dd_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $DDS defined no dd_main" >&2; exit 2; }
 # ---- W: the WRITER over the real differential, then the reader over ITS record --------------------
-DIST="$WORK/dist"; mkdir -p "$DIST/core/scripts"; g "$DIST" init -q
+DIST="$WORK/dist"; mkdir -p "$DIST/core/scripts"; world_git init -q "$DIST"
 printf 'qqprev\n' > "$DIST/core/scripts/toy.sh"; g "$DIST" add -A; g "$DIST" commit -qm prev
 printf 'qqalpha\nqqgamma\n' > "$DIST/core/scripts/toy.sh"; g "$DIST" add -A; g "$DIST" commit -qm base
 BASE="$(g "$DIST" rev-parse HEAD)"
 printf 'qqgamma\nqqdelta\n' > "$DIST/core/scripts/toy.sh"; g "$DIST" add -A; g "$DIST" commit -qm theirs
 THEIRS="$(g "$DIST" rev-parse HEAD)"
 [ -n "$BASE" ] && [ -n "$THEIRS" ] && [ "$BASE" != "$THEIRS" ] || { echo "FIXTURE ERROR: dist refs" >&2; exit 2; }
-C="$WORK/consumer"; mkdir -p "$C/scripts/ai-dlc" "$C/.claude" "$C/_bmad-output"; g "$C" init -q
+C="$WORK/consumer"; mkdir -p "$C/scripts/ai-dlc" "$C/.claude" "$C/_bmad-output"; world_git init -q "$C"
 cp "$VALIDATOR" "$C/scripts/ai-dlc/validate-artifact-derivations.sh"
 printf 'qqalpha\nqqgamma\n' > "$C/scripts/ai-dlc/toy.sh"
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$C/.claude/.ai-dlc-version"
@@ -1173,14 +1174,14 @@ mkdir -p "$C/_bmad-output/planning-artifacts/s1/archive"
 K_WHIST="_bmad-output/planning-artifacts/s1/archive/old.md:4"
 g "$C" add -A; g "$C" commit -qm "pull to 1.0.0"
 g "$DIST" show "${THEIRS}:core/scripts/toy.sh" > "$C/scripts/ai-dlc/toy.sh"
-dd() { OUTD="$(cd / && export TMPDIR="$WORK" && fx_inproc "$DDS" && dd_main "$DIST" "$BASE" "$C" "$THEIRS" "$@" 2>&1)"; RCD=$?; }
+dd() { OUTD="$(cd / && export TMPDIR="$WORK" && inproc_run "$DDS" dd_main "$DIST" "$BASE" "$C" "$THEIRS" "$@" 2>&1)"; RCD=$?; }
 OWED="$WORK/owed.tsv"
 # THE cli CELL (cells.decl): W0's in-process run, stdout and stderr kept apart, is the in-process twin of the writer run
 # as a PROGRAM once, for the one CLI outcome this unit reaches (exit 1 naming the broken derivation), on the same input,
 # cwd and TMPDIR: stdout, stderr and exit compared separately, byte for byte, plus the outcome itself (and an empty
 # stderr, so OUTD -- stdout then stderr -- reads as dd's `2>&1` would), so two runs that printed nothing cannot agree.
 EQ="$WORK/eq"; mkdir -p "$EQ"
-(cd / && export TMPDIR="$WORK" && fx_inproc "$DDS" && dd_main "$DIST" "$BASE" "$C" "$THEIRS") > "$EQ/ip.out" 2> "$EQ/ip.err"; RCD=$?; echo "$RCD" > "$EQ/ip.rc"
+(cd / && export TMPDIR="$WORK" && inproc_run "$DDS" dd_main "$DIST" "$BASE" "$C" "$THEIRS") > "$EQ/ip.out" 2> "$EQ/ip.err"; RCD=$?; echo "$RCD" > "$EQ/ip.rc"
 OUTD="$(cat "$EQ/ip.out" "$EQ/ip.err")"; PRINTED_PLAIN="$OUTD"
 rc_is "W0 control: the differential finds the broken derivation -> exit 1" 1 "$RCD"
 (cd / && TMPDIR="$WORK" FXCELL=cli-broke bash "$DDS" "$DIST" "$BASE" "$C" "$THEIRS") > "$EQ/cl.out" 2> "$EQ/cl.err"; echo "$?" > "$EQ/cl.rc"

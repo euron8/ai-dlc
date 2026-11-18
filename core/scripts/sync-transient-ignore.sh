@@ -27,6 +27,7 @@
 # EXIT STATUS: 0 when the block is in place (or was just written), 1 under --check when it is
 # missing or stale, 2 when the declaration cannot be resolved or read. --check never writes,
 # so it is safe to run from a gate.
+sti_main() {
 set -euo pipefail
 
 MODE="write"
@@ -57,10 +58,10 @@ sti_walk_root() { # <dir> -> the nearest ancestor carrying .git/ or VERSION, or 
   return 1
 }
 if [ -z "$PROJECT_ROOT" ]; then
-  PROJECT_ROOT="$(sti_walk_root "$(cd "$(dirname "$0")" && pwd)" || true)"
+  PROJECT_ROOT="$(sti_walk_root "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)" || true)"
 fi
 if [ -z "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT" ]; then
-  echo "sync-transient-ignore.sh: could not resolve a project root (no .git or VERSION above $(dirname "$0"))" >&2
+  echo "sync-transient-ignore.sh: could not resolve a project root (no .git or VERSION above $(dirname "${BASH_SOURCE[0]:-$0}"))" >&2
   exit 2
 fi
 
@@ -78,7 +79,7 @@ fi
 # scripts/schemas/, which install.sh never writes, so a `--root` naming a directory with no
 # .claude/schemas/ exited 2 while the same foreign root in the distribution got past the schema.
 # Last, so a root carrying its own declaration still wins. An empty walk adds no candidate.
-_self="$(cd "$(dirname "$0")" && pwd)"
+_self="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 _install_root="$(sti_walk_root "$_self" || true)"
 SCHEMA=""
 for _c in "${AI_DLC_STATE_PATHS_SCHEMA:-}" \
@@ -189,3 +190,6 @@ EOF
     echo "    your index is the operator's call, not an installer's."
   fi
 fi
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+sti_main "$@"

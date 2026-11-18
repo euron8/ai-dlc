@@ -55,7 +55,7 @@ printf 'HERMETIC-CONSUMED core/fixtures/lib/mutant.sh\n'
 # PASS. Every assertion below reaches the validator through `$( )`, so the same
 # shape is available here. A failed assertion is loud; one that never executed is
 # not, and this is what tells them apart.
-EXPECTED_ASSERTIONS=35
+EXPECTED_ASSERTIONS=36
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -84,7 +84,7 @@ commit() {
 # drive_src <validator-file> <outfile> [args...] -> the validator's own exit status, output in <outfile>.
 # SOURCES the file in a subshell and calls the SAME functions its main body calls, in its order,
 # minus arm_e, arm_f and arm_g: no drive through here asks about them, and the full-program drives
-# (assertions 1 and 25-26, and assertion 28's in-process rv_main) execute all three. An `exit` in an
+# (rv_ip: assertions 1, 25-26 and 28, and the two cli cells) run all three. An `exit` in an
 # arm ends this subshell with the arm's status, exactly as it ends the script. A sourced copy that
 # defines no arm_ab (an older validator) is refused rather than scored as a pass.
 drive_src() {
@@ -109,19 +109,43 @@ run() { # run <rev-or-range-flag> <value>
   echo "$?"
 }
 
+# rv_ip [args...] -> the WHOLE program in process: rv_main, the body the executed script runs, so every arm (E, F
+# and G included) reaches rv_report and the exit exactly as at a push. The subshell sources the validator, which
+# re-applies its top-level `set -uo pipefail` as an executed run does; inproc_run would clear those options before
+# the entry, and they sit outside rv_main. stdin is /dev/null, as the pool gives a program run.
+rv_ip() { ( . "$VALIDATOR" || exit 97; fx_inproc scripts/validate-release-version.sh; rv_main "$@" ) </dev/null; }
+
+# THE CLI CELLS (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome, exit 0 on assertion 1's
+# agreeing commit (cli-pass) and exit 1 on assertion 2's real defect (cli-fail). Each `FXCELL=<id> bash` start is
+# compared with rv_ip on the same commit: stdout, stderr and exit separately, byte for byte.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # <cell-id> [args...] -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when the three pairs are byte-identical
+  local id="$1"; shift
+  rv_ip "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err" </dev/null; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -1 "$EQ/$1.ip.out")" "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+
 echo "release-version-triple"
 
 # --- 1. All three agreeing passes ---------------------------------------------
 commit 0.1.0 0.1.0 'feat(v0.1.0): the first one'
-# The ONE full-program drive of a passing input: the whole validator EXECUTED, so arms E and F run
-# and the summary names both. Every other drive goes through drive_src.
-bash "$VALIDATOR" --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
+# The full-program drive of a passing input: rv_main, so arms E and F run and the summary names both.
+rv_ip --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
 if [ "$status" = "0" ] \
    && grep -q 'no committed conflict markers' "$WORK/out.txt" \
    && grep -q 'no misspelled not-discharged citation' "$WORK/out.txt"; then
   ok "subject, VERSION and CHANGELOG all agreeing passes, with arms E and F evaluated end to end"
 else
   bad "an agreeing commit failed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+if eqv cli-pass --commit HEAD && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] \
+   && grep -q 'no misspelled not-discharged citation' "$EQ/cli-pass.cl.out" "$EQ/cli-pass.cl.err"; then
+  ok "cli-pass: EXECUTED on the agreeing commit the program exits 0 exactly as rv_main in process does (stdout, stderr, exit)"
+else
+  bad "cli-pass: the program and rv_main in process differ, or the outcome is not exit 0 naming arm F ($(eq_twin cli-pass))"
 fi
 
 # --- 2. THE REAL DEFECT: subject ahead of VERSION ------------------------------
@@ -133,15 +157,14 @@ if [ "$status" = "1" ] && grep -q 'subject says v0.1.1, VERSION says 0.1.0' "$WO
 else
   bad "the real defect was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
 fi
-# The ONE executed run of a FAILING input. Every other failing drive is sourced (drive_src), which
+# The cli-fail cell: the ONE executed run of a FAILING input. Every other failing drive is sourced, which
 # bypasses the BASH_SOURCE main guard; this one executes the program, so a guard that never calls
 # rv_main would exit 0 and print nothing here and this arm would go red.
-bash "$VALIDATOR" --commit HEAD >"$WORK/exec-fail.txt" 2>&1; exec_fail_status=$?
-if [ "$exec_fail_status" = "1" ] && grep -q 'subject says v0.1.1, VERSION says 0.1.0' "$WORK/exec-fail.txt"; then
-  ok "EXECUTED (not sourced) on a failing input the validator exits 1 and names both versions, so the main guard is wired"
+if eqv cli-fail --commit HEAD && [ "$(cat "$EQ/cli-fail.cl.rc")" = 1 ] \
+   && grep -q 'subject says v0.1.1, VERSION says 0.1.0' "$EQ/cli-fail.cl.out" "$EQ/cli-fail.cl.err"; then
+  ok "cli-fail: EXECUTED (not sourced) on a failing input the program exits 1 naming both versions, exactly as rv_main in process does, so the main guard is wired"
 else
-  bad "the executed validator did not fail assertion 2's input -- exit $exec_fail_status; the BASH_SOURCE main guard may not call rv_main"
-  sed 's/^/        /' "$WORK/exec-fail.txt"
+  bad "cli-fail: the program and rv_main in process differ, or the outcome is not exit 1 naming both versions; the BASH_SOURCE main guard may not call rv_main ($(eq_twin cli-fail))"
 fi
 
 # --- 3. VERSION ahead of the CHANGELOG ----------------------------------------
@@ -653,7 +676,7 @@ cd "$WORK" || exit 2
 # A union merge of two members' appends can drop one of two identical lines where they meet, and a count of
 # lines or headings cannot see it. A repository of its own: a base, two members each appending the SAME note
 # to BL-1, and two releases naming both members, one keeping both notes and one keeping a single note. Both
-# runs execute the whole program, so arm G runs end to end each time.
+# runs drive the whole program (rv_ip, rv_main in process), so arm G runs end to end each time.
 G_DIR="$WORK/g"
 mkdir -p "$G_DIR/docs" || exit 2
 cd "$G_DIR" || exit 2
@@ -685,7 +708,7 @@ Members:
 }
 g_rel g-drop 'Note: same'
 g_rel g-keep "$(printf 'Note: same\nNote: same')"
-bash "$VALIDATOR" --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
+rv_ip --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
 if [ "$status" = 0 ] && grep -q 'ledger sections match its members (' "$WORK/out.txt"; then
   ok "arm G: a bundle keeping both members' identical note passes"
 else
@@ -693,7 +716,7 @@ else
 fi
 
 git checkout -q g-drop || exit 2
-bash "$VALIDATOR" --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
+rv_ip --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
 if [ "$status" = 1 ] && grep -q 'arm G: BL-1: changed by' "$WORK/out.txt"; then
   ok "arm G: a bundle keeping one of its two members' identical notes fails and names BL-1"
 else
@@ -737,7 +760,7 @@ else
 fi
 # The whole program in process: rv_main is the body the executed script runs, so arm E's verdict reaches
 # rv_report and the exit exactly as it does at a push; no new uncelled start of the subject.
-( . "$VALIDATOR" || exit 97; fx_inproc scripts/validate-release-version.sh; rv_main --commit HEAD ) >"$WORK/out.txt" 2>&1; status=$?
+rv_ip --commit HEAD >"$WORK/out.txt" 2>&1; status=$?
 e_fails="$(grep -c '^FAIL' "$WORK/out.txt")" || e_fails=0
 if [ "$status" = 1 ] && [ "$e_fails" = 1 ] \
    && grep -qxF 'FAIL  tracked file(s) carry committed merge-conflict markers: offender.md ' "$WORK/out.txt"; then

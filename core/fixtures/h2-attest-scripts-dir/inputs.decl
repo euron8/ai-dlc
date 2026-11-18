@@ -5,11 +5,14 @@ core/scripts/validate-provenance-block.sh
 core/scripts/validate-retro-evidence.sh
 # validate-provenance-block.sh:181 loads core/schemas/provenance-block.json; run.sh:107 copies the schemas dir, and no other schema is read.
 core/schemas/provenance-block.json
-# lib rows: validate-h2-attestation.sh:107,624 runs check-17-bypass, whose run.sh:2 sources preamble.sh. check-h1-recursion and check-manifest-bypass have no run.sh (seed.sh only, no lib/ source).
+# lib rows: validate-h2-attestation.sh:109,625 runs check-17-bypass, whose run.sh:2 sources preamble.sh. check-h1-recursion and check-manifest-bypass have no run.sh (seed.sh only, no lib/ source).
 core/fixtures/lib/preamble.sh
 core/fixtures/check-17-bypass/
 core/fixtures/check-h1-recursion/
 core/fixtures/check-manifest-bypass/
-# validate-h2-attestation.sh:63 only tests that core/skills/ai-dlc exists (-d); one stable file makes the directory exist in the sandbox.
+# validate-h2-attestation.sh:64 only tests that core/skills/ai-dlc exists (-d); one stable file makes the directory exist in the sandbox.
 core/skills/ai-dlc/SKILL.md
 core/fixtures/lib/report.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

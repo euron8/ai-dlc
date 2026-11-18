@@ -52,6 +52,7 @@
 # Usage: render-vocabulary-index.sh            write docs/vocabulary-index.md
 #        render-vocabulary-index.sh --check    render to a temp and byte-compare; no write
 # Exit:  0 = written / in sync, 1 = drift or a totality failure, 2 = usage or environment.
+rvi_main() {
 set -uo pipefail
 
 #        render-vocabulary-index.sh [--check] --skip-selfprobe
@@ -69,17 +70,17 @@ for _a in "$@"; do
   case "$_a" in
     --check)           MODE=check ;;
     --skip-selfprobe)  SKIP_SELFPROBE=1 ;;
-    *) echo "usage: $(basename "$0") [--check] [--skip-selfprobe]" >&2; exit 2 ;;
+    *) echo "usage: $(basename "${BASH_SOURCE[0]}") [--check] [--skip-selfprobe]" >&2; exit 2 ;;
   esac
 done
 [ "$SKIP_SELFPROBE" -eq 0 ] || echo "NOT-A-VERDICT: --skip-selfprobe skips this renderer's self-probes; a run with this flag proves nothing about the renderer's own predicates."
 
 # ROOT BY WALKING UP FOR A MARKER, never by counting `..` hops, so this answers identically
 # from the repo root, from a subdirectory, and from a fixture sandbox that copies it.
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [ ! -f "$ROOT/VERSION" ] && [ "$ROOT" != "/" ]; do ROOT="$(dirname "$ROOT")"; done
 if [ ! -f "$ROOT/VERSION" ]; then
-  echo "render-vocabulary-index: no VERSION marker above $(dirname "$0") — cannot locate the repo root." >&2
+  echo "render-vocabulary-index: no VERSION marker above $(dirname "${BASH_SOURCE[0]}") — cannot locate the repo root." >&2
   exit 2
 fi
 
@@ -1384,3 +1385,6 @@ fi
 render > "$OUT"
 echo "OK: wrote docs/vocabulary-index.md — $n_rows cross-file vocabular(ies), $n_schema schema enum(s)."
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rvi_main "$@"

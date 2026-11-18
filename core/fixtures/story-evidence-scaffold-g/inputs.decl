@@ -15,4 +15,5 @@ core/fixtures/story-evidence-scaffold-c/.dist-only
 core/fixtures/story-evidence-scaffold-d/run.sh
 core/fixtures/story-evidence-scaffold-d/.dist-only
 core/fixtures/lib/report.sh
+core/fixtures/lib/world.sh
 core/fixtures/lib/mutant.sh

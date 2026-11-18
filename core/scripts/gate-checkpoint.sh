@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+gck_main() {
 set -euo pipefail
 
 # gate-checkpoint.sh -- record and read back a gate's PER-CHECK verdicts, so a gate
@@ -124,7 +125,7 @@ while [ $# -gt 0 ]; do
     --nonce) NONCE="${2:-}"; shift 2 ;;
     --root)  ROOT="${2:-}"; shift 2 ;;
     --self-probe) PROBE=1; shift ;;
-    -h|--help) sed -n '/^# usage:/,/^#      a caller could confuse/p' "$0" >&2; exit 2 ;;
+    -h|--help) sed -n '/^# usage:/,/^#      a caller could confuse/p' "${BASH_SOURCE[0]}" >&2; exit 2 ;;
     open|close|record|done|list|clear|current)
       ACTION="$1"; shift
       while [ $# -gt 0 ]; do ARGS="${ARGS}${ARGS:+$(printf '\037')}$1"; shift; done
@@ -141,7 +142,7 @@ if [ "$PROBE" = "1" ]; then
   # would seam Directions 1-9 and 12, whose verdicts are about the unseamed path.
   unset AI_DLC_GATE_CHECKPOINT_PROBE_SEAM
   _pr="$(mktemp -d)"; mkdir -p "${_pr}/_bmad-output"
-  _me="$0"
+  _me="${BASH_SOURCE[0]}"
   _n="planning-19700101T000000Z"
   _fail=0
 
@@ -616,3 +617,6 @@ case "$ACTION" in
     printf 'gate-checkpoint: cleared the ledger for %s\n' "$NONCE" >&2
     ;;
 esac
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+gck_main "$@"

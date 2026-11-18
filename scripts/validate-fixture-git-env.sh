@@ -28,9 +28,10 @@
 # Exit 0 clean or under the ceiling, 1 over the ceiling or on a broken
 # declaration, 2 when it cannot establish its own population (refusal, not a
 # finding -- an empty population agrees with every claim).
+vfge_main() {
 set -u
 
-SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Resolve the repo root by WALKING UP for a marker, never by counting `..` hops:
 # a hop count answers differently from the root, from a subdirectory and from a
@@ -49,7 +50,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --max-unscrubbed) MAX_UNSCRUBBED="${2:-}"; shift 2 ;;
     --report) REPORT_ONLY=1; shift ;;
-    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,30p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "validate-fixture-git-env: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -398,3 +399,6 @@ fi
 # indistinguishable from a pass that compared nothing.
 echo "validate-fixture-git-env: ok — ${POP_N} fixture run.sh build a scratch repository, ${N_UNSCRUBBED} unscrubbed (ceiling ${MAX_UNSCRUBBED:-none})."
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vfge_main "$@"

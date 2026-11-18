@@ -1,0 +1,7 @@
+# shell-portability's starts of scripts/validate-shell-portability.sh (BL-879 grammar). Every other drive is in
+# process: run.sh loads the validator once and asks vsp_main through inproc_run, sourcing each world's own copy. One
+# cli cell per distinct CLI outcome (exit 0 PASS, exit 1 FAIL, exit 2 REFUSED), each started as FXCELL=<id> bash in
+# eqv() and compared byte for byte with the in-process call on the same world.
+cli scripts/validate-shell-portability.sh cli-pass
+cli scripts/validate-shell-portability.sh cli-fail
+cli scripts/validate-shell-portability.sh cli-refused

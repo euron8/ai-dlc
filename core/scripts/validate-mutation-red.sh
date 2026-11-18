@@ -143,6 +143,7 @@
 #
 # bash 3.2+.
 
+vmr_main() {
 set -uo pipefail
 
 # Bytes of a captured run echoed back as evidence. The RED run's tail is what the role
@@ -487,7 +488,7 @@ fi
 # The capture's first line replays this run: %q of the ORIGINAL argv. The usage check
 # above guarantees at least four arguments here; the +-guard keeps an empty array from
 # aborting under set -u on bash 3.2 should that ever change.
-printf '$'; replay_words "$0" ${ORIG_ARGV[@]+"${ORIG_ARGV[@]}"}; printf '\n'
+printf '$'; replay_words "${BASH_SOURCE[0]}" ${ORIG_ARGV[@]+"${ORIG_ARGV[@]}"}; printf '\n'
 printf 'mutation-red replay\n'
 # head and cwd make a committed capture checkable against the commit it claims to grade
 # (validate-handoff-evidence.sh reads `head:`). Outside a git work tree the line still
@@ -557,3 +558,6 @@ printf '  restore:    byte-identical\n'
 evidence "mutated run" "$MUT_LOG"
 printf 'PROVEN: %s:%s reproducibly kills the named test.\n' "$TARGET" "$LINE"
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vmr_main "$@"

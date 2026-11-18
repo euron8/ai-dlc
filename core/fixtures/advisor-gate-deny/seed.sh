@@ -14,6 +14,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$ROOT" ] && [ -f "$ROOT/core/hooks/ai-dlc-advisor-gate.sh" ]; then
   HOOK="$ROOT/core/hooks/ai-dlc-advisor-gate.sh"
@@ -34,7 +35,7 @@ g() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -c user.name=f -c us
 
 mkdir -p "$WORK/sprint" "$WORK/update" "$WORK/detached" "$WORK/norepo" "$WORK/projects/p1" "$WORK/mut" "$WORK/cpd" || exit 2
 for r in sprint update detached; do
-  g -C "$WORK/$r" init -q || exit 2
+  world_git -C "$WORK/$r" init -q || exit 2
   printf 'x\n' > "$WORK/$r/f"
   g -C "$WORK/$r" add f && g -C "$WORK/$r" commit -q -m seed || exit 2
 done
@@ -49,7 +50,7 @@ g -C "$WORK/detached" checkout -q --detach || exit 2
 #   EMPTYOUT  none                                                         -- gated
 for r in bmad code emptyout; do
   mkdir -p "$WORK/$r" || exit 2
-  g -C "$WORK/$r" init -q || exit 2
+  world_git -C "$WORK/$r" init -q || exit 2
   printf 'x\n' > "$WORK/$r/f"
   g -C "$WORK/$r" add f && g -C "$WORK/$r" commit -q -m seed || exit 2
   g -C "$WORK/$r" update-ref refs/remotes/origin/main HEAD || exit 2
@@ -64,7 +65,7 @@ mkdir -p "$WORK/code/src" && printf 'echo\n' > "$WORK/code/src/a.sh" || exit 2
 g -C "$WORK/code" add src && g -C "$WORK/code" commit -q -m code || exit 2
 #   UPSTREAM  a sprint branch already pushed with `-u` (code included), then one `_bmad-output/`
 #             commit: exempt through `@{u}`, gated through `origin/HEAD` (the range holds the code).
-mkdir -p "$WORK/upstream" && g -C "$WORK/upstream" init -q || exit 2
+mkdir -p "$WORK/upstream" && world_git -C "$WORK/upstream" init -q || exit 2
 printf 'x\n' > "$WORK/upstream/f" && g -C "$WORK/upstream" add f && g -C "$WORK/upstream" commit -q -m seed || exit 2
 g -C "$WORK/upstream" update-ref refs/remotes/origin/main HEAD || exit 2
 g -C "$WORK/upstream" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main || exit 2

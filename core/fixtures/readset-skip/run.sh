@@ -66,7 +66,10 @@ broken() { printf '  FAIL  %s\n' "$1" >&2; echo "${NAME:-readset-skip}: FIXTURE 
 # because its decision IS process identity: the live-trace drivers (RT, CT, FX, FW: readset_live_trace names its trace
 # root and judges its ceiling by `$$` and process groups), the lock start-time judge (PJ: `ps -o lstart= -p $$`), the
 # derivers slot-world starts (the slot's holder is the deriver's `$$`), the (args) self-invocations, and the one
-# end-to-end CLI run per outcome in the equivalence cell.
+# end-to-end CLI run per outcome in the equivalence cell. Every start of the deriver is a declared cell (BL-879):
+# slot-world's are `e2e` rows of readset-skip/cells.decl, the equivalence cell's two runs are `cli` rows of
+# readset-skip-c/cells.decl. The stub derivers the launcher worlds hand to the hook live at the consumer layout path
+# (LT_DVP, beside seed_lt), so the hook's own launches of them are no start of the deriver.
 SHARDS="a b c d"
 UNITS_a="arms ign man merge slot"
 UNITS_b="loc hr tk dg"
@@ -1128,6 +1131,19 @@ seed_lt() { # <t>: seed() plus a TRACKED stub deriver, so readset_deriver_path r
   mkdir -p "$1/core/scripts" && printf '%s\n' "$LT_STUB" > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
   ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm stub ) >/dev/null 2>&1
 }
+# A LAUNCHING WORLD'S STUB LIVES AT THE CONSUMER LAYOUT PATH (BL-878). Every world below whose drive makes the hook
+# LAUNCH its deriver (readset_live_trace, the in-pool worker, the ct and fx watchdog worlds) gets its stub from LT_DVP,
+# which readset_deriver_path resolves first, so the hook starts it exactly as it starts a real deriver. At
+# core/scripts/derive-fixture-readsets.sh the invocation counter would log each stub start as a start of the deriver,
+# which it is not: the subject of these worlds is the hook's launcher, kept end to end, and the stub only records what it
+# was handed. The dist-layout resolution stays driven by the seed_lt worlds that hash the stub and name it in the
+# remedy text (lrm, the held set).
+LT_DVP=scripts/ai-dlc/derive-fixture-readsets.sh
+seed_ltc() { # <t>: seed() plus the TRACKED stub deriver at LT_DVP
+  f2b_world seed "$1" || return 1
+  mkdir -p "$1/${LT_DVP%/*}" && printf '%s\n' "$LT_STUB" > "$1/$LT_DVP" || return 1
+  ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm stub ) >/dev/null 2>&1
+}
 # The local world: gamma's VALID rows (its run.sh, and src/orphan.sh, which no committed row names),
 # and an alpha row on src/lonly.sh, a file NO committed row names. Alpha has committed rows, so its
 # local rows must be ignored everywhere -- including the universe, where an ignored row would
@@ -1278,7 +1294,7 @@ lt_drive() { # <pool> <world> <setup>; prints "<message>|<invoked|not>"
   )
   printf '%s|%s' "$(tr '\n' ' ' < "$o/msg")" "$([ -f "$o/args" ] && echo invoked || echo not)"
 }
-lt_fresh() { local t="$WORK/lf.$1"; f2b_world seed_lt "$t" || broken "the launcher seed failed"; printf '%s' "$t"; }
+lt_fresh() { local t="$WORK/lf.$1"; f2b_world seed_ltc "$t" || broken "the launcher seed failed"; printf '%s' "$t"; }
 LKLOCK='"$GITDIR/ai-dlc-fixture-readsets.local.lock"'
 LK_LIVE="mkdir $LKLOCK && printf '%s %s\n' \$PPID \"\$(date +%s)\" > $LKLOCK/pid"
 LK_DEAD="bash -c 'exit 0' & dp=\$!; wait \$dp; mkdir $LKLOCK && printf '%s %s\n' \$dp \"\$(date +%s)\" > $LKLOCK/pid"
@@ -1599,7 +1615,7 @@ readset_trace_report "" > "$o/rep" 2>&1
 CT
   seed_ct() { # <t>: seed() plus the TRACKED hanging stub deriver
     f2b_world seed "$1" || return 1
-    mkdir -p "$1/core/scripts" && printf '%s\n' "$LT_HANG" > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
+    mkdir -p "$1/${LT_DVP%/*}" && printf '%s\n' "$LT_HANG" > "$1/$LT_DVP" || return 1
     ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm hang ) >/dev/null 2>&1
   }
   ct_drive() { # <pool> <name> <ceiling> <hang|finish> [hk]; prints "<live>|<after>|<exit>|<report>"
@@ -1673,10 +1689,10 @@ FX
   # never shows the sleep hangs until the gate's watchdog, a hang to read and never a verdict.
   seed_fxw() { # <t>: seed() plus a TRACKED deriver stub that exits once the watchdog's sleep is up
     f2b_world seed "$1" || return 1
-    mkdir -p "$1/core/scripts" && printf '%s\n' '#!/bin/bash' \
+    mkdir -p "$1/${LT_DVP%/*}" && printf '%s\n' '#!/bin/bash' \
       'until pgrep -g "$PPID" -x sleep >/dev/null 2>&1; do' \
       '  /bin/sleep 0.01' \
-      'done' 'exit 0' > "$1/core/scripts/derive-fixture-readsets.sh" || return 1
+      'done' 'exit 0' > "$1/$LT_DVP" || return 1
     ( cd "$1" && git add -A && git -c user.email=f@f -c user.name=f commit -qm fastw ) >/dev/null 2>&1
   }
   fx_drive() { # <pool> <name> <reps> <stop at first leak: 0|1>; prints "<control>|<reps>|<started>|<exit 0>|<leaks>"
@@ -3286,26 +3302,30 @@ d/-p'
       local d
       cp "$1" "$STUB_DERIVER"
       ( cd "$BR" && rs_drive -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$2" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/sbx.out" 2>&1 </dev/null
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" -- core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/sbx.o" 2> "$WORK/sbx.e" </dev/null
       echo "$?" > "$WORK/sbx.rc"
+      cat "$WORK/sbx.o" "$WORK/sbx.e" > "$WORK/sbx.out"
       stub_reap "${SB:-}"
       ( cd "$BR" && git checkout -q -- . ) >/dev/null 2>&1
       d="$(grep -c 'dropped during' "$SX_TR/w/fxa.win" 2>/dev/null)" || d=0
       printf '%s|%s' "$(grep -m1 -E '^  fxa ' "$WORK/sbx.out" | tr -s ' ')" "$d"
     }
     CL="$(sbx_run "$SB/deriver.sh" "$SX/lossy.list")"
-    cp "$WORK/sbx.out" "$WORK/eq.l.in"; cp "$WORK/sbx.rc" "$WORK/eq.l.in.rc"; cp "$SX_TR/w/fxa.set" "$WORK/eq.l.in.set" 2>/dev/null || : > "$WORK/eq.l.in.set"
+    cp "$WORK/sbx.o" "$WORK/eq.l.in"; cp "$WORK/sbx.e" "$WORK/eq.l.in.err"; cp "$WORK/sbx.rc" "$WORK/eq.l.in.rc"; cp "$SX_TR/w/fxa.set" "$WORK/eq.l.in.set" 2>/dev/null || : > "$WORK/eq.l.in.set"
     CW="$(sbx_run "$SB/deriver.sh" "$SX/whole.list")"
     cp "$SX_TR/w/fxa.log" "$WORK/width.log" 2>/dev/null || : > "$WORK/width.log"
-    cp "$WORK/sbx.out" "$WORK/eq.w.in"; cp "$WORK/sbx.rc" "$WORK/eq.w.in.rc"; cp "$SX_TR/w/fxa.set" "$WORK/eq.w.in.set" 2>/dev/null || : > "$WORK/eq.w.in.set"
+    cp "$WORK/sbx.o" "$WORK/eq.w.in"; cp "$WORK/sbx.e" "$WORK/eq.w.in.err"; cp "$WORK/sbx.rc" "$WORK/eq.w.in.rc"; cp "$SX_TR/w/fxa.set" "$WORK/eq.w.in.set" 2>/dev/null || : > "$WORK/eq.w.in.set"
     # THE EQUIVALENCE CELL, and the tracer unit's end-to-end runs (one per distinct outcome: fxa OMITTED, fxa
     # MAPPED). The same two worlds driven through the CLI as a PROCESS must print the same output (the `[hh:mm:ss]`
     # stamps of say() masked), write the same set and leave the same rc as the in-process drive above. The two
     # worlds' answers differ (control), so an in-process path that answered both alike could not pass.
+    # Each CLI run is the `cli` cell eq-<tag> of readset-skip-c/cells.decl (BL-879), started as FXCELL=eq-<tag>.
+    # stdout, stderr and exit are compared separately; stdout with the say() stamps masked, since the clock moves
+    # between the two runs, and stderr and exit byte for byte.
     eq_cli() { # <stream list> <tag>
       cp "$SB/deriver.sh" "$STUB_DERIVER"
       ( cd "$BR" && env -u VAS_INNER_POOL_WIDTH -u EMS_POOL_WIDTH PATH="$SX:$PATH" STUB_FEED="$SX/feed" STUB_SB="$1" \
-          AI_DLC_READSET_TRACE_ROOT="$SX_TR" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/eq.$2.cli" 2>&1 </dev/null
+          AI_DLC_READSET_TRACE_ROOT="$SX_TR" FXCELL="eq-$2" bash core/scripts/derive-fixture-readsets.sh --list fxa --tracer sandbox ) > "$WORK/eq.$2.cli" 2> "$WORK/eq.$2.cli.err" </dev/null
       echo "$?" > "$WORK/eq.$2.cli.rc"
       stub_reap "${SB:-}"
       cp "$SX_TR/w/fxa.set" "$WORK/eq.$2.cli.set" 2>/dev/null || : > "$WORK/eq.$2.cli.set"
@@ -3316,7 +3336,8 @@ d/-p'
     TRACE_ARMS=$((TRACE_ARMS+1))
     _eqd=""
     for _t in l w; do
-      [ "$(eq_mask "$WORK/eq.$_t.in")" = "$(eq_mask "$WORK/eq.$_t.cli")" ] || _eqd="$_eqd $_t:output"
+      [ "$(eq_mask "$WORK/eq.$_t.in")" = "$(eq_mask "$WORK/eq.$_t.cli")" ] || _eqd="$_eqd $_t:stdout"
+      cmp -s "$WORK/eq.$_t.in.err" "$WORK/eq.$_t.cli.err" || _eqd="$_eqd $_t:stderr"
       cmp -s "$WORK/eq.$_t.in.set" "$WORK/eq.$_t.cli.set" || _eqd="$_eqd $_t:set"
       cmp -s "$WORK/eq.$_t.in.rc" "$WORK/eq.$_t.cli.rc" || _eqd="$_eqd $_t:rc=$(cat "$WORK/eq.$_t.in.rc")/$(cat "$WORK/eq.$_t.cli.rc")"
     done
@@ -5743,7 +5764,7 @@ slot_score() { # <deriver copy> [scenario ...] -> "<rc>|<failed scenarios, sorte
   # slot-world itself runs in process; the derivers IT starts stay processes: the slot's decisions are keyed on the
   # holder's `$$` (readset_lock_write records it, rs_slot_release and readset_lock_stale judge it) and on reaping a
   # deriver's process group, so two derivers in one process would share the identity the slot exists to separate.
-  o="$( ( inproc TMPDIR="$SLOT_T" SW_GROUPS="$gf" -- "$SLOT_WV" "$d" "$HOOK" "$@" ) 2>/dev/null)"; r=$?
+  o="$( ( inproc TMPDIR="$SLOT_T" SW_GROUPS="$gf" SW_CELL=slot -- "$SLOT_WV" "$d" "$HOOK" "$@" ) 2>/dev/null)"; r=$?
   slot_reap "$gf"
   printf '%s|%s' "$r" "$(printf '%s\n' "$o" | sed -n 's/^FAIL \([a-z]*\):.*/\1/p' | sort | tr '\n' ' ' | sed 's/ $//')"
   printf '%s\n' "$o" > "$SLOT_T/last.out"
@@ -5777,11 +5798,12 @@ fi
 # Whatever the verdict, every recorded group and the live control are reaped by their recorded ids before it returns.
 # With a third argument (slot-shellkill) the teardown is that lib's pool_kill_tree applied to the world's shell pid, and the
 # caller's reap does NOT run before the census: the hook's own teardown is the only reaper the census reads.
-slot_kill_drive() { # <slot-world copy> <reap lib> [<pool_kill_tree lib>]
+slot_kill_drive() { # <slot-world copy> <reap lib> <pool_kill_tree lib, or empty> <cell prefix>
+  # (the cell prefix is the world's SW_CELL: its deriver A is the e2e cell <prefix>.hold of cells.decl)
   local T gf swp d lp pre=0 ng=0 sv=0 lv=0 g
   T="$(mktemp -d "$SLOT_T/kd.XXXXXX")" || broken "mktemp failed for the slot-kill world"
   gf="$T/groups"; : > "$gf"
-  ( inproc TMPDIR="$T" SW_GROUPS="$gf" SW_KILL_GATE="$T/gate" -- "$1" "$DERIVER" "$HOOK" hold ) >/dev/null 2>&1 &
+  ( inproc TMPDIR="$T" SW_GROUPS="$gf" SW_KILL_GATE="$T/gate" SW_CELL="$4" -- "$1" "$DERIVER" "$HOOK" hold ) >/dev/null 2>&1 &
   swp=$!
   # The world writes the gate file only with A's tree up and then blocks until killed, so the KILL is never early or late.
   aw_wait '[ -e "$T/gate" ]' 'echo "$swp"' ''
@@ -5806,7 +5828,7 @@ slot_kill_drive() { # <slot-world copy> <reap lib> [<pool_kill_tree lib>]
   printf '%s|%s|%s|%s' "$pre" "$ng" "$sv" "$lv"
 }
 SLOT_ARMS=$((SLOT_ARMS+1))
-_k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB")"
+_k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB" "" slot-kill)"
 if [ "$_k" = "1|2|0|0" ]; then
   ok "SLOT KILL: slot-world SIGKILLed mid-hold leaves no member of its 2 recorded groups (deriver A, live control) alive after the caller's reap ('$_k' pre|groups|surviving|live)"
 else bad "SLOT KILL: expected '1|2|0|0' (pre|groups|surviving|live), got '$_k'"; fi
@@ -5821,7 +5843,7 @@ slot_fork_drive() { # <slot-world copy>
   local T gf swp d ap pre=0 ng sv=0
   T="$(mktemp -d "$SLOT_T/fk.XXXXXX")" || broken "mktemp failed for the slot-forkkill world"
   gf="$T/groups"; : > "$gf"
-  ( inproc TMPDIR="$T" SW_GROUPS="$gf" SW_FORK_GATE="$T/gate" -- "$1" "$DERIVER" "$HOOK" hold ) >/dev/null 2>&1 &
+  ( inproc TMPDIR="$T" SW_GROUPS="$gf" SW_FORK_GATE="$T/gate" SW_CELL=slot-fork -- "$1" "$DERIVER" "$HOOK" hold ) >/dev/null 2>&1 &
   swp=$!
   aw_wait '[ -e "$T/gate" ]' 'echo "$swp"' ''
   d="$(ls -d "$T"/slot-world.*/hold 2>/dev/null | head -1)"
@@ -5852,7 +5874,7 @@ awk '/^    pool_tree\(\) \{$/,/^    \}$/ {print} /^    pool_kill_tree\(\) \{$/,/
   && bash -n "$SLOT_PKT_LIB" && ( . "$SLOT_PKT_LIB" && declare -F pool_tree >/dev/null && declare -F pool_kill_tree >/dev/null ) \
   || broken "could not extract exactly pool_tree and pool_kill_tree from ${HOOK#"$ROOT"/}"
 SLOT_ARMS=$((SLOT_ARMS+1))
-_k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB" "$SLOT_PKT_LIB")"
+_k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB" "$SLOT_PKT_LIB" slot-shk)"
 if [ "$_k" = "1|2|0|0" ]; then
   ok "SLOT SHELLKILL: slot-world torn down mid-hold by the hook's own pool_kill_tree on its shell pid, no caller reap, leaves no member of its 2 recorded groups alive ('$_k' pre|groups|surviving|live)"
 else bad "SLOT SHELLKILL: expected '1|2|0|0' (pre|groups|surviving|live), got '$_k'"; fi

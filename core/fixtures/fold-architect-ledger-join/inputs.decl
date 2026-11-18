@@ -17,7 +17,7 @@ core/skills/ai-dlc/steps/gate-validation.md
 core/skills/ai-dlc/steps/bug-investigation.md
 core/skills/ai-dlc/steps/route.md
 # reason: gate-slice.sh lists these two directories (overrides/ for a shadowing GATE_MANIFEST, extensions/ for the
-# additive layer, gate-slice.sh:313-314) and validate-provenance-block.sh looks for extensions/known-skills.json
+# additive layer, gate-slice.sh:314-315) and validate-provenance-block.sh looks for extensions/known-skills.json
 # (:194-196). G1 stands down when an overrides/ entry carries a GATE_MANIFEST, so the sandbox must hold exactly
 # what the tree holds there. Each is a README.md today.
 core/skills/ai-dlc/overrides/

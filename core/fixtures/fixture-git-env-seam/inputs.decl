@@ -6,6 +6,7 @@
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/inproc.sh
 core/fixtures/lib/layout.sh
 core/fixtures/trunk-push-bound/run.sh
 core/fixtures/setup-config-drift/run.sh
@@ -46,5 +47,5 @@ core/skills/ai-dlc-update/reconcile/settings-merge.sh
 core/skills/ai-dlc-update/reconcile/setup-site-drift.sh
 core/skills/ai-dlc-update/reconcile/setup-sites.md
 core/skills/ai-dlc-update/reconcile/template-sites.md
-core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+!core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh

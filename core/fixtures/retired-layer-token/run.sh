@@ -35,9 +35,10 @@ TAB="$(printf '\t')"
 L=".claude/skills/ai-dlc"
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
-# A literal-tail path, never `. "$VAR"`: in a fixture opted in by an inproc: row, P1 reads an opaque source as a drive.
 [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
+[ -f "$HERE/../lib/inproc.sh" ] || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
 
 echo "retired-layer-token:"
 echo "HERMETIC-CONSUMED $SCRIPT"
@@ -68,46 +69,20 @@ grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SCRIPT"; _gx=$?
 if [ "$rlt_def$rlt_guard" = 00 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
 if [ "$rlt_def" = 0 ]; then echo "   FAIL  $SCRIPT carries the column-0 source guard but no \`rlt_main() {\` line -- a respelled subject this fixture cannot drive" >&2; echo "retired-layer-token: FAIL (1)" >&2; exit 1; fi
 if [ "$rlt_guard" = 0 ]; then echo "   FAIL  $SCRIPT defines \`rlt_main() {\` but carries no column-0 source guard -- a respelled subject; sourcing it would run rlt_main in this shell" >&2; echo "retired-layer-token: FAIL (1)" >&2; exit 1; fi
-# NOT core/fixtures/lib/inproc.sh: this fixture declares emit-report.sh, an UNGUARDED bash subject, and P2
-# (validate-fixture-invocations.sh) reads inproc.sh's opaque `. "$1"` as an unrouted source of it. So the subject is
-# sourced here by a literal-tail path, and `rlt_run` is inproc_run's fresh-bash subshell without the source: every
-# function but rlt_main and fx_inproc is removed, every UNEXPORTED variable a fresh bash does not start with is unset,
-# the options are a fresh bash's and the command hash is empty. Exported variables, prefix assignments included, stay.
-RLT_SRC="$(dirname "$SCRIPT")/retired-layer-token.sh"
-# shellcheck source=/dev/null
-. "$RLT_SRC" || { echo "FIXTURE BROKEN: sourcing $RLT_SRC failed" >&2; exit 2; }
-declare -F rlt_main >/dev/null || { echo "FIXTURE BROKEN: $RLT_SRC defined no rlt_main when sourced" >&2; exit 2; }
-rlt_run() { # [args...] -> rlt_main's stdout, stderr and status, in a subshell shaped like a fresh `bash <subject>`
-  ( IFS=$' \t\n'
-    _rr_p="$RLT_SRC"
-    _rr_x=" $(compgen -e) "; _rr_x="${_rr_x//$'\n'/ }"
-    for _rr_f in $(compgen -A function); do case "$_rr_f" in rlt_main|fx_inproc) ;; *) unset -f "$_rr_f" ;; esac; done
-    for _rr_v in $(compgen -v); do
-      case "$_rr_x" in *" $_rr_v "*) continue ;; esac
-      case "$_rr_v" in
-        _rr_p|_rr_x|_rr_v|_rr_f) continue ;;
-        BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
-        IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
-        SHLVL|TERM|UID|_) continue ;;
-      esac
-      unset "$_rr_v" 2>/dev/null
-    done
-    OPTIND=1
-    set +eufx +o pipefail
-    hash -r
-    unset _rr_x _rr_v _rr_f
-    fx_inproc "$_rr_p"; unset -f fx_inproc; unset _rr_p
-    rlt_main "$@" )
-}
+# The subject is loaded once by core/fixtures/lib/inproc.sh and `rlt_eng` answers through its inproc_run: a fresh-bash
+# subshell that keeps only the loaded definitions, unsets every UNEXPORTED variable a fresh bash does not start with, and
+# logs one fx_inproc pass. Exported variables, prefix assignments included, stay.
+inproc_load "$SCRIPT" || { echo "FIXTURE BROKEN: sourcing $SCRIPT defined nothing" >&2; exit 2; }
+declare -F rlt_main >/dev/null || { echo "FIXTURE BROKEN: $SCRIPT defined no rlt_main when sourced" >&2; exit 2; }
 rlt_eng() { # <engine> [args...] -> what `bash <engine> [args...]` prints and exits with; <engine> must be $SCRIPT
   local _m _rc
   [ "$1" = "$SCRIPT" ] || { echo "rlt_eng: engine $1 is not the loaded subject" >&2; return 125; }
   shift
   case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in
-    "declare -x"*) rlt_run "$@"; return ;;
+    "declare -x"*) inproc_run "$SCRIPT" rlt_main "$@"; return ;;
   esac
   _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
-  AI_DLC_RECONCILE_MEMO="$_m" rlt_run "$@"; _rc=$?
+  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$SCRIPT" rlt_main "$@"; _rc=$?
   rm -rf "$_m"
   return "$_rc"
 }

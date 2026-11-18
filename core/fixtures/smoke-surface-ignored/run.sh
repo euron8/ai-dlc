@@ -66,6 +66,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/smoke-surface-ignored.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$DIR/../lib/world.sh" || { echo "FIXTURE ERROR: lib/world.sh not found" >&2; exit 2; }
 # The control tree: the whole scripts directory and the schema, laid out as the shipped one is.
 T="$WORK/tree/core"
 mkdir -p "$T/scripts" "$T/schemas" && cp -R "$(dirname "$HE")/." "$T/scripts/" && cp "$SCHEMA" "$T/schemas/sprint-status.json" \
@@ -74,7 +75,7 @@ HECTL="$T/scripts/validate-handoff-evidence.sh"
 
 # --- worlds -------------------------------------------------------------------------------------------------------
 R="$WORK/worlds"; W=""
-g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$W" -c user.name=r -c user.email=r@example.invalid \
+g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$W" -c user.name=r -c user.email=r@example.invalid \
   -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 SURF='# graph UI tree
 web/src/**'

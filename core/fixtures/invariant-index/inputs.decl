@@ -1,7 +1,8 @@
 # The renderer under test, REQUIRED: the sentinel prints where run.sh locates it. REPO is found by a VERSION marker.
-# controlA runs the renderer over the real tree: the validator's arm headers and the committed index.
+# Every world is a seeded copy carrying its own validator; the real tree's validator and index are not read.
 !scripts/render-invariant-index.sh
-scripts/validate-enforcement-map.sh
-# copy-only: core/fixtures/invariant-index/run.sh:28 run.sh tests for the marker beside the renderer; nothing reads its content
+# copy-only: core/fixtures/invariant-index/run.sh:37 run.sh tests for the marker beside the renderer; nothing reads its content
 VERSION
 core/fixtures/lib/report.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

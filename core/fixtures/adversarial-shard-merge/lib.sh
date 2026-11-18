@@ -7,6 +7,7 @@
 # Every predicate takes the merge script to drive as its first argument, so a mutant is scored by
 # the arm's own body.
 set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 [ -n "${NAME:-}" ] || { echo "FIXTURE ERROR: lib.sh sourced without NAME set" >&2; exit 2; }
 
@@ -716,7 +717,7 @@ new_subj_world() { wc_get subj new_subj_world_build; }
 new_subj_world_build() { # -> prints the shard dir s9/shards/requirements-p1 of a fresh subject world
   local w pa; w="$(mktemp -d "$WORK/sw.XXXXXX")" || return 1; pa="$w/$SUBJ_PA"
   mkdir -p "$pa/s9/shards/requirements-p1" "$w/_bmad-output/specs/s9/kernel" || return 1
-  { SG "$w" init -q . && SG "$w" checkout -q -b main
+  { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$w" init -q . && SG "$w" checkout -q -b main
     { printf '# Brief\n\n## Vision\n\n'; slorem vision 10; } > "$pa/product-brief.md"
     { printf '# PRD\n\n## Current state\n\n'; slorem current 20; printf '\n## Sprint 8\n\n'; slorem s8 20; printf '\n'; } > "$pa/prd.md"
     SG "$w" add -A && SG "$w" commit -q -m base && SG "$w" checkout -q -b sprint-9; } >/dev/null 2>&1 || return 1
@@ -1936,7 +1937,7 @@ dv_git() { # <world> -- commit the installed rulebook at a fixed date in the wor
   ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
     g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=f -c user.email=f@example.invalid \
           -c core.hooksPath=/dev/null -c commit.gpgsign=false "${@:2}"; }
-    g "$1" init -q . && g "$1" add .claude \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$1" init -q . && g "$1" add .claude \
       && GIT_COMMITTER_DATE=2026-01-01T00:00:00Z GIT_AUTHOR_DATE=2026-01-01T00:00:00Z g "$1" commit -q -m rulebook ) >/dev/null 2>&1
 }
 dv_root() { # <world> -- the rulebook, the legacy role file, the repository

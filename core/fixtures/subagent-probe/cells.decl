@@ -1,0 +1,7 @@
+# subagent-probe's starts of core/hooks/ai-dlc-subagent-probe.sh (BL-879 grammar). Every other drive is in process:
+# run.sh loads the hook once (inproc_load) and pipes each payload into sap_main through sap_ip. The hook exits 0 with
+# nothing on stdout on every path, so the cli cells are what it leaves (a row on a pipeline tree, none without a
+# snapshot), each started as FXCELL=<id> bash "$HOOK" in eqv() and compared byte for byte with the in-process call:
+# stdout, stderr, exit, the appended row with its ts deleted, and the final-message file.
+cli core/hooks/ai-dlc-subagent-probe.sh cli-row
+cli core/hooks/ai-dlc-subagent-probe.sh cli-noop

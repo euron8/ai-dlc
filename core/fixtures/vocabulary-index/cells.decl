@@ -1,0 +1,7 @@
+# vocabulary-index's starts of scripts/render-vocabulary-index.sh (BL-879 grammar). Every other drive is in process:
+# run.sh calls rvi_main through inproc_run on each world's renderer copy (vi_run, vi_cap). One cli cell per distinct
+# CLI outcome (exit 0 a render on stdout, exit 1 missing index on stderr, exit 2 usage on stderr), each started as
+# FXCELL=<id> bash <copy> in eqv() and compared byte for byte with the in-process vi_cap of the same id.
+cli scripts/render-vocabulary-index.sh cli-ok
+cli scripts/render-vocabulary-index.sh cli-missing
+cli scripts/render-vocabulary-index.sh cli-usage
