@@ -3704,24 +3704,6 @@ Step: pipeline
 
 verify: manual
 
-## BL-1169 — the BMAD readiness check is invoked three times a sprint, once before epics exist, and the sprint-planning intent writes a file no program reads
-
-Folded into BL-1175 as work item 3 (batch 259, cluster C4b, 2026-11-18; operator ruling: one backlog entry for the planning cycle). Every owed item is carried in BL-1175's text. This is not a close and nothing here shipped; the heading stays until a versioned release stamps and rotates it as superseded by BL-1175.
-
-verify: manual
-
-## BL-1170 — the planning-time trace run feeds a gate leg the step text itself calls disarmed by construction
-
-Folded into BL-1175 as work item 4 (batch 259, cluster C4b, 2026-11-18; operator ruling: one backlog entry for the planning cycle). Every owed item is carried in BL-1175's text. This is not a close and nothing here shipped; the heading stays until a versioned release stamps and rotates it as superseded by BL-1175.
-
-verify: manual
-
-## BL-1171 — every story takes the full party, elicitation and adversarial cycle whatever its risk, and a small sprint pays the whole planning charge
-
-Folded into BL-1175 as work item 2 (batch 259, cluster C4b, 2026-11-18; operator ruling: one backlog entry for the planning cycle). Every owed item is carried in BL-1175's text. This is not a close and nothing here shipped; the heading stays until a versioned release stamps and rotates it as superseded by BL-1175.
-
-verify: manual
-
 ## BL-1173 — the stated reason for not looping `bmad-review` contradicts the current BMAD docs, and a BMAD skill the pipeline invokes can vanish at an upgrade and fail only at the next planning gate
 
 **NOTE.** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/_gate-procedures.md:693–698` and the upgrade path that should run `core/scripts/validate-bmad-invocations.sh`.
@@ -3738,6 +3720,13 @@ Baseline: one contract sentence unverified against the installed skill; the invo
 Expected movement: none on wall clock or dollars; an upgrade to the docs' generation fails at the upgrade and not at a planning gate mid-sprint.
 
 Provenance: batch 259, cluster C4, from the BMAD documentation comparison; id allocated by lead ai-dlc-64.
+
+**PARTIAL (v0.1169.0).** batch 259, C5. Part 1 closed on the reading (installed bmm 6.12.4 lens-adversarial.md:5,8,19 matches `_gate-procedures.md:693-698`). Part 2 shipped in part: `ai-dlc-update` step 7z runs `validate-bmad-invocations.sh` at every ai-dlc pull and reports, never blocks. A BMAD install changed between pulls still surfaces first at Check 32 at the next planning gate, because ai-dlc does not drive `npx bmad-method install`. Owed: a blocking upgrade-time check.
+
+1. Part 1 closed on the reading, with no edit. The consumer's installed bmm 6.12.4 (graph `_bmad/_config/manifest.yaml`) adversarial lens, `.claude/skills/bmad-review/references/lens-adversarial.md:5,8,19`, reads "at least ten", "re-check on zero" and "No severity, priority, or ranking", which is what `_gate-procedures.md:693–698` states for `lenses=adversarial`. The sentence is accurate for the installed version; the docs site describes a later generation. The same claim at `rule-bodies/rule-20.md:81` and `team-roles/adversary.md:29` stands.
+2. Part 2 shipped in this release. `core/skills/ai-dlc-update/SKILL.md` step 7z runs `scripts/ai-dlc/validate-bmad-invocations.sh` after Apply and before step 8 Deliver: exit 1 surfaces each FAIL line as a delivery finding naming the BMAD floor and the remedy `npx bmad-method install`; exit 2 surfaces as SKIP; it never blocks. `enforcement-map.yaml` check 32 gains the call site (`:753–755`). The hand-run probe and its mutant (validator line deleted, read as FAIL) are in this release's commit message.
+
+Movement: none on wall clock or dollars, as expected; a dropped `/bmad-*` name now surfaces at the upgrade that drops it.
 
 Step: pipeline
 
@@ -3793,18 +3782,19 @@ s323 is open: its four planning gates have passed and the figures are at pin `EX
 - The reduced tier does not reduce it. s322 ran `carry-over-single` and paid 36.9 h and $889.
 - Planning is most of a sprint. In s322 it was 36.9 of 66.4 h and $889 of $1,348; implementing all eight stories took 13.0 h and $223.
 
-The planning rounds hold named catches (39 unique survivors in the s321 stories rounds, including that sprint's one CRITICAL, `docs/analysis/step-value-stories-adversarial-s321.md`), so the work below matches depth to the change and removes no round that holds a catch.
+The planning rounds hold named catches (in s321's stories step, 39 unique survivors in the per-story elicitation shards, including the CRITICAL 17#F-1 on story 4.3, `docs/analysis/step-value-stories-elicitation-s321.md:121`; and 8 in adversarial pass 1, including the CRITICAL 19 F-1 on story 5.2, `docs/analysis/step-value-stories-adversarial-s321.md:194`; corrected in batch 259, C5, from a sentence that gave the elicitation count against the adversarial file), so the work below matches depth to the change and removes no round that holds a catch.
 
 ### Work items
 
-Each item states its own acceptance. Items 1 and 2 wait on item 0; items 3 to 5 do not.
+Each item states its own acceptance. Items 1 and 2 waited on item 0; items 3 to 6 do not. Item 6 was added in batch 259, C5. What each item shipped or closed on is under "Progress" below.
 
 0. **The reading that sizes items 1 and 2. No code, no new run.** From graph's s321 to s323 planning artifacts and the step-value files: classify each story as carrying a new requirement, a new architecture decision, both or neither; count the surviving requirements-step, architecture-step and stories-step findings raised against each class and against each routing tag. Also read what the requirements and architecture steps' cost scales with (in-scope stories, document parts, shards per pass), because their hours so far do not follow story count: requirements was 11.1, 9.9 and 13.5 h and architecture 10.0, 5.8 and 5.2 h for 25, 8 and 18 stories. That decides what item 1 saves in a mixed sprint. Done when both tables are in this entry.
 1. **Tier per story on what the story changes, not per sprint on story count** (`route.md:527–543`, `SKILL.md` Rule 8). A story carrying neither a new requirement nor a new architecture decision does not enter the requirements or architecture review series: those documents name it as out of scope and it enters at the stories step. A sprint made only of such stories runs carry-over evaluation and the stories step. Ships only if item 0 shows such stories hold few or no surviving requirements or architecture findings; otherwise it is closed here with that reading. Ceiling on s323, if no story needed either step: 18.7 h (13.5 + 5.2, of which 6.2 h was operator wait) and $447 ($274 + $173).
 2. **Tier the per-story party and elicitation rounds inside the stories step by the routing tag the step already carries** (`stories-test-strategy.md:30`; was BL-1171). Untagged stories take adversarial pass 1 only; capital-path and security-tagged stories keep the full cycle. Ships only if item 0 shows survivors cluster in tagged stories. Estimate: $134 a sprint if 40% of 25 stories are untagged, at s321's $7.49 and $5.96 a story; wall clock moves little because the rounds are parallel.
 3. **One readiness run when the first passes, and no file nobody reads** (`architecture.md:262`, `stories-test-strategy.md:18` and `:542`; was BL-1169). Read the three calls' spawns and findings on s321 and s322; a call with no finding that reached a fix goes. The `intent=sprint-planning` output is not produced when nothing consumes its sprint data. Estimate: 0.5 to 1.2 h and $5 to $11 a sprint, on 10 to 20 minutes and $1.50 a call, to be replaced by the measured figures.
-4. **The planning-time trace gate that cannot fail moves to sprint review** (`stories-test-strategy.md:677–700`; was BL-1170). At planning, a deterministic check fails on a criterion with no mapped case; the trace runs once at sprint review, where its verdict can read FAIL. Hours and dollars: the planning run's measured cost, read from s321 and s322 before the change.
+4. **The planning-time trace gate that cannot fail moves to sprint review** (`stories-test-strategy.md:677–700`; was BL-1170). At planning, a deterministic check fails on a criterion with no mapped case; the trace runs once at sprint review, where its verdict can read FAIL. Hours and dollars: the planning run's measured cost, read from s321 and s322 before the change. As built in batch 259, C5, the item is a removal only: no AC-to-case check and no sprint-review trace run were added (Progress, item 4).
 5. **Pass 2 no wider than what the pass-1 repair changed.** The mechanism is BL-911's and stays there; this item is its planning outcome. On s323 the adversary ran 15 spawns at requirements p1 and 15 at p2, 5 and 5 at architecture, 4, 5 and 4 at carry-over. Join each series' pass-2 width to its changed-part count; if pass 2 is wider than the changed parts plus the cited parts plus one, the defect is reported to BL-911 and fixed there, and this item closes when a sprint shows the narrowed width.
+6. **Passes per series** (added batch 259, C5). After pass 1, s321 to s323 ran 28 further adversarial passes. They hold 1 CRITICAL (s321 architecture p4 F-1, introduced by the p3 repair, text written at `architecture-repair-p3.md:373–383`) and 29 first-authored MAJORs (27 of them in s321). Today every MAJOR less the underived ones counts toward NOT_MET (`core/team-roles/adversary.md:441–465`; `validate-adversarial-convergence.sh:706–710`). A MAJOR that a mechanical join places inside the repair made between pass N-1 and pass N stops counting toward NOT_MET; it still gets its targeted fix and a lead check that the convergence validator can see; a CRITICAL always blocks; a finding that cannot be joined blocks. Candidates scored on the record (estimates apportioned by spawns): the partition (b) removes 7 passes, about 4.4 h less operator wait and $97 over the three sprints, losing 0 CRITICAL and 0 first-authored MAJOR, with 20 MAJORs going to targeted fix; a pass cap of 2 removes 15 passes but loses the s321 CRITICAL and 11 first-authored MAJORs, a cap of 3 removes 6 and loses the CRITICAL and 4; candidate (d) is already shipped. The join must read only the previous pass's repair: under an any-earlier-repair join, s321 architecture p3 reads MET and the p4 CRITICAL is lost. Item 6 is CONTRACTED, and the operator ruled it built in full; it ships in a following C5 release, not this one.
 
 ### Carried text for work items 2, 3 and 4
 
@@ -3883,23 +3873,78 @@ In the carried text below, "this entry" and "close this entry" mean the work ite
 
 ### What is counted here and owned elsewhere
 
-Part of planning's hours and owned elsewhere, because each spans every step and has shipped code and its own outcome line: the single-lane remediator (BL-716: 9.5 h alone in s323's planning, the largest serial role in every planning step), the lead's own call volume (BL-819: 4,623 lead calls and at least 9.3 h with no subagent running in s323's planning), and operator answer wait (BL-972: 12.6 h of s323's planning, reported separately from machine time below). The outcome reading states how much of planning each of the three still holds.
+Part of planning's hours and owned elsewhere, because each spans every step and has shipped code and its own outcome line: the single-lane remediator (BL-716: 9.9 h solo in s323 so far, gates included, `docs/analysis/pipeline-efficiency-s323-provisional-b259/out/poles_allroles.txt:120`; the report's 9.5 h at `pipeline-efficiency-s323-provisional-b259.md:163` excludes the gates; the largest serial role in every planning step), the lead's own call volume (BL-819: 4,623 lead calls in s323's planning, `s323_provisional.txt:77`), and operator answer wait (BL-972: 12.5 h of s323's planning, `s323_provisional.txt:9`, reported separately from machine time below; the table's 39.6 − 27.0 reads 12.6 by rounding). The outcome reading states how much of planning each of the three still holds.
 
 ### Done, and what to expect
 
 Baseline: s322 — 36.9 h (30.0 h less operator wait) and $889 of planning for 8 stories at `carry-over-single`; s323 (PROVISIONAL) 39.6 h (27.0 h) and $1,071 for 18 at `full`.
 
-Expected movement: no figure is set in advance. Each work item removes what its own reading measures, and the outcome reading on the first complete graph sprint that runs items 1 to 5 reports planning hours (with and without operator wait) and dollars against s321 to s323's 27.0 to 36.8 h less operator wait and $889 to $1,298, item by item. What is known now: item 1's ceiling on s323 is 12.5 h less operator wait and $447, reached only if no story needs the requirements or architecture step; for a mixed sprint the saving is unread, because those two steps' cost has not followed story count, and item 0 sizes it. Items 2 to 4 carry their own estimates above, each marked as an estimate. If the outcome reading finds waste the items did not remove, it is added here as a further work item with its measured size.
+Expected movement: no figure is set in advance and there is no pass/fail number. Each work item removes what its own reading measures or estimates, and the outcome reading on the first complete graph sprint that runs the shipped items reports planning hours (with and without operator wait) and dollars against s321 to s323's 27.0 to 36.8 h less operator wait and $889 to $1,298, item by item. Per item, as of batch 259, C5:
 
-Two checks, in this order. BUILD DONE: items 0 to 5 are each shipped or closed on a reading, which is checkable in the batch that builds them, with no graph sprint needed. OUTCOME MEASURED: planning read on the first complete graph sprint that runs the build, against the baseline, item by item. The entry closes on the second when no work item is open; the first is reported when it is reached.
+- Items 0, 1 and 2: nothing removed. Item 0 is a reading; items 1 and 2 closed on it with nothing built (the narrow stories rule not built would have removed an ESTIMATED ~18, 27 and 18 spawns and ~$6 to $74 a sprint).
+- Item 3: 0 h and $0, measured: the same gate run is taken under another intent. The unread file is no longer written.
+- Item 4: the planning trace spawn is removed. Its cost is not attributable (no spawn-ledger row) and no estimate is made.
+- Item 5: owned by BL-911; provisional evidence only (Progress, item 5).
+- Item 6: CONTRACTED, ships in a following C5 release, so no movement from this release. The earlier 7 passes, about 4.4 h and $97 over s321 to s323, is a CEILING, not a forecast. On the current record removal is 0 of 7 passes (no finding carries a joinable cite and no reviewed bytes are kept); under the ALL rule 0 of 3 measurable deciding passes would be removed even with bytes and cites. The real joinable share is first measurable on graph's first sprint after the pull that carries the new grammar.
+- The serial remediator (BL-716), the lead's call volume (BL-819) and operator wait (BL-972) hold most of what remains and are owned there.
 
-Progress is reported as items done of six, each with its measured hours and dollars. Nothing here is PARTIAL-and-parked: an item is open, shipped, or closed on its reading.
+If the outcome reading finds waste the items did not remove, it is added here as a further work item with its measured size.
+
+Two checks, in this order. BUILD DONE: items 0 to 6 are each shipped or closed on a reading, which is checkable in the batch that builds them, with no graph sprint needed. OUTCOME MEASURED: planning read on the first complete graph sprint that runs the build, against the baseline, item by item. The entry closes on the second when no work item is open; the first is reported when it is reached.
+
+Progress is reported as items done of seven, each with its measured hours and dollars. Nothing here is PARTIAL-and-parked: an item is open, shipped, or closed on its reading.
 
 Scope: this entry replaces BL-1169, BL-1170 and BL-1171. It does not own the implementation gates (BL-1166) or the efficiency instrument (BL-1174).
 
 Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`), applied per story class: a step is kept for a class of story only on findings raised against that class.
 
 Provenance: batch 259, cluster C4b (ai-dlc session of 2026-11-18), from the provisional s323 reading and the BMAD documentation comparison. Operator, 2026-11-18: the time spent in planning is out of proportion for a consumer that extends an existing application and fixes bugs; one backlog item for planning, so it is known when it is done and when to expect improvement. Id allocated by lead ai-dlc-64.
+
+### Progress, 2026-11-18 (batch 259, C5)
+
+Readings were taken read only on graph at the refs in the table above (s323 PROVISIONAL, open). Figures are counts from those artifacts unless marked ESTIMATE. No target number applies (operator ruling, 2026-11-18).
+
+**Item 0: done.** Its two readings are the table below and the cost-scaling paragraph after items 1 and 2 ("Planning hours do not track story count"). Each story was classified as carrying a new requirement (NR), a new architecture decision (AD), both, or neither, and its surviving findings were counted by class and by the routing tag `stories-test-strategy.md:30` defines (`escalate_model`, `protected_path_editor`, or untagged).
+
+| Sprint | Stories | Classes | Survivors by routing tag |
+|---|--:|---|---|
+| s321 | 25 | BOTH 25; NR, AD and NEITHER 0 (FR-S321-1..18 and AD-1..12 all new) | Stories step: `escalate_model` (14 stories) 23 elicitation (0 CRITICAL) and 6 adversarial (including CRITICAL 19 F-1); `protected_path_editor` (1) 0 and 0; untagged (10) 16 elicitation (including CRITICAL 17#F-1) and 2 adversarial. Requirements 41 of 42 C/M reached repair; architecture 25 of 25. |
+| s322 | 8 | BOTH 3 (1.2, 1.4, 1.5); NR 5 (1.1, 1.3, and the bug folds 1.6 to 1.8); NEITHER 0 | Fixed C/M per story at carry-over / requirements / architecture / stories: `escalate_model` 1.1 18/29 (1 CRITICAL)/1/4, 1.2 2/3/2/1+1, 1.5 10/23 (1 CRITICAL)/8/0; `protected_path_editor` 1.4 4/4/10/4; untagged 1.3 1/6/1/0 (a finding naming several stories counts once per story, so these do not sum to the class totals). Bug folds, reviewed on the bug path only: 28 C/M (5 CRITICAL, 3 of them on untagged 1.7 and 1.8) and 14 fold-architecture MAJORs, all repaired. Architecture findings sit in BOTH stories (18 against 2 in NR). |
+| s323 (PROVISIONAL) | 18 | Literal: BOTH 8, NR 10, NEITHER 0. Substantive: BOTH 6, NR 3, AD 2, NEITHER 7 | Stories step: `escalate_model` (7 stories) 6 survivors, 0 CRITICAL; untagged (11) 11 survivors, 2 CRITICAL; `protected_path_editor` 0 stories. All 11 architecture survivors are on Epic 1; the 10 non-AD stories hold none. The capital-path story 2-2 and security stories 4-3 and 4-4 are untagged. |
+
+Correction: the s321 survivor figures were previously given against the wrong document. 39 is the elicitation count (`docs/analysis/step-value-stories-elicitation-s321.md:121`); the adversarial count is 8 (`docs/analysis/step-value-stories-adversarial-s321.md:194`). Each document holds its own CRITICAL.
+
+**Items 1 and 2: CLOSED on the reading, by operator ruling. Nothing was built; the narrow rule was not built.** Each rule was tested on all three sprints using only fields that exist when the decision is taken (carry-over item labels, and `architecture-impact.md`'s per-FR impact and paths, written at `requirements.md:264–270`):
+
+- R-arch removes 0 spawns in every sprint, because the spine's parts are design-level sections and not per-FR.
+- R-req loses a CRITICAL in two sprints: s322 requirements p1 cross F-1 on story 1.1, and s323 cross F-1 on story 4-2.
+- The broad R-stories loses the s323 party CRITICAL E4 on story 5-1 (adversarial pass 1 may catch it; unproven).
+- The narrow R-stories (pass 1 only when every FR's draft impact is `none` or touches only test or doc paths; anything unclassifiable takes the full cycle) loses 0 CRITICAL in all three sprints. It gives up 4, 11 and 4 raw MAJORs (s321, s322, s323) for about 18, 27 and 18 spawns, which is ~$6 to $74 a sprint (ESTIMATE), 1 to 5% of planning spend and about 0 wall clock, because the rounds run in parallel.
+- A paths rule derived from s321 and s322 fails on s323, where story 4-2 holds the requirements CRITICAL.
+
+Planning hours do not track story count: 40.8 h for 25 stories, 36.9 h for 8, 39.6 h for 18 (`s323_provisional.txt:75–77`). They track the number of review series times the passes per series. The serial remediator's solo hours are 9.6, 9.2 and 9.9 h for the whole sprint (s323 so far), gates included (`poles_allroles.txt:116`, `:118`, `:120`); in planning alone it rose from 7.8 h to 9.5 h (`pipeline-efficiency-s323-provisional-b259.md:163`). Operator wait is 4.0, 6.9 and 12.5 h (`s323_provisional.txt:75–77`, and for s323 the step rows `:16` and `:21`). In s321 to s323, each carry-over, requirements or architecture step took 560 to 1,202 lead calls (`s323_provisional.txt:12–26`). The levers that remain are passes per series (item 6), the single-lane remediator (BL-716), operator wait (BL-972) and lead calls (BL-819).
+
+**Item 3: SHIPPED in this release.** `stories-test-strategy.md` §3 and `bug-investigation.md` §5 now invoke `/bmad-sprint-planning intent=readiness` and do not create or modify `sprint-status.yaml`. Re-invoke-once and HARD_BLOCK are kept. `gate-validation.md:656` no longer says `/bmad-sprint-planning` populates the sprint's `stories:` mapping: the lead writes those entries at §3, and Check 5's remedy names that site. Evidence:
+
+- Every readiness call that had data produced at least one finding that reached a fix: s321 architecture (4 of 6 minor), s321 stories §1 before epics (M-1), s321 sprint-planning p2 (C-1 and C-2 MAJOR plus 4 minor, all repaired), s322 architecture 4 of 5, s323 architecture 4 of 6. So no call goes.
+- A sweep found no reader of the BMAD-format file that intent writes: `/usr/bin/grep -rnE 'development_status|bmad-sprint-status|intent=sprint-planning' core/skills core/team-roles` gives 3 hits at base c9743e6e5 (the two `intent=sprint-planning` invokers and `route.md:587`, a mover) and 1 at this release's tree (`route.md:587`), none a reader; controls on the same trees: `intent=readiness` 4 and a negative token 0.
+- The swap keeps the catch. The installed skill (`bmad-sprint-planning/SKILL.md:17–18`) makes the sprint-planning intent equal to the readiness gate plus `generate-tracking.md`, and C-1 and C-2 came from the readiness gate.
+
+The "§3 only when §1 returned CONCERNS" half was NOT built: s321's p2 re-run caught C-1 and C-2 MAJOR on epics that did not exist at §1. Movement: 0 h and $0, measured, because the same gate run is taken under another intent. The unread file is no longer written.
+
+**Item 4: SHIPPED in this release, as a removal.** The planning-time `/bmad-testarch-trace` run is gone from `stories-test-strategy.md` test-design step 1, and the carry-over-single paragraph, `gate-validation.md` Check 30's `--trace-verdict` paragraph and `SKILL.md` Rule 30 follow it. Evidence:
+
+- The planning trace read NOT_EVALUATED with `allow_gate=false` in both sprints read, and it wrote no `gate-decision.json`.
+- The contract adversary's join simulation (relayed by the lead, not re-derived here) found 0 of 167 criteria unmapped in s321 and 0 of 146 in s323. s322's 17 unmapped were all in bug folds.
+- The AC-to-test leg is carried by step 2's convergence review, step 3's binding to each story's `## Strategy Test IDs` table, and Check 21 at sprint review (`stories-test-strategy.md:683–689`).
+
+No AC-to-case check and no sprint-review trace run were added. Cost: not attributable, because the spawn ledger has no trace row for s321 or s322 and the tea rows mix test design, strategy and trace with no minutes or dollars. No estimate is made.
+
+**Item 5: OPEN until s323 closes.** No defect was found. s323's pass-2 widths are at the bound (requirements p2 15 spawns for 14 of 14 parts changed; spine p2 5 for 4 of 4; carry-over p2 5 for 4 of 4; stories p2 19 for 18 of 18), because the pass-1 repair touched every part. Carry-over p3 narrowed to 3 of 4 parts, which is PROVISIONAL evidence that the BL-911 narrowing fires. The measured outcome is owned by BL-911.
+
+**Item 6: CONTRACTED, ships in a following C5 release.** The operator ruled it built in full. Mechanism: the merge keeps a snapshot of each reviewed artifact; every C/M finding carries mandatory `quote:` lines; a MAJOR is repair-introduced only if ALL its quotes are new against the previous pass's snapshot. blocking = major - max(underived, repair-introduced), and CRITICAL always blocks. An unquoted or unjoinable finding is blocking (fail closed). A repair-introduced MAJOR still closes only as repaired (J3(a)). A changed-byte share above 25% makes every finding blocking. Numbers: on the current record removal is 0 of 7 passes (no finding carries a joinable cite, and no reviewed bytes are kept); under the ALL rule 0 of 3 measurable deciding passes would be removed even with bytes and cites. The earlier 7 passes, about 4.4 h and $97 over s321 to s323, is a CEILING, not a forecast. The real joinable share is first measurable on graph's first sprint after the pull that carries the new grammar.
+
+**PARTIAL (v0.1169.0).** batch 259, C5. Items 0, 1, 2, 3 and 4 are done (0 read; 1 and 2 closed on the reading by operator ruling; 3 and 4 shipped in this release). Item 5 and item 6 (contracted; ships in a following C5 release), and the outcome measurement on a complete graph sprint, are owed, so the entry stays open. BL-1169, BL-1170 and BL-1171 close as superseded by this entry.
 
 Step: requirements
 

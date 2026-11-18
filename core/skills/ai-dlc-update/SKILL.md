@@ -2788,6 +2788,15 @@ must catch.
 This is why "Layered consumers" below is a fast-forward everywhere EXCEPT at
 declared sites, not everywhere unconditionally.
 
+**Probe the installed BMAD before Deliver (step 7z).** After step 7's apply and before
+step 8, run `scripts/ai-dlc/validate-bmad-invocations.sh` from the consumer root. It is
+the installed engine's copy, so it resolves every `/bmad-*` call site in the rulebook just
+applied against the BMAD skills this consumer has installed. Exit 0: proceed. Exit 1:
+report each `FAIL:` line in the apply summary as a delivery finding, naming the BMAD floor
+the line prints and the remedy `npx bmad-method install`. Exit 2 (DISARMED or usage):
+report it in the apply summary as SKIP, with the line it printed. This never blocks the
+delivery.
+
 8. **Deliver — branch → commit → push → PR → merge.** The reconcile is landed
    through the consumer's normal review flow, never force-written to the working
    branch:

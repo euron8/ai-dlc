@@ -653,8 +653,8 @@ a story inlines — to satisfy a tooling constraint.
     file's own frontmatter, in each canonical copy: the story id as a key under
     `stories:`, carrying `status:` — an entry without it is compared on nothing
     and exits 4 — plus `file:` wherever the path is not derivable from the key.
-    `/bmad-sprint-planning` populates that mapping where it runs, and a
-    `carry-over-single` sprint skips it. Then confirm the transcription with
+    The lead writes those entries by hand at `stories-test-strategy.md` §3.
+    Then confirm the transcription with
     `derive-stories --check`: `0 drifted key(s)` means the entry agrees with the
     story file, and a non-zero count means it does not. Confirm with `--check`
     and not with the write, which would OVERWRITE a wrong transcription and exit
@@ -3068,16 +3068,12 @@ is refused: it is not a way to say "there is none".
 
 The validator prints the population it read on every path. Read that line and record it.
 
-**`--trace-verdict` is NOT passed at this gate, and that is by construction rather
-than by omission.** The only `bmad-testarch-trace` run the pipeline takes is at
-`stories-test-strategy.md` §5, at planning phase, where no story is implemented yet:
-collected coverage is 0, the tool sets `allow_gate=false`, records
-`decision: NOT_EVALUATED`, and deliberately writes no `gate-decision.json`. Passing
-the flag here would name a file that run cannot produce, and this leg would report
-DISARMED at every gate forever. It carries a real verdict only from a trace taken
-AFTER implementation; the pipeline takes no such run today. The flag remains
-supported by the validator so that a post-implementation run can arm it without a
-script change.
+**`--trace-verdict` is NOT passed at this gate.** The pipeline takes no
+`bmad-testarch-trace` run, so no `gate-decision.json` exists to name: the
+`AC → test` leg is carried by the test strategy (`stories-test-strategy.md`, the
+test-design steps 2 and 3) and by Check 21. Do not synthesise `gate-decision.json`
+to arm the flag. The flag remains supported by the validator so that a trace taken
+AFTER implementation can arm it without a script change.
 
 **`CAP-<n>` may carry a single lowercase suffix, and that is the producer's grammar.**
 `bmad-spec` never renumbers, so a capability inserted between two existing ones is
