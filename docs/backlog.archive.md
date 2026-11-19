@@ -46690,3 +46690,25 @@ BL-868: zero load-dependent tests. R3 reads no count, clock or process state; it
 Provenance: batch 260, C2 (lead ai-dlc-ff); id allocated by the lead.
 
 verify: manual
+## BL-1179 — `apply.sh --finish` declares the tree consistent while a generated taught-schema example is stale, so only the consumer's pre-push catches it
+
+**LANDED (v0.1176.0).** **DEFECT.** Filed by the consumer as PC-S323-APPLY-FINISH-DECLARES-CONSISTENT-WHILE-THE-TAUGHT-SCHEMA-EXAMPLE-IS-STALE-SO-ONLY-CONSUMER-PRE-PUSH-CATCHES-IT. Owner: `core/skills/ai-dlc-update/reconcile/apply.sh` (`taught_schema_row`) and `core/skills/ai-dlc-update/reconcile/post-write-gates.sh`.
+
+At 5026369ed the `--finish` dispatch ran `tp_finish_read`, `hook_registration_row`, `transient_ignore_row`, `agent_definitions_row` and `write_stamp`. None of them runs the consumer's `scripts/ai-dlc/sync-taught-schema.sh --check`, so `--finish` printed `RESOLVED consistent` over a stale generated region, and `post-write-gates.sh` ran four gates, none of them that check. The only catcher was the consumer's pre-push (`core/git-hooks/pre-push:365-367`), after the pull had reported success. The consumer hit it on an EXTENSION file, `.claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md`, after a pull advanced `.claude/schemas/provenance-block.json`.
+
+Goal: neither `--finish` nor the post-write gates call a tree consistent while a generated taught-schema example disagrees with the consumer's schemas.
+
+1. `post-write-gates.sh`: a fifth gate, `taught-schema`, before `hard-blockers`, check-only: `AI_DLC_PROJECT_ROOT=<consumer> bash <consumer>/scripts/ai-dlc/sync-taught-schema.sh --check`. An absent script is UNDECIDED. `N_GATES=5`.
+2. `apply.sh`: `taught_schema_row`, dispatched in both orders beside `agent_definitions_row` (under `--finish`, before `write_stamp`). It runs the consumer's copy, never the distribution's, captured `> file 2>&1` with the code read on the next statement, and never runs the sync. Rows: `WORKLIST taught-schema` (each stale file; remedy the sync, after every merge row), `WORKLIST taught-schema-region` (`file:line` of a hand-written example, an unknown profile or an unclosed region; remedy a hand edit), `NOTE taught-schema-merge-first` (a stale file still owed a semantic merge, read through `finish_classify_unmerged`, kept out of the sync row), `DECISION taught-schema-unchecked` (schema present, script absent), `DECISION taught-schema-unparsed` (exit 1 with no nameable `FAIL` line, or 126/127/other) and `DECISION taught-schema-unreadable` (exit 2, or no staging directory). No row on exit 0, or with neither the script nor the schema present. Under `--finish` the two `WORKLIST` rows withhold the stamp.
+3. `core/skills/ai-dlc-update/SKILL.md`: five post-write gates, the taught-schema gate in the unpiped capture form, the `--finish` paragraph, and the two `WORKLIST` rows on the list of rows that withhold the stamp.
+4. Fixtures: unit `ts` of `core/fixtures/apply-restamp-worklist` (shard c, run by `core/fixtures/apply-restamp-worklist-c`) drives `apply.sh --finish` on a stale world, a current world, a script-absent world, a hand-written-only world, a corrupt-schema world, a two-stale-file world and a schema-present script-absent world. `core/fixtures/post-write-gates` gains the real arm `RTS` and reads 5/5.
+
+Done condition: the receipt below exits 0. Shard c of `apply-restamp-worklist` passes with unit `ts` reporting, and the real `RTS` arm of `post-write-gates` passes on the shipped runner.
+
+BL-868: no new arm's verdict or count depends on load; none times, retries or reads a pool width.
+
+The `invocations.decl` and `FORK_BUDGET` rows these fixtures move are ratcheted by the lead on the bundle tree, not by this entry's hands.
+
+Provenance: batch 260, C1; id allocated by the lead.
+
+verify: sh A=core/fixtures/apply-restamp-worklist-c/run.sh; P=core/fixtures/post-write-gates/run.sh; [ -f "$A" ] && [ -f "$P" ] || exit 9; a="$(bash "$A" 2>&1)" || exit 1; n="$(grep -cE '^  ok    TS-W1 ' <<<"$a")" || n=0; [ "$n" -ge 1 ] || exit 1; p="$(bash "$P" 2>&1)" || exit 1; grep -qxF '  ok    RTS on the shipped runner' <<<"$p"

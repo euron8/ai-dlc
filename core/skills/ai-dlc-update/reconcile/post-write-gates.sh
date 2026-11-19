@@ -36,6 +36,8 @@
 #   leftover-tokens     a template `{token}` surviving on a live line of a team-role file
 #   setup-site-drift    reconcile/setup-site-drift.sh <dist> <consumer> <theirs>
 #   hook-registration   <consumer>/scripts/ai-dlc/validate-hook-registration.sh --root <consumer>
+#   taught-schema       AI_DLC_PROJECT_ROOT=<consumer> <consumer>/scripts/ai-dlc/sync-taught-schema.sh --check
+#                       (check-only: the generated taught-schema examples match the consumer's schemas)
 #   hard-blockers       reconcile/hard-blockers.sh --post-apply <dist> <base> <consumer> <theirs>
 # `--stub <gate>=<script>` REPLACES the command of one NAMED gate with `bash <script>`, so a fixture
 # can drive the verdict logic with a gate whose output and status it controls. It cannot add or
@@ -55,8 +57,8 @@ set -uo pipefail
 
 PROG=post-write-gates
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GATES="leftover-tokens setup-site-drift hook-registration hard-blockers"
-N_GATES=4
+GATES="leftover-tokens setup-site-drift hook-registration taught-schema hard-blockers"
+N_GATES=5
 
 # --- the leftover-token gate, as a subcommand so it is captured like every other gate ---------
 # SKILL.md's form is `grep -rn '{[a-z_]*}' <consumer>/.claude/team-roles/ | grep -v '<!--'`, whose
@@ -137,6 +139,8 @@ for gate in $GATES; do
                          set -- bash "$prog" "$DIST" "$CONSUMER" "$THEIRS" ;;
       hook-registration) prog="$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh"
                          set -- bash "$prog" --root "$CONSUMER" ;;
+      taught-schema)     prog="$CONSUMER/scripts/ai-dlc/sync-taught-schema.sh"
+                         set -- env AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$prog" --check ;;
       hard-blockers)     prog="$SELF/hard-blockers.sh"
                          set -- bash "$prog" --post-apply "$DIST" "$BASE" "$CONSUMER" "$THEIRS" ;;
     esac

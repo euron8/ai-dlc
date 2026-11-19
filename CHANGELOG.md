@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1176.0] - 2026-11-19
+
+### PC-S323-APPLY-FINISH-DECLARES-CONSISTENT-WHILE-THE-TAUGHT-SCHEMA-EXAMPLE-IS-STALE-SO-ONLY-CONSUMER-PRE-PUSH-CATCHES-IT (BL-1179 closed): a pull no longer reports a consistent tree over a stale taught-schema example
+
+- Before this release, a pull that advanced a schema in `.claude/schemas/` could finish with `apply.sh --finish` printing `RESOLVED consistent` and the post-write gates passing while a generated taught-schema example under `.claude/skills` or `.claude/team-roles` (extensions included) was stale. Only the consumer's pre-push caught it, after the pull had reported success.
+- `post-write-gates.sh` now runs five gates. The new one, `taught-schema`, runs the consumer's own `scripts/ai-dlc/sync-taught-schema.sh --check` with `AI_DLC_PROJECT_ROOT` set to the consumer. It only checks and writes nothing. A missing script reads UNDECIDED, never PASS.
+- `apply.sh` runs the same check on every run. Under `--finish` it withholds the stamp on `WORKLIST taught-schema` (each file whose generated example is stale; run `bash scripts/ai-dlc/sync-taught-schema.sh` once every merge row is done) and on `WORKLIST taught-schema-region` (a hand-written example, an unknown profile or an unclosed region, named by `file:line`; edit the file as the check's `FIX` text says). A stale file still owed a semantic merge is named on `NOTE taught-schema-merge-first` instead, because the merge brings upstream's region. A check that could not run or be read is a `DECISION` row (`taught-schema-unchecked`, `-unparsed`, `-unreadable`) and does not withhold. Neither `apply.sh` nor `post-write-gates.sh` runs the sync itself.
+- The update skill's post-write-gates text, its unpiped fallback list and its list of rows that withhold the stamp name the new gate and rows.
+- Consumer note: the update skill and its reconcile directory are bootstrapping, so this release ships alone. The engine half is live from step 3 of the delivering pull.
+
 ## [0.1175.0] - 2026-11-19
 
 ### PC-S323-SELF-UPDATE-GATE-HAS-NO-DELETION-COUPLED-FIXTURE-ARM-SO-A-DELETION-RANGE-SELF-UPDATE-IS-RED-BY-CONSTRUCTION (BL-1180): the self-update gate defers a pull that deletes a fixture file the consumer still holds

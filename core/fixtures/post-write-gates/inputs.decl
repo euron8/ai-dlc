@@ -7,3 +7,7 @@ core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/layout.sh
 core/fixtures/lib/world.sh
+# The taught-schema gate runs the consumer copy of sync-taught-schema.sh over the two taught schemas.
+!core/scripts/sync-taught-schema.sh
+!core/schemas/provenance-block.json
+!core/schemas/gate-adjudication-verdict.json
