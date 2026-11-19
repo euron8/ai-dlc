@@ -114,6 +114,16 @@ for your findings, and (d) a shared context block. You MUST:
    **State your probes under their own `## ` section, never under `## Findings`:** every
    `### ` there is a finding and carries its UPPERCASE severity (FINDING GRAMMAR,
    `merge-adversarial-shards.sh`'s header).
+
+   **Every CRITICAL and every MAJOR finding carries one or more `quote:` lines**, sharded or
+   not. Each holds a span copied verbatim from the artifact text you reviewed, at least 20
+   characters, one line per cited location: never paraphrase, abbreviate, re-wrap or join
+   two lines into one span. In files or subject mode the span opens with the stem it comes
+   from, `quote: <stem>: <span>`, where `<stem>` is the story or subject file's basename
+   without `.md` (the stem `artifact_sha` pairs with its sha): story file `story-1-k.md` gives
+   `quote: story-1-k: <span>`. Choose a span that occurs exactly once in the artifact. A
+   CRITICAL or MAJOR with no `quote:` line, or whose span the merge cannot find exactly once
+   in the bytes you reviewed, counts as blocking.
 5. **As a shard** — your brief carries `shard: <ordinal>/<K> <basename>` or
    `shard: cross/<K> g1/1 <ordinals>` (Rule 28, "Split dispatch": files axis). Review only
    your story; as the cross shard, read EVERY story
@@ -411,6 +421,9 @@ findings_critical: <int>                    # the residue the verdict is adjudic
 findings_critical_prior_scope: <int>        # of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'.
 findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.
 findings_major_underived: <int>             # of the MAJORs above, those whose ONLY defect is a MISSING DERIVATION -- a count, a universal, a call-site list or a negative asserted without one, which you have NOT shown to be false. These are RECORDED and do NOT block the exit condition; a MAJOR you have shown WRONG still does. OPTIONAL, and ABSENT MEANS ZERO -- the inverse of findings_critical_prior_scope's default, deliberately. There, absent means ALL, because assuming a cycle has not progressed is the safe assumption. Here, absent means NONE, because assuming a claim is merely unproven is not: an omission leaves every MAJOR blocking, exactly as before this field existed, so no pre-existing block changes verdict and a producer that never emits it can only be stricter, never laxer. It may never exceed findings_major -- that is arm B's business, not the reader's.
+findings_major_repair_introduced: <int>     # WRITTEN BY merge-adversarial-shards.sh, never by an adversary: of the MAJORs above, those every `quote:` span of which the repair between the series predecessor and this pass wrote (THE REPAIR-INTRODUCED CLASS). blocking = findings_major - max(findings_major_underived, this). ABSENT MEANS ZERO, and the validator reads it only from a merged pass; arm R re-derives it at the gate.
+findings_major_unjoined: <int>              # WRITTEN BY merge-adversarial-shards.sh: of the MAJORs above, those the repair-introduced join could not place (no quote, a quote not exactly once in this pass's bytes, no snapshot, or the 25% rewrite ceiling). Each one blocks.
+repair_introduced_keys: <shard-file>#<id> ... # WRITTEN BY merge-adversarial-shards.sh when findings_major_repair_introduced > 0: the J3 key of each repair-introduced MAJOR. Arm J3 closes these only by a repair record, never by a deferral.
 findings_minor: <int>                       # the nitpick bucket. Does not block the exit condition.
 resolves_divergence: <path to the resolution record> # ONLY on the verification pass, and only if the pass before you STOPPED.
 verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK> # required on every adversarial-review pass. There is no free-text verdict.
@@ -452,6 +465,18 @@ CRITICAL and MAJOR counts.
   actually close them, take it. **The ceiling licenses an exit; it does not compel one.**
 - any CRITICAL, or **more than three** MAJORs that are **not** counted in
   `findings_major_underived` → `EXIT_CONDITION_NOT_MET`. The exit is closed.
+
+**A MAJOR the previous repair wrote does not block the exit; the merge decides which those
+are, never you.** A MAJOR is repair-introduced when every one of its `quote:` spans is text
+the repair between the previous pass and this one wrote. The merge computes that class from
+the reviewed bytes and writes `findings_major_repair_introduced:`, `findings_major_unjoined:`
+and `repair_introduced_keys:` (`<shard>#<id>`) into the pass header. You never write those
+fields and never label a finding repair-introduced; grade and report every MAJOR on the
+ladder above, and stamp your own verdict from the three bullets above on your own counts. The gate's blocking MAJOR count is
+`findings_major - max(findings_major_underived, findings_major_repair_introduced)`, declared
+in `validate-adversarial-convergence.sh`. A CRITICAL always blocks, whatever text it cites. A
+repair-introduced MAJOR is still owed a repair: its key closes only as `repaired`, never as
+`DEFERRED`.
 
 **PREFER MET AT OR BELOW THE CEILING UNLESS YOU CAN NAME WHAT THE NEXT PASS CLOSES.**
 What the ceiling exists to end is the plateau this loop can sit in: 0 CRITICAL against

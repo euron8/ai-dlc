@@ -154,6 +154,8 @@ subs = {
     "findings_critical_prior_scope": "0",
     "findings_major": "0",
     "findings_major_underived": "0",
+    "findings_major_repair_introduced": "0",
+    "findings_major_unjoined": "0",
     "findings_minor": "1",
     "verdict": "EXIT_CONDITION_MET",
 }

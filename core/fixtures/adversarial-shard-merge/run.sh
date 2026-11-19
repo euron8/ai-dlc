@@ -58,20 +58,20 @@ NAME="adversarial-shard-merge"
 #                              reserved-form refusals, the cross-owner arms
 #   b  xs fi fg                X (K=8 cross groups), the series stem S, the finding id FI, fences. DIST-ONLY: the shipped
 #                              merge in place over worlds this file builds
-#   c  dv b726                 the derived set DV/PC (BL-911), BL726
+#   c  dv b726 ri              the derived set DV/PC (BL-911), BL726, the repair-introduced class RI (BL-1175)
 #   d  rr sd cs k t            re-run RR/DW, the summed prior scope, --check-shard CS, arm K, the dispatch id T (the
 #                              real remediation-guard hook in place)
 SHARDS="a b c d"
 UNITS_a="core subj doc rs ch h"
 UNITS_b="xs fi fg"
-UNITS_c="dv b726"
+UNITS_c="dv b726 ri"
 UNITS_d="rr sd cs k t"
 DIST_SHARDS="b"
 # The units whose verdict can depend on placement; the join fails if one is undeclared or dealt to a DIST_SHARDS
 # shard: core runs the in-place merge CLI and --pair-sep readers; dv reads the located rulebook and runs the
 # validator siblings in place; b726 reads the installed provenance schema; cs runs wait-for-deliverable in place;
-# k reads the located schema; t drives the real located remediation-guard hook.
-PLACED_UNITS="core dv b726 cs k t"
+# k reads the located schema; t drives the real located remediation-guard hook; ri runs the validator sibling in place.
+PLACED_UNITS="core dv b726 cs k t ri"
 GROUP=a
 while [ $# -gt 0 ]; do
   _a="$1"; shift
@@ -1130,6 +1130,25 @@ else
   else bad "DVRS: FIXTURE BROKEN -- serial-remediation-worklist.sh is not beside the merge; the shipped sequence cannot run"; fi
 fi
 fi # sg dv
+
+if sg ri; then
+echo
+# RI: THE REPAIR-INTRODUCED CLASS (BL-1175 item 6), lib.sh ri_world: p1 and p2 merged, two repairs, p3's quoted
+# shards merged end to end, the gate's arm R re-deriving each.
+p_ri1 "$MERGE" && ok "RI1: p3 (8 MAJOR, 2 underived) quoting 3 spans only the second repair wrote, 2 the FIRST repair wrote, a mixed new+old, an old line and none: findings_major_repair_introduced 3, unjoined 1, keys {$RI_KEYS_WANT}; arm R re-derives and agrees, and FAILS the same pass edited to 2" \
+  || bad "RI1: stage ${RI_STAGE:-?}: rc=${RC:-?} [$RI_GOT] $(grep -m1 'REFUSED' "$MO") $(grep -m2 '(R -- ' "$CO")"
+[ -n "${RI_S:-}" ] && has "$MO" "blocking=5" && [ "$(ri_hdr "$RI_S" verdict)" = EXIT_CONDITION_NOT_MET ] \
+  && ok "RI6: the margin -- RI1's merge reads blocking 8 - max(2, 3) = 5 > 3, EXIT_CONDITION_NOT_MET (a join reading p1 counts 5 and MET; one subtracting both counts 3 and MET)" \
+  || bad "RI6: $(grep -m1 'blocking=' "$MO") verdict [$(ri_hdr "${RI_S:-/nonexistent}" verdict 2>/dev/null)]"
+p_ri5 && ok "RI5: after three merges adversarial-snapshots/ holds 6 snapshots and git status lists none of them (it lists the p3 pass file)" \
+  || bad "RI5: [$RI_GOT]"
+p_ri7 "$MERGE" && ok "RI7: p2's snapshots deleted after p3 merged, p3 re-merged: the stored r 3 stands, UNCHANGED, the NOTE names the absent snapshot, the pass bytes unchanged" \
+  || bad "RI7: stage ${RI_STAGE:-?}: [$RI_GOT] $(grep -m1 'NOTE' "$MO")"
+p_ri2 "$MERGE" && ok "RI2: p2's snapshots deleted, p1's kept: r 0, unjoined 8, no keys line, NOT_MET, the merge says why; arm R PENDING for p3, no FAIL" \
+  || bad "RI2: stage ${RI_STAGE:-?}: rc=${RC:-?} [$RI_GOT] $(grep -m2 '(R -- ' "$CO")"
+p_ri4 "$MERGE" && ok "RI4: the second repair rewrote over 25% of story 2: r 0, unjoined 8, NOT_MET, the merge names the stem" \
+  || bad "RI4: stage ${RI_STAGE:-?}: rc=${RC:-?} [$RI_GOT] $(head -3 "$MO")"
+fi # sg ri
 
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi

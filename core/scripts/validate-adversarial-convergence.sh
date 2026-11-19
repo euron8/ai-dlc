@@ -408,6 +408,21 @@ VALID_VERDICTS="EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK"
 # NOT claim. What you may DECLINE to claim is the reviewer's judgment.
 CRITICAL_EXIT_CEILING=0
 MAJOR_EXIT_CEILING=3
+# THE BLOCKING FORMULA, declared once (BL-1175 item 6). merge-adversarial-shards.sh loads this function
+# (ri_formula_load) as it reads the ceilings above; the main loop below calls it for arms B and E.
+#   blocking_major <major> <underived> <repair_introduced> -> BLOCKING_MAJOR
+#   = major - max(underived, repair_introduced). No per-finding underived marker exists, so the max avoids
+#   subtracting one MAJOR twice. An underived count above major subtracts nothing (arm B refuses it).
+#   CRITICAL is not in it: a CRITICAL always blocks, whatever its class.
+blocking_major() {
+  local m="$1" u="${2:-0}" r="${3:-0}" x
+  BLOCKING_MAJOR="$m"
+  [ -n "$m" ] && [ "$u" -le "$m" ] 2>/dev/null || return 0
+  x="$u"
+  [ "$r" -gt "$x" ] 2>/dev/null && x="$r"
+  [ "$x" -le "$m" ] && BLOCKING_MAJOR=$((m - x))
+  return 0
+}
 
 # THE DISPATCH-ID GRAMMAR, declared once; merge-adversarial-shards.sh reads both lines from here as
 # it reads the ceilings above. The PREFIXES are what arm K and K3 accept as "carries an id": a
@@ -628,6 +643,8 @@ P_RESOLVES=()
 P_AT=()
 P_CRIT=()
 P_MAJOR=()
+P_RI=()
+P_RI_HAS=()
 P_NUM=()
 # Arm C's verdict per pass, held until the series is known (see the arm-C resolution block
 # after arm F). P_CDIV[i] is 1 iff pass i diverged on prior scope without stamping
@@ -703,12 +720,24 @@ for f in "${SORTED[@]}"; do
   # exactly `major` => this degrades to EXACTLY the pre-split predicate. Every block written
   # before this field existed keeps its verdict, and a producer that never emits it can only be
   # stricter, never laxer. A default of "all" here would let an omission RELEASE the exit.
-  underived="$(block_field "$f" 'findings_major_underived' | tr -cd '0-9')"
-  [ -z "$underived" ] && underived=0
-  blocking="$major"
-  if [ -n "$major" ] && [ "$underived" -le "$major" ] 2>/dev/null; then
-    blocking=$(( major - underived ))
-  fi
+  #
+  # findings_major_repair_introduced (BL-1175 item 6) is the MERGE's count of MAJORs the predecessor's repair
+  # wrote (merge-adversarial-shards.sh, THE REPAIR-INTRODUCED CLASS). ABSENT MEANS ZERO, as underived does,
+  # and it is read only from a MERGED pass (its block carries `shard_tool_use_ids:`, a line only the merge
+  # writes): a pass an adversary wrote itself never classes its own findings. Arm R re-derives it at the gate.
+  # One read for the three lines: each value is block_field's (the first line of that key in a block),
+  # with every non-digit dropped.
+  set -- $(awk '/SKILL_INVOCATION_PROVENANCE v1/ { inblk = 1; next } /SKILL_INVOCATION_PROVENANCE_END/ { inblk = 0 }
+    inblk && !("u" in g) && /^findings_major_underived:/ { g["u"] = 1; v = $0; sub(/^findings_major_underived:/, "", v); gsub(/[^0-9]/, "", v); u = v }
+    inblk && !("r" in g) && /^findings_major_repair_introduced:/ { g["r"] = 1; v = $0; sub(/^findings_major_repair_introduced:/, "", v); gsub(/[^0-9]/, "", v); r = v }
+    inblk && /^shard_tool_use_ids:/ { s = 1 }
+    END { print (u == "" ? "-" : u), (r == "" ? "-" : r), ("r" in g) ? 1 : 0, s + 0 }' "$f")
+  underived="${1:--}"; ri="${2:--}"; ri_has="${3:-0}"
+  [ "$underived" = "-" ] && underived=0
+  [ "${4:-0}" = 1 ] || ri_has=0
+  P_RI+=("$ri"); P_RI_HAS+=("$ri_has")
+  { [ "$ri" = "-" ] || [ "${4:-0}" != 1 ]; } && ri=0
+  blocking_major "$major" "$underived" "$ri"; blocking="$BLOCKING_MAJOR"
   invoked_at="$(block_field "$f" 'invoked_at')"
 
   P_FILE+=("$f")
@@ -814,10 +843,15 @@ for f in "${SORTED[@]}"; do
       write the number: an inflated partition is the one edit that turns this split into a
       free EXIT_CONDITION_MET, which is why it is refused rather than clamped."
     fi
+    if [ "$ri" -gt "$major" ]; then
+      err "B -- CONSISTENCY" "$f declares findings_major_repair_introduced=$ri but only
+      $major MAJOR. The merge counts repair-introduced MAJORs among findings_major; a count above it
+      is an edited block. Re-merge the pass."
+    fi
     if [ "$verdict" = "EXIT_CONDITION_MET" ] \
        && { [ "$crit" -gt "$CRITICAL_EXIT_CEILING" ] || [ "$blocking" -gt "$MAJOR_EXIT_CEILING" ]; }; then
       err "B -- CONSISTENCY" "$f stamps EXIT_CONDITION_MET while reporting
-      $crit CRITICAL and $blocking blocking MAJOR ($major MAJOR less $underived underived).
+      $crit CRITICAL and $blocking blocking MAJOR ($major MAJOR less $underived underived$([ "$ri" -eq 0 ] || printf ', or %s repair-introduced where that is more' "$ri")).
       The exit criteria are $CRITICAL_EXIT_CEILING CRITICAL and at most $MAJOR_EXIT_CEILING
       blocking MAJOR (team-roles/adversary.md severity ladder: MINOR/NIT is the nitpick bucket,
       and a MAJOR whose only defect is a missing derivation is counted in
@@ -2826,6 +2860,50 @@ if [ -n "$n_cand" ]; then
 fi
 
 # =============================================================================
+# R. REPAIR-INTRODUCED -- the header's count is the merge's own join, re-derived (BL-1175 item 6).
+# =============================================================================
+# GATE ONLY, like N: --cycle-state has exited above. Arms B and E read the HEADER count
+# (`findings_major_repair_introduced:`); this arm re-derives it through
+# `merge-adversarial-shards.sh --repair-introduced <pass>` (THE REPAIR-INTRODUCED CLASS there), never
+# reimplementing the join, and the re-derivation writes nothing.
+#   subject    every pass after the series' first whose block carries the field. A pass with no field
+#              (merged before this release, or written by one adversary) reads 0 and forks nothing.
+#   FAIL       both snapshots readable (the derivation answers, exit 0) and its count, or its key list (J3
+#              trusts `repair_introduced_keys:`), differs from the header.
+#   PENDING    printed, never counted: a snapshot absent or unreadable, or the derivation refused.
+# CALIBRATION of the merge's 25% changed-byte ceiling, measured by `--repair-introduced` itself (its `H` rows)
+# over graph blobs, read-only, each snapshot hashing to the pass's notarized artifact_sha:
+#   s321 architecture p3->p4        18.2%   (50870 of 278143 bytes)
+#   s321 test-strategy p4->p5       10.6%   (9509 of 89571)
+#   s323 coe p1->p2                 16.5%   (53883 of 325556)
+#   s322 ARCHITECTURE-SPINE p1->p2  49.7%   (16998 of 34180)
+# so the ceiling passes the three ordinary repairs and trips on the spine rewrite.
+r_cand=""
+for ((i = 1; i < N; i++)); do
+  [ "${P_RI_HAS[$i]:-0}" = 1 ] && r_cand="$r_cand $i"
+done
+if [ -n "$r_cand" ]; then
+  R_MERGE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-adversarial-shards.sh"
+  [ -f "$R_MERGE" ] || { echo "validate-adversarial-convergence.sh: arm R cannot re-derive: $R_MERGE is absent; no verdict" >&2; exit 2; }
+  for i in $r_cand; do
+    r_f="${P_FILE[$i]}"; r_b="$(basename "$r_f")"
+    r_out="$(bash "$R_MERGE" --repair-introduced "$r_f" 2>/dev/null)"; r_rc=$?
+    case "$r_rc" in
+      0)
+        r_got="$(printf '%s\n' "$r_out" | awk -F'\t' '$1 == "REPAIR-INTRODUCED" { print $2 "|" $4; exit }')"
+        r_hk="$(block_field "$r_f" 'repair_introduced_keys')"; r_hk="$(printf '%s' "$r_hk" | tr -s ' \t' ' ')"; r_hk="${r_hk# }"; r_hk="${r_hk% }"
+        if [ "$r_got" != "${P_RI[$i]}|$r_hk" ]; then
+          err "R -- REPAIR-INTRODUCED" "$r_b declares findings_major_repair_introduced=${P_RI[$i]} with keys {${r_hk}}, but the merge's
+      join over its snapshots derives ${r_got%%|*} with keys {${r_got#*|}} (merge-adversarial-shards.sh --repair-introduced $r_b).
+      The count is the merge's, never an author's: arms B and E subtract it from findings_major.
+      Re-merge the pass from its shards, or restore the block the merge wrote."
+        fi ;;
+      *) echo "PENDING (R -- REPAIR-INTRODUCED): $r_b: the derivation did not answer (exit $r_rc): $(printf '%s\n' "$r_out" | head -1)" ;;
+    esac
+  done
+fi
+
+# =============================================================================
 # L. ELICITATION -- the stories step's Advanced Elicitation ran in the SHARDED shape.
 # =============================================================================
 # GATE ONLY, like K: --cycle-state has exited above, and this arm reads git.
@@ -4222,6 +4300,9 @@ fi
 #              `<stem>-deferral-p<M>.md` beside the pass, `<step>` equal to the successor J3_SUCCESSORS
 #              declares for the stem. A stem with no row (stories, architecture) has no successor
 #              artifact that carries a finding forward, so only (a) closes its MAJORs.
+#              A key the pass lists in `repair_introduced_keys:` (BL-1175 item 6: a MAJOR the merge counted
+#              non-blocking because the predecessor's repair wrote it) closes ONLY under (a), never (b): its
+#              targeted fix and the lead's check are the record that buys the non-blocking count.
 #   FAIL       a key closed by neither, a key deferred to another step, or fewer MAJOR headings than
 #              findings_major (a MAJOR nothing can name is one nothing can close) -- when the series'
 #              FIRST pass is at or after the first commit stamping `.claude/.ai-dlc-version` at
@@ -4409,6 +4490,9 @@ if [ "$J3_OPEN" -eq 1 ]; then
   j3_succ "$j3_stem"
   : > "$AC_T/j3-def"
   [ -f "$j3_dir/${j3_stem}-deferral-p${j3_m}.md" ] && j3_deferrals "$j3_dir/${j3_stem}-deferral-p${j3_m}.md" > "$AC_T/j3-def"
+  # The keys the merge counted REPAIR-INTRODUCED (non-blocking at MET): (a) REPAIRED closes them, (b) never.
+  : > "$AC_T/j3-ri"
+  for j3_t in $(block_field "$LAST_FILE" 'repair_introduced_keys'); do printf '%s\n' "$j3_t"; done > "$AC_T/j3-ri"
   j3_bad="$(awk -F'\t' -v pd="$j3_pd" -v succ="$J3_SUCC" -v m="$j3_m" '
     function norm(t,   p) { if (index(t, pd "/") == 1) t = substr(t, length(pd) + 2)
       else { p = index(t, "/" pd "/"); if (p) t = substr(t, p + length(pd) + 2) }
@@ -4418,12 +4502,14 @@ if [ "$J3_OPEN" -eq 1 ]; then
     FILENAME == ARGV[1] { if ($0 != "") k[++nk] = $0; next }
     FILENAME == ARGV[2] { r[norm($1)] = 1; next }
     FILENAME == ARGV[3] { d[norm($1)] = $2; next }
+    FILENAME == ARGV[4] { if ($0 != "") ri[norm($1)] = 1; next }
     END { for (i = 1; i <= nk; i++) { x = k[i]; if (x in r) continue
+            if ((x in d) && (x in ri)) { print "        " x ": repair-introduced (repair_introduced_keys), so non-blocking at MET only on its targeted repair; deferred to " d[x] ", which never closes it"; continue }
             if (x in d) { if (succ != "" && d[x] == succ) continue
               if (succ == "") print "        " x ": deferred to " d[x] ", but this step declares no successor that carries a finding forward"
               else print "        " x ": deferred to " d[x] ", not to " succ ", the step after this one" }
             else print "        " x ": repaired on no linked record of pass " m " and deferred by none" } }' \
-    "$AC_T/j3-keys" "$AC_T/j3-tok" "$AC_T/j3-def")"
+    "$AC_T/j3-keys" "$AC_T/j3-tok" "$AC_T/j3-def" "$AC_T/j3-ri")"
   if [ "$j3_unkeyed" -gt 0 ]; then
     j3_bad="${j3_bad:+$j3_bad
 }        ${j3_unkeyed} of findings_major ${LAST_MAJOR} carry no MAJOR \`### \` heading under \`## Findings\`, so no key names them.
