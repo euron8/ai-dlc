@@ -2,7 +2,7 @@
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
 # review-shard-merge/run.sh -- partition-review-diff.sh and merge-review-shards.sh, the part set
 # and the JOIN of a sharded gate-1 code review and of a sharded gate-2 QA validation (--gate qa;
-# arms Q1-Q16, S7-S10), and (BL-737) the seat's shard pre-check, the owner tails, the marker key, the
+# arms Q1-Q16), and (BL-737) the seat's shard pre-check, the owner tails, the marker key, the
 # content seal on review shards and the legacy rule (arms CS1-FT1). The predicates live in `lib.sh`
 # beside this file; each runs the real, unmutated subject.
 #
