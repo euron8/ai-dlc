@@ -86,9 +86,10 @@
 #       set is zero, so a blanket arm wedges nothing and no base is needed to acquit anyone.
 #       NARROWING TO ZERO (measured over 221 shipping run.sh, 88 loaders): a rule keyed on fx_skip_exit alone cannot fire
 #       (60 run.sh call it for unrelated SKIPs; the gate is a hand-rolled halves check per fixture); the guard-token
-#       plus `_main() {` pair read on the code before the first top-level load left 6 ungated, all genuine
-#       (emit-report-refusal, reconcile-emit-report, ledger-reverify, ledger-reverify-unfalsifiable,
-#       story-evidence-scaffold, readset-skip), and each carries the gate. readset-skip-b, -c and -d load nothing in
+#       plus `_main() {` pair read on the code before the first top-level load left 6 ungated, 2 of them falsely (emit-report-refusal and reconcile-emit-report were gated in
+#       reconcile-emit-report/seed.sh:32-43, which this arm does not read; each now also carries a redundant run.sh gate
+#       the arm requires) and 4 genuine (ledger-reverify, ledger-reverify-unfalsifiable, story-evidence-scaffold,
+#       readset-skip); review-reroute and wait-beat-liveness, found by the widening, were genuine too. readset-skip-b, -c and -d load nothing in
 #       their own run.sh (they exec the parent) and are no population. A gate that is a library call is not read.
 #
 # --derive IS A STATIC JOIN, deterministic (rows LC_ALL=C sorted, no time, no path): every fixture the join refuses,

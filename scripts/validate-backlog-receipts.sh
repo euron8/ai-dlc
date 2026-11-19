@@ -1153,7 +1153,7 @@ fi
 #      added set, `.mvchg`). An unchanged entry is never re-judged, so the existing corpus cannot
 #      wedge a push; no origin/main, no set, no verdict. It fires on either of two spellings:
 #        (1) the `Expected movement:` line states a comparator then a figure: `at or below`, `at or
-#            under`, `at most`, `no more than`, `or less`, `or below`, `under`, `below`, `<=` or `≤`,
+#            under`, `at most`, `no more than`, `or less`, `or below`, `under`, `below`, or `<=`,
 #            then optional `$` and a digit. The motivating case is BL-1175 at f4c9810a1: "planning
 #            less operator wait at or below 15 h" (removed by c9743e6e5).
 #        (2) anywhere in the entry text, `target` or `target number`, optionally `of|is|was|at|for`,
@@ -1211,7 +1211,7 @@ function eflush(   sok, vd, von, ntok, vcf, tt, mt) {
   tt = text; gsub(/[Nn]o target( number)?|[Nn]ot an? target/, "", tt)
   tgt = (tt ~ /[Tt]arget( number)?( of| is| was| at| for)?[: ]+[~<>]?[$]?[0-9]/)
   mt = mvt; gsub(/[ \t]+/, " ", mt); if (mt == "") mt = "-"
-  if (mvt ~ /(at or below|at or under|at most|no more than|or less|or below|under|below|<=|\342\211\244) *[$]?[0-9]/) tgt = 1
+  if (mvt ~ /(at or below|at or under|at most|no more than|or less|or below|under|below|<=) *[$]?[0-9]/) tgt = 1
   printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%d\t%d\t%s\t%d\t%d\t%d\t%d\t%s\t%s\n", label, tagged, (index(text, "docs/analysis/") > 0), (index(text, "A step with no measured value goes") > 0 && index(text, ".claude/rules/operator-rulings.md") > 0), (index(text, "no graph pipeline step") > 0), landed, ocn, bas, stp, mv, sok, vd, von, ntok, vcf, tgt, mt, oc
   label = ""; tagged = 0; landed = 0; ocn = 0; oc = ""; inoc = 0; text = ""; bas = 0; stp = ""; mv = 0; mvt = ""; vf = ""; hv = 0; ng = 0
 }
