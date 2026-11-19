@@ -1,0 +1,3 @@
+# Measured by one counted run through scripts/seed-verdict-store.sh (the judge's own J3 output). Every start is the hook
+# copy, its queued steps' stub validators, their forks and the fixture's own bash.
+41 *

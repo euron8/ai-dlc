@@ -24,6 +24,8 @@
 #   trewrite a step rewrites a declared file and puts it back by cp -p while the steps run: its pass is not
 #            recorded, and the next flush runs it (BL-919: the keys were taken before the change)
 #   tcreate  the same for a file created and removed in a declared directory
+#   ignored  a declared file that git ignores is edited: it is not in the manifest, so it cannot move the key, and the step
+#            declaring it runs (the near-miss is `moved`, where the edited declared file is listed and the other step skips)
 #   tunrel   the near-miss: a path outside the step's inputs changed the same way leaves its pass recorded
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
@@ -62,6 +64,8 @@ flush() {
     . "$WORK/pool.sh" > /dev/null 2>&1
     . "$psu" || exit 126
     fail=0; RED_STEPS=""; PRESUITE_DONE=0
+    # the two layout and policy values the hook sets OUTSIDE the span: the distribution's declaration root, and the bypass allowed
+    PS_DECL_ROOT="scripts/presuite/"; PS_SKIP_OK=1
     ps_probe() { printf '%s\n' "$1" >> "$RAN"; }
     # ps_meet <me> <other> <bound>: send my token on my fifo, then read the other's off its fifo. A fifo's bytes die with
     # its last open fd, so reading the other's token proves both steps held their fifos open AT ONCE.
@@ -90,6 +94,9 @@ ran_of() { sort "$1.ran" 2>/dev/null | tr '\n' ' '; }  # the steps the LAST flus
 two() {
   local tag="$1" psu="$2" kind="$3" w="$WORK/$1-$3" rc1 rc2
   world "$w" || broken "could not build the $kind world"
+  if [ "$kind" = ignored ]; then
+    printf 'core/\ncore/ign.txt\n' > "$w/scripts/presuite/stepa/inputs.decl"; printf 'core/ign.txt\n' > "$w/.gitignore"; printf 'i1\n' > "$w/core/ign.txt"
+  fi
   rc1="$(flush "$w" "$psu" "$w.out1")"
   [ "$rc1" = 0 ] && [ "$(ran_of "$w")" = "a b c " ] || { echo "first:rc=$rc1:ran=$(ran_of "$w")"; return 0; }
   : > "$w.ran"
@@ -98,6 +105,7 @@ two() {
     unrel) printf 'x\n' > "$w/zz/new.txt" ;;
     moved) printf 'a2\n' > "$w/core/a.txt" ;;
     absent) mkdir -p "$w/core/fixtures/x" && : > "$w/core/fixtures/x/cells.decl" ;;
+    ignored) printf 'i2\n' > "$w/core/ign.txt" ;;
   esac
   rc2="$(flush "$w" "$psu" "$w.out2")"
   echo "rc=$rc2:ran=$(ran_of "$w")"
@@ -158,6 +166,8 @@ run_arm() { # run_arm <tag> <psu> <arm>
       chk "$tag" moved "$p" "an edit of a declared file runs the step that declares it and still skips the other keyed step" "a moved input ran '$r', want a and c (the declaring step must run, the other must skip)" ;;
     absent) r="$(two "$tag" "$psu" absent)"; [ "$r" = "rc=0:ran=a c " ] && p=0
       chk "$tag" absent "$p" "a file ADDED to a declared directory (cells.decl under core/fixtures/x/) runs the step declaring it: the directory listing moved" "an added file in a declared directory ran '$r', want a and c (the absent-path case: no file read could see it)" ;;
+    ignored) r="$(two "$tag" "$psu" ignored)"; [ "$r" = "rc=0:ran=a c " ] && p=0
+      chk "$tag" ignored "$p" "an edit of a declared file git ignores runs the step declaring it: the manifest does not list it, so it cannot move the key" "an edited git-ignored declared file ran '$r', want a and c (a declared file the manifest omits must force its step to run)" ;;
     conc) r="$(conc_arm "$psu" "$tag")"; [ "$r" = "rc=0:2" ] && p=0
       chk "$tag" conc "$p" "two steps that each read the other's token off a fifo both pass: the steps were live at once (a serial pool drops the first step's token with its fd)" "the meeting steps gave '$r', want rc=0 and 2 PASS (a serial pool cannot pass both)" ;;
     content) r="$(content_arm "$psu" "$tag")"; [ "$r" = "A=c ;B=a c " ] && p=0
@@ -170,11 +180,11 @@ run_arm() { # run_arm <tag> <psu> <arm>
       chk "$tag" tunrel "$p" "a file created and removed outside the step's declared inputs leaves its pass recorded, so the next flush skips it" "a path outside stepb's inputs, changed during the run, gave '$r', want rc=0:ran=c :0 (only the step's own key rows may void its record)" ;;
   esac
 }
-for _a in skip unrel moved absent conc content trewrite tcreate tunrel; do run_arm base "$WORK/psu.sh" "$_a"; done
+for _a in skip unrel moved absent ignored conc content trewrite tcreate tunrel; do run_arm base "$WORK/psu.sh" "$_a"; done
 # the order arm reads the base `none` world's second flush output
 cp "$WORK/base-none.out2" "$WORK/o.txt" 2>/dev/null || broken "the skip world left no second-flush output"
 r="$(sed -n '/^── /p;/^   PASS$/p;/^   skipped on/p' "$WORK/o.txt" | tr '\n' '|')"
 chk base order "$([ "$r" = "── stepa|   skipped on a recorded pass: none of its declared inputs changed|   PASS|── stepb|   skipped on a recorded pass: none of its declared inputs changed|   PASS|── stepc|   PASS|" ] && echo 0 || echo 1)" \
   "the steps print in declaration order, each title followed by its own verdict" "the print order was '$r', want stepa stepb stepc in order, each with its own verdict"
-report_end presuite-units 10
+report_end presuite-units 11
 

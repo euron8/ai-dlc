@@ -33,3 +33,4 @@ kill
 jq
 uniq
 iconv
+mkfifo

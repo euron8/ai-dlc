@@ -1,0 +1,2 @@
+# consumer-presuite-steps starts no declared subject as a program: it runs a COPY of the consumer hook at the world's
+# .githooks/pre-push, which is no path row of invocations.decl, so no cell is declared.

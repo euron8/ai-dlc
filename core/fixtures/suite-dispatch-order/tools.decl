@@ -29,3 +29,4 @@ ps
 kill
 diff
 ls
+mkfifo

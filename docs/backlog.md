@@ -3652,7 +3652,7 @@ verify: manual
 
 ## BL-1167 — the consumer lead's `git push` takes 37 to 62 s a call and is the largest lead Bash family in s322
 
-**NOTE (efficiency).** OPEN. Filed 2026-11-18. Owner: `core/git-hooks/pre-push` (the consumer's hook) and the step text that has the lead push.
+**NOTE (efficiency).** PARTIAL. Filed 2026-11-18. Owner: `core/git-hooks/pre-push` (the consumer's hook) and the step text that has the lead push.
 
 Population: graph lead transcripts, read only, at `EXTRACT_WIN_END=2026-11-12T14:41:00Z`. Lead `git push`: 39 calls at 37 s in s321 (0.40 h), 44 calls at 62 s in s322 (0.76 h) by `bash_by_sprint.py`; `lead_time.py` reads s322 as 42 intervals at 36.7 s (0.43 h). The two readers cut a call differently and the difference is not reconciled. It is the largest lead Bash family by wall clock in s322. Call counts include denied and errored calls, because `bash_by_sprint.py` does not pair `tool_use` with `tool_result`. Source: `docs/analysis/pipeline-efficiency-s317-s322-b259/out/bash_by_sprint_top80.txt` and `out/lead_time.txt`.
 
@@ -3664,7 +3664,26 @@ Fix: read the 44 s322 pushes' own output, attribute the seconds to hook steps, a
 
 Baseline: s322, 44 lead pushes, 0.76 h, 62 s a call on `bash_by_sprint.py`, the reader the close uses.
 
-Expected movement: seconds per lead push below 30 on the first complete sprint after the change, about 0.4 h of lead wall clock a sprint on the same reader, and $0.
+Expected movement: no target number (operator ruling, batch 259). Baseline: 14 routine pipeline pushes, 2,237 s. The parallel gain is read from `step elapsed` on graph's first complete sprint after a pull delivers this; no session dispatches that pull.
+
+Measure (corrected, batch 259, C7): the pipeline lead push's own elapsed time on the sprint's critical path (foreground, or backgrounded and joined). The reader figure above (`bash_by_sprint.py`: 44 rows, 0.76 h, 62 s a call) stays beside it as a reader artifact: it counts 11 mention or poll rows, and backgrounded pushes read about 0 s there.
+
+Population (batch 259, C7), split by the issuing session's opening command (`/ai-dlc` = pipeline, `/ai-dlc-update` = update), from graph's lead transcripts in the window 2026-11-09T00:00Z to 2026-11-12T14:41Z, read only, pairing `tool_use` with `tool_result` by id; elapsed is launch to the task-notification for a background push (an upper bound).
+- PIPELINE: 30 reader rows (2,737 of 2,748 reader s). 21 ran the hook, 18 of them timed, 5,686 s elapsed. Routine: 14 runs, 85 to 294 s each, 2,237 s, each running 6 to 8 of 228 fixtures; 5 to 6 of those are held-stale and run on every push. Large-set: 2 runs, 1,893 s (`tools changed`) and 1,545 s (a `.claude/team-roles/dev.md` edit). Short: a 1 s steering deny and a 10 s gitleaks run. 3 background runs are untimed.
+- UPDATE: 14 rows. 10 hook pushes, 7,272 s, 138 to 1,487 s each; 2 `--no-verify`. Named here as a separate subject and not attributed to this entry.
+
+Attribution by step is not recoverable from the s322 record. Controls: the consumer hook printed no step clock (`step elapsed` 0 in `core/git-hooks/pre-push` vs 2 in `.githooks/pre-push` at the base); 0 progress records vs 5,665 `tool_use` in the 3 lead sessions; both 600 s runs' background outputs are gone (0 present, 5 `tasks/` dirs as the control).
+
+**Progress (batch 259, C7; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The consumer pre-push now runs its tree-level steps concurrently under the fifo pool (the `PRESUITE_UNITS` span ported from BL-1091, held byte-identical across both hooks by I66) and prints `step elapsed` for each. No consumer step is keyed or skipped (`PS_DECL_ROOT` and `PS_SKIP_OK` are set outside the span). `AI_DLC_PRESUITE_SKIP` is inert on a consumer. A step still queued at the trailer fails the push. The span forces `run` for a declared file absent from the manifest. Coverage: shipping fixture `consumer-presuite-steps`; it asserts no timing and no load-dependent value (BL-868).
+
+Item 8 closes on a refuted premise: the rule-file audit is invoked with `--fail-on=local-deterministic`, which landed in 0.1059.0 on 2026-11-11, so `[core]` rows cannot set its exit, and NARRATIVE_DRIFT is tier 2. The s322 reds on that step are established: the three blocked pipeline pushes on 2026-11-11 (06:40, 11:25 and 11:31 UTC) ran an installed engine older than 0.1059.0, and their own push output prints `threshold: --fail-on=deterministic` with tier-1 findings of 1, 4 and 2 and the step FAILed. At 11:31 the locally-owned count was 0, so distribution-owned `[core]` rows drove that red. The push on 2026-11-12 at 11:45 printed `threshold: --fail-on=local-deterministic ... t1-local: 0` and the step PASSed. Those reds were `[core]` rows on an engine 0.1059.0 already fixed, not catches (source: graph's lead transcripts, read only, the push tool results). The s322 catch record for the tree-level steps is ARTIFACT PATHS only (BLOCKING sprint-token paths on 2026-11-11 and 2026-11-12).
+
+Open work items:
+(a) Keying the 3 honestly keyable steps (taught schema, rule-file audit, shell syntax), decided from graph's first `step elapsed` figures. Keying costs a second whole-tree manifest per push; the other 8 steps read git state, `settings.json`, `$HOME` or the whole tree, or have unenumerated reads (write-format steering). The span's forced-run guard for declared files absent from the manifest skips declared DIRECTORIES, which are the coarse rows a consumer declaration would use, so keying on a consumer needs that gap closed first.
+(b) The large-set bucket: the 2 pipeline runs, 3,438 s. Their fixture inputs did change, so a skip on unchanged inputs cannot reach them.
+(c) The update pushes, 7,272 s, a separate subject.
+
+NOTE: the rule-file audit calls `core-paths.sh --list` with a 30 s timeout and refuses with exit 2 on expiry, so a push goes red. It now runs concurrently with nine other steps, so a false red under load is possible, never a false green. Its own `step elapsed` line on graph's next sprint shows its time against that budget.
 
 Provenance: batch 259, cluster C4; row 11 of `docs/analysis/pipeline-efficiency-s317-s322.md`, which had no entry; id allocated by lead ai-dlc-64.
 

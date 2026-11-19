@@ -1,0 +1,7 @@
+# The spans of the consumer hook this fixture's arms exercise: the queue, key pass and flush it asserts on, the delete-only
+# exit before them, the shell-syntax glob its last step runs, and the refusal exit its trailer reads. A whole-program row
+# is refused by scripts/invalidation-guard.sh --ratchet, so the hook is declared by span.
+core/git-hooks/pre-push PRESUITE_UNITS
+core/git-hooks/pre-push PUSH_DELETE
+core/git-hooks/pre-push SYNTAX_GLOB
+core/git-hooks/pre-push FIXTURE_EXIT

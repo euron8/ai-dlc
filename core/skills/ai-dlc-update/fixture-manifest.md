@@ -80,6 +80,7 @@ core_manifest:
   - core/fixtures/check5-anchor-base/**
   - core/fixtures/check-22-spawn-ledger/**
   - core/fixtures/ci-gates-resolution/**
+  - core/fixtures/consumer-presuite-steps/**
   - core/fixtures/consumer-suite-pool/**
   - core/fixtures/readset-skip/**
   - core/fixtures/readset-skip-b/**
