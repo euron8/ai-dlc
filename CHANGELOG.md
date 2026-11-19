@@ -19,7 +19,7 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
-## [VERSION_PLACEHOLDER] - 2026-11-19
+## [0.1176.0] - 2026-11-19
 
 ### PC-S323-APPLY-FINISH-DECLARES-CONSISTENT-WHILE-THE-TAUGHT-SCHEMA-EXAMPLE-IS-STALE-SO-ONLY-CONSUMER-PRE-PUSH-CATCHES-IT (BL-1179 closed): a pull no longer reports a consistent tree over a stale taught-schema example
 
