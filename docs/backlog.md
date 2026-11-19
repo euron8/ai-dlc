@@ -4092,4 +4092,4 @@ The `invocations.decl` and `FORK_BUDGET` rows these fixtures move are ratcheted 
 
 Provenance: batch 260, C1; id allocated by the lead.
 
-verify: sh A=core/fixtures/apply-restamp-worklist-c/run.sh; P=core/fixtures/post-write-gates/run.sh; [ -f "$A" ] && [ -f "$P" ] || exit 9; a="$(bash "$A" 2>&1)" || exit 1; n="$(grep -cE '^  ok    TS[0-9]' <<<"$a")" || n=0; [ "$n" -ge 1 ] || exit 1; p="$(bash "$P" 2>&1)" || exit 1; grep -qxF '  ok    RTS on the shipped runner' <<<"$p"
+verify: sh A=core/fixtures/apply-restamp-worklist-c/run.sh; P=core/fixtures/post-write-gates/run.sh; [ -f "$A" ] && [ -f "$P" ] || exit 9; a="$(bash "$A" 2>&1)" || exit 1; n="$(grep -cE '^  ok    TS-W1 ' <<<"$a")" || n=0; [ "$n" -ge 1 ] || exit 1; p="$(bash "$P" 2>&1)" || exit 1; grep -qxF '  ok    RTS on the shipped runner' <<<"$p"
