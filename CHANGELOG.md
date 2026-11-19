@@ -19,6 +19,19 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1172.0] - 2026-11-18
+
+
+### BL-1163 (closed): `readset_strip_keys` and `readset_tools`' scan are memoized in the shared verdict store
+
+Both hooks, identical FIXTURE_POOL lines (I66), with a `VS-IDENTITY` row pinning the new span sha. The per-fixture strip parse (one `bash -n` per declared fixture) and the `.sh` word-split scan memoize per file content under `<base>/readset-memo/<root>`. The strip key is the file sha plus the judging bash, the printing bash, awk, the `readset_strip_keys` text and the runtime locale; the tools key is awk, the `readset_tools` text, the `.pathcmds` hash and the locale, all content hashes taken with one shasum exec per pass. An entry is read only if its shape, identity echo, 64-hex key and end marker validate, and written only when a re-hash of the judged file equals the `.now` sha the key used. Each file is rewritten as this pass's hits plus new entries, so it is bounded by the current tree. The memo is on only for a real push at depth 0 (`readset_memo_on`); hooks a fixture starts and `hermetic-run.sh` read no store.
+
+Cost, by PATH shim (no timing run): `bash -n` 290 -> 0 warm in the distribution and 218 -> 0 in a tree built by `scripts/install.sh`; `.sh` files on the scan's argv 636 -> 0 and 514 -> 0; cold adds 5 awk and 2 shasum, a warm pass equals the old exec counts. `.dkeys`, `.ftools`, `.tools` and `hermetic-run.sh --key-only` are byte-identical to the old hook cold, warm, partially warm, corrupted and with the memo off, in both layouts; `readset-skip` counts 204 starts before and after.
+
+Tip adversary, folded: the tools write now needs the scan's exit status to be 0 (a `.sh` gone before the scan made BSD awk skip the rest of its argv, and the later files were stored with no tools), and the strip memo stores `whole` only from a positive judgement (never from a `bash -n` that failed or never ran). Both repros store nothing cold and a warm run equals memo-off.
+
+Catch on record: the contract adversary found a key on the run.sh sha alone would read another bash's, awk's or locale's answer (under UTF-8 `/usr/bin/awk` treats NBSP as `[[:space:]]`, under the sandbox's C locale it does not), and an unchecked write that could store an old sha against a new parse; the first build's `rec_home` call at hook load put a store resolve into every nested hook run. Who would notice it gone: every push that misses the whole-suite key, a consumer's own included, which pays 290 or 218 parses and a 636 or 514-file scan each time.
+
 ## [0.1171.0] - 2026-11-18
 
 ### BL-972 (advances, stays PARTIAL): a design choice no source settles is decided on the lead's recommendation, not asked
@@ -79,6 +92,7 @@ Coverage: the shipping fixture `consumer-presuite-steps`, which asserts no timin
 - `prior_file` walks past `gate: skip` passes at gates 1 and 2, so a second rework after a skip no longer refuses.
 - The `Outcome measured:` line stays open; it is read on the next complete graph sprint.
 - Consumer cost: none beyond the pull; the lead and gate-transition changes ship with the engine and step prose.
+
 
 ## [0.1167.0] - 2026-11-18
 
