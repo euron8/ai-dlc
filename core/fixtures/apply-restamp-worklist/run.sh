@@ -132,13 +132,13 @@ trap 'rm -rf "$WORK"' EXIT
 # fire first, on a seeded duplicate and a seeded omission.
 #   a  cf u         C1-C8 / F1-F3 / CWD, U1-U5, RA0-RA9 and RA-X (the restamp guard, --finish and the union gate)
 #   b  ar           AR first-verified region
-#   c  t vf         T1-T4 transient-ignore row; VF finish-verifies-tree
+#   c  t ts vf      T1-T4 transient-ignore row; TS taught-schema row; VF finish-verifies-tree
 #   d  bl hr hu   BL-276 routing rows; BL-292 hook-registration row; BL-103 unshipped-hook row. DIST-ONLY: every
 #                 arm drives a cmp -s identical copy of the reconcile directory or of the located validator
 SHARDS="a b c d"
 UNITS_a="cf u"
 UNITS_b="ar"
-UNITS_c="t vf"
+UNITS_c="t ts vf"
 UNITS_d="bl hr hu"
 GROUP=a
 if [ "${1:-}" = "--group" ]; then
@@ -187,8 +187,9 @@ fi
 DIST_SHARDS="d"
 # The units that must stay in a shipped shard; the join fails if one is undeclared or dealt to a DIST_SHARDS shard:
 # cf reads the installed pre-push and runs apply.sh in place; u and vf run apply.sh in place; ar runs the
-# in-place reconcile directory; t walks up from apply.sh to a root and resolves by layout.
-PLACED_UNITS="cf u ar t vf"
+# in-place reconcile directory; t walks up from apply.sh to a root and resolves by layout; ts runs apply.sh
+# in place and resolves the consumer's taught-schema script and schemas by layout.
+PLACED_UNITS="cf u ar t ts vf"
 _decl=" "; while IFS= read -r _l; do _decl="$_decl$_l "; done < "$JW/declared"
 for _u in $PLACED_UNITS; do
   case "$_decl" in *" $_u "*) ;; *) rm -rf "$JW"; shard_broken "PLACED_UNITS names '$_u', which no unit guard declares" ;; esac
@@ -1452,6 +1453,160 @@ else
 fi
 
 fi  # ---- end of unit t
+
+if sg ts; then
+# --- TS: --finish CHECKS THE TAUGHT-SCHEMA REGIONS BEFORE IT STAMPS ---------------------------
+#
+# THE DEFECT. `--finish` printed `RESOLVED consistent` over a consumer whose generated taught-schema
+# region was stale against the schema the pull delivered; only the consumer's pre-push ran
+# `sync-taught-schema.sh --check`, so the operator learned it from a refused push. The row drives the
+# CONSUMER's own copy of that script, so these worlds carry it and both schemas, resolved from this
+# tree in either layout, and the stale region sits in an EXTENSION file, where the consumer met it.
+#
+# ONE BASE WORLD, COPIED. A finished tree (C4's shape, marker recording base and theirs) plus the
+# script and schemas; each world is a copy varied by one property and driven by ONE `--finish`:
+#   W1 two stale regions, a team-role file FIRST and the extension second -> WORKLIST taught-schema
+#      naming both, withheld, marker kept
+#   W2 the region rendered by the consumer's own sync -> no taught-schema row, RESOLVED consistent
+#   W3 script and schema absent -> no row, stamps (the consumer's pre-push skips the check too)
+#   W7 schema present, script absent -> DECISION taught-schema-unchecked, stamps (W3's twin)
+#   W4 a hand-written example only -> WORKLIST taught-schema-region (the sync cannot clear it), withheld
+#   W5 a schema that does not parse -> DECISION taught-schema-unparsed, stamps
+#   W8 W1 with the team-role file an untouched classify hand-back -> NOTE taught-schema-merge-first
+#      for it, and only the extension in the sync row
+TS_SCRIPT=""; TS_PROV=""; TS_GATE=""
+for cand in "$ROOT/core/scripts/sync-taught-schema.sh" "$ROOT/scripts/ai-dlc/sync-taught-schema.sh"; do
+  [ -f "$cand" ] && TS_SCRIPT="$cand" && break
+done
+for cand in "$ROOT/core/schemas/provenance-block.json" "$ROOT/.claude/schemas/provenance-block.json"; do
+  [ -f "$cand" ] && TS_PROV="$cand" && break
+done
+for cand in "$ROOT/core/schemas/gate-adjudication-verdict.json" "$ROOT/.claude/schemas/gate-adjudication-verdict.json"; do
+  [ -f "$cand" ] && TS_GATE="$cand" && break
+done
+TS_EXT=".claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md"
+TS_ROLE=".claude/team-roles/a-role.md"
+TS_BEGIN='<!-- BEGIN GENERATED: provenance-block/adversary-pass — source: .claude/schemas/provenance-block.json; do not edit by hand -->'
+TS_END='<!-- END GENERATED: provenance-block -->'
+ts_stale() { printf '# a taught file\n\n%s\na stale line no schema renders\n%s\n' "$TS_BEGIN" "$TS_END" > "$1"; }
+# ts_subj <rows> <kind> <id> -> the row's subject field, or empty
+ts_subj() { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {print $3; exit}' <<< "$1"; }
+# ts_any <rows> -> how many rows carry a taught-schema id
+ts_any()  { awk -F'\t' 'index($2, "taught-schema") == 1 {n++} END {print n+0}' <<< "$1"; }
+ts_has()  { case " $1 " in *" $2 "*) return 0 ;; esac; return 1; }
+ts_held() { [ "$(stamp_ver "$1")" = 1.0.0 ] && [ "$(marker "$1")" = PRESENT ] \
+              && has_row "$2" DECISION restamp-withheld && ! has_row "$2" RESOLVED consistent; }
+ts_stamped() { [ "$(stamp_ver "$1")" = "$THEIRS_VER" ] && [ "$(marker "$1")" = GONE ] && has_row "$2" RESOLVED consistent; }
+
+if [ -z "$TS_SCRIPT" ] || [ -z "$TS_PROV" ] || [ -z "$TS_GATE" ]; then
+  if [ "$IS_DIST" = 1 ]; then
+    bad "TS setup: sync-taught-schema.sh / provenance-block.json / gate-adjudication-verdict.json not found under $ROOT in either layout (script='$TS_SCRIPT' prov='$TS_PROV' gate='$TS_GATE'). HARD in the distribution: the row's inputs must be here."
+  else
+    printf '  SKIP  %s\n' "TS — sync-taught-schema.sh or its schemas are not in this tree; they land with the pull that carries the row"
+  fi
+else
+  echo "HERMETIC-CONSUMED $TS_SCRIPT"
+  echo "HERMETIC-CONSUMED $TS_PROV"
+  echo "HERMETIC-CONSUMED $TS_GATE"
+  # ITS OWN PAIR OF REFS. A consumer carrying `.claude/schemas/provenance-block.json` is diffed against
+  # theirs' `core/schemas/` copy by the refile check, and the shared pull ships no schemas, so every world
+  # holding one would be withheld by `finish-refile-unverified` and W2/W5/W7 could not stamp. TB and TT are
+  # BASE and THEIRS with the same two schemas committed, so the core range is the shared pull's exactly.
+  TD="$WORK/ts-dist"; TB=""; TT=""
+  tsgit() { git -C "$TD" -c user.email=f@f -c user.name=fixture "$@"; }
+  ts_ref() { # <ref> -> that ref with the schemas added, as a new commit
+    tsgit checkout -q --detach "$1" >/dev/null 2>&1 && mkdir -p "$TD/core/schemas" \
+      && cp "$TS_PROV" "$TS_GATE" "$TD/core/schemas/" && tsgit add -A >/dev/null 2>&1 \
+      && tsgit commit -q -m "ts $1" >/dev/null 2>&1 && git -C "$TD" rev-parse HEAD 2>/dev/null
+  }
+  git clone -q "$DIST" "$TD" >/dev/null 2>&1 && TB="$(ts_ref "$BASE")" && TT="$(ts_ref "$THEIRS")"
+  ts_finish() { bash "$APPLY" --finish "$TD" "$TB" "$1" "$TT" 2>/dev/null; }
+  TS_B="$WORK/ts-base"
+  if [ -n "$TB" ] && [ -n "$TT" ] && mk_consumer "$TS_B" finished hrv \
+     && printf 'version: 1.0.0\ncommit: %s\n' "$TB" > "$TS_B/.claude/.ai-dlc-version" \
+     && printf 'base: %s\ntheirs: %s\n' "$TB" "$TT" > "$TS_B/.claude/.ai-dlc-applying" \
+     && mkdir -p "$TS_B/.claude/schemas" "$TS_B/.claude/skills/ai-dlc/extensions/checks" "$TS_B/.claude/team-roles" \
+     && cp "$TS_SCRIPT" "$TS_B/scripts/ai-dlc/sync-taught-schema.sh" \
+     && cp "$TS_PROV" "$TS_B/.claude/schemas/provenance-block.json" \
+     && cp "$TS_GATE" "$TS_B/.claude/schemas/gate-adjudication-verdict.json"; then
+    ts_world() { cp -R "$TS_B" "$WORK/ts-$1" && printf '%s' "$WORK/ts-$1"; }
+    TS_OK=1
+    W1="$(ts_world w1)" && ts_stale "$W1/$TS_ROLE" && ts_stale "$W1/$TS_EXT" || TS_OK=0
+    W2="$(ts_world w2)" && printf '# a taught file\n\n%s\n%s\n' "$TS_BEGIN" "$TS_END" > "$W2/$TS_EXT" || TS_OK=0
+    W3="$(ts_world w3)" && rm -f "$W3/scripts/ai-dlc/sync-taught-schema.sh" "$W3/.claude/schemas/provenance-block.json" \
+       && ts_stale "$W3/$TS_EXT" || TS_OK=0
+    W7="$(ts_world w7)" && rm -f "$W7/scripts/ai-dlc/sync-taught-schema.sh" && ts_stale "$W7/$TS_EXT" || TS_OK=0
+    W4="$(ts_world w4)" && printf '# a taught file\n\n```\nSKILL_INVOCATION_PROVENANCE v1\nfoo: bar\n```\n' > "$W4/$TS_EXT" || TS_OK=0
+    W5="$(ts_world w5)" && ts_stale "$W5/$TS_EXT" && printf '{ not json\n' > "$W5/.claude/schemas/gate-adjudication-verdict.json" || TS_OK=0
+    W8="$(ts_world w8)" && ts_stale "$W8/$TS_ROLE" && ts_stale "$W8/$TS_EXT" || TS_OK=0
+    if [ "$TS_OK" = 1 ]; then
+      TS_H="$(git hash-object "$W8/$TS_ROLE" 2>/dev/null)"
+      printf 'classify-hashes: 1\nclassify: %s 644\t%s\n' "$TS_H" "$TS_ROLE" >> "$W8/.claude/.ai-dlc-applying"
+      # W2 is rendered by the REAL producer, the consumer's own sync; TS-S1 proves it wrote a region.
+      cp "$W2/$TS_EXT" "$WORK/ts-w2-empty.md"
+      AI_DLC_PROJECT_ROOT="$W2" bash "$W2/scripts/ai-dlc/sync-taught-schema.sh" >/dev/null 2>&1; TS_R2=$?
+      if [ "$TS_R2" = 0 ] && ! cmp -s "$W2/$TS_EXT" "$WORK/ts-w2-empty.md" && [ -n "$TS_H" ]; then
+        ok "TS-S1 setup: the consumer's own sync rendered W2's region (rc 0, file moved) and W8's classify record holds the role file's blob"
+      else
+        bad "TS-S1 setup: W2's render rc=$TS_R2 (file moved: $(cmp -s "$W2/$TS_EXT" "$WORK/ts-w2-empty.md" && echo no || echo yes)), W8 hash='$TS_H' — W2 would not be a current region"
+      fi
+      O1="$(ts_finish "$W1")"; O2="$(ts_finish "$W2")"; O3="$(ts_finish "$W3")"; O7="$(ts_finish "$W7")"
+      O4="$(ts_finish "$W4")"; O5="$(ts_finish "$W5")"; O8="$(ts_finish "$W8")"
+      if [ "$(ts_any "$O1")" = 0 ] && [ "$(ts_any "$O7")" = 0 ] && [ "$IS_DIST" = 0 ]; then
+        printf '  SKIP  %s\n' "TS — the installed apply.sh predates the taught-schema row; it lands with this same pull"
+      else
+        if [ "$IS_DIST" = 1 ] && [ "$(ts_any "$O1")" = 0 ] && [ "$(ts_any "$O7")" = 0 ]; then
+          bad "TS the resolved apply.sh ($APPLY) emitted no taught-schema row in W1 or W7, so the row is absent. HARD in the distribution: the subject must be present here."
+        fi
+        s="$(ts_subj "$O1" WORKLIST taught-schema)"
+        if ts_has "$s" "$TS_EXT" && ts_has "$s" "$TS_ROLE" && ts_held "$W1" "$O1"; then
+          ok "TS-W1 two stale regions (team-role first, extension second): WORKLIST taught-schema names both, the stamp is withheld at 1.0.0, the marker stays, no RESOLVED consistent"
+        else
+          bad "TS-W1 stale regions drew sync row '[${s}]' with stamp '$(stamp_ver "$W1")' marker $(marker "$W1") consistent=$(has_row "$O1" RESOLVED consistent && echo yes || echo no) — --finish declared a tree consistent that the consumer's pre-push refuses"
+        fi
+        if ts_stamped "$W2" "$O2" && [ "$(ts_any "$O2")" = 0 ]; then
+          ok "TS-W2 a region the consumer's sync rendered draws no taught-schema row and --finish stamps $THEIRS_VER with RESOLVED consistent"
+        else
+          bad "TS-W2 a current region drew $(ts_any "$O2") taught-schema row(s), stamp '$(stamp_ver "$W2")' marker $(marker "$W2") — a current tree is wedged"
+        fi
+        if ts_stamped "$W3" "$O3" && [ "$(ts_any "$O3")" = 0 ]; then
+          ok "TS-W3 with neither the script nor the schema on the consumer, no taught-schema row and --finish stamps"
+        else
+          bad "TS-W3 a consumer without the script or schema drew $(ts_any "$O3") taught-schema row(s), stamp '$(stamp_ver "$W3")' marker $(marker "$W3")"
+        fi
+        if has_row "$O7" DECISION taught-schema-unchecked && ts_stamped "$W7" "$O7"; then
+          ok "TS-W7 schema present and script absent: DECISION taught-schema-unchecked, and the stamp is not withheld on it"
+        else
+          bad "TS-W7 schema without script drew unchecked=$(has_row "$O7" DECISION taught-schema-unchecked && echo yes || echo no), stamp '$(stamp_ver "$W7")' marker $(marker "$W7") — an unchecked region reads exactly like a clean one"
+        fi
+        s="$(ts_subj "$O4" WORKLIST taught-schema-region)"
+        case "$s" in "$TS_EXT"*) r4=1 ;; *) r4=0 ;; esac
+        if [ "$r4" = 1 ] && ! has_row "$O4" WORKLIST taught-schema && ts_held "$W4" "$O4"; then
+          ok "TS-W4 a hand-written example draws WORKLIST taught-schema-region naming $s, not the sync row, and withholds"
+        else
+          bad "TS-W4 a hand-written example drew region '[${s}]' sync-row=$(has_row "$O4" WORKLIST taught-schema && echo yes || echo no) stamp '$(stamp_ver "$W4")' marker $(marker "$W4") — the sync cannot clear it, so a sync remedy or a stamp is wrong"
+        fi
+        if has_row "$O5" DECISION taught-schema-unparsed && ! has_row "$O5" WORKLIST taught-schema && ts_stamped "$W5" "$O5"; then
+          ok "TS-W5 a schema that does not parse draws DECISION taught-schema-unparsed and stamps"
+        else
+          bad "TS-W5 a corrupt schema drew unparsed=$(has_row "$O5" DECISION taught-schema-unparsed && echo yes || echo no) sync-row=$(has_row "$O5" WORKLIST taught-schema && echo yes || echo no) stamp '$(stamp_ver "$W5")' marker $(marker "$W5")"
+        fi
+        n8="$(ts_subj "$O8" NOTE taught-schema-merge-first)"; s="$(ts_subj "$O8" WORKLIST taught-schema)"
+        if [ "$n8" = "$TS_ROLE" ] && ts_has "$s" "$TS_EXT" && ! ts_has "$s" "$TS_ROLE"; then
+          ok "TS-W8 a stale file still owed its semantic merge is named merge-first and kept out of the sync row, which names the extension alone"
+        else
+          bad "TS-W8 merge-first '[${n8}]' sync row '[${s}]' — running the sync over an unmerged file moves its blob and clears the unmerged guard falsely"
+        fi
+      fi
+    else
+      bad "TS setup: could not build the taught-schema worlds from $TS_B"
+    fi
+  else
+    bad "TS setup: could not build the taught-schema base world"
+  fi
+fi
+
+fi  # ---- end of unit ts
 
 if sg bl; then
 # ==============================================================================================

@@ -36,7 +36,11 @@ core/git-hooks/pre-push
 !core/scripts/sync-transient-ignore.sh
 !core/schemas/pipeline-state-paths.json
 core/scripts/validate-hook-registration.sh
-# Shard c runs units t and vf; neither drives the answer-capture hook, but the guarded sandbox trace reads it, so it is declared (optional). The T inputs above are REQUIRED because unit t consumes them.
+# Unit ts copies the taught-schema checker and both schemas it reads into seeded consumers, and --finish runs that copy.
+!core/scripts/sync-taught-schema.sh
+!core/schemas/provenance-block.json
+!core/schemas/gate-adjudication-verdict.json
+# Shard c runs units t, ts and vf; none drives the answer-capture hook, but the guarded sandbox trace reads it, so it is declared (optional). The T inputs above are REQUIRED because unit t consumes them.
 core/hooks/ai-dlc-answer-capture.sh
 # The shard drivers exec the parent run.sh, and the parent's coverage join reads every driver. A fixture's OWN
 # run.sh is not declared by itself, but the siblings' are, so each shipped shard sandbox holds the shipped three (a, b, c).
