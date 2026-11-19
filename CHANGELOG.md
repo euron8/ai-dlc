@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1177.0] - 2026-11-19
+
+### BL-583 (advances, stays PARTIAL): the remaining push-suite fixture families are judged on value, and none is retired
+
+- Twelve fixture families with no catch previously on record were judged on whether each still earns its place in the push suite. None is retired or merged.
+- Eleven of them are each the only fixture asserting a live property, and BL-583 names that property for each one. The twelfth, `self-update-join-gate`, has a catch on record that the earlier count missed: it went red on 0.287.0's successor and the fix went into `self-update-gate.sh` (0.288.0).
+- Two families were left out of the judgment. `self-update-gate` gets a new unit in this batch, and `enforcement-map-sites` is held under BL-1109's ruling until BL-1008 closes.
+- The header comment of `core/fixtures/review-shard-merge/run.sh` no longer claims S7-S10 arms that the fixture does not have.
+- No fixture is removed, so the push gate's wall clock and cost are unchanged. Nothing changes for consumers beyond that one comment line.
+- BL-583 stays OPEN (PARTIAL): the two excluded families, the families outside the judged set, and the entry's other owed rows are still open.
+
 ## [0.1176.0] - 2026-11-19
 
 ### PC-S323-APPLY-FINISH-DECLARES-CONSISTENT-WHILE-THE-TAUGHT-SCHEMA-EXAMPLE-IS-STALE-SO-ONLY-CONSUMER-PRE-PUSH-CATCHES-IT (BL-1179 closed): a pull no longer reports a consistent tree over a stale taught-schema example
