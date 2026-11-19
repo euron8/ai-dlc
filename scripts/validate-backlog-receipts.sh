@@ -1146,6 +1146,41 @@ fi
 #      (F-UNTAGGED): that is the untagged-filing escape the tag-only E1 would otherwise leave open.
 #      The ruling is matched as TEXT and never resolved on disk, so this arm adds no read.
 #
+#   E3c F-TARGET (live ledger only) -- the operator ruling "no target number on an efficiency goal"
+#      (`.claude/rules/operator-rulings.md`). Population: a TAGGED entry not on the no-step branch
+#      that was ADDED since the merge-base with origin/main OR whose `Expected movement:` line
+#      differs from, or is absent at, the merge-base (eff_added_labels writes that set beside the
+#      added set, `.mvchg`). An unchanged entry is never re-judged, so the existing corpus cannot
+#      wedge a push; no origin/main, no set, no verdict. It fires on either of two spellings:
+#        (1) the `Expected movement:` line states a comparator then a figure: `at or below`, `at or
+#            under`, `at most`, `no more than`, `or less`, `or below`, `under`, `below`, `<=` or `≤`,
+#            then optional `$` and a digit. The motivating case is BL-1175 at f4c9810a1: "planning
+#            less operator wait at or below 15 h" (removed by c9743e6e5).
+#        (2) anywhere in the entry text, `target` or `target number`, optionally `of|is|was|at|for`,
+#            then `: ` or spaces, an optional `~ < >` or `$`, and a digit.
+#      The text for (2) is first scrubbed of `no target [number]` and `not a target`, so BL-878's "No
+#      target number (operator ruling, batch 259)" and BL-972's "not a target: 26 to 29 questions"
+#      stay quiet. A `^Target:` field-label arm was rejected: its count is 0 in both ledgers against
+#      15 for `^Baseline:`, so it could not fire.
+#      FALSE-POSITIVE SET, MEASURED with the shipping entry awk over EVERY entry, scope ignored
+#      (live 55 entries, 38 tagged, 15 carrying `Expected movement:`; archive 1084, 40 tagged, 5
+#      carrying it): live 2 -- BL-975 and BL-1166, tagged, both `Expected movement:` lines describe
+#      a mechanism ("the fix removes the share of ...", "a beat names a dispatched agent ...") and
+#      carry `under`/`below`/`at most` before a digit; archive 1 -- BL-272, UNTAGGED (a migration
+#      target), outside the population. All three are excluded by the scope above; the narrowing
+#      that reached zero is that scope, not the regex, and a probe seeds a base-resident
+#      offender that stays quiet. The first spelling of (2) hit BL-972 on its disclaimer; the
+#      `not a target` scrub took it to 0. Case is matched as written, so `NO-TARGET` never matches.
+#      WHAT IT CANNOT SEE: a target spelled with neither a comparator nor the word (`reduce to
+#      30%`, `aim for`). No DEFAULT_* ceiling or count is added.
+#      THE OTHER RULING, "one backlog entry per goal", IS NOT AN ARM HERE. Whether an entry is a
+#      sibling finding of an open goal cannot be decided from its text. Its shape half (a numbered
+#      work list and exactly one `Done condition` / `Close condition`) was measured and is not
+#      FP-clean: of 55 live entries only BL-878 carries a labelled condition line at all, and it
+#      carries two; 19 carry a numbered list, so a whole-ledger arm wedges on BL-878 and a
+#      filing-scope arm requiring the label refuses 18 of 19 existing spellings (BL-1178 states its
+#      done condition unlabelled).
+#
 # THE NARROWING, AND ITS MEASUREMENT. The receipt parser above lets an entry run to the next BL-
 # label, so a `## Section` preamble between two entries is read as the body of the entry above it.
 # Measured on the live ledger before this arm: E3 named exactly ONE entry, BL-807 (later BL-806
@@ -1163,7 +1198,7 @@ fi
 # ===========================================================================
 EFFAWK="$WORK/eff.awk"
 { ledger_entry_awk; backlog_entry_label_awk; backlog_efficiency_tag_awk; cat <<'AWK'
-function eflush(   sok, vd, von, ntok, vcf) {
+function eflush(   sok, vd, von, ntok, vcf, tt, mt) {
   if (label == "") return
   gsub(/[ \t]+/, " ", text); gsub(/[ \t]+/, " ", oc)
   if (stp == "") stp = "-"
@@ -1173,8 +1208,12 @@ function eflush(   sok, vd, von, ntok, vcf) {
   # VERDICT-CONFLICT's column (b255 F2b D1): the outcome prose says `did not fall` (a letter on
   # neither side) while the Verdict field reads `fell`.
   vcf = (vd == "fell" && oc ~ /(^|[^A-Za-z])[Dd]id not fall([^A-Za-z]|$)/)
-  printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%d\t%d\t%s\t%d\t%d\t%d\t%s\n", label, tagged, (index(text, "docs/analysis/") > 0), (index(text, "A step with no measured value goes") > 0 && index(text, ".claude/rules/operator-rulings.md") > 0), (index(text, "no graph pipeline step") > 0), landed, ocn, bas, stp, mv, sok, vd, von, ntok, vcf, oc
-  label = ""; tagged = 0; landed = 0; ocn = 0; oc = ""; inoc = 0; text = ""; bas = 0; stp = ""; mv = 0; vf = ""; hv = 0; ng = 0
+  tt = text; gsub(/[Nn]o target( number)?|[Nn]ot an? target/, "", tt)
+  tgt = (tt ~ /[Tt]arget( number)?( of| is| was| at| for)?[: ]+[~<>]?[$]?[0-9]/)
+  mt = mvt; gsub(/[ \t]+/, " ", mt); if (mt == "") mt = "-"
+  if (mvt ~ /(at or below|at or under|at most|no more than|or less|or below|under|below|<=|\342\211\244) *[$]?[0-9]/) tgt = 1
+  printf "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%d\t%d\t%s\t%d\t%d\t%d\t%d\t%s\t%s\n", label, tagged, (index(text, "docs/analysis/") > 0), (index(text, "A step with no measured value goes") > 0 && index(text, ".claude/rules/operator-rulings.md") > 0), (index(text, "no graph pipeline step") > 0), landed, ocn, bas, stp, mv, sok, vd, von, ntok, vcf, tgt, mt, oc
+  label = ""; tagged = 0; landed = 0; ocn = 0; oc = ""; inoc = 0; text = ""; bas = 0; stp = ""; mv = 0; mvt = ""; vf = ""; hv = 0; ng = 0
 }
 # THE STEP SET, ONE SOURCE (BL-817 item 2, and b255 F2b). V (the extractor's steps) and B (roll.py's
 # bucket tokens) are filled by the BEGIN block appended to this program once the vocabulary is read
@@ -1235,7 +1274,7 @@ function efield(l, name,   s) {
   if (inoc) { if ($0 ~ /^[ \t]*$/) inoc = 0; else oc = oc " " $0 }
   if (ocn == 0 && $0 ~ /^(<br>)?(\*\*)?Outcome measured:/) { ocn = 1; inoc = 1; oc = $0 }
   f = efield($0, "Baseline"); if (f != "@NONE@" && f ~ /^`?s3[0-9][0-9]([^0-9]|$)/) bas = 1
-  f = efield($0, "Expected movement"); if (f != "@NONE@" && f ~ /[A-Za-z0-9]/) mv = 1
+  f = efield($0, "Expected movement"); if (f != "@NONE@" && f ~ /[A-Za-z0-9]/) { mv = 1; if (mvt == "") mvt = f }
   f = efield($0, "Step")
   if (f != "@NONE@" && stp == "") { gsub(/[`*]/, "", f); sub(/[ \t].*$/, "", f); sub(/[.,;:]+$/, "", f); stp = f }
   f = efield($0, "Verdict"); if (f != "@NONE@" && !hv) { vf = f; hv = 1 }
@@ -1623,13 +1662,14 @@ eff_close() {
 # Under `archive`, <added-labels-file> names the archive entries ADDED since the merge-base, and
 # each of those is closed by the LIVE rules (eff_close's `live`); the rest keep the archive rule.
 eff_corpus() {
-  local _l _t _a _r _n _ld _on _bs _st _mv _sok _vd _von _ntok _vcf _oc _code _sac _rule _chg="" _add="" _pop=0 _ns=0 _ent=0 _fadd=0 _alive=0
+  local _l _t _a _r _n _ld _on _bs _st _mv _sok _vd _von _ntok _vcf _tg _mt _oc _code _sac _rule _chg="" _add="" _pop=0 _ns=0 _ent=0 _fadd=0 _alive=0 _mvc=""
+  [ -n "${4:-}" ] && [ -f "$4.mvchg" ] && _mvc="$(cat "$4.mvchg")"
   # STEP-AT-CLOSE's set, read ONCE (no fork per entry): the labels eff_added_labels found whose
   # step differs from, or is absent at, the merge-base. No added-labels file, no set: not evaluated.
   [ -n "${4:-}" ] && [ -f "$4.stepchg" ] && _chg="$(cat "$4.stepchg")"
   # The archive's added set, read ONCE for the same reason.
   [ "$3" = archive ] && [ -n "${4:-}" ] && [ -f "$4" ] && _add="$(cat "$4")"
-  while IFS="$(printf '\t')" read -r _l _t _a _r _n _ld _on _bs _st _mv _sok _vd _von _ntok _vcf _oc; do
+  while IFS="$(printf '\t')" read -r _l _t _a _r _n _ld _on _bs _st _mv _sok _vd _von _ntok _vcf _tg _mt _oc; do
     [ -n "$_l" ] || continue
     _ent=$((_ent + 1))
     if [ "$3" = "live" ]; then
@@ -1640,6 +1680,13 @@ eff_corpus() {
         [ "$_bs" = "1" ] || printf 'F-BASELINE\t%s\n' "$_l"
         eff_step_ok "$_sok" || printf 'F-STEP\t%s\n' "$_l"
         [ "$_mv" = "1" ] || printf 'F-MOVEMENT\t%s\n' "$_l"
+      fi
+      if [ "$_t" = "1" ] && [ "$_n" != "1" ] && [ "$_tg" = "1" ]; then
+        case "
+$_mvc
+" in *"
+$_l
+"*) printf 'F-TARGET\t%s\n' "$_l" ;; esac
       fi
     fi
     if [ "$_ld" = "1" ] && { [ "$_t" = "1" ] || [ "$_on" = "1" ]; }; then
@@ -1688,7 +1735,8 @@ eff_added_labels() { # eff_added_labels <ledger> <root> <out-file> [<step-base-n
     && { [ -z "$_x" ] || ! git -C "$2" cat-file -e "${_base}:${_x}" 2>/dev/null \
          || { _sb="$3.sbent"; git -C "$2" show "${_base}:${_x}" | awk -f "$EFFAWK" | cat - "$3.bent" > "$_sb"; }; } \
     && awk -F'\t' 'NR == FNR { s[$1] = $9; next } !($1 in s) || s[$1] == "-" || s[$1] != $9 { print $1 }' "$_sb" "$3.tent" > "$3.stepchg" \
-    || { echo "$(me): FAIL -- could not derive the entries added since merge-base ${_base}; refusing rather than judging the filing shape against an empty set." >&2; rm -f "$3" "$3.stepchg"; return 2; }
+    && awk -F'\t' 'NR == FNR { s[$1] = $17; next } !($1 in s) || s[$1] != $17 { print $1 }' "$3.bent" "$3.tent" > "$3.mvchg" \
+    || { echo "$(me): FAIL -- could not derive the entries added since merge-base ${_base}; refusing rather than judging the filing shape against an empty set." >&2; rm -f "$3" "$3.stepchg" "$3.mvchg"; return 2; }
   echo "against merge-base ${_base}"
 }
 }
@@ -1718,7 +1766,7 @@ EFF_N="$(printf '%s' "$EFF_OUT" | grep -c .)" || EFF_N=0
 eff_report() {
   [ "$EFF_N" -eq 0 ] && return 0
   printf '%s\n' "$EFF_OUT" | awk -F'\t' '{ printf "FAIL: E\t%s\t%s\n", $2, $1 }' >&2
-  echo "FAIL: E: $EFF_N efficiency finding(s) in $LEDGER (codes above). NO-OUTCOME/NO-SPRINT/NO-DIRECTION/NO-VALUE-CITATION/SHAPE: an efficiency close needs an 'Outcome measured:' line naming the consumer sprint, the token-equivalent \$ with API \$ beside, gap-inclusive hours, a lead figure and a subagent figure reported separately (each seat word -- lead, subagent(s) -- followed first by '<n> h' or '\$<n>', not a percentage or a count, and not one figure shared by both seats), and 'fell' or 'did not fall' -- the latter with a path:line \"phrase\" citation whose phrase hits exactly one line, that line not saying 'did not fall' and being either a 'Failure caught:' line under core/skills/ai-dlc/steps/ with a non-null tail or a non-header table row with a non-null cell under a 'Failure caught' / 'Unique' / 'Catch' column (VALUE-NULL when the phrase resolves but its line does not qualify; null is empty, none, n/a, -, an em dash, 0, no, nothing, or a cell starting 'no ' or '0 '; --archive keeps the old any-hit rule); or, with no sprint, the explicit 'no graph pipeline step' wording naming where 'the cost lives in'. F-RULING: cite \"A step with no measured value goes\" in .claude/rules/operator-rulings.md. NO-SCRIPT/NO-FIGURES: a sprint-naming outcome line also names the script that measured it (a resolving path ending .py or .sh, or a resolving directory token plus a bare basename under it; a path:line value citation does not count) and gives a before and an after figure (both words 'before' and 'after', or a '<num> to <num>' pair). NO-TOKENS/NO-STEP-BOUND/NO-DIRECTION/OFF-STEP/STEP-AT-CLOSE/VERDICT-CONFLICT (sprint-naming line, on the live ledger and, under --archive, on every archive entry added since the merge-base with origin/main; an archive entry present at the merge-base keeps the archive rule): the outcome line carries a token figure ('<n> tokens', '<n>M tokens', '<n> K tokens'; roll.py prints '<x>M tokens'; an 'sNNN tokens' sprint token does not count); the entry carries a 'Step: <token>' line whose token is a step (as F-STEP below; no Basis: fallback); the direction is read ONLY from a 'Verdict: <group> fell' or 'Verdict: <group> did not fall' line, the whole field, where <group> is '<step>( plus <step>)*', never from 'fell' elsewhere in the prose; the group names the entry's own Step token and no bucket token (roll.py GROUPS rows with no step set: $(printf '%s' "$EFF_BUCKETS" | tr '\n' ' ')) other than it, so 'Step: pipeline' is the only way to close on the whole-pipeline bucket; and the Step line was already present, unchanged, at the merge-base with origin/main, so the step is declared before the close, never at it; and a 'fell' Verdict field may not stand beside outcome prose saying 'did not fall' (VERDICT-CONFLICT: the field cannot cancel the value citation that prose owes). FELL-ROSE: a 'Verdict: <group> fell' close needs its own figures to fall (the first number after 'before' above the first after 'after', or the left of the first '<num> to <num>' pair above the right); a 'fell' whose figures cannot be read that way needs the value citation a 'did not fall' owes (NO-VALUE-CITATION). F-BASELINE/F-STEP/F-MOVEMENT: a tagged efficiency entry ADDED on this branch carries a 'Baseline: s3NN' line, a 'Step: <token>' line whose token is a step of extract.py's STEP_RE (less SUBPROC), 'pre-step', 'gate-validation[<step>]' or a roll.py bucket token, and a non-empty 'Expected movement:' line, unless it says there is no graph pipeline step. F-UNTAGGED: an entry citing docs/analysis/ carries a bold efficiency tag (**DEFECT (efficiency).**, **DEFECT, efficiency.**, **NOTE (efficiency).** or **DEFECT. [efficiency rank N]**) or the 'no graph pipeline step' line." >&2
+  echo "FAIL: E: $EFF_N efficiency finding(s) in $LEDGER (codes above). NO-OUTCOME/NO-SPRINT/NO-DIRECTION/NO-VALUE-CITATION/SHAPE: an efficiency close needs an 'Outcome measured:' line naming the consumer sprint, the token-equivalent \$ with API \$ beside, gap-inclusive hours, a lead figure and a subagent figure reported separately (each seat word -- lead, subagent(s) -- followed first by '<n> h' or '\$<n>', not a percentage or a count, and not one figure shared by both seats), and 'fell' or 'did not fall' -- the latter with a path:line \"phrase\" citation whose phrase hits exactly one line, that line not saying 'did not fall' and being either a 'Failure caught:' line under core/skills/ai-dlc/steps/ with a non-null tail or a non-header table row with a non-null cell under a 'Failure caught' / 'Unique' / 'Catch' column (VALUE-NULL when the phrase resolves but its line does not qualify; null is empty, none, n/a, -, an em dash, 0, no, nothing, or a cell starting 'no ' or '0 '; --archive keeps the old any-hit rule); or, with no sprint, the explicit 'no graph pipeline step' wording naming where 'the cost lives in'. F-RULING: cite \"A step with no measured value goes\" in .claude/rules/operator-rulings.md. NO-SCRIPT/NO-FIGURES: a sprint-naming outcome line also names the script that measured it (a resolving path ending .py or .sh, or a resolving directory token plus a bare basename under it; a path:line value citation does not count) and gives a before and an after figure (both words 'before' and 'after', or a '<num> to <num>' pair). NO-TOKENS/NO-STEP-BOUND/NO-DIRECTION/OFF-STEP/STEP-AT-CLOSE/VERDICT-CONFLICT (sprint-naming line, on the live ledger and, under --archive, on every archive entry added since the merge-base with origin/main; an archive entry present at the merge-base keeps the archive rule): the outcome line carries a token figure ('<n> tokens', '<n>M tokens', '<n> K tokens'; roll.py prints '<x>M tokens'; an 'sNNN tokens' sprint token does not count); the entry carries a 'Step: <token>' line whose token is a step (as F-STEP below; no Basis: fallback); the direction is read ONLY from a 'Verdict: <group> fell' or 'Verdict: <group> did not fall' line, the whole field, where <group> is '<step>( plus <step>)*', never from 'fell' elsewhere in the prose; the group names the entry's own Step token and no bucket token (roll.py GROUPS rows with no step set: $(printf '%s' "$EFF_BUCKETS" | tr '\n' ' ')) other than it, so 'Step: pipeline' is the only way to close on the whole-pipeline bucket; and the Step line was already present, unchanged, at the merge-base with origin/main, so the step is declared before the close, never at it; and a 'fell' Verdict field may not stand beside outcome prose saying 'did not fall' (VERDICT-CONFLICT: the field cannot cancel the value citation that prose owes). FELL-ROSE: a 'Verdict: <group> fell' close needs its own figures to fall (the first number after 'before' above the first after 'after', or the left of the first '<num> to <num>' pair above the right); a 'fell' whose figures cannot be read that way needs the value citation a 'did not fall' owes (NO-VALUE-CITATION). F-TARGET: a tagged entry added, or whose 'Expected movement:' changed, since the merge-base states no target number: no 'Expected movement:' comparator-then-figure ('at or below 15', 'at most 3', '<= 4') and no 'target of 30' wording (operator-rulings.md; 'no target number' and 'not a target' disclaimers are fine). F-BASELINE/F-STEP/F-MOVEMENT: a tagged efficiency entry ADDED on this branch carries a 'Baseline: s3NN' line, a 'Step: <token>' line whose token is a step of extract.py's STEP_RE (less SUBPROC), 'pre-step', 'gate-validation[<step>]' or a roll.py bucket token, and a non-empty 'Expected movement:' line, unless it says there is no graph pipeline step. F-UNTAGGED: an entry citing docs/analysis/ carries a bold efficiency tag (**DEFECT (efficiency).**, **DEFECT, efficiency.**, **NOTE (efficiency).** or **DEFECT. [efficiency rank N]**) or the 'no graph pipeline step' line." >&2
   return 1
 }
 if [ -n "$EFF_MODE" ]; then
