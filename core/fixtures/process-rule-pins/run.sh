@@ -123,11 +123,19 @@
 #     no recommendation.** paragraph says in the question why its options carry none
 #     (route-say-why). All five are para rows; each token sits on ONE line of its subject.
 #   - Rule 11(a)'s sort-before-asking: the unbadged trigger names a value the operator alone owns
-#     (r11a-value-trigger), and the `Sort every question three ways` paragraph pins its decide, provided-value,
-#     no-widen, badged, tree-never-settles and outside-the-sort clauses, the tree's WHERE/HOW-only
-#     scope, the lead-words exclusion, the scope confirmation kept outside the sort and the sentence
-#     that a value-preserving choice decides no value (r11a-sort-*). All para rows. Their clause list
-#     is also the receipt-bl876.sh clause list; keep the two byte-identical.
+#     (r11a-value-trigger), and the `Sort every question three ways` paragraph pins its decide
+#     and For-Your-Information-only (r11a-sort-fyi-only) clauses, provided-value, no-widen, badged,
+#     tree-never-settles and outside-the-sort clauses, the tree's WHERE/HOW-only scope, the
+#     lead-words exclusion, the scope confirmation kept outside the sort, the Rule 12 Tier 1 matters
+#     kept outside it, the sentence that a value-preserving choice decides no value, and item (ii)'s
+#     decide-on-the-lead's-recommendation lead with each of its conjuncts (unclear operator words are
+#     asked, no fact only the operator holds, no option sets, widens or keeps in force a value
+#     another option would change, the value list, the authority list, scope, live-system action and
+#     security shipped as code, no change to what the deployed system shows or does
+#     (r11a-sort-rec-observable), undone after the checkpoint), its record and its For Your Information route
+#     (r11a-sort-*, r11a-sort-rec-*). All para rows, except r11a-sort-veto-absent, an `absent` row
+#     on SKILL.md that fails if the veto line on the next question returns. Rule 12 Tier 2's
+#     Action paragraph says its bullets yield to that sort (r12-tier2-yields-sort, a para row).
 #   - SKILL.md Rule 32 touchpoint I cites the advisor gate's window, so one consult covers a run
 #     of pushes, merges and deploys inside it (r32-i-window, a line-mode `contains` pin: keep the
 #     phrase on ONE line, and not on the `- **I --` line itself, which opens the span). Section 4g
@@ -615,11 +623,27 @@ r11a-say-why|S|SKILL.md|### Rule 12 |### Rule 13 |**Every decision put to the op
 r11a-attested-act|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has attested is not raised again.**|para|no later step puts it back to the operator:
 r11a-premise|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has attested is not raised again.**|para|shows the act did not occur is an authorization-premise invalidation
 r11a-value-trigger|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|decides a value the operator alone owns and no operator words fix
-r11a-sort-decide|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|record it as a Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry naming its source and a one-line reason, add one veto line for it to the next `AskUserQuestion` you send
+r11a-sort-decide|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|record it as a Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry naming its source and a one-line reason
+r11a-sort-fyi-only|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|it reaches the operator only under `### For Your Information` at the checkpoint
+r11a-sort-veto-absent|S|SKILL.md|||veto line for it to the next|absent
 r11a-sort-provided|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|leaves every operator-owned value in force or sets it to the operator's verbatim value or that value exactly converted between units
 r11a-sort-decides-no-value|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|Such a choice decides no value, so Rule 11(a)'s UNBADGED trigger does not reach it.
 r11a-sort-no-widen|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|A choice that otherwise sets, relaxes or widens a value, a limit or an authority is settled by no source
-r11a-sort-badged|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|A design choice no source settles is asked with one option `(Recommended)`
+r11a-sort-badged|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|Any other design choice no source settles is asked with one option `(Recommended)`.
+r11a-sort-rec-lead|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|(ii) **A design choice no source settles is decided on the lead's recommendation only when every one of these holds:**
+r11a-sort-rec-unclear|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|no operator answer, request or `LOCKED_REQUIREMENTS` entry speaks to it, however unclearly (one that does is a Rule 11(a) ambiguity and is asked)
+r11a-sort-rec-intent|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|it needs no fact only the operator holds (what they meant, intend or observed);
+r11a-sort-rec-keep|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|none of its options sets, relaxes or widens a value, a limit or an authority, or keeps one in force that another option would change
+r11a-sort-rec-value|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|where a value is any value Rule 11(a)'s UNBADGED trigger names (a config leaf, a threshold or literal on a money path, a byte-pin, an `LR-` or `LRC-` id, a `D-<n>` decision), an address, an enable flag, a cap, a ceiling, a timeout, a retry count or a rate
+r11a-sort-rec-authority|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|an authority is who or what may act, sign, spend, deploy, waive, patch or re-baseline a check, or reach a secret;
+r11a-sort-rec-scope|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|it changes no story, acceptance criterion or requirement in scope;
+r11a-sort-rec-security|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|it decides no action on a live system (a deploy, a fire, a write to live data, a spend) and no security, authentication, certificate or trust behaviour, whether written now or shipped as code;
+r11a-sort-rec-observable|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|none of its options changes what the deployed system shows or does for a user, an operator or an external party;
+r11a-sort-rec-undo|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|and its effect can be undone after the checkpoint.
+r11a-sort-rec-record|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|Record it as a Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry whose `**Decision/Question:**` line opens `source: recommendation`, naming the options weighed and a one-line reason;
+r11a-sort-rec-fyi|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|it reaches the operator under `### For Your Information` at the checkpoint, not as a question.
+r11a-sort-outside-tier1|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|any Rule 12 Tier 1 matter (a choice that contradicts an operator-approved decision, a requirement divergence, or a carry-over deferral)
+r12-tier2-yields-sort|S|SKILL.md|### Rule 12 |### Rule 13 |Action: document decision and rationale, proceed without blocking.|para|These bullets yield to `#### Operator decisions: sort before asking (Rule 11(a))`
 r11a-sort-tree-no-value|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|The tree never settles a value
 r11a-sort-outside|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|Outside this sort, each asked as its own rule says:
 r11a-sort-where-how|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|for WHERE and HOW only
