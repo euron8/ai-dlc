@@ -3999,8 +3999,17 @@ fi
 # unmerged guard, and the merge brings theirs' region anyway. An outcome the row cannot parse is
 # a DECISION, never a pass. GATED ON THE DECLARATION like transient_ignore_row: neither half
 # present is an older consumer this release has nothing to say about.
+#
+# THE REMEDY NAMES `--finish` ONLY WHILE THE MARKER STANDS. Under `--finish`, or on an ordinary run
+# that handed work back, the stamp is withheld and `--finish` is what writes it. On an ordinary run
+# that stamped, write_stamp removed the marker before this row ran; a `--finish` there finds no
+# marker and records the re-stamp as identity-unchecked, so the remedy ends at post-write-gates.
 taught_schema_row() {
 local _script="$CONSUMER/scripts/ai-dlc/sync-taught-schema.sh" _out _rc _stale="" _merge="" _region="" _p _unk _halt
+local _then="then re-run post-write-gates; this apply already stamped, so no re-stamp is owed"
+if [ "$FINISH" = 1 ] || [ -f "$APPLYING" ]; then
+  _then="then re-run post-write-gates, then re-run \`apply.sh --finish\`"
+fi
 if [ ! -f "$_script" ]; then
   [ -f "$CONSUMER/.claude/schemas/provenance-block.json" ] || return 0
   say DECISION taught-schema-unchecked ".claude/schemas/provenance-block.json" \
@@ -4053,14 +4062,14 @@ if [ -n "$_merge" ]; then
 fi
 if [ -n "$_stale" ]; then
   say WORKLIST taught-schema "${_stale% }" \
-    "generated taught-schema example(s) are STALE against the schema this apply delivered: ${_stale}— the consumer's pre-push runs the same check and will refuse the push. Only after every semantic-merge and finish-unapplied row is resolved, run \`bash scripts/ai-dlc/sync-taught-schema.sh\` (no arguments; it rewrites only the generated regions), then re-run post-write-gates, then re-run \`apply.sh --finish\`."
+    "generated taught-schema example(s) are STALE against the schema this apply delivered: ${_stale}— the consumer's pre-push runs the same check and will refuse the push. Only after every semantic-merge and finish-unapplied row is resolved, run \`bash scripts/ai-dlc/sync-taught-schema.sh\` (no arguments; it rewrites only the generated regions), ${_then}."
 fi
 if [ -n "$_region" ]; then
   _region="$(printf '%s' "$_region" | tr '\n' ' ')"
   local _stop=""
   [ "${_halt:-0}" -gt 0 ] && _stop=" An unknown profile or an unclosed region STOPS the scan at that file, so files after it were not checked: re-run the check after the fix."
   say WORKLIST taught-schema-region "${_region% }" \
-    "taught-schema example(s) the sync cannot clear: ${_region}— a hand-written example outside a generated region, an unknown profile, or a region never closed. Edit each file as the check's FIX text says (\`bash scripts/ai-dlc/sync-taught-schema.sh --check\` prints it), then re-run post-write-gates and \`apply.sh --finish\`.${_stop}"
+    "taught-schema example(s) the sync cannot clear: ${_region}— a hand-written example outside a generated region, an unknown profile, or a region never closed. Edit each file as the check's FIX text says (\`bash scripts/ai-dlc/sync-taught-schema.sh --check\` prints it), ${_then}.${_stop}"
 fi
 }
 

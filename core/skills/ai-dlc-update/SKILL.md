@@ -2544,7 +2544,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    and `finish-unapplied` row is resolved, because the merge brings theirs' region and a sync
    before it moves the file's blob; then re-run this gate. A hand-written example, an unknown
    profile or a region never closed is not cleared by the sync: edit the file as the check's
-   `FIX` text says, then re-run this gate.
+   `FIX` text says, then re-run this gate. Re-run `apply.sh --finish` after it only while the
+   `.claude/.ai-dlc-applying` marker stands; an apply that already stamped owes no re-stamp.
 
    - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
      `<theirs-sha>`, **preserving `skill_version`/`skill_commit`/`installed_at`/
@@ -2732,9 +2733,14 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      the sync, after every merge row is done) or a `WORKLIST taught-schema-region` row (`file:line`
      of a hand-written example, an unknown profile or an unclosed region; the remedy is a hand
      edit). A stale file still owed a semantic merge is named on a `NOTE taught-schema-merge-first`
-     row instead of the sync row: merge it first. A check that could not run or be read is a
-     `DECISION taught-schema-unchecked`, `taught-schema-unparsed` or `taught-schema-unreadable`
-     row and does not withhold.
+     row instead of the sync row: merge it first. Either WORKLIST row's remedy ends in one of two
+     forms. While the marker stands (under `--finish`, or an ordinary apply that withheld) it
+     ends "then re-run post-write-gates, then re-run `apply.sh --finish`". On an ordinary apply
+     that stamped, the row prints after the stamp and ends "then re-run post-write-gates; this
+     apply already stamped, so no re-stamp is owed": do not run `--finish` there, because with
+     no marker it records the re-stamp as `DECISION restamp-identity-unchecked`. A check that
+     could not run or be read is a `DECISION taught-schema-unchecked`, `taught-schema-unparsed`
+     or `taught-schema-unreadable` row and does not withhold.
 
      **Every row `--finish` can emit that withholds the stamp**, derived from the `say WORKLIST`
      sites outside `apply.sh`'s resolution phases, plus `staging-refused`, which

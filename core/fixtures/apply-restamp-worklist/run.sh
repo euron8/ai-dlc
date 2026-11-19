@@ -1474,6 +1474,10 @@ if sg ts; then
 #   W5 a schema that does not parse -> DECISION taught-schema-unparsed, stamps
 #   W8 W1 with the team-role file an untouched classify hand-back -> NOTE taught-schema-merge-first
 #      for it, and only the extension in the sync row
+#   WO a stale extension region on an ORDINARY apply that stamps -> the sync row is still emitted, after
+#      the stamp, and its remedy ends at post-write-gates: write_stamp removed the marker, so a
+#      `--finish` there would record the re-stamp as identity-unchecked. W1's remedy (marker standing)
+#      names `--finish`.
 TS_SCRIPT=""; TS_PROV=""; TS_GATE=""
 for cand in "$ROOT/core/scripts/sync-taught-schema.sh" "$ROOT/scripts/ai-dlc/sync-taught-schema.sh"; do
   [ -f "$cand" ] && TS_SCRIPT="$cand" && break
@@ -1539,6 +1543,7 @@ else
     W4="$(ts_world w4)" && printf '# a taught file\n\n```\nSKILL_INVOCATION_PROVENANCE v1\nfoo: bar\n```\n' > "$W4/$TS_EXT" || TS_OK=0
     W5="$(ts_world w5)" && ts_stale "$W5/$TS_EXT" && printf '{ not json\n' > "$W5/.claude/schemas/gate-adjudication-verdict.json" || TS_OK=0
     W8="$(ts_world w8)" && ts_stale "$W8/$TS_ROLE" && ts_stale "$W8/$TS_EXT" || TS_OK=0
+    WO="$(ts_world wo)" && rm -f "$WO/.claude/.ai-dlc-applying" && ts_stale "$WO/$TS_EXT" || TS_OK=0
     if [ "$TS_OK" = 1 ]; then
       TS_H="$(git hash-object "$W8/$TS_ROLE" 2>/dev/null)"
       printf 'classify-hashes: 1\nclassify: %s 644\t%s\n' "$TS_H" "$TS_ROLE" >> "$W8/.claude/.ai-dlc-applying"
@@ -1552,6 +1557,7 @@ else
       fi
       O1="$(ts_finish "$W1")"; O2="$(ts_finish "$W2")"; O3="$(ts_finish "$W3")"; O7="$(ts_finish "$W7")"
       O4="$(ts_finish "$W4")"; O5="$(ts_finish "$W5")"; O8="$(ts_finish "$W8")"
+      OO="$(bash "$APPLY" "$TD" "$TB" "$WO" "$TT" 2>/dev/null)"
       if [ "$(ts_any "$O1")" = 0 ] && [ "$(ts_any "$O7")" = 0 ] && [ "$IS_DIST" = 0 ]; then
         printf '  SKIP  %s\n' "TS — the installed apply.sh predates the taught-schema row; it lands with this same pull"
       else
@@ -1596,6 +1602,16 @@ else
           ok "TS-W8 a stale file still owed its semantic merge is named merge-first and kept out of the sync row, which names the extension alone"
         else
           bad "TS-W8 merge-first '[${n8}]' sync row '[${s}]' — running the sync over an unmerged file moves its blob and clears the unmerged guard falsely"
+        fi
+        s="$(ts_subj "$OO" WORKLIST taught-schema)"; dO="$(detail_of "$OO" WORKLIST taught-schema)"
+        d1="$(detail_of "$O1" WORKLIST taught-schema)"
+        case "$dO" in *--finish*) fO=1 ;; *) fO=0 ;; esac
+        case "$dO" in *"already stamped"*) aO=1 ;; *) aO=0 ;; esac
+        case "$d1" in *"apply.sh --finish"*) f1=1 ;; *) f1=0 ;; esac
+        if ts_has "$s" "$TS_EXT" && ts_stamped "$WO" "$OO" && [ "$fO" = 0 ] && [ "$aO" = 1 ] && [ "$f1" = 1 ]; then
+          ok "TS-O1 an ordinary apply that stamped still draws WORKLIST taught-schema naming the stale extension, and its remedy says the stamp already stands and names no --finish, while TS-W1's (marker standing) names apply.sh --finish"
+        else
+          bad "TS-O1 ordinary apply sync row '[${s}]' stamp '$(stamp_ver "$WO")' marker $(marker "$WO") remedy-names-finish=$fO says-stamped=$aO, W1 remedy-names-finish=$f1 — a --finish after the stamp finds no marker and re-stamps identity-unchecked"
         fi
       fi
     else
