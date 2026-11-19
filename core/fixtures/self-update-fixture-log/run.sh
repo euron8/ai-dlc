@@ -178,8 +178,17 @@ if [ ! -f "$GATE_SH" ]; then
 else
   G_OUT="$GCONS/out-g4-gate.txt"; G_ERR="$GCONS/err-g4-gate.txt"
   gin_restore
+  # G4'S CONSUMER LACKS tests/fixtures/touched-deleted FOR THE GATE RUN. The range deletes
+  # core/fixtures/touched-deleted, and a consumer still holding it is a pull the gate's arm R3
+  # (deletion-coupled-fixtures) correctly DEFERs -- so this part, which needs an OK record to score
+  # the join, holds it aside and puts it back after. The seed keeps it for the over-completeness arm.
+  G4_HELD="$CKD/g4-held-touched-deleted"
+  mv "$GCONS/tests/fixtures/touched-deleted" "$G4_HELD" \
+    || bad "FIXTURE ERROR: could not hold tests/fixtures/touched-deleted aside for G4's gate run"
   bash "$GATE_SH" "$DIST" "$D_BASE" "$D_THEIRS" "$GCONS" >"$G_OUT" 2>"$G_ERR"
   g_rc=$?
+  mv "$G4_HELD" "$GCONS/tests/fixtures/touched-deleted" \
+    || bad "FIXTURE ERROR: could not restore tests/fixtures/touched-deleted after G4's gate run"
   G_REC="$(ls -t "$GLOG"/self-update-gate-*.md 2>/dev/null | head -1)"
   if [ "$g_rc" -eq 0 ] && [ -n "$G_REC" ] && [ -s "$G_REC" ]; then
     ok "the SHIPPING gate writes a record of its own under _bmad-output/ai-dlc-update/"

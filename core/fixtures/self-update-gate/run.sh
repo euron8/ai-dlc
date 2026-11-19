@@ -2923,6 +2923,105 @@ printf '# step at theirs\n' > "$BT/cons/.claude/skills/ai-dlc/steps/bt.md"
 ss_assert "theirs-fx-control" "$(bt_checkout "$GATE")" "r2=0 und=0 ok=1" \
   "with the consumer's rulebook already at theirs nothing is about to change, so no rulebook DEFER"
 printf '# step at base\n' > "$BT/cons/.claude/skills/ai-dlc/steps/bt.md"
+
+# --- A PULL THAT DELETES A FIXTURE FILE THE CONSUMER STILL HOLDS DEFERS (arm R3) ---------------
+# Step 2 never deletes, so a fixture file theirs removes stays in the consumer beside its new
+# siblings. The world: theirs deletes core/fixtures/x/b.sh and a spaced non-ASCII sibling, and
+# rewords core/fixtures/x/a.sh; nothing else defers in it (no hook script, no rulebook), so the
+# terminal `-` row is R3's to decide. Consumers, one property apart:
+#   held    tests/fixtures/x/b.sh (map_consumer's path)  -> DEFER naming it
+#   lack    neither file                                 -> no R3 row, OK
+#   claude  only .claude/fixtures/x/b.sh (not the mapped path) -> no R3 row, OK
+#   spaced  only tests/fixtures/x/s p café.sh             -> DEFER naming it whole
+# The rename world moves b.sh to c.sh byte-identically, which git pairs as a rename unless the
+# listing says --no-renames; the consumer holding b.sh still holds a file theirs removed.
+DL="$QW/dl"
+dl_world() { # dl_world <dir> <delete|rename> -> <dir>/{dist,B,T} and the four consumers
+  local w="$1" c
+  mkdir -p "$w/dist/core/rules" "$w/dist/core/fixtures/x"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"
+  printf 'dl machinery\n' > "$w/dist/core/rules/dl.md"
+  printf '#!/bin/sh\nexit 0\n' > "$w/dist/core/fixtures/x/a.sh"
+  printf '#!/bin/sh\necho stale-b\n' > "$w/dist/core/fixtures/x/b.sh"
+  printf '#!/bin/sh\necho spaced\n' > "$w/dist/core/fixtures/x/s p $QU.sh"
+  qw_git "$w/dist" add -A >/dev/null 2>&1; qw_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  printf '#!/bin/sh\n# reworded\nexit 0\n' > "$w/dist/core/fixtures/x/a.sh"
+  if [ "$2" = rename ]; then
+    qw_git "$w/dist" mv core/fixtures/x/b.sh core/fixtures/x/c.sh >/dev/null 2>&1
+  else
+    qw_git "$w/dist" rm -q core/fixtures/x/b.sh "core/fixtures/x/s p $QU.sh" >/dev/null 2>&1
+  fi
+  qw_git "$w/dist" add -A >/dev/null 2>&1; qw_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  for c in held lack claude spaced; do
+    mkdir -p "$w/$c/.githooks" "$w/$c/tests/fixtures/x"
+    printf '#!/usr/bin/env bash\nexit 0\n' > "$w/$c/.githooks/pre-push"; chmod +x "$w/$c/.githooks/pre-push"
+    printf '#!/bin/sh\nexit 0\n' > "$w/$c/tests/fixtures/x/a.sh"
+  done
+  printf '#!/bin/sh\necho stale-b\n' > "$w/held/tests/fixtures/x/b.sh"
+  mkdir -p "$w/claude/.claude/fixtures/x"; printf '#!/bin/sh\necho stale-b\n' > "$w/claude/.claude/fixtures/x/b.sh"
+  printf '#!/bin/sh\necho spaced\n' > "$w/spaced/tests/fixtures/x/s p $QU.sh"
+}
+dl_world "$DL/del" delete
+dl_world "$DL/ren" rename
+# dl_scan <gate> <world> <consumer> -> "r3=<bracketed paths|none> term=<OK|DEFER|...>"
+dl_scan() {
+  local o r t
+  o="$(LC_ALL=en_US.UTF-8 bash "$1" --no-safe-stop-advice "$DL/$2/dist" "$(cat "$DL/$2/B")" "$(cat "$DL/$2/T")" "$DL/$2/$3" 2>/dev/null)"
+  r="$(printf '%s\n' "$o" | awk -F'\t' '$1 == "SELF-UPDATE-DEFER" && $2 == "deletion-coupled-fixtures" {print $3; exit}' | grep -o '\[[^]]*\]' | tr -d '\n')"
+  t="$(printf '%s\n' "$o" | awk -F'\t' '$1 ~ /^SELF-UPDATE-/ && $2 == "-" {sub(/^SELF-UPDATE-/, "", $1); print $1; exit}')"
+  printf 'r3=%s term=%s\n' "${r:-none}" "${t:-none}"
+}
+sd_assert "del-held" "$(dl_scan "$GATE" del held)" "r3=[tests/fixtures/x/b.sh] term=DEFER" \
+  "a pull deleting core/fixtures/x/b.sh, which the consumer holds at tests/fixtures/x/b.sh, DEFERs naming it"
+sd_assert "del-lack" "$(dl_scan "$GATE" del lack)" "r3=none term=OK" \
+  "the same pull against a consumer that already lacks every deleted file has no R3 row and stays OK"
+sd_assert "del-claude" "$(dl_scan "$GATE" del claude)" "r3=none term=OK" \
+  "a consumer holding b.sh only at .claude/fixtures/, which is not map_consumer's path, stays OK"
+sd_assert "del-spaced" "$(dl_scan "$GATE" del spaced)" "r3=[tests/fixtures/x/s p $QU.sh] term=DEFER" \
+  "a deleted path carrying a space and a non-ASCII byte is listed raw, read whole, and named in the DEFER"
+sd_assert "del-rename" "$(dl_scan "$GATE" ren held)" "r3=[tests/fixtures/x/b.sh] term=DEFER" \
+  "a byte-identical rename b.sh -> c.sh leaves the consumer's b.sh behind, so it DEFERs like a deletion"
+
+# --- THE --safe-stop WALK STOPS BEFORE THE RELEASE THAT DELETES A HELD FIXTURE FILE ------------
+# Five releases past base, every one moving core/rules/dl.md so each slice lands machinery and
+# survives the walk's keep test. R2 deletes core/fixtures/x/gone.sh, which the consumer LACKS; R3
+# deletes core/fixtures/x/b.sh, which it holds; R4 is theirs and never a candidate. The latest clean
+# candidate is R2. R2's child has a deletion to map, so it is the nested child loading map_consumer
+# itself: a child that cannot load it answers UNDECIDED and the walk falls back to R1. A gate without
+# R3 names R3, the deleting release; an existence test that defers on any deletion names R1.
+SW="$DL/walk"
+mkdir -p "$SW/dist/core/rules" "$SW/dist/core/fixtures/x" "$SW/cons/.githooks" "$SW/cons/tests/fixtures/x"
+git -C "$SW/dist" init -q
+printf '1.0.0\n' > "$SW/dist/VERSION"; printf 'dl machinery 0\n' > "$SW/dist/core/rules/dl.md"
+printf '#!/bin/sh\nexit 0\n' > "$SW/dist/core/fixtures/x/a.sh"
+printf '#!/bin/sh\necho stale-b\n' > "$SW/dist/core/fixtures/x/b.sh"
+printf '#!/bin/sh\necho gone\n' > "$SW/dist/core/fixtures/x/gone.sh"
+qw_git "$SW/dist" add -A >/dev/null 2>&1; qw_git "$SW/dist" commit -qm base >/dev/null 2>&1
+git -C "$SW/dist" rev-parse HEAD > "$SW/B"
+for _r in 1 2 3 4; do
+  printf '1.%s.0\n' "$_r" > "$SW/dist/VERSION"; printf 'dl machinery %s\n' "$_r" > "$SW/dist/core/rules/dl.md"
+  [ "$_r" = 2 ] && qw_git "$SW/dist" rm -q core/fixtures/x/gone.sh >/dev/null 2>&1
+  [ "$_r" = 3 ] && qw_git "$SW/dist" rm -q core/fixtures/x/b.sh >/dev/null 2>&1
+  qw_git "$SW/dist" add -A >/dev/null 2>&1; qw_git "$SW/dist" commit -qm "R$_r" >/dev/null 2>&1
+  git -C "$SW/dist" rev-parse HEAD > "$SW/R$_r"
+done
+printf '#!/usr/bin/env bash\nexit 0\n' > "$SW/cons/.githooks/pre-push"; chmod +x "$SW/cons/.githooks/pre-push"
+printf '#!/bin/sh\nexit 0\n' > "$SW/cons/tests/fixtures/x/a.sh"
+printf '#!/bin/sh\necho stale-b\n' > "$SW/cons/tests/fixtures/x/b.sh"
+# sw_stop <gate> -> "stop=<R1..R4|none|unknown:<sha>>", the release the walk names, by exact sha
+sw_stop() {
+  local s n
+  s="$(bash "$1" --safe-stop "$SW/dist" "$(cat "$SW/B")" "$(cat "$SW/R4")" "$SW/cons" 2>/dev/null)"
+  [ -n "$s" ] || { echo "stop=none"; return 0; }
+  for n in 1 2 3 4; do [ "$s" = "$(cat "$SW/R$n")" ] && { echo "stop=R$n"; return 0; }; done
+  echo "stop=unknown:$s"
+}
+sd_assert "del-safe-stop" "$(sw_stop "$GATE")" "stop=R2" \
+  "the walk names R2, the latest clean release before R3 deletes a held fixture file; R2's own deletion the consumer lacks"
 rm -rf "$QW"
 
 fi

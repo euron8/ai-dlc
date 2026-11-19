@@ -4070,3 +4070,34 @@ verify: manual
 Provenance: batch 259 close; id allocated by lead ai-dlc-64.
 
 verify: manual
+
+## BL-1180 — the self-update gate has no arm that reads deletions, so a pull that deletes a fixture file the consumer still holds self-updates red
+
+**DEFECT.** OPEN. Filed 2026-11-19. Filed by the consumer as PC-S323-SELF-UPDATE-GATE-HAS-NO-DELETION-COUPLED-FIXTURE-ARM-SO-A-DELETION-RANGE-SELF-UPDATE-IS-RED-BY-CONSTRUCTION. Owner: `core/skills/ai-dlc-update/reconcile/self-update-gate.sh`.
+
+Defect, at 5026369ed. 0.1165.0 (cad8cfd8a) deleted `core/fixtures/review-shard-merge/receipt-bl988.sh`. Step 2 never deletes (`reconcile/self-update-fixtures.sh:12-13`; SKILL.md step 2's bucket list), so the reference consumer kept the stale file beside the new siblings, `receipt-bl980.sh:155` tripped on it, and the self-update push went red. The gate had answered `SELF-UPDATE-OK`: its DEFER emitters were R1, R2 and the push differential, and `UPSTREAM-DELETED` appeared in it only as a comment. No arm read deletions. The filing's "new sibling check" detail is wrong: the partition check predates the range; the coupling is the deletion.
+
+Remedy: arm R3 `deletion-coupled-fixtures` (`self-update-gate.sh:1308-1372` at 3fa89b0dc), after R2 and before the `deferred_join` check, outside arm C's `AI_DLC_GATE_IN_SAFE_STOP` block, so the `--safe-stop` walk runs it too.
+- It lists `git diff --no-renames --diff-filter=D --name-only BASE..THEIRS -- core/fixtures/` with `core.quotePath=false`, reads its status, stages the list and reads it line by line. A failed listing is `SELF-UPDATE-UNDECIDED deletion-coupled-fixtures`. `--no-renames` is required: a rename leaves the old path in the consumer's tree, and git pairs a byte-identical rename, which would never list as D.
+- It loads `map_consumer` itself through `gate_load_preclassify`. The nested `--safe-stop` child never enters arm C, and arm C skips the load when `preclassify.sh` is absent. An unloadable map or an empty mapped path is UNDECIDED.
+- A held path is `[ -f ]` at `map_consumer`'s path (`core/fixtures/x` → `tests/fixtures/x`). Held paths give `SELF-UPDATE-DEFER deletion-coupled-fixtures` naming them and stating that step 2 never deletes; `deferred_join=1`, so the existing join emits the `-` DEFER and the safe-stop advice.
+
+Builder's choice: preclassify's deleted / deleted-noop split is re-derived inline (one git exec; `-f`, the test preclassify's `file_hash` applies through `pc_ctest -f`), rather than running preclassify per candidate. Running it per candidate would cost a bash start plus a full hash pass in every nested `--safe-stop` child and move counted-start rows.
+
+Scope decisions:
+- Whole deleted fixture directories are included. The gated apply deletes them and the slice does not.
+- A held file under a directory carrying `.dist-only` at theirs is deferred too, although the apply skips it (DIST-ONLY-SKIP, `preclassify.sh:795`). Zero cases are on record; deferring one costs a gated apply, where acquitting it would risk a red push.
+
+Accepted false-positive set (contract D3, measured by the contract adversary and not re-derived for this entry; the lead's decision; recorded beside the arm): the reference consumer's pulls since 2026-11-01 that R3 defers are 0.1128.0→0.1142.0 (26 held of 75 deleted fixture paths), 0.1143.0→0.1157.0 (1 of 20) and 0.1164.0→0.1167.0 (1 of 1, the motivating red). The reference consumer's earlier PRs #1290 and #1295 were pushed with held stale deletions. None is a false positive: a stale fixture file the consumer holds stays until the gated apply removes it. Narrowing: none; the only filter is the consumer-existence test.
+
+Carriers: `core/skills/ai-dlc-update/SKILL.md` step 2 now names three couplings (a new bullet for the deletion coupling) and scopes "a machinery-only pull still proceeds autonomously" to one that deletes no held fixture file; the gate's text above R1 reads "three ways".
+
+Fixture cells: `core/fixtures/self-update-gate/run.sh` shard d gains the qw cells `del-held`, `del-lack`, `del-claude`, `del-spaced`, `del-rename` and `del-safe-stop`. `core/fixtures/self-update-fixture-log/run.sh` Part G4 moves `tests/fixtures/touched-deleted` aside for its gate run, so R3 does not defer there and G4 still gets the OK record it scores.
+
+BL-868: zero load-dependent tests. R3 reads no count, clock or process state; its verdict is a function of the range and the consumer tree, so a fixture cell over it has none to depend on.
+
+**LANDED (vVERSION_PLACEHOLDER).** (batch 260, C2.) R3 ships in `self-update-gate.sh`; step 2's text in SKILL.md names the deletion coupling. Probe, hand-run once on a `mktemp -d` miniature (hand-run, uncommitted): base `SELF-UPDATE-OK`, tip `SELF-UPDATE-DEFER deletion-coupled-fixtures [tests/fixtures/x/b.sh]`; quiet when the consumer lacks the file and on a `.claude/fixtures/x/b.sh` near-miss; a spaced path maps. The mutant that drops `--no-renames` reads OK on a byte-identical rename and is killed; the mutant that drops R3's own `gate_load_preclassify` reads UNDECIDED in the `--safe-stop` child's path and is killed. Who would notice it gone: every consumer pull whose range deletes a fixture file the consumer holds, 3 of the reference consumer's pulls since 2026-11-01.
+
+Provenance: batch 260, C2 (lead ai-dlc-ff); id allocated by the lead.
+
+verify: manual

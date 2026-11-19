@@ -437,7 +437,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    deliberately excludes.** Measured on the reference consumer pulling 0.249.0 → 0.261.0:
    **7 of that tree's 109 fixtures are red in the state this step constructs**, and the
    operator had to cut a branch, write the 17-path slice and run 43 derived fixtures to
-   find out. Two distinct couplings, both real:
+   find out. Three distinct couplings, all real:
 
    - **`enforcement-map.yaml` is machinery; its `CHECK_LOADED` anchors are rulebook.** A
      release that adds a check makes the incoming map reference an anchor that does not
@@ -448,13 +448,22 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      `validate-reattach-budget.sh` against the SHIPPED `SKILL.md` and mutates its mandate.
      Its subject is rulebook, so it cannot be green while machinery is at theirs and
      rulebook at ours — whatever the slice contains.
+   - **A fixture file the pull deletes stays in the consumer's tree.** This step never
+     deletes, so the slice ships a deleted fixture file's new siblings beside the stale copy,
+     and a sibling that enumerates its own directory runs or asserts on the file upstream
+     removed. Only the step-7 gated apply performs the deletion (`UPSTREAM-DELETED`). The
+     gate's `deletion-coupled-fixtures` row names each deleted `core/fixtures/` path the
+     consumer still holds at its `tests/fixtures/` mapping; a deleted path the consumer
+     already lacks is quiet.
 
    **So the deferral is structural, not exceptional**, and for any pull spanning a
    check-adding release it is the expected outcome. `reconcile/self-update-gate.sh` now
-   detects both couplings BEFORE the branch is cut and returns `SELF-UPDATE-DEFER`, so the
-   slice folds into the gated apply without the branch/write/run/revert cycle. Its arms fire
-   only when the rulebook is ALSO about to change: a machinery-only pull still proceeds
-   autonomously (verified against 0.256.0 → 0.257.0, which touches no rulebook file).
+   detects all three couplings BEFORE the branch is cut and returns `SELF-UPDATE-DEFER`, so the
+   slice folds into the gated apply without the branch/write/run/revert cycle. Its two
+   rulebook arms fire only when the rulebook is ALSO about to change (verified against 0.256.0
+   → 0.257.0, which touches no rulebook file), and its deletion arm only when the pull deletes
+   a fixture file the consumer still holds: a machinery-only pull that deletes no held fixture
+   file still proceeds autonomously.
 
    **EMPTY is a CONTENT question, not a diff question — or this step never terminates.**
    The slice is `git diff base→theirs`, and `base` is the stamp's `commit`, which advances
