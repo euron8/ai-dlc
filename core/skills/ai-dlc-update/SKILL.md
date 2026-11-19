@@ -2383,8 +2383,8 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      the autonomous self-update cycle in step 2.)
 
    **RUN THE POST-WRITE GATES THROUGH ONE SCRIPT, AND READ ITS VERDICT LINES — NEVER A GATE'S
-   PROSE.** The four gates below (leftover tokens, setup-site drift, hook registration, and the
-   `hard-blockers.sh --post-apply` re-run) are exit-code gates. After the last write, run them
+   PROSE.** The five gates below (leftover tokens, setup-site drift, hook registration, taught
+   schema, and the `hard-blockers.sh --post-apply` re-run) are exit-code gates. After the last write, run them
    together, unpiped:
 
    ```
@@ -2525,6 +2525,26 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    while it was written: `ai-dlc-rules-floor.sh` — which `install.sh` calls "the
    SINGLE detector, running every session" — present and unregistered for six
    releases, across pulls that reported success.
+
+   **Taught-schema gate — hard, runs after the last write, blocks delivery.**
+
+   ```
+   AI_DLC_PROJECT_ROOT=<consumer> bash <consumer>/scripts/ai-dlc/sync-taught-schema.sh --check > <file> 2>&1; rc=$?
+   ```
+
+   Exit 0 required — observed as `post-write-gates.sh`'s `GATE taught-schema PASS` line, or by
+   the unpiped fallback form above. Same place in the sequence as the gates above — after the
+   last write, before delivery. It asserts that every generated taught-schema example under
+   `.claude/skills` and `.claude/team-roles`, extensions included, is rendered from the schemas
+   in `.claude/schemas/`. It only checks and writes nothing. Its `FAIL` lines go to stderr, so
+   capture both streams. An absent script is UNDECIDED; exit 2 (root unresolved) is a FAIL.
+
+   A `FAIL` naming a STALE example is cleared by `bash scripts/ai-dlc/sync-taught-schema.sh` (no
+   arguments; it rewrites only the generated regions). Run it only after every semantic-merge
+   and `finish-unapplied` row is resolved, because the merge brings theirs' region and a sync
+   before it moves the file's blob; then re-run this gate. A hand-written example, an unknown
+   profile or a region never closed is not cleared by the sync: edit the file as the check's
+   `FIX` text says, then re-run this gate.
 
    - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
      `<theirs-sha>`, **preserving `skill_version`/`skill_commit`/`installed_at`/
@@ -2707,6 +2727,15 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      those you have already adjudicated, or they are the tool saying it could not look,
      and gating on one that cannot clear would wedge the consumer with no exit.
 
+     It also runs the consumer's `scripts/ai-dlc/sync-taught-schema.sh --check` and withholds on
+     a `WORKLIST taught-schema` row (each file whose generated example is stale; the remedy is
+     the sync, after every merge row is done) or a `WORKLIST taught-schema-region` row (`file:line`
+     of a hand-written example, an unknown profile or an unclosed region; the remedy is a hand
+     edit). A stale file still owed a semantic merge is named on a `NOTE taught-schema-merge-first`
+     row instead of the sync row: merge it first. A check that could not run or be read is a
+     `DECISION taught-schema-unchecked`, `taught-schema-unparsed` or `taught-schema-unreadable`
+     row and does not withhold.
+
      **Every row `--finish` can emit that withholds the stamp**, derived from the `say WORKLIST`
      sites outside `apply.sh`'s resolution phases, plus `staging-refused`, which
      `ap_staging_refused` emits as a `WORKLIST` under `--finish`: `finish-marker-directory` (the marker's path is a directory), `finish-base-unverified`,
@@ -2716,7 +2745,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      `finish-refile-unverified`,
      `finish-exec-owed`, `staging-refused`, `hook-unshipped`, `settings-merge`,
      `settings-local-dangling`, `transient-ignore`, `transient-ignore-tracked`,
-     `agent-definitions`. Three `DECISION` rows stop it without stamping, because they write
+     `agent-definitions`, `taught-schema`, `taught-schema-region`. Three `DECISION` rows stop it without stamping, because they write
      nothing: `restamp-identity-mismatch`, `restamp-unresolvable` and `restamp-absent` (no stamp
      file at all). `restamp-failed` and `skill-restamp-failed` also leave the stamp short of
      `<theirs>`, but only after a write was attempted.
