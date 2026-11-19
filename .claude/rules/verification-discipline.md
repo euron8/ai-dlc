@@ -17,7 +17,7 @@ A control on an input ADJACENT to the one that matters reads as working. Where t
 
 ## Count a suite's distinct input SHAPES, not its arms
 
-Channels converge on the obvious input and agree for that reason. Give each channel its own seed shape (for
+Give each channel its own seed shape (for
 example a duplicate NOT adjacent to the original); never add another arm instead.
 
 A hand-run mutant that scores identical may mean the corpus lacks the discriminating input: construct the input
@@ -139,8 +139,7 @@ pattern or zero times, and either way exits 0.
 
 ## A calibration is a property of its text, not of its divisor
 
-Re-measure a bytes-per-token figure whenever the corpus changes; carrying a divisor across populations gives
-the same number with the opposite error.
+Re-measure a bytes-per-token figure whenever the corpus changes.
 
 ## Ask what rate a hypothesis PREDICTS before a zero refutes it
 
