@@ -336,6 +336,7 @@ pin_scan() {
   {
     line = $0
     if (m == "absent") { if (index(line, l) > 0) { whole++; if (fl == 0) fl = NR }; next }
+    if (m == "absentw") { gsub(/[ \t]+/, " ", line); sub(/^ /, "", line); sub(/ $/, "", line); all = (all == "" ? line : all " " line); if (fl == 0 && index(all, l) > 0) fl = NR; next }
     if (com) { if (index(line, "-->")) com = 0; if (m == "para") flush(); next }
     t = line; sub(/^[ \t]+/, "", t)
     if (fence == "") {
@@ -364,7 +365,8 @@ pin_scan() {
       if (hit) ins++
     }
   }
-  END { if (m == "absent") { print whole, whole, 1, 1, fl; exit 0 }
+  END { if (m == "absentw") { r = all; whole = 0; while ((c = index(r, l)) > 0) { whole++; r = substr(r, c + length(l)) }; print whole, whole, 1, 1, fl; exit 0 }
+        if (m == "absent") { print whole, whole, 1, 1, fl; exit 0 }
         if (m == "para") flush()
         if (x && np != 1) ins = 0
         if (fence != "" || com) { print "UNBALANCED"; exit 2 }
@@ -625,7 +627,8 @@ r11a-premise|S|SKILL.md|### Rule 12 |### Rule 13 |**An act the operator has atte
 r11a-value-trigger|S|SKILL.md|### Rule 11 |### Rule 12 |**Every option states its concrete effect, INCLUDING the value it leaves|para|decides a value the operator alone owns and no operator words fix
 r11a-sort-decide|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|record it as a Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry naming its source and a one-line reason
 r11a-sort-fyi-only|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|it reaches the operator only under `### For Your Information` at the checkpoint
-r11a-sort-veto-absent|S|SKILL.md|||veto line for it to the next|absent
+r11a-sort-veto-absent|S|SKILL.md|||veto line for it to the next|absentw
+r11a-sort-outside-catchall|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|a gate STOP adjudication (`steps/_gate-procedures.md`), and any other decision a step reserves to the operator.
 r11a-sort-provided|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|leaves every operator-owned value in force or sets it to the operator's verbatim value or that value exactly converted between units
 r11a-sort-decides-no-value|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|Such a choice decides no value, so Rule 11(a)'s UNBADGED trigger does not reach it.
 r11a-sort-no-widen|S|SKILL.md|### Rule 12 |### Rule 13 |**Sort every question three ways before it is asked.**|para|A choice that otherwise sets, relaxes or widens a value, a limit or an authority is settled by no source
@@ -1075,7 +1078,7 @@ corpus_report() {
     out="$(pin_scan "$f" "$s" "$e" "$lead" "$mode" "$tok")"; rc=$?
     [ "$rc" -eq 0 ] || { bad "$id: ${f#"$ROOT/"} has an unbalanced fence or comment"; continue; }
     read -r ins whole sl el fl <<<"$out"
-    if [ "$mode" = "absent" ]; then
+    if [ "$mode" = "absent" ] || [ "$mode" = "absentw" ]; then
       [ "$whole" -eq 0 ] && ok "$id: absent from ${f#"$ROOT/"}" \
                          || bad "$id: token present in ${f#"$ROOT/"} at line $fl ($whole hit(s)) — the definition must live once"
     elif [ "$sl" -eq 0 ] || [ "$el" -eq 0 ]; then
@@ -1224,6 +1227,11 @@ printf 'a\n```\none git pathspec per line\n```\n' > "$P/ab-fence.md"
 probe "absent mode: a seeded copy inside a fence fires" 1 "$P/ab-fence.md" "" "" "one git pathspec per line" absent
 printf 'one git pathspec per\nline of text\n' > "$P/ab-near.md"
 probe "absent mode: a near-miss (wrapped, one word short) stays quiet" 0 "$P/ab-near.md" "" "" "one git pathspec per line" absent
+printf 'a veto line for it\nto the next ask\n' > "$P/abw-split.md"
+probe "absentw mode: a phrase split across a line break fires" 1 "$P/abw-split.md" "" "" "veto line for it to the next" absentw
+probe "absent mode: the same split phrase is missed line by line" 0 "$P/abw-split.md" "" "" "veto line for it to the next" absent
+printf 'a veto line for it\nto the end\n' > "$P/abw-near.md"
+probe "absentw mode: a near-miss stays quiet" 0 "$P/abw-near.md" "" "" "veto line for it to the next" absentw
 printf '## A\n  **LEAD.** indented\nsee **LEAD.** mid-line\n## B\n' > "$P/indent.md"
 probe "an indented or mid-line lead is not a line-start pin" 0 "$P/indent.md" "## A" "## B" "**LEAD.**" prefix
 probe "a mid-line token IS found in contains mode" 2 "$P/indent.md" "## A" "## B" "**LEAD.**" contains

@@ -3147,6 +3147,8 @@ Still owed:
 3. The sort's Outside list has no catch-all for a decision another step reserves to the operator. One instance: `steps/handoff.md:107-114`, where after a `pre-push: BLOCKED.` "The operator decides whether the hook is fixed or bypassed"; today that decision stays asked only through item (ii)'s authority to "waive, patch or re-baseline a check".
 4. Zero tagged entries is not a pass. If the closing sprint has no entry opening `source: recommendation`, the closer reads every Tier 2 `DECIDED_AUTONOMOUSLY` entry and states the count.
 
+**Progress (batch 260, C3): work-list items 3 and 4 (D1, D2) are built; the entry stays PARTIAL on items 1 and 2.** D1: `core/fixtures/process-rule-pins/run.sh` gains the mode `absentw`, which whitespace-joins the whole file and counts the token in the joined text, so a phrase split across a line break is found. `r11a-sort-veto-absent` now uses it, and three engine probes cover the split form (found by `absentw`, missed by `absent`) and a near-miss. D2: the sort's Outside list in `core/skills/ai-dlc/SKILL.md` ends with "and any other decision a step reserves to the operator", at the end of the paragraph, and the new `para` row `r11a-sort-outside-catchall` pins it. `postcompact-digest.md` is re-rendered. Hand-run once: the veto phrase split over two lines and added to SKILL.md fails `r11a-sort-veto-absent` (the old `absent` mode reads 0 on the same text); removing the catch-all fails `r11a-sort-outside-catchall`. Still owed: items 1, 2 and 5 of the work list below.
+
 ### Work list at batch 259 close
 
 One done condition, unchanged: the `Outcome measured:` reading above on a complete post-rule sprint. The "Still owed" items above, numbered as work:
