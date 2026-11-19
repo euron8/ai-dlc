@@ -24,7 +24,6 @@ check-24-adversarial-convergence-c	core/scripts/validate-adversarial-convergence
 content-seal	core/scripts/join-remediator-shards.sh runs outside a declared cell; core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/hooks/ai-dlc-content-seal.sh runs outside a declared cell; core/scripts/validate-gate-adjudication.sh runs outside a declared cell; core/scripts/wait-for-deliverable.sh runs outside a declared cell; core/scripts/content-seal.sh runs outside a declared cell
 core-paths-audit-diff	core/scripts/core-paths.sh runs outside a declared cell
 dispatch-model-guard	core/scripts/merge-adversarial-shards.sh runs outside a declared cell; core/scripts/validate-spawn-ledger.sh runs outside a declared cell; core/scripts/validate-gate-adjudication.sh runs outside a declared cell
-fixture-git-env-seam	core/skills/ai-dlc-update/reconcile/unregistered-drift.sh runs outside a declared cell; core/scripts/validate-audit-anchors.sh runs outside a declared cell
 fixture-hygiene	scripts/validate-fixture-invocations.sh runs outside a declared cell; scripts/validate-fixture-hygiene.sh runs outside a declared cell
 fixture-invocation-budget	scripts/validate-fixture-invocations.sh runs outside a declared cell; scripts/collect-counted-stores.sh runs outside a declared cell; core/scripts/hermetic-run.sh runs outside a declared cell
 fold-architect-ledger-join	core/scripts/validate-spawn-ledger.sh runs outside a declared cell

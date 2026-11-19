@@ -4,3 +4,7 @@
 # probe's copy in vf_cli and compared byte for byte with vf_ip on the same arguments.
 cli scripts/validate-fixture-git-env.sh cli-refuse
 cli scripts/validate-fixture-git-env.sh cli-pass
+# The inner fixtures run from the root: their own cells credit the validate-audit-anchors.sh and unregistered-drift.sh
+# starts (inputs.decl holds both cells.decl files for the sandbox).
+drives trunk-push-bound
+drives setup-config-drift
