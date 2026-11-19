@@ -1,2 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 89 *
+# sync-taught-schema.sh is never started at its declared path: run.sh and the gate start the consumer COPY at
+# <world>/consumer/scripts/ai-dlc/sync-taught-schema.sh, which does not end in /core/scripts/sync-taught-schema.sh
+# (the dist copy cannot be pointed at a consumer: its script-relative core/schemas/ wins). So 0 counted starts.
+0 core/scripts/sync-taught-schema.sh
