@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1175.0] - 2026-11-19
+
+### PC-S323-SELF-UPDATE-GATE-HAS-NO-DELETION-COUPLED-FIXTURE-ARM-SO-A-DELETION-RANGE-SELF-UPDATE-IS-RED-BY-CONSTRUCTION (BL-1180): the self-update gate defers a pull that deletes a fixture file the consumer still holds
+
+For consumers pulling a release range that deletes a fixture file. Step 2 (the autonomous self-update) never deletes, so a fixture file upstream removed stayed in the consumer's tree beside its new siblings, and a sibling that enumerates its own directory went red on a pull that broke nothing. The reference consumer's 0.1164.0 → 0.1167.0 self-update push failed this way on `review-shard-merge/receipt-bl988.sh`, after the gate had answered `SELF-UPDATE-OK`.
+
+`reconcile/self-update-gate.sh` gains arm R3, `deletion-coupled-fixtures`. It lists the range's deleted `core/fixtures/` paths (`--no-renames`, so a rename counts as a deletion of the old path; `core.quotePath=false`, read line by line), maps each to the consumer's `tests/fixtures/` path with preclassify's own `map_consumer`, and defers when the consumer still holds one as a file. The slice then folds into the step-7 gated apply, which performs the deletion. A deleted path the consumer already lacks is quiet. The arm runs in the `--safe-stop` walk too, loading `map_consumer` itself; a failed listing, an unloadable map or an empty mapped path is `SELF-UPDATE-UNDECIDED`.
+
+Whole deleted fixture directories are included. A held file under a `.dist-only` directory is deferred too (no case on record). Accepted false-positive set, no narrowing: three of the reference consumer's pull ranges since 2026-11-01 defer (0.1128.0 → 0.1142.0, 26 held of 75 deleted; 0.1143.0 → 0.1157.0, 1 of 20; 0.1164.0 → 0.1167.0, 1 of 1); none is a false positive, because a held stale fixture file stays until the gated apply removes it.
+
+The self-update-gate fixture gains six cells in shard d (`del-held`, `del-lack`, `del-claude`, `del-spaced`, `del-rename`, `del-safe-stop`). The self-update-fixture-log fixture's Part G4 moves `tests/fixtures/touched-deleted` aside for its gate run.
+
+`ai-dlc-update` SKILL.md step 2 now names three couplings, and a machinery-only pull proceeds autonomously only when it deletes no fixture file the consumer holds.
+
 ## [0.1174.0] - 2026-11-18
 
 ### BL-1175 (advances, stays PARTIAL): repair-introduced MAJORs no longer block the next adversarial pass
