@@ -410,7 +410,10 @@ Action: mark task BLOCKED, message the lead (a teammate: `SendMessage` `to: "mai
 - Implementation option selection among alternatives presented in a
   carry-over item or story spec.
 
-Action: document decision and rationale, proceed without blocking.
+Action: document decision and rationale, proceed without blocking. These
+bullets yield to `#### Operator decisions: sort before asking (Rule
+11(a))`: a choice that sort leaves asked is asked, whatever a bullet
+above says.
 
 **Tier 3 -- not an escalation:**
 Formatting, naming, phrasing, minor refactors, test structure, or any
@@ -443,16 +446,39 @@ a `LOCKED_REQUIREMENTS` entry -- and, for WHERE and HOW only (a code
 path, a check's placement, which component reads what), the tree. It is
 a HOW decision under Rule 13 (`rule-bodies/rule-13.md`): record it as a
 Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry naming its source and a
-one-line reason, add one veto line for it to the next `AskUserQuestion`
-you send, and it reaches the operator under `### For Your Information`
-at the checkpoint (`steps/deploy-validate.md` §5). This holds on a money
-path, a config leaf or a pinned span, PROVIDED the choice leaves every
-operator-owned value in force or sets it to the operator's verbatim
-value or that value exactly converted between units. Such a choice
-decides no value, so Rule 11(a)'s UNBADGED trigger does not reach it. A
-choice that otherwise sets, relaxes or widens a value, a limit or an
-authority is settled by no source. (ii) **A design choice no
-source settles is asked with one option `(Recommended)`.** (iii) **Only
+one-line reason; it reaches the operator only under `### For Your
+Information` at the checkpoint (`steps/deploy-validate.md` §5). This
+holds on a money path, a config leaf or a pinned span, PROVIDED the
+choice leaves every operator-owned value in force or sets it to the
+operator's verbatim value or that value exactly converted between units.
+Such a choice decides no value, so Rule 11(a)'s UNBADGED trigger does
+not reach it. A choice that otherwise sets, relaxes or widens a value, a
+limit or an authority is settled by no source. (ii) **A design choice no
+source settles is decided on the lead's recommendation only when every
+one of these holds:** no operator answer, request or
+`LOCKED_REQUIREMENTS` entry speaks to it, however unclearly (one that
+does is a Rule 11(a) ambiguity and is asked); it needs no fact only the
+operator holds (what they meant, intend or observed); none of its
+options sets, relaxes or widens a value, a limit or an authority, or
+keeps one in force that another option would change, where a value is
+any value Rule 11(a)'s UNBADGED trigger names (a config leaf, a
+threshold or literal on a money path, a byte-pin, an `LR-` or `LRC-` id,
+a `D-<n>` decision), an address, an enable flag, a cap, a ceiling, a
+timeout, a retry count or a rate, and an authority is who or what may
+act, sign, spend, deploy, waive, patch or re-baseline a check, or reach
+a secret; it changes no story, acceptance criterion or requirement in
+scope; it decides no action on a live system (a deploy, a fire, a write
+to live data, a spend) and no security, authentication, certificate or
+trust behaviour, whether written now or shipped as code; none of its
+options changes what the deployed system shows or does for a user, an
+operator or an external party; and its effect can be undone after the
+checkpoint. Record it as a Rule 12 Tier 2
+`DECIDED_AUTONOMOUSLY` entry whose `**Decision/Question:**` line opens
+`source: recommendation`, naming the options weighed and a one-line
+reason; it reaches the operator under
+`### For Your Information` at the checkpoint, not as a question. Any
+other design choice no source settles is asked with one option
+`(Recommended)`. (iii) **Only
 a value the operator alone owns and no operator words fix is asked
 UNBADGED, as Rule 11(a) says** -- a number, an address, a limit, an
 enable flag, a secret, wallet or security config. **The tree never
@@ -462,8 +488,9 @@ source; and words a lead wrote into a `LOCKED_REQUIREMENTS` entry are no
 source for what they add. **Outside this sort, each asked as its own
 rule says:** the sprint-scope confirmation (`steps/route.md` Step 6),
 operator relief (Rule 11(a), `bug-investigation.md` §2b), a choice that
-moves a locked requirement's boundary (Rule 13) or contradicts an
-operator-approved decision (Rule 12 Tier 1), and a gate STOP
+moves a locked requirement's boundary (Rule 13), any Rule 12 Tier 1
+matter (a choice that contradicts an operator-approved decision, a
+requirement divergence, or a carry-over deferral), and a gate STOP
 adjudication (`steps/_gate-procedures.md`).
 
 #### Operator decisions: one shape (Rule 11(a))

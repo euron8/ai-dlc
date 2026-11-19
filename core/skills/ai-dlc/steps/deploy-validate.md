@@ -567,7 +567,7 @@ See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
   - [Option]: [its effect and the value it leaves in force] — [the consequence of choosing it]
 
 ### For Your Information
-[One line per DECIDED_AUTONOMOUSLY entry, citing its id; one line per standing-ruling release §3 item 2 cites, never omitted; then any other item that asks nothing of you, or omit those other items]
+[One line per DECIDED_AUTONOMOUSLY entry, citing its id and stating what an override would undo; one line per standing-ruling release §3 item 2 cites, never omitted; then any other item that asks nothing of you, or omit those other items]
 
 ### Next Steps
 [If multi-sprint: "Sprint 1 of N complete. Awaiting your validation
@@ -689,7 +689,7 @@ fields and citing its id; a locked requirement's `HARD_BLOCK` is not,
 since it is resolved before the checkpoint is presented. Every
 `DECIDED_AUTONOMOUSLY` entry is one line under `### For Your
 Information` citing its id, never left out, so the operator can
-override it. An item that asks nothing of the operator -- a status, a
+override it. That line states what the override would undo. An item that asks nothing of the operator -- a status, a
 fact already acted on -- goes under `### For Your Information` or is left
 out, never under `### Decisions for You`; with no decision owed that
 block reads `none`. These items belong to the prose checkpoint (Rule 3
