@@ -2256,7 +2256,7 @@ p_lanefiles() { # files mode, three disjoint story parts -> 3 lanes; each escala
   [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 3" && [ "$(lane_n "$JO" 'LANE: ')" = 3 ] \
     && has "$JO" "LANE: 1 files: $REL/$S21 parts: 01.md" && has "$JO" "FANIN: ESCALATED: 02.md F-2 — MINOR (lanes out)" \
     && has "$JO" "FANIN: sweep" && has "$JO" "FANIN-COUNT: 4" && has "$JO" "files mode keeps no pre-repair copy" \
-    && ! has "$JO" "UNASSESSED"
+    && ! has "$JO" "UNASSESSED" && ! has "$JO" "CROSS"
 }
 p_lanedoc() { # document mode, three section parts of ONE document -> ONE lane (they share the file), no sweep owed
   local w; w="$(doc_world)" || return 1
@@ -2264,7 +2264,7 @@ p_lanedoc() { # document mode, three section parts of ONE document -> ONE lane (
   docpart "$w" 1; docpart "$w" 2; docpart "$w" 3
   run_docjoin "$1" "$w"
   [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 1" && has "$JO" "LANE: 1 files: $DOCREL parts: 1.md 2.md 3.md" \
-    && has "$JO" "from serial-remediation-worklist.sh" && ! has "$JO" "UNASSESSED" && has "$JO" "FANIN-COUNT: 0"
+    && has "$JO" "from serial-remediation-worklist.sh" && ! has "$JO" "UNASSESSED" && has "$JO" "FANIN-COUNT: 0" && ! has "$JO" "CROSS"
 }
 # lane_subj <join> <cite 0|1> <hit 0|1> -> RC, $JO. The subject world: SPEC and architecture-impact whole-file parts,
 # prd in three section parts. cite=1: architecture-impact cites a prd line that part 4's edit moves (a MOVED-CITE).
@@ -2310,7 +2310,7 @@ p_laneround() { # the lane round's own join (--artifact stories-serial): lane pa
   sed "s/@STORY@/$S22/g" "$HERE/seed.block-sib.md" > "$d/lane-2.md"
   run_join "$1" "$w" --artifact stories-serial
   [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 2 writers)" && has "$JO" "SERIAL-REQUIRED: 2" \
-    && ! has "$JO" "LANE" && ! has "$JO" "FANIN"
+    && ! has "$JO" "LANE" && ! has "$JO" "FANIN" && ! has "$JO" "CROSS"
 }
 # ---- AN ESCALATION'S OWN FILE, AND THE ADJUDICATION PARTITION (BL-716). graph s320-s322: a files-mode escalation naming one
 # story no part edited was a FANIN item (5 of s322's 7), and the solo tail was adjudication, not writing. escpart appends <n>
@@ -2342,19 +2342,19 @@ p_adjfour() { # files mode, 3 lanes, FOUR file-less escalations -> the fan-in de
   # LN17 reads this run (one subject run per distinct state): the world and a copy of its output.
   ADJ4_W="$w"; rm -f "$WORK/adjfour.out"; [ "$RC" -eq 0 ] && cp "$JO" "$WORK/adjfour.out"
   [ "$RC" -eq 0 ] && has "$JO" "FANIN-COUNT: 5" && adj_ok "$JO" fanin 2 && has "$JO" "ADJUDICATOR-COUNT: 2" \
-    && ! grep -q '^ADJUDICATE: fanin .*sweep' "$JO"
+    && ! grep -q '^ADJUDICATE: fanin .*sweep' "$JO" && ! has "$JO" "CROSS"
 }
 p_adjthree() { # p_adjfour one item short: THREE fan-in items -> no batch at all, the writer adjudicates as before
   local w; w="$(new_world)"; three_writers "$w"
   sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"
   run_join "$1" "$w"
-  [ "$RC" -eq 0 ] && has "$JO" "FANIN-COUNT: 4" && has "$JO" "ADJUDICATOR-COUNT: 0" && ! has "$JO" "ADJUDICATE: "
+  [ "$RC" -eq 0 ] && has "$JO" "FANIN-COUNT: 4" && has "$JO" "ADJUDICATOR-COUNT: 0" && ! has "$JO" "ADJUDICATE: " && ! has "$JO" "CROSS"
 }
 p_adjcap() { # ELEVEN fan-in items -> k=min(4, floor(11/2)) = 4 batches, none over 3 items (an uncapped deal gives 5)
   local w; w="$(new_world)"; three_writers "$w"
   sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"; escpart "$w/$SLOT/shards/stories-repair-p1/02.md" 8
   run_join "$1" "$w"
-  [ "$RC" -eq 0 ] && has "$JO" "FANIN-COUNT: 12" && adj_ok "$JO" fanin 4 && has "$JO" "ADJUDICATOR-COUNT: 4"
+  [ "$RC" -eq 0 ] && has "$JO" "FANIN-COUNT: 12" && adj_ok "$JO" fanin 4 && has "$JO" "ADJUDICATOR-COUNT: 4" && ! has "$JO" "CROSS"
 }
 # p_planfile (BL-716, graph s323: the lead's `| tail -30` lost the ADJUDICATE lines and the re-join refused, so no adjudicator
 # was dispatched). It reads p_adjfour's run (LN10), never a second join of that state: the join's LAST line is `PLAN-FILE:`
@@ -2383,7 +2383,7 @@ p_escown() { # an escalation naming a story NO part edited, on disk in the slot 
   escpart "$w/$SLOT/shards/stories-repair-p1/01.md" 1 "\`$REL/story-9.9-unowned.md:1\` (escalated: an open decision on that story)"
   run_join "$1" "$w"
   [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 3" && has "$JO" "LANE: 3 files: $REL/story-9.9-unowned.md parts:" \
-    && has "$JO" "LANE-ITEM: 3 ESCALATED: 01.md E-1 — MINOR" && ! has "$JO" "FANIN: ESCALATED: 01.md E-1"
+    && has "$JO" "LANE-ITEM: 3 ESCALATED: 01.md E-1 — MINOR" && ! has "$JO" "FANIN: ESCALATED: 01.md E-1" && ! has "$JO" "CROSS"
 }
 p_escnear() { # p_escown three ways apart, each staying a FANIN item and adding no lane: the story is NOT on disk; the file is
   # outside the slot; the escalation names the files of TWO part lanes (lanes never merge)
@@ -2456,6 +2456,77 @@ p_lanerec() { # a lane round's record is read AFTER round 1: its closes: closes 
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --escalations "$r2" --sprint 9 > "$JO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-CLOSED: requirements-party-repair.md F-1 — MAJOR" && ok="${ok}e"
   [ "$ok" = abcde ]
+}
+# ---- THE ROUTE FILE (BL-716, header 4d): `<shard dir>/.findings-partition`, the lead's serial-routed findings. xworld builds a
+# two-lane files-mode round (S21, S22); xroute <world> <line>... writes the file, a line per argument (TABs spelled \t).
+xworld() { local w; w="$(new_world)"; drive "$w" Edit "$w/$REL/$S21" "$AG1"; drive "$w" Edit "$REL/$S22" "$AG2"
+  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; printf '%s' "$w"; }
+xroute() { local w="$1" l; shift; { printf '# findings-partition v1\n'; for l in "$@"; do printf '%b\n' "$l"; done; } > "$w/$SLOT/shards/stories-repair-p1/.findings-partition"; }
+p_xdeal() { # FOUR serial-routed findings on one lane's file -> that lane's CROSS items dealt (k=2); one naming two lanes' files, and
+  # one naming `-`, -> FANIN items (lanes never merge); CROSS-COUNT right after SERIAL-REQUIRED; the plan file carries it all
+  local w d; w="$(xworld)"; d="$w/$SLOT/shards/stories-repair-p1"
+  xroute "$w" "serial\tcross.md#F-1\t$REL/$S21" "serial\tcross.md#F-2\t$REL/$S21" "serial\t1.md#F-3\t$REL/$S21" "serial\tcross-2.md#F-4\t$REL/$S21" \
+    "serial\tcross.md#F-5\t$REL/$S21 $REL/$S22" "serial\tcross.md#F-6\t-"
+  run_join "$1" "$w"
+  XD_OUT="$WORK/xdeal.out"; cp "$JO" "$XD_OUT"
+  [ "$RC" -eq 0 ] && has "$JO" "CROSS-COUNT: 6" && has "$JO" "LANE-COUNT: 2" \
+    && [ "$(sed -n '/^SERIAL-REQUIRED: /{n;p;}' "$JO")" = "CROSS-COUNT: 6" ] \
+    && has "$JO" "LANE-ITEM: 1 CROSS: cross.md#F-1 files: $REL/$S21" && has "$JO" "LANE-ITEM: 1 CROSS: cross-2.md#F-4 files: $REL/$S21" \
+    && adj_ok "$JO" 1 2 \
+    && has "$JO" "FANIN: CROSS: cross.md#F-5 files: $REL/$S21 $REL/$S22 (lanes 1 2)" && has "$JO" "FANIN: CROSS: cross.md#F-6 files: - (lanes out)" \
+    && ! grep -q '^LANE-ITEM: 2 CROSS' "$JO" && has "$d/.join-plan" "CROSS-COUNT: 6" && has "$d/.join-plan" "ADJUDICATE: 1 1/2 CROSS: "
+}
+p_xrefuse() { # one malformed shape per world -> exit 2, the shape's own REFUSED text, no record and no .join-plan
+  local w v t ok="" i
+  for v in "1|line 1 is not exactly" "2|exactly three TAB-separated fields" "3|is not <shard file>.md#<id>" "4|repeats an earlier line" \
+           "5|holds an absolute path or a '..'" "6|holds an absolute path or a '..'" "7|the files field is empty" "8|the first field is not 'serial'"; do
+    t="${v#*|}"; i="${v%%|*}"; w="$(xworld)"
+    case "$i" in
+      1) xroute "$w" "serial\tcross.md#F-1\t$REL/$S21"; sed -i '' '1s/v1/v2/' "$w/$SLOT/shards/stories-repair-p1/.findings-partition" ;;
+      2) xroute "$w" "serial\tcross.md#F-1" ;;
+      3) xroute "$w" "serial\tcross.md F-1\t$REL/$S21" ;;
+      4) xroute "$w" "serial\t01.md#F-1\t$REL/$S21" "serial\tcross.md#F-2\t$REL/$S22" "serial\t1.md#F-1\t$REL/$S21" ;;
+      5) xroute "$w" "serial\tcross.md#F-1\t$REL/../$S21" ;;
+      6) xroute "$w" "serial\tcross.md#F-1\t/abs/$S21" ;;
+      7) xroute "$w" "serial\tcross.md#F-1\t" ;;
+      8) xroute "$w" "other\tcross.md#F-1\t$REL/$S21" ;;
+    esac
+    run_join "$1" "$w"
+    refused "$w" "$t" && [ ! -e "$w/$SLOT/shards/stories-repair-p1/.join-plan" ] && ok="${ok}${i}"
+  done
+  [ "$ok" = 12345678 ]
+}
+p_xzero() { # a round whose parts edit nothing (LANE-COUNT 0) with one routed finding -> the FANIN CROSS line, no lane, nothing dealt
+  local w; w="$(new_world)"; : > "$w/$SLOT/shards/stories-repair-p1/01.md"; escpart "$w/$SLOT/shards/stories-repair-p1/01.md" 1
+  drive "$w" Write "$w/$SLOT/shards/stories-repair-p1/01.md" "$AG1"
+  xroute "$w" "serial\tcross.md#F-1\t$REL/$S21"
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 0" && has "$JO" "FANIN: CROSS: cross.md#F-1 files: $REL/$S21 (lanes out)" \
+    && has "$JO" "CROSS-COUNT: 1" && has "$JO" "ADJUDICATOR-COUNT: 0" && ! has "$JO" "ADJUDICATE: "
+}
+p_xlane() { # the lane round's join (--artifact stories-serial) REFUSES a route file in its own shard dir, writing nothing
+  local w d; w="$(new_world)"; d="$w/$SLOT/shards/stories-serial-repair-p1"; mkdir -p "$d" || return 1
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"; sed "s/@STORY@/$S21/g" "$HERE/seed.block-sib.md" > "$d/lane-1.md"
+  printf '# findings-partition v1\nserial\tcross.md#F-1\t-\n' > "$d/.findings-partition"
+  run_join "$1" "$w" --artifact stories-serial
+  [ "$RC" -eq 2 ] && has "$JO" "exists in a lane round's shard dir" && [ ! -e "$w/$SLOT/stories-serial-repair-p1.md" ] && [ ! -e "$d/.join-plan" ]
+}
+p_xcover() { # --escalations: a route key no record's source: carries -> CROSS-OPEN (never refused); covered ones silent; 03.md equals 3.md;
+  # a later record's source covers it; no route file -> not one new byte
+  local w r1 r2 ok="" d
+  w="$(mktemp -d "$WORK/xc.XXXXXX")" && mkdir -p "$w/.claude" || return 1
+  r1="$w/stories-repair-p1.md"; r2="$w/stories-serial-repair-p1.md"; d="$w/shards/stories-repair-p1"; mkdir -p "$d" || return 1
+  printf '<!-- shard: cross.md -->\n### F-1 — MAJOR\n- disposition: repaired\n- source: cross.md#F-1\n- edit: n/a\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: `3.md#F-3`\n- edit: n/a\n\n### F-2 — MAJOR\n- disposition: repaired\n- source: `_bmad-output/party-mode/s323/stories-architect-1.md#F-2`\n- edit: n/a\n\n### F-7 — MAJOR\n- disposition: repaired\n- source: cross.md#F-7, 02.md#F-8\n- edit: n/a\n\n### F-4 — MAJOR\n- disposition: repaired\n- source: stories-architect-2.md#F-4\n- edit: n/a\n' > "$r1"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && ! has "$JO" "CROSS" && ok="${ok}a"
+  printf '# findings-partition v1\nserial\tcross.md#F-1\t-\nserial\t03.md#F-3\t-\nserial\tcross.md#F-9\t-\nserial\tstories-architect-1.md#F-2\t-\nserial\tcross.md#F-7\t-\nserial\t2.md#F-8\t-\nserial\t_bmad-output/party-mode/s323/stories-architect-2.md#F-4\t-\n' > "$d/.findings-partition"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$JO" "CROSS-OPEN: cross.md#F-9" && ! has "$JO" "CROSS-OPEN: cross.md#F-1" && ! has "$JO" "CROSS-OPEN: 03.md" \
+    && has "$JO" "CROSS-OPEN-COUNT: 1" && ok="${ok}b"
+  printf '<!-- shard: lane-1.md -->\n### lane F-9 — MAJOR\n- disposition: repaired\n- source: cross.md#F-9\n- edit: n/a (no edit)\n' > "$r2"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --escalations "$r2" --sprint 305 > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && ! has "$JO" "CROSS-OPEN: " && has "$JO" "CROSS-OPEN-COUNT: 0" && ok="${ok}c"
+  [ "$ok" = abc ]
 }
 p_lanename() { # the subject party join prints the lane round's name derived from its record -> the party-serial artifact
   sj_party "$1" "architecture-dev-1.md#F-1" || return 1
