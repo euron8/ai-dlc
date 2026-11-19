@@ -3247,21 +3247,31 @@ finish_verify_tree() {
 # behaviour that engine had: this check cannot fire on such a marker. On the pull that delivers this
 # engine that happens only under SELF-UPDATE-DEFER or a leftover same-base marker; when the step-2
 # self-update lands, step 7 runs this engine, the record is written, and the check is live.
+#
+# A LIST MODE FOR THE ONE OTHER READER OF THIS RECORD. With `FCU_LIST=1` it emits no row and
+# instead sets `FCU_PATHS` to every recorded path whose merge is still outstanding (untouched, or
+# unreadable, which withholds here too), newline-separated. `taught_schema_row` asks it which
+# stale regions sit in a file still owed a semantic merge, so there is one reader of the
+# `classify:` lines, not two. A marker that cannot be read, or that records nothing, lists nothing.
 finish_classify_unmerged() {
   local _ml _l _h _m _c _now _nm _tab
+  FCU_PATHS=""
   [ -f "$APPLYING" ] || return 0
   # PRESENT AND UNREADABLE is not "no record": the grep below fails on it and read it as an older
   # engine's marker, a NOTE that stamped. The record exists and cannot be judged.
   [ -r "$APPLYING" ] || {
+    [ "${FCU_LIST:-0}" = 1 ] && return 0
     say WORKLIST finish-classify-unverified "${APPLYING#"$CONSUMER"/}" "the in-flight marker exists and could not be read, so its semantic-merge record cannot be judged: whether a handed-back merge is still undone is UNKNOWN and the stamp is not advanced. Make the file readable, then re-run --finish."
     return 0
   }
   _tab="$(printf '\t')"
   if ! grep -q '^classify-hashes: ' "$APPLYING" 2>/dev/null; then
+    [ "${FCU_LIST:-0}" = 1 ] && return 0
     say NOTE finish-classify-unrecorded "${APPLYING#"$CONSUMER"/}" "this marker records no \`classify-hashes:\` line -- it was written by an apply that predates the record -- so whether a file handed back as a semantic merge was ever merged cannot be checked here. Confirm each \`semantic-merge\` row of that run by hand."
     return 0
   fi
   _ml="$(awk '/^classify: /' "$APPLYING" 2>/dev/null)" || {
+    [ "${FCU_LIST:-0}" = 1 ] && return 0
     say WORKLIST finish-classify-unverified "${APPLYING#"$CONSUMER"/}" "the marker's semantic-merge record could not be read, so whether a handed-back merge is still undone is UNKNOWN and the stamp is not advanced. Make the file readable, then re-run --finish."
     return 0
   }
@@ -3275,6 +3285,13 @@ finish_classify_unmerged() {
     [ -e "$CONSUMER/$_c" ] || continue
     _now="$(git hash-object "$CONSUMER/$_c" 2>/dev/null)" || _now=""
     _nm=644; [ -x "$CONSUMER/$_c" ] && _nm=755
+    if [ "${FCU_LIST:-0}" = 1 ]; then
+      if [ "$_h" = "-" ] || [ -z "$_now" ] \
+         || { [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; }; then
+        FCU_PATHS="${FCU_PATHS}${_c}${NL_CH}"
+      fi
+      continue
+    fi
     if [ "$_h" = "-" ] || [ -z "$_now" ]; then
       say WORKLIST finish-classify-unverified "$_c" "handed back as a semantic merge, and its blob could not be read $([ "$_h" = "-" ] && printf 'when the apply recorded it' || printf 'now'), so whether the merge was done is UNKNOWN and the stamp is not advanced. Make the file readable, then re-run --finish."
     elif [ "$_now" = "$_h" ] && { [ -z "$_m" ] || [ "$_nm" = "$_m" ]; }; then
@@ -3959,6 +3976,94 @@ elif [ -f "$AD_SETTINGS" ] && command -v jq >/dev/null 2>&1 \
 fi
 }
 
+# --- TAUGHT-SCHEMA REGIONS: a fourth DECLARATION delivered in two halves ----------------------
+#
+# THE SAME SHAPE AS THE TWO ROWS ABOVE. `.claude/schemas/provenance-block.json` and
+# `gate-adjudication-verdict.json` arrive as a pure apply; every taught example an agent reads is
+# `sync-taught-schema.sh` RENDERING them into a generated region of a `.md` under `.claude/skills`
+# or `.claude/team-roles` -- extensions included, which no pull writes -- and on a pull nothing
+# calls it. The consumer's pre-push runs its `--check`, so a pull that advanced a schema used to
+# stamp `RESOLVED consistent` and hand the operator a red push.
+#
+# IT DRIVES THE CONSUMER'S OWN COPY WITH `--check`, NEVER THE DISTRIBUTION'S AND NEVER THE SYNC.
+# The consumer's copy is the one its pre-push runs; the sync rewrites user-owned files and this
+# driver has no channel for the operator's gate on that edit. `AI_DLC_PROJECT_ROOT` pins the root
+# the script would otherwise walk up for. Every FAIL line goes to STDERR, so the capture is
+# `> file 2>&1` with the status read on the next statement.
+#
+# ONE ROW PER REMEDY. A STALE region is cleared by the sync; a hand-written example, an unknown
+# profile and an unclosed region are not -- the sync cannot clear them, and the last two stop the
+# scan where they occur -- so they are their own row. A stale region in a file still owed a
+# semantic merge (the marker's `classify:` record, read by finish_classify_unmerged in list mode)
+# is kept OUT of the sync row: the sync would move that file's blob and falsely clear the
+# unmerged guard, and the merge brings theirs' region anyway. An outcome the row cannot parse is
+# a DECISION, never a pass. GATED ON THE DECLARATION like transient_ignore_row: neither half
+# present is an older consumer this release has nothing to say about.
+taught_schema_row() {
+local _script="$CONSUMER/scripts/ai-dlc/sync-taught-schema.sh" _out _rc _stale="" _merge="" _region="" _p _unk _halt
+if [ ! -f "$_script" ]; then
+  [ -f "$CONSUMER/.claude/schemas/provenance-block.json" ] || return 0
+  say DECISION taught-schema-unchecked ".claude/schemas/provenance-block.json" \
+    "scripts/ai-dlc/sync-taught-schema.sh is not on this consumer, so nothing verified that the taught examples under .claude/skills and .claude/team-roles are rendered from the schema this apply delivered. It is delivered by install.sh's copy loop over core/scripts/; run a fresh install of that script, then \`bash scripts/ai-dlc/sync-taught-schema.sh\`."
+  return 0
+fi
+if [ -z "$AP_TMP" ] || [ ! -d "$AP_TMP" ]; then
+  say DECISION taught-schema-unreadable ".claude/schemas/provenance-block.json" \
+    "the taught-schema check could not run: this apply has no staging directory to capture its output in, so whether the generated regions match the schema is UNKNOWN — and unknown reads exactly like clean. Re-run \`bash scripts/ai-dlc/sync-taught-schema.sh --check\` and act on what it prints."
+  return 0
+fi
+_out="$AP_TMP/taught-schema.out"
+AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$_script" --check > "$_out" 2>&1
+_rc=$?
+[ "$_rc" = 0 ] && return 0
+if [ "$_rc" = 2 ]; then
+  say DECISION taught-schema-unreadable ".claude/schemas/provenance-block.json" \
+    "the taught-schema check could not resolve this consumer's root (exit 2), so whether the generated regions match the schema is UNKNOWN — and unknown reads exactly like clean. Detail: $(tr '\n' ' ' < "$_out")"
+  return 0
+fi
+if [ "$_rc" = 1 ]; then
+  _stale="$(awk 'index($0, "FAIL  ") == 1 && index($0, " example is STALE") { s = substr($0, 7); i = index(s, ": the generated "); if (i) print substr(s, 1, i - 1) }' "$_out")"
+  _region="$(awk 'index($0, "FAIL  ") == 1 && (index($0, ": a HAND-WRITTEN ") || index($0, " profile ") && index($0, ": unknown ") || index($0, " is never closed with ")) { s = substr($0, 7); i = index(s, ": a HAND-WRITTEN "); if (!i) i = index(s, ": unknown "); if (!i) i = index(s, ": a BEGIN GENERATED region "); if (i) print substr(s, 1, i - 1) }' "$_out")"
+  _unk="$(awk 'index($0, "FAIL  ") == 1 && !index($0, " example is STALE") && !index($0, ": a HAND-WRITTEN ") && !(index($0, ": unknown ") && index($0, " profile ")) && !index($0, " is never closed with ") {n++} END {print n+0}' "$_out")"
+  _halt="$(awk 'index($0, "FAIL  ") == 1 && (index($0, " is never closed with ") || index($0, ": unknown ") && index($0, " profile ")) {n++} END {print n+0}' "$_out")"
+fi
+if [ "$_rc" != 1 ] || { [ -z "$_stale" ] && [ -z "$_region" ]; } || [ "${_unk:-0}" -gt 0 ]; then
+  say DECISION taught-schema-unparsed ".claude/schemas/provenance-block.json" \
+    "the taught-schema check exited ${_rc} without a failure this row can name, so whether the generated regions match the schema is UNKNOWN — and unknown reads exactly like clean. A schema that does not parse, a missing \`python3\` or a missing schema all look like this. Fix what the detail shows, then re-run \`bash scripts/ai-dlc/sync-taught-schema.sh --check\` until it exits 0. Detail: $(tail -n 3 "$_out" | tr '\n' ' ')"
+  [ "$_rc" = 1 ] || return 0
+fi
+if [ -n "$_stale" ]; then
+  FCU_LIST=1 finish_classify_unmerged
+  local _rest="$_stale" _keep=""
+  while [ -n "$_rest" ]; do
+    _p="${_rest%%"$NL_CH"*}"
+    case "$_rest" in *"$NL_CH"*) _rest="${_rest#*"$NL_CH"}" ;; *) _rest="" ;; esac
+    [ -n "$_p" ] || continue
+    case "${NL_CH}${FCU_PATHS}" in
+      *"${NL_CH}${_p}${NL_CH}"*) _merge="${_merge}${_p} " ;;
+      *) _keep="${_keep}${_p} " ;;
+    esac
+  done
+  FCU_PATHS=""
+  _stale="$_keep"
+fi
+if [ -n "$_merge" ]; then
+  say NOTE taught-schema-merge-first "${_merge% }" \
+    "stale generated region(s) in file(s) still owed a semantic merge: ${_merge}— merge first; the merge brings theirs' region. Running the sync before it would move the file's blob and falsely clear the unmerged-merge guard. Re-run \`bash scripts/ai-dlc/sync-taught-schema.sh --check\` after the merge."
+fi
+if [ -n "$_stale" ]; then
+  say WORKLIST taught-schema "${_stale% }" \
+    "generated taught-schema example(s) are STALE against the schema this apply delivered: ${_stale}— the consumer's pre-push runs the same check and will refuse the push. Only after every semantic-merge and finish-unapplied row is resolved, run \`bash scripts/ai-dlc/sync-taught-schema.sh\` (no arguments; it rewrites only the generated regions), then re-run post-write-gates, then re-run \`apply.sh --finish\`."
+fi
+if [ -n "$_region" ]; then
+  _region="$(printf '%s' "$_region" | tr '\n' ' ')"
+  local _stop=""
+  [ "${_halt:-0}" -gt 0 ] && _stop=" An unknown profile or an unclosed region STOPS the scan at that file, so files after it were not checked: re-run the check after the fix."
+  say WORKLIST taught-schema-region "${_region% }" \
+    "taught-schema example(s) the sync cannot clear: ${_region}— a hand-written example outside a generated region, an unknown profile, or a region never closed. Edit each file as the check's FIX text says (\`bash scripts/ai-dlc/sync-taught-schema.sh --check\` prints it), then re-run post-write-gates and \`apply.sh --finish\`.${_stop}"
+fi
+}
+
 # --- THE TWO ORDERS, DISPATCHED ONCE ---------------------------------------------------------
 #
 # Ordinary apply: stamp, then the hook row. The hook row cannot gate the stamp here because the
@@ -3985,6 +4090,14 @@ fi
 # `--finish` is the invocation that sees it. Gating the stamp on the earlier answer is what
 # would be wrong, and `say` never does that for a WORKLIST row on the ordinary path.
 #
+# THE TAUGHT-SCHEMA ROW RIDES LAST, IN BOTH ORDERS. Its declaration is written by the pure-apply
+# phase, like the transient-ignore row's, so it is answerable at either moment. Under `--finish`
+# it runs before the stamp, so a stale or hand-written region withholds the stamp and keeps the
+# marker; on the ordinary run it follows the stamp and names the work without withholding, as
+# the agent-definition row does. It reads the marker's `classify:` record to keep a stale region
+# in an unmerged file out of its sync row; on the ordinary run that record is this run's own
+# (written before any write) and the marker is gone only when nothing was handed back.
+#
 # THE TEMPLATE RECORD IS READ FIRST UNDER `--finish`, and it emits nothing there: its rows come
 # from write_stamp (finish_template_unmerged, behind the identity check). It is read ahead of the
 # hook row only so that row knows whether the settings merge is already handed back by the json
@@ -3994,12 +4107,14 @@ if [ "$FINISH" = 1 ]; then
   hook_registration_row
   transient_ignore_row
   agent_definitions_row
+  taught_schema_row
   write_stamp
 else
   write_stamp
   hook_registration_row
   transient_ignore_row
   agent_definitions_row
+  taught_schema_row
 fi
 
 exit 0
