@@ -387,8 +387,7 @@
 #     THE REMAINDER the grammar does not read, each re-derived at 619bfde94 by an uncommitted instrumented copy of this
 #     scan (its controls: hits on the known `gitq -C … init` and `G init` lines): wrapper-function inits, a command-
 #     position word other than git/world_git followed by `init`, 129 code lines in 29 fixtures, 19 of them with no
-#     arm row (now READ by the wrapper clause below, BL-1162); variable-held git, 2 lines (`"$REAL_GIT" init`, fanout-payload-channel run.sh:156 and fanout-untracked-
-#     corpus run.sh:96), neither an arm row; heredoc-body inits, 11 lines in fixture-invocation-budget,
+#     arm row (now READ by the wrapper clause below, BL-1162); variable-held git, 2 lines at 619bfde94 (`"$REAL_GIT" init`), now READ by the variable-held clause below and migrated; heredoc-body inits, 11 lines in fixture-invocation-budget,
 #     prepush-worktree-env-scrub and shell-portability, each also an arm row through a code line, so no fixture is
 #     heredoc-only (gate-remediation-deny seed.sh:212 and ledger-reverify-dist-only-reach run.sh:82 are CODE lines and
 #     arm rows); script-string inits, 5 lines (fixture-git-env-seam run.sh:272/295/325, review-shard-merge
@@ -419,8 +418,8 @@
 #     `-P`, `--bare`, `-q`) and/or up to two dir-first words, then the whole word `init`; one count per line, the
 #     fixture's first such line is its H14 row. Keywords, builtins and undefined words are excluded by requiring the
 #     definition; core/fixtures/lib is out of the population, so a wrapper defined only there is read by no fixture.
-#     NAMED BLIND ROUTES (the entry stays open): variable-held git (`"$REAL_GIT"`, in a wrapper body or a call; a body
-#     of only `"$REAL_GIT"` is no wrapper), a wrapper body that is a subshell (`g() ( git "$@" )`), a wrapper whose body reaches git only after `if`/`elif`/`while`/`until`/`time` (`g() { if git "$@"; then :; fi; }`), a wrapper that
+#     NAMED BLIND ROUTES (the entry stays open): variable-held git INSIDE A WRAPPER BODY (a body of only `"$REAL_GIT"` is
+#     no wrapper), a wrapper body that is a subshell (`g() ( git "$@" )`), a wrapper whose body reaches git only after `if`/`elif`/`while`/`until`/`time` (`g() { if git "$@"; then :; fi; }`), a wrapper that
 #     reaches git only through another wrapper, an alias, `eval`, and a wrapper call whose option run is longer than
 #     the grammar. At 747f89054 the clause reads 133 code lines in 30 fixtures (the census hand's figure; the entry's
 #     129/29 was taken at 619bfde94), 19 fixtures with no allowlist row, 11 listed; controls: 31 `gitq ... init` in
@@ -433,6 +432,15 @@
 #     definition (lib.sh) and a `g` after a `#` line carrying `<<EOT` (no phantom heredoc) FIRE; `g(){ world_git "$@"; }`,
 #     `echo "g init"`, `echo init`, `# g init`, a heredoc body, an undefined `ok init`, a `"$REAL_GIT"` body and a wrapper
 #     defined only in core/fixtures/lib stay quiet. COST: no exec added (the scan awk and the judge awk already run).
+#     THE VARIABLE-HELD CLAUSE (BL-1162; `vg14`, read inside gi14): a COMMAND-POSITION word (after `;` `&` `|` `(` `{` `!`,
+#     `then`/`do`/`else`, an `if`/`while`/... run, and `command`/`exec`/`env`/`-u X`/NAME=value prefixes) that is `"$VAR"`,
+#     `$VAR`, `${VAR}`, `"git"` or ends in `/git`, then the gi14 option run, then `init`. THE MASK TRAP: maskcode turns
+#     `"$REAL_GIT"` into `"XXXXXXXXX"`, so command position is found on M[i] and the word is read from O[i] at the same
+#     offset (the mask is length-preserving). FP SET, how it reached 0: the command-position anchor; a loose `$VAR" init`
+#     form hits about 77 files through `git -C "$d" init`. Measured with the shipping validator at 5026369ed: H14 lines
+#     285 -> 287, the two added are exactly fanout-payload-channel run.sh:182 and fanout-untracked-corpus run.sh:121
+#     (control: the literal-git grammar reads 278 in the same population). Mutant: reading the word from M[i] instead of
+#     O[i] drops both rows. Both fixtures adopted world_git in the same commit (H14-M4 refuses an added row).
 #
 # ON THE BRANCH THAT SHIPS THIS, H2 AND H3 ARE RED BY DESIGN: their offenders sit in fixtures other units are
 # rewriting, and H1-H3 carry NO allowlist (H1's one offender is fixed on that branch). The owner fixes them on the
@@ -895,10 +903,23 @@ function ps13(i,   o, s, st, p, k, t) {
 # gi14 <line>: `GI <fx> <rel>:<line>: <text>` when the MASKED code line runs `git init`: scripts/validate-fixture-git-env.sh
 # INIT_RE (a `git` with no name character or `-` before it, then only global options, then the whole word `init`),
 # its option run widened by the long options a world builder spells. A heredoc body line is never read.
+function vg14(i,   s, o, off, p, w, re, ore) {
+  s = "; " M[i]; o = "; " O[i]
+  re = "(;|&|[|]|[(]|[{]|!|[[:space:]]then|[[:space:]]do|[[:space:]]else)[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*(((command|exec|env)|-u[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*"
+  ore = "^([[:space:]]+(-[cC][[:space:]]+[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare))*[[:space:]]+init([[:space:]]|$)"
+  off = 0
+  while (match(substr(s, off + 1), re)) {
+    p = off + RSTART + RLENGTH; off += RSTART
+    # the mask hides the quoted name (`"$REAL_GIT"` reads `"XXXXXXXXX"`): the word is read in O at the same offset
+    w = wordat(o, p); gsub(/["\047]/, "", w)
+    if ((w ~ /^[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?$/ || w == "git" || w ~ /\/git$/) && substr(s, WEND) ~ ore) return 1
+  }
+  return 0
+}
 function gi14(i,   s, t) {
   s = M[i]
-  if (!index(s, "init") || !index(s, "git")) return
-  if (s !~ /(^|[^[:alnum:]_-])git([[:space:]]+(-[cC][[:space:]]*[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare))*[[:space:]]+init([[:space:]]|$)/) return
+  if (!index(s, "init")) return
+  if (!(index(s, "git") && s ~ /(^|[^[:alnum:]_-])git([[:space:]]+(-[cC][[:space:]]*[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare))*[[:space:]]+init([[:space:]]|$)/) && !vg14(i)) return
   t = trim(O[i]); gsub(/\t/, " ", t)
   print "GI\t" FX "\t" REL ":" i ": " substr(t, 1, 160)
 }
