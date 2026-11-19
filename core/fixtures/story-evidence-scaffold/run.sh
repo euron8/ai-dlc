@@ -435,6 +435,20 @@ if [ "$WORLDS_OK" -eq 1 ] && ! HECTL="$(mk_tree control)"; then
   WORLDS_OK=0; bad "FIXTURE BROKEN: could not build the control tree (scripts dir + schema), or sprint-status.sh is not beside the validator in it"
 fi
 if [ "$WORLDS_OK" -eq 1 ]; then
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# PRE-WRAP CONSUMER GATE (BL-878): the validator is sourced below (he_ro_label) and a pre-wrap file would run its body.
+# Neither half is SKIP (FIXTURE BROKEN in the distribution, exit 0 on a consumer); exactly one half FAILS.
+grep -qxF 'he_main() {' "$HECTL"; _wg1=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HECTL"; _wg2=$?
+[ "$_wg1" -le 1 ] && [ "$_wg2" -le 1 ] || { echo "FIXTURE ERROR: cannot read $HECTL (grep exit $_wg1/$_wg2)" >&2; exit 2; }
+case "$_wg1$_wg2" in
+  00) : ;;
+  11) echo "SKIP: story-evidence-scaffold: $HECTL predates the in-process wrap"; fx_skip_exit "$DIR" ;;
+  *) bad "$HECTL carries one half of the in-process wrap (he_main line: rc $_wg1, column-0 source guard: rc $_wg2) -- a respelled subject this fixture cannot drive"
+     report_end story-evidence-scaffold ;;
+esac
+fi
+if [ "$WORLDS_OK" -eq 1 ]; then
 if gsel handoff; then
   se_need $(for c in $CASES; do printf '%s ' "${c%%:*}"; done)
   got="$(vector "$HECTL")"

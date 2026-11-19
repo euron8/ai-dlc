@@ -59,6 +59,19 @@ echo "HERMETIC-CONSUMED core/scripts/wfd-start-of.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# PRE-WRAP CONSUMER GATE (BL-878): a consumer one pull behind carries this fixture with a subject that predates the
+# in-process wrap, and loading it would run its whole body. Neither half is SKIP (FIXTURE BROKEN in the distribution,
+# exit 0 on a consumer); exactly one half FAILS; an unreadable subject is FIXTURE ERROR.
+grep -qxF 'wfd_beat_main() {' "$SUBJ"; _wg1=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJ"; _wg2=$?
+[ "$_wg1" -le 1 ] && [ "$_wg2" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_wg1/$_wg2)" >&2; exit 2; }
+case "$_wg1$_wg2" in
+  00) : ;;
+  11) echo "SKIP: wait-beat-liveness: $SUBJ predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$SUBJ carries one half of the in-process wrap (wfd_beat_main line: rc $_wg1, column-0 source guard: rc $_wg2) -- a respelled subject this fixture cannot drive"
+     report_end wait-beat-liveness ;;
+esac
 broken() { printf 'wait-beat-liveness: FIXTURE BROKEN — %s\n' "$1" >&2; exit 2; }
 
 TMPROOT="$(mktemp -d)" || broken "mktemp failed"

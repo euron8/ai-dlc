@@ -15,3 +15,4 @@ core/scripts/partition-document.sh
 core/scripts/content-seal.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/world.sh
+core/fixtures/lib/layout.sh

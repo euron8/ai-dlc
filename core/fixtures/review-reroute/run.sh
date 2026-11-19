@@ -118,6 +118,19 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# PRE-WRAP CONSUMER GATE (BL-878): a consumer one pull behind carries this fixture with a subject that predates the
+# in-process wrap, and loading it would run its whole body. Neither half is SKIP (FIXTURE BROKEN in the distribution,
+# exit 0 on a consumer); exactly one half FAILS; an unreadable subject is FIXTURE ERROR.
+grep -qxF 'prd_main() {' "$SD/partition-review-diff.sh"; _wg1=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SD/partition-review-diff.sh"; _wg2=$?
+[ "$_wg1" -le 1 ] && [ "$_wg2" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SD/partition-review-diff.sh (grep exit $_wg1/$_wg2)" >&2; exit 2; }
+case "$_wg1$_wg2" in
+  00) : ;;
+  11) echo "SKIP: review-reroute: $SD/partition-review-diff.sh predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$SD/partition-review-diff.sh carries one half of the in-process wrap (prd_main line: rc $_wg1, column-0 source guard: rc $_wg2) -- a respelled subject this fixture cannot drive"
+     report_end review-reroute ;;
+esac
 TAB="$(printf '\t')"
 # Each arm takes the script directory under test and returns 0 when its assertion holds.
 route() { OUT="$(bash "$1/partition-review-diff.sh" --route "$R" "$2" "$(rr_ref "$W" "$3")" --exclude-captures "$W/captures" 2>&1)"; RC=$?; }
