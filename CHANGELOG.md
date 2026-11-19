@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [VERSION_PLACEHOLDER] - 2026-11-19
+
+### Planning gates trust only pass-file counts the merge itself wrote, and agents waiting on their own jobs get one clear instruction when the wait runs out (BL-1175, BL-538 advance, stay PARTIAL)
+
+- For consumers running the adversarial review cycle: the adversarial-review convergence check no longer trusts a merged review file's finding counts on its word. It checks the file against the merge's own record in the tracked write ledger, so the check works on any clone, and an edited count no longer lets a review pass. Older files without a record are flagged as pending, not failed. (BL-1175 items 11-13)
+- For anyone re-merging an adversarial pass: a pass first merged without `--rerun` is still refused by a `--rerun` merge (a pass file is never overwritten), but the refusal now says so and tells you to re-merge without `--rerun`. (BL-1175 item 12)
+- For the convergence gate's own tests: the J3 receipt now holds the repaired exit as a fixture arm (a repair-introduced MAJOR closed by a repair passes), so removing that clause fails the suite. (BL-1175 item 7)
+- For the lead in planning: the step that has the lead write each story's `stories:` entry in every canonical sprint-status copy now comes before the carry-over-single gate and is on the bug path too; the gate text no longer mentions a trace decision the gate stopped reading; and the route for a finding that needs a late architecture decision (repair in the stories or architecture series, the decision line in `ARCHITECTURE-SPINE.md`, never a deferral) is stated where the lead runs it. (BL-1175 items 17, 18, 20)
+- For consumers whose stories carry an `frs:` field: the spec-join check now verifies that every requirement id a story lists under `frs:` exists in the PRD, so a story that points at a requirement that does not exist is caught; a story without the field gets a note, not a failure. (BL-1175 item 19)
+- For dev, QA, code-reviewer and protected-path-editor agents: an agent waiting on its own background job now has a defined way out when the wait gives up. It stops its job, reports BLOCKED with the log tail and ends its turn, instead of being told to re-dispatch or keep waiting. Its wait (`wait-for-deliverable.sh --own-job`) no longer prints a warning telling it to use `--dispatch`, a flag a Bash job cannot use. (BL-538)
+- Both entries stay open: BL-1175 owes items 8, 9, 10, 14, 15, 16 and 21, item 5 and the outcome on a complete graph sprint; BL-538 owes the per-wake re-count on the next complete graph sprint.
+
 ## [0.1180.0] - 2026-11-19
 
 ### BL-1124 (advances, stays PARTIAL), BL-878 (item 5 done): the push gate starts far fewer processes

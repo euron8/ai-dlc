@@ -653,7 +653,8 @@ a story inlines — to satisfy a tooling constraint.
     file's own frontmatter, in each canonical copy: the story id as a key under
     `stories:`, carrying `status:` — an entry without it is compared on nothing
     and exits 4 — plus `file:` wherever the path is not derivable from the key.
-    The lead writes those entries by hand at `stories-test-strategy.md` §3.
+    The lead writes those entries by hand at `stories-test-strategy.md` §3 and
+    `bug-investigation.md` §5.
     Then confirm the transcription with
     `derive-stories --check`: `0 drifted key(s)` means the entry agrees with the
     story file, and a non-zero count means it does not. Confirm with `--check`
@@ -3138,10 +3139,16 @@ never as an anchor, because it is re-rendered on every derive. Byte anchoring of
 requirement TEXT stays Check 3b's job against the product brief — the spec adds
 no anchor target.
 
-**Both borrowed verdicts are decided here, not observed.** `lint_spine.py` exits 0
+**Every story `frs:` entry resolves to an FR id `prd.md` spells**, read with the same
+grammar as the `CAP → FR` leg. An id the PRD does not carry FAILs under the key
+`story-fr:<story basename>:<FR id>`; an absent or empty `frs:` field is reported as a note.
+
+**The borrowed verdicts are decided here, not observed.** `lint_spine.py` exits 0
 unconditionally and leaves the call to its caller; a non-empty `ad_fields` or
-`placeholder` finding set FAILS. A `bmad-testarch-trace` decision of `FAIL` FAILS;
-`CONCERNS` and `WAIVED` are recorded in the gate log with the matrix path cited.
+`placeholder` finding set FAILS. This gate passes no `--trace-verdict` and reads no
+trace verdict. When a trace taken after implementation arms that flag, a
+`bmad-testarch-trace` decision of `FAIL` FAILS, and `CONCERNS` and `WAIVED` are recorded
+in the gate log with the matrix path cited.
 Both verdicts are read from a NAMED KEY, never by scanning the file: `lint_spine.py`
 severity comes from its own `by_severity`/`severity` fields, and the trace decision
 from `gate_status` — `gate-decision.json` also carries `p0_status`, `p1_status` and a
@@ -3167,7 +3174,7 @@ in-scope stories were told a field they carry is absent.
 mute button.** Adopting this check inherits whatever orphans the chain already has — 15 in
 the reference consumer (5 `LR`→`CAP`, 10 `CAP`→`FR`), none of them caused by adopting it.
 The baseline names them, one namespaced key per line (`lr:` / `fr:` / `ad:` / `story:` /
-`story-cap:`, namespaced because joins (2) and (2a) both key on `CAP-<n>` and a bare id
+`story-cap:` / `story-fr:`, namespaced because joins (2) and (2a) both key on `CAP-<n>` and a bare id
 would suppress both on one line). **Join (3) carries two keys, deliberately.**
 `story:<basename>` is the story's `capabilities:` FIELD — absent, or empty and unexplained.
 `story-cap:<basename>:<CAP-id>` is one citation that resolves to no capability. A `story-cap:`

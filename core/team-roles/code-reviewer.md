@@ -835,11 +835,13 @@ Bash `timeout: 600000`, never with `run_in_background` and never in a poll loop.
 exceed 600 seconds is started with `run_in_background: true`, as
 `<cmd> > <log> 2>&1; echo "rc=$?" > <sentinel>` (`<log>` and `<sentinel>` absolute paths outside
 your worktree, `<epoch>` the `date +%s` you read just before starting it), and waited on with
-`AI_DLC_WAIT_BEAT_SECS=540 bash scripts/ai-dlc/wait-for-deliverable.sh --since <epoch> <sentinel>`
-(no `--complete`, no `--dispatch`) at `timeout: 600000`, re-called until it prints
-`DELIVERED <sentinel>`; the job's output is then in `<log>`. You do not end your turn while a
-background job of yours is running. The `--complete` form is only for waiting on another
-agent's deliverable paths.
+`AI_DLC_WAIT_BEAT_SECS=540 bash scripts/ai-dlc/wait-for-deliverable.sh --own-job --since <epoch>
+--progress-path <log> <sentinel>` (no `--complete`, no `--dispatch`) at `timeout: 600000`,
+re-called until it prints `DELIVERED <sentinel>`; the job's output is then in `<log>`. You do not
+end your turn while a background job of yours is running. The `--complete` form is only for
+waiting on another agent's deliverable paths. If that wait exits 1, the job is your own, so never
+re-dispatch or re-run it: stop it by its own background task id (never by pattern), read the tail
+of `<log>`, SendMessage BLOCKED with that tail to main, then end the turn.
 
 ## Relationship to QA
 

@@ -2724,6 +2724,32 @@ p_ri7() {
   [ "$RC" -eq 0 ] && has "$MO" "UNCHANGED: " && has "$MO" "stands as stored (findings_major_repair_introduced: 3)" \
     && has "$MO" "snapshot $t absent" && has "$MO" "arm R reports PENDING" && cmp -s "$WORK/ri7.p3" "$s/stories-adversarial-p3.md"
 }
+# RI8 (THE ATTESTATION): RI7's world, p2's snapshots gone. OFF-CHECKOUT: every merge program row's root rewritten to
+# another clone path; p3 still reads attested, so the re-merge answers UNCHANGED with the stored r standing and the
+# gate prints no ATTESTATION note. EDITED: p3's header then edited to r 5 and MET (8 - max(2, 5) = 3, inside the
+# ceiling); the gate does not believe it (NOTE, arm B FAILS on 8 blocking MAJOR) and the re-merge REFUSES, naming it
+# not attested, the pass bytes unmoved.
+p_ri8() {
+  local m="$1" s="${RI_S:-}" l; RI_STAGE=build
+  [ -n "$s" ] || return 1
+  l="$(dirname "$s")/.artifact-writes.jsonl"
+  RI_STAGE=seed; [ "$(grep -c '"actor":"program:merge-adversarial-shards"' "$l")" -ge 3 ] || return 1
+  sed '/"actor":"program:merge-adversarial-shards"/s#"root":"[^"]*"#"root":"/elsewhere/another-clone"#' "$l" > "$l.x" && mv "$l.x" "$l" || return 1
+  has "$l" '"root":"/elsewhere/another-clone"' || return 1
+  RI_STAGE=off-remerge; $ASM_RUN "$m" "$s/shards/stories-p3" < /dev/null > "$MO" 2>&1; RC=$?
+  RI_GOT="rc=$RC $(grep -m1 -E '^(UNCHANGED|REFUSED)' "$MO")"
+  [ "$RC" -eq 0 ] && has "$MO" "UNCHANGED: " && has "$MO" "stands as stored (findings_major_repair_introduced: 3)" || return 1
+  RI_STAGE=off-gate; dv_gate "$m" "$s"; has "$CO" "pass artifact" && ! has "$CO" "NOTE (ATTESTATION)" && ! has "$CO" "FAIL (B -- " || return 1
+  RI_STAGE=edit; cp "$s/stories-adversarial-p3.md" "$WORK/ri8.p3" || return 1
+  sed -e 's/^findings_major_repair_introduced: 3$/findings_major_repair_introduced: 5/' -e 's/^verdict: EXIT_CONDITION_NOT_MET$/verdict: EXIT_CONDITION_MET/' \
+    "$WORK/ri8.p3" > "$s/stories-adversarial-p3.md" && cp "$s/stories-adversarial-p3.md" "$WORK/ri8.e3" || return 1
+  RI_STAGE=edit-gate; dv_gate "$m" "$s"
+  has "$CO" "stories-adversarial-p3.md is not attested" && has "$CO" "FAIL (B -- CONSISTENCY)" && has "$CO" "8 blocking MAJOR" || return 1
+  RI_STAGE=edit-remerge; $ASM_RUN "$m" "$s/shards/stories-p3" < /dev/null > "$MO" 2>&1; RC=$?
+  RI_GOT="rc=$RC $(grep -m1 -E '^(UNCHANGED|REFUSED)' "$MO")"
+  [ "$RC" -ne 0 ] && has "$MO" "already exists and differs" && has "$MO" "stories-adversarial-p3.md is not attested" \
+    && cmp -s "$WORK/ri8.e3" "$s/stories-adversarial-p3.md"
+}
 # RI2: p2's snapshots deleted (p1's kept) before p3 merges: every MAJOR unjoined, r = 0, no keys line, NOT_MET, the
 # merge says why; the gate prints arm R PENDING for p3, never a FAIL.
 p_ri2() {

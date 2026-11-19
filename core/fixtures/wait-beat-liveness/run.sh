@@ -1764,14 +1764,15 @@ S19b_dispatch_grammar_missing_refuses() {
 #      it. The emission sits in the sweep at FIRST=1 (the sidecar did not exist before this beat).
 #      Rows: the first arm warns; a continuation is silent; --reset warns; a wave adding a target
 #      warns once; a target delivered on its arming beat warns; --status is silent; a path
-#      delivered and then re-armed in a later round warns again (delivery removes the sidecar).
+#      delivered and then re-armed in a later round warns again (delivery removes the sidecar);
+#      an --own-job arming beat is silent, and its exhaustion prints the own-job remedy alone.
 # ===========================================================================
 S19C_WARN="WARN: wait-for-deliverable: --since without --dispatch"
 s19c_beat() {  # $1 = subject, $2 = workdir; rest = argv (the targets are named by the caller)
   s19c_subj="$1" s19c_w="$2"; shift 2
   ( cd "$s19c_w" && unset CLAUDE_CODE_SESSION_ID && export \
         AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=1 \
-        AI_DLC_MAX_WAIT_BEATS=6 AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
+        AI_DLC_MAX_WAIT_BEATS="${S19C_MAXB:-6}" AI_DLC_TEAMMATE_DIR="$TMPROOT/does-not-exist" \
         AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$s19c_subj" "$@" ) > "$BEATOUT" 2>&1
   RC=$?; OUT="$(cat "$BEATOUT")"
   s19c_n="$(grep -cF "$S19C_WARN" "$BEATOUT")" || s19c_n=0
@@ -1792,7 +1793,16 @@ s19c_world() {  # $1 = subject -> W19C_1..W19C_8 (WARN counts) and W19C_DEL (del
   s19c_e="$(mk_work)"; mk_ledger_row "$s19c_e" toolu_wbl764disp $(( s19c_s + 30 ))
   s19c_beat "$(sib_dir "$1")/wait-for-deliverable.sh" "$s19c_e" --since "$s19c_s" --dispatch toolu_wbl764disp pend.md; W19C_8="$s19c_n"
   W19C_8RC="$RC"; W19C_8OUT="$OUT"
-  rm -rf "$s19c_w" "$s19c_d" "$s19c_e"
+  # Row 9: an --own-job arming beat (--since, no --dispatch) is silent; row 10: its second beat
+  # exhausts a one-beat sequence and prints the own-job remedy. The log predates the join, so it
+  # buys no progress grant.
+  s19c_o="$(mk_work)"; : > "$s19c_o/job.log"
+  fx_backdate "$s19c_o/job.log" 3600 || broken "cannot backdate job.log"
+  S19C_MAXB=1
+  s19c_beat "$1" "$s19c_o" --own-job --since "$s19c_s" --progress-path job.log sent; W19C_9="$s19c_n"; W19C_9OUT="$OUT"
+  s19c_beat "$1" "$s19c_o" --own-job --since "$s19c_s" --progress-path job.log sent; W19C_10RC="$RC"; W19C_10OUT="$OUT"
+  S19C_MAXB=6
+  rm -rf "$s19c_w" "$s19c_d" "$s19c_e" "$s19c_o"
 }
 S19c_since_warn_fires_on_arming_only() {
   s19c_world "$SUBJ"
@@ -1806,6 +1816,17 @@ S19c_since_warn_fires_on_arming_only() {
   [ "$W19C_7" -eq 1 ] && ok "since-warn: a path delivered then re-armed in a later round warns again" || bad "since-warn: the re-armed path printed $W19C_7 WARN line(s), want 1"
   case "$W19C_8OUT" in *"pend.md"*) : ;; *) bad "since-warn: CONTROL FAILED — the --dispatch arming beat did not run (rc=$W19C_8RC): $W19C_8OUT" ;; esac
   [ "$W19C_8" -eq 0 ] && ok "since-warn: an arming beat that passes --dispatch is silent" || bad "since-warn: an arming beat with --dispatch printed $W19C_8 WARN line(s), want 0"
+  case "$W19C_9OUT" in *"WAITING   sent"*) : ;; *) bad "since-warn: CONTROL FAILED — the --own-job arming beat did not run: $W19C_9OUT" ;; esac
+  [ "$W19C_9" -eq 0 ] && ok "since-warn: an --own-job arming beat is silent" || bad "since-warn: an --own-job arming beat printed $W19C_9 WARN line(s), want 0"
+  case "$W19C_10OUT" in
+    *"NON-DELIVERY sent -- absent after 1 beats"*"OWN JOB: this sentinel is your own background job's. Never re-dispatch or re-run it"*"stop it by its own background task id (never by pattern)"*"SendMessage BLOCKED with that"*)
+      case "$W19C_10OUT" in
+        *"Re-dispatch the"*|*"Do NOT keep beating"*) bad "own-job: the exhaust text still carries the re-dispatch remedy: $W19C_10OUT" ;;
+        *) [ "$W19C_10RC" -eq 1 ] && ok "own-job: exhaustion prints the own-job remedy, not the re-dispatch one (rc 1)" \
+             || bad "own-job: exhaustion exited $W19C_10RC, want 1: $W19C_10OUT" ;;
+      esac ;;
+    *) bad "own-job: exhaustion did not print the own-job remedy (rc=$W19C_10RC): $W19C_10OUT" ;;
+  esac
 }
 
 # ===========================================================================

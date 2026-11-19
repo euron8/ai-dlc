@@ -655,7 +655,10 @@ SKILL_INVOCATION_PROVENANCE_END -->
    `EXIT_CONDITION_MET`.** The merge classes it and writes `findings_major_repair_introduced:`,
    `findings_major_unjoined:` and `repair_introduced_keys:` into the pass header beside
    `findings_major_underived:`. The rule, the blocking count and its closure as `repaired`,
-   never `DEFERRED`: `team-roles/adversary.md`, "The verdict".
+   never `DEFERRED`: `team-roles/adversary.md`, "The verdict". Check 24 believes a merged pass's
+   `findings_major_underived:` and `findings_major_repair_introduced:` only while the merge's newest
+   write-ledger row for that pass records its bytes; on a pass whose bytes differ from that row both
+   read 0 and every MAJOR blocks, so never edit a merged pass file.
 4. Append the step's changelog ("Where a changelog is written" below), then proceed to
    the step's next action.
 
@@ -992,6 +995,12 @@ and the merge stamps `shard_set_derived_from:`.
       the digest does not name. A series with no row there (stories, architecture) closes its
       MAJORs only by repair.
    Otherwise dispatch another pass in this series.
+
+   **A MAJOR that needs an architecture decision closes the same way in the stories and
+   architecture series: by way 1, REPAIRED, on that series' own repair record.** The decision
+   itself, an `AD-<n>` that binds the capability or a `- **No-AD:** CAP-<n> — REASON: …` line,
+   goes into `ARCHITECTURE-SPINE.md`, where Check 30 joins every capability to one of the two. A
+   deferral naming the key FAILs Check 24 arm J3.
 
    **A key the pass header lists in `repair_introduced_keys:` closes only by way 1, REPAIRED**;
    a deferral naming it does not close it (`team-roles/adversary.md`, "The verdict").

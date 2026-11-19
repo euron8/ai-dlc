@@ -533,6 +533,11 @@ architecture doc (`dev.md`/`qa.md` Context Loading), per Rule 25.
 
 ### 3. Sprint Planning
 
+The lead, not `/bmad-sprint-planning`, writes the sprint into each canonical copy of the
+sprint-status yaml: `planned_close: <ISO-8601 UTC>` in its sprint block, and one entry per story
+under its `stories:` mapping, the story id as the key, carrying `status:` plus `file:` wherever
+the path is not derivable from the key.
+
 **Intensity gate for carry-over-single.** When
 `validation_intensity == carry-over-single`, skip `/bmad-sprint-planning`
 and place all carry-over stories in a single sprint. Carry-over items are
@@ -544,11 +549,6 @@ It is the post-epics readiness gate: it validates the PRD and architecture again
 stories authored above. State both at the call: the skill's full flow generates the tracking file
 after a PASS, and only the `readiness` intent stops at the verdict. A CONCERNS or FAIL verdict is a finding, never an operator question: route each finding to
 the `pm` or the `architect` as §1 does, then re-invoke ONCE after they land; a second CONCERNS or FAIL verdict is a HARD_BLOCK the lead routes.
-
-The lead, not the skill, writes the sprint into the canonical sprint-status yaml:
-`planned_close: <ISO-8601 UTC>` in its sprint block, and one entry per story under its
-`stories:` mapping, the story id as the key, carrying `status:` plus `file:` wherever the path
-is not derivable from the key.
 
 **Multi-sprint phasing check (Rule 14):** If the total story count exceeds
 what can be delivered in a single sprint (typically 3-5 stories), or if

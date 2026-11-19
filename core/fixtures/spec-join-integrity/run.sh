@@ -257,6 +257,26 @@ says "trichotomy: the declared disposition is RECORDED, not silent" \
   "declares no capability, with a rationale" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty-declared.md"
 
+# --- the frs: join ---------------------------------------------------------------
+want 0 "frs: a story whose every frs: id the PRD spells PASSES" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-frs-ok.md"
+cap "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-frs-ok.md"
+if grep -qF "carries no 'frs:' ids" <<<"$CAPOUT"; then
+  bad "frs: a resolving frs: field was reported as absent -- the join never read it"
+elif ! grep -qF "validate-spec-join.sh: PASS" <<<"$CAPOUT"; then
+  bad "frs: the resolving case printed no PASS line"
+else
+  ok "frs: the resolving frs: field is read and joined, not noted as absent"
+fi
+want 1 "frs: a story citing an FR id the PRD never spells FAILS" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-frs-dangling.md"
+says "frs: the failure names the dangling id, not the resolving one beside it" \
+  "cites 'FR-S300-9' in 'frs:'" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-frs-dangling.md"
+says "frs: an ABSENT frs: field is a recorded note, and the healthy set still passes (OVER-FIRE CONTROL above)" \
+  "story-ok.md carries no 'frs:' ids" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
+
 # --- --baseline, and the arm that stops it outliving its cause (v0.254.0) ------
 want 1 "baseline control: the orphan LR fails with no baseline" \
   --spec "$R/orphan-lr" --prd "$R/prd-ok.md"
@@ -477,7 +497,7 @@ n_discrim()  { NEW_ARMS=$((NEW_ARMS+1)); discriminates "$@"; }
 n_want 0 "SUFFIX: a kernel defining CAP-1a alongside CAP-1 and CAP-2 passes every join" \
   --spec "$R/real-suffixed" --prd "$R/prd-suffixed.md" --story "$R/story-suffixed.md" --spine "$R/spine-suffixed.md"
 n_says "SUFFIX: CAP-1a is COUNTED into the capability set, not merely tolerated" \
-  "PASS (2 locked requirement(s), 3 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
+  "PASS (2 locked requirement(s), 3 capability(ies), 1 story(ies), 1 recorded note(s), 0 baselined)" \
   --spec "$R/real-suffixed" --prd "$R/prd-suffixed.md" --story "$R/story-suffixed.md" --spine "$R/spine-suffixed.md"
 
 # THE ARMS THAT PROVE THE SUFFIXED ID FEEDS THE JOINS. A widening that parsed CAP-1a and
@@ -519,7 +539,7 @@ n_says "RESIDUE: an UPPERCASE suffix is caught too — the partition is the clas
 n_want 0 "RESIDUE PIN: template tokens CAP-<n> and CAP-N are NOT residue" \
   --spec "$R/cap-template" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 n_says "RESIDUE PIN: and they are not counted as capabilities either" \
-  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 1 recorded note(s), 0 baselined)" \
   --spec "$R/cap-template" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 
 
@@ -627,7 +647,7 @@ n_says "DISPOSITION: the LR is NAMED in the note, so the decision is visible" \
   "LR-S304-6 is dispositioned NO-CAPABILITY in" \
   --spec "$R/disp-ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 n_says "DISPOSITION: and it COUNTS in the note total" \
-  "PASS (3 locked requirement(s), 2 capability(ies), 1 story(ies), 1 recorded note(s), 0 baselined)" \
+  "PASS (3 locked requirement(s), 2 capability(ies), 1 story(ies), 2 recorded note(s), 0 baselined)" \
   --spec "$R/disp-ok" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 # The producer's qualifier is decided per append, exactly as for `(capability by ...)`.
 n_want 0 "DISPOSITION: '(disposition by lead)' is the SAME entry type and is read" \
@@ -684,7 +704,7 @@ n_says "NO-AD LIFETIME: and it is reported as the same contradiction" \
 n_want 0 "RESIDUE SCOPE: a residue-shaped token in the memlog, PRD, story and spine does NOT disarm" \
   --spec "$R/residue-elsewhere" --prd "$R/prd-residue-token.md" --story "$R/story-residue-token.md" --spine "$R/spine-residue-token.md"
 n_says "RESIDUE SCOPE: and the run is a real PASS, not an empty one" \
-  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 1 recorded note(s), 0 baselined)" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 2 recorded note(s), 0 baselined)" \
   --spec "$R/residue-elsewhere" --prd "$R/prd-residue-token.md" --story "$R/story-residue-token.md" --spine "$R/spine-residue-token.md"
 
 # `_` AND `-` ARE WORD CHARACTERS, so `\bCAP-[0-9]+[a-z]?\b` matches neither id in full.
@@ -706,7 +726,7 @@ n_says "RESIDUE CLASS: the hyphenated id is NAMED" \
 n_want 0 "FENCE: a definition-shaped line inside a fenced example block is an illustration, not a declaration" \
   --spec "$R/cap-fenced" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 n_says "FENCE: and the fenced CAP ids are not counted as capabilities either" \
-  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 1 recorded note(s), 0 baselined)" \
   --spec "$R/cap-fenced" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 
 # MENTIONS BUT DEFINES NONE is not the same state as ZERO CAPABILITIES, and the two must
@@ -720,7 +740,7 @@ n_says "DEFINITION GRAMMAR: and it is told which of the two states it is in" \
 n_want 0 "DEFINITION GRAMMAR: a prose MENTION of CAP-3 does not define it" \
   --spec "$R/cap-prose-mention" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 n_says "DEFINITION GRAMMAR: the mentioned id is not required of any FR or AD" \
-  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 1 recorded note(s), 0 baselined)" \
   --spec "$R/cap-prose-mention" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 
 
@@ -806,7 +826,7 @@ n_want 2 "EMPHASIS: a code-marker definition '- \`CAP-1a\`' DISARMS too" \
 n_want 0 "EMPHASIS PIN: a prose bullet that merely OPENS with a capability id is not a definition attempt" \
   --spec "$R/cap-prose-bullet" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 n_says "EMPHASIS PIN: and the mentioned id does not enter the capability set" \
-  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 0 recorded note(s), 0 baselined)" \
+  "PASS (2 locked requirement(s), 2 capability(ies), 1 story(ies), 1 recorded note(s), 0 baselined)" \
   --spec "$R/cap-prose-bullet" --prd "$R/prd-ok.md" --story "$R/story-ok.md"
 n_discrim "EMPHASIS PIN DISCRIMINATES: the prose bullet is quiet while a two-id run in the SAME container DISARMS" \
   "$R/cap-prose-bullet" "$R/decl-bullet" "$R/prd-ok.md"

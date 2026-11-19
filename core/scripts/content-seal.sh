@@ -59,11 +59,15 @@
 #     the dispatch-binding arm alone; no mode compares its bytes with a seal. --merge still appends
 #     its program row for the verdict, which names the writer and nothing keys on.
 #   - merge-adversarial-shards.sh's PASS FILE (`<artifact>-adversarial-p<M>.md`,
-#     `requirements-elicitation.md`) is RECORD-ONLY and outside the set. Its reader is Check 24
-#     (`validate-adversarial-convergence.sh`). The merge looks at an existing pass file twice: a
-#     `cmp -s` against what it would write, which already refuses any byte difference, and an EARLIER
-#     pass's `findings_critical`, read for the summed-divergence stamp. LIMIT: a Bash edit of a prior
-#     pass's count can move that stamp, and no seal comparison guards it; Check 24 reads the same bytes.
+#     `requirements-elicitation.md`) is outside the set, and its program row is its ATTESTATION
+#     (`--program-row`): a pass file is attested when the newest `program:merge-adversarial-shards`
+#     row for its path, written at ANY root, records the bytes on disk. Check 24
+#     (`validate-adversarial-convergence.sh`) does not believe `findings_major_underived:` and
+#     `findings_major_repair_introduced:` on a pass whose newest such row records other bytes (a pass with
+#     no row predates the rows and is believed, PENDING), and the merge lets a pass's stored
+#     repair-introduced counts stand (a re-merge after a snapshot is lost) only on an attested pass.
+#     LIMIT: the merge's summed-divergence stamp reads an EARLIER pass's `findings_critical` with no
+#     attestation, so a Bash edit of that count can move the stamp.
 #
 # NO SEAL ROW, NO COMPARISON. A sealed-set file that has never had a Write or Edit -- one created
 # wholly through Bash -- carries no row and passes as it did before seals existed. For an adversary
@@ -96,6 +100,12 @@
 #        program that wrote the file from bytes it hashed itself passes that sha, so a write landing
 #        between its own write and this row is never sealed as the program's: exit 1, no row, and
 #        the file stays refused by every reader. `wait-for-deliverable.sh --mark` is the caller.
+#   content-seal.sh --program-row <state-dir> <name> <file>...   one line per file, in argument order:
+#        `file TAB attested|differs|none`. `attested`: the newest `program:<name>` row for the file's
+#        path records the sha256 of its bytes on disk; `differs`: it records another; `none`: no such
+#        row, or the file is outside the state dir. NO root filter: a row written by the same program at
+#        another clone path attests the same tracked bytes. One jq pass over the ledger, one hash call.
+#        Exit 2: jq is absent, the ledger does not parse, or the state dir does not exist.
 #   content-seal.sh --first-tool-ts <state-dir>           the earliest `ts` of a TOOL seal row (actor
 #        `agent` or `session`) in this tree's ledger, same root filter as --check, or nothing when
 #        there is none. When the recorder first ran here; program rows do not count.
@@ -511,6 +521,41 @@ seal_last_tool_row() { # <state dir> <file>... -> per sealed file with a tool ro
   return 0
 }
 
+seal_program_row() { # <state dir> <name> <file>... -> per file: file TAB attested|differs|none
+  local st="$1" name="$2" f d ld="" lp="" tab="" rels="" hf=() sums="" rel want have tb
+  shift 2
+  _seal_state "$st" || return 2
+  tb="$(printf '\t')"
+  for f in "$@"; do
+    d="${f%/*}"; [ "$d" != "$f" ] || d=.; [ -n "$d" ] || d=/
+    if [ "$d" != "$ld" ]; then ld="$d"; lp="$(cd "$d" 2>/dev/null && pwd -P)" || lp=""; fi
+    rel=""
+    case "$lp/" in "$_SP"/*) [ -f "$f" ] && { rel="$lp/"; rel="${_SN}/${rel#"$_SP"/}${f##*/}"; hf+=("$f"); } ;; esac
+    rels="${rels}${rel}"$'\n'
+  done
+  if [ -f "$_SL" ] && [ "${#hf[@]}" -gt 0 ]; then
+    command -v jq >/dev/null 2>&1 || { echo "content-seal: jq is not on PATH" >&2; return 2; }
+    tab="$(jq -rn --arg a "program:$name" '
+      reduce (inputs | select(type == "object") | select(.kind == "content-seal") | select(.actor == $a)
+              | select((.path | type) == "string")) as $x ({}; .[$x.path] = ($x.sha256 // ""))
+      | to_entries[] | .key + "\t" + (.value | tostring)' "$_SL")" \
+      || { echo "content-seal: the write ledger $_SL does not parse as JSON lines" >&2; return 2; }
+    if command -v shasum >/dev/null 2>&1; then sums="$(shasum -a 256 "${hf[@]}" 2>/dev/null)"
+    else sums="$(sha256sum "${hf[@]}" 2>/dev/null)"; fi
+  fi
+  { printf '%s\n' "$@"; printf '%s' "$rels"; printf '%s\n' "$sums"; printf '%s\n' "$tab"; } \
+    | awk -F "$tb" -v n="$#" -v k="${#hf[@]}" '
+      NR <= n { file[NR] = $0; next }
+      NR <= 2 * n { rel[NR - n] = $0; next }
+      NR <= 2 * n + k { split($0, w, " "); sum[NR - 2 * n] = w[1]; next }
+      NF >= 2 { want[$1] = $2 }
+      END { j = 0
+        for (i = 1; i <= n; i++) {
+          s = "none"
+          if (rel[i] != "") { j++; if (rel[i] in want) s = (want[rel[i]] == sum[j] && sum[j] != "") ? "attested" : "differs" }
+          print file[i] "\t" s } }'
+}
+
 seal_record() { # <state dir> program:<name> <file>...
   local st="$1" actor="$2" f sha
   shift 2
@@ -641,6 +686,9 @@ seal_main() {
     --record-expect)
       [ "$#" -eq 5 ] || { echo "usage: $0 --record-expect <state-dir> program:<name> <sha256> <file>" >&2; return 2; }
       seal_record_expect "$2" "$3" "$4" "$5" ;;
+    --program-row)
+      [ "$#" -ge 4 ] || { echo "usage: $0 --program-row <state-dir> <name> <file>..." >&2; return 2; }
+      seal_program_row "$2" "$3" "${@:4}" ;;
     --first-tool-ts)
       [ "$#" -eq 2 ] || { echo "usage: $0 --first-tool-ts <state-dir>" >&2; return 2; }
       seal_first_tool_ts "$2" ;;
@@ -649,7 +697,7 @@ seal_main() {
         || { echo "usage: $0 --review-shard <shard file> [--legacy]" >&2; return 2; }
       seal_review_shard "$2" "${3:-}" ;;
     --agent-ere) printf '%s\n' "$AGENT_ID_ERE" ;;
-    *) echo "usage: $0 --check|--row|--last-tool-row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --first-tool-ts <state-dir> | --review-shard <shard file> [--legacy] | --admit-marker <file>... | - | --agent-ere" >&2
+    *) echo "usage: $0 --check|--row|--last-tool-row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --program-row <state-dir> <name> <file>... | --first-tool-ts <state-dir> | --review-shard <shard file> [--legacy] | --admit-marker <file>... | - | --agent-ere" >&2
        return 2 ;;
   esac
 }

@@ -1144,6 +1144,8 @@ p_ri5 && ok "RI5: after three merges adversarial-snapshots/ holds 6 snapshots an
   || bad "RI5: [$RI_GOT]"
 p_ri7 "$MERGE" && ok "RI7: p2's snapshots deleted after p3 merged, p3 re-merged: the stored r 3 stands, UNCHANGED, the NOTE names the absent snapshot, the pass bytes unchanged" \
   || bad "RI7: stage ${RI_STAGE:-?}: [$RI_GOT] $(grep -m1 'NOTE' "$MO")"
+p_ri8 "$MERGE" && ok "RI8: the merge's program rows moved to another clone root: p3 still reads attested (re-merge UNCHANGED, stored r stands, no gate note); p3 then edited to r 5 and MET: the gate reads it not attested and FAILS arm B on 8 blocking MAJOR, and the re-merge refuses it as not attested" \
+  || bad "RI8: stage ${RI_STAGE:-?}: [$RI_GOT] $(grep -m1 -E 'NOTE|REFUSED' "$MO") $(grep -m1 -E 'ATTESTATION|FAIL \(B' "$CO")"
 p_ri2 "$MERGE" && ok "RI2: p2's snapshots deleted, p1's kept: r 0, unjoined 8, no keys line, NOT_MET, the merge says why; arm R PENDING for p3, no FAIL" \
   || bad "RI2: stage ${RI_STAGE:-?}: rc=${RC:-?} [$RI_GOT] $(grep -m2 '(R -- ' "$CO")"
 p_ri4 "$MERGE" && ok "RI4: the second repair rewrote over 25% of story 2: r 0, unjoined 8, NOT_MET, the merge names the stem" \

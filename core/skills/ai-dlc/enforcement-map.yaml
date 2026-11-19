@@ -702,10 +702,10 @@ checks:
         posture: FAILS the gate (exit 0 required; exit 2 is a FAIL, not a skip)
         why: the chain's middle joins were hand-typed prose arrows nothing read, so a
           locked requirement could stop being mentioned with every downstream
-          artifact staying internally consistent. It also DECIDES two verdicts BMAD
-          produces and never acts on — lint_spine.py exits 0 by design and leaves the
-          call to its caller, and a testarch-trace decision of FAIL is otherwise just
-          a line in a report.
+          artifact staying internally consistent. It also DECIDES lint_spine.py's
+          verdict, which BMAD produces and never acts on — lint_spine.py exits 0 by
+          design and leaves the call to its caller. The gate passes no --trace-verdict,
+          so no testarch-trace decision is read at this call site.
     ci_workflow: ~
     fixtures: [tests/fixtures/spec-join-integrity]
 
