@@ -19,7 +19,7 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
-## [VERSION_PLACEHOLDER] - 2026-11-19
+## [0.1180.0] - 2026-11-19
 
 ### BL-1124 (advances, stays PARTIAL), BL-878 (item 5 done): the push gate starts far fewer processes
 
@@ -32,7 +32,7 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - The push hook's verdict-store skip rewrites every hit's record with one `awk` and one `mv` instead of a `sed` and `mv` per hit (120 processes become 3 for 60 hits), each record still replaced by a rename, in both hooks, with byte-identical records.
 - The push hook builds its tool list from the PATH directories with shell globbing instead of an `ls` and `awk` per directory (12 processes become 0 per call), and builds the excluded-path pattern without a `sed` per name (7 become 3); the list and the pattern are byte-identical, in both hooks.
 - `render-agent-definitions.sh` reads every role's model, effort and omit setting with one `jq` instead of four per role (79 `jq` runs become 3 on the template's role set); the rendered agent files and messages are byte-identical, including roles with odd values.
-- BL-1124 stays PARTIAL: the select-phase bodies `apply_readset_skip` and `cl_select`, and the consumer-layout build's per-directory `cp -p` (kept: its mode and mtime effect is not shown inert), are still owed; its (d) remainder is BL-1134 and its (e) remainder is BL-1133.
+- BL-1124 stays PARTIAL: the `readset_span_sha` and `readset_tail_sha` pipelines, and the consumer-layout build's per-directory `cp -p` (kept: its mode and mtime effect is not shown inert), are still owed; its (d) remainder is BL-1134 and its (e) remainder is BL-1133.
 
 ## [0.1179.0] - 2026-11-19
 
