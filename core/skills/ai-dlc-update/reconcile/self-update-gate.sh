@@ -1116,9 +1116,10 @@ fi
 
 # ---- THE MACHINERY SLICE CANNOT ALWAYS STAND ALONE -------------------------------------
 # Step 2's stated premise is "a fixture's subject is always machinery". It is FALSE, and the
-# arms below are the two ways it fails. Both were measured on the reference consumer at
+# arms below are the three ways it fails. R1 and R2 were measured on the reference consumer at
 # 0.249.0 against 0.261.0: 7 of that tree's 109 fixtures are red in the state step 2 builds,
 # and the operator had to cut a branch, write 17 paths and run 43 fixtures to discover it.
+# R3 is the deletion coupling: step 2 never deletes, so a fixture file the pull removes stays.
 #
 # This runs BEFORE the push-blocking differential below because it is cheaper and it is a
 # harder stop: the push arm asks whether the slice can be PUSHED, this asks whether the slice
@@ -1300,6 +1301,72 @@ $(printf '%s\n' "$r2_one" | grep -v '^[[:space:]]*#' || true)"
   done < "$TMP/r2-fx"
   if [ -n "$R2_HITS" ]; then
     emit SELF-UPDATE-DEFER "rulebook-coupled-fixtures" "this pull changes rulebook file(s) [$R2_RB], and fixture(s)${R2_HITS} assert against a rulebook file resolved in the live tree. Step 2 installs machinery without rulebook, so those fixtures judge new machinery against the OLD rulebook and go red on a pull that broke nothing. Fold the slice into the gated apply so both land on one branch."
+    deferred_join=1
+  fi
+fi
+
+# --- ARM R3: the pull DELETES a fixture file the consumer still holds --------------------
+# Step 2 never deletes (self-update-fixtures.sh, SKILL.md step 2): a path theirs deletes stays in
+# the consumer's tree as it was at base. When that path is a fixture file, the slice ships the new
+# siblings beside the stale one, and a sibling that enumerates its own directory (a receipt
+# globbing `receipt-bl*.sh`) runs or asserts on a file upstream removed -- red by construction on a
+# pull that broke nothing. Only the gated apply performs the deletion (UPSTREAM-DELETED), so the
+# slice must fold into it.
+#
+# THE LISTING: `--no-renames`, because a rename is a deletion of the old path as far as step 2 is
+# concerned -- it writes the new path and leaves the old one -- and a byte-identical rename would
+# otherwise be paired by git and never listed as D. `core.quotePath=false` and a staged,
+# line-by-line read so a spaced or non-ASCII path is one entry that maps. A failed listing prints
+# nothing, which reads as "nothing deleted": its status is read and a failure is UNDECIDED.
+#
+# THE PREDICATE is preclassify's own deleted / deleted-noop split, re-derived inline: preclassify
+# files a deleted path whose consumer copy fails `-f` (file_hash -> pc_ctest -f) as
+# UPSTREAM-DELETED-NOOP and every other as UPSTREAM-DELETED or its consumer-modified CLASSIFY
+# form, both of which the gated apply acts on. So a held path is `[ -f ]` at `map_consumer`'s
+# path (core/fixtures/x -> tests/fixtures/x), never a private table and never `-e`. Running
+# preclassify itself per candidate would cost a bash start and a full hash pass in every nested
+# --safe-stop child. `map_consumer` is loaded HERE, not borrowed from arm C: the --safe-stop child
+# never enters arm C's block, and arm C skips the load when preclassify.sh is absent. The load is
+# only needed when something was deleted; an unloadable map or an empty mapped path then is
+# UNDECIDED, because an unmapped path tests as absent and reads as quiet.
+#
+# WHOLE DELETED DIRECTORIES ARE INCLUDED: the gated apply deletes them, the slice does not. A held
+# file under a directory carrying `.dist-only` at theirs is deferred too, although the apply skips
+# it (DIST-ONLY-SKIP); no such case is on record, and deferring it costs one gated apply where
+# acquitting it would be a red push.
+#
+# FALSE-POSITIVE SET, measured over the reference consumer's pulls of the 0.1128.0 onward window:
+# 0.1128.0->0.1142.0 defers (26 held of 75 deleted fixture paths), 0.1143.0->0.1157.0 defers (1 of
+# 20), 0.1164.0->0.1167.0 defers (1 of 1, the motivating red). Earlier pulls pushed slices with held
+# stale deletions. None is a false positive: a stale fixture file the consumer holds stays until the
+# gated apply removes it, and the slice's verdict on it is the apply's to own. NARROWING: none; the
+# only filter is the consumer-existence test, and a pull whose deleted paths the consumer already
+# lacks stays quiet.
+R3_RC=0
+R3_DEL="$(git -C "$DIST" -c core.quotePath=false diff --no-renames --diff-filter=D --name-only "${BASE}..${THEIRS}" -- core/fixtures/ 2>/dev/null)" || R3_RC=$?
+if [ "$R3_RC" -ne 0 ]; then
+  emit SELF-UPDATE-UNDECIDED "deletion-coupled-fixtures" "the fixture deletion listing of ${BASE}..${THEIRS} failed (git diff exited ${R3_RC}), so whether this pull deletes a fixture file the consumer still holds is UNKNOWN. A listing that failed prints nothing, which reads exactly like a pull that deletes nothing -- the OK this arm exists to withhold; treat as DEFER and re-run."
+  exit 0
+fi
+if [ -n "$R3_DEL" ]; then
+  gate_load_preclassify "$(dirname "$SELF_SRC")/preclassify.sh"
+  if ! command -v map_consumer >/dev/null 2>&1; then
+    emit SELF-UPDATE-UNDECIDED "deletion-coupled-fixtures" "this pull deletes fixture path(s), but map_consumer() could not be loaded out of $(dirname "$SELF_SRC")/preclassify.sh, so where the consumer holds them is UNKNOWN. An unmapped path tests as absent, which reads as a consumer that already lacks it -- the OK this arm exists to withhold; treat as DEFER and re-run."
+    exit 0
+  fi
+  R3_HELD=""
+  gate_stage r3-del "$R3_DEL" "the fixture deletion list"
+  while IFS= read -r r3p; do
+    [ -n "$r3p" ] || continue
+    r3_cons="$(map_consumer "$r3p")"
+    if [ -z "$r3_cons" ]; then
+      emit SELF-UPDATE-UNDECIDED "deletion-coupled-fixtures" "map_consumer() returned an empty path for the deleted ${r3p}, so whether the consumer holds it is UNKNOWN; treat as DEFER and re-run."
+      exit 0
+    fi
+    [ -f "$CONSUMER/$r3_cons" ] && R3_HELD="$R3_HELD [$r3_cons]"
+  done < "$TMP/r3-del"
+  if [ -n "$R3_HELD" ]; then
+    emit SELF-UPDATE-DEFER "deletion-coupled-fixtures" "this pull deletes fixture file(s) the consumer still holds:${R3_HELD}. Step 2 never deletes, so the slice would ship their new siblings beside the stale files, and a fixture that enumerates its own directory goes red on a pull that broke nothing. Only the gated apply deletes them; fold the slice into it."
     deferred_join=1
   fi
 fi
