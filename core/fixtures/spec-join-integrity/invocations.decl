@@ -2,4 +2,4 @@
 # Re-measured (BL-878, batch 259 C3) by one counted run: the subject runs in process through inproc_run of vsj_main (inproc row); it starts only in its cli cells (cells.decl). `*` keeps the settled-tree net's two end-to-end stubs (st-stop.sh, st-exit.sh).
 28 *
 3 core/scripts/validate-spec-join.sh
-192 inproc:core/scripts/validate-spec-join.sh
+194 inproc:core/scripts/validate-spec-join.sh

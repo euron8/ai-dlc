@@ -19,11 +19,11 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
-## [VERSION_PLACEHOLDER] - 2026-11-19
+## [0.1181.0] - 2026-11-19
 
 ### Planning gates trust only pass-file counts the merge itself wrote, and agents waiting on their own jobs get one clear instruction when the wait runs out (BL-1175, BL-538 advance, stay PARTIAL)
 
-- For consumers running the adversarial review cycle: the adversarial-review convergence check no longer trusts a merged review file's finding counts on its word. It checks the file against the merge's own record in the tracked write ledger, so the check works on any clone, and an edited count no longer lets a review pass. Older files without a record are flagged as pending, not failed. (BL-1175 items 11-13)
+- For consumers running the adversarial review cycle: the adversarial-review convergence check no longer trusts a merged review file's finding counts on its word. It checks the file against the merge's own record in the tracked write ledger, so the check works on any clone, and an edited count no longer lets a review pass for a pass with a merge record; passes without one are believed as recorded (see BL-1175). Among those, a merged pass 2 or later whose recorded underived or repair-introduced counts are non-zero prints one pending line rather than failing. (BL-1175 items 11-13)
 - For anyone re-merging an adversarial pass: a pass first merged without `--rerun` is still refused by a `--rerun` merge (a pass file is never overwritten), but the refusal now says so and tells you to re-merge without `--rerun`. (BL-1175 item 12)
 - For the convergence gate's own tests: the J3 receipt now holds the repaired exit as a fixture arm (a repair-introduced MAJOR closed by a repair passes), so removing that clause fails the suite. (BL-1175 item 7)
 - For the lead in planning: the step that has the lead write each story's `stories:` entry in every canonical sprint-status copy now comes before the carry-over-single gate and is on the bug path too; the gate text no longer mentions a trace decision the gate stopped reading; and the route for a finding that needs a late architecture decision (repair in the stories or architecture series, the decision line in `ARCHITECTURE-SPINE.md`, never a deferral) is stated where the lead runs it. (BL-1175 items 17, 18, 20)
