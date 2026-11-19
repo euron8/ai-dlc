@@ -128,6 +128,7 @@ mkdir -p "$A5_ROOT" && [ -d "$A5_ROOT" ] \
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 broken() { printf '  FIXTURE BROKEN  %s\n' "$1" >&2; exit 2; }
 . "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+. "$HERE/../lib/world.sh" || { echo "FIXTURE ERROR: cannot source lib/world.sh" >&2; exit 2; }
 
 # IN PROCESS (BL-878). The subject is loaded ONCE with lib/inproc.sh's inproc_load (its source guard returns after
 # defining rpf_main) and every arm asks rpf_main through inproc_run, in a subshell made to look like a fresh
@@ -179,7 +180,7 @@ SIG_DIFF='^@@ '
 mktree() { # mktree <dir> <extra-corpus-files>
   local d="$1" extra="$2" i=1
   mkdir -p "$d/docs" "$d/_bmad-output/planning-artifacts/s306" || return 2
-  ( cd "$d" && "$REAL_GIT" init -q . ) || return 2
+  ( cd "$d" && world_git init -q . ) || return 2
   printf 'sprint: 306\n' > "$d/_bmad-output/planning-artifacts/sprint-status.yaml" || return 2
   while [ "$i" -le 20 ]; do printf 'line %d\n' "$i" >> "$d/docs/architecture.md"; i=$((i+1)); done
   # Backticks are written via printf \140: a citation is backtick-delimited by the

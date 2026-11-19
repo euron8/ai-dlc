@@ -773,7 +773,7 @@ if [ "$HANDOFF_VOCAB_OK" = "1" ] && { [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] || [ "$
     #        \ { ids present in subagent-context.jsonl }
     # BLOCK iff open is non-empty AND the In-Flight table carries ZERO data rows.
     #
-    # THE KEY IS `tool_use_id` AND THE CHOICE IS NOT RE-ARGUED HERE. probe_effort() in
+    # THE KEY IS `tool_use_id` AND THE CHOICE IS NOT RE-ARGUED HERE. the effort join in
     # core/scripts/validate-spawn-ledger.sh joins these same two ledgers on the same key,
     # and its header carries the measurement that rejected every ordered alternative -- the
     # ledger is written in DISPATCH order and the stop record in COMPLETION order, and the

@@ -1174,7 +1174,7 @@ not passed after it. It reads the `closes:` lines with no `party-mode/s<N>/` dir
 every escalation still open; each open one is the lead's to adjudicate. A party record takes
 `--sources` the same way, which does the same. Where round one's `.findings-partition` lies beside its
 shard dir (found from the record's name), either call also prints `CROSS-OPEN: <key>` for each routed key no
-entry's `source:` token carries across the records passed, then `CROSS-OPEN-COUNT: <n>`; each is
+serial writer's `source:` token carries across the records passed (a shard's own entry never does), then `CROSS-OPEN-COUNT: <n>`; each is
 the lead's to adjudicate, as an open escalation is, and is never a refusal. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the
 fix aside as outside the shard or not required without naming a hand-off, and, in every parts
 mode, a `repaired` entry with an edit whose `siblings:` field is absent or in none of its four

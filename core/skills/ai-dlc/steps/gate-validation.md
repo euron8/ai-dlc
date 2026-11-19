@@ -1985,7 +1985,7 @@ Record its `party seats judged as shardable:` line with the `COUNTS:` line. An e
 whose seat line names no seat judged no persona's shard declaration.
 
 **`--probe` IS WHAT MAKES THE EFFORT ARM REACHABLE, AND WITHOUT IT THAT ARM
-CANNOT FIRE AT THIS GATE.** `probe_effort()` returns empty unless `--probe`
+CANNOT FIRE AT THIS GATE.** The effort join yields empty unless `--probe`
 names a readable file, so every row lands in `EFFORT_PENDING` and none can
 reach `VIOL` — a clean-looking verdict over an arm that never ran, which is
 this repository's recurring defect. `subagent-context.jsonl` is written by

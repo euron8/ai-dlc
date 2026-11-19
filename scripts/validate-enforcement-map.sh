@@ -5507,36 +5507,68 @@ RT_EOF
   # `NAME()`, `rec_home NAME`, `for NAME in`, `read [-r] NAME`, `unset [-f|-v] NAME`, `function NAME`, `printf -v NAME`,
   # `${NAME:=x}` / `${NAME=x}` (so `: ${NAME:=x}` too), `eval ...NAME=...` and `alias NAME=`. A ` #` inside a string
   # no longer truncates the line: the comment strip is quote-aware.
+  # Also read, over the pool's global and function names: `NAME[i]=` / `NAME[i]+=` (subscript allowed before the
+  # assignment operator); `(( ... ))`, `$(( ... ))` and `for (( ... ))` bodies holding NAME with an assignment
+  # operator (`=` `+=` `-=` `*=` `/=` `%=` `<<=` `>>=` `&=` `|=` `^=`, never `==`) or `++`/`--` on either side, form
+  # `[arith]`; `let` arguments, form `[let]`; and `declare|typeset|local -n X=NAME` keyed on the TARGET NAME, read
+  # before the `local` strip, form `[nameref]`. Arithmetic is read off a third image of the line (DQ): RAW with
+  # every single-quoted span and every double-quoted span blanked EXCEPT a command substitution inside one, so
+  # `echo "$(( NAME++ ))"` fires while `awk '(( NAME++ ))'` and `echo "(( NAME++ ))"` stay quiet. `let` is
+  # detected on BLK (a `let` inside a string never matches) and its arguments are read off RAW, as eval does. One
+  # row per line and name: a form an earlier branch printed is not printed twice. The nameref ban was NOT put in
+  # validate-shell-portability.sh S3: its corpus is `git ls-files '*.sh'`, which holds neither pre-push hook.
   # Measured at the tip over both hooks: zero hits for every form. NOT covered, by measurement: a name the pool only
   # READS. Its candidate set (`$NAME` read in the pool, assigned nowhere at column 0) was 77 hits over the two hooks,
   # all legitimate top-level locals and configuration (`n`, `out`, `rc`, `q`, `sp`, `FXCOUNT_*`, `AI_DLC_*` ...);
-  # it is not an override set. Also not covered: `(( NAME++ ))`, `let NAME=`, `NAME[i]=`, `declare -n`.
-  # The quote state is CARRIED across lines (cut() blanks a multi-line string as a whole, so the line that closes an
-  # `awk '`...`'` string is not read as an opening quote) and resets only at the start of each hook. A hook that ends
-  # inside a quote prints `QUOTE`, so an ODD-parity desync fails closed instead of blanking the rest of the file. An
-  # EVEN number of stray quotes (BL-1176: `"$(grep '^"' f)"`, the inner `"` flips the state) resyncs by itself and is
-  # silent, blinding the quote-blanked forms until the next stray `"`; none sits outside the pool at this tip.
+  # it is not an override set. Also not covered: a nameref declared without a target (`declare -n r` then
+  # `r=NAME`), and arithmetic after the first `))` of a nested group.
+  # The quote state is a STACK carried across lines (cut() blanks a multi-line string as a whole, so the line that
+  # closes an awk string is not read as an opening quote) and resets only at the start of each hook. `s` is a
+  # single-quoted span, `d` a double-quoted one; inside a double-quoted span a dollar-paren pushes `c`, a command
+  # substitution in which quotes start fresh, an open paren pushes `p`, and a close paren at depth 0 returns to the
+  # double quote. BL-1176: with a one-character toggle, a grep of a caret and a double quote inside a dollar-paren
+  # inside a double-quoted string closed the string at the inner double quote and opened a single quote that ran
+  # to a comment apostrophe lines later, blinding the quote-blanked forms in between (dist 1174-1182, consumer
+  # 989-997); both spans are gone with the stack. A hook that ends inside a quote prints `QUOTE`, so an ODD-parity
+  # desync fails closed. `COMCLOSE` fails a carried quote span that CLOSES on a comment line: a desync tends to
+  # resync on an apostrophe in a comment, and no legitimate span in either hook closes on one (measured: the old
+  # cut gave exactly the two spans above, the stack gives none). It sees only a desync that resyncs on a comment
+  # line; one that resyncs on a code-line apostrophe stays silent. A backtick command substitution inside a double
+  # quote still produces the desync, the case the arm is proved to fire on.
   ps_out="$(awk '
-    function cut(s,   i, n, c, q, p) {
-      RAW = ""; BLK = ""; q = QS; n = length(s)
+    function cut(s,   i, n, c, top, nx) {
+      RAW = ""; BLK = ""; DQ = ""; n = length(s)
       for (i = 1; i <= n; i++) {
-        c = substr(s, i, 1)
-        if (q == "\047") { RAW = RAW c; if (c == "\047") { q = ""; BLK = BLK c } continue }
-        if (q == "\042") {
+        c = substr(s, i, 1); top = substr(QS, length(QS), 1); nx = substr(s, i + 1, 1)
+        if (top == "s") { RAW = RAW c; DQ = DQ " "; if (c == "\047") { QS = substr(QS, 1, length(QS) - 1); if (QS == "") { BLK = BLK c; DQ = DQ } } continue }
+        if (top == "d") {
           RAW = RAW c
-          if (c == "\\") { i++; RAW = RAW substr(s, i, 1); continue }
-          if (c == "\042") { q = ""; BLK = BLK c }
+          if (c == "\\") { i++; RAW = RAW nx; DQ = DQ "  "; continue }
+          if (c == "$" && nx == "(") { QS = QS "c"; i++; RAW = RAW "("; DQ = DQ "$("; continue }
+          DQ = DQ " "
+          if (c == "\042") { QS = substr(QS, 1, length(QS) - 1); if (QS == "") BLK = BLK c }
           continue
         }
-        if (c == "\\") { RAW = RAW c substr(s, i + 1, 1); BLK = BLK c substr(s, i + 1, 1); i++; continue }
-        if (c == "\047" || c == "\042") { q = c; RAW = RAW c; BLK = BLK c; continue }
+        if (top == "c" || top == "p") {
+          RAW = RAW c; DQ = DQ c
+          if (c == "\\") { i++; RAW = RAW nx; DQ = DQ nx; continue }
+          if (c == "\047") { QS = QS "s"; continue }
+          if (c == "\042") { QS = QS "d"; continue }
+          if (top == "c" && c == "$" && nx == "(") { QS = QS "c"; i++; RAW = RAW "("; DQ = DQ "("; continue }
+          if (c == "(") { QS = QS "p"; continue }
+          if (c == ")") { QS = substr(QS, 1, length(QS) - 1); continue }
+          continue
+        }
+        if (c == "\\") { RAW = RAW c nx; BLK = BLK c nx; DQ = DQ c nx; i++; continue }
+        if (c == "\047" || c == "\042") { QS = (c == "\047") ? "s" : "d"; RAW = RAW c; BLK = BLK c; DQ = DQ c; continue }
         if (c == "#" && (i == 1 || substr(s, i - 1, 1) ~ /[ \t]/)) break
-        RAW = RAW c; BLK = BLK c
+        RAW = RAW c; BLK = BLK c; DQ = DQ c
       }
-      QS = q
     }
     function hit(i, nm, how,   k) {
       if (nm in G) k = "global"; else if (nm in F) k = "function"; else return
+      if ((i SUBSEP nm) in SEEN) return
+      SEEN[i SUBSEP nm] = 1
       print nf "\t" i "\t" k "\t" nm (how == "" ? "" : " [" how "]")
     }
     function idents(i, str, how,   t) {
@@ -5545,9 +5577,37 @@ RT_EOF
       gsub(/(^|[ \t])-[A-Za-z]+/, " ", str)
       while (match(str, /[A-Za-z_][A-Za-z0-9_]*/)) { t = substr(str, RSTART, RLENGTH); str = substr(str, RSTART + RLENGTH); hit(i, t, how) }
     }
-    function scan(   i, s, t, rest, pre, nm, kind, n, inblk, dep, u, here, op, r, b, x) {
+    function arithtok(i, seg, how,   t, hist, pre, id, af, prior, pc) {
+      t = seg; hist = ""
+      while (match(t, /[A-Za-z_][A-Za-z0-9_]*/)) {
+        pre = substr(t, 1, RSTART - 1); id = substr(t, RSTART, RLENGTH); af = substr(t, RSTART + RLENGTH)
+        prior = hist pre; hist = prior id; t = af
+        if (!(id in G)) continue
+        pc = substr(prior, length(prior), 1)
+        if (pc ~ /[$A-Za-z0-9_{]/) continue
+        if (prior ~ /(\+\+|--)[ \t]*$/) { hit(i, id, how); continue }
+        if (match(af, /^\[[^]]*\]/)) af = substr(af, RLENGTH + 1)
+        sub(/^[ \t]+/, "", af)
+        if (af ~ /^(\+\+|--)/) { hit(i, id, how); continue }
+        if (match(af, /^(<<|>>|[-+*\/%&|^])?=/) && substr(af, RLENGTH + 1, 1) != "=") hit(i, id, how)
+      }
+    }
+    function arith(i, str, how,   p, rest, d, j, c, seg) {
+      while ((p = index(str, "((")) > 0) {
+        rest = substr(str, p + 2); d = 0; seg = ""
+        for (j = 1; j <= length(rest); j++) {
+          c = substr(rest, j, 1)
+          if (c == "(") d++
+          else if (c == ")") { if (d == 0) break; d-- }
+          seg = seg c
+        }
+        arithtok(i, seg, how)
+        str = substr(rest, j)
+      }
+    }
+    function scan(   i, s, t, rest, pre, nm, kind, n, inblk, dep, u, here, op, r, b, x, was, aa) {
       if (nf == "") return
-      n = 0; pb = 0; pe = 0; ub = 0; ue = 0; QS = ""; inblk = 0
+      n = 0; pb = 0; pe = 0; ub = 0; ue = 0; QS = ""; inblk = 0; split("", SEEN)
       for (i = 1; i <= nl; i++) {
         if (L[i] == "# FIXTURE_POOL_BEGIN") pb = i
         else if (L[i] == "# FIXTURE_POOL_END") pe = i
@@ -5565,23 +5625,31 @@ RT_EOF
       for (i = 1; i <= nl; i++) {
         if (nf == cons && index(L[i], "# pool-shadow:") && !(ub && ue > ub && i > ub && i < ue)) print nf "\t" i "\tMARKER\t-"
         s = L[i]
-        cut(s); r = RAW; b = BLK
+        was = QS; cut(s); r = RAW; b = BLK
+        if (was != "" && QS == "" && s ~ /^[ \t]*#/) print nf "\t" i "\tCOMCLOSE\t-"
         if (!inblk && s ~ /^[ \t]*\( /) { inblk = 1; dep = 0; op = i }
         if (inblk) { u = b; dep += gsub(/\(/, "(", u); u = b; dep -= gsub(/\)/, ")", u) }
         here = inblk; if (inblk && dep <= 0) inblk = 0
         if (i >= pb && i <= pe) continue
         if (s ~ /^[ \t]*#/) continue
         if (s ~ /# pool-shadow: subshell$/) { if (!here && nf != cons) print nf "\t" i "\tMARKTOP\t-"; continue }
+        rest = r
+        while (match(rest, /(^|[;&|({ \t])(declare|typeset|local)[ \t]+(-[A-Za-z]+[ \t]+)*-[A-Za-z]*n[A-Za-z]*[ \t]+[A-Za-z_][A-Za-z0-9_]*=["\047]?[A-Za-z_][A-Za-z0-9_]*/)) {
+          t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
+          sub(/^.*=["\047]?/, "", t); hit(i, t, "nameref")
+        }
         gsub(/(^|[;&|({ \t])local[ \t][^;]*/, " ", r)
         gsub(/(^|[;&|({ \t])local[ \t][^;]*/, " ", b)
         rest = " " r
-        while (match(rest, /[;&|({ \t][A-Za-z_][A-Za-z0-9_]*([ \t]*\(\)|\+?=)/)) {
+        while (match(rest, /[;&|({ \t][A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?([ \t]*\(\)|\+?=)/)) {
           pre = (RSTART > 1) ? substr(rest, RSTART - 1, 1) : ""
           t = substr(rest, RSTART + 1, RLENGTH - 1)
           rest = substr(rest, RSTART + RLENGTH)
           if (pre == "$") continue
-          if (t ~ /=$/) { nm = t; sub(/\+?=$/, "", nm); kind = "global"; if (!(nm in G)) continue }
+          if (t ~ /=$/) { nm = t; sub(/(\[[^]]*\])?\+?=$/, "", nm); kind = "global"; if (!(nm in G)) continue }
           else { nm = t; sub(/[ \t]*\(\)$/, "", nm); kind = "function"; if (!(nm in F)) continue }
+          if ((i SUBSEP nm) in SEEN) continue
+          SEEN[i SUBSEP nm] = 1
           print nf "\t" i "\t" kind "\t" nm
         }
         if (match(r, /(^|[;&|({ \t])rec_home[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
@@ -5613,6 +5681,10 @@ RT_EOF
         while (match(rest, /\$\{[A-Za-z_][A-Za-z0-9_]*:?=/)) {
           t = substr(rest, RSTART + 2, RLENGTH - 2); rest = substr(rest, RSTART + RLENGTH); sub(/:?=$/, "", t); hit(i, t, "${:=}")
         }
+        arith(i, DQ, "arith")
+        if (b ~ /(^|[;&|({ \t])let[ \t]/ && match(r, /(^|[;&|({ \t])let[ \t]/)) {
+          aa = substr(r, RSTART + RLENGTH); sub(/[;&|].*$/, "", aa); arithtok(i, aa, "let")
+        }
         if (match(r, /(^|[;&|({ \t])eval[ \t]/)) {
           rest = substr(r, RSTART + RLENGTH)
           while (match(rest, /[A-Za-z_][A-Za-z0-9_]*(\+?=|[ \t]*\(\))/)) {
@@ -5636,6 +5708,8 @@ RT_EOF
       err "I66 ${ps_f#$REPO_ROOT/}:${ps_l} carries '# pool-shadow: subshell' outside any '( ... )' block. The marker exempts only a line inside an open subshell, where an override cannot outlive the block; at top level it would hide a real override of the pool. Move the line into a subshell or drop the marker."
     elif [ "$ps_k" = MARKER ]; then
       err "I66 ${ps_f#$REPO_ROOT/}:${ps_l} carries a '# pool-shadow:' marker. The consumer hook has no pool-shadow exemption: an override there changes what only a consumer's suite runs or skips. Remove the marker and move the override inside the pool."
+    elif [ "$ps_k" = COMCLOSE ]; then
+      err "I66 ${ps_f#$REPO_ROOT/}:${ps_l} closes a quote span carried from an earlier line, and the closing line is a comment. A comment line holds an apostrophe by habit, so a scan whose quote state slipped (a quote the scan read differently from the shell, such as one inside a backtick or a command substitution it could not follow) resyncs there and blanks every line between. Quote the construct so the scan reads it as the shell does, or reword the comment."
     elif [ "$ps_k" = QUOTE ]; then
       err "I66 ${ps_f#$REPO_ROOT/}: the pool-shadow scan ended inside an unclosed quote (last line ${ps_l}), so every line after the quote opened was blanked and no override there could be seen. Close the quote, or an apostrophe in an unquoted heredoc body desynchronised the scan: quote it or reword it."
     elif [ "$ps_k" = ZERO ]; then

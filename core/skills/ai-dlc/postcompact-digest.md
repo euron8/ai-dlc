@@ -163,8 +163,9 @@ rule says:** the sprint-scope confirmation (`steps/route.md` Step 6),
 operator relief (Rule 11(a), `bug-investigation.md` §2b), a choice that
 moves a locked requirement's boundary (Rule 13), any Rule 12 Tier 1
 matter (a choice that contradicts an operator-approved decision, a
-requirement divergence, or a carry-over deferral), and a gate STOP
-adjudication (`steps/_gate-procedures.md`).
+requirement divergence, or a carry-over deferral), a gate STOP
+adjudication (`steps/_gate-procedures.md`), and any other decision a step
+reserves to the operator.
 
 #### Operator decisions: one shape (Rule 11(a))
 **Every decision put to the operator has one shape, wherever it is

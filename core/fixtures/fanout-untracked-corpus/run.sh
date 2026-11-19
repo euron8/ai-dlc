@@ -76,6 +76,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+. "$HERE/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 
 # IN PROCESS (BL-878). The subject is loaded ONCE with lib/inproc.sh's inproc_load (its source guard returns after
 # defining rpf_main) and every arm asks rpf_main through inproc_run, in a subshell made to look like a fresh
@@ -118,7 +119,7 @@ declare -F rpf_main >/dev/null || { echo "FIXTURE BROKEN: sourcing $SUBJ defined
 mktree() { # mktree <dir> <with-sprint-artifacts: yes|no>
   local d="$1" want="$2" i=1
   mkdir -p "$d/docs/junk" "$d/_bmad-output/planning-artifacts/s306" || return 2
-  ( cd "$d" && "$REAL_GIT" init -q . ) || return 2
+  ( cd "$d" && world_git init -q . ) || return 2
   printf 'docs/junk/\n' > "$d/.gitignore" || return 2
   printf 'sprint: 306\n' > "$d/_bmad-output/planning-artifacts/sprint-status.yaml" || return 2
   while [ "$i" -le 20 ]; do printf 'line %d\n' "$i" >> "$d/docs/architecture.md"; i=$((i+1)); done
