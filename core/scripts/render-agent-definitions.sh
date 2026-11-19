@@ -190,7 +190,24 @@ render_one() {
   printf 'A path `.claude/hooks/ai-dlc-protect.sh` protects (its PROTECTED_PATTERNS) is read with the native Read tool, never with a context-mode tool (ctx_*): the hook denies those calls.\n'
 }
 
-ROLES="$(jq -r '.aiDlcRoles | keys[]' "$SETTINGS" 2>/dev/null)"
+# ONE jq FOR EVERY ROLE. A line is `F` US `<role>` US `<model key>` US `<model string>` US `<effort>` US `<omitClaudeMd>`
+# (US = \037, a separator that is not IFS whitespace, so an empty field survives the split), the four values the
+# per-role calls below load. A role whose fields hold a newline or US, a non-scalar, or a lookup jq errors on, and a
+# role name outside the role-file grammar, is printed as `S` US `<name>`; the loop then loads that role's fields with
+# the four per-field calls, so the value is exactly what they return. The path is read from the tag alone, never
+# inferred from a US inside the name.
+US="$(printf '\037')"
+ROLES="$(jq -r '. as $d | .aiDlcRoles | keys[] as $r
+  | if ($r | test("^[a-z][a-z0-9-]*$") | not) then "S\u001f" + $r else
+      (try (
+        def sc: if type == "string" then . elif type == "number" or type == "boolean" then tojson else error("slow") end;
+        (($d.aiDlcRoles[$r].model // "") | sc) as $m
+        | (if $m == "" then "" else (($d.aiDlcModels[$m] // "") | sc) end) as $ms
+        | (($d.aiDlcRoles[$r].effort // "") | sc) as $e
+        | ($d.aiDlcRoles[$r].omitClaudeMd | if . == null then "" else tostring end) as $o
+        | [$m, $ms, $e, $o] | if any(.[]; test("[\n\u001f]")) then error("slow") else . end
+        | (["F", $r] + .) | join("\u001f")
+      ) catch ("S\u001f" + $r)) end' "$SETTINGS" 2>/dev/null)"
 
 rc=0
 rendered=0
@@ -208,6 +225,15 @@ missing=""
 
 while IFS= read -r role; do
   [ -n "$role" ] || continue
+  fast=""
+  case "$role" in
+    "F$US"*) fast=1; role="${role#F"$US"}"; IFS="$US" read -r role mkey mstr eff om <<EOR
+$role
+EOR
+    ;;
+    "S$US"*) role="${role#S"$US"}" ;;
+  esac
+  [ -n "$role" ] || continue
 
   # A ROLE NAME IS A PATH COMPONENT AND settings.json IS CONSUMER-OWNED INPUT. Anything outside
   # the role-file grammar the dispatch guard already derives (`[a-z][a-z-]*`) is refused rather
@@ -217,14 +243,14 @@ while IFS= read -r role; do
     [!a-z]*)          bad_name="$bad_name $role"; continue ;;
   esac
 
-  mkey="$(jq -r --arg r "$role" '.aiDlcRoles[$r].model // empty' "$SETTINGS" 2>/dev/null)"
+  [ -n "$fast" ] || mkey="$(jq -r --arg r "$role" '.aiDlcRoles[$r].model // empty' "$SETTINGS" 2>/dev/null)"
   if [ -z "$mkey" ]; then
     # NORMAL, NOT AN ERROR. See the header: a role configuring no model (a party persona whose
     # model /bmad-party-mode chooses) is one this renderer has nothing to say about.
     skipped_nomodel=$((skipped_nomodel+1))
     continue
   fi
-  mstr="$(jq -r --arg k "$mkey" '.aiDlcModels[$k] // empty' "$SETTINGS" 2>/dev/null)"
+  [ -n "$fast" ] || mstr="$(jq -r --arg k "$mkey" '.aiDlcModels[$k] // empty' "$SETTINGS" 2>/dev/null)"
   if [ -z "$mstr" ]; then
     # A DELIVERY GAP, NOT A PREFERENCE. The role was configured to run on a model and the key
     # resolves to nothing, so it gets no definition and its spawns fall back to the parent's
@@ -235,7 +261,7 @@ while IFS= read -r role; do
     continue
   fi
 
-  eff="$(jq -r --arg r "$role" '.aiDlcRoles[$r].effort // empty' "$SETTINGS" 2>/dev/null)"
+  [ -n "$fast" ] || eff="$(jq -r --arg r "$role" '.aiDlcRoles[$r].effort // empty' "$SETTINGS" 2>/dev/null)"
   if [ -n "$eff" ] && ! effort_valid "$eff"; then
     bad_effort="$bad_effort ${role}(${eff})"
     eff=""
@@ -243,7 +269,7 @@ while IFS= read -r role; do
 
   # NOT `// empty`: see the header. A declared `false` must reach `omit_valid` AS `false`, not
   # as absence, so the loader distinguishes the three states the declaration can be in.
-  om="$(jq -r --arg r "$role" '.aiDlcRoles[$r].omitClaudeMd | if . == null then "" else tostring end' "$SETTINGS" 2>/dev/null)"
+  [ -n "$fast" ] || om="$(jq -r --arg r "$role" '.aiDlcRoles[$r].omitClaudeMd | if . == null then "" else tostring end' "$SETTINGS" 2>/dev/null)"
   if [ -n "$om" ] && ! omit_valid "$om"; then
     bad_omit="$bad_omit ${role}(${om})"
     om=""

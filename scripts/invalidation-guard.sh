@@ -43,12 +43,15 @@ G_W=""
 g_cleanup() { [ -n "$G_W" ] && [ -d "$G_W" ] && rm -rf -- "$G_W"; return 0; }
 trap g_cleanup EXIT
 
+# The sha256 of stdin as its first field, cut with builtins (a `shasum | cut` pair is one exec more).
+g_hash1() { local h; h="$(shasum -a 256)"; printf '%s' "${h%% *}"; }
+
 # Each `# NAME_BEGIN` .. `# NAME_END` span of a file as `<NAME>\t<sha256 of its raw lines>`, sorted. A file with
 # no span prints nothing.
 g_spans() { # <file>
   local n
   for n in $(sed -n 's/^# \([A-Z0-9_]*\)_BEGIN$/\1/p' "$1" | sort -u); do
-    printf '%s\t%s\n' "$n" "$(sed -n "/^# ${n}_BEGIN\$/,/^# ${n}_END\$/p" "$1" | shasum -a 256 | cut -d' ' -f1)"
+    printf '%s\t%s\n' "$n" "$(sed -n "/^# ${n}_BEGIN\$/,/^# ${n}_END\$/p" "$1" | g_hash1)"
   done
 }
 
@@ -59,7 +62,7 @@ g_recover() { # <root> <path> <sha256> <dest>
   for b in $(git -C "$1" log --all --format= --raw --no-renames --no-abbrev -n "$G_SCAN" -- "$2" 2>/dev/null \
                | awk '{ print $3; print $4 }' | grep -v '^0*$' | awk '!s[$0]++'); do
     git -C "$1" cat-file blob "$b" > "$4" 2>/dev/null || continue
-    [ "$(shasum -a 256 < "$4" | cut -d' ' -f1)" = "$3" ] && return 0
+    [ "$(g_hash1 < "$4")" = "$3" ] && return 0
   done
   return 1
 }
@@ -156,7 +159,7 @@ g_judge() { # <root> <out> <keys> <list> <work>
   return 1
 }
 g_has() { case "$1" in *"$2"*) return 0 ;; esac; return 1; }
-g_slug() { printf '%s' "$1" | shasum -a 256 | cut -c1-16; }
+g_slug() { local h; h="$(printf '%s' "$1" | g_hash1)"; printf '%s' "${h:0:16}"; }
 # The span lists of <path> as recorded (sha <old>) and as present, cached per pair. Non-zero: not recovered.
 g_span_cache() { # <root> <path> <old sha> <work>
   local so sn
@@ -172,8 +175,7 @@ g_self_probe() {
   local P="$G_W/probe" o k rc out bad="" H=bin/hook
   mkdir -p "$P/r/bin" "$P/r/docs" "$P/o" "$P/k" "$P/w" || return 2
   for k in fa fb fc fd fe ff; do mkdir -p "$P/r/core/fixtures/$k" && : > "$P/r/core/fixtures/$k/run.sh" || return 2; done
-  ( cd "$P/r" && git init -q . && git config user.email p@p && git config user.name p && git config commit.gpgsign false \
-      && git config core.hooksPath /dev/null ) || return 2
+  ( cd "$P/r" && git init -q . ) || return 2
   printf '#!/bin/sh\n# head comment\n# SPAN_A_BEGIN\nalpha\n# SPAN_A_END\n# SPAN_B_BEGIN\nbeta\n# SPAN_B_END\ntail\n' > "$P/r/$H"
   printf 'plain\n' > "$P/r/notes.txt"
   printf '%s\n' "$H" > "$P/r/core/fixtures/fa/inputs.decl"              # legacy whole program
@@ -184,14 +186,14 @@ g_self_probe() {
   printf 'bin/\n' > "$P/r/core/fixtures/ff/inputs.decl"                 # the program reached through a legacy directory line
   printf '#program\t%s\nfa\t%s\tlegacy\nfb\t%s\twhole\nfc\t%s\tlegacy\nfe\t!%s\tlegacy\nff\tbin/\tlegacy\n' "$H" "$H" "$H" "$H" "$H" \
     > "$P/r/docs/inputs-decl-whole-rows.tsv"
-  ( cd "$P/r" && git add -A && git commit -qm base ) || return 2
-  o="$(shasum -a 256 < "$P/r/$H" | cut -d' ' -f1)"
+  ( cd "$P/r" && git add -A && git -c user.email=p@p -c user.name=p -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -qm base ) || return 2
+  o="$(g_hash1 < "$P/r/$H")"
   for k in fa fb fc fd fe ff; do
     [ "$k" = fe ] && o=0000000000000000000000000000000000000000000000000000000000000000
     printf '#format k1\n#state ok\n#tools canonical\n%s\t%s\n' "$H" "$o" > "$P/k/$k.key"
     printf '%s\n' "$k" >> "$P/o/.dfx"; printf '%s\trun\tchanged %s\tk\tok\n' "$k" "$H" >> "$P/o/.kdec"
   done
-  printf 'notes.txt\t%s\n' "$(shasum -a 256 < "$P/r/notes.txt" | cut -d' ' -f1)" >> "$P/k/fc.key"
+  printf 'notes.txt\t%s\n' "$(g_hash1 < "$P/r/notes.txt")" >> "$P/k/fc.key"
   # (1) a comment outside every span: fa, fc, fd FAIL; fb (whole) reads it; fe and ff are unattributed
   sed 's/^# head comment$/# head comment, edited/' "$P/r/$H" > "$P/r/$H.n" && mv "$P/r/$H.n" "$P/r/$H"
   g_probe_keys "$P" "$H"
@@ -226,12 +228,13 @@ g_self_probe() {
   return 1
 }
 g_probe_keys() { # <probe dir> <hook path>: rewrite .dkeys from the probe tree's present content
-  local P="$1" k
+  local P="$1" k hh hn
+  hh="$(g_hash1 < "$P/r/$2")"; hn="$(g_hash1 < "$P/r/notes.txt")"
   : > "$P/o/.dkeys"
   for k in fa fb fc fd fe ff; do
-    printf '%s\t%s\t%s\n' "$k" "$2" "$(shasum -a 256 < "$P/r/$2" | cut -d' ' -f1)" >> "$P/o/.dkeys"
+    printf '%s\t%s\t%s\n' "$k" "$2" "$hh" >> "$P/o/.dkeys"
   done
-  printf 'fc\tnotes.txt\t%s\n' "$(shasum -a 256 < "$P/r/notes.txt" | cut -d' ' -f1)" >> "$P/o/.dkeys"
+  printf 'fc\tnotes.txt\t%s\n' "$hn" >> "$P/o/.dkeys"
 }
 
 # THE RATCHET over the whole-rows list and the inputs.decl corpus under <root>. Parses the declaration as

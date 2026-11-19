@@ -264,15 +264,31 @@ emit_components() {
   #    readset_section_of SOURCED from .githooks/pre-push's READSET_KEYROWS span (the per-fixture key's own pair), as
   #    `<sha256>  <path> <heading>`; a file any declarer keys whole is also hashed whole.
   printf '### keyed\n'
-  local d kl kp kt p t tab
-  tab="$(printf '\t')"; kl=""
-  for d in core/fixtures/*/inputs.decl; do
-    [ -f "$d" ] || continue
-    kp="$(awk '{ sub(/\r$/, ""); x = 0; r = 0
+  local d kl kp kt p t tab kall us ka
+  tab="$(printf '\t')"; kl=""; us="$(printf '\037')"; ka=""
+  # ONE awk over every inputs.decl, each + line prefixed by its file and a US byte (one exec, not one per declarer).
+  set -- core/fixtures/*/inputs.decl
+  for d in "$@"; do [ -f "$d" ] && ka="${ka}${d}${us}"; done
+  set --
+  while [ -n "$ka" ]; do set -- "$@" "${ka%%"$us"*}"; ka="${ka#*"$us"}"; done
+  kall=""
+  if [ "$#" -gt 0 ]; then
+    kall="$(awk -v us="$us" 'FNR == 1 { bad = 0 }
+                 { sub(/\r$/, ""); x = 0; r = 0
                  while ((c = substr($0, 1, 1)) == "!" || c == "+") { if (c == "+") x = 1; else r = 1; $0 = substr($0, 2) }
-                 if (x && r) { bad = 1; exit }
-                 if (x) print }
-               END { exit bad ? 3 : 0 }' "$d")" || die "could not read $d for its + declarations, or a line there carries + and ! together. Fails closed."
+                 if (x && r) { bad = 1; bf = FILENAME; exit }
+                 if (x) print FILENAME us $0 }
+               END { if (bad) { print "BAD" us bf; exit 3 } }' "$@")" || die "could not read an inputs.decl for its + declarations, or a line there carries + and ! together. Fails closed."
+  fi
+  for d in "$@"; do
+    kp=""
+    while IFS= read -r p; do
+      case "$p" in "$d$us"*) kp="${kp}${p#"$d$us"}
+" ;; esac
+    done <<< "$kall"
+    while [ "${kp%
+}" != "$kp" ]; do kp="${kp%
+}"; done
     [ -n "$kp" ] || continue
     if [ -f "${d%/inputs.decl}/section.decl" ]; then
       kt="$(sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' .githooks/pre-push \
@@ -307,14 +323,37 @@ emit_components() {
 
   # 8. THE TOOLS. Identity, hash and version -- see TOOLS above for why all three.
   printf '### tools\n'
-  local t p
+  # One shasum over every present tool (a shasum that did not answer for every path, or answered out of order,
+  # falls back to one per tool); the first hash field and the first --version line are cut with builtins.
+  local t p tp="" tl="" th="" tn=0 hi=0 hh v nl
+  nl="
+"
+  set --
+  for t in $TOOLS; do
+    p="$(command -v "$t" 2>/dev/null)"
+    [ -n "$p" ] || continue
+    set -- "$@" "$p"; tn=$((tn + 1))
+  done
+  if [ "$tn" -gt 0 ]; then
+    th="$(shasum -a 256 "$@" 2>/dev/null)"
+    while IFS= read -r hh; do [ -z "$hh" ] || hi=$((hi + 1)); done <<< "$th"
+    [ "$hi" = "$tn" ] || th=""
+    hi=0
+  fi
+  [ -z "$th" ] || exec 3<<< "$th"
   for t in $TOOLS; do
     p="$(command -v "$t" 2>/dev/null)"
     if [ -z "$p" ]; then printf '%s ABSENT\n' "$t"; continue; fi
-    printf '%s %s %s %s\n' "$t" "$p" \
-      "$(shasum -a 256 "$p" 2>/dev/null | awk '{print $1}')" \
-      "$("$t" --version 2>/dev/null | head -1 | tr -d '\n')"
+    hh=""
+    if [ -n "$th" ]; then
+      IFS= read -r hh <&3 || hh=""
+      case "$hh" in *"  $p") hh="${hh%% *}" ;; *) hh="" ;; esac
+    fi
+    [ -n "$hh" ] || hh="$(shasum -a 256 "$p" 2>/dev/null | awk '{print $1}')"
+    v="$("$t" --version 2>/dev/null)"
+    printf '%s %s %s %s\n' "$t" "$p" "$hh" "${v%%"$nl"*}"
   done
+  exec 3<&-
 }
 
 # ---------------------------------------------------------------------------

@@ -998,8 +998,10 @@ rec_unlock() { rm -rf "$1" 2>/dev/null; }
 #
 # A record is written per fixture on PASS, whatever its neighbours did; never on a fail, a kill
 # or a missing verdict. A fixture that ran because a FILE in its read set or own directory moved
-# is recorded `stale`: a stale fixture always runs, and the post-green live trace takes it. Once
-# that trace lands its local rows are its key and the next pass records it `ok`. A LISTING
+# is recorded `stale`: a stale fixture always runs. An UNDECLARED stale fixture is taken by the post-green
+# live trace; once that trace lands its local rows are its key and the next pass records it `ok`. A stale
+# DECLARED fixture (one with an `inputs.decl`) is mapped before the trace queue and the live trace skips
+# it, so it is re-run and never traced; trace it by hand with `--declared-out`. A LISTING
 # change never stales: the record is written `ok` with every file and directory under each
 # newly appeared entry added to its keys, so whatever F might now read there is keyed.
 #
@@ -1056,7 +1058,7 @@ readset_excluded_re() {
           | sed -n 's/^\([A-Za-z0-9._-]\{1,\}\)$/\1/p' | grep -v '^\.git$')"
   [ -n "$tops" ] || return 0
   for t in $tops; do
-    re="${re}|^$(printf '%s' "$t" | sed 's/\./\\./g')(/|$)"
+    re="${re}|^${t//./\\.}(/|$)"
   done
   printf '%s' "${re#|}"
 }
@@ -1892,6 +1894,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 2344ea159b99335fe28e7862362a545b06d8b659e12f3fe4cb88ca7eb482582b BL-1124 (c) select cuts: the per-fixture grep loops are one awk each, readset_strip_keys backgrounds each bash -n without a subshell group, readset_decl_batch parses every declaration in one awk with the one premap/mapper join, readset_vs_want batches the per-candidate readers and the store scan stops at a foreign line-3 #fixture; every key, parse and digest row is byte-identical, so no entry changes meaning
 # VS-IDENTITY 1 dd6b4948a04c22742669aac0b53351884194a2f4805d85d7efb2a9f7660ce48c BL-1124 (c) readset_decl_parse per-fixture span, section and git.decl execs: readset_decl_spans parses spans.decl with builtins and readset_decl_spansbatch takes every fixture span presence and hash in one mapper start, one awk and one shasum, the `+` rows are collected by the row loop and hashed by readset_decl_hashes in one shasum for the whole pre-pass, readset_decl_ranges splits its paths with builtins, the glob expansion no longer moves a scratch file; every parse row is byte-identical, so no entry changes meaning
 # VS-IDENTITY 1 f9b807a1a25300e88515d3dd0b540b78d83247360d76ba0c357b745c18a52df3 BL-1163 memoizes readset_strip_keys and readset_tools' scan under the readset-memo record, off unless a depth-0 push entry; every key row, .dkeys, .ftools and .tools is byte-identical, so no stored entry changes meaning
+# VS-IDENTITY 1 746efba9d11a1197bda98bb7975dcaa74df97d66b77e8aef4890f0351a828e35 readset_excluded_re escapes each excluded name's dots with a parameter expansion, not a sed per name (BL-1124); the regex is byte-identical, so no entry changes meaning
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -2193,9 +2196,16 @@ readset_decl_batch() {
 #     `<path>\t<sha256>`; readset_decl_parse (`pre`) reads its path there and hashes alone any path the file lacks.
 #     A shasum whose output does not name the listed paths in order leaves every `.h` empty.
 readset_decl_hashes() {
-  local en="$1" e1 e2 e3 t k p rq dp q pl u=$'\n' list=$'\n' n=0 o hc="" l
+  local en="$1" e1 e2 e3 t k p rq dp q pl u=$'\n' list=$'\n' glist=$'\n' n=0 o hc="" hg="" l
   while IFS=$'\t' read -r e1 e2 e3; do
     : > "$e3.h"
+    if [ -s "$e3.gq" ]; then
+      : > "$e3.gh"
+      while IFS= read -r q || [ -n "$q" ]; do
+        [ -f "$q" ] || continue
+        case "$list" in *"$u$q$u"*) ;; *) list="$list$q$u"; glist="$glist$q$u"; n=$((n + 1)) ;; esac
+      done < "$e3.gq"
+    fi
     [ -s "$e3.p" ] || continue
     pl=$u; while IFS= read -r q || [ -n "$q" ]; do pl="$pl$q$u"; done < "$e3.p"
     while IFS=$'\t' read -r t k p rq dp; do
@@ -2211,11 +2221,13 @@ readset_decl_hashes() {
   o="$(shasum -a 256 -- "$@" 2>/dev/null)" || return 0
   while IFS= read -r l; do
     [ "$#" -gt 0 ] && [ "${l:66}" = "$1" ] || return 0
-    hc="$hc$1"$'\t'"${l%% *}"$'\n'; shift
+    case "$glist" in *"$u$1$u"*) hg="$hg$1"$'\t'"${l%% *}"$'\n' ;; *) hc="$hc$1"$'\t'"${l%% *}"$'\n' ;; esac
+    shift
   done <<<"$o"
   [ "$#" -eq 0 ] || return 0
   while IFS=$'\t' read -r e1 e2 e3; do
     [ ! -s "$e3.p" ] || printf '%s' "$hc" > "$e3.h"
+    [ ! -s "$e3.gq" ] || printf '%s' "$hg" > "$e3.gh"
   done < "$en"
 }
 readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool search path> <scratch prefix> [<premap>] [pre]
@@ -2291,7 +2303,9 @@ readset_decl_parse() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <tool
     done < "$w.pf"
   fi
   [ ! -f "$fd/spans.decl" ] || readset_decl_spans "$fx" "$fd" "$lay" "$mp" "$w"
-  [ ! -f "$fd/git.decl" ] || readset_decl_ranges "$fx" "$fd" "$w"
+  if [ -f "$fd/git.decl" ]; then
+    if [ "${8:-}" = pre ] && [ -f "$w.gr" ]; then readset_decl_rangerows "$fx" "$w"; else readset_decl_ranges "$fx" "$fd" "$w"; fi
+  fi
   [ -f "$fd/tools.decl" ] || return 0
   while IFS= read -r t || [ -n "$t" ]; do
     case "$t" in ''|'#'*) continue ;; esac
@@ -2490,8 +2504,8 @@ readset_decl_spans() { # <fx> <fixture dir> <dist|cons> <mapper, or empty> <scra
 #   move). An EMPTY @file range is accepted and keyed on the hash of the empty list: a deriver whose range is empty at
 #   one HEAD gains commits later, and its key moves then.
 #   Every command here reads /dev/null, never the git.decl the loop is reading.
-readset_decl_ranges() { # <fx> <fixture dir> <scratch prefix>
-  local fx="$1" fd="$2" w="$3" line kw ex rest out p b t der n=0 ga
+readset_decl_ranges() { # <fx> <fixture dir> <scratch prefix> [prep]
+  local fx="$1" fd="$2" w="$3" line kw ex rest out p b t der n=0 ga gl="$3.gl" pm="${4:-}"
   local -a gw
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in range|'range '*) ;; *) continue ;; esac
@@ -2512,11 +2526,50 @@ readset_decl_ranges() { # <fx> <fixture dir> <scratch prefix>
     b="$(git rev-parse -q --verify "${b}^{commit}" < /dev/null 2>/dev/null)" && t="$(git rev-parse -q --verify "${t}^{commit}" < /dev/null 2>/dev/null)" \
       || { printf '%s\tX\trref\t%s\n' "$fx" "$line"; continue; }
     set --; for p in "${gw[@]}"; do [ -z "$p" ] || set -- "$@" "$p"; done
-    GIT_LITERAL_PATHSPECS=1 git rev-list "${b}..${t}" -- "$@" < /dev/null > "$w.gl" 2>/dev/null || { printf '%s\tX\trref\t%s\n' "$fx" "$line"; continue; }
-    [ -s "$w.gl" ] || [ "$der" = 1 ] || { printf '%s\tX\trempty\t%s\n' "$fx" "$line"; continue; }
-    p="$(shasum -a 256 < "$w.gl")"; p="${p%% *}"
+    [ "$pm" != prep ] || gl="$w.gl.$n"
+    GIT_LITERAL_PATHSPECS=1 git rev-list "${b}..${t}" -- "$@" < /dev/null > "$gl" 2>/dev/null || { printf '%s\tX\trref\t%s\n' "$fx" "$line"; continue; }
+    [ -s "$gl" ] || [ "$der" = 1 ] || { printf '%s\tX\trempty\t%s\n' "$fx" "$line"; continue; }
+    if [ "$pm" = prep ]; then
+      printf '%s\n' "$gl" >> "$w.gq"
+      printf '%s\tG\tgit-range:%s\t@%s\t%s\t%s\n' "$fx" "$n" "$gl" "$b" "$t"
+      continue
+    fi
+    p="$(shasum -a 256 < "$gl")"; p="${p%% *}"
     printf '%s\tG\tgit-range:%s\t%s\t%s\t%s\n' "$fx" "$n" "$p" "$b" "$t"
   done < "$fd/git.decl"
+}
+# readset_decl_rangeprep <entries>: after readset_decl_batch over the same entries, runs readset_decl_ranges in `prep`
+#   mode for each entry whose fixture carries a git.decl and whose declaration parsed (`.b` first field 0): its rows go
+#   to `<scratch prefix>.gr` with each G row's hash field `@<rev-list output file>`, the rev-list files named in
+#   `<scratch prefix>.gq`; readset_decl_hashes hashes them in its one shasum into `.gh`, and readset_decl_rangerows
+#   prints the rows with the hash filled in (its own shasum for a file `.gh` lacks).
+readset_decl_rangeprep() {
+  local e1 e2 e3 fd rb rj
+  while IFS=$'\t' read -r e1 e2 e3; do
+    fd="${e2%/inputs.decl}"
+    [ -f "$fd/git.decl" ] || continue
+    read -r rb rj < "$e3.b" || continue
+    [ "$rb" = 0 ] || continue
+    : > "$e3.gq"
+    readset_decl_ranges "$e1" "$fd" "$e3" prep > "$e3.gr"
+  done < "$1"
+}
+readset_decl_rangerows() { # <fx> <scratch prefix>
+  local fx="$1" w="$2" l a b c d e f hp hh dp
+  while IFS= read -r l || [ -n "$l" ]; do
+    case "$l" in
+      "$fx"$'\t'G$'\t'git-range:*)
+        IFS=$'\t' read -r a b c d e f <<<"$l"
+        case "$d" in
+          @*) dp=""
+              while IFS=$'\t' read -r hp hh; do [ "$hp" != "${d#@}" ] || { dp="$hh"; break; }; done < "$w.gh"
+              if [ "${#dp}" -ne 64 ]; then dp="$(shasum -a 256 < "${d#@}")"; dp="${dp%% *}"; fi
+              printf '%s\tG\t%s\t%s\t%s\t%s\n' "$a" "$c" "$dp" "$e" "$f" ;;
+          *) printf '%s\n' "$l" ;;
+        esac ;;
+      *) printf '%s\n' "$l" ;;
+    esac
+  done < "$w.gr"
 }
 readset_decl_tool_hashes() { # <parse rows> <tool hash file, appended>
   awk -F'\t' -v h="$2" 'BEGIN { while ((getline l < h) > 0) { t = index(l, "\t"); have[substr(l, 1, t - 1)] = 1 } }
@@ -2655,7 +2708,9 @@ readset_tools() { # <out>
   local out="$1" xp="$READSET_TOOL_XP" tf="" sc="$1/.ftools" ml="$1/.rt.sh" fr="${FXROOT:-}" rt_rc=0
   [ -n "$xp" ] || xp="$(readset_git_exec_path)"
   ( IFS=:; for p in $xp:$READSET_TOOL_DIRS; do
-      [ -d "$p" ] && ls -1 "$p" 2>/dev/null | awk -v d="$p" '{ print d "\t" $0 }'
+      [ -d "$p" ] || continue
+      set +f
+      for f in "$p"/*; do [ -e "$f" ] || [ -L "$f" ] || continue; printf '%s\t%s\n' "$p" "${f##*/}"; done
     done ) > "$out/.pathcmds"
   readset_memo_id "$out"
   grep '\.sh$' "$out/.files" > "$out/.rt.sh"
@@ -2746,7 +2801,7 @@ readset_declared() { # <list> <out>
     b="${d%/inputs.decl}"; b="${b##*/}"
     printf '%s\t%s\t%s\n' "$b" "${FXROOT}${b}/inputs.decl" "$out/.dp.$b"
   done < "$out/.dlist" > "$out/.dbatch"
-  [ ! -s "$out/.dbatch" ] || { readset_decl_batch "$out/.dbatch" "$lay" "$pm"; readset_decl_hashes "$out/.dbatch"; readset_decl_spansbatch "$out/.dbatch" "$lay" "$mp"; RS_SPC="$out/.dbatch"; }
+  [ ! -s "$out/.dbatch" ] || { readset_decl_batch "$out/.dbatch" "$lay" "$pm"; readset_decl_rangeprep "$out/.dbatch"; readset_decl_hashes "$out/.dbatch"; readset_decl_spansbatch "$out/.dbatch" "$lay" "$mp"; RS_SPC="$out/.dbatch"; }
   while IFS= read -r d; do
     b="${d%/inputs.decl}"; b="${b##*/}"
     readset_decl_parse "$b" "${FXROOT}${b}" "$lay" "$mp" "$xpd" "$out/.dp.$b" "$pm" pre >> "$out/.dparse"
@@ -2927,10 +2982,19 @@ readset_verdicts() { # <out>: a DECLARED fixture decided `run` with a stored pas
   awk -F'\t' 'NR == FNR { h[$1] = 1; next } ($1 in h) && $2 == "run" { print $1 "\tskip\t\tv\tok"; next } { print }' "$out/.vs.hit" "$out/.kdec" > "$out/.kdec.t" \
     && mv "$out/.kdec.t" "$out/.kdec" || return 0
   # A STORE SKIP CARRIES THE STORE ENTRY'S PENDING COUNT into `.kpn`, which the publish writes as the record's line 4.
-  while read -r fx pn; do
-    sed '2s/.*/#state ok/' "$out/.k/$fx" > "$out/.k/$fx.t" && mv "$out/.k/$fx.t" "$out/.k/$fx"
-    printf '%s\t%s\n' "$fx" "$pn" >> "$out/.kpn"
-  done < "$out/.vs.hit"
+  # ONE awk writes every hit's rewritten record (line 2 only) into the staging directory `.k.s`, a sibling of `.k` on the
+  # same filesystem, and ONE `mv` renames each staged file over its `.k` record: an entry is never written in place and
+  # a reader sees the old record or the whole new one. A record that cannot be read or has no line 2 is not staged and
+  # stays as it is. The awk also appends the `.kpn` rows.
+  mkdir -p "$out/.k.s" || return 0
+  awk -F'\t' -v ko="$out/.k/" -v ks="$out/.k.s/" -v kpn="$out/.kpn" '{ f = ko $1; n = 0
+      while ((getline l < f) > 0) L[++n] = l
+      close(f)
+      if (n >= 2) { L[2] = "#state ok"; g = ks $1; for (i = 1; i <= n; i++) print L[i] > g; close(g) }
+      for (i = 1; i <= n; i++) delete L[i]
+      print $1 "\t" $2 >> kpn }' "$out/.vs.hit"
+  _vs_st=("$out/.k.s/"*)
+  [ ! -e "${_vs_st[0]}" ] || mv -f "${_vs_st[@]}" "$out/.k/"
   cut -f1 "$out/.vs.hit" > "$out/.vs"
   return 0
 }

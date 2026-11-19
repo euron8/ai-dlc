@@ -421,7 +421,7 @@ echo "Installing team roles..."
 # no enumerated list to drift from core/team-roles/.
 for role_file in "$SCRIPT_DIR/../core/team-roles/"*.md; do
   cp "$role_file" "$PROJECT_ROOT/.claude/team-roles/"
-  echo "  $(basename "$role_file") installed"
+  echo "  ${role_file##*/} installed"
 done
 
 # Install templates (always overwrite with AI/DLC versions)
@@ -545,11 +545,12 @@ if [ ! -e "${core_scripts[0]}" ]; then
   echo "  A silent no-op here yields a project whose every check is absent and inert."
   exit 1
 fi
+core_cp=(); core_chm=()
 for script_path in "${core_scripts[@]}"; do
   [ -f "$script_path" ] || continue
-  script="$(basename "$script_path")"
-  cp "$script_path" "$PROJECT_ROOT/scripts/ai-dlc/"
-  chmod +x "$PROJECT_ROOT/scripts/ai-dlc/$script"
+  script="${script_path##*/}"
+  # One cp and one chmod after the loop, not one pair per script.
+  core_cp+=("$script_path"); core_chm+=("$PROJECT_ROOT/scripts/ai-dlc/$script")
   echo "  ai-dlc/$script installed"
   # MIGRATION, NOT CLEANUP. A pre-0.126.0 consumer has this script loose in
   # scripts/, possibly with local edits (the reference consumer had one). Deleting
@@ -559,6 +560,10 @@ for script_path in "${core_scripts[@]}"; do
     STALE_CORE_SCRIPTS+=("scripts/$script")
   fi
 done
+if [ "${#core_cp[@]}" -gt 0 ]; then
+  cp "${core_cp[@]}" "$PROJECT_ROOT/scripts/ai-dlc/"
+  chmod +x "${core_chm[@]}"
+fi
 
 # bash 3.2 (macOS default) errors on "${arr[@]}" for an EMPTY array under set -u,
 # so the count is tested before the array is ever expanded.
@@ -621,7 +626,7 @@ mkdir -p "$PROJECT_ROOT/.claude/schemas"
 for schema_file in "$SCRIPT_DIR/../core/schemas/"*.json; do
   [ -f "$schema_file" ] || continue
   cp "$schema_file" "$PROJECT_ROOT/.claude/schemas/"
-  echo "  $(basename "$schema_file") installed"
+  echo "  ${schema_file##*/} installed"
 done
 
 # Render the transient pipeline state into the consumer's .gitignore.
@@ -709,7 +714,7 @@ mkdir -p "$PROJECT_ROOT/.claude/rules"
 for rule_file in "$SCRIPT_DIR/../core/rules/"*.md; do
   [ -f "$rule_file" ] || continue
   cp "$rule_file" "$PROJECT_ROOT/.claude/rules/"
-  echo "  $(basename "$rule_file") installed"
+  echo "  ${rule_file##*/} installed"
 done
 
 # Install test fixture templates (always overwrite with AI/DLC versions)
@@ -726,6 +731,10 @@ mkdir -p "$PROJECT_ROOT/tests/fixtures"
 # across four files, and the two that were missed at v0.316.0 were found by a failed
 # push rather than at authoring time. The list here and uninstall.sh's are the pair that
 # disagreed; deriving this one means the disagreement has one fewer side that can drift.
+# ONE `git ls-files` over core/fixtures for every fixture, and one `cp` per directory run, not one git, mkdir and cp per
+# tracked file. The index order keeps a fixture's entries contiguous; a fixture not in the derived set is skipped.
+_fx_set="
+"
 for fixture_dir in $(
   for _fd in "$SCRIPT_DIR/../core/fixtures/"*/; do
     [ -d "$_fd" ] || continue
@@ -733,34 +742,74 @@ for fixture_dir in $(
     _fn="${_fd%/}"; printf '%s\n' "${_fn##*/}"
   done | sort
 ); do
-  # TRACKED FILES ONLY, NESTED ONES INCLUDED, MODES KEPT (BL-892). The list is the index's,
-  # read through the scrubbed call above, so an untracked or ignored file beside a fixture's
-  # tracked ones (a `__pycache__/`, a scratch log) never reaches a consumer. A plain
-  # `cp dir/*` refused a subdirectory and aborted the install under `set -e`; `cp -pR dir/*`
-  # fixed that and copied every stray file on disk instead. A fixture directory with no
-  # tracked file at all (a deleted fixture's leftovers) is skipped before the `mkdir`, so
-  # the consumer gets no empty directory that uninstall's hand list would never remove.
-  # Top-level dotfiles stay out, exactly as under the old `*` glob.
-  ai_dlc_src_git ls-files -z -- ":(literal)core/fixtures/$fixture_dir" > "$AI_DLC_FX_LS" \
-    || { echo "Error: git ls-files failed for core/fixtures/$fixture_dir/"; exit 1; }
-  [ -s "$AI_DLC_FX_LS" ] || continue
-  if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
-    mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
-    while IFS= read -r -d '' _fx_path; do
-      _fx_rel="${_fx_path#"core/fixtures/$fixture_dir/"}"
-      case "$_fx_rel" in .*) continue ;; esac
-      case "$_fx_rel" in */*) mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir/${_fx_rel%/*}" ;; esac
-      cp -p "$AI_DLC_ROOT/$_fx_path" "$PROJECT_ROOT/tests/fixtures/$fixture_dir/$_fx_rel"
-    done < "$AI_DLC_FX_LS"
-    # chmod the whole glob, not two named scripts -- the same reasoning the reconcile
-    # loop above states. `cp` preserves the source mode on a NEW file, so a fixture
-    # shipping a third executable works by luck; on an OVERWRITE it keeps the
-    # destination's existing mode, which is 0644 forever and silent. That is how a
-    # guard once installed inert while every content diff stayed green.
-    chmod +x "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"*.sh 2>/dev/null || true
-    echo "  $fixture_dir/ installed"
-  fi
+  _fx_set="$_fx_set$fixture_dir
+"
 done
+# TRACKED FILES ONLY, NESTED ONES INCLUDED, MODES KEPT (BL-892). The list is the index's,
+# read through the scrubbed call above, so an untracked or ignored file beside a fixture's
+# tracked ones (a `__pycache__/`, a scratch log) never reaches a consumer. A plain
+# `cp dir/*` refused a subdirectory and aborted the install under `set -e`; `cp -pR dir/*`
+# fixed that and copied every stray file on disk instead. A fixture directory with no
+# tracked file at all (a deleted fixture's leftovers) gets no `mkdir`, so
+# the consumer gets no empty directory that uninstall's hand list would never remove.
+# Top-level dotfiles stay out, exactly as under the old `*` glob.
+ai_dlc_src_git ls-files -z -- ":(literal)core/fixtures" > "$AI_DLC_FX_LS" \
+  || { echo "Error: git ls-files failed for core/fixtures/"; exit 1; }
+# Every destination directory is made by one `mkdir -p` first: a fixture's own directory (it has a tracked file) and each
+# nested directory a non-dot tracked file sits in.
+_fx_mk=(); _fx_cur=""; _fx_on=0; _fx_dest=""; _fx_rd=""; _fx_run=(); _fx_chm=(); _fx_pd=""
+while IFS= read -r -d '' _fx_path; do
+  case "$_fx_path" in core/fixtures/*/*) ;; *) continue ;; esac
+  _fx_n="${_fx_path#core/fixtures/}"; _fx_name="${_fx_n%%/*}"; _fx_rel="${_fx_n#*/}"
+  if [ "$_fx_name" != "$_fx_cur" ]; then
+    _fx_cur="$_fx_name"; _fx_on=0; _fx_pd=""
+    case "$_fx_set" in *"
+$_fx_name
+"*) _fx_on=1; _fx_mk+=("$PROJECT_ROOT/tests/fixtures/$_fx_name") ;; esac
+  fi
+  [ "$_fx_on" = 1 ] || continue
+  case "$_fx_rel" in .*) continue ;; esac
+  case "$_fx_rel" in */*) _fx_d="${_fx_rel%/*}" ;; *) continue ;; esac
+  if [ "$_fx_d" != "$_fx_pd" ]; then _fx_pd="$_fx_d"; _fx_mk+=("$PROJECT_ROOT/tests/fixtures/$_fx_name/$_fx_d"); fi
+done < "$AI_DLC_FX_LS"
+[ "${#_fx_mk[@]}" -eq 0 ] || mkdir -p "${_fx_mk[@]}"
+_fx_cur=""
+_fx_flush() {
+  if [ "${#_fx_run[@]}" -gt 0 ]; then
+    cp -p "${_fx_run[@]}" "$_fx_dest/${_fx_rd:+$_fx_rd/}"
+    _fx_run=()
+  fi
+}
+# chmod the whole glob, not two named scripts -- the same reasoning the reconcile
+# loop above states. `cp` preserves the source mode on a NEW file, so a fixture
+# shipping a third executable works by luck; on an OVERWRITE it keeps the
+# destination's existing mode, which is 0644 forever and silent. That is how a
+# guard once installed inert while every content diff stayed green. The chmod is one call after the last fixture.
+_fx_close() {
+  _fx_flush
+  if [ "$_fx_on" = 1 ]; then
+    for _fx_g in "$_fx_dest/"*.sh; do [ -e "$_fx_g" ] && _fx_chm+=("$_fx_g"); done
+    echo "  $_fx_cur/ installed"
+  fi
+}
+while IFS= read -r -d '' _fx_path; do
+  case "$_fx_path" in core/fixtures/*/*) ;; *) continue ;; esac
+  _fx_n="${_fx_path#core/fixtures/}"; _fx_name="${_fx_n%%/*}"; _fx_rel="${_fx_n#*/}"
+  if [ "$_fx_name" != "$_fx_cur" ]; then
+    [ -z "$_fx_cur" ] || _fx_close
+    _fx_cur="$_fx_name"; _fx_on=0; _fx_rd=""
+    case "$_fx_set" in *"
+$_fx_name
+"*) _fx_on=1; _fx_dest="$PROJECT_ROOT/tests/fixtures/$_fx_name" ;; esac
+  fi
+  [ "$_fx_on" = 1 ] || continue
+  case "$_fx_rel" in .*) continue ;; esac
+  case "$_fx_rel" in */*) _fx_d="${_fx_rel%/*}" ;; *) _fx_d="" ;; esac
+  if [ "$_fx_d" != "$_fx_rd" ]; then _fx_flush; _fx_rd="$_fx_d"; fi
+  _fx_run+=("$AI_DLC_ROOT/$_fx_path")
+done < "$AI_DLC_FX_LS"
+[ -z "$_fx_cur" ] || _fx_close
+[ "${#_fx_chm[@]}" -eq 0 ] || chmod +x "${_fx_chm[@]}" 2>/dev/null || true
 
 # Create feedback log
 if [ ! -f "$PROJECT_ROOT/docs/ai-dlc-feedback.md" ]; then
