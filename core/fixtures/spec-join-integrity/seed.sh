@@ -95,6 +95,10 @@ printf -- '---\nstory_id: s1\n---\n# no capabilities field\n' > "$ROOT/story-nof
 printf -- '---\ncapabilities: []\n---\n# empty, unexplained\n' > "$ROOT/story-empty.md"
 printf -- '---\ncapabilities: []\ncapabilities_rationale: pipeline-infra only; implements no spec capability\n---\n# empty, declared\n' > "$ROOT/story-empty-declared.md"
 
+# --- the frs: join: one resolving set, one set whose SECOND id the PRD never spells ---
+printf -- '---\ncapabilities: [CAP-1, CAP-2]\nfrs: [FR-S300-1, FR-S300-2]\n---\n# frs resolve\n' > "$ROOT/story-frs-ok.md"
+printf -- '---\ncapabilities: [CAP-1]\nfrs: [FR-S300-1, FR-S300-9]\n---\n# frs dangling\n' > "$ROOT/story-frs-dangling.md"
+
 # --- baselines (v0.254.0) -----------------------------------------------------
 # LIVE: names the orphan-lr case's actual failure, so it suppresses and stays honest.
 printf '# pre-existing at adoption\nlr:LR-S300-2\n' > "$ROOT/baseline-live.txt"

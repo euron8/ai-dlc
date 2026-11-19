@@ -38,6 +38,8 @@
 #  (2a) every CAP-N is bound by an architecture decision (`- **Binds:**` in the spine)
 #   (3) every `capabilities:` entry in a story frontmatter resolves to a CAP-N
 #       that SPEC.md defines
+#  (3b) every `frs:` entry in a story frontmatter resolves to an FR id prd.md spells
+#       (join (2)'s grammar); an absent or empty `frs:` is a note
 #
 # ANCHOR ON THE MEMLOG, NOT SPEC.md. By bmad-spec's own contract (its SKILL.md; the
 # package ships no renderer, so the agent performs the derive and nothing enforces it),
@@ -145,6 +147,8 @@ done
 #   story:<basename>  join (3)  story `capabilities:` FIELD -- absent, or empty and unexplained
 #   story-cap:<basename>:<CAP-id>
 #                     join (3)  one story citation that resolves to no capability
+#   story-fr:<basename>:<FR-id>
+#                     join (3b) one story `frs:` id that prd.md does not spell
 #
 # THE TWO story KEYS ARE SEPARATE ON PURPOSE. A file-level `story:<basename>` covering
 # both would let one baseline line excuse a missing field AND every dangling citation in
@@ -1050,6 +1054,7 @@ if [ -z "$FR_LINES" ]; then
   echo "$PROG: DISARMED — EXAMINED NOTHING — $PRD contains no functional-requirement identifiers (nothing matching FR-<n> / FR-S<N>-<n>). Join (2) has nothing to read, which is not the same as closing." >&2
   exit 2
 fi
+FR_IDS="$(grep -oE '(^|[^A-Za-z0-9-])N?FR-?[A-Za-z0-9]*-?[0-9]+' "$PRD" | sed 's/^[^A-Za-z0-9-]//' | sort -u)"
 for cap in $CAPS; do
   if ! grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)" <<<"$FR_LINES"; then
     fail_join "fr:$cap" "$cap is defined in SPEC.md but no functional requirement in $PRD cites it. A capability with no FR behind it is specified and unplanned — it reaches no epic, no story and no test. Add the citation to the FR entry, in the form research-requirements.md mandates."
@@ -1060,6 +1065,20 @@ done
 if [ "${#STORIES[@]}" -gt 0 ]; then
   for s in "${STORIES[@]}"; do
     [ -f "$s" ] || { echo "$PROG: DISARMED — --story names an unreadable file: $s" >&2; exit 2; }
+    # (3b) the story's `frs:` field joins the PRD's FR-id set, read with join (2)'s grammar.
+    # Absent or empty is a note; an id the PRD never spells is a dangling reference.
+    fr_refs="$(sed -n '/^frs:/{s/^frs:[[:space:]]*//; s/[][]//g; s/["'\'']//g; s/,/ /g; p; }' "$s" | head -1)"
+    case "$fr_refs" in *[![:space:]]*) fr_some=1 ;; *) fr_some=0 ;; esac
+    if [ "$fr_some" -eq 0 ]; then
+      echo "  note  $(basename "$s") carries no 'frs:' ids, so its FR join is not checked"
+      note=$((note+1))
+    else
+      for fr in $fr_refs; do
+        if ! grep -qx -- "$fr" <<<"$FR_IDS"; then
+          fail_join "story-fr:$(basename "$s"):$fr" "$s cites '$fr' in 'frs:' and $PRD carries no such functional-requirement id. Cite an FR id the PRD defines, or drop the stale one."
+        fi
+      done
+    fi
     refs="$(sed -n '/^capabilities:/{s/^capabilities:[[:space:]]*//; s/[][]//g; s/,/ /g; p; }' "$s" | head -1)"
     # THREE STATES, NOT ONE. An empty `$refs` was reported as "carries no 'capabilities:'
     # frontmatter field" regardless of why it was empty, and that sentence is FALSE for two

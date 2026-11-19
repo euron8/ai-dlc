@@ -11,6 +11,8 @@
 #   merge-adversarial-shards.sh --repair-introduced <pass file>
 #                                                   THE REPAIR-INTRODUCED CLASS re-derived; writes
 #                                                   nothing (arm R)
+#   merge-adversarial-shards.sh --body-counts <pass file>...   per file `<file>\t<C>\t<M>`, its body's
+#                                                   CRITICAL and MAJOR finding headings (Check 24)
 #   merge-adversarial-shards.sh --map <shard-dir>   print `<ordinal>\t<basename>`, one per story,
 #                                                   for the lead to put in each shard brief
 #   merge-adversarial-shards.sh --document <path> <shard-dir>
@@ -1890,6 +1892,17 @@ case "${1:-}" in
   --derived-set)
     [ $# -eq 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --derived-set <planning>/s<N>/<artifact>-adversarial-p<M>.md"; exit 2; }
     derived_set_main "$2"; exit $? ;;
+  --body-counts)
+    # One line per pass file: `<file>\t<CRITICAL>\t<MAJOR>`, the finding headings of its body as parse_shard heads
+    # them (the grammar check_counts holds every shard's header to). Check 24 reads it for an unattested pass.
+    [ $# -ge 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --body-counts <pass file>..."; exit 2; }
+    shift; CITE=stories; OTHER=""
+    for _bf in "$@"; do
+      [ -f "$_bf" ] && [ -r "$_bf" ] || { printf 'REFUSED: %s is not a readable file\n' "$_bf"; exit 2; }
+      parse_shard "$_bf" | awk -v f="$_bf" '$1 == "X" && $3 == "CRITICAL" { c++ } $1 == "X" && $3 == "MAJOR" { m++ }
+        END { printf "%s\t%d\t%d\n", f, c, m }' || exit 2
+    done
+    exit 0 ;;
   --repair-introduced)
     [ $# -eq 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --repair-introduced <planning>/s<N>/<artifact>-adversarial-p<M>.md"; exit 2; }
     repair_introduced_main "$2"; exit $? ;;
@@ -2821,13 +2834,21 @@ if [ "$ELICIT" -eq 0 ]; then
   ri_derive "$T/body" "$(basename "$OUT")" "$T/ri.np" "$SPRINT_DIR" "$ARTIFACT" "$PASS" "$T/ri.snap"
   # A RE-MERGE AFTER A SNAPSHOT IS GONE (untracked: a fresh clone or another checkout has none). When the
   # stored pass already carries the three lines and this derivation is PENDING only because a snapshot is
-  # absent or unreadable, the stored r, unjoined and keys stand, so an identical re-merge answers UNCHANGED.
-  RI_SNAP_WHY=""; _ri_stood=0
+  # absent or unreadable, the stored r, unjoined and keys stand, so an identical re-merge answers UNCHANGED --
+  # but only when the stored pass is ATTESTED: the newest program row this merge wrote for it, at any root,
+  # records its bytes (content-seal.sh --program-row). An unattested pass takes the unjoinable path and refuses.
+  RI_SNAP_WHY=""; _ri_stood=0; _ri_att=""
   if [ "$RI_STATE" = pending ]; then
     case "$RI_WHY" in *"did not parse"*|*"names no artifact_sha"*|*"the join"*) ;;
       *" snapshot "*" absent;"*|*" unreadable;"*) RI_SNAP_WHY="$RI_WHY" ;; esac
   fi
   if [ -n "$RI_SNAP_WHY" ] && [ -f "$OUT" ]; then
+    _ri_att="$(bash "$SEAL" --program-row "$REC_STATE" merge-adversarial-shards "$OUT" 2>/dev/null)" || _ri_att=""
+    _ri_att="${_ri_att##*$'\t'}"
+    [ "$_ri_att" = attested ] \
+      || printf 'NOTE: %s is not attested (its newest program:merge-adversarial-shards row in the write ledger does not record its bytes: %s), so its stored repair-introduced counts do not stand\n' "$OUT" "${_ri_att:-unreadable}" >&2
+  fi
+  if [ -n "$RI_SNAP_WHY" ] && [ -f "$OUT" ] && [ "$_ri_att" = attested ]; then
     read -r _sr _su _sk < <(awk '/SKILL_INVOCATION_PROVENANCE v1/ { i = 1 } /SKILL_INVOCATION_PROVENANCE_END/ { i = 0 }
       i && sub(/^findings_major_repair_introduced: /, "") { r = $0 } i && sub(/^findings_major_unjoined: /, "") { u = $0 }
       i && sub(/^repair_introduced_keys:/, "") { k = $0 } END { print r " " u " " k }' "$OUT")
@@ -2956,6 +2977,12 @@ out_matches() {
 }
 DIFFERS="$OUT already exists and differs from this merge; a pass file is never overwritten"
 [ -z "$RI_SNAP_WHY" ] || DIFFERS="$DIFFERS (the repair-introduced join of this merge is PENDING: $RI_SNAP_WHY)"
+# A --rerun merge of a pass first merged plainly differs only by its `rerun:` lines: name that remedy.
+if [ -n "$RR_LINES" ] && [ -e "$OUT" ] \
+   && awk '/SKILL_INVOCATION_PROVENANCE v1/ { i = 1 } /SKILL_INVOCATION_PROVENANCE_END/ { i = 0 } i && /^rerun: / { next } { print }' "$T/out" > "$T/out.rr" \
+   && cmp -s "$T/out.rr" "$OUT"; then
+  DIFFERS="$DIFFERS: $OUT was merged without --rerun; re-merge it without --rerun"
+fi
 if [ "$DRY" -eq 1 ]; then
   # --dry-run writes nothing: an existing output that differs still refuses at once, as below.
   if [ -e "$OUT" ] && ! out_matches; then
@@ -2972,11 +2999,12 @@ if [ -e "$OUT" ]; then
 fi
 cp "$T/out" "$OUT.merge-tmp.$$" && mv "$OUT.merge-tmp.$$" "$OUT" || refuse "writing $OUT failed"
 [ "$ELICIT" -eq 1 ] || ri_publish "$T/ri.snap"
-# The program's own seal row, RECORD-ONLY: the pass file is outside the sealed set. This merge reads an
-# existing pass file twice: the `cmp -s` above (which refuses any byte difference), and an EARLIER
-# pass's findings_critical for the summed-divergence stamp. LIMIT: a Bash edit of a prior pass's count
-# can move that stamp, and nothing here compares it with a seal; Check 24 reads the same bytes
-# (content-seal.sh, PROGRAM ROWS). A failed append changes no outcome.
+# The program's own seal row: the pass file is outside the sealed set, and this row is its ATTESTATION
+# (content-seal.sh, PROGRAM ROWS): Check 24 stops believing the pass's underived and repair-introduced counts
+# once the newest such row records other bytes, and a later re-merge lets its stored counts stand only while
+# that row records its bytes. LIMIT:
+# the summed-divergence stamp reads an EARLIER pass's findings_critical with no attestation, so a Bash
+# edit of that count can move the stamp. A failed append leaves the pass unattested.
 [ -f "$SEAL" ] && { bash "$SEAL" --record "$REC_STATE" program:merge-adversarial-shards "$OUT" \
   || printf 'NOTE: the program seal row for %s was not appended\n' "$OUT" >&2; }
 if [ "$ELICIT" -eq 1 ]; then

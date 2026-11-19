@@ -236,7 +236,7 @@
 # USAGE
 #   scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...] [--reset] [--quiet]
 #                                   [--since <epoch|ISO8601>] [--dispatch <agentId|toolu_id>]
-#                                   [--progress-path <dir|file>]...
+#                                   [--progress-path <dir|file>]... [--own-job]
 #                                   [--complete | --complete-repair] [--status]
 #                                   [--shard-header convergence|elicitation]
 #   scripts/ai-dlc/wait-for-deliverable.sh --mark <file> <step> <seat> <shard>... findings=<n>
@@ -273,6 +273,11 @@
 #                      DISPATCH FAILED agent-<X> means that dispatched agent died before
 #                      delivering: resume THAT agent id; its In-Flight row is the lead's claim,
 #                      to check against the agent's description (header: "DISPATCH FAILED").
+#   --own-job          the sentinel is the caller's OWN background job, not another agent's
+#                      deliverable: no --since-without---dispatch WARN, and on exhaustion (exit 1)
+#                      the remedy is never to re-dispatch or re-run the job: stop it by its own
+#                      background task id (never by pattern), read the tail of its --progress-path
+#                      log, SendMessage BLOCKED with that tail to main, and end the turn.
 #   (Each is documented in full below the `set -u` line.)
 #
 # EXIT CODES
@@ -518,6 +523,7 @@ PROGRESS_PATHS=""
 COMPLETE=0
 STATUS=0
 COMPLETE_REPAIR=0
+OWN_JOB=0
 SEAT_FLAG=0
 SHARD_AXIS=""
 # The marker a --complete beat keys on. One token per call (see --complete-repair above).
@@ -1105,6 +1111,7 @@ while [ $# -gt 0 ]; do
     --complete) COMPLETE=1; SEAT_FLAG=1; shift ;;
     --complete-repair) COMPLETE=1; COMPLETE_REPAIR=1; MARK_TOKEN="repair-complete: serial "; shift ;;
     --status) STATUS=1; shift ;;
+    --own-job) OWN_JOB=1; shift ;;
     --shard-header)
       shift
       case "${1:-}" in
@@ -2656,7 +2663,7 @@ for t in $TARGETS; do
   # Whether THIS beat armed the join must be read before join_of, which creates
   # the sidecar as a side effect.
   FIRST=0; [ -f "$s" ] || FIRST=1
-  if [ "$FIRST" -eq 1 ] && [ -n "$SINCE" ] && [ -z "$DISPATCH" ] && [ "$SINCE_WARNED" -eq 0 ]; then
+  if [ "$FIRST" -eq 1 ] && [ -n "$SINCE" ] && [ -z "$DISPATCH" ] && [ "$OWN_JOB" -eq 0 ] && [ "$SINCE_WARNED" -eq 0 ]; then
     SINCE_WARNED=1
     echo "WARN: wait-for-deliverable: --since without --dispatch -- nothing checks the stamp against the dispatch, and a stamp later than it misses the teammate's early writes. Pass --dispatch <agentId from the Agent result>." >&2
   fi
@@ -2852,8 +2859,12 @@ if [ -n "$EXHAUSTED" ]; then
       echo "  NOTE: $t still shows work under the progress path, but all $MAX_BEATS"
       echo "  progress grants are spent. The bound is deliberate -- a teammate that"
       echo "  keeps writing without delivering is a hang, and Rule 29 Check C says a"
-      echo "  wait must end. Decide: re-dispatch, or --reset if you have read the"
-      echo "  worktree and judged it genuinely close."
+      if [ "$OWN_JOB" -eq 1 ]; then
+        echo "  wait must end. It is your own job: follow the OWN JOB remedy below."
+      else
+        echo "  wait must end. Decide: re-dispatch, or --reset if you have read the"
+        echo "  worktree and judged it genuinely close."
+      fi
     done; IFS="$OLDIFS"
   fi
   if [ "$DISPATCH_LIVE" -eq 1 ] || [ "$DISPATCH_LIVE" -eq 2 ]; then
@@ -2899,12 +2910,17 @@ if [ -n "$EXHAUSTED" ]; then
     echo "  last message before any re-dispatch: if it reports the work done, verify the work where"
     echo "  it says it wrote it; only if it did not finish, re-dispatch ONCE (then re-run with"
     echo "  --reset), and if it fails again, HARD_BLOCK."
+  elif [ "$OWN_JOB" -eq 1 ]; then
+    echo "  OWN JOB: this sentinel is your own background job's. Never re-dispatch or re-run it, and"
+    echo "  do not beat again: stop it by its own background task id (never by pattern), read the"
+    echo "  tail of its log (${PROGRESS_PATHS:-the --progress-path log}), SendMessage BLOCKED with that"
+    echo "  tail to main, then end the turn."
   elif [ "$COMPLETE" -eq 0 ] || [ "$EX_ABSENT" -eq 1 ]; then
     echo "  Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the"
     echo "  teammate ONCE (then re-run with --reset), and if it fails again, HARD_BLOCK."
   fi
-  echo "  Do NOT keep beating: the wait never runs forever (Rule 29, Check C)."
-  if [ -z "$PROGRESS_PATHS" ] && [ "$COMPLETE" -eq 0 ]; then
+  [ "$OWN_JOB" -eq 1 ] || echo "  Do NOT keep beating: the wait never runs forever (Rule 29, Check C)."
+  if [ -z "$PROGRESS_PATHS" ] && [ "$COMPLETE" -eq 0 ] && [ "$OWN_JOB" -eq 0 ]; then
     echo "  Before you re-dispatch: an exhausted clock is not evidence of death. If the"
     echo "  teammate may still be working, re-arm with --reset --progress-path <its"
     echo "  worktree> and this beat will extend the sequence while it keeps writing."

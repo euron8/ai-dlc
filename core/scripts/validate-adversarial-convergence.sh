@@ -292,8 +292,9 @@ if [ "$_ac_rc" -ne 0 ]; then
   exit 2
 fi
 SORTED=()
+SORTED_KEY=()
 while IFS= read -r line; do
-  [ -n "$line" ] && SORTED+=("${line#* }")
+  [ -n "$line" ] && { SORTED+=("${line#* }"); SORTED_KEY+=("${line%% *}"); }
 done < "$AC_T/sorted"
 
 # ---- provenance field extraction -------------------------------------------
@@ -701,6 +702,46 @@ STALL_PEAK=0
 STALL_PEAK_FROM=""
 STALL_PEAK_AT=""
 
+# THE ATTESTATION (BL-1175 items 11 and 13). The merge appends a `program:merge-adversarial-shards` row for
+# every pass file it writes to the tracked write ledger; `content-seal.sh --program-row` answers, in one ledger
+# read for the whole series, whether the newest such row records the bytes on disk (at any clone root).
+#   attested   the row records the bytes: the header counts are believed.
+#   differs    the pass HAS a row and its bytes are not the row's: `findings_major_underived:` and
+#              `findings_major_repair_introduced:` are NOT believed and read 0, so every MAJOR blocks (arms B and
+#              E), and `findings_critical:` / `findings_major:` read as the larger of the header and the body's own
+#              finding headings (`merge-adversarial-shards.sh --body-counts`, one start for the series), so lowering
+#              a header count alone buys no exit. A finding deleted from the body together with its count is not seen.
+#   none       no row (a pass merged before the merge wrote rows, or no ledger): counts believed as recorded; a merged
+#              pass 2 or later that subtracts an underived or repair-introduced count prints one PENDING line.
+# `repair_introduced_keys:` is never disbelieved (keys only make J3 stricter). An unreadable ledger attests nothing.
+P_ATT=()
+P_BC=()
+att_st=""
+case "${SORTED[0]}" in */planning-artifacts/*) att_st="${SORTED[0]%%/planning-artifacts/*}" ;; esac
+if [ -n "$att_st" ] && [ -f "$att_st/planning-artifacts/.artifact-writes.jsonl" ]; then
+  att_seal="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/content-seal.sh"
+  att_rc=0; att_out="$(bash "$att_seal" --program-row "$att_st" merge-adversarial-shards "${SORTED[@]}" 2>/dev/null)" || { att_rc=$?; att_out=""; }
+  [ "$att_rc" -ne 2 ] || echo "WARN (ATTESTATION): ledger $att_st/planning-artifacts/.artifact-writes.jsonl unreadable -- every pass read as unattested-none" >&2
+  [ -n "$att_out" ] || [ "$att_rc" -eq 2 ] || [ "$CYCLE_STATE" -eq 1 ] || echo "NOTE (ATTESTATION): the write ledger under $att_st could not be read through $att_seal; no merged pass is attested"
+  att_i=0; att_c=(); att_ci=()
+  while IFS= read -r att_l; do
+    [ -n "$att_l" ] || continue
+    P_ATT[$att_i]="${att_l##*$'\t'}"
+    [ "${P_ATT[$att_i]}" != differs ] || { att_c+=("${SORTED[$att_i]}"); att_ci+=("$att_i"); }
+    att_i=$((att_i + 1))
+  done <<< "$att_out"
+  if [ "${#att_c[@]}" -gt 0 ]; then
+    att_merge="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-adversarial-shards.sh"
+    att_bc="$(bash "$att_merge" --body-counts "${att_c[@]}" 2>/dev/null)" || att_bc=""
+    att_i=0
+    while IFS="$(printf '\t')" read -r _ att_bcc att_bcm; do
+      [ -n "$att_bcm" ] || continue
+      P_BC[${att_ci[$att_i]}]="$att_bcc $att_bcm"; att_i=$((att_i + 1))
+    done <<< "$att_bc"
+  fi
+fi
+att_i=0
+
 for f in "${SORTED[@]}"; do
   raw_verdict="$(block_field "$f" 'verdict')"
   verdict="$(normalize_verdict "$raw_verdict")"
@@ -737,6 +778,26 @@ for f in "${SORTED[@]}"; do
   [ "${4:-0}" = 1 ] || ri_has=0
   P_RI+=("$ri"); P_RI_HAS+=("$ri_has")
   { [ "$ri" = "-" ] || [ "${4:-0}" != 1 ]; } && ri=0
+  att="${P_ATT[$att_i]:-none}"; att_pn="${SORTED_KEY[$att_i]:-0}"; att_i=$((att_i + 1))
+  if [ "$att" = none ] && [ "${4:-0}" = 1 ] && [ "$((10#$att_pn))" -ge 2 ] && { [ "$underived" != 0 ] || [ "$ri" != 0 ]; }; then
+    att_msg="PENDING (ATTESTATION): $f has no program:merge-adversarial-shards row in the write ledger (merged before the merge wrote one, or no ledger), so its findings_major_underived=$underived and findings_major_repair_introduced=$ri are believed as recorded."
+    if [ "$CYCLE_STATE" -eq 1 ]; then printf '%s\n' "$att_msg" >&2; else printf '%s\n' "$att_msg"; fi
+  fi
+  if [ "$att" = differs ]; then
+    if [ "$underived" != 0 ] || [ "$ri" != 0 ]; then
+      att_why="its newest program:merge-adversarial-shards row in the write ledger records other bytes"
+      att_msg="NOTE (ATTESTATION): $f is not attested ($att_why), so its findings_major_underived=$underived and findings_major_repair_introduced=$ri are not believed and read 0: every MAJOR blocks. Re-merge the pass from its shards (move the file aside first), or restore the bytes the merge wrote."
+      if [ "$CYCLE_STATE" -eq 1 ]; then printf '%s\n' "$att_msg" >&2; else printf '%s\n' "$att_msg"; fi
+    fi
+    underived=0; ri=0
+    att_bcc="${P_BC[$((att_i - 1))]:-}"; att_bcm="${att_bcc#* }"; att_bcc="${att_bcc% *}"
+    if [ -n "$att_bcm" ] && { { [ -n "$crit" ] && [ "$att_bcc" -gt "$crit" ]; } || { [ -n "$major" ] && [ "$att_bcm" -gt "$major" ]; }; }; then
+      att_msg="NOTE (ATTESTATION): $f is not attested and its body heads $att_bcc CRITICAL / $att_bcm MAJOR findings, more than its header's findings_critical=$crit / findings_major=$major; the larger counts are read."
+      if [ "$CYCLE_STATE" -eq 1 ]; then printf '%s\n' "$att_msg" >&2; else printf '%s\n' "$att_msg"; fi
+      [ -n "$crit" ] && [ "$att_bcc" -gt "$crit" ] && crit="$att_bcc"
+      [ -n "$major" ] && [ "$att_bcm" -gt "$major" ] && major="$att_bcm"
+    fi
+  fi
   blocking_major "$major" "$underived" "$ri"; blocking="$BLOCKING_MAJOR"
   invoked_at="$(block_field "$f" 'invoked_at')"
 
@@ -894,6 +955,7 @@ for f in "${SORTED[@]}"; do
   # the pre-v0.52.0 predicate. It can only make C stricter, never laxer, so the
   # missing field cannot be used to dodge a hard block.
   prior="$(block_field "$f" 'findings_critical_prior_scope' | tr -cd '0-9')"
+  [ "$att" = differs ] && prior=""
   [ -z "$prior" ] && prior="$crit"
 
   # Sanity: the partition cannot exceed the whole. Catches a typo and a dishonest

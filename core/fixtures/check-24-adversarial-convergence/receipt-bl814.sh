@@ -16,6 +16,7 @@
 #   deferbold    the same, bold labels, backticks, a pass-qualified token      J3 silent, exit 0
 #   rideferred   deferred's bytes plus `repair_introduced_keys: 1.md#F-1` (BL-1175 item 6): that key, deferred,
 #                stays open; cross-1.md#F-1's deferral still closes it          FAIL (J3), exit 1
+#   rirepaired   rideferred's pass, both keys repaired by a linked coe-repair-p1.md  PASS (converged), 0
 #   wrongstep    coe, both deferred to architecture                            FAIL (J3), exit 1
 #   repaired     architecture, both named by a repair entry linked from the notarized sha   silent, 0
 #   dirrepaired  graph s320 stories-p4's shape: a directory artifact, a `<stem>@<sha>` list, per-story
@@ -134,6 +135,11 @@ build() {
   # rideferred: deferred's bytes plus `repair_introduced_keys: 1.md#F-1` (deferred is its ALLOW twin).
   PASS_RI="1.md#F-1" coe_world rideferred 2026-09-29T11:00:00Z 2 0 "$TWO" "$TWOX" || return 1
   defer "$B/rideferred/$D/coe-deferral-p1.md" requirements 1.md#F-1 cross-1.md#F-1
+  # rirepaired: rideferred's pass bytes, both keys closed by a repair linked from the notarized sha instead.
+  PASS_RI="1.md#F-1" coe_world rirepaired 2026-09-29T11:00:00Z 2 0 "$TWO" "$TWOX" || return 1
+  doc coe 2 > "$B/.c2"
+  repair "$B/rirepaired/$D/coe-repair-p1.md" carry-over-evaluation.md "$(sha "$B/rirepaired/$D/carry-over-evaluation.md")" "$(sha "$B/.c2")" 1.md#F-1 cross-1.md#F-1
+  mv "$B/.c2" "$B/rirepaired/$D/carry-over-evaluation.md" || return 1
   coe_world deferbold 2026-09-29T11:00:00Z 2 0 "$TWO" "$TWOX" || return 1
   printf '# deferral record\n\n- **source:** `coe-p1/1.md#F-1`\n- **deferred-to:** `requirements` (restated in requirements-context.md)\n\n- source: _bmad-output/planning-artifacts/s1/shards/coe-p1/cross-1.md#F-1\n- _deferred-to:_ requirements\n' \
     > "$B/deferbold/$D/coe-deferral-p1.md"
@@ -303,6 +309,7 @@ run deferbold coe;  [ "$RC" -eq 0 ] && nj || bad="$bad deferbold(rc=$RC)"
 run rideferred coe; [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (J3 -- OPEN MAJOR)"* ]] \
   && [[ "$OUT" == *"  1.md#F-1: repair-introduced (repair_introduced_keys), so non-blocking at MET only on its targeted repair; deferred to requirements, which never closes it"* ]] \
   && [[ "$OUT" != *"cross-1.md#F-1:"* ]] || bad="$bad rideferred(rc=$RC)"
+run rirepaired coe; [ "$RC" -eq 0 ] && nj && [[ "$OUT" == *"PASS: the cycle converged"* ]] || bad="$bad rirepaired(rc=$RC)"
 run wrongstep coe;  [ "$RC" -eq 1 ] && [[ "$OUT" == *"deferred to architecture, not to requirements"* ]] || bad="$bad wrongstep(rc=$RC)"
 run repaired architecture;  [ "$RC" -eq 0 ] && nj || bad="$bad repaired(rc=$RC)"
 run dirrepaired architecture; [ "$RC" -eq 0 ] && nj || bad="$bad dirrepaired(rc=$RC)"

@@ -220,6 +220,11 @@ cites the same dispatch. It does not prove the disposition text came from that
 architect, and an unrelated architect dispatch later in the sprint also
 satisfies it.
 
+**A folded capability that needs a new architecture decision gets it from this dispatch.** The
+architect's step 2 writes the `AD-<n>` that binds it, or the `No-AD` line, into
+`ARCHITECTURE-SPINE.md`. Check 17's fold architecture gate reads the residue, and Check 30's
+`Binds`/`No-AD` join reads the spine.
+
 **Then stamp the story — MECHANICALLY, never by hand.** Check 17's bug-fix
 story-readiness gate requires a `SKILL_INVOCATION_PROVENANCE` block on the story
 itself, and nothing else writes one. Run:
@@ -253,6 +258,11 @@ It is the readiness gate for the single-story sprint. State both at the call: th
 flow generates the tracking file after a PASS, and only the `readiness` intent stops at the
 verdict. A CONCERNS or FAIL verdict is a finding, never an operator question: route each finding to
 the `pm` or the `architect`, role-bound per Rule 19, then re-invoke ONCE after they land; a second CONCERNS or FAIL verdict is a HARD_BLOCK the lead routes.
+
+The lead, not `/bmad-sprint-planning`, writes the sprint into each canonical copy of the
+sprint-status yaml: `planned_close: <ISO-8601 UTC>` in its sprint block, and one entry per story
+under its `stories:` mapping, the story id as the key, carrying `status:` plus `file:` wherever
+the path is not derivable from the key.
 
 ### 6. Gate Validation and Proceed
 

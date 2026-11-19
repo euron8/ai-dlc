@@ -46,8 +46,8 @@
 # every NDP, NDC and document-self-probe figure in the history above describes the tree before that, and only the rows below are current.
 # 480 to 463, BL-1059: T1's four SELF_ID worlds are copies of the cached B3 world with the self line rewritten (self_world; SELF_ID enters a world only through self_line,
 # never the hook payload), WC0 compares its copy against EQ1's fresh CLI pass instead of building and merging a second fresh world, and A1 reads WC0's copy merge.
-463 *
+467 *
 11 core/scripts/merge-adversarial-shards.sh
-124 core/scripts/content-seal.sh
+128 core/scripts/content-seal.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
 95 inproc:core/scripts/merge-adversarial-shards.sh
