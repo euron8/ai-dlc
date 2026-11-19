@@ -46712,3 +46712,21 @@ The `invocations.decl` and `FORK_BUDGET` rows these fixtures move are ratcheted 
 Provenance: batch 260, C1; id allocated by the lead.
 
 verify: sh A=core/fixtures/apply-restamp-worklist-c/run.sh; P=core/fixtures/post-write-gates/run.sh; [ -f "$A" ] && [ -f "$P" ] || exit 9; a="$(bash "$A" 2>&1)" || exit 1; n="$(grep -cE '^  ok    TS-W1 ' <<<"$a")" || n=0; [ "$n" -ge 1 ] || exit 1; p="$(bash "$P" 2>&1)" || exit 1; grep -qxF '  ok    RTS on the shipped runner' <<<"$p"
+## BL-1176 — the I66 pool-shadow scan's carried quote state desyncs on an even number of stray quotes, and no arm shows it
+
+**DEFECT.** OPEN. Filed 2026-11-18. Owner: the I66 pool-shadow arm in `scripts/validate-enforcement-map.sh` (`cut()`, `:5514-5520`; `QS = q` at `:5520`).
+
+**LANDED (v0.1178.0).** `cut()` now carries a quote STACK: inside a `"..."` a `$(` opens a command substitution whose quotes start fresh, `(` nests, and a `)` at depth 0 returns to the `"`. The stack resets where `scan()` resets the quote state (once per hook, so it cannot leak from one hook to the other). The "reset double-quote state per line" fix shape below was measured and not built: it keeps the desynced span and adds new ones at 1589-1599 and 1960-1967, and cuts the legitimate multi-line `"..."` strings at 310-313, 362-363, 419-420 and 447-448. The "print the spans outside the pool" arm was not built either: 11 of its spans are legitimate. Built instead: the `COMCLOSE` row, which fails I66 on a carried quote span that closes on a comment line. Measured over both hooks with the shipping awk: the old `cut()` gives exactly the two trigger spans (`.githooks/pre-push` 1174-1182, `core/git-hooks/pre-push` 989-997) and the stack gives none, so the arm's false-positive set is empty and the span list changes only by those two removals (107 spans before, 105 after). The arm sees only a desync that resyncs on a comment line: one that resyncs on a code-line apostrophe stays silent. It can still fire after the fix: a backtick inside a double quote (`x="`grep '^"' f`"`, appended to a hook copy) desyncs and the arm reports the comment line that closes it. The probe in the entry's own shape (appended after the pool: the shape line, `unset`, `for`, the shape line, `unset`) reports three rows after the fix (`unset`, `for`, `unset`) and one before; reverting `cut()` to the one-character toggle returns the one. Pool extents now: `.githooks/pre-push:794-4225`, `core/git-hooks/pre-push:603-3992`; the trigger is `"$(grep -m1 '^"' ...)"` at `.githooks/pre-push:1174` and `core/git-hooks/pre-push:989`, whose single quote ran to a comment apostrophe at 1182 and 997. The `:1144` / `:755` and `:764-4102` / `:369-3665` figures below were stale. Provenance: batch 260, C3.
+
+`cut()` carries its single- and double-quote state across lines (BL-1161's fix for a multi-line `awk '...'` string). In double-quote mode it ignores `'`, so in `"$(grep '^"' f)"` the inner `"` flips the state. From that line until the next stray `"`, the quote-blanked copy of every line is blanked, so the `unset`, `read`, `for`, `function`, `alias` and `printf -v` forms and the paren count go blind. The `QUOTE` row (a hook that ends inside a quote) fires only on odd parity at end of file, so an even number of stray quotes is silent.
+
+It is live at `.githooks/pre-push:1144` and `core/git-hooks/pre-push:755`, `elif grep -q '^"' ...; then printf ... "$(grep -m1 '^"' ...)"`, both inside the pool (`.githooks/pre-push:764-4102`, `core/git-hooks/pre-push:369-3665`) and resynced before the pool ends, so nothing outside the pool is blinded at this tip. Probe, run through the extracted awk on a copy of the distribution hook: the shape `x="$(grep '^"' f)"`, `unset FIXTURE_JOBS`, `for FIXTURE_JOBS in a; do :; done`, the shape again, `unset FIXTURE_JOBS`, appended after the pool. The tip reports only the last `unset` (`:4577`); the per-line-reset mutant reports all three (`:4574`, `:4575`, `:4577`).
+
+Fix shape, not built: carry only single-quote state from a multi-line opener and reset double-quote state per line, or track `$(` nesting inside `"..."`.
+
+The missing arm: one that prints the carried-quote spans outside the pool, so an even-parity desync is visible instead of silent.
+
+Provenance: batch 259, C1 tip adversary; id allocated by the lead (ai-dlc-64).
+
+verify: manual
+

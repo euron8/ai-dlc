@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1178.0] - 2026-11-19
+
+### Remediator shard join keeps route-key directories; seven gate-tooling fixes (batch 260, C3)
+
+- The remediator shard join no longer mixes up two findings that share a file name. A route key now keeps its directory, so `a/x.md#F-1` and `b/x.md#F-1` are two keys: a route file holding both is accepted instead of refused, and a path-qualified `source:` token is read whole. A shard section's own `source:` lines still never close a routed finding, but entries the serial remediator appends after the join, in round one's record or in any later record, now do. (BL-716, stays PARTIAL: D1 and D3 fixed; the `Outcome measured:` line from a graph sprint is still owed.)
+- The sort's Outside list in `SKILL.md` gains a catch-all ("and any other decision a step reserves to the operator"), and the pin that checks for the sort's veto phrase now reads across line wraps, so a phrase split over two lines is found. `postcompact-digest.md` is re-rendered. (BL-972, stays PARTIAL on its remaining items.)
+- `probe_effort` and its only reader are deleted from `validate-spawn-ledger.sh`; comments that named it are reworded in the continue hook, `gate-validation.md` and the `check-22-spawn-ledger` fixture. No behaviour change. (BL-1168, stays PARTIAL: the outcome line is owed.)
+- The fixture-hygiene check H14 now catches a `git init` run through a variable (`"$VAR" init`, `"git" init`, `*/git init`). It finds exactly two lines, both in the `fanout-payload-channel` and `fanout-untracked-corpus` fixtures; both now use `world_git init -q .`. (BL-1162, stays PARTIAL: the other remainder sets are open.)
+- The I66 pool-shadow scan in `validate-enforcement-map.sh` no longer loses track of quotes after `"$(grep '^"' ...)"`: it keeps a quote stack, and a new `COMCLOSE` row fails I66 on a carried quote span that closes on a comment line. Its false-positive set over both hooks is empty. (BL-1176, closed.)
+- The same scan now flags four more ways to override a pool-owned name from outside the pool: arithmetic (`(( N++ ))`, `$(( --N ))`, `for (( N=0; ...; N++ ))`), `let`, subscript assignment (`N[i]=`) and `declare|typeset|local -n` namerefs. False-positive set over both hooks: 0. (BL-1161, stays PARTIAL: read-only-names arm and a nameref declared without a target remain open.)
+- BL-842 (Check 22 spawn-ledger question routing) now carries the efficiency tag and the step-value Decision rule line its close requires. No behaviour change; it stays PARTIAL until a graph sprint supplies the `Outcome measured:` line.
+
 ## [0.1177.0] - 2026-11-19
 
 ### BL-583 (advances, stays PARTIAL): the remaining push-suite fixture families are judged on value, and none is retired
