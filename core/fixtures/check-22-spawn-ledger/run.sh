@@ -805,7 +805,7 @@ stepverdict() {
 # READING IT. Every other arm in this file builds its own command line with `--probe`
 # already on it, so the fixture was structurally incapable of noticing that the command
 # gate-validation.md publishes carried no `--probe` at all. Measured before this arm existed:
-# `probe_effort()` returns empty without a readable probe, every row lands in EFFORT_PENDING,
+# the effort join returns empty without a readable probe, every row lands in EFFORT_PENDING,
 # and the effort route cannot reach VIOL -- so a consumer running the step file's own command
 # got a clean verdict over an arm that never ran, while all 55 assertions here were green.
 #

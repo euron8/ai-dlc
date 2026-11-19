@@ -1103,8 +1103,8 @@ if [ -f "$LEDGER" ]; then
   # reported `requested model='true'`.)
   # THE TIER ARM'S PROBE SIDE, joined inside the projection so the loop forks nothing per
   # row (header above the main loop). An absent, unreadable or unparseable probe joins as
-  # an empty file -- every tier row PENDING -- which is what `probe_effort` answers for the
-  # same three states. Never the ledger read failing: `--slurpfile` on a bad file would
+  # an empty file -- every tier row PENDING -- which is the answer for all
+  # three states. Never the ledger read failing: `--slurpfile` on a bad file would
   # abort the whole projection and route a full ledger to PRE-LEDGER.
   TIER_PROBE=/dev/null
   if [ -n "$PROBE" ] && [ -r "$PROBE" ] && jq -s 'length' "$PROBE" >/dev/null 2>&1; then
@@ -1116,13 +1116,12 @@ if [ -f "$LEDGER" ]; then
       # called null. Nulls are mapped to the sentinel BEFORE any stringification.
       def tok: if . == null then "__NONE__"
                else (tostring | if . == "" then "__NONE__" else . end) end;
-      # tool_use_id -> model, LAST probe row per id winning, as in probe_effort.
+      # tool_use_id -> model, LAST probe row per id winning.
       ( reduce ($probe[] | select(type == "object") | select((.tool_use_id // "") != ""))
           as $r ({}; .[$r.tool_use_id | tostring] = $r.model) ) as $pm
       # tool_use_id -> the observed value of the EFFORT ARM, from the LAST probe row per id (string ids
-      # only, as probe_effort compared): the __REFUSED__ rule for a pinned-effort model below
-      # transcript version 2.1.267, else effort. A jq error in the rule reads as empty, as it did
-      # when probe_effort ran jq per row.
+      # only): the __REFUSED__ rule for a pinned-effort model below
+      # transcript version 2.1.267, else effort. A jq error in the rule reads as empty.
       | def effobs: try (
           if ((.model // "") | test("opus-4-7|opus-4-8|fable-5"))
              and (((.transcript_version // "0") | split(".") | map(tonumber? // 0)) < [2,1,267])
@@ -1313,8 +1312,9 @@ name_role() {  # dispatch name -> the longest declared role it is named after, o
 }
 
 # --- THE EFFORT ARM'S GROUND TRUTH ---------------------------------------------
-# `probe_effort <tool_use_id>` -> the effort the teammate's own transcript recorded, or
-# empty when no probe row joins. THE JOIN IS THE EXACT TOOL-USE ID AND NOTHING ELSE.
+# The effort the teammate's own transcript recorded is joined in the RECORDS projection (the
+# `$probe` map above), empty when no probe row joins. THE JOIN IS THE EXACT TOOL-USE ID AND
+# NOTHING ELSE.
 #
 # The ordered alternatives were measured and rejected: the ledger is written at dispatch
 # and the telemetry at completion, so a join on (role, most-recent-unmatched) mis-pairs
@@ -1325,28 +1325,13 @@ name_role() {  # dispatch name -> the longest declared role it is named after, o
 # not a join; it is a coin the gate cannot see.
 #
 # REFUSAL, NOT SILENCE, ON A PINNED-EFFORT MODEL BELOW 2.1.267. That build fixed `effort:`
-# on models whose launch effort is pinned, so the field is not evidence there. It returns
-# the sentinel `__REFUSED__` rather than empty, because empty means "no row joined" and
-# routes to PENDING -- two different facts with two different remedies, and collapsing
-# them is how an unverifiable row reads as an unwritten one.
-PROBE_READABLE=false
-[ -n "$PROBE" ] && [ -r "$PROBE" ] && PROBE_READABLE=true
-probe_effort() {  # tool_use_id
-  [ "$PROBE_READABLE" = true ] || return 0
-  [ -n "$1" ] || return 0
-  jq -rs --arg t "$1" '
-      [ .[] | select(type == "object") | select((.tool_use_id // "") == $t) ] | last
-      | if . == null then ""
-        # The pinned family, named here because it is the population the version floor
-        # applies to. An unpinned model carried a correct `effort` on every build, so
-        # widening the refusal to every model would discard the rows this arm exists for.
-        elif ((.model // "") | test("opus-4-7|opus-4-8|fable-5"))
-             and (((.transcript_version // "0") | split(".") | map(tonumber? // 0))
-                  < [2,1,267])
-          then "__REFUSED__"
-        else (.effort // "") end
-    ' "$PROBE" 2>/dev/null || true
-}
+# on models whose launch effort is pinned, so the field is not evidence there. The
+# projection yields the sentinel `__REFUSED__` rather than empty, because empty means "no
+# row joined" and routes to PENDING -- two different facts with two different remedies, and
+# collapsing them is how an unverifiable row reads as an unwritten one. The pinned family
+# is the population the version floor applies to: an unpinned model carried a correct
+# `effort` on every build, so widening the refusal to every model would discard the rows
+# this arm exists for.
 
 # --- THE TIER ARM'S GROUND TRUTH, FOR A ROW THAT RECORDED ITS PIN AT DISPATCH ----------
 # `tier_pinned` is the pin key the dispatch guard resolved WHEN IT DISPATCHED, so it is the
@@ -1364,12 +1349,12 @@ probe_effort() {  # tool_use_id
 # comparison then passes on the wrong pair). Unjoined is PENDING, as on the effort arm: a
 # row whose teammate has not stopped yet, or a call without --probe, has no ground truth.
 #
-# THE JOIN IS DONE IN THE RECORDS PROJECTION, NOT PER ROW. `probe_effort` forks a jq over the
-# whole probe per definition-bound row; a second per in-scope row would double that, and a
+# THE JOIN IS DONE IN THE RECORDS PROJECTION, NOT PER ROW. a jq forked over the
+# whole probe per definition-bound row would be linear in the ledger, a second per in-scope row would double that, and a
 # shell-side map read per row by pattern expansion was measured QUADRATIC -- a first draft of
 # this arm did not finish the reference consumer's ~1000-row sprint against its 6000-line probe
 # in ten minutes, where the base validator takes 29s. The projection carries the joined model
-# as the record's last column (`tiermodel`), LAST probe row per id winning as in `probe_effort`.
+# as the record's last column (`tiermodel`), LAST probe row per id winning, as in the effort join.
 
 # `pin_key_memo <role>` -> PK_RES: `pin_key` once per distinct role, not per row (it forks jq up to
 # twice). The cache is a newline-delimited string, no `declare -A`; `pin_key` itself is untouched (I56).

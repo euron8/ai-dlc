@@ -3774,6 +3774,8 @@ Progress (batch 259, cluster C6). (i) Fix in `core/scripts/validate-spawn-ledger
 
 1. DEFECT. D1: `probe_effort` is dead code in `core/scripts/validate-spawn-ledger.sh` after the RECORDS-projection fix. At dd7f349e7 `grep -nE 'probe_effort[ (]'` matches the definition (`:1334`) and three comment lines (`:1123`, `:1125`, `:1316`) and no call; control: the definition line matches. Its comments are cited by `core/hooks/ai-dlc-continue.sh:776`, `gate-validation.md:1988` and `core/fixtures/check-22-spawn-ledger/run.sh:808`, which would need rewording with the deletion.
 
+**PARTIAL (D1 done).** Batch 260, C3: D1 is delivered. `probe_effort()` and its sole reader `PROBE_READABLE` are deleted from `core/scripts/validate-spawn-ledger.sh`, and the comments that named the function are reworded there, in `core/hooks/ai-dlc-continue.sh`, `core/skills/ai-dlc/steps/gate-validation.md` and `core/fixtures/check-22-spawn-ledger/run.sh`. D1 was the only item on the work list; the `Outcome measured:` line (graph's next complete sprint, read against the s322 baseline) is still owed, so the entry stays open.
+
 
 Step: pipeline
 
