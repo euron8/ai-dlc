@@ -1879,13 +1879,15 @@ spec_render_probe() {
 # record_tail <record> -- the entry contract over one record no join wrote, then its escalations:
 # shared by --sources and --escalations, so each line below exists once.
 # fp_open <record>... -- COVERAGE of the route file (header 4d). Round one's `<state>/planning-artifacts/s<N>/shards/<record stem>/.findings-partition`
-# is located from the FIRST record's name; each key no `source:` token of any record passed carries (ordinals compared numerically) prints
-# `CROSS-OPEN: <key>`, then `CROSS-OPEN-COUNT: <n>`. Reported, never refused; an absent or unreadable file prints nothing.
+# is located from the FIRST record's name; each key no `source:` token carries prints
+# `CROSS-OPEN: <key>`, then `CROSS-OPEN-COUNT: <n>` (ordinals compared numerically). A token counts from any record after the first, and from the
+# first only past the join-written part: the last `<!-- shard: X -->` section is the line count of `<shard dir>/X` long, and entries the serial
+# remediator appends sit beyond it; a shard section's own entries never count. Reported, never refused; an absent or unreadable file prints nothing.
 fp_open() {
   local _fp="${1%/*}/shards/${1##*/}"; [ "${1%/*}" != "$1" ] || _fp="./shards/${1##*/}"
   _fp="${_fp%.md}/.findings-partition"
   [ -f "$_fp" ] || return 0
-  awk -F'\t' -v fp="$_fp" '
+  awk -F'\t' -v fp="$_fp" -v sd="${_fp%/*}" '
     function nk(k,   f, id, b, d) { f = k; sub(/#.*/, "", f); id = substr(k, length(f) + 2); sub(/^\.\//, "", f); d = ""
       if (f ~ /\//) { d = f; sub(/[^\/]*$/, "", d) }; sub(/^.*\//, "", f); b = f; sub(/\.md$/, "", b)
       if (b ~ /^[0-9]+$/) return d (b + 0) ".md#" id; return d f "#" id }
@@ -1893,13 +1895,17 @@ fp_open() {
     BEGIN { c = 0; while ((getline l < fp) > 0) { c++; if (c == 1) { if (l != "# findings-partition v1") { bad = 1; break }; continue }
         if (split(l, q, "\t") == 3 && q[1] == "serial") { ord[++no] = q[2]; nrm[no] = nk(q[2]); cnt[bk(q[2])]++ } }
       close(fp); }
+    function addt(t) { have[nk(t)] = 1; hb[bk(t)] = 1; if (t !~ /\//) bare[nk(t)] = 1 }
     FNR == 1 { fi++ }
-    fi > 1 && /^[ \t]*-?[ \t]*[*_`]*source[*_`]*:/ { x = $0; sub(/^[^:]*:/, "", x)
+    fi == 1 && /^<!-- shard: [^ ]+ -->[ \t]*$/ { ms++; ml = FNR; mn = $0; sub(/^<!-- shard: /, "", mn); sub(/ -->.*$/, "", mn); next }
+    /^[ \t]*-?[ \t]*[*_`]*source[*_`]*:/ { x = $0; sub(/^[^:]*:/, "", x)
       while (match(x, /[A-Za-z0-9_][A-Za-z0-9_.\/-]*\.md#[A-Za-z0-9][A-Za-z0-9._-]*/)) { t = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH)
-        sub(/[.-]+$/, "", t); have[nk(t)] = 1; hb[bk(t)] = 1; if (t !~ /\//) bare[nk(t)] = 1 } }
+        sub(/[.-]+$/, "", t); if (fi > 1) addt(t); else if (ms > 0) { nc++; ct[nc] = t; cl[nc] = FNR; cs[nc] = ms } } }
     function cov(i,   b) { b = bk(ord[i]); if (nrm[i] !~ /\//) return (b in hb)
       return (nrm[i] in have) || ((b in bare) && cnt[b] == 1) }
-    END { n = 0; for (i = 1; i <= no; i++) if (!cov(i)) { print "CROSS-OPEN: " ord[i]; n++ }
+    END { if (nc > 0) { f = sd "/" mn; sn = 0; while ((r = getline z < f) > 0) sn++; close(f); if (r < 0) sn = 0
+        for (i = 1; i <= nc; i++) if (cs[i] == ms && cl[i] > ml + sn) addt(ct[i]) }
+      n = 0; for (i = 1; i <= no; i++) if (!cov(i)) { print "CROSS-OPEN: " ord[i]; n++ }
       if (no > 0 || !bad) print "CROSS-OPEN-COUNT: " n }' "$@"
 }
 record_tail() {  # <record> [<lane round's record>...] -- closure is positional across them, in this order

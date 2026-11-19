@@ -2517,20 +2517,23 @@ p_xcover() { # --escalations: a route key no LATER record's source: carries -> C
   local w r1 r2 ok="" d
   w="$(mktemp -d "$WORK/xc.XXXXXX")" && mkdir -p "$w/.claude" || return 1
   r1="$w/stories-repair-p1.md"; r2="$w/stories-serial-repair-p1.md"; d="$w/shards/stories-repair-p1"; mkdir -p "$d" || return 1
-  printf '<!-- shard: cross.md -->\n### F-1 — MAJOR\n- disposition: repaired\n- source: cross.md#F-1\n- edit: n/a\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: `3.md#F-3`\n- edit: n/a\n\n### F-2 — MAJOR\n- disposition: repaired\n- source: `_bmad-output/party-mode/s323/stories-architect-1.md#F-2`\n- edit: n/a\n' > "$r1"
+  printf '### F-1 — MAJOR\n- disposition: repaired\n- source: cross.md#F-1\n- edit: n/a\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: `3.md#F-3`\n- edit: n/a\n\n### F-2 — MAJOR\n- disposition: repaired\n- source: `_bmad-output/party-mode/s323/stories-architect-1.md#F-2`\n- edit: n/a\n' > "$d/cross.md"
+  { printf '<!-- shard: cross.md -->\n'; cat "$d/cross.md"; printf '\n'; } > "$r1"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --sprint 305 > "$JO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && ! has "$JO" "CROSS" && ok="${ok}a"
   printf '# findings-partition v1\nserial\tcross.md#F-1\t-\nserial\t03.md#F-3\t-\nserial\tcross.md#F-9\t-\nserial\tstories-architect-1.md#F-2\t-\nserial\tcross.md#F-7\t-\nserial\t2.md#F-8\t-\nserial\t_bmad-output/party-mode/s323/stories-architect-2.md#F-4\t-\nserial\tca/x.md#F-1\t-\nserial\tcb/x.md#F-1\t-\n' > "$d/.findings-partition"
-  # b: round one's own sources (F-1, F-3, F-2) acquit nothing -- all nine keys open
+  # b: the shard section's own sources (F-1, F-3, F-2) acquit nothing -- all nine keys open
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --sprint 305 > "$JO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$JO" "CROSS-OPEN: cross.md#F-1" && has "$JO" "CROSS-OPEN: 03.md#F-3" && has "$JO" "CROSS-OPEN: stories-architect-1.md#F-2" \
     && has "$JO" "CROSS-OPEN-COUNT: 9" && ok="${ok}b"
-  # c: a later record's sources cover all but cross.md#F-9 and cb/x.md#F-1 (the bare-key cover, the numeric ordinal, the path-qualified
+  # c: the serial writer APPENDS an entry to round one's record past the join-written section (LANE-COUNT 0 shape), citing cross.md#F-9: covered, 0 CROSS-OPEN
+  # for it; a later record's sources cover all but cross.md#F-9 and cb/x.md#F-1 (the bare-key cover, the numeric ordinal, the path-qualified
   # key by its own path; ca/x.md covered by its own path while cb/x.md, same basename, stays open)
+  printf '\n### serial F-9 — MAJOR\n- disposition: repaired\n- source: cross.md#F-9\n- edit: n/a\n' >> "$r1"
   printf '<!-- shard: lane-1.md -->\n### lane 1 — MAJOR\n- disposition: repaired\n- source: cross.md#F-1, 3.md#F-3, stories-architect-1.md#F-2\n- edit: n/a (no edit)\n\n### lane 2 — MAJOR\n- disposition: repaired\n- source: cross.md#F-7, 02.md#F-8, stories-architect-2.md#F-4, ca/x.md#F-1\n- edit: n/a (no edit)\n' > "$r2"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --escalations "$r2" --sprint 305 > "$JO" 2>&1; RC=$?
-  [ "$RC" -eq 0 ] && has "$JO" "CROSS-OPEN: cross.md#F-9" && has "$JO" "CROSS-OPEN: cb/x.md#F-1" && ! has "$JO" "CROSS-OPEN: ca/x.md" \
-    && ! has "$JO" "CROSS-OPEN: cross.md#F-1" && ! has "$JO" "CROSS-OPEN: 03.md" && has "$JO" "CROSS-OPEN-COUNT: 2" && ok="${ok}c"
+  [ "$RC" -eq 0 ] && ! has "$JO" "CROSS-OPEN: cross.md#F-9" && has "$JO" "CROSS-OPEN: cb/x.md#F-1" && ! has "$JO" "CROSS-OPEN: ca/x.md" \
+    && ! has "$JO" "CROSS-OPEN: cross.md#F-1" && ! has "$JO" "CROSS-OPEN: 03.md" && has "$JO" "CROSS-OPEN-COUNT: 1" && ok="${ok}c"
   [ "$ok" = abc ]
 }
 p_lanename() { # the subject party join prints the lane round's name derived from its record -> the party-serial artifact
