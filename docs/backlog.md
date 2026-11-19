@@ -2389,6 +2389,15 @@ Re-audit (BL-817): graph s319 against s320, `docs/analysis/pipeline-efficiency-s
 
 **PARTIAL (v0.1173.0).** Batch 259, cluster C8: findings the lead routes serial are dealt to read-only adjudicators. Source: a read-only reading of graph's s321-s323 serial records, each entry classified by its `- source:` line, its `- closes:` line and its heading. Serial-record entries, share mechanical / escalation / cross or spanning: s321 13.6 / 37.8 / 47.4% (521 entries), s322 22.4 / 46.4 / 25.8% (375), s323 18.2 / 30.0 / 47.3% (444). The join dealt only escalations and the worklist's HIT and MOVED-CITE items, so a finding the lead routed serial because it cites two or more parts, or because its fix lies outside the in-scope parts, was in no plan. REFUTED, the proposal to dispatch serial only on a HIT, a moved cite, an escalation or an unassessable worklist: graph s323 `coe-repair-p2` printed ESCALATED-COUNT 0 and 0 items, yet its lane record carries 5 `cross` findings (3 MAJOR) and 2 real edits in `coe-serial-repair-p2`. A clean worklist greps only sentences of 30 or more characters, and an out-of-set sibling (the `stories-serial-repair-p1` "F-3 sibling in another file") is invisible to it. ESTIMATE, unmeasured: 0.6-1.9 h a sprint. It is weighted by entry, not by time, it does not subtract adjudicator dispatch overhead, and it is taken from the split upper bounds in `docs/analysis/pipeline-efficiency-s323-provisional-b259/out/serial_tail.txt`. Built: the lead writes `<shard dir>/.findings-partition` (header `# findings-partition v1`, one `serial<TAB><key><TAB><files | ->` line per routed finding) before dispatching a parts-mode round's shards. `core/scripts/join-remediator-shards.sh` validates it fail-closed, prints `CROSS-COUNT:` after `SERIAL-REQUIRED:`, and routes each line as `LANE-ITEM: <n> CROSS: ...` (one lane) or `FANIN: CROSS: ...` (two or more lanes, a file in no lane, or `-`), so the existing `ADJUDICATE:` deal covers it. A `-serial` lane join refuses the file. `--escalations` and `--sources` print `CROSS-OPEN: <key>` and `CROSS-OPEN-COUNT:` for a routed key no entry's `source:` carries. A round with `LANE-COUNT: 0` and a fan-in gets one serial remediator briefed from round one's `.join-plan`. The writer stays the owner of every routed finding and re-runs `validate-artifact-derivations.sh` after the lanes before applying a fan-in CROSS decision. The carriers are `core/skills/ai-dlc/steps/_gate-procedures.md` ("Route file") and `core/team-roles/remediator.md`. Owed: the `Outcome measured:` line above, from a graph sprint run on this version, naming `poles.py`'s remediator solo-role hours and `serial_tail.py`'s width-1 split, before and after, and how many routed findings were dealt. Known gaps, to be filed under BL-716's work list at batch close: (D1) route keys and `source:` tokens are normalised to their basename, so `coe-p1/cross.md#F-2` and `coe-p2/cross.md#F-2` collide; a route file holding both refuses, and coverage can acquit across passes. (D3) coverage counts round one's shard entries, so a shard that folds a cross token into its own repaired entry acquits the serial half; dealing is unaffected.
 
+### Work list at batch 259 close
+
+The entry's done condition is the Owed `Outcome measured:` line above, unchanged.
+
+1. DEFECT. D1: route keys and `source:` tokens normalise to their basename, so `coe-p1/cross.md#F-2` and `coe-p2/cross.md#F-2` collide; a route file holding both refuses, and coverage can acquit across passes.
+2. DEFECT. D3: coverage counts round one's shard entries, so a shard that folds a cross token into its own repaired entry acquits the serial half; dealing is unaffected.
+3. NOTE. `core/team-roles/remediator.md:436` and `:473` are flagged NARRATIVE_DRIFT by `core/scripts/audit-rule-files.sh`. Both carry their "Measured:" text at f29df7ba1, before C8 (count of the first sentence 1 at f29df7ba1 and at cd008b9a5; C8 added 0 lines with "Measured"; control, an absent token, 0), and the gate's call (`.githooks/pre-push:652`, `--fail-on=deterministic`) exits 0 at dd7f349e7 while the plain run exits 1. Non-gating and not caused by C8.
+
+
 verify: manual
 
 ## BL-804 — a remediator writes `derivations: not replayed` although replay is its default, and the join's refusal costs a whole re-dispatch
@@ -2892,7 +2901,7 @@ fixture-git-env-seam on C2's tree (aa80cdc6e, then 322f513f8). The inner setup-c
 
 The readset-skip and census-hermetic-coverage decl rows may move again on the bundle's combined tip, where another cluster edits `.githooks/pre-push`.
 
-Item 6, the read-set re-trace, stays owed for these 21 fixtures. The push gate's post-green live trace takes stale fixtures.
+Item 6, the read-set re-trace, stays owed for these 21 fixtures. CORRECTED at batch 259 close: the push gate's post-green live trace does NOT take a declared fixture. A declared fixture is mapped before the trace queue is built (`.githooks/pre-push:1341-1342`) and the in-pool trace skips any fixture with an `inputs.decl` (`:1613`); at dd7f349e7 291 of 293 `core/fixtures/*/run.sh` fixtures carry one, the two without being hook-registration-join and retro-compliance-workflow. A stale declared fixture is re-run, never traced, so a declared fixture is traced only by a hand-run `--declared-out` trace in the main checkout.
 
 Citations the wraps moved in files this release's units did not edit were fixed in the same release by commit 83f315dd7 ("259-C3: fix line citations moved by the C3 wraps"). Re-read at cad8cfd8a (0.1165.0), where each of the four files is byte-identical to 83f315dd7's: `core/hooks/ai-dlc-gate-remediation-guard.sh` cites `ai-dlc-acknowledge.sh:556`, `:496-499`, `:791-824`, `:778-789`, `:401-411`, `:776`, `:143-151` and `:470-473` (`:556` reads "Clearing the pause flag does NOT lift this", as the guard's `:46` quotes); `core/fixtures/fold-architect-ledger-join/inputs.decl:20` cites `gate-slice.sh:314-315`, the `overrides`/`extensions` joins; `docs/plans/codify-rule-surface.md:422` cites `validate-plan-shape.sh:48`, the empty-glob guard; `docs/plans/graph-s305-runbook.md:295` cites `sync-transient-ignore.sh:37`, the `--check` arm. None is stale.
 
@@ -2903,6 +2912,17 @@ Cost: subject starts fall in 17 of the 21 fixtures; readset-skip, readset-skip-c
 **Close condition.** The allowlist is empty and BL-879's check passes over the whole suite. The receipt runs that check in its completion mode, which exits non-zero while any allowlist row remains, so the entry cannot close the day the check lands. At the 0.986.0 base `bash scripts/validate-fixture-inprocess.sh --complete` exits 1 with `  INCOMPLETE  177 allowlist row(s) remain in scripts/fixture-inprocess-allowlist.txt`, so the receipt reads STILL-LIVE for that reason.
 
 The receipt's reads of `scripts/validate-enforcement-map.sh`, `scripts/validate-fixture-hygiene.sh` and `scripts/validate-fixture-invocations.sh` are guarded (W6-10): under `--complete`, an absent or unopenable input makes the driver exit 9, which R13 reads as could-not-measure. R13 still reads `core/fixtures/lib/mutant.sh`, `scripts/fixture-inprocess-allowlist.txt` and the ENUMERATED removal as unguarded (exit 1). Its ceiling is `DEFAULT_MAX_R13` in `scripts/validate-backlog-receipts.sh`, which the two-sided ratchet holds equal to that live count.
+
+### Owed at batch 259 close
+
+Done condition for these items: the hand seeding runs per release for grep-matched fixtures are read against the baseline on the next releases that change a widely grepped file. Baseline: one hand seeding run per release, 10 to 25 minutes each (per run, not per reader). No target number (operator ruling, batch 259).
+
+1. NOTE. No arm requires a shipping converted fixture to carry the pre-wrap consumer SKIP gate. Each shipping converted fixture carries it today by hand (the Progress lines above name them), and nothing fails a new one that omits it. Needed: an arm binding "shipping and converted" to the gate's two halves, or a recorded reason none can.
+2. Read-set gap, observed and not a gate defect. Under 0.1169.0 the gate did not dispatch 4 fixtures that grep a changed file: story-fields-derive, apply-machinery-stamp, check-17-bypass and core-paths-audit-diff. The lead ran them by hand; all green. A sandbox trace of those 4 (`derive-fixture-readsets.sh --list "<4 names>" --tracer sandbox --declared-out`, main checkout detached at dd7f349e7): rc 0, 47 s, 4 of 4 kept, 98 paths (15, 47, 20 and 16). The exact join of `declared.tsv` column 2 against the 12 files 0.1169.0 changed (`git diff --name-only dd59cef1f 50b367a24`) gives 0 hits for every fixture; control, same join: adding `core/scripts/core-paths.sh` matches core-paths-audit-diff. So each grep-matches the changed file and does not read it, and the gate was right to skip them. Output: `~/.cache/ai-dlc/readset-windows/batch-259/trace-4/`. Directory rows: trace-4's read-sets also hold directory entries (`core`, `core/fixtures`, `core/fixtures/lib`, `core/scripts`, `core/skills`, `core/skills/ai-dlc`, `core/skills/ai-dlc-update`, `core/skills/ai-dlc-update/reconcile` and the four fixtures' own directories), which the exact-path join does not cover. 0.1169.0's 12 changes are all modifications (`git diff --name-status dd59cef1f 50b367a24`: 12 M, 0 A, 0 D), so no directory listing moved and the skip stands; a release that adds or deletes a file under those directories needs the directory rows joined.
+3. Before 0.1170.0, 0.1171.0 and 0.1168.0 the lead found further grep-match readers the prediction did not list: 26 for `uninstall.sh` and `validate-enforcement-map.sh`, 18 including deploy-validate-smoke-classification, and 3 for `validate-spawn-ledger.sh` (backlog-real-ledger, gate-adjudication, gate-repair-record): 47, seeded green before each push, so no gate showed whether it would have run them. None is traced and none is shown to read the changed file. Decide between two candidates, without a default: stop seeding grep-matched fixtures, or trace the 47 with `--tracer sandbox --declared-out` first.
+4. C5a's join control found the local map records only 5 of 15 known readers of `ai-dlc-update/SKILL.md`. Needed: a join of the map against the 15, with a positive control.
+5. NOTE. `.githooks/pre-push:1001` still says the post-green live trace takes a stale fixture; for a declared fixture it does not (the correction above). Reword the comment when the hook next changes.
+
 
 verify: sh bash scripts/validate-fixture-inprocess.sh --complete
 
@@ -3118,6 +3138,17 @@ Still owed:
 2. `r11a-sort-veto-absent` reads SKILL.md line by line, so the veto sentence put back with a line break inside it leaves the fixture green; the tip adversary ran that mutant and it survived.
 3. The sort's Outside list has no catch-all for a decision another step reserves to the operator. One instance: `steps/handoff.md:107-114`, where after a `pre-push: BLOCKED.` "The operator decides whether the hook is fixed or bypassed"; today that decision stays asked only through item (ii)'s authority to "waive, patch or re-baseline a check".
 4. Zero tagged entries is not a pass. If the closing sprint has no entry opening `source: recommendation`, the closer reads every Tier 2 `DECIDED_AUTONOMOUSLY` entry and states the count.
+
+### Work list at batch 259 close
+
+One done condition, unchanged: the `Outcome measured:` reading above on a complete post-rule sprint. The "Still owed" items above, numbered as work:
+
+1. The outcome reading on a complete s323, plus the hand reading of every `source: recommendation` entry (blocked on s323 closing; item 1 of "Still owed" above).
+2. The contact-shape re-rule on BL-994's evidence is the operator's (item 2 above).
+3. DEFECT. D1: `r11a-sort-veto-absent` (`core/fixtures/process-rule-pins/run.sh:628`) is a line-wise absent check; the veto sentence put back with a line break inside it leaves the fixture green (the tip adversary's mutant survived). Match across the paragraph, not per line.
+4. DEFECT. D2: the sort's Outside list has no catch-all for a decision a step reserves to the operator. One instance: `core/skills/ai-dlc/steps/handoff.md:107-114`, where after `pre-push: BLOCKED.` "The operator decides whether the hook is fixed or bypassed" (the sentence wraps a line, so a one-line grep reads 0 hits for it; the lines were re-read at dd7f349e7).
+5. NOTE. Zero tagged entries is not a pass: if the closing sprint has no entry opening `source: recommendation`, the closer reads every Tier 2 `DECIDED_AUTONOMOUSLY` entry and states the count. BL-972's text at dd7f349e7 is PARTIAL (0.1171.0) and carries no measured pass count, so none is written here.
+
 
 verify: manual
 
@@ -3528,7 +3559,9 @@ Owed:
 - NOTE: these file-line forms go stale at the next file added to `core/scripts/`, `core/hooks/`, `core/fixtures/lib/` and `core/schemas/`, because gate-transition, h2-attest-scripts-dir and story-evidence-scaffold-b, -c, -d, -g read those directories whole and the shrink-only list refuses a new `whole` row.
 - Cost: 421 more declared lines (git diff --numstat of the 12 inputs.decl), so those 12 fixtures dispatch on a change to any of them. Catch on record: the sandbox holds a fixture to its declared inputs, and the read-set skip reuses a pass when no declared input moved, so an undeclared read (for example layer-readopt-gate-c's `register-drift.sh`) was a path whose edit could not re-run the fixture. Who would notice it gone: the pre-push read-set skip.
 - Line sum: backlog-size-ceiling 1, layer-readopt-gate-b 1, -c 1, -d 2, -e 1, owed-derivations 1, gate-transition 85, h2-attest-scripts-dir 13, story-evidence-scaffold-b/-c/-d/-g 79 each (316) = 421. `core/fixtures/lib/inproc.sh` is h2's declared line 16.
-- The entry stays PARTIAL: the three stale-window retakes, the 7 stale-window edited fixtures and fixture-git-env-seam stay owed to a hand-run `bash core/scripts/derive-fixture-readsets.sh --list "<names>" --tracer sandbox --declared-out` in the main checkout detached at the landed tip, scheduled by the lead at batch close, and the five `hermetic-run.sh` reads. Part (B): the install-heavy loss bullet under Owed is superseded by BL-1134's LANDED line and is restated above.
+- The entry stays PARTIAL: the three stale-window retakes, the 7 stale-window edited fixtures and fixture-git-env-seam stay owed to a hand-run `bash core/scripts/derive-fixture-readsets.sh --list "<names>" --tracer sandbox --declared-out` in the main checkout detached at the landed tip, scheduled by the lead at batch close, and the five `hermetic-run.sh` reads. Part (B): the install-heavy loss bullet under Owed is superseded by BL-1134's LANDED line and is restated above. Batch 259 close: the retakes named here are taken (Progress below); the decisions remain owed.
+
+**Progress (batch 259 close).** The stale-window retakes are taken. Trace 1: `bash core/scripts/derive-fixture-readsets.sh --list "<12 names>" --tracer sandbox --declared-out`, main checkout detached at dd7f349e7, rc 0, 976 s; all 12 kept, 0 omitted, 2876 paths. Per fixture: backlog-rotate-fence-guard 16, settings-merge-unparseable-template 12, layer-contract-conformance-b 2005, gate-transition 134, h2-attest-scripts-dir 42, owed-derivations 28, story-evidence-scaffold-b 107, -c 110, -d 107, -g 107, fixture-git-env-seam 108, check-24-adversarial-convergence 100. The 12 names are the ones listed as owed above (the entry's two lists plus the check-24 and fixture-git-env-seam retakes of the batch-258 verdict). The five post-C4 retakes stay discharged by the batch-258 lead ruling above. Output: `declared.tsv`, `trace.log`, `trace.rc`, `wall.sec`, `map.diff` and `map.tsv` at `~/.cache/ai-dlc/readset-windows/batch-259/trace-12/` (a location no run reads); `--declared-out` exits before the tracked map `.ai-dlc-fixture-readsets.tsv` is written, so that file is unchanged. The per-fixture decision of each `declared.tsv` set against its `inputs.decl`, using the shipping comparator, stays owed; the trace does not decide it.
 
 Provenance: batch 257, wave 12, W12-16 (ai-dlc-68), split out of BL-1144 on landing; id allocated by the lead.
 
@@ -3642,6 +3675,14 @@ Provenance: batch 259, cluster C4 (ai-dlc session of 2026-11-18), from the s322-
 
 **PARTIAL (v0.1168.0).** batch 259, C6. The mechanism shipped; the outcome measurement (gate-1 passes per story on the next complete graph sprint) is OPEN. Reading, classified by judgment from each finding's text by a C6 read-only hand over graph `docs/reviews/` s321 and s322 pass-1 code-review files, and not re-derived: 35 of 53 blocking findings (66%) are raisable by a diff-plus-AC reviewer (s321 27 of 42, s322 8 of 11); code-review first-pass clean stories move 10/32 to 17/32 as a CEILING, because about 4 to 5 of the 35 rest on mutant replays; QA pass-1 findings are mostly not raisable (s321 3 of 13). Mechanism: a new declared role `pre-reviewer` (`core/team-roles/pre-reviewer.md`, `aiDlcRoles.pre-reviewer` pinned `sonnet`/`low`, `omitClaudeMd: true`), dispatched once by the dev before gate 1 (`core/team-roles/dev.md` item 15, `implementation.md` dev-evidence list). It is ledgered with `parent_agent_id` = the dev, judged by Check 22, and pinned under I56; it is not shardable, writes no file, and is not a gate. No trust root: the dev inherits `Agent` because rendered definitions carry no `tools` key. Cost: measured, the s322 sonnet `code-reviewer` spawn (33 spawns, `out322/spawns.jsonl`) averages $0.64 and about 1.3M tokens (s321: 57 spawns, $0.74); this is the CEILING for a `pre-reviewer` spawn, which reads one diff and the criteria at low effort, so the per-spawn figure at `sonnet`/`low` is ESTIMATED below $0.64 and not measured. The earlier "$1.50 at the s322 spawn average" is not reproduced by the sonnet `code-reviewer` mean above and is replaced in Expected movement. Probes (hand-run once): `impl_passes.py` counts a `code-reviewer` row as a gate spawn and a `pre-reviewer` row as none; a nested `pre-reviewer` dispatch is allowed, writes `role:pre-reviewer`, `parent_agent_id` = the dev, `role_contract_cited:true`, no shard line, and `validate-spawn-ledger.sh` exits 0 with 0 rows out of Rule 19 scope, while the same dispatch without the Rule 19(b) line is denied; `scripts/install.sh` into an empty tree lands the role file and the settings entry and renders `.claude/agents/pre-reviewer.md` with `sonnet`/`low`, and `scripts/uninstall.sh` removes both.
 
+### Work list at batch 259 close (C6 tip findings, deferred)
+
+The entry's done condition is the Owed `Outcome measured:` line (gate-1 passes per story on graph's next complete sprint).
+
+1. DEFECT. D2: the `pre-reviewer` role's read-only property is prose only. `core/team-roles/pre-reviewer.md` says "read-only" in its title and Identity, and no validator, fixture or settings key enforces it: `grep -rln pre-reviewer core scripts .claude/rules` at dd7f349e7 lists only `dev.md`, `pre-reviewer.md` and `implementation.md` (control: `dev.md` is in the list). Add an enforcer or state why none is possible.
+2. DEFECT. D3: this entry's wording no longer matches what shipped. The heading ("the dev seat's only pre-submission check is its own list"), the Fix paragraph and the head status line (OPEN) read as at filing, while the PARTIAL line records a shipped role (`pre-reviewer`, `sonnet`/`low`, `omitClaudeMd: true`, ledgered, not a gate, writes no file). Rewrite the head to what shipped.
+
+
 Step: implementation
 
 verify: manual
@@ -3714,6 +3755,11 @@ Provenance: batch 259, cluster C4; row 10 of `docs/analysis/pipeline-efficiency-
 Progress (batch 259, cluster C6). (i) Fix in `core/scripts/validate-spawn-ledger.sh`: the effort ground truth is joined in the single RECORDS projection (a `$pe` map, last probe row per id winning, the `__REFUSED__` rule for a pinned-effort model below transcript version 2.1.267 evaluated there) and read by the loop as the `effjoin` column, so `probe_effort` no longer forks a `jq -rs` over the whole probe per row; `pin_key` is memoised per role in the caller by `pin_key_memo` (a newline-delimited string, bash 3.2), with `pin_key`, `matches_pin` and `row_in_scope` untouched (I56). `jq` execs per run on a synthetic ledger with S in-sprint in-scope rows, counted by a PATH shim, before then after: S=20 65 then 9; S=200 605 then 9. The before count is linear in S (3 per row), the after count constant. Output (stdout, stderr and exit) is byte-identical before and after on S=20, S=200 and a world with legacy rows, which carry an effort mismatch, a `__REFUSED__` row and duplicate probe ids. (ii) Wait-for-deliverable split, a reading, NO CHANGE: graph subagent transcripts s321 and s322, `tool_use` paired with `tool_result`, `is_error` calls dropped. s321: `--mark` 873 calls 341 s median 0.30 s, `--mark-repair` 26 calls 42 s, `--complete` 28 calls 892 s (6 waited, 890 s). s322: `--mark` 509 calls 306 s median 0.42 s, `--mark-repair` 10 calls 25 s, `--complete` 25 calls 2,981 s (17 waited, 2,979 s). The waiting share is about 70% (s321) and 90% (s322); checking is 383 s and 331 s. The checking branch refused 2 of 900 mark calls in s321 and 16 of 528 in s322 (8 seal-bytes, 3 derivations replay, 2 empty file, 1 SEAL-REFUSED, 1 check-shard/part, 1 other); control token `MARKED` present in 4,108 results, absent token `zzq9` 0. The checking share refuses, so it stays. (iii) Cost driver reading: in-sprint rows times probe size, not ledger length N (s321 1,245 rows of which 1,241 effort-bound; s322 672 rows of which 666). (iv) `test-pytest-admission.sh` is graph's own script, recorded as a reading only.
 
 **PARTIAL (v0.1168.0).** Batch 259, cluster C6: the `validate-spawn-ledger.sh` fix (effort joined in the RECORDS projection, `pin_key` memoised per role) and the `wait-for-deliverable.sh` and `test-pytest-admission.sh` readings are delivered; the `Outcome measured:` line (graph's next complete sprint, read against the s322 baseline) is owed.
+
+### Work list at batch 259 close (C6 tip finding)
+
+1. DEFECT. D1: `probe_effort` is dead code in `core/scripts/validate-spawn-ledger.sh` after the RECORDS-projection fix. At dd7f349e7 `grep -nE 'probe_effort[ (]'` matches the definition (`:1334`) and three comment lines (`:1123`, `:1125`, `:1316`) and no call; control: the definition line matches. Its comments are cited by `core/hooks/ai-dlc-continue.sh:776`, `gate-validation.md:1988` and `core/fixtures/check-22-spawn-ledger/run.sh:808`, which would need rewording with the deletion.
+
 
 Step: pipeline
 
@@ -3963,6 +4009,32 @@ No AC-to-case check and no sprint-review trace run were added. Cost: not attribu
 
 **PARTIAL (v0.1174.0).** batch 259, C5b. Item 6 (passes per series) shipped in this release. Items 0 to 4 are done as above; item 5 is still open until s323 closes, and the outcome measurement on a complete graph sprint is owed, so the entry stays open.
 
+### Work items filed at batch 259 close (items 7 to 18)
+
+Source: the 0.1174.0 commit message (dd7f349e7), item 6 above, and the 0.1169.0 tip findings. Tiers: no BLOCKER. The entry's one done condition is unchanged: every work item shipped or closed on its reading AND the outcome measured on a complete graph sprint. Every line below was re-read at dd7f349e7; a finding marked "reported" is the builder's, not re-derived here.
+
+Item 6 findings, none built:
+
+7. DEFECT. `check-24-adversarial-convergence` has no repaired twin. Its J3 receipt (`receipt-bl814.sh`, unit j3) holds `rideferred` (FAIL) and the `deferred` ALLOW twin; the REPAIRED exit (`rirepaired`, rc 0, "PASS: the cycle converged") was hand-run once and is no fixture arm, so deleting the REPAIRED clause is killed only by that hand run.
+8. DEFECT. A story added between pass N-1 and pass N trips the 25% ceiling (reported at C5b).
+9. NOTE. J3 binds only stamp-era series (reported at C5b).
+10. NOTE. N5: the merge's join uses byte-wise awk (reported at C5b); the effect on a quote span holding a multibyte character is not measured.
+11. DEFECT. Arm R cannot fire off the merging checkout: the predecessor snapshots are untracked (`s<N>/adversarial-snapshots/<sha256>`) and live only where the merge ran, so on any other checkout the arm reads PENDING and the gate never re-derives the count.
+12. DEFECT. D2: `--rerun` refuses a pass first merged plainly: a `--rerun` merge adds a `rerun:` line to the block (`merge-adversarial-shards.sh`), so it never equals a pass merged without it, and neither form can write the stored count.
+13. DEFECT. The pass-file header counts (`findings_major_repair_introduced`, `findings_major_unjoined`, `repair_introduced_keys`) are unsealed, and when a predecessor snapshot is lost the stored values stand (item 6, the D2 fold), so an edited header count is believed.
+14. NOTE. Arm R reports a NOTE on a first pass.
+15. NOTE (cost, measured by the counted run at 0.1174.0). The merge's work grew: `adversarial-shard-merge-c` `*` 487 to 548 and `merge-adversarial-shards.sh` 8 to 22 starts in that fixture (also `content-seal.sh` 82 to 99, in-process merge 105 to 116). Baseline for any reduction is those rows; no target number.
+16. Item 5's outcome on a complete s323 stays owed until s323 closes (the signal is in `docs/plans/graph-ledger-full-drain.md`, action 1).
+
+0.1169.0 (C5a) findings, none built:
+
+17. DEFECT. D1: the sentence that has the lead write each story's `stories:` entry sits after the carry-over-single gate (`stories-test-strategy.md:536-540` gate, sentence at `:548-551`), is absent from `bug-investigation.md` §5, and says "the canonical sprint-status yaml" where Check 5 requires each canonical copy (`gate-validation.md:652-656`). Three sites: `stories-test-strategy.md:548`, `bug-investigation.md` §5, `gate-validation.md:656`.
+18. NOTE. Residual trace prose after the planning trace removal: `gate-validation.md:3143` ("A `bmad-testarch-trace` decision of `FAIL` FAILS") and `enforcement-map.yaml:707`; `ai-dlc-update/SKILL.md:998` no longer matches (0 hits for `testarch-trace|trace-verdict` in that file, control: 3 hits in `gate-validation.md` and 1 in `enforcement-map.yaml`).
+19. DEFECT. `validate-spec-join.sh` reads only `capabilities:` for a story (`:1063` the sed, `:1085-1086` and `:1091` the missing and empty messages); a story's `frs:` field is joined to nothing.
+20. NOTE. The late-AD route is partly written: `bug-investigation.md:187` ("Fold architecture dispatch") and `_gate-procedures.md:990-991` (a series with no `J3_SUCCESSORS` row, stories and architecture, closes its keys otherwise) leave the late-architecture-decision case unstated.
+21. DEFECT. `j2t_ids` (`validate-adversarial-convergence.sh:3896-3899`, called at `:4029`) matched 0 rows on s321 and s323 when C5a read them, so the J2T arm cannot fire on those sprints (reported at C5a; not re-run).
+
+
 Step: requirements
 
 verify: manual
@@ -3981,5 +4053,20 @@ Fix shape, not built: carry only single-quote state from a multi-line opener and
 The missing arm: one that prints the carried-quote spans outside the pool, so an even-parity desync is visible instead of silent.
 
 Provenance: batch 259, C1 tip adversary; id allocated by the lead (ai-dlc-64).
+
+verify: manual
+
+## BL-1178 — push-gate and lead-tooling hygiene: findings from batch 259 that have no other entry
+
+**NOTE.** OPEN. Filed 2026-11-19. Owner: `.githooks/pre-push`, `scripts/validate-backlog-receipts.sh`, `scripts/predict-push-set.sh` and the lead's seeding briefs. One entry for the goal; each finding is a numbered work item, and the entry's done condition is every item shipped or closed on its reading.
+
+1. DEFECT. The read-set lock release at `.githooks/pre-push:1534-1566` (found by C1): the watchdog comment block at `:1534-1540` records that a stop arriving while the watchdog is blocked in `wait` ran no trap, so `wait "$wp"` (`:1560`) hung with the lock held and no exit written; the release at `:1566` is `rm -f "$lk/pid"; rmdir "$lk"` with one retry after `sleep 1`. The race C1 reported is in that release path; its reproduction is C1's and was not re-derived here. Needed: the reproduction, then a release that cannot leave the lock held.
+2. NOTE. A stray inert memo file, `~/.cache/ai-dlc/verdicts/readset-memo/89857cfe9bf868b6d9f96ead87733c959709fa3a/tools.scripts_presuite_` (440261 bytes, written 2026-11-18 14:53, its four siblings 23:08). The memo name is `tools.${fr//\//_}` (`.githooks/pre-push:2662`), so it belongs to the fixture root `scripts/presuite/`; nothing reads it (a `grep -rn 'presuite_'` over `scripts core/scripts .githooks core/git-hooks` at dd7f349e7 matches nothing, control: `readset_memo_id` matches). Delete it and decide whether that root should memoise at all.
+3. DEFECT. `scripts/validate-backlog-receipts.sh` leaves registered worktrees in the subject repo when interrupted: 2 were found and removed in batch 259, although the script has an EXIT/INT/TERM trap (`:441`) and a parent cleanup (`:910-925`). Needed: the interrupt path that escapes both, reproduced.
+4. NOTE. A seeder started under `ctx_execute` died with no rc and no census. Briefs now require one backgrounded Bash call on a script file that writes an rc; no arm enforces it.
+5. NOTE. A `scripts/predict-push-set.sh` prediction taken before another push lands goes stale: 18 fixtures predicted against 1 run for 0.1172.0.
+6. DEFECT. R2: neither "one backlog entry per goal" nor "no target number on an efficiency goal" (`.claude/rules/operator-rulings.md`) has an enforcer. At dd7f349e7 no script under `scripts/` or `core/scripts/` matches `target number|no target` for backlog entries (the two hits, `validate-plan-shape.sh:645` and `validate-layer-entries.sh:1078`, are about other things), and no script matches `one entry per` (the one hit, `validate-backlog-size.sh:73`, is a comment about a different choice); `validate-backlog-receipts.sh` binds only baseline and outcome (E1, E2, E3b) and a non-empty `Expected movement:` (F-MOVEMENT). Needed: an arm for each, with its false-positive set measured first, or a recorded reason a rule that cannot be mechanised stays prose.
+
+Provenance: batch 259 close; id allocated by lead ai-dlc-64.
 
 verify: manual

@@ -60,9 +60,7 @@ Load from peer ai-dlc sessions on the lead's batch is the lead's to schedule.
 
 Cost evidence for a routine change is the gate's recorded counts (invocations.decl, exec, fork, render). Where the stated goal IS wall clock or box load, the push gate that delivers the change is the
 measurement. Take no hand timing run before it, and never re-measure a quantity already on record (a gate log, the
-durations record, a verdict). Decide what to change from the code and that record. A brief, dispatch or
-instruction to another session carries no step this file forbids its executor: delegating a forbidden action is
-taking it. Never ask to reconfirm a stated goal.
+durations record, a verdict). Decide what to change from the code and that record. A brief, dispatch or instruction to another session carries no step this file forbids its executor: delegating a forbidden action is taking it. Never ask to reconfirm a stated goal.
 
 ## The burden of verifying a change is proportional to the change
 
@@ -100,7 +98,7 @@ to succeed, from evidence. If the plan's precondition for it is unmet, say that 
 ## A wall clock is a defect until it is justified
 
 A fixture or gate taking tens of minutes does more work than its checks need. Report a cost that grew
-under your own change, with before and after; never quote a long wall clock as normal.
+under your own change, before and after; never quote a long wall clock as normal.
 
 ## A step with no measured value goes
 
@@ -137,6 +135,9 @@ missing lead-held value degrades to the prior behaviour; it never refuses.
 notification only after a long silence. Present an operator stall as CHOICES WITH A MARKED RECOMMENDATION, not
 an open question. Report on any question, on any decision, and on completion including an early stop.
 
+Reports say in plain words what each release delivers and for whom; versions, cluster labels and BL ids only
+trail. Name a session by its name (ai-dlc-xx) plus the subject.
+
 ## Tier findings on consequence
 
 **BLOCKER**, **DEFECT**, **NOTE**. A NOTE gets no lineage sentence and no justification paragraph. Keep locked
@@ -145,8 +146,7 @@ decisions to BLOCKER and DEFECT. Never present a dozen findings in one register.
 ## A closable session is stated plainly
 
 When a peer session holds no further work (releases merged and verified, branches and worktrees cleaned up, no
-slot, filing, relay or close duty owed), the lead says so plainly to the operator AND messages that session
-that it is CLOSABLE.
+slot, filing, relay or close duty owed), the lead tells the operator and messages that session CLOSABLE.
 
 ## A tightly scoped defect is fast-tracked
 
