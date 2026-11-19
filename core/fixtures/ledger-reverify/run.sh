@@ -184,6 +184,19 @@ lr_badf() { local _l; printf -v _l "$@"; bad "${_l%$'\n'}"; }
 # 0, the top of a process, which no subshell is.
 # shellcheck source=/dev/null
 . "$DIR/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $DIR" >&2; exit 2; }
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# PRE-WRAP CONSUMER GATE (BL-878): a consumer one pull behind carries this fixture with a subject that predates the
+# in-process wrap, and loading it would run its whole body. Neither half is SKIP (FIXTURE BROKEN in the distribution,
+# exit 0 on a consumer); exactly one half FAILS; an unreadable subject is FIXTURE ERROR.
+grep -qxF 'lr_main() {' "$CLOSER"; _wg1=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$CLOSER"; _wg2=$?
+[ "$_wg1" -le 1 ] && [ "$_wg2" -le 1 ] || { echo "FIXTURE ERROR: cannot read $CLOSER (grep exit $_wg1/$_wg2)" >&2; exit 2; }
+case "$_wg1$_wg2" in
+  00) : ;;
+  11) echo "SKIP: ledger-reverify: $CLOSER predates the in-process wrap"; fx_skip_exit "$DIR" ;;
+  *) bad "$CLOSER carries one half of the in-process wrap (lr_main line: rc $_wg1, column-0 source guard: rc $_wg2) -- a respelled subject this fixture cannot drive"
+     report_end "ledger-reverify shard '$LR_GROUP' of '$SHARDS'" ;;
+esac
 inproc_load "$CLOSER" || { echo "FIXTURE BROKEN: sourcing $CLOSER defined nothing" >&2; exit 2; }
 declare -F lr_main >/dev/null || { echo "FIXTURE BROKEN: $CLOSER defined no lr_main when sourced" >&2; exit 2; }
 lr_eng() { # <engine> [args...] -> what `bash <engine> [args...]` prints and exits with

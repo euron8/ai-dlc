@@ -16,3 +16,4 @@ core/fixtures/story-evidence-scaffold/run.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/world.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

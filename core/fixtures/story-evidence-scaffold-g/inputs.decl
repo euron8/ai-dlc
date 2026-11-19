@@ -96,3 +96,4 @@ core/skills/ai-dlc/steps/stories-test-strategy.md
 core/team-roles/code-reviewer.md
 core/team-roles/dev.md
 core/team-roles/qa.md
+core/fixtures/lib/layout.sh

@@ -8,6 +8,7 @@ core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/pool-span.sh
+core/fixtures/lib/layout.sh
 # The shard drivers exec the parent run.sh, and the parent's coverage join reads every driver. A fixture's OWN
 # run.sh is not declared: the runner copies the fixture's own directory itself.
 core/fixtures/readset-skip-b/run.sh

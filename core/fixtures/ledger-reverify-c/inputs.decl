@@ -14,3 +14,4 @@ core/fixtures/ledger-reverify/receipt-bl932.sh
 core/fixtures/ledger-reverify-b/run.sh
 # The coverage join reads each DIST_SHARDS shard's .dist-only marker (present, non-empty) in the distribution.
 core/fixtures/ledger-reverify-b/.dist-only
+core/fixtures/lib/layout.sh

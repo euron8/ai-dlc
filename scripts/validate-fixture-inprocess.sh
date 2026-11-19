@@ -60,6 +60,38 @@
 #   EXEMPT (undeclarable): printed from `validate-fixture-invocations.sh --b2-census`, the static walk over
 #       core/fixtures/*/.undeclarable, never from the judge (which is never called for them).
 #
+#   W   a SHIPPING fixture (no .dist-only) whose run.sh loads a subject in process (inproc_load, inproc_run or fx_inproc,
+#       outside a column-0 function body) and whose own code, BEFORE that first load, does not carry both wrap-half checks
+#       -- a non-comment line that is a grep for the source guard `[ "${BASH_SOURCE[0]}" = "$0" ]` and a non-comment line
+#       that is a grep for an entry line `<p>_main() {` -- FAILs: a consumer one pull behind carries the fixture with a
+#       subject that predates the wrap, and the load would run its whole body (the gate is gate-resume's, through
+#       lib/layout.sh fx_skip_exit). Bound to the emission site: a comment, or a gate AFTER the load, does not satisfy it.
+#       W2 (the blind route, measured): a shipping fixture whose in-process loads sit ONLY inside column-0 function
+#       bodies (18 at this commit, gate-resume among them) FAILs unless its non-comment code carries a source-guard line
+#       and an entry-line (`() {` closed by a quote or `$`) line anywhere. File order against the function is NOT read:
+#       the first-call widening read 11 ungated, 6 or more of them false (a gate present, a name collision on the way).
+#       Three are exempt by name, and none is a wrapped subject this arm could gate: consumer-suite-pool and
+#       postcompact-rulebook-recovery load UNWRAPPED subjects (the pre-push hooks and core/hooks/*.sh carry neither the
+#       entry line nor the guard), push-drain-refusals checks only the `pd_main() {` half and degrades to a NOTE.
+#       Measured gap, fixed in this change: review-reroute and wait-beat-liveness sourced a WRAPPED subject with no gate.
+#       W3 (operand count): each wrapped subject (guard line plus `<p>_main() {` line) a loader has an `inproc:` row for
+#       needs one source-guard grep line of its own, so one gate cannot cover a second subject. A gate spelled as a helper
+#       called once per subject reads as one grep line, so the 12 fixtures below are OWED, enumerated in w_owed with the
+#       count form (S wrapped subjects against O grep lines): cycle-commits-enforce 1/0, gate-resume 2/1,
+#       layer-catalog-collision 3/1, layer-qualifier-grain 2/1, layer-readopt-gate 3/2, push-drain-refusals 1/0,
+#       retro-audit-scans 2/1, story-evidence-scaffold 3/1, story-provenance 2/1, trunk-audit-gate 2/1,
+#       upstream-routing 2/1, wait-stale-deliverable 1/0. Whether each is a helper or a real second-subject gap is NOT
+#       measured per fixture; a NEW fixture over its count FAILs. The arm cannot tell which subject a grep names.
+#       NO BASE RATCHET, deliberately: with the six fixed (and review-reroute, wait-beat-liveness) the tip false-positive
+#       set is zero, so a blanket arm wedges nothing and no base is needed to acquit anyone.
+#       NARROWING TO ZERO (measured over 221 shipping run.sh, 88 loaders): a rule keyed on fx_skip_exit alone cannot fire
+#       (60 run.sh call it for unrelated SKIPs; the gate is a hand-rolled halves check per fixture); the guard-token
+#       plus `_main() {` pair read on the code before the first top-level load left 6 ungated, 2 of them falsely (emit-report-refusal and reconcile-emit-report were gated in
+#       reconcile-emit-report/seed.sh:32-43, which this arm does not read; each now also carries a redundant run.sh gate
+#       the arm requires) and 4 genuine (ledger-reverify, ledger-reverify-unfalsifiable, story-evidence-scaffold,
+#       readset-skip); review-reroute and wait-beat-liveness, found by the widening, were genuine too. readset-skip-b, -c and -d load nothing in
+#       their own run.sh (they exec the parent) and are no population. A gate that is a library call is not read.
+#
 # --derive IS A STATIC JOIN, deterministic (rows LC_ALL=C sorted, no time, no path): every fixture the join refuses,
 # or the B2 census reports a gap for, becomes one `<fixture>\t<reason>` row. A missing cells.decl reads as an empty
 # one, so a fixture whose every subject row is 0 passes with nothing to tag (lead ruling). A PASS here is a
@@ -351,6 +383,68 @@ fi
 m4sf "$ROOT" "$ROOT" "$ROOT/$ALLOW_REL" "$WORK/m4-narrowed.txt" || rc=1
 m4 "$ROOT" "$WORK/m4-narrowed.txt" "$WORK/m4-root.txt" "$ALLOW_REL" M4 "$M4_REMEDY" > "$WORK/m4.out"; [ $? = 0 ] || rc=1
 cat "$WORK/m4.out"
+# ARM W (header above): one awk over every shipping fixture's run.sh. A shipping fixture is one with no .dist-only.
+# The Remedy below names gate-resume/run.sh as the reference gate; a gate-resume directory whose run.sh is gone is an absent
+# input (exit 9 under --complete, BL-878's receipt contract), never a corpus one fixture smaller.
+[ ! -d "$ROOT/core/fixtures/gate-resume" ] || [ -f "$ROOT/core/fixtures/gate-resume/run.sh" ] \
+  || absent_refuse "arm W's reference gate core/fixtures/gate-resume/run.sh is absent"
+w_files=""; w_n=0
+for d in "$ROOT"/core/fixtures/*/; do
+  [ -f "${d}run.sh" ] && [ ! -e "${d}.dist-only" ] || continue
+  w_files="$w_files ${d}run.sh"; w_n=$((w_n + 1))
+done
+[ "$w_n" -gt 0 ] || { echo "validate-fixture-inprocess: REFUSED -- arm W found zero shipping run.sh under $ROOT" >&2; exit 2; }
+# shellcheck disable=SC2086 # paths carry no whitespace; the split is the point
+awk '
+  FNR == 1 { if (fn != "") w_emit(); fn = FILENAME; L = 0; FB = 0; G1 = 0; G2 = 0; A1 = 0; A2 = 0; O = 0; infn = 0; nf++ }
+  /^[[:space:]]*#/ { next }
+  { line = $0
+    if (line ~ /^[A-Za-z_][A-Za-z0-9_]*\(\) *\{/ && line !~ /\}[[:space:]]*$/) infn = 1
+    if (line ~ /grep[^|]*BASH_SOURCE\[0\]\}" = "\$0"/) O++
+    if (!G1 && !L && line ~ /grep[^|]*BASH_SOURCE\[0\]\}" = "\$0"/) G1 = FNR
+    if (!G2 && !L && line ~ /grep[^|]*\(\) \{/) G2 = FNR
+    if (!A1 && line ~ /BASH_SOURCE\[0\]\}" = "\$0"/) A1 = FNR
+    if (!A2 && line ~ /\(\) \{(["\047$\\])/) A2 = FNR
+    if (line ~ /(^|[^A-Za-z_])(inproc_load|inproc_run|fx_inproc)([^A-Za-z_]|$)/) { if (infn) FB = 1; else if (!L) L = FNR }
+    if (infn && line ~ /^\}/) infn = 0 }
+  function w_emit() {
+    if (!L && !FB) return
+    nl++
+    if (L && !(G1 && G2)) printf "W %s:%d: the first in-process load has no pre-wrap gate before it (source-guard grep line %s, entry-line grep line %s)\n", fn, L, (G1 ? G1 : "absent"), (G2 ? G2 : "absent")
+    if (!L && !(A1 && A2) && fn !~ /\/(consumer-suite-pool|postcompact-rulebook-recovery|push-drain-refusals)\/run\.sh$/) printf "W %s: loads only inside function bodies and carries no source-guard line and entry-line pair anywhere\n", fn
+    printf "WO %s %d\n", fn, O }
+  END { w_emit(); printf "WSCAN %d %d\n", nf, nl }' $w_files > "$WORK/w.out" 2>&1 || { echo "validate-fixture-inprocess: REFUSED -- arm W's awk failed" >&2; exit 2; }
+w_sc="$(awk '$1 == "WSCAN" { print $2 }' "$WORK/w.out")"; w_ld="$(awk '$1 == "WSCAN" { print $3 }' "$WORK/w.out")"
+[ "$w_sc" = "$w_n" ] || { echo "validate-fixture-inprocess: REFUSED W: listed $w_n shipping run.sh, awk scanned ${w_sc:-none}" >&2; exit 2; }
+# W, operand count: a loader's invocations.decl names each wrapped subject (guard line and a `<p>_main() {` line) it has an
+# inproc: row for; the fixture needs at least as many source-guard greps as wrapped subjects, so one gate cannot cover two.
+w_decls=""
+for d in "$ROOT"/core/fixtures/*/; do
+  [ -f "${d}run.sh" ] && [ ! -e "${d}.dist-only" ] && [ -f "${d}invocations.decl" ] && w_decls="$w_decls ${d}invocations.decl"
+done
+# shellcheck disable=SC2086
+awk '$2 ~ /^inproc:/ { s = $2; sub(/^inproc:/, "", s); n = split(FILENAME, p, "/"); print p[n - 1] "\t" s }' $w_decls | LC_ALL=C sort -u > "$WORK/w.pairs"
+w_subj=""
+for s in $(cut -f2 "$WORK/w.pairs" | LC_ALL=C sort -u); do [ -f "$ROOT/$s" ] && w_subj="$w_subj $ROOT/$s"; done
+# shellcheck disable=SC2086
+awk 'FNR == 1 { if (f != "" && g && e) print substr(f, length(R) + 2); f = FILENAME; g = 0; e = 0 }
+  $0 == "[ \"${BASH_SOURCE[0]}\" = \"$0\" ] || return 0" { g = 1 }
+  /^[a-z_]+_main\(\) \{/ { e = 1 }
+  END { if (f != "" && g && e) print substr(f, length(R) + 2) }' R="$ROOT" $w_subj | LC_ALL=C sort -u > "$WORK/w.wrapped"
+grep -q . "$WORK/w.wrapped" || [ -z "$w_subj" ] || { echo "validate-fixture-inprocess: REFUSED W: no wrapped subject among the inproc: rows" >&2; exit 2; }
+awk -F'\t' 'FILENAME == ARGV[1] { W[$1] = 1; next }
+  FILENAME == ARGV[2] { if (($2 in W)) S[$1]++; next }
+  FILENAME == ARGV[3] { split($0, a, " "); nm = a[2]; sub(/\/run\.sh$/, "", nm); n = split(nm, q, "/"); O[q[n]] = a[3] + 0 }
+  END { for (f in O) if (S[f] > O[f]) printf "%s\tW core/fixtures/%s/run.sh: %d wrapped subject(s) with an inproc: row, %d source-guard grep(s) -- one gate cannot cover them all\n", f, f, S[f], O[f] }' \
+  "$WORK/w.wrapped" "$WORK/w.pairs" <(grep '^WO ' "$WORK/w.out") | LC_ALL=C sort > "$WORK/w3.raw"
+w_owed=" cycle-commits-enforce gate-resume layer-catalog-collision layer-qualifier-grain layer-readopt-gate push-drain-refusals retro-audit-scans story-evidence-scaffold story-provenance trunk-audit-gate upstream-routing wait-stale-deliverable "
+awk -F'\t' -v o="$w_owed" 'index(o, " " $1 " ") == 0 { print $2 }' "$WORK/w3.raw" >> "$WORK/w.out"
+if grep -q '^W ' "$WORK/w.out"; then
+  rc=1
+  grep '^W ' "$WORK/w.out" | LC_ALL=C sort | sed -e "s#$ROOT/##" -e 's/^/  FAIL  /'
+  echo "  Remedy: before the first load, grep -qxF the subject for its \`<p>_main() {\` line and for the column-0 source guard, and on neither half SKIP through lib/layout.sh fx_skip_exit (core/fixtures/gate-resume/run.sh gr_halves); exactly one half FAILs."
+fi
+echo "validate-fixture-inprocess: arm W scanned $w_n shipping run.sh, $w_ld in-process loader(s)"
 if [ "$MODE" = complete ]; then
   if [ "$nsc" -eq 0 ]; then echo "  INCOMPLETE  zero fixtures scanned"; rc=1
   elif [ "$nal" -gt 0 ]; then echo "  INCOMPLETE  $nal allowlist row(s) remain in $ALLOW_REL"; rc=1; fi

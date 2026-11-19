@@ -8,7 +8,9 @@ core/fixtures/lib/report.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/inproc.sh
 core/fixtures/lib/layout.sh
+core/fixtures/trunk-push-bound/cells.decl
 core/fixtures/trunk-push-bound/run.sh
+core/fixtures/setup-config-drift/cells.decl
 core/fixtures/setup-config-drift/run.sh
 core/fixtures/setup-config-drift/seed.sh
 !core/scripts/validate-audit-anchors.sh

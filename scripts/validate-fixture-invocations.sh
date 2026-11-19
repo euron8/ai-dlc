@@ -202,6 +202,7 @@
 # FXC-IDENTITY 1 c7866870c9fc05fae058d1bf5fb35bc9f474f41af7b9a637bcad6d1504b21555 static P2 arm only: the two source sites of lib/inproc.sh are judged at each inproc_load/inproc_run call, and an unresolvable command word after a source of an unguarded subject is a drive (BL-1164, BL-1152 item 3); fxc_judge and the tag=0 fxc_req are unchanged, so no counted fixture's judgement moves
 # FXC-IDENTITY 1 06ebe5e1e7ca5b54a66a90709d4951f8be83b6eaf9a247a913968705652a23b8 nested-cell attribution (BL-1164): an inner fixture's declared cells credit only a tag whose start has that fixture's run.sh among its logged ancestors, so the judge can only move a fixture from FAIL to pass; every recorded pass stays valid
 # FXC-IDENTITY 1 76851c1313b10778fef27862ae33216f89ffabfa6398bd73a9c22c7b4dc4c930 nested-cell credit is opt-in (BL-1164): a fixture declares drives <inner> in its cells.decl for an inner fixture's cells to credit a tag, a drives row naming itself, its own shard parent or a fixture with no cells.decl is a C2 error, the ancestry match is anchored on the judged root, and the credit only narrows; no recorded pass carried a credited tag (the one fixture that had one, the seam, is an allowlist row and not judged)
+# FXC-IDENTITY 1 856140b0b6298704b078d84148c92f30ab42003c4014fa03d01b6a0e95549b66 the static join (arm R) credits the cli and e2e cells of a fixture a accepted `drives <X>` row names while inputs.decl holds its cells.decl, as fxc_judge's caller does (BL-878); fxc_judge is unchanged, so no counted fixture's judgement moves
 set -u
 FXC_FORMAT=1
 
@@ -1227,6 +1228,22 @@ fxc_static_join() {
     cf="$d/cells.decl"
     if [ -f "$cf" ]; then fxc_cells_parse "$cf" > "$w/c"; else : > "$w/c"; fi
     fxc_drives_check "$root" "$fx" "$w/c" > "$w/dc"; cat "$w/dc" >> "$w/c"
+    # ARM R's INNER CREDIT (BL-878). A `drives <X>` row that fxc_drives_check accepts credits X's cli/e2e cells as `inner`
+    # rows, parsed from X's own cells.decl (never concatenated with this fixture's: cell ids may collide), one level deep
+    # (X's own drives rows are not followed), and only while inputs.decl also holds the line core/fixtures/<X>/cells.decl,
+    # which the sandboxed judge needs to read it. A subject with inner credit passes when n >= c_own + c_inner (one start
+    # per inner cell at least: X may run more than once); a subject with none keeps equality. The dynamic judge decides
+    # that every start is tagged. M4 is down-only: a dynamic C1 failure after an allowlist row is deleted is fixed in
+    # the fixture, never answered by restoring the row.
+    : > "$w/inner"
+    case "$(< "$w/c")" in
+      *drives*) awk -F'\t' 'FILENAME == ARGV[1] { split($5, a, " "); bad[a[2]] = 1; next } $1 == "R" && $3 == "drives" && !($4 in bad) { print $4 }' "$w/dc" "$w/c" > "$w/inner" ;;
+    esac
+    while IFS= read -r p; do
+      [ -n "$p" ] && [ "$p" != "$fx" ] && [ -f "$root/core/fixtures/$p/cells.decl" ] || continue
+      LC_ALL=C awk -v want="core/fixtures/$p/cells.decl" '{ sub(/\r$/, ""); l = $0; sub(/^[!+]/, "", l); if (l == want) f = 1 } END { exit f ? 0 : 1 }' "$d/inputs.decl" || continue
+      fxc_cells_parse "$root/core/fixtures/$p/cells.decl" | awk -F'\t' -v OFS='\t' '$1 == "R" && ($3 == "cli" || $3 == "e2e") { $3 = "inner"; print }' >> "$w/c"
+    done < "$w/inner"
     : > "$w/r"; [ -f "$d/invocations.decl" ] && fxc_decl_rows "$d/invocations.decl" > "$w/r"
     : > "$w/n"
     while IFS="$T" read -r c k g tgt raw; do
@@ -1243,13 +1260,14 @@ fxc_static_join() {
       FILENAME == ARGV[3] { if ($1 == "E" && $2 == fx) { print "E\t" fx "\tP2\t" $3 "\t" $4 "\t" $5; bad = 1 } next }
       $1 == "E" { print "E\t" fx "\t" $4 "\t" $3 "\t" $5; bad = 1; next }
       $1 == "R" && $3 == "drives" { next }
+      $1 == "R" && $3 == "inner" { INN[$4]++; next }
       $1 == "R" { if (!($4 in N)) { print "E\t" fx "\tC2\t" $7 "\t" $3 " row names " $4 ", which is no path row of invocations.decl"; bad = 1 }
                   if ($3 == "nested") { if (!($5 in N)) { print "E\t" fx "\tC2\t" $7 "\tnested row names child " $5 ", which is no path row of invocations.decl"; bad = 1 } else NEST[$5] = 1 }
                   else CC[$4]++
                   if ($3 == "cli" && G[$4] != "G" && G[$4] != "A") { print "E\t" fx "\tC5\t" $7 "\tcli subject " $4 " carries no column-0 BASH_SOURCE source guard statement"; G[$4] = "R"; bad = 1 } }
       END { for (s in N) { n = N[s] + 0; c = CC[s] + 0
               if (n == 0 && c == 0) continue
-              if (n == c || ((s in NEST) && n >= c)) continue
+              if (n == c || ((s in NEST) && n >= c) || ((s in INN) && n >= c + INN[s])) continue
               r = r (r == "" ? "" : "; ") s " declares " n " start(s) against " c " cell(s)" ((s in NEST) ? " and a nested row" : "") }
             if (r != "") print "X\t" fx "\t" r
             else if (bad) print "X\t" fx "\tstatic finding(s) above"

@@ -2221,6 +2221,21 @@ DERIVER=""
 for _d in "$ROOT/scripts/ai-dlc/derive-fixture-readsets.sh" "$ROOT/core/scripts/derive-fixture-readsets.sh"; do
   [ -f "$_d" ] && DERIVER="$_d" && break
 done
+if [ -n "$DERIVER" ]; then
+. "$RS_LIB/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# PRE-WRAP CONSUMER GATE (BL-878): a consumer one pull behind carries this fixture with a subject that predates the
+# in-process wrap, and loading it would run its whole body. Neither half is SKIP (FIXTURE BROKEN in the distribution,
+# exit 0 on a consumer); exactly one half FAILS; an unreadable subject is FIXTURE ERROR.
+grep -qxF 'rs_main() {' "$DERIVER"; _wg1=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$DERIVER"; _wg2=$?
+[ "$_wg1" -le 1 ] && [ "$_wg2" -le 1 ] || { echo "FIXTURE ERROR: cannot read $DERIVER (grep exit $_wg1/$_wg2)" >&2; exit 2; }
+case "$_wg1$_wg2" in
+  00) : ;;
+  11) echo "SKIP: readset-skip: $DERIVER predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$DERIVER carries one half of the in-process wrap (rs_main line: rc $_wg1, column-0 source guard: rc $_wg2) -- a respelled subject this fixture cannot drive"
+     report_end "$NAME" ;;
+esac
+fi
 # THE DERIVER IS CONSUMED in every shard: its LOCALMAP span is read by the digest worlds and by hr, and
 # the sentinel is printed only when the span is really there, so a deriver declared but not read fails.
 if [ -n "$DERIVER" ] && grep -q '^# READSET_LOCALMAP_BEGIN$' "$DERIVER"; then

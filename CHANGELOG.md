@@ -19,6 +19,18 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1179.0] - 2026-11-19
+
+### BL-878, BL-1178 (advance, stay PARTIAL), BL-1155 (stays PARTIAL): the fixture-conversion check credits a driven fixture's cells and requires the pre-wrap gate, and the ledger refuses a numeric target on an efficiency goal
+
+- For the conversion check (`scripts/validate-fixture-inprocess.sh`, arm R): a fixture that runs another fixture can now declare it with a `drives <X>` row and have X's own cells credited, one level deep and only while its `inputs.decl` lists X's `cells.decl`. fixture-git-env-seam is the first, and its allowlist row is gone (66 rows to 65). A fixture with no `drives` row is judged exactly as before and costs nothing extra.
+- For fixture authors (arm W of the same validator): a shipping fixture that loads a subject in-process must now check the pre-wrap consumer gate's two halves before its first load, and the push fails if it does not. Six fixtures that lacked the gate now carry it; two more were already gated in their seed and now also carry the copy the arm requires. The operand-count rule is owed for 12 fixtures.
+- For lead sessions filing efficiency entries (`scripts/validate-backlog-receipts.sh`): a new arm, F-TARGET, fails the push when a new or changed efficiency entry puts a numeric comparator on its `Expected movement:` line (for example "at or below 15 h") or writes "target of 30%". "No target number" and "not a target" stay quiet, and entries already in the ledger are not re-judged.
+- Decided, no code: "one backlog entry per goal" stays a written rule, because whether two entries share a goal cannot be told from their text. The comparator pass over the batch-259 read-set trace of 12 fixtures needs no `inputs.decl` edits as evidence at 5026369ed, but 10 of those fixtures' windows are stale on this release and are owed a re-trace.
+- Recorded for the lead's close trace: an approximate 121-name `--list` standing in for the 47 unnamed grep-match readers, and the corrected count of readers of the update skill's SKILL.md.
+- The new checks read files only, so no test depends on load (BL-868).
+- BL-878, BL-1155 and BL-1178 stay OPEN (PARTIAL); the 47-reader trace, two SKILL.md readers, the 12 operand-count fixtures, the 10 re-traces and the `hermetic-run.sh` `whole` rows are owed.
+
 ## [0.1178.0] - 2026-11-19
 
 ### Remediator shard join keeps route-key directories; seven gate-tooling fixes (batch 260, C3)
@@ -41,6 +53,7 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
 - The header comment of `core/fixtures/review-shard-merge/run.sh` no longer claims S7-S10 arms that the fixture does not have.
 - No fixture is removed, so the push gate's wall clock and cost are unchanged. Nothing changes for consumers beyond that one comment line.
 - BL-583 stays OPEN (PARTIAL): the two excluded families, the families outside the judged set, and the entry's other owed rows are still open.
+
 
 ## [0.1176.0] - 2026-11-19
 

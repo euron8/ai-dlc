@@ -12,3 +12,4 @@
 # Shared reporting helpers.
 core/fixtures/lib/report.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh
