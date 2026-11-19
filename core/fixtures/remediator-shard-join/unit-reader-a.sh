@@ -411,7 +411,7 @@ p_xzero "$JOIN" && ok "LN20: a zero-lane round with one routed finding -> the FA
   || bad "LN20: the zero-lane route case failed (rc=$RC): $(cat "$JO")"
 p_xlane "$JOIN" && ok "LN21: the lane round's join REFUSES a route file in its shard dir, writing nothing" \
   || bad "LN21: the lane round read or ignored a route file (rc=$RC): $(cat "$JO")"
-p_xcover "$JOIN" && ok "LN22: --escalations prints CROSS-OPEN for a route key no source: carries, silent for a covered one (03.md = 3.md), count 0 once a later record covers it, nothing new with no file" \
+p_xcover "$JOIN" && ok "LN22: --escalations prints CROSS-OPEN for a route key no later record's source: carries (round one's own never acquit; same-basename keys in two dirs are two keys), silent for a covered one (03.md = 3.md), count 0 once a later record covers it, nothing new with no file" \
   || bad "LN22: the CROSS-OPEN coverage failed (rc=$RC): $(cat "$JO")"
 fi
 

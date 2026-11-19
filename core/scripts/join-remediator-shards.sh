@@ -1013,8 +1013,8 @@ src_probe() {
 #   (4d) THE ROUTE FILE (BL-716), PARTS MODE, ROUND ONE ONLY. The lead writes
 #       `<shard dir>/.findings-partition` before dispatching the shards: line 1 is exactly
 #       `# findings-partition v1`, then one line per SERIAL-ROUTED finding, `serial<TAB><key><TAB><files>`,
-#       <key> one token `<shard file>.md#<id>` (a leading directory is cut to its basename and the
-#       ordinal read numerically, so `01.md#F-1` equals `1.md#F-1`), <files> space-separated
+#       <key> one token `<shard file>.md#<id>` (a leading directory is kept and the
+#       ordinal read numerically, so `01.md#F-1` equals `1.md#F-1`, and `a/x.md#F-1` and `b/x.md#F-1` are two keys), <files> space-separated
 #       project-relative paths, or `-` when unknown. No file: the output is byte-identical to a join
 #       with no such feature. A file that exists is validated BEFORE anything is written, and refused
 #       (exit 2, `REFUSED:`, no record, no plan file) on a bad header, a line without three TAB fields,
@@ -1026,8 +1026,9 @@ src_probe() {
 #       CROSS items are dealt with every other item (4b). With LANE-COUNT 0 the FANIN lines are the
 #       whole serial plan and nothing is dealt. `--sources` and `--escalations` locate round one's file
 #       from the first record's name (`<dir>/shards/<record stem>/.findings-partition`) and print
-#       `CROSS-OPEN: <key>` for each key no `source:` token of any record passed carries (every token
-#       on a `source:` line covers; a path-qualified token is cut to its basename), then
+#       `CROSS-OPEN: <key>` for each key no `source:` token of a record AFTER the first carries (the first record is
+#       round one's own, whose entries never acquit; every token on a `source:` line covers; a bare token covers a
+#       path-qualified key only when no other key shares its basename), then
 #       `CROSS-OPEN-COUNT: <n>` -- reported, never refused; no file, nothing printed.
 #   (6) THE DISPOSITION KEY AND ITS VOCABULARY (BL-542). Every check above keys on an entry's
 #       `disposition:` line, so an entry that spells the key otherwise escaped all of them: graph's
@@ -1885,15 +1886,20 @@ fp_open() {
   _fp="${_fp%.md}/.findings-partition"
   [ -f "$_fp" ] || return 0
   awk -F'\t' -v fp="$_fp" '
-    function nk(k,   f, id, b) { f = k; sub(/#.*/, "", f); id = substr(k, length(f) + 2); sub(/^.*\//, "", f); b = f; sub(/\.md$/, "", b)
-      if (b ~ /^[0-9]+$/) return (b + 0) ".md#" id; return f "#" id }
+    function nk(k,   f, id, b, d) { f = k; sub(/#.*/, "", f); id = substr(k, length(f) + 2); sub(/^\.\//, "", f); d = ""
+      if (f ~ /\//) { d = f; sub(/[^\/]*$/, "", d) }; sub(/^.*\//, "", f); b = f; sub(/\.md$/, "", b)
+      if (b ~ /^[0-9]+$/) return d (b + 0) ".md#" id; return d f "#" id }
+    function bk(k,   f) { f = nk(k); sub(/^.*\//, "", f); return f }
     BEGIN { c = 0; while ((getline l < fp) > 0) { c++; if (c == 1) { if (l != "# findings-partition v1") { bad = 1; break }; continue }
-        if (split(l, q, "\t") == 3 && q[1] == "serial") { ord[++no] = q[2]; nrm[no] = nk(q[2]) } }
+        if (split(l, q, "\t") == 3 && q[1] == "serial") { ord[++no] = q[2]; nrm[no] = nk(q[2]); cnt[bk(q[2])]++ } }
       close(fp); }
-    /^[ \t]*-?[ \t]*[*_`]*source[*_`]*:/ { x = $0; sub(/^[^:]*:/, "", x)
-      while (match(x, /[A-Za-z0-9][A-Za-z0-9_.-]*\.md#[A-Za-z0-9][A-Za-z0-9._-]*/)) { t = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH)
-        sub(/[.-]+$/, "", t); have[nk(t)] = 1 } }
-    END { n = 0; for (i = 1; i <= no; i++) if (!(nrm[i] in have)) { print "CROSS-OPEN: " ord[i]; n++ }
+    FNR == 1 { fi++ }
+    fi > 1 && /^[ \t]*-?[ \t]*[*_`]*source[*_`]*:/ { x = $0; sub(/^[^:]*:/, "", x)
+      while (match(x, /[A-Za-z0-9_][A-Za-z0-9_.\/-]*\.md#[A-Za-z0-9][A-Za-z0-9._-]*/)) { t = substr(x, RSTART, RLENGTH); x = substr(x, RSTART + RLENGTH)
+        sub(/[.-]+$/, "", t); have[nk(t)] = 1; hb[bk(t)] = 1; if (t !~ /\//) bare[nk(t)] = 1 } }
+    function cov(i,   b) { b = bk(ord[i]); if (nrm[i] !~ /\//) return (b in hb)
+      return (nrm[i] in have) || ((b in bare) && cnt[b] == 1) }
+    END { n = 0; for (i = 1; i <= no; i++) if (!cov(i)) { print "CROSS-OPEN: " ord[i]; n++ }
       if (no > 0 || !bad) print "CROSS-OPEN-COUNT: " n }' "$@"
 }
 record_tail() {  # <record> [<lane round's record>...] -- closure is positional across them, in this order
@@ -2574,15 +2580,17 @@ resolve_cites() {
 }
 
 # --- THE ROUTE FILE (BL-716; the header's arm 4d). fp_norm_key <key> -> the key with its shard ordinal
-# read numerically and a path-qualified file part cut to its basename, so `01.md#F-1`, `1.md#F-1` and `dir/1.md#F-1` are one key. fp_check <file> validates the lead's
+# read numerically and a path-qualified file part KEPT with its directory, so `01.md#F-1` and `1.md#F-1` are one key and `a/1.md#F-1`
+# and `b/1.md#F-1` are two. fp_check <file> validates the lead's
 # `<shard dir>/.findings-partition` and refuses (nothing is written yet) on any malformed line; on a clean
 # file FP_ROWS holds one `R<TAB><key><TAB><files>` row per line and FP_N their count.
 fp_norm_key() {
-  local f="${1%%#*}" b nb
+  local f="${1%%#*}" b nb d=""
+  case "$f" in */*) d="${f%/*}/" ;; esac
   f="${f##*/}"; b="${f%.md}"
-  case "$b" in ''|*[!0-9]*) printf '%s' "${f}#${1#*#}"; return 0 ;; esac
+  case "$b" in ''|*[!0-9]*) printf '%s' "${d}${f}#${1#*#}"; return 0 ;; esac
   nb="$b"; while [ "${nb#0}" != "$nb" ] && [ "${#nb}" -gt 1 ]; do nb="${nb#0}"; done
-  printf '%s' "${nb}.md#${1#*#}"
+  printf '%s' "${d}${nb}.md#${1#*#}"
 }
 fp_check() {
   local f="$1" line n=0 t key rest files kf ki b nk seen="" bad tb=$'\t' nl=$'\n'

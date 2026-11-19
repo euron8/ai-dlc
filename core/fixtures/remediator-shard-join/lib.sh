@@ -2499,10 +2499,11 @@ p_xrefuse() { # one malformed shape per world -> exit 2, the shape's own REFUSED
 p_xzero() { # a round whose parts edit nothing (LANE-COUNT 0) with one routed finding -> the FANIN CROSS line, no lane, nothing dealt
   local w; w="$(new_world)"; : > "$w/$SLOT/shards/stories-repair-p1/01.md"; escpart "$w/$SLOT/shards/stories-repair-p1/01.md" 1
   drive "$w" Write "$w/$SLOT/shards/stories-repair-p1/01.md" "$AG1"
-  xroute "$w" "serial\tcross.md#F-1\t$REL/$S21"
+  xroute "$w" "serial\tcross.md#F-1\t$REL/$S21" "serial\tpb/cross.md#F-1\t$REL/$S21" "serial\tpc/cross.md#F-1\t$REL/$S21"
   run_join "$1" "$w"
   [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 0" && has "$JO" "FANIN: CROSS: cross.md#F-1 files: $REL/$S21 (lanes out)" \
-    && has "$JO" "CROSS-COUNT: 1" && has "$JO" "ADJUDICATOR-COUNT: 0" && ! has "$JO" "ADJUDICATE: "
+    && has "$JO" "FANIN: CROSS: pb/cross.md#F-1 files: $REL/$S21 (lanes out)" && has "$JO" "FANIN: CROSS: pc/cross.md#F-1 files: $REL/$S21 (lanes out)" \
+    && has "$JO" "CROSS-COUNT: 3" && has "$JO" "ADJUDICATOR-COUNT: 0" && ! has "$JO" "ADJUDICATE: "
 }
 p_xlane() { # the lane round's join (--artifact stories-serial) REFUSES a route file in its own shard dir, writing nothing
   local w d; w="$(new_world)"; d="$w/$SLOT/shards/stories-serial-repair-p1"; mkdir -p "$d" || return 1
@@ -2511,21 +2512,25 @@ p_xlane() { # the lane round's join (--artifact stories-serial) REFUSES a route 
   run_join "$1" "$w" --artifact stories-serial
   [ "$RC" -eq 2 ] && has "$JO" "exists in a lane round's shard dir" && [ ! -e "$w/$SLOT/stories-serial-repair-p1.md" ] && [ ! -e "$d/.join-plan" ]
 }
-p_xcover() { # --escalations: a route key no record's source: carries -> CROSS-OPEN (never refused); covered ones silent; 03.md equals 3.md;
-  # a later record's source covers it; no route file -> not one new byte
+p_xcover() { # --escalations: a route key no LATER record's source: carries -> CROSS-OPEN (never refused); round one's own entries never acquit;
+  # covered ones silent; 03.md equals 3.md; a path-qualified key is covered by its own path, not a same-basename other path; no route file -> not one new byte
   local w r1 r2 ok="" d
   w="$(mktemp -d "$WORK/xc.XXXXXX")" && mkdir -p "$w/.claude" || return 1
   r1="$w/stories-repair-p1.md"; r2="$w/stories-serial-repair-p1.md"; d="$w/shards/stories-repair-p1"; mkdir -p "$d" || return 1
-  printf '<!-- shard: cross.md -->\n### F-1 — MAJOR\n- disposition: repaired\n- source: cross.md#F-1\n- edit: n/a\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: `3.md#F-3`\n- edit: n/a\n\n### F-2 — MAJOR\n- disposition: repaired\n- source: `_bmad-output/party-mode/s323/stories-architect-1.md#F-2`\n- edit: n/a\n\n### F-7 — MAJOR\n- disposition: repaired\n- source: cross.md#F-7, 02.md#F-8\n- edit: n/a\n\n### F-4 — MAJOR\n- disposition: repaired\n- source: stories-architect-2.md#F-4\n- edit: n/a\n' > "$r1"
+  printf '<!-- shard: cross.md -->\n### F-1 — MAJOR\n- disposition: repaired\n- source: cross.md#F-1\n- edit: n/a\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: `3.md#F-3`\n- edit: n/a\n\n### F-2 — MAJOR\n- disposition: repaired\n- source: `_bmad-output/party-mode/s323/stories-architect-1.md#F-2`\n- edit: n/a\n' > "$r1"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --sprint 305 > "$JO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && ! has "$JO" "CROSS" && ok="${ok}a"
-  printf '# findings-partition v1\nserial\tcross.md#F-1\t-\nserial\t03.md#F-3\t-\nserial\tcross.md#F-9\t-\nserial\tstories-architect-1.md#F-2\t-\nserial\tcross.md#F-7\t-\nserial\t2.md#F-8\t-\nserial\t_bmad-output/party-mode/s323/stories-architect-2.md#F-4\t-\n' > "$d/.findings-partition"
+  printf '# findings-partition v1\nserial\tcross.md#F-1\t-\nserial\t03.md#F-3\t-\nserial\tcross.md#F-9\t-\nserial\tstories-architect-1.md#F-2\t-\nserial\tcross.md#F-7\t-\nserial\t2.md#F-8\t-\nserial\t_bmad-output/party-mode/s323/stories-architect-2.md#F-4\t-\nserial\tca/x.md#F-1\t-\nserial\tcb/x.md#F-1\t-\n' > "$d/.findings-partition"
+  # b: round one's own sources (F-1, F-3, F-2) acquit nothing -- all nine keys open
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --sprint 305 > "$JO" 2>&1; RC=$?
-  [ "$RC" -eq 0 ] && has "$JO" "CROSS-OPEN: cross.md#F-9" && ! has "$JO" "CROSS-OPEN: cross.md#F-1" && ! has "$JO" "CROSS-OPEN: 03.md" \
-    && has "$JO" "CROSS-OPEN-COUNT: 1" && ok="${ok}b"
-  printf '<!-- shard: lane-1.md -->\n### lane F-9 — MAJOR\n- disposition: repaired\n- source: cross.md#F-9\n- edit: n/a (no edit)\n' > "$r2"
+  [ "$RC" -eq 0 ] && has "$JO" "CROSS-OPEN: cross.md#F-1" && has "$JO" "CROSS-OPEN: 03.md#F-3" && has "$JO" "CROSS-OPEN: stories-architect-1.md#F-2" \
+    && has "$JO" "CROSS-OPEN-COUNT: 9" && ok="${ok}b"
+  # c: a later record's sources cover all but cross.md#F-9 and cb/x.md#F-1 (the bare-key cover, the numeric ordinal, the path-qualified
+  # key by its own path; ca/x.md covered by its own path while cb/x.md, same basename, stays open)
+  printf '<!-- shard: lane-1.md -->\n### lane 1 — MAJOR\n- disposition: repaired\n- source: cross.md#F-1, 3.md#F-3, stories-architect-1.md#F-2\n- edit: n/a (no edit)\n\n### lane 2 — MAJOR\n- disposition: repaired\n- source: cross.md#F-7, 02.md#F-8, stories-architect-2.md#F-4, ca/x.md#F-1\n- edit: n/a (no edit)\n' > "$r2"
   AI_DLC_PROJECT_ROOT="$w" bash "$1" --escalations "$r1" --escalations "$r2" --sprint 305 > "$JO" 2>&1; RC=$?
-  [ "$RC" -eq 0 ] && ! has "$JO" "CROSS-OPEN: " && has "$JO" "CROSS-OPEN-COUNT: 0" && ok="${ok}c"
+  [ "$RC" -eq 0 ] && has "$JO" "CROSS-OPEN: cross.md#F-9" && has "$JO" "CROSS-OPEN: cb/x.md#F-1" && ! has "$JO" "CROSS-OPEN: ca/x.md" \
+    && ! has "$JO" "CROSS-OPEN: cross.md#F-1" && ! has "$JO" "CROSS-OPEN: 03.md" && has "$JO" "CROSS-OPEN-COUNT: 2" && ok="${ok}c"
   [ "$ok" = abc ]
 }
 p_lanename() { # the subject party join prints the lane round's name derived from its record -> the party-serial artifact
