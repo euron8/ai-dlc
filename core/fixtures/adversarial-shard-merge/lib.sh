@@ -762,7 +762,7 @@ p_files_golden() { # files mode is byte-identical to the merge before section mo
 # ------------------------------------------------------------------ subject mode (--subject)
 # A subject world is a git repository (trunk main, sprint on a branch) holding the requirements
 # subject, its manifest written by the REAL partition-subject.sh first map. Shards notarize the
-# four stems and name the manifest; findings cite subject ordinals by `sections:`.
+# two stems and name the manifest; findings cite subject ordinals by `sections:`.
 SG() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$1" -c user.name=f -c user.email=f@example.invalid -c core.hooksPath=/dev/null "${@:2}"; }
 slorem() { local i; for i in $(seq 1 "$2"); do printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
 SUBJ_PA=_bmad-output/planning-artifacts
@@ -771,22 +771,19 @@ new_subj_world_build() { # -> prints the shard dir s9/shards/requirements-p1 of 
   local w pa; w="$(mktemp -d "$WORK/sw.XXXXXX")" || return 1; pa="$w/$SUBJ_PA"
   mkdir -p "$pa/s9/shards/requirements-p1" "$w/_bmad-output/specs/s9/kernel" || return 1
   { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$w" init -q . && SG "$w" checkout -q -b main
-    { printf '# Brief\n\n## Vision\n\n'; slorem vision 10; } > "$pa/product-brief.md"
     { printf '# PRD\n\n## Current state\n\n'; slorem current 20; printf '\n## Sprint 8\n\n'; slorem s8 20; printf '\n'; } > "$pa/prd.md"
+    printf '# SPEC\n\ncap-0: THE system SHALL exist.\n' > "$w/_bmad-output/specs/s9/kernel/SPEC.md"
     SG "$w" add -A && SG "$w" commit -q -m base && SG "$w" checkout -q -b sprint-9; } >/dev/null 2>&1 || return 1
-  printf 'A new brief line.\n' >> "$pa/product-brief.md"
-  { printf '## Sprint 9\n\n### Goals\n\n'; slorem s9g 30; printf '\n### Requirements\n\n'; slorem s9r 30; } >> "$pa/prd.md"
+  { printf '## Sprint 9\n\n### Goals\n\n'; slorem s9g 30; printf '\n### Requirements\n\n'; slorem s9r 30; printf '\n### Risks\n\n'; slorem s9k 30; printf '\n### Open questions\n\n'; slorem s9q 30; } >> "$pa/prd.md"
   printf '# SPEC\n\ncap-1: THE system SHALL x.\n' > "$w/_bmad-output/specs/s9/kernel/SPEC.md"
-  printf -- '- FR-S9-1: architecture_impact: none\n' > "$pa/s9/architecture-impact.md"
   AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --map 9 > "$w/subject.map" 2>&1 || return 1
   printf '%s' "$pa/s9/shards/requirements-p1"
 }
 subj_root() { printf '%s' "$(dirname "$(dirname "$(dirname "$(dirname "$(dirname "$1")")")")")"; }
 subj_out_of() { printf '%s' "$(dirname "$(dirname "$1")")/requirements-adversarial-p1.md"; }
-subj_shas() { # <shard dir> -> the four-stem list as on disk, in the `@` form a current tree's merge emits
+subj_shas() { # <shard dir> -> the two-stem list as on disk, in the `@` form a current tree's merge emits
   local w; w="$(subj_root "$1")"
-  printf 'product-brief@%s SPEC@%s prd@%s architecture-impact@%s' "$(sha_of "$w/$SUBJ_PA/product-brief.md")" \
-    "$(sha_of "$w/_bmad-output/specs/s9/kernel/SPEC.md")" "$(sha_of "$w/$SUBJ_PA/prd.md")" "$(sha_of "$w/$SUBJ_PA/s9/architecture-impact.md")"
+  printf 'SPEC@%s prd@%s' "$(sha_of "$w/_bmad-output/specs/s9/kernel/SPEC.md")" "$(sha_of "$w/$SUBJ_PA/prd.md")"
 }
 # sshard <dir> <key> <n-major> <cite> [sha-list] [skill] [verdict|-] [artifact]
 sshard() {
@@ -817,7 +814,7 @@ subj_refused_clean() { # <token> <shard-dir>
   local o; o="$(subj_out_of "$2")"
   [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1" && [ ! -e "$o" ]
 }
-p_subj_b3() { # sums, recomputes, artifact = manifest, four stems, ids = ordinals + cross; validator reads it
+p_subj_b3() { # sums, recomputes, artifact = manifest, two stems, ids = ordinals + cross; validator reads it
   local m="$1" d o k want have
   d="$(subj_b3_world)" || return 1; o="$(subj_out_of "$d")"
   k="$(grep -c . "$(subj_root "$d")/subject.map")"
@@ -857,13 +854,13 @@ p_subj_sha() { # one stem's sha is not the disk bytes (the prd moved), every oth
   run_subj_merge "$1" "$d"
   subj_refused_clean "notarizes prd=" "$d"
 }
-p_subj_stems() { # a shard notarizing three of the four stems
+p_subj_stems() { # a shard notarizing one of the two stems
   local d sl; d="$(subj_b3_world)" || return 1
-  sl="$(subj_shas "$d" | sed 's/ architecture-impact@[0-9a-f]*//')"
-  case "$sl" in *architecture-impact*) return 1 ;; esac
+  sl="$(subj_shas "$d" | sed 's/ prd@[0-9a-f]*//')"
+  case "$sl" in *prd@*) return 1 ;; esac
   sshard "$d" 2 1 2 "$sl"
   run_subj_merge "$1" "$d"
-  subj_refused_clean "notarizes each of the four stems once" "$d"
+  subj_refused_clean "notarizes each stem of the manifest once" "$d"
 }
 p_subj_art() { # a shard naming prd.md, not the manifest
   local d; d="$(subj_b3_world)" || return 1
@@ -970,8 +967,15 @@ p_stem_control() { # the same shards under doc-p1/ and under graph's real coe-p1
   local d s
   for s in doc coe; do
     d="$(stem_world "$s-p1")" || return 1
+    [ "$s" != coe ] || printf '%s\n' 'ai-dlc-era: e4-forward-1' > "$d/.era" || return 1
     stem_merge "$1" "$d"
     [ "$RC" -eq 0 ] && has "$MO" "MERGED: " && [ -f "$(stem_s9 "$d")/$s-adversarial-p1.md" ] || return 1
+    # A freshly merged pass 1 opens the series under the new engine: it carries the era token line that Check 24 arm
+    # P1J reads (the producer's token-writing line; deleting it makes this fail).
+    # The coe world has .era (the era key) and gets the token; the doc world has none (shards dispatched before the
+    # update, merged after it) and gets none.
+    if [ "$s" = coe ]; then grep -qxF 'ai-dlc-era: e4-forward-1' "$(stem_s9 "$d")/$s-adversarial-p1.md" || return 1
+    else ! grep -qxF 'ai-dlc-era: e4-forward-1' "$(stem_s9 "$d")/$s-adversarial-p1.md" || return 1; fi
   done
 }
 p_stem_near() { # a stem CONTAINING the word, not ending in it, is legal: adversarial-notes-p1 MERGES
@@ -2129,13 +2133,15 @@ dvrs_subj_build() { # -> the s9 dir of a subject world (rulebook committed) with
   local d w o; d="$(new_subj_world_build)" || return 1; w="$(subj_root "$d")"
   dv_root "$w" || return 1
   for o in $(cut -f1 "$w/subject.map"); do
-    if [ "$((10#$o))" = 2 ]; then sshard "$d" "$o" 1 "$((10#$o))" "" "" EXIT_CONDITION_NOT_MET; else sshard "$d" "$o" 0 "$((10#$o))" "" "" EXIT_CONDITION_NOT_MET; fi
+    if [ "$((10#$o))" = "${DVRS_CITE:-2}" ]; then sshard "$d" "$o" 1 "$((10#$o))" "" "" EXIT_CONDITION_NOT_MET; else sshard "$d" "$o" 0 "$((10#$o))" "" "" EXIT_CONDITION_NOT_MET; fi
   done
   for o in $(subj_xkeys "$d"); do sshard "$d" "$o" 0 "1, 2" "" "" EXIT_CONDITION_NOT_MET; done
   $ASM_RUN "$MERGE" --subject 9 "$d" < /dev/null > /dev/null 2>&1 && [ -f "$(subj_out_of "$d")" ] || return 1
   printf '%s' "$(dirname "$(dirname "$d")")"
 }
 dvrs_subj_world() { wc_get dvrss dvrs_subj_build; }
+dvrs_subj_build1() { DVRS_CITE=1 dvrs_subj_build; }
+dvrs_subj_world1() { wc_get dvrss1 dvrs_subj_build1; } # the same world with p1's MAJOR on part 1, the SPEC
 # dvrs_tail <merge> <mode document|subject> <sprint dir> <artifact> <p2 shard dir> <owed ordinals> <merge args...> --
 # steps 4 and 5: the derived map is exactly the mode's own --map rows of <owed> (narrowed by part content, no
 # full-width reason); the FULL map dispatched with its cross shards is REFUSED, nothing written; the owed parts
@@ -2209,7 +2215,7 @@ p_dvrs() {
 p_dvrss() {
   local m="$1" s w rd sha wl rc
   wl="$SRCDIR/serial-remediation-worklist.sh"; [ -f "$wl" ] || return 1
-  s="$(dvrs_subj_world)" || return 1; w="$(dirname "$(dirname "$(dirname "$s")")")"; rd="$s/shards/requirements-repair-p1"
+  s="$(dvrs_subj_world1)" || return 1; w="$(dirname "$(dirname "$(dirname "$s")")")"; rd="$s/shards/requirements-repair-p1"
   sha="$(sed -n 's/^artifact_sha: //p' "$s/requirements-adversarial-p1.md" | head -1)"; [ -n "$sha" ] || return 1
   ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --split 9 "$rd" --expect-sha "$sha" ) < /dev/null > "$WORK/dvrss.split" 2>&1 || return 1
   [ -f "$rd/.subject" ] && [ -f "$rd/prd/sections/.before" ] && [ -f "$rd/.before/SPEC" ] && [ -f "$rd/prd/sections/1.md" ] || return 1
@@ -2219,9 +2225,9 @@ p_dvrss() {
   ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$wl" "$rd" ) < /dev/null > "$WORK/dvrss.wl" 2>&1; rc=$?
   case "$rc" in 0|3) ;; *) return 1 ;; esac
   [ ! -e "$rd/prd/sections/.before" ] && [ ! -e "$rd/.before/SPEC" ] && [ -f "$rd/.subject" ] || return 1
-  # Owed {2 3}: p1's MAJOR cites part 2 (SPEC, unchanged), and prd's first in-scope section (`## Sprint 9`, part 3)
+  # Owed {1 2}: p1's MAJOR cites part 1 (SPEC, unchanged), and prd's first in-scope section (`## Sprint 9`, part 2)
   # grew by the repaired line; Goals and Requirements moved down one line with their bytes unchanged.
-  dvrs_tail "$m" subject "$s" requirements "$s/shards/requirements-p2" "2 3" --subject 9
+  dvrs_tail "$m" subject "$s" requirements "$s/shards/requirements-p2" "1 2" --subject 9
 }
 # ---- THE PART-CONTENT DERIVED SET (BL-911: document and subject modes). Every document or subject pass
 # notarizes `part_sha:`, one `<ordinal>=<sha256>` per map row; a later pass owes the parts whose digest
@@ -2430,32 +2436,36 @@ p_pcsr() {
   dv_map "$1" "$s" requirements-p2 --subject 9 < /dev/null
   [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "$PC_RUN" ] && ! has "$WORK/dv.err" "full width"
 }
-# PCS: SUBJECT mode, keyed (file, digest). p1's six parts {brief, SPEC, prd Sprint 9, Goals, Requirements, arch}
-# with p1's MAJOR on part 2 (SPEC). The repair REVERTS the brief to base, so its part LEAVES the subject and every
-# later ordinal drops by one; grows Goals by five lines (Requirements' boundaries move); edits Requirements in
-# place. Owed {1 3 4}: the cited SPEC at its new ordinal 1, Goals, Requirements. Ordinal and range joins owe the
-# whole map; a cite read as a current ordinal owes {2 3 4}.
+# PCS: SUBJECT mode, keyed (file, digest). p1's four parts {SPEC, prd Sprint 9, Goals, Requirements} with p1's MAJOR
+# on part 2 (prd Sprint 9). The repair REVERTS the SPEC to base, so its part LEAVES the subject and every later
+# ordinal drops by one; grows Goals by five lines (Requirements' boundaries move, its bytes do not).
+# Owed {1 2}: the cited Sprint 9 part at its new ordinal 1 and Goals. Requirements, unchanged, is not owed; the
+# ordinal join and the range join owe it, and a cite read as a current ordinal owes a different set.
 p_pcs() {
   local s w pa; s="$(dvrs_subj_world)" || return 1; w="$(pc_root "$s")"; pa="$w/$SUBJ_PA"
-  grep -v '^A new brief line\.$' "$pa/product-brief.md" > "$pa/product-brief.md.n" && mv "$pa/product-brief.md.n" "$pa/product-brief.md" || return 1
+  printf '# SPEC\n\ncap-0: THE system SHALL exist.\n' > "$w/_bmad-output/specs/s9/kernel/SPEC.md" || return 1
   awk '{ print } /^s9g line 30 of/ { for (i = 1; i <= 5; i++) print "grown goal " i " carrying enough prose to weigh something real." }
-    /^s9r line 3 of/ { print "A repaired requirement line." }' "$pa/prd.md" > "$pa/prd.md.n" && mv "$pa/prd.md.n" "$pa/prd.md" || return 1
+    ' "$pa/prd.md" > "$pa/prd.md.n" && mv "$pa/prd.md.n" "$pa/prd.md" || return 1
   pc_cur subject "$s/requirements-adversarial-p1.md" "$w" && pc_alt subject 2 || return 1
-  [ "$(cut -f2 "$WORK/pc.cmap" | grep -c 'product-brief')" = 0 ] && [ "$PC_CON" = "1 3 4" ] && [ "$PC_ORD" != "1 3 4" ] \
-    && [ "$PC_RNG" != "1 3 4" ] && [ "$PC_CBO" = "2 3 4" ] || { PC_WHY="seed does not discriminate: $PC_ALL"; return 1; }
+  [ "$(cut -f2 "$WORK/pc.cmap" | grep -c 'SPEC.md')" = 0 ] && [ "$PC_CON" = "1 2" ] && [ "$PC_ORD" != "1 2" ] \
+    && [ "$PC_RNG" != "1 2" ] && [ "$PC_CBO" != "1 2" ] || { PC_WHY="seed does not discriminate: $PC_ALL"; return 1; }
   dv_map "$1" "$s" requirements-p2 --subject 9 < /dev/null
-  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "1 3 4" ] && ! has "$WORK/dv.err" "full width"
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "1 2" ] && ! has "$WORK/dv.err" "full width"
 }
-# PCS2: THE SAME BYTES IN TWO FILES. The repair rewrites SPEC.md into a byte copy of architecture-impact.md. Keyed
-# (file, digest), SPEC changed and arch did not: owed {2}. Keyed on the digest alone the two parts are a duplicate
-# and both are owed: {2 6}.
+# PCS2: THE SAME BYTES IN TWO FILES. p1's MAJOR is on part 1 (the SPEC). The repair rewrites SPEC.md into a byte copy
+# of the prd's Requirements part (ordinal 4). Keyed (file, digest), SPEC changed and the prd part did not: owed {1}.
+# Keyed on the digest alone the two parts are a duplicate and both are owed: {1 4}.
 p_pcs2() {
-  local s w pa; s="$(dvrs_subj_world)" || return 1; w="$(pc_root "$s")"; pa="$w/$SUBJ_PA"
-  cp "$pa/s9/architecture-impact.md" "$w/_bmad-output/specs/s9/kernel/SPEC.md" || return 1
-  pc_cur subject "$s/requirements-adversarial-p1.md" "$w" && pc_alt subject 2 || return 1
-  [ "$PC_CON" = 2 ] && [ "$PC_DIG" != 2 ] || { PC_WHY="seed does not discriminate: $PC_ALL"; return 1; }
+  local s w pa a z; s="$(dvrs_subj_world1)" || return 1; w="$(pc_root "$s")"; pa="$w/$SUBJ_PA"
+  read -r a z <<EOF
+$( ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --map 9 --read-only ) < /dev/null 2>/dev/null | awk -F'\t' '$1 + 0 == 4 { print $3, $4 }' )
+EOF
+  [ -n "$a" ] && [ -n "$z" ] || return 1
+  awk -v a="$a" -v z="$z" 'NR > z { exit } NR >= a' "$pa/prd.md" > "$w/_bmad-output/specs/s9/kernel/SPEC.md" || return 1
+  pc_cur subject "$s/requirements-adversarial-p1.md" "$w" && pc_alt subject 1 || return 1
+  [ "$PC_CON" = 1 ] && [ "$PC_DIG" != 1 ] || { PC_WHY="seed does not discriminate: $PC_ALL"; return 1; }
   dv_map "$1" "$s" requirements-p2 --subject 9 < /dev/null
-  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = 2 ] && ! has "$WORK/dv.err" "full width"
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = 1 ] && ! has "$WORK/dv.err" "full width"
 }
 # pc_ds <merge> <pass file> -> DS_ORDS, DS_FULL (the FULL reason, empty when narrowed), DS_RC: --derived-set.
 pc_ds() {

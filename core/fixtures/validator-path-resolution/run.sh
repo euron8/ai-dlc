@@ -303,6 +303,9 @@ argv_for() {
     # the subject lookup under the resolved root, finds no spec kernel, and refuses naming that
     # root -- without writing a manifest. Same floor as the entries above: the root is CONSULTED.
     partition-subject.sh)           printf '%s' "--map 9 --read-only" ;;
+    # --precheck needs the sprint's PRD and slot; absent under every root, it refuses naming the
+    # path it resolved, so the two roots answer differently. Same floor: the root is CONSULTED.
+    requirements-bookkeeping.sh)    printf '%s' "--precheck 9" ;;
     # --status sleeps and writes nothing. The progress path IS the state dir under the right root,
     # so the guard refuses naming it; under a wrong root the state dir moves and the guard passes.
     wait-for-deliverable.sh)        printf '%s' "--status --progress-path $WORK/_bmad-output x.md" ;;

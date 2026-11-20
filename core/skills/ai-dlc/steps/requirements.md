@@ -18,6 +18,8 @@ step is never loaded for them.
 
 ## EXECUTION SEQUENCE
 
+Your first action in this step is `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file requirements.md 'Pipeline Position'`.
+
 ### 0. Exploration Dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run section 1 inline. Spawn an `analyst` subagent
@@ -190,7 +192,9 @@ exception 3):
 **(a) Update the product brief.** Per Rule 25(a) — integrate the new scope into the
 current-state sections and **move** superseded content and prior per-sprint narrative to
 `product-brief-history.md` (cut-and-paste, verbatim). Never drop content: the union of live
-and history must preserve everything prior.
+and history must preserve everything prior. The brief is not part of the validation subject
+(section 5): no review or repair round reads it, so write it once, from the PRD's scope, and
+leave it.
 
 **(b) Run `bmad-spec` headless** with the product brief and its `LOCKED_REQUIREMENTS` block
 (section 3) as input, and slug `<sprint-slug>` — **no sprint token in the slug**, because
@@ -211,6 +215,12 @@ mechanics, the returns handling, and why the spec is never a full-text anchor ta
   HARD_BLOCK before the gate, not carried as a note — unless it is resolved by the research
   sub-skills below, in which case it is not escalated.
 - A section 3 `(lead interpretation)` bullet that is unanswered is escalated the same way, as a Rule 12 `HARD_BLOCK` before the gate; no research sub-skill resolves it, only the operator's captured answer.
+
+**Settle every cheaply checkable premise in this dispatch.** Before the first operator ask, each SPEC
+`open_questions[]` entry and each assumption the SPEC or PRD records as "unconfirmed" or as a later step's
+confirmation is settled here when one fetch, grep or read can settle it: run it, write the result into the
+SPEC and PRD with its derivation, and record the entry as closed. Only an entry that no fetch, grep or read
+can settle goes to the operator, and every such entry goes in the one ask this step opens with.
 
 **(c) Update the PRD.** Per Rule 25(a) — integrate the new scope's requirements into the
 current-state sections and **move** superseded requirement versions and prior per-sprint scope
@@ -267,7 +277,9 @@ do not treat the returned offer as an instruction to hand it the update.
 - FR-S<N>-<k>: architecture_impact: none
 - FR-S<N>-<k>: architecture_impact: <one line naming the component and the change>
 ```
-The Architect seat in section 5 challenges every line reading `none`.
+The file is not part of the validation subject (section 5). The Architect seat in section 5 challenges
+every line reading `none` by reading the file beside the FR, records the finding against that FR's part
+of `prd.md`, and the part's remediator edits the line in the file with the FR.
 
 **Research runs.** `/bmad-deep-recon type=domain`, `/bmad-deep-recon type=market` and
 `/bmad-deep-recon type=technical`, each with `intent=run subagents=none research_output_path={planning_artifacts}/s<N>/research`, run inside this same
@@ -290,14 +302,13 @@ Returns paths only. The lead reads paths, not content.
 
 Run the validation cycle (`_gate-procedures.md`, "Validation cycle") — its passes use the
 **Adversarial review dispatch** and **Adversarial repair dispatch** sub-routines — over the
-product brief, the spec kernel, the PRD and `architecture-impact.md` as ONE subject.
+spec kernel and the PRD as ONE subject. The product brief and `architecture-impact.md` are
+outside it: no part, shard or repair covers them.
 **The subject is sharded (Rule 28, "Split dispatch": subject axis), and every sub-pass is
 sharded** — the party round, its repair, elicitation, its repair, every adversarial pass and
 every repair. `_gate-procedures.md` carries the subject case at each of those sites.
-- **The four subject files:** `_bmad-output/planning-artifacts/product-brief.md`, the spec
-  kernel `_bmad-output/specs/s<N>/*/SPEC.md` (exactly one match; `partition-subject.sh`
-  refuses zero or two), `_bmad-output/planning-artifacts/prd.md`, and
-  `_bmad-output/planning-artifacts/s<N>/architecture-impact.md`.
+- **The two subject files:** the spec kernel `_bmad-output/specs/s<N>/*/SPEC.md` (exactly one
+  match; `partition-subject.sh` refuses zero or two) and `_bmad-output/planning-artifacts/prd.md`.
 - **The base:** `git merge-base <trunk> HEAD`, trunk from `AI_DLC_TRUNK` (default `main`).
   The diff runs from that base tree to the working tree. The party round's first map resolves
   it ONCE and records it in the subject manifest. Every later invocation reads the base from the
@@ -311,27 +322,34 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
   whole-file part. A subject with every file unchanged is refused, not mapped. A part key is
   `<file-stem> <heading>`, as in `shard: 4/7 prd ### Functional requirements`. A subject that
   maps to one part is `shard: none (serial-document)` (Rule 28 exception 4).
-- **The SPEC is repaired through its own render path, never by a direct edit.** A finding
-  whose fix lies in `SPEC.md` goes to that part's one remediator, which appends a `(decision)`
-  entry to the spec's `.memlog.md` and re-renders `SPEC.md` through `bmad-spec` — the amendment
-  procedure's item 2 path in `_gate-procedures.md`, "Divergence resolution dispatch". Invoking
-  the `bmad-spec` Skill loads its instructions and renders nothing, and no render script exists,
-  so the render IS the remediator re-deriving `SPEC.md` WHOLE from `.memlog.md` under those
-  instructions, never by Edits to the affected lines. It then appends one
+- **The SPEC is repaired through its own render path, never by a direct edit, and rendered ONCE
+  per repair.** A finding whose fix lies in `SPEC.md` goes to that part's one remediator, which
+  appends a `(decision)` entry to the spec's `.memlog.md` and does not render. After the repair's
+  serial tail, ONE `bmad-spec` dispatch re-renders `SPEC.md` — the amendment procedure's item 2
+  path in `_gate-procedures.md`, "Divergence resolution dispatch". Invoking the `bmad-spec` Skill
+  loads its instructions and renders nothing, and no render script exists, so the render IS that
+  dispatch re-deriving `SPEC.md` WHOLE from `.memlog.md` under those instructions, never by Edits
+  to the affected lines; no bookkeeping script renders it. It then appends one
   `- (event) Render <pass>: re-derived from memlog through <last decision>` line to `.memlog.md`;
   a change applied with Edit is recorded as `- (event) Hand-edit <pass>`, never as Render. A
-  `(decision)` entry after the last such Render line is a stale SPEC, and the join refuses it.
-  The serial remediator after the join renders the same way: when its block appends a
-  `(decision)` entry, it re-renders `SPEC.md` and appends its Render line BEFORE its
-  `--mark-repair`, so the lead's beat on the record ends after the render.
+  `(decision)` entry after the last such Render line is a stale SPEC; the join checks it after the
+  serial tail, not mid-round.
+- **Bookkeeping is a script, never a remediator pass.** Before the first adversarial pass, and
+  after each serial tail, run `scripts/ai-dlc/requirements-bookkeeping.sh --precheck <N>`: it
+  lists stale `derived` fences, slot bullets missing or different in the PRD's
+  `LOCKED_REQUIREMENTS` block, FRs with no or an unknown `(CAP-m)`, and cites past a file's end.
+  The script closes its own findings: `--rederive <file>...` rewrites stale fence outputs and
+  `--mirror-lr <N>` copies the slot's bullets into the PRD block, then `--seal <file>...` runs on
+  every file the script rewrote and `--precheck` re-runs until it prints `PRECHECK clean`. A
+  finding the script cannot close is the only one a `remediator` receives. The adversary reviews
+  substance, not these.
 - **The adversarial series is named `s<N>/requirements-adversarial-p<M>`.** A sharded pass is
   written by `merge-adversarial-shards.sh --subject`, never by `--document`; a one-part subject's
   single adversary writes it directly, notarizing the subject manifest. Check 24 arm K3 holds
-  the series to the subject shape. No `--document` merge of a subject file (brief, SPEC, `prd.md`,
-  `architecture-impact.md`) runs while `s<N>/requirements-subject.md` exists — no
+  the series to the subject shape. No `--document` merge of a subject file (SPEC, `prd.md`) runs while `s<N>/requirements-subject.md` exists — no
   `prd-adversarial-p*` series — and `merge-adversarial-shards.sh` refuses one (its B4).
 - **party-mode seats / subject:** Architect, Dev — walk every part of the subject. The Architect
-  seat challenges every `architecture_impact: none` line in `architecture-impact.md`. The round
+  seat challenges every `architecture_impact: none` line in `architecture-impact.md` (section 4). The round
   is seats x subject-parts (Rule 28, "Split dispatch"), and its seats record findings without
   editing; the party repair applies them (`_gate-procedures.md`, "Validation cycle" item 1).
 - **source-fidelity check:** where features originate from carry-over items or user
@@ -346,6 +364,8 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
   `verdict:` and the series ends when one stamps `EXIT_CONDITION_MET`. One validation cycle
   over the four subject files as one subject satisfies the per-artifact minimum (Check 20).
 - **`Seam D` label:** `requirements adversarial pass <N>`.
+- **after convergence:** a MINOR the terminal MET pass leaves is recorded in the changelog and
+  not repaired; no repair dispatch runs after the series ends.
 - **on convergence:** append a changelog to
   `_bmad-output/planning-artifacts/s<N>/changelog-requirements.md` (`_gate-procedures.md` —
   "Where a changelog is written"; NOT the artifacts themselves), then proceed to gate

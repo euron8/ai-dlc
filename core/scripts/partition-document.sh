@@ -13,6 +13,12 @@
 #   partition-document.sh --assemble <dir>
 #       writes the sections back over the document the manifest names. Exit 0 on
 #       `ASSEMBLED:` or `UNCHANGED:` (stdout).
+#   partition-document.sh --assemble <dir> --keep
+#       as --assemble, but `sections/<ordinal>.md` stay on disk (serial lanes edit them, section-local).
+#   partition-document.sh --reassemble <dir>
+#       after an --assemble --keep: writes the kept copies over the document once, only while the document is
+#       still the bytes that assembly wrote; the out-of-scope gaps are read from `sections/.before`. Prints
+#       `REASSEMBLED:`; removes the copies.
 #   partition-document.sh --part-sha <doc> [--expect-sha <sha256>]
 #   partition-document.sh --part-sha --rows <root> [--scope-ref <sha>]
 #       stdout: one `<ordinal>=<sha256>` line per part, in map order, then one `run:<o>,<o>,...` line per
@@ -132,6 +138,19 @@
 #   first is the previous last+1, the final last is the line count (a final line without a newline
 #   counts). A SCOPED map does not tile; see below.
 #
+# THE SIZE RULE (unscoped maps only). In a document with two or more `##` atoms, an atom over two thirds of MAX_SHARE_PCT of the bytes (33%)
+#   of more than 16384 bytes (one context read) that holds no `###` heading and no table row (a long run of bullets or paragraphs) splits before every non-blank
+#   line that follows a blank line outside a fence or comment; the packer joins the small pieces. A one-`##`
+#   document stays SERIAL.
+# THE SCOPED SIZE RULE AND SPAN CAP (`--scope-ref`). In-scope edits scattered through one long section used to pack
+#   into ONE part spanning the text between them (s323: the 1,015-line NFR part, 25 hunks in lines 219-1199). Now a
+#   piece longer than a PART_CAP-th of the document bytes that holds out-of-scope lines splits at blank lines, pieces
+#   with no in-scope byte drop, and a part may not span more than SC bytes of the document (SC starts at a PART_CAP-th
+#   and grows by a quarter until the parts fit PART_CAP). Unscoped maps are unchanged.
+# THE PER-ROUND COMMIT (`--shard-dir`, pass M >= 2, series whose pass-1 shard dir carries the era token, which `--shard-dir` writes as `.era` when it opens pass 1): refuses (exit 2) while `s<N>/<name>-repair-p<M-1>.md`
+#   or the artifact has uncommitted changes in its repository. No such record, no repository, or an ignored path
+#   is not judged.
+#
 # THE SCOPE (`--scope-ref <sha>` on --map and --split)
 #   The in-scope lines are the WORKTREE file's lines that differ from the file in the base TREE
 #   (`<sha>:<path>`), by `git diff --no-index --diff-algorithm=myers -U0` of that blob against the
@@ -225,10 +244,10 @@ map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or o
         close(sf)
       }
     }
-    function pack(t,   i, n, s) {
-      n = 1; s = 0
+    function pack(t,   i, n, s, f) {
+      n = 1; s = 0; f = A1[1]
       for (i = 1; i <= na; i++) {
-        if ((s > 0 && s + AS[i] > t) || (i > 1 && RN[i] != RN[i - 1])) { n++; s = 0 }
+        if ((s > 0 && s + AS[i] > t) || (i > 1 && RN[i] != RN[i - 1]) || (capon && s > 0 && PB[A2[i]] - PB[f - 1] > SC)) { n++; s = 0; f = A1[i] }
         s += AS[i]
       }
       return n
@@ -245,13 +264,19 @@ map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or o
     cmt { if (index($0, "-->")) cmt = 0; next }
     /^[ \t]*(```|~~~)/ { match($0, /(`+|~+)/); fence = substr($0, RSTART, RLENGTH); next }
     /^[ \t]*<!--/ { if (!index(substr($0, index($0, "<!--") + 4), "-->")) cmt = 1; next }
+    /^[ \t]*\r?$/ { BL[NR] = 1; next }
     /^\|/   { TR[NR] = 1; next }
     /^## /  { n2++; h2[n2] = NR; h2t[n2] = $0; next }
-    /^### / { n3++; h3[n3] = NR; h3t[n3] = $0; next }
+    /^### / { n3++; H3L[NR] = 1; h3[n3] = NR; h3t[n3] = $0; next }
     END {
       if (bad) { print "partition-document: cannot read the scope list " sf > "/dev/stderr"; exit 2 }
       tot = 0
-      for (k = 1; k <= NR; k++) { W[k] = (scoped ? (IN[k] ? B[k] : 0) : B[k]); tot += W[k] }
+      # THE SPAN CAP (scoped only): a part may not span more than SC bytes of the document, in-scope or not (SC starts
+      # at tl/PART_CAP, never under 16384 bytes, one context read), so scattered edits in one long section are not packed into one part that carries the text
+      # between them.
+      tl = 0; PB[0] = 0
+      for (k = 1; k <= NR; k++) { W[k] = (scoped ? (IN[k] ? B[k] : 0) : B[k]); tot += W[k]; tl += B[k]; PB[k] = tl }
+      SC = int(tl / cap) + 1; if (SC < 16384) SC = 16384; capon = (scoped && nin < NR)
       if (scoped && tot == 0) exit 0
       if (n2 == 0) { print "SERIAL: no ## heading outside a fence"; exit 3 }
       na = 0
@@ -276,6 +301,25 @@ map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or o
           for (k = A1[i] + 2; k <= A2[i]; k++) if (TR[k] && TR[k - 1] && TR[k - 2] && RUNSEP[k - 1]) {
             nb++; C1[nb] = st; C2[nb] = k - 1; CH[nb] = AH[i]; st = k
           }
+        # THE SIZE RULE: a piece STILL over MAX_SHARE_PCT that no `###` heading and no table row cut
+        # reached (a long run of bullets or paragraphs) splits before every non-blank line that follows
+        # a blank line outside a fence or comment; the packer then joins the small pieces back.
+        # THE SCOPED SIZE RULE: under --scope-ref a piece no row cut reached that is longer than a PART_CAP-th of the
+        # document bytes and holds out-of-scope lines splits at blank-line runs (a run opens the piece after it); a piece left with no in-scope
+        # byte is dropped below, so a part is the changed paragraphs and not the carried text around them.
+        if (scoped && nb == nb0) {
+          sb = 0; zz = 0; for (k = A1[i]; k <= A2[i]; k++) { sb += B[k]; if (W[k] == 0) zz = 1 }
+          if (zz && sb * cap > tl && sb > 16384)
+            for (k = A1[i] + 1; k <= A2[i]; k++) if (BL[k - 1] && !BL[k]) {
+              r = k; while (r - 1 > st && BL[r - 1]) r--
+              if (r > st) { nb++; C1[nb] = st; C2[nb] = r - 1; CH[nb] = AH[i]; st = r }
+            }
+        }
+        hx = 0; for (k = A1[i]; k <= A2[i] && !hx; k++) if (TR[k] || H3L[k]) hx = 1
+        if (!scoped && n2 > 1 && nb == nb0 && !hx && s > 16384 && s * 100 > tot * int(maxpct * 2 / 3))
+          for (k = A1[i] + 1; k <= A2[i]; k++) if (BL[k - 1] && !BL[k] && W[k] > 0 && k > st) {
+            nb++; C1[nb] = st; C2[nb] = k - 1; CH[nb] = AH[i]; st = k
+          }
         nb++; C1[nb] = st; C2[nb] = A2[i]; CH[nb] = AH[i]
         # THE TABLE RUN: every piece of an atom the row cut split shares the id i (0: not cut).
         for (q = nb0 + 1; q <= nb; q++) TB[q] = (nb > nb0 + 1) ? i : 0
@@ -290,6 +334,8 @@ map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or o
         if (s > mx) mx = s
       }
       if (RN[na] > cap) for (i = 1; i <= na; i++) RN[i] = 1
+      # The cap starts at a PART_CAP-th of the document and grows by a quarter until the parts fit PART_CAP.
+      if (capon) for (g = 0; g < 60 && pack(tot) > cap; g++) SC = int(SC * 1.25) + 1
       target = int((tot + cap - 1) / cap); if (mx > target) target = mx
       if (pack(target) > cap) {
         lo = target; hi = tot
@@ -298,7 +344,7 @@ map_of() { # <doc> [<in-scope line list> [<relax>]] -> map on stdout (rc 0) or o
       }
       np = 1; P1[1] = A1[1]; PH[1] = AH[1]; PS[1] = 0
       for (i = 1; i <= na; i++) {
-        if ((PS[np] > 0 && PS[np] + AS[i] > target) || (i > 1 && RN[i] != RN[i - 1])) { np++; P1[np] = A1[i]; PH[np] = AH[i]; PS[np] = 0 }
+        if ((PS[np] > 0 && PS[np] + AS[i] > target) || (i > 1 && RN[i] != RN[i - 1]) || (capon && PS[np] > 0 && PB[A2[i]] - PB[P1[np] - 1] > SC)) { np++; P1[np] = A1[i]; PH[np] = AH[i]; PS[np] = 0 }
         PS[np] += AS[i]; P2[np] = A2[i]
         t = ATB[i]
         if (t > 0 && GL[t] != np) { GL[t] = np; GN[t]++; GM[t] = GM[t] (GN[t] > 1 ? "," : "") np; if (GN[t] == 1) GO[++ng] = t }
@@ -419,6 +465,8 @@ pdoc_main() {
 export LC_ALL=C
 PART_CAP=8
 MAX_SHARE_PCT=50
+[ -f "${BASH_SOURCE[0]%/*}/era-token.sh" ] && . "${BASH_SOURCE[0]%/*}/era-token.sh"
+AI_DLC_ERA_TOKEN="${AI_DLC_ERA_TOKEN:-}"
 
 
 
@@ -547,7 +595,7 @@ case "${1:-}" in
     SD_ROWS=""
     if [ -f "$SD_LEDGER" ]; then SD_ROWS="$(grep -F -e "\"path\":\"$SD_BASE" -e "\"path\": \"$SD_BASE" "$SD_LEDGER")"; fi
     sd_nonempty() { # <dir>: 0 when the dir holds any entry (dotfiles included), no fork
-      for _e in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$_e" ] || [ -L "$_e" ] && return 0; done
+      for _e in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ "${_e##*/}" = .era ] && continue; [ -e "$_e" ] || [ -L "$_e" ] && return 0; done
       return 1
     }
     sd_why() { # <M>: sets SD_WHY to why pass M is spent, empty when it is free
@@ -571,7 +619,24 @@ case "${1:-}" in
         while [ -n "$SD_WHY" ] && [ "$SD_NEXT" -le 9999 ]; do SD_NEXT=$((SD_NEXT + 1)); sd_why "$SD_NEXT"; done
         refuse "pass $PASS of $NAME in s$SN is spent: $SD_FIRST; take pass $SD_NEXT (resume a dispatched pass with --existing)"
       fi
+      # THE PER-ROUND COMMIT: round M opens only when round M-1's accepted repair (its joined record) and the
+      # artifact it repaired are committed. A record that does not exist, a tree with no repository, or a path
+      # the repository ignores is not judged: nothing is read as clean there.
+      if [ "$PASS" -gt 1 ]; then
+        SD_PREV="$SD_PLAN/s$SN/$NAME-repair-p$((PASS - 1)).md"
+        if [ -f "$SD_PREV" ]; then
+          # FORWARD-ONLY: only a series whose pass-1 shard dir carries the era token (written below when pass 1 opens) is judged.
+          SD_ERA=SKIP
+          [ -n "$AI_DLC_ERA_TOKEN" ] && grep -qxF -- "$AI_DLC_ERA_TOKEN" "$SD_PLAN/s$SN/shards/$NAME-p1/.era" 2>/dev/null && SD_ERA=OWED
+          [ "$SD_ERA" = OWED ] || echo "partition-document: ROUND-COMMIT: SKIP pre-era $NAME" >&2
+          SD_DIRTY=""
+          [ "$SD_ERA" != OWED ] || SD_DIRTY="$( unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C "${SD_PREV%/*}" status --porcelain --untracked-files=all -- "$SD_PREV" "$A" 2>/dev/null )"
+          [ -z "$SD_DIRTY" ] || refuse "pass $PASS of $NAME in s$SN cannot open: pass $((PASS - 1))'s accepted repair is uncommitted ($(printf '%s' "$SD_DIRTY" | awk '{ printf "%s%s", (NR > 1 ? "; " : ""), $0 }')); commit the round (one commit per round) first"
+        fi
+      fi
       mkdir -p "$SD_DIR" || refuse "cannot create $SD_DIR"
+      # THE ERA TOKEN: the unit this opens is a series when it is pass 1; the producer stamps it (era-token.sh).
+      [ "$PASS" -ne 1 ] || [ -z "$AI_DLC_ERA_TOKEN" ] || printf '%s\n' "$AI_DLC_ERA_TOKEN" > "$SD_DIR/.era" || refuse "cannot write the era token into $SD_DIR"
     fi
     cd "$SD_DIR" 2>/dev/null || refuse "cannot resolve $SD_DIR"
     pwd -P
@@ -759,8 +824,48 @@ EOF
     printf 'SPLIT: %s parts of %s into %s\n' "$(printf '%s\n' "$M" | grep -c .)" "$ABS" "$SEC"
     exit 0 ;;
 
+  --reassemble)
+    # THE SECOND ASSEMBLY of a join that kept its section copies (`--assemble <dir> --keep`): serial lanes
+    # edit `sections/<ordinal>.md`, section-local, and this writes them over the document once. It refuses
+    # unless the document is still the bytes the first assembly wrote, and rewrites the `assembled` row.
+    [ "$#" -eq 2 ] || refuse "usage: --reassemble <dir>"
+    DIR="$2"; MF="$DIR/sections/.manifest"
+    [ -f "$MF" ] || refuse "no manifest at $MF"
+    DOC="$(manifest_field "$MF" document)"; DONE="$(manifest_field "$MF" assembled)"
+    [ -n "$DOC" ] && [ -f "$DOC" ] || refuse "the document the manifest names is gone"
+    [ -n "$DONE" ] || refuse "$MF has no assembled row; --reassemble follows an --assemble --keep"
+    [ "$(sha_of "$DOC")" = "$DONE" ] || refuse "$DOC is no longer the bytes the first assembly wrote (sha256 $DONE); something wrote it while the lanes edited"
+    [ -f "$DIR/sections/.before" ] || refuse "no $DIR/sections/.before to read the out-of-scope ranges from"
+    TAB="$(printf '\t')"
+    ORDS="$(awk -F'\t' '$1 == "part" { print $2 }' "$MF")"
+    for o in $ORDS; do [ -f "$DIR/sections/$o.md" ] || refuse "kept section $o is missing from $DIR/sections; --assemble was not run with --keep"; done
+    LAST="$(printf '%s\n' "$ORDS" | tail -n 1)"
+    for o in $ORDS; do
+      [ "$o" = "$LAST" ] && continue
+      [ -s "$DIR/sections/$o.md" ] || continue
+      [ "$(tail -c 1 "$DIR/sections/$o.md" | wc -l | tr -d ' ')" -eq 1 ] || refuse "section $o does not end in a newline; it would glue onto the heading of the next section"
+    done
+    T="$(dirname "$DOC")/.$(basename "$DOC").reassemble.$$"
+    : > "$T" || refuse "cannot stage $T"
+    while IFS="$TAB" read -r kind f1 f2 f3; do
+      case "$kind" in
+        part) cat "$DIR/sections/$f1.md" >> "$T" || { rm -f "$T"; refuse "cannot stage section $f1"; } ;;
+        gap) tail -n "+$f1" "$DIR/sections/.before" | head -n "$((f2 - f1 + 1))" >> "$T" || { rm -f "$T"; refuse "cannot stage gap lines $f1-$f2"; } ;;
+      esac
+    done < "$MF"
+    [ "$(sha_of "$DOC")" = "$DONE" ] || { rm -f "$T"; refuse "$DOC moved while it was being reassembled; nothing written"; }
+    cp -p "$DOC" "$T.m" && cat "$T" > "$T.m" && mv "$T.m" "$DOC" || { rm -f "$T" "$T.m"; refuse "cannot write $DOC"; }
+    rm -f "$T"
+    NEW="$(sha_of "$DOC")"
+    { grep -v '^assembled	' "$MF"; printf 'assembled\t%s\n' "$NEW"; } > "$MF.$$" && mv "$MF.$$" "$MF" || refuse "$DOC was written but $MF could not record it (sha256 $NEW)"
+    for o in $ORDS; do rm -f "$DIR/sections/$o.md"; done
+    printf 'REASSEMBLED: %s sha256=%s\n' "$DOC" "$NEW"
+    exit 0 ;;
+
   --assemble)
-    [ "$#" -eq 2 ] || refuse "usage: --assemble <dir>"
+    KEEP=0
+    if [ "$#" -eq 3 ] && [ "$3" = "--keep" ]; then KEEP=1; set -- "$1" "$2"; fi
+    [ "$#" -eq 2 ] || refuse "usage: --assemble <dir> [--keep]"
     DIR="$2"; MF="$DIR/sections/.manifest"
     [ -f "$MF" ] || refuse "no manifest at $MF"
     DOC="$(manifest_field "$MF" document)"
@@ -821,7 +926,7 @@ EOF
     mv "$T" "$DOC" || { rm -f "$T"; refuse "cannot write $DOC"; }
     NEW="$(sha_of "$DOC")"
     printf 'assembled\t%s\n' "$NEW" >> "$MF" || refuse "$DOC was written but $MF could not record it (sha256 $NEW)"
-    for o in $ORDS; do rm -f "$DIR/sections/$o.md"; done
+    if [ "$KEEP" -eq 0 ]; then for o in $ORDS; do rm -f "$DIR/sections/$o.md"; done; fi
     printf 'ASSEMBLED: %s sha256=%s\n' "$DOC" "$NEW"
     exit 0 ;;
 

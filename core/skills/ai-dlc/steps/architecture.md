@@ -12,6 +12,9 @@ full validation cycle.
 
 ## EXECUTION SEQUENCE
 
+**Step entry, the first action of this step:** run
+`bash scripts/ai-dlc/snapshot-update.sh --set current_step_file architecture.md 'Pipeline Position'`.
+
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default) AND the variant reads existing code or
@@ -314,10 +317,11 @@ architecture doc — its passes use the **Adversarial review dispatch** and
   `validation_intensity:` and `minimum_met:` — that is the skip provenance
   gate-validation Check 20 reads.
 - **`Seam D` label:** `architecture adversarial pass <N>`.
-- **on convergence:** append a changelog to
+- **on convergence:** write the changelog's record inventory with
+  `scripts/ai-dlc/architecture-close.sh --sprint <N> --no-commit` (§4a), which appends it to
   `_bmad-output/planning-artifacts/s<N>/changelog-architecture.md`
   (`_gate-procedures.md` — "Where a changelog is written"; NOT the architecture doc
-  itself), then proceed to index regeneration (§4a).
+  itself); add the lead's own prose beside it, then proceed to §4a.
 
 ### 4a. Regenerate the architecture index (Rule 25(b) slice enabler)
 
@@ -327,11 +331,13 @@ as `<heading title> — #<anchor> — <one-line summary>`. This is the discovera
 backstop dev/qa consult (per their Context Loading contracts) to locate the
 section(s) to slice-read when a story's `architecture_refs` is absent or stale.
 
-Run the deterministic generator `scripts/ai-dlc/gen-architecture-index.js` (headings +
-anchors are extracted mechanically; keep it cheap and always-current — do NOT
-author the index by hand or by LLM summary of the whole doc, which would
-re-incur the whole-read cost this index exists to avoid). Commit the regenerated
-index alongside the architecture-doc changes.
+Run `scripts/ai-dlc/architecture-close.sh --sprint <N>`: it writes the changelog's record inventory once,
+runs the deterministic generator `gen-architecture-index.js` (headings + anchors are extracted
+mechanically — never author the index by hand or by LLM summary of the whole doc), and commits the
+changelog, the index and the architecture doc in one commit by explicit path. Then run
+`scripts/ai-dlc/architecture-prenonce.sh --sprint <N>`: exit 1 names every sprint entry of
+`docs/escalations/pending.md` with no `**Status:**` line, an out-of-vocabulary status, or a snapshot
+that lost lines Check 35 will count; repair each before the gate.
 
 **Then immediately proceed to gate validation:**
 

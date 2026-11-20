@@ -97,3 +97,4 @@ core/team-roles/code-reviewer.md
 core/team-roles/dev.md
 core/team-roles/qa.md
 core/fixtures/lib/layout.sh
+core/scripts/era-token.sh

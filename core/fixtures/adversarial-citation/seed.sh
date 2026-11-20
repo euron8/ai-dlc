@@ -243,6 +243,12 @@ bl_k3() { # <world> accept|refuse
   { printf '## Sprint 9\n\n### Goals\n\n'; bllorem s9g 30; printf '\n### Requirements\n\n'; bllorem s9r 30; } >> "$pa/prd.md"
   printf -- '- FR-S9-1: architecture_impact: none\n' >> "$pa/s9/architecture-impact.md"
   ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+    # write the manifest as the FOUR-file subject a series opened before the subject became two files carries, in the
+    # form partition-subject.sh writes it; partition-subject.sh serves it as recorded (`SUBJECT: SKIP pre-era` on stderr)
+    base="$(blg "$w" merge-base main HEAD 2>/dev/null)" && [ -n "$base" ] || exit 1
+    { printf '# Requirements subject -- sprint 9\n\n<!-- REQUIREMENTS_SUBJECT v1\nsprint: 9\ntrunk: main\nbase: %s\n' "$base"
+      printf 'file: product-brief %s/product-brief.md\nfile: SPEC _bmad-output/specs/s9/kernel/SPEC.md\nfile: prd %s/prd.md\n' "$BL_PA" "$BL_PA"
+      printf 'file: architecture-impact %s/s9/architecture-impact.md\nREQUIREMENTS_SUBJECT_END -->\n' "$BL_PA"; } > "$pa/s9/requirements-subject.md" || exit 1
     AI_DLC_PROJECT_ROOT="$w" bash "$BL_SD/partition-subject.sh" --map 9 ) > "$w/subject.map" 2> "$w/subject.err" \
     || { echo "seed.sh: partition-subject.sh --map 9 refused in $w: $(head -2 "$w/subject.err")" >&2; return 1; }
   [ -f "$pa/s9/requirements-subject.md" ] || return 1

@@ -1,5 +1,5 @@
 # Set from one counted run (scripts/seed-verdict-store.sh) after the batteries were removed; every row is exact.
-310 *
+308 *
 45 core/scripts/content-seal.sh
 0 core/hooks/ai-dlc-content-seal.sh
 2 core/scripts/merge-adversarial-shards.sh

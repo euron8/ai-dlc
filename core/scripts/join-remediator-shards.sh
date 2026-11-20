@@ -243,6 +243,22 @@
 #   No fold is owed elsewhere: merge-adversarial-shards.sh refuses a nested writer earlier, on role
 #   (an adversary is a leaf and spawns nothing), and validate-gate-adjudication.sh counts no writers.
 #
+# SECTION-KEYED LANES (`--document ... --keep-sections`, BL-716). The join assembles with `partition-document.sh
+#   --assemble --keep`, so `sections/<n>.md` stay on disk, and the lane report keys its nodes on those copies, not on
+#   the one document: two sections no edit set and no MOVED-CITE joins are two lanes. The worklist's document lines are
+#   re-spelled section-local (a HIT or a citing line by its post-edit section, a cited line by the section holding it
+#   before the repair); a line in an out-of-scope gap stays as written and lands in the fan-in. A hit spanning lanes is
+#   one FANIN item, as everywhere. `LANE-SECTIONS:` names the copies; the lanes edit them, then
+#   `partition-document.sh --reassemble <repair-dir>` writes the document once. Without the flag the report is one
+#   lane over the document, as before.
+# THE PER-ROUND COMMIT. A join of round M >= 2 refuses while round M-1's joined record is uncommitted
+#   (`git status` on the record); `partition-document.sh --shard-dir` refuses the same for that record and the
+#   artifact. FORWARD-ONLY: only a series whose pass-1 shard dir carries the era token (era-token.sh; partition-document.sh
+#   --shard-dir writes it when it opens pass 1) is judged; any other series prints `ROUND-COMMIT: SKIP pre-era <name>` and
+#   passes. A record or path the repository does not track or ignore reads clean there.
+# THE SPEC RENDER is owed once, after the serial tail: a subject-mode join prints `SPEC-RENDER: DEFERRED` for a stale
+#   memlog and writes its record; `--sources` and `--escalations` over the finished records refuse it.
+#
 # NOT A MODE OF THE ADVERSARY MERGE. A separate program on purpose: the adversary-shard fix and
 # this one close different backlog entries, and a shared mode would let either close both.
 #
@@ -364,6 +380,10 @@ export LC_ALL=C
 
 refuse_n=0
 GAP_LINES=""; GAP_N=0
+# THE ERA TOKEN (era-token.sh, sourced below): the per-round commit refusal and the coe pass-1 keyed-source rule judge only a
+# series whose pass-1 review shard dir `shards/<name>-p1/.era` carries it; partition-document.sh --shard-dir writes it there.
+[ -f "$(dirname "${BASH_SOURCE[0]}")/era-token.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/era-token.sh"
+AI_DLC_ERA_TOKEN="${AI_DLC_ERA_TOKEN:-}"
 # Every variable record_tail prints has a global default: contract_refusals assigns them, and a run
 # that never reaches it must print empty under `set -u`, never die naming an unbound variable.
 CHAIN_LINES=""; ESC_SUP=""; ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0
@@ -390,7 +410,7 @@ lane_name() {
   esac
 }
 
-SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0
+SPRINT=""; ARTIFACT=""; PASS=""; APATH=""; SINCE=""; UNTIL=""; DOCUMENT=""; REPDIR=""; DOCMODE=0; KEEPSEC=0
 SUBJMODE=0; SUBJ_BASE=""; SRCMODE=0; SRC_REC=""; SRC_MORE=""; RERUN=""; AGENTMODE=0; AGENT_ID=""
 PARTMODE=0; CHKPART=""; CP_PATH=""; CP_STATE=""
 FP_ROWS=""; FP_PRESENT=0; FP_N=0
@@ -1841,6 +1861,10 @@ spec_render_check() {
   r="${s%% *}"; s="${s#* }"; n="${s%% *}"; f="${s#* }"
   if [ "$r" = 0 ]; then
     SPEC_LINE="SPEC-RENDER: SKIP -- ${m} carries no '(event) Render ... ${SPEC_RENDER_PHRASE}' line, so no render is recorded to compare against"
+  elif [ "$n" -gt 0 ] && [ "${SPEC_DEFER:-0}" = 1 ]; then
+    # A round's join does not judge the SPEC: the render is owed ONCE, after the serial tail, and the record modes
+    # (--sources, --escalations over the serial record) refuse a stale SPEC there.
+    SPEC_LINE="SPEC-RENDER: DEFERRED -- ${m}:${f}: ${n} (decision) entry(ies) after the last render (line ${r}); render SPEC.md once after the serial tail, where --sources/--escalations refuse it until it is"
   elif [ "$n" -gt 0 ]; then
     refuse "${m}:${f}: ${n} (decision) entry(ies) after the last render (line ${r}), so SPEC.md does not carry them; re-derive SPEC.md whole from .memlog.md under bmad-spec and append '- (event) Render <pass>: ${SPEC_RENDER_PHRASE} <last decision>' (a change applied with Edit is '(event) Hand-edit', never Render)"
   else
@@ -1978,6 +2002,7 @@ while [ $# -gt 0 ]; do
     --since) SINCE="${2:-}"; shift 2 ;;
     --until) UNTIL="${2:-}"; shift 2 ;;
     --document) DOCUMENT="${2:-}"; DOCMODE=1; shift 2 ;;
+    --keep-sections) KEEPSEC=1; shift ;;
     -h|--help) awk 'NR == 1 { next } !/^#/ { exit } { print }' "$0"; exit 0 ;;
     -*) die "unknown argument '$1' (see --help)" ;;
     *) { [ "$DOCMODE" = 1 ] || [ "$SUBJMODE" = 1 ]; } && [ -z "$REPDIR" ] || die "unknown argument '$1' (see --help)"
@@ -2078,6 +2103,7 @@ if [ "$SUBJMODE" = 1 ]; then
   ARTIFACT="requirements"
 fi
 
+[ "$KEEPSEC" = 0 ] || [ "$DOCMODE" = 1 ] || die "--keep-sections applies with --document only"
 # Document mode may name the repair dir instead of the three flags: `.../s<N>/shards/<artifact>-repair-p<M>`.
 if [ "$DOCMODE" = 1 ] && [ -n "$REPDIR" ]; then
   _rb="$(basename "${REPDIR%/}")"; _rs="$(basename "$(dirname "$(dirname "${REPDIR%/}")")")"
@@ -2408,6 +2434,23 @@ fi
 # (its STATE_DIR_NAME), so this is derived the same way, whether AI_DLC_STATE_DIR is absolute or not.
 SHARD_REL="${_STATE_DIR##*/}/planning-artifacts/s${SPRINT}/shards"
 MANIFEST="${SHARD_DIR}/sections/.manifest"
+# THE PER-ROUND COMMIT. Round M joins only when round M-1's accepted repair record is committed: one commit per
+# round, so a later round's diff is its own. A missing previous record, a tree with no repository and a path the
+# repository ignores are not judged (git reports nothing for them).
+case "$PASS" in
+  [2-9]|[1-9][0-9]*)
+    case "$PASS" in *[!0-9]*) ;; *)
+      _pr="${OUT%-p${PASS}.md}-p$((PASS - 1)).md"
+      if [ "$_pr" != "$OUT" ] && [ -f "$_pr" ]; then
+        _ea=SKIP
+        [ -n "$AI_DLC_ERA_TOKEN" ] && grep -qxF -- "$AI_DLC_ERA_TOKEN" "${PA}/s${SPRINT}/shards/${ARTIFACT}-p1/.era" 2>/dev/null && _ea=OWED
+        [ "$_ea" = OWED ] || echo "ROUND-COMMIT: SKIP pre-era ${ARTIFACT}" >&2
+        _pd=""
+        [ "$_ea" != OWED ] || _pd="$(unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C "$(dirname "$_pr")" status --porcelain --untracked-files=all -- "$_pr" 2>/dev/null)"
+        [ -z "$_pd" ] || refuse "round ${PASS} cannot join: round $((PASS - 1))'s accepted repair record ${_pr##*/} is uncommitted (${_pd}); commit the round first (one commit per round)"
+      fi ;;
+    esac ;;
+esac
 phys() { # <path> -> physical absolute path of an existing file or dir, rc 1 if its parent is gone
   local d b
   if [ -d "$1" ]; then (cd "$1" 2>/dev/null && pwd -P); return; fi
@@ -2674,6 +2717,9 @@ lane_report() {
     _keys="$(awk -F'\t' '$1 == "part" { print ($7 != "-" ? $7 : $4) "\t" $4
       if ($7 == "-" && $3 == "SPEC") { m = $4; sub(/SPEC\.md$/, ".memlog.md", m); print m "\t" $4 } }' "$SUBJ_REC" \
       | awk -F'\t' -v p="${SREL}/" -v n="${STATE_NAME}/" '{ for (i = 1; i <= 2; i++) if (index($i, p) == 1) $i = n substr($i, length(p) + 1); print $1 "\t" $2 }' OFS='\t')"
+  elif [ "$DOCMODE" = 1 ] && [ "$KEEPSEC" = 1 ]; then
+    # SECTION-KEYED LANES: the kept section copies are the nodes, so two disjoint sections are two lanes.
+    _keys="$(printf '%s\n' "$ROWS" | awk -F'\t' 'NF >= 2 { print $1 "\t" $1 }')"
   elif [ "$DOCMODE" = 1 ]; then
     _keys="$(printf '%s\n' "$ROWS" | awk -F'\t' -v d="$DOC_REL" 'NF >= 2 { print $1 "\t" d }')"
   else
@@ -2693,6 +2739,31 @@ lane_report() {
   # no part edited can be a lane of its own there. Document and subject mode keep it empty: their
   # lane join's artifact path is the one assembled document or the state dir's own parts.
   [ "$DOCMODE$SUBJMODE" = 00 ] && _slotp="${SHARD_REL%/shards}/"
+  # The worklist speaks in document lines (post for a hit or a citing line, pre for the cited line); a section-keyed
+  # round re-spells each in the section copy it falls in, section-local, from the manifest's pre ranges and the
+  # kept copies' own lengths. A line in no section (an out-of-scope gap) is left as the worklist wrote it.
+  if [ "$KEEPSEC" = 1 ] && [ "$DOCMODE" = 1 ] && [ "$_wrc" = 0 ]; then
+    _zt="$(for _o in $(awk -F'\t' '$1 == "part" { print $2 }' "$MANIFEST"); do printf 'Z\t%s\t%s\n' "$_o" "$(awk 'END { print NR }' "${SHARD_DIR}/sections/${_o}.md" 2>/dev/null)"; done)"
+    _wl="$({ awk -F'\t' '$1 == "part" || $1 == "gap" { print }' "$MANIFEST"; printf '%s\n' "$_zt"; printf 'L\n'; printf '%s\n' "$_wl"; } | awk -F'\t' -v dr="$DOC_REL" -v sk="${APATH}" '
+      function suf(a, b) { return a == b || (length(a) > length(b) && substr(a, length(a) - length(b)) == "/" b) || (length(b) > length(a) && substr(b, length(b) - length(a)) == "/" a) }
+      function pre_of(n,  i) { for (i = 1; i <= nr; i++) if (K[i] == "p" && n >= F[i] && n <= E[i]) return i; return 0 }
+      function post_of(n,  i) { for (i = 1; i <= nr; i++) if (K[i] == "p" && n >= PS[i] && n <= PE[i]) return i; return 0 }
+      function split_cite(t, o,  c) { c = t; sub(/:[0-9,-]+$/, "", c); o[1] = c; c = t; sub(/^.*:/, "", c); o[2] = c }
+      BEGIN { nr = 0; run = 1; inw = 0 }
+      inw { if ($0 ~ /^ +HIT /) { t = $0; sub(/^ +HIT /, "", t); split_cite(t, q)
+              if (suf(q[1], dr) && q[2] ~ /^[0-9]+$/ && (i = post_of(q[2] + 0))) { print "    HIT " sk "/" O[i] ".md:" (q[2] - PS[i] + 1); next } }
+            else if ($0 ~ /^MOVED-CITE /) { n = split($0, m, " ")
+              split_cite(m[2], a); split_cite(m[3], b)
+              if (suf(a[1], dr) && suf(b[1], dr) && a[2] ~ /^[0-9]+$/ && b[2] ~ /^[0-9]+$/ && (i = post_of(a[2] + 0)) && (j = pre_of(b[2] + 0))) {
+                to = m[5]; if (to ~ /^[0-9]+$/) { if ((k = post_of(to + 0)) == j) to = to - PS[j] + 1; else to = "doc:" to }
+                print "MOVED-CITE " sk "/" O[i] ".md:" (a[2] - PS[i] + 1) "  " sk "/" O[j] ".md:" (b[2] - F[j] + 1) " -> " to; next } }
+            print; next }
+      $0 == "L" { inw = 1; at = 1; for (i = 1; i <= nr; i++) { if (K[i] == "p") { PS[i] = at; PE[i] = at + Z[O[i]] - 1; at = PE[i] + 1 } else at += E[i] - F[i] + 1 } next }
+      $1 == "part" { nr++; K[nr] = "p"; O[nr] = $2; F[nr] = $3; E[nr] = $4; next }
+      $1 == "gap" { nr++; K[nr] = "g"; F[nr] = $2; E[nr] = $3; next }
+      $1 == "Z" { Z[$2] = $3 + 0; next }')"
+    echo "LANE-SECTIONS: kept -- lanes edit ${SHARD_REL}/${ARTIFACT}-repair-p${PASS}/sections/<n>.md, section-local lines; then bash scripts/ai-dlc/partition-document.sh --reassemble ${SHARD_DIR#"${JR_ROOT}"/}"
+  fi
   _e=""
   while IFS= read -r _p; do
     [ -n "$_p" ] || continue
@@ -3550,6 +3621,28 @@ SRCPEOF
   fi
 fi
 
+# A coe pass-1 repair round (shards/coe-repair-p1, parts mode): every entry of every part names the pass-1 review finding it
+# applied or escalated as `source: <review-shard-file>#<finding-id>`, resolved on the pair against shards/coe-p1/, by the
+# party round's own resolver. A series whose shards/coe-p1/.era lacks the era token (era-token.sh) reads SKIP, never a refusal.
+COE_DIR="${PA}/s${SPRINT}/shards/coe-p1"
+_coe_owed=0
+if [ "$PARTY" = 0 ] && [ "$SUBJMODE" = 0 ] && [ "$DOCMODE" = 0 ] && [ "$ARTIFACT" = coe ] && [ "$PASS" = 1 ]; then
+  if [ -n "$AI_DLC_ERA_TOKEN" ] && grep -qxF -- "$AI_DLC_ERA_TOKEN" "${COE_DIR}/.era" 2>/dev/null; then _coe_owed=1
+  else echo "COE-SOURCES: SKIP pre-era coe" >&2; fi
+fi
+if [ "$_coe_owed" = 1 ]; then
+  if [ -d "$COE_DIR" ]; then
+    SEAT_DIR="$COE_DIR"
+    set --
+    while IFS= read -r p; do [ -n "$p" ] && set -- "$@" "$p"; done <<COEPEOF
+$PARTS
+COEPEOF
+    src_refusals "$(src_check "$COE_DIR" "$@")"
+  else
+    refuse "no pass-1 review shards at ${COE_DIR}; a coe pass-1 repair's sources resolve there"
+  fi
+fi
+
 # The entry contract over every part, in every mode (BL-508 siblings, BL-519 set-aside).
 contract_probe
 set --
@@ -3564,7 +3657,7 @@ SPEC_LINE=""
 if [ "$SUBJMODE" = 1 ]; then
   spec_render_probe
   _sm="$(printf '%s\n' "$SUBJ_SET" | awk '/(^|\/)specs\/s[0-9]+\/[^\/]+\/\.memlog\.md$/ { print; exit }')"
-  if [ -n "$_sm" ]; then spec_render_check "${STATE_PARENT}${_sm}" ""
+  if [ -n "$_sm" ]; then SPEC_DEFER=1; spec_render_check "${STATE_PARENT}${_sm}" ""; SPEC_DEFER=0
   else SPEC_LINE="SPEC-RENDER: SKIP -- the split gave the SPEC no part, so no SPEC was repaired in this join"; fi
 fi
 
@@ -3604,6 +3697,7 @@ if [ "$SUBJMODE" = 1 ]; then
   }
   for _st in product-brief SPEC prd architecture-impact; do
     _rel="$(awk '/REQUIREMENTS_SUBJECT v1/ { inb = 1; next } /REQUIREMENTS_SUBJECT_END/ { inb = 0 } inb && $1 == "file:" && $2 == s { print $3 }' s="$_st" "${JR_ROOT}/${_srm}")"
+    [ -n "$_rel" ] || continue
     if command -v shasum >/dev/null 2>&1; then _h="$(shasum -a 256 "${JR_ROOT}/${_rel}" | cut -d' ' -f1)"
     else _h="$(sha256sum "${JR_ROOT}/${_rel}" | cut -d' ' -f1)"; fi
     SUBJ_AFTER="${SUBJ_AFTER} ${_st}${JR_SEP}${_h}"
@@ -3612,7 +3706,7 @@ elif [ "$DOCMODE" = 1 ]; then
   # The document's sha before is the one the split recorded (the bytes the shards were cut from);
   # after is re-hashed off the assembled document, so the record is a J2 repair link.
   DOC_BEFORE="$(awk -F'\t' '$1 == "sha256" { print $2; exit }' "$MANIFEST")"
-  ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" 2>&1)" || {
+  ASM_LINE="$(bash "$PARTITION" --assemble "$SHARD_DIR" $([ "$KEEPSEC" = 1 ] && echo --keep) 2>&1)" || {
     printf '%s\n' "$ASM_LINE" >&2
     die "the sections of ${DOC_ABS} did not assemble; no repair record was written"
   }

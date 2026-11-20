@@ -22,3 +22,4 @@ core/fixtures/lib/inproc.sh
 core/fixtures/lib/mutant.sh
 # The guard hook is a subject (wrapped as dg_main); its starts of the ledger validator and the merge run in process through dg_bash.
 !core/hooks/ai-dlc-dispatch-guard.sh
+core/scripts/era-token.sh

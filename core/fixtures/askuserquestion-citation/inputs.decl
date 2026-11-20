@@ -10,3 +10,4 @@
 !core/scripts/validate-adversarial-convergence.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/mutant.sh
+core/scripts/era-token.sh

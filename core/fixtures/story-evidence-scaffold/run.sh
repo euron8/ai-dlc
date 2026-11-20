@@ -67,6 +67,7 @@ cap a
 prose a
 inplace a
 listcaps a
+era a
 b3 a
 gjoin-probe a
 handoff b
@@ -1113,6 +1114,62 @@ if gsel listcaps && [ "$WORLDS_OK" -eq 1 ]; then
       ok "LIST-CAPTURES: the story read AT the ref prints cap1 once (RED and plain citations), cap2 from './', the bare cap3.txt from its capture dir; '../', an outside absolute, glob, elided, untracked and the bare y.txt outside a capture dir print nothing; x/y.txt prints once cited by full path; cap5 cited on disk only is not printed at L2 and is at L3"
     else
       bad "LIST-CAPTURES: want [$LCWANT] got [$got]"
+    fi
+  fi
+fi
+
+# --- E4 era token: the producer stamps, the judge reads --------------------------------------------------------------
+# strategy-rows.sh --bind writes the token line into the Strategy Test IDs section it binds, and strategy-self-check.sh
+# --handoff judges the Kind vocabulary only in a section carrying it. Drive the PRODUCER, then the JUDGE on what it wrote:
+# a producer that stops writing the token turns the FAIL cell into a SKIP and the presence cell red. The ALLOW twin
+# (Kind test) is in the same run, one property apart. The two scripts run as processes: they are not loadable.
+if gsel era; then
+  ER_D=""
+  for cand in "$SE_WDIR/../../scripts" "$SE_WDIR/../../../scripts/ai-dlc"; do
+    if [ -f "$cand/strategy-rows.sh" ] && [ -f "$cand/strategy-self-check.sh" ] && [ -f "$cand/era-token.sh" ]; then ER_D="$cand"; break; fi
+  done
+  if [ -z "$ER_D" ]; then
+    case "$HE" in
+      */core/scripts/*) bad "ERA: FIXTURE BROKEN -- strategy-rows.sh, strategy-self-check.sh or era-token.sh is absent in the distribution" ;;
+      *) echo "SKIP ERA: the stories planning scripts are not installed in this consumer yet; nothing was checked" ;;
+    esac
+  else
+    for f in strategy-rows.sh strategy-self-check.sh; do echo "HERMETIC-CONSUMED core/scripts/$f"; done
+    ER_W="$WORK/world-era"
+    mkdir -p "$ER_W/stories" || bad "ERA: FIXTURE BROKEN -- cannot make the world"
+    printf -- '---\nid: S9-1.1\nstatus: draft\n---\n# Story\n\n- **AC1 (EXISTENTIAL).** one\n- **AC2 (UNIVERSAL).** two\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-1.md"
+    er_out="$(FXCELL="cli-era-bind" bash "$ER_D/strategy-rows.sh" --sprint 9 --stories-dir "$ER_W/stories" --bind 2>&1)"; er_rc=$?
+    er_n="$(grep -cx 'ai-dlc-era: e4-forward-1' "$ER_W/stories/story-1-1.md")"
+    if [ "$er_rc" -eq 0 ] && [ "$er_n" = 1 ] && grep -qxF '| ST9-1 | - |  |  |' "$ER_W/stories/story-1-1.md" && grep -qxF '| ST9-2 | - |  |  |' "$ER_W/stories/story-1-1.md"; then
+      ok "ERA: strategy-rows.sh --bind wrote the ai-dlc-era: e4-forward-1 line once, as its own line, and one empty row per AC"
+    else
+      bad "ERA: --bind rc=$er_rc, token lines=$er_n [$er_out]"
+    fi
+    er_set() { awk -v k="$1" '{ if ($0 == "| ST9-1 | - |  |  |") print "| ST9-1 | - | " k " | x.py::t |"; else if ($0 == "| ST9-2 | - |  |  |") print "| ST9-2 | - | test | y.py::t |"; else print }' "$ER_W/stories/story-1-1.md" > "$2"; }
+    for er_k in unit test; do
+      mkdir -p "$ER_W/$er_k" && er_set "$er_k" "$ER_W/$er_k/story-1-1.md"
+      ( cd "$ER_W" && FXCELL="cli-era-$er_k" bash "$ER_D/strategy-self-check.sh" --sprint 9 --stories-dir "$ER_W/$er_k" --handoff > "$ER_W/$er_k.out" 2>&1 )
+    done
+    if grep -q 'FAILED  kind-vocabulary' "$ER_W/unit.out" && grep -q 'Kind "unit" is not one of' "$ER_W/unit.out"; then
+      ok "ERA: strategy-self-check.sh --handoff FAILs Kind unit in the table the producer stamped"
+    else
+      bad "ERA: Kind unit in a stamped table was not refused: $(grep kind-vocabulary "$ER_W/unit.out" | head -1)"
+    fi
+    # D5: a dev's handoff judges its OWN story. A second stamped story in the same dir still has empty cells; the dir-wide run
+    # (control) refuses it, and --story on the first does not, with no --sprint and never INCOMPLETE.
+    cp "$ER_W/stories/story-1-1.md" "$ER_W/test/story-2-1.md"
+    ( cd "$ER_W" && FXCELL="cli-era-own" bash "$ER_D/strategy-self-check.sh" --handoff --story "$ER_W/test/story-1-1.md" > "$ER_W/own.out" 2>&1 )
+    ( cd "$ER_W" && FXCELL="cli-era-dir" bash "$ER_D/strategy-self-check.sh" --handoff --stories-dir "$ER_W/test" > "$ER_W/dir.out" 2>&1 )
+    if grep -q 'ok      kind-vocabulary (1 judged, 0 SKIP pre-era)' "$ER_W/own.out" && ! grep -q 'INCOMPLETE' "$ER_W/own.out" \
+       && grep -q 'FAILED  kind-vocabulary' "$ER_W/dir.out" && grep -q 'story-2-1.md' "$ER_W/dir.out"; then
+      ok "ERA: --handoff --story judges that story alone (a second stamped story with empty cells does not fail it; the dir-wide run does)"
+    else
+      bad "ERA: --story scoping: own=[$(grep kind-vocabulary "$ER_W/own.out" | head -1)] dir=[$(grep kind-vocabulary "$ER_W/dir.out" | head -1)]"
+    fi
+    if grep -q 'ok      kind-vocabulary (1 judged, 0 SKIP pre-era)' "$ER_W/test.out"; then
+      ok "ERA: the same stamped table with Kind test is judged and passes the Kind arm"
+    else
+      bad "ERA: Kind test in a stamped table: $(grep kind-vocabulary "$ER_W/test.out" | head -1)"
     fi
   fi
 fi

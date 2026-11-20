@@ -9,3 +9,4 @@ core/fixtures/lib/world.sh
 core/fixtures/lib/inproc.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/layout.sh
+core/scripts/era-token.sh

@@ -26,3 +26,4 @@ core/schemas/harness-origin.json
 !core/hooks/ai-dlc-answer-capture.sh
 core/schemas/pause-routing.json
 core/fixtures/lib/report.sh
+core/scripts/era-token.sh

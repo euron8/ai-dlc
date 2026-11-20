@@ -115,6 +115,8 @@ refuses the record before it reports any escalation. After the last entry is app
 names on a `REFUSED:` line, and repeat until it prints no `REFUSED:` line; never hand back a record
 it refuses.
 
+When your brief assigns you ONE subject file of an answer fold that edits several files, you are that file's only writer: edit no other file, and append your entries, one per answer that file takes, to your own record `<round one's record stem>-answer-<n>.md` beside the joined record, never to the joined record or another writer's record. Each entry carries its `### <heading>`, `- disposition: repaired`, its `- closes:` lines and its `- edit:` line as above. Before handing back, run `scripts/ai-dlc/join-remediator-shards.sh --escalations <round one's record> --escalations <your record> --sprint <N>` and fix every entry it names on a `REFUSED:` line. The lead closes the fold with one `--escalations` flag per record, round one's first, then the lane record when it exists, then every answer record in `<n>` order; an escalation no record closes stays open.
+
 Leave the git index as you found it. No `git add`, `git mv`, `git rm`, `git commit`,
 `git stash` or `git reset`; move a file with plain `mv` when your brief asks for a move. The
 lead commits, and anything you stage rides into its next commit unseen. That holds for

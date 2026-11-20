@@ -18,3 +18,6 @@ core/fixtures/lib/report.sh
 core/fixtures/lib/world.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/layout.sh
+!core/scripts/strategy-rows.sh
+!core/scripts/strategy-self-check.sh
+core/scripts/era-token.sh

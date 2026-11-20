@@ -374,7 +374,7 @@ if [ -n "$SJW" ]; then
     || bad "B2: SPEC rows=$n_spec (want 1), specs/README.md rows=$n_near (want 0)"
   n_sec="$(awk -F'\t' '$1 == "part" && $7 != "-"' "$SJW/$SJRD/.subject" | grep -c .)" || n_sec=0
   n_whole="$(awk -F'\t' '$1 == "part" && $7 == "-"' "$SJW/$SJRD/.subject" | grep -c .)" || n_whole=0
-  [ "$n_sec" -ge 2 ] && [ "$n_whole" -ge 2 ] \
+  [ "$n_sec" -ge 2 ] && [ "$n_whole" -ge 1 ] \
     && ok "SJ0: the subject seed splits into $n_sec section part(s) and $n_whole whole-file part(s), so both join paths are reachable" \
     || bad "SJ0: FIXTURE BROKEN -- $n_sec section / $n_whole whole-file part(s)"
 else
@@ -406,8 +406,8 @@ p_specunread "$JOIN" && ok "SP10: --escalations, a cited stale memlog made unrea
   || bad "SP10: an unreadable memlog was not refused (rc=$RC): $(cat "$JO")"
 p_specserial "$JOIN" && ok "SP11: --escalations, a joined record whose terminated serial block alone cites the spec memlog: a decision it appended after the last phrased Render is REFUSED naming the memlog; the Render written after it (before --mark-repair) passes, rendered through" \
   || bad "SP11: the serial block's stale SPEC was not refused, or its rendered SPEC was (rc=$RC): $(cat "$JO")"
-p_sjspecstale "$JOIN" && ok "SP6: --subject, the SPEC part's memlog holds a decision after its last phrased Render -> rc 2, REFUSED naming the memlog, no record written" \
-  || bad "SP6: subject mode did not refuse a stale SPEC memlog (rc=$RC): $(cat "$JO")"
+p_sjspecstale "$JOIN" && ok "SP6: --subject, the SPEC part's memlog holds a decision after its last phrased Render -> rc 0, the record written, SPEC-RENDER: DEFERRED naming the memlog (the refusal moved to the record modes after the serial tail)" \
+  || bad "SP6: subject mode did not defer a stale SPEC memlog (rc=$RC): $(cat "$JO")"
 p_sjspecfresh "$JOIN" && ok "SP7: --subject, the same memlog rendered through its last decision -> JOINED, the record written, SPEC-RENDER: rendered through its last decision" \
   || bad "SP7: subject mode refused or did not report a rendered-through SPEC memlog (rc=$RC): $(cat "$JO")"
 p_sjspecnone "$JOIN" && ok "SP8: --subject, the SPEC part's memlog does not exist -> JOINED, SPEC-RENDER: SKIP naming that it does not exist" \

@@ -231,6 +231,8 @@ Instruct all teammates:
   (`.claude/team-roles/dev.md`, item 15) over its diff and the story's
   acceptance criteria. Its spawn is ledgered under the dev as parent; it
   writes no file and is not a gate review.
+
+**Run the strategy self-check before handoff.** Before QA handoff, run `bash scripts/ai-dlc/strategy-self-check.sh --handoff --story <this story's file>` and repair every `FAILED` line; its last line is `STRATEGY-SELF-CHECK: PASS` or `FAIL`.
 - On story transition to `done`, the closing writer (item 4 of section 3)
   closes out any upstream source item the story satisfies, in the closing
   commit — do not defer to retro:

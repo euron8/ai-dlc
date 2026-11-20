@@ -224,6 +224,10 @@ nothing in the joined record: the lead's beat on that record keys on `repair-com
 alone, and the join reads a `seat-complete:` line as neither a block terminator nor a sha
 triple, so the serial pass's block still opens at its own triple.
 
+**An adversarial pass-1 repair of the carry-over evaluation names every CRITICAL and MAJOR finding behind an entry.** When your brief hands you a pass's review shards (`_bmad-output/planning-artifacts/s<N>/shards/coe-p1/`), every entry that repairs or escalates one of that pass's CRITICAL or MAJOR findings carries a `source:` line with one `<review-shard-file>#<finding-id>` token per finding the edit applies, the id being the first token of that finding's `###` heading and the file being the shard file with its ordinal (`1.md#F-2`, `cross.md#F-1`). A finding id repeats across shards, so the file is never dropped, and prose such as "cross shard F-1" is not a token. `join-remediator-shards.sh` refuses a carry-over entry whose `source:` carries no such token (a series whose `shards/coe-p1/.era` carries no era token prints `COE-SOURCES: SKIP pre-era coe` and is not judged), and Check 24 arm `P1J` (it prints `SKIP` for a series whose `shards/<stem>-p1/.era`, or for a SERIAL pass 1 the pass-1 file itself, carries no era token) refuses a pass-1 CRITICAL or MAJOR that no `repaired` entry (under a triple linked from the pass's notarized sha) or `escalated` entry names.
+
+**An answer fold that edits several files gets one writer per file.** Each writes its own record `<round one's record stem>-answer-<n>.md`; the lead passes one `--escalations` per record, round one's first.
+
 **A deferral record, when your brief asks for one**, is `s<N>/<artifact>-deferral-p<M>.md` in the
 grammar of `_gate-procedures.md`, "Every MAJOR the terminal MET pass leaves is closed on a record".
 

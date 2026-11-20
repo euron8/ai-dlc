@@ -177,7 +177,8 @@ sor_override = sys.argv[2] or None
 # REMOVE `product-brief.md` WHEN, and not before: a consumer's brief holds no
 # LOCKED_REQUIREMENTS block (`--emit-blocks` over it returns none) and its story
 # corpus carries no `full_text_source` naming it. Both are measurable in one run, so
-# this deprecation has a test rather than a date.
+# this deprecation has a test rather than a date. The requirements step's subject no longer
+# lists the brief (`partition-subject.sh`), so that step's validation rounds do not read it.
 DEFAULT_SOR_BASENAMES = ("locked-requirements.md", "product-brief.md", "carry-over-backlog.md")
 LEGACY_SOR_BASENAME = "product-brief.md"
 if sor_override:

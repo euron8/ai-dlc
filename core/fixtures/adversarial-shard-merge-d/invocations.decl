@@ -5,7 +5,7 @@
 # unsharded 53. The older measurement history above belongs to the unsharded fixture.
 # Re-measured for BL-1099 (units re-dealt so the dist-only shards hold no placement-dependent unit): one counted run (scripts/seed-verdict-store.sh).
 # 635 to 607, BL-1059: T1 builds its four SELF_ID worlds as copies of the cached B3 world (self_world). One counted run through core/scripts/hermetic-run.sh.
-449 *
+435 *
 6 core/scripts/merge-adversarial-shards.sh
 4 core/scripts/content-seal.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).

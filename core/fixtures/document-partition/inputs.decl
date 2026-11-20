@@ -2,3 +2,4 @@ core/scripts/partition-document.sh
 core/scripts/merge-adversarial-shards.sh
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/scripts/era-token.sh

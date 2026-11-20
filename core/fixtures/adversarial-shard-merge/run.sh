@@ -342,8 +342,8 @@ if sg subj; then
 SW0="$(new_subj_world)"; SW0R="$(subj_root "$SW0")"
 n_sp="$(grep -c . "$SW0R/subject.map")" || n_sp=0
 n_sf="$(cut -f2 "$SW0R/subject.map" | sort -u | grep -c .)" || n_sf=0
-if [ "$n_sp" -ge 4 ] && [ "$n_sf" -eq 4 ] && [ -f "$SW0R/$SUBJ_PA/s9/requirements-subject.md" ]; then
-  ok "U0: the subject seed maps to $n_sp parts across all 4 files (read from partition-subject.sh --map), manifest written"
+if [ "$n_sp" -ge 4 ] && [ "$n_sf" -eq 2 ] && [ -f "$SW0R/$SUBJ_PA/s9/requirements-subject.md" ]; then
+  ok "U0: the subject seed maps to $n_sp parts across both files (read from partition-subject.sh --map), manifest written"
 else
   bad "U0: FIXTURE BROKEN -- the subject seed maps to $n_sp part(s) over $n_sf file(s): $(head -3 "$SW0R/subject.map")"
 fi
@@ -354,7 +354,7 @@ p_subj_at "$MERGE" && ok "U1b: subject shards notarizing the old <stem>=<sha> fo
 p_subj_miss_cross "$MERGE" && ok "U2: a subject shard set missing its LAST cross group -> REFUSED, nothing written" || bad "U2: (rc=$RC) $(cat "$MO")"
 p_subj_xcite "$MERGE" && ok "U3: a part shard citing another file's ordinal -> REFUSED by the partition, nothing written" || bad "U3: (rc=$RC) $(cat "$MO")"
 p_subj_sha "$MERGE" && ok "U4: one stem notarized at other bytes (the rest right) -> REFUSED naming that stem, nothing written" || bad "U4: (rc=$RC) $(cat "$MO")"
-p_subj_stems "$MERGE" && ok "U5: a shard notarizing three of four stems -> REFUSED, nothing written" || bad "U5: (rc=$RC) $(cat "$MO")"
+p_subj_stems "$MERGE" && ok "U5: a shard notarizing one of two stems -> REFUSED, nothing written" || bad "U5: (rc=$RC) $(cat "$MO")"
 p_subj_art "$MERGE" && ok "U6: a shard naming prd.md instead of the manifest -> REFUSED, nothing written" || bad "U6: (rc=$RC) $(cat "$MO")"
 p_subj_elicit "$MERGE" && ok "U7: --elicitation writes s9/requirements-elicitation.md with NO verdict (file or stdout); a verdict-bearing shard and a non-elicitation skill each REFUSED" \
   || bad "U7: the elicitation merge (rc=$RC): $(cat "$MO")"
@@ -1148,8 +1148,8 @@ else
   p_pct2 "$MERGE" && ok "PCT2: a table cut into exactly two pieces, the header piece packed under Section 1, only the header changed: both pieces owed (ignoring the run owes {1})" || bad "PCT2: ords [$DV_ORDS] run [${PC_RUN:-}] ${PC_WHY:-}"
   p_pcc "$MERGE" && ok "PCC: a plain row before a run edited: {1} only, never the run beside it" || bad "PCC: ords [$DV_ORDS] run [${PC_RUN:-}] ${PC_WHY:-}, want {1}"
   p_pcsr "$MERGE" && ok "PCSR: subject, a table added since base inside prd, cut into a run mapped onto GLOBAL ordinals (every member a prd.md row, the header inside the first): its header changed, the whole run owed" || bad "PCSR: ords [$DV_ORDS] run [${PC_RUN:-}] ${PC_WHY:-}"
-  p_pcs "$MERGE" && ok "PCS: subject, the brief leaves scope (ordinals drop by one), Goals grows, Requirements edited: {1 3 4}, the cited SPEC at its new ordinal 1 (cite-by-ordinal {2 3 4}, ordinal join the whole map)" || bad "PCS: ords [$DV_ORDS] ${PC_WHY:-}, want {1 3 4}"
-  p_pcs2 "$MERGE" && ok "PCS2: subject, SPEC.md rewritten into architecture-impact.md's bytes: keyed (file, digest) only SPEC is owed, {2} (digest alone {2 6})" || bad "PCS2: ords [$DV_ORDS] ${PC_WHY:-}, want {2}"
+  p_pcs "$MERGE" && ok "PCS: subject, the SPEC leaves scope (ordinals drop by one), Goals grows, Requirements unchanged: {1 2}, the cited Sprint 9 part at its new ordinal 1 (cite-by-ordinal {2 3 4}, ordinal join the whole map)" || bad "PCS: ords [$DV_ORDS] ${PC_WHY:-}, want {1 2}"
+  p_pcs2 "$MERGE" && ok "PCS2: subject, SPEC.md rewritten into the prd Requirements part's bytes: keyed (file, digest) only SPEC is owed, {1} (digest alone {1 4})" || bad "PCS2: ords [$DV_ORDS] ${PC_WHY:-}, want {1}"
   p_pck "$MERGE" && ok "PCK: K4 controls -- the unedited document world owes {6} and PCC's edited world {1}, narrowed in --derived-map and --derived-set alike" || bad "PCK: ${PC_CELL:-}: ${PC_WHY:-}"
   p_pcka "$MERGE" && ok "PCKa: p1 without part_sha: the FULL map with its reason, byte-identical in --derived-map and --derived-set" || bad "PCKa: ${PC_WHY:-}"
   p_pckb "$MERGE" && ok "PCKb: pass M without its own part_sha (p1 has one): --derived-set owes the FULL map with its reason, never narrowed" || bad "PCKb: ${PC_WHY:-}"
@@ -1171,7 +1171,7 @@ else
     echo "HERMETIC-CONSUMED $SRCDIR/serial-remediation-worklist.sh"
     p_dvrs "$MERGE" && ok "DVRS: document mode, the shipped sequence (split on p1's sha, a section edited, assembled, the worklist consuming .before): --derived-map prints exactly the --map rows {4 6} with no full-width reason, the full map dispatched is REFUSED, the derived p2 merges derived from p1, the gate reads no FAIL (N, and arm N FAILs a superset and a subset of {4 6} (N4); a files world in the same arm still narrows to {3 6}" \
       || bad "DVRS: rc=$RC ords [$DV_ORDS] $(head -2 "$WORK/dvrs.err" 2>/dev/null) | $(head -2 "$MO") | $(grep -m2 'FAIL (N' "$CO")"
-    p_dvrss "$MERGE" && ok "DVRSS: subject mode, the shipped sequence (split on p1's sha list, a prd section edited, assembled, the worklist consuming prd's and SPEC's .before): exactly the --map rows {2 3}, the full map REFUSED, p2 merges derived from p1, the gate reads no FAIL (N, and arm N FAILs a superset and a subset (N4)" \
+    p_dvrss "$MERGE" && ok "DVRSS: subject mode, the shipped sequence (split on p1's sha list, a prd section edited, assembled, the worklist consuming prd's and SPEC's .before): exactly the --map rows {1 2}, the full map REFUSED, p2 merges derived from p1, the gate reads no FAIL (N, and arm N FAILs a superset and a subset (N4)" \
       || bad "DVRSS: rc=$RC $(head -2 "$WORK/dvrs.err" 2>/dev/null) | $(head -2 "$MO") | $(head -2 "$WORK/dvrss.split" 2>/dev/null) | $(grep -m2 'FAIL (N' "$CO")"
   else bad "DVRS: FIXTURE BROKEN -- serial-remediation-worklist.sh is not beside the merge; the shipped sequence cannot run"; fi
 fi

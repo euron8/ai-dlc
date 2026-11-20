@@ -469,17 +469,26 @@ SJPA=_bmad-output/planning-artifacts
 SJRD=$SJPA/s9/shards/requirements-repair-p1
 SPECREL=_bmad-output/specs/s9/kernel/SPEC.md
 SJSD=_bmad-output
-subj_world() { # -> a world whose subject is split into $SJRD; brief UNCHANGED (no part)
+subj_world() { # [nospec|preera] -> a world whose subject is split into $SJRD; `nospec`: the SPEC UNCHANGED since base (no part);
+  # `preera`: a series opened before the subject became two files -- its manifest names the brief, SPEC, prd and
+  # architecture-impact (the brief and architecture-impact unchanged, so no part), served as recorded
   local w pa; w="$(mktemp -d "$WORK/sj.XXXXXX")" || return 1; pa="$w/$SJPA"
   mkdir -p "$pa/s9" "$w/$SJSD/specs/s9/kernel" "$w/$SJSD/gate-adjudication" || return 1
   printf '# Pipeline Snapshot\n' > "$w/$SJSD/pipeline-snapshot.md"
   { SJG "$w" init -q . && SJG "$w" checkout -q -b main
     { printf '# Brief\n\n## Vision\n\n'; sjlorem vision 10; } > "$pa/product-brief.md"
     { printf '# PRD\n\n## Current state\n\n'; sjlorem current 20; printf '\n## Sprint 8\n\n'; sjlorem s8 20; printf '\n'; } > "$pa/prd.md"
+    if [ "${1:-}" = nospec ]; then printf '# SPEC\n\ncap-1: THE system SHALL x.\n' > "$w/$SPECREL"; fi
+    if [ "${1:-}" = preera ]; then printf -- '- FR-S9-1: architecture_impact: none\n' > "$pa/s9/architecture-impact.md"; fi
     SJG "$w" add -A && SJG "$w" commit -q -m base && SJG "$w" checkout -q -b sprint-9; } >/dev/null 2>&1 || return 1
   { printf '## Sprint 9\n\n### Goals\n\n'; sjlorem s9g 30; printf '\n### Requirements\n\n'; sjlorem s9r 30; } >> "$pa/prd.md"
   printf '# SPEC\n\ncap-1: THE system SHALL x.\n' > "$w/$SPECREL"
-  printf -- '- FR-S9-1: architecture_impact: none\n' > "$pa/s9/architecture-impact.md"
+  if [ "${1:-}" = preera ]; then
+    local pb; pb="$(SJG "$w" merge-base main HEAD 2>/dev/null)" && [ -n "$pb" ] || return 1
+    { printf '# Requirements subject -- sprint 9\n\n<!-- REQUIREMENTS_SUBJECT v1\nsprint: 9\ntrunk: main\nbase: %s\n' "$pb"
+      printf 'file: product-brief %s/product-brief.md\nfile: SPEC %s\nfile: prd %s/prd.md\n' "$SJPA" "$SPECREL" "$SJPA"
+      printf 'file: architecture-impact %s/s9/architecture-impact.md\nREQUIREMENTS_SUBJECT_END -->\n' "$SJPA"; } > "$pa/s9/requirements-subject.md" || return 1
+  fi
   AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --map 9 > "$w/subject.map" 2>&1 || return 1
   AI_DLC_PROJECT_ROOT="$w" bash "$SRCDIR/partition-subject.sh" --split 9 "$w/$SJRD" >/dev/null 2>&1 || return 1
   [ -f "$w/$SJRD/.subject" ] || return 1
@@ -519,9 +528,21 @@ p_sjoin() { # every part by one writer -> JOINED, prd assembled, SPEC written in
   n="$(grep -c 'Repaired by the part' "$w/$SJPA/prd.md")" || n=0
   [ "$RC" -eq 0 ] && has "$JO" "($k parts, $k writers)" && [ -f "$(sj_out "$w")" ] && [ "$n" -ge 2 ] \
     && has "$w/$SPECREL" "Repaired by the part" && has "$(sj_out "$w")" "- artifact: $SJPA/s9/requirements-subject.md" \
+    && grep -qE "^- artifact_sha_before: SPEC${s}[0-9a-f]{64} prd${s}[0-9a-f]{64}\$" "$(sj_out "$w")" \
+    && grep -qE "^- artifact_sha_after: SPEC${s}[0-9a-f]{64} prd${s}[0-9a-f]{64}\$" "$(sj_out "$w")" \
+    && ! grep -q "Repaired by" "$w/$SJPA/product-brief.md"
+}
+p_sjpre() { # a PRE-ERA four-file series (manifest: brief, SPEC, prd, architecture-impact) -> JOINED, four-stem sha lists
+  local w k n s="${2:-@}"; w="$(subj_world preera)" || return 1
+  grep -q '^SUBJECT: SKIP pre-era ' "$w/subject.map" || return 1
+  k="$(sj_part_rows "$w" | grep -c .)"
+  sj_all "$w"; run_sjoin "$1" "$w"
+  n="$(grep -c 'Repaired by the part' "$w/$SJPA/prd.md")" || n=0
+  [ "$RC" -eq 0 ] && has "$JO" "($k parts, $k writers)" && [ -f "$(sj_out "$w")" ] && [ "$n" -ge 2 ] \
+    && has "$(sj_out "$w")" "- artifact: $SJPA/s9/requirements-subject.md" \
     && grep -qE "^- artifact_sha_before: product-brief${s}[0-9a-f]{64} SPEC${s}[0-9a-f]{64} prd${s}[0-9a-f]{64} architecture-impact${s}[0-9a-f]{64}\$" "$(sj_out "$w")" \
     && grep -qE "^- artifact_sha_after: product-brief${s}[0-9a-f]{64} SPEC${s}[0-9a-f]{64} prd${s}[0-9a-f]{64} architecture-impact${s}[0-9a-f]{64}\$" "$(sj_out "$w")" \
-    && ! grep -q "Repaired by" "$w/$SJPA/product-brief.md"
+    && ! grep -q "Repaired by" "$w/$SJPA/product-brief.md" && ! grep -q "Repaired by" "$w/$SJPA/s9/architecture-impact.md"
 }
 p_sjspec2() { # the WHOLE-FILE SPEC part written by two agents -> REFUSED; nothing assembled
   local w o; w="$(subj_world)" || return 1
@@ -573,12 +594,12 @@ p_sjrraside() { # A13's world joined WITH --rerun: one other SECTION part re-run
   c="${l#*in the window -- }"
   [ "$c" = "$SJPA/prd.md was written in the window at $(gts 19:30:00) by a9999999999999999, but this join set that write aside (a --rerun supersedes it): the re-run writes it after its start, or the part stops citing it" ]
 }
-p_sjnopart() { # the UNCHANGED brief (no part) written in the window -> REFUSED: no shard owns it
-  local w; w="$(subj_world)" || return 1
+p_sjnopart() { # the UNCHANGED SPEC (a subject file with no part) written in the window -> REFUSED: no shard owns it
+  local w; w="$(subj_world nospec)" || return 1
   sj_all "$w"
-  printf 'stray\n' >> "$w/$SJPA/product-brief.md"; drive "$w" Edit "$w/$SJPA/product-brief.md" a7777777777777777
+  printf 'stray\n' >> "$w/$SPECREL"; drive "$w" Edit "$w/$SPECREL" a7777777777777777
   run_sjoin "$1" "$w"
-  sj_refused "$w" "$SJPA/product-brief.md has no part in this split"
+  sj_refused "$w" "$SPECREL has no part in this split"
 }
 sj_party() { # <join> <source token> -> RC, $JO, SJP_W: a --pass party join, every part citing the token
   local w rd o n=0 row f; w="$(subj_world)" || return 1; SJP_W="$w"
@@ -2085,10 +2106,12 @@ sj_spec_world() { # <memlog body, printf %b | "-" for none> -> prints the world;
   fi
   printf '%s' "$w"
 }
-p_sjspecstale() { # decision, decision, phrased Render, decision -> rc 2, the memlog named, NO record written
+p_sjspecstale() { # decision, decision, phrased Render, decision -> the join DEFERS the render (rc 0, record written, the memlog
+  # named on a SPEC-RENDER: DEFERRED line): the render is owed once after the serial tail, where the record modes refuse it
   local w; w="$(sj_spec_world "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n- (decision) c\n")" || return 1
   run_sjoin "$1" "$w"
-  sj_refused "$w" "specs/s9/kernel/.memlog.md:4: 1 (decision) entry(ies) after the last render (line 3)" && ! has "$JO" "rendered through"
+  [ "$RC" -eq 0 ] && [ -f "$(sj_out "$w")" ] && has "$JO" "SPEC-RENDER: DEFERRED -- " && has "$JO" "specs/s9/kernel/.memlog.md:4: 1 (decision) entry(ies) after the last render (line 3)" \
+    && ! has "$JO" "rendered through" && ! has "$JO" "REFUSED"
 }
 p_sjspecfresh() { # the ALLOW twin: no decision after the render -> JOINED, the record written, rendered through
   local w; w="$(sj_spec_world "- (decision) a\n- (decision by pm) b\n- (event) Render p1: $SPEC_PH b\n")" || return 1
@@ -2266,41 +2289,41 @@ p_lanedoc() { # document mode, three section parts of ONE document -> ONE lane (
   [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 1" && has "$JO" "LANE: 1 files: $DOCREL parts: 1.md 2.md 3.md" \
     && has "$JO" "from serial-remediation-worklist.sh" && ! has "$JO" "UNASSESSED" && has "$JO" "FANIN-COUNT: 0" && ! has "$JO" "CROSS"
 }
-# lane_subj <join> <cite 0|1> <hit 0|1> -> RC, $JO. The subject world: SPEC and architecture-impact whole-file parts,
-# prd in three section parts. cite=1: architecture-impact cites a prd line that part 4's edit moves (a MOVED-CITE).
-# hit=1: part 3 REPLACES a prd line whose text SPEC and architecture-impact also carry (a HIT in two lanes).
+# lane_subj <join> <cite 0|1> <hit 0|1> -> RC, $JO. The subject world: the SPEC a whole-file part, prd in three
+# section parts. cite=1: the SPEC cites a prd line that part 4's edit moves (a MOVED-CITE).
+# hit=1: part 3 REPLACES a prd line whose text the SPEC also carries (a HIT standing in the SPEC's lane and prd's).
 lane_subj() {
   local w ln f s3
   w="$(subj_world)" || return 1
   f="s9g line 3 of the section, carrying enough prose to weigh something real."
   if [ "$2" = 1 ]; then
     ln="$(grep -n '^s9r line 5 ' "$w/$SJPA/prd.md" | cut -d: -f1)"; [ -n "$ln" ] || return 1
-    printf -- '- FR-S9-1 see `%s/prd.md:%s`\n' "$SJPA" "$ln" >> "$w/$SJPA/s9/architecture-impact.md"
+    printf -- '- FR-S9-1 see `%s/prd.md:%s`\n' "$SJPA" "$ln" >> "$w/$SPECREL"
   fi
   if [ "$3" = 1 ]; then
     s3="$(sj_part_rows "$w" | awk -F'\t' '$2 + 0 == 3 { print $7 }')"; [ -n "$s3" ] && grep -qxF "$f" "$w/$s3" || return 1
-    printf '%s\n' "$f" >> "$w/$SPECREL"; printf '%s\n' "$f" >> "$w/$SJPA/s9/architecture-impact.md"
+    printf '%s\n' "$f" >> "$w/$SPECREL"
     awk -v f="$f" '$0 == f { print "The third goal line, rewritten by its part."; next } { print }' "$w/$s3" > "$w/s3.tmp" && mv "$w/s3.tmp" "$w/$s3" || return 1
   fi
   sj_all "$w"; run_sjoin "$1" "$w"
 }
-p_lanesubj() { # prd's sections share prd.md (one lane); a MOVED-CITE from architecture-impact joins it; SPEC its own -> 2 lanes
+p_lanesubj() { # prd's sections share prd.md (one lane); a MOVED-CITE from the SPEC joins it -> 1 lane holding both files
   lane_subj "$1" 1 0 || return 1
-  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 2" && has "$JO" "1 MOVED-CITE edge(s)" \
-    && has "$JO" "LANE: 1 files: $SJPA/prd.md $SJPA/s9/architecture-impact.md parts: 2.md 3.md 4.md 5.md" \
-    && has "$JO" "LANE: 2 files: $SPECREL parts: 1.md" && has "$JO" "LANE-ITEM: 1 MOVED-CITE $SJPA/s9/architecture-impact.md:" \
-    && ! has "$JO" "UNASSESSED" && has "$JO" "FANIN: sweep"
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 1" && has "$JO" "1 MOVED-CITE edge(s)" \
+    && has "$JO" "LANE: 1 files: $SJPA/prd.md $SPECREL parts: 1.md 2.md 3.md 4.md" \
+    && has "$JO" "LANE-ITEM: 1 MOVED-CITE $SPECREL:" \
+    && ! has "$JO" "UNASSESSED" && has "$JO" "FANIN-COUNT: 0"
 }
-p_lanesubjnear() { # p_lanesubj one property apart, no cite -> 3 lanes, architecture-impact its own
+p_lanesubjnear() { # p_lanesubj one property apart, no cite -> 2 lanes, the SPEC its own
   lane_subj "$1" 0 0 || return 1
-  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 3" && has "$JO" "0 MOVED-CITE edge(s)" \
-    && has "$JO" "LANE: 1 files: $SJPA/prd.md parts: 2.md 3.md 4.md" && ! has "$JO" "UNASSESSED"
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 2" && has "$JO" "0 MOVED-CITE edge(s)" \
+    && has "$JO" "LANE: 1 files: $SJPA/prd.md parts: 2.md 3.md 4.md" && has "$JO" "LANE: 2 files: $SPECREL parts: 1.md" && ! has "$JO" "UNASSESSED"
 }
-p_lanehit() { # a common-line HIT standing in two lanes' files -> still 3 lanes, ONE FANIN item for the fragment (s319's shape)
+p_lanehit() { # a replaced line still standing in the SPEC's file -> still 2 lanes, the HIT is the SPEC lane's own item
   lane_subj "$1" 0 1 || return 1
-  local n; n="$(grep -c '^FANIN: HIT "s9g line 3 of the section' "$JO")" || n=0
-  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 3" && [ "$n" = 1 ] && grep -qE '^FANIN: HIT .*\(lanes (2 3|3 2)\)$' "$JO" \
-    && ! has "$JO" "LANE-ITEM: 2 HIT" && ! has "$JO" "UNASSESSED"
+  local n; n="$(grep -c '^LANE-ITEM: 2 HIT "s9g line 3 of the section' "$JO")" || n=0
+  [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 2" && [ "$n" = 1 ] && has "$JO" "LANE-ITEM: 2 HIT" \
+    && ! grep -q '^FANIN: HIT' "$JO" && ! has "$JO" "UNASSESSED"
 }
 p_laneround() { # the lane round's own join (--artifact stories-serial): lane parts under shards/stories-serial-repair-p1/
   # -> JOINED into stories-serial-repair-p1.md, and NO LANE or FANIN line (lanes of lanes would recurse)

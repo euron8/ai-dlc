@@ -68,6 +68,16 @@
 #                          where blocking helps nobody; never at a gate.
 #   --quiet                suppress the per-run measurement lines. The FAIL block
 #                          still goes to stderr.
+#   --candidate <file>     judge a snapshot BEFORE it is written (snapshot-update.sh's
+#                          pre-write refusal): the lines of the base snapshot that the
+#                          candidate lacks, against the same survival test, over the
+#                          tracked markdown EXCLUDING the snapshot's working copy, plus
+#                          the candidate and --extra. Exit 1 only when the candidate's
+#                          destroyed count reaches the floor AND exceeds the working
+#                          copy's own, so a snapshot already red is never wedged and an
+#                          op that conserves is never refused.
+#   --extra <file>         with --candidate: lines the write will also append to the
+#                          history file, counted as surviving.
 #   -h, --help             print this header.
 #
 # Also honoured: AI_DLC_SNAPSHOT_CONSERVATION_MIN_LEN, the character length below
@@ -124,6 +134,8 @@ FLOOR="${AI_DLC_SNAPSHOT_CONSERVATION_FLOOR:-40}"
 # Matching those produces noise in both directions and none of them is a record.
 MIN_LEN="${AI_DLC_SNAPSHOT_CONSERVATION_MIN_LEN:-20}"
 SHOW=12
+CANDIDATE=""
+EXTRA=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -134,6 +146,8 @@ while [ $# -gt 0 ]; do
     --floor)         FLOOR="${2:-}"; shift 2 ;;
     --warn-only)     WARN_ONLY=1; shift ;;
     --quiet)         QUIET=1; shift ;;
+    --candidate)     CANDIDATE="${2:-}"; shift 2 ;;
+    --extra)         EXTRA="${2:-}"; shift 2 ;;
     -h|--help)
       sed -n '2,85p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0 ;;
@@ -256,6 +270,45 @@ trap 'rm -rf "$TMPROOT"' EXIT
 CAND="$TMPROOT/candidates"
 CORPUS="$TMPROOT/corpus"
 DESTROYED="$TMPROOT/destroyed"
+
+if [ -n "$CANDIDATE" ]; then
+  [ -f "$CANDIDATE" ] || { echo "ERROR: --candidate is not a file: $CANDIDATE" >&2; exit 2; }
+  git -C "$ROOT" cat-file -e "${BASE}:${SNAPSHOT}" 2>/dev/null || {
+    say "verdict             : NOT-APPLICABLE -- the snapshot is not in the base commit."; exit 0; }
+  vsc_norm() { sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | awk -v m="$MIN_LEN" 'length($0) >= m' | sort -u; }
+  git -C "$ROOT" show "${BASE}:${SNAPSHOT}" 2>/dev/null | vsc_norm > "$TMPROOT/base"
+  vsc_norm < "$CANDIDATE" > "$TMPROOT/cand"
+  vsc_norm < "$ROOT/$SNAPSHOT" > "$TMPROOT/cur"
+  comm -23 "$TMPROOT/base" "$TMPROOT/cand" > "$TMPROOT/rc"
+  comm -23 "$TMPROOT/base" "$TMPROOT/cur" > "$TMPROOT/rs"
+  RC_N="$(wc -l < "$TMPROOT/rc" | tr -d ' ')"
+  NEWLY="$(comm -23 "$TMPROOT/rc" "$TMPROOT/rs" | wc -l | tr -d ' ')"
+  say "candidate           : $RC_N line(s) of the base missing from it, $NEWLY of them removed by this write"
+  if [ "$RC_N" -lt "$FLOOR" ] || [ "$NEWLY" -eq 0 ]; then
+    say "verdict             : PASS -- below the floor of $FLOOR, or nothing newly removed."
+    exit 0
+  fi
+  ( cd "$ROOT" && git ls-files -z -- '*.md' ":(exclude)$SNAPSHOT" 2>/dev/null | xargs -0 cat 2>/dev/null
+    cat "$CANDIDATE"; [ -z "$EXTRA" ] || cat "$EXTRA" ) \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort -u > "$CORPUS"
+  [ "$(wc -l < "$CORPUS" | tr -d ' ')" -gt 0 ] || { echo "ERROR: the conservation corpus is empty." >&2; exit 2; }
+  comm -23 "$TMPROOT/rc" "$CORPUS" > "$DESTROYED"
+  GONE="$(wc -l < "$DESTROYED" | tr -d ' ')"
+  GONE_CUR="$(comm -23 "$TMPROOT/rs" "$CORPUS" | wc -l | tr -d ' ')"
+  say "lines_destroyed     : $GONE in the candidate, $GONE_CUR in the working copy (floor $FLOOR)"
+  if [ "$GONE" -lt "$FLOOR" ] || [ "$GONE" -le "$GONE_CUR" ]; then
+    say "verdict             : PASS -- this write does not take destruction to the floor."
+    exit 0
+  fi
+  {
+    echo "FAIL: this write leaves $GONE line(s) removed from $SNAPSHOT since ${BASE:0:9} in no tracked markdown file (floor $FLOOR; $GONE_CUR before it)."
+    head -n "$SHOW" "$DESTROYED" | sed 's/^/        /' | cut -c1-118
+    echo "      Rule 25(a): superseded content is MOVED, never deleted. Use --move-to-history <section> <match>"
+    echo "      (appends the line to pipeline-snapshot-history.md first) instead of --line-delete, --close-item,"
+    echo "      --row-delete or --line-replace on lines that carry a record."
+  } >&2
+  exit 1
+fi
 
 # Both sides are normalised the same way -- leading and trailing whitespace
 # stripped -- so that content re-indented on its way into the history file still

@@ -26,6 +26,11 @@
 #                                                   exit 2 on bad arguments. Reads no sibling, no
 #                                                   harness record and no shard dir, so a delivery
 #                                                   join can call it on one file while its agent lives.
+#   merge-adversarial-shards.sh --check-keys <pass-file>
+#                                                   an UNSHARDED pass the adversary wrote itself (no merge
+#                                                   ran check_keys on it): the reservation and key rules of
+#                                                   check_keys on the convergence axis; prints KEYS-OK and
+#                                                   exits 0, or REFUSED: <reason> and exits 1.
 #   merge-adversarial-shards.sh --check-shard-dir <dir>...
 #                                                   the DISPATCH-TIME answer for a shard dir a brief
 #                                                   names: the merge's placement and name lines on
@@ -373,7 +378,7 @@
 #   is derived from <shard-file>'s PATH as a merge derives it from <shard-dir> (merge_locate, the
 #   `<artifact>-p<M>` parse), and every message names <shard-file>, never the bytes file.
 #     mode      `requirements-elicitation` -> subject mode, elicitation axis; `requirements-p<M>` -> subject
-#               mode (the manifest s<N>/requirements-subject.md, its four stems); files mode (its ordinal
+#               mode (the manifest s<N>/requirements-subject.md, its two stems); files mode (its ordinal
 #               map) only when s<N>/ holds a directory entry spelled EXACTLY <artifact>, compared byte for
 #               byte against the listing (never `[ -d ]` alone, which on a case-insensitive filesystem reads
 #               s<N>/architecture-spine/ for ARCHITECTURE-SPINE), holding two or more story files; otherwise
@@ -853,8 +858,9 @@ check_shard_artifact() {
       [ -n "$want" ] || { HDR_MSG="$sf artifact_sha names stem '$st', not a subject stem ($(cut -f1 "$T/stems" | tr '\n' ' '))"; return 1; }
       [ "$sv" = "$want" ] || { HDR_MSG="$sf notarizes $st=$sv but that file is $want on disk; the shard reviewed other bytes"; return 1; }
     done
-    [ "$nt" -eq 4 ] && [ "$(printf '%s\n' $sha | sed "s/$PAIR_SEP.*//" | sort -u | grep -c .)" -eq 4 ] \
-      || { HDR_MSG="$sf artifact_sha carries $nt token(s); a subject shard notarizes each of the four stems once"; return 1; }
+    nst="$(grep -c . "$T/stems")"
+    [ "$nt" -eq "$nst" ] && [ "$(printf '%s\n' $sha | sed "s/$PAIR_SEP.*//" | sort -u | grep -c .)" -eq "$nst" ] \
+      || { HDR_MSG="$sf artifact_sha carries $nt token(s); a subject shard notarizes each stem of the manifest once"; return 1; }
     art="$(field "$P" artifact)"
     [ -n "$art" ] || { HDR_MSG="$sf declares no artifact; a subject shard names the subject manifest"; return 1; }
     resolve_artifact "$art"
@@ -872,7 +878,7 @@ check_shard_artifact() {
   fi
   return 0
 }
-# subj_stems_build: the four subject stems and their disk shas, in manifest order, `<stem>\t<sha>` in
+# subj_stems_build: the two subject stems and their disk shas, in manifest order, `<stem>\t<sha>` in
 #   $T/stems, from $SUBJ_MF (the merge's subject branch and --check-shard).
 subj_stems_build() {
 SUBJ_ROOT=""
@@ -892,7 +898,8 @@ while read -r _k _st _rel; do
   [[ $_s =~ ^[a-f0-9]{64}$ ]] || refuse "cannot hash $_rel"
   printf '%s\t%s\n' "$_st" "$_s" >> "$T/stems" || refuse "cannot stage the subject shas"
 done < "$T/mfiles"
-[ "$(grep -c . "$T/stems")" = "4" ] || refuse "$SUBJ_MF does not list four subject files"
+# two files, or four in a series opened before the subject became two (forward-only)
+[ "$(grep -c . "$T/stems")" = "2" ] || [ "$(grep -c . "$T/stems")" = "4" ] || refuse "$SUBJ_MF does not list two subject files"
 }
 # files_map_build: the ordinal map, derived from the artifact directory $STORIES_DIR, into $T/map;
 #   sets K and W (the merge's files branch and --check-shard).
@@ -1867,6 +1874,8 @@ pair_sep() {
   bash "$d/validate-provenance-block.sh" --accepts-at-pair >/dev/null 2>&1 || { printf '='; return 0; }
   printf '@'
 }
+# The E4 era token: one definition, era-token.sh beside this script.
+AI_DLC_ERA_TOKEN=""; . "$(dirname "${BASH_SOURCE[0]}")/era-token.sh" 2>/dev/null || AI_DLC_ERA_TOKEN=""   # absent copy: no token written, no era judged
 case "${1:-}" in
   -h|--help) awk 'NR > 1 && /^set -u/ { exit } NR > 1' "$MERGE_SELF"; exit 0 ;;
   --pair-sep)
@@ -1883,6 +1892,42 @@ case "${1:-}" in
     parse_shard "$2" > "$CH_P" || { rm -f "$CH_P"; printf 'REFUSED: parsing %s did not run\n' "$2"; exit 2; }
     if check_header "$CH_P" "$2" "$4"; then rm -f "$CH_P"; exit 0; fi
     rm -f "$CH_P"; printf 'REFUSED: %s\n' "$HDR_MSG"; exit 1 ;;
+  --check-keys)
+    # A hand-written UNSHARDED pass file (one adversary wrote the pass itself, so no merge ran check_keys on it):
+    # the same reservation and key rules, on the convergence axis. Prints KEYS-OK on success, so a run that checked
+    # nothing never reads as one that passed.
+    [ $# -eq 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --check-keys <pass-file>"; exit 2; }
+    [ -f "$2" ] && [ -r "$2" ] || { printf 'REFUSED: %s is not a readable file\n' "$2"; exit 2; }
+    CITE=stories; OTHER=""; ANY_DIVERGENT=0
+    CK_P="$(mktemp "${TMPDIR:-/tmp}/merge-adversarial-shards.ck.XXXXXX")" || { printf '%s\n' "REFUSED: mktemp failed"; exit 2; }
+    parse_shard "$2" > "$CK_P" || { rm -f "$CK_P"; printf 'REFUSED: parsing %s did not run\n' "$2"; exit 2; }
+    # A MERGED pass carries the merge-written `shard_tool_use_ids: <key>=<id> ...` provenance field (the field arm N
+    # reads; a `## Shard: ` line is typed text anyone can write and keys nothing), and its ids repeat across shards by
+    # design: the merge ran check_keys on each shard, so the pass is skipped here (printed, never read as a pass of this
+    # check). Check 24 arms K and N re-derive that field through the merge, so a hand-typed one fails there.
+    if grep -qE '^shard_tool_use_ids:[[:space:]]+.*[A-Za-z0-9-]+=[A-Za-z0-9_]+' "$2"; then rm -f "$CK_P"; printf 'KEYS-SKIP: %s is a merged pass (the merge checked each shard)\n' "$2"; exit 0; fi
+    # Forward-only: a series is judged only when it opened under the new engine. A series whose pass-1 shards were
+    # dispatched through partition-document.sh --shard-dir carries the era token in shards/<stem>-p1/.era (the one key
+    # the merge reads too); a series with no such shard dir (one adversary wrote pass 1 itself) carries it as a line
+    # of its pass-1 file. Anything else reads KEYS-SKIP pre-era, never a refusal.
+    ck_dir="$(dirname "$2")"; ck_b="${2##*/}"; ck_p1="$2"; ck_stem=""
+    case "$ck_b" in *-adversarial-p[0-9]*.md) ck_stem="${ck_b%-adversarial-p*}"; ck_p1="$ck_dir/${ck_stem}-adversarial-p1.md" ;; esac
+    [ -f "$ck_p1" ] || ck_p1="$2"
+    ck_era=""
+    if [ -n "$AI_DLC_ERA_TOKEN" ]; then
+      if [ -n "$ck_stem" ] && [ -d "$ck_dir/shards/${ck_stem}-p1" ]; then
+        grep -qxF -- "$AI_DLC_ERA_TOKEN" "$ck_dir/shards/${ck_stem}-p1/.era" 2>/dev/null && ck_era=1
+      else
+        grep -qxF -- "$AI_DLC_ERA_TOKEN" "$ck_p1" && ck_era=1
+      fi
+    fi
+    if [ -z "$ck_era" ]; then
+      rm -f "$CK_P"; printf 'KEYS-SKIP: %s pre-era (its series carries no era token)\n' "$2"; exit 0
+    fi
+    if check_reserved "$CK_P" "$2" && check_keys "$CK_P" "$2" convergence; then
+      rm -f "$CK_P"; printf 'KEYS-OK: %s\n' "$2"; exit 0
+    fi
+    rm -f "$CK_P"; printf 'REFUSED: %s\n' "$HDR_MSG"; exit 1 ;;
   --check-shard-dir)
     [ $# -ge 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] && [ "$DMAP" -eq 0 ] \
       || { printf '%s\n' "usage: merge-adversarial-shards.sh --check-shard-dir <planning>/s<N>/shards/<dir>..."; exit 3; }
@@ -2916,6 +2961,9 @@ fi
   else
   printf '# %s -- adversarial pass %s (merged from %s shards)\n' "$ARTIFACT" "$PASS" "$(wc -l < "$T/shards" | tr -d ' ')"
   printf '\nVerdict RECOMPUTED by merge-adversarial-shards.sh from the summed residue; shard verdicts are advisory.\n'
+  if [ "${PASS:-}" = 1 ] && [ -n "$AI_DLC_ERA_TOKEN" ] && grep -qxF -- "$AI_DLC_ERA_TOKEN" "$SHARD_DIR/.era" 2>/dev/null; then
+    printf '%s\n' "$AI_DLC_ERA_TOKEN"
+  fi
   [ -z "$DIV_LINE" ] || printf 'DIVERGENT_HARD_BLOCK stamped by: %s.\n' "$DIV_LINE"
   fi
   printf '\n## Shard ordinal map\n\n```text\n'

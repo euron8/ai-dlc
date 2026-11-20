@@ -39,3 +39,4 @@ core/fixtures/lib/world.sh
 # The coverage join reads each DIST_SHARDS shard's .dist-only marker (present, non-empty) in the distribution.
 core/fixtures/review-shard-merge-e/.dist-only
 core/fixtures/review-shard-merge-f/.dist-only
+core/scripts/era-token.sh

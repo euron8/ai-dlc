@@ -3291,6 +3291,70 @@ wiring_e2e() {
   else bad "wiring: CLI and in-process answers differ, or an outcome is missing [${wr_bad_# }] (distinct answers: $wr_n_ of 6) -- see $TMPROOT/wr.*"; fi
 }
 
+# ===========================================================================
+# 31. REPAIR-DIRECTORY SHARDS REFUSE --shard-header AT ARMING; A HUNG REVIEW SEAT IS NAMED.
+#     (a) A target under a `*-repair-*` shard directory is refused (exit 64) naming flag and target;
+#         the same call on a party shard directory arms (its twin, one property apart).
+#     (b) A --complete beat prints every undelivered shard's agent silence; an agent whose newest
+#         record is a tool_use with no result older than the bound is HUNG. Its twins: a younger
+#         open tool_use, an answered old tool_use, and the same hung transcript on a join with no
+#         --complete.
+# ===========================================================================
+mk_seat_tr() {  # $1 = dir, $2 = agent id, $3 = brief target, $4 = tool_use age secs, $5 = open|answered
+  mkdir -p "$1" || broken "cannot create $1"
+  ms_n_="$(fx_seed_now)"; ms_a_="$(fx_iso $(( ms_n_ - $4 - 5 )))"; ms_b_="$(fx_iso $(( ms_n_ - $4 )))"
+  [ -n "$ms_a_" ] && [ -n "$ms_b_" ] || broken "neither BSD nor GNU date can format an epoch"
+  { printf '{"parentUuid":null,"isSidechain":true,"agentId":"%s","type":"user","message":{"role":"user","content":"Write the deliverable %s"},"timestamp":"%s.100Z"}\n' "$2" "$3" "$ms_a_"
+    printf '{"parentUuid":"u1","isSidechain":true,"agentId":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_%s","name":"Bash","input":{"command":"x"}}]},"type":"assistant","timestamp":"%s.300Z"}\n' "$2" "$2" "$ms_b_"
+    [ "$5" != answered ] || printf '{"parentUuid":"u2","isSidechain":true,"agentId":"%s","type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"ok","tool_use_id":"toolu_%s"}]},"timestamp":"%s.400Z"}\n' "$2" "$2" "$ms_b_"
+  } > "$1/agent-$2.jsonl" || broken "cannot write the seat transcript"
+}
+sbeat() {  # $1=workdir $2=teammate dir ; rest = argv
+  sb_w_="$1" sb_td_="$2"; shift 2
+  ( cd "$sb_w_" && unset CLAUDE_CODE_SESSION_ID && export \
+        AI_DLC_WAIT_BEAT_SECS=2 AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_WAIT_POLL_SECS=1 AI_DLC_WAIT_MARGIN_SECS=0 \
+        AI_DLC_MAX_WAIT_BEATS=1 AI_DLC_TEAMMATE_DIR="$sb_td_" \
+        AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$SUBJ" --since "$CBEAT_SINCE" "$@" ) > "$BEATOUT" 2>&1
+  RC=$?
+  OUT="$(cat "$BEATOUT")"
+}
+
+S31a_repair_dir_refuses_shard_header() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 ))
+  cbeat "$SUBJ" "$W" --complete --shard-header elicitation shards/stories-elicitation-repair-p1/03.md
+  if [ "$RC" -eq 64 ] && has "--shard-header elicitation" && has "shards/stories-elicitation-repair-p1/03.md" && has "NO beat ran"; then
+    ok "repair-dir: a target in a *-repair-* shard directory is refused at arming (exit 64), naming flag and target"
+  else bad "repair-dir: a repair-directory target was not refused at arming (rc=$RC): $OUT"; fi
+  cbeat "$SUBJ" "$W" --complete --shard-header elicitation shards/stories-elicitation/03.md
+  if [ "$RC" -eq 0 ] && has "WAITING   shards/stories-elicitation/03.md"; then
+    ok "repair-dir: CONTROL — the same call on a party shard directory arms and waits (rc 0)"
+  else bad "repair-dir: CONTROL FAILED — a non-repair shard directory did not arm (rc=$RC): $OUT"; fi
+  rm -rf "$W"
+}
+
+S31b_hung_review_seat() {
+  W="$(mk_work)"; CBEAT_SINCE=$(( $(date +%s) - 30 )); TD="$W/td"
+  mk_seat_tr "$TD" aaa1 "shards/p2/05.md" 100 open        # young open tool_use, listed first
+  mk_seat_tr "$TD" hung6 "shards/p2/06.md" 1500 open      # the hung one, not first
+  mk_seat_tr "$TD" ans7 "shards/p2/07.md" 1500 answered   # old but answered
+  sbeat "$W" "$TD" --complete shards/p2/05.md shards/p2/06.md shards/p2/07.md
+  if has "REVIEW SEAT HUNG agent-hung6 (shards/p2/06.md)" && has "Bash tool_use with no result" && has "TaskStop agent-hung6" && has "re-dispatch that shard"; then
+    ok "hung-seat: an open tool_use past the bound is printed HUNG, naming the agent, the shard and the remedy"
+  else bad "hung-seat: the hung review seat was not named (rc=$RC): $OUT"; fi
+  if has "REVIEW SHARD shards/p2/05.md -- not delivered; agent-aaa1 silent" && has "REVIEW SHARD shards/p2/06.md -- not delivered; agent-hung6 silent" \
+     && has "REVIEW SHARD shards/p2/07.md -- not delivered; agent-ans7 silent"; then
+    ok "hung-seat: every undelivered review shard prints its agent's silence age"
+  else bad "hung-seat: a shard's silence line is missing: $OUT"; fi
+  if ! has "HUNG agent-aaa1" && ! has "HUNG agent-ans7"; then
+    ok "hung-seat: NEAR-MISS — an open tool_use under the bound and an old one WITH its result are not HUNG"
+  else bad "hung-seat: a young or answered tool_use was printed HUNG: $OUT"; fi
+  sbeat "$W" "$TD" shards/p2/06.md
+  if has "shards/p2/06.md" && ! has "HUNG" && ! has "REVIEW SHARD"; then
+    ok "hung-seat: NEAR-MISS — the same hung transcript on a join with no --complete prints neither word"
+  else bad "hung-seat: a non-review join printed the review-seat lines: $OUT"; fi
+  rm -rf "$W"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------
