@@ -780,7 +780,7 @@ otherwise.**
 - **Read-set traces run with the sandbox tracer, by the session** (`operator-rulings.md`).
 - **The advisor is a tool for a session that is stuck, not a step of the release flow.** Call it
   when a result does not fit what was expected. The one flow step that requires it: Call the advisor once immediately before every push: a hook outside the repo denies the push otherwise.
-  The roll call requires one too (action 0). Pre-merge requires none.
+  The roll call requires one too (`docs/roll-call.md`). Pre-merge requires none.
 
 **STANDING OPERATOR RULING FROM BATCH 198: NO PARTIAL SHARDING.** In the operator's words: "I dont' want 'partial
 implementations' of sharding. If it can be sharded, then it should be sharded." A release that shards part of a
@@ -795,29 +795,12 @@ candidate's surviving half is upstream's to file and build, never a question for
 
    - **Who leads.** The session that receives and ACCEPTS the one-liner is the LEAD. Its first
      call is `ListAgents`.
-   - **Roll call.** In ONE parallel block with action 0a's first spawns, `SendMessage` every other
+   - **Opening survey (not the roll call).** In ONE parallel block with action 0a's first spawns, `SendMessage` every other
      `ai-dlc-*` session in the listing (never a `graph-*` session, not even a read-only question),
      asking for its current state and whether it is free to own a release. A session whose
      release landed is never re-assigned, and is CLOSABLE only by operator-rulings.md's test. A
      session that has not answered after one re-ask and one more timer counts as no session.
-   - **Roll call every 70 minutes, with an advisor call.** For this plan's batches the 70 minutes replace the 45-minute figure in `CLAUDE.md`'s `## Build process`. Operator instruction at batch 255: "the
-     lead session performs a roll call once every 45 minutes and instructs any session that isn't
-     marked as closeable to call the advisor. Once all sessions return roll call advisor results
-     then the lead session calls the advisor." The batch-257 operator ruling replaces the 45-minute
-     interval: the roll call runs every 70 minutes, in staggered groups of 3, and the next group is
-     messaged only after every session in the current group has answered, to minimise advisor rate
-     limiting. Each owner still makes its roll-call advisor call. Every 70 minutes the lead sends
-     each `ai-dlc-*` session not yet stated CLOSABLE one `SendMessage`, a group of 3 at a time. It asks for one line (release, state, next
-     step, anything blocked or owed) and tells the session to call `advisor`, act on it, and report
-     what the call changed. When every such session has answered, the lead calls `advisor` itself.
-     A session that has not answered after one re-ask and one more timer is reported to the
-     operator as silent. When designated, the lead arms ONE non-recurring job at now+70 minutes
-     (cron cannot say 70 minutes, and recurring jobs drift: measured next fires 18 then 63 minutes
-     apart); each fire re-arms the next job first. It re-arms after a compaction and stops when no
-     session remains active. The advisor-call exemption is ONLY a session that is PAUSED or stated
-     CLOSABLE (operator); a session holding or queued for the push turn is NOT exempt. A paused
-     session still answers with its one line. The lead asks active sessions for advisor calls a few at a time: 28 at once at batch 256
-     returned rate-limited.
+   - **The periodic roll call is `docs/roll-call.md`, its only definition.**
    - **A graph-watch session.** When the operator assigns one, a peer `ai-dlc-*` session watches
      the consumer READ ONLY for the batch: it reads graph's artifacts, transcripts and ledger; it
      never edits, commits or pushes there; it never messages a `graph-*` session. It reports to the
@@ -931,7 +914,7 @@ candidate's surviving half is upstream's to file and build, never a question for
    - `AI_DLC_FIXTURE_JOBS` is the session environment's value: never set, override or unset it on
      a push. Push with a bare `git push`.
 
-   **Review.** The advisor calls in the flow are the roll call's (action 0) and the one before a push
+   **Review.** The advisor calls in the flow are the roll call's (`docs/roll-call.md`) and the one before a push
    (queue protocol). A contract adversary (`opus`, read-only) runs only when
    the release adds a mechanism or a consumer cost. One tip adversary (`opus`, read-only) reviews
    the finished branch and also carries the second verification of every CLOSE verdict. Fold its
@@ -957,7 +940,7 @@ candidate's surviving half is upstream's to file and build, never a question for
 given at batch 90.
 
    - Your FIRST tool calls are action 0's `ListAgents` and then, in ONE parallel block, action 0's
-     roll-call messages and these `Agent` spawns:
+     opening-survey messages and these `Agent` spawns:
      a **sweep hand** (`sonnet`, findings as text) that runs the derive block verbatim, one
      script per fence with its output labelled (never one concatenated script), and
      returns the counts, the unfiled list with filing dates, and every control's value; and a

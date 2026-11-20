@@ -17,7 +17,12 @@ The lead runs this every 45 minutes while builder sessions are active.
 3. The lead makes an advisor call in its own message, after the reread.
 4. The lead appends to the log: the time, its own read ranges, the advisor call made, each session's reply, and
    any defect it found.
-5. The lead arms the next roll call 45 minutes after this one started (a one-shot cron firing this procedure).
+5. The lead arms the next roll call at the interval stated above, timed from when this one started (a one-shot cron
+   firing this procedure).
+6. A session that has not answered after one re-ask and one more roll-call interval is reported to the operator as
+   silent.
+7. The lead re-arms the roll call after a compaction or resume. The roll call stops when no active builder session
+   remains.
 
 ## Message
 
@@ -30,6 +35,9 @@ Reread with the Read tool, ALWAYS with offset AND limit. Never use ctx_*, cat, s
 - <handoff dir>/handoff-common.md and your own handoff file.
 
 If a read comes back as a stub, halve the limit and reread.
+
+After the reread, make an advisor call and act on it. Only a session that is PAUSED or stated CLOSABLE is exempt; a
+session holding or queued for the push turn is not. An exempt session still replies.
 
 You MUST reply. Send the reply to <lead> with the SendMessage tool as soon as the reread is done, before any
 other work and before ending your turn; plain output reaches nobody. The reply contains:

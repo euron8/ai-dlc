@@ -13,7 +13,7 @@ No plan and no task stops to ask for merge authorization. Cut the branch, run th
 - No build or release step outside it is run; the triggers CLAUDE.md names still bind. Every run other than a
   merge goes in parallel; merges are ordered.
 - Call the advisor once immediately before every push: a hook outside the repo denies the push otherwise. The roll-call advisor
-  call stays (exempt: PAUSED or CLOSABLE sessions); no pre-merge advisor call.
+  call is `docs/roll-call.md`'s; no pre-merge advisor call.
 
 ## A consumer pull is NOT preapproved
 
