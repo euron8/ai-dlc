@@ -160,7 +160,8 @@ Builder:
    `install.sh` ships, the subject, `VERSION` and the CHANGELOG heading name the next version and the commit
    runs `scripts/backlog-rotate.sh --apply`; otherwise the subject names no version.
 4. Run `bash -n` on every edited script, one probe that fails without the change plus a mutant it kills (by
-   hand, once; the output goes in the sha message, never into a fixture), and each fixture you edited, once.
+   hand, once; the output goes in the sha message, never into a fixture), and each edited fixture
+   via `scripts/seed-verdict-store.sh`, plainly if .undeclarable.
 5. Run `bash scripts/pregate-self-check.sh` on the exact tree (`--member` when it edits `.githooks/pre-push`).
 6. Send the lead the sha and remove your worktree.
 
