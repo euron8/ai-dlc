@@ -1,0 +1,12 @@
+text-only turn (no tool)                     n 1321 act 5.24h | mod 1.25 tool 0.00 wait 3.98 | fr 1.31M out 0.33M
+Bash shell read (grep/sed/cat/ls/awk/..)     n  498 act 1.35h | mod 0.92 tool 0.08 wait 0.35 | fr 1.54M out 0.30M
+AskUserQuestion (operator)                   n   19 act 0.81h | mod 0.06 tool 0.41 wait 0.34 | fr 0.04M out 0.03M
+Bash other prog                              n  122 act 0.40h | mod 0.13 tool 0.19 wait 0.08 | fr 1.25M out 0.07M
+Bash git/gh                                  n   67 act 0.36h | mod 0.18 tool 0.11 wait 0.07 | fr 0.15M out 0.04M
+Bash script                                  n   81 act 0.34h | mod 0.19 tool 0.09 wait 0.05 | fr 0.22M out 0.04M
+Write other-path                             n   51 act 0.25h | mod 0.21 tool 0.00 wait 0.04 | fr 0.12M out 0.16M
+Bash python-inline                           n   55 act 0.23h | mod 0.17 tool 0.01 wait 0.04 | fr 0.14M out 0.06M
+Read claude-skill/rules                      n   43 act 0.17h | mod 0.13 tool 0.00 wait 0.04 | fr 0.36M out 0.02M
+ToolSearch                                   n   25 act 0.11h | mod 0.08 tool 0.00 wait 0.03 | fr 0.08M out 0.02M
+advisor consult                              n    8 act 0.09h | mod 0.04 tool 0.06 wait 0.00 | fr 0.03M out 0.00M
+Read step-file                               n   27 act 0.09h | mod 0.05 tool 0.00 wait 0.04 | fr 0.11M out 0.02M

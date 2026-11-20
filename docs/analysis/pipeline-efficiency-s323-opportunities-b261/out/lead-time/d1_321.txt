@@ -1,0 +1,7 @@
+s321 lead hook records 4451, sum of durationMs 0.69 h (sequential upper bound), injected bytes 1.5 MB
+  PreToolUse         ai-dlc-recover-gate.sh                   hook_success             n     7  sum   0.59 h  mean 301167 ms max 301778 ms  bytes   0.00 MB
+  Stop               stop.mjs                                 hook_success             n  1312  sum   0.05 h  mean    127 ms max    929 ms  bytes   0.00 MB
+  PreToolUse         pretooluse.mjs                           hook_success             n  1475  sum   0.03 h  mean     62 ms max    688 ms  bytes   0.00 MB
+  PostToolBatch      ai-dlc-context-sensor.sh                 hook_success             n   242  sum   0.01 h  mean    143 ms max    294 ms  bytes   0.00 MB
+  PreToolUse         ai-dlc-dispatch-guard.sh                 hook_success             n    28  sum   0.01 h  mean    708 ms max    830 ms  bytes   0.00 MB
+  SessionStart       ai-dlc-recover.sh                        hook_success             n    57  sum   0.01 h  mean    343 ms max    806 ms  bytes   0.00 MB

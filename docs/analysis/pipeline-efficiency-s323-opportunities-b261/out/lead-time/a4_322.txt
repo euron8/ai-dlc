@@ -1,0 +1,12 @@
+text-only turn (no tool)                     n  701 act 4.16h | mod 1.25 tool 0.00 wait 2.91 | fr 1.10M out 0.26M
+Bash shell read (grep/sed/cat/ls/awk/..)     n 1369 act 2.64h | mod 2.16 tool 0.17 wait 0.31 | fr 1.43M out 0.76M
+ctx_execute shell read                       n  335 act 0.98h | mod 0.92 tool 0.03 wait 0.03 | fr 0.28M out 0.23M
+Bash git/gh                                  n  229 act 0.90h | mod 0.37 tool 0.48 wait 0.05 | fr 0.14M out 0.12M
+Bash other prog                              n  224 act 0.58h | mod 0.30 tool 0.22 wait 0.07 | fr 0.60M out 0.13M
+AskUserQuestion (operator)                   n   20 act 0.49h | mod 0.09 tool 0.20 wait 0.20 | fr 0.01M out 0.04M
+Bash script                                  n  116 act 0.45h | mod 0.18 tool 0.25 wait 0.02 | fr 0.08M out 0.05M
+advisor consult                              n   41 act 0.38h | mod 0.11 tool 0.27 wait 0.01 | fr 0.24M out 0.02M
+ToolSearch                                   n   55 act 0.34h | mod 0.31 tool 0.00 wait 0.03 | fr 0.05M out 0.03M
+ctx_search/index/batch                       n  173 act 0.34h | mod 0.27 tool 0.02 wait 0.05 | fr 0.59M out 0.05M
+Write other-path                             n   50 act 0.25h | mod 0.21 tool 0.00 wait 0.04 | fr 0.02M out 0.08M
+Edit planning-artifacts                      n   87 act 0.22h | mod 0.14 tool 0.05 wait 0.03 | fr 0.04M out 0.08M

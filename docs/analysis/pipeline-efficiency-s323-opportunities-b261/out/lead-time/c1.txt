@@ -1,0 +1,18 @@
+== s321: compact_boundary 57, summary records 57 | trigger {'auto': 57} | summarizer durationMs: sum 1.10h median 64.3s p90 91.9s max 122s; <1s: 0 | preTokens mean 369k median 388k max 408k | postTokens mean 34k
+   window A (leading reorient reads: step/snapshot/skill/task-output/ToolSearch/Skill): calls 78 (mean 1.4/compaction), active 0.16h (mean 10s), fresh+out 4.67M tok, cache-read 3M
+   window B (until first dispatch/edit/gate/commit call, cap 60): calls 289 (mean 5.1), active 1.52h (mean 96s), fresh+out 6.57M, cache-read 32M; windows that hit the cap/never ended: 1
+   Classer compaction-recovery: calls 55 active 0.01h fresh+out 3.89M; step-reread calls 123 active 0.49h
+   by step: {'gate-validation': 14, 'implementation': 12, 'stories-test-strategy': 11, 'deploy-validate': 7, 'architecture': 4, 'handoff': 3, 'requirements': 2, 'sprint-review': 2}
+   calls between compactions: median 106 mean 112 ; minutes between: median 65.4 mean 99.2
+== s322: compact_boundary 72, summary records 72 | trigger {'auto': 72} | summarizer durationMs: sum 1.56h median 68.3s p90 110.9s max 361s; <1s: 0 | preTokens mean 230k median 230k max 241k | postTokens mean 23k
+   window A (leading reorient reads: step/snapshot/skill/task-output/ToolSearch/Skill): calls 324 (mean 4.5/compaction), active 0.23h (mean 12s), fresh+out 3.04M tok, cache-read 17M
+   window B (until first dispatch/edit/gate/commit call, cap 60): calls 1089 (mean 15.1), active 1.83h (mean 91s), fresh+out 5.07M, cache-read 74M; windows that hit the cap/never ended: 1
+   Classer compaction-recovery: calls 287 active 0.06h fresh+out 2.81M; step-reread calls 398 active 0.91h
+   by step: {'gate-validation': 20, 'requirements': 9, 'implementation': 8, 'stories-test-strategy': 8, 'carry-over-evaluation': 7, 'retro': 7, 'architecture': 4, 'deploy-validate': 3}
+   calls between compactions: median 122 mean 122 ; minutes between: median 39.6 mean 52.2
+== s323: compact_boundary 134, summary records 134 | trigger {'auto': 134} | summarizer durationMs: sum 1.24h median 0.0s p90 104.6s max 160s; <1s: 76 | preTokens mean 231k median 230k max 249k | postTokens mean 43k
+   window A (leading reorient reads: step/snapshot/skill/task-output/ToolSearch/Skill): calls 618 (mean 4.6/compaction), active 0.25h (mean 7s), fresh+out 8.35M tok, cache-read 48M
+   window B (until first dispatch/edit/gate/commit call, cap 60): calls 2056 (mean 15.3), active 4.29h (mean 115s), fresh+out 13.46M, cache-read 203M; windows that hit the cap/never ended: 0
+   Classer compaction-recovery: calls 563 active 0.16h fresh+out 8.03M; step-reread calls 684 active 1.69h
+   by step: {'gate-validation': 65, 'stories-test-strategy': 11, 'implementation': 11, 'requirements': 10, 'deploy-validate': 9, 'sprint-review': 8, 'carry-over-evaluation': 7, 'architecture': 7}
+   calls between compactions: median 79 mean 84 ; minutes between: median 17.8 mean 31.0

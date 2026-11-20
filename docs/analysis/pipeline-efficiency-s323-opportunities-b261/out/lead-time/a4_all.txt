@@ -1,0 +1,26 @@
+text-only turn (no tool)                     n  572 act 5.60h | mod 0.78 tool 0.00 wait 4.82 | fr 0.40M out 0.18M
+advisor consult                              n  193 act 2.46h | mod 0.64 tool 1.60 wait 0.21 | fr 0.92M out 0.07M
+AskUserQuestion (operator)                   n   25 act 2.46h | mod 0.18 tool 0.19 wait 2.10 | fr 0.02M out 0.04M
+Bash shell read (grep/sed/cat/ls/awk/..)     n 1146 act 1.98h | mod 1.75 tool 0.10 wait 0.13 | fr 1.01M out 0.64M
+ctx_execute shell read                       n  593 act 1.54h | mod 1.33 tool 0.08 wait 0.13 | fr 0.70M out 0.35M
+Bash git/gh                                  n  190 act 0.71h | mod 0.31 tool 0.38 wait 0.02 | fr 0.14M out 0.14M
+ctx_search/index/batch                       n  228 act 0.64h | mod 0.57 tool 0.05 wait 0.02 | fr 0.50M out 0.07M
+Read claude-skill/rules                      n  230 act 0.46h | mod 0.40 tool 0.02 wait 0.05 | fr 0.60M out 0.07M
+Bash other prog                              n  167 act 0.40h | mod 0.22 tool 0.12 wait 0.06 | fr 0.32M out 0.12M
+Write other-path                             n   57 act 0.35h | mod 0.33 tool 0.00 wait 0.02 | fr 0.04M out 0.13M
+Bash script                                  n   95 act 0.32h | mod 0.15 tool 0.14 wait 0.03 | fr 0.06M out 0.05M
+ToolSearch                                   n   65 act 0.29h | mod 0.21 tool 0.00 wait 0.08 | fr 0.29M out 0.04M
+Bash python-inline                           n   89 act 0.25h | mod 0.17 tool 0.06 wait 0.03 | fr 0.06M out 0.04M
+ctx_execute python                           n   60 act 0.24h | mod 0.23 tool 0.01 wait 0.01 | fr 0.07M out 0.04M
+Edit gate-records                            n   76 act 0.24h | mod 0.18 tool 0.02 wait 0.03 | fr 0.03M out 0.10M
+ctx_execute shell python-inline              n   60 act 0.22h | mod 0.19 tool 0.02 wait 0.01 | fr 0.11M out 0.05M
+Edit planning-artifacts                      n   90 act 0.22h | mod 0.15 tool 0.02 wait 0.05 | fr 0.05M out 0.07M
+Read other-path                              n   75 act 0.14h | mod 0.12 tool 0.00 wait 0.02 | fr 0.06M out 0.03M
+Edit docs/                                   n   47 act 0.11h | mod 0.09 tool 0.02 wait 0.00 | fr 0.02M out 0.04M
+TaskStop                                     n   59 act 0.10h | mod 0.08 tool 0.00 wait 0.01 | fr 0.60M out 0.04M
+Read step-file                               n   31 act 0.07h | mod 0.05 tool 0.00 wait 0.02 | fr 0.03M out 0.02M
+Write planning-artifacts                     n   15 act 0.07h | mod 0.07 tool 0.00 wait 0.00 | fr 0.01M out 0.03M
+ctx_execute shell git diff                   n    5 act 0.07h | mod 0.02 tool 0.01 wait 0.04 | fr 0.00M out 0.00M
+Read snapshot                                n   32 act 0.06h | mod 0.06 tool 0.00 wait 0.00 | fr 0.12M out 0.01M
+Read impl-artifacts                          n   13 act 0.06h | mod 0.03 tool 0.00 wait 0.03 | fr 0.01M out 0.00M
+Read planning-artifacts                      n   20 act 0.05h | mod 0.05 tool 0.00 wait 0.00 | fr 0.04M out 0.01M

@@ -1,0 +1,26 @@
+== s321 lead active (<=300s intervals) split; hours
+  ALL            total  51.3h | WAIT(agent running) 27.5 | model 14.8 | idle/harness (no agent running) 4.9 | tool 4.1
+  planning       total  18.3h | WAIT(agent running) 11.5 | model 4.9 | idle/harness (no agent running) 1.0 | tool 0.9
+  impl+gate      total  19.5h | WAIT(agent running) 10.2 | model 6.3 | tool 1.9 | idle/harness (no agent running) 1.1
+  sprint-review  total   2.5h | WAIT(agent running) 1.7 | model 0.6 | tool 0.2 | idle/harness (no agent running) 0.1
+  rest           total  10.9h | WAIT(agent running) 4.1 | model 3.1 | idle/harness (no agent running) 2.7 | tool 1.1
+== s322 lead active (<=300s intervals) split; hours
+  ALL            total  36.4h | model 17.9 | WAIT(agent running) 12.6 | tool 3.3 | idle/harness (no agent running) 2.6
+  planning       total  14.2h | WAIT(agent running) 7.2 | model 6.0 | tool 0.6 | idle/harness (no agent running) 0.5
+  impl+gate      total  12.7h | model 6.9 | WAIT(agent running) 3.9 | tool 1.3 | idle/harness (no agent running) 0.7
+  sprint-review  total   1.1h | WAIT(agent running) 0.6 | model 0.4 | idle/harness (no agent running) 0.1 | tool 0.1
+  rest           total   8.4h | model 4.6 | idle/harness (no agent running) 1.4 | tool 1.4 | WAIT(agent running) 1.0
+== s323 lead active (<=300s intervals) split; hours
+  ALL            total  48.6h | model 25.2 | WAIT(agent running) 15.4 | tool 5.8 | idle/harness (no agent running) 2.3
+  planning       total  17.6h | model 8.3 | WAIT(agent running) 7.7 | tool 1.2 | idle/harness (no agent running) 0.3
+  impl+gate      total  19.5h | model 11.2 | WAIT(agent running) 4.9 | tool 2.9 | idle/harness (no agent running) 0.6
+  sprint-review  total   4.2h | model 2.0 | WAIT(agent running) 1.8 | tool 0.3 | idle/harness (no agent running) 0.1
+  rest           total   7.4h | model 3.7 | tool 1.3 | idle/harness (no agent running) 1.3 | WAIT(agent running) 1.1
+       model 25.19
+       wait while subagent running (harness) 9.13
+       wait while subagent running (idle-wait) 6.25
+       tool 5.75
+       wait, no subagent running (harness) 1.44
+       wait, no subagent running (idle-wait) 0.78
+       wait, no subagent running (wake) 0.05
+       wait while subagent running (wake) 0.03

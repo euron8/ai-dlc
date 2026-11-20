@@ -1,0 +1,16 @@
+s323 lead Bash script calls by script (n, active h; exact-repeat of the same command text in the same unit+step: n,h; of which result size identical: n,h)
+  snapshot-update.sh                 n  636 1.73h | exact-repeat n   3 0.01h | same-size n   1 0.00h
+  wait-for-deliverable.sh            n  438 0.70h | exact-repeat n  58 0.09h | same-size n  58 0.09h
+  gate-transition.sh                 n   94 0.54h | exact-repeat n   2 0.00h | same-size n   0 0.00h
+  gate-checkpoint.sh                 n  115 0.33h | exact-repeat n   1 0.01h | same-size n   0 0.00h
+  verdict.sh                         n   73 0.23h | exact-repeat n   2 0.00h | same-size n   1 0.00h
+  join-remediator-shards.sh          n   78 0.20h | exact-repeat n   0 0.00h | same-size n   0 0.00h
+  validate-gate-adjudication.sh      n   65 0.17h | exact-repeat n   0 0.00h | same-size n   0 0.00h
+  validate-artifact-derivations.sh   n   29 0.13h | exact-repeat n   0 0.00h | same-size n   0 0.00h
+  gate-slice.sh                      n   57 0.12h | exact-repeat n   1 0.00h | same-size n   1 0.00h
+  validate-snapshot-conservation.sh  n   21 0.10h | exact-repeat n   0 0.00h | same-size n   0 0.00h
+  retro-replay-harness.sh            n   18 0.10h | exact-repeat n   1 0.00h | same-size n   0 0.00h
+  validate-escalation-resolution.sh  n   15 0.08h | exact-repeat n   0 0.00h | same-size n   0 0.00h
+  merge-review-shards.sh             n   27 0.07h | exact-repeat n   0 0.00h | same-size n   0 0.00h
+  diag-aggregator-sentinel.sh        n    2 0.06h | exact-repeat n   1 0.03h | same-size n   1 0.03h
+  sleep-containing Bash blocks: n46 0.11h

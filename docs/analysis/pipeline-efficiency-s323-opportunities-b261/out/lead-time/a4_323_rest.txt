@@ -1,0 +1,12 @@
+text-only turn (no tool)                     n   99 act 0.54h | mod 0.17 tool 0.00 wait 0.38 | fr 0.03M out 0.04M
+Bash git/gh                                  n   86 act 0.51h | mod 0.15 tool 0.35 wait 0.01 | fr 0.06M out 0.04M
+advisor consult                              n   49 act 0.50h | mod 0.16 tool 0.32 wait 0.02 | fr 0.02M out 0.02M
+ctx_execute shell read                       n  146 act 0.38h | mod 0.34 tool 0.01 wait 0.03 | fr 0.15M out 0.10M
+Bash shell read (grep/sed/cat/ls/awk/..)     n  233 act 0.35h | mod 0.32 tool 0.02 wait 0.01 | fr 0.16M out 0.15M
+AskUserQuestion (operator)                   n    8 act 0.27h | mod 0.03 tool 0.07 wait 0.17 | fr 0.00M out 0.01M
+Bash other prog                              n  105 act 0.24h | mod 0.13 tool 0.06 wait 0.05 | fr 0.26M out 0.07M
+Bash script                                  n   40 act 0.18h | mod 0.06 tool 0.12 wait 0.00 | fr 0.02M out 0.02M
+ctx_execute python                           n    6 act 0.10h | mod 0.09 tool 0.00 wait 0.00 | fr 0.00M out 0.00M
+Write other-path                             n   26 act 0.07h | mod 0.06 tool 0.00 wait 0.01 | fr 0.02M out 0.04M
+Edit planning-artifacts                      n   23 act 0.05h | mod 0.04 tool 0.01 wait 0.00 | fr 0.01M out 0.02M
+ctx_execute shell python-inline              n   14 act 0.05h | mod 0.04 tool 0.00 wait 0.00 | fr 0.01M out 0.01M

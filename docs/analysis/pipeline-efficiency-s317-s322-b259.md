@@ -2,7 +2,8 @@
 
 Measured 2026-11-18. This updates [`pipeline-efficiency-s317-s322.md`](pipeline-efficiency-s317-s322.md),
 which read s322 while it was partial (3 of 8 stories done). Scripts and raw output are in
-[`pipeline-efficiency-s317-s322-b259/`](pipeline-efficiency-s317-s322-b259/). Nothing was written to graph.
+[`pipeline-efficiency-s317-s322-b259/`](pipeline-efficiency-s317-s322-b259/). Nothing was written to graph. The analysis continues through s323 in
+[`pipeline-efficiency-s323-opportunities-b261.md`](pipeline-efficiency-s323-opportunities-b261.md).
 
 > **Clock note (BL-1174).** Every hours figure in this report is on the monotone segment clock. The extractor's
 > earlier clock charged an out-of-order record's interval twice. Sprint totals, old clock to monotone clock, at

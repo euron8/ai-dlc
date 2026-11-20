@@ -1,0 +1,27 @@
+== s321 lead tool_use blocks 9794, active 26.0h (per-call shared over blocks)
+  EXACT repeat (same unit+step+tool+command/path): 535 blocks, 0.78h, fresh+out 3.06M, identical result size 364 | of which within one compaction cycle 266 (0.49h)
+  NEAR repeat (same tool+program+first path): 3403 blocks, 8.65h, fresh+out 10.46M, identical result size 846 | of which within one compaction cycle 2580 (6.55h)
+== s322 lead tool_use blocks 9394, active 22.0h (per-call shared over blocks)
+  EXACT repeat (same unit+step+tool+command/path): 401 blocks, 0.90h, fresh+out 1.84M, identical result size 190 | of which within one compaction cycle 184 (0.56h)
+  NEAR repeat (same tool+program+first path): 3242 blocks, 7.24h, fresh+out 5.66M, identical result size 761 | of which within one compaction cycle 2578 (6.03h)
+== s323 lead tool_use blocks 12411, active 34.2h (per-call shared over blocks)
+  EXACT repeat (same unit+step+tool+command/path): 1028 blocks, 3.61h, fresh+out 7.32M, identical result size 399 | of which within one compaction cycle 243 (1.34h)
+      after-compaction / consult         n 109 1.35h same-size   0
+      same-cycle / consult               n  77 0.86h same-size   0
+      after-compaction / Read            n 611 0.80h same-size 260
+      same-cycle / Bash git push         n   8 0.22h same-size   2
+      same-cycle / Read                  n  67 0.09h same-size  20
+      same-cycle / Bash script:wait-for- n  49 0.07h same-size  49
+      after-compaction / ctx_search      n  34 0.06h same-size  29
+      same-cycle / Bash script:diag-aggr n   1 0.03h same-size   1
+      same-cycle / ctx_execute           n   6 0.02h same-size   0
+  NEAR repeat (same tool+program+first path): 5788 blocks, 15.55h, fresh+out 15.24M, identical result size 907 | of which within one compaction cycle 3647 (9.69h)
+      same-cycle / Bash other            n1820 4.05h same-size  73
+      after-compaction / Bash other      n 668 1.56h same-size  22
+      after-compaction / consult         n 109 1.35h same-size   0
+      same-cycle / Bash script:snapshot- n 461 1.23h same-size  85
+      same-cycle / ctx_execute           n 425 1.20h same-size   4
+      same-cycle / consult               n  77 0.86h same-size   0
+      after-compaction / Read            n 611 0.80h same-size 260
+      same-cycle / Bash script:wait-for- n 295 0.44h same-size 251
+      after-compaction / Bash script:sna n 129 0.41h same-size  23

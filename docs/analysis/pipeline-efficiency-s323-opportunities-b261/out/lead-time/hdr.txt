@@ -1,0 +1,16 @@
+sprint 323 class other group ALL calls 4520 act 19.93h | model 8.91 tool 3.03 wake 0.06 idle 0.00 harness 7.94 | fresh 7.1M out 2.59M cr 688M
+sprint 321 class other group ALL calls 2462 act 9.82h | model 3.63 tool 1.00 wake 0.03 idle 0.00 harness 5.17 | fresh 5.8M out 1.23M cr 579M
+sprint 322 class other group ALL calls 4336 act 14.18h | model 8.30 tool 1.89 wake 0.07 idle 0.00 harness 3.93 | fresh 7.6M out 2.40M cr 619M
+sprint 323 class other group ALL calls 4520 act 19.93h | model 8.91 tool 3.03 wake 0.06 idle 0.00 harness 7.94 | fresh 7.1M out 2.59M cr 688M
+sprint 321 class other group planning calls 1189 act 3.04h | model 1.72 tool 0.31 wake 0.00 idle 0.00 harness 1.01 | fresh 2.1M out 0.58M cr 273M
+sprint 322 class other group planning calls 1768 act 4.83h | model 2.86 tool 0.27 wake 0.00 idle 0.00 harness 1.70 | fresh 3.6M out 0.96M cr 251M
+sprint 323 class other group planning calls 1657 act 8.04h | model 3.37 tool 0.71 wake 0.02 idle 0.00 harness 3.94 | fresh 3.3M out 0.92M cr 243M
+sprint 321 class other group impl+gate calls 662 act 3.70h | model 0.99 tool 0.21 wake 0.00 idle 0.00 harness 2.50 | fresh 1.6M out 0.35M cr 171M
+sprint 322 class other group impl+gate calls 1356 act 4.69h | model 2.86 tool 0.56 wake 0.02 idle 0.00 harness 1.26 | fresh 2.1M out 0.78M cr 199M
+sprint 323 class other group impl+gate calls 1433 act 6.51h | model 2.81 tool 1.12 wake 0.01 idle 0.00 harness 2.58 | fresh 1.8M out 0.76M cr 232M
+sprint 321 class other group sprint-review calls 79 act 0.77h | model 0.10 tool 0.00 wake 0.00 idle 0.00 harness 0.67 | fresh 0.1M out 0.03M cr 17M
+sprint 322 class other group sprint-review calls 111 act 0.51h | model 0.15 tool 0.02 wake 0.00 idle 0.00 harness 0.34 | fresh 0.1M out 0.05M cr 15M
+sprint 323 class other group sprint-review calls 342 act 1.50h | model 0.70 tool 0.15 wake 0.00 idle 0.00 harness 0.64 | fresh 0.6M out 0.21M cr 52M
+sprint 321 class other group rest calls 532 act 2.31h | model 0.83 tool 0.47 wake 0.02 idle 0.00 harness 0.99 | fresh 1.9M out 0.27M cr 119M
+sprint 322 class other group rest calls 1101 act 4.14h | model 2.43 tool 1.04 wake 0.04 idle 0.00 harness 0.63 | fresh 1.8M out 0.62M cr 154M
+sprint 323 class other group rest calls 1088 act 3.88h | model 2.03 tool 1.05 wake 0.03 idle 0.00 harness 0.78 | fresh 1.4M out 0.70M cr 162M

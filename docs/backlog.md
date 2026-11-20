@@ -1345,6 +1345,22 @@ Still owed: `procedure`, `open` and text's hours on s322; item 3's closing graph
 
 **PARTIAL (v0.1185.0).** batch 261, C5. Delivered: the complete-s323 planning classes, compactions per hour and the lead-only bound, the finding that the lead-hours movement is not met, and the old-clock corrections. Owed: the lead's hours and tokens outside planning on the first sprint that runs the remaining shipped items, and the BL-1174 `lead_time.py:72` clock for the idle-wake figures.
 
+### Progress / work items added, 2026-11-20 (batch 261, C10)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 1, and the lead-time reader's scripts and tables under `docs/analysis/pipeline-efficiency-s323-opportunities-b261/`. Population: graph s323, monotone clock, `EXTRACT_WIN_END=2026-11-20T04:20:00Z`, in-session time only. The s323 decomposition of the lead's hours: lead-own 33.3 h = model 25.2 + tool 5.8 + idle 2.3; 15.4 h waiting on running agents (waits under 5 minutes: 7.7 h planning, 4.9 h implementation, 1.8 h sprint review); 17.9 h operator answers; 8.9 h long waits on agents. A lead call costs 8.7 s per 1,000 output tokens and does not slow with context size between 80K and 200K tokens; the 20% of calls that write 1,000 tokens or more hold 54% of model time. The lead made 11,744 calls and compacted 134 times. In the implementation step alone the lead was active 13.6 of 14.4 h and a finished agent waited a median 7.6 minutes for the lead's next dispatch on its story (36 of 88 such waits over 10 minutes), so every hour removed from the lead there is wall clock.
+
+Work items added (the draft's labels 1a to 1g in parentheses), each an upper bound on s323:
+
+4. (1a) After each of the 134 compactions the hooks require a 27 KB digest read, a snapshot read, a step-file read and an advisor call before work resumes. The summarizer plus the slow first call cost 1.8 h; the calls up to the next productive action are 2,056 and 4.3 h; 125 of the sprint's 211 advisor calls are this one. Change: the recovery hook injects the snapshot slice and the step's resume section itself, and the post-compaction advisor call folds into the once-per-gate call or goes. Reach: up to 4.3 h, of which the advisor call is 1.55 h and identical re-reads 0.8 h.
+5. (1b) The lead types each agent's brief: 329 calls of about 3,100 output tokens, 2.76 h. 131 dispatches were then refused for a missing `Deliverable:` line and typed again (211 of 1,033 dispatches refused in all, 20%, against 10% in s322). Change: a script renders the brief from the plan, the role and the shard, and the dispatch carries a path and the fields that vary; the join already prints the lane plan (`join-remediator-shards.sh`); a rendered brief cannot omit the line. Reach: up to 2.3 h, plus 0.66 h of refused dispatches.
+6. (1c) `gate-validation.md` is 247 KB. The lead read it 391 times (5.9 MB); 65 of the 134 compactions happened inside gate validation; 155 lead reads were denied as over the one-read limit. 0.1184.0 names the exact chunk to read after a refusal, which removes the blind retry and not the sixteen chunks. Change: ship the gate procedure as per-check sections under the read limit, with the section list rendered by script. Reach: 0.45 h in denied reads; the larger effect, fewer compactions, is not sized.
+7. (1d) 280 `snapshot-update.sh` calls ran immediately after another one (0.86 h), though the script already takes many operations per call; 131 calls carry snapshot text the lead typed (0.79 h); the class is 3.57 h. Change: the gate and step programs that know the state change write the snapshot row themselves. Reach: up to 0.86 h and 0.79 h.
+8. (1e) Sprint review, deploy-validate and retro are prose the lead re-derives: `retro.md` is 1,740 lines with 8 code blocks, and the lead wrote 9 scratch scripts in s323's retro; each gate runs its arms one call at a time. Change: a retro-close runner and a gate-arms runner. Reach: up to 3.0 h; 1.5 to 2 h expected.
+9. (1f) 1,739 separate shell reads (3.4 h) look up what a finding cites. Change: one call that prints a finding's cited lines. Reach: up to 1.7 h.
+10. (1g) A text-only turn while agents run draws a 3.4 KB forced-continuation message (69 times). Change: allow the stop when a background agent is running. Reach: 0.2 h.
+
+Overlap: items 4, 6 and the re-read part of 7 overlap; item 5 is disjoint from the rest. Found efficient, no change: hook wall time (0.12 h all sprint), notification delivery (0.5 s median), validator re-runs (none), exact-repeat polls (0.09 h), linters, commits, CI (graph runs none).
+
 Step: pipeline
 
 verify: manual
@@ -1613,6 +1629,10 @@ Outcome measured: claim 1, lane-idle minutes during a pending operator ask, on s
 **PARTIAL (v0.1145.0) — the s323 edge and the late-write probe are built; the close reading is still owed (batch 257, W9-12).** The edge and the probe are BL-972's PARTIAL paragraph of this release, and their figures are there. They are not restated here. s323 is incomplete. graph's commit subjects on every ref since 2026-11-05 carry s322's close (`f7e60625b`, 2026-11-12T12:32:58Z, the control) and no s323 close or retro. The spawn ledger on `ai-dlc/carry-over/s323-per-chain-consolidation` holds 40 s323 rows, all on 2026-11-13. Since s322 only one `/ai-dlc` lead has run (`0ef7ba46`, 2026-11-13T08:16:50Z to 13:17Z). BL-994 landed (v0.1136.0) and measured a non-blocking route, a plain-text question that ends the turn. Whether that re-rules BL-972's contact shape is the operator's question, and the lead put it to the operator separately. Still owed: claim 2 on a complete s323, read by `ask_split.py` with the new edge. It rides on BL-972.
 
 **Outcome measured (graph s323 complete, batch 261; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** Claim 1, on s323 complete against s320, by `docs/analysis/pipeline-efficiency-s317-s322/scripts/ask_split.py` (`EXTRACT_WIN_END=2026-11-20T04:20:00Z`, run from a detached checkout of af44929cc; script byte-equal to base; it pairs raw tool_use and tool_result times, so the clock at sha af44929cc8ca96ab91e8526516e9ac4efa7d21cd does not touch its hour and minute figures; output `docs/analysis/s323-outcomes-b261/bl841-bl1141/ask_split.s323.txt`): idle share of ask-wait minutes s320 96.9% (2956.8 of 3051.8 min), s323 88.4% (1208.9 of 1367.5 min over 38 asks), 8.5 points lower against the 5.0-point rule (`pipeline-efficiency-s317-s322.md:173`); against s321 93.7% (1453.6 of 1552.0), 5.3 points. Raw idle minutes 2957 to 1209 while lane-covered time inside waits rose 1.58 h to 2.64 h; s323's total waits were 1368 min against s320's 3052. s323 buckets: FINISHED-INSIDE 912 min (10 asks), NONE-RUNNING 215 (18), RUNNING-NO-FINISH 240 (10); four FINISHED-INSIDE asks (148, 200, 300, 195 min) hold most of the wait, so the share is sensitive to a few asks. $0 API, $0 token-equivalent. Controls, same run: the 10-27 ask reads 89.25 of 95.40 min; s320 reproduces 2956.8 of 3051.8; s321 1453.6 of 1552.0; a run at `EXTRACT_WIN_END=2026-11-11T10:30:00Z` matches committed `out/ask_split.txt` on every per-sprint line (`ask_split.baseline-s322win.txt`). Claim 2, a measured null again with the shipped rule in force (item 4 at graph `SKILL.md:357`, engine 0.1101.0 or later; item 4 shipped v0.968.0, BL-972's fix 0.1092.0, both in the population): 0 of 38 s323 asks name a lane (`ask_lane_names.py 320 321 322 323 --list`, output `ask_lane_names.s323.txt`); controls s320 5 of 63 (the recorded 5 of 63), s321 0 of 56; a broader grammar finds 5 of 38, read by hand, none names a held lane. BL-972 columns, same run: HELD-AT-ASK 0 of 38, DISPATCHED-AT-ASK 13 of 38 (34.2%), ADJ-DISPATCH 2, DRAINED-AT-ASK 0. Stays PARTIAL: claim 2's mechanism is still owed, and with HELD 0 of 38 there is still no population for a pre-ask hold.
+
+### Progress / work items added, 2026-11-20 (batch 261, C10)
+
+Claim 2 (an ask names a held lane) cannot move: "keep other lanes moving" is worth about 30 minutes of s323's 17.9 h of operator wait, because after each long ask the lead's next work was the answer itself or the next question (`docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 3). See BL-972.
 
 Step: pipeline
 
@@ -2297,6 +2317,17 @@ The entry's done condition is the Owed `Outcome measured:` line above, unchanged
 2. DEFECT, FIXED (batch 260, C3). D3: coverage counts round one's shard entries, so a shard that folds a cross token into its own repaired entry acquits the serial half; dealing is unaffected.
 3. NOTE. `core/team-roles/remediator.md:436` and `:473` are flagged NARRATIVE_DRIFT by `core/scripts/audit-rule-files.sh`. Both carry their "Measured:" text at f29df7ba1, before C8 (count of the first sentence 1 at f29df7ba1 and at cd008b9a5; C8 added 0 lines with "Measured"; control, an absent token, 0), and the gate's call (`.githooks/pre-push:652`, `--fail-on=deterministic`) exits 0 at dd7f349e7 while the plain run exits 1. Non-gating and not caused by C8.
 
+### Progress / work items added, 2026-11-20 (batch 261, C10)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 4. Population: graph s323 planning by real step boundaries (13.1 h an ask was pending, 18.5 h at least one agent ran, 12.0 h of it exactly one, 8.4 h a lone remediator).
+
+Work items added (the draft's labels 4a and 4b in parentheses):
+
+4. (4a) An operator's answer is folded into four documents by one serial agent though it edits disjoint files. Change: one writer per file. Reach: 0.85 h.
+5. (4b) A single-document artifact is one lane because the join's node is a file; seven single-lane rounds showed no cross-section edges. Change: section-keyed lanes for single-document artifacts. Reach: 0.8 h.
+
+Of the 6.20 h in `LANES=1` rounds (`serial_tail.py`, committed), the planning serial-tails reader of batch 261, C10 puts about 1.1 h in single-document single-lane rounds of lone-remediator time; that reader's script is not committed (see the README beside the report). The batch 259 update's opportunity 3 is worth about 1.7 h on its remediator half, not 3.7 h.
+
 
 verify: manual
 
@@ -2956,6 +2987,12 @@ Still owed: the `Outcome measured:` line, from the first window in which this sc
 
 **PARTIAL (v0.1185.0).** The window the done condition waits for has arrived: the first window in which `docs/analysis/dispatch-death-bl975/scan.sh` finds a death after the engine shipped is graph s323 (`--from 2026-11-16T00:00:00Z --to 2026-11-20T04:20:00Z`, starting where the previous window ended, so no gap). It found 44 dispatched-agent deaths in lead session 64926214 on 2026-11-19, all arm A (channel R 8, 0 candidates), 36 failed-notified 17:34:29Z to 17:36:13Z and 8 at 17:47:01Z to 17:47:09Z. All 44 harness failed notices carry one cause, `Agent terminated early due to an API error: ... rate_limit_error` (claude-opus-5-5 30, claude-sonnet-5-5 14), each agent's last record a synthetic assistant error line; the lead issued no TaskStop or KillShell on any of them (the two TaskStops in the burst name shell tasks, not agents). Notice latency fell on one derivation, scan.sh deaths plus the lead's first action on the same seat or shard (`docs/analysis/dispatch-death-bl975/first_action.py`, run on each window's DEATH rows; a lead Agent call for the same seat and shard, or a SendMessage naming the agent id or its repair part, or the scan's report/resume column; plain transcript-timestamp differences): s322 4 deaths, first action 3701 to 3729 s after the death, median 3717 s; s323 44 deaths, 41 with a first action, 57 to 934 s, median 832 s (the 36 notice-only deaths alone: median 840 s over 33). The earlier 867 s median quoted for this window was the upper middle value of 32, the median of those 32 is 854 s, and the 4-death s322 hand reading of 3709 s sits inside the s322 range. Three of the 44 have no first action found: dev 4 (`a4614e110d66142f3`), dev 1 (`a8275171e85ff9baf`) and the second round dispatcher (`ac4ae55c612bec229`); their deliverables exist at the close of the round, so they may have been relaunched under another description. Cost groups, sprint-group totals with story counts, at af44929cc (`extract.py`, `analyze.py`, `roll.py --seats`, window end 2026-11-20T04:20:00Z). Monotone clock (EXTRACT_MONOTONE_SEGS=1): requirements s322 (8 stories) 1.17 h gap-inclusive, token-equivalent $35.2 (API $30.0), s323 (18 stories) 0.73 h, $14.8 (API $12.3), fell; sprint-review, where the deaths fell, s322 0.28 h, $12.6 (API $10.3), s323 0.52 h, $13.6 (API $11.6), rose. Old clock (EXTRACT_MONOTONE_SEGS=0): requirements 1.26 h to 4.98 h, sprint-review 0.29 h to 1.13 h, both rose; the dollars are identical on both clocks. Still owed: the `Outcome measured:` line. The efficiency Outcome grammar (`scripts/validate-backlog-receipts.sh:1229-1239`, the verdict field) takes a step-group token and compares figures read after `before` and `after`, so it cannot express a notice-latency outcome, and the close waits on that. Nothing is filed.
 
+### Progress / work items added, 2026-11-20 (batch 261, C10)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 4.
+
+1. (report item 4c) A review shard hung 49 minutes on a permission prompt while four 10-minute waits saw nothing. Change: each wait beat prints every undelivered shard's silence, and a shard silent two beats is re-dispatched. Reach: 0.7 h per occurrence; one such stall in 377 long spawns over s321 to s323.
+
 verify: manual
 
 
@@ -3055,6 +3092,28 @@ One done condition, unchanged: the `Outcome measured:` reading above on a comple
 3. DEFECT. D1: `r11a-sort-veto-absent` (`core/fixtures/process-rule-pins/run.sh:628`) is a line-wise absent check; the veto sentence put back with a line break inside it leaves the fixture green (the tip adversary's mutant survived). Match across the paragraph, not per line.
 4. DEFECT. D2: the sort's Outside list has no catch-all for a decision a step reserves to the operator. One instance: `core/skills/ai-dlc/steps/handoff.md:107-114`, where after `pre-push: BLOCKED.` "The operator decides whether the hook is fixed or bypassed" (the sentence wraps a line, so a one-line grep reads 0 hits for it; the lines were re-read at dd7f349e7).
 5. NOTE. Zero tagged entries is not a pass: if the closing sprint has no entry opening `source: recommendation`, the closer reads every Tier 2 `DECIDED_AUTONOMOUSLY` entry and states the count. BL-972's text at dd7f349e7 is PARTIAL (0.1171.0) and carries no measured pass count, so none is written here.
+
+### Progress / work items added, 2026-11-20 (batch 261, C10)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 3, and the operator-ask reader's scripts and tally under `docs/analysis/pipeline-efficiency-s323-opportunities-b261/`. Population: graph s323, each of its 38 asks read (27 pipeline, 11 in update sessions; 1,368 minutes), classified by reading:
+
+| Kind | Asks | Minutes |
+|---|--:|--:|
+| Needed the operator and could not be foreseen | 17 | 562 |
+| The same decision, answered the same way before | 10 | 381 |
+| The operator took the marked recommendation | 6 | 327 |
+| No recommendation marked; the operator chose the status quo | 2 | 95 |
+| Not a decision | 3 | 2 |
+
+Presence decides the wait: asks sent within 10 minutes of an operator action took a median 2.3 minutes, and after an hour of silence 68 minutes. Of 18 waits over 30 minutes in s321 to s323, 17 had no operator prompt in any project during them. The engine sends no notification: nothing under `core/` or `templates/` calls `PushNotification`, and graph's installed `Notification` hook list is empty.
+
+The operator's choices of 2026-11-20 are items 6 and 7 below. Offered and NOT chosen: a push notification on a pending ask; the presence finding stands as a measurement. Measured and NOT built: a decision register at step start is worth about 11 minutes, because questions come out of lane output mid-step; this withdraws opportunity 2 of the batch 259 update (`docs/analysis/pipeline-efficiency-s317-s322-b259.md`).
+
+Work items added:
+
+6. A standing-rulings record that the lead and the update skill consult before asking, with the three update-session families as its first rows: "delete a pristine file upstream removed" asked 28 times before s323 and answered yes in 24; "extension still additive" asked 48 times, 42 as recommended; override drift asked 23 times. Reach: up to 380 minutes of s323's asks (214 pipeline, 166 update).
+7. Proceed on a marked recommendation with a recorded veto window, where the work under it is cheap to redo. This needs an ask that does not hold the turn. Reach: up to 83 minutes, not the 422 a naive count gives, because the lead reaches its next operator-gated question within minutes and waits in the same absence.
+8. DEFECT. A question's factual premises carry their evidence: one `file:line` per premise the question states as fact. Six s323 asks on one certificate-header premise (asks 3, 14, 15, 19, 29 and 37 in the operator-asks reader's numbering) total 577 minutes; the facts that contradicted the premise were in graph's tree (`infra/lib/ingress-stack.ts:111`, `rebalancer/api.py:635`, as reported by the reader, not re-derived here). One 195-minute sprint-review ask quoted the operator's own earlier answers in its question text; Rule 11(a)(i), decide when a source settles it, had shipped before s321 and did not stop it.
 
 
 verify: manual
@@ -3609,6 +3668,12 @@ The entry's done condition is the Owed `Outcome measured:` line (gate-1 passes p
 1. DEFECT. D2: the `pre-reviewer` role's read-only property is prose only. `core/team-roles/pre-reviewer.md` says "read-only" in its title and Identity, and no validator, fixture or settings key enforces it: `grep -rln pre-reviewer core scripts .claude/rules` at dd7f349e7 lists only `dev.md`, `pre-reviewer.md` and `implementation.md` (control: `dev.md` is in the list). Add an enforcer or state why none is possible.
 2. DONE (batch 261, C8). D3: the heading, the Fix paragraph and the head status line now state the shipped role (`pre-reviewer`, `sonnet`/`low`, `omitClaudeMd: true`, ledgered, not a gate, writes no file) and PARTIAL. The only other text quoting the old heading was this item.
 
+### Progress / work items added, 2026-11-20 (batch 261, C10)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 5.
+
+3. First-pass rework is mostly paperwork: of 55 classified review findings, 30 are evidence or bookkeeping form and 5 are code. A recurring one is evidence captured on a commit other than the frozen one; `core/scripts/validate-handoff-evidence.sh` runs before gate 1 and does not compare them. Change: a capture-commit check in `core/scripts/validate-handoff-evidence.sh`. Reach: up to 6 agent-hours and $43 of rework, by allocation.
+
 
 Step: implementation
 
@@ -3776,6 +3841,13 @@ Owed (keeps the entry PARTIAL): `docs/analysis/pipeline-efficiency-s317-s322/scr
 NOTE. `docs/analysis/pipeline-efficiency-s317-s322/scripts/bl1003_rederive.py`'s `members()` raises ValueError since BL-1003 left the backlog; run it with `--only w1,w2,w3` (the docstring says so).
 
 NOTE. The committed `bl1003_rederive.py` output predates the extractor changes of 0.1131.0 and 0.1145.0 (61 against 29 spawn-label changes at W1; the s322 gate-terminator 15:08:37Z -> 14:00:06Z): extractor drift on s322, not the clock.
+
+### Progress / work items added, 2026-11-20 (batch 261, C10)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 8. Two instrument defects in the efficiency readers:
+
+1. DEFECT. `extract.py` charges an ask to operator wait only where a gap exceeds 300 s, so an ask that receives background notifications is charged to lead active: one 88-minute ask reads 5 minutes, and about 2 h of s323's lead-active time is an ask pending.
+2. DEFECT. `roll.py` prices cache writes at the one-hour rate (`P` gives cw = 2 x input), while every s323 subagent call wrote five-minute cache. At the five-minute rate subagent dollars are about $249 lower a sprint. Which rate is billed was not established.
 
 Step: pipeline
 
@@ -4023,6 +4095,14 @@ Reading on complete s323 (batch 261; pin EXTRACT_WIN_END=2026-11-20T04:20:00Z; m
 
 **PARTIAL (v0.1185.0).** batch 261, C5. Delivered: the complete-s323 planning reading (table, per-story figures, shares), item 0's class table carried over, item 5 closed on its reading, item 16 closed. Items 0 to 5 are done or closed on a reading; items 8, 9, 10, 14, 15 and 21 are reported by C6 in this batch and are not touched here. Owed: the outcome measurement of the shipped items (3, 4 and 6) on a complete graph sprint that runs them, so the entry stays open.
 
+### Progress / work items added, 2026-11-20 (batch 261, C10)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 4.
+
+22. (report item 4d) Fence re-derivation, renders and seals run as 23 agent spawns. Change: a record-mechanics script. Reach: 0.4 h, $6.
+
+Correction to item 3's estimate: item 3 sizes the readiness and trace calls at 0.5 to 1.2 h and $5 to $11 a sprint; in s323 they took about 2 minutes, and the architecture readiness call caught 4 repaired findings, so the saving is about a tenth of that estimate and the call stays. Kept on evidence: pass 2 (14 major findings in s323, nearly all on text the repair added or left stale; the count is a reading of finding headings) and party rounds (465 repaired entries across the four steps). Not proposed: overlapping the planning steps reaches up to 5.7 h, but late operator decisions in requirements were cited by architecture, so the rework risk is real.
+
 
 Step: requirements
 
@@ -4054,3 +4134,68 @@ Provenance: batch 259 close; id allocated by lead ai-dlc-64.
 verify: manual
 
 
+## BL-1186 — s323 implementation and its gates took 14.0 h against an 11.3 h critical path, held by a suite-launch memory refusal and a serialization rule the engine does not handle
+
+**DEFECT (efficiency).** Filed 2026-11-20 (batch 261, C10). Owner: `core/skills/ai-dlc/steps/implementation.md` and `core/skills/ai-dlc/steps/_dispatch-protocol.md`. Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, groups 2 and 5.
+
+Goal: implementation and its gates stop being held by things the engine does not handle. One done condition: the `Outcome measured:` line on the first complete sprint after items 1 to 5 ship, read against the baseline below.
+
+Population: graph s323, read only, monotone clock (`extract.py` at the 0.1185.0 tree), `EXTRACT_WIN_END=2026-11-20T04:20:00Z`, in-session time only. Graph's rule (`docs/coding-conventions.md`, "Suite-Launch Admission and Watchdog") refuses a suite launch unless 8 workers x 1.25 GiB + 16 GiB = 26 GiB fits in measured headroom, and fixes the worker count at 8. On 2026-11-18 from 14:45Z to 19:27Z headroom sat between 15.6 and 25.9 GiB. 261 refused launches are in s323's transcripts (a control token returns in 5,372 files), 206 of them between 13:00Z and 24:00Z that day. One QA agent lived 290 minutes of which 277 were polling for a 138-second run; a dev rework ran 323 minutes with 114 refusals; both were on the critical path. The operator was asked once, 88 minutes in, and answered "keep waiting". The engine has no text about admission (0 files under `core/` mention it in step or role text), so each agent polls on its own. A simulation on the measured per-story durations gives 11.3 h at width 4, 6 or 8; the spawn cap is 42 and was not hit.
+
+Baseline: s323 implementation with its gate 15.1 h for 18 stories (monotone clock), 14.0 h measured window against 11.3 h critical path. The 2.7 h difference is lead latency (BL-819). Agents spent 9.8 h in `wait-for-deliverable.sh` in s323 against 0.9 h in s322; about 6.8 to 7.0 h of it is agents retrying against the admission rule.
+
+Work list, each measured waste an upper bound on s323:
+
+1. Check the consumer's suite predicate against measured headroom before the first implementation wave, beside the pre-dispatch auth check in `core/skills/ai-dlc/steps/implementation.md`. Waste: 261 refusals; 7.0 agent-hours in 81 agents.
+2. One single-flight queue for suite runs in place of every seat polling `wait-for-deliverable.sh`. Waste: as item 1; wall clock 1 to 3 h and up to 4.7 h (two readers, not reconciled: a concurrency join gives 1 to 3 h at low confidence, a critical-path simulation up to 4.7 h of implementation's 14.0 h).
+3. Escalate to the operator after a bounded number of refusals. Waste: as item 1; the one ask in s323 came 88 minutes in.
+4. State the shared-source-file relaxation as the rule in `core/skills/ai-dlc/steps/_dispatch-protocol.md`, where it now serializes: stories that write one source file run together and merge at close. `_dispatch-protocol.md` declared an eight-story chain; the lead ran four of them together and merged at close, and the declared chain would have cost about 6.4 h more. Reach: 0 h against the s323 baseline, because the lead already ran those stories together; the 6.4 h is what the declared chain would have cost, so this item protects existing practice. Risk: merge conflicts, of which s323 has two review records.
+5. A held, deferred or operator-labelled item carries a resolvable operator source, checked where the label matters. (a) At INTAKE, when a sprint takes such an item into its scope (carry-over evaluation and scope setting), whatever sprint wrote the label, and (b) at implementation exit for a label written during the sprint, the check resolves each cited operator locator to a line whose text matches the quote. A label with no source, or whose locator does not resolve, does NOT block and is NOT silently accepted: the lead surfaces it as one operator decision with the recommendation "keep it as labelled", proceeds on that recommendation (work under a kept hold is nothing, so it is cheap to reverse), and records the operator's answer against the item as its source, so the same item is never asked again. Design decided here on the merits, 2026-11-20 (the operator may overrule): silent acceptance of a wrong label cost s323 a 195-minute ask and about 3.4 h of lead time, found only at sprint review; a blocking ask costs an operator wait at planning (s323's carry-over asks waited 148 and 200 minutes); surfacing with a default costs no wait and moves the discovery to intake. It needs no "legacy" date test, so it behaves the same on any consumer. It depends on BL-972's proceed-on-recommendation and standing-rulings items. Measured waste: three stories (2.1, 2.2, 2.3) reached sprint review labelled operator-held with no quote behind the label; they were built and gated inside sprint review after a 3.25 h wait, 3.4 h of lead-active time. Reach: 3.4 h, one occurrence.
+Consumer-side record, 2026-11-20, as reported by the graph session and not re-derived here: graph's audit found 58 labelled items (23 backed, 10 stale, 25 unbacked) and three cited quotes that resolve in neither operator history file; the operator declined a retroactive batch (0 confirmed, 0 corrected, 0 dropped); graph's policy is no retroactive audit of legacy items, each handled when a sprint takes it on, and correct go-forward state. This item touches an item only when a sprint takes it on, which is that policy.
+
+Consumer side: the admission predicate and the worker count are the consumer's (graph `docs/coding-conventions.md`), as is whatever shares the box with the local model. The consumer side is being coordinated with graph by the operator's grant of 2026-11-20, and is never written from here. Graph's `scripts/pytest_admission.py` measures headroom as free plus inactive memory, so the 16 GiB allowance is margin on top of whatever is resident, and graph's s322 record shows the local model server resident at 150.3 GiB of 256 GiB (reported by the graph session on 2026-11-20; not re-derived here). What held the memory in s323 is not established. Consumer-side progress, 2026-11-20, done by graph under the operator's approval and never from here: graph PR #1340 (e3c7794c5) makes its suite admission step down 8 -> 6 -> 4 workers before refusing (`STEP_DOWN = (6, 4)` in graph `scripts/pytest_admission.py`). Of s323's refused readings carrying a headroom figure, 31% pass at 6 workers and 63% at 4. Engine items 1 to 3 are unchanged by it.
+
+Not proposed: running QA alongside code review. It reaches at most 1.1 h and wastes QA in the 7 of 17 stories where review fails first. There are no pushes inside implementation (0 against 230 commits).
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`). Related: BL-819 (lead latency), BL-1166.
+
+Expected movement: the fix removes the agent-hours implementation spends refused at the suite launch (items 1 to 3) and a held, deferred or operator-labelled item taken into scope without an operator quote (item 5); item 4 is not a movement against the s323 baseline; the outcome is read against the baseline above, implementation elapsed hours and the count of refused launches, on graph's next complete sprint.
+
+Provenance: batch 261, cluster C10 (session ai-dlc-d5), from the s323 opportunities report; id allocated by the C10 session.
+
+Step: implementation
+
+verify: manual
+
+
+## BL-1187 — every subagent spawn loads the same fixed context before it works: $450 of s323's $1,580 subagent dollars (28%)
+
+**DEFECT (efficiency).** Filed 2026-11-20 (batch 261, C10). Owner: `templates/settings.json.template`, `core/scripts/render-agent-definitions.sh`, `core/team-roles/*.md` and `templates/CLAUDE.md.template`. Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 6.
+
+Goal: a subagent's first request carries only what its role reads. One done condition: the `Outcome measured:` line on the first complete sprint after items 1 to 5 ship, read against the baseline below.
+
+Population: graph s323 subagents (1,138 spawns), read only, `roll.py` prices, `EXTRACT_WIN_END=2026-11-20T04:20:00Z`. Subagent dollars are 42% cache writes, 40% cache reads and 18% output; the cache hit rate is 96.3%; thinking is $81 in all and no seat runs at high effort, so model and effort bindings are not the lever. A 48.8 KB project-instructions block (graph's `CLAUDE.md`, two rule files, the operator's memory index) loads into 795 spawns in 15 roles, and 0 of them read those files again; `omitClaudeMd` is set for 4 of 19 roles. 1,062 of 1,138 spawns used neither the Skill nor the Agent tool but carry both definitions and a 30 KB skills list.
+
+Baseline: s323 subagent API $1,580 (reader recompute $1,582.28 against the record's $1,582.26), fixed first-request context $450 (28%); s321 $437 (23%), s322 $214 (22%).
+
+Work list, each reach an upper bound on s323:
+
+1. Set `omitClaudeMd` for every role but dev, dev-escalated and protected-path-editor in `templates/settings.json.template`, and carry the one path dev needs in its brief. Reach: $133 (upper bound; $159 if the dev seats could also opt out).
+2. A `tools:` allowlist per role in `core/scripts/render-agent-definitions.sh`. Reach: up to $162, inferred from one allowlisted agent and to be tested on one role first.
+3. Role files under 16 KB with appendices read on demand: qa 50,457 B, code-reviewer 48,987, adversary 46,895, remediator 39,519, dev 31,678, architect 16,796 (`wc -c` on `core/team-roles/*.md`; six role files over the 16,384 B limit). The context-mode plugin refuses a single read over 16,384 bytes and the engine tells every agent to read its role file first; in a 40-spawn sample 35 dev, 16 qa, 13 code-reviewer and 13 remediator spawns loaded under half their contract. 0.1184.0 (BL-1184) made chunked reads work and deliberately left the first-read line of `render-agent-definitions.sh` unchanged, so this item is about calls and tokens: a chunked read is one call per 16 KB, and a role file under 16 KB makes it one. Reach: up to $60 to 70; the compliance half is 0.1184.0's to show on s324.
+4. Byte-identical sibling shard briefs with the shard identity in a first read: sibling shards cache-write 18 to 37K tokens each because their briefs differ near the top of the prompt. Reach: up to $118, low to medium confidence; it assumes byte-identical briefs and depends on BL-819's rendered briefs (item 5).
+5. `templates/CLAUDE.md.template` puts "## Project Operations Protocol" (line 37) and "## Deployment Commands" (line 55) in the consumer's always-loaded `CLAUDE.md`. On graph those two sections are 11,776 B and 2,681 B of a 21,850 B file, loaded into every agent that has not opted out and into the lead after every compaction (134 in s323). Give them a home the ops seat and deploy-validate read on demand. Evidence that nothing in the engine depends on their being in `CLAUDE.md`: `core/skills/ai-dlc/steps/deploy-validate.md` and `core/team-roles/ops.md` each contain 0 references to `CLAUDE.md` (control: `deploy-validate.md` mentions "ops" 5 times, case-insensitive); the role files that name `CLAUDE.md` are `core/team-roles/dev.md:127` and `core/team-roles/protected-path-editor.md:7`. Consumer-side progress, 2026-11-20, done by graph under the operator's approval and never from here: graph PR #1341 (885f53e83) moved its deploy and ops protocol to `docs/operator-runbooks/deploy-protocol.md`, and graph's `CLAUDE.md` went from 21,850 B to 10,249 B (`git cat-file -s`; control: the parent commit reads 21,850). The engine item, the template's two sections, still stands so a future install does not put them back. Reach: not sized; the part reaching opted-in roles falls inside item 1.
+
+Items 1 and 2 cut the same first-request tokens and are bounded together by about $300.
+
+Observations, unbuilt (NOTE): 36 agents died on rate limits ($24, 205 agent-minutes); 80 of 168 gate-adjudicator spawns ended in a plain pass ($40; a text match, not checked against the rules).
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`). Related: BL-819 (rendered briefs), BL-1184.
+
+Expected movement: the fix removes the share of each subagent's first request that its role never reads; the outcome is read against the baseline above, the fixed first-request context dollars and its share of subagent dollars, on graph's next complete sprint.
+
+Provenance: batch 261, cluster C10 (session ai-dlc-d5), from the s323 opportunities report; id allocated by the C10 session.
+
+Step: pipeline
+
+verify: manual
