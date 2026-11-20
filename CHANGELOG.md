@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1195.0] - 2026-11-20
+
+### Every settings fill reaches a consumer's settings.json on any pull, not only when the settings template changed (BL-1187)
+
+- For every consumer whose `.claude/settings.json` lacks something the settings merge would add. On graph today that is 16 of its 19 roles missing the template's role keys (`omitClaudeMd`, `disallowedTools`) that cut each subagent's first request. The merge that fills them ran only when `templates/settings.json.template` changed in the pulled range. A fill added to `settings-merge.sh` while the template stood still, or a template change taken under an older engine, never reached the file.
+- `reconcile/apply.sh` now merges the template into a copy of the consumer's `settings.json` on every pull whose range left the template alone. If the copy changes, it prints `WORKLIST template-json-merge .claude/settings.json`. That is the row a template change prints, and it withholds the stamp the same way. `--finish` re-tests it by the same copy-merge. The row quotes the merge's own report lines: which roles get which keys, and the context-mode retirement with its `--scope user` install instruction. No list of fills is kept, so the next fill added to `settings-merge.sh` reaches consumers with no change here. This replaces 0.1193.0's context-mode-only trigger.
+- Declining has a price: deleting the file's `template:` line clears one pull, and the row comes back on the next while the copy still changes. A fill is declined for good in the file itself: a role key by declaring it, a plugin by setting it `false`, `bashOutputMaxChars` by declaring a number. A deleted template role or `aiDlcModels` key, an edited or reordered ai-dlc hook block, and the file's key order and formatting cannot be declined, because the merge always restores them. When the merge's report names no fill, the row lists the kinds of change it can be.
+- Any consumer `.claude/settings.json` that `settings-merge.sh` refuses (empty, an array, JSONC with comments, a key of the wrong type such as `"hooks": []`) raises no row and gets no fill until it is fixed; a row there could not be cleared, because the merge refuses it on every pull. The next pull after the fix asks for the merge. A refusal caused by the engine itself (the merge script missing or failing on an empty `{}` too, the template unreadable) still raises `DECISION template-json-refused` and withholds the stamp.
+- Which pull first runs it: the pull that delivers this release, from step 3, when its step-2 self-update gate passes. Under `SELF-UPDATE-DEFER` (graph's last pulls), an un-synced step 2 or a failed step-2 push, that pull runs the consumer's old engine, and the row first appears on the following pull, or at the `SELF-UPDATE-SAFE-STOP` ref.
+- Fixture `apply-restamp-theirs` (`receipt-bl886.sh`) gains cells `er` (a role-key fill with no context-mode id), `ez` and `ex` (a missing or failing merge script withholds), and `em` and `ek` (a `[]` file and a `{"hooks":[]}` file raise nothing and stamp); `en` becomes a merge fixed point.
+
 ## [0.1194.0] - 2026-11-20
 
 ### Fewer repeat asks: a standing-rulings record, premise evidence on questions, and fix-forward PRs no longer asked (BL-972, BL-1189)

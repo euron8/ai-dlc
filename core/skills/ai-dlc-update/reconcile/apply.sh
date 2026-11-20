@@ -1302,7 +1302,7 @@ ap_write_marker() {
 # test under `--finish` too, never by its blob, and only while its `template:` line is present --
 # deleting that line is the decline exit an idempotency test otherwise would not have. This catches
 # a template that moved base->theirs, since `--templates` buckets on that delta, and, with no such
-# row for settings.json, a context-mode enable settings-merge.sh retires (tp_cm_retire_scan).
+# row for settings.json, the same test on settings.json alone (tp_settings_scan).
 #
 # ONE ROW HERE NAMES `reapply_remedy`, AND ONLY ONE: `finish-template-unscanned`, for a marker
 # whose scan refused. Nothing was recorded, so `--finish` cannot clear it; a fresh ordinary run whose
@@ -1379,39 +1379,54 @@ template_scan() {
         esac ;;
     esac
   done < "$DT_DIR/tpl.out"
-  [ "$_js" = 1 ] || tp_cm_retire_scan
+  [ "$_js" = 1 ] || tp_settings_scan
   TP_SCANNED=1
   return 0
 }
-# tp_cm_retire_scan -- the context-mode retirement, whether or not the range moved the template.
-# template_scan's json row comes from the base->theirs template delta, so a consumer that took the
-# template change under an engine without the retirement keeps `enabledPlugins
-# ["context-mode@context-mode"]: true` through every later pull that leaves the template alone. The
-# predicate is settings-merge.sh's own: its `--check` prints the `enabledPlugins:` line when the
-# retirement fires, so a `false`, another plugin, an absent key and a template that wires no hooks
-# all stay silent here as they do there. A builtin read gates it: a file that never names the id
-# forks nothing. The row, its `template:` line and --finish's re-test are template_scan's own.
-tp_cm_retire_scan() {
-  local _c=.claude/settings.json _tm=templates/settings.json.template _s="" _o _crc=0
+# tp_settings_scan -- every settings-merge.sh fill, whether or not the range moved the template.
+# template_scan's json row comes from the base->theirs template delta, so a fill the merge gained
+# while the template stood still (a retirement, a role key) never reached a consumer whose pulls
+# left the template alone, and neither did one a consumer took under an engine without it. The test
+# is tp_json_test's, the one --finish re-runs: merging theirs' template into a COPY changes the copy.
+# No list of fills is kept here, so a fill added to settings-merge.sh is caught with no edit to this
+# file. Equal, no consumer file, no template at theirs, and settings-merge.sh refusing the consumer's
+# file while the same merge into `{}` passes are silent. On `differs` only,
+# settings-merge.sh --check supplies the row's wording (its `enabledPlugins:` and `filled` lines);
+# it decides nothing.
+tp_settings_scan() {
+  local _c=.claude/settings.json _tm=templates/settings.json.template _o _l _what=""
   [ -f "$CONSUMER/$_c" ] || return 0
-  IFS= read -r -d '' _s < "$CONSUMER/$_c" || :
-  case "$_s" in *'"context-mode@context-mode"'*) ;; *) return 0 ;; esac
   tp_json_test "$_tm" "$_c"
-  [ "$TP_JT" = equal ] && return 0
-  if [ "$TP_JT" = differs ]; then
-    _o="$(bash "$SELF/settings-merge.sh" --consumer "$CONSUMER/$_c" --template "$AP_TMP/tpj/template" --check < /dev/null 2> /dev/null)" || _crc=$?
-    if [ "$_crc" -ne 0 ]; then
-      TP_JT=refused; TP_JW="settings-merge.sh --check exited ${_crc}"
-    else
-      case "${NL_CH}${_o}" in *"${NL_CH}enabledPlugins: "*) ;; *) return 0 ;; esac
+  case "$TP_JT" in
+    equal) return 0 ;;
+    differs)
+      _o="$(bash "$SELF/settings-merge.sh" --consumer "$CONSUMER/$_c" --template "$AP_TMP/tpj/template" --check < /dev/null 2> /dev/null)" || _o=""
+      while IFS= read -r _l; do
+        case "$_l" in "enabledPlugins: "*|"settings-merge: filled "*) _what="${_what} [${_l}]" ;; esac
+      done <<EOF
+$_o
+EOF
+      [ -n "$_what" ] || _what=" [--check names no fill: the change is one of a hook block, the order of hook blocks or event keys, the file's formatting, a plugin the template enables, or a template key the file deleted (a role, an aiDlcModels key, bashOutputMaxChars); compare the file with a merged copy]"
       TP_JSON_OWED=1
-      say WORKLIST template-json-merge "$_c" "this file still enables \`context-mode@context-mode\` at project scope, which settings-merge.sh retires (context-mode is a user-level install), and \`${_tm}\` did not change between \`${BASE}\` and \`${THEIRS}\`, so no earlier row asked for the merge: it is owed. ${tp_remedy_json} Every user of this project then needs \`claude plugin install context-mode@context-mode --scope user\`. Then run --finish, which re-runs this same test."
+      say WORKLIST template-json-merge "$_c" "merging \`${_tm}\` at \`${THEIRS}\` into a copy of this file changes the copy, and the template did not change between \`${BASE}\` and \`${THEIRS}\`, so no template row asked for the merge: it is owed.${_what} ${tp_remedy_json} Then run --finish, which re-runs this same test."
       TP_LINES="${TP_LINES}$(tp_rec_line "$_c")${NL_CH}"
-      return 0
-    fi
-  fi
+      return 0 ;;
+  esac
+  git -C "$DIST" cat-file -e "${THEIRS}:${_tm}" 2> /dev/null || return 0
+  # A file settings-merge.sh refuses (not a JSON object, JSONC, a key of the wrong type) is refused on
+  # every pull, and deleting its template: line clears one pull only, so it is silent. settings-merge.sh
+  # exits 1 for a refused file and for its own failures alike, so the CONTROL decides: the same merge
+  # into an empty `{}`. It passing means the engine works and the file was refused; it failing (a broken
+  # script, jq missing, a bad template) keeps the row, as does every refusal before the merge ran.
+  case "$TP_JW" in
+    "settings-merge.sh exited "*)
+      printf '{}\n' > "$AP_TMP/tpj/ctl.json" 2> /dev/null \
+        && bash "$SELF/settings-merge.sh" --consumer "$AP_TMP/tpj/ctl.json" --template "$AP_TMP/tpj/template" < /dev/null > /dev/null 2>&1 \
+        && return 0
+      TP_JW="${TP_JW}; the same merge into an empty {} failed too, so the engine, not this file, refused" ;;
+  esac
   TP_JSON_OWED=1
-  say DECISION template-json-refused "$_c" "this file names \`context-mode@context-mode\`, and whether settings-merge.sh would retire its project enable could not be tested (${TP_JW}) -- this is NOT a finding that it is retired. Fix that, then ${tp_remedy_json}"
+  say DECISION template-json-refused "$_c" "whether merging \`${_tm}\` at \`${THEIRS}\` would change this file could not be tested (${TP_JW}) -- this is NOT a finding that it is merged. Fix that, then ${tp_remedy_json}"
   TP_LINES="${TP_LINES}$(tp_rec_line "$_c")${NL_CH}"
   return 0
 }

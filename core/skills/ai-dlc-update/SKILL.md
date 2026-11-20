@@ -1191,13 +1191,21 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      `apply.sh` hands this back too, as a `WORKLIST template-json-merge` row that withholds
      the re-stamp, after running `settings-merge.sh` on a copy of the file: a copy that
      changes means the merge is owed, a copy that does not means it is done and no row is
-     printed. The same row is printed when the range left the template alone but the
-     consumer's file still carries the context-mode enable the merge retires (the
-     `enabledPlugins:` line `--check` prints). A file that is owed is recorded on a
-     `template:` line, and `--finish` re-checks
-     it by running `settings-merge.sh` on a copy again, which must change nothing, or it
-     prints `WORKLIST finish-template-json-unmerged` and withholds. The deliberate-no-op
-     exit is deleting that file's own `template:` line.
+     printed. The same test runs on every pull, whether or not the range changed the
+     template, so any fill the merge owes reaches the file; the row then quotes the
+     `enabledPlugins:` and `settings-merge: filled` lines `--check` prints. A file that is
+     owed is recorded on a `template:` line, and `--finish` re-checks it by running
+     `settings-merge.sh` on a copy again, which must change nothing, or it prints
+     `WORKLIST finish-template-json-unmerged` and withholds. The deliberate-no-op exit is
+     deleting that file's own `template:` line; while the copy still changes, the next
+     pull asks again. A fill is declined for good in the file itself: a role key by
+     declaring it in the consumer's role, a plugin by setting it `false`,
+     `bashOutputMaxChars` by declaring a number. These have no such opt-out, because
+     the merge always restores them: an edited or reordered ai-dlc hook block, a
+     template role or `aiDlcModels` key the consumer deleted, and the file's event-key
+     order and formatting. A file `settings-merge.sh` refuses (not a JSON object, a key
+     of the wrong type) raises no row, and no fill reaches it until it is fixed; a
+     refusal the engine causes still prints `DECISION template-json-refused`.
 
    **RUN THE POST-WRITE GATES THROUGH ONE SCRIPT, AND READ ITS VERDICT LINES — NEVER A GATE'S
    PROSE.** The five gates below (leftover tokens, setup-site drift, hook registration, taught
