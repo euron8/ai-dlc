@@ -28,6 +28,9 @@
 # VERSION, which every release edits, and the hit rate is zero. The exclusions are
 # justified by measurement, not by argument -- see EXCLUDE.
 #
+# HISTORY RANGES ARE IN THE KEY. A fixture whose git.decl carries a `range` line reads git history, which the tree
+# does not hold; the `### ranges` component folds each such line's read-set hash, so a moved range moves this key.
+#
 # OUTPUT. One line: the key. `--explain` prints the components it was built from
 # and `--summary` the sets it used; the pre-push announce shows both on a hit,
 # because a silent cached green is the defect class with a stopwatch attached.
@@ -321,7 +324,38 @@ emit_components() {
     done <<< "$kl"
   fi
 
-  # 8. THE TOOLS. Identity, hash and version -- see TOOLS above for why all three.
+  # 8. THE HISTORY RANGES. Every `range` line of every core/fixtures/*/git.decl: fixture, `git-range:<n>` key and the
+  #    row's HASH field, from readset_decl_ranges SOURCED from .githooks/pre-push's READSET_KEYROWS span (the per-fixture
+  #    key's own function; no base or theirs sha, so this key moves exactly when that row does). Fails closed: an X row,
+  #    or a span that cannot be found or loaded, refuses the key. The span is loaded only when a git.decl carries a range.
+  printf '### ranges\n'
+  local rg rf rrc rw rrows rfx
+  set -- core/fixtures/*/git.decl
+  rg=""
+  for rf in "$@"; do [ -f "$rf" ] && rg="${rg}${rf}${us}"; done
+  set --
+  while [ -n "$rg" ]; do set -- "$@" "${rg%%"$us"*}"; rg="${rg#*"$us"}"; done
+  rf=""
+  if [ "$#" -gt 0 ]; then
+    rf="$(grep -lE '^range( |$)' "$@" 2>/dev/null)"; rrc=$?
+    [ "$rrc" -le 1 ] || die "could not scan the git.decl files for range lines. Fails closed."
+  fi
+  if [ -n "$rf" ]; then
+    rw="$(mktemp -d "${TMPDIR:-/tmp}/sck-ranges.XXXXXX")" || die "could not make a scratch directory for the range rows. Fails closed."
+    sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' .githooks/pre-push > "$rw/keyrows.sh" 2>/dev/null
+    grep -q '^readset_decl_ranges() ' "$rw/keyrows.sh" || die "could not find readset_decl_ranges in .githooks/pre-push's READSET_KEYROWS span. Fails closed."
+    . "$rw/keyrows.sh" || die "could not load the READSET_KEYROWS span of .githooks/pre-push. Fails closed."
+    while IFS= read -r rf; do
+      rfx="${rf%/git.decl}"; rfx="${rfx##*/}"
+      rrows="$(readset_decl_ranges "$rfx" "${rf%/git.decl}" "$rw/w")" || die "readset_decl_ranges failed for $rfx. Fails closed."
+      case "$rrows" in *"$tab"X"$tab"*) die "readset_decl_ranges refuses a range line of $rfx. Fails closed." ;; esac
+      [ -n "$rrows" ] || die "readset_decl_ranges returned no row for $rfx, which carries a range line. Fails closed."
+      printf '%s\n' "$rrows" | cut -f1,3,4
+    done <<< "$rf"
+    rm -f "$rw/keyrows.sh" "$rw"/w.* ; rmdir "$rw" 2>/dev/null
+  fi
+
+  # 9. THE TOOLS. Identity, hash and version -- see TOOLS above for why all three.
   printf '### tools\n'
   # One shasum over every present tool (a shasum that did not answer for every path, or answered out of order,
   # falls back to one per tool); the first hash field and the first --version line are cut with builtins.
@@ -373,6 +407,7 @@ case "${1:-}" in
     printf 'ignored:       derived from .gitignore via git check-ignore\n'
     printf 'paths hashed:  %s\n' "$(printf '%s\n' "$_paths" | grep -c . )"
     printf 'tools:         %s\n' "$TOOLS"
+    printf 'ranges:        each git.decl range line, keyed on its read-set hash (readset_decl_ranges)\n'
     exit 0 ;;
   "") : ;;
   *) die "usage: suite-content-key.sh [--explain|--summary]" ;;
