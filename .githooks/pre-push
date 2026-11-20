@@ -548,6 +548,11 @@ step "release version triple (subject == VERSION == CHANGELOG heading)" rv_tripl
 #     in the imperative. Followed literally, that redoes shipped work.
 step "plan shape (docs/plans/ is resumable by a session that never saw this one)" \
   bash scripts/validate-plan-shape.sh
+pe1_report_coverage() {
+  [ -f scripts/validate-efficiency-report-coverage.sh ] || { printf '   SKIP: scripts/validate-efficiency-report-coverage.sh is absent in this tree\n'; return 0; }
+  bash scripts/validate-efficiency-report-coverage.sh
+}
+step "pipeline-efficiency report coverage (PE1: a declared section per step file)" pe1_report_coverage
 
 # 1e. Narrow authoring rules live in `.claude/rules/*.md` and load only when Claude READS
 #     a matching file -- measured on CC 2.1.226: Read and Edit fire the trigger, Write,

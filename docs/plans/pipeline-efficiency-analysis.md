@@ -47,7 +47,9 @@ report named `docs/analysis/pipeline-efficiency-<last sprint>-opportunities-b<ba
    the pin `EXTRACT_WIN_END=<utc timestamp>` at the top of the report's method section.
 
 2. Fix the scope. The step list is the union of (a) every file under `core/skills/ai-dlc/steps/` at each
-   engine version from action 1 (`git ls-tree` per version tag of this repo, never a glob against the
+   engine version from action 1 (this repo has no version tags; a release is the commit whose subject starts
+   `<version> —`. Find it with `git log --format='%H %s' origin/main | grep -E '^[0-9a-f]+ <version> '`, then run
+   `git ls-tree --name-only "<sha>:core/skills/ai-dlc/steps"`; never a glob against the
    manifest, which declares `steps/*.md` as one wildcard), (b) the current tree's
    `core/skills/ai-dlc/steps/`, (c) `core/skills/ai-dlc-update/` (the update skill), and (d) the consumer's
    extensions and overrides for each step: `/Users/n8/git/graph/.claude/skills/ai-dlc/steps/`,
@@ -59,10 +61,14 @@ report named `docs/analysis/pipeline-efficiency-<last sprint>-opportunities-b<ba
    `export EXTRACT_WIN_END=<pin>; B=docs/analysis/pipeline-efficiency-s317-s320/scripts;
    A=docs/analysis/pipeline-efficiency-s317-s318/scripts; python3 -I $B/extract.py $OUT && python3 -I
    $A/spawns.py $OUT && python3 -I $A/analyze.py $OUT && python3 -I $B/roll.py $OUT > $OUT/roll.txt`, where
-   `$OUT` is a fresh `mktemp -d` under the scratchpad. Control: `cmp $OUT/roll.txt` against the committed
-   `docs/analysis/pipeline-efficiency-s323-complete-b261/out/roll.monotone-clock.txt` for the sprints that file
-   covers must report no difference; a differing `cmp` against `roll.default-clock.txt` must also report a
-   difference. Do not proceed on a failed control.
+   `$OUT` is a fresh `mktemp -d` under the scratchpad. Control, run before the reading, at the fixed observation point `EXTRACT_WIN_END=2026-11-20T04:20:00Z`: run the
+   same chain into a second fresh `$OUT0` with that pin and every correction off, `EXTRACT_WIN_END=2026-11-20T04:20:00Z EXTRACT_EDGES=hand EXTRACT_RELABEL=0 EXTRACT_OPWAIT=0 EXTRACT_FORK_DEDUPE=0 EXTRACT_IDLE_TAIL=0 EXTRACT_SPLIT_SEGS=0`. Its whole-file `roll.txt` must `cmp` identical to the
+   committed `docs/analysis/pipeline-efficiency-s323-complete-b261/out/roll.monotone-clock.txt`, and a `cmp` against
+   `roll.default-clock.txt` must report a difference; a pin later than that one adds the next sprint's rows and fails
+   the whole-file `cmp`. Then take the reading from the run on the defaults at the new pin: its `roll.txt` must DIFFER
+   from the all-off `roll.txt`. The derived sprint edges read the first-parent main of `EXTRACT_GRAPH_REPO` (default
+   `/Users/n8/git/graph`, read-only), so that checkout must be current before either run. Do not proceed on a failed
+   control.
 
 4. Dispatch one reader per step from action 2, in parallel, each as a read-only background `Agent`. Each
    brief carries the time sentence of action 0 and the preamble of the previous run (`steps/` README of the
@@ -114,20 +120,24 @@ report named `docs/analysis/pipeline-efficiency-<last sprint>-opportunities-b<ba
    `roll.txt` of action 3, (b) then applies the instrument corrections one at a time and prints the old and
    the corrected per-step table with the class split (lead model, lead tool, idle with no agent running,
    waiting on agents under 300 s, operator, long agent wait), spawns, subagent dollars at both cache-write
-   rates, lead calls and compactions: step attribution from the lead's declared transitions
+   rates, lead calls and compactions. The extractor applies each correction by default, each behind its own
+   switch set to 0 to turn it off: step attribution from the lead's declared transitions
    (`snapshot-update.sh --set current_step_file`, gate open and close records, `gate-checkpoint.sh --nonce`
-   spans), operator wait over the whole span of every ask plus the pause flag to the next human prompt,
-   forked sessions counted once, idle tails after a session's last tool call removed, and sprint edges
-   re-derived rather than hand-kept. Until BL-1174 lands the extractor taking those boundaries from the
-   pipeline's own declarations, apply the corrections by hand from `steps/reconcile/` and name each one in
-   the report's instrument section. Control: every corrected row's classes sum to its elapsed hours, and spawns
+   spans) with a counted-read fallback (`EXTRACT_RELABEL`), operator wait over the whole span of every ask plus
+   the pause flag to the next human prompt (`EXTRACT_OPWAIT`), forked sessions counted once
+   (`EXTRACT_FORK_DEDUPE`), idle tails after a session's last tool call removed (`EXTRACT_IDLE_TAIL`), and
+   sprint edges derived from the consumer's sprint-close commits (`EXTRACT_EDGES`) and segments split at sprint edges (`EXTRACT_SPLIT_SEGS`). The reconcile pass prints
+   the old table (all switches off) against the corrected one (defaults) per step, plus the
+   `boundary-source sprint=N declared=X inferred=Y` lines. Control: every corrected row's classes sum to its elapsed hours, and spawns
    and lead calls are unchanged by relabelling.
 
 7a. Take step and gate boundaries from the pipeline's own records. (a) Every redesign that replaces a file the
    lead reads (a gate run as a program, a split step file, a scripted late step) still writes the snapshot's
    `current_step_file` sets and the gate open and close records. (b) The extractor takes step and gate
-   boundaries from those records and sprint boundaries from the consumer's sprint-close commits; that change
-   exists before the next sprint's reading is taken. (c) Every item lands before the next graph sprint, so
+   boundaries from those records and sprint boundaries from the consumer's sprint-close commits, and writes the
+   sprint edges to `$OUT/edges.tsv`, the one edge source for `extract.py` and its downstream chain (`spawns.py`, `analyze.py`, `roll.py`);
+   `lead_time.py` stays on the hand edge list, so its per-sprint figures are labelled hand edges, and older analysis scripts
+   carry their own edge lists only to reproduce their committed outputs. (c) Every item lands before the next graph sprint, so
    that sprint measures the items together: the per-step tables attribute an effect to a step, not to one
    change inside it. No pull is dispatched by this action.
 
@@ -151,7 +161,11 @@ report named `docs/analysis/pipeline-efficiency-<last sprint>-opportunities-b<ba
     overlap note, and what was not measured; what cuts across steps; ranked levers on wall clock with their
     sequencing constraints; decisions; instrument defects; corrections to earlier published figures; what was
     not established and whether it was available; how to reproduce. Every saving is marked upper bound unless
-    measured; figures are quoted from the reconcile tables.
+    measured; figures are quoted from the reconcile tables. Each step's `### ` section carries one line
+    starting `Step files: ` (outside code fences) followed by backticked bare basenames such as `route.md`,
+    or `ai-dlc-update/SKILL.md` for the update flow; a full path there is malformed. Each declared name must
+    also appear on another line of the same section. `scripts/validate-efficiency-report-coverage.sh` (PE1)
+    checks this at push.
 
 11. Commit as one records-only commit on `origin/main`: the report, its directory (`steps/`, `findings/`,
     `scripts/`, README listing every script, the reader that produced it and how to run it), and the backlog
@@ -162,7 +176,7 @@ report named `docs/analysis/pipeline-efficiency-<last sprint>-opportunities-b<ba
     operator on any question, on any decision, and on completion including an early stop.
 
 12. Update this runbook in the same commit when a step file was added, renamed or removed since the last run:
-    re-derive action 2's list from the steps directory and the engine versions, re-derive the Current state
+    re-derive action 2's list from the steps directory and the engine versions (`scripts/validate-efficiency-report-coverage.sh`, PE1, is the push-time check that a new step file gets a section), re-derive the Current state
     section, and re-run every command in this file after the merge so none prints a figure the file no longer
     states.
 
