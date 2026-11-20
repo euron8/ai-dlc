@@ -1,0 +1,10 @@
+architecture {('ARCHCTX', 'Bash'): 6, ('IMPACT', 'Read'): 1, ('IMPACT', 'Bash'): 3, ('SPINE', 'Write'): 5, ('ARCHDOC', 'Write'): 4, ('ARCHIDX', 'Write'): 1, ('IMPACT', 'Write'): 1, ('ARCHCTX', 'Write'): 2, ('ARCHDOC', 'Bash'): 42, ('SPINE', 'Bash'): 72, ('CHGLOG', 'Bash'): 8, ('ARCHDOC', 'Read'): 3, ('SPINE', 'Read'): 3, ('ARCHDOC', 'Edit'): 9, ('SPINE', 'Edit'): 4, ('ARCHIDX', 'Bash'): 4, ('CHGLOG', 'Write'): 3}
+carry-over-evaluation {('IMPACT', 'Bash'): 8, ('ARCHDOC', 'Bash'): 1}
+deploy-validate {('ARCHDOC', 'Edit'): 7, ('ARCHDOC', 'Bash'): 12, ('ARCHDOC', 'Read'): 3, ('ARCHDOC', 'Write'): 1}
+gate-validation[requirements] {('IMPACT', 'Write'): 1, ('IMPACT', 'Edit'): 1}
+handoff {('ARCHDOC', 'Bash'): 2, ('ARCHIDX', 'Bash'): 1, ('CHGLOG', 'Bash'): 1, ('IMPACT', 'Bash'): 1}
+implementation {('ARCHDOC', 'Bash'): 2, ('SPINE', 'Bash'): 1}
+requirements {('IMPACT', 'Bash'): 49, ('IMPACT', 'Write'): 3, ('IMPACT', 'Edit'): 1}
+retro {('ARCHDOC', 'Write'): 4}
+route {('ARCHDOC', 'Bash'): 1}
+stories-test-strategy {('SPINE', 'Bash'): 11, ('SPINE', 'Write'): 6, ('ARCHDOC', 'Write'): 3, ('IMPACT', 'Write'): 1, ('ARCHDOC', 'Bash'): 1, ('IMPACT', 'Bash'): 1, ('SPINE', 'Edit'): 1}

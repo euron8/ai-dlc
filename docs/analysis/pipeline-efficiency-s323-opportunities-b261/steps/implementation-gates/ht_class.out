@@ -1,0 +1,24 @@
+('at-sprint-base', 'False') 82
+('at-sprint-base', 'True') 57
+('code-delta', 'False') 141
+('code-delta', 'True') 34
+('records-only-delta', 'False') 73
+('records-only-delta', 'True') 24
+('test-only-delta', 'False') 74
+('test-only-delta', 'True') 14
+records-only-delta
+   ('1-1-g1-p2.plan', 's323-1-1-mutation-no-leg1-marker.txt', '92d87de07b91', 'e4130b7e36db', {'rec': 11})
+   ('1-1-g2-p1.plan', 's323-1-1-mutation-no-leg1-marker.txt', '92d87de07b91', '74e85e4ead78', {'rec': 12})
+   ('1-2-g1-p1.plan', 's323-1-2-post-change-full.txt', 'd51826212dd6', 'e0568e755a26', {'rec': 4})
+code-delta
+   ('1-1-g1-p2.plan', 's323-1-1-primary-xpass.txt', 'e70a344c06ea', 'e4130b7e36db', {'rec': 178, 'code': 12, 'test': 20})
+   ('1-1-g2-p1.plan', 's323-1-1-primary-xpass.txt', 'e70a344c06ea', '74e85e4ead78', {'rec': 179, 'code': 12, 'test': 20})
+   ('1-3-g1-p2.plan', 's323-1-3-red-at-sprint-base-seq-estimate-fail.txt', 'ae63caf382f0', '15eb4ed45568', {'rec': 359, 'code': 15, 'test': 24})
+at-sprint-base
+   ('1-1-g1-p2.plan', 's323-1-1-red-at-base-no-leg1.txt', 'ae63caf382f0', 'e4130b7e36db', {'rec': 20, 'code': 1, 'test': 6})
+   ('1-1-g2-p1.plan', 's323-1-1-red-at-base-no-leg1.txt', 'ae63caf382f0', '74e85e4ead78', {'rec': 21, 'code': 1, 'test': 6})
+   ('1-2-g1-p1.plan', 's323-1-2-pre-change-full.txt', '2fe36573cf31', 'e0568e755a26', {'rec': 12, 'code': 1, 'test': 4})
+test-only-delta
+   ('1-1-g1-p2.plan', 's323-1-1-xfail-at-frozen.txt', '35a529d0f59c', 'e4130b7e36db', {'rec': 11, 'test': 1})
+   ('1-1-g2-p1.plan', 's323-1-1-xfail-at-frozen.txt', '35a529d0f59c', '74e85e4ead78', {'rec': 12, 'test': 1})
+   ('1-2-g1-p2.plan', 's323-1-2-post-change-full.txt', 'd51826212dd6', 'e512e386b077', {'rec': 8, 'test': 1})

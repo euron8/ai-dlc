@@ -1,0 +1,12 @@
+/private/tmp/claude-501/-Users-n8-git-ai-dlc/b2fb5d2f-285d-43b0-bb35-73998d6c5019/scratchpad/steps/implementation-gates/chain_decomp.py:12: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  H = lambda t: dt.datetime.utcfromtimestamp(t).strftime('%d %H:%M')
+C1 3.1->3.2: window 18 12:51Z .. 19 02:52Z = 841 min; agent-active union 667 min (79%); gaps 174 min of which lead made a Bash call within 120 s for 171 min; edge latency 3.1 close -> 3.2 first dev = 17 min
+   union by type (min): {'g1': 67, 'g2': 338, 'close': 2, 'g3': 27, 'dev': 331}
+   largest gaps: [('18 13:30', 46, 45), ('18 19:42', 27, 27), ('19 01:19', 26, 24), ('19 02:32', 19, 19)]
+C2 1.1->5.2: window 18 12:51Z .. 19 01:08Z = 737 min; agent-active union 594 min (81%); gaps 142 min of which lead made a Bash call within 120 s for 142 min; edge latency 1.1 close -> 5.2 first dev = 10 min
+   union by type (min): {'g3': 24, 'g1': 53, 'dev': 537, 'g2': 46, 'close': 2}
+   largest gaps: [('18 12:57', 71, 70), ('18 20:40', 23, 23), ('19 00:50', 16, 16), ('18 21:03', 10, 10)]
+C3 5.4->5.5: window 18 12:51Z .. 18 22:33Z = 582 min; agent-active union 304 min (52%); gaps 278 min of which lead made a Bash call within 120 s for 276 min; edge latency 5.4 close -> 5.5 first dev = 5 min
+   union by type (min): {'g3': 24, 'g2': 39, 'g1': 27, 'close': 2, 'dev': 256}
+   largest gaps: [('18 14:47', 144, 142), ('18 13:33', 46, 45), ('18 22:12', 21, 21), ('18 17:42', 10, 10)]
+control: lead rows 8009

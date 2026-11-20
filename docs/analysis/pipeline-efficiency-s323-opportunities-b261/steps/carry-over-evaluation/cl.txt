@@ -1,0 +1,20 @@
+## Cluster S317: 12 items
+
+Byte-guarded capital-path items (`...SWEEP-SLIPPAGE-KWARG...`, `...SWEEP-MINT-HASH-UNRECORDED...`, `...WITHHELD-REMAINDER...`, `...GATED-ARM-MARKER...`, `...ASSERT-NO-POST-MINT-MODIFY-ON-GATED-HAS-NO-PRODUCTION-CALLER`, the fifth LR-S318-7 item that row names) are marked operator-owned (byte-guarded span edits; see `CO-S319-LR-S318-7-BYTE-GUARDED-ITEMS-AWAIT-OPERATOR-PINS`, which carries the operator's instruction "I will name the pin in a message when I want each taken; do not ask me for it before then"); a pipeline story cannot take them without the operator's re-pin. Their close predicate i
+
+Four of the twelve fall in neither the byte-guarded group nor an enable-related group, and are grouped here by what their titles and bodies state, with no disposition proposed:
+
+- **Byte-guard family, not named above:** `CO-S317-B4-IN-SPAN-ALLOWANCE-WIDENING-NEEDS-RENARROWING-WHEN-THE-GUARD-BASE-SHA-MOVES` (archive close signal: closes when the allowance is narrowed again with the guard's `BASE_SHA` moved, or when the operator retires the guard). The guard and its pins are operator-owned; whether this row needs an operator re-pin was not checked here. (`CO-S317-ASSERT-NO-POST-MINT-MODIFY-ON-GATED-HAS-NO-PRODUCTION-CALLER` is not in this bullet: it is operator-pinned, listed above.)
+- **Pipeline-machinery candidate:** `CO-S317-REQUIRE-DONE-REFUSES-DONE-PENDING-LIVENESS` (deploy-validate §1 `--require-done` refuses the consumer's `done-pending-liveness` status). Whether the refusing code is AI/DLC-owned is answered per path by `scripts/ai-dlc/core-paths.sh --is-core`, which was not run on it here; if it is core, the finding is a push candidate filed in `_bmad-output/ai-dlc-update/push-candidate-ledger.md`, not a carry-over item, per `.claude/rules/upstream-routing.md`.
+- **Test-harness row:** `CO-S317-CHAIN-CONTEXT-TEST-HARNESS-RE-RESOLVES-AND-ORPHANS-A-DISABLED-CHAIN`; its archive close signal is that a bridge test exists and is green.
+- **Live-path precondition on Base offramp:** `CO-S317-BASE-OFFRAMP-NEEDS-CHAINSBASEV3-QUOTER-V2-ADDRESS-CONFIGURED`. Per its title, a Base two-hop offramp fails closed with ConfigError until `chains.base.v3_quoter_v2_address` is configured on the live config. That is a live-throughput precondition for offramp sweeps, not hygiene; it sits on Item 2's path (the row is tagged adjacent to Item 2), so the key's presence is already answered: `v3_quoter_v2_address` is present at the Base config revision `634d508313322a634ac7d3d43600f04fcc1e880ae72c125e736fdd15d02e983e` already read for Item 2 (`_bma
+
+```derived
+$ grep -n -o -F -e '"v3_quoter_v2_address": "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a"' -e '"revision": "634d508313322a634ac7d3d43600f04fcc1e880ae72c125e736fdd15d02e983e"' _bmad-output/planning-artifacts/s323/base-config-keys-read.md
+## Aged items (origin sprint 312 or earlier): 71 items
+
+Origin sprint 312 or earlier (more than 10 sprints old). Basis for most is the heading title only (bodies are archive); no disposition is proposed here, because validity, effort and the defect check were not run per item (see Gaps). Age is not staleness. Membership is every `### CO-` heading between this heading and the S313-S316 cluster heading, re-derived by `sed -n '/^## Aged items/,/^## Cluster S313-S316/p' _bmad-output/planning-artifacts/s323/carry-over-evaluation.md` piped to `grep -c '^##
+
+A triage pass treats one subset differently from the rest. **RE-VERIFY** is for rows tagged capital-path or test-integrity in the backlog, plus `CO-S307-THEME-INVARIANT-DETECTOR-INERT` (its title names an inert detector) and the required passive-monitor row `CO-S260-ROUTER-WIN-MONITOR`: the triage pass re-runs the row's own premise (for example whether the `pytest.skip` is still on that path) and closes the row only if that check fails, never on title alone. Every other row carries no dispositio
+
+```derived

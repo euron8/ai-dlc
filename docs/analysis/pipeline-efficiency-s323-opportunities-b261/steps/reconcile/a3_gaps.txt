@@ -1,0 +1,14 @@
+stories 17 unnamed-story spawns dropped 2
+G2 -> G3 n= 13 median   15.4 min  p90  117.6  >10min   7  >60min  5 sum  9.81 h  sum capped600  1.69 h
+G3 -> C  n= 15 median   17.1 min  p90   25.7  >10min  15  >60min  0 sum  5.00 h  sum capped600  2.50 h
+G1 -> G2 n= 14 median    6.6 min  p90   45.5  >10min   5  >60min  1 sum  3.95 h  sum capped600  1.46 h
+ B -> G2 n=  5 median    8.6 min  p90   13.8  >10min   2  >60min  0 sum  1.16 h  sum capped600  0.59 h
+ B -> G3 n=  7 median    3.5 min  p90    9.7  >10min   1  >60min  0 sum  1.01 h  sum capped600  0.65 h
+ B -> G1 n= 16 median    1.9 min  p90    6.3  >10min   1  >60min  0 sum  0.88 h  sum capped600  0.85 h
+G2 -> B  n=  6 median    7.1 min  p90   11.8  >10min   2  >60min  0 sum  0.72 h  sum capped600  0.66 h
+G3 -> G3 n=  7 median    2.7 min  p90    4.3  >10min   0  >60min  0 sum  0.35 h  sum capped600  0.35 h
+G3 -> B  n=  4 median    3.7 min  p90    5.1  >10min   0  >60min  0 sum  0.27 h  sum capped600  0.27 h
+G1 -> B  n=  3 median    2.5 min  p90    2.5  >10min   0  >60min  0 sum  0.17 h  sum capped600  0.17 h
+G2 -> G2 n=  1 median    3.4 min  p90    3.4  >10min   0  >60min  0 sum  0.06 h  sum capped600  0.06 h
+ B -> B  n=  1 median    0.7 min  p90    0.7  >10min   0  >60min  0 sum  0.01 h  sum capped600  0.01 h
+ALL n=92 median 6.6 min >10min 33 sum 23.39 h capped600 9.26 h

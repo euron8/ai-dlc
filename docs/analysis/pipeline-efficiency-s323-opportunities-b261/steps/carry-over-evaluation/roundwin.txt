@@ -1,0 +1,12 @@
+window 11-13T08:20:00 -> 11-13T08:35:00 active_min 4.9 operator_wait_min 0.0 other_gap_min(agent wait/idle) 9.8 records 189
+window 11-13T08:35:00 -> 11-13T08:53:00 active_min 17.9 operator_wait_min 0.0 other_gap_min(agent wait/idle) 0.0 records 224
+window 11-13T08:53:00 -> 11-13T09:34:00 active_min 22.2 operator_wait_min 0.0 other_gap_min(agent wait/idle) 18.7 records 336
+window 11-13T09:34:00 -> 11-13T12:02:00 active_min 0.9 operator_wait_min 131.6 other_gap_min(agent wait/idle) 14.7 records 16
+window 11-13T12:02:00 -> 11-13T13:03:06 active_min 40.9 operator_wait_min 20.0 other_gap_min(agent wait/idle) 0.0 records 635
+window 11-16T23:20:00 -> 11-16T23:40:00 active_min 18.6 operator_wait_min 0.0 other_gap_min(agent wait/idle) 0.0 records 298
+window 11-16T23:40:00 -> 11-17T00:34:00 active_min 35.9 operator_wait_min 0.0 other_gap_min(agent wait/idle) 16.5 records 686
+window 11-17T00:34:00 -> 11-17T01:22:00 active_min 31.9 operator_wait_min 0.0 other_gap_min(agent wait/idle) 15.5 records 504
+window 11-17T01:22:00 -> 11-17T01:43:00 active_min 7.4 operator_wait_min 11.7 other_gap_min(agent wait/idle) 0.0 records 127
+window 11-17T01:43:00 -> 11-17T02:22:00 active_min 29.2 operator_wait_min 0.0 other_gap_min(agent wait/idle) 8.4 records 608
+window 11-17T02:22:00 -> 11-17T02:40:03 active_min 12.2 operator_wait_min 0.0 other_gap_min(agent wait/idle) 5.6 records 317
+window 11-17T02:40:03 -> 11-17T03:02:06 active_min 22.0 operator_wait_min 0.0 other_gap_min(agent wait/idle) 0.0 records 780

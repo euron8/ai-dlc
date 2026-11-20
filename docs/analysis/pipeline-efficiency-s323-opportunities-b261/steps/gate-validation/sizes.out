@@ -1,0 +1,65 @@
+bytes 246219 lines 3704 codeblocks 4
+   13-  111    5631 B ## Gate-type manifest (conditional check loading)
+  112-  160    3183 B ## Consumer-catalog crosswalk (label the catalog; never join by number
+  161-  221    8314 B ## Validation Checklist
+  222-  290    4738 B ### 1. Validation cycle complete?
+  291-  327    1964 B ### 1c. Research-invocation enforcement (research-requirements gate, a
+  328-  442    8074 B ### 2. No unresolved HARD_BLOCKs?
+  443-  492    3131 B ### 2a. Escalation resolution operator-citation?
+  493-  521    1578 B ### 3. Requirement anchor integrity?
+  522-  564    2053 B ### 3a. Story validation origin check (story gates only).
+  565-  618    3091 B ### 3b. Locked-requirement full-text anchor integrity (story gates).
+  619-  630     523 B ### 4. Template placeholder detection?
+  631-  736    6984 B ### 5. Story status consistency?
+  737-  755     926 B ### 6. Production integrity tests exist? (Implementation gates only)
+  756-  770     800 B ### 7. Artifact consistency?
+  771-  789     822 B ### 8. Deployment evidence? (Implementation gates only)
+  790-  868   12133 B ### 9. Visual verification? (UI sprint gates only)
+  869-  886     905 B ### 10. Schema/API field verification? (Schema-modifying stories only)
+  887-  940    3375 B ### 11. Smoke test coverage for user-facing changes? (Implementation g
+  941-  952    1071 B ### 11a. Live-run attempted under envvar gate? (Implementation gates o
+  953- 1122   11079 B ### 12. Append gate log entry.
+ 1123- 1136     471 B ### 13. Announce gate passage.
+ 1137- 1388   16383 B ### 14. Update pipeline snapshot.
+ 1389- 1451    3062 B ### 15. Verify snapshot reflects this gate.
+ 1452- 1515    3453 B ### 16. Stub audit (hot-path files) — content verification.
+ 1516- 1717   13636 B ### 17. Skill-invocation provenance (retro gate + sub-skill-gated gate
+ 1718- 1766    2846 B ### 18. Per-class test-debt audit.
+ 1767- 1827    3399 B ### 19. Self-reflexive Gate 2 self-discrimination map application.
+ 1828- 1881    3229 B ### 20. Validation-intensity compliance (all planning gates).
+ 1882- 1930    2469 B ### 21. Test-strategy deliverable presence (sprint-review gate).
+ 1931- 2251   21165 B ### 22. Teammate-spawn role binding (implementation gates only).
+ 2252- 2315    3448 B ### 23. Per-sprint planning-artifact sprint stamps (all planning gates
+ 2316- 2500   14190 B ### 24. The adversarial cycle CONVERGED (Rule 8).
+ 2501- 2547    2895 B ### 25. Rule 29 bounded-join conduct — the operator was reachable.
+ 2548- 2637    4931 B ### H1. Harness meta-check — each phase-specific check has a self-test
+ 2638- 2705    3898 B ### H2. Harness self-test — seeded forgery fixture + H1 recursion guar
+ 2706- 2712     450 B ### Sub-step snapshot update (referenced by step files)
+ 2713- 2719     429 B ### Auto-handoff evaluation (referenced by step files)
+ 2720- 2831    6977 B ### Core-layer immutability (§7.1 authoring guard — retro/close gate).
+ 2832- 2891    4684 B ### 26. Gate-check adjudication verdict (escalated llm checks).
+ 2892- 2952    3776 B ### 27. Routing sanity — a subordinated defect (first planning gate).
+ 2953- 2976    1357 B ### 28. Spec-layer adoption is declared (all planning gates).
+ 2977- 3039    3718 B ### 29. Spec kernel integrity (planning gates, spec layer in force).
+ 3040- 3214   12713 B ### 30. Spec join integrity (story gates, spec layer in force).
+ 3215- 3246    1826 B ### 31. Acceptance-criterion falsifiability (story gates, spec layer i
+ 3247- 3276    1771 B ### 32. Every BMAD invocation resolves (all planning gates).
+ 3277- 3356    5090 B ### 33. Every identifier the operator named reaches this sprint's scop
+ 3357- 3440    5699 B ### 34. The operator saw the scope before the sprint planned against i
+ 3441- 3497    3390 B ### 35. Snapshot content that left the file went somewhere (all planni
+ 3498- 3558    3805 B ### 36. The post-merge trunk audit re-runs at the gate (carry-over pla
+ 3559- 3617    4981 B ### 37. No owed derivation is open (all planning gates).
+ 3618- 3669    3445 B ## Gate Failure
+ 3670- 3687     978 B ## Gate Reset
+ 3688- 3704     847 B ## Not self-authorizable
+PROC bytes 148145 lines 1822 codeblocks 5
+   16-  155    8518 B ## Sub-step snapshot update (referenced by step files)
+  156-  216    6494 B ## Bounded-join beat (referenced by step files)
+  217-  289    6196 B ## Gate-adjudication dispatch (referenced by the gate)
+  290-  664   34743 B ## Validation cycle (referenced by step files)
+  665-  696    2067 B ## Where a changelog is written (referenced by step files)
+  697-  857   15988 B ## Adversarial review dispatch (referenced by step files)
+  858- 1071   15818 B ## Divergence resolution dispatch (referenced by step files)
+ 1072- 1486   39750 B ## Adversarial repair dispatch (referenced by step files and by the ga
+ 1487- 1729   13890 B ## Auto-handoff evaluation (referenced by step files)
+ 1730- 1822    3898 B ## Context reminder threshold check (referenced by Check 14)

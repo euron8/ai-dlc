@@ -1,0 +1,47 @@
+TOOL COUNTS (ok only): {'Bash': 672, 'mcp__plugin_context-mode_context-mode__ctx_execute': 124, 'Read': 89, 'Edit': 59, 'mcp__advisor__consult': 36, 'mcp__plugin_context-mode_context-mode__ctx_search': 30, 'Write': 16, 'TaskStop': 15, 'Agent': 14, 'ToolSearch': 7, 'Monitor': 5, 'AskUserQuestion': 5, 'SendMessage': 4}
+ERRORED: {'Read': 31, 'mcp__plugin_context-mode_context-mode__ctx_search': 2, 'Bash': 24, 'mcp__plugin_context-mode_context-mode__ctx_execute': 6, 'Agent': 4, 'AskUserQuestion': 2, 'Edit': 4, 'TaskStop': 1, 'WebFetch': 1}
+READS (file: n, result chars):
+   deploy-validate.md 17 227470
+   pipeline-snapshot.md 8 97003
+   gate-log.md 7 40858
+   story-4-3-staged-evidence.md 6 8744
+   carry-over-backlog.md 6 15584
+   config.py 4 7103
+   pending.md 4 10112
+   execution.py 3 13864
+   bgyaelazq.output 3 1992
+   architecture.md 3 10723
+   postcompact-digest.md 2 28326
+   story-4-2-903b-close-and-928-clause.md 2 27117
+   s323-deferred-ac-predicates.md 1 22185
+   _gate-procedures.md 1 10169
+   rebalancer-idle.sh 1 3573
+   editableFields.js 1 2077
+   configSchema.js 1 2873
+   sprint-status.yaml 1 936
+   rebalancer-base.yaml 1 3171
+   story-4-4-aggregator-forwards-client-cert.md 1 19226
+   apiread.sh 1 2369
+   prefire.sh 1 1220
+   prefire-lock-matic.txt 1 1580
+   bdji4yn9h.output 1 327
+   api.py 1 2423
+LATENCY top by total seconds (key, n, total_s, max_s):
+   AskUserQuestion 5 1761 905
+   mcp__advisor__consult 36 875 48
+   Bash:cd /private/tmp/claude-501/-Users-n8-git 12 322 120
+   Bash:until grep 3 121 120
+   Edit 59 85 7
+   mcp__plugin_context-mode_context-mode__ctx_execute 124 45 6
+   Agent 14 33 3
+   Bash:git add 28 23 1
+   Bash:scripts/ai-dlc/snapshot-update.sh --acti 29 22 1
+   Read 89 21 1
+   Bash:aws ecs 24 19 2
+   Bash:grep -n 72 18 1
+   Bash:gh pr 6 17 7
+   Bash:grep -E 8 15 11
+   mcp__plugin_context-mode_context-mode__ctx_search 30 13 1
+   Write 16 12 1
+   Bash:cd /Users/n8/git/graph 33 12 2
+   Bash:grep '"ok"' 1 11 11

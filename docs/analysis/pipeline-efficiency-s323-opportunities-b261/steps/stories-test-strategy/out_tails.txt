@@ -1,0 +1,11 @@
+B party round                      n=76 median-end  11.9 p90  18.9 last  25.8 min | last: tea 12.6m tea part 4
+C party repair (+lanes, fan-in)    n=38 median-end  33.0 p90  34.1 last  83.4 min | last: remediator 9.8m Re-derive six stale fences, s323
+D elicitation                      n=19 median-end   9.4 p90  11.9 last  20.3 min | last: adversary 12.9m Elicitation shard cross
+E elicitation repair (+serial)     n=20 median-end   3.0 p90  57.4 last  79.1 min | last: remediator 10.8m Fan-in seat for elicitation serial
+F adv p1 review                    n=19 median-end   5.7 p90  11.4 last  13.3 min | last: adversary 13.3m Adversary shard 01
+G adv p1 repair                    n=20 median-end   4.0 p90   7.4 last  32.6 min | last: remediator 12.0m Fan-in for adversarial repair
+H adv p2 review (+retries)         n=20 median-end   4.9 p90  11.6 last  61.8 min | last: adversary 8.3m p2 adversary shard 06 re-run
+I adv p2 repair                    n=16 median-end   2.7 p90   3.5 last  21.8 min | last: remediator 12.4m p2 repair cross seat
+K ts p1 review                     n=12 median-end   7.0 p90  21.9 last  25.9 min | last: remediator 5.8m Repair shard 3
+M gate repairs                     n= 3 median-end  17.0 p90  17.0 last  32.2 min | last: remediator 9.3m Gate repair seat check 5
+N gate adjudicators                n= 8 median-end   0.9 p90   1.1 last   1.3 min | last: gate-adjudicator 1.3m Gate adjudicator shard 7/8

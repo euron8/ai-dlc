@@ -1,0 +1,13 @@
+lead transcripts scanned 175
+implementation           reads= 679 sessions= 53 by sprint {317: 43, 318: 24, 319: 81, 320: 75, 321: 91, 322: 119, 323: 246}
+bug-investigation        reads=  32 sessions=  6 by sprint {319: 6, 321: 2, 322: 20, 323: 4}
+    first/last  2026-11-19T12:00 sessions ['48918adc', '6249c621', '70834da1', '70871959', '70fd1d6d', 'ecf29541']
+artifact-consolidation   reads=   1 sessions=  1 by sprint {318: 1}
+    first/last 2026-10-12T03:10 2026-10-12T03:10 sessions ['f849d75f']
+discovery                reads=   8 sessions=  4 by sprint {319: 4, 321: 2, 322: 2}
+    first/last  2026-11-13T03:42 sessions ['343df64b', '48918adc', '629f04b7', 'ecf29541']
+codebase-inventory       reads=   0 sessions=  0 by sprint {}
+deep-codebase-analysis   reads=   0 sessions=  0 by sprint {}
+doc-repair-backfill      reads=   0 sessions=  0 by sprint {}
+doc-reconciliation       reads=   0 sessions=  0 by sprint {}
+zz-nonexistent-step      reads=   0 sessions=  0 by sprint {}

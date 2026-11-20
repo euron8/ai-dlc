@@ -1,0 +1,23 @@
+control kind zz: 0 (must be 0); total rows 209 sum of agg files 209
+sprint kind pass | files, rework verdicts, C/I findings by class
+('321', 'code-review', 'p1') files 34 rework 17 {'CODE': 15, 'TEST': 18, 'EVIDENCE': 8, 'BOOKKEEPING': 15}
+('321', 'code-review', 'p2+') files 27 rework 7 {'TEST': 6, 'EVIDENCE': 2, 'BOOKKEEPING': 2}
+('321', 'qa-validation', 'p1') files 34 rework 8 {'TEST': 4, 'EVIDENCE': 5, 'BOOKKEEPING': 16}
+('321', 'qa-validation', 'p2+') files 12 rework 3 {'CODE': 1, 'TEST': 1, 'EVIDENCE': 1, 'BOOKKEEPING': 3}
+('322', 'code-review', 'p1') files 8 rework 3 {'CODE': 2, 'EVIDENCE': 6, 'BOOKKEEPING': 3}
+('322', 'code-review', 'p2+') files 12 rework 2 {'CODE': 1, 'none': 1}
+('322', 'qa-validation', 'p1') files 8 rework 3 {'TEST': 2, 'BOOKKEEPING': 3}
+('322', 'qa-validation', 'p2+') files 8 rework 2 {'BOOKKEEPING': 3}
+('323', 'code-review', 'p1') files 20 rework 7 {'CODE': 3, 'TEST': 12, 'EVIDENCE': 7, 'BOOKKEEPING': 5}
+('323', 'code-review', 'p2+') files 14 rework 1 {'TEST': 1}
+('323', 'qa-validation', 'p1') files 20 rework 10 {'CODE': 2, 'TEST': 6, 'EVIDENCE': 8, 'BOOKKEEPING': 3, 'none': 1}
+('323', 'qa-validation', 'p2+') files 12 rework 2 {'EVIDENCE': 2, 'BOOKKEEPING': 2, 'none': 1}
+sprint 321 review files-stories 58
+   qa-validation stories 34 passes 46 per story 1.35
+   code-review stories 34 passes 61 per story 1.79
+sprint 322 review files-stories 9
+   qa-validation stories 9 passes 17 per story 1.89
+   code-review stories 8 passes 20 per story 2.5
+sprint 323 review files-stories 21
+   code-review stories 20 passes 34 per story 1.7
+   qa-validation stories 20 passes 32 per story 1.6

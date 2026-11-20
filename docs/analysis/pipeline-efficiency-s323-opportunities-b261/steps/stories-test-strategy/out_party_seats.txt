@@ -1,0 +1,4 @@
+C/M repair blocks with seat sources 188 by #distinct seats naming it {1: 82, 4: 40, 2: 40, 3: 26}
+blocks naming seat {'architect': 111, 'sm': 73, 'dev': 78, 'tea': 138}
+blocks ONLY that seat names {'architect': 29, 'dev': 5, 'tea': 41, 'sm': 7}
+[(('architect', 'gone'), 1), (('architect', 'nospan'), 5), (('architect', 'not-repaired'), 5), (('architect', 'shipped'), 18), (('dev', 'nospan'), 1), (('dev', 'not-repaired'), 1), (('dev', 'shipped'), 3), (('sm', 'nospan'), 2), (('sm', 'not-repaired'), 1), (('sm', 'shipped'), 4), (('tea', 'gone'), 1), (('tea', 'nospan'), 13), (('tea', 'not-repaired'), 6), (('tea', 'shipped'), 21)]

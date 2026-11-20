@@ -1,0 +1,29 @@
+('elicit', '-') {'nospan': 5, 'shipped': 3, 'gone': 1}
+('elicit', '?') {'nostory': 2}
+('elicit', 'E') {'nospan': 4, 'shipped': 4}
+('p1', '-') {'gone': 3, 'nospan': 4, 'shipped': 11, 'not-repaired': 1}
+('p1', 'E') {'shipped': 7, 'nospan': 3}
+('p2', '-') {'nospan': 1}
+('p2', 'E') {'shipped': 1}
+('party', '-') {'shipped': 38, 'nospan': 33, 'not-repaired': 10, 'gone': 2}
+('party', '?') {'nostory': 6}
+('party', 'E') {'shipped': 55, 'gone': 4, 'not-repaired': 12, 'nospan': 28}
+
+1-1 E {'p1:shipped': 1, 'party:shipped': 22}
+1-2 E {'elicit:shipped': 2, 'p1:shipped': 3, 'party:shipped': 13}
+1-3 E {'p1:shipped': 1, 'party:shipped': 8}
+1-4 E {'elicit:shipped': 1, 'p1:shipped': 1, 'party:shipped': 1}
+2-1 - {'p1:shipped': 2, 'party:shipped': 1}
+2-2 - {'p1:shipped': 2, 'party:shipped': 3}
+2-3 E {'p2:shipped': 1, 'party:shipped': 3}
+3-1 - {'elicit:shipped': 1, 'party:shipped': 2}
+3-2 E {'elicit:shipped': 1, 'party:shipped': 3}
+4-1 - {'p1:shipped': 2, 'party:shipped': 5}
+4-2 - {'elicit:shipped': 2, 'p1:shipped': 3, 'party:shipped': 1}
+4-3 - {'p1:shipped': 1, 'party:shipped': 10}
+4-4 - {'party:shipped': 1}
+5-1 - {'party:shipped': 3}
+5-2 E {'p1:shipped': 1, 'party:shipped': 5}
+5-3 - {'p1:shipped': 1, 'party:shipped': 3}
+5-4 - {'party:shipped': 2}
+5-5 - {'party:shipped': 7}

@@ -1,0 +1,110 @@
+== BACKGROUND
+321 git push                 n= 12 total= 163.0 min mean= 13.6 min max= 35.6
+321 self-update-push         n=  5 total=  52.2 min mean= 10.4 min max= 21.8
+321 apply.sh                 n= 18 total=  46.7 min mean=  2.6 min max=  7.1
+321 self-update-gate         n= 24 total=  39.2 min mean=  1.6 min max=  7.1
+321 emit-report              n= 17 total=  21.2 min mean=  1.2 min max=  3.0
+321 hard-blockers            n=  1 total=   5.4 min mean=  5.4 min max=  5.4
+321 post-write-gates         n=  4 total=   2.8 min mean=  0.7 min max=  1.6
+321 ledger-reverify          n=  2 total=   2.0 min mean=  1.0 min max=  1.1
+321 dist-clone               n=  8 total=   1.7 min mean=  0.2 min max=  1.1
+321 hermetic-run             n=  1 total=   1.4 min mean=  1.4 min max=  1.4
+321 preclassify              n=  4 total=   1.2 min mean=  0.3 min max=  0.6
+321 derivation-differential  n=  1 total=   0.2 min mean=  0.2 min max=  0.2
+321 other                    n=  1 total=   0.1 min mean=  0.1 min max=  0.1
+322 git push                 n=  9 total= 138.0 min mean= 15.3 min max= 24.8
+322 apply.sh                 n= 16 total=  64.6 min mean=  4.0 min max= 13.2
+322 emit-report              n= 19 total=  44.9 min mean=  2.4 min max= 10.7
+322 self-update-push         n=  2 total=  42.7 min mean= 21.3 min max= 24.5
+322 self-update-gate         n= 14 total=  33.8 min mean=  2.4 min max= 12.0
+322 predicate-differential   n=  1 total=   4.8 min mean=  4.8 min max=  4.8
+322 other                    n=  4 total=   3.2 min mean=  0.8 min max=  1.8
+322 post-write-gates         n=  5 total=   2.7 min mean=  0.5 min max=  0.8
+322 hard-blockers            n=  3 total=   2.7 min mean=  0.9 min max=  1.6
+322 layer-drift              n=  2 total=   1.8 min mean=  0.9 min max=  1.2
+322 ledger-reverify          n=  2 total=   0.8 min mean=  0.4 min max=  0.6
+322 dist-clone               n=  3 total=   0.4 min mean=  0.1 min max=  0.2
+322 preclassify              n=  1 total=   0.3 min mean=  0.3 min max=  0.3
+323 git push                 n= 14 total= 161.1 min mean= 11.5 min max= 86.9
+323 emit-report              n= 21 total=  60.7 min mean=  2.9 min max=  4.8
+323 apply.sh                 n= 12 total=  45.6 min mean=  3.8 min max=  9.9
+323 self-update-push         n=  3 total=  38.3 min mean= 12.8 min max= 15.2
+323 self-update-gate         n=  8 total=  15.8 min mean=  2.0 min max=  5.9
+323 layer-drift              n=  5 total=  12.9 min mean=  2.6 min max=  4.0
+323 preclassify              n=  6 total=   3.7 min mean=  0.6 min max=  2.9
+323 hard-blockers            n=  4 total=   3.3 min mean=  0.8 min max=  1.2
+323 post-write-gates         n=  4 total=   2.6 min mean=  0.6 min max=  1.2
+323 other                    n=  1 total=   1.3 min mean=  1.3 min max=  1.3
+323 ledger-reverify          n=  2 total=   0.8 min mean=  0.4 min max=  0.7
+323 derivation-differential  n=  1 total=   0.3 min mean=  0.3 min max=  0.3
+323 dist-clone               n=  3 total=   0.2 min mean=  0.1 min max=  0.1
+323 run.sh                   n=  1 total=   0.2 min mean=  0.2 min max=  0.2
+323 relabel-extension        n=  1 total=   0.1 min mean=  0.1 min max=  0.1
+323 readopt-override         n=  1 total=   0.0 min mean=  0.0 min max=  0.0
+== FOREGROUND
+321 push-drain               n= 15 total=  11.4 min mean=  0.8 min max=  9.7
+321 other                    n=415 total=  11.3 min mean=  0.0 min max=  5.1
+321 gh pr merge              n= 18 total=   7.8 min mean=  0.4 min max=  5.1
+321 layer-drift              n= 15 total=   4.7 min mean=  0.3 min max=  0.5
+321 hard-blockers            n= 12 total=   4.0 min mean=  0.3 min max=  0.6
+321 post-write-gates         n=  5 total=   2.3 min mean=  0.5 min max=  0.8
+321 preclassify              n= 13 total=   2.3 min mean=  0.2 min max=  0.8
+321 self-update-gate         n= 32 total=   1.7 min mean=  0.1 min max=  0.6
+321 run.sh                   n=  9 total=   1.4 min mean=  0.2 min max=  0.9
+321 emit-report              n=  5 total=   1.2 min mean=  0.2 min max=  0.6
+321 predicate-differential   n=  1 total=   0.9 min mean=  0.9 min max=  0.9
+321 ledger-reverify          n= 21 total=   0.8 min mean=  0.0 min max=  0.3
+321 self-update-fixtures     n=  7 total=   0.8 min mean=  0.1 min max=  0.7
+321 apply.sh                 n= 11 total=   0.3 min mean=  0.0 min max=  0.1
+321 dist-clone               n= 24 total=   0.3 min mean=  0.0 min max=  0.1
+321 readopt-override         n= 10 total=   0.2 min mean=  0.0 min max=  0.0
+321 git push                 n=  2 total=   0.1 min mean=  0.0 min max=  0.1
+321 settings-merge           n=  9 total=   0.1 min mean=  0.0 min max=  0.0
+321 retired-                 n=  2 total=   0.1 min mean=  0.0 min max=  0.1
+321 relabel-extension        n=  1 total=   0.0 min mean=  0.0 min max=  0.0
+321 hermetic-run             n=  2 total=   0.0 min mean=  0.0 min max=  0.0
+321 self-update-push         n=  1 total=   0.0 min mean=  0.0 min max=  0.0
+322 layer-drift              n= 17 total=   8.3 min mean=  0.5 min max=  1.3
+322 other                    n=479 total=   7.3 min mean=  0.0 min max=  0.5
+322 emit-report              n= 11 total=   2.1 min mean=  0.2 min max=  2.0
+322 hard-blockers            n= 14 total=   2.0 min mean=  0.1 min max=  0.8
+322 gh pr merge              n= 14 total=   1.8 min mean=  0.1 min max=  0.2
+322 preclassify              n= 23 total=   1.4 min mean=  0.1 min max=  1.0
+322 readopt-override         n=  8 total=   1.0 min mean=  0.1 min max=  0.5
+322 ledger-reverify          n= 26 total=   0.6 min mean=  0.0 min max=  0.1
+322 run.sh                   n= 19 total=   0.4 min mean=  0.0 min max=  0.2
+322 self-update-gate         n= 31 total=   0.4 min mean=  0.0 min max=  0.0
+322 git push                 n=  7 total=   0.3 min mean=  0.0 min max=  0.1
+322 derivation-differential  n=  6 total=   0.3 min mean=  0.1 min max=  0.3
+322 unregistered-drift       n=  1 total=   0.2 min mean=  0.2 min max=  0.2
+322 dist-clone               n= 15 total=   0.1 min mean=  0.0 min max=  0.0
+322 push-drain               n=  9 total=   0.1 min mean=  0.0 min max=  0.0
+322 gh pr checks             n=  3 total=   0.1 min mean=  0.0 min max=  0.0
+322 apply.sh                 n=  2 total=   0.0 min mean=  0.0 min max=  0.0
+322 settings-merge           n=  7 total=   0.0 min mean=  0.0 min max=  0.0
+322 predicate-differential   n=  5 total=   0.0 min mean=  0.0 min max=  0.0
+322 hermetic-run             n=  3 total=   0.0 min mean=  0.0 min max=  0.0
+322 retired-                 n=  1 total=   0.0 min mean=  0.0 min max=  0.0
+323 other                    n=576 total=  34.0 min mean=  0.1 min max=  2.0
+323 layer-drift              n= 31 total=   9.3 min mean=  0.3 min max=  2.0
+323 hard-blockers            n= 17 total=   6.6 min mean=  0.4 min max=  1.9
+323 emit-report              n= 35 total=   3.3 min mean=  0.1 min max=  2.0
+323 run.sh                   n= 18 total=   2.6 min mean=  0.1 min max=  2.0
+323 ledger-reverify          n= 29 total=   2.4 min mean=  0.1 min max=  2.0
+323 self-update-push         n=  9 total=   2.1 min mean=  0.2 min max=  2.0
+323 gh pr merge              n= 13 total=   1.4 min mean=  0.1 min max=  0.2
+323 post-write-gates         n=  4 total=   1.3 min mean=  0.3 min max=  0.7
+323 preclassify              n= 32 total=   1.1 min mean=  0.0 min max=  0.4
+323 self-update-gate         n= 38 total=   1.0 min mean=  0.0 min max=  0.6
+323 push-drain               n= 11 total=   0.6 min mean=  0.1 min max=  0.5
+323 relabel-extension        n=  3 total=   0.5 min mean=  0.2 min max=  0.4
+323 derivation-differential  n=  2 total=   0.5 min mean=  0.2 min max=  0.2
+323 hermetic-run             n= 11 total=   0.4 min mean=  0.0 min max=  0.4
+323 git push                 n= 11 total=   0.4 min mean=  0.0 min max=  0.1
+323 readopt-override         n=  7 total=   0.2 min mean=  0.0 min max=  0.1
+323 retired-                 n=  5 total=   0.2 min mean=  0.0 min max=  0.2
+323 dist-clone               n= 11 total=   0.1 min mean=  0.0 min max=  0.1
+323 gh pr checks             n=  2 total=   0.1 min mean=  0.1 min max=  0.1
+323 apply.sh                 n= 10 total=   0.1 min mean=  0.0 min max=  0.0
+323 settings-merge           n=  4 total=   0.0 min mean=  0.0 min max=  0.0
+323 unregistered-drift       n=  3 total=   0.0 min mean=  0.0 min max=  0.0

@@ -1,0 +1,4 @@
+control zz: 0 (must be 0)
+s321: story stems 24, with both p1 files 24: CR ok + QA NR 2 ['2-4', '5-2']; both NR 6; both ok 5; CR NR + QA ok 11; stems with no NR anywhere 5
+s322: story stems 8, with both p1 files 8: CR ok + QA NR 1 ['4']; both NR 2; both ok 4; CR NR + QA ok 1; stems with no NR anywhere 3
+s323: story stems 19, with both p1 files 17: CR ok + QA NR 4 ['3-1', '4-1', '4-3', '4-4']; both NR 5; both ok 6; CR NR + QA ok 2; stems with no NR anywhere 8

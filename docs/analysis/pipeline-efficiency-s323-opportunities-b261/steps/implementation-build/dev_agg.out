@@ -1,0 +1,63 @@
+per spawn: role story usd wall standby active(wall-standby)
+dev-escal  1.1    $21.0   323   265    58 1.1 rework: 4 findings
+dev        3.2    $19.3   288   256    32 Story 3.2 dev
+dev-escal  5.2    $27.1   209   163    46 Story 5.2 dev
+dev        5.5     $3.2   126    95    31 Story 5.5 dev
+dev-escal  1.4    $13.6    90    50    41 Story 1.4 dev
+dev-escal  1.3    $12.9    88    64    24 Story 1.3 dev
+dev        5.5     $2.8    87    65    22 5.5 rework record-only
+dev-escal  1.1    $13.1    70    21    48 Re-dispatch 1.1 escalated
+dev        4.1     $8.0    44    24    20 Dev story 323-4.1 adjudication record
+dev-escal  1.2    $14.7    41     0    41 Story 1.2 dev
+dev        5.4     $4.1    38    23    16 Dev story 323-5.4 collapsed config
+dev        3.1     $2.8    38     7    31 Dev story 323-3.1 lazy dotenv
+dev        4.1     $1.0    33    20    13 4.1 rework: wrapped run
+dev        4.3     $1.4    33    29     5 Dev story 323-4.3 mTLS staging
+dev        1.2     $2.5    19     6    13 1.2 dev rework AC11d arms
+dev        2.1     $2.7    16     0    16 Dev seat story 2.1
+dev        5.3     $0.9     9     0     9 Dev story 323-5.3 TEL card
+dev        5.1     $1.2     9     0     9 Dev story 323-5.1 rewards cards
+dev        2.2     $1.5     9     0     9 Dev seat story 2.2
+dev        4.4     $1.1     7     0     7 Dev story 323-4.4 client cert
+dev        1.1     $1.7     6     0     6 Dev story 323-1.1 gas retry
+dev-escal  3.2     $1.3     4     0     4 3.2 dev-escalated re-verification seat
+dev        5.4     $0.4     3     0     3 5.4 rework: capture refresh
+dev        4.2     $0.6     2     0     2 Dev story 323-4.2 903b close
+dev        5.1     $0.6     2     0     2 5.1 rework: e2e arm
+dev        4.4     $0.5     1     0     1 4.4 rework: fixture padding
+dev        3.1     $0.5     1     0     1 3.1 rework: lane wiring
+dev        5.3     $0.5     1     0     1 5.3 dev rework: gate-3 FAILs
+dev        -       $0.4     1     0     1 F-6 root fix: load_env_file $VAR
+dev        5.4     $0.4     1     0     1 5.4 gate-3 11a rework
+dev        5.5     $0.3     1     0     1 5.5 record fix: PIT + dup
+pre-revie  2.1     $0.2     0     0     0 Pre-review story 2.1 diff
+dev        1.2     $0.2     0     0     0 1.2 stub-audit comment fix
+pre-revie  2.2     $0.2     0     0     0 Pre-review story 2.2 diff
+dev+esc wall min 1600 standby(>300s gaps) 1086 = 68%
+
+activity                  calls think+tool_min  %time  out_tok  %out  cacheW_M  cacheR_M
+run:tests/lint               448     165    32%   281658   23%      1.2       59
+bash:wait-own-job             76     103    20%    30343    3%      0.1       11
+shell:inspect(read)          553      53    10%   170930   14%      4.1       70
+bash:other                   179      39     7%    51370    4%      0.9       22
+write:code/tests             137      26     5%   117562   10%      0.4       15
+evidence:validators          194      24     5%    93077    8%      0.2       24
+write:record                 129      21     4%    94070    8%      0.1       14
+read:story/arch/conv         243      18     3%    53309    4%      1.1       25
+git:read                     190      13     2%    43148    4%      2.0       21
+ctx-tool                      83      12     2%    29106    2%      0.4       10
+evidence:mutation-red         73      11     2%    35330    3%      0.1        9
+git:commit/add               120       8     2%    36314    3%      0.1       12
+other:TaskStop                14       7     1%     2195    0%      0.0        3
+python/node:inline            43       5     1%    40244    3%      0.1        6
+read:role/engine-text         88       4     1%    10578    1%      1.0        3
+sendmessage                   30       4     1%    25558    2%      0.0        6
+other:Monitor                 82       3     1%    20066    2%      0.0       11
+read:code                     18       3     1%     2654    0%      0.0        3
+other:ToolSearch              19       3     1%     4910    0%      0.0        4
+read:records                   5       0     0%      886    0%      0.1        1
+spawn:pre-reviewer             2       0     0%     1366    0%      0.0        0
+other:bash                     2       0     0%      757    0%      0.0        0
+other:WebFetch                 1       0     0%      157    0%      0.0        0
+text/final                     0       0     0%    62592    5%      0.4       23
+TOTAL active min 522 out tok 1208180 cacheW M 12.4 cacheR M 352

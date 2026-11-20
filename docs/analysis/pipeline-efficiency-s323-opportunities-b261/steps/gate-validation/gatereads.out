@@ -1,0 +1,36 @@
+(321, 'architecture') {'gate-validation.md': (16, 223), 'gate-validation-domain.md': (1, 73), 'gate-validation-push-914.md': (1, 2), 'gate-validation-push.md': (1, 6), '_gate-procedures.md': (1, 12)} compact 1
+(321, 'implementation') {'gate-validation.md': (172, 2827), '_gate-procedures.md': (16, 164), 'gate-validation-domain.md': (20, 987), 'validator-honesty.md': (16, 43), 'gate-validation-push-914.md': (17, 33), 'gate-validation-push.md': (15, 97)} compact 21
+(321, 'requirements') {'gate-validation.md': (14, 266), 'gate-validation-domain.md': (2, 146), 'gate-validation-push-914.md': (2, 4), 'gate-validation-push.md': (2, 13), '_gate-procedures.md': (3, 19)} compact 1
+(321, 'sprint-review') {'gate-validation.md': (14, 155), 'gate-validation-push-914.md': (1, 2), 'gate-validation-push.md': (1, 6), '_gate-procedures.md': (1, 7)} compact 1
+(321, 'stories-test-strategy') {'gate-validation.md': (7, 130), 'gate-validation-domain.md': (1, 73), 'gate-validation-push-914.md': (1, 2), 'gate-validation-push.md': (1, 6), '_gate-procedures.md': (2, 17)} compact 0
+(322, 'architecture') {'gate-validation.md': (29, 338), '_gate-procedures.md': (8, 73), 'gate-validation-push-914.md': (1, 2), 'gate-validation-push.md': (3, 6), 'gate-validation-domain.md': (2, 13)} compact 6
+(322, 'carry-over-evaluation') {'gate-validation.md': (19, 330), 'gate-validation-domain.md': (4, 86), 'gate-validation-push-914.md': (2, 4), 'gate-validation-push.md': (4, 7), '_gate-procedures.md': (1, 6)} compact 1
+(322, 'implementation') {'_gate-procedures.md': (6, 24), 'gate-validation.md': (5, 22), 'validator-honesty.md': (1, 2)} compact 14
+(322, 'requirements') {'gate-validation.md': (14, 166), 'gate-validation-domain.md': (3, 73), 'gate-validation-push-914.md': (1, 2), 'gate-validation-push.md': (3, 6), '_gate-procedures.md': (1, 6)} compact 2
+(322, 'retro') {'gate-validation.md': (16, 217), 'gate-validation-domain.md': (5, 106), 'gate-validation-push-914.md': (2, 3), '_gate-procedures.md': (1, 4)} compact 1
+(322, 'sprint-review') {'gate-validation.md': (11, 115), 'gate-validation-domain.md': (4, 75), 'gate-validation-push-914.md': (1, 2), 'gate-validation-push.md': (3, 6), '_gate-procedures.md': (1, 9)} compact 2
+(322, 'stories-test-strategy') {'gate-validation.md': (34, 435), 'gate-validation-domain.md': (4, 121), 'gate-validation-push-914.md': (2, 4), 'gate-validation-push.md': (4, 9), '_gate-procedures.md': (2, 14)} compact 4
+(323, 'architecture') {'gate-validation.md': (45, 693), 'gate-validation.md(err)': (2, 0), '_gate-procedures.md': (6, 61), 'gate-validation-domain.md': (8, 174), 'gate-validation-push-914.md': (2, 4), 'gate-validation-push.md': (5, 19)} compact 5
+(323, 'carry-over-evaluation') {'gate-validation.md': (19, 408), 'gate-validation-push-914.md': (2, 4), 'gate-validation-push.md': (3, 13), 'gate-validation-domain.md': (12, 152), '_gate-procedures.md': (1, 7)} compact 2
+(323, 'implementation') {'_gate-procedures.md': (7, 49), 'gate-validation.md': (188, 2959), 'gate-validation-domain.md': (47, 1054), 'gate-validation-push-914.md': (19, 37), 'validator-honesty.md': (16, 43), 'gate-validation-push.md': (39, 96), 'gate-validation-domain.md(err)': (1, 0)} compact 46
+(323, 'requirements') {'gate-validation.md': (21, 227), 'gate-validation-push-914.md': (2, 4), 'gate-validation-push.md': (4, 9), 'gate-validation-domain.md': (8, 133), '_gate-procedures.md': (1, 13)} compact 3
+(323, 'retro') {'gate-validation.md': (18, 228), '_gate-procedures.md': (3, 16), 'gate-validation-domain.md': (3, 50), 'gate-validation-push-914.md': (1, 2)} compact 2
+(323, 'sprint-review') {'gate-validation.md': (48, 650), 'gate-validation-domain.md': (11, 244), 'validator-honesty.md': (2, 5), 'gate-validation-push-914.md': (3, 6), 'gate-validation-push.md': (6, 13), '_gate-procedures.md': (5, 42)} compact 11
+(323, 'stories-test-strategy') {'_gate-procedures.md': (6, 67), 'gate-validation.md': (49, 758), 'gate-validation-domain.md': (11, 257), 'gate-validation-push-914.md': (4, 8), 'gate-validation-push.md': (6, 13)} compact 9
+nonimpl (321, '_gate-procedures.md') 7 reads 58 KB
+nonimpl (321, 'gate-validation-domain.md') 4 reads 292 KB
+nonimpl (321, 'gate-validation-push-914.md') 5 reads 10 KB
+nonimpl (321, 'gate-validation-push.md') 5 reads 32 KB
+nonimpl (321, 'gate-validation.md') 51 reads 776 KB
+nonimpl (322, '_gate-procedures.md') 14 reads 115 KB
+nonimpl (322, 'gate-validation-domain.md') 22 reads 477 KB
+nonimpl (322, 'gate-validation-push-914.md') 9 reads 17 KB
+nonimpl (322, 'gate-validation-push.md') 17 reads 36 KB
+nonimpl (322, 'gate-validation.md') 123 reads 1603 KB
+nonimpl (323, '_gate-procedures.md') 22 reads 209 KB
+nonimpl (323, 'gate-validation-domain.md') 53 reads 1013 KB
+nonimpl (323, 'gate-validation-push-914.md') 14 reads 28 KB
+nonimpl (323, 'gate-validation-push.md') 24 reads 69 KB
+nonimpl (323, 'gate-validation.md') 200 reads 2967 KB
+nonimpl (323, 'gate-validation.md(err)') 2 reads 0 KB
+nonimpl (323, 'validator-honesty.md') 2 reads 5 KB

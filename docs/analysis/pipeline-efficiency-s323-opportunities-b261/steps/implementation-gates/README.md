@@ -1,0 +1,12 @@
+# implementation-gates (gate 1 code review, gate 2 QA, gate 3 adjudication), graph s321-s323, read only
+Run order: story_gates.py -> rework_delta.py -> tiers.py / rework_time.py / finding_mix.py / pass1_pairs.py; the others are independent. All `python3 -I`.
+- g3_checks.py (g3_checks.out): per-check PASS/non-PASS over every implementation verdict file in s321-s323 + the non-PASS evidence heads. Control NOPE gate type = 0.
+- story_gates.py (plans.tsv, reviews.tsv, trans.tsv, story_gates.out): gate plans (story, gate, pass, frozen sha, commit time), review files (verdict, C/I findings with Class), and git-diff path classes (code/test/rec) between consecutive plan shas.
+- rework_delta.py (rework_delta.tsv): each NEEDS_REWORK review joined to the delta that followed it. tiers.py (tiers.out): tier A code changed / B test changed / C records only. rework_time.py: commit-to-commit rework interval per tier.
+- finding_mix.py, pass1_pairs.py, shard_yield.py (.out): finding classes by gate/sprint/pass; pass-1 verdict pairs per story; findings by seat type (part, cross, serial).
+- seat_timeline.py (seat_timeline.<sprint>.tsv/.out): gate seats per story from MONO/spawns.jsonl, waves, union wall, dollars. Control sprint 999 = 0.
+- bash_gates.py, fullsuite_runs.py (.out): lead gate-transition.sh latency per gate, seat Bash minutes, full-suite launches and wait-for-deliverable minutes per role, from the other hand's hand-s323late/out/bash.jsonl (s321 lead rows are absent from that corpus).
+Not re-derived here: the 55-finding / 80-of-168 / 49.8 s figures in the brief (this run gets 46 / not derived / 37.3 s s323 mean and 50.1 s s322 mean).
+Follow-up (wall clock and warn-class false positives):
+- bursts.py (bursts.tsv): s323 per-story ordered bursts (build/g1/g2/g3/rework/close) from spawns.jsonl. chain_decomp.py (.out): wall decomposition of the three executed dependency chains. chain_sim.py (.out): chain-level wall under V1 g3 script+seat, V2 g1||g2, V3 refuse records, W admission waits; savings are UPPER BOUNDS, V2/V3 per-story values are hand-derived from bursts.tsv and printed with their arithmetic.
+- warn_fp.py (warn_fp.323.tsv/.out, warn_fp.322.out): runs graph's installed validate-handoff-evidence.sh (cmp-identical to core/scripts) read only over every g1/g2 plan, matches each WARN to same-story C/I findings. ht_class.py (ht_class.out): head-tree lines by head==sprint base / delta class. Matching is a story-level keyword proxy (over-states true positives); capture-unresolved matches are invalid (basename 'out'/'log').

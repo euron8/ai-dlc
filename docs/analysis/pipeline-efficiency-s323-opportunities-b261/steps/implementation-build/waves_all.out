@@ -1,0 +1,27 @@
+sprint 321 21 first-dispatch dev spawns
+  +  0.0 h  n= 4  2.1 reserve audit, 3.2 tunnel label, 5.5 restage entry, 6.1 base state rep
+  +  3.4 h  n= 3  Dev-escalated 3.3 , Dev-escalated 1.2 , 3.4 execution-stat
+  + 13.6 h  n= 1  4.2 alert evaluato
+  + 19.5 h  n= 3  1.3 Base boots idl, 4.3 Rebalancer pag, 5.1 Base ECS servi
+  + 21.0 h  n= 3  5.2 monitoring pin, 5.3 base config fi, 1.4 dead-man-switc
+  + 22.5 h  n= 1  1.5 per-instance l
+  + 22.7 h  n= 1  5.4 operator preco
+  + 25.4 h  n= 1  1.6 dev-escalated 
+  + 26.4 h  n= 1  2.2 dev-escalated 
+  + 27.4 h  n= 1  2.3 dev-escalated 
+  + 29.0 h  n= 1  Dev-escalated 2.4
+  + 30.5 h  n= 1  Edit CLAUDE.md for
+sprint 322 22 first-dispatch dev spawns
+  +  0.0 h  n= 4  Dev story-322-4 ch, Dev story-322-3 sm, Dev story-322-2 an, Dev story-322-5 of
+  +  5.1 h  n= 1  S322 1.6 dev
+  +  7.9 h  n= 1  1.7 bisect pin
+  +  9.5 h  n= 4  1.3 nav count, 1.2 anvil driver, Protected editor 1, 1.5 offramp gas wr
+  + 14.6 h  n= 5  Gate-1 cross revie, Gate-1 shard 2/4 1, Gate-1 shard 4/4 1, Gate-1 shard 3/4 1, Gate-1 shard 1/4 1
+  + 14.9 h  n= 5  Gate-2 QA part 2/4, Gate-2 QA part 3/4, Gate-2 QA part 1/4, Gate-2 QA part 4/4, Gate-2 cross QA 1.
+  + 16.9 h  n= 1  Reword two role-fi
+  + 29.6 h  n= 1  1.5 dev from zero
+sprint 323 14 first-dispatch dev spawns
+  +  0.0 h  n= 8  323-5.3 TEL card, 323-4.4 client cer, 323-3.1 lazy doten, 323-5.1 rewards ca, 323-5.4 collapsed , 323-4.3 mTLS stagi
+  +  5.1 h  n= 1  5.5 dev
+  +  7.6 h  n= 1  3.2 dev
+  +  8.4 h  n= 4  5.2 dev, 1.4 dev, 1.3 dev, 1.2 dev

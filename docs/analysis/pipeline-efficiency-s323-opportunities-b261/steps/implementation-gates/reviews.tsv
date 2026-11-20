@@ -1,0 +1,209 @@
+321	1-1-ff	qa-validation	1	d627bc0a18	PASS	0		1-1-ff-qa-validation.md
+321	1-1	qa-validation	1	e011774eee	PASS	0		1-1-qa-validation.md
+321	1-2	qa-validation	2	114ca50531	NEEDS_REWORK	2	CODE=1,TEST=1	1-2-qa-validation-p2.md
+321	1-2	qa-validation	3	168a90b030	PASS	0		1-2-qa-validation-p3.md
+321	1-2	qa-validation	1	fe25770fd2	NEEDS_REWORK	4	BOOKKEEPING=2,TEST=2	1-2-qa-validation.md
+321	1-3	qa-validation	1	edb4a91911	PASS	0		1-3-qa-validation.md
+321	1-4	qa-validation	1	95bf1ee524	PASS	0		1-4-qa-validation.md
+321	1-5	qa-validation	1	89f1684439	PASS	1	BOOKKEEPING=1	1-5-qa-validation.md
+321	1-6	qa-validation	1	a6399ce6d8	PASS	0		1-6-qa-validation.md
+321	1-1	code-review	2	a170cc638a	APPROVED	0		1.1-code-review-p2.md
+321	1-1	code-review	1	5418fca57b	NEEDS_REWORK	1	TEST=1	1.1-code-review.md
+321	1-1-ff	code-review	1	89843ef6e2	APPROVED	1	BOOKKEEPING=1	1.1-ff-code-review.md
+321	1-2	code-review	2	2e80b6cb7b	NEEDS_REWORK	3	TEST=3	1.2-code-review-p2.md
+321	1-2	code-review	3	a18c38b349	NEEDS_REWORK	1	TEST=1	1.2-code-review-p3.md
+321	1-2	code-review	4	5b1607f0e5	APPROVED	0		1.2-code-review-p4.md
+321	1-2	code-review	5	2b6a589140	NEEDS_REWORK	1	TEST=1	1.2-code-review-p5.md
+321	1-2	code-review	6	656a46daea	APPROVED	0		1.2-code-review-p6.md
+321	1-2	code-review	7	30fba1d02e	APPROVED	0		1.2-code-review-p7.md
+321	1-2	code-review	1	6a1ecb3f4b	NEEDS_REWORK	9	CODE=3,EVIDENCE=1,TEST=5	1.2-code-review.md
+321	1-3	code-review	2	b55ae23263	APPROVED	0		1.3-code-review-p2.md
+321	1-3	code-review	1	b048af9661	NEEDS_REWORK	1	TEST=1	1.3-code-review.md
+321	1-4	code-review	2	d9e0ce9077	APPROVED	0		1.4-code-review-p2.md
+321	1-4	code-review	1	be489e4b20	NEEDS_REWORK	1	CODE=1	1.4-code-review.md
+321	1-5	code-review	1	df74abe8f2	APPROVED	0		1.5-code-review.md
+321	1-6	code-review	1	55f8c72b64	?	0		1.6-code-review.md
+321	2-1	qa-validation	1	2e190262d2	PASS	0		2-1-qa-validation.md
+321	2-2	qa-validation	1	3a53ff8f43	PASS	3	BOOKKEEPING=3	2-2-qa-validation.md
+321	2-3	qa-validation	1	a5675d0a81	PASS	0		2-3-qa-validation.md
+321	2-4	qa-validation	2	e3dc4623a1	PASS	0		2-4-qa-validation-p2.md
+321	2-4	qa-validation	1	9ea960039e	NEEDS_REWORK	2	BOOKKEEPING=2	2-4-qa-validation.md
+321	2-1	code-review	2	b2a0cd99e6	APPROVED	0		2.1-code-review-p2.md
+321	2-1	code-review	1	433c00fc6e	NEEDS_REWORK	1	BOOKKEEPING=1	2.1-code-review.md
+321	2-2	code-review	1	565a745593	APPROVED	3	BOOKKEEPING=3	2.2-code-review.md
+321	2-3	code-review	2	48e7c77613	APPROVED	0		2.3-code-review-p2.md
+321	2-3	code-review	1	5e98991400	NEEDS_REWORK	1	CODE=1	2.3-code-review.md
+321	2-4	code-review	1	c296bc1c40	APPROVED	1	CODE=1	2.4-code-review.md
+321	3-1	qa-validation	2	8440114cf5	PASS	0		3-1-qa-validation-p2.md
+321	3-1	qa-validation	1	ab18f89acb	PASS	0		3-1-qa-validation.md
+321	3-2	qa-validation	2	96c4c0e653	PASS	0		3-2-qa-validation-p2.md
+321	3-2	qa-validation	1	724694ec9e	NEEDS_REWORK	1	BOOKKEEPING=1	3-2-qa-validation.md
+321	3-3	code-review	2	6ca8b5d337	APPROVED	0		3-3-code-review-p2.md
+321	3-3	code-review	1	c19ff752b0	NEEDS_REWORK	7	CODE=2,EVIDENCE=1,TEST=4	3-3-code-review.md
+321	3-3	qa-validation	1	2b537b6dec	PASS	0		3-3-qa-validation.md
+321	3-4	qa-validation	2	bb7f2e7a60	PASS	0		3-4-qa-validation-p2.md
+321	3-4	qa-validation	1	277d7004ad	NEEDS_REWORK	2	EVIDENCE=2	3-4-qa-validation.md
+321	3-1	code-review	2	e83c58f219	NEEDS_REWORK	1	EVIDENCE=1	3.1-code-review-p2.md
+321	3-1	code-review	3	52f5a9d2aa	APPROVED	0		3.1-code-review-p3.md
+321	3-1	code-review	4	dc8b4df378	APPROVED	0		3.1-code-review-p4.md
+321	3-1	code-review	1	3870861907	NEEDS_REWORK	3	BOOKKEEPING=1,CODE=2	3.1-code-review.md
+321	3-2	code-review	2	877243cdf5	APPROVED	0		3.2-code-review-p2.md
+321	3-2	code-review	1	2e6d82ed05	NEEDS_REWORK	2	EVIDENCE=1,TEST=1	3.2-code-review.md
+321	3-4	code-review	2	2ce48e24b8	NEEDS_REWORK	1	TEST=1	3.4-code-review-p2.md
+321	3-4	code-review	3	8d26717fe5	APPROVED	0		3.4-code-review-p3.md
+321	3-4	code-review	1	ce26223a2d	NEEDS_REWORK	3	CODE=2,TEST=1	3.4-code-review.md
+321	4-1	qa-validation	2	724b11cc19	PASS	0		4-1-qa-validation-p2.md
+321	4-1	qa-validation	1	b22530ea41	NEEDS_REWORK	1	EVIDENCE=1	4-1-qa-validation.md
+321	4-2	qa-validation	1	151161906c	PASS	0		4-2-qa-validation.md
+321	4-3	qa-validation	2	8268d839bb	NEEDS_REWORK	2	BOOKKEEPING=1,EVIDENCE=1	4-3-qa-validation-p2.md
+321	4-3	qa-validation	3	77a342a7db	PASS	0		4-3-qa-validation-p3.md
+321	4-3	qa-validation	1	fb42a6066a	NEEDS_REWORK	3	BOOKKEEPING=1,TEST=2	4-3-qa-validation.md
+321	4-1	code-review	2	a28e094013	APPROVED	0		4.1-code-review-p2.md
+321	4-1	code-review	1	5476355e65	NEEDS_REWORK	1	TEST=1	4.1-code-review.md
+321	4-2	code-review	1	8ea4fba41a	APPROVED	0		4.2-code-review.md
+321	4-3	code-review	2	e95c07030c	APPROVED	0		4.3-code-review-p2.md
+321	4-3	code-review	3	9ca2e1d465	APPROVED	0		4.3-code-review-p3.md
+321	4-3	code-review	1	1b55183782	NEEDS_REWORK	4	CODE=1,TEST=3	4.3-code-review.md
+321	5-1	qa-validation	1	fbf4fbaf48	PASS	1	EVIDENCE=1	5-1-qa-validation.md
+321	5-2	qa-validation	2	1628633971	PASS	0		5-2-qa-validation-p2.md
+321	5-2	qa-validation	1	a5625ad525	NEEDS_REWORK	1	EVIDENCE=1	5-2-qa-validation.md
+321	5-3	qa-validation	1	77a0be7338	PASS	1	BOOKKEEPING=1	5-3-qa-validation.md
+321	5-4	qa-validation	1	f9ee7df3f0	PASS	0		5-4-qa-validation.md
+321	5-5	qa-validation	1	e51a814109	PASS	0		5-5-qa-validation.md
+321	5-1	code-review	2	3800addafd	APPROVED	0		5.1-code-review-p2.md
+321	5-1	code-review	1	18d5584efa	NEEDS_REWORK	1	TEST=1	5.1-code-review.md
+321	5-2	code-review	1	8171e74bab	APPROVED	0		5.2-code-review.md
+321	5-3	code-review	2	9e20e1f6dc	APPROVED	0		5.3-code-review-p2.md
+321	5-3	code-review	1	445b7e8947	NEEDS_REWORK	1	CODE=1	5.3-code-review.md
+321	5-4	code-review	2	d331997096	NEEDS_REWORK	1	BOOKKEEPING=1	5.4-code-review-p2.md
+321	5-4	code-review	3	9acce558c3	APPROVED	0		5.4-code-review-p3.md
+321	5-4	code-review	1	e671ca2b6b	NEEDS_REWORK	1	BOOKKEEPING=1	5.4-code-review.md
+321	5-5	code-review	1	31b9f3e53d	APPROVED	0		5.5-code-review.md
+321	6-1	qa-validation	2	2f8e24616e	NEEDS_REWORK	2	BOOKKEEPING=2	6-1-qa-validation-p2.md
+321	6-1	qa-validation	3	88e56a9f7f	PASS	0		6-1-qa-validation-p3.md
+321	6-1	qa-validation	1	89cec83dd5	NEEDS_REWORK	4	BOOKKEEPING=4	6-1-qa-validation.md
+321	6-2	qa-validation	1	7de8cf9145	PASS	0		6-2-qa-validation.md
+321	6-1	code-review	2	31223bf417	NEEDS_REWORK	2	BOOKKEEPING=1,EVIDENCE=1	6.1-code-review-p2.md
+321	6-1	code-review	3	b1611e9dfb	APPROVED	0		6.1-code-review-p3.md
+321	6-1	code-review	1	f4218bf82b	NEEDS_REWORK	6	BOOKKEEPING=2,EVIDENCE=4	6.1-code-review.md
+321	6-2	code-review	1	0e4fa775ec	APPROVED	0		6.2-code-review.md
+321	sr-claude	code-review	1	2726eae077	APPROVED	0		sr-claude-code-review.md
+321	sr-claude	qa-validation	1	eec00a0c1f	PASS	0		sr-claude-qa-validation.md
+321	sr-docs	code-review	1	1c6433d946	APPROVED	2	BOOKKEEPING=2	sr-docs-code-review.md
+321	sr-docs	qa-validation	1	1aa63cedbc	PASS	1	BOOKKEEPING=1	sr-docs-qa-validation.md
+321	sr-envleak	code-review	1	5f1257a583	APPROVED	0		sr-envleak-code-review.md
+321	sr-envleak	qa-validation	1	798d157b89	PASS	0		sr-envleak-qa-validation.md
+321	sr-leftovers	code-review	1	18211de248	APPROVED	5	BOOKKEEPING=4,EVIDENCE=1	sr-leftovers-code-review.md
+321	sr-leftovers	qa-validation	1	50e17332b0	PASS	0		sr-leftovers-qa-validation.md
+321	sr-minors	code-review	1	e1fc60c317	APPROVED	0		sr-minors-code-review.md
+321	sr-minors	qa-validation	1	542edc7665	PASS	0		sr-minors-qa-validation.md
+321	sr-pool	code-review	1	a80e578b53	APPROVED	1	CODE=1	sr-pool-code-review.md
+321	sr-pool	qa-validation	1	33998fb9d1	PASS	0		sr-pool-qa-validation.md
+321	sr-probe	code-review	1	323c7b18e4	APPROVED	0		sr-probe-code-review.md
+321	sr-probe	qa-validation	1	64f625a907	PASS	0		sr-probe-qa-validation.md
+321	sr-tests	code-review	1	0d83871e33	APPROVED	0		sr-tests-code-review.md
+321	sr-tests	qa-validation	1	ea658a7ee8	PASS	0		sr-tests-qa-validation.md
+321	sr-web	code-review	1	4a58923c0d	APPROVED	0		sr-web-code-review.md
+321	sr-web	qa-validation	1	fd0d251e46	PASS	0		sr-web-qa-validation.md
+322	4	qa-validation	2	850a203658	PASS	0		1-4-qa-validation-p2.md
+322	4	qa-validation	3	2bd341fe5d	NEEDS_REWORK	1	BOOKKEEPING=1	1-4-qa-validation-p3.md
+322	4	qa-validation	4	63eb1f5e60	PASS	0		1-4-qa-validation-p4.md
+322	1	code-review	2	2f5dd2f671	APPROVED	0		1-code-review-p2.md
+322	1	code-review	3	eb08613289	APPROVED	0		1-code-review-p3.md
+322	1	code-review	1	bfa918cbae	APPROVED	2	EVIDENCE=2	1-code-review.md
+322	1	qa-validation	1	11bb6e8001	PASS	0		1-qa-validation.md
+322	2	code-review	1	0cc80cc0e3	APPROVED	0		2-code-review.md
+322	2	qa-validation	1	1f72de2582	PASS	0		2-qa-validation.md
+322	3	code-review	2	261e62474b	NEEDS_REWORK	1	none=1	3-code-review-p2.md
+322	3	code-review	3	cfae3c7033	APPROVED	0		3-code-review-p3.md
+322	3	code-review	4	58112ec8ce	APPROVED	0		3-code-review-p4.md
+322	3	code-review	1	3e43abb998	APPROVED	0		3-code-review.md
+322	3	qa-validation	2	9c572624c0	PASS	0		3-qa-validation-p2.md
+322	3	qa-validation	1	c6ebe5c96d	PASS	0		3-qa-validation.md
+322	4	code-review	2	e324d77a07	NEEDS_REWORK	1	CODE=1	4-code-review-p2.md
+322	4	code-review	3	8cc5986635	APPROVED	0		4-code-review-p3.md
+322	4	code-review	1	9800e9d93e	APPROVED	1	CODE=1	4-code-review.md
+322	4	qa-validation	2	850a203658	PASS	0		4-qa-validation-p2.md
+322	4	qa-validation	3	2bd341fe5d	NEEDS_REWORK	1	BOOKKEEPING=1	4-qa-validation-p3.md
+322	4	qa-validation	1	7a9c48c209	NEEDS_REWORK	1	BOOKKEEPING=1	4-qa-validation.md
+322	5	code-review	1	8c8f178016	APPROVED	0		5-code-review.md
+322	5	qa-validation	1	8998f533f6	PASS	0		5-qa-validation.md
+322	6	code-review	2	b349bb818c	APPROVED	0		6-code-review-p2.md
+322	6	code-review	1	3efc5f63ba	NEEDS_REWORK	3	BOOKKEEPING=2,EVIDENCE=1	6-code-review.md
+322	6	qa-validation	1	0023c40427	PASS	1	BOOKKEEPING=1	6-qa-validation.md
+322	7	code-review	2	d85e133e52	APPROVED	0		7-code-review-p2.md
+322	7	code-review	1	f68acdc7fb	NEEDS_REWORK	3	CODE=1,EVIDENCE=2	7-code-review.md
+322	7	qa-validation	2	229023288a	PASS	0		7-qa-validation-p2.md
+322	7	qa-validation	1	19e6c38071	NEEDS_REWORK	1	BOOKKEEPING=1	7-qa-validation.md
+322	8	code-review	2	70ca3bd2c2	APPROVED	0		8-code-review-p2.md
+322	8	code-review	3	96ec50b5a0	APPROVED	0		8-code-review-p3.md
+322	8	code-review	4	d1ea394924	APPROVED	0		8-code-review-p4.md
+322	8	code-review	1	4b41cf2e7a	NEEDS_REWORK	2	BOOKKEEPING=1,EVIDENCE=1	8-code-review.md
+322	8	qa-validation	2	baf4af187e	PASS	1	BOOKKEEPING=1	8-qa-validation-p2.md
+322	8	qa-validation	1	613d4aa8d3	NEEDS_REWORK	2	TEST=2	8-qa-validation.md
+323	1-1	code-review	2	e4130b7e36	APPROVED	0		1-1-code-review-p2.md
+323	1-1	code-review	1	35a529d0f5	NEEDS_REWORK	4	BOOKKEEPING=1,EVIDENCE=2,TEST=1	1-1-code-review.md
+323	1-1	qa-validation	1	74e85e4ead	PASS	1	BOOKKEEPING=1	1-1-qa-validation.md
+323	1-2	code-review	2	e512e386b0	APPROVED	0		1-2-code-review-p2.md
+323	1-2	code-review	1	e0568e755a	NEEDS_REWORK	1	TEST=1	1-2-code-review.md
+323	1-2	qa-validation	1	6d644fb3fa	PASS	0		1-2-qa-validation.md
+323	1-3	code-review	2	15eb4ed455	APPROVED	0		1-3-code-review-p2.md
+323	1-3	code-review	3	4c8474987c	APPROVED	0		1-3-code-review-p3.md
+323	1-3	code-review	1	1d99fc5d82	NEEDS_REWORK	1	TEST=1	1-3-code-review.md
+323	1-3	qa-validation	2	ed31a129fa	PASS	0		1-3-qa-validation-p2.md
+323	1-3	qa-validation	1	15eb4ed455	NEEDS_REWORK	2	EVIDENCE=1,TEST=1	1-3-qa-validation.md
+323	1-4	code-review	1	34235d3bb2	APPROVED	2	TEST=2	1-4-code-review.md
+323	1-4	qa-validation	1	c38e16e04c	PASS	0		1-4-qa-validation.md
+323	4-2	qa-validation	1	dac9e023f6	PASS	1	BOOKKEEPING=1	11-qa-validation.md
+323	5	code-review	1	20133c64f7	APPROVED	0		2-1-code-review.md
+323	5	qa-validation	1	20133c64f7	PASS	0		2-1-qa-validation.md
+323	6	code-review	1	c2694ab0b8	APPROVED	0		2-2-code-review.md
+323	6	qa-validation	1	c2694ab0b8	PASS	0		2-2-qa-validation.md
+323	7	code-review	1	a44c80eb30	APPROVED	1	CODE=1	2-3-code-review.md
+323	2-3	qa-validation	1		PASS	0		2-3-qa-validation.md
+323	3-1	code-review	2	36164a6e3e	APPROVED	0		3-1-code-review-p2.md
+323	3-1	code-review	1	c8bfcff81e	APPROVED	0		3-1-code-review.md
+323	3-1	qa-validation	2	e1d89b33e3	PASS	0		3-1-qa-validation-p2.md
+323	3-1	qa-validation	1	fb52d7ba29	NEEDS_REWORK	1	CODE=1	3-1-qa-validation.md
+323	3-2	code-review	2	140bc001fb	APPROVED	0		3-2-code-review-p2.md
+323	3-2	code-review	3	b4655c3730	NEEDS_REWORK	1	TEST=1	3-2-code-review-p3.md
+323	3-2	code-review	4	1e63602a65	APPROVED	0		3-2-code-review-p4.md
+323	3-2	code-review	1	fe542d6c0c	NEEDS_REWORK	5	BOOKKEEPING=1,EVIDENCE=2,TEST=2	3-2-code-review.md
+323	3-2	qa-validation	2	1e63602a65	PASS	0		3-2-qa-validation-p2.md
+323	3-2	qa-validation	1	fc76e63182	NEEDS_REWORK	2	TEST=2	3-2-qa-validation.md
+323	4-1	code-review	1	84f82ff1da	APPROVED	0		4-1-code-review.md
+323	4-1	qa-validation	2	70c528c712	PASS	0		4-1-qa-validation-p2.md
+323	4-1	qa-validation	1	27110f1598	NEEDS_REWORK	1	EVIDENCE=1	4-1-qa-validation.md
+323	4-2	code-review	1	48928b97f4	APPROVED	0		4-2-code-review.md
+323	4-3	code-review	1	4cbad70873	APPROVED	0		4-3-code-review.md
+323	4-3	qa-validation	2	d774ffe996	PASS	0		4-3-qa-validation-p2.md
+323	4-3	qa-validation	1	c39f52628c	NEEDS_REWORK	1	EVIDENCE=1	4-3-qa-validation.md
+323	4-4	code-review	2	b7f27dcfe2	APPROVED	0		4-4-code-review-p2.md
+323	4-4	code-review	1	98afa359f6	APPROVED	0		4-4-code-review.md
+323	4-4	qa-validation	2	960225620b	PASS	0		4-4-qa-validation-p2.md
+323	4-4	qa-validation	1	4955b7b8f4	NEEDS_REWORK	1	TEST=1	4-4-qa-validation.md
+323	5-1	code-review	1	f3db80f2c0	APPROVED	0		5-1-code-review.md
+323	5-1	qa-validation	1	78c4a61645	PASS	0		5-1-qa-validation.md
+323	5-2	code-review	2	928026497b	APPROVED	0		5-2-code-review-p2.md
+323	5-2	code-review	3	cad76927f6	APPROVED	0		5-2-code-review-p3.md
+323	5-2	code-review	1	bb5d5c34b6	NEEDS_REWORK	2	CODE=1,TEST=1	5-2-code-review.md
+323	5-2	qa-validation	2	fc53c367ed	NEEDS_REWORK	1	EVIDENCE=1	5-2-qa-validation-p2.md
+323	5-2	qa-validation	3	dd9857e5b1	PASS	0		5-2-qa-validation-p3.md
+323	5-2	qa-validation	1	928026497b	NEEDS_REWORK	2	CODE=1,EVIDENCE=1	5-2-qa-validation.md
+323	5-3	code-review	1	e8cd1184c8	APPROVED	1	TEST=1	5-3-code-review.md
+323	5-3	qa-validation	1	f110af3384	PASS	1	TEST=1	5-3-qa-validation.md
+323	5-4	code-review	2	b8918e0a37	APPROVED	0		5-4-code-review-p2.md
+323	5-4	code-review	1	1f599fc8e8	NEEDS_REWORK	2	BOOKKEEPING=1,TEST=1	5-4-code-review.md
+323	5-4	qa-validation	2	3f6c18a449	PASS	0		5-4-qa-validation-p2.md
+323	5-4	qa-validation	1	c8b64c1be9	NEEDS_REWORK	3	BOOKKEEPING=1,EVIDENCE=2	5-4-qa-validation.md
+323	5-5	code-review	2	3ee43d643e	APPROVED	0		5-5-code-review-p2.md
+323	5-5	code-review	3	13a0b9519e	APPROVED	0		5-5-code-review-p3.md
+323	5-5	code-review	1	8de03aae75	NEEDS_REWORK	5	BOOKKEEPING=2,EVIDENCE=3	5-5-code-review.md
+323	5-5	qa-validation	2	13a0b9519e	NEEDS_REWORK	4	none=1,BOOKKEEPING=2,EVIDENCE=1	5-5-qa-validation-p2.md
+323	5-5	qa-validation	3	0617fced07	PASS	0		5-5-qa-validation-p3.md
+323	5-5	qa-validation	1	941603feb6	NEEDS_REWORK	4	none=1,EVIDENCE=2,TEST=1	5-5-qa-validation.md
+323	sprint-review-fix	code-review	1	af56c5f4bf	APPROVED	1	CODE=1	sprint-review-fix-code-review.md
+323	sprint-review-fix	qa-validation	2		PASS	0		sprint-review-fix-qa-validation-p2.md
+323	sprint-review-fix	qa-validation	1		PASS	0		sprint-review-fix-qa-validation.md
+323	sprint-review-step3	code-review	1	5c5d58ab44	APPROVED	2	TEST=2	sprint-review-step3-code-review.md
+323	sprint-review-step3	qa-validation	1		?	0		sprint-review-step3-qa-validation.md

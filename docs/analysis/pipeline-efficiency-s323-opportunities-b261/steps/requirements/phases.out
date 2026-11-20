@@ -1,0 +1,8 @@
+phase                                    spawn  agent-h      usd  first  last   lead-calls lead-act-min
+0 analyst+authoring chain                    3     0.70     16.8  03:02 03:44       52        36
+1 party round+repair+6 serial passes        68     3.86     76.4  07:21 14:39      313       131
+2 elicitation+repair+serial                 47     2.79     47.7  14:44 17:13      367       100
+3 adversarial p1+repair+serial              43     3.29     57.6  17:16 19:35      247       112
+4 adv p2 verify+post-MET repair             16     1.29     24.4  19:36 20:04      271        53
+5 gate adjudicators                          3     0.14      1.8  20:31 20:35       54        11
+TOTAL spawns 180 agent-h 12.07 usd 224.7 lead-act-min 442

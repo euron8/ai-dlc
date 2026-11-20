@@ -1,0 +1,9 @@
+tests                    88 writes 154873 bytes 31%
+story-file               76 writes 100738 bytes 20%
+heredoc:tests            20 writes 69547 bytes 14%
+other-record             53 writes 60088 bytes 12%
+heredoc:other-record     27 writes 51350 bytes 10%
+code                     49 writes 30789 bytes 6%
+heredoc:code             13 writes 28381 bytes 6%
+heredoc:story-file       2 writes 5660 bytes 1%
+total bytes 501426

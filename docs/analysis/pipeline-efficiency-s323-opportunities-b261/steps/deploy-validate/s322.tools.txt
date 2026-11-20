@@ -1,0 +1,42 @@
+TOOL COUNTS (ok only): {'Bash': 440, 'Read': 68, 'Edit': 20, 'Write': 10, 'mcp__plugin_context-mode_context-mode__ctx_search': 9, 'mcp__advisor__consult': 9, 'mcp__plugin_context-mode_context-mode__ctx_execute': 9, 'ToolSearch': 6, 'Agent': 3, 'TaskStop': 3}
+ERRORED: {'Read': 16, 'Edit': 5, 'Bash': 14, 'Agent': 2, 'mcp__plugin_context-mode_context-mode__ctx_search': 1, 'TaskStop': 1, 'TaskOutput': 2}
+READS (file: n, result chars):
+   deploy-validate.md 14 188590
+   deploy-validate-domain.md 10 73755
+   execution.py 7 35795
+   postcompact-digest.md 6 71856
+   pipeline-snapshot.md 5 67557
+   deploy-validate-push.md 5 21902
+   pending.md 4 7978
+   gate-log.md 3 20435
+   ops-4b-preroll-report.md 2 3365
+   carry-over-backlog.md 2 3640
+   sprint-review-qa-6.md 1 966
+   story-1-1-story-5-6-closeout-observation-and-predicate.md 1 5510
+   story-1-3-smoke-nav-button-count-derived.md 1 1202
+   sprint-review-party-triage.md 1 5920
+   story-1-5-offramp-gas-estimate-payload-wrap.md 1 1534
+   ecs-deploy.sh 1 3881
+   ssm-tunnel.sh 1 1757
+   locked-requirements.md 1 4056
+   5-dev-report.md 1 3403
+   config.py 1 3383
+LATENCY top by total seconds (key, n, total_s, max_s):
+   Bash:for i 7 354 111
+   mcp__advisor__consult 9 205 36
+   Bash:git add 20 23 3
+   Bash:gh pr 4 23 8
+   Edit 20 21 2
+   Agent 3 17 8
+   Bash:grep -n 63 15 0
+   Read 68 15 1
+   Bash:OUT=/private/tmp/claude-501/-Users-n8-gi 1 14 14
+   Write 10 13 4
+   Bash:scripts/ai-dlc/snapshot-update.sh --set 17 13 1
+   Bash:bash scripts/ai-dlc/snapshot-update.sh 10 10 3
+   Bash:for svc 2 7 4
+   Bash:scripts/ai-dlc/snapshot-update.sh --acti 7 7 2
+   Bash:for k 2 7 4
+   Bash:cat >> 10 7 3
+   Bash:grep -rn 16 6 2
+   Bash:sed -n 27 6 0

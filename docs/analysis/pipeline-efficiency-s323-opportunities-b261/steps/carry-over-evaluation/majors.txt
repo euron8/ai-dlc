@@ -1,0 +1,45 @@
+coe-elicitation/1.md F-1 — MAJOR — "Authoritative number: 286 distinct ids" double-counts one id; the replayable distinct count is 285
+coe-elicitation/1.md F-2 — MAJOR — Operator scope attribution on line 3 carries no verbatim quote of the operator's message
+coe-elicitation/1.md F-3 — MAJOR — Line 46: the premise that the pending-escalation text names both ids is half false, and the paragraph carries no derivation
+coe-elicitation/2.md F-1 — MAJOR — Item 1 per-site AC "no transaction is signed" cannot hold at the two offramp legs as the code orders them
+coe-elicitation/2.md F-2 — MAJOR — Item 2 wall 3(a) premise "on Base Leg 1 is the native leg" is drawn from the Matic config
+coe-elicitation/2.md F-3 — MAJOR — Item 2: share (i) is DECIDED as shipping at line 191, but the Dependencies paragraph still returns it to the lead as undecided
+coe-elicitation/2.md F-4 — MAJOR — Item 2: the two S316 native-balance items are labelled OUT, yet wall 3(a) is said to need them
+coe-elicitation/2.md F-5 — MAJOR — Item 3a: the 3a-1 close signal and the 3a-2 AC text use the opt-in/flag model that decided option (c) replaced
+coe-elicitation/2.md F-6 — MAJOR — Item 3b: the close signal names nine loader node ids, but the TAKEN Base-route parametrization renames and doubles them
+coe-elicitation/2.md F-7 — MAJOR — Items 3b, 10 and 11 are declared independent, but the TAKEN live-smoke ACs put all three in `server/test_live_smoke.py`
+coe-elicitation/2.md F-8 — MAJOR — Item 7: the discharge of falsification layers 1 and 2 depends on a Merkl read nobody is authorized to take
+coe-elicitation/2.md F-9 — MAJOR — Item 8: the allowlist text is stale against the Day-0 live read the item itself cites
+coe-elicitation/3.md F-1 — MAJOR — Entry 3 still says the S322 per-item answers "were not found recorded", contradicted by the escalation file and by the document's own Status paragraph
+coe-elicitation/3.md F-3 — MAJOR — The S317 cluster leaves `CO-S317-ASSERT-NO-POST-MINT-MODIFY-ON-GATED-HAS-NO-PRODUCTION-CALLER` out of the operator-pinned set and says its re-pin status "was not checked", but the row the cluster
+coe-elicitation/3.md F-5 — MAJOR — The pointer-row fold closes two rows by supersession in a cluster whose own text says no row closes by supersession; their recorded close signal is unmet, and the row entries do not show the fold
+coe-elicitation/3.md F-6 — MAJOR — The aged-list stale-closure exclusion covers 2 rows, but 5 aged rows carry an "Adjacent to scope item(s)" tag; the other 3 are left exposed to bulk closure
+coe-elicitation/4.md F-1 — MAJOR — Operator ratification attributed with no verbatim quote (S298 closure)
+coe-elicitation/4.md F-2 — MAJOR — "finds 2 headings without it" is an underived count
+coe-elicitation/cross.md F-1 — MAJOR — Item 2's dependency list reopens the share (i) decision that its own three-share paragraph and the S322 escalation text record as decided
+coe-elicitation/cross.md F-2 — MAJOR — Item 7 says the Playwright mTLS wiring is absorbed into its story; the S319 cluster calls the same row an unmet dependency whose ownership is deferred
+coe-elicitation/cross.md F-3 — MAJOR — Two owners discharge the same S319 DV-redefer id on different events: Item 4a's single edit and Item 7's post-deploy live read
+coe-elicitation/cross.md F-4 — MAJOR — The `_active_execution` remedy "mirrors the fee-collect ladder", but no standalone fee-collect path sets `_active_execution`, so Item 1's edited collect path has the same Rule (d) blind spot
+coe-elicitation/cross.md F-5 — MAJOR — Item 5 is declared closed (and the Gaps restate it) on a read that skipped the swap_skipped exclusion the document says a close must not skip
+coe-elicitation/cross.md F-6 — MAJOR — Gaps says the evaluation read one archive entry and proposes no close; the cluster sections read several archive bodies and close two pointer rows on them
+coe-p1/1.md F-1 — MAJOR — Line 3 attributes the 11-item list and its numbering to an operator message with no quote and no locator
+coe-p1/2.md F-1 — MAJOR — Wall 3(a) is named as the closer of the approve-to-zero id "on that id's own signal", but that signal is the refusal share (i) ships, and line 255 says share (i) discharges it
+coe-p1/2.md F-2 — MAJOR — "the five commits since": there are 30 commits since `e0ebaf019`
+coe-p1/2.md F-3 — MAJOR — Underived counts and negatives in Items 1 and 2 (all true where checked)
+coe-p1/2.md F-5 — MAJOR — Operator attributions in part 2 lack a locator, and two have no verbatim quote
+coe-p1/3.md F-1 — MAJOR — Two "operator-accepted" attributions in part 3 carry no verbatim quote, and the one locator points at the lead's entry rather than the operator's message
+coe-p1/3.md F-5 — MAJOR — The "no live body" and "body in archive" labels are false for 20 cluster rows, and the SRMIN disposition rests on the false one
+coe-p1/3.md F-6 — MAJOR — Counts at `:1644` are asserted without a derivation (counted as underived; replayed true)
+coe-p1/3.md F-7 — MAJOR — Load-bearing counts and negatives at `:1748`, `:2072` and `:2076` carry no derivation (replayed true; blocking under the third test)
+coe-p1/cross.md F-1 — MAJOR — An OPEN id that part 3 renews has no section, so the "261 other OPEN/PARTIAL/no-token ids" universal is false
+coe-p1/cross.md F-2 — MAJOR — Part 3's stale-closure exclusion is released by "the ids it cites" in Items 1-11, but tagged and BLOCKS-ON rows exist that their item never cites
+coe-p1/cross.md F-3 — MAJOR — Item 5's "the five commits since" `e0ebaf019` contradicts part 1's own eleven-commit audit, which already holds ten commits after it
+coe-p1/cross.md F-4 — MAJOR — Part 2 marks the S322 smoke rows adjacent to the 3a-2+3b story, and part 3 says the evaluation does not mark them adjacent and defers the check
+coe-p2/2.md F-1 — MAJOR — Share (i) bullet says the backlog still words the id's close signal as a refusal; the backlog at HEAD already names wall 3(a)
+coe-p2/3.md F-1 — MAJOR — The repair's list of tag-only rows at `:910` names 6, and 14 more tagged rows are cited by no Item section
+coe-p2/3.md F-2 — MAJOR — The cross F-5 repair re-anchored "The same applies to" at `:1447`, so two unrelated rows now read as close candidates
+coe-p2/3.md F-3 — MAJOR — The rewritten exception at `:2014` covers only Item 3a Dependencies, but an S321 smoke row tagged `3` at `:1963` is named in Item 3b's Dependencies
+coe-p2/cross.md F-1 — MAJOR — The repaired release rule enumerates six tag-only rows as its set; 14 more tagged rows have no Item-section citation
+coe-p2/cross.md F-2 — MAJOR — Parts 2 and 3 say backlog line 1120 still words the close signal as a refusal; the same commit re-worded it to name wall 3(a)
+coe-p2/cross.md F-3 — MAJOR — The repaired Gaps figure "the 262 ids that have a `### CO-` section" is a count over part 3 with no derivation (true at HEAD; underived)
+coe-p3/4.md F-1 — MAJOR — Repair 2's new negative "the Status-token hygiene id is named only in the Heading-ids note and the Backlog-hygiene bullet" (:2184) carries no fence in the document (true at HEAD; underived)

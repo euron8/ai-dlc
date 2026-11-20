@@ -1,0 +1,21 @@
+total attributed active min 149
+  text-only (no tool)                        102.6 min 1145 calls  5.4 s/call
+  snapshot-update.sh (pipeline-snapshot)      11.6 min  166 calls  4.2 s/call
+  git read (log/show/diff/status)              7.4 min  277 calls  1.6 s/call
+  edit/write other artifacts                   4.0 min   25 calls  9.6 s/call
+  dispatch                                     3.4 min   48 calls  4.2 s/call
+  wait loops                                   3.4 min  129 calls  1.6 s/call
+  write briefs/scripts                         3.1 min   23 calls  8.2 s/call
+  live probes (aws/ssm/api)                    3.1 min  102 calls  1.8 s/call
+  bash read (grep/sed/cat/tail...)             3.0 min  166 calls  1.1 s/call
+  gate/validate scripts                        2.9 min   59 calls  3.0 s/call
+  Read                                         1.6 min   94 calls  1.0 s/call
+  AskUserQuestion                              1.6 min   17 calls  5.6 s/call
+  git commit/push (evidence, cont records)     0.5 min   13 calls  2.2 s/call
+  other:Monitor                                0.1 min    2 calls  3.3 s/call
+  gh pr                                        0.1 min    6 calls  0.9 s/call
+  ctx_execute/search                           0.0 min    2 calls  1.0 s/call
+  other:TaskStop                               0.0 min    3 calls  0.5 s/call
+  other:ToolSearch                             0.0 min    7 calls  0.2 s/call
+  other:ListAgents                             0.0 min    6 calls  0.0 s/call
+  other:ctx_search_placeholder                 0.0 min    1 calls  0.0 s/call

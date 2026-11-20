@@ -1,0 +1,36 @@
+== sprint 321
+stage             lead_h script_h   ask_h  oper_h Tcalls
+report              0.82    0.62    0.09    5.07    266
+push                0.27    2.38    0.00    0.32     36
+pr                  0.65    0.00    0.11    1.35    106
+fetch               0.18    0.12    1.71    0.00     94
+selfupdate-gate     0.18    1.13    0.00    0.01     86
+apply               0.17    0.49    0.00    0.07     80
+classify            0.46    0.18    0.02    0.00    146
+start               0.04    0.00    0.00    0.26     13
+overrides           0.04    0.00    0.03    0.00     14
+TOTAL               2.81    4.92    1.96    7.08    841
+== sprint 322
+stage             lead_h script_h   ask_h  oper_h Tcalls
+report              1.12    0.47    1.01    1.02    388
+push                0.18    1.86    0.04    0.76     83
+pr                  0.59    0.12    0.06    1.74    187
+classify            0.75    0.40    0.59    0.02    262
+apply               0.30    0.80    0.23    0.23    118
+selfupdate-gate     0.27    0.77    0.00    0.30    111
+fetch               0.19    0.00    0.01    0.00     80
+overrides           0.11    0.00    0.01    0.00     29
+start               0.09    0.00    0.00    0.01     17
+TOTAL               3.60    4.42    1.96    4.08   1275
+== sprint 323
+stage             lead_h script_h   ask_h  oper_h Tcalls
+push                1.17    1.37    0.36    2.05    174
+report              2.65    0.98    0.30    0.97    533
+fetch               0.28    0.00    2.30    0.00    106
+classify            1.33    0.15    0.15    0.01    438
+pr                  0.69    0.02    0.00    0.58    164
+apply               0.33    0.57    0.16    0.08    124
+selfupdate-gate     0.46    0.67    0.00    0.00    116
+start               0.16    0.00    0.00    0.01     29
+overrides           0.06    0.00    0.01    0.00     18
+TOTAL               7.12    3.75    3.27    3.69   1702

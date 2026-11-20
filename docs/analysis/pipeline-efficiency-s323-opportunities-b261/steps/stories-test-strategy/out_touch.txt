@@ -1,0 +1,14 @@
+('gate', 'code-reviewer') {'spawns': 19, 'story_calls': 49, 'ts_calls': 0, 'spawns_touch_story': 17}
+('gate', 'code-reviewer-escalated') {'spawns': 17, 'story_calls': 71, 'ts_calls': 0, 'spawns_touch_story': 17}
+('gate', 'dev') {'spawns': 7, 'story_calls': 42, 'ts_calls': 0, 'spawns_touch_story': 5}
+('gate', 'dev-escalated') {'spawns': 2, 'story_calls': 38, 'ts_calls': 0, 'spawns_touch_story': 2}
+('gate', 'gate-adjudicator') {'spawns': 133, 'story_calls': 647, 'ts_calls': 6, 'spawns_touch_story': 129, 'spawns_touch_ts': 4}
+('gate', 'qa') {'spawns': 18, 'story_calls': 96, 'ts_calls': 0, 'spawns_touch_story': 18}
+('impl', 'code-reviewer') {'spawns': 31, 'story_calls': 162, 'ts_calls': 0, 'spawns_touch_story': 29}
+('impl', 'code-reviewer-escalated') {'spawns': 3, 'story_calls': 10, 'ts_calls': 0, 'spawns_touch_story': 3}
+('impl', 'dev') {'spawns': 18, 'story_calls': 213, 'ts_calls': 20, 'spawns_touch_story': 18, 'spawns_touch_ts': 9}
+('impl', 'dev-escalated') {'spawns': 4, 'story_calls': 173, 'ts_calls': 4, 'spawns_touch_story': 4, 'spawns_touch_ts': 3}
+('impl', 'gate-adjudicator') {'spawns': 1, 'story_calls': 13, 'ts_calls': 2, 'spawns_touch_story': 1, 'spawns_touch_ts': 1}
+('impl', 'ops') {'spawns': 2, 'story_calls': 6, 'ts_calls': 2, 'spawns_touch_story': 2, 'spawns_touch_ts': 1}
+('impl', 'pre-reviewer') {'spawns': 2, 'story_calls': 1, 'ts_calls': 0, 'spawns_touch_story': 1}
+('impl', 'qa') {'spawns': 50, 'story_calls': 232, 'ts_calls': 7, 'spawns_touch_story': 46, 'spawns_touch_ts': 2}

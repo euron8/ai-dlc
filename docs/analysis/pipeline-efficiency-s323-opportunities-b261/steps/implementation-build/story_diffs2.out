@@ -1,0 +1,36 @@
+commits: 231 dev-window, 109 other
+dev total added lines 209568
+    code     touches    40 added    551    0% deleted 171
+    docs-md  touches     5 added     24    0% deleted 15
+    rec:capture-txt touches   277 added 182984   87% deleted 46316
+    rec:docs-reviews touches    88 added  11963    6% deleted 0
+    rec:other-bmad/escal touches   169 added   5168    2% deleted 346
+    rec:sprint-status touches    28 added     28    0% deleted 28
+    rec:story-file touches   145 added   1822    1% deleted 573
+    rec:test-results touches    12 added    188    0% deleted 1
+    tests    touches   102 added   6840    3% deleted 533
+gate/lead total added lines 87808
+    code     touches    10 added     64    0% deleted 36
+    docs-md  touches    10 added    162    0% deleted 18
+    rec:capture-txt touches    49 added  61275   70% deleted 60248
+    rec:docs-reviews touches   183 added  18107   21% deleted 0
+    rec:other-bmad/escal touches   127 added   7259    8% deleted 905
+    rec:sprint-status touches    19 added     23    0% deleted 23
+    rec:story-file touches    51 added    739    1% deleted 172
+    tests    touches    11 added    179    0% deleted 37
+per story (dev commits): code/tests/record/docs added
+1-1 {'code': 98, 'tests': 861, 'rec:': 0, 'docs-md': 0} commits dev 10 other 2
+3-1 {'code': 38, 'tests': 101, 'rec:': 0, 'docs-md': 0} commits dev 11 other 4
+4-1 {'code': 0, 'tests': 0, 'rec:': 0, 'docs-md': 0} commits dev 9 other 2
+4-2 {'code': 0, 'tests': 0, 'rec:': 0, 'docs-md': 0} commits dev 1 other 5
+4-3 {'code': 2, 'tests': 12, 'rec:': 0, 'docs-md': 0} commits dev 7 other 3
+4-4 {'code': 3, 'tests': 106, 'rec:': 0, 'docs-md': 0} commits dev 9 other 5
+5-1 {'code': 15, 'tests': 258, 'rec:': 0, 'docs-md': 0} commits dev 4 other 3
+5-3 {'code': 3, 'tests': 175, 'rec:': 0, 'docs-md': 0} commits dev 3 other 3
+5-4 {'code': 17, 'tests': 200, 'rec:': 0, 'docs-md': 0} commits dev 8 other 6
+5-5 {'code': 32, 'tests': 89, 'rec:': 0, 'docs-md': 20} commits dev 16 other 4
+3-2 {'code': 130, 'tests': 1132, 'rec:': 0, 'docs-md': 0} commits dev 25 other 1
+1-2 {'code': 47, 'tests': 968, 'rec:': 0, 'docs-md': 0} commits dev 14 other 2
+1-3 {'code': 80, 'tests': 1351, 'rec:': 0, 'docs-md': 2} commits dev 35 other 42
+1-4 {'code': 5, 'tests': 247, 'rec:': 0, 'docs-md': 0} commits dev 17 other 1
+5-2 {'code': 81, 'tests': 1340, 'rec:': 0, 'docs-md': 2} commits dev 62 other 26

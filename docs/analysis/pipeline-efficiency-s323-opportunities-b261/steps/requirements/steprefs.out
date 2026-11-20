@@ -1,0 +1,11 @@
+321 LEAD requirements windows {'_gate-procedures': 86, 'discovery': 1, 'requirements.md': 14, 'research-req': 1}
+   analyst Requirements context exploration {}
+   pm File ADR-S316-12 carry-over item {}
+   pm-escalated Author brief, spec, PRD for sprint 321 {'requirements.md': 2, 'discovery': 4}
+   pm-escalated Re-derive SPEC.md from memlog {}
+322 LEAD requirements windows {'requirements.md': 36, '_gate-procedures': 43}
+   pm-escalated Authoring chain s322 requirements {'requirements.md': 6, 'discovery': 2}
+   analyst Requirements context digest s322 {'requirements.md': 4}
+323 LEAD requirements windows {'requirements.md': 42, '_gate-procedures': 68, 'discovery': 1, 'research-req': 1}
+   analyst Requirements context digest {'requirements.md': 1}
+   pm-escalated Requirements authoring chain {'discovery': 3, 'research-req': 3, 'requirements.md': 3}

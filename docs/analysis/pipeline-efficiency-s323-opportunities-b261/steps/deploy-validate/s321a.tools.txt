@@ -1,0 +1,47 @@
+TOOL COUNTS (ok only): {'Bash': 910, 'Read': 93, 'Write': 45, 'Agent': 35, 'AskUserQuestion': 17, 'SendMessage': 11, 'ToolSearch': 7, 'ListAgents': 6, 'Edit': 4, 'TaskStop': 3, 'Monitor': 2, 'mcp__plugin_context-mode_context-mode__ctx_search': 2}
+ERRORED: {'Bash': 8, 'Read': 1, 'Agent': 2, 'ctx_search_placeholder': 1}
+READS (file: n, result chars):
+   deploy-validate.md 13 306193
+   pipeline-snapshot.md 8 389706
+   postcompact-digest.md 6 154188
+   api.py 4 18522
+   aggregator.py 4 10425
+   base-first-save-ff-dev-report.md 4 15435
+   base-save-and-2e-ops-report.md 4 17922
+   deploy-validate-domain.md 3 51164
+   3b-ops-report.md 3 30394
+   pending.md 2 6861
+   3b-recheck-ops-report.md 2 7170
+   base-refunding-router-code-review.md 2 13445
+   base-poolswaptest-deploy-ops-report.md 2 19522
+   execution.py 2 13812
+   deploy-validate-push.md 1 15571
+   monitoring.diff.txt 1 5470
+   cicd.diff.txt 1 3909
+   s317-base-enable.md 1 1754
+   ssm-tunnel.sh 1 1418
+   902e-ops-report.md 1 3055
+   step4-ops-report.md 1 19001
+   base-deploy-staging.md 1 3809
+   create-rebalancer-db.sh 1 2894
+   base-db-ops-report.md 1 12004
+   base-config-write-ops-report.md 1 14145
+LATENCY top by total seconds (key, n, total_s, max_s):
+   AskUserQuestion 17 63700 38688
+   Bash:scripts/ai-dlc/snapshot-update.sh --row- 9 1030 1028
+   Bash:T=/Users/n8/git/graph/test-results; for 10 792 110
+   Bash:S=/private/tmp/claude-501/-Users-n8-git- 102 587 110
+   Agent 35 145 5
+   Bash:ls scripts 1 100 100
+   Bash:gh pr 16 44 9
+   Bash:scripts/ai-dlc/wait-for-deliverable.sh - 57 42 5
+   Bash:cat >> 88 40 3
+   Bash:pkill -f 5 37 8
+   Write 45 35 1
+   Bash:/bin/bash /private/tmp/claude-501/-Users 3 29 20
+   Bash:for w 1 28 28
+   Bash:export AWS_PROFILE=graph 5 28 16
+   Read 93 24 1
+   Bash:T=test-results; grep 3 16 8
+   Bash:scripts/ai-dlc/snapshot-update.sh --set 13 14 4
+   Bash:scripts/ai-dlc/snapshot-update.sh --acti 25 14 3

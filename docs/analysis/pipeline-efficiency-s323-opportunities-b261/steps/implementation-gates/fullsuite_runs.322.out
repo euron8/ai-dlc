@@ -1,0 +1,19 @@
+s322 full-suite launches by role (n, bash minutes), refusals-on-headroom seen in result text, wait-for-deliverable minutes
+adversary 4 0 refused 0 wait-min 1
+analyst 5 0 refused 0 wait-min 0
+architect 6 0 refused 0 wait-min 0
+code-reviewer 19 4 refused 0 wait-min 0
+code-reviewer-escalated 2 3 refused 0 wait-min 0
+dev 43 2 refused 0 wait-min 0
+dev-escalated 14 1 refused 0 wait-min 0
+ops 2 0 refused 0 wait-min 0
+pm 2 0 refused 0 wait-min 0
+protected-path-editor 6 0 refused 0 wait-min 0
+qa 41 4 refused 0 wait-min 0
+tea 12 0 refused 0 wait-min 0
+control zz-nope: 0 (must be 0)
+qa per story {'1-1': 2, '1-2': 10, '1-3': 15, '1-4': 5, '1-5': 3, '1-8': 2, '?': 4}
+code-reviewer per story {'1-2': 1, '1-3': 17, '?': 1}
+code-reviewer-escalated per story {'1-5': 2}
+dev per story {'1-3': 5, '1-8': 15, '322-3': 3, '?': 20}
+dev-escalated per story {'1-1': 1, '1-2': 4, '1-5': 7, '322-5': 2}

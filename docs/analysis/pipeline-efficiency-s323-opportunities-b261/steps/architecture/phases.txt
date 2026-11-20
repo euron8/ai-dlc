@@ -1,0 +1,19 @@
+P0 read step+dispatch prep                 3min calls= 17 adv=0 agent=0 bash=6 read=7 edit=0
+P1 architect chain (join)                 21min calls= 12 adv=0 agent=1 bash=6 read=5 edit=0
+P2 adopt+pm routing+fold                   6min calls= 34 adv=0 agent=2 bash=23 read=5 edit=4
+P3 party 20 seats                         18min calls= 77 adv=0 agent=20 bash=35 read=16 edit=0
+P4 party repair+lane+fanin+rulings        58min calls=106 adv=2 agent=20 bash=61 read=15 edit=5
+P5 V1 advisor+ripple fixes                 9min calls= 53 adv=2 agent=0 bash=30 read=5 edit=12
+P6 elicitation 5 shards                   14min calls= 13 adv=0 agent=5 bash=7 read=1 edit=0
+P7 elicitation repair+serial              20min calls= 26 adv=0 agent=5 bash=19 read=1 edit=1
+P8 R12 verify+advisor+fixer               18min calls=103 adv=2 agent=1 bash=82 read=12 edit=2
+P9 adv p1 5 shards+merge                  18min calls= 17 adv=0 agent=6 bash=10 read=1 edit=0
+P10 p1 repair 4+serial                    25min calls=120 adv=2 agent=6 bash=75 read=30 edit=1
+P11 adv p2                                17min calls= 16 adv=0 agent=5 bash=10 read=0 edit=0
+P12 handoff+push                           8min calls= 25 adv=1 agent=0 bash=22 read=2 edit=0
+Q1 resume+postMET repair dispatch         17min calls= 38 adv=0 agent=2 bash=20 read=15 edit=0
+Q2 changelog+index+commit+Seam B          10min calls= 97 adv=1 agent=0 bash=59 read=21 edit=7
+Q3 gate load+script arms                   8min calls= 56 adv=1 agent=0 bash=30 read=24 edit=1
+Q4 gate adj1+Check2 fail+repair           14min calls= 88 adv=2 agent=6 bash=41 read=33 edit=1
+Q5 gate re-run(adj2)+verdicts             17min calls= 82 adv=1 agent=6 bash=31 read=38 edit=0
+Q6 gate log+snapshot+check35              13min calls= 68 adv=1 agent=0 bash=48 read=11 edit=0

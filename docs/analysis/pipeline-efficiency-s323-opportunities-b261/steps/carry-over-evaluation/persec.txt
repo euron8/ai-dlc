@@ -1,0 +1,46 @@
+coe-elicitation/1.md MAJOR=3 MINOR=1
+coe-elicitation/2.md MAJOR=9 MINOR=4
+coe-elicitation/3.md MAJOR=4 MINOR=3
+coe-elicitation/4.md MAJOR=2 MINOR=5
+coe-elicitation/cross.md MAJOR=6 MINOR=3
+coe-p1/1.md MAJOR=1 MINOR=0
+coe-p1/2.md MAJOR=4 MINOR=1
+coe-p1/3.md MAJOR=4 MINOR=3
+coe-p1/cross.md MAJOR=4 MINOR=1
+coe-p2/1.md MAJOR=0 MINOR=0
+coe-p2/2.md MAJOR=1 MINOR=2
+coe-p2/3.md MAJOR=3 MINOR=0
+coe-p2/4.md MAJOR=0 MINOR=2
+coe-p2/cross.md MAJOR=3 MINOR=2
+coe-p3/2.md MAJOR=0 MINOR=0
+coe-p3/3.md MAJOR=0 MINOR=1
+coe-p3/4.md MAJOR=1 MINOR=0
+coe-p3/cross.md MAJOR=0 MINOR=1
+party carry-over-evaluation-architect-1.md MAJOR+=4 shard: 1/6 ## 1a. Audit anchor
+party carry-over-evaluation-architect-2.md MAJOR+=2 shard: 2/6 ### Item 3b. CO-S322-LIVE-SMOKE-REBALANCER-PAGE-L
+party carry-over-evaluation-architect-3.md MAJOR+=4 shard: 3/6 ### Item 7. Bug: Dashboard Uncollected Rewards an
+party carry-over-evaluation-architect-4.md MAJOR+=2 shard: 4/6 ### Item 11. UI change: rename the Collect Fees s
+party carry-over-evaluation-architect-5.md MAJOR+=5 shard: 5/6 ## Other OPEN items, by cluster
+party carry-over-evaluation-architect-6.md MAJOR+=4 shard: 6/6 ## Gaps
+party carry-over-evaluation-architect-cross.md MAJOR+=7 shard: cross/6 g1/1 1,2,3,4,5,6
+party carry-over-evaluation-dev-1.md MAJOR+=2 shard: 1/6 ## 1a. Audit anchor
+party carry-over-evaluation-dev-2.md MAJOR+=1 shard: 2/6
+party carry-over-evaluation-dev-3.md MAJOR+=1 shard: 3/6
+party carry-over-evaluation-dev-4.md MAJOR+=1 shard: 4/6
+party carry-over-evaluation-dev-5.md MAJOR+=4 shard: 5/6 ## Other OPEN items, by cluster
+party carry-over-evaluation-dev-6.md MAJOR+=2 shard: 6/6 ## Gaps
+party carry-over-evaluation-dev-cross.md MAJOR+=5 shard: cross/6 g1/1 1,2,3,4,5,6
+party carry-over-evaluation-pm-1.md MAJOR+=3 shard: 1/6 ## 1a. Audit anchor
+party carry-over-evaluation-pm-2.md MAJOR+=2 shard: 2/6
+party carry-over-evaluation-pm-3.md MAJOR+=2 shard: 3/6 ### Item 7. Bug: Dashboard Uncollected Rewards an
+party carry-over-evaluation-pm-4.md MAJOR+=2 shard: 4/6
+party carry-over-evaluation-pm-5.md MAJOR+=4 shard: 5/6 ## Other OPEN items, by cluster
+party carry-over-evaluation-pm-6.md MAJOR+=4 shard: 6/6 ## Gaps
+party carry-over-evaluation-pm-cross.md MAJOR+=6 shard: cross/6 g1/1 1,2,3,4,5,6
+party carry-over-evaluation-tea-1.md MAJOR+=5 shard: 1/6 ## 1a. Audit anchor
+party carry-over-evaluation-tea-2.md MAJOR+=5 shard: 2/6
+party carry-over-evaluation-tea-3.md MAJOR+=4 shard: 3/6 ### Item 7. Bug: Dashboard Uncollected Rewards an
+party carry-over-evaluation-tea-4.md MAJOR+=4 shard: 4/6 ### Item 11. UI change: rename the Collect Fees s
+party carry-over-evaluation-tea-5.md MAJOR+=4 shard: 5/6 ## Other OPEN items, by cluster
+party carry-over-evaluation-tea-6.md MAJOR+=6 shard: 6/6 ## Gaps
+party carry-over-evaluation-tea-cross.md MAJOR+=5 shard: cross/6 g1/1 1,2,3,4,5,6

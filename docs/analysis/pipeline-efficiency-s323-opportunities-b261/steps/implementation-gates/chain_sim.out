@@ -1,0 +1,24 @@
+g3 passes (nonce->verdict min) per on-chain story: {'3.1': [14.6], '3.2': [13.2, 12.6], '1.1': [14.9], '5.2': [16.2, 8.2], '5.4': [14.3, 11.2], '5.5': [10.4, 10.2]}
+
+variant | C1 min | C2 min | C3 min | 1.4-chain | wall min (h) | saved vs measured
+measured              | 841 | 737 | 582 | 682 | 841 (14.0 h) | 0 min (0.0 h) binding C1
+V1 g3 script+seat     | 812 | 709 | 548 | 672 | 812 (13.5 h) | 29 min (0.5 h) binding C1
+V2 g1||g2             | 725 | 652 | 503 | 677 | 725 (12.1 h) | 116 min (1.9 h) binding C1
+V3 refuse records     | 841 | 722 | 492 | 682 | 841 (14.0 h) | 0 min (0.0 h) binding C1
+V1+V2+V3              | 696 | 609 | 379 | 667 | 696 (11.6 h) | 145 min (2.4 h) binding C1
+W 3.1 wait only       | 559 | 737 | 582 | 682 | 737 (12.3 h) | 104 min (1.7 h) binding C2
+W both waits          | 559 | 454 | 582 | 399 | 582 (9.7 h) | 259 min (4.3 h) binding C3
+V1+V2+V3+W            | 414 | 326 | 379 | 384 | 414 (6.9 h) | 427 min (7.1 h) binding C1
+
+V2 notes:
+  3.1 47.6 g1p1 end -> g2p1 start gap 45.6 removed; g1p2 (0.8 + gap 1.2) hidden under g2p2
+  3.2 68 g1p1/g2p1 together, one rework, g1p2/g2p2 together: old gate span 21:53-01:53 = 240 -> ~172
+  1.1 5 rework changes code, so QA reruns after it; only g1p2->g2p1 gap 4.1 + 0.8 hidden
+  5.2 80 old gate span 21:43-00:22 = 159 -> ~79: one rework cycle instead of two
+  5.4 49.1 g1p1 end -> g2p1 start gap 45.5 + g1p2 (1.4 + 2.2) hidden
+  5.5 30 g1p1 || g2p1 and one rework cycle fewer; 5.5 overlaps its dev seat, so a modest figure
+V3 notes:
+  5.4 21.6 tier C: rework capture refresh + record-only QA pass 2 with their gaps
+  5.5 68 tier C: record-only rework seat 20:35-22:02; QA p1 end 20:33 -> g3 start 21:41
+  5.2 15 tier C: QA p2 EVIDENCE only -> g2p3 record-only pass 2.5 + rework gap
+V1 per story (min): {'3.1': 9.6, '3.2': 19.7, '1.1': 9.9, '5.2': 18.4, '5.4': 19.6, '5.5': 14.6}

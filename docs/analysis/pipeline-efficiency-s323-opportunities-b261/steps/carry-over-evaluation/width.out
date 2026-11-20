@@ -1,0 +1,18 @@
+(322, 'p1', 'cross-cross') {'n': 5, 'crit': 0, 'refound_by_part': 2, 'refound_other_round': 3, 'unique_in_cross': 2, 'unique_in_part': 0}
+(322, 'p1', 'part') {'n': 19, 'crit': 0, 'refound_by_part': 5, 'refound_other_round': 10, 'unique_in_cross': 0, 'unique_in_part': 9}
+(322, 'p2', 'cross-cross') {'n': 2, 'crit': 0, 'refound_by_part': 0, 'refound_other_round': 1, 'unique_in_cross': 1, 'unique_in_part': 0}
+(322, 'p2', 'part') {'n': 7, 'crit': 0, 'refound_by_part': 2, 'refound_other_round': 4, 'unique_in_cross': 0, 'unique_in_part': 3}
+(322, 'p3', 'cross-cross') {'n': 1, 'crit': 0, 'refound_by_part': 0, 'refound_other_round': 0, 'unique_in_cross': 1, 'unique_in_part': 0}
+(322, 'p3', 'part') {'n': 1, 'crit': 0, 'refound_by_part': 0, 'refound_other_round': 1, 'unique_in_cross': 0, 'unique_in_part': 0}
+(322, 'party', 'cross-cross') {'n': 11, 'crit': 0, 'refound_by_part': 9, 'refound_other_round': 4, 'unique_in_cross': 2, 'unique_in_part': 0}
+(322, 'party', 'part') {'n': 52, 'crit': 0, 'refound_by_part': 39, 'refound_other_round': 25, 'unique_in_cross': 0, 'unique_in_part': 18}
+(323, 'elic', 'cross-cross') {'n': 6, 'crit': 0, 'refound_by_part': 0, 'refound_other_round': 2, 'unique_in_cross': 4, 'unique_in_part': 0}
+(323, 'elic', 'part') {'n': 18, 'crit': 0, 'refound_by_part': 4, 'refound_other_round': 9, 'unique_in_cross': 0, 'unique_in_part': 9}
+(323, 'p1', 'cross-cross') {'n': 4, 'crit': 0, 'refound_by_part': 1, 'refound_other_round': 3, 'unique_in_cross': 1, 'unique_in_part': 0}
+(323, 'p1', 'part') {'n': 9, 'crit': 0, 'refound_by_part': 2, 'refound_other_round': 5, 'unique_in_cross': 0, 'unique_in_part': 4}
+(323, 'p2', 'cross-cross') {'n': 3, 'crit': 0, 'refound_by_part': 2, 'refound_other_round': 1, 'unique_in_cross': 1, 'unique_in_part': 0}
+(323, 'p2', 'part') {'n': 4, 'crit': 0, 'refound_by_part': 2, 'refound_other_round': 3, 'unique_in_cross': 0, 'unique_in_part': 0}
+(323, 'p3', 'part') {'n': 1, 'crit': 0, 'refound_by_part': 0, 'refound_other_round': 0, 'unique_in_cross': 0, 'unique_in_part': 1}
+(323, 'party', 'cross-cross') {'n': 23, 'crit': 1, 'refound_by_part': 18, 'refound_other_round': 11, 'unique_in_cross': 3, 'unique_in_part': 0}
+(323, 'party', 'part') {'n': 77, 'crit': 3, 'refound_by_part': 47, 'refound_other_round': 21, 'unique_in_cross': 0, 'unique_in_part': 44}
+total findings 243 control: min tokens/finding 0 with 0 toks 7

@@ -1,0 +1,15 @@
+ALL critical        4
+ALL major       96
+ALL minor       80
+pm critical        1
+pm major       22
+pm minor       21
+architect critical        1
+architect major       27
+architect minor       24
+dev critical        0
+dev major       16
+dev minor       20
+tea critical        2
+tea major       31
+tea minor       15

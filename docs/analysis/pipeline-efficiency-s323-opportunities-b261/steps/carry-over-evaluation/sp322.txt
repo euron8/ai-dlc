@@ -1,0 +1,112 @@
+11-09T00:20 27.1 analyst 5.7 S322 carry-over evaluation draft
+11-09T00:55 21.7 general-purpose 2.4 Round-dispatcher: coe party
+11-09T00:56 6.5 pm 1.2 pm cross
+11-09T00:56 8.4 architect 2.1 architect cross
+11-09T00:57 2.4 dev 0.7 dev cross
+11-09T00:57 1.0 tea 0.4 tea cross
+11-09T00:57 1.2 pm 0.4 pm 1/7
+11-09T00:57 4.6 pm 0.9 pm 2/7
+11-09T00:57 1.9 pm 0.5 pm 3/7
+11-09T00:57 11.3 pm 1.9 pm 4/7
+11-09T00:57 1.3 pm 0.4 pm 5/7
+11-09T00:57 1.6 pm 0.5 pm 6/7
+11-09T00:58 0.7 pm 0.3 pm 7/7
+11-09T00:58 7.4 architect 1.7 architect 1/7
+11-09T00:58 19.0 architect 3.9 architect 2/7
+11-09T00:58 7.2 architect 1.5 architect 3/7
+11-09T00:58 13.5 architect 3.3 architect 4/7
+11-09T00:58 3.9 architect 1.1 architect 5/7
+11-09T00:58 6.1 architect 1.5 architect 6/7
+11-09T00:58 7.7 architect 2.0 architect 7/7
+11-09T00:59 0.8 dev 0.3 dev 1/7
+11-09T00:59 7.3 dev 1.3 dev 2/7
+11-09T00:59 2.0 dev 0.5 dev 3/7
+11-09T00:59 7.5 dev 1.3 dev 4/7
+11-09T00:59 0.7 dev 0.3 dev 5/7
+11-09T00:59 1.9 dev 0.6 dev 6/7
+11-09T00:59 0.5 dev 0.2 dev 7/7
+11-09T01:00 1.0 tea 0.3 tea 1/7
+11-09T01:00 7.4 tea 1.4 tea 2/7
+11-09T01:00 0.9 tea 0.3 tea 3/7
+11-09T01:00 0.9 tea 0.4 tea 4/7
+11-09T01:00 1.5 tea 0.4 tea 5/7
+11-09T01:00 1.4 tea 0.5 tea 6/7
+11-09T01:00 1.2 tea 0.4 tea 7/7
+11-09T01:20 5.0 remediator 1.2 Party repair section 1
+11-09T01:20 25.8 remediator 4.0 Party repair section 4
+11-09T01:20 6.3 remediator 1.2 Party repair section 3
+11-09T01:20 11.3 remediator 2.1 Party repair section 2
+11-09T01:20 6.7 remediator 1.2 Party repair section 5
+11-09T01:20 2.1 remediator 0.7 Party repair section 7
+11-09T01:20 14.0 remediator 2.4 Party repair section 6
+11-09T01:47 1.3 remediator 0.5 Repair re-run part 2
+11-09T01:47 1.1 remediator 0.4 Repair re-run part 7
+11-09T01:47 2.1 remediator 0.5 Repair re-run part 6
+11-09T01:47 0.5 remediator 0.3 Repair re-run part 5
+11-09T01:49 0.7 remediator 0.3 Second re-run of part 6
+11-09T01:51 22.9 remediator 4.4 Serial lane 1 of party repair
+11-09T02:19 13.9 remediator 2.4 Fan-in party repair remediator
+11-09T02:37 30.1 adversary 3.6 coe p1 shard 1
+11-09T02:37 30.1 adversary 3.8 coe p1 shard 2
+11-09T02:37 28.4 adversary 4.3 coe p1 shard 3
+11-09T02:37 54.1 adversary 7.0 coe p1 shard 4
+11-09T02:37 41.1 adversary 5.4 coe p1 shard 6
+11-09T02:37 44.2 adversary 5.4 coe p1 cross shard
+11-09T02:37 49.1 adversary 5.6 coe p1 shard 5
+11-09T02:37 60.8 adversary 7.1 coe p1 shard 7
+11-09T02:52 0.5 dev 0.3 Add S7 cap to Base config
+11-09T03:42 6.7 remediator 1.2 coe repair p1 shard 7
+11-09T03:42 3.9 remediator 1.0 coe repair p1 shard 3
+11-09T03:42 3.0 remediator 0.7 coe repair p1 shard 1
+11-09T03:42 2.8 remediator 0.7 coe repair p1 shard 6
+11-09T03:42 4.3 remediator 1.0 coe repair p1 shard 5
+11-09T03:42 1.4 remediator 0.6 coe repair p1 shard 2
+11-09T03:42 3.8 remediator 1.3 coe repair p1 shard 4
+11-09T03:50 2.2 remediator 0.6 coe repair p1 shard 2 rerun
+11-09T03:53 7.8 remediator 1.6 coe serial lane 1
+11-09T04:01 2.4 remediator 0.5 coe serial fan-in
+11-09T04:07 17.8 adversary 2.9 coe p2 shard 5
+11-09T04:07 39.3 adversary 5.9 coe p2 shard 3
+11-09T04:07 16.4 adversary 2.7 coe p2 shard 1
+11-09T04:07 17.7 adversary 2.7 coe p2 shard 4
+11-09T04:07 20.3 adversary 3.0 coe p2 shard 2
+11-09T04:07 28.6 adversary 3.8 coe p2 shard 6
+11-09T04:07 86.6 adversary 11.4 coe p2 cross
+11-09T05:08 26.9 adversary 5.1 coe p2 cross re-dispatch
+11-09T05:40 33.6 adversary 5.7 coe p2 cross third run
+11-09T06:18 1.2 remediator 0.6 coe repair p2 shard 1
+11-09T06:18 1.4 remediator 0.5 coe repair p2 shard 6
+11-09T06:18 1.8 remediator 0.5 coe repair p2 shard 4
+11-09T06:18 3.1 remediator 0.9 coe repair p2 shard 3
+11-09T06:18 0.5 remediator 0.3 coe repair p2 shard 5
+11-09T06:18 2.8 remediator 0.6 coe repair p2 shard 2
+11-09T06:24 341.6 remediator 2.2 coe serial lane p2
+11-09T12:08 5.2 adversary 1.3 coe p3 shard 1
+11-09T12:08 4.2 adversary 1.2 coe p3 shard 5
+11-09T12:08 19.0 adversary 3.6 coe p3 shard 3
+11-09T12:08 15.4 adversary 2.8 coe p3 cross shard
+11-09T12:08 4.4 adversary 1.1 coe p3 shard 4
+11-09T12:08 11.4 adversary 1.7 coe p3 shard 6
+11-09T12:08 18.6 adversary 1.5 coe p3 shard 2
+11-09T12:32 0.3 remediator 0.3 Write coe deferral record
+11-09T12:35 59.2 analyst 8.2 Route s321 minors triage rows
+11-09T13:46 1.1 gate-adjudicator 0.4 Gate adjudicator shard 3/10
+11-09T13:46 1.2 gate-adjudicator 0.4 Gate adjudicator shard 1/10
+11-09T13:46 2.4 gate-adjudicator 0.7 Gate adjudicator shard 4/10
+11-09T13:46 0.9 gate-adjudicator 0.3 Gate adjudicator shard 5/10
+11-09T13:46 1.1 gate-adjudicator 0.3 Gate adjudicator shard 2/10
+11-09T13:46 0.8 gate-adjudicator 0.2 Gate adjudicator shard 7/10
+11-09T13:46 0.4 gate-adjudicator 0.2 Gate adjudicator shard 10/10
+11-09T13:46 0.6 gate-adjudicator 0.3 Gate adjudicator shard 6/10
+11-09T13:46 0.5 gate-adjudicator 0.2 Gate adjudicator shard 9/10
+11-09T13:46 0.5 gate-adjudicator 0.3 Gate adjudicator shard 8/10
+11-09T13:49 1.2 gate-adjudicator 0.3 Re-adjudicate shard 2/10
+11-09T13:49 0.9 gate-adjudicator 0.4 Re-adjudicate shard 3/10
+11-09T13:49 0.8 gate-adjudicator 0.2 Re-adjudicate shard 5/10
+11-09T13:49 1.5 gate-adjudicator 0.4 Re-adjudicate shard 1/10
+11-09T13:49 1.8 gate-adjudicator 0.5 Re-adjudicate shard 4/10
+11-09T13:52 2.0 gate-adjudicator 0.7 Re-adjudicate shard 10/10
+11-09T13:52 0.8 gate-adjudicator 0.2 Re-adjudicate shard 9/10
+11-09T13:52 1.0 gate-adjudicator 0.3 Re-adjudicate shard 8/10
+11-09T13:52 0.9 gate-adjudicator 0.2 Re-adjudicate shard 7/10
+11-09T13:52 1.6 gate-adjudicator 0.4 Re-adjudicate shard 6/10

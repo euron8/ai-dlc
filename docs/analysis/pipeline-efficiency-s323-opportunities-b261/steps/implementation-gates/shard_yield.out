@@ -1,0 +1,21 @@
+control ZZNOPE headings: 0 (must be 0)
+(321, 'code-review', 'cross') {'TEST': 2, 'CODE': 3} total 5
+(321, 'code-review', 'part') {'TEST': 13, 'CODE': 3, 'EVIDENCE': 2} total 18
+(321, 'code-review', 'serial') {'TEST': 9, 'BOOKKEEPING': 17, 'CODE': 9, 'EVIDENCE': 8} total 43
+(321, 'qa-validation', 'cross') {'BOOKKEEPING': 3, 'TEST': 1} total 4
+(321, 'qa-validation', 'part') {'TEST': 4, 'CODE': 1, 'EVIDENCE': 1, 'BOOKKEEPING': 1} total 7
+(321, 'qa-validation', 'serial') {'BOOKKEEPING': 15, 'EVIDENCE': 5} total 20
+(322, 'code-review', 'cross') {'none': 1, 'EVIDENCE': 1, 'BOOKKEEPING': 1} total 3
+(322, 'code-review', 'part') {'EVIDENCE': 2, 'CODE': 1} total 3
+(322, 'code-review', 'serial') {'EVIDENCE': 3, 'CODE': 2, 'BOOKKEEPING': 2} total 7
+(322, 'qa-validation', 'cross') {'TEST': 1} total 1
+(322, 'qa-validation', 'part') {'BOOKKEEPING': 2, 'TEST': 1} total 3
+(322, 'qa-validation', 'serial') {'BOOKKEEPING': 4} total 4
+(323, 'code-review', 'cross') {'TEST': 4, 'EVIDENCE': 1, 'BOOKKEEPING': 3} total 8
+(323, 'code-review', 'part') {'EVIDENCE': 6, 'BOOKKEEPING': 2, 'TEST': 3, 'CODE': 1} total 12
+(323, 'code-review', 'serial') {'TEST': 6, 'CODE': 2} total 8
+(323, 'qa-validation', 'cross') {'BOOKKEEPING': 2, 'TEST': 2, 'CODE': 1, 'EVIDENCE': 1} total 6
+(323, 'qa-validation', 'part') {'TEST': 1, 'EVIDENCE': 6, 'BOOKKEEPING': 2, 'none': 2} total 11
+(323, 'qa-validation', 'serial') {'EVIDENCE': 3, 'TEST': 3, 'BOOKKEEPING': 1, 'CODE': 1} total 8
+files with shard sections: {(321, 'qa-validation'): 6, (321, 'code-review'): 5, (322, 'code-review'): 3, (322, 'qa-validation'): 3, (323, 'code-review'): 7, (323, 'qa-validation'): 10}
+serial files: {(321, 'qa-validation'): 40, (321, 'code-review'): 56, (322, 'qa-validation'): 13, (322, 'code-review'): 17, (323, 'code-review'): 27, (323, 'qa-validation'): 22}

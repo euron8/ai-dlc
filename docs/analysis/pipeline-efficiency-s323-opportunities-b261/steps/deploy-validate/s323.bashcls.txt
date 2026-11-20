@@ -1,0 +1,14 @@
+BASH by purpose (n, total_s): {'git': (381, 490), 'aws ecs/ssm/other': (68, 163), 'snapshot-update': (85, 57), 'gh pr/api': (12, 28), 'grep/sed/cat/ls/wc/head': (69, 17), 'gate/validate script': (19, 11), 'other': (19, 4), 'wait/until loop': (8, 2), 'curl/api probe': (4, 2), 'smoke/test run': (7, 2)}
+TOOL latency total s by tool: {'AskUserQuestion': 1761, 'mcp__advisor__consult': 875, 'Bash': 774, 'Edit': 85, 'mcp__plugin_context-mode_context-mode__ctx_execute': 45, 'Agent': 33, 'Read': 21, 'mcp__plugin_context-mode_context-mode__ctx_search': 13} ALL 3621
+    120s cd /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad && bash diag-aggregator-sentinel.sh
+    120s until grep -q "UPDATE_IN_PROGRESS      | AWS::ECS::Service" /dev/null 2>/dev/null; do :; done; aws ecs describe-services --cluster
+    100s cd /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad && bash diag-aggregator-sentinel.sh
+     11s cd /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad && bash lockread.sh graph/rebalance
+     11s cd /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad && bash lockread.sh graph/rebalance
+     11s cd /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad && bash lockread.sh graph/rebalance
+     11s grep -E "query_utc|status|0 rows" /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad/pref
+     11s cd /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad && bash prefire-active.sh Rebalance
+     11s cd /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad && bash prefire-active.sh Rebalance
+     11s cd /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad && bash prefire.sh 2>&1 | tee prefi
+     11s cd /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad && bash prefire-active.sh Rebalance
+     11s cd /private/tmp/claude-501/-Users-n8-git-graph/64926214-f7bb-40dd-b276-c5678a934489/scratchpad && bash apiread.sh RebalancerServic

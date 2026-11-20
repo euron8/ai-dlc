@@ -1,0 +1,14 @@
+BASH by purpose (n, total_s): {'wait/until loop': (12, 324), 'git': (156, 112), 'snapshot-update': (62, 54), 'grep/sed/cat/ls/wc/head': (128, 36), 'aws ecs/ssm/other': (19, 34), 'gh pr/api': (7, 25), 'gate/validate script': (39, 14), 'smoke/test run': (8, 2), 'curl/api probe': (5, 2), 'other': (4, 1)}
+TOOL latency total s by tool: {'Bash': 604, 'mcp__advisor__consult': 205, 'Edit': 21, 'Agent': 17, 'Read': 15, 'Write': 13, 'mcp__plugin_context-mode_context-mode__ctx_search': 4, 'ToolSearch': 3} ALL 884
+    111s for i in $(seq 1 22); do grep -q "SMOKE-RC" test-results/smoke-test-output.txt 2>/dev/null && break; sleep 5; done; grep -E "SMOKE
+    100s for i in $(seq 1 20); do grep -q "SMOKE-RC" test-results/smoke-test-output.txt 2>/dev/null && break; sleep 5; done; grep -E "SMOKE
+     65s for i in $(seq 1 22); do grep -q "SMOKE-RC" test-results/smoke-test-output.txt 2>/dev/null && break; sleep 5; done; grep -E "SMOKE
+     25s for i in $(seq 1 22); do grep -q "tunnel closed" test-results/s322/903b-post-deploy-2026-11-12.txt 2>/dev/null && break; sleep 5; 
+     20s for i in $(seq 1 22); do grep -q "903b-done" test-results/s322/903b-exec-health-2026-11-12.txt 2>/dev/null && break; sleep 5; done
+     17s for i in 1 2 3 4 5 6; do R=$(aws ecs describe-services --profile graph --region us-east-1 --cluster graph-cluster --services Servi
+     15s for i in $(seq 1 20); do grep -q "902e-rc=" /private/tmp/claude-501/-Users-n8-git-graph/e444bf13-0caa-4c51-8740-f3367f670c13/tasks
+     14s OUT=/private/tmp/claude-501/-Users-n8-git-graph/e444bf13-0caa-4c51-8740-f3367f670c13/tasks/b52b50ibp.output; for i in $(seq 1 22);
+      8s gh pr merge 1317 --squash 2>&1 | tail -5
+      6s gh pr merge 1318 --squash 2>&1 | tail -3
+      6s gh pr create --base main --title "Sprint 322 — epic5-closeout-and-s321-carryovers" --body-file /private/tmp/claude-501/-Users-n8-g
+      4s for svc in ServicesStack-RebalancerServiceC5833138-GJW4MEY7GxM5 ServicesStack-RebalancerBaseChainServiceFD258A73-rwkZxxTKqtLl; do 

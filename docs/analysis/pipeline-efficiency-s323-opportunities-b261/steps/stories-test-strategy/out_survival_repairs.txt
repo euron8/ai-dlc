@@ -1,0 +1,19 @@
+control impossible span in stories: False | control real heading in stories: True
+party {'MAJOR': 187, 'MINOR': 155, 'CRITICAL': 1, 'OTHER': 1}
+    CRITICAL {'no-span': 1}
+    MAJOR {'span-shipped': 95, 'span-gone': 4, 'not-repaired': 26, 'no-span': 62}
+    MINOR {'no-span': 68, 'span-shipped': 45, 'not-repaired': 41, 'span-gone': 1}
+elicit {'MAJOR': 18, 'MINOR': 30, 'CRITICAL': 1}
+    CRITICAL {'span-shipped': 1}
+    MAJOR {'no-span': 9, 'not-repaired': 1, 'span-shipped': 7, 'span-gone': 1}
+    MINOR {'no-span': 21, 'span-shipped': 8, 'span-gone': 1}
+p1 {'MAJOR': 27, 'MINOR': 59, 'CRITICAL': 2}
+    CRITICAL {'span-gone': 1, 'no-span': 1}
+    MAJOR {'span-shipped': 18, 'span-gone': 2, 'no-span': 6, 'not-repaired': 1}
+    MINOR {'span-shipped': 29, 'no-span': 28, 'span-gone': 1, 'not-repaired': 1}
+p2 {'MINOR': 23, 'MAJOR': 2}
+    MAJOR {'span-shipped': 1, 'no-span': 1}
+    MINOR {'no-span': 8, 'span-shipped': 13, 'not-repaired': 1, 'span-gone': 1}
+ts {'MAJOR': 5, 'OTHER': 6, 'MINOR': 1}
+    MAJOR {'span-shipped': 3, 'no-span': 1, 'not-repaired': 1}
+    MINOR {'span-gone': 1}

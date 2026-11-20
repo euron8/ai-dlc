@@ -1,0 +1,31 @@
+carry-over-evaluation-architect-2.md:5:## F-1 (critical) sections: 2
+carry-over-evaluation-architect-2.md-6-sections: 2
+carry-over-evaluation-architect-2.md-7-
+carry-over-evaluation-architect-2.md-8-The Gap the section leaves open ("whether they are skipped in the deploy-validate smoke run ... is not established here") can be closed from the repo, and the answer breaks the story shape and the close signal. In the S322 deploy-validate smoke output (committed in the S322 retro, #1319) the Rebalancer-page Playwright tests did not time out on `networkidle`. They SKIPPED because the smoke interpreter has no Python `playwright` package, and the Data Smoke row still reported PASS-with-note:
+carry-over-evaluation-architect-2.md-9-
+carry-over-evaluation-architect-2.md-10-```derived
+carry-over-evaluation-architect-2.md-11-$ grep -o '\[[0-9]*\] server/tests/../test_live_smoke.py:[0-9]*: [Pp]laywright not installed' test-results/smoke-test-output.txt
+--
+carry-over-evaluation-pm-cross.md:4:## F-1 (critical) sections: 1, 6
+carry-over-evaluation-pm-cross.md-5-sections: 1, 6
+carry-over-evaluation-pm-cross.md-6-
+carry-over-evaluation-pm-cross.md-7-Item 2 wall 1 is classed "pure config validation, test-only verifiable ... mechanically closable by the pipeline" (part 1), and Item 2 wall 3(a) is parked as an unresolved operator-vs-pipeline Gap (parts 1, 6). The two are not independent. The deps line in part 1 cites `CO-S321-STORY-2-4-NATIVE-TWO-HOP-SWEEP-SIGNS-APPROVE-TO-ZERO-ADDRESS`. I read the strict-xfail test it names, `test_ac1_exposure_two_hop_native_with_prices_available_signs_nothing` in `rebalancer/tests/test_s321_offramp_native_sizing.py`:245. Its xfail reason says a native two-hop sweep "signs an approve whose `to` is the zero address and a Leg 1 swap ... only config and the gas fail-safe stop it today".
+carry-over-evaluation-pm-cross.md-8-
+carry-over-evaluation-pm-cross.md-9-- The "config" stop is exactly the zero-address validator that wall 1 relaxes.
+carry-over-evaluation-pm-cross.md-10-- So shipping wall 1 alone, with wall 3(a) and wall 2 left to the operator, removes one of the two remaining stops on a live-capital signing path. It does so before any code makes the native leg correct.
+--
+carry-over-evaluation-tea-2.md:12:## F-1 (critical) sections: 2
+carry-over-evaluation-tea-2.md-13-sections: 2
+carry-over-evaluation-tea-2.md-14-
+carry-over-evaluation-tea-2.md-15-The Gap the artifact leaves open ("whether they are skipped in the deploy-validate smoke run or merely at risk of timing out") is answerable from disk, and the answer changes the story.
+carry-over-evaluation-tea-2.md-16-
+carry-over-evaluation-tea-2.md-17-**The operator's "SKIPPED" is literal.** The latest smoke junit on disk is `test-results/smoke-junit.xml`. It is untracked; its suite timestamp is 2026-11-12T04:09:36-05:00, about 55 minutes after the 08:14:40Z rollout, so it is very likely the S322 deploy-validate run. It records 12 testcases skipped with the message `playwright not installed`. Among them are the 8 loader tests that load the page directly (F-2). A junit parse, not fenced here, also lists the 4 `TestIosPortraitNavFix` nav tests that S322 story 1.3 fixed, which would mean that fix was never exercised at the gate either. The ninth loader, sm3, PASSED through its bundle fallback (F-3).
+carry-over-evaluation-tea-2.md-18-
+--
+carry-over-evaluation-tea-6.md:44:## F-3 (critical) sections: 6
+carry-over-evaluation-tea-6.md-45-sections: 6
+carry-over-evaluation-tea-6.md-46-
+carry-over-evaluation-tea-6.md-47-The "Live-environment verification not run (no SSM/AWS)" bullet records as a gap a check that CLAUDE.md makes a **blocking Day-0 gate at this step**. `PI-S169-1` (CLAUDE.md:255) says that for any anchor whose ACs reference live environment data, the lead MUST verify that every required endpoint is reachable at carry-over-evaluation, before story-dev. It also says that an environment deferral filed after Day 0 is a process violation.
+carry-over-evaluation-tea-6.md-48-
+carry-over-evaluation-tea-6.md-49-Reads (a) to (e) cover five of the eleven scoped items: 5, 7, 8, 9 and 4a. Each of those items' ACs is either decided by a live read or closed by one:
+carry-over-evaluation-tea-6.md-50-- Item 7's layer-1 read decides which layer the fix goes in.

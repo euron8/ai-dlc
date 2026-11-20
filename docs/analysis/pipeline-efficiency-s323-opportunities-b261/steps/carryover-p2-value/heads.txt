@@ -1,0 +1,91 @@
+s320 p1 Shard: section 2 L104 F-1 MAJOR the fallback read compares against the wrong aggregator input: live IL's hold baseline is the event sum, not entryLiquidity/entryTick
+s320 p1 Shard: section 3 L156 F-1 MAJOR 3b blast radius leaves out the WIDE-exit reader of the same metric, which can pass when it should not (lines 149, 174)
+s320 p1 Shard: section 4 L243 F-1 MAJOR Bucket 4b says the `cards-grid` wording is outside Story 3.2 AC5, but it is in AC5's own Then clause and fixture
+s320 p1 Shard: section 4 L257 F-2 MAJOR Bucket 4a says the role files carry the pricing half, but neither carries the bullet's dollars requirement, and the shape trims it
+s320 p1 Shard: section 5 L311 F-1 MAJOR The §6 allowlist derivation at :455 is stale, so the document fails its own derivation validator
+s320 p1 Shard: section 5 L325 F-2 MAJOR "the three other stale `IN SPRINT (S319` ids" has no derivation in this section, and the fence beside it shows only two
+s320 p1 Shard: section 5 L337 F-3 MAJOR "the page has 10 `role="status"` sites" is asserted without a derivation
+s320 p1 Shard: section 6 L399 F-1 MAJOR "both callers" of `get_pool_pnl` is false: `rebalancer/api.py:3355` is not a `get_pool_pnl` call
+s320 p1 Shard: section 6 L426 F-2 MAJOR the promoted S307 item has no story carrier, no close signal and no status if it does not close
+s320 p1 Shard: section 7 L470 F-1 MAJOR Gaps line 558 says the deleting commit "was not located"; it is one `git log` away, and the fenced `ls` does not support "the script was deleted"
+s320 p1 Shard: section 7 L486 F-2 MAJOR Gaps lines 537, 541 and 542 assert counts and a negative with no derivation in the section (all true when run)
+s320 p1 Shard: cross-section g L562 F-1 MAJOR Bucket 1 says the Day-0 equality read of 3.2 AC8 / 3.3 AC5 "discharges" against the AC text as written, but Bucket 4b says that text binds the predica
+s320 p1 Shard: cross-section g L597 F-2 MAJOR Bucket 2's read story still names the "passive subgraph read", which the operator-decision bullet and Bucket 3b's derived reachability fact both rule 
+s320 p1 Shard: cross-section g L689 F-1 MAJOR S307 is paired with Bucket 2 as "same symptom", but its symptom is a guard in a test Bucket 2 says it does not cover, and nothing names S307's close c
+s320 p1 Shard: cross-section g L715 F-2 MAJOR The defect-class denominator and the variant decision ignore the promoted items and misrecord a decision the snapshot re-recorded as OPERATOR_DECIDED
+s320 p1 Shard: cross-section g L779 F-1 MAJOR Section 1 and Gaps misrecord the variant decision as the lead's open call after it was re-recorded OPERATOR_DECIDED
+s320 p1 Shard: cross-section g L796 F-2 MAJOR The "script was deleted" premise under the check-17 retire decision is false, and its fence does not test it
+s320 p1 Shard: cross-section g L852 F-1 MAJOR Bucket 3a leaves the Check-17 branch open (repoint or retire) while §4a/Gaps record it as decided (retire)
+s320 p1 Shard: cross-section g L869 F-2 MAJOR §4a's universal "all OPEN except CO-S307" is false: the S318 fixture-staleness co-closer has no Status line
+s320 p1 Shard: cross-section g L927 F-1 MAJOR The S3 breaker "fold into CO-S292" has no vehicle, so the operator-accepted interim risk lands nowhere
+s320 p1 Shard: cross-section g L948 F-2 MAJOR The Bucket 3c close check greps for "the disposition text" in an unnamed artifact, and the coercion text it would match is already there
+s320 p1 Shard: cross-section g L961 F-3 MAJOR "the S319 story files are sha-locked" has no derivation, and the two sections give different reasons why the 4b amendment cannot go into them
+s320 p1 Shard: cross-section g L1005 F-1 MAJOR The evidence for retiring the 8 check-17 tests misrecords the tree: the script was moved, not deleted, and the deletion commit is findable
+s320 p1 Shard: cross-section g L1024 F-2 MAJOR Section 5 hands the HODL-sweep-log candidate to the operator, but the Gaps queue of operator questions leaves it out, so nobody asks
+s320 p1 Shard: cross-section g L1039 F-3 MAJOR The promoted `CO-S307-POOL-PNL-IL-VS-FEES-MISPRICING` has no story and no close check of its own, and the Gaps reachability item does not cover it
+s320 p1 Shard: cross-section g L1055 F-4 MAJOR "Not yet put to the operator (no record in `pending.md` or the answers history)" is a negative stated with no derivation
+s320 p2 Shard: section 1 L28 F-1 MAJOR the line-3 parenthetical the repair added ("the files cited in this section are unchanged between `91a665334` and `b20bd5442`") is false for `_bmad-ou
+s320 p2 Shard: section 2 L83 F-1 MAJOR the repaired third candidate cause adds "a `current_value_usd` that is not actually fee-inclusive", which moves IL the wrong way to explain a negative
+s320 p2 Shard: section 2 L107 F-2 MAJOR two negatives the repairs wrote into Bucket 2 have no derivation in the document (both true when run)
+s320 p2 Shard: section 4 L216 F-1 MAJOR Line 292's "unchanged since filing" is a git-history negative written by repair 4.md F-3, with no fence in the document
+s320 p2 Shard: section 6 L298 F-1 MAJOR line 505's `:2246` guard locator and the negative "which Bucket 2's two red tests do not run" have no fence in the document
+s320 p2 Shard: section 6 L313 F-2 MAJOR line 528's negative "whose backlog body has no `Status:` line" has no fence in the document
+s320 p2 Shard: section 7 L361 F-1 MAJOR the repair's new grounds for the check-17 retire decision, and the new "one `claimable_raw` hit" count, carry no derivation (both true when run)
+s320 p2 Shard: cross-section g L420 F-1 MAJOR Bucket 1's Dependencies field still reads "none" after the serial cross-1 F-1 repair made the Rebalancer half of the Day-0 read depend on Bucket 4b
+s320 p2 Shard: cross-section g L505 F-1 MAJOR The repair's "same pool and lifetime IL figure" is false: S307's 15x guard reads a different aggregator field, over a different position scope, from t
+s320 p3 Shard: section 1 L28 F-1 MAJOR line 90's code claims about which page renders `RewardsCard` and which renders the status-bar fields carry no fence in the document (both true when ru
+s320 p3 Shard: cross-section g L445 F-1 MAJOR "which also covers closed positions" (lines 113 and 525) has no derivation in the document
+s320 p3 Shard: cross-section g L700 F-1 MAJOR the repair's "which also covers closed positions" has no derivation in the document: the fence shows the test reading the field but not the aggregator
+s322 p1 Shard: section 1 L37 F-1 MAJOR Line 101 frames the S318 STORY-2-6/2-7 ceiling and close-signal re-decision on a superseded premise; the S320 retro already recorded a renewal for 5.4
+s322 p1 Shard: section 1 L63 F-2 MAJOR Line 5 (and line 99) attribute the scope to the operator with no quote and no locator
+s322 p1 Shard: section 2 L104 F-1 MAJOR Rows 144 and 146 treat the S318 2-6 monitor as never having fired and give both S318 monitors the lapsed 2026-10-28 ceiling; the S320 retro already sc
+s322 p1 Shard: section 2 L118 F-2 MAJOR Row 117 asserts "the only ServicesStack deploy of S321 fired from HEAD ed49ace11" with no derivation in the document (repair R-2 of the party-repair p
+s322 p1 Shard: section 3 L166 F-1 MAJOR A.6.2 and A.6.3: "fb6f198e7 predates the deployed bytes", "a live PUT", and "#1305 added that allowlist ... so that event is no longer expected" are f
+s322 p1 Shard: section 3 L175 F-2 MAJOR A.6.2 option 2 names "the PUT request body" as an AC4 comparand, but the PUT body is an edit list, not a file; "leaves AC4 dischargeable" has no deriv
+s322 p1 Shard: section 3 L182 F-3 MAJOR A.6.4 and A.9(1): the Matic `registeredAt` premise ("fails against any honest cdk-deploy-start anchor ... restate against the 4840808e7 rollout") is f
+s322 p1 Shard: section 3 L187 F-4 MAJOR A.6.1: "The S321 records do not hold the tag" is false; the `4840808e7` push tag is on record
+s322 p1 Shard: section 3 L192 F-5 MAJOR A.5, A.6.4 and A.7: "The timestamp therefore has no derived source yet" is false; a lead-run, recorded ServicesStack fire and a recorded Base deployme
+s322 p1 Shard: section 3 L197 F-6 MAJOR A.2 line 180 and A.6.3 line 251: the count "two such rows ... both SWEEP rows" is false; the ops reports record a third Base `manual_create` row and M
+s322 p1 Shard: section 6 L459 F-1 MAJOR line 974: the compensating Rule (d) check names an `execution_log` read that cannot see a claim in flight
+s322 p1 Shard: section 6 L484 F-2 MAJOR line 983: "the live workaround `max_rebalance_cost_ratio` 1.7 is still in force" is asserted with no live read and the latest capture in the repo says
+s322 p1 Shard: section 6 L496 F-3 MAJOR line 777 (and 778 by inheritance): "silent zero on the off-ramp estimate path" is false for `CO-S290-ESTIMATE-17217-SILENT-ZERO-EMIT`, and the tag con
+s322 p1 Shard: section 6 L513 F-4 MAJOR line 982: "the item's own trigger fires in S322" is contradicted by the document's own record of S321 rebalancer deploys after the item was filed
+s322 p1 Shard: section 7 L599 F-1 MAJOR L-1 attributes the exclusion reading to the operator with no locator, and neither recorded operator message states the exclusion
+s322 p1 Shard: section 7 L603 F-2 MAJOR L-1 "two non-`manual` writers" is an underived universal and negative
+s322 p1 Shard: section 7 L607 F-3 MAJOR M-3 / A.5 / Gap 3 say the AC1 deploy start has no derivable source, but the repo records it
+s322 p1 Shard: section 7 L611 F-4 MAJOR L-2 frames Base as running "with no alert coverage"; the document's own evidence and the live record show a Base down alarm and a built dead-man alert
+s322 p1 Shard: cross-section L644 F-1 MAJOR L-2 re-confirmation is routed to "the next checkpoint" prose; no HARD_BLOCK cites the scope authorization and the event that falsified its premise
+s322 p1 Shard: cross-section L649 F-2 MAJOR "The timestamp therefore has no derived source yet" (A.5, A.6.4, M-3) is false: the repo records the Base ServicesStack fire time
+s322 p1 Shard: cross-section L654 F-3 MAJOR The Matic `registeredAt` comparand "restated against the 4840808e7 rollout" (row 109, A.6.4, A.9(1)) has no basis: that rollout did not register a new
+s322 p1 Shard: cross-section L659 F-4 MAJOR L-1 labels the exclusion reading "the operator's instruction" while its own quote, and the operator-confirmed scope text, say the opposite; no locator
+s322 p1 Shard: cross-section L664 F-5 MAJOR AC3's organic-row predicate is stated three ways; under L-1/M-1 a FAILED organic Base row falls out of AC3 entirely
+s322 p2 Shard: section 1 L57 F-1 MAJOR Row 117 says the flip commit's parent records Base `absent: true` "(derived below)", and no fence anywhere in the document derives it
+s322 p2 Shard: section 2 L94 F-1 MAJOR M-2 (repair entry 7.md F-9) restates AC4's mode as a sha256 comparison, contradicting the leaf-wise mode A.6.2 and A.9(4) now carry
+s322 p2 Shard: section 3 L199 F-1 MAJOR line 543: "The other readers are the tests that open `execution.py` itself, counted by this sweep (45 files)" is a closed enumeration, and false; whol
+s322 p2 Shard: section 3 L240 F-3 MAJOR line 506: "Per the operator's disposition there is no re-route" attributes a decision to the operator with no quote and no locator (kept by coe-repair
+s322 p2 Shard: section 4 L309 F-1 MAJOR Line 779 assigns arm (3) to option A's change set, but arm (3) is already green on today's helper, so it cannot meet line 769's mutation-RED rule (int
+s322 p2 Shard: cross-section L416 F-1 MAJOR AC3's organic-row predicate is still stated two incompatible ways; M-1 says AC3 "keeps the predicate (L-1)" while A.6.3/A.9(3) carry a different one
+s322 p2 Shard: cross-section L434 F-2 MAJOR M-3 and its serial-repair rewording say the live CloudFormation read is "blocked in this session", but the same session demonstrated a working AWS pat
+s322 p3 Shard: section 3 L134 F-1 MAJOR lines 563 and 588: "(1) ... (2) Tests that open `execution.py` itself ... `getsourcelines(`, `getsourcefile(` and `__file__`-style reads return nothin
+s322 p3 Shard: cross-section L298 F-1 MAJOR M-3's new negative "no CloudFormation `describe-stack-events` read by that path is recorded" has no derivation in the document (written by coe-serial-
+s323 p1 Shard: section 1 L24 F-1 MAJOR Line 3 attributes the 11-item list and its numbering to an operator message with no quote and no locator
+s323 p1 Shard: section 2 L150 F-1 MAJOR Wall 3(a) is named as the closer of the approve-to-zero id "on that id's own signal", but that signal is the refusal share (i) ships, and line 255 say
+s323 p1 Shard: section 2 L186 F-2 MAJOR "the five commits since": there are 30 commits since `e0ebaf019`
+s323 p1 Shard: section 2 L203 F-3 MAJOR Underived counts and negatives in Items 1 and 2 (all true where checked)
+s323 p1 Shard: section 2 L243 F-5 MAJOR Operator attributions in part 2 lack a locator, and two have no verbatim quote
+s323 p1 Shard: section 3 L291 F-1 MAJOR Two "operator-accepted" attributions in part 3 carry no verbatim quote, and the one locator points at the lead's entry rather than the operator's mess
+s323 p1 Shard: section 3 L370 F-5 MAJOR The "no live body" and "body in archive" labels are false for 20 cluster rows, and the SRMIN disposition rests on the false one
+s323 p1 Shard: section 3 L442 F-6 MAJOR Counts at `:1644` are asserted without a derivation (counted as underived; replayed true)
+s323 p1 Shard: section 3 L458 F-7 MAJOR Load-bearing counts and negatives at `:1748`, `:2072` and `:2076` carry no derivation (replayed true; blocking under the third test)
+s323 p1 Shard: cross-section L564 F-1 MAJOR An OPEN id that part 3 renews has no section, so the "261 other OPEN/PARTIAL/no-token ids" universal is false
+s323 p1 Shard: cross-section L595 F-2 MAJOR Part 3's stale-closure exclusion is released by "the ids it cites" in Items 1-11, but tagged and BLOCKS-ON rows exist that their item never cites
+s323 p1 Shard: cross-section L629 F-3 MAJOR Item 5's "the five commits since" `e0ebaf019` contradicts part 1's own eleven-commit audit, which already holds ten commits after it
+s323 p1 Shard: cross-section L652 F-4 MAJOR Part 2 marks the S322 smoke rows adjacent to the 3a-2+3b story, and part 3 says the evaluation does not mark them adjacent and defers the check
+s323 p2 Shard: section 2 L147 F-1 MAJOR Share (i) bullet says the backlog still words the id's close signal as a refusal; the backlog at HEAD already names wall 3(a)
+s323 p2 Shard: section 3 L242 F-1 MAJOR The repair's list of tag-only rows at `:910` names 6, and 14 more tagged rows are cited by no Item section
+s323 p2 Shard: section 3 L273 F-2 MAJOR The cross F-5 repair re-anchored "The same applies to" at `:1447`, so two unrelated rows now read as close candidates
+s323 p2 Shard: section 3 L294 F-3 MAJOR The rewritten exception at `:2014` covers only Item 3a Dependencies, but an S321 smoke row tagged `3` at `:1963` is named in Item 3b's Dependencies
+s323 p2 Shard: cross-section L517 F-1 MAJOR The repaired release rule enumerates six tag-only rows as its set; 14 more tagged rows have no Item-section citation
+s323 p2 Shard: cross-section L558 F-2 MAJOR Parts 2 and 3 say backlog line 1120 still words the close signal as a refusal; the same commit re-worded it to name wall 3(a)
+s323 p2 Shard: cross-section L588 F-3 MAJOR The repaired Gaps figure "the 262 ids that have a `### CO-` section" is a count over part 3 with no derivation (true at HEAD; underived)
+s323 p3 Shard: section 4 L191 F-1 MAJOR Repair 2's new negative "the Status-token hygiene id is named only in the Heading-ids note and the Backlog-hygiene bullet" (:2184) carries no fence in
