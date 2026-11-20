@@ -135,6 +135,87 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/snapshot-update-stamps.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). snapshot-update.sh is loaded once and asked through inproc_run (snu_run). Every other start a cell
+# makes -- the budget validator (also started by snapshot-update.sh itself), the mandatory-rules validator, the continue
+# hook and the recover hook -- goes through the `bash` shim below: the wrapped subjects run their entry in a subshell made
+# fresh the way inproc_run makes one, the unwrapped recover hook is sourced in one (its `exit` ends the subshell). One
+# command-line start per distinct CLI outcome remains (cells.decl), each compared byte for byte with the in-process answer.
+# A core fixture ships ahead of its subjects: a subject with neither the `<p>_main() {` line nor the column-0 source guard
+# predates the wrap and SKIPs (FIXTURE BROKEN in the distribution); exactly one half FAILs; an unreadable subject is
+# FIXTURE ERROR.
+sus_halves() { # <file> <entry> -> "<def><guard>"
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+sus_pre=""
+sus_gate() { # <file> <entry>: one call line per wrapped subject
+  local h
+  h="$(sus_halves "$1" "$2")" || exit 2
+  case "$h" in
+    11) : ;;
+    00) sus_pre="$sus_pre $1" ;;
+    *) bad "$1 carries one half of the in-process wrap ($2 line, column-0 source guard: $h) -- a respelled subject this fixture cannot drive"
+       report_end snapshot-update-stamps ;;
+  esac
+}
+sus_gate "$PROG" snu_main
+sus_gate "$VAL" vab_main
+sus_gate "$CONT_HOOK" hkcont_main
+sus_gate "$VMR" vmr_main
+if [ -n "$sus_pre" ]; then echo "SKIP: subject predates the in-process wrap:$sus_pre"; fx_skip_exit "$HERE"; fi
+
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+export FX_SNU="$PROG" FX_VAB="$VAL" FX_CONT="$CONT_HOOK" FX_REC="$RECOVER_HOOK" FX_VMR="$VMR" # exported: inproc_run keeps exported variables and drops the rest
+bash() { # a start of one of these five subjects runs in process (fresh-options subshell); any other start is real
+  local _p="${1:-}" _e=""
+  if [ -n "$_p" ] && [ -f "$_p" ]; then
+    if [ "$_p" -ef "$FX_SNU" ]; then _e=snu_main
+    elif [ "$_p" -ef "$FX_VAB" ]; then _e=vab_main
+    elif [ "$_p" -ef "$FX_CONT" ]; then _e=hkcont_main
+    elif [ "$_p" -ef "$FX_VMR" ]; then _e=vmr_main
+    elif [ "$_p" -ef "$FX_REC" ]; then _e=unwrapped; fi
+  fi
+  if [ -z "$_e" ]; then command bash "$@"; return; fi
+  shift
+  (
+    _x=" $(compgen -e) "; _x="${_x//$'\n'/ }"
+    for _v in $(compgen -v); do
+      case "$_x" in *" $_v "*) continue ;; esac
+      case "$_v" in
+        _x|_v|_e|_p) continue ;;
+        BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
+        IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
+        SHLVL|TERM|UID|_) continue ;;
+      esac
+      unset "$_v" 2>/dev/null
+    done
+    OPTIND=1; set +eufx +o pipefail; hash -r
+    case "$_e" in
+      snu_main) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$_p"; . "$_p" && snu_main "$@" ;;
+      vab_main) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$_p"; . "$_p" && vab_main "$@" ;;
+      hkcont_main) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$_p"; . "$_p" && hkcont_main "$@" ;;
+      vmr_main) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$_p"; . "$_p" && vmr_main "$@" ;;
+      unwrapped) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$_p"; . "$_p" "$@" ;;
+    esac
+  )
+}
+inproc_load "$PROG" || { echo "FIXTURE ERROR: $PROG defines no snu_main (not loadable)" >&2; exit 2; }
+SUS_FNS="${INPROC_FNS}bash "
+# inproc_run strips every function the loaded subject did not define; the shim is part of the kept set.
+snu_run() { # <program> <snapshot-update args> -> its answer in process; <program> is the loaded one or a copy of it (NOVAL)
+  local _pr="$1"; shift
+  INPROC_LOADED="$PROG"; INPROC_FNS="$SUS_FNS"; INPROC_DEFS="$(declare -f $INPROC_FNS)"
+  if [ "$_pr" = "$PROG" ]; then inproc_run "$PROG" snu_main "$@"; else inproc_run "$LONE" snu_main "$@"; fi
+}
+LONE="$WORK/lone/snapshot-update.sh" # NOVAL's copy of the program, with no sibling validator beside it
 
 NOW=1792964000                      # 2026-10-25T21:33:20Z, pinned so the arms do not race the clock
 export AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW"
@@ -181,7 +262,7 @@ XSEC="Deploy Baseline,Operator Identity"
 RC=""; OUT=""
 # drive <program> <snapshot> <ops...>
 drive() { local pr="$1" s="$2"; shift 2
-  OUT="$(AI_DLC_PROJECT_ROOT="${s%/_bmad-output/*}" bash "$pr" --snapshot "$s" "$@" 2>&1)"; RC=$?; }
+  OUT="$(AI_DLC_PROJECT_ROOT="${s%/_bmad-output/*}" snu_run "$pr" --snapshot "$s" "$@" 2>&1)"; RC=$?; }
 
 # cell <CELL> <program> <tag> -> 0 when the cell holds on that program (GREEN), 1 when it fails (RED).
 # CELL_MSG carries the detail of a failure. Each cell seeds its own project under $WORK/<tag>-<cell>.
@@ -239,9 +320,9 @@ cell() {
       if [ "$RC" = 2 ] && [ "$(cksum < "$s")" = "$cs" ]; then return 0; fi
       CELL_MSG="rc=$RC"; return 1 ;;
     NOVAL)
-      mkdir -p "$WORK/$t-lone"; cp "$pr" "$WORK/$t-lone/snapshot-update.sh"
+      mkdir -p "${LONE%/*}"; cp "$pr" "$LONE"
       s="$(seed "$WORK/$t-noval" 0)"; cs="$(cksum < "$s")"
-      drive "$WORK/$t-lone/snapshot-update.sh" "$s" --activity "$T_OK x"
+      drive "$LONE" "$s" --activity "$T_OK x"
       if [ "$RC" = 2 ] && [ "$(cksum < "$s")" = "$cs" ]; then return 0; fi
       CELL_MSG="rc=$RC"; return 1 ;;
     LOCKWAIT)
@@ -254,10 +335,14 @@ cell() {
       s="$(seed "$WORK/$t-lockwait" 0)"; cs="$(cksum < "$s")"
       local lk="${s%/*}/.pipeline-snapshot.md.lock" wt="$WORK/$t-lockwait/tmp" wp f seen=0
       mkdir -p "$wt" "$lk" && printf '%s\n' "$$" > "$lk/pid"
-      AI_DLC_PROJECT_ROOT="${s%/_bmad-output/*}" AI_DLC_SNAPSHOT_LOCK_TENTHS=36000 TMPDIR="$wt" \
-        bash "$pr" --snapshot "$s" --row-add "a2222222222222222 | qa | /w/b.md | 2026-10-25T21:00:00Z | in-flight" \
-        > "$WORK/$t-lockwait/out" 2>&1 &
+      # The writer runs in process, in subshells under $wp, so it starts in its own process group
+      # (set -m) and the broken-release path below stops the whole group, not $wp alone.
+      set -m
+      ( AI_DLC_PROJECT_ROOT="${s%/_bmad-output/*}" AI_DLC_SNAPSHOT_LOCK_TENTHS=36000 TMPDIR="$wt" \
+        snu_run "$pr" --snapshot "$s" --row-add "a2222222222222222 | qa | /w/b.md | 2026-10-25T21:00:00Z | in-flight" \
+        > "$WORK/$t-lockwait/out" 2>&1 ) &
       wp=$!
+      set +m
       while kill -0 "$wp" 2>/dev/null; do
         for f in "$wt"/snapshot-update-ops.*; do [ -e "$f" ] && seen=1; done
         [ "$seen" = 1 ] && break
@@ -272,7 +357,7 @@ cell() {
       # A release that did not take (measured: rmdir absent from the sandbox) would leave the writer
       # waiting out its whole ceiling. Stop it by the pid this cell recorded, and say why.
       if [ -d "$lk" ]; then
-        kill "$wp" 2>/dev/null; wait "$wp"
+        kill -TERM -- "-$wp" 2>/dev/null; wait "$wp"
         CELL_MSG="FIXTURE BROKEN: the held lock could not be released (rmdir failed), so the writer was stopped"; return 1
       fi
       wait "$wp"; RC=$?
@@ -294,7 +379,7 @@ cell() {
       s="$(seed "$WORK/$t-locktimeout" 0)"; cs="$(cksum < "$s")"
       local lk3="${s%/*}/.pipeline-snapshot.md.lock"
       mkdir -p "$lk3" && printf '%s\n' "$$" > "$lk3/pid"
-      OUT="$(AI_DLC_PROJECT_ROOT="${s%/_bmad-output/*}" AI_DLC_SNAPSHOT_LOCK_TENTHS=1 bash "$pr" --snapshot "$s" --activity "$T_OK blocked" 2>&1)"; RC=$?
+      OUT="$(AI_DLC_PROJECT_ROOT="${s%/_bmad-output/*}" AI_DLC_SNAPSHOT_LOCK_TENTHS=1 snu_run "$pr" --snapshot "$s" --activity "$T_OK blocked" 2>&1)"; RC=$?
       rm -f "$lk3/pid"; rmdir "$lk3" 2>/dev/null
       if [ "$RC" = 3 ] && grep -q 'LOCK TIMEOUT' <<<"$OUT" && [ "$(cksum < "$s")" = "$cs" ]; then return 0; fi
       CELL_MSG="rc=$RC changed=$([ "$(cksum < "$s")" = "$cs" ] && echo no || echo yes)"; return 1 ;;
@@ -713,6 +798,71 @@ if cell IFLINEWRITE "$PROG" ship; then ok "IFLINEWRITE: --line-replace writes a 
 if cell IFADDREFUSE "$PROG" ship; then ok "IFADDREFUSE: --line-add into In-Flight Teammates refuses a free-text and a done status cell, names the value, file unchanged"; else bad "IFADDREFUSE: $CELL_MSG"; fi
 if cell IFADDWRITE "$PROG" ship; then ok "IFADDWRITE: --line-add into In-Flight Teammates writes a member status row and a --- rule"; else bad "IFADDWRITE: $CELL_MSG"; fi
 if cell IFADDDUPHDR "$PROG" ship; then ok "IFADDDUPHDR: --line-add of a second header beside the present one is refused, file unchanged"; else bad "IFADDDUPHDR: $CELL_MSG"; fi
+
+# --- EQUIVALENCE: one command-line start per distinct CLI outcome (cells.decl), each held byte for byte (stdout, stderr, exit and
+# the written snapshot) to the in-process answer on the same input. The world is seeded once at one path and copied back for the
+# second run, so a path printed in a message is the same string in both answers.
+EQ_PROG=""; EQ_ID=""; EQ_IN=""; EQ_LOCK=0; EQ_CWD=""; EQ_ARGS=()
+eq_run() { # <ip|cl> <world> -> the subject's answer; stderr to $2.err.<mode>
+  local mode="$1" p="$2"
+  (
+    cd "${EQ_CWD:-$p}" || exit 99
+    export AI_DLC_PROJECT_ROOT="$p" HOME="$p/home" CLAUDE_PROJECT_DIR="$p"
+    if [ "$EQ_LOCK" = 1 ]; then
+      mkdir -p "$p/_bmad-output/.pipeline-snapshot.md.lock" && printf '%s\n' "$$" > "$p/_bmad-output/.pipeline-snapshot.md.lock/pid"
+      export AI_DLC_SNAPSHOT_LOCK_TENTHS=1
+    fi
+    if [ "$mode" = ip ]; then
+      printf '%s' "$EQ_IN" | bash "$EQ_PROG" ${EQ_ARGS[@]+"${EQ_ARGS[@]}"} 2>"$p.err.ip"
+    else
+      printf '%s' "$EQ_IN" | FXCELL="$EQ_ID" command bash "$EQ_PROG" ${EQ_ARGS[@]+"${EQ_ARGS[@]}"} 2>"$p.err.cl"
+    fi
+  )
+}
+# eq_norm: the subject names its candidate and payload temp files with its own pid, which is the fixture's in process and a
+# child's on the command line; only that number is masked.
+eq_norm() { sed -E 's/(candidate|payload)\.[0-9]+/\1.PID/g'; }
+eq_check() { # <world> <wanted exit> <label>
+  local p="$1" want="$2" lbl="$3" o1 r1 s1 o2 r2 s2
+  rm -rf "$p.orig"; cp -R "$p" "$p.orig"
+  o1="$(eq_run ip "$p" | eq_norm)"; r1=$?; s1="$(cksum < "$p/_bmad-output/pipeline-snapshot.md")"
+  rm -rf "$p"; cp -R "$p.orig" "$p"
+  o2="$(eq_run cl "$p" | eq_norm)"; r2=$?; s2="$(cksum < "$p/_bmad-output/pipeline-snapshot.md")"
+  if [ "$r1" = "$want" ] && [ "$r2" = "$want" ] && [ "$o1" = "$o2" ] && [ "$(eq_norm < "$p.err.ip")" = "$(eq_norm < "$p.err.cl")" ] && [ "$s1" = "$s2" ] \
+     && [ -n "$o1$(cat "$p.err.ip")" ]; then
+    ok "EQUIVALENCE: $lbl -- the in-process answer is the command line's (exit $want, stdout, stderr, snapshot)"
+  else
+    bad "EQUIVALENCE: $lbl -- in-process rc=$r1 cli rc=$r2 (want $want), stdout $([ "$o1" = "$o2" ] && echo same || echo DIFFERS), stderr $([ "$(eq_norm < "$p.err.ip")" = "$(eq_norm < "$p.err.cl")" ] && echo same || echo DIFFERS), snapshot $([ "$s1" = "$s2" ] && echo same || echo DIFFERS)"
+  fi
+}
+eq_snu() { # <id> <wanted exit> <label> <snapshot-update args...>
+  local id="$1" want="$2" lbl="$3" p s; shift 3
+  p="$WORK/eqv-$id"; s="$(seed "$p" 0)"; mkdir -p "$p/home"
+  EQ_PROG="$PROG"; EQ_ID="$id"; EQ_IN=""; EQ_CWD=""; EQ_LOCK=0
+  [ "$id" != cli-snu-lock ] || EQ_LOCK=1
+  EQ_ARGS=(--snapshot "$s" "$@")
+  eq_check "$p" "$want" "$lbl"
+}
+eq_snu cli-snu-ok 0 "snapshot-update.sh, a valid op" --activity "$T_OK equivalence"
+eq_snu cli-snu-refuse 1 "snapshot-update.sh, a stamp two hours ahead" --activity "$T_FUT planned"
+eq_snu cli-snu-ambig 2 "snapshot-update.sh, a target matching no line" --close-item "no-such-item"
+eq_snu cli-snu-lock 3 "snapshot-update.sh, a lock held for the whole run" --activity "$T_OK blocked"
+for _e in "cli-vab-ok:0" "cli-vab-refuse:1"; do
+  p="$WORK/eqv-${_e%%:*}"; seed "$p" 0 >/dev/null; mkdir -p "$p/home"
+  EQ_PROG="$VAL"; EQ_ID="${_e%%:*}"; EQ_IN=""; EQ_CWD=""; EQ_LOCK=0
+  case "$EQ_ID" in
+    cli-vab-ok) printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step: x\n' > "$p/_bmad-output/pipeline-snapshot.md"
+                EQ_ARGS=(--root "$p" --only pipeline-snapshot.md); _l="validate-artifact-budget.sh, a snapshot inside its budget" ;;
+    *) EQ_ARGS=(--root "$p" --only pipeline-snapshot.md); _l="validate-artifact-budget.sh, the seeded snapshot it refuses" ;;
+  esac
+  eq_check "$p" "${_e##*:}" "$_l"
+done
+p="$WORK/eqv-cli-vmr-ok"; seed "$p" 0 >/dev/null; mkdir -p "$p/home"
+EQ_PROG="$VMR"; EQ_ID=cli-vmr-ok; EQ_IN=""; EQ_CWD=""; EQ_LOCK=0; EQ_ARGS=(900)
+eq_check "$p" 1 "validate-mandatory-rules.sh, a snapshot with no pipeline-position field"
+p="$WORK/eqv-cli-cont-ok"; seed "$p" 0 >/dev/null; mkdir -p "$p/home"
+EQ_PROG="$CONT_HOOK"; EQ_ID=cli-cont-ok; EQ_IN='{"session_id":"t","transcript_path":""}'; EQ_CWD=""; EQ_LOCK=0; EQ_ARGS=()
+eq_check "$p" 0 "ai-dlc-continue.sh, an active pipeline's Stop"
 
 left="$(ls -a "$WORK"/*/_bmad-output 2>/dev/null)"
 n_out="$(grep -c 'pipeline-snapshot\.md$' <<<"$left")" || n_out=0

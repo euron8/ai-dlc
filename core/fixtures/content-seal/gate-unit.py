@@ -19,6 +19,7 @@
 import contextlib
 import io
 import os
+import subprocess
 import sys
 
 src, mode, gate_type, verdict_path, schema, emap = sys.argv[1:7]
@@ -40,6 +41,26 @@ os.environ.update({
 })
 sys.path.insert(0, src)
 import gate_adjudication  # noqa: E402
+
+# gate_adjudication.py starts the shipped seal with subprocess.run (bash content-seal.sh <mode> ...): python cannot call a shell
+# function, so each of those starts stays a program. Each carries its own cell tag, FXCELL=cs-gate-seal-<n>, n counted in the
+# file gate-arms.sh names in CS_GATE_CTR across this fixture's runs of this driver (cells.decl declares one e2e row per tag).
+_run = subprocess.run
+
+
+def _tagged(cmd, *args, **kwargs):
+    if isinstance(cmd, list) and len(cmd) > 1 and os.path.basename(str(cmd[1])) == "content-seal.sh" and os.environ.get("CS_GATE_CTR"):
+        with open(os.environ["CS_GATE_CTR"]) as fh:
+            n = int(fh.read().strip() or "0") + 1
+        with open(os.environ["CS_GATE_CTR"], "w") as fh:
+            fh.write("%d\n" % n)
+        env = dict(kwargs.get("env") or os.environ)
+        env["FXCELL"] = "cs-gate-seal-%d" % n
+        kwargs["env"] = env
+    return _run(cmd, *args, **kwargs)
+
+
+gate_adjudication.subprocess.run = _tagged
 
 sys.argv = [os.path.join(src, "gate_adjudication.py"), mode, gate_type, verdict_path, schema, emap, sibling] + parts
 out, err = io.StringIO(), io.StringIO()

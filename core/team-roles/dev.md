@@ -165,6 +165,8 @@ Before starting any task, read these files in order:
     RESOLVED in the same commit that marks the story done.
 12. When adding new environment variables, update both the real `.env` and any
     environment template file in the same commit.
+
+Run every full-suite run (step 6) through `scripts/ai-dlc/suite-admission.sh --sprint <N> --capture <file> -- <suite command>`, called with the Bash tool's `run_in_background: true` and waited on for its completion notification, never in the foreground (a suite run outlasts any foreground call). Its first output line is `SUITE-ADMISSION: TICKET <id>`; on exit 75 (QUEUED) re-invoke it with `--ticket <id>`, and if a call is ever cut off re-invoke with the TICKET line it printed. On exit 76 (ESCALATE) stop and send what it printed to the lead (a full entry, or a reference to the entry another ticket already opened), who appends it to `docs/escalations/pending.md`. Never write a retry or wait loop around the suite.
 13. If your implementation deviates from a story AC for valid reasons, update
     the AC text in the story file to match what was actually built. The story
     file is the source of truth and must reflect reality, not the original spec.
@@ -385,6 +387,21 @@ project that replaces that section does not replace this one.
   after every re-capture. The lead runs
   `scripts/ai-dlc/validate-handoff-evidence.sh` before gate 1 and refuses
   the handoff on any of these.
+- **A test-suite run is committed as a run summary, never as its log.** The
+  summary is the capture format `validate-handoff-evidence.sh` reads: line 1
+  `$ <the exact, replayable command>`, line 2 `head: <full sha>` (with
+  `(+dirty)` when the run had uncommitted changes), line 3 the counts line (the
+  runner's own `N passed, M failed ...` line), then the last 40 lines of the
+  log. The full log stays outside git, in a path you do not commit. A script
+  that runs the suite for you writes this form; a hand-written summary
+  follows it exactly. A full-log capture is still accepted. A capture whose
+  first 25 lines lack the `$ ` line or the `head:` line refuses the handoff.
+- **The handoff check is your LAST action.** After your final commit, run
+  `scripts/ai-dlc/validate-handoff-evidence.sh <story-file> <base> HEAD` with the
+  story base the lead gave you and `HEAD` as the frozen sha: the same arms the
+  lead runs at the gate-1 transition, on the same sha. It must exit 0 before you
+  report. A fix is a new commit followed by a new run; nothing is committed
+  after the last run.
 
 **Verify with one read-only command per Bash call.** A check that reads the tree to confirm a
 claim (a count, a citation, a listing) is either a `derived` fence in your deliverable, replayed

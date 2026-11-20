@@ -99,6 +99,7 @@
 # 4. Restart Claude Code
 # 5. Verify with /hooks
 
+adc_main() {
 set -u
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
@@ -548,3 +549,6 @@ REL="${FILE#"$PROJECT_DIR"/}"
   echo "match the prose -- the block is the evidence, the prose is the claim."
 } >&2
 exit 2
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+adc_main "$@"

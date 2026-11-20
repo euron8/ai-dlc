@@ -6,3 +6,6 @@
 !core/scripts/partition-subject.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/world.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

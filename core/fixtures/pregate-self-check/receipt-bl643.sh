@@ -28,8 +28,9 @@
 #   dirty (record present, an untracked file) -> 1 naming the dirty tree. Then the WHOLE <pre-push>
 #   on the deny shape from a clean copy of G (E2E), which must stop at the gate. Prints one summary line; exit 0 when it
 #   is the expected line, 1 when it differs, 9 when the world cannot be built.
+blr_main() {
 set -uo pipefail
-. "$(cd "$(dirname "$0")/../lib" && pwd)/pool-span.sh" || { echo "receipt-bl643: cannot source lib/pool-span.sh" >&2; exit 9; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/pool-span.sh" || { echo "receipt-bl643: cannot source lib/pool-span.sh" >&2; exit 9; }
 if [ "${1:-}" = --gate ]; then
   HK="${2:-}"
   [ -s "$HK" ] || exit 9
@@ -82,18 +83,14 @@ if [ "${1:-}" = --gate ]; then
   exit 1
 fi
 SC="${1:-scripts/pregate-self-check.sh}"
+RROOT="$PWD"; SVS="$RROOT/scripts/seed-verdict-store.sh"
 FX=core/fixtures/procsub-staged-refusal
 for f in "$SC" "$FX/procsub-spell.awk" "$FX/procsub-spell-probe.diff" scripts/seed-verdict-store.sh; do [ -s "$f" ] || exit 9; done
 W="$(mktemp -d)" || exit 9
 trap '[ -n "$W" ] && rm -rf "$W"' EXIT
 [ -d "$W" ] || exit 9
-S="$W/self"
-mkdir -p "$S/scripts" "$S/$FX" || exit 9
-echo 0.0.1 > "$S/VERSION" || exit 9
-cp "$SC" "$S/scripts/pregate-self-check.sh" || exit 9
-cp "$FX/procsub-spell.awk" "$FX/procsub-spell-probe.diff" "$S/$FX/" || exit 9
-cp scripts/seed-verdict-store.sh "$S/scripts/" || exit 9
-# A clean root's section d runs through the self tree's seed-verdict-store.sh, which arms with the root hook's
+# psc_drive, the in-process ask of the self-check, is run.sh's (the library has no command-line entry and no fallback).
+# A clean root's section d runs through the self-check's own seed-verdict-store.sh, which arms with the root hook's
 # fxcount_arm. This stub, appended below each stub hook's exit, sets the four variables it exports and names a
 # counted store nothing writes (the stub runner records nothing).
 ARMFN='fxcount_arm() {
@@ -164,7 +161,7 @@ for v in A B C D U J; do
   seedgit "$T" || exit 9
 done
 drive() { # <root> <out-file> -> the self-check's exit
-  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
+  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" psc_drive HEAD </dev/null >"$2" 2>&1 )
 }
 # BL-1020 worlds: copies of root A (committed hook = A's), each with a different hook-path state.
 #   World A itself is driven from a cwd that is not the root (drive_away; it does NOT test the defensive relative-path join: the self-check cds to its root first). Hres: core.hooksPath -> an absolute dir whose hook differs from the
@@ -271,11 +268,11 @@ pred_stub "$W/rootFs" "$(printf 'fdir\tN\nfdir\tD\tcore/scripts\t1\tcore/scripts
 printf '# edited\n' >> "$W/rootFs/core/scripts/fx-sub.sh" || exit 9
 gitin "$W/rootFs" -c user.email=x@x -c user.name=x commit -q -am "edit fx-sub.sh" || exit 9
 drive_away() { # <root> <out-file> -> the self-check's exit, run from a cwd other than the root
-  ( cd "$W" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" HEAD </dev/null >"$2" 2>&1 )
+  ( cd "$W" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" psc_drive HEAD </dev/null >"$2" 2>&1 )
 }
 drive "$W/rootHres" "$W/Hres.out"; hres=$?
 drive_base() { # <root> <out-file> <base> -> the self-check's exit, with an explicit base ref
-  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" "$3" </dev/null >"$2" 2>&1 )
+  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" psc_drive "$3" </dev/null >"$2" 2>&1 )
 }
 drive_base "$W/rootHtree" "$W/Htree.out" base0; htree=$?
 drive_base "$W/rootHbehind" "$W/Hbehind.out" newbase; hbehind=$?
@@ -311,8 +308,36 @@ wdn=no; grep -qF 'NO RECORD written: the work tree was not clean' "$W/Wd.out" &&
 # BL-1066: Wd (dirty) runs it there too, through --dirty-ok.
 aseed=no; grep -qF "counted store $W/rootA/.stub-store/counted-000000000000 (clean tree" "$W/A.out" && aseed=yes
 wdseed=no; grep -qF "counted store $W/rootWd/.stub-store/counted-000000000000 (dirty tree" "$W/Wd.out" && wdseed=yes
+# BL-878 command-line twins: the one start per distinct CLI outcome of the self-check and of the seeder, each compared on
+# stdout, stderr and exit with the in-process answer on the same input. The two sides run in turn on the SAME root, which is
+# put back to its seeded state before each (the root's store and its stub store are the only things a run leaves).
+mkdir -p "$W/eq/keep" || exit 9
+eqv() { # <cell id> <cwd> <root or -> <psc|svs> <args...> -> "<exit>/<yes|no>": the in-process exit, and whether all three agree
+  local id="$1" cwd="$2" root="$3" prog="$4" m; shift 4
+  for m in ip cli; do
+    [ "$root" = - ] || rm -rf "$root/.stub-store" "$root.vs"
+    ( cd "$cwd" || exit 9
+      [ "$root" = - ] || export AI_DLC_VERDICT_STORE="$root.vs" AI_DLC_PREGATE_ROOT="$root"
+      case "$prog:$m" in
+        psc:ip) psc_drive "$@" ;;
+        psc:cli) FXCELL="$id" command bash "$SC" "$@" ;;
+        svs:ip) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$SVS"; ( . "$SVS" && svs_main "$@" ) ;;
+        svs:cli) FXCELL="$id" command bash "$SVS" "$@" ;;
+      esac ) </dev/null >"$W/eq/$id.$m.o" 2>"$W/eq/$id.$m.e"
+    echo "$?" > "$W/eq/$id.$m.rc"
+  done
+  # The self-check prints each section's elapsed whole seconds on a line of its own, `   (<n>s)`; that is the one thing that
+  # varies between two runs of one input, so both sides are compared with <n> read as N.
+  for m in ip cli; do
+    sed 's/^   ([0-9][0-9]*s)$/   (Ns)/' "$W/eq/$id.$m.o" > "$W/eq/$id.$m.on"; sed 's/^   ([0-9][0-9]*s)$/   (Ns)/' "$W/eq/$id.$m.e" > "$W/eq/$id.$m.en"
+  done
+  if cmp -s "$W/eq/$id.ip.on" "$W/eq/$id.cli.on" && cmp -s "$W/eq/$id.ip.en" "$W/eq/$id.cli.en" && cmp -s "$W/eq/$id.ip.rc" "$W/eq/$id.cli.rc" \
+    && { [ -s "$W/eq/$id.ip.o" ] || [ -s "$W/eq/$id.ip.e" ]; }; then echo "$(cat "$W/eq/$id.ip.rc")/yes"; else echo "$(cat "$W/eq/$id.ip.rc")/no"; fi
+}
+EQV="psc-refuse=$(eqv cli-psc-refuse "$W" - psc one two) psc-pass=$(eqv cli-psc-pass "$W" "$W/rootA" psc HEAD) svs-refuse=$(eqv cli-svs-refuse "$W" - svs) svs-pass=$(eqv cli-svs-pass "$W/rootA" "$W/rootA" svs --keep "$W/eq/keep" validator-fork-budget)"
+EQV_WANT='psc-refuse=2/yes psc-pass=0/yes svs-refuse=2/yes svs-pass=0/yes'
 drive_member() { # <root> <out-file> <base> -> the self-check's exit under --member
-  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" bash "$S/scripts/pregate-self-check.sh" --member "$3" </dev/null >"$2" 2>&1 )
+  ( cd "$1" && AI_DLC_VERDICT_STORE="$1.vs" AI_DLC_PREGATE_ROOT="$1" psc_drive --member "$3" </dev/null >"$2" 2>&1 )
 }
 drive_member "$W/rootMt" "$W/Mt.out" base0; mt=$?
 mtn=no; grep -qF "member mode: running the tree's own hook $W/rootMt/.githooks/pre-push (" "$W/Mt.out" \
@@ -381,6 +406,7 @@ nv=$RC
 # World A's own output, printed ABOVE the summary only when A is not clean, so a caller can read why; the
 # summary stays the last line.
 [ "$a" = 0 ] || sed 's/^/A| /' "$W/A.out"
+echo "EQV $EQV"
 echo "A=$a B=$b C=$c noparse=$np nostep=$ns noverdict=$nv D=$d Dran=$dran Dnamed=$dnamed U=$u Unamed=$unamed J=$j Jnamed=$jnamed Hres=$hres Hresn=$hresn Htree=$htree Htreen=$htreen Habs=$habs Habsn=$habsn Hbehind=$hbehind Hbehindn=$hbehindn Arec=$arec Brec=$brec Wd=$wd Wdrec=$wdrec Wdn=$wdn Aseed=$aseed Wdseed=$wdseed Mt=$mt Mtn=$mtn Mtrec=$mtrec Mr=$mr Mrn=$mrn Htreem=$htreem Eskip=$eskip Mte=$mte Er=$er Ern=$ern Ts=$ts Tsn=$tsn Tn=$tn Tnn=$tnn Ep=$ep Epn=$epn Epall=$epall Epnone=$epnone Fskip=$fskip Tnf=$tnf Fs=$fs Fsn=$fsn Fsnear=$fsnear"
 shared_ok=0; base_ok=0; e_ok=0
 [ "$a" = 0 ] && [ "$aseed" = yes ] && [ "$arec" = yes ] && [ "$mt" = 0 ] && [ "$mtn" = yes ] && [ "$mtrec" = no ] \
@@ -393,5 +419,8 @@ shared_ok=0; base_ok=0; e_ok=0
 [ "$ep" = 0 ] && [ "$epn" = yes ] && [ "$epall" = no ] && [ "$epnone" = no ] \
   && [ "$er" = 1 ] && [ "$ern" = yes ] && [ "$ts" = 0 ] && [ "$tsn" = yes ] && [ "$tn" = 0 ] && [ "$tnn" = yes ] \
   && [ "$fskip" = yes ] && [ "$tnf" = yes ] && [ "$fs" = 1 ] && [ "$fsn" = yes ] && [ "$fsnear" = no ] && e_ok=1
-[ "$shared_ok$base_ok$e_ok" = 111 ] && exit 0
+[ "$shared_ok$base_ok$e_ok" = 111 ] && [ "$EQV" = "$EQV_WANT" ] && exit 0
 exit 1
+}
+# This file is a LIBRARY for run.sh, the one fixture that reads it: sourced, it defines blr_main and runs nothing. It has no
+# command-line entry, so no start of it exists to declare a cell for.

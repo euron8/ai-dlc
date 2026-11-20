@@ -54,13 +54,10 @@ set -u
 
 # ---- Source-able seam ------------------------------------------------------
 # Everything above the main guard below is DEFINITION ONLY: sourcing this file defines the
-# check state, fail() and check7() and runs nothing. Executing it runs the whole series, exactly
+# fail() and check7() and runs nothing (vmr_main initialises the check state). Executing it runs the whole series, exactly
 # as before. The guard is the repo idiom (core/scripts/content-seal.sh). A caller that sources
 # the file and calls check7() runs the SAME code the series runs; there is no flag that skips
 # a check, so nothing at the gate can opt out of one.
-FAILURES=0
-SKIPPED_CHECKS=""
-FAILURE_MSGS=""
 
 # Helper: append a failure message
 fail() {
@@ -105,6 +102,9 @@ fi
 }
 
 vmr_main() {
+FAILURES=0
+SKIPPED_CHECKS=""
+FAILURE_MSGS=""
 
 # ---- Subset mode: --check-clean-tree ---------------------------------------
 # A tree-state-agnostic entrypoint (no sprint number, no in-flight retro): assert

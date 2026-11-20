@@ -20,3 +20,6 @@ wc
 od
 tail
 mv
+find
+sort
+cmp

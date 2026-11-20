@@ -49,6 +49,7 @@
 # 1. Place at .claude/hooks/ai-dlc-content-seal.sh, chmod +x
 # 2. Register under PostToolUse, matcher "Write|Edit|MultiEdit" (templates/settings.json.template)
 
+acs_main() {
 set -u
 
 INPUT=$(cat)
@@ -117,3 +118,6 @@ mkdir -p "${LOG_DIR}/planning-artifacts" 2>/dev/null || exit 0
 seal_append "${LOG_DIR}/planning-artifacts/.artifact-writes.jsonl" "$SEAL_REL" "$SEAL_ROOT" "$ACTOR" \
   "$AGENT_ID" "$SESSION_ID" "$TOOL_NAME" "$TOOL_USE_ID" "$TRANSCRIPT" "$SHA" 2>/dev/null
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+acs_main "$@"

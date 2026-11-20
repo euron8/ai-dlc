@@ -261,6 +261,7 @@
 # The lead runs the adjudicate form through verdict.sh so the exit code is not swallowed by a
 # pipe. Compatible with bash 3.2+ and Python 3 stdlib (no PyYAML — the map is regex-parsed).
 
+vga_main() {
 set -u
 
 MODE=""
@@ -276,14 +277,14 @@ case "${1:-}" in
         MODE="expected"
         GATE_TYPE="${2:-}"
         if [ -z "$GATE_TYPE" ]; then
-            echo "usage: $0 --expected <gate_type> [--shard <i>/<N>]" >&2
+            echo "usage: ${BASH_SOURCE[0]} --expected <gate_type> [--shard <i>/<N>]" >&2
             exit 2
         fi
         if [ "$#" -gt 2 ]; then
             # `--shard` is the ONLY word accepted after the gate type. An unknown one used to be
             # ignored, and a mistyped shard flag then printed the WHOLE worklist to every shard.
             if [ "${3:-}" != "--shard" ] || [ "$#" -ne 4 ] || [ -z "${4:-}" ]; then
-                echo "usage: $0 --expected <gate_type> [--shard <i>/<N>]" >&2
+                echo "usage: ${BASH_SOURCE[0]} --expected <gate_type> [--shard <i>/<N>]" >&2
                 exit 2
             fi
             GA_SHARD="$4"
@@ -294,7 +295,7 @@ case "${1:-}" in
         GATE_TYPE="${2:-}"
         VERDICT_PATH="${3:-}"
         if [ -z "$GATE_TYPE" ] || [ -z "$VERDICT_PATH" ] || [ "$#" -lt 4 ]; then
-            echo "usage: $0 --merge <gate_type> <verdict_path> <part>..." >&2
+            echo "usage: ${BASH_SOURCE[0]} --merge <gate_type> <verdict_path> <part>..." >&2
             exit 2
         fi
         shift 3
@@ -305,7 +306,7 @@ case "${1:-}" in
         # which do not vary by gate type, and the part's nonce is its own filename's stem.
         MODE="check-part"
         if [ "$#" -ne 2 ] || [ -z "${2:-}" ]; then
-            echo "usage: $0 --check-part <part>" >&2
+            echo "usage: ${BASH_SOURCE[0]} --check-part <part>" >&2
             exit 2
         fi
         MERGE_PARTS=("$2")
@@ -315,7 +316,7 @@ case "${1:-}" in
         GATE_TYPE="${2:-}"
         VERDICT_PATH="${3:-}"
         if [ -z "$GATE_TYPE" ] || [ -z "$VERDICT_PATH" ]; then
-            echo "usage: $0 --coverage <gate_type> <verdict_path>" >&2
+            echo "usage: ${BASH_SOURCE[0]} --coverage <gate_type> <verdict_path>" >&2
             exit 2
         fi
         if [ "$#" -gt 3 ]; then
@@ -334,7 +335,7 @@ case "${1:-}" in
             if [ "$1" = "--sprint" ]; then
                 case "${2:-}" in ''|0*|*[!0-9]*) _ga_sprint_ok=0 ;; *) _ga_sprint_ok=1 ;; esac
                 if [ -n "$GA_SERIES_SPRINT" ] || [ "$_ga_sprint_ok" -ne 1 ]; then
-                    echo "usage: $0 --series [--sprint <N>] <dir|verdict>...   (<N>: one bare integer, no leading zero, at most once)" >&2
+                    echo "usage: ${BASH_SOURCE[0]} --series [--sprint <N>] <dir|verdict>...   (<N>: one bare integer, no leading zero, at most once)" >&2
                     exit 2
                 fi
                 GA_SERIES_SPRINT="$2"
@@ -345,17 +346,17 @@ case "${1:-}" in
             shift
         done
         if [ "${#SERIES_PATHS[@]}" -eq 0 ]; then
-            echo "usage: $0 --series [--sprint <N>] <dir|verdict>..." >&2
+            echo "usage: ${BASH_SOURCE[0]} --series [--sprint <N>] <dir|verdict>..." >&2
             exit 2
         fi
         ;;
     "" )
-        echo "usage: $0 --expected <gate_type>   |   $0 <gate_type> <verdict_path>" >&2
-        echo "       $0 --expected <gate_type> --shard <i>/<N>" >&2
-        echo "       $0 --merge <gate_type> <verdict_path> <part>..." >&2
-        echo "       $0 --check-part <part>" >&2
-        echo "       $0 --coverage <gate_type> <verdict_path>" >&2
-        echo "       $0 --series [--sprint <N>] <dir|verdict>..." >&2
+        echo "usage: ${BASH_SOURCE[0]} --expected <gate_type>   |   ${BASH_SOURCE[0]} <gate_type> <verdict_path>" >&2
+        echo "       ${BASH_SOURCE[0]} --expected <gate_type> --shard <i>/<N>" >&2
+        echo "       ${BASH_SOURCE[0]} --merge <gate_type> <verdict_path> <part>..." >&2
+        echo "       ${BASH_SOURCE[0]} --check-part <part>" >&2
+        echo "       ${BASH_SOURCE[0]} --coverage <gate_type> <verdict_path>" >&2
+        echo "       ${BASH_SOURCE[0]} --series [--sprint <N>] <dir|verdict>..." >&2
         exit 2
         ;;
     -*)
@@ -367,7 +368,7 @@ case "${1:-}" in
         GATE_TYPE="$1"
         VERDICT_PATH="${2:-}"
         if [ -z "$VERDICT_PATH" ]; then
-            echo "usage: $0 <gate_type> <verdict_path> [--transcript PATH] [--transcript-dir DIR]" >&2
+            echo "usage: ${BASH_SOURCE[0]} <gate_type> <verdict_path> [--transcript PATH] [--transcript-dir DIR]" >&2
             exit 2
         fi
         ;;
@@ -388,10 +389,10 @@ if [ "$MODE" = "adjudicate" ]; then
     while [ "$#" -gt 0 ]; do
         case "$1" in
             --transcript)
-                [ "$#" -ge 2 ] || { echo "usage: $0 <gate_type> <verdict_path> [--transcript PATH] [--transcript-dir DIR]" >&2; exit 2; }
+                [ "$#" -ge 2 ] || { echo "usage: ${BASH_SOURCE[0]} <gate_type> <verdict_path> [--transcript PATH] [--transcript-dir DIR]" >&2; exit 2; }
                 TRANSCRIPT="$2"; shift 2 ;;
             --transcript-dir)
-                [ "$#" -ge 2 ] || { echo "usage: $0 <gate_type> <verdict_path> [--transcript PATH] [--transcript-dir DIR]" >&2; exit 2; }
+                [ "$#" -ge 2 ] || { echo "usage: ${BASH_SOURCE[0]} <gate_type> <verdict_path> [--transcript PATH] [--transcript-dir DIR]" >&2; exit 2; }
                 TRANSCRIPT_DIR="$2"; shift 2 ;;
             *)
                 echo "ERROR: unknown argument: $1" >&2
@@ -857,3 +858,7 @@ export GA_SEAL
 # stdin is /dev/null, as it was when the program arrived as a heredoc on `python3 -`: the children
 # it spawns (content-seal.sh) never inherit the caller's stdin.
 python3 "$GA_SCRIPT_DIR/gate_adjudication.py" "$MODE" "$GATE_TYPE" "$VERDICT_PATH" "$SCHEMA" "$MAP" "$SIBLING" ${SERIES_PATHS+"${SERIES_PATHS[@]}"} ${MERGE_PARTS+"${MERGE_PARTS[@]}"} </dev/null
+}
+# Executed, it runs; sourced, it has defined vga_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vga_main "$@"

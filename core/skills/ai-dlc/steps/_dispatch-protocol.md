@@ -29,11 +29,20 @@ follow the worktree-explicit dispatch protocol:
    without its story spec and forces teardown + recreate. Violation:
    dispatch rework; surface at retro.
 1. Lead pre-creates a physical worktree per dispatched story BEFORE
-   issuing the Agent call:
-   `git worktree add <repo>-s<N>-story-<X> -b dev/sprint-<N>/story-<X> <sprint-branch-HEAD>`
-   and, from the lead checkout, records that sha as the story's dispatch:
-   `scripts/ai-dlc/merge-review-shards.sh --record-dispatch s<N>-<story-index> <sprint-branch-HEAD>`.
-   A rework re-dispatch runs it again and the first value is kept (`RECORD-KEPT:`).
+   issuing the Agent call, with one command from the lead checkout:
+   `scripts/ai-dlc/dispatch-story.sh s<N>-<story-index> <base>`, for example
+   `dispatch-story.sh s323-3-1 dev/sprint-323/story-3-0` (the index joins its
+   parts with `-`, never `.`). `<base>` is the sprint-branch HEAD, or the
+   predecessor story's dev branch tip for a by-content dependent story.
+   It checks `gh auth status`, runs
+   `git worktree add <repo>-s<N>-story-<X> -b dev/sprint-<N>/story-<X> <base>`,
+   records that sha as the story's dispatch
+   (`scripts/ai-dlc/merge-review-shards.sh --record-dispatch s<N>-<story-index> <base>`),
+   writes the dispatch transition through `story-transition.sh --no-seam` (no
+   `SEAM-C:` line: the lead's per-transition Seam C check runs after the Agent
+   call), and prints the brief skeleton, whose first line is the `Deliverable:` line.
+   A rework re-dispatch runs only the record call again and the first value is
+   kept (`RECORD-KEPT:`).
 2. Dev branches MUST branch off the current sprint-branch HEAD at
    dispatch time. The lead MUST NOT branch dev worktrees off `main`
    unless the sprint branch has not diverged from main.
@@ -185,36 +194,35 @@ the gate on it.
 
 **Bounded-join ≠ serial execution.** The beat governs HOW the lead
 waits on a dev, NOT how MANY run at once. This is Rule 28's "Split
-dispatch" files axis applied to dev work; the real dependency defined
-below is that clause's serial exception 1. Independent stories MUST be
-dispatched in parallel — in waves (Rule 28, "Split dispatch"), each in
-its own worktree, then beat-joined on all results. Parallelism comes from per-story worktrees
-plus the join. The lead SHALL serialize two stories ONLY on a
-real dependency: a shared source file both stories write, or a
-by-content gate dependency (story B's gate-1 reads story A's merged
-output). Before the first dispatch the lead MUST emit, as a written
-planning output, a **story dependency-DAG + wave plan**: for each
-story, the files it owns and the stories it genuinely depends on, with
-wave grouping derived from it (independent stories → same wave /
-parallel; shared-file or by-content chains → serialized land-order).
-Every story not in wave 1 gets a `held:` line when the plan is written, its
-unblock action naming its predecessor story or wave. The plan states the
+dispatch" files axis applied to dev work. Waves follow REAL CONTENT
+DEPENDENCY only. Stories that write one source file run together, each in
+its own worktree, and merge at close in land order; a shared file is not a
+reason to serialize them. A story that depends on a predecessor's content
+(its gate-1 reads the predecessor's output) starts from the predecessor's
+dev BRANCH tip, not after the predecessor merges and gates:
+`dispatch-story.sh s<N>-<story-index> <predecessor branch>`. The one stated
+exception is Rule 28's protected-path serial rule: protected-path editors
+run one at a time. Every other story is dispatched at once, in one wave.
+Parallelism comes from per-story worktrees plus the join.
+Before the first dispatch the lead MUST emit, as a written planning output,
+a **story dependency-DAG + wave plan**: for each story, the files it owns
+and the stories it depends on by content, with wave grouping derived from
+it. Every story not in wave 1 gets a `held:` line when the plan is written,
+its unblock action naming its predecessor branch. The plan states the
 sprint's earliest close, copied from the `EARLIEST-CLOSE` line of
 `scripts/ai-dlc/validate-ac-falsifiability.sh --stories-dir <stories dir>`,
-never computed by hand. A
-default-to-serial dispatch the operator must challenge to parallelize,
-or a missing / after-the-fact wave-DAG, is a lead-conduct retro
-finding.
+never computed by hand. A default-to-serial dispatch the operator must
+challenge to parallelize, or a missing / after-the-fact wave-DAG, is a
+lead-conduct retro finding.
 
 **Minimum mechanism (Rule 26(c)) — the wave-DAG planning output.**
-Failure caught: silent over-serialization — independent stories queued
-behind a chain they share no files with, wasting wall-clock and
-parallel capacity; and its inverse, parallel dispatch of two stories
-that write the same file, causing merge thrash. False-positive cost:
-one written dependency-DAG + wave grouping per sprint before dispatch.
-Removal condition: retire once dispatch parallelism is derived
-mechanically from a per-story file-ownership manifest rather than lead
-judgment.
+Failure caught: silent over-serialization — stories queued behind a chain
+they share no content dependency with, or behind a predecessor's merge and
+gates when its branch tip was enough, wasting wall-clock and parallel
+capacity. False-positive cost: one written dependency-DAG + wave grouping
+per sprint before dispatch. Removal condition: retire once dispatch
+parallelism is derived mechanically from a per-story file-ownership
+manifest rather than lead judgment.
 
 **Dispatch-prompt cache discipline.** When dispatching multiple
 teammates (parallel devs, or a dev plus QA on the same story), order

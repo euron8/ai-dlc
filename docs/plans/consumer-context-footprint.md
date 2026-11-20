@@ -345,7 +345,7 @@ the snapshot 38 times and the current step 31 times; `postcompact-digest.md` twi
 
 Shipped sizes (`wc -c`): `SKILL.md` 108,508; `ai-dlc-update/SKILL.md` 175,718; `steps/*.md`
 530,071 over 22 files; `team-roles/*.md` 165,961 over 18; `postcompact-digest.md` 28,577.
-Nothing bounds the shipped size of SKILL.md, steps or roles — `validate-reattach-budget.sh:174`
+Nothing bounds the shipped size of SKILL.md, steps or roles — `validate-reattach-budget.sh:175`
 prints the whole-file figure as an observation, never a gate.
 
 Harness facts that fix the design (Claude Code docs, fetched 2026-09-18): a skill body stays

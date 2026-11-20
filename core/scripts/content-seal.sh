@@ -658,7 +658,7 @@ seal_main() {
   local mode="${1:-}" st
   case "$mode" in
     --admit-marker)
-      [ "$#" -ge 2 ] || { echo "usage: $0 --admit-marker <file>... | -" >&2; return 2; }
+      [ "$#" -ge 2 ] || { echo "usage: ${BASH_SOURCE[0]} --admit-marker <file>... | -" >&2; return 2; }
       shift
       if [ "$#" -eq 1 ] && [ "$1" = "-" ]; then
         set --
@@ -667,7 +667,7 @@ seal_main() {
       fi
       seal_admit_marker "$@" ;;
     --check|--row|--last-tool-row)
-      [ "$#" -ge 3 ] || { echo "usage: $0 $mode <state-dir> <file>... | -" >&2; return 2; }
+      [ "$#" -ge 3 ] || { echo "usage: ${BASH_SOURCE[0]} $mode <state-dir> <file>... | -" >&2; return 2; }
       st="$2"; shift 2
       if [ "$#" -eq 1 ] && [ "$1" = "-" ]; then
         set --
@@ -680,24 +680,24 @@ seal_main() {
         *) seal_last_tool_row "$st" "$@" ;;
       esac ;;
     --record)
-      [ "$#" -ge 4 ] || { echo "usage: $0 --record <state-dir> program:<name> <file>..." >&2; return 2; }
+      [ "$#" -ge 4 ] || { echo "usage: ${BASH_SOURCE[0]} --record <state-dir> program:<name> <file>..." >&2; return 2; }
       st="$2"; shift
       seal_record "$st" "${2}" "${@:3}" ;;
     --record-expect)
-      [ "$#" -eq 5 ] || { echo "usage: $0 --record-expect <state-dir> program:<name> <sha256> <file>" >&2; return 2; }
+      [ "$#" -eq 5 ] || { echo "usage: ${BASH_SOURCE[0]} --record-expect <state-dir> program:<name> <sha256> <file>" >&2; return 2; }
       seal_record_expect "$2" "$3" "$4" "$5" ;;
     --program-row)
-      [ "$#" -ge 4 ] || { echo "usage: $0 --program-row <state-dir> <name> <file>..." >&2; return 2; }
+      [ "$#" -ge 4 ] || { echo "usage: ${BASH_SOURCE[0]} --program-row <state-dir> <name> <file>..." >&2; return 2; }
       seal_program_row "$2" "$3" "${@:4}" ;;
     --first-tool-ts)
-      [ "$#" -eq 2 ] || { echo "usage: $0 --first-tool-ts <state-dir>" >&2; return 2; }
+      [ "$#" -eq 2 ] || { echo "usage: ${BASH_SOURCE[0]} --first-tool-ts <state-dir>" >&2; return 2; }
       seal_first_tool_ts "$2" ;;
     --review-shard)
       { [ "$#" -eq 2 ] || { [ "$#" -eq 3 ] && [ "$3" = --legacy ]; }; } \
-        || { echo "usage: $0 --review-shard <shard file> [--legacy]" >&2; return 2; }
+        || { echo "usage: ${BASH_SOURCE[0]} --review-shard <shard file> [--legacy]" >&2; return 2; }
       seal_review_shard "$2" "${3:-}" ;;
     --agent-ere) printf '%s\n' "$AGENT_ID_ERE" ;;
-    *) echo "usage: $0 --check|--row|--last-tool-row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --program-row <state-dir> <name> <file>... | --first-tool-ts <state-dir> | --review-shard <shard file> [--legacy] | --admit-marker <file>... | - | --agent-ere" >&2
+    *) echo "usage: ${BASH_SOURCE[0]} --check|--row|--last-tool-row <state-dir> <file>... | --record <state-dir> program:<name> <file>... | --record-expect <state-dir> program:<name> <sha256> <file> | --program-row <state-dir> <name> <file>... | --first-tool-ts <state-dir> | --review-shard <shard file> [--legacy] | --admit-marker <file>... | - | --agent-ere" >&2
        return 2 ;;
   esac
 }

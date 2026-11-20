@@ -1,9 +1,9 @@
 # Measured by one counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge's own J3
 # and J7 output) after the BL-1095 split dealt this shard its units; every row is that run's count for this shard alone.
-62 *
+61 *
 4 core/scripts/partition-review-diff.sh
 7 core/scripts/merge-review-shards.sh
-6 core/scripts/content-seal.sh
+5 core/scripts/content-seal.sh
 2 core/scripts/wait-for-deliverable.sh
 2 core/hooks/ai-dlc-content-seal.sh
 0 core/scripts/record-only-diff.sh
@@ -14,5 +14,5 @@
 22 inproc:core/scripts/merge-review-shards.sh
 8 inproc:core/scripts/content-seal.sh
 4 inproc:core/scripts/wait-for-deliverable.sh
-7 inproc:core/hooks/ai-dlc-content-seal.sh
+14 inproc:core/hooks/ai-dlc-content-seal.sh
 8 inproc:core/scripts/record-only-diff.sh

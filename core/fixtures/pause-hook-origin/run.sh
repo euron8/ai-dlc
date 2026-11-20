@@ -43,12 +43,30 @@ _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.cla
 [ -n "$_PRS" ] && echo "HERMETIC-CONSUMED core/schemas/pause-routing.json"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: cannot source lib/layout.sh" >&2; exit 2; }
+
+# PRE-WRAP GATE. A hook without the wrap would RUN when sourced (reading this shell's stdin and exiting), a silent
+# green, so both halves are required before the load. Neither half predates the wrap: SKIP on a consumer, FIXTURE
+# BROKEN in the distribution. Exactly one half is a respelled hook this fixture cannot drive, which FAILS. The four
+# other hooks this fixture names are only read (copied and legend-compared), never run.
+[ -r "$HOOK" ] || { echo "FIXTURE ERROR: cannot read $HOOK -- an unreadable hook is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'hkpause_main() {' "$HOOK" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: pause-hook-origin: $HOOK predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) echo "  FAIL  $HOOK carries one half of the in-process wrap (hkpause_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive" >&2; echo "pause-hook-origin: 1 assertion(s) FAILED" >&2; exit 1 ;;
+esac
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "${HOOK%/*}/ai-dlc-pause.sh" || { echo "FIXTURE BROKEN: sourcing $HOOK defined nothing" >&2; exit 2; }
+declare -F hkpause_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no hkpause_main" >&2; exit 2; }
 
 # Drive the hook exactly as the harness does: JSON on stdin, CLAUDE_PROJECT_DIR set.
 fire() { # <prompt-json-string>
   rm -f "$FLAG"
   printf '{"session_id":"fixture","prompt":%s}' "$1" \
-    | CLAUDE_PROJECT_DIR="$PROJECT" bash "$HOOK" >/dev/null 2>&1
+    | CLAUDE_PROJECT_DIR="$PROJECT" inproc_run "${HOOK%/*}/ai-dlc-pause.sh" hkpause_main >/dev/null 2>&1
 }
 
 echo "pause-hook-origin:"
@@ -146,7 +164,7 @@ b_fire() { # <hook> <project> <session> <transcript-path|""> <prompt>
     jq -nc --arg s "$3" --arg t "$4" --arg p "$5" '{session_id:$s,transcript_path:$t,prompt:$p}'
   else
     jq -nc --arg s "$3" --arg p "$5" '{session_id:$s,prompt:$p}'
-  fi | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1
+  fi | CLAUDE_PROJECT_DIR="$2" inproc_run "${1%/*}/ai-dlc-pause.sh" hkpause_main >/dev/null 2>&1
 }
 b_proj() { local p; p="$(mktemp -d "$WORK/bind.XXXXXX")/project"; mkdir -p "$p/_bmad-output"
   cp "$SNAPSHOT" "$p/_bmad-output/pipeline-snapshot.md"; printf '%s' "$p"; }
@@ -393,6 +411,38 @@ else
     bad "THE RESUME CLEAR IS NOT BOUND ($V10): both emitters must carry the rm as its own call and the separate [ ! -e ] verify, byte-identically"
   fi
 fi
+
+# --- the cli cells (cells.decl): the hook started as a PROGRAM once per distinct outcome -----------------------
+# The hook exits 0 and prints nothing on every path; what differs is what it writes into the project: a typed steer
+# raises the pause flag, an empty prompt is skipped with its reason logged. Each is started as FXCELL=<id> bash
+# "$HOOK" on a copy of the seeded project and compared with the in-process call on another copy: stdout, stderr, exit
+# and the project tree (timestamps, epochs and the copy's path normalised). Each cell asserts its own outcome, so two
+# runs that both did nothing cannot read as equal.
+EQ="$WORK/eq"; rm -rf "$EQ"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir $EQ" >&2; exit 2; }
+proj_sig() { # <dir> -> the tree's file list and contents, timestamps, epochs and the dir path normalised
+  ( cd "$1" && find . -type f | sort | while read -r f; do printf '== %s\n' "$f"; cat "$f"; done ) \
+    | sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z?/TS/g' -e 's/^TS [0-9a-f]{16}$/TS NONCE/' -e 's/[0-9]{10}/EPOCH/g' -e "s|$1|DIR|g"
+}
+cli_cell() { # <id> <prompt-json-string> <outcome test on $cl> <outcome words>
+  local id="$1" ip="$EQ/$1/ip" cl="$EQ/$1/cl" pl d
+  pl="$(printf '{"session_id":"fixture","prompt":%s}' "$2")"
+  for d in "$ip" "$cl"; do mkdir -p "$d/_bmad-output" && cp "$SNAPSHOT" "$d/_bmad-output/pipeline-snapshot.md" || { bad "$id: could not seed the project"; return; }; done
+  printf '%s' "$pl" | CLAUDE_PROJECT_DIR="$ip" inproc_run "${HOOK%/*}/ai-dlc-pause.sh" hkpause_main > "$EQ/$id/ip.out" 2> "$EQ/$id/ip.err"; echo "$?" > "$EQ/$id/ip.rc"
+  printf '%s' "$pl" | CLAUDE_PROJECT_DIR="$cl" FXCELL="$id" bash "$HOOK" > "$EQ/$id/cl.out" 2> "$EQ/$id/cl.err"; echo "$?" > "$EQ/$id/cl.rc"
+  # the provenance block carries a fresh nonce per start; the rest of stdout must be byte-equal
+  for _s in ip cl; do sed -E 's/nonce=[0-9a-f]+/nonce=N/g' "$EQ/$id/$_s.out" > "$EQ/$id/$_s.out.n" && mv "$EQ/$id/$_s.out.n" "$EQ/$id/$_s.out"; done
+  proj_sig "$ip" > "$EQ/$id/ip.sig"; proj_sig "$cl" > "$EQ/$id/cl.sig"
+  if cmp -s "$EQ/$id/ip.out" "$EQ/$id/cl.out" && cmp -s "$EQ/$id/ip.err" "$EQ/$id/cl.err" && cmp -s "$EQ/$id/ip.rc" "$EQ/$id/cl.rc" \
+     && cmp -s "$EQ/$id/ip.sig" "$EQ/$id/cl.sig" && [ "$(cat "$EQ/$id/cl.rc")" = 0 ] && [ -s "$EQ/$id/cl.sig" ] && eval "$3"; then
+    ok "$id: the program $4 exactly as the in-process call does (stdout, stderr, exit 0 and the project tree)"
+  else
+    bad "$id: the program and the in-process call differ, or the outcome is not: $4"
+  fi
+}
+cli_cell cli-pause '"Stop and re-check the gate before you continue."' \
+  '[ -f "$cl/_bmad-output/pipeline-paused.flag" ] && grep -q "USER_PAUSE" "$cl/_bmad-output/pipeline-continuation-log.md"' "raises the pause flag and logs USER_PAUSE for operator prose"
+cli_cell cli-skip '""' \
+  '[ ! -f "$cl/_bmad-output/pipeline-paused.flag" ] && grep -q "PAUSE_SKIPPED" "$cl/_bmad-output/pipeline-continuation-log.md"' "skips an empty prompt and logs PAUSE_SKIPPED"
 
 echo
 report_end pause-hook-origin

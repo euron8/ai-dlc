@@ -26,8 +26,8 @@
 # IN PROCESS. Every reader call goes through pdx: push-drain.sh is SOURCED in a subshell (its
 # BASH_SOURCE guard stops it after the definitions) and its CLI entry pd_main is called with the
 # CLI's argv. The kept end-to-end runs are PEQ's three (`bash <reader>` on a drain, a refusal and a
-# --digest), each compared byte-for-byte with the in-process answer. A reader that predates the guard
-# is driven through `bash` by pdx itself, so this file reaches a consumer one pull behind safely.
+# --digest), each compared byte-for-byte with the in-process answer. A reader that predates the wrap is gated before any load
+# (SKIP on a consumer, FIXTURE BROKEN in the distribution).
 set -uo pipefail
 # THE ROOT IS READ BEFORE THE SCRUB. Under the hermetic runner the project root is the sandbox,
 # handed over as AI_DLC_PROJECT_ROOT; the walk below, started from this file's own location,
@@ -79,6 +79,25 @@ if [ -z "$RD" ]; then
   fx_skip_exit "$HERE"
 fi
 echo "HERMETIC-CONSUMED $RD"
+# PRE-WRAP CONSUMER GATE (BL-878): a consumer one pull behind carries this fixture with a reader that predates the in-process
+# wrap, and pdx sources it. Neither half is SKIP (FIXTURE BROKEN in the distribution, exit 0 on a consumer); exactly one half
+# FAILS; an unreadable reader is FIXTURE ERROR. Every load below comes after this.
+pd_halves() { # pd_halves <file> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -q '^pd_main() {$' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable reader is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable reader is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_pd_h="$(pd_halves "$RD")" || exit 2
+case "$_pd_h" in
+  11) : ;;
+  00) echo "SKIP: push-drain-refusals: $RD predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) echo "FAIL  push-drain-refusals -- $RD carries one half of the in-process wrap (pd_main line, column-0 source guard: $_pd_h) -- a respelled reader this fixture cannot drive"; exit 1 ;;
+esac
 command -v git >/dev/null 2>&1    || broken "no git on PATH"
 command -v shasum >/dev/null 2>&1 || broken "no shasum on PATH"
 
@@ -108,22 +127,17 @@ chk() { # chk <arm-id> <text> <command...>  -- ok when the command exits 0
 # pdx <reader> [<args>...] -- THE IN-PROCESS DRIVE. The reader is
 # SOURCED in a subshell -- its BASH_SOURCE guard stops it after the definitions -- and its own CLI
 # entry, pd_main, is called with the argv the CLI would get, so its `exit`, its EXIT trap and its
-# `set -uo pipefail` all end with the subshell. A reader that predates the guard (a consumer one pull
-# behind this fixture) has no pd_main and would RUN on being sourced, so it is driven through
-# `bash <reader>` instead; that is the CLI, and the arms read the same rows either way.
+# `set -uo pipefail` all end with the subshell. A reader that predates the wrap (a consumer one pull
+# behind this fixture) is refused by the pre-wrap gate above before any load.
 # PEQ below proves the two drives answer byte-for-byte alike. fx_inproc is given an ABSOLUTE subject path under
 # $ROOT: one drive runs from `cd /`, where a relative path logs
 # as `//core/...` and the judge's count does not match it.
 pdx() {
   local r="$1"; shift
-  if grep -q '^pd_main() {$' "$r"; then
-    ( # shellcheck source=/dev/null
-      . "$r" || exit 2
-      fx_inproc "$ROOT/core/skills/ai-dlc-update/reconcile/push-drain.sh"
-      pd_main "$@" )
-  else
-    bash "$r" "$@"
-  fi
+  ( # shellcheck source=/dev/null
+    . "$r" || exit 2
+    fx_inproc "$ROOT/core/skills/ai-dlc-update/reconcile/push-drain.sh"
+    pd_main "$@" )
 }
 dg() { # dg <reader> <file> <heading> -- that block's digest per the reader's own --digest
   local o
@@ -285,22 +299,9 @@ fails=$((fails + n_bad)); oks=$((oks + n_ok))
 # drain (exit 0, rows), its no-such-ref refusal (exit 2, REFUSED), and one --digest (exit 0). Each is
 # compared byte-for-byte, stdout and stderr and exit apart, with the in-process pd_main on the same
 # input, and the drain and the refusal must differ, so two empty drives cannot agree into a pass.
-# The digest leg also asserts the reader carries the guard: on an unguarded reader pdx IS the CLI,
-# and the comparison would be one program against itself.
+# The pre-wrap gate guarantees the reader is wrapped, so pdx is never the CLI and the comparison is two programs,
+# never one program against itself.
 pe_ok=1; pe_why=""
-# A reader with no guard is legal ONLY in the consumer layout, one pull behind this fixture: pdx drove
-# every arm through the CLI there, so there is no in-process answer to compare and PEQ is not evaluated.
-# In the distribution layout the reader IS this release's, and a missing guard is a regression.
-pe_skip=0
-if ! grep -q '^pd_main() {$' "$RD"; then
-  case "$RD" in
-    "$ROOT/.claude/skills/"*) pe_skip=1 ;;
-    *) pe_ok=0; pe_why="$pe_why no-pd_main-in-$RD" ;;
-  esac
-fi
-if [ "$pe_skip" = 1 ]; then
-  echo "NOTE  PEQ  not evaluated -- $RD predates the source guard (no pd_main), so every drive above was the CLI and there is no in-process answer to compare"
-else
 pe_D="$WORK/real/dist"; pe_C="$WORK/real/c"; pe_good="$(cat "$WORK/real/.ref.good")"
 pe_cmp() { # pe_cmp <tag> <args...>
   local t="$1" ur=0 cr=0; shift
@@ -319,6 +320,5 @@ pe_cmp digest --digest "$pe_C/$X/x-push.md"
   && [ "$(grep -c . "$WORK/pe.digest.co" || true)" -eq 2 ] || { pe_ok=0; pe_why="$pe_why outcomes"; }
 if [ "$pe_ok" = 1 ]; then ok "PEQ  the in-process pd_main equals bash <reader> byte-for-byte on a drain (rc 0), a refusal (rc 2) and a --digest (rc 0)"
 else bad "PEQ  the in-process drive differs from the CLI:$pe_why"; fi
-fi
 
 report_end push-drain-refusals

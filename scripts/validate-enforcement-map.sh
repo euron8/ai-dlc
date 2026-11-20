@@ -10032,7 +10032,7 @@ esv_sites() {
 #     for scripts/validate-enforcement-map.sh would acquit every future real emitter added
 #     here, which is the shape mechanism-design.md calls a mechanism defending its own defect.
 #   - a Python docstring (core/scripts/report-propagation-fanout.sh:344) and an awk-program
-#     comment inside a shell string (validate-artifact-budget.sh:893), neither of which is a
+#     comment inside a shell string (validate-artifact-budget.sh:894), neither of which is a
 #     statement beginning with an output verb.
 #   - `# ... nothing to compare` comment prose in ten fixtures and two reconcile helpers.
 #

@@ -13,6 +13,11 @@ import time
 
 
 # ---------------------------------------------------------------- derive the escalated set
+# Optional per-gate-type override: `adjudication_by_gate: {<gate_type>: <class>}` on a check entry.
+# `adjudication` is the class for every gate type not named. cid -> [(gate_type, class)] in file order.
+BY_GATE = {}
+
+
 def parse_map(path):
     """Regex block-parse enforcement-map.yaml's `checks:` section (no PyYAML). Returns a list
     of (check_id, adjudication, [gate_types]) in file order, and the id of any check whose
@@ -22,6 +27,7 @@ def parse_map(path):
     cur_id = None
     cur_adj = None
     cur_gts = None
+    BY_GATE.clear()
 
     def flush():
         if cur_id is not None:
@@ -51,6 +57,11 @@ def parse_map(path):
             if m and cur_id is not None:
                 cur_adj = m.group(1)
                 continue
+            m = re.match(r"^    adjudication_by_gate:\s*\{(.*)\}\s*$", line)
+            if m and cur_id is not None:
+                BY_GATE[cur_id] = [tuple(x.strip().strip("\"'") for x in kv.split(":", 1))
+                                   for kv in m.group(1).split(",") if kv.strip()]
+                continue
             m = re.match(r"^    gate_types:\s*\[(.*)\]\s*$", line)
             if m and cur_id is not None:
                 cur_gts = [t.strip() for t in m.group(1).split(",") if t.strip()]
@@ -63,6 +74,9 @@ def parse_map(path):
 def escalated_for(gt):
     out = []
     for cid, adj, gts in checks:
+        for k, v in BY_GATE.get(cid, []):
+            if k == gt:
+                adj = v
         if adj != ESCALATED_CLASS:
             continue
         if gt in gts or "universal" in gts:
@@ -1048,6 +1062,18 @@ def main():
             )
         sys.exit(2)
 
+
+    _known_gts = {g for _, _, gts in checks for g in gts if g != "universal"}
+    _bad = [(c, k, v) for c, kv in BY_GATE.items() for k, v in kv
+            if k not in _known_gts or v not in CLASSES]
+    if _bad:
+        for c, k, v in _bad:
+            sys.stderr.write(
+                f"FAIL (derivation): check '{c}' adjudication_by_gate names '{k}: {v}'; the key must be a "
+                f"gate_type some check declares ({sorted(_known_gts)}) and the value one of "
+                f"{sorted(CLASSES)}. Fix the enforcement-map entry.\n"
+            )
+        sys.exit(2)
 
     if mode == "series":
         run_series()

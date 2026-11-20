@@ -22,3 +22,5 @@ touch
 tr
 wc
 shasum
+find
+sort

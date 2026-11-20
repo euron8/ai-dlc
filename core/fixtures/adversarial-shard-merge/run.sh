@@ -153,10 +153,56 @@ echo "  [J0] coverage join: $_ndecl units derived from the sg guards, dealt disj
 ASM_RUN=mx
 # Each world shape is built once and copied per use (lib.sh wc_get); WC0 below holds a copy to a fresh build.
 ASM_WCACHE=1
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECTS. A present subject with neither the `<p>_main() {` line nor its source guard
+# predates the in-process wrap, and sourcing it would run its whole body: SKIP and exit 0 (FIXTURE BROKEN in the
+# distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
+# unreadable subject is FIXTURE ERROR. Each wrapped subject has its own two greps (merge_main, seal_main); mx sources both.
+# The gate sources lib/layout.sh before lib.sh, so the AI_DLC_* scrub lib.sh owns runs here first as well.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+asm_find() { # <basename> -> the sibling's path in either layout, found by walking UP; empty when absent
+  local _d="$HERE" _c
+  while [ -n "$_d" ] && [ "$_d" != "/" ]; do
+    for _c in "$_d/core/scripts/$1" "$_d/scripts/ai-dlc/$1"; do [ -f "$_c" ] && { printf '%s' "$_c"; return 0; }; done
+    _d="$(dirname "$_d")"
+  done
+}
+_am="$(asm_find merge-adversarial-shards.sh)"; _as="$(asm_find content-seal.sh)"
+_am_h=00; _as_h=00
+if [ -n "$_am" ]; then
+  grep -qxF 'merge_main() {' "$_am"; _x=$?
+  [ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_am (grep exit $_x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$_x" -ne 0 ] || _am_h="1${_am_h#?}"
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$_am"; _x=$?
+  [ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_am (grep exit $_x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$_x" -ne 0 ] || _am_h="${_am_h%?}1"
+fi
+if [ -n "$_as" ]; then
+  grep -qxF 'seal_main() {' "$_as"; _x=$?
+  [ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_as (grep exit $_x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$_x" -ne 0 ] || _as_h="1${_as_h#?}"
+  grep -qxF 'if [ "${BASH_SOURCE[0]}" = "$0" ]; then' "$_as"; _x=$?
+  [ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_as (grep exit $_x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$_x" -ne 0 ] || _as_h="${_as_h%?}1"
+fi
+_pre=""
+for _s in "$_am:$_am_h" "$_as:$_as_h"; do
+  [ -n "${_s%%:*}" ] || continue
+  case "${_s##*:}" in
+    11) : ;;
+    00) _pre="$_pre ${_s%%:*}" ;;
+    *) printf '  FAIL  %s carries one half of the in-process wrap (entry line, source guard: %s) -- a respelled subject this fixture cannot drive\n' "${_s%%:*}" "${_s##*:}" >&2
+       echo "$NAME: FAIL" >&2; exit 1 ;;
+  esac
+done
+if [ -n "$_pre" ]; then echo "SKIP: $NAME:$_pre predate(s) the in-process wrap"; fx_skip_exit "$HERE"; fi
 . "$HERE/lib.sh"
 echo "HERMETIC-CONSUMED $MERGE"
 # Every marked shard the arms merge is admitted by the merge's sibling content-seal.sh --admit-marker (BL-750).
 echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"
+# The gate arms run the validator beside the merge (it starts the merge for its derived set), and the CS arms mark through the wait-for-deliverable.sh sibling: both are declared subjects of this fixture.
+echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"
+echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
 
 # ---------------------------------------------------------------------------------- the arms
 echo "$NAME:"
@@ -170,7 +216,7 @@ eq_pair() { # <label> <shard dir or -> <args...> (@D is replaced by the shard di
   local lab="$1" d="$2" a o=""; shift 2
   local args=(); for a in "$@"; do args[${#args[@]}]="${a//@D/$d}"; done
   [ "$d" = - ] || o="$(out_of "$d")"
-  bash "$MERGE" "${args[@]}" > "$WORK/eq.$lab.c.out" 2> "$WORK/eq.$lab.c.err"; echo $? > "$WORK/eq.$lab.c.rc"
+  FXCELL="cli-$lab" bash "$MERGE" "${args[@]}" > "$WORK/eq.$lab.c.out" 2> "$WORK/eq.$lab.c.err"; echo $? > "$WORK/eq.$lab.c.rc"
   [ -n "$o" ] && [ -f "$o" ] && mv "$o" "$WORK/eq.$lab.c.pass"
   mx "$MERGE" "${args[@]}" > "$WORK/eq.$lab.i.out" 2> "$WORK/eq.$lab.i.err"; echo $? > "$WORK/eq.$lab.i.rc"
   [ -n "$o" ] && [ -f "$o" ] && mv "$o" "$WORK/eq.$lab.i.pass"
@@ -583,7 +629,7 @@ if sg cs; then
 WFD="$SRCDIR/wait-for-deliverable.sh"
 cs() { $ASM_RUN "$1" --check-shard "$2" --findings "$3" > "$MO" 2>&1; RC=$?; } # <merge> <shard file> <n>
 cs_lr() { sed "s|^lead_role: .*|lead_role: $2|" "$1" > "$1.t" && mv "$1.t" "$1"; } # <shard file> <value>
-cs_seal() { bash "$WFD" --mark "$1" requirements adversary "$2" "findings=$3" >/dev/null 2>&1; } # <file> <shard> <n>
+cs_seal() { asm_cell wfd "$WFD"; FXCELL="$ASM_FX" bash "$WFD" --mark "$1" requirements adversary "$2" "findings=$3" >/dev/null 2>&1; } # <file> <shard> <n>
 # The shipped mark now runs --check-shard (wait-for-deliverable.sh header term 7), so a SECOND sealed sibling that
 # disagrees with the first is refused at its seal. That world is still reachable: a shard sealed by an engine half
 # whose mark has no merge beside it (term 7's absent-sibling case, today's behaviour). cs_seal_presib is that mark,
@@ -759,7 +805,7 @@ p_cs_docfb_near() { # CS14: the same block-less 2.md keeps today's SKIP wherever
   printf '# repair part\n\n- **disposition:** repaired\n- **edit:** `stories/story-1.md:3`\n' > "$s/1.md"
   printf '# repair part\n\n- **disposition:** repaired\n- **edit:** `stories/story-1.md:4`\n' > "$s/2.md"
   cs_seal_presib "$s/2.md" 2 0 || return 1
-  has "$s/2.md" "sha=" && bash "$(dirname "$m")/content-seal.sh" --admit-marker "$s/2.md" >/dev/null 2>&1 || return 1 # sealed as cs_sealed reads it
+  has "$s/2.md" "sha=" && mx "$(dirname "$m")/content-seal.sh" --admit-marker "$s/2.md" >/dev/null 2>&1 || return 1 # sealed as cs_sealed reads it
   cs "$m" "$s/1.md" 0
   [ "$RC" -eq 3 ] && has "$MO" "SKIP: $s/1.md carries no provenance block" && ! has "$MO" "REFUSED" || ok=0
   [ "$ok" = 1 ]
@@ -794,7 +840,7 @@ eq_arm CS7b 0 "SHARD-OK" "--check-shard passing" - --check-shard "$csd/1.md" --f
 # unchanged (cmp), the merge's REFUSED line relayed and the mark's remedy; each corrected near-miss: MARKED.
 cs_mk() { # <dir holding wait-for-deliverable.sh> <shard file> <shard> <n> -> RC, $MO, $WORK/cs-e2e.before
   cp "$2" "$WORK/cs-e2e.before" || return 1
-  bash "$1/wait-for-deliverable.sh" --mark "$2" requirements adversary "$3" "findings=$4" > "$MO" 2>&1; RC=$?
+  asm_cell wfd "$1/wait-for-deliverable.sh"; FXCELL="$ASM_FX" bash "$1/wait-for-deliverable.sh" --mark "$2" requirements adversary "$3" "findings=$4" > "$MO" 2>&1; RC=$?
 }
 cs_mk_refused() { # <shard file> <the merge's REFUSED line>
   [ "$RC" -eq 64 ] && cmp -s "$WORK/cs-e2e.before" "$1" && has "$MO" "$2" \

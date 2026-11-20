@@ -958,6 +958,7 @@ ptr-remediator-serial|R|remediator.md||<EOF>|Read `.claude/team-roles/appendix/r
 ptr-remediator-mechanism|R|remediator.md||<EOF>|Read `.claude/team-roles/appendix/remediator-mechanism.md` when you need this role's Rule 26(c) record: the failure it was created for, its false-positive cost, or its removal condition.|contains
 qa-deploy-protocol|R|qa.md|## Context Loading|## Gate-2 Start Condition (HARD)|**Before any command against a deployed environment, read the project's operations protocol.**|contains
 cr-deploy-protocol|R|code-reviewer.md|## Context Loading|## Review Document Template|**Before any command against a deployed environment, read the project's operations protocol.**|contains
+analyst-deploy-protocol|R|analyst.md|## The evidence contract|## Constraints|**Before you run any condition, query or observable against a deployed environment, read the project's operations protocol.**|contains
 PINS
 }
 
@@ -1097,6 +1098,9 @@ lead_files() { # the install-scoped markdown corpus, sorted; no path carries a b
 }
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
 
 # corpus_report — the verdict over the resolved tree. Printed identically by --report.
 corpus_report() {
@@ -1188,6 +1192,32 @@ fi
 
 echo "process-rule-pins"
 [ -n "$RESOLVED" ] && echo "HERMETIC-CONSUMED core/skills/ai-dlc/"
+# PRE-WRAP CONSUMER GATE. The --mark arm (d) runs wait-for-deliverable.sh in process. A core fixture ships ahead of its
+# subject: a present engine with neither wrap half (the `wfd_beat_main() {` line, the column-0 source guard) predates the
+# wrap, and sourcing it would run its whole body: SKIP (FIXTURE BROKEN in the distribution). Exactly one half is a
+# respelled subject this fixture cannot drive: FAIL. An unreadable engine is FIXTURE ERROR, rc 2. An absent engine keeps
+# arm (d)'s own absent path. Nothing before arm (d) sources or runs the engine.
+if [ -n "$RESOLVED" ]; then
+  case "${RESOLVED%% *}" in
+    dist) _wfd="${RESOLVED#* }/core/scripts/wait-for-deliverable.sh" ;;
+    *)    _wfd="${RESOLVED#* }/scripts/ai-dlc/wait-for-deliverable.sh" ;;
+  esac
+  if [ -f "$_wfd" ]; then
+    _wd=0; _wg=0
+    grep -qxF 'wfd_beat_main() {' "$_wfd"; _x=$?
+    [ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_wfd (grep exit $_x)" >&2; exit 2; }
+    [ "$_x" -ne 0 ] || _wd=1
+    grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$_wfd"; _x=$?
+    [ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_wfd (grep exit $_x)" >&2; exit 2; }
+    [ "$_x" -ne 0 ] || _wg=1
+    case "$_wd$_wg" in
+      11) : ;;
+      00) echo "SKIP: process-rule-pins: $_wfd predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+      *) bad "$_wfd carries one half of the in-process wrap (entry line, column-0 source guard: $_wd$_wg) -- a respelled subject this fixture cannot drive"
+         report_end process-rule-pins ;;
+    esac
+  fi
+fi
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
@@ -1803,7 +1833,8 @@ run_rendered() {
   line="${line//<role>/dev}"; line="${line//<shard>/none}"; line="${line//<n>/0}"
   case "$line" in *'<'*|*'>'*) printf 'UNFILLED %s' "$line"; return ;; esac
   set -f; set -- $line; set +f
-  bash "$@" >/dev/null 2>&1; rc=$?
+  [ "$1" = "$WFD" ] || { printf 'NOTENGINE %s' "$1"; return; }
+  inproc_run "$WFD" wfd_mark_main "${@:2}" >/dev/null 2>&1; rc=$?
   printf '%s %s' "$rc" "$(awk 'NF { l = $0 } END { print l }' "$d/result.md")"
 }
 if [ ! -f "$WFD" ]; then
@@ -1817,6 +1848,27 @@ else
   else
     bad "mark-runs: the rendered --mark line from \"Bounded-join beat\" did not seal a scratch file: '$mr' (want '0 seat-complete: deploy-validate dev none sha=<hex> findings=0')"
   fi
+  # THE CLI CELLS (cells.decl): the engine as a PROGRAM once per distinct CLI outcome of --mark, each compared with the
+  # in-process call on the same input (stdout, stderr and exit byte for byte): the seal that exits 0 and the refusal
+  # (exit 64) on a missing file. The seed file is rewritten before each twin, so both read one state.
+  EQ="$MG/eq"; mkdir -p "$EQ" || exit 2
+  eqv() { # eqv <cell-id> <file> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when all three agree
+    local id="$1" f="$2"
+    printf '# Result\n\nfinding text\n' > "$MG/real/eq.md"
+    inproc_run "$WFD" wfd_mark_main --mark "$f" deploy-validate dev none findings=0 > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+    printf '# Result\n\nfinding text\n' > "$MG/real/eq.md"
+    FXCELL="$id" bash "$WFD" --mark "$f" deploy-validate dev none findings=0 > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+    cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+  }
+  eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+    "$(head -1 "$EQ/$1.ip.out")" "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+  if eqv cli-mark "$MG/real/eq.md" && [ "$(cat "$EQ/cli-mark.cl.rc")" = 0 ] && grep -q '^MARKED ' "$EQ/cli-mark.cl.out"; then
+    ok "cli-mark: the program seals a scratch file, prints MARKED, exit 0, exactly as the in-process call does"
+  else bad "cli-mark: the program and the in-process call differ, or the outcome is not MARKED with exit 0 ($(eq_twin cli-mark))"; fi
+  if eqv cli-mark-refuse "$MG/real/absent.md" && [ "$(cat "$EQ/cli-mark-refuse.cl.rc")" = 64 ] \
+     && grep -q '^FAIL: --mark: ' "$EQ/cli-mark-refuse.cl.err" && [ ! -s "$EQ/cli-mark-refuse.cl.out" ]; then
+    ok "cli-mark-refuse: the program refuses a missing file on stderr, exit 64, exactly as the in-process call does"
+  else bad "cli-mark-refuse: the program and the in-process call differ, or the outcome is not the exit-64 refusal ($(eq_twin cli-mark-refuse))"; fi
 fi
 
 # (b) deploy-validate.md dispatch sites.

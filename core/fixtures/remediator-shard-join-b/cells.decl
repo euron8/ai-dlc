@@ -1,0 +1,10 @@
+# remediator-shard-join-b (shard b of remediator-shard-join): every start of a declared subject here is one cli cell. The shard asks
+# each subject in process; the CLI answers once per distinct outcome (SEAM-A-SUBJ, SEAM-A-HOOK in the sibling's unit-reader-a.sh),
+# tagged FXCELL=<id> at its one start and compared byte for byte with the in-process answer on the same input.
+cli core/scripts/join-remediator-shards.sh cli-a-subj-pass
+cli core/scripts/join-remediator-shards.sh cli-a-subj-refuse
+cli core/hooks/ai-dlc-gate-remediation-guard.sh cli-a-hook-ag1
+cli core/hooks/ai-dlc-gate-remediation-guard.sh cli-a-hook-gnew
+# A CLI join starts the serial worklist and the seal check beside itself.
+nested core/scripts/join-remediator-shards.sh core/scripts/serial-remediation-worklist.sh why=the CLI join runs the worklist as a program beside itself after a document or subject assembly
+nested core/scripts/join-remediator-shards.sh core/scripts/content-seal.sh why=the CLI join checks each marked shard's seal through content-seal.sh as a program

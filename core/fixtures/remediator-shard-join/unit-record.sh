@@ -80,7 +80,7 @@ printf '%b' '### F-1 — MAJOR\n- disposition: escalated\n- edit: n/a\n' > "$sw/
 seam_ok=1
 for _k in refuse pass; do
   uenter "$sw" "$sw/$_k.md"; cp "$JO" "$sw/$_k.unit"; echo "$RC" > "$sw/$_k.unit.rc"
-  AI_DLC_PROJECT_ROOT="$sw" bash "$JOIN" --escalations "$sw/$_k.md" --sprint 305 > "$sw/$_k.cli" 2>&1; echo "$?" > "$sw/$_k.cli.rc"
+  FXCELL="cli-er0-$_k" AI_DLC_PROJECT_ROOT="$sw" bash "$JOIN" --escalations "$sw/$_k.md" --sprint 305 > "$sw/$_k.cli" 2>&1; echo "$?" > "$sw/$_k.cli.rc"
   cmp -s "$sw/$_k.unit" "$sw/$_k.cli" && cmp -s "$sw/$_k.unit.rc" "$sw/$_k.cli.rc" || seam_ok=0
 done
 if [ "$seam_ok" = 1 ] && ! cmp -s "$sw/refuse.unit" "$sw/pass.unit" && [ "$(cat "$sw/refuse.unit.rc")" = 2 ] && [ "$(cat "$sw/pass.unit.rc")" = 0 ]; then

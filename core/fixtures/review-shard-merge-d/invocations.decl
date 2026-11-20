@@ -13,5 +13,5 @@
 0 inproc:core/scripts/sprint-status.sh
 118 inproc:core/scripts/merge-review-shards.sh
 48 inproc:core/scripts/partition-review-diff.sh
-2 inproc:core/hooks/ai-dlc-content-seal.sh
+4 inproc:core/hooks/ai-dlc-content-seal.sh
 22 inproc:core/scripts/record-only-diff.sh

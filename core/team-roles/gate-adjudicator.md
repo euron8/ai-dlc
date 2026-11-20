@@ -70,6 +70,11 @@ output path (`${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.v
    gate_series_id/catalog agreement and the content seal need the other parts, so those
    cross-part checks happen at merge.
 
+   **At an `implementation` gate you are the only seat** — your brief carries `shard: 1/1 implementation`
+   and you derive your slice with `--expected implementation --shard 1/1`. The checks decided by a script
+   arm or a rule table never appear on that list; of Check 2 you judge the hard-block half alone, since its
+   vocabulary and suppression-lifetime half is Check 2c, already decided by `gate-transition.sh`.
+
    You do not write the
    verdict and you do not run `--coverage`. The lead runs `--merge`, which writes the one v1
    verdict and refuses a missing slice or a duplicate id. If you are re-dispatched for the same

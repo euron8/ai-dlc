@@ -54,6 +54,25 @@ echo "HERMETIC-CONSUMED core/hooks/ai-dlc-gate-remediation-guard.sh"
 
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: cannot source lib/layout.sh" >&2; exit 2; }
+
+# PRE-WRAP GATE. A hook without the wrap would RUN when sourced (reading this shell's stdin and exiting), a silent
+# green, so both halves are required before the load. Neither half predates the wrap: SKIP on a consumer, FIXTURE
+# BROKEN in the distribution. Exactly one half is a respelled hook this fixture cannot drive, which FAILS.
+[ -r "$HOOK" ] || { echo "FIXTURE ERROR: cannot read $HOOK -- an unreadable hook is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'grg_main() {' "$HOOK" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  # 01: the pre-wrap hook already carried the column-0 guard (it split the head functions from the body at that line) and
+  # no `grg_main() {` line, so a guard alone is a hook that predates the wrap; a definition without the guard is not.
+  00|01) echo "SKIP: gate-remediation-deny: $HOOK predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) echo "  FAIL  $HOOK carries one half of the in-process wrap (grg_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive" >&2; echo "gate-remediation-deny: 1 assertion(s) FAILED" >&2; exit 1 ;;
+esac
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK defined nothing" >&2; exit 2; }
+declare -F grg_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no grg_main" >&2; exit 2; }
 
 
 # Drive the PreToolUse hook. `agent` empty => the LEAD (the harness omits agent_id
@@ -72,7 +91,7 @@ drive() { # <work> <tool> <file_path> [agent_id] [transcript] [hook-override] [g
     '{session_id:"t", tool_name:$t, transcript_path:$tr, tool_input:{file_path:$f}}
      + (if $a == "" then {} else {agent_id:$a} end)' \
     | ( if [ -n "$dcwd" ]; then cd "$dcwd" || exit 2; fi
-        CLAUDE_PROJECT_DIR="$w" AI_DLC_GATE_METRICS="$gm" bash "$h" 2>/dev/null )
+        CLAUDE_PROJECT_DIR="$w" AI_DLC_GATE_METRICS="$gm" inproc_run "$h" grg_main 2>/dev/null )
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
 
@@ -1896,6 +1915,37 @@ _rb="$(bash "$HERE/receipt-bl989.sh" "$HOOK" "$RR_VAL" 2>&1)"; _rbrc=$?
 rm -rf "$RR" "$RR_BASE"
 
 [ -n "$GRD_DECOY" ] && rm -rf "$GRD_DECOY"
+
+# --- the cli cells (cells.decl): the hook started as a PROGRAM once per distinct outcome -----------------------
+# The hook exits 0 on every path; its outcomes are a deny decision on stdout and a silent allow. Each is started as
+# FXCELL=<id> bash "$HOOK" on a copy of a seeded workspace and compared with the in-process call on another copy:
+# stdout, stderr, exit and the workspace tree (timestamps, epochs and the copy's path normalised). Each cell asserts
+# its own outcome, so two runs that both did nothing cannot read as equal.
+seed open-fail
+CLI_BASE="$W"; CLI_EQ="$(mktemp -d "${TMPDIR:-/tmp}/grd-cli.XXXXXX")" || { echo "FIXTURE ERROR: mktemp" >&2; exit 2; }
+proj_sig() { # <dir> -> the tree's file list and contents, timestamps, epochs and the dir path normalised
+  ( cd "$1" && find . -type f | sort | while read -r f; do printf '== %s\n' "$f"; cat "$f"; done ) \
+    | sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z?/TS/g' -e 's/^TS [0-9a-f]{16}$/TS NONCE/' -e 's/[0-9]{10}/EPOCH/g' -e "s|$1|DIR|g"
+}
+cli_cell() { # <id> <file under the workspace> <outcome test on $CLI_EQ/<id>/cl.out> <outcome words>
+  local id="$1" ip="$CLI_EQ/$1/ip" cl="$CLI_EQ/$1/cl" d
+  mkdir -p "$CLI_EQ/$id" && cp -R "$CLI_BASE" "$ip" && cp -R "$CLI_BASE" "$cl" || { bad "$id: could not copy the seeded workspace"; return; }
+  for d in ip cl; do
+    jq -nc --arg t Edit --arg f "$CLI_EQ/$id/$d/$2" '{session_id:"t", tool_name:$t, transcript_path:"", tool_input:{file_path:$f}}' > "$CLI_EQ/$id/$d.in"
+  done
+  CLAUDE_PROJECT_DIR="$ip" AI_DLC_GATE_METRICS="" inproc_run "$HOOK" grg_main < "$CLI_EQ/$id/ip.in" > "$CLI_EQ/$id/ip.out" 2> "$CLI_EQ/$id/ip.err"; echo "$?" > "$CLI_EQ/$id/ip.rc"
+  CLAUDE_PROJECT_DIR="$cl" AI_DLC_GATE_METRICS="" FXCELL="$id" bash "$HOOK" < "$CLI_EQ/$id/cl.in" > "$CLI_EQ/$id/cl.out" 2> "$CLI_EQ/$id/cl.err"; echo "$?" > "$CLI_EQ/$id/cl.rc"
+  for d in ip cl; do sed -e "s|$CLI_EQ/$id/$d|DIR|g" "$CLI_EQ/$id/$d.out" > "$CLI_EQ/$id/$d.outn"; sed -e "s|$CLI_EQ/$id/$d|DIR|g" "$CLI_EQ/$id/$d.err" > "$CLI_EQ/$id/$d.errn"; proj_sig "$CLI_EQ/$id/$d" > "$CLI_EQ/$id/$d.sig"; done
+  if cmp -s "$CLI_EQ/$id/ip.outn" "$CLI_EQ/$id/cl.outn" && cmp -s "$CLI_EQ/$id/ip.errn" "$CLI_EQ/$id/cl.errn" && cmp -s "$CLI_EQ/$id/ip.rc" "$CLI_EQ/$id/cl.rc" \
+     && cmp -s "$CLI_EQ/$id/ip.sig" "$CLI_EQ/$id/cl.sig" && [ "$(cat "$CLI_EQ/$id/cl.rc")" = 0 ] && [ -s "$CLI_EQ/$id/cl.sig" ] && eval "$3"; then
+    ok "$id: the program $4 exactly as the in-process call does (stdout, stderr, exit 0 and the workspace tree)"
+  else
+    bad "$id: the program and the in-process call differ, or the outcome is not: $4"
+  fi
+}
+cli_cell cli-deny "$ART" 'denied "$(cat "$CLI_EQ/$id/cl.out")"' "denies a lead edit to a planning artifact during a failing pass"
+cli_cell cli-allow "README-outside-corpus.md" '[ ! -s "$CLI_EQ/$id/cl.out" ]' "allows a lead edit to a file outside the corpus, silently"
+rm -rf "$CLI_EQ" "$CLI_BASE"
 
 
 echo

@@ -21,6 +21,7 @@
 #       "hooks": [{ "type": "command",
 #                   "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-postcompact.sh" }] }]
 
+hpcm_main() {
 set -u
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
@@ -159,3 +160,6 @@ case "$RECOVERED" in
 esac
 
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+hpcm_main "$@"

@@ -43,6 +43,40 @@ for cand in \
   [ -f "$cand" ] && VALIDATOR="$cand" && break
 done
 [ -n "$VALIDATOR" ] || { echo "FIXTURE BROKEN: cannot locate validate-gate-adjudication.sh from $DIR"; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present validator with neither the `vga_main() {` line nor the column-0
+# source guard predates the in-process wrap, and sourcing it would run its whole body: SKIP and exit 0 (FIXTURE BROKEN
+# in the distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
+# unreadable subject is FIXTURE ERROR. This check runs BEFORE any source of the subject.
+gsr_half() { # gsr_half <fixed line> -> 0 present, 1 absent; exit 2 when the subject is unreadable
+  local x; grep -qxF "$1" "$VALIDATOR"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  return "$x"
+}
+_gsr_d=0; _gsr_g=0
+gsr_half 'vga_main() {' || _gsr_d=1
+gsr_half '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' || _gsr_g=1
+# _d/_g hold 1 when the line is ABSENT.
+if [ "$_gsr_d$_gsr_g" = 11 ]; then
+  echo "SKIP: gate-series-rung: $VALIDATOR predates the in-process wrap"; fx_skip_exit "$DIR"
+elif [ "$_gsr_d$_gsr_g" != 00 ]; then
+  bad "$VALIDATOR carries one half of the in-process wrap (vga_main line absent=$_gsr_d, column-0 source guard absent=$_gsr_g) -- a respelled subject this fixture cannot drive"
+  report_end gate-series-rung
+fi
+# IN PROCESS (BL-878). Every cell asks vga_main through vga_f, which hands the file to lib/inproc.sh's inproc_run: the
+# validator is sourced inside inproc_run's own subshell and its entry called there, logged as a pass of the subject
+# (the `inproc:` row). The operand is a literal tail, as gate-resume's, so arm P2 of validate-fixture-invocations.sh
+# resolves it. The programs run only in the cells of cells.decl.
+vga_f() { # vga_f <file> [args...] -> vga_main's stdout, stderr and exit
+  local _f="$1"; shift
+  case "$_f" in */validate-gate-adjudication.sh) ;; *) echo "FIXTURE BROKEN: vga_f was handed $_f, not a validate-gate-adjudication.sh" >&2; return 125 ;; esac
+  ( inproc_run "${_f%/*}/validate-gate-adjudication.sh" vga_main "$@" )
+}
 # The REQUIRED input of inputs.decl: every case below drives this file.
 echo "HERMETIC-CONSUMED core/scripts/validate-gate-adjudication.sh"
 [ -f "$(dirname "$VALIDATOR")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED core/scripts/gate_adjudication.py"
@@ -51,13 +85,11 @@ ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 [ -n "$ROOT" ] && [ -d "$ROOT" ] || { echo "FIXTURE BROKEN: seed.sh produced no root"; exit 2; }
 trap 'rm -rf "$ROOT"' EXIT
 
-# shellcheck source=/dev/null
-. "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 note_fail() { bad "$*"; }
 gd() { printf '%s/%s/_bmad-output/gate-adjudication' "$ROOT" "$1"; }
 
 # Run a case; set RC and OUT.
-run_case() { OUT="$(bash "$VALIDATOR" --series "$(gd "$1")" 2>&1)"; RC=$?; }
+run_case() { OUT="$(vga_f "$VALIDATOR" --series "$(gd "$1")" 2>&1)"; RC=$?; }
 
 # expect <case> <rc> <marker|-> <human name>
 expect() {
@@ -151,7 +183,7 @@ W2_SPAN='story-20260811T180200Z → story-20260811T180400Z (pass 4 of 4'
 # and never the repo's or the sandbox's.
 w_series() { # <validator> <case> -> OUT RC
   OUT="$(AI_DLC_PROJECT_ROOT="$ROOT/$2" AI_DLC_ESCALATIONS="$ROOT/$2/docs/escalations/pending.md" \
-    bash "$1" --series "$(gd "$2")" 2>&1)"; RC=$?; }
+    vga_f "$1" --series "$(gd "$2")" 2>&1)"; RC=$?; }
 w_p1() { w_series "$1" waived-x3
   [ "$RC" -eq 0 ] && ! grep -q 'STALLED' <<<"$OUT"; }
 w_p2() { w_series "$1" waived-then-fail
@@ -180,11 +212,11 @@ else ok "W3 unresolved-x3: an unresolved waiver continues the run as FAIL (STALL
 H_GRAPH=8b97a31758ceb96afbc157064b758927
 H_LEGACY=ca0413ff65393dfcf12ff1fdf35becec
 SG="$(gd graph)"
-sr() { local v="$1"; shift; OUT="$(bash "$v" --series "$@" 2>&1)"; RC=$?; }
+sr() { local v="$1"; shift; OUT="$(vga_f "$v" --series "$@" 2>&1)"; RC=$?; }
 has() { grep -qF -- "$1" <<<"$OUT"; }
 # hsig <validator> <dir>: md5 of "<rc>\n<stdout>\0<stderr>" with the seeded root normalised.
 hsig() {
-  bash "$1" --series "$2" >"$ROOT/.h.out" 2>"$ROOT/.h.err"; RC=$?
+  vga_f "$1" --series "$2" >"$ROOT/.h.out" 2>"$ROOT/.h.err"; RC=$?
   python3 -c 'import hashlib,sys
 r,rc,o,e=sys.argv[1:]
 t=rc+"\n"+open(o).read().replace(r,"<ROOT>")+"\0"+open(e).read().replace(r,"<ROOT>")
@@ -200,9 +232,9 @@ sc_D() { sr "$1" --sprint 32 "$SG" "$(gd s322-one)"; [ "$RC" -eq 0 ] && has "PAS
 sc_E() {
   local a bad=0
   for a in 0322 3x ""; do
-    OUT="$(bash "$1" --series "$SG" --sprint $a 2>&1)"; RC=$?; [ "$RC" -eq 2 ] && has "usage:" || bad=1
+    OUT="$(vga_f "$1" --series "$SG" --sprint $a 2>&1)"; RC=$?; [ "$RC" -eq 2 ] && has "usage:" || bad=1
   done
-  OUT="$(bash "$1" --series --sprint 322 "$SG" --sprint 322 2>&1)"; RC=$?; [ "$RC" -eq 2 ] && has "usage:" || bad=1
+  OUT="$(vga_f "$1" --series --sprint 322 "$SG" --sprint 322 2>&1)"; RC=$?; [ "$RC" -eq 2 ] && has "usage:" || bad=1
   sr "$1" --sprint 322 "$SG" "$(gd s322-one)"; local before="$OUT" brc=$RC
   sr "$1" "$SG" "$(gd s322-one)" --sprint 322
   # E's own runs end in exit 2 by design, so RC is the cell's verdict here, not the last exit.
@@ -290,6 +322,27 @@ for c in $SC_CELLS; do
   validator said: $(head -3 <<<"$OUT")"; fi
 done
 [ "$SC_RED" -eq 0 ] && ok "sprint-scope: all 12 cells hold on the shipped validator"
+
+# --------------------------------------------------------------------------
+# 6. THE PROGRAM, once per distinct CLI outcome (cells.decl cli rows). Each is `FXCELL=<id> bash <validator>` compared
+# byte for byte (stdout, stderr, exit) with the in-process call on the same input, and asserts its own exit code and a
+# line of output so two runs that both printed nothing cannot read as equivalent.
+# --------------------------------------------------------------------------
+EQ="$ROOT/.eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # eqv <cell-id> <rc> <marker> <args...>
+  local id="$1" erc="$2" mk="$3"; shift 3
+  vga_f "$VALIDATOR" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+     && [ "$(cat "$EQ/$id.cl.rc")" = "$erc" ] && grep -qF -- "$mk" "$EQ/$id.cl.out" "$EQ/$id.cl.err"; then
+    ok "$id: the program exits $erc carrying '$mk', byte-identical to the in-process call"
+  else
+    bad "$id: the program and the in-process call differ, or the outcome is not exit $erc carrying '$mk' (in-process rc=$(cat "$EQ/$id.ip.rc"), program rc=$(cat "$EQ/$id.cl.rc"))"
+  fi
+}
+eqv cli-series-fail 1 'STALLED' --series "$(gd stall-fires)"
+eqv cli-series-pass 0 'PASS' --series "$(gd stall-silent)"
+eqv cli-series-usage 2 'usage:' --series "$SG" --sprint 0322
 
 echo
 report_end gate-series-rung

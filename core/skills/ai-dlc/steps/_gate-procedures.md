@@ -250,14 +250,17 @@ the native path with its own schema. Before returning that path it runs
 just wrote — its own role file governs what a non-zero exit obliges it to do, and that mode decides
 nothing about the gate.
 
-**Shard the worklist (Rule 28, "Split dispatch": worklist-items axis).** When `--expected
-<gate_type>` prints more than one check, dispatch N `gate-adjudicator` shards in waves
-(Rule 28, "Split dispatch") instead of one, with N no greater than that count (`--shard` refuses a larger N). All N share this
+**Shard the worklist (Rule 28, "Split dispatch": worklist-items axis).** At an `implementation` gate the worklist
+is one seat: dispatch ONE `gate-adjudicator` whose brief carries `shard: 1/1 implementation`, because the script arms and
+rule tables decide every other check there (`adjudication_by_gate` in `enforcement-map.yaml`, read by
+`--expected`). At every other gate type, when `--expected <gate_type>` prints more than one check, dispatch N
+`gate-adjudicator` shards in waves (Rule 28, "Split dispatch") instead of one, with N no greater than that count
+(`--shard` refuses a larger N). All N share this
 ONE `gate_nonce`. Each shard derives its own slice with
 `scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type> --shard <i>/<N>` and writes
 `<gate_nonce>.part-<i>of<N>.jsonl` beside the verdict path, never a `.json` (`--series` walks
 that directory and refuses any `.json` that is not a verdict). Its brief carries
-`shard: <i>/<N> <gate_type>`, the gate's `story: <story-index>` line when it has one, and the one `gate_series_id` every shard of this dispatch stamps, since `--merge` refuses parts that disagree on it. At a one-story implementation gate 3 each shard's brief also carries `gate-plan: <the g3 plan path>`, the same line the unsharded adjudicator's brief carries; the dispatch guard denies a shard without it, and no other gate has such a plan. Dispatch the shards right after minting the nonce: a merged verdict
+`shard: <i>/<N> <gate_type>`, the gate's `story: <story-index>` line when it has one, and the one `gate_series_id` every shard of this dispatch stamps, since `--merge` refuses parts that disagree on it. At a one-story implementation gate 3 the seat's brief also carries `gate-plan: <the g3 plan path>`, the same line the unsharded adjudicator's brief carries; the dispatch guard denies a seat without it, and no other gate has such a plan. Dispatch the shards right after minting the nonce: a merged verdict
 is written by the validator, gets no verdict-write ledger row, and binds only through a
 `gate-adjudicator` spawn-ledger row within 900s of the nonce. The join is the program: beat-join
 every part path, then run

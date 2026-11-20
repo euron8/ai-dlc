@@ -62,7 +62,7 @@ planning gate that edits `scripts/*.sh`.
 | universal      | 1, 2, 2a, 3, 4, 7, 12, 13, 14, 15, 16, 25, 26, H1, H2, failure  |
 | planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33, 34, 35, 36, 37             |
 | story          | 3a, 3b, 5, 17, 24, 30, 31                                       |
-| implementation | 5, 6, 8, 9, 10, 11, 11a, 17, 19, 22                             |
+| implementation | 2c, 5, 6, 8, 9, 10, 11, 11a, 17, 19, 22                         |
 | sprint-review  | 18, 20, 21                                                      |
 | retro          | 8, 9, 17, core-layer-immutability                               |
 <!-- GATE_MANIFEST_END -->
@@ -170,8 +170,8 @@ SKILL.md Rule 32 touchpoint G1 applies here, before the script arms run.
 `scripts/ai-dlc/gate-transition.sh <story> 3 -C <worktree> --base <sha> --sprint <N> --story-file <path> --transcript-dir <dir>` (`<N>` the snapshot `sprint_id`, `<path>` the story file's canonical path, `<dir>` the directory the lead's session `transcript_path` sits in, as Check 2a below passes it), which runs the arms
 below and then `gate-checkpoint.sh open` in one call (see `implementation.md`, "One call per
 gate transition"); a refusal there is a **Gate Failure** and writes no plan. A gate 3 dispatched over several stories, or over none, runs no `gate-transition.sh`, which takes one story per call. At every gate except a one-story implementation gate 3 (where `gate-transition.sh` ran these arms above), multi-story and storyless gate 3 included, at gate entry, BEFORE minting `gate_nonce` and before
-dispatching anything, the lead runs every `adjudication: script` check in the manifest AND the
-script arm of every `adjudication: llm` check whose enforcement-map entry carries an
+dispatching anything, the lead runs every check in the manifest whose EFFECTIVE class at this gate is `script` (`adjudication_by_gate[<gate_type>]` when the entry carries it, else `adjudication`) AND the
+script arm of every check whose effective class here is `llm` and whose enforcement-map entry carries an
 `enforcer:` — Check 2's `validate-escalation-status-vocabulary.sh` and
 `validate-suppression-lifetime.sh` are the measured case. A FAIL there goes to **Gate Failure**
 now, while no adjudicator is running. The adjudicator is then dispatched once, against a corpus
@@ -489,6 +489,16 @@ reference consumer: the single-file invocation failed **4 of 4**
 operator-resolved HARD_BLOCKs whose quotes are every one of them present in the
 transcript corpus. The directory takes precedence over the single file when
 both are given. Supplying ground truth must never be worse than supplying none.
+
+### 2c. Escalation vocabulary and suppression lifetimes? (implementation gates)
+<!-- CHECK_LOADED: 2c -->
+
+The script half of Check 2 at an implementation gate. Run
+`scripts/ai-dlc/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md` and
+`scripts/ai-dlc/verdict.sh validate-suppression-lifetime --escalations docs/escalations/pending.md`; exit 0 from
+both is required, and either exit 0 printing `OK: EXAMINED NOTHING` is a pass because no escalation exists.
+At a one-story implementation gate 3 `gate-transition.sh` has already run both before the adjudicator is
+dispatched, so this check carries no adjudicator verdict; Check 2 there is the hard-block half alone.
 
 ### 3. Requirement anchor integrity?
 <!-- CHECK_LOADED: 3 -->

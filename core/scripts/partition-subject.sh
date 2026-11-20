@@ -57,6 +57,7 @@
 #     happen, not a SERIAL subject.
 #
 # Portability: bash 3.2, BSD tools, LC_ALL=C.
+psub_main() {
 set -u
 export LC_ALL=C
 # A git hook exports these, and they would redirect every `git -C` below to the hook's repo.
@@ -334,3 +335,6 @@ ST="$DIRP/.subject.tmp.$$"
   done < "$T/rows"; } > "$ST" && mv "$ST" "$DIRP/.subject" || { rm -f "$ST"; undo; refuse "cannot write $DIRP/.subject"; }
 printf 'SPLIT: %s parts of the sprint %s subject into %s (%s sectioned stem(s):%s)\n' "$K" "$SPRINT" "$DIRP" "$(set -- $SPLIT_DONE; echo $#)" "$SPLIT_DONE"
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+psub_main "$@"

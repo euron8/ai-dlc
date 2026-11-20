@@ -1,0 +1,8 @@
+# pause-question-in-prose's starts of core/hooks/ai-dlc-continue.sh (BL-879 grammar). Every other drive is in process
+# (run.sh drive(): inproc_load once, inproc_run hkcont_main per case). The hook exits 0 on every path, so the cli
+# cells are its three outcomes (a block verdict, an allow carrying an operator systemMessage, a silent allow with no
+# pipeline), each started as FXCELL=<id> bash "$HOOK" on a seeded project and compared with the in-process call on
+# another copy of it: stdout, stderr, exit and the normalised project tree.
+cli core/hooks/ai-dlc-continue.sh cli-block
+cli core/hooks/ai-dlc-continue.sh cli-warn
+cli core/hooks/ai-dlc-continue.sh cli-allow

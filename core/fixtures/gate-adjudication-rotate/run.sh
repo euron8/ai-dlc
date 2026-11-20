@@ -50,6 +50,78 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$GUARD")" && pwd)/$(basename "$GUARD")"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
+# IN PROCESS (BL-878). Every drive of the rotator is a subshell sourcing it (ip_call, paired with fx_inproc) and calling
+# rga_main; a `bash <rotator>` anywhere here, the lay-c/lay-d layout copies included, is answered by the `bash` function
+# below. Two cli cells (cells.decl) start it as a program for one distinct outcome each, compared byte for byte with the
+# in-process answer. The guard hook is driven in process too (grg_main, through the same `bash` function and ip_call); its
+# two cli cells (cells.decl) start it as a program for one distinct outcome each, compared byte for byte with the answer.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A rotator with neither wrap half predates the wrap: SKIP and exit 0 on a
+# consumer, FIXTURE BROKEN in the distribution (lib/layout.sh fx_skip_exit); exactly one half FAILS; unreadable is rc 2.
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+[ -r "$ROT" ] || { echo "FIXTURE ERROR: cannot read $ROT -- an unreadable rotator is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'rga_main() {' "$ROT" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$ROT" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: gate-adjudication-rotate: $ROT predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$ROT carries one half of the in-process wrap (rga_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled rotator this fixture cannot drive"; report_end gate-adjudication-rotate; exit 1 ;;
+esac
+# The guard hook gets the same gate. A guard with neither half predates the wrap, and so does one with the column-0
+# guard alone (the pre-wrap hook already split its head functions from its body at that line); a `grg_main() {` line
+# without the guard is a respelled hook this fixture cannot drive.
+[ -r "$GUARD" ] || { echo "FIXTURE ERROR: cannot read $GUARD -- an unreadable guard is not one that predates the wrap" >&2; exit 2; }
+_gw_d=0; _gw_g=0
+grep -qxF 'grg_main() {' "$GUARD" && _gw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$GUARD" && _gw_g=1
+case "$_gw_d$_gw_g" in
+  11) : ;;
+  00|01) echo "SKIP: gate-adjudication-rotate: $GUARD predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$GUARD carries one half of the in-process wrap (grg_main line, column-0 source guard: $_gw_d$_gw_g) -- a respelled guard this fixture cannot drive"; report_end gate-adjudication-rotate; exit 1 ;;
+esac
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+ip_entry() { case "${1##*/}" in rotate-gate-adjudication.sh) echo rga_main ;; ai-dlc-gate-remediation-guard.sh) echo grg_main ;; *) return 1 ;; esac; }
+IP_SUBJ="$ROT"  # seed env.sh redefines ROT, so the logged subject path is taken here
+IP_GSUBJ="$GUARD"
+IP_KEEP=" bash ip_call ip_scrub ip_entry fx_inproc "
+ip_scrub() { # this subshell reduced to what a fresh `bash <script>` has: exported vars only, no fixture functions
+  local _v _e
+  _e=" $(compgen -e | tr '\n' ' ') "
+  for _v in $(compgen -v); do
+    case "$_e" in *" $_v "*) continue ;; esac
+    case "$_v" in
+      BASH*|IFS|OPTIND|OPTERR|PPID|UID|EUID|SHELLOPTS|HISTCMD|LINENO|RANDOM|SECONDS|FUNCNAME|PIPESTATUS|GROUPS|DIRSTACK|HOSTTYPE|MACHTYPE|OSTYPE|HOSTNAME|SHLVL|PWD|OLDPWD|_|PS4|_v|_e|IP_*) continue ;;
+    esac
+    unset -v "$_v" 2>/dev/null
+  done
+  for _v in $(compgen -A function); do case "$IP_KEEP" in *" $_v "*) ;; *) unset -f "$_v" ;; esac; done
+  OPTIND=1; set +eufx +o pipefail; hash -r
+}
+ip_call() { # <script> [args...] (a layout copy of the rotator is logged as a pass of the rotator) -- the answer of `bash <script> args`: stdout, stderr, stdin and status are the subject's
+  local IP_F="$1" IP_E; shift
+  IP_E="$(ip_entry "$IP_F")" || { command bash "$IP_F" "$@"; return; }
+  case "$IP_E" in grg_main) IP_LOG="$IP_GSUBJ" ;; *) IP_LOG="$IP_SUBJ" ;; esac
+  ( ip_scrub; fx_inproc "$IP_LOG"; . "$IP_F" || exit 126; "$IP_E" "$@" )
+}
+bash() { # a `bash <rotator>` is answered in process; every other bash is the real one; env FXCELL=<id> bash is the cli cell
+  if [ -z "${FXCELL:-}" ] && [ -n "${1:-}" ] && ip_entry "$1" > /dev/null 2>&1 && [ -r "$1" ]; then ip_call "$@"; else command bash "$@"; fi
+}
+# cli_eqv <id> <cwd> <args...> -- one `env FXCELL=<id> bash $ROT` start and one in-process call over the SAME input from <cwd>,
+# stdout, stderr and exit compared byte for byte. A report or a refusal: neither writes.
+EQ="$(mktemp -d "${TMPDIR:-/tmp}/gar-eq.XXXXXX")" || exit 2
+trap 'rm -rf "$EQ"' EXIT
+cli_eqv() {
+  local id="$1" cwd="$2"; shift 2
+  ( cd "$cwd" && ip_call "$ROT" "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$cwd" && env FXCELL="$id" bash "$ROT" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+     && { [ -s "$EQ/$id.cl.out" ] || [ -s "$EQ/$id.cl.err" ]; }; then
+    ok "($id) the command line and the in-process call agree byte for byte (exit $(cat "$EQ/$id.cl.rc"))"
+  else
+    bad "($id) command line and in-process differ: exit $(cat "$EQ/$id.cl.rc") vs $(cat "$EQ/$id.ip.rc"); stdout $(cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && echo equal || echo DIFFERS), stderr $(cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && echo equal || echo DIFFERS)"
+  fi
+}
+
 seed() { # <case> -> sets W/PROJ/GA/DEST_S308, or aborts the whole run
   W="$(bash "$HERE/seed.sh" "$1")" || { echo "FIXTURE ERROR: seed.sh '$1' exited non-zero" >&2; exit 2; }
   [ -n "$W" ] && [ -d "$W" ] && [ -f "$W/env.sh" ] \
@@ -66,13 +138,28 @@ seed() { # <case> -> sets W/PROJ/GA/DEST_S308, or aborts the whole run
 treehash() { ( cd "$1" 2>/dev/null && find . -type f | sort | while IFS= read -r f; do
     printf '%s  %s\n' "$(shasum "$f" | cut -d' ' -f1)" "$f"; done ) }
 
-drive() { # <projdir> <tool> <file_path> -> the guard's stdout JSON
-  local w="$1" tool="$2" fp="$3"
+drive() { # <projdir> <tool> <file_path> <cell id> -> the guard's stdout JSON
+  local w="$1" tool="$2" fp="$3" cell="$4"
   jq -nc --arg t "$tool" --arg f "$fp" \
     '{session_id:"t", tool_name:$t, tool_input:{file_path:$f}}' \
     | CLAUDE_PROJECT_DIR="$w" AI_DLC_GATE_METRICS="" bash "$GUARD" 2>/dev/null
 }
 denied() { case "$1" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) return 0 ;; esac; return 1; }
+# guard_eqv <id> <file_path under the project> -- one `env FXCELL=<id> bash $GUARD` start and one in-process call over the SAME
+# payload, each on its own copy of the project (the hook logs a denial into it): stdout, stderr and exit byte for byte
+# after the copy's path is normalised.
+guard_eqv() {
+  local id="$1" rel="$2" d
+  for d in ip cl; do
+    rm -rf "$EQ/$id.$d"; cp -R "$PROJ" "$EQ/$id.$d" || { bad "($id) could not copy the project"; return; }
+    jq -nc --arg f "$EQ/$id.$d/$rel" '{session_id:"t", tool_name:"Edit", tool_input:{file_path:$f}}' > "$EQ/$id.$d.in"
+  done
+  CLAUDE_PROJECT_DIR="$EQ/$id.ip" AI_DLC_GATE_METRICS="" ip_call "$GUARD" < "$EQ/$id.ip.in" > "$EQ/$id.ip.out0" 2> "$EQ/$id.ip.err0"; echo "$?" > "$EQ/$id.ip.rc"
+  CLAUDE_PROJECT_DIR="$EQ/$id.cl" AI_DLC_GATE_METRICS="" env FXCELL="$id" bash "$GUARD" < "$EQ/$id.cl.in" > "$EQ/$id.cl.out0" 2> "$EQ/$id.cl.err0"; echo "$?" > "$EQ/$id.cl.rc"
+  for d in ip cl; do
+    sed "s|$EQ/$id.$d|DIR|g" "$EQ/$id.$d.out0" > "$EQ/$id.$d.out"; sed "s|$EQ/$id.$d|DIR|g" "$EQ/$id.$d.err0" > "$EQ/$id.$d.err"
+  done
+}
 
 # The rotator resolves its repo root by walking UP from the CURRENT WORKING DIRECTORY
 # (CLAUDE.md: "resolve the repo root by walking up for a marker"), and the seeded project
@@ -113,6 +200,9 @@ if [ "$rc" -eq 0 ] && [ "$BEFORE_A" = "$AFTER_A" ] && [ ! -d "$DEST_S308" ] \
 else
   bad "(a) report mode changed the tree or misreported (rc=$rc): $(head -1 <<<"$out")"
 fi
+# The two cli cells, on the same untouched world: the report (exit 0) and the usage refusal (exit 2).
+cli_eqv cli-report "$PROJ" --sprint s308
+cli_eqv cli-refuse "$PROJ" --no-such-option
 
 # =============================================================================
 # ARM (b) — apply moves exactly the s308 set, byte-equal, source absent.
@@ -183,16 +273,32 @@ fi
 seed guardworld
 TARGET="$PROJ/_bmad-output/planning-artifacts/s309/x.md"
 
-OUT1="$(drive "$PROJ" Edit "$TARGET")"
+OUT1="$(drive "$PROJ" Edit "$TARGET" e-deny-live)"
 if denied "$OUT1"; then
   ok "(e.1) BEFORE rotation: the s308 FAIL verdict is the only live pass and the lead's edit is DENIED (reproduces DEFECT 1)"
 else
   bad "(e.1) FIXTURE COULD NOT REPRODUCE THE DEFECT — the pre-rotation edit was not denied, so this arm cannot fire: $OUT1"
 fi
 
+guard_eqv cli-guard-deny "_bmad-output/planning-artifacts/s309/x.md"
+if cmp -s "$EQ/cli-guard-deny.ip.out" "$EQ/cli-guard-deny.cl.out" && cmp -s "$EQ/cli-guard-deny.ip.err" "$EQ/cli-guard-deny.cl.err" \
+   && cmp -s "$EQ/cli-guard-deny.ip.rc" "$EQ/cli-guard-deny.cl.rc" && [ "$(cat "$EQ/cli-guard-deny.cl.rc")" = 0 ] && denied "$(cat "$EQ/cli-guard-deny.cl.out")"; then
+  ok "(cli-guard-deny) the program denies the live-FAIL edit exactly as the in-process call does (stdout, stderr, exit 0)"
+else
+  bad "(cli-guard-deny) the program and the in-process call differ, or the program did not deny"
+fi
+
 rotate --sprint s308 --apply >/dev/null 2>&1
 
-OUT2="$(drive "$PROJ" Edit "$TARGET")"
+guard_eqv cli-guard-allow "_bmad-output/planning-artifacts/s309/x.md"
+if cmp -s "$EQ/cli-guard-allow.ip.out" "$EQ/cli-guard-allow.cl.out" && cmp -s "$EQ/cli-guard-allow.ip.err" "$EQ/cli-guard-allow.cl.err" \
+   && cmp -s "$EQ/cli-guard-allow.ip.rc" "$EQ/cli-guard-allow.cl.rc" && [ "$(cat "$EQ/cli-guard-allow.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-guard-allow.cl.out" ]; then
+  ok "(cli-guard-allow) the program allows the rotated tree's edit silently, exactly as the in-process call does (stdout, stderr, exit 0)"
+else
+  bad "(cli-guard-allow) the program and the in-process call differ, or the program printed a decision"
+fi
+
+OUT2="$(drive "$PROJ" Edit "$TARGET" e-allow-rotated)"
 if ! denied "$OUT2"; then
   ok "(e.2) AFTER rotation: the same edit is ALLOWED — the closed sprint's FAIL is no longer the live pass"
 else
@@ -212,7 +318,7 @@ cat > "$GA/planning-20260907T160702Z.verdict.json" <<'EOF'
 }
 EOF
 
-OUT3="$(drive "$PROJ" Edit "$TARGET")"
+OUT3="$(drive "$PROJ" Edit "$TARGET" e-deny-current)"
 if denied "$OUT3"; then
   ok "(e.3) CONTROL: a live CURRENT-sprint FAIL still DENIES after rotation — rotation did not blind the guard"
 else

@@ -56,6 +56,87 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/held-stories.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). validate-held-stories.sh and snapshot-update.sh are the two top-level subjects, loaded once each and
+# asked through inproc_run (vhs_drive, snu_drive). Every nested start they make (snapshot-update.sh starts the budget
+# validator and the held-stories validator, which starts sprint-status.sh) goes through the `bash` shim below, which runs
+# the subject's entry in a subshell made fresh the way inproc_run makes one. A core fixture ships ahead of its subjects: a
+# subject with neither the `<p>_main() {` line nor the column-0 source guard predates the wrap and SKIPs (FIXTURE BROKEN in
+# the distribution); exactly one half FAILs; an unreadable subject is FIXTURE ERROR.
+hs_halves() { # <file> <entry> -> "<def><guard>"
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+hs_pre=""
+hs_gate() { # hs_gate <file>:<entry> -- one call line per wrapped subject, so each carries its own gate
+  local _s="$1" _h
+  _h="$(hs_halves "${_s%%:*}" "${_s##*:}")" || exit 2
+  case "$_h" in
+    11) : ;;
+    00) hs_pre="$hs_pre ${_s%%:*}" ;;
+    *) bad "${_s%%:*} carries one half of the in-process wrap (${_s##*:} line, column-0 source guard: $_h) -- a respelled subject this fixture cannot drive"
+       report_end held-stories ;;
+  esac
+}
+hs_gate "$VAL:vhs_main"
+hs_gate "$SS:ss_main"
+hs_gate "$SU:snu_main"
+hs_gate "$VAB:vab_main"
+if [ -n "$hs_pre" ]; then echo "SKIP: subject predates the in-process wrap:$hs_pre"; fx_skip_exit "$HERE"; fi
+
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+export FX_VAB="$VAB" FX_VHS="$VAL" FX_SS="$SS" # exported: inproc_run keeps exported variables and drops the rest
+bash() { # a subject's own `bash <sibling>` start of one of the three validators runs its entry in a fresh-options subshell; any other start is real
+  local _p="${1:-}" _e=""
+  case "$_p" in
+    "$FX_VAB") _e=vab_main ;;
+    "$FX_VHS") _e=vhs_main ;;
+    "$FX_SS") _e=ss_main ;;
+  esac
+  if [ -z "$_e" ]; then command bash "$@"; return; fi
+  shift
+  (
+    _x=" $(compgen -e) "; _x="${_x//$'\n'/ }"
+    for _v in $(compgen -v); do
+      case "$_x" in *" $_v "*) continue ;; esac
+      case "$_v" in
+        _x|_v|_e|_p) continue ;;
+        BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
+        IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
+        SHLVL|TERM|UID|_) continue ;;
+      esac
+      unset "$_v" 2>/dev/null
+    done
+    OPTIND=1; set +eufx +o pipefail; hash -r
+    case "$_e" in
+      vab_main) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$_p"; . "$_p" && vab_main "$@" ;;
+      vhs_main) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$_p"; . "$_p" && vhs_main "$@" ;;
+      ss_main) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$_p"; . "$_p" && ss_main "$@" ;;
+    esac
+  )
+}
+inproc_load "$VAL" || { echo "FIXTURE ERROR: $VAL defines no vhs_main (not loadable)" >&2; exit 2; }
+HS_VHS_FNS="${INPROC_FNS}bash "
+inproc_load "$SU" || { echo "FIXTURE ERROR: $SU defines no snu_main (not loadable)" >&2; exit 2; }
+HS_SNU_FNS="${INPROC_FNS}bash "
+# inproc_run strips every function the loaded subject did not define; use_subj selects which loaded subject is current and
+# names the shim with its set (inproc_run then checks the set's definitions are unchanged, and bash is part of it).
+use_subj() {
+  case "$1" in
+    vhs) INPROC_LOADED="$VAL"; INPROC_FNS="$HS_VHS_FNS" ;;
+    snu) INPROC_LOADED="$SU"; INPROC_FNS="$HS_SNU_FNS" ;;
+  esac
+  INPROC_DEFS="$(declare -f $INPROC_FNS)"
+}
+vhs_drive() { use_subj vhs; inproc_run "$VAL" vhs_main "$@"; } # <validator args> -> its answer, in process
+snu_drive() { use_subj snu; inproc_run "$SU" snu_main "$@"; }  # <snapshot-update args> -> its answer, in process
 
 NOW=1793200000
 export AI_DLC_NOW="$NOW"
@@ -91,13 +172,13 @@ ROW_130='ae0266c9c421f266a | code-reviewer gate 1 story 1.30 part 1/4 | /w/shard
 HOLD_KEY="- held: story-320-4 until the 2.1 tolerance amendment lands since $((NOW - 600))"
 
 RC=""; OUT=""
-drive() { OUT="$(AI_DLC_PROJECT_ROOT="$2" bash "$1" --root "$2" 2>&1)"; RC=$?; }
+drive() { OUT="$(AI_DLC_PROJECT_ROOT="$2" vhs_drive --root "$2" 2>&1)"; RC=$?; }
 has() { grep -qxF -- "$1" <<<"$OUT"; }
-# su_drive <validator path> <world>: the snapshot-update.sh beside that validator writes one
+# su_drive <validator path> <world>: snapshot-update.sh (in process) writes one
 # --activity line into the world's snapshot (the sub-step site's story-transition write)
 ACT_LINE='2026-10-27T21:20Z story 2.1 transition observed'
 su_drive() {
-  OUT="$(AI_DLC_PROJECT_ROOT="$2" bash "$(dirname "$1")/snapshot-update.sh" --snapshot "$2/_bmad-output/pipeline-snapshot.md" --activity "$ACT_LINE" 2>&1)"; RC=$?
+  OUT="$(AI_DLC_PROJECT_ROOT="$2" snu_drive --snapshot "$2/_bmad-output/pipeline-snapshot.md" --activity "$ACT_LINE" 2>&1)"; RC=$?
   grep -qxF -- "- $ACT_LINE" "$2/_bmad-output/pipeline-snapshot.md"
 }
 
@@ -199,5 +280,41 @@ else
     ok "S2: ai-dlc-recover.sh's verification turn names every held: Open Item"
   else bad "S2: ai-dlc-recover.sh's verification turn no longer names the held: Open Items"; fi
 fi
+
+# --- the cli cells (cells.decl): each program run as a PROGRAM once per distinct CLI outcome ----------------------
+# One `FXCELL=<id> bash <subject>` start per outcome, compared with the in-process answer on the same input (stdout+stderr
+# merged, exit, and for snapshot-update the resulting snapshot), each reading the SAME world path restored between the two runs.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+cell_vhs() { # <id> <world>
+  local id="$1" w="$2"
+  ( AI_DLC_PROJECT_ROOT="$w" vhs_drive --root "$w" ) > "$EQ/$id.ip.out" 2>&1; echo "$?" > "$EQ/$id.ip.rc"
+  ( AI_DLC_PROJECT_ROOT="$w" FXCELL="$id" command bash "$VAL" --root "$w" ) > "$EQ/$id.cl.out" 2>&1; echo "$?" > "$EQ/$id.cl.rc"
+}
+cell_snu() { # <id> <world>
+  local id="$1" w="$2" snapf="$2/_bmad-output/pipeline-snapshot.md"
+  cp "$snapf" "$EQ/$id.pre"
+  ( AI_DLC_PROJECT_ROOT="$w" snu_drive --snapshot "$snapf" --activity "$ACT_LINE" ) > "$EQ/$id.ip.out" 2>&1; echo "$?" > "$EQ/$id.ip.rc"
+  cp "$snapf" "$EQ/$id.ip.snap"; cp "$EQ/$id.pre" "$snapf"
+  ( AI_DLC_PROJECT_ROOT="$w" FXCELL="$id" command bash "$SU" --snapshot "$snapf" --activity "$ACT_LINE" ) > "$EQ/$id.cl.out" 2>&1; echo "$?" > "$EQ/$id.cl.rc"
+  cp "$snapf" "$EQ/$id.cl.snap"
+}
+same_cell() { cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc"; }
+w="$WORK/cell-vhs-ok"; world "$w" ready-for-dev; snap "$w" "$HOLD_KEY" "$ROW_DELIV"; cell_vhs cli-vhs-ok "$w"
+w="$WORK/cell-vhs-fail"; world "$w" ready-for-dev; snap "$w" "" "$ROW_DELIV"; cell_vhs cli-vhs-fail "$w"
+w="$WORK/cell-vhs-unev"; world "$w" ready-for-dev; cell_vhs cli-vhs-unev "$w"
+w="$WORK/cell-snu-ok"; world "$w" ready-for-dev; snap "$w" "$HOLD_KEY" "$ROW_DELIV"; cell_snu cli-snu-ok "$w"
+w="$WORK/cell-snu-warn"; world "$w" ready-for-dev; snap "$w" "" "$ROW_DELIV"; cell_snu cli-snu-warn "$w"
+for c in "cli-vhs-ok 0 held-stories: OK" "cli-vhs-fail 1 UNACCOUNTED story-320-4" "cli-vhs-unev 2 no snapshot"; do
+  set -- $c; id="$1"; rc="$2"; shift 2
+  if same_cell "$id" && [ "$(cat "$EQ/$id.cl.rc")" = "$rc" ] && grep -qF -- "$*" "$EQ/$id.cl.out"; then ok "$id: validate-held-stories.sh as a program matches the in-process answer (exit $rc, names '$*')"
+  else bad "$id: the program and the in-process call disagree (rc cl=$(cat "$EQ/$id.cl.rc") ip=$(cat "$EQ/$id.ip.rc"))"; fi
+done
+for c in "cli-snu-ok held-stories: OK" "cli-snu-warn UNACCOUNTED story-320-4"; do
+  set -- $c; id="$1"; shift
+  if same_cell "$id" && cmp -s "$EQ/$id.ip.snap" "$EQ/$id.cl.snap" && [ "$(cat "$EQ/$id.cl.rc")" = 0 ] && grep -qF -- "$*" "$EQ/$id.cl.out" \
+     && grep -qxF -- "- $ACT_LINE" "$EQ/$id.cl.snap"; then ok "$id: snapshot-update.sh as a program matches the in-process answer and snapshot (exit 0, names '$*')"
+  else bad "$id: the program and the in-process call disagree (rc cl=$(cat "$EQ/$id.cl.rc") ip=$(cat "$EQ/$id.ip.rc"))"; fi
+done
+if ! cmp -s "$EQ/cli-snu-ok.cl.out" "$EQ/cli-snu-warn.cl.out"; then ok "the snapshot-update cells differ"; else bad "the snapshot-update cells are identical"; fi
 
 report_end held-stories

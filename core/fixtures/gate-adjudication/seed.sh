@@ -38,8 +38,25 @@ cp "$MAP_SRC" "$WORK/enforcement-map.yaml"
 mkdir -p "$WORK/gate-adjudication"
 VERDICT="$WORK/gate-adjudication/$NONCE.verdict.json"
 
+# THE PRE-WRAP CONSUMER GATE, before the validator is sourced: a consumer one pull behind carries this fixture with a
+# subject that predates the wrap, and sourcing it would run its whole body. Neither half -> exit 3 (run.sh SKIPs);
+# exactly one half -> exit 4; an unreadable subject -> exit 2.
+_vga_d=0; _vga_g=0
+grep -qxF 'vga_main() {' "$VALIDATOR"; _x=$?
+[ "$_x" -le 1 ] || { rm -rf "$WORK"; echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_x)" >&2; exit 2; }
+[ "$_x" -ne 0 ] || _vga_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _x=$?
+[ "$_x" -le 1 ] || { rm -rf "$WORK"; echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_x)" >&2; exit 2; }
+[ "$_x" -ne 0 ] || _vga_g=1
+case "$_vga_d$_vga_g" in
+  11) : ;;
+  00) rm -rf "$WORK"; exit 3 ;;
+  *) rm -rf "$WORK"; exit 4 ;;
+esac
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { rm -rf "$WORK"; echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
 IDS="$(AI_DLC_ENFORCEMENT_MAP="$WORK/enforcement-map.yaml" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
-        bash "$VALIDATOR" --expected "$GATE_TYPE")" || { echo "FIXTURE ERROR: --expected failed" >&2; exit 2; }
+        inproc_run "${VALIDATOR%/*}/validate-gate-adjudication.sh" vga_main --expected "$GATE_TYPE")" || { echo "FIXTURE ERROR: --expected failed" >&2; exit 2; }
 
 python3 - "$VERDICT" "$NONCE" "$GATE_TYPE" $IDS <<'PY'
 import json, sys

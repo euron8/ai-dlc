@@ -13,3 +13,7 @@
 !core/schemas/pause-routing.json
 !core/skills/ai-dlc/SKILL.md
 core/fixtures/lib/report.sh
+# the in-process drive (inproc_load / inproc_run / fx_inproc) and the pre-wrap SKIP gate
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

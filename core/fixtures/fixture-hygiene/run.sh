@@ -53,8 +53,28 @@ WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
 VREL=scripts/validate-fixture-hygiene.sh
 IREL=scripts/validate-fixture-invocations.sh
+# IN PROCESS (BL-878). The validator is asked through hyg_f, which hands the probe world's byte-identical copy to
+# inproc_run: it sources the copy in a fresh-bash subshell, so its root walk resolves to the PROBE, and calls fhy_main
+# there, logged as a pass of the shipping subject. The copy still STARTS the shard-stub resolver as a program, once per
+# run; the shim below tags each of those starts (e2e cells), and the cli cells' resolver starts are covered by a nested row.
+hyg_f() { # hyg_f <file> [args...] -> fhy_main's stdout, stderr and exit
+  local _f="$1"; shift
+  case "$_f" in */validate-fixture-hygiene.sh) ;; *) echo "FIXTURE BROKEN: hyg_f was handed $_f, not a validate-fixture-hygiene.sh" >&2; return 125 ;; esac
+  ( INPROC_LOADED="$ROOT/$VREL"; inproc_run "${_f%/*}/validate-fixture-hygiene.sh" fhy_main "$@" )
+}
+# THE SHIM. The validator and the collector start the judge themselves (`bash <judge> --impl-of` / `--store-key`), and no
+# tag can be passed in. For an in-process pass, PATH names a `bash` that puts $SHIM_TAG on a judge start's own command
+# line and runs the real bash; every other start is unchanged. cells.decl declares each tag as an e2e cell.
+SHIM_DIR="$WORK/shim"; mkdir -p "$SHIM_DIR" \
+  && printf '%s\n' '#!/bin/bash' 'case "${1:-}" in */validate-fixture-invocations.sh) [ -z "${SHIM_TAG:-}" ] || export FXCELL="$SHIM_TAG" ;; esac' "exec $(command -v bash) \"\$@\"" > "$SHIM_DIR/bash" \
+  && chmod +x "$SHIM_DIR/bash" || { echo "FIXTURE ERROR: cannot write the bash shim" >&2; exit 2; }
+REAL_BASH="$(command -v bash)"
 g() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY git -c core.hooksPath=/dev/null "$@"; }
 
 # --- the worlds -------------------------------------------------------------------------------------------------
@@ -135,19 +155,20 @@ mk_world "$WORK/w-dirty" dirty && mk_world "$WORK/w-clean" clean \
   || { echo "FIXTURE BROKEN: could not build the probe worlds byte-identical" >&2; exit 2; }
 
 # --- one validator run per distinct state -------------------------------------------------------------------------
-drive() { # <tag> <world dir>
-  ( cd "$2" && unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && bash "$2/$VREL" ) > "$WORK/c.$1.out" 2> "$WORK/c.$1.err"
-  echo $? > "$WORK/c.$1.rc"
+drive() { # <tag> <world dir> [validator args...]
+  local _t="$1" _w="$2"; shift 2
+  ( cd "$_w" && unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && PATH="$SHIM_DIR:$PATH" SHIM_TAG="e2e-hyg-resolver-$_t" hyg_f "$_w/$VREL" "$@" ) > "$WORK/c.$_t.out" 2> "$WORK/c.$_t.err"
+  echo $? > "$WORK/c.$_t.rc"
 }
 # d8drive / d9drive <tag>: arms D8 and D9 ARE receipt-bl929.sh and receipt-bl930.sh, each seeding its own world
 # (BL-929: a scrubbed fixture, a scrubbed-IMPL stub, an unscrubbed unlisted and an allowlisted one; BL-930: the
 # GIT_-only hook driver I10 acquitted and a listed hook driver) and driving the validator.
 d8drive() {
-  bash "$HERE/receipt-bl929.sh" > "$WORK/c.$1.out" 2> "$WORK/c.$1.err"
+  PATH="$SHIM_DIR:$PATH" SHIM_TAG="e2e-hyg-resolver-$1" "$REAL_BASH" "$HERE/receipt-bl929.sh" > "$WORK/c.$1.out" 2> "$WORK/c.$1.err"
   echo $? > "$WORK/c.$1.rc"
 }
 d9drive() {
-  bash "$HERE/receipt-bl930.sh" > "$WORK/c.$1.out" 2> "$WORK/c.$1.err"
+  PATH="$SHIM_DIR:$PATH" SHIM_TAG="e2e-hyg-resolver-$1" "$REAL_BASH" "$HERE/receipt-bl930.sh" > "$WORK/c.$1.out" 2> "$WORK/c.$1.err"
   echo $? > "$WORK/c.$1.rc"
 }
 has()  { grep -qF -- "$2" "$WORK/c.$1.out" "$WORK/c.$1.err"; }
@@ -181,7 +202,7 @@ verdict() { # <arm> <tag>
 }
 H9MK="# bl868-allow: fa-wait"
 
-drive dirty "$WORK/w-dirty" & drive clean "$WORK/w-clean" & d8drive d8 & d9drive d9 &
+drive dirty "$WORK/w-dirty" & drive clean "$WORK/w-clean" & drive usage "$WORK/w-clean" --bogus & d8drive d8 & d9drive d9 &
 wait
 for a in D1 D2 D3 D6 D12 DE1 DW D14; do
   if verdict "$a" dirty; then ok "$a the dirty world names exactly its seeded line"; : > "$WORK/base.$a"
@@ -199,6 +220,26 @@ verdict C clean && ok "C the clean world (every near-miss) is rc 0 with the OK l
   || bad "C the clean world is not clean (rc $(cat "$WORK/c.clean.rc")): $(head -c 800 "$WORK/c.clean.out" | tr '\n' ' ')"
 verdict R clean && ok "R the validator resolved the PROBE root (3 fixture .sh scanned, not this repository's corpus)" \
   || bad "R the clean run did not report the probe's 3-file corpus"
+# THE CLI CELLS (cells.decl): the validator as a PROGRAM once per distinct CLI outcome (rc 1 with findings, rc 0 clean,
+# rc 2 usage), each compared byte for byte (stdout, stderr, exit) with the in-process answer already read above on the
+# same world and arguments. Each cell also asserts its own exit code and a line of output, so two runs that both
+# printed nothing cannot read as equivalent.
+cli_cell() { # <id> <world> <in-process tag> <want rc> <want line> [validator args...]
+  local id="$1" w="$2" t="$3" rc="$4" line="$5"; shift 5
+  ( cd "$w" && unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && FXCELL="$id" bash "$w/$VREL" "$@" ) > "$WORK/k.$id.out" 2> "$WORK/k.$id.err"
+  echo $? > "$WORK/k.$id.rc"
+  cmp -s "$WORK/c.$t.out" "$WORK/k.$id.out" && cmp -s "$WORK/c.$t.err" "$WORK/k.$id.err" && cmp -s "$WORK/c.$t.rc" "$WORK/k.$id.rc" \
+    && [ "$(cat "$WORK/k.$id.rc")" = "$rc" ] && grep -qF -- "$line" "$WORK/k.$id.out" "$WORK/k.$id.err"
+}
+if cli_cell cli-hyg-dirty "$WORK/w-dirty" dirty 1 'FAIL H1:'; then
+  ok "cli-hyg-dirty: the program fails the dirty world with its findings, exit 1, exactly as the in-process call does"
+else bad "cli-hyg-dirty: the program and the in-process call differ, or the outcome is not exit 1 with FAIL H1 (rc $(cat "$WORK/k.cli-hyg-dirty.rc"))"; fi
+if cli_cell cli-hyg-clean "$WORK/w-clean" clean 0 'OK: validate-fixture-hygiene -- '; then
+  ok "cli-hyg-clean: the program passes the clean world with the OK line, exit 0, exactly as the in-process call does"
+else bad "cli-hyg-clean: the program and the in-process call differ, or the outcome is not exit 0 with the OK line (rc $(cat "$WORK/k.cli-hyg-clean.rc"))"; fi
+if cli_cell cli-hyg-usage "$WORK/w-clean" usage 2 'usage: validate-fixture-hygiene.sh' --bogus; then
+  ok "cli-hyg-usage: the program refuses an unknown flag with its usage line, exit 2, exactly as the in-process call does"
+else bad "cli-hyg-usage: the program and the in-process call differ, or the outcome is not exit 2 with the usage line (rc $(cat "$WORK/k.cli-hyg-usage.rc"))"; fi
 if [ -e "$WORK/base.D1" ] && verdict C clean; then
   echo "HERMETIC-CONSUMED $VREL"
   echo "HERMETIC-CONSUMED $IREL"

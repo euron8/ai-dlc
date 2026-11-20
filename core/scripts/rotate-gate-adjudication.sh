@@ -162,6 +162,7 @@
 #       1 = REFUSED or HARD_BLOCK: an integrity check failed and NOTHING more
 #           was written than had already landed before the failure
 #       2 = usage / cannot resolve a repo root
+rga_main() {
 set -uo pipefail
 
 SELF_NAME="rotate-gate-adjudication"
@@ -169,7 +170,7 @@ SELF_NAME="rotate-gate-adjudication"
 # The command a remedy line prints, spelled for the layout THIS copy runs from, so an
 # operator can paste it from the repo root: install.sh puts core/scripts/<x> at
 # scripts/ai-dlc/<x>. Derived from this script's own directory, never hardcoded.
-SELF_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || SELF_DIR=""
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || SELF_DIR=""
 case "$SELF_DIR" in
   */scripts/ai-dlc) SELF_CMD="bash scripts/ai-dlc/${SELF_NAME}.sh" ;;
   */core/scripts)   SELF_CMD="bash core/scripts/${SELF_NAME}.sh" ;;
@@ -932,3 +933,6 @@ fi
 echo "${SELF_NAME}: moved ${N_VERDICTS} verdict(s), ${N_SIDECARS} sidecar(s) -- ${N_FILES} file(s) total -- to ${DEST}."
 sed 's/^/  /' "$TMPD/move_files"
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rga_main "$@"

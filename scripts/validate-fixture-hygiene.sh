@@ -451,6 +451,8 @@
 # H9 adds one H9_AWK pass over the corpus, its join awk and sorts, and reuses run_all's list. H13 reads inside the
 # scan awk's existing pass and adds its judge awk, one sort and one grep; its H13-M4 is the shared m4. H14 likewise
 # (its own COST line above).
+# fhy_main is the whole command-line body: sourcing this file defines it and returns at the guard below; running it calls it.
+fhy_main() {
 set -uo pipefail
 
 MODE=check
@@ -466,7 +468,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$HERE"
 while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/VERSION" ]; do ROOT="$(dirname "$ROOT")"; done
 if [ ! -f "$ROOT/VERSION" ]; then
-  echo "validate-fixture-hygiene: FAIL -- could not resolve repo root (no VERSION marker above $0)" >&2; exit 2
+  echo "validate-fixture-hygiene: FAIL -- could not resolve repo root (no VERSION marker above ${BASH_SOURCE[0]})" >&2; exit 2
 fi
 RESOLVER="$HERE/validate-fixture-invocations.sh"
 [ -f "$RESOLVER" ] || { echo "validate-fixture-hygiene: FAIL -- the shard-stub resolver $RESOLVER is absent" >&2; exit 2; }
@@ -1715,3 +1717,6 @@ if [ "$rc" = 0 ]; then
   echo "OK: validate-fixture-hygiene -- $nlist fixture .sh scanned; H1 $t1 / H2 $t2 candidate test(s), no offender; H6 $t6 lib source(s), all guarded; H12 no mutation battery in a run.sh or lib.sh; E1 $ne1 receipt(s), $ni1 inert and allowlisted; H9 $nh9r bounded-wait row(s), every one allowlisted; H13 ${n13:-0} hand span extraction(s), every one allowlisted; H14 ${n14:-0} hand git init line(s), every one allowlisted."
 fi
 exit "$rc"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+fhy_main "$@"

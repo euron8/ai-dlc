@@ -136,6 +136,7 @@
 #      snapshot moved under all 3 attempts; the snapshot is unchanged
 #   3  the lock was not acquired within the wait; nothing was read or written
 set -u
+snu_main() {
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
 # Resolve the project root by walking UP for a marker, never by a fixed number of `..` hops:
@@ -815,3 +816,6 @@ case "$HRC" in
   *) printf 'snapshot-update: held-stories NOT EVALUATED (validate-held-stories.sh exit %s):\n%s\n' "$HRC" "$HOUT" ;;
 esac
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+snu_main "$@"

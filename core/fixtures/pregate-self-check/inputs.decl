@@ -15,3 +15,6 @@ VERSION
 !scripts/seed-verdict-store.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/pool-span.sh
+# Loaded in process (BL-878): run.sh sources lib/inproc.sh, which sources lib/mutant.sh for fx_inproc.
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

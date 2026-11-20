@@ -22,3 +22,5 @@ tr
 wc
 od
 mv
+find
+sort

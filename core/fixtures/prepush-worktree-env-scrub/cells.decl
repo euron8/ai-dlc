@@ -1,0 +1,9 @@
+# prepush-worktree-env-scrub's four starts of the push hook (BL-879 grammar). The hook is the program the pusher starts and
+# stays a program: it records the gate holder in a file named by its own `$$` (gate_held_f, removed by an EXIT trap),
+# makes process groups with `set -m` and reaps them by group, ignores INT/TERM/HUP while it reaps, and ends the shell
+# with a top-level `exit`; none of that can exist in a subshell of the caller without signalling or ending it.
+# Its pool, its fixture dispatch and the repository-environment scrub are exactly what each drive asserts.
+e2e .githooks/pre-push e2e-s1-pristine why=hook run end to end from a linked worktree with the repository env exported; its $$ holder file, EXIT trap and set -m pool groups exist only in the started process
+e2e .githooks/pre-push e2e-s2-pristine why=the consumer-layout copy of the hook run end to end from a linked worktree; same $$ holder file, EXIT trap and set -m pool groups
+e2e .githooks/pre-push e2e-rc-pristine-1 why=push 1 of the BL-1048 world runs the whole hook, whose top-level exit, EXIT trap and set -m pool reap would end the caller if run in it
+e2e .githooks/pre-push e2e-rc-pristine-2 why=push 2 of the BL-1048 world re-runs the whole hook against the store push 1 wrote; same top-level exit, EXIT trap and set -m pool reap

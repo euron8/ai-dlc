@@ -27,6 +27,25 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALI
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# PRE-WRAP GATE: the subject's two wrap halves are read before any source of it. Neither half -> SKIP (a consumer
+# that has not pulled the wrap; FIXTURE BROKEN in the distribution); one half -> FAIL; unreadable -> FIXTURE ERROR.
+ad_halves() { # <file> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF 'vad_cli() {' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x)" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x)" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_ad_h="$(ad_halves "$VALIDATOR")" || exit 2
+case "$_ad_h" in
+  11) : ;;
+  00) echo "SKIP: artifact-derivations: $VALIDATOR predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$VALIDATOR carries one half of the in-process wrap (vad_cli() line, column-0 source guard: $_ad_h)"; report_end artifact-derivations ;;
+esac
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -1911,15 +1930,17 @@ u_pair() { # $1 validator  $2 cwd  $3 root  $4 PATH prefix ("" = none)  $5.. arg
   U_VALP="$val"
   UP_IN="$(cd "$cwd" && vad_call "$val" AI_DLC_PROJECT_ROOT="$root" PATH="${pp:+$pp:}$PATH" -- "$@" 2>&1 | u_norm)"
   UP_RIN="$(cd "$cwd" && vad_call "$val" AI_DLC_PROJECT_ROOT="$root" PATH="${pp:+$pp:}$PATH" -- "$@" >/dev/null 2>&1; echo $?)"
-  UP_CLI="$(cd "$cwd" && AI_DLC_PROJECT_ROOT="$root" PATH="${pp:+$pp:}$PATH" "$UREAL_BASH" "$val" "$@" 2>&1 | u_norm)"
-  UP_RCLI="$(cd "$cwd" && AI_DLC_PROJECT_ROOT="$root" PATH="${pp:+$pp:}$PATH" "$UREAL_BASH" "$val" "$@" >/dev/null 2>&1; echo $?)"
+  # ONE CLI start per outcome, tagged as its cell (cells.decl cli-<label>): output and status from the same run.
+  UP_RAW="$(cd "$cwd" && AI_DLC_PROJECT_ROOT="$root" PATH="${pp:+$pp:}$PATH" FXCELL="cli-$U_LBL" "$UREAL_BASH" "$val" "$@" 2>&1; echo "@@rc=$?")"
+  UP_RCLI="${UP_RAW##*@@rc=}"
+  UP_CLI="$(printf '%s' "${UP_RAW%@@rc=*}" | u_norm)"
 }
 mshim 'kill -9 $$'
 U_ALL=""; U_RCS=""; u_bad=0
 while IFS="|" read -r u_lbl u_val u_cwd u_root u_pp u_args; do
   [ -n "$u_lbl" ] || continue
   eval "set -- $u_args"
-  u_pair "$u_val" "$u_cwd" "$u_root" "$u_pp" "$@"
+  U_LBL="$u_lbl"; u_pair "$u_val" "$u_cwd" "$u_root" "$u_pp" "$@"
   if [ "$UP_IN" = "$UP_CLI" ] && [ "$UP_RIN" = "$UP_RCLI" ] && [ -n "$UP_IN" ]; then
     ok "u-$u_lbl  the in-process call and the CLI give the same output and status ($UP_RIN)"
   else
@@ -1942,17 +1963,17 @@ case " $U_RCS " in *" 0 "*" 1 "*|*" 1 "*" 0 "*) u_rcs=ok ;; *) u_rcs=no ;; esac
 [ "$u_distinct" -ge 7 ] && [ "$u_rcs" = ok ] && case " $U_RCS " in *" 2 "*) true ;; *) false ;; esac \
   && ok "u-distinct  the eight outcomes give $u_distinct distinct answers and statuses 0, 1 and 2 all occur, so the equalities above compare different things" \
   || bad "u-distinct the eight outcomes gave only $u_distinct distinct answers or lack a status of 0, 1 or 2 (statuses:$U_RCS)"
-# The recording shim: the CLI side calls `bash` through PATH once per run, the in-process side never.
+# The recording shim: a `bash` through PATH logs one call. CONTROL first: a plain `bash -c :` through the shim must log
+# (so a shim that records nothing cannot read as "no call"); then the in-process call must add none. No subject start.
 rm -f "$U/bash.log"
-( cd "$WORK" && AI_DLC_PROJECT_ROOT="$WORK" PATH="$U/bin:$PATH" bash "$VALIDATOR" "$WORK/a-true/story.md" ) >/dev/null 2>&1
-u_cli_calls="$(grep -c call "$U/bash.log" 2>/dev/null)" || u_cli_calls=0
+( PATH="$U/bin:$PATH" bash -c : ) >/dev/null 2>&1
+u_ctl_calls="$(grep -c call "$U/bash.log" 2>/dev/null)" || u_ctl_calls=0
 rm -f "$U/bash.log"
 ( cd "$WORK" && vad_call "$VALIDATOR" AI_DLC_PROJECT_ROOT="$WORK" PATH="$U/bin:$PATH" -- "$WORK/a-true/story.md" ) >/dev/null 2>&1
 u_in_calls="$(grep -c call "$U/bash.log" 2>/dev/null)" || u_in_calls=0
-[ "$u_cli_calls" -ge 1 ] && [ "$u_in_calls" -eq 0 ] \
-  && ok "u-noproc  the recording bash shim saw the CLI run call bash and saw the in-process call make no bash call" \
-  || bad "u-noproc the recording bash shim saw $u_cli_calls call(s) from the CLI run (want at least 1) and $u_in_calls from the in-process call (want 0)"
-
+[ "$u_ctl_calls" -ge 1 ] && [ "$u_in_calls" -eq 0 ] \
+  && ok "u-noproc  the recording bash shim saw the control call bash ($u_ctl_calls) and saw the in-process call make no bash call" \
+  || bad "u-noproc the recording bash shim saw $u_ctl_calls control call(s) (want at least 1) and $u_in_calls from the in-process call (want 0)"
 
 echo
 report_end artifact-derivations

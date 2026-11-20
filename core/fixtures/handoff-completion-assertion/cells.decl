@@ -1,0 +1,11 @@
+# handoff-completion-assertion's starts of core/hooks/ai-dlc-continue.sh and core/hooks/ai-dlc-recover.sh (BL-878 item 7;
+# BL-879 grammar). Every drive is in process: the `bash` shim in run.sh runs continue's entry (hkcont_main) and recover (sourced
+# whole in a subshell) in a fresh-options subshell, one fx_inproc pass per call. One command-line start per distinct outcome,
+# started as FXCELL=<id> command bash <hook> and compared with the in-process answer on the same input by stdout, stderr
+# and exit: continue refuses (a Stop with no resume block on an unpushed tree) and allows (not a git repo); recover emits its
+# directive (a compact SessionStart over a snapshot) and stands down silent (a non-compact SessionStart).
+cli core/hooks/ai-dlc-continue.sh cli-cont-block
+cli core/hooks/ai-dlc-continue.sh cli-cont-allow
+# ai-dlc-recover.sh carries no source guard (another cluster owns it), so a `cli` cell cannot name it (C5): an e2e cell each.
+e2e core/hooks/ai-dlc-recover.sh e2e-rec-ctx why=ai-dlc-recover.sh is not wrapped behind a source guard, so its command-line answer is the program run as the harness starts it
+e2e core/hooks/ai-dlc-recover.sh e2e-rec-quiet why=ai-dlc-recover.sh is not wrapped behind a source guard, so its command-line stand-down is the program run as the harness starts it

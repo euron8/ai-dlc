@@ -21,20 +21,51 @@ unset CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+# seed.sh carries the pre-wrap consumer gate (the subject's `vga_main() {` line and its column-0 source guard, checked
+# BEFORE its own in-process --expected): it exits 3 when the subject predates the wrap (a SKIP on a consumer, FIXTURE
+# BROKEN in the distribution), 4 when it carries exactly one half (a respelled subject this fixture cannot drive).
+WORK="$(bash "$HERE/seed.sh")"; _seed_rc=$?
+case "$_seed_rc" in
+  0) : ;;
+  3) echo "SKIP: gate-adjudication: validate-gate-adjudication.sh predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  4) bad "validate-gate-adjudication.sh carries one half of the in-process wrap (vga_main line, column-0 source guard) -- a respelled subject this fixture cannot drive"
+     report_end gate-adjudication ;;
+  *) echo "FIXTURE ERROR: seed failed" >&2; exit 2 ;;
+esac
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$WORK/env.sh"
+# The pre-wrap gate ran in seed.sh (exit 3/4 above); restate it on the resolved subject before the first load below.
+grep -qxF 'vga_main() {' "$VALIDATOR" && grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR" \
+  || { echo "FIXTURE ERROR: $VALIDATOR lost a wrap half after seed.sh checked it" >&2; exit 2; }
 # The REQUIRED input of inputs.decl: every assertion below drives this validator, and seed.sh
 # has already run it (--expected) to derive the escalated set, so this is the point of first use.
 echo "HERMETIC-CONSUMED $VALIDATOR"
 [ -f "$(dirname "$VALIDATOR")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED $(dirname "$VALIDATOR")/gate_adjudication.py"
 
-. "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# IN PROCESS (BL-878). The validator is asked through vga_f / vga, which hand the file to lib/inproc.sh's inproc_run:
+# nothing is loaded into this shell, inproc_run sources the file inside its own fresh-bash subshell and calls vga_main
+# there, logged under the subject's path (the one `inproc:` row). The operand is a literal tail, "${_f%/*}/validate-gate-adjudication.sh",
+# so arm P2 of scripts/validate-fixture-invocations.sh resolves it; the case refuses (125) any other basename.
+# The programs run end to end only in the cells of cells.decl (cli-pass, cli-defect, cli-refuse).
+vga_f() { # vga_f <file> [args...] -> vga_main's stdout, stderr and exit, logged as a pass of $VALIDATOR
+  local _f="$1"; shift
+  case "$_f" in */validate-gate-adjudication.sh) ;; *) echo "FIXTURE BROKEN: vga_f was handed $_f, not a validate-gate-adjudication.sh" >&2; return 125 ;; esac
+  ( [ "$_f" = "$VALIDATOR" ] || INPROC_LOADED="$VALIDATOR"; inproc_run "${_f%/*}/validate-gate-adjudication.sh" vga_main "$@" )
+}
+vga() { vga_f "$VALIDATOR" "$@"; }
 
 run() { # run <verdict_path> -> sets RC to the validator's exit code
   AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
-    bash "$VALIDATOR" "$GATE_TYPE" "$1" >/dev/null 2>&1
+    vga "$GATE_TYPE" "$1" >/dev/null 2>&1
   RC=$?
 }
 
@@ -69,7 +100,7 @@ fi
 # --- Assertion 1: DERIVATION --------------------------------------------------
 # --expected must print EXACTLY the verdict's covered set. A hand-maintained escalation list is
 # the exact bug this design removes; assert the two derivations agree.
-EXP="$(AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" bash "$VALIDATOR" --expected "$GATE_TYPE" | sort)"
+EXP="$(AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" vga --expected "$GATE_TYPE" | sort)"
 COV="$(python3 -c 'import json,sys; print("\n".join(sorted(v["check_id"] for v in json.load(open(sys.argv[1]))["verdicts"])))' "$VERDICT")"
 if [ "$EXP" = "$COV" ]; then
   ok "--expected $GATE_TYPE prints exactly the covered set ($(printf '%s' "$EXP" | tr '\n' ' '))"
@@ -105,7 +136,7 @@ awk 'BEGIN{d=0} /^    adjudication: llm$/ && !d {sub(/llm/,"lmm"); d=1} {print}'
 if ! grep -q 'adjudication: lmm' "$BADMAP"; then
   bad "FIXTURE STALE: no 'adjudication: llm' line to corrupt in the map"
 else
-  AI_DLC_ENFORCEMENT_MAP="$BADMAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" >/dev/null 2>&1
+  AI_DLC_ENFORCEMENT_MAP="$BADMAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" vga "$GATE_TYPE" "$VERDICT" >/dev/null 2>&1
   RC=$?
   [ "$RC" -eq 2 ] && ok "an unknown map adjudication value ('lmm') → exit 2 (derivation layer)" || bad "a map typo did NOT fail with exit 2 (rc=$RC) — the escalated set could silently empty"
 fi
@@ -154,7 +185,7 @@ doc["gate_series_id"] = sid
 open(out, "w").write(json.dumps(doc, indent=2) + "\n")
 PY
   SF_ERR="$(AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
-    bash "$VALIDATOR" "$GATE_TYPE" "$SF_PATH" 2>&1 >/dev/null)"
+    vga "$GATE_TYPE" "$SF_PATH" 2>&1 >/dev/null)"
   RC=$?
 }
 sf_says() { local n; n="$(grep -cF -- "$1" <<<"$SF_ERR")" || n=0; [ "$n" -gt 0 ]; }
@@ -254,7 +285,7 @@ SOUT="$WORK/carveout.out"
 runx() { # runx <escalations> <gate-metrics> [<transcript-dir>] — RC and $SOUT from the pristine-plus-mutation verdict
   AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
   AI_DLC_ESCALATIONS="$1" AI_DLC_GATE_METRICS="$2" \
-    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" --transcript-dir "${3:-$TDIR}" > "$SOUT" 2>&1
+    vga "$GATE_TYPE" "$VERDICT" --transcript-dir "${3:-$TDIR}" > "$SOUT" 2>&1
   RC=$?
 }
 
@@ -549,7 +580,7 @@ restore; fail_on "$X"
 GA_S17_OUT="$WORK/s17.out"
 ( cd "$GA_CWD_DECOY" && AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
     AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_PROJECT_ROOT="$GA_CWD_ROOT" \
-    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" --transcript-dir "$TDIR" ) > "$GA_S17_OUT" 2>&1
+    vga "$GATE_TYPE" "$VERDICT" --transcript-dir "$TDIR" ) > "$GA_S17_OUT" 2>&1
 GA_S17_RC=$?
 GA_S17_N="$(grep -cF -- "$SUPP_LINE" "$GA_S17_OUT")" || GA_S17_N=0
 if [ "$GA_S17_RC" -eq 0 ] && [ "$GA_S17_N" -gt 0 ]; then
@@ -590,7 +621,7 @@ fi
 restore; fail_on "$X"
 AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
 AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" \
-  bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" > "$SOUT" 2>&1
+  vga "$GATE_TYPE" "$VERDICT" > "$SOUT" 2>&1
 RC=$?
 if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "no-transcript" && ! has "$SUPP_LINE"; then
   ok "S19: run with neither --transcript nor --transcript-dir, an in-force entry covers nothing → exit 1 and the block says 'no-transcript'"
@@ -611,7 +642,7 @@ else
 fi
 AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
 AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" \
-  bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" --transcript "$TFILE" > "$SOUT" 2>&1
+  vga "$GATE_TYPE" "$VERDICT" --transcript "$TFILE" > "$SOUT" 2>&1
 RC=$?
 if [ "$RC" -eq 0 ] && has "$SUPP_LINE"; then
   ok "S20: --transcript naming a file whose SIBLING carries the operator's words verifies the entry → exit 0 (the file is widened to its corpus, as the guard does)"
@@ -647,7 +678,7 @@ else
   ok "S23-pre: node is absent under the stripped PATH (control), so the verifier below cannot run"
   PATH="$GA_P2" AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
   AI_DLC_ESCALATIONS="$ESC_INFORCE" AI_DLC_GATE_METRICS="$GM_BEFORE" \
-    bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" --transcript-dir "$TDIR" > "$SOUT" 2>&1
+    vga "$GATE_TYPE" "$VERDICT" --transcript-dir "$TDIR" > "$SOUT" 2>&1
   RC=$?
   if [ "$RC" -eq 1 ] && has "$BLOCK_X" && has "VALIDATE-GATE-ADJUDICATION: UNVERIFIABLE" \
      && has "verifier-error: 1 in-force" && ! has "no genuine operator turn" && ! has "$SUPP_LINE"; then
@@ -795,7 +826,7 @@ PY
 fw_run() { # fw_run <validator> <escalations> <gate-metrics> <transcript-dir> -> RC, $SOUT
   AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
   AI_DLC_ESCALATIONS="$2" AI_DLC_GATE_METRICS="$3" \
-    bash "$1" "$GATE_TYPE" "$VERDICT" --transcript-dir "$4" > "$SOUT" 2>&1
+    vga_f "$1" "$GATE_TYPE" "$VERDICT" --transcript-dir "$4" > "$SOUT" 2>&1
   RC=$?
 }
 W_ID="$(sed -n 's/^## //p' "$ESC_WAIVER" | head -1)"
@@ -919,7 +950,7 @@ ga_writerow() { # <ts> <stem> <agent_id>
 }
 ga_run() { # -> RC, and GA_OUT carries the message
   GA_OUT="$(AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
-              bash "$VALIDATOR" "$GATE_TYPE" "$VERDICT" 2>&1)"
+              vga "$GATE_TYPE" "$VERDICT" 2>&1)"
   RC=$?
 }
 ga_unbound() { case "$GA_OUT" in *"bound to NO dispatch"*) return 0 ;; esac; return 1; }
@@ -1067,7 +1098,7 @@ CV_ERR="$WORK/coverage.err"
 
 cov_run() { # cov_run <validator> <verdict_path> -> RC, $CV_OUT (stdout), $CV_ERR (stderr)
   AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
-    bash "$1" --coverage "$GATE_TYPE" "$2" > "$CV_OUT" 2> "$CV_ERR"
+    vga_f "$1" --coverage "$GATE_TYPE" "$2" > "$CV_OUT" 2> "$CV_ERR"
   RC=$?
 }
 # EVERY FULL-MODE DRIVE IN THIS SECTION NAMES ALL THREE CHANNELS, for the reason the carve-out
@@ -1078,7 +1109,7 @@ cov_run() { # cov_run <validator> <verdict_path> -> RC, $CV_OUT (stdout), $CV_ER
 cov_full() { # cov_full <verdict_path> -> RC, $CV_OUT, $CV_ERR
   AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
   AI_DLC_ESCALATIONS="$ESC_EMPTY" AI_DLC_GATE_METRICS="$GM_BEFORE" \
-    bash "$VALIDATOR" "$GATE_TYPE" "$1" --transcript-dir "$TDIR" > "$CV_OUT" 2> "$CV_ERR"
+    vga "$GATE_TYPE" "$1" --transcript-dir "$TDIR" > "$CV_OUT" 2> "$CV_ERR"
   RC=$?
 }
 cv_has() { # cv_has <file> <token>
@@ -1337,7 +1368,7 @@ fi
 D4_EV="$HERE/seed.consumer-evidence.tsv"
 D4_OK=1
 [ -s "$D4_EV" ] || { bad "D4-pre: FIXTURE BROKEN -- $D4_EV is missing; the parts would carry no real evidence"; D4_OK=0; }
-d4_expect() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" bash "$1" --expected "$GATE_TYPE" "${@:2}"; }
+d4_expect() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" vga_f "$1" --expected "$GATE_TYPE" "${@:2}"; }
 D4_N=3
 D4_OUT="$WORK/d4.out"
 # Parts are built from the REAL program's slices, so the arms test the merge against what the
@@ -1362,7 +1393,7 @@ for cid in sys.stdin.read().split():
 d4_merge() { # <validator> <dir> <part>... -> RC, $D4_OUT
   local v="$1" dir="$2"; shift 2
   AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
-    bash "$v" --merge "$GATE_TYPE" "$dir/$NONCE.verdict.json" "$@" > "$D4_OUT" 2>&1
+    vga_f "$v" --merge "$GATE_TYPE" "$dir/$NONCE.verdict.json" "$@" > "$D4_OUT" 2>&1
   RC=$?
 }
 d4_refused() { # <dir> <token> -- exit 2, the token, and NO verdict written
@@ -1438,12 +1469,12 @@ if [ "$D4_OK" -eq 1 ]; then
   D4_SA="$(d4_dir)"; D4_SB="$(d4_dir)"
   cp "$PRISTINE" "$D4_SA/$NONCE.verdict.json"; cp "$PRISTINE" "$D4_SB/$NONCE.verdict.json"
   d4_parts "$D4_SB"
-  d4_series() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" bash "$VALIDATOR" --series "$1" 2>&1 | sed "s#$1#<TREE>#g"; }
+  d4_series() { AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" vga --series "$1" 2>&1 | sed "s#$1#<TREE>#g"; }
   D4_OA="$(d4_series "$D4_SA")"; D4_RA=$?
   D4_OB="$(d4_series "$D4_SB")"
   D4_NPART="$(find "$D4_SB" -name '*.part-*.jsonl' | grep -c .)" || D4_NPART=0
   printf '{"x": 1}\n' > "$D4_SB/stray.json"
-  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" bash "$VALIDATOR" --series "$D4_SB" > "$D4_OUT" 2>&1; D4_RC=$?
+  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" vga --series "$D4_SB" > "$D4_OUT" 2>&1; D4_RC=$?
   if [ "$D4_NPART" -eq 3 ] && [ -n "$D4_OA" ] && [ "$D4_OA" = "$D4_OB" ] && [ "$D4_RC" -eq 2 ]; then
     ok "D4-series: --series over a tree holding 3 .part-*.jsonl reads byte-identical to the tree without them, while a stray .json in the same tree exits 2 (the control sees a difference)"
   else
@@ -1460,7 +1491,7 @@ if [ "$D4_OK" -eq 1 ]; then
   # SAME file: a check-part with its own key list prints a different expected-keys list.
   d5_check() { # <validator> <part> -> RC, $D4_OUT
     AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" \
-      bash "$1" --check-part "$2" > "$D4_OUT" 2>&1
+      vga_f "$1" --check-part "$2" > "$D4_OUT" 2>&1
     RC=$?
   }
   d5_body() { # the first REFUSED line of $D4_OUT, mode label stripped
@@ -1763,6 +1794,32 @@ else
 fi
 
 ga_clean_ledgers
+restore
+
+# --- CLI CELLS: the validator started as a program, one per distinct outcome (exit 0, exit 1, exit 2), each compared
+# with the in-process call on the same input: stdout, stderr and exit, byte for byte (cells.decl). Each cell also
+# asserts its own exit code and that the program wrote something, so two runs that both printed nothing cannot read equal.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # eqv <cell-id> <verdict> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when all three agree
+  local id="$1" v="$2"
+  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" vga "$GATE_TYPE" "$v" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" FXCELL="$id" bash "$VALIDATOR" "$GATE_TYPE" "$v" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -1 "$EQ/$1.ip.out")" "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+restore
+if eqv cli-pass "$VERDICT" && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && [ -s "$EQ/cli-pass.cl.out" ]; then
+  ok "cli-pass: the program accepts the complete all-PASS verdict, exit 0 with its summary, exactly as the in-process call does"
+else bad "cli-pass: the program and the in-process call differ, or the outcome is not exit 0 with output ($(eq_twin cli-pass))"; fi
+py_edit 'doc["verdicts"][0]["evidence"] = ""'
+if eqv cli-defect "$VERDICT" && [ "$(cat "$EQ/cli-defect.cl.rc")" = 1 ] && [ -s "$EQ/cli-defect.cl.err" ]; then
+  ok "cli-defect: the program refuses an empty evidence on stderr, exit 1, exactly as the in-process call does"
+else bad "cli-defect: the program and the in-process call differ, or the outcome is not exit 1 on stderr ($(eq_twin cli-defect))"; fi
+restore
+if eqv cli-refuse "$WORK/gate-adjudication/does-not-exist.verdict.json" && [ "$(cat "$EQ/cli-refuse.cl.rc")" = 2 ] && [ -s "$EQ/cli-refuse.cl.err" ]; then
+  ok "cli-refuse: the program refuses an absent verdict on stderr, exit 2, exactly as the in-process call does"
+else bad "cli-refuse: the program and the in-process call differ, or the outcome is not exit 2 on stderr ($(eq_twin cli-refuse))"; fi
 restore
 
 echo

@@ -1,0 +1,6 @@
+# Every arm drives sprint-status.sh in process (ss_main through rt / inproc_run). One cli cell per distinct CLI outcome,
+# each started as FXCELL=<id> bash in eqv() and compared byte for byte (stdout, stderr, exit) with the in-process call on the
+# same read-only input: sprint-id passing, the exit-1 refusal on a canonical with no sprint key, and the no-mode usage refusal.
+cli core/scripts/sprint-status.sh cli-sprint-id
+cli core/scripts/sprint-status.sh cli-sprint-id-refuse
+cli core/scripts/sprint-status.sh cli-usage

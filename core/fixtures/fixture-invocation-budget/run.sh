@@ -5,6 +5,9 @@
 # THE SUBJECT is the invocation budget end to end: hermetic-run.sh's three-variable gate, its BASH_ENV/FXCOUNT_LOG
 # passthrough into the sandboxed fixture, its judge call before the verdict-store write, and the judge's arms.
 # Nothing here re-implements a judge rule: every verdict below is the shipping judge's, read off the runner's output.
+# IN PROCESS (BL-878): the judge and the collector are asked through fiv_f and ccs_f; the programs run only in the cells
+# of cells.decl (cli twins compared byte for byte, the runner and the self-probe end to end, the hook's four judge calls
+# tagged by a8.sh's `bash` function). Arm K7 holds the judge's remaining CLI twins (usage, --gen-rc passing and refused).
 #
 # run.sh itself). The worlds, each
 # built once: ok (declared 3 / 2), mis (declared 2 / 2), nodecl (no invocations.decl), untag and rel (A9, A10).
@@ -50,8 +53,30 @@ WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
 JREL=scripts/validate-fixture-invocations.sh
 RREL=core/scripts/hermetic-run.sh
+CREL=scripts/collect-counted-stores.sh
+# IN PROCESS (BL-878). The judge and the dead-store collector are asked through fiv_f and ccs_f, which hand the file
+# (the subject tree's copy, or a byte-identical or edited copy of it) to inproc_run: it sources the file in a fresh-bash
+# subshell and calls fiv_main / ccs_main there, logged as a pass of the subject tree's copy (the `inproc:` rows). The
+# collector still starts the judge for its store key (a shim tags that start). The programs run only in the
+# cells of cells.decl: cli cells (each compared byte for byte with its in-process twin), e2e cells for the runner, the
+# judge's self-probe and the hook's own calls of the judge, and the relocated judge copy JC that K3 and K5 hand the hook.
+# The helpers are written to a file so k.sh and a8.sh, which run as their own processes, load the same definitions.
+fiv_f() { # fiv_f <file> [args...] -> fiv_main's stdout, stderr and exit
+  local _f="$1"; shift
+  case "$_f" in */validate-fixture-invocations.sh) ;; *) echo "FIXTURE BROKEN: fiv_f was handed $_f, not a validate-fixture-invocations.sh" >&2; return 125 ;; esac
+  ( [ "$_f" = "$FX_JUDGE_LOADED" ] || INPROC_LOADED="$FX_JUDGE_LOADED"; inproc_run "${_f%/*}/validate-fixture-invocations.sh" fiv_main "$@" )
+}
+ccs_f() { # ccs_f <file> [args...] -> ccs_main's stdout, stderr and exit
+  local _f="$1"; shift
+  case "$_f" in */collect-counted-stores.sh) ;; *) echo "FIXTURE BROKEN: ccs_f was handed $_f, not a collect-counted-stores.sh" >&2; return 125 ;; esac
+  ( [ "$_f" = "$FX_COLLECT_LOADED" ] || INPROC_LOADED="$FX_COLLECT_LOADED"; inproc_run "${_f%/*}/collect-counted-stores.sh" ccs_main "$@" )
+}
 
 # --- the subject tree ------------------------------------------------------------------------
 mk_subject() { # <dir>
@@ -65,6 +90,15 @@ mk_subject() { # <dir>
 SUBJ="$WORK/subj"
 mk_subject "$SUBJ" && cmp -s "$ROOT/$JREL" "$SUBJ/$JREL" && cmp -s "$ROOT/$RREL" "$SUBJ/$RREL" \
   || { echo "FIXTURE BROKEN: could not copy the subject tree byte-identical into $SUBJ" >&2; exit 2; }
+# THE SHIM. The validator and the collector start the judge themselves (`bash <judge> --impl-of` / `--store-key`), and no
+# tag can be passed in. For an in-process pass, PATH names a `bash` that puts $SHIM_TAG on a judge start's own command
+# line and runs the real bash; every other start is unchanged. cells.decl declares each tag as an e2e cell.
+SHIM_DIR="$WORK/shim"; mkdir -p "$SHIM_DIR" \
+  && printf '%s\n' '#!/bin/bash' 'case "${1:-}" in */validate-fixture-invocations.sh) [ -z "${SHIM_TAG:-}" ] || export FXCELL="$SHIM_TAG" ;; esac' "exec $(command -v bash) \"\$@\"" > "$SHIM_DIR/bash" \
+  && chmod +x "$SHIM_DIR/bash" || { echo "FIXTURE ERROR: cannot write the bash shim" >&2; exit 2; }
+REAL_BASH="$(command -v bash)"
+export FX_JUDGE_LOADED="$SUBJ/$JREL" FX_COLLECT_LOADED="$SUBJ/$CREL"
+declare -f fiv_f ccs_f > "$WORK/fns.sh" || { echo "FIXTURE ERROR: cannot write the helper file" >&2; exit 2; }
 
 # --- A8's driver: fxcount_arm, extracted from the subject tree's hook by its own boundaries, under a stub `step` ---
 # a8.sh <subject dir> <scratch dir>. Three modes, each in a subshell with the FXCOUNT variables unset and the verdict
@@ -97,6 +131,22 @@ mode() { # <label> <cwd> <POOL_DEPTH_IN>
     export AI_DLC_VERDICT_STORE="$w/store.$1" TMPDIR="$w/tmp.$1"
     POOL_DEPTH_IN="$3"
     step() { shift; "$@"; echo "STEP_RC=$?"; }
+    # The hook starts the judge as a program, four distinct calls, with no way to carry a tag: this function names each
+    # start by its flag (FXCELL on the start's own command line) and runs the real bash otherwise. cells.decl declares
+    # the four ids as e2e cells.
+    bash() {
+      case "${1:-}" in
+        */validate-fixture-invocations.sh)
+          case "${2:-}" in
+            --identity-check) FXCELL=e2e-hook-identity command bash "$@" ;;
+            --gen-rc) FXCELL=e2e-hook-genrc command bash "$@" ;;
+            --key-rows) FXCELL=e2e-hook-keyrows command bash "$@" ;;
+            --store-key) FXCELL=e2e-hook-storekey command bash "$@" ;;
+            *) FXCELL=e2e-hook-other command bash "$@" ;;
+          esac ;;
+        *) command bash "$@" ;;
+      esac
+    }
     . "$w/a8.fn"
     eval "$(grep -v '^NO-SUITE-STEP$' "$w/a8.call")"
     env > "$w/env.$1" ) > "$w/out.$1" 2>&1
@@ -152,31 +202,53 @@ cat > "$WORK/k.sh" <<'K'
 #!/usr/bin/env bash
 set -u
 a="$1"; s="$2"; t="$3"; mkdir -p "$t" || exit 2
+. "$K_ROOT/core/fixtures/lib/inproc.sh" || { echo "k.sh BROKEN: lib/inproc.sh is absent"; exit 2; }
+. "$K_FNS" || { echo "k.sh BROKEN: the helper file is absent"; exit 2; }
 J="$s/scripts/validate-fixture-invocations.sh"
+# eqj <cell id> <ip out> <ip err> <ip rc> <file> <args...>: the CLI twin of a fiv_f call, started as FXCELL=<id> bash;
+# prints 1 when stdout, stderr and exit are byte-identical to the in-process answer, else 0.
+eqj() {
+  local id="$1" o="$2" e="$3" r="$4" f="$5" rc; shift 5
+  FXCELL="$id" bash "$f" "$@" > "$t/$id.o" 2> "$t/$id.e"; rc=$?
+  if cmp -s "$o" "$t/$id.o" && cmp -s "$e" "$t/$id.e" && [ "$r" = "$rc" ]; then printf 1; else printf 0; fi
+}
+hk_bash() { # the hook starts the judge as a program and carries no tag: name the start by its flag
+  case "${1:-}" in
+    */validate-fixture-invocations.sh) FXCELL="e2e-hook-$HK_TAG-${2#--}" command bash "$@" ;;
+    *) command bash "$@" ;;
+  esac
+}
 case "$a" in
 K1)
   R="$t/r"; mkdir -p "$R/core/fixtures/s" "$R/core/fixtures/s-b" "$R/core/fixtures/u" || exit 2
   printf 'exit 0\n' > "$R/core/fixtures/s/run.sh"; printf 'exit 0\n' > "$R/core/fixtures/u/run.sh"
   printf '%s\n' 'HERE="$(cd "$(dirname "$0")" && pwd)"' 'IMPL="$HERE/../s/run.sh"' 'exec bash "$IMPL" --group b' > "$R/core/fixtures/s-b/run.sh"
-  bash "$J" --key-rows "$R" > "$t/k1"; r1=$?
+  fiv_f "$J" --key-rows "$R" > "$t/k1" 2> "$t/k1.e"; r1=$?
+  e1="$(eqj cli-judge-keyrows "$t/k1" "$t/k1.e" "$r1" "$J" --key-rows "$R")"
   row() { awk -F'\t' -v f="$2" '$1 == f { split($2, j, " "); printf "%s:%s:%s", j[2], j[3], j[4] }' "$1"; }
-  printf 'K1 rc=%s s-b=%s u=%s s=%s n=%s\n' "$r1" "$(row "$t/k1" s-b)" "$(row "$t/k1" u)" "$(row "$t/k1" s)" "$(awk 'END { print NR }' "$t/k1")" ;;
+  printf 'K1 rc=%s s-b=%s u=%s s=%s n=%s eq=%s\n' "$r1" "$(row "$t/k1" s-b)" "$(row "$t/k1" u)" "$(row "$t/k1" s)" "$(awk 'END { print NR }' "$t/k1")" "$e1" ;;
 K2)
   for v in a b c; do mkdir -p "$t/$v/scripts" || exit 2; done
-  cp "$J" "$t/a/scripts/x.sh" || exit 2
-  awk '{ print } $0 == "set -u" && !d { print "FXC_K2_EXTRA=1"; d = 1 }' "$J" > "$t/b/scripts/x.sh"
-  awk '{ print } $0 == "set -u" && !d { print "# one comment line the identity drops"; d = 1 }' "$J" > "$t/c/scripts/x.sh"
-  { cmp -s "$J" "$t/b/scripts/x.sh" || cmp -s "$J" "$t/c/scripts/x.sh"; } && { echo "K2 BROKEN: a copy did not change"; exit 2; }
-  for v in a b c; do bash "$t/$v/scripts/x.sh" --identity-check > "$t/$v.out" 2>&1; echo $? > "$t/$v.rc"; done
-  printf 'K2 a=%s b=%s c=%s named=%s\n' "$(cat "$t/a.rc")" "$(cat "$t/b.rc")" "$(cat "$t/c.rc")" \
-    "$(grep -c 'has no `# FXC-IDENTITY 1 <sha> <reason>` row' "$t/b.out")" ;;
+  Jn=validate-fixture-invocations.sh
+  cp "$J" "$t/a/scripts/$Jn" || exit 2
+  awk '{ print } $0 == "set -u" && !d { print "FXC_K2_EXTRA=1"; d = 1 }' "$J" > "$t/b/scripts/$Jn"
+  awk '{ print } $0 == "set -u" && !d { print "# one comment line the identity drops"; d = 1 }' "$J" > "$t/c/scripts/$Jn"
+  { cmp -s "$J" "$t/b/scripts/$Jn" || cmp -s "$J" "$t/c/scripts/$Jn"; } && { echo "K2 BROKEN: a copy did not change"; exit 2; }
+  for v in a b c; do fiv_f "$t/$v/scripts/$Jn" --identity-check > "$t/$v.out" 2>&1; echo $? > "$t/$v.rc"; done
+  # the twins: the real judge (passes, pinned) and the copy with one code line added (refuses, naming FXC-IDENTITY)
+  fiv_f "$J" --identity-check > "$t/ok.ip.o" 2> "$t/ok.ip.e"; rok=$?
+  fiv_f "$t/b/scripts/$Jn" --identity-check > "$t/rf.ip.o" 2> "$t/rf.ip.e"; rrf=$?
+  eok="$(eqj cli-judge-identity-ok "$t/ok.ip.o" "$t/ok.ip.e" "$rok" "$J" --identity-check)"
+  erf="$(eqj cli-judge-identity-refuse "$t/rf.ip.o" "$t/rf.ip.e" "$rrf" "$t/b/scripts/$Jn" --identity-check)"
+  printf 'K2 a=%s b=%s c=%s named=%s eq=%s:%s\n' "$(cat "$t/a.rc")" "$(cat "$t/b.rc")" "$(cat "$t/c.rc")" \
+    "$(grep -c 'has no `# FXC-IDENTITY 1 <sha> <reason>` row' "$t/b.out")" "$eok" "$erf" ;;
 K3)
   sed -n '/^# READSET_VS_BEGIN$/,/^# READSET_VS_END$/p' "$s/.githooks/pre-push" > "$t/vs.sh"
   grep -q '^readset_vs_input() ' "$t/vs.sh" || { echo "K3 BROKEN: no READSET_VS span with readset_vs_input"; exit 2; }
   R="$t/r"; mkdir -p "$R/core/fixtures/probe" && printf 'exit 0\n' > "$R/core/fixtures/probe/run.sh" || exit 2
   printf 'k\tv\n' > "$t/rows"; printf 'probe\t#judge f1 probe listed\n' > "$t/kr"; printf 'other\t#judge f1 other listed\n' > "$t/kr2"
   ( . "$t/vs.sh"; unset FXCOUNT_JUDGE FXCOUNT_KEYROWS; readset_vs_input probe "r f1" "$t/rows" "$R" ) > "$t/u" 2>/dev/null; ru=$?
-  ( . "$t/vs.sh"; unset FXCOUNT_KEYROWS; FXCOUNT_JUDGE="$J"; readset_vs_input probe "r f1" "$t/rows" "$R" ) > "$t/c" 2>/dev/null; rc=$?
+  ( HK_TAG=k3; bash() { hk_bash "$@"; }; . "$t/vs.sh"; unset FXCOUNT_KEYROWS; FXCOUNT_JUDGE="$J"; readset_vs_input probe "r f1" "$t/rows" "$R" ) > "$t/c" 2>/dev/null; rc=$?
   ( . "$t/vs.sh"; FXCOUNT_JUDGE="$J"; FXCOUNT_KEYROWS="$t/kr"; readset_vs_input probe "r f1" "$t/rows" "$R" ) > "$t/k" 2>/dev/null; rk=$?
   ( . "$t/vs.sh"; FXCOUNT_JUDGE="$J"; FXCOUNT_KEYROWS="$t/kr2"; readset_vs_input probe "r f1" "$t/rows" "$R" ) > /dev/null 2>&1; rm2=$?
   l5() { sed -n 5p "$1" | tr '\t' '|'; }
@@ -184,8 +256,13 @@ K3)
 K4)
   printf 's-b\t#judge f1 s unlisted\nu\t#judge f1 u unlisted\nx\t#judge f1 x listed\nv\t#judge f2 v unlisted\n' > "$t/kr"
   printf '# old\ns\tS1 seeded\nx\tS1 seeded\n' > "$t/old"
-  o1="$(bash "$J" --legacy-ok "$t/old" "$t/kr" f1)"; r1=$?; o2="$(bash "$J" --legacy-ok "$t/old" "$t/kr" f2)"; r2=$?
-  printf 'K4 rc=%s/%s f1=%s f2=%s\n' "$r1" "$r2" "$(printf '%s\n' "$o1" | tr '\n' ',')" "$(printf '%s\n' "$o2" | tr '\n' ',')" ;;
+  o1="$(fiv_f "$J" --legacy-ok "$t/old" "$t/kr" f1)"; r1=$?; o2="$(fiv_f "$J" --legacy-ok "$t/old" "$t/kr" f2)"; r2=$?
+  # the twins: the passing call (f1) and the exit-2 usage refusal (a wrong argument count)
+  fiv_f "$J" --legacy-ok "$t/old" "$t/kr" f1 > "$t/lp.o" 2> "$t/lp.e"; rlp=$?
+  fiv_f "$J" --legacy-ok "$t/old" > "$t/lu.o" 2> "$t/lu.e"; rlu=$?
+  elp="$(eqj cli-judge-legacy "$t/lp.o" "$t/lp.e" "$rlp" "$J" --legacy-ok "$t/old" "$t/kr" f1)"
+  elu="$(eqj cli-judge-legacy-usage "$t/lu.o" "$t/lu.e" "$rlu" "$J" --legacy-ok "$t/old")"
+  printf 'K4 rc=%s/%s f1=%s f2=%s eq=%s:%s refuse=%s\n' "$r1" "$r2" "$(printf '%s\n' "$o1" | tr '\n' ',')" "$(printf '%s\n' "$o2" | tr '\n' ',')" "$elp" "$elu" "$rlu" ;;
 K5)
   W="$t/w"; mkdir -p "$W/.githooks" "$W/core/scripts" "$W/core/fixtures/decl" "$W/src" "$W/scripts" || exit 2
   cp "$s/.githooks/pre-push" "$W/.githooks/" && cp "$s/core/scripts/hermetic-run.sh" "$s/core/scripts/core-paths.sh" "$W/core/scripts/" \
@@ -195,7 +272,7 @@ K5)
   printf '!src/a.sh\n' > "$W/core/fixtures/decl/inputs.decl"; printf '1 *\n0 src/a.sh\n' > "$W/core/fixtures/decl/invocations.decl"
   ( cd "$W" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm k5 ) > /dev/null 2>&1 || exit 2
   root="$(cd "$W" && git rev-list --max-parents=0 HEAD)"
-  env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE AI_DLC_VERDICT_STORE="$t/L" bash "$W/core/scripts/hermetic-run.sh" --root "$W" decl > "$t/hr.l" 2>&1; rl=$?
+  env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE AI_DLC_VERDICT_STORE="$t/L" FXCELL=e2e-hr-K5-legacy bash "$W/core/scripts/hermetic-run.sh" --root "$W" decl > "$t/hr.l" 2>&1; rl=$?
   nl="$(/usr/bin/find "$t/L" -type f | wc -l | tr -d ' ')"
   git clone -q "file://$W" "$t/B" > /dev/null 2>&1 || exit 2
   # The counted store has NO directory for this project until the counted write below, as on the first push after
@@ -203,7 +280,7 @@ K5)
   [ ! -e "$t/S/$root" ] || { echo "K5 BROKEN: the counted store exists before any counted write"; exit 2; }
   . "$K_ROOT/core/fixtures/lib/pool-span.sh" || { echo "K5 BROKEN: cannot source lib/pool-span.sh"; exit 2; }
   pool_span "$s/.githooks/pre-push" "$t/pool.sh" FIXTURE_POOL || { echo "K5 BROKEN: no FIXTURE_POOL span"; exit 2; }
-  printf '%s\n' '. "$1" 2>/dev/null' 'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$2/list"' \
+  printf '%s\n' 'bash() { case "${1:-}" in */validate-fixture-invocations.sh) FXCELL="e2e-hook-k5-$DEC_TAG-${2#--}" command bash "$@" ;; *) command bash "$@" ;; esac; }' '. "$1" 2>/dev/null' 'for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf "%s\n" "$d"; done > "$2/list"' \
     'apply_readset_skip "$2/list" "$2" > "$2/ann" 2>&1' > "$t/drv.sh"
   printf 'decl\t#judge f1 decl unlisted\n' > "$t/kr.same"; printf 'decl\t#judge f1 decl listed\n' > "$t/kr.moved"
   printf 'decl\n' > "$t/lok.in"; printf 'other\n' > "$t/lok.out"
@@ -213,12 +290,12 @@ K5)
       unset FXCOUNT_KEYROWS FXCOUNT_LEGACY_STORE FXCOUNT_LEGACY_OK
       [ "$2" = - ] || { FXCOUNT_KEYROWS="$2"; export FXCOUNT_KEYROWS; }
       [ "$3" = - ] || { FXCOUNT_LEGACY_STORE="$t/L"; FXCOUNT_LEGACY_OK="$3"; export FXCOUNT_LEGACY_STORE FXCOUNT_LEGACY_OK; }
-      FXCOUNT_JUDGE="$J" AI_DLC_VERDICT_STORE="$t/S" AI_DLC_READSET_LIVE_TRACE=0 bash "$t/drv.sh" "$t/pool.sh" "$t/d.$1" ) > "$t/d.$1.log" 2>&1
+      FXCOUNT_JUDGE="$J" DEC_TAG="$1" AI_DLC_VERDICT_STORE="$t/S" AI_DLC_READSET_LIVE_TRACE=0 bash "$t/drv.sh" "$t/pool.sh" "$t/d.$1" ) > "$t/d.$1.log" 2>&1
     awk -F'\t' '$1 == "decl" && ($2 == "run" || $2 == "skip") { printf "%s", $2 }' "$t/d.$1/.kdec" 2>/dev/null
   }
   da="$(dec a "$t/kr.same" "$t/lok.in")"; db="$(dec b "$t/kr.same" "$t/lok.out")"
-  rcf="$(bash "$J" --gen-rc "$t/rc")" && mkdir -p "$t/fxd" || exit 2
-  env FXCOUNT_RC="$rcf" FXCOUNT_DIR="$t/fxd" FXCOUNT_JUDGE="$J" AI_DLC_VERDICT_STORE="$t/S" bash "$W/core/scripts/hermetic-run.sh" --root "$W" decl > "$t/hr.c" 2>&1; rw=$?
+  rcf="$(fiv_f "$J" --gen-rc "$t/rc")" && mkdir -p "$t/fxd" || exit 2
+  env FXCOUNT_RC="$rcf" FXCOUNT_DIR="$t/fxd" FXCOUNT_JUDGE="$J" AI_DLC_VERDICT_STORE="$t/S" FXCELL=e2e-hr-K5-counted bash "$W/core/scripts/hermetic-run.sh" --root "$W" decl > "$t/hr.c" 2>&1; rw=$?
   jl="$(cat "$t/S/$root"/* 2>/dev/null | grep -cx '#judge f1 decl unlisted')"
   dc="$(dec c - -)"; dd="$(dec d "$t/kr.moved" -)"
   printf 'K5 rl=%s nl=%s a=%s b=%s rw=%s jl=%s c=%s d=%s\n' "$rl" "$nl" "$da" "$db" "$rw" "$jl" "$dc" "$dd" ;;
@@ -228,10 +305,32 @@ K6)
     mkdir -p "$B/$d" && printf 'x\n' > "$B/$d/e1" || exit 2
   done
   printf 'x\n' > "$B/counted-0123456789ab/r/.tmp.1"
-  ( cd "$s" && bash scripts/collect-counted-stores.sh --base "$B" ) > "$t/dry" 2>&1; rd=$?
-  ( cd "$s" && bash scripts/collect-counted-stores.sh --apply --base "$B" ) > "$t/app" 2>&1; ra=$?
-  printf 'K6 dry=%s:%s apply=%s:%s left=%s gone=%s\n' "$rd" "$(grep '^dead: ' "$t/dry" | tr '\n' ';')" "$ra" "$(grep '^removed: ' "$t/app" | tr '\n' ';')" \
-    "$(/usr/bin/find "$B" -type f | wc -l | tr -d ' ')" "$([ -e "$B/counted-0123456789ab" ] && echo 0 || echo 1)" ;;
+  C="$s/scripts/collect-counted-stores.sh"
+  cp -R "$B" "$t/base2" || exit 2
+  ( cd "$s" && PATH="$K_SHIM:$PATH" SHIM_TAG=e2e-collect-storekey-dry ccs_f "$C" --base "$B" ) > "$t/dry" 2>&1; rd=$?
+  ( cd "$s" && PATH="$K_SHIM:$PATH" SHIM_TAG=e2e-collect-storekey-apply ccs_f "$C" --apply --base "$B" ) > "$t/app" 2>&1; ra=$?
+  # the twins, one per distinct CLI outcome (dry run, apply, the exit-2 usage refusal), each on a copy of the base the
+  # in-process call read; the apply twin must also leave the same tree
+  ( cd "$s" && ccs_f "$C" --bogus ) > "$t/us.ip" 2>&1; rus=$?
+  ( cd "$s" && FXCELL=cli-collect-dry bash "$C" --base "$t/base2" ) > "$t/dry.cl" 2>&1; rdc=$?
+  ( cd "$s" && FXCELL=cli-collect-apply bash "$C" --apply --base "$t/base2" ) > "$t/app.cl" 2>&1; rac=$?
+  ( cd "$s" && FXCELL=cli-collect-usage bash "$C" --bogus ) > "$t/us.cl" 2>&1; ruc=$?
+  # the dry twin read the intact copy only if it ran before the apply twin; the in-process dry run read B intact too
+  ecd=0; ecd="$(cmp -s "$t/dry" "$t/dry.cl" && [ "$rd" = "$rdc" ] && echo 1 || echo 0)"
+  eca="$(cmp -s "$t/app" "$t/app.cl" && [ "$ra" = "$rac" ] && diff -r "$B" "$t/base2" > /dev/null && echo 1 || echo 0)"
+  ecu="$(cmp -s "$t/us.ip" "$t/us.cl" && [ "$rus" = "$ruc" ] && [ "$rus" = 2 ] && echo 1 || echo 0)"
+  printf 'K6 dry=%s:%s apply=%s:%s left=%s gone=%s eq=%s:%s:%s\n' "$rd" "$(grep '^dead: ' "$t/dry" | tr '\n' ';')" "$ra" "$(grep '^removed: ' "$t/app" | tr '\n' ';')" \
+    "$(/usr/bin/find "$B" -type f | wc -l | tr -d ' ')" "$([ -e "$B/counted-0123456789ab" ] && echo 0 || echo 1)" "$ecd" "$eca" "$ecu" ;;
+K7)
+  # the judge's remaining CLI outcomes this fixture reaches: the usage refusal (no argument), and --gen-rc passing and
+  # refused. Both --gen-rc twins write the same directory, so the printed path is the same.
+  fiv_f "$J" > "$t/u.ip.o" 2> "$t/u.ip.e"; ru=$?
+  fiv_f "$J" --gen-rc "$t/rc7" > "$t/g.ip.o" 2> "$t/g.ip.e"; rg=$?
+  fiv_f "$J" --gen-rc > "$t/gu.ip.o" 2> "$t/gu.ip.e"; rgu=$?
+  eu="$(eqj cli-judge-usage "$t/u.ip.o" "$t/u.ip.e" "$ru" "$J")"
+  eg="$(eqj cli-judge-genrc "$t/g.ip.o" "$t/g.ip.e" "$rg" "$J" --gen-rc "$t/rc7")"
+  egu="$(eqj cli-judge-genrc-usage "$t/gu.ip.o" "$t/gu.ip.e" "$rgu" "$J" --gen-rc)"
+  printf 'K7 usage=%s genrc=%s genrc-usage=%s rc=%s/%s/%s rcfile=%s\n' "$eu" "$eg" "$egu" "$ru" "$rg" "$rgu" "$([ -s "$t/rc7/fxcount.rc" ] && echo 1 || echo 0)" ;;
 *) echo "k.sh: unknown arm $a"; exit 2 ;;
 esac
 K
@@ -268,23 +367,23 @@ drive() {
   local t="$1" s="$3" w rcf fd="$WORK/fxd.$1" st="$WORK/store.$1"
   mkdir -p "$fd" "$st" || return 1
   if [ "$2" = SP ]; then
-    bash "$s/$JREL" --self-probe > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0
+    FXCELL=e2e-judge-selfprobe bash "$s/$JREL" --self-probe > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0
   fi
   if [ "$2" = A8 ]; then
     bash "$WORK/a8.sh" "$s" "$WORK/a8.$t" > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0
   fi
-  case "$2" in K[1-6])
-    K_ROOT="$ROOT" bash "$WORK/k.sh" "$2" "$s" "$WORK/k.$t" > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0 ;;
+  case "$2" in K[1-7])
+    K_ROOT="$ROOT" K_SHIM="$SHIM_DIR" K_FNS="$WORK/fns.sh" bash "$WORK/k.sh" "$2" "$s" "$WORK/k.$t" > "$WORK/c.$t.out" 2>&1; echo $? > "$WORK/c.$t.rc"; return 0 ;;
   esac
   local fx=probe
   case "$2" in A1) w=ok ;; A2|A3|A6) w=mis ;; A5) w=nodecl ;; A9) w=untag ;; A10) w=rel ;; esac
-  rcf="$(bash "$s/$JREL" --gen-rc "$WORK/rc.$t")" || return 1
+  rcf="$(fiv_f "$s/$JREL" --gen-rc "$WORK/rc.$t")" || return 1
   case "$2" in
-    A3) env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE AI_DLC_VERDICT_STORE="$st" \
+    A3) env -u FXCOUNT_RC -u FXCOUNT_DIR -u FXCOUNT_JUDGE AI_DLC_VERDICT_STORE="$st" FXCELL="e2e-hr-$2" \
           bash "$s/$RREL" --root "$WORK/w-$w" "$fx" ;;
-    A6) env -u FXCOUNT_JUDGE FXCOUNT_RC="$rcf" FXCOUNT_DIR="$fd" AI_DLC_VERDICT_STORE="$st" \
+    A6) env -u FXCOUNT_JUDGE FXCOUNT_RC="$rcf" FXCOUNT_DIR="$fd" AI_DLC_VERDICT_STORE="$st" FXCELL="e2e-hr-$2" \
           bash "$s/$RREL" --root "$WORK/w-$w" "$fx" ;;
-    *)  env FXCOUNT_RC="$rcf" FXCOUNT_DIR="$fd" FXCOUNT_JUDGE="$s/$JREL" AI_DLC_VERDICT_STORE="$st" \
+    *)  env FXCOUNT_RC="$rcf" FXCOUNT_DIR="$fd" FXCOUNT_JUDGE="$s/$JREL" AI_DLC_VERDICT_STORE="$st" FXCELL="e2e-hr-$2" \
           bash "$s/$RREL" --root "$WORK/w-$w" "$fx" ;;
   esac > "$WORK/c.$t.out" 2>&1
   echo $? > "$WORK/c.$t.rc"
@@ -309,16 +408,17 @@ verdict() {
     SP) rcis "$t" 0 && has "$t" 'self-probe: 103 cells, all green' ;;
     A8) rcis "$t" 0 && has "$t" 'A8 CHECK-OK call:' && has "$t" 'A8 CHECK-OK a-armed:' && has "$t" 'A8 CHECK-OK b-judge-absent:' \
           && has "$t" 'A8 CHECK-OK c-nested:' && ! has "$t" 'A8 CHECK-BAD' ;;
-    K1) rcis "$t" 0 && has "$t" 'K1 rc=0 s-b=f1:s:unlisted u=f1:u:unlisted s=f1:s:unlisted n=3' ;;
-    K2) rcis "$t" 0 && has "$t" 'K2 a=0 b=1 c=0 named=1' ;;
+    K1) rcis "$t" 0 && has "$t" 'K1 rc=0 s-b=f1:s:unlisted u=f1:u:unlisted s=f1:s:unlisted n=3 eq=1' ;;
+    K2) rcis "$t" 0 && has "$t" 'K2 a=0 b=1 c=0 named=1 eq=1:1' ;;
     K3) rcis "$t" 0 && has "$t" 'K3 unc=0:0:k|v cnt=0:#judge f1 probe unlisted tab=0:#judge f1 probe listed miss=1' ;;
-    K4) rcis "$t" 0 && has "$t" 'K4 rc=0/0 f1=u,x, f2=v,' ;;
+    K4) rcis "$t" 0 && has "$t" 'K4 rc=0/0 f1=u,x, f2=v, eq=1:1 refuse=2' ;;
     K5) rcis "$t" 0 && has "$t" 'K5 rl=0 nl=1 a=skip b=run rw=0 jl=1 c=skip d=run' ;;
-    K6) rcis "$t" 0 && has "$t" 'K6 dry=0:dead: counted-0123456789ab (2 file(s)); apply=0:removed: counted-0123456789ab (2 file(s)); left=6 gone=1' ;;
+    K6) rcis "$t" 0 && has "$t" 'K6 dry=0:dead: counted-0123456789ab (2 file(s)); apply=0:removed: counted-0123456789ab (2 file(s)); left=6 gone=1 eq=1:1:1' ;;
+    K7) rcis "$t" 0 && has "$t" 'K7 usage=1 genrc=1 genrc-usage=1 rc=2/0/2 rcfile=1' ;;
     *) return 1 ;;
   esac
 }
-ARMS="A1 A2 A3 A5 A6 A8 A9 A10 SP K1 K2 K3 K4 K5 K6"
+ARMS="A1 A2 A3 A5 A6 A8 A9 A10 SP K1 K2 K3 K4 K5 K6 K7"
 
 # --- the unmutated arms -----------------------------------------------------------------------------------------
 for a in $ARMS; do drive "base.$a" "$a" "$SUBJ" & done; wait

@@ -1663,7 +1663,10 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    `model_window_needed=yes`, reproduce its `ask:` lines verbatim as an operator
    question (no `AI_DLC_MODEL_<FAMILY>_WINDOW` is declared in the settings `env`
    block; the operator adds the declarations themselves, and the reconcile never
-   writes `env`, so nothing is passed at apply) — a
+   writes `env`, so nothing is passed at apply) — when it reports
+   `suite_admission_probe=none`, reproduce its `optional:` lines verbatim as an
+   optional setting the operator may add themselves (never required, never
+   written by the reconcile) — a
    **deletions list**: every
    `UPSTREAM-DELETED` **and `ORPHANED-RELOCATED`** path (upstream removed the file, or
    moved where it ships it and the stale copy at the old path is provably ours — for an

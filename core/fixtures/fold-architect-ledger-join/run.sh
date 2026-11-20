@@ -70,6 +70,33 @@ if ! grep -q -- '--fold-architect)' "$VSL"; then
   echo "FIXTURE BROKEN: core/scripts/validate-spawn-ledger.sh has no --fold-architect mode" >&2
   exit 1
 fi
+# THE SUBJECT IS DRIVEN IN PROCESS (BL-878): vsl_f hands validate-spawn-ledger.sh to lib/inproc.sh's inproc_run, which
+# runs vsl_main in a subshell made to look like a fresh `bash <subject>`. A present subject with neither the
+# `vsl_main() {` line nor the column-0 source guard predates the wrap, and sourcing it would run its whole body: SKIP
+# and exit 0 on a consumer (FIXTURE BROKEN in the distribution), never an ok. Exactly one half is a respelled subject
+# this fixture cannot drive, which FAILS. An unreadable subject is FIXTURE ERROR. This gate runs before any source
+# of the subject.
+# shellcheck source=/dev/null
+. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+vsl_halves() { # vsl_halves <file> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF 'vsl_main() {' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_vsl_h="$(vsl_halves "$VSL")" || exit 2
+case "$_vsl_h" in
+  11) : ;;
+  00) echo "SKIP: fold-architect-ledger-join: $VSL predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$VSL carries one half of the in-process wrap (vsl_main line, column-0 source guard: $_vsl_h) -- a respelled subject this fixture cannot drive"
+     report_end fold-architect-ledger-join ;;
+esac
 # Reached only when the subject is present AND carries the mode, so the degenerate exits above cannot satisfy the
 # REQUIRED input `!core/scripts/validate-spawn-ledger.sh` in inputs.decl.
 echo "HERMETIC-CONSUMED core/scripts/validate-spawn-ledger.sh"
@@ -79,10 +106,13 @@ WORK="$(cd "$WORK" && pwd)"
 case "$WORK" in /tmp/*|/private/*|/var/folders/*) trap 'rm -rf "$WORK"' EXIT ;; esac
 
 stood=0
-# shellcheck source=/dev/null
-. "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 sd()  { printf '  --    %s\n' "$1"; stood=$((stood+1)); }
 . "$HERE/../lib/settled-net.sh" || { echo "FIXTURE ERROR: lib/settled-net.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+inproc_load "$VSL" || { echo "FIXTURE ERROR: cannot load $VSL" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/fixtures/lib/settled-net.sh"
 
 # --- the real inputs, and the controls that they can express the defect --------------------
@@ -191,9 +221,12 @@ rel() { printf '%s\n' "${1#"$W"/}"; }  # <absolute path inside the current world
 # EVERY DRIVE RUNS FROM THE WORLD ROOT. The subject reads `_bmad-output/pipeline-snapshot.md`
 # relative to the cwd, so a drive from the caller's cwd would read a consumer's OWN snapshot when
 # this fixture runs there, and every no-snapshot arm would then assert about that sprint.
+# vsl_f <args>: vsl_main's stdout, stderr and exit, one in-process pass of $VSL (the operand is a literal tail: the
+# fixture's `inproc:` row counts it).
+vsl_f() { ( inproc_run "${VSL%/*}/validate-spawn-ledger.sh" vsl_main "$@" ); }
 drive() {  # args to the subject; sets RC, FIRST, NPASS, OUTF. DRIVE_PATH -> PATH override
   OUTF="$WORK/out.$WN.$RANDOM"
-  ( cd "$W" && PATH="${DRIVE_PATH:-$PATH}" bash "$VSL" "$@" ) > "$OUTF" 2>&1; RC=$?
+  ( cd "$W" && export PATH="${DRIVE_PATH:-$PATH}" && vsl_f "$@" ) > "$OUTF" 2>&1; RC=$?
   FIRST="$(sed -n 1p "$OUTF")"
   NPASS="$(grep -c '^PASS:' "$OUTF")" || NPASS=0
 }
@@ -315,7 +348,7 @@ bash "$VPB" "$SLOT/$RES" --require-skill bmad-review-adversarial-general >/dev/n
 if [ "$pbrc" -eq 0 ]; then ok "[A-ii-pb-old] an old-name pin accepts the current bmad-review + lens: adversarial residue"
 else bad "[A-ii-pb-old] an old-name pin accepts the current bmad-review + lens: adversarial residue -- rc=$pbrc"; fi
 # Default ledger path resolves against the CWD the gate runs in, so drive it from the world root.
-( cd "$W" && bash "$VSL" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" $VARF ) > "$WORK/dl.out" 2>&1; RC=$?
+( cd "$W" && vsl_f --fold-architect "$SLOT/$RES" "$SLOT/$ONE" $VARF ) > "$WORK/dl.out" 2>&1; RC=$?
 OUTF="$WORK/dl.out"; FIRST="$(sed -n 1p "$OUTF")"; NPASS=0
 expect A-ledger-default 0 "PASS: $ONE" "" 0 "no --ledger: _bmad-output/spawn-ledger.jsonl under the cwd is read"
 
@@ -539,7 +572,7 @@ if [ "$ST_BASE" = 002 ]; then ok "[NET-cells] the cut net reads frozen-running 0
 else bad "[NET-cells] the cut net read '$ST_BASE', want 002"; fi
 for flag in --ledger --sprint --settings --probe --variant --route --snapshot; do
   o="$WORK/d6${flag}.out"; s="$WORK/d6${flag}.rc"
-  d6_metered "$o" "$s" bash "$VSL" --fold-architect "$WORK/x/fold-architecture-z.md" "$WORK/x/bug-fix-oneshot-z.md" "$flag"
+  d6_metered "$o" "$s" vsl_f --fold-architect "$WORK/x/fold-architecture-z.md" "$WORK/x/bug-fix-oneshot-z.md" "$flag"
   if [ "$?" = 2 ]; then
     echo "FIXTURE BROKEN: [D6$flag] the subject's tree settled (every process blocked, nothing pending, nothing changing) without exiting; no verdict on the parse is readable" >&2
     exit 2
@@ -664,7 +697,10 @@ run_cmds() {
     line="$(printf '%s\n' "$line" | sed -e "s|^scripts/ai-dlc/|$SD/|" -e "s|<story-file>|$XSTORY|g" \
       -e "s|<residue>|$XRES|g" -e "s|<one-shot>|$XONE|g" -e "s|s<N>|s$XN|g" -e "s|<slug>|$SLUG|g")"
     set -f; set -- $line; set +f
-    ( cd "$XW" && bash "$@" ) > "$WORK/cmd.$i.out" 2>&1; w=$?
+    case "$1" in
+      */validate-spawn-ledger.sh) ( cd "$XW" && shift && vsl_f "$@" ) > "$WORK/cmd.$i.out" 2>&1; w=$? ;;
+      *) ( cd "$XW" && bash "$@" ) > "$WORK/cmd.$i.out" 2>&1; w=$? ;;
+    esac
     [ "$w" -gt "$CRC" ] && CRC=$w
   done < "$1"
   CN=$i
@@ -877,13 +913,39 @@ printf '%s\n' '#!/bin/bash' 'for a in "$@"; do case "$a" in *pipeline-snapshot.m
 "$W/shim/awk" 'BEGIN { exit 0 }' /dev/null || { echo "FIXTURE BROKEN: the awk shim does not pass through" >&2; exit 2; }
 SHIM_PATH="$W/shim:$PATH"
 OUTF="$WORK/out.$WN.$RANDOM"
-( cd "$W" && PATH="$SHIM_PATH" bash "$VSL" --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --route "$ROUTE" ) > "$OUTF" 2>&1; RC=$?
+( cd "$W" && export PATH="$SHIM_PATH" && vsl_f --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --route "$ROUTE" ) > "$OUTF" 2>&1; RC=$?
 FIRST="$(sed -n 1p "$OUTF")"; NPASS="$(grep -c '^PASS:' "$OUTF")" || NPASS=0
 expect Dc-reader-dies 2 "FAIL: could not read the pipeline snapshot" "reader rc=137" 1 "the snapshot reader terminated mid-read -> exit 2 naming its status, never NOT-OWED from sprint-status"
 drive --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" --route "$ROUTE"
 expect Dc-reader-lives 2 "FAIL: variant disagreement: snapshot says carry-over, sprint-status says bug" "" 1 "the same world with the real awk reaches the disagreement check"
 
+# --- the CLI cells (cells.decl): one per distinct outcome, byte-identical to the in-process call -----------------------
+# Each is the program started as FXCELL=<id> bash "$VSL" in the world root, beside the same arguments through vsl_f.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+eqv() { # eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when all three agree (cwd is the current world)
+  local id="$1"; shift
+  ( cd "$W" && vsl_f "$@" ) > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$W" && FXCELL="$id" bash "$VSL" "$@" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -1 "$EQ/$1.ip.out")" "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+mkworld 313; oneshot "$SLOT/$ONE"; residue "$SLOT/$RES" "$ARCH_AFTER" "$STORY"; stamp "$STORY" "$(rel "$SLOT/$ONE")"
+if eqv cli-fold-pass --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF \
+   && [ "$(cat "$EQ/cli-fold-pass.cl.rc")" = 0 ] && grep -q "^PASS: $ONE -> $RES" "$EQ/cli-fold-pass.cl.out"; then
+  ok "[cli-fold-pass] the program PASSES the architect-after-one-shot world with exit 0 and a PASS line, exactly as the in-process call does"
+else bad "[cli-fold-pass] the program and the in-process call differ, or the outcome is not a PASS ($(eq_twin cli-fold-pass))"; fi
+rm -f "$SLOT/$RES"
+if eqv cli-fold-fail --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/spawn-ledger.jsonl" $VARF \
+   && [ "$(cat "$EQ/cli-fold-fail.cl.rc")" = 1 ] && grep -q '^FAIL: no residue' "$EQ/cli-fold-fail.cl.err"; then
+  ok "[cli-fold-fail] the program FAILS the no-residue world with exit 1 and a FAIL line, exactly as the in-process call does"
+else bad "[cli-fold-fail] the program and the in-process call differ, or the outcome is not a no-residue FAIL ($(eq_twin cli-fold-fail))"; fi
+if eqv cli-fold-refuse --fold-architect "$SLOT/$RES" "$SLOT/$ONE" --ledger "$W/_bmad-output/no-such-ledger.jsonl" $VARF \
+   && [ "$(cat "$EQ/cli-fold-refuse.cl.rc")" = 2 ] && grep -q '^FAIL: no spawn ledger at' "$EQ/cli-fold-refuse.cl.err"; then
+  ok "[cli-fold-refuse] the program refuses an absent ledger with exit 2, exactly as the in-process call does"
+else bad "[cli-fold-refuse] the program and the in-process call differ, or the outcome is not the exit-2 refusal ($(eq_twin cli-fold-refuse))"; fi
+
 # --- verdict ---------------------------------------------------------------------------------
-EXPECTED_ARMS=76
+EXPECTED_ARMS=79
 echo "fold-architect-ledger-join: $stood stood down"
 report_end fold-architect-ledger-join "$((EXPECTED_ARMS - stood))"

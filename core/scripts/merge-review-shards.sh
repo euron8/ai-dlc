@@ -1870,8 +1870,8 @@ done
 if [ -n "$RD_NAME" ]; then
   [ -z "$SERIAL$SDIR$GATE$OUT$CHECK$STORY_F$R_BASE$R_FROZEN$RV" ] && [ "$LEAD" = 0 ] || refuse "--record-dispatch takes no other argument; $USAGE"
   rd_sha_="$(git --no-replace-objects rev-parse -q --verify "${RD_SHA}^{commit}" 2> /dev/null < /dev/null)" \
-    || refuse "--record-dispatch: $RD_SHA is not a commit in $(pwd); pass the sprint-branch HEAD the dev worktree was cut from"
-  rd_f_="$(lead_record_path . "$RD_NAME")" || refuse "--record-dispatch: '$RD_NAME' is not s<N>-<story-index>, or $(pwd) is not in a git repository"
+    || refuse "--record-dispatch: $RD_SHA is not a commit in $(pwd); pass the commit the dev worktree was cut from: the sprint-branch HEAD, or the predecessor story's dev-branch tip (a branch name or sha) when this story depends on its content"
+  rd_f_="$(lead_record_path . "$RD_NAME")" || refuse "--record-dispatch: '$RD_NAME' is not s<N>-<story-index> (the index joins its parts with '-', never '.': story 3.1 of sprint 323 is s323-3-1), or $(pwd) is not in a git repository"
   if rd_v_="$(lead_record_get . "$RD_NAME" dispatch)"; then
     printf 'RECORD-KEPT: %s dispatch: %s\n' "$rd_f_" "$rd_v_"; exit 0
   fi

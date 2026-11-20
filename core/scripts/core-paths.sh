@@ -141,6 +141,7 @@ to_consumer_glob() {  # <manifest entry> -> consumer-relative glob
 }
 # --- END SHARED WITH hooks/ai-dlc-core-guard.sh -------------------------------
 
+cpth_main() {
 # MODE_DISPATCH_BEGIN
 MODE="${1:-}"
 case "$MODE" in
@@ -536,7 +537,7 @@ EOT
   # for is a literal string in this file. I53 joins that spelling to the modes the delegate
   # dispatches, and a call assembled out of a variable is one the join cannot see -- which
   # would leave the invariant guarding the prose that describes this call and not the call.
-  ESC_DIR="$(cd "$(dirname "$0")" && pwd)"
+  ESC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   AUTH_OUT=""
   if [ ! -f "$ESC_DIR/validate-escalation-resolution.sh" ]; then
     echo "core-paths: cannot classify the range -- $ESC_DIR/validate-escalation-resolution.sh is" >&2
@@ -586,3 +587,6 @@ EOF
 
 echo "not-core: ${REL} (no core-manifest glob matches; manifest read from ${USED})"
 exit 1
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+cpth_main "$@"

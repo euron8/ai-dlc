@@ -78,6 +78,7 @@ SCHEMA="$(pick "$HERE/../../schemas/pause-routing.json" \
                "$HERE/../../../.claude/schemas/pause-routing.json")"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1"; echo ""; echo "handoff-completion-assertion: FIXTURE BROKEN" >&2; exit 2; }
 
 for _f in ai-dlc-continue.sh ai-dlc-recover.sh ai-dlc-handoff-pending.sh; do
@@ -91,6 +92,61 @@ echo "HERMETIC-CONSUMED core/hooks/ai-dlc-continue.sh"
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-recover.sh"
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-handoff-pending.sh"
 echo "HERMETIC-CONSUMED core/schemas/pause-routing.json"
+
+# IN PROCESS (BL-878). ai-dlc-continue.sh is wrapped (hkcont_main behind the column-0 source guard); ai-dlc-recover.sh is
+# not, and is sourced whole in a subshell of its own, where its `exit` ends only that subshell. Both are asked through the
+# `bash` shim below, which every `bash <hook>` start of this file reaches; any other start (the entry hook, the gate, the
+# seed, a sibling a hook starts itself) is real. A core fixture ships ahead of its subject: a continue hook with neither the
+# `hkcont_main() {` line nor the column-0 source guard predates the wrap and SKIPs (FIXTURE BROKEN in the distribution);
+# exactly one half FAILs; an unreadable subject is FIXTURE ERROR.
+hca_halves() { # <file> <entry> -> "<def><guard>"
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_h="$(hca_halves "$HOOKS_DIR/ai-dlc-continue.sh" hkcont_main)" || exit 2
+case "$_h" in
+  11) : ;;
+  00) echo "SKIP: subject predates the in-process wrap: $HOOKS_DIR/ai-dlc-continue.sh"; fx_skip_exit "$HERE" ;;
+  *) bad "$HOOKS_DIR/ai-dlc-continue.sh carries one half of the in-process wrap (hkcont_main line, column-0 source guard: $_h) -- a respelled subject this fixture cannot drive"
+     report_end handoff-completion-assertion ;;
+esac
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+export FX_CONT="$HOOKS_DIR/ai-dlc-continue.sh" FX_REC="$HOOKS_DIR/ai-dlc-recover.sh" # exported: the shim's subshell keeps exported variables and drops the rest
+bash() { # `bash <continue|recover>` runs the hook in a fresh-options subshell, one fx_inproc pass per call; any other start is real
+  local _p="${1:-}" _e=""
+  case "$_p" in
+    "$FX_CONT") _e=hkcont_main ;;
+    "$FX_REC") _e=recover ;;
+  esac
+  if [ -z "$_e" ]; then command bash "$@"; return; fi
+  shift
+  (
+    _x=" $(compgen -e) "; _x="${_x//$'\n'/ }"
+    for _v in $(compgen -v); do
+      case "$_x" in *" $_v "*) continue ;; esac
+      case "$_v" in
+        _x|_v|_e|_p) continue ;;
+        BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
+        IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
+        SHLVL|TERM|UID|_) continue ;;
+      esac
+      unset "$_v" 2>/dev/null
+    done
+    for _f in $(compgen -A function); do [ "$_f" = fx_inproc ] || unset -f "$_f"; done
+    unset _f _x _v
+    OPTIND=1; set +eufx +o pipefail; hash -r
+    case "$_e" in
+      hkcont_main) fx_inproc "$_p"; unset -f fx_inproc; . "$_p" && hkcont_main "$@" ;;
+      recover) fx_inproc "$_p"; unset -f fx_inproc; . "$_p" ;;
+    esac
+  )
+}
 
 ROOT="$(bash "$HERE/seed.sh")"
 { [ -n "$ROOT" ] && [ -d "$ROOT" ]; } || broken "seed.sh produced no sandbox root"
@@ -689,7 +745,7 @@ T_PB_MID="$ROOT/pb-mid.jsonl"; T_PB_WATCH="$ROOT/pb-watch.jsonl"; T_PB_AGENT="$R
 # Every other `date` call passes through to the real one. reset_state/drive clear the stall state before each
 # drive, so no stamp written under the real clock is read under the pinned one.
 HCA_EPOCH="$(date +%s)"; HCA_REAL_DATE="$(command -v date)"; mkdir -p "$ROOT/clk"
-printf '#!%s\nif [ "$#" -eq 1 ] && [ "$1" = "+%%s" ]; then echo %s; exit 0; fi\nexec %s "$@"\n' "$(command -v bash)" "$HCA_EPOCH" "$HCA_REAL_DATE" > "$ROOT/clk/date"
+printf '#!%s\nif [ "$#" -eq 1 ] && [ "$1" = "+%%s" ]; then echo %s; exit 0; fi\nexec %s "$@"\n' "$(type -P bash)" "$HCA_EPOCH" "$HCA_REAL_DATE" > "$ROOT/clk/date"
 chmod +x "$ROOT/clk/date"
 # RESOLUTION FIRST, THEN THE ANSWER (BL-868). A shim that is not executable is skipped by PATH lookup and the REAL date
 # answers instead, which equals HCA_EPOCH only while the clock has not ticked since HCA_EPOCH was taken -- a coin flip on
@@ -1375,7 +1431,7 @@ fc_drive() { # fc_drive <transcript> [PATH] [hooksdir] -> raw stdout; P_UNPUSHED
   reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"
   jq -nc --arg t "$1" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
   | PATH="${2:-$PATH}" CLAUDE_PROJECT_DIR="$P_UNPUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
-    /bin/bash "${3:-$HOOKS_DIR}/ai-dlc-continue.sh" 2>/dev/null
+    bash "${3:-$HOOKS_DIR}/ai-dlc-continue.sh" 2>/dev/null
 }
 fc_log() { printf '%s' "$P_UNPUSHED/_bmad-output/pipeline-continuation-log.md"; }
 fc_isblock() { grep -q '"decision" *: *"block"' <<<"$1" && grep -qF 'HANDOFF GUARD' <<<"$1"; }
@@ -1413,7 +1469,7 @@ fi
 #        the disk and git arms convict, and all of them are satisfied here.
 reset_state "$P_PUSHED"; touch "$P_PUSHED/_bmad-output/pipeline-paused.flag"
 o="$(jq -nc --arg t "$T_FC_NONE" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
-     | CLAUDE_PROJECT_DIR="$P_PUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" /bin/bash "$HOOKS_DIR/ai-dlc-continue.sh" 2>/dev/null)"
+     | CLAUDE_PROJECT_DIR="$P_PUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$HOOKS_DIR/ai-dlc-continue.sh" 2>/dev/null)"
 if ! fc_isblock "$o" && ! grep -qF -- "-- HANDOFF_GUARD" "$P_PUSHED/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
   ok "(fc3b) a COMPLETED handoff, no transcript, driver signal fresh -> ALLOW with no HANDOFF_GUARD row (the entry costs a finished handoff nothing)"
 else
@@ -1444,7 +1500,7 @@ _fc5=""
 for _p in "$PATH" "$FC_NJ"; do
   reset_state "$P_UNPUSHED"; touch "$P_UNPUSHED/_bmad-output/pipeline-paused.flag"; rm -f "$P_UNPUSHED/_bmad-output/.driver/handoff"
   o="$(jq -nc --arg t "$T_FC_NONE" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
-       | PATH="$_p" CLAUDE_PROJECT_DIR="$P_UNPUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" /bin/bash "$HOOKS_DIR/ai-dlc-continue.sh" 2>/dev/null)"
+       | PATH="$_p" CLAUDE_PROJECT_DIR="$P_UNPUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$HOOKS_DIR/ai-dlc-continue.sh" 2>/dev/null)"
   if ! fc_isblock "$o" && ! grep -qF -- "-- $FC_ROW" "$(fc_log)"; then _fc5="${_fc5}a"; else _fc5="${_fc5}b"; fi
 done
 [ "$_fc5" = aa ] && ok "(fc5) no handoff signal on disk, transcript absent / no jq -> ALLOW both ways, no fail-closed row (an unreadable Stop with nothing pending is not convicted)" \
@@ -1475,7 +1531,7 @@ _fc7=""
 for _i in 1 2 3 4 5; do
   fc7_age "$P_UNPUSHED/_bmad-output/handoff-guard-state.txt"
   o="$(jq -nc --arg t "$T_FC_OK" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' \
-       | PATH="$FC_NJ" CLAUDE_PROJECT_DIR="$P_UNPUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" /bin/bash "$HOOKS_DIR/ai-dlc-continue.sh" 2>/dev/null)"
+       | PATH="$FC_NJ" CLAUDE_PROJECT_DIR="$P_UNPUSHED" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$HOOKS_DIR/ai-dlc-continue.sh" 2>/dev/null)"
   if fc_isblock "$o"; then _fc7="${_fc7}b"; else _fc7="${_fc7}a"; fi
 done
 _fc7bo="$(grep -c -- '-- BACKOFF$' "$(fc_log)" 2>/dev/null)" || _fc7bo=0
@@ -2238,6 +2294,45 @@ if arm_c5k "$HOOKS_DIR"; then
 else
   bad "(c5k) the BACKOFF branch wrote a completion stamp -- a handoff that failed every arm recorded itself complete"
 fi
+
+# =============================================================================
+# EQUIVALENCE: the in-process answer is the command line's, byte for byte (stdout, stderr, exit), on a refusing and a
+# passing input of each hook. One real start per cell, tagged FXCELL=<id> (cells.decl). ai-dlc-continue.sh is a `cli`
+# subject (guarded); ai-dlc-recover.sh carries no source guard, so its two starts are `e2e` cells.
+# =============================================================================
+EQ="$ROOT/.eqv"; mkdir -p "$EQ"
+eqv() { # eqv <cell-id> <hook> <projdir> <payload-file> <want-pattern> <want-label>
+  local id="$1" hook="$2" proj="$3" pl="$4" want="$5" lbl="$6" k
+  for k in ip cl; do
+    reset_state "$proj"; rm -f "$proj/_bmad-output/handoff-guard-state.txt"
+    [ "$hook" != "$FX_REC" ] || [ ! -f "$SNAP_PLAIN" ] || [ "$want" = QUIET ] || cp "$SNAP_PLAIN" "$proj/_bmad-output/pipeline-snapshot.md"
+    if [ "$k" = ip ]; then
+      ( CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$hook" < "$pl" > "$EQ/$id.$k.out" 2> "$EQ/$id.$k.err"; echo "$?" > "$EQ/$id.$k.rc" )
+    else
+      ( CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" FXCELL="$id" command bash "$hook" < "$pl" > "$EQ/$id.$k.out" 2> "$EQ/$id.$k.err"; echo "$?" > "$EQ/$id.$k.rc" )
+    fi
+    # each emission opens with a provenance marker carrying a per-emission nonce; only the nonce is normalised
+    sed 's/nonce=[0-9a-f]*/nonce=N/' "$EQ/$id.$k.out" > "$EQ/$id.$k.outn"
+  done
+  if [ "$want" = QUIET ]; then
+    [ ! -s "$EQ/$id.ip.out" ] || { bad "(eqv $id) $lbl: the in-process run was expected to emit nothing"; return; }
+  else
+    grep -q -- "$want" "$EQ/$id.ip.out" || { bad "(eqv $id) $lbl: the in-process run lacks '$want' -- the cell would compare two empty answers"; return; }
+  fi
+  if cmp -s "$EQ/$id.ip.outn" "$EQ/$id.cl.outn" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"; then
+    ok "(eqv $id) $lbl: the in-process answer is the command line's (stdout, stderr, exit $(cat "$EQ/$id.cl.rc"))"
+  else
+    bad "(eqv $id) $lbl: the in-process answer differs from the CLI's: rc ip=$(cat "$EQ/$id.ip.rc") cl=$(cat "$EQ/$id.cl.rc")"
+  fi
+}
+jq -nc --arg t "$T_REQ_NOBLK" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' > "$EQ/stop-block.json"
+jq -nc --arg t "$T_REQ_OK" --arg s "$SESS_A" '{transcript_path:$t,session_id:$s}' > "$EQ/stop-allow.json"
+jq -nc --arg s "$SESS_A" '{source:"compact",session_id:$s}' > "$EQ/rec-compact.json"
+jq -nc --arg s "$SESS_A" '{source:"startup",session_id:$s}' > "$EQ/rec-startup.json"
+eqv cli-cont-block "$FX_CONT" "$P_UNPUSHED" "$EQ/stop-block.json" '"decision"' "continue, refusing input (a Stop with no resume block on an unpushed tree)"
+eqv cli-cont-allow "$FX_CONT" "$P_NOGIT" "$EQ/stop-allow.json" QUIET "continue, passing input (not a git repo)"
+eqv e2e-rec-ctx "$FX_REC" "$P_REC" "$EQ/rec-compact.json" 'additionalContext' "recover, a compact SessionStart over a snapshot"
+eqv e2e-rec-quiet "$FX_REC" "$P_REC" "$EQ/rec-startup.json" QUIET "recover, a non-compact SessionStart"
 
 rm -rf "$ROOT"
 echo ""

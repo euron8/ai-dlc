@@ -50,6 +50,7 @@
 #   AI_DLC_NOW / AI_DLC_HOLD_MAX_HOURS. Never a silent pass on an absent
 #   input. An EMPTY list-stories answer (exit 0) is a sprint with no stories, accounted trivially.
 #
+vhs_main() {
 set -u
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -84,7 +85,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --root)     [ $# -ge 2 ] && [ -n "$2" ] || unevaluable "--root needs a directory"; ROOT="$2"; shift 2 ;;
     --snapshot) [ $# -ge 2 ] && [ -n "$2" ] || unevaluable "--snapshot needs a path"; SNAP="$2"; shift 2 ;;
-    -h|--help)  sed -n '2,58p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)  awk 'NR >= 2 && NR <= 59 && $0 != "vhs_main() {"' "${BASH_SOURCE[0]}"; exit 0 ;;
     *)          unevaluable "unknown argument '$1'" ;;
   esac
 done
@@ -200,3 +201,7 @@ case "$rc" in
   *) unevaluable "the evaluator exited $rc" ;;
 esac
 exit 0
+}
+# Executed, it runs; sourced, it has defined vhs_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vhs_main "$@"

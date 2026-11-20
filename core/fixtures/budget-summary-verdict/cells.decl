@@ -1,0 +1,17 @@
+# budget-summary-verdict's starts (BL-878 item 7; BL-879 grammar). Every drive is in process: run.sh's `bash` shim runs the
+# entry of validate-artifact-budget.sh (vab_main), verdict.sh (vrd_main) and wait-for-deliverable.sh (wfd_beat_main; this fixture starts it only
+# as `--dispatch-ts`, and wfd_mark_main returns at once for that) in a subshell made fresh the way lib/inproc.sh makes one, and routes every nested start the same way (the
+# wrapper's validator start, the validator's resolver starts), logging each resolver start into the fork counter. One
+# command-line start per distinct CLI outcome, started as FXCELL=<id> bash <subject> and compared on stdout+stderr and exit
+# with the in-process answer on the same input: the validator exits 0 (PASS line), 1 (OVER row) and 1 (LATE row, the world
+# that reaches the resolver); verdict.sh exits 0 (PASS) and 1 (FAIL). No end-to-end cell: no subject holds a process group,
+# `$$` holder, exec of itself or EXIT trap a subshell would end differently. wait-for-deliverable.sh is started by no cell of
+# its own: its only start here is the validator's `--dispatch-ts` resolver call, covered by the nested row.
+cli core/scripts/validate-artifact-budget.sh cli-vab-pass
+cli core/scripts/validate-artifact-budget.sh cli-vab-over
+cli core/scripts/validate-artifact-budget.sh cli-vab-late
+cli core/scripts/verdict.sh cli-vrd-pass
+cli core/scripts/verdict.sh cli-vrd-fail
+# The nested starts of those cli cells are real processes (each program starts its siblings itself).
+nested core/scripts/verdict.sh core/scripts/validate-artifact-budget.sh why=the two verdict.sh cli cells start it as a program, whose own validator start is a real process the run.sh shim cannot route
+nested core/scripts/validate-artifact-budget.sh core/scripts/wait-for-deliverable.sh why=the cli-vab-late cell starts the validator as a program, whose own --dispatch-ts resolver starts are real processes the run.sh shim cannot route

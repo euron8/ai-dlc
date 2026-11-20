@@ -70,18 +70,16 @@
 #       bodies (18 at this commit, gate-resume among them) FAILs unless its non-comment code carries a source-guard line
 #       and an entry-line (`() {` closed by a quote or `$`) line anywhere. File order against the function is NOT read:
 #       the first-call widening read 11 ungated, 6 or more of them false (a gate present, a name collision on the way).
-#       Three are exempt by name, and none is a wrapped subject this arm could gate: consumer-suite-pool and
-#       postcompact-rulebook-recovery load UNWRAPPED subjects (the pre-push hooks and core/hooks/*.sh carry neither the
-#       entry line nor the guard), push-drain-refusals checks only the `pd_main() {` half and degrades to a NOTE.
+#       One is exempt by name, and its subject is not one this arm could gate: consumer-suite-pool loads UNWRAPPED
+#       subjects (the pre-push hooks carry neither the entry line nor the guard).
 #       Measured gap, fixed in this change: review-reroute and wait-beat-liveness sourced a WRAPPED subject with no gate.
 #       W3 (operand count): each wrapped subject (guard line plus `<p>_main() {` line) a loader has an `inproc:` row for
-#       needs one source-guard grep line of its own, so one gate cannot cover a second subject. A gate spelled as a helper
-#       called once per subject reads as one grep line, so the 12 fixtures below are OWED, enumerated in w_owed with the
-#       count form (S wrapped subjects against O grep lines): cycle-commits-enforce 1/0, gate-resume 2/1,
-#       layer-catalog-collision 3/1, layer-qualifier-grain 2/1, layer-readopt-gate 3/2, push-drain-refusals 1/0,
-#       retro-audit-scans 2/1, story-evidence-scaffold 3/1, story-provenance 2/1, trunk-audit-gate 2/1,
-#       upstream-routing 2/1, wait-stale-deliverable 1/0. Whether each is a helper or a real second-subject gap is NOT
-#       measured per fixture; a NEW fixture over its count FAILs. The arm cannot tell which subject a grep names.
+#       needs one gate of its own: a non-comment source-guard grep line, a call of a helper function whose body (or
+#       whose callee) carries one (one per call line, so a gate spelled as a helper called once per subject counts per
+#       call, a loop counts once), a `name '<guard literal>'` helper line, or a seed.sh credit. No fixture is owed.
+#       SEED CREDIT: a run.sh whose non-comment line before its first load runs `$HERE/seed.sh`, or `$V/seed.sh` with
+#       `V="$HERE/../<fixture>"` assigned, is credited the gate (and one gate operand) when that seed.sh carries both
+#       greps (emit-report-refusal runs reconcile-emit-report's).
 #       NO BASE RATCHET, deliberately: with the six fixed (and review-reroute, wait-beat-liveness) the tip false-positive
 #       set is zero, so a blanket arm wedges nothing and no base is needed to acquit anyone.
 #       NARROWING TO ZERO (measured over 221 shipping run.sh, 88 loaders): a rule keyed on fx_skip_exit alone cannot fire
@@ -394,25 +392,49 @@ for d in "$ROOT"/core/fixtures/*/; do
   w_files="$w_files ${d}run.sh"; w_n=$((w_n + 1))
 done
 [ "$w_n" -gt 0 ] || { echo "validate-fixture-inprocess: REFUSED -- arm W found zero shipping run.sh under $ROOT" >&2; exit 2; }
+# W credits a gate in a seed.sh the run.sh runs before its first load (emit-report-refusal runs its sibling's): the seeds that carry
+# both wrap-half greps are listed first, by fixture directory name.
+w_sg="$WORK/w.seedgate"; : > "$w_sg"
+w_seeds=""
+for d in "$ROOT"/core/fixtures/*/; do [ -f "${d}seed.sh" ] && w_seeds="$w_seeds ${d}seed.sh"; done
+# shellcheck disable=SC2086
+[ -z "$w_seeds" ] || awk '
+  FNR == 1 { if (fn != "" && g && e) { n = split(fn, p, "/"); print p[n - 1] }; fn = FILENAME; g = 0; e = 0 }
+  /^[[:space:]]*#/ { next }
+  /grep[^|]*BASH_SOURCE\[0\]\}" = "\$0"/ { g = 1 }
+  /grep[^|]*\(\) \{/ { e = 1 }
+  END { if (fn != "" && g && e) { n = split(fn, p, "/"); print p[n - 1] } }' $w_seeds > "$w_sg" || { echo "validate-fixture-inprocess: REFUSED -- arm W's seed awk failed" >&2; exit 2; }
 # shellcheck disable=SC2086 # paths carry no whitespace; the split is the point
-awk '
-  FNR == 1 { if (fn != "") w_emit(); fn = FILENAME; L = 0; FB = 0; G1 = 0; G2 = 0; A1 = 0; A2 = 0; O = 0; infn = 0; nf++ }
+awk -v sgf="$w_sg" '
+  BEGIN { while ((getline sg < sgf) > 0) SG[sg] = 1 }
+  FNR == 1 { if (fn != "") w_emit(); fn = FILENAME; L = 0; FB = 0; G1 = 0; G2 = 0; A1 = 0; A2 = 0; A3 = 0; O = 0; infn = 0; GS = 0; curf = ""; OL = 0; delete H; delete HN; delete CALL; delete SV; nf++ }
   /^[[:space:]]*#/ { next }
   { line = $0
+    if (line ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*\(\) *\{/) { curf = line; sub(/^[[:space:]]*/, "", curf); sub(/\(.*/, "", curf); hd = curf; one = (line ~ /\}[[:space:]]*$/) } else { hd = ""; one = 0 }
+    for (h in H) if (h != hd && line ~ ("(^|[^A-Za-z0-9_])" h "([^A-Za-z0-9_]|$)")) { if (curf == "" || (curf in H)) CALL[h]++; else if (curf != h) HN[curf] = 1; if (curf != "" && curf != h) HN[curf] = 1 }
+    for (h in HN) H[h] = 1
+    if (line ~ /^[[:space:]]*\}/) curf = ""
     if (line ~ /^[A-Za-z_][A-Za-z0-9_]*\(\) *\{/ && line !~ /\}[[:space:]]*$/) infn = 1
-    if (line ~ /grep[^|]*BASH_SOURCE\[0\]\}" = "\$0"/) O++
+    if (line ~ /grep[^|]*BASH_SOURCE\[0\]\}" = "\$0"/) { O++; if (curf != "") H[curf] = 1 }
+    else if (line ~ /[A-Za-z_][A-Za-z0-9_]* \047\[ "\$\{BASH_SOURCE\[0\]\}" = "\$0"/) OL++
+    if (line ~ /^[A-Za-z_][A-Za-z0-9_]*="\$[A-Za-z_{}]+\/\.\.\/[A-Za-z0-9_-]+"/) { nm = line; sub(/=.*/, "", nm); tg = line; sub(/^.*\/\.\.\//, "", tg); sub(/".*/, "", tg); SV[nm] = tg }
+    if (!L && !GS && match(line, /\$\{?[A-Za-z_]+\}?\/seed\.sh/)) { tk = substr(line, RSTART + 1, RLENGTH - 1); sub(/\/seed\.sh$/, "", tk); gsub(/[{}]/, "", tk); np = split(fn, pp, "/"); tgt = (tk == "HERE") ? pp[np - 1] : SV[tk]; if (tgt != "" && (tgt in SG)) GS = 1 }
     if (!G1 && !L && line ~ /grep[^|]*BASH_SOURCE\[0\]\}" = "\$0"/) G1 = FNR
     if (!G2 && !L && line ~ /grep[^|]*\(\) \{/) G2 = FNR
     if (!A1 && line ~ /BASH_SOURCE\[0\]\}" = "\$0"/) A1 = FNR
     if (!A2 && line ~ /\(\) \{(["\047$\\])/) A2 = FNR
+    if (!A3 && line ~ /predate[^ ]* the in-process wrap/) A3 = FNR
     if (line ~ /(^|[^A-Za-z_])(inproc_load|inproc_run|fx_inproc)([^A-Za-z_]|$)/) { if (infn) FB = 1; else if (!L) L = FNR }
-    if (infn && line ~ /^\}/) infn = 0 }
-  function w_emit() {
+    if (infn && line ~ /^\}/) infn = 0
+    if (one) curf = "" }
+  function w_emit(   h, o) {
     if (!L && !FB) return
     nl++
-    if (L && !(G1 && G2)) printf "W %s:%d: the first in-process load has no pre-wrap gate before it (source-guard grep line %s, entry-line grep line %s)\n", fn, L, (G1 ? G1 : "absent"), (G2 ? G2 : "absent")
-    if (!L && !(A1 && A2) && fn !~ /\/(consumer-suite-pool|postcompact-rulebook-recovery|push-drain-refusals)\/run\.sh$/) printf "W %s: loads only inside function bodies and carries no source-guard line and entry-line pair anywhere\n", fn
-    printf "WO %s %d\n", fn, O }
+    if (L && !(G1 && G2) && !GS) printf "W %s:%d: the first in-process load has no pre-wrap gate before it (source-guard grep line %s, entry-line grep line %s)\n", fn, L, (G1 ? G1 : "absent"), (G2 ? G2 : "absent")
+    if (!L && !(A1 && A2 && A3) && fn !~ /\/consumer-suite-pool\/run\.sh$/) printf "W %s: loads only inside function bodies and carries no source-guard line and entry-line pair anywhere, or no emitted line (SKIP or note) naming a subject that predates the in-process wrap\n", fn
+    o = O + OL + GS
+    for (h in H) if (CALL[h] > 1) o += CALL[h] - 1
+    printf "WO %s %d\n", fn, o }
   END { w_emit(); printf "WSCAN %d %d\n", nf, nl }' $w_files > "$WORK/w.out" 2>&1 || { echo "validate-fixture-inprocess: REFUSED -- arm W's awk failed" >&2; exit 2; }
 w_sc="$(awk '$1 == "WSCAN" { print $2 }' "$WORK/w.out")"; w_ld="$(awk '$1 == "WSCAN" { print $3 }' "$WORK/w.out")"
 [ "$w_sc" = "$w_n" ] || { echo "validate-fixture-inprocess: REFUSED W: listed $w_n shipping run.sh, awk scanned ${w_sc:-none}" >&2; exit 2; }
@@ -437,8 +459,7 @@ awk -F'\t' 'FILENAME == ARGV[1] { W[$1] = 1; next }
   FILENAME == ARGV[3] { split($0, a, " "); nm = a[2]; sub(/\/run\.sh$/, "", nm); n = split(nm, q, "/"); O[q[n]] = a[3] + 0 }
   END { for (f in O) if (S[f] > O[f]) printf "%s\tW core/fixtures/%s/run.sh: %d wrapped subject(s) with an inproc: row, %d source-guard grep(s) -- one gate cannot cover them all\n", f, f, S[f], O[f] }' \
   "$WORK/w.wrapped" "$WORK/w.pairs" <(grep '^WO ' "$WORK/w.out") | LC_ALL=C sort > "$WORK/w3.raw"
-w_owed=" cycle-commits-enforce gate-resume layer-catalog-collision layer-qualifier-grain layer-readopt-gate push-drain-refusals retro-audit-scans story-evidence-scaffold story-provenance trunk-audit-gate upstream-routing wait-stale-deliverable "
-awk -F'\t' -v o="$w_owed" 'index(o, " " $1 " ") == 0 { print $2 }' "$WORK/w3.raw" >> "$WORK/w.out"
+cut -f2 "$WORK/w3.raw" >> "$WORK/w.out"
 if grep -q '^W ' "$WORK/w.out"; then
   rc=1
   grep '^W ' "$WORK/w.out" | LC_ALL=C sort | sed -e "s#$ROOT/##" -e 's/^/  FAIL  /'

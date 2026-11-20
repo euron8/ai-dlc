@@ -17,3 +17,8 @@ core/schemas/gate-adjudication-verdict.json
 core/skills/ai-dlc/enforcement-map.yaml
 core/skills/ai-dlc/steps/_gate-procedures.md
 core/fixtures/lib/report.sh
+core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+# The guard hook is a subject (wrapped as dg_main); its starts of the ledger validator and the merge run in process through dg_bash.
+!core/hooks/ai-dlc-dispatch-guard.sh

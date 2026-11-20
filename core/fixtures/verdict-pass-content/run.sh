@@ -60,6 +60,46 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/_bmad-output" || exit 2
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). verdict.sh is loaded once and asked through vrd_drive (inproc_run -> vrd_main); the validator it
+# starts (`bash "$target"`) runs as vab_main in a subshell through the `bash` shim below. A core fixture ships ahead of its
+# subjects: a subject with neither the `<p>_main() {` line nor the column-0 source guard predates the wrap and SKIPs
+# (FIXTURE BROKEN in the distribution); exactly one half FAILs; an unreadable subject is FIXTURE ERROR.
+vp_halves() { # <file> <entry> -> "<def><guard>"
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+vp_pre=""
+for _s in "$VERDICT:vrd_main" "$VALIDATOR:vab_main"; do
+  _h="$(vp_halves "${_s%%:*}" "${_s##*:}")" || exit 2
+  case "$_h" in
+    11) : ;;
+    00) vp_pre="$vp_pre ${_s%%:*}" ;;
+    *) bad "${_s%%:*} carries one half of the in-process wrap (${_s##*:} line, column-0 source guard: $_h) -- a respelled subject this fixture cannot drive"
+       report_end verdict-pass-content ;;
+  esac
+done
+if [ -n "$vp_pre" ]; then echo "SKIP: subject predates the in-process wrap:$vp_pre"; fx_skip_exit "$HERE"; fi
+
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+export FX_VAB="$VALIDATOR" # exported: inproc_run keeps exported variables and drops the rest
+bash() { # verdict.sh's own `bash "$target"` start of the budget validator runs vab_main in a fresh-options subshell; any other start is real
+  if [ "${1:-}" = "$FX_VAB" ]; then
+    shift
+    ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$FX_VAB"; ( unset LINES SELF_DIR SCRIPTS_DIR WORST v target name out rc ok_hits hits _n; set +eufx +o pipefail; . "$FX_VAB" && vab_main "$@" )
+  else command bash "$@"; fi
+}
+inproc_load "$VERDICT" || { echo "FIXTURE ERROR: $VERDICT defines no vrd_main (not loadable)" >&2; exit 2; }
+# inproc_run strips every function the subject did not define; the shim is kept by naming it with the loaded set.
+INPROC_FNS="${INPROC_FNS}bash "; INPROC_DEFS="$(declare -f $INPROC_FNS)"
+vrd_drive() { inproc_run "$VERDICT" vrd_main "$@"; } # <verdict args> -> its answer, in process
 
 # A snapshot small enough to pass the byte budget with room to spare. The PASS
 # path is what this fixture measures, so every run below must actually pass.
@@ -73,17 +113,22 @@ mkdir -p "$WORK/_bmad-output" || exit 2
   printf '## Context Reminders\n- context_reminders_sent: none\n\n'
 } > "$WORK/_bmad-output/pipeline-snapshot.md"
 
-run_verdict() {
-  bash "$VERDICT" "$VALIDATOR" --root "$WORK" --only pipeline-snapshot.md \
-    >"$WORK/out.txt" 2>&1
-  echo "$?"
+EQ="$WORK/eq"; mkdir -p "$EQ"
+# eqv <cell-id> <verdict args...>: the in-process answer (the arms read it) and the same input run as a PROGRAM
+# (FXCELL=<id> bash verdict.sh, one start per distinct CLI outcome, see cells.decl); both land in $EQ/<id>.{ip,cl}.{out,err,rc}.
+eqv() {
+  local id="$1"; shift
+  vrd_drive "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" command bash "$VERDICT" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
 }
+same_cell() { cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.err" "$EQ/$1.cl.err" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc"; }
 
 echo "verdict-pass-content"
 
 # --- 1. A passing run still exits 0 and still says PASS ------------------------
 # The floor. Whatever else changes, callers read this line as the verdict.
-status="$(run_verdict)"
+eqv cli-pass "$VALIDATOR" --root "$WORK" --only pipeline-snapshot.md
+status="$(cat "$EQ/cli-pass.ip.rc")"; cat "$EQ/cli-pass.ip.out" "$EQ/cli-pass.ip.err" > "$WORK/out.txt"
 if [ "$status" = "0" ] && grep -q '^PASS  validate-artifact-budget.sh' "$WORK/out.txt"; then
   ok "a passing run exits 0 and prints the PASS verdict line"
 else
@@ -108,7 +153,7 @@ cat > "$WORK/silent.sh" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-bash "$VERDICT" "$WORK/silent.sh" >"$WORK/silent-out.txt" 2>&1
+vrd_drive "$WORK/silent.sh" >"$WORK/silent-out.txt" 2>&1
 silent_status=$?
 if [ "$silent_status" = "0" ] && grep -q '^PASS  silent.sh' "$WORK/silent-out.txt"; then
   ok "a validator that prints nothing still renders as PASS, exit 0"
@@ -122,13 +167,25 @@ fi
 # both would leave a failing gate with no reason attached, which is worse than the
 # defect this change fixes.
 head -c 40000 /dev/zero | tr '\0' 'x' >> "$WORK/_bmad-output/pipeline-snapshot.md"
-fail_status="$(run_verdict)"
+eqv cli-fail "$VALIDATOR" --root "$WORK" --only pipeline-snapshot.md
+fail_status="$(cat "$EQ/cli-fail.ip.rc")"; cat "$EQ/cli-fail.ip.out" "$EQ/cli-fail.ip.err" > "$WORK/out.txt"
 if [ "$fail_status" = "1" ] && grep -q '^FAIL  validate-artifact-budget.sh' "$WORK/out.txt" \
    && grep -q 'OVER ' "$WORK/out.txt"; then
   ok "a failing run still exits 1 and still surfaces its failing lines"
 else
   bad "exit $fail_status / FAIL detail missing -- the FAIL branch regressed"
 fi
+
+# --- 5. THE COMMAND-LINE RUN GIVES THE IN-PROCESS ANSWER ------------------------
+# Each cli cell is compared on stdout, stderr and exit, and asserts its own outcome (a positive conjunct), so two runs
+# that both printed nothing cannot read as equivalent; the pass and fail cells must differ.
+if same_cell cli-pass && [ "$(cat "$EQ/cli-pass.cl.rc")" = 0 ] && grep -q '^PASS  validate-artifact-budget.sh' "$EQ/cli-pass.cl.out"; then
+  ok "cli-pass: verdict.sh as a program matches the in-process answer (exit 0, PASS line)"
+else bad "cli-pass: the program and the in-process call disagree"; fi
+if same_cell cli-fail && [ "$(cat "$EQ/cli-fail.cl.rc")" = 1 ] && grep -q '^FAIL  validate-artifact-budget.sh' "$EQ/cli-fail.cl.out"; then
+  ok "cli-fail: verdict.sh as a program matches the in-process answer (exit 1, FAIL line)"
+else bad "cli-fail: the program and the in-process call disagree"; fi
+if ! cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-fail.cl.out"; then ok "the pass and fail cells differ"; else bad "pass and fail cells are identical"; fi
 
 echo ""
 report_end verdict-pass-content

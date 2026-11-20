@@ -50,6 +50,28 @@ ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 
 trap 'rm -rf "$ROOT"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: cannot source lib/layout.sh" >&2; exit 2; }
+
+# PRE-WRAP GATE, both hooks. A hook without the wrap would RUN when sourced (reading this shell's stdin and exiting), a
+# silent green, so both halves of each are required before any load. Neither half of either predates the wrap: SKIP on a
+# consumer, FIXTURE BROKEN in the distribution. Exactly one half of either is a respelled hook this fixture cannot drive.
+for _pw_h in "$HOOK:aac_main" "$PAUSE_HOOK:hkpause_main"; do
+  _pw_f="${_pw_h%:*}"; _pw_m="${_pw_h##*:}"
+  [ -r "$_pw_f" ] || { echo "FIXTURE ERROR: cannot read ${_pw_f:-<unresolved hook>} -- an unreadable hook is not one that predates the wrap" >&2; exit 2; }
+  _pw_d=0; _pw_g=0
+  grep -qxF "$_pw_m() {" "$_pw_f" && _pw_d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$_pw_f" && _pw_g=1
+  case "$_pw_d$_pw_g" in
+    11) : ;;
+    00) echo "SKIP: answer-handoff-routing: $_pw_f predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+    *) echo "  FAIL  $_pw_f carries one half of the in-process wrap ($_pw_m line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive" >&2; echo "answer-handoff-routing: 1 assertion(s) FAILED" >&2; exit 1 ;;
+  esac
+done
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: cannot source lib/inproc.sh" >&2; exit 2; }
+# The answer hook is the loaded subject; the pause hook is run by path (inproc_run sources it in its own subshell, and
+# the pass is logged under the loaded subject).
+inproc_load "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK defined nothing" >&2; exit 2; }
+declare -F aac_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no aac_main" >&2; exit 2; }
 
 echo "answer-handoff-routing:"
 
@@ -94,7 +116,7 @@ fire() { # fire <question> <answer> [hook] -> the hook's stdout on stdout
     '{tool_name:"AskUserQuestion",session_id:"fx",tool_use_id:"tu-fx",
       tool_response:{answers:{($q):$a}}}' \
     | CLAUDE_PROJECT_DIR="$CASE_DIR" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
-      bash "$hk" 2>/dev/null
+      inproc_run "$hk" aac_main 2>/dev/null
 }
 flag()      { [ -f "$CASE_DIR/_bmad-output/pipeline-paused.flag" ] && echo yes || echo no; }
 pauses()    { grep -c '^## .*-- USER_PAUSE' "$CASE_DIR/_bmad-output/pipeline-continuation-log.md" 2>/dev/null || echo 0; }
@@ -135,7 +157,7 @@ PPROJ="$(mktemp -d)"; mkdir -p "$PPROJ/_bmad-output"
 cp "$ROOT/snapshot.md" "$PPROJ/_bmad-output/pipeline-snapshot.md"
 P_CTX="$(printf '{"session_id":"fx","prompt":"hand off the sprint please"}' \
          | CLAUDE_PROJECT_DIR="$PPROJ" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
-           bash "$PAUSE_HOOK" 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')"
+           inproc_run "$PAUSE_HOOK" hkpause_main 2>/dev/null | jq -r '.hookSpecificOutput.additionalContext // ""')"
 rm -rf "$PPROJ"
 if [ ${#BRANCH} -lt 100 ]; then
   bad "FIXTURE BROKEN — pause_branch_text is ${#BRANCH} bytes; a near-empty needle is contained by everything and this arm would pass against two hooks that share nothing"
@@ -231,6 +253,38 @@ fi
 newcase yes; OUT="$(fire "$Q_REAL" "handoff")"
 [ "$(captured)" = "1" ] && ok "a ROUTED answer is still written to operator-answers-history.md" \
   || bad "the routed answer was not captured (rows=$(captured)) — routing has displaced provenance, which is the thing this hook was built for"
+
+# --- the cli cells (cells.decl): the answer hook started as a PROGRAM once per distinct outcome -----------------
+# A routed answer prints a PostToolUse hookSpecificOutput and raises the pause flag; an ordinary answer prints nothing
+# and routes nothing. Each is started as FXCELL=<id> bash "$HOOK" on a copy of a seeded project and compared with the
+# in-process call on another copy: stdout, stderr, exit and the project tree (timestamps and the copy's path
+# normalised). Each cell asserts its own outcome, so two runs that both did nothing cannot read as equal.
+EQ="$ROOT/eq"; rm -rf "$EQ"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir $EQ" >&2; exit 2; }
+proj_sig() { # <dir> -> the tree's file list and contents, timestamps and the dir path normalised
+  ( cd "$1" && find . -type f | sort | while read -r f; do printf '== %s\n' "$f"; cat "$f"; done ) \
+    | sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z?/TS/g' -e 's/^TS [0-9a-f]{16}$/TS NONCE/' -e 's/[0-9]{10}/EPOCH/g' -e "s|$1|DIR|g"
+}
+cli_cell() { # <id> <answer> <outcome test on $EQ/<id>/cl.out and $cl> <outcome words>
+  local id="$1" ans="$2" ip="$EQ/$1/ip" cl="$EQ/$1/cl" pl
+  pl="$(jq -nc --arg q "$Q_REAL" --arg a "$ans" '{tool_name:"AskUserQuestion",session_id:"fx",tool_use_id:"tu-fx",tool_response:{answers:{($q):$a}}}')"
+  mkdir -p "$ip/_bmad-output" "$cl/_bmad-output" && cp "$ROOT/snapshot.md" "$ip/_bmad-output/pipeline-snapshot.md" && cp "$ROOT/snapshot.md" "$cl/_bmad-output/pipeline-snapshot.md" \
+    || { bad "$id: could not seed the project"; return; }
+  printf '%s' "$pl" | CLAUDE_PROJECT_DIR="$ip" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" inproc_run "$HOOK" aac_main > "$EQ/$id/ip.out" 2> "$EQ/$id/ip.err"; echo "$?" > "$EQ/$id/ip.rc"
+  printf '%s' "$pl" | CLAUDE_PROJECT_DIR="$cl" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" FXCELL="$id" bash "$HOOK" > "$EQ/$id/cl.out" 2> "$EQ/$id/cl.err"; echo "$?" > "$EQ/$id/cl.rc"
+  # the provenance block carries a fresh nonce per start; the rest of stdout must be byte-equal
+  for _s in ip cl; do sed -E 's/nonce=[0-9a-f]+/nonce=N/g' "$EQ/$id/$_s.out" > "$EQ/$id/$_s.out.n" && mv "$EQ/$id/$_s.out.n" "$EQ/$id/$_s.out"; done
+  proj_sig "$ip" > "$EQ/$id/ip.sig"; proj_sig "$cl" > "$EQ/$id/cl.sig"
+  if cmp -s "$EQ/$id/ip.out" "$EQ/$id/cl.out" && cmp -s "$EQ/$id/ip.err" "$EQ/$id/cl.err" && cmp -s "$EQ/$id/ip.rc" "$EQ/$id/cl.rc" \
+     && cmp -s "$EQ/$id/ip.sig" "$EQ/$id/cl.sig" && [ "$(cat "$EQ/$id/cl.rc")" = 0 ] && [ -s "$EQ/$id/cl.sig" ] && eval "$3"; then
+    ok "$id: the program $4 exactly as the in-process call does (stdout, stderr, exit 0 and the project tree)"
+  else
+    bad "$id: the program and the in-process call differ, or the outcome is not: $4"
+  fi
+}
+cli_cell cli-route "handoff" \
+  'jq -e ".hookSpecificOutput.hookEventName==\"PostToolUse\"" "$EQ/$id/cl.out" >/dev/null 2>&1 && [ -f "$cl/_bmad-output/pipeline-paused.flag" ]' "routes a handoff answer: PostToolUse output and the pause flag"
+cli_cell cli-silent "option B — fix the validator first" \
+  '[ ! -s "$EQ/$id/cl.out" ] && [ ! -f "$cl/_bmad-output/pipeline-paused.flag" ] && [ -f "$cl/_bmad-output/operator-answers-history.md" ]' "routes an ordinary answer nowhere: no stdout, no flag, the answer still recorded"
 
 echo ""
 report_end answer-handoff-routing

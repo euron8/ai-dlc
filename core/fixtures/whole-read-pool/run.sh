@@ -94,6 +94,63 @@ mkdir -p "$WORK/_bmad-output/planning-artifacts" "$WORK/docs" "$WORK/.claude/tea
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
+# IN PROCESS (BL-878). The validator is asked through vab_ip, which hands it to lib/inproc.sh's inproc_run: the file is
+# loaded once here (inproc_load) and vab_main runs in a fresh-bash subshell, so its `exit` stays in that subshell. The
+# program runs only in the cells of cells.decl (the cli cells below, each compared byte for byte with the in-process
+# answer on the same input).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present subject with neither the `vab_main() {` line nor the column-0
+# source guard predates the wrap, and sourcing it would run its whole body: SKIP and exit 0 (FIXTURE BROKEN in the
+# distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
+# unreadable subject is FIXTURE ERROR.
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+vab_halves() { # vab_halves <file> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF 'vab_main() {' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_vh="$(vab_halves "$VALIDATOR")" || exit 2
+case "$_vh" in
+  11) : ;;
+  00) echo "SKIP: whole-read-pool: $VALIDATOR predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$VALIDATOR carries one half of the in-process wrap (vab_main line, column-0 source guard: $_vh) -- a respelled subject this fixture cannot drive"
+     report_end whole-read-pool ;;
+esac
+inproc_load "$VALIDATOR" || { echo "FIXTURE ERROR: could not load $VALIDATOR" >&2; exit 2; }
+vab_ip() { inproc_run "$VALIDATOR" vab_main "$@"; }
+# vab_eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}: the in-process answer and the program's, for the cli cell.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq failed" >&2; exit 2; }
+vab_eqv() {
+  local id="$1"; shift
+  vab_ip "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+# vab_cell <id> <want rc> <label> <args...>: the cli cell. PRESENCE-shaped: the program's rc is the wanted one, its
+# stdout is non-empty (a subject replaced by `exit 0` fails), and all three streams equal the in-process call's.
+vab_cell() {
+  local id="$1" want="$2" label="$3"; shift 3
+  if vab_eqv "$id" "$@" && [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && [ -s "$EQ/$id.cl.out" ]; then
+    ok "$id: $label -- the program and the in-process call agree byte for byte, exit $want"
+  else
+    bad "$id: $label -- the program and the in-process call differ, or the exit is not $want (in-process rc=$(cat "$EQ/$id.ip.rc") / program rc=$(cat "$EQ/$id.cl.rc"))"
+  fi
+}
+# vab_f <file> [args...]: the validator, or a copy of it staged in a world (a copy's pass is a pass of the subject it copies).
+vab_f() {
+  local _f="$1"; shift
+  ( [ "$_f" = "$VALIDATOR" ] || INPROC_LOADED="$VALIDATOR"; inproc_run "$_f" vab_main "$@" )
+}
+
 # The consumer's config block, in the layout install.sh writes. `aiDlcRoles.<role>.model`
 # is a KEY into `aiDlcModels`, never a model string -- the same two-hop resolution
 # ai-dlc-dispatch-guard.sh performs.
@@ -121,7 +178,7 @@ artifacts() { # artifacts <kb-each>
 }
 
 run() {
-  bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
+  vab_ip --root "$WORK" >"$WORK/out.txt" 2>&1
   echo "$?"
 }
 pool_of() { sed -n 's/^whole-read pool     : \([0-9]*\) tok.*/\1/p' "$WORK/out.txt" | head -1; }
@@ -208,7 +265,7 @@ fi
 # Process env AI_DLC_MODEL_<FAMILY>_WINDOW, then the settings files' env block. Both are
 # seeded on a haiku analyst, whose default (66000) is what each would fall back to.
 settings 'haiku' 'claude-haiku-4-5'
-AI_DLC_MODEL_HAIKU_WINDOW=1m bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
+AI_DLC_MODEL_HAIKU_WINDOW=1m vab_ip --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "330000" ]; then
   ok "process env AI_DLC_MODEL_HAIKU_WINDOW=1m overrides the family default"
 else
@@ -225,7 +282,7 @@ if [ "$(pool_of)" = "330000" ]; then
 else
   bad "settings .env override gave pool '$(pool_of)', expected 330000"
 fi
-AI_DLC_MODEL_HAIKU_WINDOW=500000 bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
+AI_DLC_MODEL_HAIKU_WINDOW=500000 vab_ip --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "165000" ]; then
   ok "  and process env outranks the settings .env (500000 -> 165000)"
 else
@@ -237,7 +294,7 @@ fi
 # refused (50000..2000000), and the source must say so rather than read as a default.
 settings 'haiku' 'claude-haiku-4-5'
 for v in 99 99999999999999999999; do
-  AI_DLC_MODEL_HAIKU_WINDOW="$v" bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
+  AI_DLC_MODEL_HAIKU_WINDOW="$v" vab_ip --root "$WORK" >"$WORK/out.txt" 2>&1
   if [ "$(pool_of)" = "66000" ] && grep -q "rejected env AI_DLC_MODEL_HAIKU_WINDOW=$v" "$WORK/out.txt"; then
     ok "a declared window of $v is rejected, named in the source, and falls to 66000"
   else
@@ -245,7 +302,7 @@ for v in 99 99999999999999999999; do
   fi
 done
 settings_env 'haiku' 'claude-haiku-4-5' '1000000'
-AI_DLC_MODEL_HAIKU_WINDOW=99 bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
+AI_DLC_MODEL_HAIKU_WINDOW=99 vab_ip --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "330000" ]; then
   ok "  a rejected process env falls through to the valid settings .env (330000)"
 else
@@ -359,7 +416,7 @@ fi
 # with a remedy (consolidate) that must never run mid-sprint.
 artifacts 400
 printf '## Pipeline Position\nx\n' > "$WORK/_bmad-output/pipeline-snapshot.md"
-bash "$VALIDATOR" --root "$WORK" --only pipeline-snapshot.md >"$WORK/out.txt" 2>&1
+vab_ip --root "$WORK" --only pipeline-snapshot.md >"$WORK/out.txt" 2>&1
 only_status=$?
 if [ "$only_status" = "0" ] && ! grep -q 'WHOLE-READ POOL' "$WORK/out.txt"; then
   ok "--only pipeline-snapshot.md ignores the pool entirely"
@@ -376,7 +433,7 @@ artifacts 1
 LONE="$WORK/lone"; mkdir -p "$LONE" || exit 2
 cp "$VALIDATOR" "$LONE/validate-artifact-budget.sh" || exit 2
 settings 'sonnet' 'claude-sonnet-5[1m]'
-env -u AI_DLC_WINDOW_LIB bash "$LONE/validate-artifact-budget.sh" --root "$WORK" >"$WORK/out.txt" 2>&1
+( unset AI_DLC_WINDOW_LIB; vab_f "$LONE/validate-artifact-budget.sh" --root "$WORK" ) >"$WORK/out.txt" 2>&1
 lone_rc=$?
 if [ "$lone_rc" = "0" ] && [ "$(pool_of)" = "330000" ] && grep -q 'fallback: ai-dlc-window.sh not found' "$WORK/out.txt"; then
   ok "library absent: a [1m] analyst still reads 330000, exit 0, and the source says fallback"
@@ -384,7 +441,7 @@ else
   bad "library absent: exit $lone_rc, pool '$(pool_of)' -- expected 0 / 330000 / a fallback source"
 fi
 settings 'sonnet' 'sonnet'
-env -u AI_DLC_WINDOW_LIB bash "$LONE/validate-artifact-budget.sh" --root "$WORK" >"$WORK/out.txt" 2>&1
+( unset AI_DLC_WINDOW_LIB; vab_f "$LONE/validate-artifact-budget.sh" --root "$WORK" ) >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "66000" ]; then
   ok "  and a bare alias reads 66000 there -- the tightening direction"
 else
@@ -393,7 +450,7 @@ fi
 
 # --- 8c. THE SHARED LIBRARY THROUGH AI_DLC_WINDOW_LIB ----------------------------
 settings 'sonnet' 'sonnet'
-AI_DLC_WINDOW_LIB="$WINLIB" bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
+AI_DLC_WINDOW_LIB="$WINLIB" vab_ip --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "330000" ] && grep -q 'bare alias sonnet default' "$WORK/out.txt"; then
   ok "  the shared library through AI_DLC_WINDOW_LIB reads 330000 from the bare-alias default"
 else
@@ -427,7 +484,7 @@ sensor_window() { # sensor_window <model id> -> the sensor's effective_window
 }
 validator_window() { # validator_window <validator> <model id>
   settings 'm' "$2"
-  bash "$1" --root "$WORK" >"$WORK/out.txt" 2>&1
+  vab_f "$1" --root "$WORK" >"$WORK/out.txt" 2>&1
   p="$(pool_of)"
   [ -n "$p" ] && printf '%s' "$(( p * 100 / 33 ))"
 }
@@ -477,12 +534,18 @@ fi
 # conflate them.
 settings 'sonnet' 'claude-sonnet-5'
 artifacts 1
-AI_DLC_READER_WINDOW_TOKENS=600000 bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
+AI_DLC_READER_WINDOW_TOKENS=600000 vab_ip --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "198000" ] && grep -q 'AI_DLC_READER_WINDOW_TOKENS' "$WORK/out.txt"; then
   ok "the env override applies and names itself as the source"
 else
   bad "override gave pool '$(pool_of)' and/or did not name its source"
 fi
+
+# --- The cli cells: one per distinct CLI outcome, the program compared byte for byte with the in-process call -----
+vab_cell cli-vab-pass 0 "a planning pool inside the window passes" --root "$WORK"
+artifacts 400
+vab_cell cli-vab-over 1 "a planning pool over the window fails" --root "$WORK"
+artifacts 1
 
 # --- 10. AN ARCHIVED PER-SPRINT COPY IS NOT A POOL MEMBER ----------------------
 # The pool finds its members by BASENAME across two whole trees. That was safe
@@ -632,7 +695,7 @@ cp "$SPRINT_SCHEMA" "$WORK/schemas/sprint-status.json" || exit 2
 # A copy staged the same way in the same directory still pools the live slot.
 CONTROL3="$BIN/control-budget.sh"
 cp "$VALIDATOR" "$CONTROL3" || exit 2
-bash "$CONTROL3" --root "$WORK" >"$WORK/out.txt" 2>&1
+vab_f "$CONTROL3" --root "$WORK" >"$WORK/out.txt" 2>&1
 if grep -q 's302/locked-requirements\.md' <<<"$(pool_rows)"; then
   ok "  control: an unmutated copy staged the same way still pools the live slot"
 else

@@ -39,6 +39,23 @@ SCHEMA="$(pick "$HERE/../../schemas/pause-routing.json" \
 
 ROOT="$(bash "$HERE/seed.sh")"
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: cannot source lib/layout.sh" >&2; exit 2; }
+
+# PRE-WRAP GATE. A hook without the wrap would RUN when sourced (reading this shell's stdin and exiting), a silent
+# green, so both halves are required before the load. Neither half predates the wrap: SKIP on a consumer, FIXTURE
+# BROKEN in the distribution. Exactly one half is a respelled hook this fixture cannot drive, which FAILS.
+[ -r "$HOOK" ] || { echo "FIXTURE ERROR: cannot read $HOOK -- an unreadable hook is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'hkcont_main() {' "$HOOK" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: pause-question-in-prose: $HOOK predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) echo "  FAIL  $HOOK carries one half of the in-process wrap (hkcont_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive" >&2; echo "pause-question-in-prose: 1 assertion(s) FAILED" >&2; exit 1 ;;
+esac
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK defined nothing" >&2; exit 2; }
+declare -F hkcont_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no hkcont_main" >&2; exit 2; }
 
 # THE SUBJECT MAY BE ABSENT, AND THAT MUST NOT READ AS GREEN. A core fixture ships one pull
 # ahead of the code it guards, so on the pull that delivers this file the hook beside it may
@@ -58,15 +75,19 @@ if [ -n "$SCHEMA" ] && [ -f "$SCHEMA" ]; then echo "HERMETIC-CONSUMED core/schem
 # A fresh project dir per case, so the rapid-fire counter cannot leak between them and turn a
 # BLOCKED into a BACKOFF. The project is LEFT ON DISK: the continuation log is half the
 # verdict, and the arms below read it by event line.
+mkproj() { # <dir> <flag 0|1> <snapshot 0|1>
+  rm -rf "$1"; mkdir -p "$1/_bmad-output"
+  [ "$2" = "1" ] && touch "$1/_bmad-output/pipeline-paused.flag"
+  [ "$3" = "1" ] && cp "$ROOT/snapshot.md" "$1/_bmad-output/pipeline-snapshot.md"
+  return 0
+}
 drive() {
   local case="$1" t="$2" flag="$3" snap="$4" hk="${5:-$HOOK}"
   local proj="$ROOT/proj-$case"
-  rm -rf "$proj"; mkdir -p "$proj/_bmad-output"
-  [ "$flag" = "1" ] && touch "$proj/_bmad-output/pipeline-paused.flag"
-  [ "$snap" = "1" ] && cp "$ROOT/snapshot.md" "$proj/_bmad-output/pipeline-snapshot.md"
+  mkproj "$proj" "$flag" "$snap"
   jq -nc --arg t "$t" --arg s "fx-$case" '{transcript_path:$t,session_id:$s}' \
     | CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="${SCHEMA:-}" \
-      bash "$hk" > "$ROOT/out-$case.json" 2>"$ROOT/err-$case.txt"
+      inproc_run "$hk" hkcont_main > "$ROOT/out-$case.json" 2>"$ROOT/err-$case.txt"
   printf '%s' "$?" > "$ROOT/rc-$case"
 }
 
@@ -247,6 +268,37 @@ if blocked s4 && ! logged s4 'ALLOWED_NOT_AIDLC_SESSION'; then
 else
   bad "S4 a Stop whose transcript cannot be read was ALLOWED: $(cat "$ROOT/out-s4.json") — a lost transcript path now lets a stalled lead end its turn"
 fi
+
+# --- the cli cells (cells.decl): the hook started as a PROGRAM once per distinct outcome -----------------------
+# The hook exits 0 on every path; its outcomes are a block verdict, an allow carrying an operator systemMessage, and
+# a silent allow. Each is started as FXCELL=<id> bash "$HOOK" on a seeded project and compared with the in-process
+# call on another copy of it: stdout, stderr, exit and the project tree (timestamps and the copy's path normalised).
+# Each cell asserts its own outcome, so two runs that both did nothing cannot read as equal.
+EQ="$ROOT/eq"; rm -rf "$EQ"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir $EQ" >&2; exit 2; }
+proj_sig() { # <dir> -> the tree's file list and contents, timestamps and the dir path normalised
+  ( cd "$1" && find . -type f | sort | while read -r f; do printf '== %s\n' "$f"; cat "$f"; done ) \
+    | sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z?/TS/g' -e 's/^TS [0-9a-f]{16}$/TS NONCE/' -e 's/[0-9]{10}/EPOCH/g' -e "s|$1|DIR|g"
+}
+cli_cell() { # <id> <transcript> <flag> <snapshot> <outcome test on $EQ/<id>/cl.out> <outcome words>
+  local id="$1" ip="$EQ/$1/ip" cl="$EQ/$1/cl" pl
+  mkdir -p "$EQ/$id" && mkproj "$ip" "$3" "$4" && mkproj "$cl" "$3" "$4" || { bad "$id: could not seed the project"; return; }
+  pl="$(jq -nc --arg t "$2" --arg s "fx-$id" '{transcript_path:$t,session_id:$s}')"
+  printf '%s' "$pl" | CLAUDE_PROJECT_DIR="$ip" AI_DLC_PAUSE_ROUTING_SCHEMA="${SCHEMA:-}" inproc_run "$HOOK" hkcont_main > "$EQ/$id/ip.out" 2> "$EQ/$id/ip.err"; echo "$?" > "$EQ/$id/ip.rc"
+  printf '%s' "$pl" | CLAUDE_PROJECT_DIR="$cl" AI_DLC_PAUSE_ROUTING_SCHEMA="${SCHEMA:-}" FXCELL="$id" bash "$HOOK" > "$EQ/$id/cl.out" 2> "$EQ/$id/cl.err"; echo "$?" > "$EQ/$id/cl.rc"
+  proj_sig "$ip" > "$EQ/$id/ip.sig"; proj_sig "$cl" > "$EQ/$id/cl.sig"
+  if cmp -s "$EQ/$id/ip.out" "$EQ/$id/cl.out" && cmp -s "$EQ/$id/ip.err" "$EQ/$id/cl.err" && cmp -s "$EQ/$id/ip.rc" "$EQ/$id/cl.rc" \
+     && cmp -s "$EQ/$id/ip.sig" "$EQ/$id/cl.sig" && [ "$(cat "$EQ/$id/cl.rc")" = 0 ] && [ -s "$EQ/$id/cl.sig" ] && eval "$5"; then
+    ok "$id: the program $6 exactly as the in-process call does (stdout, stderr, exit 0 and the project tree)"
+  else
+    bad "$id: the program and the in-process call differ, or the outcome is not: $6"
+  fi
+}
+cli_cell cli-block "$ROOT/noq.jsonl" 0 1 \
+  'jq -e ".decision==\"block\"" "$EQ/$id/cl.out" >/dev/null 2>&1' "blocks the stop with a decision on stdout"
+cli_cell cli-warn "$ROOT/fire.jsonl" 1 0 \
+  'jq -e "has(\"systemMessage\") and (has(\"decision\")|not)" "$EQ/$id/cl.out" >/dev/null 2>&1' "allows the stop with an operator systemMessage and no decision"
+cli_cell cli-allow "$ROOT/fire.jsonl" 0 0 \
+  '[ ! -s "$EQ/$id/cl.out" ]' "allows the stop silently with no pipeline"
 
 rm -rf "$ROOT"
 echo ""

@@ -48,6 +48,64 @@ echo "HERMETIC-CONSUMED core/scripts/validate-artifact-budget.sh"
 WORK="$(mktemp -d 2>/dev/null)" || { echo "run.sh: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/_bmad-output"
+
+# IN PROCESS (BL-878). The validator is asked through vab_ip, which hands it to lib/inproc.sh's inproc_run: the file is
+# loaded once here (inproc_load) and vab_main runs in a fresh-bash subshell, so its `exit` stays in that subshell. The
+# program runs only in the cells of cells.decl (the cli cells below, each compared byte for byte with the in-process
+# answer on the same input).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present subject with neither the `vab_main() {` line nor the column-0
+# source guard predates the wrap, and sourcing it would run its whole body: SKIP and exit 0 (FIXTURE BROKEN in the
+# distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
+# unreadable subject is FIXTURE ERROR.
+# shellcheck source=/dev/null
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+vab_halves() { # vab_halves <file> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF 'vab_main() {' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_vh="$(vab_halves "$V")" || exit 2
+case "$_vh" in
+  11) : ;;
+  00) echo "SKIP: snapshot-supersession-marker: $V predates the in-process wrap"; fx_skip_exit "$DIR" ;;
+  *) bad "$V carries one half of the in-process wrap (vab_main line, column-0 source guard: $_vh) -- a respelled subject this fixture cannot drive"
+     # --- The cli cells: one per distinct CLI outcome, the program compared byte for byte with the in-process call -----
+snap '- prior estimate is SUPERSEDED.'
+vab_cell cli-vab-block 1 "a bare status stamp under --fail-on blocks" --root "$WORK" --only pipeline-snapshot.md --warn-only --fail-on pipeline-snapshot.md
+snap '- 13/14 WONTFIX/SUPERSEDED items closed; the section was superseded by an experiment.'
+vab_cell cli-vab-pass 0 "ordinary prose passes under --fail-on" --root "$WORK" --only pipeline-snapshot.md --warn-only --fail-on pipeline-snapshot.md
+
+report_end snapshot-supersession-marker ;;
+esac
+inproc_load "$V" || { echo "FIXTURE ERROR: could not load $V" >&2; exit 2; }
+vab_ip() { inproc_run "$V" vab_main "$@"; }
+# vab_eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}: the in-process answer and the program's, for the cli cell.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq failed" >&2; exit 2; }
+vab_eqv() {
+  local id="$1"; shift
+  vab_ip "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$V" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+# vab_cell <id> <want rc> <label> <args...>: the cli cell. PRESENCE-shaped: the program's rc is the wanted one, its
+# stdout is non-empty (a subject replaced by `exit 0` fails), and all three streams equal the in-process call's.
+vab_cell() {
+  local id="$1" want="$2" label="$3"; shift 3
+  if vab_eqv "$id" "$@" && [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && [ -s "$EQ/$id.cl.out" ]; then
+    ok "$id: $label -- the program and the in-process call agree byte for byte, exit $want"
+  else
+    bad "$id: $label -- the program and the in-process call differ, or the exit is not $want (in-process rc=$(cat "$EQ/$id.ip.rc") / program rc=$(cat "$EQ/$id.cl.rc"))"
+  fi
+}
 SNAP="$WORK/_bmad-output/pipeline-snapshot.md"
 
 # A schema-clean, well-under-budget snapshot. `$1` is dropped into Open Items, so SIZE
@@ -57,7 +115,7 @@ snap() {
   printf '## Pipeline Position\n- at retro\n## Sprint Context\n- sprint 1\n## Recent Activity\n- nothing notable\n## Open Items\n%s\n## Locked Decisions\n- keep the threshold\n## In-Flight Teammates\n| dev-a | idle | join |\n## Context Reminders\n- keep it small\n' \
     "$1" > "$SNAP"
 }
-run() { bash "$V" --root "$WORK" --only pipeline-snapshot.md "$@" >/dev/null 2>&1; }
+run() { vab_ip --root "$WORK" --only pipeline-snapshot.md "$@" >/dev/null 2>&1; }
 
 # --- Arm 1: each forbidden shape fires -------------------------------------------
 while IFS='|' read -r label line; do
@@ -145,5 +203,11 @@ if run --warn-only --fail-on snapshot.md; then
 else
   bad "--fail-on 'snapshot.md' hardened pipeline-snapshot.md — the match is a substring match"
 fi
+
+# --- The cli cells: one per distinct CLI outcome, the program compared byte for byte with the in-process call -----
+snap '- prior estimate is SUPERSEDED.'
+vab_cell cli-vab-block 1 "a bare status stamp under --fail-on blocks" --root "$WORK" --only pipeline-snapshot.md --warn-only --fail-on pipeline-snapshot.md
+snap '- 13/14 WONTFIX/SUPERSEDED items closed; the section was superseded by an experiment.'
+vab_cell cli-vab-pass 0 "ordinary prose passes under --fail-on" --root "$WORK" --only pipeline-snapshot.md --warn-only --fail-on pipeline-snapshot.md
 
 report_end snapshot-supersession-marker

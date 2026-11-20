@@ -33,11 +33,20 @@
 # and an arm that matches prose cannot fire, which reads exactly like one that passed.
 # The pair "no record" / "renamed field" is what pins the reader between the two ways it
 # can go wrong.
-set -u
+set -uo pipefail
 # Scrub ambient AI_DLC_* — the validator reads AI_DLC_STATE_DIR, and a consumer that
 # tunes it in settings.json would otherwise fail this fixture against correct code.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# shellcheck source=/dev/null
+. "$DIR/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$DIR/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
 
 VALIDATOR=""
 for cand in \
@@ -51,6 +60,24 @@ if [ -z "$VALIDATOR" ]; then
   exit 1
 fi
 
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present validator with neither the `vga_main() {` line nor the column-0
+# source guard predates the in-process wrap, and sourcing it would run its whole body: SKIP and exit 0 (FIXTURE BROKEN
+# in the distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS.
+# An unreadable subject is FIXTURE ERROR.
+_gd=0; _gg=0
+grep -qxF 'vga_main() {' "$VALIDATOR"; _x=$?
+[ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_x)" >&2; exit 2; }
+[ "$_x" -ne 0 ] || _gd=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VALIDATOR"; _x=$?
+[ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $VALIDATOR (grep exit $_x)" >&2; exit 2; }
+[ "$_x" -ne 0 ] || _gg=1
+case "$_gd$_gg" in
+  11) : ;;
+  00) echo "SKIP: gate-repair-record: $VALIDATOR predates the in-process wrap"; fx_skip_exit "$DIR" ;;
+  *) bad "$VALIDATOR carries one half of the in-process wrap (vga_main line, column-0 source guard: $_gd$_gg) -- a respelled subject this fixture cannot drive"
+     report_end gate-repair-record ;;
+esac
+
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")"
 [ -f "$(dirname "$VALIDATOR")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED $(cd "$(dirname "$VALIDATOR")" && pwd)/gate_adjudication.py"
 
@@ -59,12 +86,19 @@ if [ -z "$ROOT" ] || [ ! -d "$ROOT" ]; then
   echo "FIXTURE BROKEN: seed.sh produced no root"
   exit 1
 fi
-trap 'rm -rf "$ROOT"' EXIT
+EQ="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp" >&2; exit 2; }
+trap 'rm -rf "$ROOT" "$EQ"' EXIT
 
-FAILURES=0
-ASSERTIONS=0
+# IN PROCESS (BL-878). Every verdict below is vga_main's, asked through vga, which hands the validator to lib/inproc.sh's
+# inproc_run (the operand is a literal tail so arm P2 resolves it); the programs run only in the two cli cells of
+# cells.decl, each compared byte for byte with the in-process answer on the same input.
+inproc_load "$VALIDATOR" || { echo "FIXTURE ERROR: cannot load $VALIDATOR" >&2; exit 2; }
+vga() { inproc_run "${VALIDATOR%/*}/validate-gate-adjudication.sh" vga_main "$@"; }
 
-note_fail() { echo "FAIL: $*"; FAILURES=$((FAILURES + 1)); }
+_f0=0
+settle() { [ "$fails" -eq "$_f0" ] && ok "$1"; return 0; }
+note_fail() { bad "$*"; }
+
 
 # --------------------------------------------------------------------------
 # 0. THE DIFFERENTIAL ITSELF. Everything below is worthless if this does not hold.
@@ -76,7 +110,7 @@ gate-repaired-resolution-off-label"
 A="$ROOT/gate-repaired-delegated/_bmad-output/gate-adjudication"
 B="$ROOT/gate-repaired-inline-no-record/_bmad-output/gate-adjudication"
 
-ASSERTIONS=$((ASSERTIONS + 1))
+_f0=$fails
 n_a="$(find "$A" -name '*.verdict.json' | wc -l | tr -d ' ')"
 if [ "$n_a" -lt 3 ]; then
   note_fail "the seeded series has $n_a verdict(s); the differential needs at least three
@@ -101,10 +135,11 @@ else
     done
   done
 fi
+settle "every case carries a byte-identical verdict series to gate-repaired-delegated (three or more passes)"
 
 # And the difference that IS intended must actually be there, or the cases are the same
 # case twice and all three would agree no matter what the validator does.
-ASSERTIONS=$((ASSERTIONS + 1))
+_f0=$fails
 recs_a="$(find "$ROOT/gate-repaired-delegated/_bmad-output/planning-artifacts" \
           -name 'gate-*-repair-p*.md' 2>/dev/null | wc -l | tr -d ' ')"
 recs_b="$(find "$ROOT/gate-repaired-inline-no-record/_bmad-output/planning-artifacts" \
@@ -113,6 +148,7 @@ if [ "$recs_a" -ne 2 ] || [ "$recs_b" -ne 0 ]; then
   note_fail "the seeded repair records are delegated=$recs_a, inline=$recs_b; expected 2
   and 0. The independent variable is not set, so the cases are one case twice."
 fi
+settle "the independent variable is set: delegated carries 2 repair records, inline carries 0"
 
 # --------------------------------------------------------------------------
 # 1. THE ARM. Assert on the MESSAGE, never on the exit code alone.
@@ -125,12 +161,12 @@ fi
 # --------------------------------------------------------------------------
 # $1 case-dir  $2 expected exit  $3 message regex ('' = must carry no repair-record
 #                                                  finding)  $4 why
-expect() {
+expect() { _f0=$fails; _expect "$@"; settle "$1 exits $2 on the finding the case names"; }
+_expect() {
   local case_dir="$1" want="$2" want_re="$3" why="$4" got out
-  ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series \
-        "$ROOT/$case_dir/_bmad-output/gate-adjudication" 2>&1)"
+  vga --series "$ROOT/$case_dir/_bmad-output/gate-adjudication" >"$EQ/$case_dir.out" 2>"$EQ/$case_dir.err"
   got=$?
+  out="$(cat "$EQ/$case_dir.out" "$EQ/$case_dir.err")"
   if [ "$got" -ne "$want" ]; then
     note_fail "$case_dir exited $got, expected $want.
   $why
@@ -249,7 +285,7 @@ expect gate-repaired-record-off-label 1 'UNSTRUCTURED REPAIR RECORD' \
 # --------------------------------------------------------------------------
 C22A="$ROOT/gate-c22-remediated-resolution/_bmad-output/gate-adjudication"
 C22B="$ROOT/gate-c22-remediated-no-record/_bmad-output/gate-adjudication"
-ASSERTIONS=$((ASSERTIONS + 1))
+_f0=$fails
 n_c22="$(find "$C22A" -name '*.verdict.json' | wc -l | tr -d ' ')"
 if [ "$n_c22" -ne 2 ]; then
   note_fail "the Check 22 pair seeded $n_c22 verdict(s); it needs exactly two passes (FAIL then PASS)."
@@ -259,11 +295,13 @@ else
   $(basename "$f"); the pair must differ ONLY in the resolution record."
   done
 fi
-ASSERTIONS=$((ASSERTIONS + 1))
+settle "the Check 22 pair carries a byte-identical two-pass series"
+_f0=$fails
 recs_c22a="$(find "$ROOT/gate-c22-remediated-resolution/_bmad-output/planning-artifacts" -name 'gate-implementation-resolution-p1.md' | wc -l | tr -d ' ')"
 recs_c22b="$(find "$ROOT/gate-c22-remediated-no-record/_bmad-output/planning-artifacts" -name 'gate-*-p*.md' | wc -l | tr -d ' ')"
 [ "$recs_c22a" -eq 1 ] && [ "$recs_c22b" -eq 0 ] || note_fail "the Check 22 pair's records are
   with=$recs_c22a, without=$recs_c22b; expected 1 and 0."
+settle "the Check 22 pair differs only in the resolution record (1 and 0)"
 
 expect gate-c22-remediated-resolution 0 '' \
 "Check 22 FAILed at pass 1 on remediable rows only and PASSed at pass 2, and the lead's
@@ -285,8 +323,9 @@ expect gate-c22-remediated-no-record 1 'MISSING REPAIR RECORD' \
 # fired here, cases 2 and 3 would exit 1 for a reason that has nothing to do with the
 # repair record, and the fixture would report green while measuring the wrong mechanism.
 # --------------------------------------------------------------------------
-ASSERTIONS=$((ASSERTIONS + 1))
-rung_out="$(bash "$VALIDATOR" --series "$B" 2>&1)"
+_f0=$fails
+rung_out="$(cat "$EQ/gate-repaired-inline-no-record.out" "$EQ/gate-repaired-inline-no-record.err")"
+[ -s "$EQ/gate-repaired-inline-no-record.out" ] || [ -s "$EQ/gate-repaired-inline-no-record.err" ] || bad "the inline case printed nothing; the rung check below would read an empty answer"
 if grep -qiE 'consecutive|stall' <<<"$rung_out"; then
   note_fail "the stall rung fired on the inline case. The seeded series holds FAIL on one
   check for two consecutive passes, one short of K=3, precisely so that this fixture's
@@ -296,11 +335,24 @@ if grep -qiE 'consecutive|stall' <<<"$rung_out"; then
   validator said: $rung_out"
 fi
 
-if [ "$FAILURES" -eq 0 ]; then
-  echo "ok: gate-repair-record — $ASSERTIONS assertion(s); the differential holds (the"
-  echo "    delegated and inline cases carry byte-identical verdict series) and the"
-  echo "    validator separates them on the repair record alone."
-  exit 0
-fi
-echo "FAILED: gate-repair-record — $FAILURES of $ASSERTIONS assertion(s)"
-exit 1
+settle "the stall rung did not fire on the inline case (the red cases are red on the record alone)"
+
+# --------------------------------------------------------------------------
+# 3. THE PROGRAM, once per distinct CLI outcome (cells.decl cli rows): exit 0 and the exit-1 refusal, each started as
+# FXCELL=<id> bash and compared with the in-process answer already captured above: stdout, stderr and exit, byte for byte.
+# --------------------------------------------------------------------------
+eqv() { # eqv <cell-id> <case-dir> <want-rc>
+  local id="$1" c="$2" want="$3"
+  FXCELL="$id" bash "$VALIDATOR" --series "$ROOT/$c/_bmad-output/gate-adjudication" >"$EQ/$id.cl.out" 2>"$EQ/$id.cl.err"
+  echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$c.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$c.err" "$EQ/$id.cl.err" \
+    && [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && [ -s "$EQ/$id.cl.out" -o -s "$EQ/$id.cl.err" ]
+}
+if eqv cli-series-pass gate-repaired-delegated 0; then
+  ok "cli-series-pass: the program answers the delegated series with exit 0 and the same bytes as the in-process call"
+else bad "cli-series-pass: the program and the in-process call differ, or the outcome is not exit 0 with output (rc $(cat "$EQ/cli-series-pass.cl.rc"))"; fi
+if eqv cli-series-refuse gate-repaired-inline-no-record 1 && grep -qiE 'repair record|repair-record' "$EQ/cli-series-refuse.cl.out" "$EQ/cli-series-refuse.cl.err"; then
+  ok "cli-series-refuse: the program refuses the inline series on the repair-record finding with exit 1 and the same bytes as the in-process call"
+else bad "cli-series-refuse: the program and the in-process call differ, or the outcome is not exit 1 on a repair-record finding (rc $(cat "$EQ/cli-series-refuse.cl.rc"))"; fi
+
+report_end gate-repair-record

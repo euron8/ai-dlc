@@ -1,0 +1,16 @@
+# held-stories' starts (BL-878 item 7; BL-879 grammar). Every drive is in process: run.sh loads validate-held-stories.sh and
+# snapshot-update.sh once each and asks vhs_main / snu_main through inproc_run, and every nested start the two make (the budget
+# validator, the held-stories validator, sprint-status.sh) runs its entry in a subshell through run.sh's `bash` shim. One
+# command-line start per distinct CLI outcome, started as FXCELL=<id> bash <subject> and compared on stdout+stderr, exit (and, for
+# snapshot-update, the written snapshot) with the in-process answer on the same input: validate-held-stories.sh exits 0 (clean),
+# 1 (UNACCOUNTED) and 2 (no snapshot); snapshot-update.sh exits 0 with the OK line and 0 with an UNACCOUNTED finding. No
+# end-to-end cell: no subject holds a process group, `$$` holder, exec of itself or EXIT trap a subshell would end differently.
+cli core/scripts/validate-held-stories.sh cli-vhs-ok
+cli core/scripts/validate-held-stories.sh cli-vhs-fail
+cli core/scripts/validate-held-stories.sh cli-vhs-unev
+cli core/scripts/snapshot-update.sh cli-snu-ok
+cli core/scripts/snapshot-update.sh cli-snu-warn
+# The nested starts of those cli cells are real processes (each program starts its siblings itself).
+nested core/scripts/validate-held-stories.sh core/scripts/sprint-status.sh why=the three validate-held-stories.sh cli cells start it as a program, whose own sprint-status.sh start is a real process the run.sh shim cannot route
+nested core/scripts/snapshot-update.sh core/scripts/validate-artifact-budget.sh why=the two snapshot-update.sh cli cells start it as a program, whose own validator start is a real process the run.sh shim cannot route
+nested core/scripts/snapshot-update.sh core/scripts/validate-held-stories.sh why=the two snapshot-update.sh cli cells start it as a program, whose own held-stories start is a real process the run.sh shim cannot route

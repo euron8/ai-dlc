@@ -35,12 +35,53 @@ trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The validator (vscf_main) and the capture hook (aac_main) are asked through vsc / aac, which hand the
+# subject to lib/inproc.sh's inproc_run; every pass is logged by fx_inproc and counted on an `inproc:` row. The programs
+# run only in the cells of cells.decl: one cli cell per distinct validator exit (0, 1, 2, 3) and one for the hook, each
+# compared byte for byte with the in-process answer on the same input (the CLI CELLS block at the end).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present subject with neither the `<p>_main() {` line nor the column-0
+# source guard predates the wrap, and sourcing it would run its whole body: SKIP and exit 0 (FIXTURE BROKEN in the
+# distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
+# unreadable subject is FIXTURE ERROR.
+sc_halves() { # sc_halves <file> <entry> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_sc_pre=""
+sc_gate() { # sc_gate <file>:<entry> -- one call line per wrapped subject, so each carries its own gate
+  local _sc="$1" _gh
+  _gh="$(sc_halves "${_sc%%:*}" "${_sc##*:}")" || exit 2
+  case "$_gh" in
+    11) : ;;
+    00) _sc_pre="$_sc_pre ${_sc%%:*}" ;;
+    *) bad "${_sc%%:*} carries one half of the in-process wrap (${_sc##*:} line, column-0 source guard: $_gh) -- a respelled subject this fixture cannot drive"
+       report_end scope-confirmation ;;
+  esac
+}
+sc_gate "$VALIDATOR:vscf_main"
+sc_gate "$HOOK:aac_main"
+if [ -n "$_sc_pre" ]; then echo "SKIP: scope-confirmation:$_sc_pre predate(s) the in-process wrap"; fx_skip_exit "$HERE"; fi
+inproc_load "${VALIDATOR%/*}/validate-scope-confirmation.sh" || { echo "FIXTURE BROKEN: cannot load $VALIDATOR" >&2; exit 2; }
+vsc() { inproc_run "${VALIDATOR%/*}/validate-scope-confirmation.sh" vscf_main "$@"; } # the validator's stdout, stderr and exit, as `bash <validator> <args>` gives them
+aac() { ( inproc_load "${HOOK%/*}/ai-dlc-answer-capture.sh" && inproc_run "${HOOK%/*}/ai-dlc-answer-capture.sh" aac_main "$@" ); } # the hook, loaded in its own subshell
+
 sha_of() { printf '%s' "$1" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1; }
 
-# Run a validator against a snapshot/answers pair. Echoes the exit code; stashes output.
+# Run the validator against a snapshot/answers pair. Echoes the exit code; stashes output.
+# (the first argument, the validator, is kept for the call sites; vsc asks the subject loaded above)
 LAST_OUT=""
 rc_of() {
-  LAST_OUT="$(bash "$1" --snapshot "$2" --answers "$3" 2>&1)"
+  LAST_OUT="$(vsc --snapshot "$2" --answers "$3" 2>&1)"
   printf '%s' "$?"
 }
 
@@ -51,7 +92,11 @@ printf 'HERMETIC-CONSUMED %s\n' "$HOOK"
 _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.claude/schemas/pause-routing.json"; do [ -f "$_c" ] && { _PRS="$(cd "$(dirname "$_c")" && pwd -P)/pause-routing.json"; break; }; done
 [ -n "$_PRS" ] && printf 'HERMETIC-CONSUMED %s\n' "$_PRS"
 
-if [ -z "${SHA:-}" ]; then
+# The capture hook records the operator's answer in process, from the seeded payload on stdin. $SHA, the seed's cite, is
+# the hash of the answer computed independently; HOOK_SHA is what the hook wrote.
+CLAUDE_PROJECT_DIR="$PROJ" aac < "$WORK/payload.json" >/dev/null 2>&1 || true
+HOOK_SHA="$(sed -n 's/^- SHA256: //p' "$ANSWERS" 2>/dev/null | tail -1)"
+if [ -z "$HOOK_SHA" ]; then
   bad "SEED BROKEN: the capture hook recorded no SHA256, so every assertion below would be comparing against an empty string"
   echo; echo "scope-confirmation: $fails assertion(s) FAILED" >&2; exit 1
 fi
@@ -154,7 +199,7 @@ fi
 # --- Assertion 12: the recorded SHA resolves to the ANSWER bytes ---------------
 # This is what makes the cite a citation grade rather than a checksum. Recomputed here
 # independently of the hook.
-if [ "$SHA" = "$(sha_of "$ANSWER")" ]; then
+if [ "$HOOK_SHA" = "$(sha_of "$ANSWER")" ] && [ "$HOOK_SHA" = "$SHA" ]; then
   ok "the hook's recorded SHA256 is the hash of the operator's answer, recomputed independently"
 else
   bad "the recorded SHA256 does not match a hash of the answer it labels — every cite built on it resolves to nothing"
@@ -165,7 +210,7 @@ fi
 # it wrote itself and pass a provenance check by talking to itself — the S290
 # fabrication, reintroduced through the fix for its mirror image.
 Q='Is this the scope you asked for?'
-if [ "$SHA" != "$(sha_of "$Q")" ] && [ "$SHA" != "$(sha_of "$Q$ANSWER")" ] \
+if [ "$HOOK_SHA" != "$(sha_of "$Q")" ] && [ "$HOOK_SHA" != "$(sha_of "$Q$ANSWER")" ] \
    && ! grep -q "^- SHA256: $(sha_of "$Q")\$" "$ANSWERS"; then
   ok "the hash covers the answer alone — neither the lead-authored question nor question+answer hashes to it"
 else
@@ -220,7 +265,7 @@ fi
 # produced — a stale instrument, reading exactly like a real finding. `run_v` sets both
 # the code and the output in the CURRENT shell.
 LAST_RC=0
-run_v() { LAST_OUT="$(bash "$1" --snapshot "$2" --answers "$3" 2>&1)"; LAST_RC=$?; }
+run_v() { LAST_OUT="$(vsc --snapshot "$2" --answers "$3" 2>&1)"; LAST_RC=$?; }
 out_has() { grep -qF "$1" <<<"$LAST_OUT"; }
 
 # --- Assertion 19: the producer's dominant form -------------------------------
@@ -337,8 +382,8 @@ sc_ident_holds() {
   SC_IDENT_WHY=""
   a="$(sc_ident_corpus)" || { SC_IDENT_WHY="could not build corpus A"; return 1; }
   b="$(sc_ident_corpus)" || { SC_IDENT_WHY="could not build corpus B"; return 1; }
-  oa="$(bash "$v" --snapshot "$a/snapshot.md" --answers "$a/answers.md" 2>&1)"; ra=$?
-  ob="$(bash "$v" --snapshot "$b/snapshot.md" --answers "$b/answers.md" 2>&1)"; rb=$?
+  oa="$(vsc --snapshot "$a/snapshot.md" --answers "$a/answers.md" 2>&1)"; ra=$?
+  ob="$(vsc --snapshot "$b/snapshot.md" --answers "$b/answers.md" 2>&1)"; rb=$?
   if [ "$ra" != "0" ] || [ "$rb" != "0" ]; then
     SC_IDENT_WHY="rc=$ra/$rb, expected 0/0 — the run never reached the PASS emitter"; return 1
   fi
@@ -382,7 +427,7 @@ SC_D="$(mktemp -d "$WORK/dflt.XXXXXX")"
 mkdir -p "$SC_D/_bmad-output"
 cp "$WORK/snap-good.md" "$SC_D/_bmad-output/pipeline-snapshot.md"
 cp "$ANSWERS"           "$SC_D/_bmad-output/operator-answers-history.md"
-SC_DOUT="$(AI_DLC_PROJECT_ROOT="$SC_D" bash "$VALIDATOR" 2>&1)"; SC_DRC=$?
+SC_DOUT="$(AI_DLC_PROJECT_ROOT="$SC_D" vsc 2>&1)"; SC_DRC=$?
 if [ "$SC_DRC" = "0" ] \
    && grep -qF "$SC_D/_bmad-output/pipeline-snapshot.md" <<<"$SC_DOUT" \
    && grep -qF "$SC_D/_bmad-output/operator-answers-history.md" <<<"$SC_DOUT"; then
@@ -545,7 +590,7 @@ fi
 
 SD_OUT=""; SD_RC=0
 sd_run() {   # $1 validator, $2 snapshot name, $3 answers path, $4 repo path, [$5 TZ]
-  SD_OUT="$(TZ="${5:-UTC}" bash "$1" --snapshot "$SD/snap-$2.md" --answers "$3" \
+  SD_OUT="$(TZ="${5:-UTC}" vsc --snapshot "$SD/snap-$2.md" --answers "$3" \
             --backlog "$SD_BL" --repo "$4" 2>&1)"; SD_RC=$?
 }
 sd_has() { grep -qF -- "$1" <<<"$SD_OUT"; }
@@ -635,7 +680,7 @@ done
 # --- Assertion 63: the two consumer layouts do not change the answer ------------
 # The arm reads `carry-over-backlog-archive.md` BESIDE the backlog it was given, never from
 # the root, so a backlog passed by path finds its own archive from any working directory.
-SD_CWD_OUT="$( cd / && bash "$VALIDATOR" --snapshot "$SD/snap-archived.md" --answers "$ANSWERS" \
+SD_CWD_OUT="$( cd / && vsc --snapshot "$SD/snap-archived.md" --answers "$ANSWERS" \
                  --backlog "$SD_BL" --repo "$REPO_STD" 2>&1 )"; SD_CWD_RC=$?
 if [ "$SD_CWD_RC" = "0" ] && grep -qF "deferred_items_checked: 1" <<<"$SD_CWD_OUT"; then
   ok "run from / the archive beside the given backlog still resolves — the arm is cwd-invariant"
@@ -688,10 +733,10 @@ UR_OUT=""; UR_RC=0
 ur_run() {   # $1 validator, $2 world, $3 snapshot name, [$4 stub mode]
   : > "$UR/stub/LOG"
   if [ -n "${4:-}" ]; then
-    UR_OUT="$(PATH="$UR/stub:$PATH" UR_AWK_MODE="$4" TZ=UTC bash "$1" --snapshot "$SD/snap-$3.md" \
+    UR_OUT="$(PATH="$UR/stub:$PATH" UR_AWK_MODE="$4" TZ=UTC vsc --snapshot "$SD/snap-$3.md" \
               --answers "$ANSWERS" --backlog "$UR/$2/carry-over-backlog.md" --repo "$REPO_STD" 2>&1)"; UR_RC=$?
   else
-    UR_OUT="$(TZ=UTC bash "$1" --snapshot "$SD/snap-$3.md" --answers "$ANSWERS" \
+    UR_OUT="$(TZ=UTC vsc --snapshot "$SD/snap-$3.md" --answers "$ANSWERS" \
               --backlog "$UR/$2/carry-over-backlog.md" --repo "$REPO_STD" 2>&1)"; UR_RC=$?
   fi
 }
@@ -755,7 +800,7 @@ for l in en_US.UTF-8 C.UTF-8; do
   if [ "$(LC_ALL="$l" locale charmap 2>/dev/null)" = "UTF-8" ]; then LB_LOC="$l"; break; fi
 done
 lb_run() {   # $1 validator, $2 world -> echoes rc
-  LC_ALL="$LB_LOC" LANG="$LB_LOC" TZ=UTC bash "$1" --snapshot "$SD/snap-latin1.md" --answers "$ANSWERS" \
+  LC_ALL="$LB_LOC" LANG="$LB_LOC" TZ=UTC vsc --snapshot "$SD/snap-latin1.md" --answers "$ANSWERS" \
     --backlog "$LB/$2/carry-over-backlog.md" --repo "$REPO_STD" >/dev/null 2>&1
   echo $?
 }
@@ -889,7 +934,7 @@ ls_esc outside  2026-10-15T21:42:08Z DEFERRAL_REQUEST "defer CO-S300-UNRELATED t
 ls_esc noask    2026-10-15T21:42:08Z DEFERRAL_REQUEST "defer CO-S318-ASKED-ITEM to a later sprint."
 LS_OUT=""; LS_RC=0
 ls_run() {    # $1 validator, $2 snapshot, $3 escalations world, [$4 answers path]
-  LS_OUT="$(TZ=UTC bash "$1" --snapshot "$LS/snap-$2.md" --answers "${4:-$LS_ANS}" --backlog "$LS/backlog.md" \
+  LS_OUT="$(TZ=UTC vsc --snapshot "$LS/snap-$2.md" --answers "${4:-$LS_ANS}" --backlog "$LS/backlog.md" \
             --repo "$REPO_STD" --requests "$LS/requests.md" --escalations "$LS/esc-$3.md" 2>&1)"; LS_RC=$?
 }
 ls_has() { grep -qF -- "$1" <<<"$LS_OUT"; }
@@ -937,6 +982,41 @@ for c in $LS_CELLS; do
   if [ "$want" = "$got" ]; then ok "locked-scope cell '$c': rc=$got as required"
   else bad "locked-scope cell '$c': got '$got', expected '$want' — $(ls_why "$c")"; fi
 done
+
+# =============================================================================
+# THE CLI CELLS (cells.decl): each subject run as a PROGRAM once per distinct CLI outcome, each compared with the
+# in-process call on the same input: stdout, stderr and exit, byte for byte. The validator's four exits (0 pass, 1
+# refusal, 2 unreadable snapshot, 3 PENDING) read one world; the hook's capture runs in a fresh project dir per twin and
+# its answers file is compared with the heading's timestamp normalized. Each cell asserts its own exit code and a line
+# of output, so two runs that both printed nothing cannot read as equivalent.
+# =============================================================================
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when all three agree
+  local id="$1"; shift
+  vsc "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] / program rc=%s out=[%s]' "$(cat "$EQ/$1.ip.rc")" "$(head -1 "$EQ/$1.ip.out")" \
+  "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")"; }
+sc_cli() { # sc_cli <id> <rc> <must-appear-in-output> <snapshot> <answers>
+  if eqv "$1" --snapshot "$4" --answers "$5" && [ "$(cat "$EQ/$1.cl.rc")" = "$2" ] && grep -qF -- "$3" "$EQ/$1.cl.out" "$EQ/$1.cl.err"; then
+    ok "$1: the program exits $2 and prints '$3', exactly as the in-process call does"
+  else bad "$1: the program and the in-process call differ, or the outcome is not exit $2 printing '$3' ($(eq_twin "$1"))"; fi
+}
+sc_cli cli-vscf-pass    0 "scope_confirmed: corrected"         "$WORK/snap-good.md"        "$ANSWERS"
+sc_cli cli-vscf-fail    1 "carries no 'scope_confirmed' field" "$WORK/snap-nofield.md"     "$ANSWERS"
+sc_cli cli-vscf-missing 2 "answers_entries_scanned:"           "$WORK/no-such-snapshot.md" "$ANSWERS"
+sc_cli cli-vscf-pending 3 "answers_entries_scanned:"           "$WORK/snap-good.md"        "$WORK/no-such-answers.md"
+# the hook: the same payload, a fresh project dir per twin
+for _t in ip cl; do mkdir -p "$EQ/proj-$_t/_bmad-output"; done
+CLAUDE_PROJECT_DIR="$EQ/proj-ip" aac < "$WORK/payload.json" > "$EQ/aac.ip.out" 2> "$EQ/aac.ip.err"; echo "$?" > "$EQ/aac.ip.rc"
+CLAUDE_PROJECT_DIR="$EQ/proj-cl" FXCELL=cli-aac-capture bash "$HOOK" < "$WORK/payload.json" > "$EQ/aac.cl.out" 2> "$EQ/aac.cl.err"; echo "$?" > "$EQ/aac.cl.rc"
+for _t in ip cl; do sed 's/^## [0-9][0-9T:Z-]* /## STAMP /' "$EQ/proj-$_t/_bmad-output/operator-answers-history.md" > "$EQ/aac.$_t.ans" 2>/dev/null; done
+if cmp -s "$EQ/aac.ip.out" "$EQ/aac.cl.out" && cmp -s "$EQ/aac.ip.err" "$EQ/aac.cl.err" && cmp -s "$EQ/aac.ip.rc" "$EQ/aac.cl.rc" \
+   && cmp -s "$EQ/aac.ip.ans" "$EQ/aac.cl.ans" && [ "$(cat "$EQ/aac.cl.rc")" = 0 ] && grep -qF "SHA256: $SHA" "$EQ/aac.cl.ans"; then
+  ok "cli-aac-capture: the hook program records the answer under the same SHA256 and emits the same output as the in-process call, exit 0"
+else bad "cli-aac-capture: the hook program and the in-process call differ, or the capture holds no SHA256 of the answer (in-process rc=$(cat "$EQ/aac.ip.rc") / program rc=$(cat "$EQ/aac.cl.rc"))"; fi
 
 echo
 report_end scope-confirmation

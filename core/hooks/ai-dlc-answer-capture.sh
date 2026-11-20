@@ -98,6 +98,7 @@
 # 4. Restart Claude Code
 # 5. Verify with /hooks
 
+aac_main() {
 set -u
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
@@ -111,7 +112,7 @@ SNAPSHOT_FILE="${LOG_DIR}/pipeline-snapshot.md"
 # upstream, .claude/hooks/ in a consumer -- and is the copy that shipped in the same package
 # as this file. The PROJECT_DIR candidates are the fallback for a hook invoked through a
 # copy; the env override is for fixtures driving this hook from a temp directory.
-_prs_self="$(cd "$(dirname "$0")" && pwd)"
+_prs_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAUSE_ROUTING_SCHEMA=""
 for _prs in "${AI_DLC_PAUSE_ROUTING_SCHEMA:-}" \
             "${_prs_self}/../schemas/pause-routing.json" \
@@ -377,3 +378,6 @@ jq -n --arg context "$(ai_dlc_provenance_wrap ai-dlc-answer-capture PostToolUse 
 }' 2>/dev/null || true
 
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+aac_main "$@"

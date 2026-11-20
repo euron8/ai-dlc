@@ -26,8 +26,11 @@
 # and Ts and Tn now carry a stub predictor. +17 starts: Fs's self-check (1), its prefix and two step validators (3),
 # its section d and f seeds (2), their unit.sh and runner starts (4 + 4), and the predictor in Fs, Ts and Tn (3).
 # From one counted run through scripts/seed-verdict-store.sh.
-137 *
-21 scripts/pregate-self-check.sh
-2 core/fixtures/pregate-self-check/receipt-bl643.sh
-16 scripts/seed-verdict-store.sh
+117 *
+2 scripts/pregate-self-check.sh
+0 core/fixtures/pregate-self-check/receipt-bl643.sh
+3 scripts/seed-verdict-store.sh
 # 75 to 161, 27 to 56 and 3 to 4, BL-1020: the receipt drives five more roots (Hcwd, Hres, Htree, Hbehind, Habs) in each of its runs, and run.sh gains the m3 mutant run. From two agreeing counted runs.
+3 inproc:core/fixtures/pregate-self-check/receipt-bl643.sh
+23 inproc:scripts/pregate-self-check.sh
+2 inproc:scripts/seed-verdict-store.sh

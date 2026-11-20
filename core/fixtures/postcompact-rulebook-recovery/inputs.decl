@@ -13,4 +13,5 @@ core/skills/ai-dlc/SKILL.md
 !core/schemas/pause-routing.json
 core/fixtures/lib/report.sh
 core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh
 !core/hooks/ai-dlc-handoff-entry.sh

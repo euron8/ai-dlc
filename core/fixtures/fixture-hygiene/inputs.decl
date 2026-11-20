@@ -6,3 +6,8 @@
 # preamble.sh and report.sh, sourced here.
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+# The in-process cells and their twins: cells.decl, and mutant.sh (fx_inproc) and inproc.sh (inproc_run), sourced here
+# and by both receipts.
+core/fixtures/fixture-hygiene/cells.decl
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/inproc.sh

@@ -1,0 +1,8 @@
+# handoff-resume-guard's starts of core/hooks/ai-dlc-continue.sh (BL-879 grammar). Every other drive is in process
+# (run.sh drive(), drive_world(), lease_drive(), the no-jq and isolated-copy probes: inproc_load once, inproc_run
+# hkcont_main per call; the isolated copy is run by path, its pass logged under the loaded subject). The hook exits 0
+# on every path, so the cli cells are two outcomes (the guard's block verdict on stdout; a silent allow), each started
+# as FXCELL=<id> bash "$HOOK" on a project built as drive() builds it and compared with the in-process call on another
+# copy of it: stdout, stderr, exit and the normalised project tree.
+cli core/hooks/ai-dlc-continue.sh cli-block
+cli core/hooks/ai-dlc-continue.sh cli-allow

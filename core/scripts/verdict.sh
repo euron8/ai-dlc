@@ -67,14 +67,15 @@
 #   AI_DLC_VERDICT_LINES   lines to echo under a verdict     (default 6)
 #   AI_DLC_SCRIPTS_DIR     where validators live           (default: this dir)
 
+vrd_main() {
 set -u
 
 LINES="${AI_DLC_VERDICT_LINES:-6}"
-SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="${AI_DLC_SCRIPTS_DIR:-$SELF_DIR}"
 
 if [ $# -lt 1 ]; then
-  echo "FAIL: usage: $0 <validator> [args...]   (or --all)" >&2
+  echo "FAIL: usage: ${BASH_SOURCE[0]} <validator> [args...]   (or --all)" >&2
   exit 64
 fi
 
@@ -205,3 +206,6 @@ fi
 
 run_one "$@"
 exit $?
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vrd_main "$@"

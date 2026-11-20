@@ -171,18 +171,6 @@ trap 'rm -rf "$WORK"' EXIT
 # byte for byte with the in-process call on the same input.
 [ -f "$HERE/../lib/inproc.sh" ] || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
 . "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
-# PRE-WRAP CONSUMER GATE (BL-878): a consumer one pull behind carries this fixture with a subject that predates the
-# in-process wrap, and loading it would run its whole body. Neither half is SKIP (FIXTURE BROKEN in the distribution,
-# exit 0 on a consumer); exactly one half FAILS; an unreadable subject is FIXTURE ERROR.
-grep -qxF 'er_main() {' "$EMIT"; _wg1=$?
-grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$EMIT"; _wg2=$?
-[ "$_wg1" -le 1 ] && [ "$_wg2" -le 1 ] || { echo "FIXTURE ERROR: cannot read $EMIT (grep exit $_wg1/$_wg2)" >&2; exit 2; }
-case "$_wg1$_wg2" in
-  00) : ;;
-  11) echo "SKIP: reconcile-emit-report: $EMIT predates the in-process wrap"; fx_skip_exit "$HERE" ;;
-  *) bad "$EMIT carries one half of the in-process wrap (er_main line: rc $_wg1, column-0 source guard: rc $_wg2) -- a respelled subject this fixture cannot drive"
-     report_end "reconcile-emit-report shard '$GROUP' of '$SHARDS'" ;;
-esac
 inproc_load "$EMIT" || { echo "FIXTURE ERROR: sourcing $EMIT defined no er_main" >&2; exit 2; }
 er_ip() { # er_ip <emit-report.sh path> <args...> -> the subject's stdout, stderr and exit
   local _e="$1"; shift

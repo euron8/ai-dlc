@@ -1,0 +1,15 @@
+# Every beat, --status, --dispatch-ts and --mark call of wait-for-deliverable.sh runs in process (wbl_ip), and the merge's
+# --check-header runs in process (hdr_msg, inproc_run). The programs run only in these cells.
+# wiring_e2e: wait-for-deliverable.sh as a program once per distinct CLI outcome, each held byte-identical (stdout, stderr,
+# exit) to wbl_ip on the same world, and the six answers shown pairwise distinct.
+cli core/scripts/wait-for-deliverable.sh wiring-del
+cli core/scripts/wait-for-deliverable.sh wiring-nondel
+cli core/scripts/wait-for-deliverable.sh wiring-refuse
+cli core/scripts/wait-for-deliverable.sh wiring-status
+cli core/scripts/wait-for-deliverable.sh wiring-mark
+# merge-adversarial-shards.sh --check-header: the passing and the refusing outcome, each compared with the in-process answer.
+cli core/scripts/merge-adversarial-shards.sh cli-header-pass
+cli core/scripts/merge-adversarial-shards.sh cli-header-refuse
+# --dispatch-ts is run as a program on a sib.* copy of the subject (its sibling grammar sits beside the copy), which takes no
+# cell. A --shard-header beat on the real subject asks the merge in process (the `bash` shim in wbl_ip), so its header
+# checks are inproc: passes of the merge, not starts.

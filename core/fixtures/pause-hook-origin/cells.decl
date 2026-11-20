@@ -1,0 +1,8 @@
+# pause-hook-origin's starts of core/hooks/ai-dlc-pause.sh (BL-879 grammar). Every other drive is in process (run.sh
+# fire() and b_fire(): inproc_load once, inproc_run hkpause_main per prompt). The hook exits 0 and prints nothing on
+# every path, so the cli cells are two outcomes on the project tree (operator prose raises the pause flag and logs
+# USER_PAUSE; an empty prompt is skipped with PAUSE_SKIPPED logged), each started as FXCELL=<id> bash "$HOOK" on a copy
+# of the seeded project and compared with the in-process call on another copy: stdout, stderr, exit and the
+# normalised project tree.
+cli core/hooks/ai-dlc-pause.sh cli-pause
+cli core/hooks/ai-dlc-pause.sh cli-skip

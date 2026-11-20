@@ -69,7 +69,7 @@ uworld() {
 rec() {
   local a=""
   [ -n "$4" ] && a=",\"agent_id\":\"$4\",\"agent_type\":\"fixture\""
-  ( CLAUDE_PROJECT_DIR="$1"; fx_inproc core/hooks/ai-dlc-content-seal.sh; . "$SEALHOOK" ) > /dev/null 2>&1 <<EOF
+  ( CLAUDE_PROJECT_DIR="$1"; fx_inproc core/hooks/ai-dlc-content-seal.sh; . "$SEALHOOK"; acs_main ) > /dev/null 2>&1 <<EOF
 {"session_id":"fx-session","hook_event_name":"PostToolUse","tool_name":"$2","tool_input":{"file_path":"$3"},"tool_use_id":"toolu_01FxSealWrite","transcript_path":"$1/.harness/fx-session.jsonl","tool_response":{}$a}
 EOF
 }

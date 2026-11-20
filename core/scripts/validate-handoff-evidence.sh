@@ -42,7 +42,7 @@
 #
 # SMOKE MODE (BL-845) runs ONLY the smoke arms below (smoke_arms), never the status, row, heading,
 # capture or run-record arms: the row arm refuses correct stories at the gate-2 shas (MEASURED,
-# bookkeeping arms, below). The lead runs it at the gate-2 go-signal, before QA is dispatched;
+# bookkeeping arms, below). The lead runs it at the gate-2 go-signal (the frozen sha gates 1 and 2 are dispatched on together), before QA is dispatched;
 # handoff mode runs the same function at every gate-1 handoff. It is the MECHANICAL half of
 # gate-validation.md Check 11 ("section exists and lists files", "the files exist"); the judgment
 # half (the tests correspond to the story's user-facing change, the test type matches the change
@@ -253,20 +253,50 @@
 #       EVERY in-range capture; this arm reads only the ones the story CITES, as (a) does, so the
 #       shipped arm refuses 2 of the 4 (`ac8-generation-compare` at p4 and p6). The story at p6
 #       cites neither ac9 capture, so (m) does not read them.
-#   (n) PLACEHOLDER (WARN, never a refusal, exit unchanged). An in-range capture (a)'s range
+#   (n) PLACEHOLDER (a refusal under the pending path below, else WARN). An in-range capture (a)'s range
 #       reads, whose first 25 lines carry a `$ ` line with an unexpanded `<name>` placeholder
 #       (`<[A-Za-z_-]+>`): one `WARN placeholder <capture>: ...` line per placeholder. Narrowing,
 #       same population as (m): every `<x>` first; then `<redacted>` exempt (credential hygiene:
 #       a capture must not carry the secret it elides); then `<base-worktree>` exempt, the one
 #       remaining hit (s319 3-3 `test-results/s319-3-3-evidence/lint-base.txt:1`), which its
 #       reviewer accepted. FP 0 after that. A WARN because an enumerated FP set a reviewer
-#       accepted is correct data, and a WARN cannot wedge a correct handoff.
-#   WARN. A capture's `head:` sha is missing, does not resolve, or names a tree that
-#       differs from <frozen> outside the cited captures and the story file. For a replay
+#       accepted is correct data. The refusal tier is the 2026-11-20 decision; its measured set is
+#       under HANDOFF REFUSALS WITH A PENDING PATH.
+#   HEAD. A capture's `head:` sha is missing (a refusal under the pending path below, else WARN),
+#       does not resolve, or names a tree that
+#       differs from <frozen> outside the cited captures and the story file (both WARN: head-tree
+#       is never a refusal). For a replay
 #       capture the sha is the first `head:` after the replay header, falling back to the
-#       first in the 25 lines when the block carries none. Never a
-#       refusal: a capture taken at the content head and committed in a records commit
-#       after it is the normal shape.
+#       first in the 25 lines when the block carries none. head-unresolved and
+#       head-tree are never refusals: a capture taken at the content head and committed in a
+#       records commit after it is the normal shape.
+#
+# HANDOFF REFUSALS WITH A PENDING PATH (2026-11-20; replaces the withdrawn BL-1166 item 3, the
+# capture-commit check: head-tree stays a WARN). head-missing, placeholder (n) and section-empty (r)
+# REFUSE when the validator copy at <base> carries the `# HE_STRICT_TIER: 1` marker line, and WARN
+# otherwise. The key is a field the pull wrote into the story's own base tree, never a version or date, so a story whose handoff predates the release
+# stays WARN and an in-flight story cannot wedge; a story based after the pull is held to the refusals.
+# Captures: an old full-log capture and a run SUMMARY (dev.md, QA Handoff Evidence: line 1 `$ <command>`,
+# line 2 `head: <sha>`, line 3 the counts line, then the last 40 lines; the format's one home) both
+# satisfy arms (a), (j), (m), (n), the head arm and the counts reader, which read the first 25 lines
+# and the last `N passed|failed` line.
+# CAPTURE-UNRESOLVED TOKENIZER FIX FIRST: cap_tokens read CAPX through `awk -v`, which strips the
+# backslash, so `\.(txt|log|out)` became `.(txt|log|out)` and prose `hook/out`, `name/log` matched as
+# capture paths. Re-derived over graph s323's 84 gate-transition plans (each plan's story, base, frozen
+# sha, read only): old script 8 `capture-unresolved` lines, 6 of them `hook/out` or `name/log`
+# (all false); fixed script 0 lines.
+# FALSE-POSITIVE SET, strict tier forced (marker forced on a copy) over the same 84 plans, each
+# against its recorded story, base and sha: 10 of 84 refuse (74 OK); the old script refuses 4.
+# New refusals, 6 passes in 3 stories, every one read: 5-4 g1 p1, g1 p2, g2 p1 (3-4 captures with no
+# `head:` line, `$ cd web && npx vitest run` and three siblings, plus an empty `## Production Integrity
+# Tests`: both true, the dev wrote neither head nor section; later passes clear both), 5-5 g1 p1 and p2
+# (empty `## Production Integrity Tests`: true), 3-2 g1 p1 (`<scratch>` on the `$ ` line of two
+# captures: the command cannot replay, the arm's own definition; p2 rewrote it, so a refusal at p1 moves
+# the fix one pass earlier; `<scratch>` is not exempted because it elides the very directory the replay
+# needs). Classified: 0 false refusals of a correct handoff. Older figures: of the 375 states at (r), the
+# 2 QA-accepted fires (s317 1-6, 2-7) are satisfied by `none: <reason>`; the 18 head-missing of s317/s318
+# are pre-pull stories, WARN by the stamp key, and the summary format carries `head:` so a re-capture
+# clears each.
 #   (o) DAR-HEADS. Handoff mode runs the --render-dar --check arm on the story at <frozen> and
 #       folds its REFUSED line into its own: `dar-heads-stale` and `dar-heads-duplicate` always
 #       refuse. `dar-heads-missing` (a capture cited, no block) is decided from git records, never
@@ -533,8 +563,12 @@
 #       aab2ddf4a and s317 2.7 at 96345d422 (each DAR sits in the dev report, not the story; 2.7
 #       was re-ruled a true positive by the lead because its dev report carries a dev-written
 #       `## 8. Dev Agent Record`). FALSE-POSITIVE SET: 0 of 141.
-#   (r) SECTION-EMPTY (WARN, never a refusal, exit unchanged). The operator lifted the batch-230
-#       "empty evidence headings: no arm" ruling for a warning arm only; a refusal is not authorized.
+#   (r) SECTION-EMPTY (a refusal where the story's base records the pull that carries it, else WARN;
+#       see HANDOFF REFUSALS WITH A PENDING PATH). The 2026-11-20 operator decision replaced the
+#       batch-230 "empty evidence headings: no arm" ruling and the warning-only tier that followed it:
+#       head-missing, placeholder (n) and section-empty refuse at handoff. The remedy is one line
+#       (`none: <reason>` is content), so the standard is satisfiable by every story the 2 QA-accepted
+#       fires below describe.
 #       Run in the same heading-demoted pass as (p), on the story at <frozen>: `WARN section-empty
 #       <story>: the '## <h>' section has no content` for `## Production Integrity Tests` and `## Smoke
 #       Test Updates` when the section sits at level 2 and, read to the next level-1 or level-2
@@ -627,6 +661,23 @@
 G() { git -C "$REPO" "$@"; }
 refuse() { printf 'REFUSED %s\n' "$1"; refused=1; }
 warn()   { printf 'WARN %s\n' "$1"; }
+# HANDOFF REFUSALS WITH A PENDING PATH. head-missing, placeholder and section-empty are refusals for a
+# story whose BASE tree carries a copy of this validator (scripts/ai-dlc/ in a consumer, core/scripts/ in
+# the distribution) that holds the marker line below, and stay WARN for every story whose base lacks it.
+# The marker is a field the pull wrote, never a version or a date. STRICT is set once, in handoff mode.
+# HE_STRICT_TIER: 1
+HE_STRICT_PATHS="scripts/ai-dlc/validate-handoff-evidence.sh core/scripts/validate-handoff-evidence.sh"
+STRICT=0
+he_strict() { # <base sha> -> sets STRICT
+  local pth src
+  STRICT=0
+  for pth in $HE_STRICT_PATHS; do
+    src="$(G show "$1:$pth" 2>/dev/null)" || continue
+    if grep -q '^# HE_STRICT_TIER: 1$' <<<"$src"; then STRICT=1; return 0; fi
+  done
+  return 0
+}
+tier() { if [ "$STRICT" = 1 ]; then refuse "$1"; else warn "$1"; fi; } # refuse where he_strict says so, else WARN
 resolve() { # <ref> -> full sha or empty
   G rev-parse --verify --quiet "$1^{commit}" 2>/dev/null
 }
@@ -786,7 +837,10 @@ cap_resolve() {
   done
 }
 cap_tokens() {
-  LC_ALL=C awk -v capx="$CAPX" -v bare="$1" '
+  # CAPX goes through ENVIRON: `awk -v` strips one backslash level, so `\.` became a bare `.` and
+  # `hook/out` (prose: a hook's stdout/out) matched `[^/].out` as a capture path.
+  HE_CAPX="$CAPX" LC_ALL=C awk -v bare="$1" '
+  BEGIN { capx = ENVIRON["HE_CAPX"] }
   {
     line=$0; l2=line; gsub(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+(-[A-Z0-9]+)*/, " ", l2)
     red = (l2 ~ /(^|[^A-Za-z])(RED|PROVEN)([^A-Za-z]|$)/) ? 1 : 0
@@ -1517,6 +1571,7 @@ FROZEN="$(resolve "$3")"; [ -n "$FROZEN" ] || { echo "$ME: UNEVALUABLE — froze
 TEXT_RAW="$(story_text "$FROZEN" "$STORY")" || { echo "$ME: UNEVALUABLE — cannot read $STORY at $FROZEN or on disk" >&2; exit 2; }
 # Every citation reader below reads the story with its capture-heads block stripped (dar_strip).
 TEXT="$(dar_strip <<<"$TEXT_RAW")"
+he_strict "$BASE"
 if [ "$BASE" = "$FROZEN" ]; then
   warn "range-empty: base ${BASE:0:12} is the frozen sha, so arm (a) reads no capture (base is the gate-1 manifest's base on every handoff, rework included)"
 elif ! G merge-base --is-ancestor "$BASE" "$FROZEN" 2>/dev/null; then
@@ -1586,7 +1641,7 @@ if [ -n "$CAPS" ]; then
       phs="$(LC_ALL=C awk '/^\$ /{ s=$0; while (match(s, /<[A-Za-z_-]+>/)) { p=substr(s, RSTART, RLENGTH); s=substr(s, RSTART+RLENGTH); if (p != "<redacted>" && p != "<base-worktree>") print NR " " p } }' <<<"$hdr")"
       while IFS=' ' read -r pn pp; do
         [ -n "$pn" ] || continue
-        warn "placeholder $cap: line $pn carries $pp on its '\$ ' line, a placeholder the command cannot replay with"
+        tier "placeholder $cap: line $pn carries $pp on its '\$ ' line, a placeholder the command cannot replay with; write the command as it ran"
       done <<<"$phs"
       # (j) REPLAY-PREAMBLE. Lines are numbered within the first 25: rl is the first
       # `mutation-red replay` line, fd the first `$ ` line. The script prints its own `$ ` line
@@ -1603,7 +1658,7 @@ if [ -n "$CAPS" ]; then
       if [ -n "$rp" ]; then cap_head "$rl"; else cap_head ""; fi
       h="$CH_SHA"
       if [ -z "$h" ]; then
-        warn "head-missing $cap: no 'head: <sha>' line in its first 25 lines"
+        tier "head-missing $cap: no 'head: <sha>' line in its first 25 lines (the capture header is '\$ <command>' then 'head: <sha>'; commit the run summary the dev.md capture rule describes)"
       else
         hs="$(resolve "$h")"
         if [ -z "$hs" ]; then
@@ -2004,7 +2059,7 @@ if tracked "$FROZEN" "$STORY"; then
         # (p) DAR-MISSING: a refusal (header: HANDOFF MODE (p)).
         dar) refuse "dar-missing $STORY: the '## Dev Agent Record' section is $h at ${FROZEN:0:12} (comments, blank table rows, subheadings, labels with no value and template placeholders are not content; a filled line inside a code fence is); the dev populates it in the story file before the handoff (dev.md step 8); for a lead-executed story the lead writes a one-line DAR carrying 'lead (self-executed', which validate-mandatory-rules.sh Check 6 then fails unless docs/escalations/pending.md has a DECIDED_AUTONOMOUSLY or HARD_BLOCK entry naming the story" ;;
         # (r) SECTION-EMPTY: a WARN, never a refusal; the exit is unchanged (header: HANDOFF MODE (r)).
-        empty) warn "section-empty $STORY: the '## $h' section has no content at ${FROZEN:0:12} (the Dev Agent Record content grammar: comments, blank table rows, bare subheadings, labels with no value and template placeholders such as 'To be filled by the dev' are not content); fill it before the handoff, or write 'none: <reason>' (dev.md, QA Handoff Evidence: an empty heading at handoff is an unfinished story)" ;;
+        empty) tier "section-empty $STORY: the '## $h' section has no content at ${FROZEN:0:12} (the Dev Agent Record content grammar: comments, blank table rows, bare subheadings, labels with no value and template placeholders such as 'To be filled by the dev' are not content); fill it before the handoff, or write 'none: <reason>' (dev.md, QA Handoff Evidence: an empty heading at handoff is an unfinished story)" ;;
       esac
     done <<<"$demoted"
   fi

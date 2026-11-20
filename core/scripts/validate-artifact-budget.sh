@@ -114,6 +114,7 @@
 #      fatal), or --warn-only
 #   1  an artifact is past budget + grace, or input unreadable
 
+vab_main() {
 set -u
 
 BPT="${AI_DLC_BYTES_PER_TOKEN:-4}"
@@ -368,7 +369,7 @@ SPRINT_WHOLE_READ_SET="locked-requirements.md"
 #
 # The comment two paragraphs up already named `aiDlcModels` as the source of truth; the
 # code simply never read it. The resolution idiom below is the one
-# `core/hooks/ai-dlc-dispatch-guard.sh:453-455` already uses, deliberately, rather than
+# `core/hooks/ai-dlc-dispatch-guard.sh:454-456` already uses, deliberately, rather than
 # a second reading of the same config.
 #
 # UNRESOLVED FALLS BACK TO 200000, NEVER TO THE LARGER NUMBER. No settings.json, no
@@ -835,7 +836,7 @@ check_snapshot_entry_shape() {
       # THE DETAIL LINE OPENS WITH `misfiled`, AND THAT IS A CONTRACT WITH verdict.sh.
       # NO APOSTROPHE MAY APPEAR IN THIS COMMENT: the awk program is single-quoted
       # and one closes it, which bash then reports as a syntax error 20 lines away.
-      # verdict.sh:122 surfaces at most AI_DLC_VERDICT_LINES (6) lines matching
+      # verdict.sh:164 surfaces at most AI_DLC_VERDICT_LINES (6) lines matching
       # ^[[:space:]]*(ok|warn|OK:|PASS|WARN|OVER) after PASS <name>, and that window
       # is what the Check 14 evidence cell pastes. One WARN per misfiled line would
       # fill it -- the reference consumer has a revision carrying 29 of them -- and
@@ -914,7 +915,7 @@ check_inflight_rows() {
 #
 # So of the four dispositions available to a lead, three were refused and the
 # only passing one was DELETION, which steps/handoff.md and the remedy text of
-# ai-dlc-continue.sh:390 both instruct against in as many words. That consumer
+# ai-dlc-continue.sh:391 both instruct against in as many words. That consumer
 # hit this twice in one sprint and worked around it by deleting the row, which
 # is the record loss the instruction exists to prevent.
 #
@@ -2538,3 +2539,7 @@ if [ "$RC" -eq 0 ]; then
   fi
 fi
 exit "$RC"
+}
+# Executed, it runs; sourced, it has defined vab_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vab_main "$@"
