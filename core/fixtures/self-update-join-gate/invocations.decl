@@ -5,6 +5,6 @@
 # cli-undecided cells), the enclosed-layout run (1) and the 4 equivalence twins (4) make the 12 of the inproc row.
 # RE-MEASURE when an arm or a gate run is added or removed, AND when range.sh's range moves: a newer
 # anchor-adding commit changes the walk's candidate count, so its nested-run count can move with history.
-56 *
+62 *
 10 core/skills/ai-dlc-update/reconcile/self-update-gate.sh
 12 inproc:core/skills/ai-dlc-update/reconcile/self-update-gate.sh

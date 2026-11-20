@@ -529,7 +529,8 @@ gate_refline() {
 #                            status, not the capture's, because only a next line's FIRST token
 #                            counts and that line opens with `[`.
 #   M<TAB><line><TAB><kind>  MENTIONED, never run: a comment, an existence test, a `for … in`
-#                            list, printf text, or a path that runs on into another name
+#                            list, printf text, a string comparison (`== "<path>"` or `!= "<path>"`),
+#                            or a path that runs on into another name
 #                            (`x.sh=y.sh` executes a different file)
 #   X<TAB><line><TAB><argv>  run with its status read, but the argv span holds an expansion or
 #                            quoting this gate cannot resolve without executing the hook. AN
@@ -647,6 +648,8 @@ gate_argv_scan() {
           printf "M\t%d\ttest\n", r
         } else if (pre ~ /(^|[;[:space:]])for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]/) {
           printf "M\t%d\tlist\n", r
+        } else if (pre ~ /[=!]=[[:space:]]*["\047]$/) {
+          printf "M\t%d\teq\n", r
         } else {
           printf "U\t%d\t\n", r
         }
