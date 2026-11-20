@@ -67,6 +67,7 @@
 #      hook is not installed, or scope_deferred_items is absent on a record whose
 #      scope answer predates the release that introduced it. Never a silent pass.
 
+vscf_main() {
 set -u
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -720,3 +721,7 @@ fi
 
 [ "$LS_RC" -eq 1 ] && exit 1
 exit "$SDI_RC"
+}
+# Executed, it runs; sourced, it has defined vscf_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vscf_main "$@"

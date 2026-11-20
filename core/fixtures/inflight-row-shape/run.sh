@@ -80,6 +80,58 @@ SNAP="$WORK/_bmad-output/pipeline-snapshot.md"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
+# IN PROCESS (BL-878). The validator is asked through vab_ip, which hands it to lib/inproc.sh's inproc_run: the file is
+# loaded once here (inproc_load) and vab_main runs in a fresh-bash subshell, so its `exit` stays in that subshell. The
+# program runs only in the cells of cells.decl (the cli cells below, each compared byte for byte with the in-process
+# answer on the same input).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present subject with neither the `vab_main() {` line nor the column-0
+# source guard predates the wrap, and sourcing it would run its whole body: SKIP and exit 0 (FIXTURE BROKEN in the
+# distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
+# unreadable subject is FIXTURE ERROR.
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+vab_halves() { # vab_halves <file> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF 'vab_main() {' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_vh="$(vab_halves "$VALIDATOR")" || exit 2
+case "$_vh" in
+  11) : ;;
+  00) echo "SKIP: inflight-row-shape: $VALIDATOR predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$VALIDATOR carries one half of the in-process wrap (vab_main line, column-0 source guard: $_vh) -- a respelled subject this fixture cannot drive"
+     report_end inflight-row-shape ;;
+esac
+inproc_load "$VALIDATOR" || { echo "FIXTURE ERROR: could not load $VALIDATOR" >&2; exit 2; }
+vab_ip() { inproc_run "$VALIDATOR" vab_main "$@"; }
+# vab_eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}: the in-process answer and the program's, for the cli cell.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq failed" >&2; exit 2; }
+vab_eqv() {
+  local id="$1"; shift
+  vab_ip "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+# vab_cell <id> <want rc> <label> <args...>: the cli cell. PRESENCE-shaped: the program's rc is the wanted one, its
+# stdout is non-empty (a subject replaced by `exit 0` fails), and all three streams equal the in-process call's.
+vab_cell() {
+  local id="$1" want="$2" label="$3"; shift 3
+  if vab_eqv "$id" "$@" && [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && [ -s "$EQ/$id.cl.out" ]; then
+    ok "$id: $label -- the program and the in-process call agree byte for byte, exit $want"
+  else
+    bad "$id: $label -- the program and the in-process call differ, or the exit is not $want (in-process rc=$(cat "$EQ/$id.ip.rc") / program rc=$(cat "$EQ/$id.cl.rc"))"
+  fi
+}
+
 # The seven canonical sections, with whatever body is passed for In-Flight.
 seed() { # seed <in-flight-body>
   { printf '# Pipeline Snapshot\n\n'
@@ -95,7 +147,7 @@ seed() { # seed <in-flight-body>
 
 run_validator() { # run_validator [script-path]
   local v="${1:-$VALIDATOR}"
-  bash "$v" --root "$WORK" --only pipeline-snapshot.md >"$WORK/out.txt" 2>&1
+  vab_ip --root "$WORK" --only pipeline-snapshot.md >"$WORK/out.txt" 2>&1
   echo "$?"
 }
 
@@ -492,13 +544,21 @@ expect 0 "a strikethrough in another section is out of scope"
 # snapshot it can no longer do anything about.
 seed "$HEADER
 | ~~\`dev-s296-story-1\`~~ | \`dev-escalated\` | DELIVERED + CONSUMED | 2026-07-22 | — |"
-bash "$VALIDATOR" --root "$WORK" --only pipeline-snapshot.md --warn-only >"$WORK/out.txt" 2>&1
+vab_ip --root "$WORK" --only pipeline-snapshot.md --warn-only >"$WORK/out.txt" 2>&1
 warn_status=$?
 if [ "$warn_status" = "0" ] && grep -q 'struck-through row' "$WORK/out.txt"; then
   ok "--warn-only reports the struck row and still exits 0"
 else
   bad "--warn-only exit $warn_status / message missing -- retro posture broken"
 fi
+
+# --- The cli cells: one per distinct CLI outcome, the program compared byte for byte with the in-process call -----
+seed "$HEADER
+| ~~\`dev-s296-story-1\`~~ | \`dev-escalated\` | DELIVERED + CONSUMED | 2026-07-22 | — |"
+vab_cell cli-vab-fail 1 "a struck In-Flight row fails" --root "$WORK" --only pipeline-snapshot.md
+seed "$HEADER
+| \`dev-s296-story-2\` | \`dev\` | docs/reviews/x.md | 2026-07-22 | in-flight |"
+vab_cell cli-vab-pass 0 "an in-flight row passes" --root "$WORK" --only pipeline-snapshot.md
 
 echo ""
 report_end inflight-row-shape

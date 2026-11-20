@@ -126,6 +126,8 @@ number you could have run in one command. Measured across four sprints of this p
 of the MAJOR findings raised after the first adversarial pass are counts, enumerations and
 `file:line` citations asserted at authoring time without being executed.
 
+**Before you run any condition, query or observable against a deployed environment, read the project's operations protocol.** Read `docs/operator-runbooks/deploy-protocol.md` when it exists, otherwise the `## Project Operations Protocol` section of the project's `CLAUDE.md`, with native Read. Its production target, prohibited paths and approval-required operations bind every such run, a live condition re-run at a retro Close-Out included.
+
 ## Constraints
 
 - **Read-only.** You do NOT modify source code, rule files, the snapshot,

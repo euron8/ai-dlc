@@ -53,6 +53,7 @@
 #
 # EXIT  0 every file assessed; 3 at least one UNASSESSABLE line (the worklist above it is
 #       partial, never clean); 2 usage or an unreadable split.
+srw_main() {
 set -uo pipefail
 export LC_ALL=C
 
@@ -307,3 +308,6 @@ case "$rc" in
     ;;
 esac
 exit "$rc"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+srw_main "$@"

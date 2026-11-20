@@ -70,6 +70,7 @@ echo "$NAME: resolved subjects = $PART , $MERGE , $SEAL_SRC , $WFD_SRC , $HOOK"
 # the caller's redirections. EQ1-EQ6 (run.sh) hold the in-process answer byte-equal to the CLI's, one
 # refusing and one passing input per subject, and those are the end-to-end runs kept.
 IP_FRESH=" $(env -i "$BASH" -c 'compgen -v' | tr '\n' ' ') "
+export IP_FRESH
 [ "$IP_FRESH" != "  " ] || { echo "FIXTURE ERROR: a fresh bash listed no variable; the in-process scrub has no baseline" >&2; exit 2; }
 ip_run() {
   (
@@ -82,13 +83,13 @@ ip_run() {
     _ip_a=("$@"); _ip_l="${IP_LOADED:-}"; _ip_f="${IP_FNS:- }"
     # The scrub forks nothing: each list is a builtin written to a scratch file beside $MO (rebound per scorer by
     # bind_scratch) and read back with `read`, never through a command substitution.
-    _ip_t="$(dirname "$MO")/.ip-scrub"
+    _ip_t="${IP_SCRUB:-${MO%/*}}/.ip-scrub"
     set +u +o pipefail
     _ip_keep="$IP_FRESH"
     compgen -e > "$_ip_t"; while IFS= read -r _ip_v; do _ip_keep="$_ip_keep$_ip_v "; done < "$_ip_t"
     compgen -A function > "$_ip_t"
     while IFS= read -r _ip_v; do
-      case "$_ip_v" in ip_run) continue ;; esac
+      case "$_ip_v" in ip_run|bash) continue ;; esac
       [ "$_ip_v" != fx_inproc ] || continue
       [ "$_ip_s" = "$_ip_l" ] && case "$_ip_f" in *" $_ip_v "*) continue ;; esac
       unset -f "$_ip_v"
@@ -142,17 +143,18 @@ ip_load "$SRCDIR/merge-review-shards.sh" || { echo "FIXTURE ERROR: $MERGE could 
 # stamp masked). Each EQ_FILES file is put back to its pre-run bytes (or absence) before each side, and stdin
 # is EQ_IN (default /dev/null). EQ_RC holds the shared exit code; EQ_WHY what differed.
 eq_pair() {
-  local n="$1" d f i rc1 rc2; shift
+  local n="$1" d f i rc1 rc2 ft="eq-$1"; shift
   local -a ev=() ipe=()
   while [ "${1:-}" = -e ]; do ev+=("$2"); ipe+=(-e "$2"); shift 2; done
   local s="$1" m="$2"; shift 2
+  case "$s" in */partition-document.sh) ft="" ;; esac # no subject of invocations.decl: its start takes no cell
   d="$(mktemp -d "$WORK/eq.XXXXXX")" || return 1
   i=0; for f in ${EQ_FILES:-}; do i=$((i + 1)); if [ -e "$f" ]; then cp "$f" "$d/snap.$i"; else : > "$d/none.$i"; fi; done
   eq_restore() { local j=0 g; for g in ${EQ_FILES:-}; do j=$((j + 1)); if [ -f "$d/none.$j" ]; then rm -f "$g"; else cp "$d/snap.$j" "$g"; fi; done; }
   eq_side() { local j=0 g; for g in ${EQ_FILES:-}; do j=$((j + 1)); if [ -e "$g" ]; then sed 's/"ts":"[^"]*"/"ts":"-"/g' "$g" > "$d/$1.f$j"; else echo ABSENT > "$d/$1.f$j"; fi; done; }
   ip_run ${ipe[@]+"${ipe[@]}"} "$s" "$m" "$@" > "$d/ip.out" 2> "$d/ip.err" < "${EQ_IN:-/dev/null}"; rc1=$?
   eq_side ip; eq_restore
-  env ${ev[@]+"${ev[@]}"} bash "$s" "$@" ${EQ_CLI_TAIL:+"$EQ_CLI_TAIL"} > "$d/cli.out" 2> "$d/cli.err" < "${EQ_IN:-/dev/null}"; rc2=$?
+  env ${ft:+FXCELL="$ft"} ${ev[@]+"${ev[@]}"} bash "$s" "$@" ${EQ_CLI_TAIL:+"$EQ_CLI_TAIL"} > "$d/cli.out" 2> "$d/cli.err" < "${EQ_IN:-/dev/null}"; rc2=$?
   eq_side cli
   EQ_RC="$rc1"; EQ_WHY=""; EQ_OUT="$d/ip.out"
   [ "$rc1" = "$rc2" ] || EQ_WHY="$EQ_WHY rc $rc1/$rc2"
@@ -645,9 +647,17 @@ kworld() {
 # written. A fifth fixed path added to a predicate must be added here, or two concurrent scorers
 # write it at once.
 bind_scratch() { # <dir> -> MO, PO, PE, RERUN_KEEP, CO, MKO under <dir>
-  MO="$1/merge.out"; PO="$1/part.out"; PE="$1/part.err"; RERUN_KEEP="$1/rerun.keep"; CO="$1/check.out"; MKO="$1/mark.out"
+  IP_SCRUB="$1"; MO="$1/merge.out"; PO="$1/part.out"; PE="$1/part.err"; RERUN_KEEP="$1/rerun.keep"; CO="$1/check.out"; MKO="$1/mark.out"
 }
 bind_scratch "$WORK"
+# THE `bash` SHIM. A subject asked in process still starts content-seal.sh as a child (wait-for-deliverable.sh --mark's
+# --record-expect, the marker admission); a call naming the shipped seal by its path runs seal_main in a subshell of this
+# process through ip_run, which keeps this function and the exported names it reads (a pass logged by fx_inproc, no
+# start). Every other `bash` call, a stand-in script included, is the program it always was.
+IP_SCRUB="$WORK"; RSM_R_SEAL="$SEAL_SRC"; export IP_SCRUB RSM_R_SEAL
+bash() {
+  if [ "${1:-}" = "${RSM_R_SEAL:-/nonexistent}" ]; then shift; ip_run "$RSM_R_SEAL" seal_main "$@"; else command bash "$@"; fi
+}
 run_merge() { # <script-dir> <shard-dir> -> RC, $MO
   ip_run -e "AI_DLC_PROJECT_ROOT=$PROJ" "$1/merge-review-shards.sh" mrs_main "$2" --gate code-review --out "$(out_of "$2")" \
     > "$MO" 2>&1 < /dev/null; RC=$?
@@ -1739,7 +1749,7 @@ fire() { # <file> <agent|session> [tool] [project root] -> 0 when the recorder a
     '{tool_name: $t, tool_input: {file_path: $fp}, session_id: "fixture-session", tool_use_id: "toolu_fixture",
       transcript_path: "/dev/null"} + (if $who == "agent" then {agent_id: "a0123456789abcdef", agent_type: "code-reviewer"} else {} end)')" \
     || return 1
-  ip_run -e "CLAUDE_PROJECT_DIR=$root" "$HOOK" - <<<"$pl" > /dev/null 2>&1
+  ip_run -e "CLAUDE_PROJECT_DIR=$root" "$HOOK" acs_main <<<"$pl" > /dev/null 2>&1
   n1="$(grep -c . "$l" 2>/dev/null)" || n1=0
   [ "$n1" -gt "$n0" ]
 }
@@ -2187,7 +2197,7 @@ p_env() {
     mkdir -p "$nb" "$jb" || return 1
     while IFS= read -r t; do
       case "$t" in ""|"#"*|jq) continue ;; esac
-      f="$(command -v "$t")" && [ -x "$f" ] && ln -s "$f" "$nb/$t" || { WHY="FIXTURE ERROR: $t from tools.decl is not on PATH"; return 1; }
+      f="$(type -P "$t")" && [ -x "$f" ] && ln -s "$f" "$nb/$t" || { WHY="FIXTURE ERROR: $t from tools.decl is not on PATH"; return 1; }
     done < "$LIB_DIR/tools.decl"
     ln -s "$(command -v jq)" "$jb/jq" || return 1
   fi

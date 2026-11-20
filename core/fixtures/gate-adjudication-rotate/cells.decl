@@ -1,0 +1,11 @@
+# gate-adjudication-rotate's starts of its two subjects (BL-879 grammar). Every rotator drive is in process: run.sh
+# sources the rotator in a subshell and calls rga_main (ip_call; a `bash <rotator>` is answered by run.sh's bash
+# function). The two cli cells start it as FXCELL=<id> bash "$ROT" in cli_eqv() and compare stdout, stderr and exit
+# byte for byte with the in-process call: the --sprint report (exit 0) and the usage refusal (exit 2).
+# The guard hook is driven in process too (the same `bash` function and ip_call, entry grg_main): guard_eqv() starts it as
+# FXCELL=<id> bash "$GUARD" on a copy of the project and compares stdout, stderr and exit with the in-process call on
+# another copy: the deny of a live FAIL and the silent allow of the rotated tree.
+cli core/scripts/rotate-gate-adjudication.sh cli-report
+cli core/scripts/rotate-gate-adjudication.sh cli-refuse
+cli core/hooks/ai-dlc-gate-remediation-guard.sh cli-guard-deny
+cli core/hooks/ai-dlc-gate-remediation-guard.sh cli-guard-allow

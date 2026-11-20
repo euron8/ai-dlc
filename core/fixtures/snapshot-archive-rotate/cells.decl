@@ -1,0 +1,11 @@
+# snapshot-archive-rotate's starts of its three subjects (BL-879 grammar). Every other drive is in process: run.sh answers
+# each `bash <subject>` through ip_call, the kill-point sweep included (the DEBUG trace and the SIGKILL of the in-process
+# subshell are installed by ip_call). One cli cell per distinct command-line outcome, each started as
+# `env FXCELL=<id> bash <subject>` and compared byte for byte with the in-process call over the same input: the rotator's
+# report-only answer, its usage refusal and its no-cut-point refusal; each hook's answer (the Stop hook's block decision,
+# the pause hook's flag) on a copy of one world.
+cli core/scripts/rotate-snapshot-archive.sh cli-report
+cli core/scripts/rotate-snapshot-archive.sh cli-usage
+cli core/scripts/rotate-snapshot-archive.sh cli-refuse
+cli core/hooks/ai-dlc-continue.sh cli-stop
+cli core/hooks/ai-dlc-pause.sh cli-prompt

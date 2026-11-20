@@ -1,0 +1,8 @@
+# answer-handoff-routing's starts of core/hooks/ai-dlc-answer-capture.sh (BL-879 grammar). Every other drive is in
+# process (run.sh fire(): inproc_load once, inproc_run aac_main per answer), and the one drive of
+# core/hooks/ai-dlc-pause.sh (assertion 4's context) is inproc_run of hkpause_main by path, its pass logged under the
+# loaded subject. The cli cells are the answer hook's two outcomes (a routed answer: PostToolUse output and the pause
+# flag; an ordinary answer: no stdout, no flag), each started as FXCELL=<id> bash "$HOOK" on a copy of a seeded
+# project and compared with the in-process call on another copy: stdout, stderr, exit and the normalised tree.
+cli core/hooks/ai-dlc-answer-capture.sh cli-route
+cli core/hooks/ai-dlc-answer-capture.sh cli-silent

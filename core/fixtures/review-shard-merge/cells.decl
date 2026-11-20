@@ -1,0 +1,26 @@
+# review-shard-merge's starts of its subjects (BL-878 grammar). Every other drive is in process: ip_run asks prd_main, mrs_main,
+# seal_main, wfd_mark_main and the recorder's acs_main in a subshell, and a call of the shipped seal by a subject that is itself
+# asked in process runs through lib.sh's `bash` shim, also in process. The programs run only in the cells below: the EQ arms
+# of run.sh (shard a, unit seam) start each subject once per distinct CLI outcome through lib.sh's eq_pair, which tags the
+# start FXCELL=eq-<name> and holds its stdout, stderr, exit code and files byte-identical to the in-process answer on the same input.
+cli core/scripts/partition-review-diff.sh eq-prt_ok
+cli core/scripts/partition-review-diff.sh eq-prt_ser
+cli core/scripts/partition-review-diff.sh eq-prt_no
+cli core/scripts/partition-review-diff.sh eq-eq0
+cli core/scripts/merge-review-shards.sh eq-mrg_ok
+cli core/scripts/merge-review-shards.sh eq-mrg_same
+cli core/scripts/merge-review-shards.sh eq-mrg_no
+cli core/scripts/merge-review-shards.sh eq-chk_ok
+cli core/scripts/merge-review-shards.sh eq-chk_no
+cli core/scripts/merge-review-shards.sh eq-ser_ok
+cli core/scripts/merge-review-shards.sh eq-ser_no
+cli core/scripts/content-seal.sh eq-seal_ok
+cli core/scripts/content-seal.sh eq-seal_no
+cli core/scripts/content-seal.sh eq-fts_ok
+cli core/scripts/content-seal.sh eq-fts_no
+cli core/scripts/wait-for-deliverable.sh eq-mk_ok
+cli core/scripts/wait-for-deliverable.sh eq-mk_no
+cli core/hooks/ai-dlc-content-seal.sh eq-hk_row
+cli core/hooks/ai-dlc-content-seal.sh eq-hk_none
+# The CLI --mark of eq-mk_ok records the replaced file's seal through the seal as a child program.
+nested core/scripts/wait-for-deliverable.sh core/scripts/content-seal.sh why=the --mark CLI run of eq-mk_ok starts the shipped seal as a program for --record-expect and the marker admission

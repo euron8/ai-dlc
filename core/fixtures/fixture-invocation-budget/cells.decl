@@ -1,0 +1,49 @@
+# fixture-invocation-budget's starts of its three subjects (BL-879 grammar). Every other drive is in process: k.sh and
+# run.sh ask the judge (fiv_main) and the dead-store collector (ccs_main) through fiv_f and ccs_f; the collector reads the
+# judge's store key by starting the judge (--store-key): a PATH shim tags the in-process runs' starts, a nested row covers
+# the cli runs'.
+#
+# THE JUDGE, cli: one cell per distinct CLI outcome this fixture reaches, each started as FXCELL=<id> bash in k.sh's
+# eqj() and compared byte for byte (stdout, stderr, exit) with the in-process call on the same input.
+cli scripts/validate-fixture-invocations.sh cli-judge-usage
+cli scripts/validate-fixture-invocations.sh cli-judge-genrc
+cli scripts/validate-fixture-invocations.sh cli-judge-genrc-usage
+cli scripts/validate-fixture-invocations.sh cli-judge-keyrows
+cli scripts/validate-fixture-invocations.sh cli-judge-identity-ok
+cli scripts/validate-fixture-invocations.sh cli-judge-identity-refuse
+cli scripts/validate-fixture-invocations.sh cli-judge-legacy
+cli scripts/validate-fixture-invocations.sh cli-judge-legacy-usage
+# THE COLLECTOR, cli: the dry run, the apply (the twin must leave the same tree) and the exit-2 usage refusal.
+cli scripts/collect-counted-stores.sh cli-collect-dry
+cli scripts/collect-counted-stores.sh cli-collect-apply
+cli scripts/collect-counted-stores.sh cli-collect-usage
+# THE RUNNER stays end to end: hermetic-run.sh confines the fixture under sandbox-exec, runs it under env -i with the
+# counter's BASH_ENV, then calls the judge and writes the verdict store from the fixture's exit. A start of it is that
+# process and sandbox boundary, which a subshell cannot reproduce; each id is one probe world (A<n>) or one K5 pass.
+e2e core/scripts/hermetic-run.sh e2e-hr-A1 why=runs the probe fixture under sandbox-exec and env -i, then judges: ok world, armed
+e2e core/scripts/hermetic-run.sh e2e-hr-A2 why=runs the probe fixture under sandbox-exec and env -i, then judges: mismatched world, armed, must record no verdict
+e2e core/scripts/hermetic-run.sh e2e-hr-A3 why=runs the probe fixture under sandbox-exec and env -i with the counter unarmed, so no judge runs and the verdict is recorded
+e2e core/scripts/hermetic-run.sh e2e-hr-A5 why=runs the probe fixture under sandbox-exec and env -i, then judges: a world with no invocations.decl, armed
+e2e core/scripts/hermetic-run.sh e2e-hr-A6 why=runs the probe fixture under sandbox-exec and env -i with two of the three arming variables, which must stay inert
+e2e core/scripts/hermetic-run.sh e2e-hr-A9 why=runs the probe fixture under sandbox-exec and env -i, then judges: untagged starts and no cells.decl, armed
+e2e core/scripts/hermetic-run.sh e2e-hr-A10 why=runs the probe fixture under sandbox-exec and env -i, then judges: a start spelled relative to a cd'd directory, armed
+e2e core/scripts/hermetic-run.sh e2e-hr-K5-legacy why=runs the probe fixture under sandbox-exec and env -i with no counter, writing the legacy store a later counted read reuses
+e2e core/scripts/hermetic-run.sh e2e-hr-K5-counted why=runs the probe fixture under sandbox-exec and env -i with the counter armed, writing the counted store entry with its judge row
+# The judge call inside each armed runner start: the child's logged parent is a start of the runner.
+nested core/scripts/hermetic-run.sh scripts/validate-fixture-invocations.sh why=the runner calls the judge as a program on its own armed counter log before the verdict-store write
+# THE JUDGE, e2e. Its --self-probe starts bash under env -i, ulimit -f with SIGXFSZ ignored, and BASH_ENV's DEBUG trap:
+# a real bash start is the thing it measures.
+e2e scripts/validate-fixture-invocations.sh e2e-judge-selfprobe why=--self-probe measures real bash starts under env -i, ulimit -f 0 with SIGXFSZ ignored and BASH_ENV's DEBUG trap, none of which exists in a subshell
+# The hook's fxcount_arm starts the judge as a program four ways (the hook is under test here, not a subject, and is
+# not loadable); a8.sh's `bash` function puts each flag's id on the start's own command line.
+e2e scripts/validate-fixture-invocations.sh e2e-hook-identity why=the pre-push hook's fxcount_arm starts the judge as a program (--identity-check); the hook is under test and runs the judge by `bash <path>`
+e2e scripts/validate-fixture-invocations.sh e2e-hook-genrc why=the pre-push hook's fxcount_arm starts the judge as a program (--gen-rc); the hook is under test and runs the judge by `bash <path>`
+e2e scripts/validate-fixture-invocations.sh e2e-hook-keyrows why=the pre-push hook's fxcount_arm starts the judge as a program (--key-rows); the hook is under test and runs the judge by `bash <path>`
+e2e scripts/validate-fixture-invocations.sh e2e-hook-storekey why=the pre-push hook's fxcount_arm starts the judge as a program (--store-key); the hook is under test and runs the judge by `bash <path>`
+# K3 and K5: the hook's readset code (readset_vs_input, apply_readset_skip) starts the judge as a program; hk_bash and
+# drv.sh's bash function put the id on the start's own command line, and the judge path is the real subject's.
+e2e scripts/validate-fixture-invocations.sh e2e-hook-k3-key-rows why=the hook process starts the judge (--key-rows) as a program; no tag can be passed in, so a bash function names the start
+e2e scripts/validate-fixture-invocations.sh e2e-hook-k5-c-key-rows why=the hook process starts the judge (--key-rows) as a program from drv.sh; no tag can be passed in, so a bash function names the start
+e2e scripts/validate-fixture-invocations.sh e2e-collect-storekey-dry why=the collector starts the judge as a program (--store-key); no tag can be passed in, so a PATH shim names the start
+e2e scripts/validate-fixture-invocations.sh e2e-collect-storekey-apply why=the collector starts the judge as a program (--store-key); no tag can be passed in, so a PATH shim names the start
+nested scripts/collect-counted-stores.sh scripts/validate-fixture-invocations.sh why=the collector started as a program starts the judge as a program for its store key

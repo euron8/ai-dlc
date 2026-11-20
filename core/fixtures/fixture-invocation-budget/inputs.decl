@@ -17,3 +17,6 @@ core/fixtures/lib/preamble.sh
 !scripts/collect-counted-stores.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/pool-span.sh
+# The in-process cells: cells.decl, and inproc.sh (inproc_run), sourced here and in k.sh.
+core/fixtures/fixture-invocation-budget/cells.decl
+core/fixtures/lib/inproc.sh

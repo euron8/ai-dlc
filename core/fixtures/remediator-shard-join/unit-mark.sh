@@ -32,7 +32,7 @@ for _k in refuse pass; do
   # shellcheck disable=SC2086
   wfd_run "$WFD" --mark "$sw/$_k.unit.md" $_args > "$sw/$_k.unit" 2>&1; echo "$?" > "$sw/$_k.unit.rc"
   # shellcheck disable=SC2086
-  bash "$WFD" --mark "$sw/$_k.cli.md" $_args > "$sw/$_k.cli" 2>&1; echo "$?" > "$sw/$_k.cli.rc"
+  FXCELL="cli-mk0-$_k" bash "$WFD" --mark "$sw/$_k.cli.md" $_args > "$sw/$_k.cli" 2>&1; echo "$?" > "$sw/$_k.cli.rc"
   # the messages name the file, so compare with the world tag normalised
   sed "s#$sw/$_k\.unit#F#g" "$sw/$_k.unit" > "$sw/$_k.unit.n"; sed "s#$sw/$_k\.cli#F#g" "$sw/$_k.cli" > "$sw/$_k.cli.n"
   cmp -s "$sw/$_k.unit.n" "$sw/$_k.cli.n" && cmp -s "$sw/$_k.unit.rc" "$sw/$_k.cli.rc" || seam_ok=0

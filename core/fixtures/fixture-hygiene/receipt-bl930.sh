@@ -62,7 +62,11 @@ printf '# probe\ngl\tunscrubbed, listed, drives a hook\n' > "$W/scripts/env-scru
   && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY git -C "$W" add -A core; } >/dev/null 2>&1 \
   || { echo "receipt-bl930: REFUSED -- could not index the probe world" >&2; exit 9; }
 
-( cd "$W" && unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && bash "$W/scripts/validate-fixture-hygiene.sh" ) > "$WORK/out" 2> "$WORK/err"
+# The validator is asked IN PROCESS: inproc_run sources the probe's byte-identical copy (or the substituted one) in a
+# fresh-bash subshell and calls fhy_main there, logged as a pass of the shipping subject.
+. "$ROOT/core/fixtures/lib/inproc.sh" || { echo "receipt-bl930: REFUSED -- core/fixtures/lib/inproc.sh is absent" >&2; exit 9; }
+( cd "$W" && unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE && INPROC_LOADED="$ROOT/scripts/validate-fixture-hygiene.sh" \
+    && inproc_run "$W/scripts/validate-fixture-hygiene.sh" fhy_main ) > "$WORK/out" 2> "$WORK/err"
 vrc=$?
 cat "$WORK/err" >&2
 [ "$vrc" = 2 ] && { echo "receipt-bl930: the validator REFUSED (exit 2)"; exit 2; }

@@ -2,6 +2,7 @@ awk
 basename
 bash
 cat
+cmp
 cut
 dirname
 find

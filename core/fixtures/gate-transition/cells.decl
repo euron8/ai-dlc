@@ -44,3 +44,4 @@ e2e core/scripts/gate-transition.sh sd why=gate 2 pass 2 whose rework edits the 
 e2e core/scripts/gate-transition.sh sw1 why=gate 2 pass 3 after a GATE2-SKIP at pass 2, the G2W1 wedge arm
 e2e core/scripts/gate-transition.sh sw2 why=gate 1 pass 3 after a GATE1-SKIP at pass 2, the G2W2 wedge arm
 e2e core/scripts/gate-transition.sh sw3 why=gate 2 pass 3 after a dispatched pass 2 with no QA file, the G2W3 refusal arm
+nested core/scripts/gate-transition.sh core/scripts/gate-transition.sh why=gate 2 pass 2 answering GATE1-RERUN (Rule A) runs gate 1 itself by starting the transition script as a child, once per RERUN, RA0 and RAN world

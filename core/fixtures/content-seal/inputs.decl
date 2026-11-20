@@ -43,6 +43,7 @@ core/fixtures/remediator-shard-join/seed.seat-architecture-tea-1.md
 core/fixtures/remediator-shard-join/seed.story-2.1-positions-on-demand.md
 core/fixtures/remediator-shard-join/seed.story-2.2-lifetime-pnl-on-demand.md
 core/fixtures/remediator-shard-join/seed.story-3.1-dark-theme.md
+core/fixtures/lib/layout.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/world.sh

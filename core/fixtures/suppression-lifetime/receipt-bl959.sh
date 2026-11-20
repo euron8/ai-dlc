@@ -14,9 +14,10 @@
 # The validator is resolved from the repo root, found by walking up from this file for a marker,
 # never by counting `..` hops; both install layouts are tried. Prints `receipt-bl959: PASS` and exits
 # 0, or `receipt-bl959: FAIL <why>` and exits 1; exit 2 when the validator cannot be located.
+r959_main() {
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 d="$HERE"; ROOT=""
 while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
   if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then ROOT="$d"; break; fi
@@ -70,3 +71,6 @@ grep -qF 'is past its lifetime and the check is' <<<"$o9" && grep -qF "entry: ##
 if [ -z "$why" ]; then echo "receipt-bl959: PASS"; exit 0; fi
 echo "receipt-bl959: FAIL$why"
 exit 1
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+r959_main "$@"

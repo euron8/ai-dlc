@@ -49,12 +49,91 @@ case "$SRCDIR" in */scripts/ai-dlc) ;; */core/scripts) ;; *) echo "FIXTURE ERROR
 echo "subject-partition: resolved subject = $PS"
 echo "HERMETIC-CONSUMED $(cd "$SRCDIR" && pwd -P)/partition-subject.sh"
 echo "HERMETIC-CONSUMED $(cd "$SRCDIR" && pwd -P)/partition-document.sh"
+echo "HERMETIC-CONSUMED $(cd "$SRCDIR" && pwd -P)/merge-adversarial-shards.sh"
+echo "HERMETIC-CONSUMED $(cd "$SRCDIR" && pwd -P)/validate-adversarial-convergence.sh"
 
 _tmp="${TMPDIR:-/tmp}"; _tmp="${_tmp%/}"
 WORK="$(mktemp -d "$_tmp/subject-partition.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). Every `bash <wrapped script> ...` below -- the fixture's own and a subject's call of its sibling -- is
+# answered by ip_call in a subshell (the `bash` function), as `bash <script>` would answer; the command-line starts left are the
+# cli cells in cells.decl, each compared byte for byte with the in-process answer.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A subject with neither wrap half (the `<p>_main() {` line, the column-0 source guard)
+# predates the wrap: SKIP and exit 0 on a consumer, FIXTURE BROKEN in the distribution (lib/layout.sh fx_skip_exit). Exactly one
+# half, or one subject wrapped and not the other, is a respelled program this fixture cannot drive and FAILS; unreadable is rc 2.
+PD="$SRCDIR/partition-document.sh"; MG="$SRCDIR/merge-adversarial-shards.sh"; VC="$SRCDIR/validate-adversarial-convergence.sh"
+[ -r "$PS" ] && [ -r "$PD" ] && [ -r "$MG" ] && [ -r "$VC" ] || { echo "FIXTURE ERROR: cannot read $PS, $PD, $MG or $VC -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0; _pw_d2=0; _pw_g2=0; _pw_d3=0; _pw_g3=0; _pw_d4=0; _pw_g4=0
+grep -qxF 'psub_main() {' "$PS" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$PS" && _pw_g=1
+grep -qxF 'pdoc_main() {' "$PD" && _pw_d2=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$PD" && _pw_g2=1
+grep -qxF 'merge_main() {' "$MG" && _pw_d3=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$MG" && _pw_g3=1
+grep -qxF 'vac_main() {' "$VC" && _pw_d4=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$VC" && _pw_g4=1
+_pw_all="$_pw_d$_pw_g $_pw_d2$_pw_g2 $_pw_d3$_pw_g3 $_pw_d4$_pw_g4"
+case "$_pw_all" in
+  *10*|*01*) bad "a subject carries one half of the in-process wrap (entry line and guard of psub, pdoc, merge, vac: $_pw_all) -- a respelled program this fixture cannot drive"; report_end subject-partition; exit 1 ;;
+  *00*) echo "SKIP: subject-partition: a subject predates the in-process wrap (psub, pdoc, merge, vac: $_pw_all)"; fx_skip_exit "$HERE" ;;
+esac
+# ---- in-process route (template; adapt the entry table per fixture) ---------------------------------------
+# Sourced AFTER the pre-wrap gate and AFTER lib/report.sh + lib/layout.sh. lib/inproc.sh gives fx_inproc.
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+ip_entry() { case "${1##*/}" in
+  partition-subject.sh) echo psub_main ;; partition-document.sh) echo pdoc_main ;;
+  merge-adversarial-shards.sh) echo merge_main ;; validate-adversarial-convergence.sh) echo vac_main ;;
+  *) return 1 ;; esac; }
+IP_SRC="$SRCDIR"
+IP_KEEP=" bash ip_call ip_scrub ip_entry fx_inproc "
+ip_scrub() { # this subshell reduced to what a fresh `bash <script>` child has: exported vars only, no fixture functions
+  local _v _e
+  _e=" $(compgen -e | tr '\n' ' ') "
+  for _v in $(compgen -v); do
+    case "$_e" in *" $_v "*) continue ;; esac
+    case "$_v" in
+      BASH*|IFS|OPTIND|OPTERR|PPID|UID|EUID|SHELLOPTS|HISTCMD|LINENO|RANDOM|SECONDS|FUNCNAME|PIPESTATUS|GROUPS|DIRSTACK|HOSTTYPE|MACHTYPE|OSTYPE|HOSTNAME|SHLVL|PWD|OLDPWD|_|PS4|_v|_e|IP_*) continue ;;
+    esac
+    unset -v "$_v" 2>/dev/null
+  done
+  for _v in $(compgen -A function); do case "$IP_KEEP" in *" $_v "*) ;; *) unset -f "$_v" ;; esac; done
+  OPTIND=1; set +eufx +o pipefail; hash -r
+}
+# ip_call <script> [args...] -- the answer of `bash <script> args`, in a subshell; stdout, stderr, stdin and the status are the
+# subject's. A call from inside it to a wrapped sibling comes back here through the `bash` function below.
+ip_call() {
+  local IP_F="$1" IP_E; shift
+  IP_E="$(ip_entry "$IP_F")" || { command bash "$IP_F" "$@"; return; }
+  ( ip_scrub; fx_inproc "$IP_F"; . "$IP_F" || exit 126; "$IP_E" "$@" ); local IP_RC=$?
+  # X7's fault: with UNDO_FAIL=1 a successful --split leaves an EMPTY .manifest, so the rows it recorded differ from the map's.
+  if [ "${UNDO_FAIL:-0}" = 1 ] && [ "$IP_E" = pdoc_main ] && [ "${1:-}" = --split ] && [ "$IP_RC" -eq 0 ]; then : > "$3/sections/.manifest"; fi
+  return "$IP_RC"
+}
+# THE ROUTING FUNCTION. A `bash <wrapped script> ...` anywhere in this fixture (and inside an in-process subject) is answered in
+# process; every other `bash` is the real one. `env FXCELL=<id> bash <script>` (env execs the real bash) is the cli cell.
+bash() {
+  # Only the shipped file itself (-ef: the same inode as $SRCDIR's), never a copy another program made: validate-adversarial-convergence
+  # starts its own k3 copies of the partitioners, and those stay real starts.
+  if [ -z "${FXCELL:-}" ] && [ -n "${1:-}" ] && ip_entry "$1" > /dev/null 2>&1 && [ -r "$1" ] && [ "$1" -ef "$IP_SRC/${1##*/}" ]; then ip_call "$@"; else command bash "$@"; fi
+}
+# cli_eqv <id> <script> <args...> -- one `env FXCELL=<id> bash <script>` start and one in-process call over the SAME input,
+# stdout, stderr and exit compared byte for byte. Neither may write (a report or a refusal); callers pass input they can re-run.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+cli_eqv() {
+  local id="$1" s="$2"; shift 2
+  ip_call "$s" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  env FXCELL="$id" bash "$s" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+     && { [ -s "$EQ/$id.cl.out" ] || [ -s "$EQ/$id.cl.err" ]; }; then
+    ok "$id: the command line and the in-process call agree byte for byte (exit $(cat "$EQ/$id.cl.rc"))"
+  else
+    bad "$id: command line and in-process differ: exit $(cat "$EQ/$id.cl.rc") vs $(cat "$EQ/$id.ip.rc"); stdout $(cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && echo equal || echo DIFFERS), stderr $(cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && echo equal || echo DIFFERS)"
+  fi
+}
 
 g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$1" -c user.name=f -c user.email=f@example.invalid -c core.hooksPath=/dev/null "${@:2}"; }
 lorem() { local i; for i in $(seq 1 "$2"); do printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
@@ -227,16 +306,13 @@ p_x6() { # a token with no `=`, and a token naming no subject stem -> each REFUS
   [ "$r1" -eq 2 ] && [ "$RC" -eq 2 ] && grep -q "names stem 'stories'" "$OUT" && nothing_left "$d"
 }
 p_x7() { # the undo: the prd's split SUCCEEDS but does not reproduce its map rows -> its sections are removed, no .subject
-  local w d m; w="$(world)" || return 1; d="$w/$PAR/s9/shards/requirements-repair-p1"
-  m="$(mktemp -d "$WORK/undo.XXXXXX")" || return 1
-  cp "$1" "$m/partition-subject.sh"
-  # A pass-through to the real program. With UNDO_FAIL=1 it empties the split's .manifest afterwards, so
-  # the rows the split recorded differ from the map's; UNDO_FAIL=0 is the control (the same wrapper splits).
-  printf '#!/usr/bin/env bash\nbash "%s/partition-document.sh" "$@"; rc=$?\nif [ "${UNDO_FAIL:-0}" = 1 ] && [ "$rc" -eq 0 ]; then : > "$3/sections/.manifest"; fi\nexit $rc\n' "$SRCDIR" > "$m/partition-document.sh"
-  UNDO_FAIL=0 run "$m/partition-subject.sh" "$w" --split 9 "$d"
+  local w d; w="$(world)" || return 1; d="$w/$PAR/s9/shards/requirements-repair-p1"
+  # UNDO_FAIL=1 makes ip_call empty the split's .manifest after a successful pdoc --split (the fault), so the rows the split
+  # recorded differ from the map's; UNDO_FAIL=0 is the control (the same call splits).
+  UNDO_FAIL=0 run "$1" "$w" --split 9 "$d"
   { [ "$RC" -eq 0 ] && [ -f "$d/prd/sections/.manifest" ] && [ -f "$d/prd/sections/1.md" ]; } || return 1
   rm -rf "$d"
-  UNDO_FAIL=1 run "$m/partition-subject.sh" "$w" --split 9 "$d"
+  UNDO_FAIL=1 run "$1" "$w" --split 9 "$d"
   [ "$RC" -eq 2 ] && grep -q 'does not reproduce its map rows' "$OUT" && nothing_left "$d" && [ ! -e "$d/prd" ]
 }
 p_x8() { # a NESTED state dir (out/bmad): map and split --expect-sha work, and .subject/manifest spell the root-relative path
@@ -276,7 +352,17 @@ p_x6 "$PS" && ok "X6: --expect-sha token without '=' and token naming no subject
 p_x7 "$PS" && ok "X7: a split that does not reproduce its map rows -> REFUSED and the undo leaves no section (an identical wrapper without the fault splits)" || bad "X7: $(head -3 "$OUT")"
 p_x8 "$PS" && ok "X8: nested AI_DLC_STATE_DIR=out/bmad -> map and split --expect-sha work; manifest and .subject spell out/bmad/..." || bad "X8: $(head -3 "$OUT")"
 p_x9 "$PS" && ok "X9: --expect-sha in the <stem>@<sha> form, and mixed with <stem>=<sha> -> SPLIT" || bad "X9: $(head -3 "$OUT")"
-if bash "$HERE/receipt.sh" "$TREE" > "$OUT" 2>&1; then ok "R: receipt.sh exits 0 on $TREE"
+# THE CLI CELLS (cells.decl): one `env FXCELL=<id> bash <subject>` start per distinct outcome of the map, a passing run and a refusing
+# one, each compared byte for byte (stdout, stderr, exit) with the in-process answer over the same world. The passing map starts
+# partition-document.sh as its own children, which the nested row covers.
+w_cli="$(world)" || { echo "FIXTURE ERROR: the cli world did not build" >&2; exit 2; }
+AI_DLC_PROJECT_ROOT="$w_cli" cli_eqv cli-map "$PS" --map 9
+w_cli="$(world)" || { echo "FIXTURE ERROR: the cli world did not build" >&2; exit 2; }
+rm -r "$w_cli/_bmad-output/specs/s9/kernel"
+AI_DLC_PROJECT_ROOT="$w_cli" cli_eqv cli-refuse "$PS" --map 9
+# receipt.sh is driven in process too: sourced in a scrubbed subshell, so its own `bash <psub|pdoc>` calls answer through the
+# `bash` function (it is no subject: its other starts, the merge and the convergence validator, are real and uncounted here).
+if ( IP_T="$TREE"; IP_R="$HERE/receipt.sh"; ip_scrub; set -- "$IP_T"; . "$IP_R" ) > "$OUT" 2>&1; then ok "R: receipt.sh exits 0 on $TREE"
 else bad "R: receipt.sh did not pass on $TREE: $(cat "$OUT")"; fi
 
 echo

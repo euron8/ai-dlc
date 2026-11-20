@@ -38,6 +38,7 @@
 #
 # --keep <dir>: each fixture's whole output is also copied to <dir>/<fixture>.out (scripts/pregate-self-check.sh
 # reads the judge's pass line there). A copy that fails is a refusal.
+svs_main() {
 set -u
 # STDIN IS /dev/null FOR THE WHOLE RUN, as the push's pool gives every fixture (xargs children, and its worker's
 # `< /dev/null`). bash 3.2 skips BASH_ENV in a `bash -c` at shell level 1 whose stdin is an inet socket, and the
@@ -130,3 +131,7 @@ if [ -n "$cons" ]; then
   [ "$fail" = 0 ] || grep -E '^census: |^--- |^ ' "$work/cons.out"
 fi
 exit "$fail"
+}
+# Loadable: sourced, this file defines svs_main and runs nothing; executed, it runs it (core/fixtures/lib/inproc.sh).
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+svs_main "$@"

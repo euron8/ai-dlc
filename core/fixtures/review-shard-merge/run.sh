@@ -169,6 +169,49 @@ echo "  [J0] coverage join: $_ndecl units derived from the sg guards, dealt disj
 [ "$RSM_DEAL" = 0 ] || exit 0
 # I10 reads run.sh, not lib.sh, for the ambient-env scrub; this is the same scrub lib.sh performs.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present subject with neither the `<p>_main() {` line nor the source guard
+# predates the in-process wrap, and loading it would run its whole body: SKIP and exit 0 on a consumer (FIXTURE BROKEN in
+# the distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
+# unreadable subject is FIXTURE ERROR. content-seal.sh spells its guard as `if [ ... ]; then`, every other subject as
+# `|| return 0`. All of it runs BEFORE lib.sh loads anything.
+. "$(cd "$HERE/../lib" && pwd)/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+rsm_up() { # <dist rel> <consumer rel> -> the first existing path walking up from $HERE
+  local d="$HERE" c
+  while [ -n "$d" ] && [ "$d" != "/" ]; do
+    for c in "$d/$1" "$d/$2"; do [ -f "$c" ] && { printf '%s' "$c"; return 0; }; done
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+rsm_halves() { # rsm_halves <file> <entry> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -q "^$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1" || grep -qxF 'if [ "${BASH_SOURCE[0]}" = "$0" ]; then' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_rsm_pre=""
+rsm_check() { # rsm_check <file> <entry>
+  local gh
+  [ -n "$1" ] || return 0
+  gh="$(rsm_halves "$1" "$2")" || exit 2
+  case "$gh" in
+    11) : ;;
+    00) _rsm_pre="$_rsm_pre ${1##*/}" ;;
+    *) echo "FAIL  $NAME: ${1##*/} carries one half of the in-process wrap ($2 line, source guard: $gh) -- a respelled subject this fixture cannot drive"; exit 1 ;;
+  esac
+}
+rsm_check "$(rsm_up core/scripts/partition-review-diff.sh scripts/ai-dlc/partition-review-diff.sh)" prd_main
+rsm_check "$(rsm_up core/scripts/merge-review-shards.sh scripts/ai-dlc/merge-review-shards.sh)" mrs_main
+rsm_check "$(rsm_up core/scripts/content-seal.sh scripts/ai-dlc/content-seal.sh)" seal_main
+rsm_check "$(rsm_up core/scripts/wait-for-deliverable.sh scripts/ai-dlc/wait-for-deliverable.sh)" wfd_mark_main
+rsm_check "$(rsm_up core/hooks/ai-dlc-content-seal.sh .claude/hooks/ai-dlc-content-seal.sh)" acs_main
+rsm_check "$(rsm_up core/scripts/record-only-diff.sh scripts/ai-dlc/record-only-diff.sh)" ro_main
+rsm_check "$(rsm_up core/scripts/sprint-status.sh scripts/ai-dlc/sprint-status.sh)" ss_main
+if [ -n "$_rsm_pre" ]; then echo "SKIP: $NAME:$_rsm_pre predate(s) the in-process wrap"; fx_skip_exit "$HERE"; fi
 . "$(cd "$HERE/../lib" && pwd)/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 . "$HERE/lib.sh"
 # fx_inproc (the in-process pass logger).
@@ -249,10 +292,10 @@ eqp fts_no 2 "$SEAL_SRC" seal_main --first-tool-ts "$_eqf/absent"
 eq_arm EQ7b "content-seal.sh --first-tool-ts in process (seal_main) answers byte-for-byte what the CLI does: the earliest tool row's ts (rc 0), and a missing state dir refused (rc 2)" fts_ok fts_no
 printf '{"tool_name":"Write","tool_input":{"file_path":"%s"},"session_id":"fixture-session","tool_use_id":"toolu_fixture","transcript_path":"/dev/null","agent_id":"a0123456789abcdef","agent_type":"code-reviewer"}\n' "$_eqm/3.md" > "$WORK/eq-hook-row.json"
 printf '{"tool_name":"Write","tool_input":{"file_path":"%s"},"session_id":"fixture-session","tool_use_id":"toolu_fixture","transcript_path":"/dev/null"}\n' "$WORK/eq-not-sealed.md" > "$WORK/eq-hook-none.json"
-EQ_IN="$WORK/eq-hook-row.json" EQ_FILES="$LEDGER" eqp hk_row 0 -e "CLAUDE_PROJECT_DIR=$MAIN" "$HOOK" -
-EQ_IN="$WORK/eq-hook-none.json" EQ_FILES="$LEDGER" eqp hk_none 0 -e "CLAUDE_PROJECT_DIR=$MAIN" "$HOOK" -
+EQ_IN="$WORK/eq-hook-row.json" EQ_FILES="$LEDGER" eqp hk_row 0 -e "CLAUDE_PROJECT_DIR=$MAIN" "$HOOK" acs_main
+EQ_IN="$WORK/eq-hook-none.json" EQ_FILES="$LEDGER" eqp hk_none 0 -e "CLAUDE_PROJECT_DIR=$MAIN" "$HOOK" acs_main
 cp "$WORK/eq-hk_row.ans" "$WORK/eq-hk_row.ans.o"; { cat "$WORK/eq-hk_row.ans.o"; grep -c . "$LEDGER"; } > "$WORK/eq-hk_row.ans"
-_hk1="$(grep -c . "$LEDGER")"; EQ_IN="$WORK/eq-hook-row.json" ip_run -e "CLAUDE_PROJECT_DIR=$MAIN" "$HOOK" - < "$WORK/eq-hook-row.json"; _hk2="$(grep -c . "$LEDGER")"
+_hk1="$(grep -c . "$LEDGER")"; EQ_IN="$WORK/eq-hook-row.json" ip_run -e "CLAUDE_PROJECT_DIR=$MAIN" "$HOOK" acs_main < "$WORK/eq-hook-row.json"; _hk2="$(grep -c . "$LEDGER")"
 [ "$_hk2" = $((_hk1 + 1)) ] || EQP_hk_row=0 EQW_hk_row="the in-process recorder appended $((_hk2 - _hk1)) row(s), want 1"
 # EQ0, the comparison's own control: the same partition pair with ONE argument added on the CLI side only
 # (EQ_CLI_TAIL) must be reported as differing, so a comparison that cannot see a difference cannot pass EQ1-EQ8.

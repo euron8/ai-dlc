@@ -1,0 +1,14 @@
+# dispatch-model-guard's starts of core/scripts/validate-spawn-ledger.sh and core/scripts/validate-gate-adjudication.sh
+# (BL-879 grammar). Section 15t asks both directly, in process (vsl_f / vga_f), and keeps one program start per
+# distinct CLI outcome, compared byte for byte with the in-process answer in eqv(): exit 0 and exit 1 of each.
+cli core/scripts/validate-spawn-ledger.sh cli-vsl-pass
+cli core/scripts/validate-spawn-ledger.sh cli-vsl-refuse
+cli core/scripts/validate-gate-adjudication.sh cli-vga-pass
+cli core/scripts/validate-gate-adjudication.sh cli-vga-refuse
+# The guard hook runs in process (dg_main); the three cli rows are its one program start per distinct outcome, compared with the in-process answer.
+cli core/hooks/ai-dlc-dispatch-guard.sh cli-dg-set
+cli core/hooks/ai-dlc-dispatch-guard.sh cli-dg-deny
+cli core/hooks/ai-dlc-dispatch-guard.sh cli-dg-quiet
+# The guard's own starts of the ledger validator and the merge run in process (dg_bash routes them to vsl_main / merge_main). The one start left is
+# section 15's stand-in validator, a script that exits 2, which the guard starts as a program: the fail-open arm exists only for a validator that is not the shipped one.
+e2e core/scripts/validate-spawn-ledger.sh dg-vsl-stub why=the guard's remediation predicate fails closed on a validator that exits 2; the stand-in is a one-line script, not the shipped validator, so no in-process entry exists

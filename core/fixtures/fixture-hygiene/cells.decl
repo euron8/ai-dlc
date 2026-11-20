@@ -1,0 +1,14 @@
+# fixture-hygiene's starts of scripts/validate-fixture-hygiene.sh (BL-879 grammar). Every other drive is in process:
+# run.sh asks fhy_main through hyg_f, and receipt-bl929.sh / receipt-bl930.sh ask it through inproc_run. The validator
+# starts the shard-stub resolver as a program (bash <resolver> --impl-of), once per run: each in-process run's start is
+# an e2e cell (a PATH shim names it), and the cli cells' starts are covered by the nested row.
+# One cli cell per distinct CLI outcome (exit 1 with findings, exit 0 clean, the exit-2 usage refusal), each started as
+# FXCELL=<id> bash in cli_cell() and compared byte for byte with the in-process call on the same world and arguments.
+cli scripts/validate-fixture-hygiene.sh cli-hyg-dirty
+cli scripts/validate-fixture-hygiene.sh cli-hyg-clean
+cli scripts/validate-fixture-hygiene.sh cli-hyg-usage
+e2e scripts/validate-fixture-invocations.sh e2e-hyg-resolver-dirty why=the validator starts the resolver as a program (--impl-of); no tag can be passed in, so a PATH shim names the start
+e2e scripts/validate-fixture-invocations.sh e2e-hyg-resolver-clean why=the validator starts the resolver as a program (--impl-of); no tag can be passed in, so a PATH shim names the start
+e2e scripts/validate-fixture-invocations.sh e2e-hyg-resolver-d8 why=the validator, run by receipt-bl929.sh, starts the resolver as a program (--impl-of); no tag can be passed in, so a PATH shim names the start
+e2e scripts/validate-fixture-invocations.sh e2e-hyg-resolver-d9 why=the validator, run by receipt-bl930.sh, starts the resolver as a program (--impl-of); no tag can be passed in, so a PATH shim names the start
+nested scripts/validate-fixture-hygiene.sh scripts/validate-fixture-invocations.sh why=the validator started as a program starts the resolver as a program, once per run

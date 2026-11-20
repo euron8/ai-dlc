@@ -24,8 +24,9 @@
 #           control: --record-partition on a shard dir no --map has written refuses `no manifest`.
 #   OPEN12  every gate-1 and gate-2 run leaves a live `.gate-checkpoint/OPEN` byte-identical.
 #           control: the gate-3 run (G3) moves it.
-#   RERUN   gate 2 pass 2 whose prior QA pass reviewed the base: Rule A answers GATE1-RERUN, and the plan
-#           reads `gate: rerun`, `manifest: none`, a `route: rerun GATE1-RERUN` line and no shard line.
+#   RERUN   gate 2 pass 2 whose prior QA pass reviewed the base: Rule A answers GATE1-RERUN, so gate 1 runs TOGETHER:
+#           the gate-2 plan reads `gate: 2` and a `gate1-plan:` line naming a written `gate: 1` plan for pass 1, and
+#           no plan anywhere reads `gate: rerun`.
 #           control: the prior QA pass reviewed the frozen sha, GATE1-SKIP, and the plan is `gate: 2` with shard lines.
 #   PRIORM  gate 1 pass 2 over a pass-1 prior written by the REAL merge-review-shards.sh, one column-0 reviewed-sha
 #           line per shard (non-adjacent, all naming MID, the commit between B and WK): exit 0, `gate: 1`, its `prior:`
@@ -47,8 +48,8 @@
 #   frozen sha after it adds only a docs .md), its gate-2 index dash form and its gate-1 files dot form:
 #   RA1     p1 APPROVED at B, p2 APPROVED at G1, a p3 .md.draft beside them: exit 0, `gate: 2`, `rule-a-base: gate1 <G1>
 #           <p2 file>`, a GATE1-SKIP gate-log line. control: RA0.
-#   RA0     the RA1 world without p2: `gate: rerun`, `rule-a-base: qa <WK> ...`, next: naming `5.1` and `--pass 2`.
-#   RAN     p9 APPROVED and p10 NEEDS_REWORK at G1: p10 decides by number, `gate: rerun`, base qa. control: RA1.
+#   RA0     the RA1 world without p2: `gate: 2`, `rule-a-base: qa <WK> ...`, a `gate1-plan:` line naming the `5.1` gate-1 plan.
+#   RAN     p9 APPROVED and p10 NEEDS_REWORK at G1: p10 decides by number, base qa, `gate: 2` with the `6.1` pass-11 gate-1 plan. control: RA1.
 #   RAX     the re-review APPROVED at a side commit not ancestor-related to WK: exit 1, REFUSED gate1-review, no plan.
 #   RAA     gate-1 files under both the dot and the dash form: exit 1, REFUSED gate1-review ambiguous, no plan.
 #   RAM     the re-review a MERGED file (the real merge's output, every reviewed-sha naming G1): RA1's answer.
@@ -284,12 +285,14 @@ st_g2() { # gate 2 after the fold: RECP, OPEN12, and DAR's control
   fi
   V_OPEN=$OPEN_SAME
 }
+# g1with <gate-2 plan> <gate-1 plan basename>: the plan's gate1-plan: line names that file, and the file is a written gate-1 plan.
+g1with() { local f; f="$(sed -n 's/^gate1-plan: //p' "$1" | sed -n 1p)"; [ -n "$f" ] && [ "${f##*/}" = "$2" ] && [ -f "$f" ] && grep -qx 'gate: 1' "$f"; }
 st_g2r() { # gate 2 pass 2, prior QA reviewed the base: RERUN, OPEN12
   mkdir -p "$L/docs/reviews/s1" && printf '# QA Validation: 1-1\n\nreviewed-sha: %s\n' "$B" > "$L/docs/reviews/s1/1-1-qa-validation.md"
   gtrun "$1" "$2" g2r 2 - 1-1 2 --pass 2
   V_RERUN=0
-  [ "$RC" = 0 ] && grep -qx 'gate: rerun' "$P/1-1-g2-p2.plan" && grep -qx 'manifest: none' "$P/1-1-g2-p2.plan" \
-    && grep -q '^route: rerun GATE1-RERUN: ' "$P/1-1-g2-p2.plan" && [ "$(nshards "$P/1-1-g2-p2.plan")" = 0 ] && V_RERUN=1
+  [ "$RC" = 0 ] && grep -qx 'gate: 2' "$P/1-1-g2-p2.plan" && ! grep -qx 'gate: rerun' "$P/1-1-g2-p2.plan" \
+    && g1with "$P/1-1-g2-p2.plan" 1-1-g1-p1.plan && V_RERUN=1
   V_OPEN=$OPEN_SAME
 }
 st_g2k() { # gate 2 pass 2, prior QA reviewed the frozen sha: RERUN's control, OPEN12
@@ -430,23 +433,23 @@ st_ra0() { # the RA1 world without the p2 file: RA0
   rm -f "$RV/5.1-code-review-p2.md"
   rarun "$1" "$2" ra0 5-1
   V_RA0=0
-  [ "$RC" = 0 ] && grep -qx 'gate: rerun' "$WD/ra0.plan" && grep -qxF "rule-a-base: qa $WK $RV/5-1-qa-validation.md" "$WD/ra0.plan" \
-    && grep -q '^next: gate-transition.sh 5\.1 1 --pass 2 -C ' "$WD/ra0.plan" && V_RA0=1
+  [ "$RC" = 0 ] && grep -qx 'gate: 2' "$WD/ra0.plan" && grep -qxF "rule-a-base: qa $WK $RV/5-1-qa-validation.md" "$WD/ra0.plan" \
+    && g1with "$WD/ra0.plan" 5.1-g1-p2.plan && V_RA0=1
   V_OPEN=$OPEN_SAME
 }
 st_ran() { # p9 APPROVED and p10 NEEDS_REWORK, both at G1: the numerically latest decides, RAN
   g1f "$RV/6.1-code-review-p9.md" APPROVED "$G1"; g1f "$RV/6.1-code-review-p10.md" NEEDS_REWORK "$G1"
   rarun "$1" "$2" ran 6-1
   V_RAN=0
-  [ "$RC" = 0 ] && grep -qx 'gate: rerun' "$WD/ran.plan" && grep -qxF "rule-a-base: qa $WK $RV/6-1-qa-validation.md" "$WD/ran.plan" \
-    && grep -qF "6.1-code-review-p10.md reads verdict=NEEDS_REWORK" "$WD/ran.plan" && grep -q '^next: gate-transition.sh 6\.1 1 --pass 11 ' "$WD/ran.plan" && V_RAN=1
+  [ "$RC" = 0 ] && grep -qx 'gate: 2' "$WD/ran.plan" && grep -qxF "rule-a-base: qa $WK $RV/6-1-qa-validation.md" "$WD/ran.plan" \
+    && grep -qF "6.1-code-review-p10.md reads verdict=NEEDS_REWORK" "$WD/ran.plan" && g1with "$WD/ran.plan" 6.1-g1-p11.plan && V_RAN=1
   V_OPEN=$OPEN_SAME
 }
 st_rax() { # the re-review APPROVED at XS, on a side branch neither ancestor nor descendant of the QA sha: RAX
   g1f "$RV/7.1-code-review-p2.md" APPROVED "$XS"
   rarun "$1" "$2" rax 7-1
   V_RAX=0
-  [ "$RC" = 1 ] && grep -q 'REFUSED gate1-review: .* not ancestor-related; refusing to guess' "$WD/rax.err" && grep -q '  remedy: re-run gate 1 for story 7\.1 as a full-range re-review pass' "$WD/rax.err" \
+  [ "$RC" = 1 ] && grep -q 'REFUSED gate1-review: .* not ancestor-related; refusing to guess' "$WD/rax.err" && grep -q '  remedy: repair the gate-1 review record of story 7\.1 (a full-range re-review pass' "$WD/rax.err" \
     && [ ! -e "$WD/rax.plan" ] && V_RAX=1
   V_OPEN=$OPEN_SAME
 }
@@ -744,7 +747,7 @@ nrc=$?
   || bad "RECP control: --record-partition without a manifest did not refuse (rc=$nrc)"
 
 st_g2r g2r "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
-[ "$V_RERUN" = 1 ] && ok "RERUN GATE1-RERUN at gate 2 pass 2: gate: rerun, manifest: none, no shard line" \
+[ "$V_RERUN" = 1 ] && ok "RERUN GATE1-RERUN at gate 2 pass 2: gate 1 runs together, a gate: 2 plan naming the written gate-1 plan" \
   || bad "RERUN rc=$RC: $(grep -E '^(gate|manifest|route):' "$P/1-1-g2-p2.plan" 2> /dev/null | tr '\n' ' ')"
 st_g2k g2k "$GTR"; [ "$V_OPEN" = 1 ] || O12=0
 [ "$V_RERUNC" = 1 ] && ok "RERUN control: GATE1-SKIP at gate 2 pass 2 writes gate: 2 with $(nshards "$P/1-1-g2-p2.plan") shard lines" \

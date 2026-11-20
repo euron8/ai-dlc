@@ -162,7 +162,7 @@ EOF
   # The world's own verdict store: a consumer-layout pass the drive records lands here, never in the caller's store.
   # The drive is a PUSH, so it runs at a push's pool depth 0 whatever depth this fixture runs at (plain, or in the
   # gate's pool at depth 1): one world, one verdict and one invocation count either way.
-  ( cd "$sb/wt" && env -u PREPUSH_POOL_DEPTH GIT_DIR="$gd" AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$sb/vs" \
+  ( cd "$sb/wt" && env -u PREPUSH_POOL_DEPTH FXCELL="e2e-$tag" GIT_DIR="$gd" AI_DLC_FIXTURE_NO_SKIP=1 AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_VERDICT_STORE="$sb/vs" \
       bash "$hookfile" ) </dev/null > "$sb/hook.log" 2>&1
   printf '%s\n' "$?" > "$sb/hook.rc"
 
@@ -299,7 +299,7 @@ rcpt_drive() { # <tag> <hook-source> <pristine>
 rcpt_push() { # <tag> <n>: one push of the world; log in <tag>/log.<n>, exit in <tag>/rc.<n>
   local w="$WORK/$1/w"
   ( unset FXCOUNT_DIR FXCOUNT_RC FXCOUNT_JUDGE
-    hook_drive "$w" "$WORK/$1/log.$2" PREPUSH_POOL_DEPTH=1 AI_DLC_PRESUITE_SKIP=1 AI_DLC_VERDICT_STORE="$w.vs" ) > "$WORK/$1/rc.$2"
+    hook_drive "$w" "$WORK/$1/log.$2" FXCELL="e2e-$1-$2" PREPUSH_POOL_DEPTH=1 AI_DLC_PRESUITE_SKIP=1 AI_DLC_VERDICT_STORE="$w.vs" ) > "$WORK/$1/rc.$2"
 }
 rcpt_red() { # <cell> <tag>: 0 RED, 1 GREEN
   local t="$WORK/$2"

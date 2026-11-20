@@ -236,6 +236,7 @@
 #      required input could not be read — a refusal, not a pass. An
 #      escalations path that exists but is not a regular file, or could not be read, refuses
 #      in both modes with `REFUSED:` on stderr and nothing on stdout
+vlt_main() {
 set -u
 
 ESCALATIONS=""
@@ -261,7 +262,7 @@ while [ $# -gt 0 ]; do
     # A query mode beside --in-force, and it takes every --in-force path: IN_FORCE is set too.
     --waivers)         IN_FORCE=1; WAIVERS=1; shift ;;
     -h|--help)
-      sed -n '1,/^set -u$/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
+      sed -n '1,/^vlt_main() {$/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
       exit 0 ;;
 # MODE_DISPATCH_END
     *)
@@ -1185,3 +1186,7 @@ echo "  catalog:       $ENFORCEMENT_MAP"
 echo "  gate metrics:  ${GATE_METRICS:-(none given)}"
 echo "  baseline:      ${BASELINE:-(none given)}"
 exit 0
+}
+# Executed, it runs; sourced, it has defined vlt_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vlt_main "$@"

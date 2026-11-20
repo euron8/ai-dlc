@@ -1,0 +1,7 @@
+# implementation-join-yield's starts of core/hooks/ai-dlc-continue.sh (BL-879 grammar). Every other drive is in process
+# (run.sh drive_stop() and tx_seq(): inproc_load once, inproc_run hkcont_main per Stop). The hook exits 0 on every
+# path, so the cli cells are two outcomes (a block verdict on stdout; a silent allow that logs ALLOWED_BY_LIVE_BEAT),
+# each started as FXCELL=<id> bash "$STOP_HOOK" on a seeded world and compared with the in-process call on another
+# copy of it: stdout, stderr, exit and the normalised world tree.
+cli core/hooks/ai-dlc-continue.sh cli-block
+cli core/hooks/ai-dlc-continue.sh cli-yield

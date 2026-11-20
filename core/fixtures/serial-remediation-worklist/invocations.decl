@@ -1,5 +1,8 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-19 *
-9 core/scripts/serial-remediation-worklist.sh
-7 core/scripts/partition-document.sh
-2 core/scripts/partition-subject.sh
+3 *
+2 core/scripts/serial-remediation-worklist.sh
+0 core/scripts/partition-document.sh
+0 core/scripts/partition-subject.sh
+7 inproc:core/scripts/partition-document.sh
+11 inproc:core/scripts/serial-remediation-worklist.sh
+2 inproc:core/scripts/partition-subject.sh

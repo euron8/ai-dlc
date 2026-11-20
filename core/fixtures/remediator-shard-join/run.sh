@@ -98,11 +98,95 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 [ -f "$MUT_LIB" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
 . "$MUT_LIB"
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
+LAY_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/layout.sh"
+[ -f "$LAY_LIB" ] || { echo "FIXTURE ERROR: lib/layout.sh not found beside $HERE" >&2; exit 2; }
+. "$LAY_LIB"
+
+# PRE-WRAP GATE: each subject this fixture asks in process is read for its two wrap halves (the `<p>_main() {` or entry line
+# and the column-0 source guard) BEFORE any source of it. A subject with neither half is a consumer that has not pulled the
+# wrap: SKIP (FIXTURE BROKEN in the distribution); a subject with one half FAILs; an unreadable one is FIXTURE ERROR.
+rj_pre=""; rj_one=""
+rj_gate() { # <subject file> <entry function> -> appends to rj_pre (neither half) or rj_one (one half); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -q "^$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x)" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1" || grep -qxF 'if [ "${BASH_SOURCE[0]}" = "$0" ]; then' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x)" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  # a guard-only subject (the guard line older than the entry function) is a hook a consumer holds before the wrap: SKIP, as for neither half
+  case "$d$g" in 11) ;; 00) rj_pre="$rj_pre $1" ;; 01) if [ "${3:-}" = guard-only-skips ]; then rj_pre="$rj_pre $1"; else rj_one="$rj_one $1($d$g)"; fi ;; *) rj_one="$rj_one $1($d$g)" ;; esac
+}
+rj_gate "$JOIN" join_main
+rj_gate "$HOOK" grg_main guard-only-skips
+rj_gate "$DHOOK" adc_main
+rj_gate "$CONV" vac_main
+rj_gate "$DVAL" vad_cli
+rj_gate "$SRCDIR/content-seal.sh" seal_main
+rj_gate "$SRCDIR/serial-remediation-worklist.sh" srw_main
+rj_gate "$SRCDIR/wait-for-deliverable.sh" wfd_mark_main
+if [ -n "$rj_one" ]; then
+  bad "the in-process wrap is half present (def, guard) in:$rj_one"
+  echo "$NAME: $fails assertion(s) FAILED" >&2; exit 1
+fi
+if [ -n "$rj_pre" ]; then
+  echo "SKIP: $NAME: these subjects predate the in-process wrap:$rj_pre"
+  fx_skip_exit "$HERE"
+fi
+
+# ------------------------------------------------------------------------- the in-process route for this file's own cells
+# A predicate below that runs `bash <subject> args` runs the subject in a subshell of this process instead: the join
+# (join_main), the remediation guard hook (hook_pretool_head), the seal (seal_main) and the worklist (srw_main), each
+# sourced fresh AFTER rs_scrub has reduced the subshell's names to what a CLI child starts with (the exported
+# environment, a VAR=x prefix included), with pipefail off as the CLI runs. A start the join makes of the seal or the
+# worklist from inside its call is routed the same way; every other start is a real child. The CLI answers once per
+# outcome in the SEAM cells of the unit-*.sh files (cells.decl), which tag their starts.
+RS_LEADF="$WORK/rs.lead"; RS_ROOT="$PWD"
+rs_scrub() { # -> this subshell's names reduced to a CLI child's
+  local _uv _ue
+  _ue=" $(compgen -e | tr '\n' ' ') "
+  for _uv in $(compgen -v); do
+    case "$_uv" in
+      BASH*|IFS|OPTIND|OPTERR|OPTARG|PPID|UID|EUID|SHELLOPTS|HISTCMD|LINENO|RANDOM|SECONDS|FUNCNAME|PIPESTATUS|GROUPS|DIRSTACK|HOSTTYPE|MACHTYPE|OSTYPE|HOSTNAME|SHLVL|PWD|OLDPWD|_|SRCDIR|RS_*|_uv|_ue|PS1|PS2|PS4) continue ;;
+    esac
+    case "$_ue" in *" $_uv "*) continue ;; esac
+    unset -v "$_uv" 2>/dev/null; unset -v "$_uv" 2>/dev/null
+  done
+  for _uv in $(compgen -A function); do
+    case " bash fx_inproc rs_scrub " in *" $_uv "*) ;; *) unset -f "$_uv" ;; esac
+  done
+}
+bash() {
+  [ -z "${RS_CLI:-}" ] || { command bash "$@"; return; }
+  RS_K=""
+  case "${1:-}" in
+    "${SRCDIR:-/nonexistent/rs}/content-seal.sh") RS_K=seal ;;
+    "${SRCDIR:-/nonexistent/rs}/serial-remediation-worklist.sh") RS_K=srw ;;
+  esac
+  if [ -z "$RS_K" ] && [ -z "${RS_IN:-}" ]; then
+    case "${1:-}" in
+      "${JOIN:-/nonexistent/rs}") RS_K=join ;;
+      */ai-dlc-gate-remediation-guard.sh) RS_K=hook ;;
+    esac
+  fi
+  [ -n "$RS_K" ] || { command bash "$@"; return; }
+  RS_F="$1"; shift
+  (
+    RS_IN=1; set +o pipefail
+    case "$RS_K" in
+      join) fx_inproc "$RS_ROOT/core/scripts/join-remediator-shards.sh";  rs_scrub; . "$RS_F" || exit 125; join_main "$@" ;;
+      hook) fx_inproc "$RS_ROOT/core/hooks/ai-dlc-gate-remediation-guard.sh";  rs_scrub; set --; ( . "$RS_F" || exit 125; grg_config; fx_inproc "$RS_ROOT/core/hooks/ai-dlc-gate-remediation-guard.sh"; hook_pretool_head; : > "$RS_LEADF" ) ;;
+      seal) rs_scrub; . "${RS_F%/*}/content-seal.sh" || exit 125; fx_inproc "$RS_ROOT/core/scripts/content-seal.sh"; seal_main "$@" ;;
+      srw) rs_scrub; . "${RS_F%/*}/serial-remediation-worklist.sh" || exit 125; fx_inproc "$RS_ROOT/core/scripts/serial-remediation-worklist.sh"; srw_main "$@" ;;
+    esac
+  )
+}
 
 # ---------------------------------------------------------------------------------- the arms
 echo "$NAME:"
 echo "HERMETIC-CONSUMED core/scripts/join-remediator-shards.sh"
 echo "HERMETIC-CONSUMED core/hooks/ai-dlc-gate-remediation-guard.sh"
+echo "HERMETIC-CONSUMED core/scripts/content-seal.sh"  # every shard: the readers' seal cases load it, and a CLI join checks seals through it
 
 if sg head; then
 echo "HERMETIC-CONSUMED core/scripts/serial-remediation-worklist.sh"  # the join starts it beside itself in every head subject assembly
@@ -617,6 +701,14 @@ else
   else bad "SRC11: a quoted mark_file did not match its seat (rc=$RC): $(head -3 "$JO")"; fi
 fi
 fi # sg tail
+
+# LEAD-R: no hook drive above fell past arm 2 (a lead or non-edit payload), where in process and CLI part ways.
+# Its self-probe first: one lead drive in process, with the marker pointed at a scratch path, must write it.
+_lp="$WORK/rs.lead-probe"
+( RS_LEADF="$_lp"; _w="$(new_world)"; drive "$_w" Edit "$_w/$REL/$S21" "" )
+if [ ! -e "$_lp" ]; then bad "LEAD-R: FIXTURE BROKEN -- the self-probe's lead drive wrote no marker, so LEAD-R cannot fire"
+elif [ ! -e "$RS_LEADF" ]; then ok "LEAD-R: every in-process hook drive in this file was a dispatched edit that ended inside hook_pretool_head"
+else bad "LEAD-R: a hook drive returned from hook_pretool_head (a lead or non-edit payload); its later arms ran in no process"; fi
 
 echo
 if [ "$fails" -eq 0 ]; then echo "$NAME: PASS"; exit 0; fi

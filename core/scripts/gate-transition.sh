@@ -27,14 +27,16 @@
 #            lines, which authorizes no seat); then --route, then --narrow and the
 #            narrowed map with its two fallbacks; partition-review-diff.sh --map;
 #            pass M >= 2: validate-carried-findings.sh --list.
-#   gate 2   --list-captures at the go-signal sha; pass M >= 2: --gate1-rerun from Rule A's base (GATE1-RERUN or any
-#            refusal stops here and writes a `gate: rerun` plan with no shard lines, which authorizes no seat -- the lead
-#            runs the plan's `next:` gate-1 command). The base is the prior QA pass's reviewed-sha, or the reviewed-sha of
+#   gate 2   --list-captures at the frozen sha; pass M >= 2: --gate1-rerun from Rule A's base. GATE1-RERUN (or any
+#            refusal of that question) is a code-changing delta: gate 1 and gate 2 run TOGETHER on this frozen sha, so
+#            this call runs `gate-transition.sh <g1idx> 1 --pass <P+1>` itself, records its plan path on a `gate1-plan:`
+#            line, and goes on to write the gate-2 plan; the lead dispatches the seats of both plans in one wave and
+#            sends the dev ONE merged rework list. GATE1-SKIP (a records-only delta) leaves gate 1 unrun. The base is the prior QA pass's reviewed-sha, or the reviewed-sha of
 #            the LATEST gate-1 review (the highest pass by number, `<g1idx>-code-review[-p<P>].md`, worktree then root)
 #            when its verdict, read by merge-review-shards.sh --read-verdict, is APPROVED and that sha descends from the
 #            QA sha and is an ancestor of the frozen sha; the plan's `rule-a-base:` line names which file decided.
 #            <g1idx> is the one index form (the gate-2 index, or it with its first `-` made `.` or its first `.` made
-#            `-`) that carries gate-1 review files; the `next:` line names that form and `--pass <P+1>`. Files under
+#            `-`) that carries gate-1 review files. Files under
 #            two forms, a reviewed-sha that is not ancestor-related to the QA sha or not in the frozen history, an
 #            unreadable verdict or sha each REFUSE `gate1-review`; the DAR-fold preflight,
 #            VERIFIED and never performed; handoff --gate2; --smoke; pass M >= 2: --route;
@@ -59,7 +61,7 @@
 # directory only, never in the basename (artifact-path-grammar.md, held by I82 and I82b). Any plan already at that path is removed BEFORE the first
 # check, and the new one is written only after every check has passed, through a temporary file
 # and mv. So a plan on disk is a completion record. Lines, in order:
-#   story: <idx> / gate: <1|2|3|rerun|skip|close> / pass: <M> / sha: <frozen sha> / worktree: <abs> /
+#   story: <idx> / gate: <1|2|3|skip|close> / pass: <M> / sha: <frozen sha> / worktree: <abs> /
 #   manifest: <shard-dir>/.manifest, or none / route: <kind> <answer line> / nonce: <gate_nonce>
 #   (gate 3 and close only) / the --map stdout lines, byte-equal / the brief inputs, each
 #   `<key>: <value>`.
@@ -447,7 +449,7 @@ case "$GATE" in
     input prior "$PRIOR"
     # RULE A's BASE (header, gate 2): the QA sha, unless the latest gate-1 review is an APPROVED re-review of the rework.
     g1_scan
-    G1REM="re-run gate 1 for story $G1IDX as a full-range re-review pass (its review file then names a sha in the frozen history), then re-run gate-transition.sh $IDX 2 --pass $PASS"
+    G1REM="repair the gate-1 review record of story $G1IDX (a full-range re-review pass names a sha in the frozen history), then re-run gate-transition.sh $IDX 2 --pass $PASS"
     [ "$G1NF" -le 1 ] || { refuse gate1-review "gate-1 review files sit under $G1NF index forms ($G1FORMS) in docs/reviews/s${SPRINT}/ of $WT or $ROOT; ambiguous, refusing to guess which one gate 1 wrote" "keep story $IDX's gate-1 review files under the one index form gate 1 ran under, then re-run gate-transition.sh $IDX 2 --pass $PASS"; stop_if_refused; }
     BASE_A="$GO"; BKIND=qa; BFILE="$PRIOR"; NEXTP='<next gate-1 pass>'
     if [ "$G1P" = 0 ]; then
@@ -490,10 +492,15 @@ case "$GATE" in
     l="$(first_line "$W.out")"; [ -n "$l" ] || l="$(first_line "$W.err")"
     case "$RC:$l" in
       0:GATE1-SKIP*) input gate-log "$l" ;;
-      *) MANIFEST=none; ROUTE="rerun $l"
-         input next "gate-transition.sh $G1IDX 1 --pass $NEXTP -C $WT --base $BASE --sprint $SPRINT --story-file $STORY"
-         printf 'gate-transition: Rule A answered %s; gate 1 re-runs as a re-review pass first. This plan authorizes no seat; the lead runs the next: gate-1 command.\n' "$l" >&2
-         write_plan rerun ;;
+      *) input gate-log "Rule A: $l; the delta changes code, so gate 1 re-runs together with this gate 2 on the frozen sha $SHA12"
+         G1P2="$NEXTP"; [ "$G1P" != 0 ] || G1P2=1
+         bash "$SELF/gate-transition.sh" "$G1IDX" 1 --pass "$G1P2" -C "$WT" --base "$BASE" --sprint "$SPRINT" --story-file "$STORY" > "$W.out" 2> "$W.err" < /dev/null; RC=$?
+         if [ "$RC" = 0 ]; then
+           input gate1-plan "$(first_line "$W.out")"
+         else
+           refuse gate1-together "the gate-1 transition that runs with this gate 2 (gate-transition.sh $G1IDX 1 --pass $G1P2) exited $RC: $(grep -m1 -E 'REFUSED|gate-transition:' "$W.err" 2> /dev/null)" "fix what that gate-1 refusal names, then re-run gate-transition.sh $IDX 2 --pass $PASS"
+           stop_if_refused
+         fi ;;
     esac
   fi
   # The DAR-fold preflight, verified: the canonical sprint-branch story's Dev Agent Record is

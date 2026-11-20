@@ -64,16 +64,18 @@ gr_halves() { # gr_halves <file> <entry> -> "<def><guard>" (1 present, 0 absent)
   printf '%s%s' "$d" "$g"
 }
 _gr_pre=""
-for _gr in "$SLICE:gsl_main" "$CKPT:gck_main"; do
-  [ -n "${_gr%%:*}" ] || continue
-  _gh="$(gr_halves "${_gr%%:*}" "${_gr##*:}")" || exit 2
+gr_check() { # gr_check <file> <entry>
+  [ -n "$1" ] || return 0
+  _gh="$(gr_halves "$1" "$2")" || exit 2
   case "$_gh" in
     11) : ;;
-    00) _gr_pre="$_gr_pre ${_gr%%:*}" ;;
-    *) bad "${_gr%%:*} carries one half of the in-process wrap (${_gr##*:} line, column-0 source guard: $_gh) -- a respelled subject this fixture cannot drive"
+    00) _gr_pre="$_gr_pre $1" ;;
+    *) bad "$1 carries one half of the in-process wrap ($2 line, column-0 source guard: $_gh) -- a respelled subject this fixture cannot drive"
        report_end gate-resume ;;
   esac
-done
+}
+gr_check "$SLICE" gsl_main
+gr_check "$CKPT" gck_main
 if [ -n "$_gr_pre" ]; then echo "SKIP: gate-resume:$_gr_pre predate(s) the in-process wrap"; fx_skip_exit "$HERE"; fi
 gsl_f() { # gsl_f <file> [args...] -> gsl_main's stdout, stderr and exit, logged as a pass of $SLICE
   local _f="$1"; shift

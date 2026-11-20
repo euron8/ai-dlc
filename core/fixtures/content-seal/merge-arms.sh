@@ -11,6 +11,7 @@ _asm="$CS_HERE/../adversarial-shard-merge/lib.sh"
 [ -f "$_asm" ] || { echo "FIXTURE BROKEN: $_asm is absent; nothing was asserted" >&2; exit 2; }
 . "$_asm"
 . "$CS_HERE/seal-lib.sh"
+cs_route "$MERGE"
 # Sourced here, before the first in-process pass (in_set below), so fx_inproc is defined for every one of them.
 . "$CS_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED $MERGE"
@@ -68,7 +69,15 @@ ip() { # each phase function called below is one in-process pass of the merge: o
 }
 ipref() { [ "$RC" -eq 2 ] && has "$MO" "REFUSED:" && has "$MO" "$1"; } # in-process refusal naming <token>
 ippass() { [ "$RC" -eq 0 ] && [ ! -s "$MO" ]; }                         # in-process: every phase passed, nothing printed
-run_merge "$MERGE" "$d1"; cp "$MO" "$WORK/m1.cli"; m1rc=$RC
+# merge_eq <cell id> <shard dir> -> RC, $MO: the merge as a program (the cell's one tagged start) and in process on the SAME
+# world, compared byte for byte; the world is left as the in-process run made it. Every other merge call below is in process.
+merge_eq() {
+  local w; w="$(world_root "$2")"
+  if cs_eq "$1" "$w" "$MERGE" "$2"; then ok "$1: the merge in process answers byte-for-byte what the CLI does ($(head -1 "$CS_EQ_OUT" | cut -c1-40))"
+  else bad "$1: the in-process merge differs from the CLI:$CS_EQ_WHY"; fi
+  RC="$CS_EQ_RC"; cp "$CS_EQ_OUT" "$MO"
+}
+merge_eq cs-merge-merged "$d1"; cp "$MO" "$WORK/m1.cli"; m1rc=$RC
 if [ "$RC" -eq 0 ] && has "$MO" "MERGED:" && [ "$n1" -ge "$nsh" ] && [ "$nsh" -ge 4 ] && cmp -s "$o0" "$(out_of "$d1")"; then
   ok "CS-M1: $nsh shards sealed ($n1 seal rows) and untouched: MERGED, pass file byte-identical to the unsealed merge"
 else bad "CS-M1: sealed untouched set: rc=$RC seals=$n1 shards=$nsh, identical=$(cmp -s "$o0" "$(out_of "$d1")" && echo yes || echo no): $(head -3 "$MO")"; fi
@@ -82,7 +91,7 @@ else bad "CS-M1b: no program:merge-adversarial-shards seal row after a sealed me
 fresh_sealed; d2="$FS_D"; hr_ids "$d2/2.md"; a2="$HR_AGENT"
 patch_shard "$d2/2.md"
 grep -q 'toolu_01PatchedByLead' "$d2/2.md" || { echo "FIXTURE BROKEN: CS-M2's perl -0pi changed nothing" >&2; exit 2; }
-run_merge "$MERGE" "$d2"; cp "$MO" "$WORK/m2.cli"; m2rc=$RC
+merge_eq cs-merge-refused "$d2"; cp "$MO" "$WORK/m2.cli"; m2rc=$RC
 ip "$MERGE" "$d2"; cp "$MO" "$WORK/m2.ip"; m2iprc=$RC
 if refused_clean "2.md $TOKEN" "$d2" && has "$MO" "agent $a2 (Write)" && has "$MO" "$REMEDY"; then
   ok "CS-M2: perl -0pi through a shell function's variable after the seal: REFUSED naming 2.md, agent $a2 and the remedy"
@@ -282,12 +291,12 @@ else bad "CS-K6: through a symlinked state dir --mark left the shards unsealed: 
 # REFUSING input (a marker call with a missing field) and a PASSING one (a file outside the sealed set, marked), and the
 # two answers differ. The passing file is restored between the two runs so both mark the same bytes at the same path.
 sm="$WORK/seam"; mkdir -p "$sm"; printf '# stories -- adversarial shard 1\n\n### M1 -- MAJOR -- a finding\n\nBody.\n' > "$sm/1.md"; cp "$sm/1.md" "$sm/1.orig"
-seam_cli() { bash "$WFD" "$@" > "$sm/cli.out" 2> "$sm/cli.err"; echo $? > "$sm/cli.rc"; }
+seam_cli() { local c="$1"; shift; FXCELL="$c" command bash "$WFD" "$@" > "$sm/cli.out" 2> "$sm/cli.err"; echo $? > "$sm/cli.rc"; }
 seam_inp() { ( set +o pipefail; fx_inproc core/scripts/wait-for-deliverable.sh; . "$WFD"; wfd_mark_main "$@" ) > "$sm/inp.out" 2> "$sm/inp.err"; echo $? > "$sm/inp.rc"; }
 seam_same() { cmp -s "$sm/cli.out" "$sm/inp.out" && cmp -s "$sm/cli.err" "$sm/inp.err" && cmp -s "$sm/cli.rc" "$sm/inp.rc"; }
-seam_cli --mark "$sm/1.md" stories adversary; cp "$sm/cli.out" "$sm/ref.out"; cp "$sm/cli.err" "$sm/ref.err"; cp "$sm/cli.rc" "$sm/ref.rc"
+seam_cli cs-wfd-mark-refuse --mark "$sm/1.md" stories adversary; cp "$sm/cli.out" "$sm/ref.out"; cp "$sm/cli.err" "$sm/ref.err"; cp "$sm/cli.rc" "$sm/ref.rc"
 seam_inp --mark "$sm/1.md" stories adversary; sk1=0; seam_same && sk1=1; rr="$(cat "$sm/inp.rc")"; cp "$sm/inp.err" "$sm/refuse.err"
-seam_cli --mark "$sm/1.md" stories adversary 1 findings=1; cp "$sm/1.orig" "$sm/1.md"
+seam_cli cs-wfd-mark-pass --mark "$sm/1.md" stories adversary 1 findings=1; cp "$sm/1.orig" "$sm/1.md"
 seam_inp --mark "$sm/1.md" stories adversary 1 findings=1; sk2=0; seam_same && sk2=1; rp="$(cat "$sm/inp.rc")"
 if [ "$sk1" = 1 ] && [ "$sk2" = 1 ] && [ "$rr" = 64 ] && [ "$rp" = 0 ] && grep -q '^FAIL: --mark: ' "$sm/refuse.err" && grep -q '^MARKED ' "$sm/inp.out" && ! cmp -s "$sm/ref.err" "$sm/inp.err"; then
   ok "CS-K7: wfd_mark_main in process answers byte-for-byte what the CLI does on a refusing and a passing --mark (rc 64 / 0), and the two differ"
@@ -355,9 +364,9 @@ a2_status() { # <world root> <target> -> the --status line for it
 }
 # CS-A2s: THE SEAM. The CLI's --status answer equals a2_raw's byte for byte on the CURRENT world (UNFINISHED)
 # and on the LEGACY one (UNSETTLED), and the two answers differ.
-a2_cli() { ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 bash "$WFD" --status --complete --since 1 "$2" 2>&1 ); }
-a2s_ca="$(a2_cli "$rA" "${dA#"$rA"/}/1.md"; echo "rc=$?")"; a2s_ia="$(a2_raw "$rA" "${dA#"$rA"/}/1.md"; echo "rc=$?")"
-a2s_cl="$(a2_cli "$rL" "${dL#"$rL"/}/1.md"; echo "rc=$?")"; a2s_il="$(a2_raw "$rL" "${dL#"$rL"/}/1.md"; echo "rc=$?")"
+a2_cli() { ( cd "$1" && AI_DLC_PROJECT_ROOT="$1" AI_DLC_WAIT_SETTLE_SECS=60 FXCELL="$3" command bash "$WFD" --status --complete --since 1 "$2" 2>&1 ); }
+a2s_ca="$(a2_cli "$rA" "${dA#"$rA"/}/1.md" cs-wfd-status-current; echo "rc=$?")"; a2s_ia="$(a2_raw "$rA" "${dA#"$rA"/}/1.md"; echo "rc=$?")"
+a2s_cl="$(a2_cli "$rL" "${dL#"$rL"/}/1.md" cs-wfd-status-legacy; echo "rc=$?")"; a2s_il="$(a2_raw "$rL" "${dL#"$rL"/}/1.md"; echo "rc=$?")"
 if [ "$a2s_ca" = "$a2s_ia" ] && [ "$a2s_cl" = "$a2s_il" ] && [ "$a2s_ca" != "$a2s_cl" ] \
    && case "$a2s_ca" in *"UNFINISHED "*) true ;; *) false ;; esac && case "$a2s_cl" in *"UNSETTLED "*) true ;; *) false ;; esac; then
   ok "CS-A2s: wfd_beat_main --status in process answers byte-for-byte what the CLI does on the CURRENT (UNFINISHED) and LEGACY (UNSETTLED) worlds, and the two differ"

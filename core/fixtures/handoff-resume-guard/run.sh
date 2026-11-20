@@ -47,6 +47,23 @@ echo "HERMETIC-CONSUMED $(cd "$(dirname "$HOOK")" && pwd)/$(basename "$HOOK")"
 
 ROOT="$(bash "$HERE/seed.sh")"
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: cannot source lib/layout.sh" >&2; exit 2; }
+
+# PRE-WRAP GATE. A hook without the wrap would RUN when sourced (reading this shell's stdin and exiting), a silent
+# green, so both halves are required before the load. Neither half predates the wrap: SKIP on a consumer, FIXTURE
+# BROKEN in the distribution. Exactly one half is a respelled hook this fixture cannot drive, which FAILS.
+[ -r "$HOOK" ] || { echo "FIXTURE ERROR: cannot read $HOOK -- an unreadable hook is not one that predates the wrap" >&2; rm -rf "$ROOT"; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'hkcont_main() {' "$HOOK" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: handoff-resume-guard: $HOOK predates the in-process wrap"; rm -rf "$ROOT"; fx_skip_exit "$HERE" ;;
+  *) echo "  FAIL  $HOOK carries one half of the in-process wrap (hkcont_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive" >&2; echo "handoff-resume-guard: 1 assertion(s) FAILED" >&2; rm -rf "$ROOT"; exit 1 ;;
+esac
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$HOOK" || { echo "FIXTURE BROKEN: sourcing $HOOK defined nothing" >&2; exit 2; }
+declare -F hkcont_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no hkcont_main" >&2; exit 2; }
 
 # Drive the hook exactly as the harness does: JSON on stdin, decision on stdout.
 # A fresh state dir per case, so the rapid-fire backoff cannot leak between them.
@@ -81,7 +98,7 @@ drive() { # drive <transcript> [snapshot] [hook] -> prints "block" or "allow"
   : > "$proj/_bmad-output/.driver/handoff"
   out="$(jq -nc --arg t "$t" --arg s "fx" '{transcript_path:$t,session_id:$s}' \
         | CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
-          bash "$hk" 2>/dev/null)"
+          inproc_run "$hk" hkcont_main 2>/dev/null)"
   rm -rf "$proj"
   if printf '%s' "$out" | jq -e '.decision=="block"' >/dev/null 2>&1; then
     printf 'block'
@@ -121,7 +138,7 @@ ISO="$ROOT/isolated"; mkdir -p "$ISO"; cp "$HOOK" "$ISO/ai-dlc-continue.sh"
 iso_proj="$(mktemp -d)"; mkdir -p "$iso_proj/_bmad-output"
 iso_out="$(jq -nc --arg t "$(cat "$ROOT/.p_miss")" --arg s "fx" '{transcript_path:$t,session_id:$s}' \
           | CLAUDE_PROJECT_DIR="$iso_proj" AI_DLC_PAUSE_ROUTING_SCHEMA="$ROOT/no-such-schema.json" \
-            bash "$ISO/ai-dlc-continue.sh" 2>/dev/null)"
+            inproc_run "$ISO/ai-dlc-continue.sh" hkcont_main 2>/dev/null)"
 rm -rf "$iso_proj"
 if printf '%s' "$iso_out" | jq -e '.decision=="block"' >/dev/null 2>&1; then
   bad "the guard BLOCKED with its vocabulary declaration unreachable — it is matching on something written in the hook after all, and the single-source claim is false"
@@ -251,7 +268,7 @@ drive_world() { # drive_world <world-dir> [hook] -> "block" or "allow" (stderr: 
   : > "$proj/_bmad-output/.driver/handoff"
   out="$(jq -nc --arg t "$w/lead.jsonl" --arg s "fx" '{transcript_path:$t,session_id:$s}' \
         | CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" \
-          bash "$hk" 2>/dev/null)"
+          inproc_run "$hk" hkcont_main 2>/dev/null)"
   rm -rf "$proj"
   # THE REASON GOES TO STDERR SO THE VERDICT CAN STAY ON STDOUT, and the redirection
   # ORDER is the whole trap: `2>/dev/null >&2` points stderr at /dev/null FIRST and then
@@ -355,7 +372,7 @@ touch "$f_proj/_bmad-output/pipeline-paused.flag"
 cp "$W_OFF/_bmad-output/"*.jsonl "$f_proj/_bmad-output/" 2>/dev/null || true
 : > "$f_proj/_bmad-output/.driver/handoff"
 f_res="$(printf '%s' "$f_out" | PATH="$JQSTUB:$PATH" CLAUDE_PROJECT_DIR="$f_proj" \
-         AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$HOOK" 2>/dev/null)"
+         AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" inproc_run "$HOOK" hkcont_main 2>/dev/null)"
 rm -rf "$f_proj"
 # A HERE-STRING, NOT A PIPE INTO `grep -q`. `grep -q` leaves at its first match while the
 # writer is still pushing, and under this file's `pipefail` the pipeline then answers with
@@ -452,7 +469,7 @@ lease_world() { # lease_world <lease|NONE> <snapshot-file> <flag:up|down> -> pro
 }
 lease_drive() { # lease_drive <proj> <transcript> [hook] -> raw hook stdout
   jq -nc --arg t "$2" --arg s "fx" '{transcript_path:$t,session_id:$s}' \
-    | CLAUDE_PROJECT_DIR="$1" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "${3:-$HOOK}" 2>/dev/null
+    | CLAUDE_PROJECT_DIR="$1" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" inproc_run "${3:-$HOOK}" hkcont_main 2>/dev/null
 }
 LEASE_LOG='_bmad-output/pipeline-continuation-log.md'
 lease_ev()  { grep -c -- "^## .* -- $2\$" "$1/$LEASE_LOG" 2>/dev/null || true; }
@@ -848,6 +865,33 @@ _no="$(grep -c '^  ok    ' <<< "$_pa")" || _no=0
 oks=$((oks + _no))
 if [ "$_parc" -eq 0 ]; then ok "push-authorised: all three push sites carry the authorisation sentence, and two carry the --no-verify prohibition"
 else bad "push-authorised: a prescribed handoff push lacks the authorisation sentence beside it"; fi
+
+# --- the cli cells (cells.decl): the hook started as a PROGRAM once per distinct outcome -----------------------
+# The hook exits 0 on every path; its outcomes here are the guard's block verdict on stdout and an allow. Each is
+# started as FXCELL=<id> bash "$HOOK" on a project built as drive() builds it and compared with the in-process call on
+# another copy of it: stdout, stderr, exit and the project tree (timestamps, epochs and the copy's path normalised).
+# Each cell asserts its own outcome, so two runs that both did nothing cannot read as equal.
+EQ="$ROOT/eq"; rm -rf "$EQ"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir $EQ" >&2; exit 2; }
+proj_sig() { # <dir> -> the tree's file list and contents, timestamps, epochs and the dir path normalised
+  ( cd "$1" && find . -type f | sort | while read -r f; do printf '== %s\n' "$f"; cat "$f"; done ) \
+    | sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z?/TS/g' -e 's/^TS [0-9a-f]{16}$/TS NONCE/' -e 's/[0-9]{10}/EPOCH/g' -e "s|$1|DIR|g"
+}
+cli_cell() { # <id> <transcript-file> <outcome test on $EQ/<id>/cl.out> <outcome words>
+  local id="$1" ip="$EQ/$1/ip" cl="$EQ/$1/cl" pl d
+  pl="$(jq -nc --arg t "$(cat "$2")" --arg s "fx" '{transcript_path:$t,session_id:$s}')"
+  for d in "$ip" "$cl"; do mkdir -p "$d/_bmad-output/.driver" && : > "$d/_bmad-output/.driver/handoff" || { bad "$id: could not seed the project"; return; }; done
+  printf '%s' "$pl" | CLAUDE_PROJECT_DIR="$ip" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" inproc_run "$HOOK" hkcont_main > "$EQ/$id/ip.out" 2> "$EQ/$id/ip.err"; echo "$?" > "$EQ/$id/ip.rc"
+  printf '%s' "$pl" | CLAUDE_PROJECT_DIR="$cl" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" FXCELL="$id" bash "$HOOK" > "$EQ/$id/cl.out" 2> "$EQ/$id/cl.err"; echo "$?" > "$EQ/$id/cl.rc"
+  proj_sig "$ip" > "$EQ/$id/ip.sig"; proj_sig "$cl" > "$EQ/$id/cl.sig"
+  if cmp -s "$EQ/$id/ip.out" "$EQ/$id/cl.out" && cmp -s "$EQ/$id/ip.err" "$EQ/$id/cl.err" && cmp -s "$EQ/$id/ip.rc" "$EQ/$id/cl.rc" \
+     && cmp -s "$EQ/$id/ip.sig" "$EQ/$id/cl.sig" && [ "$(cat "$EQ/$id/cl.rc")" = 0 ] && [ -s "$EQ/$id/cl.sig" ] && eval "$3"; then
+    ok "$id: the program $4 exactly as the in-process call does (stdout, stderr, exit 0 and the project tree)"
+  else
+    bad "$id: the program and the in-process call differ, or the outcome is not: $4"
+  fi
+}
+cli_cell cli-block "$ROOT/.p_miss" 'grep -qF "HANDOFF GUARD" "$EQ/$id/cl.out" && jq -e ".decision==\"block\"" "$EQ/$id/cl.out" >/dev/null 2>&1' "blocks a handoff request that has no resume block"
+cli_cell cli-allow "$ROOT/.p_core4" '[ ! -s "$EQ/$id/cl.out" ]' "allows a handoff request that carries the resume block, silently"
 
 rm -rf "$ROOT"
 echo ""

@@ -11,3 +11,6 @@
 !core/schemas/harness-origin.json
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

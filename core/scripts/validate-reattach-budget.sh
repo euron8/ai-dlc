@@ -73,6 +73,7 @@
 #   paths and the unreadable-file path exit BEFORE it is computed -- there the structure moved
 #   or the input is absent, so the measurement is undefined rather than withheld.
 
+vrab_main() {
 set -u
 
 BUDGET="${AI_DLC_REATTACH_BUDGET:-5000}"
@@ -302,3 +303,6 @@ fi
 say "PASS  protocol ends at ~${EST_TOKENS} tokens; ${SLACK} tokens of slack under the ${CEILING}-token ceiling (${BUDGET} window - ${MARGIN} margin); whole file ${WHOLE_BYTES} bytes (observation)."
 say "      protocol names the digest to recover from, SKILL.md for full rule text, and the router for an un-routed session."
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vrab_main "$@"

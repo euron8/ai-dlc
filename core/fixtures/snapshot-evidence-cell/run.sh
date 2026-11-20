@@ -74,6 +74,73 @@ GATELOG="$WORK/_bmad-output/implementation-artifacts/gate-log.md"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
+# IN PROCESS (BL-878). The validator is asked through vab_ip, which hands it to lib/inproc.sh's inproc_run: the file is
+# loaded once here (inproc_load) and vab_main runs in a fresh-bash subshell, so its `exit` stays in that subshell. The
+# program runs only in the cells of cells.decl (the cli cells below, each compared byte for byte with the in-process
+# answer on the same input).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present subject with neither the `vab_main() {` line nor the column-0
+# source guard predates the wrap, and sourcing it would run its whole body: SKIP and exit 0 (FIXTURE BROKEN in the
+# distribution), never an ok. Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
+# unreadable subject is FIXTURE ERROR.
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: lib/mutant.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+vab_halves() { # vab_halves <file> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF 'vab_main() {' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_vh="$(vab_halves "$VALIDATOR")" || exit 2
+case "$_vh" in
+  11) : ;;
+  00) echo "SKIP: snapshot-evidence-cell: $VALIDATOR predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$VALIDATOR carries one half of the in-process wrap (vab_main line, column-0 source guard: $_vh) -- a respelled subject this fixture cannot drive"
+     report_end snapshot-evidence-cell ;;
+esac
+inproc_load "$VALIDATOR" || { echo "FIXTURE ERROR: could not load $VALIDATOR" >&2; exit 2; }
+vab_ip() { inproc_run "$VALIDATOR" vab_main "$@"; }
+# vab_eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}: the in-process answer and the program's, for the cli cell.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq failed" >&2; exit 2; }
+vab_eqv() {
+  local id="$1"; shift
+  vab_ip "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$VALIDATOR" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+# vab_cell <id> <want rc> <label> <args...>: the cli cell. PRESENCE-shaped: the program's rc is the wanted one, its
+# stdout is non-empty (a subject replaced by `exit 0` fails), and all three streams equal the in-process call's.
+vab_cell() {
+  local id="$1" want="$2" label="$3"; shift 3
+  if vab_eqv "$id" "$@" && [ "$(cat "$EQ/$id.cl.rc")" = "$want" ] && [ -s "$EQ/$id.cl.out" ]; then
+    ok "$id: $label -- the program and the in-process call agree byte for byte, exit $want"
+  else
+    bad "$id: $label -- the program and the in-process call differ, or the exit is not $want (in-process rc=$(cat "$EQ/$id.ip.rc") / program rc=$(cat "$EQ/$id.cl.rc"))"
+  fi
+}
+# The gate-log fallback of an in-process vab_main starts check-owed-derivations.sh (--scope-batch), which starts
+# sprint-status.sh (sprint-id): children of a call that is no start, which no nested row can cover and no shim can
+# answer (inproc_run strips every function the subject did not define). Each such start is tagged through the
+# environment this call exports, and the e2e cells of cells.decl declare them. Each declared cell tags exactly one start,
+# so a call whose root holds no canonical gate-log.md (the calls that take the fallback) is tagged with its own
+# ordinal; every other call is untagged.
+vab_ip() {
+  local _a _p="" _r="" _n _t=""
+  for _a in "$@"; do [ "$_p" = "--root" ] && _r="$_a"; _p="$_a"; done
+  if [ -n "$_r" ] && [ ! -f "$_r/_bmad-output/implementation-artifacts/gate-log.md" ]; then
+    _n=$(( $(cat "$EQ/ordinal" 2>/dev/null || echo 0) + 1 )); echo "$_n" > "$EQ/ordinal"
+    _t="e2e-scope-chain-$_n"
+  fi
+  FXCELL="$_t" inproc_run "$VALIDATOR" vab_main "$@"
+}
+
 # Seed a gate log whose NEWEST gate section's Check 14 row is the argument. The
 # older section's rows are deliberately older-format `-` cells: they were written
 # under earlier rules, and indicting them retroactively would make this arm
@@ -102,7 +169,7 @@ seed() { # seed <newest-check-14-row>
 seed_story_line() { grep -n '^## Gate \[story\]' "$GATELOG" | cut -d: -f1; }
 
 run_arm() {
-  bash "$VALIDATOR" --root "$WORK" --check-evidence >"$WORK/out.txt" 2>&1
+  vab_ip --root "$WORK" --check-evidence >"$WORK/out.txt" 2>&1
   echo "$?"
 }
 
@@ -249,7 +316,7 @@ d_seed_log() { # d_seed_log <path> <evidence-cell>
 d_verdict() { # d_verdict <script> <root> [extra args...]
   local s="$1" r="$2"; shift 2
   local st n
-  bash "$s" --root "$r" --check-evidence "$@" >"$D/out.txt" 2>&1
+  vab_ip --root "$r" --check-evidence "$@" >"$D/out.txt" 2>&1
   st=$?
   n="$(grep -oE 'cites [0-9]+ tok' "$D/out.txt" | tail -1)" || n=""
   n="${n#cites }"; n="${n% tok}"
@@ -455,7 +522,7 @@ d_expect "W9  decoys on both sides, live still won " "PASS/5120"  "$V_W9"
 d_expect "W10 a current-sprint decoy loses to live " "PASS/5881"  "$V_W10"
 
 if grep -q 'no gate-log.md found' "$D/out.txt" 2>/dev/null; then :; fi
-bash "$VALIDATOR" --root "$W1" --check-evidence >"$D/w1.txt" 2>&1
+vab_ip --root "$W1" --check-evidence >"$D/w1.txt" 2>&1
 if grep -q 'no gate-log.md found' "$D/w1.txt"; then
   ok "W1  and the failure NAMES the missing gate log"
 else
@@ -739,7 +806,7 @@ E_WANT="PASS/5076/- PASS/5076/- PASS/5492/- FAIL1/-/STALE FAIL1/-/STALE FAIL1/-/
 # EXIT/CITED/CLASS. The class is read from the refusal text, most specific first.
 e_verdict() { # e_verdict <script> <root>
   local s="$1" r="$2" st n c
-  bash "$s" --root "$r" --check-evidence >"$E/out.txt" 2>&1
+  vab_ip --root "$r" --check-evidence >"$E/out.txt" 2>&1
   st=$?
   n="$(grep -oE 'cites [0-9]+ tok' "$E/out.txt" | tail -1)" || n=""
   n="${n#cites }"; n="${n% tok}"
@@ -805,7 +872,7 @@ done
 # pipefail answers with the writer's EPIPE and reads a present string as absent.
 e_has() { # e_has <label> <root> <fixed-string>
   local msg
-  msg="$(bash "$VALIDATOR" --root "$2" --check-evidence 2>&1)"
+  msg="$(vab_ip --root "$2" --check-evidence 2>&1)"
   if grep -qF -- "$3" <<<"$msg"; then ok "$1"; else bad "$1 -- no '$3' in:"; printf '%s\n' "$msg" | sed 's/^/        /'; fi
 }
 e_has "W-A selects the stories section by its heading timestamp" "$WA" \
@@ -821,6 +888,12 @@ e_has "W-L names the gate-3 section that logged no Check 14 row" "$WL" \
   "the gate whose section heads line $(e_line "$WL/$E_LIVE" gate-3):"
 e_has "W-M names the NEWEST row-less section carrying the date, not the last" "$WM" \
   "the gate whose section heads line $(e_line "$WM/$E_LIVE" gate-3b):"
+
+# --- The cli cells: one per distinct CLI outcome, the program compared byte for byte with the in-process call -----
+seed '| [core] 14 — Update pipeline snapshot | PASS (lead) | `PASS  validate-artifact-budget.sh` / `  ok  _bmad-output/pipeline-snapshot.md   5432 tok  (budget   6000)` |'
+vab_cell cli-vab-pass 0 "a cell carrying the measurement passes" --root "$WORK" --check-evidence
+seed '| [core] 14 — Update pipeline snapshot | PASS (lead) | `PASS  validate-artifact-budget.sh` (exit 0). |'
+vab_cell cli-vab-refuse 1 "a cell carrying no measurement is refused" --root "$WORK" --check-evidence
 
 echo ""
 report_end snapshot-evidence-cell

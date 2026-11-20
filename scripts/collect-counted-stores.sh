@@ -13,13 +13,15 @@
 # removes the emptied directories with rmdir, which refuses a directory that still holds anything.
 #
 # Exit: 0 done (or nothing to collect), 2 refused (no hook, arming failed, a kept store not derivable).
+# ccs_main is the whole command-line body: sourcing this file defines it and returns at the guard below; running it calls it.
+ccs_main() {
 set -u
 apply=0; base="$HOME/.cache/ai-dlc/verdicts"
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply) apply=1; shift ;;
-    --base) [ -n "${2:-}" ] || { echo "usage: $0 [--apply] [--base DIR]" >&2; exit 2; }; base="$2"; shift 2 ;;
-    *) echo "usage: $0 [--apply] [--base DIR]" >&2; exit 2 ;;
+    --base) [ -n "${2:-}" ] || { echo "usage: ${BASH_SOURCE[0]} [--apply] [--base DIR]" >&2; exit 2; }; base="$2"; shift 2 ;;
+    *) echo "usage: ${BASH_SOURCE[0]} [--apply] [--base DIR]" >&2; exit 2 ;;
   esac
 done
 HOOK="$PWD/.githooks/pre-push"
@@ -55,3 +57,6 @@ for d in "$base"/counted-*; do
 done
 [ "$apply" = 1 ] && printf '%s dead store(s), %s file(s) removed\n' "$n" "$nf" || printf '%s dead store(s), %s file(s); rerun with --apply to remove them\n' "$n" "$nf"
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+ccs_main "$@"

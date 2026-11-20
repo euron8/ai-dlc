@@ -4,3 +4,7 @@
 core/scripts/validate-escalation-resolution.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/world.sh
+# In-process drive (BL-878): inproc_run, fx_inproc (inproc.sh sources mutant.sh), and fx_skip_exit for the pre-wrap consumer gate.
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

@@ -175,6 +175,7 @@
 #          variant, a snapshot/sprint-status variant disagreement
 #   The ledger defaults to `_bmad-output/spawn-ledger.jsonl`. An ABSENT ledger is exit 2, not
 #   SKIP: a mistyped path must not read as a sprint that predates the ledger.
+vsl_main() {
 set -u
 
 LEDGER=""
@@ -238,7 +239,7 @@ while [ $# -gt 0 ]; do
     --context)
       [ $# -ge 2 ] || { echo "FAIL: --context takes the path of subagent-context.jsonl" >&2; exit 2; }
       CONTEXT="$2"; shift 2 ;;
-    -h|--help)  sed -n '2,62p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,62p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -1856,3 +1857,7 @@ if [ "$TIER_PENDING" -gt 0 ]; then
   echo "  is PENDING, not verified (${PROBE_NOTE})."
 fi
 exit 0
+}
+# Executed, it runs; sourced, it has defined vsl_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vsl_main "$@"

@@ -73,6 +73,78 @@ WORK="$(cd "$WORK" && pwd -P)"
 trap 'rm -rf "$WORK"' EXIT
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). Every `bash <wrapped script> ...` below, the fixture's own and a subject's call of a sibling, is answered by
+# ip_call in a subshell (the `bash` function), as `bash <script>` would answer; the command-line starts left are the cli cells in
+# cells.decl, each compared byte for byte with the in-process answer.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A subject with neither wrap half (the `<p>_main() {` line, the column-0 source guard)
+# predates the wrap: SKIP and exit 0 on a consumer, FIXTURE BROKEN in the distribution (lib/layout.sh fx_skip_exit). Exactly one
+# half, or one subject wrapped and not the others, is a respelled program this fixture cannot drive and FAILS; unreadable is rc 2.
+PD="$SRC/partition-document.sh"; PS="$SRC/partition-subject.sh"
+[ -r "$SW" ] && [ -r "$PD" ] && [ -r "$PS" ] || { echo "FIXTURE ERROR: cannot read $SW, $PD or $PS -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0; _pw_d2=0; _pw_g2=0; _pw_d3=0; _pw_g3=0
+grep -qxF 'srw_main() {' "$SW" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SW" && _pw_g=1
+grep -qxF 'pdoc_main() {' "$PD" && _pw_d2=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$PD" && _pw_g2=1
+grep -qxF 'psub_main() {' "$PS" && _pw_d3=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$PS" && _pw_g3=1
+_pw_all="$_pw_d$_pw_g $_pw_d2$_pw_g2 $_pw_d3$_pw_g3"
+case "$_pw_all" in
+  *10*|*01*) bad "a subject carries one half of the in-process wrap (entry line and guard of srw, pdoc, psub: $_pw_all) -- a respelled program this fixture cannot drive"; report_end serial-remediation-worklist; exit 1 ;;
+  *00*) echo "SKIP: serial-remediation-worklist: a subject predates the in-process wrap (srw, pdoc, psub: $_pw_all)"; fx_skip_exit "$HERE" ;;
+esac
+# ---- in-process route (template; adapt the entry table per fixture) ---------------------------------------
+# Sourced AFTER the pre-wrap gate and AFTER lib/report.sh + lib/layout.sh. lib/inproc.sh gives fx_inproc.
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+ip_entry() { case "${1##*/}" in
+  partition-subject.sh) echo psub_main ;; partition-document.sh) echo pdoc_main ;;
+  serial-remediation-worklist.sh) echo srw_main ;; 
+  *) return 1 ;; esac; }
+IP_SRC="$SRC"
+IP_KEEP=" bash ip_call ip_scrub ip_entry fx_inproc "
+ip_scrub() { # this subshell reduced to what a fresh `bash <script>` child has: exported vars only, no fixture functions
+  local _v _e
+  _e=" $(compgen -e | tr '\n' ' ') "
+  for _v in $(compgen -v); do
+    case "$_e" in *" $_v "*) continue ;; esac
+    case "$_v" in
+      BASH*|IFS|OPTIND|OPTERR|PPID|UID|EUID|SHELLOPTS|HISTCMD|LINENO|RANDOM|SECONDS|FUNCNAME|PIPESTATUS|GROUPS|DIRSTACK|HOSTTYPE|MACHTYPE|OSTYPE|HOSTNAME|SHLVL|PWD|OLDPWD|_|PS4|_v|_e|IP_*) continue ;;
+    esac
+    unset -v "$_v" 2>/dev/null
+  done
+  for _v in $(compgen -A function); do case "$IP_KEEP" in *" $_v "*) ;; *) unset -f "$_v" ;; esac; done
+  OPTIND=1; set +eufx +o pipefail; hash -r
+}
+# ip_call <script> [args...] -- the answer of `bash <script> args`, in a subshell; stdout, stderr, stdin and the status are the
+# subject's. A call from inside it to a wrapped sibling comes back here through the `bash` function below.
+ip_call() {
+  local IP_F="$1" IP_E; shift
+  IP_E="$(ip_entry "$IP_F")" || { command bash "$IP_F" "$@"; return; }
+  ( ip_scrub; fx_inproc "$IP_F"; . "$IP_F" || exit 126; "$IP_E" "$@" )
+}
+# THE ROUTING FUNCTION. A `bash <wrapped script> ...` anywhere in this fixture (and inside an in-process subject) is answered in
+# process; every other `bash` is the real one. `env FXCELL=<id> bash <script>` (env execs the real bash) is the cli cell.
+bash() {
+  if [ -z "${FXCELL:-}" ] && [ -n "${1:-}" ] && ip_entry "$1" > /dev/null 2>&1 && [ -r "$1" ] && [ "$1" -ef "$IP_SRC/${1##*/}" ]; then ip_call "$@"; else command bash "$@"; fi
+}
+# cli_eqv <id> <script> <args...> -- one `env FXCELL=<id> bash <script>` start and one in-process call over the SAME input,
+# stdout, stderr and exit compared byte for byte. Neither may write (a report or a refusal); callers pass input they can re-run.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+cli_eqv() {
+  local id="$1" s="$2"; shift 2
+  [ -z "${CLI_PRE:-}" ] || eval "$CLI_PRE"
+  ip_call "$s" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  [ -z "${CLI_PRE:-}" ] || eval "$CLI_PRE"
+  env FXCELL="$id" bash "$s" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+     && { [ -s "$EQ/$id.cl.out" ] || [ -s "$EQ/$id.cl.err" ]; }; then
+    ok "$id: the command line and the in-process call agree byte for byte (exit $(cat "$EQ/$id.cl.rc"))"
+  else
+    bad "$id: command line and in-process differ: exit $(cat "$EQ/$id.cl.rc") vs $(cat "$EQ/$id.ip.rc"); stdout $(cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && echo equal || echo DIFFERS), stderr $(cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && echo equal || echo DIFFERS)"
+  fi
+}
 g() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 world_git -C "$1" -c user.name=f -c user.email=f@example.invalid -c core.hooksPath=/dev/null "${@:2}"; }
 lorem() { local i; for i in $(seq 1 "$2"); do printf '%s line %d of the section, carrying enough prose to weigh something real.\n' "$1" "$i"; done; }
 FLOOR='The floor is a hardcoded literal of one hundred raw units.'
@@ -284,6 +356,15 @@ for a in $ARMS; do
     bad "$(echo "$a" | tr 'a-z' 'A-Z')"
   fi
 done
+
+# THE CLI CELLS (cells.decl): one `env FXCELL=<id> bash <worklist>` start per distinct outcome, a worklist that emits (exit 0) and a
+# refusal (--bogus, exit 2), each compared byte for byte (stdout, stderr, exit) with the in-process answer; the emitting run consumes
+# the pre-repair copy, so the post-build state is put back before each side.
+w_cli="$WORK/dw-base"
+_cwd0="$PWD"; cd "$w_cli" || exit 2
+AI_DLC_PROJECT_ROOT="$w_cli" CLI_PRE='reset_doc "$w_cli"' cli_eqv cli-worklist "$SW" "$w_cli/r" --also "$w_cli/other.md"
+AI_DLC_PROJECT_ROOT="$w_cli" cli_eqv cli-bogus "$SW" "$w_cli/r" --also "$w_cli/other.md" --bogus
+cd "$_cwd0" || exit 2
 
 echo "serial-remediation-worklist: $N_WL worklist run(s), $N_WORLD world(s) built"
 

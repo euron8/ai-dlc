@@ -11,3 +11,7 @@
 core/skills/ai-dlc/steps/implementation.md
 core/hooks/ai-dlc-recover.sh
 core/fixtures/lib/report.sh
+# Loaded in process (BL-878): run.sh sources lib/layout.sh and lib/inproc.sh, which sources lib/mutant.sh for fx_inproc.
+core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

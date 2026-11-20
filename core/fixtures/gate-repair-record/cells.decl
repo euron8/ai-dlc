@@ -1,0 +1,5 @@
+# gate-repair-record's starts of core/scripts/validate-gate-adjudication.sh (BL-879 grammar). Every other drive is in
+# process: run.sh asks vga_main through vga. One cli cell per distinct CLI outcome (exit 0, the exit-1 repair-record
+# refusal), each started as FXCELL=<id> bash in eqv() and compared byte for byte with the in-process answer.
+cli core/scripts/validate-gate-adjudication.sh cli-series-pass
+cli core/scripts/validate-gate-adjudication.sh cli-series-refuse

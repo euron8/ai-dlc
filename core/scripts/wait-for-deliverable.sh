@@ -1145,7 +1145,7 @@ while [ $# -gt 0 ]; do
         exit 64; }
       PROGRESS_PATHS="${PROGRESS_PATHS}${PROGRESS_PATHS:+|}$1"
       shift ;;
-    -h|--help) sed -n '2,/^set -u$/p' "$0" | sed '$d'; exit 0 ;;
+    -h|--help) sed -n '2,/^set -u$/p' "${BASH_SOURCE[0]}" | sed '$d'; exit 0 ;;
     -*) echo "unknown arg: $1" >&2; exit 64 ;;
     *) TARGETS="${TARGETS}${TARGETS:+|}$1"; shift ;;
   esac
@@ -1169,7 +1169,7 @@ fi
 
 if [ -z "$TARGETS" ]; then
   echo "FAIL: pass at least one deliverable path." >&2
-  echo "usage: $0 <path> [<path>...] [--reset]" >&2
+  echo "usage: ${BASH_SOURCE[0]} <path> [<path>...] [--reset]" >&2
   exit 64
 fi
 
@@ -1308,7 +1308,7 @@ sidecar_put() {  # $1 = file, $2 = content
 # the same trap, so a refusal leaves nothing behind.
 #
 # THE LEASE LIVES AT THE PROJECT ROOT'S `_bmad-output`, WHATEVER AI_DLC_STATE_DIR SAYS. The stop
-# hook reads `${CLAUDE_PROJECT_DIR}/_bmad-output/.beat-inflight` (ai-dlc-continue.sh:120) and
+# hook reads `${CLAUDE_PROJECT_DIR}/_bmad-output/.beat-inflight` (ai-dlc-continue.sh:121) and
 # never sees AI_DLC_STATE_DIR: every lead beat that sets one sets it as a per-command prefix, so
 # the hook's environment cannot carry it. A lease written under a custom state dir was therefore
 # invisible to the hook. Counters, join epochs and settle records stay in STATE_DIR; only the

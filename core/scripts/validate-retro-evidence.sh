@@ -91,6 +91,7 @@
 # Part of Sprint 137 Story 137-5 (Item 324) + Sprint 138 Story 138-3
 # (Item 326) structural enforcement.
 
+vre_main() {
 set -u
 
 # ---- Usage check -----------------------------------------------------------
@@ -466,3 +467,7 @@ print(f"    personas: {len(personas_found):<6} >= {MIN_PERSONAS}     OK ({', '.j
 print(f"    phases:   {len(phases_found):<6} >= {MIN_PHASES}     OK ({', '.join(phases_found)})")
 sys.exit(0)
 PYEOF
+}
+# Executed, it runs; sourced, it has defined vre_main and returns.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+vre_main "$@"

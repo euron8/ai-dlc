@@ -34,7 +34,7 @@ seal_hook() {
     '{session_id:"fx-session", hook_event_name:"PostToolUse", tool_name:$t, tool_input:{file_path:$p},
       tool_use_id:"toolu_01FxSealWrite", transcript_path:$tp, tool_response:{}}
      + (if $a == "" then {} else {agent_id:$a, agent_type:"fixture"} end)' \
-    | CLAUDE_PROJECT_DIR="$1" bash "$SEALHOOK" >/dev/null 2>&1
+    | ( CLAUDE_PROJECT_DIR="$1"; export CLAUDE_PROJECT_DIR; set +u +o pipefail; fx_inproc core/hooks/ai-dlc-content-seal.sh; . "$SEALHOOK"; acs_main ) >/dev/null 2>&1
 }
 # seal_count <ledger> -> the number of content-seal rows in it (0 when it is absent)
 seal_count() { local n; n="$(grep -c '"kind":"content-seal"' "$1" 2>/dev/null)" || n=0; printf '%s' "$n"; }
@@ -43,6 +43,79 @@ seal_count() { local n; n="$(grep -c '"kind":"content-seal"' "$1" 2>/dev/null)" 
 WFD="$SRCDIR/wait-for-deliverable.sh"
 [ -f "$WFD" ] || { echo "FIXTURE ERROR: $WFD is not beside the reader under test; the --mark arms have no subject" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
+
+# THE IN-PROCESS ROUTE. A call of a registered subject by its shipped path runs in a subshell of this process, as
+# `bash <subject> <args>` would answer it: the `bash` function below catches it, and cs_run sources the subject and calls
+# its entry (a pass logged by fx_inproc, no start). Every subject a subject starts in turn (the merge's and the join's
+# `bash "$SEAL"`, --mark's --record-expect) reaches this function too: cs_run keeps it, and the registry CS_ROUTES it reads
+# is exported. Any other `bash` call (a stand-in script, a copy, a data tool) is the program it always was. The CLI is
+# started only by cs_eq below, one tagged start per distinct outcome (FXCELL=<cell id> command bash).
+CS_ROUTES="
+"
+export CS_ROUTES
+cs_route() { CS_ROUTES="$CS_ROUTES$1
+"; export CS_ROUTES; } # <absolute subject path>
+cs_route "$SEAL"; cs_route "$WFD"
+bash() { case "${CS_ROUTES:-}" in *$'\n'"${1:-}"$'\n'*) cs_run "$@" ;; *) command bash "$@" ;; esac; }
+cs_run() { # <subject path> <args...> -- the subject's own entry, in a subshell reduced to a CLI child's names
+  (
+    set +o pipefail +u
+    _cs_keep='^(BASH.*|IFS|OPTIND|OPTERR|LINENO|RANDOM|SRANDOM|SECONDS|EPOCH.*|PIPESTATUS|FUNCNAME|GROUPS|EUID|UID|PPID|SHELLOPTS|HOSTNAME|HOSTTYPE|MACHTYPE|OSTYPE|DIRSTACK|PS[0-9]|SHLVL|PWD|OLDPWD|HOME|PATH|TMPDIR|_cs_.*)$'
+    _cs_exp=" $(compgen -e | tr '\n' ' ') "
+    for _cs_i in 1 2 3 4 5 6 7 8; do # a caller's local, unset, uncovers the caller's caller's binding: repeat
+      _cs_n=0
+      for _cs_v in $(compgen -v); do
+        [[ $_cs_v =~ $_cs_keep ]] && continue
+        case "$_cs_exp" in *" $_cs_v "*) continue ;; esac
+        unset "$_cs_v" 2>/dev/null && _cs_n=$((_cs_n + 1))
+      done
+      [ "$_cs_n" -eq 0 ] && break
+    done
+    for _cs_v in $(compgen -A function); do case "$_cs_v" in cs_run|bash|fx_inproc) ;; *) unset -f "$_cs_v" ;; esac; done
+    _cs_s="$1"; shift
+    case "${_cs_s##*/}" in
+      content-seal.sh) _cs_r=core/scripts/content-seal.sh; _cs_e=seal_main ;;
+      merge-adversarial-shards.sh) _cs_r=core/scripts/merge-adversarial-shards.sh; _cs_e=merge_main ;;
+      join-remediator-shards.sh) _cs_r=core/scripts/join-remediator-shards.sh; _cs_e=join_main ;;
+      validate-gate-adjudication.sh) _cs_r=core/scripts/validate-gate-adjudication.sh; _cs_e=vga_main ;;
+      wait-for-deliverable.sh) _cs_r=core/scripts/wait-for-deliverable.sh; _cs_e=wfd_mark_main ;;
+      *) echo "FIXTURE BROKEN: cs_run has no entry for ${_cs_s##*/}" >&2; exit 97 ;;
+    esac
+    # shellcheck source=/dev/null
+    fx_inproc "$_cs_r"; . "$_cs_s" || exit 90
+    case "$_cs_e" in
+      wfd_mark_main) fx_inproc "$_cs_r"; wfd_mark_main "$@"; fx_inproc "$_cs_r"; wfd_beat_main "$@" ;;
+      *) fx_inproc "$_cs_r"; "$_cs_e" "$@" ;;
+    esac
+  )
+}
+# cs_eq <cell id> <world root or ""> <subject> <args...> -- ONE distinct outcome end to end: the subject started as a program
+# (the cell's tagged start), then asked in process on the same input, and the two answers compared byte for byte (stdout,
+# stderr, exit code, and the world's file list). The world is snapshotted first and put back at the SAME path before the
+# in-process run (seal rows carry the physical root); the CLI's copy is dropped, so the world afterwards is the in-process
+# answer's. Env prefixes and the working directory are the caller's; stdin is CS_EQ_IN (default /dev/null). Sets CS_EQ_RC
+# (the shared exit code), CS_EQ_OUT (both streams of the in-process run) and CS_EQ_WHY (what differed); 0 when identical.
+cs_eq() {
+  local id="$1" w="$2" s="$3" e="${CS_EQ_DIR:-$WORK}/cseq.$1"; shift 3
+  case "${CS_ROUTES:-}" in *$'\n'"$s"$'\n'*) ;; *) echo "FIXTURE BROKEN: cs_eq: $s is no registered subject" >&2; exit 2 ;; esac
+  [ -z "$w" ] || cp -Rp "$w" "$w.eqsnap" || { echo "FIXTURE BROKEN: cs_eq cannot snapshot $w" >&2; exit 2; }
+  FXCELL="$id" command bash "$s" "$@" > "$e.cout" 2> "$e.cerr" < "${CS_EQ_IN:-/dev/null}"; echo $? > "$e.crc"
+  if [ -n "$w" ]; then
+    ( cd "$w" && find . -type f | LC_ALL=C sort ) > "$e.cfiles" 2>/dev/null
+    rm -rf "$w" && mv "$w.eqsnap" "$w" || { echo "FIXTURE BROKEN: cs_eq cannot restore $w" >&2; exit 2; }
+  fi
+  bash "$s" "$@" > "$e.iout" 2> "$e.ierr" < "${CS_EQ_IN:-/dev/null}"; echo $? > "$e.irc"
+  [ -z "$w" ] || {
+    ( cd "$w" && find . -type f | LC_ALL=C sort ) > "$e.ifiles" 2>/dev/null; }
+  CS_EQ_WHY=""; read -r CS_EQ_RC < "$e.irc"
+  cmp -s "$e.crc" "$e.irc" || CS_EQ_WHY="$CS_EQ_WHY rc $(cat "$e.crc")/$CS_EQ_RC"
+  cmp -s "$e.cout" "$e.iout" || CS_EQ_WHY="$CS_EQ_WHY stdout[$(head -1 "$e.cout") | $(head -1 "$e.iout")]"
+  cmp -s "$e.cerr" "$e.ierr" || CS_EQ_WHY="$CS_EQ_WHY stderr[$(head -1 "$e.cerr") | $(head -1 "$e.ierr")]"
+  [ -z "$w" ] || cmp -s "$e.cfiles" "$e.ifiles" || CS_EQ_WHY="$CS_EQ_WHY files"
+  [ -s "$e.cout" ] || [ -s "$e.cerr" ] || CS_EQ_WHY="$CS_EQ_WHY the CLI printed nothing (a comparison of nothing)"
+  CS_EQ_OUT="$e.out"; cat "$e.iout" "$e.ierr" > "$CS_EQ_OUT"
+  [ -z "$CS_EQ_WHY" ]
+}
 # race_engine <dir> -> the path of a --mark engine copy whose content-seal.sh sibling is a STUB: on a
 # --record or --record-expect call it first appends a line to the file through Bash, then runs the real
 # library. That is a write landing between --mark's move and its seal row, forced, with no sleep.
@@ -51,7 +124,7 @@ race_engine() {
   { printf '#!/bin/bash\nREAL=%q\n' "$SEAL"
     printf 'if [ "${BASH_SOURCE[0]}" != "$0" ]; then . "$REAL"; return 0; fi\n'
     printf 'case "${1:-}" in --record|--record-expect) printf "written through Bash after the move\\n" >> "${@: -1}" ;; esac\n'
-    printf 'exec bash "$REAL" "$@"\n'; } > "$1/content-seal.sh" || return 1
+    printf '. "$REAL"; seal_main "$@"; exit $?\n'; } > "$1/content-seal.sh" || return 1
   # The installed layout: the join (its checks_field segments a replayed record) and the validator sit
   # beside the engine. The validator is a COUNTING wrapper over the real one: each replay the mark runs
   # appends a line to <dir>/validator.calls, so an arm can assert the BL-816 replay actually ran.

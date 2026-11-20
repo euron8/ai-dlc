@@ -1,0 +1,24 @@
+# remediator-shard-join (shard a): every start of a declared subject here is one cli cell of BL-879's grammar. The fixture
+# asks each subject in process (join_main, hook_pretool_head, adc_main, vac_main, seal_main, srw_main, wfd_mark_main); the CLI
+# answers once per distinct outcome, tagged FXCELL=<id> at its one start and compared byte for byte with the in-process answer
+# on the same input (SEAM cells in unit-reader-b.sh, unit-reader.sh, unit-record.sh, unit-mark.sh).
+cli core/scripts/join-remediator-shards.sh cli-b-join-pass
+cli core/scripts/join-remediator-shards.sh cli-b-join-refuse
+cli core/scripts/join-remediator-shards.sh cli-join-pass
+cli core/scripts/join-remediator-shards.sh cli-join-refuse
+cli core/scripts/join-remediator-shards.sh cli-er0-pass
+cli core/scripts/join-remediator-shards.sh cli-er0-refuse
+cli core/hooks/ai-dlc-gate-remediation-guard.sh cli-b-hook-pinned
+cli core/hooks/ai-dlc-gate-remediation-guard.sh cli-b-hook-unpinned
+cli core/hooks/ai-dlc-gate-remediation-guard.sh cli-hook-agent
+cli core/hooks/ai-dlc-gate-remediation-guard.sh cli-hook-lead
+cli core/hooks/ai-dlc-derivation-capture.sh cli-b-cap-stale
+cli core/hooks/ai-dlc-derivation-capture.sh cli-b-cap-doc
+cli core/scripts/validate-adversarial-convergence.sh cli-b-conv-h1
+cli core/scripts/validate-adversarial-convergence.sh cli-b-conv-h2
+cli core/scripts/wait-for-deliverable.sh cli-mk0-pass
+cli core/scripts/wait-for-deliverable.sh cli-mk0-refuse
+# A CLI join starts the seal check and the serial worklist beside itself, and a CLI convergence validator starts the seal.
+nested core/scripts/join-remediator-shards.sh core/scripts/content-seal.sh why=the CLI join runs the seal library's check as a program beside itself on every record it reads or writes
+nested core/scripts/join-remediator-shards.sh core/scripts/serial-remediation-worklist.sh why=the CLI join runs the worklist as a program beside itself after a document or subject assembly
+nested core/scripts/validate-adversarial-convergence.sh core/scripts/content-seal.sh why=the CLI convergence validator runs the seal library's check as a program on the series it reads

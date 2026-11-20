@@ -17,6 +17,8 @@
 # The last-entry archive worlds raised the validator from 120 to 124 by four drives (archgx, archbx, archgi,
 # archgd), and the `*` total 307 -> 317 by those 4 and the 6 drives of 2 mutants (arch_earlyexit: its 3
 # deciding arms and twin sen_C; arch_norefuse: arch_gd and sen_C). Two agreeing counted runs.
-130 *
-124 core/scripts/validate-suppression-lifetime.sh
-1 core/scripts/verdict.sh
+11 *
+5 core/scripts/validate-suppression-lifetime.sh
+2 core/scripts/verdict.sh
+126 inproc:core/scripts/validate-suppression-lifetime.sh
+3 inproc:core/scripts/verdict.sh

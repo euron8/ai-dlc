@@ -12,6 +12,8 @@ teammates, create tasks, orchestrate the build/review/QA cycle.
 
 ## EXECUTION SEQUENCE
 
+**First action:** `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file implementation.md 'Pipeline Position'`
+
 ### 1. Context Loading
 
 Read sprint stories from `_bmad-output/planning-artifacts/s<N>/stories/`.
@@ -105,12 +107,11 @@ Catalog and field semantics defined in `stories-test-strategy.md` "Story
 Routing Tags" subsection. Violation fails gate-validation Check 22 on
 detection at the implementation gate.
 
-**Pre-dispatch auth check.** Before any dev dispatch, run:
-```
-gh auth status
-```
-MUST succeed. Failure = HARD_BLOCK (environment not authenticated).
+**Pre-dispatch auth check.** `scripts/ai-dlc/dispatch-story.sh` runs
+`gh auth status` before it creates anything; a failure is HARD_BLOCK
+(environment not authenticated) and the call exits 2.
 
+**Pre-dispatch capacity check.** Before wave 1, run `scripts/ai-dlc/suite-admission.sh --probe-only`. Exit 3 (REFUSED) is reported to the operator before any dev dispatch; exit 0 (ADMIT, or NO-PROBE when the consumer declares none) proceeds.
 
 **The dispatch protocol — READ AND FOLLOW `_dispatch-protocol.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before
 issuing the first `Agent` call of this step.** That file carries the full,
@@ -149,14 +150,8 @@ axis, as `_dispatch-protocol.md` "Bounded-join ≠ serial execution" applies it.
 Spawn additional dev teammates if stories span multiple ownership
 boundaries (e.g., dev-frontend + dev-backend).
 
-### 3. Create Task List
+### 3. Closing Writer And Spawn Ledger
 
-Create tasks from sprint stories. For every dev task, create three
-follow-up tasks with dependencies:
-1. Code review task → assigned to code-reviewer, blocked by dev task
-2. QA validation task → assigned to qa, blocked by code review
-3. Story validation → blocked by QA. Gate 3 is a lead-run
-   `gate-validation.md` declared `[implementation]`; no sub-skill performs it.
 4. Closing writer → blocked by gate 3. **Once gate 3 passes, the lead
    dispatches one `code-reviewer` as the closing writer, `shard: 1/1
    <story-index>`, for every story, serial or sharded.** The closing writer
@@ -177,37 +172,12 @@ follow-up tasks with dependencies:
    the `close` plan that `gate-transition.sh <story> close <flags>` writes after verifying
    the story's last gate-3 ledger holds a `26 PASS` row.
 
-### 4. Self-Validate Task List
-
-Verify:
-- Every sprint story has a corresponding task
-- Dependencies are correct (review blocked by dev, QA blocked by review)
-- Teammate assignments match story scope and ownership boundaries
-- No story is assigned to a teammate outside their ownership boundary
-- Every teammate spawn in Step 2 bound the full role contract per
-  SKILL.md Rule 19: (a) the Agent tool `model` parameter was passed and
-  matches the role's `/model` directive, and (b) the dispatch carried
-  the standing role-contract line binding the subagent to
-  `.claude/team-roles/<role>.md`. You do NOT hand-record these:
-  `ai-dlc-dispatch-guard.sh` writes one row per dispatch to
-  `_bmad-output/spawn-ledger.jsonl` at PreToolUse, and Check 22 reads
-  that. READ the ledger here and confirm it matches what you believe you
-  dispatched — a row with `role_contract_cited: false` or
-  `role_file_readable: false` is a Rule 19 violation you can still fix
-  before the gate. `role_contract_cited` is true when the prompt OR the
-  definition the dispatch selected delivered the (b) line, and
-  `contract_via` says which; it records delivery, not the teammate's read. Do not restate the ledger's contents in the gate log
-  as a substitute for it; a table you write about your own dispatches is
-  what Check 22 stopped relying on.
-- Every story tagged `protected_path_editor: true` was dispatched to a
-  `protected-path-editor` teammate (serialized), not executed inline by
-  the lead and not delegated to a dev. Record the dispatch in the gate
-  log.
-- Every story tagged `escalate_model: true` was dispatched to a
-  `dev-escalated` teammate, not to a plain `dev`. Record the dispatch in
-  the gate log, and whether the tag was authored or set at dispatch.
-
-Log task list validation in gate log.
+Read `_bmad-output/spawn-ledger.jsonl` once before the first gate: it holds
+one row per dispatch, written by `ai-dlc-dispatch-guard.sh` at PreToolUse, and
+Check 22 reads it. A row with `role_contract_cited: false` or
+`role_file_readable: false` is a Rule 19 violation you can still fix before the
+gate. Do not restate the ledger's contents in the gate log as a substitute
+for it.
 
 ### 5. Begin Implementation
 
@@ -507,8 +477,8 @@ new review answers each with one column-0 line `carried: <prior heading> — res
 pass, so it carries again. Gate validation Check 1 runs `validate-carried-findings.sh` on
 the two files.
 
-**DAR-fold preflight before gate-2 dispatch.** After gate1 (code
-review) approves a story and BEFORE dispatching gate2 (QA), the lead
+**DAR-fold preflight before gate-2 dispatch.** Gate 1 (code review) and gate 2 (QA) are
+dispatched together on one frozen sha, so BEFORE dispatching either, the lead
 MUST copy the Dev Agent Record the dev wrote on the story branch into the canonical sprint-branch story file;
 `gate-transition.sh <story> 2 <flags>` then verifies that file's Dev Agent Record section is non-empty and equal to the story-branch section, performs no copy, and refuses when the fold is not done — a mechanical
 section-presence check, the same class as gate-validation check #4's Dev Agent Record
@@ -521,15 +491,23 @@ is guaranteed present in the canonical story file by the merge step
 itself, making the fold redundant. Dispatching gate2 with an empty DAR
 section is a retro finding.
 
-**Gate 1 after a QA rework (Rule A).** When a QA `NEEDS_REWORK` sends the
-story back to dev, gate 1 re-runs on the rework iff the range adds a test file
+**Gates 1 and 2 together.** On a story's first pass the lead runs `gate-transition.sh <story> 1` and
+`gate-transition.sh <story> 2` on the one frozen sha and dispatches the seats of both plans in one wave: no QA seat
+waits for the gate-1 verdict. When both gates return findings the lead sends the dev ONE rework list, the merge of the
+two review files' findings, and one rework follows.
+
+**Gate 1 after a QA rework (Rule A).** After that one rework (or after any QA `NEEDS_REWORK`), gate 1 re-runs
+iff the range adds a test file
 or changes a code or test file on a line that is not blank, a comment or a
 docstring. Captures and records never trigger it. At gate 2 the program asks
 `partition-review-diff.sh --gate1-rerun` first, `<go-signal-sha>` being the base the program takes: the QA reviewed-sha, or the reviewed-sha of an APPROVED latest gate-1 re-review that descends from it.
-`GATE1-SKIP:` leaves the transition a gate-2 one and dispatches QA's
-re-validation directly, after the handoff preflight below; `GATE1-RERUN:`, or any refusal,
-makes the transition a gate-1 re-review: the plan's `gate:` line reads `rerun`, and the lead
-runs gate 1 as a re-review pass first.
+`GATE1-SKIP:` (a records-only delta) leaves the transition a gate-2 one and dispatches QA's
+re-validation directly, after the handoff preflight below, as the record-only route does.
+`GATE1-RERUN:`, or any refusal of that question, is a code-changing delta: gate 1 and gate 2 re-run
+together on the new frozen sha. The one `gate-transition.sh <story> 2 --pass M <flags>` call runs the
+gate-1 transition itself, writes both plans, and records the gate-1 plan's path on a `gate1-plan:` line of the gate-2 plan.
+The lead dispatches the seats of both plans in one wave, each brief citing its own plan, and merges
+the findings of both into one rework list for the dev. No plan reads `gate: rerun`.
 
 **Gate 1 after a gate-3 rework (Rule A).** At gate 1, pass M >= 2, when the story's newest g3
 plan names a sha the pass M-1 reviewed-sha is an ancestor of or equal to, the frozen sha is not
@@ -699,44 +677,35 @@ work when the freeze is honored. Removal condition: retire once the
 gate pipeline pins reviews to an immutable content ref (a tag or a PR
 merge-commit) instead of a live worktree HEAD.
 
-**Sub-step snapshot updates during implementation.** The lead MUST
-run a sub-step snapshot update (see `_gate-procedures.md` \"Sub-step
-snapshot update\") after every story transition: ready-for-dev →
-in-progress, in-progress → review, review → done. Each transition
-appends a Recent Activity line naming the story ID, new status,
-and teammate. This keeps the snapshot reflective of mid-sprint
-state so a `/compact` or handoff mid-implementation does not lose
-visibility into which stories are in-flight.
+**Per-story bookkeeping during implementation.** The lead MUST run
+`bash scripts/ai-dlc/story-transition.sh <story-id> <from-status> <to-status> <teammate> [-- <snapshot-update.sh op> ...]`
+after every story transition: ready-for-dev → in-progress, in-progress →
+review, review → done. One call writes the Recent Activity line through
+`snapshot-update.sh` (the extra ops after `--` ride in the same call; no
+`gate-log.md` line is written) and runs the Seam C check of `_gate-procedures.md`
+"Auto-handoff evaluation". Its last line is `SEAM-C: CONTINUE` or
+`SEAM-C: FIRE`. On FIRE the lead checks preconditions 6 and 7 of that
+procedure and, when both hold, executes the Rule 2(a) handoff and the session
+ends; on CONTINUE orchestration resumes. `dispatch-story.sh` makes the
+dispatch-time call itself with `--no-seam`, so it prints no `SEAM-C:` line: the
+lead runs the per-transition Seam C check (`story-transition.sh` without
+`--no-seam`) after the `Agent` call returns, never before it.
 
-**And the lead MUST run one AT DISPATCH — in the same turn as the
-`Agent` call, before the first wait beat.** Each wave (Rule 28, "Split
-dispatch") writes one update covering every teammate it launched: a row per
-teammate in **In-Flight Teammates**, carrying its deliverable path.
+**The In-Flight Teammates row at dispatch.** `ai-dlc-inflight-row.sh` writes
+the row, one per teammate a wave launched, from the brief's
+`Deliverable: <path>` line in the same turn as the `Agent` call. A
+transition-time write cannot substitute: a teammate is at risk from dispatch
+until join, which is exactly the window in which no transition has happened
+yet.
 
-A transition-time write cannot substitute: a teammate is at risk from
-dispatch until join, which is exactly the window in which no transition
-has happened yet.
-
-**Minimum mechanism (Rule 26(c)) — the dispatch-time In-Flight
-Teammates row.** Failure caught: the lead cannot address a dispatched
+**Minimum mechanism (Rule 26(c)) — the dispatch-time In-Flight Teammates
+row.** Failure caught: the lead cannot address a dispatched
 teammate, reads that as teammate *death*, and re-dispatches work still
 running or already delivered. False-positive
-cost: one table row per dispatch, written in a snapshot update the lead
-already runs; deleted at join, or held as `delivered-reachable` while the
-teammate can still be messaged. Removal condition: retire once the harness
-gives the lead a handle that both survives compaction and is valid for
-the spawn shape it used.
-
-**Auto-handoff evaluation after each story transition (Seam C).**
-After each sub-step snapshot update in this step, the lead MUST
-invoke auto-handoff evaluation (see `_gate-procedures.md`
-\"Auto-handoff evaluation\") at `Seam C` with the label
-`implementation story transition <story-id> <from-status>→<to-status>`.
-If all preconditions hold — including
-`auto_handoff_mode: safe-seam`, red threshold confirmed under Mode
-1, and no teammate awaiting orchestration — auto-handoff FIRES and
-the session ends. Otherwise evaluation returns CONTINUE and
-orchestration resumes.
+cost: one table row per dispatch, deleted at join, or held as
+`delivered-reachable` while the teammate can still be messaged. Removal
+condition: retire once the harness gives the lead a handle that both survives
+compaction and is valid for the spawn shape it used.
 
 ### 7. All Gates Passed
 

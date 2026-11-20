@@ -51,6 +51,7 @@
 # 4. Restart Claude Code
 # 5. Verify with /hooks
 
+hkpause_main() {
 set -u
 
 # -----------------------------------------------------------------------------
@@ -142,7 +143,7 @@ done
 # the schema directory that shipped in the same package. The PROJECT_DIR candidates below
 # it are the fallback for a hook invoked through a copy. The env override is for fixtures,
 # which drive a mutated copy from a temp directory where neither path resolves.
-_prs_self="$(cd "$(dirname "$0")" && pwd)"
+_prs_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAUSE_ROUTING_SCHEMA=""
 for _prs in "${AI_DLC_PAUSE_ROUTING_SCHEMA:-}" \
             "${_prs_self}/../schemas/pause-routing.json" \
@@ -529,3 +530,6 @@ jq -n \
   }'
 
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+hkpause_main "$@"

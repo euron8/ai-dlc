@@ -98,7 +98,7 @@ Entry point is `git push` → `.githooks/pre-push`, 11 steps. No pre-commit, no
 | `scripts/validate-release-version.sh` | Commit subject == `VERSION` == CHANGELOG heading, per commit and across a range. |
 | `scripts/validate-no-dead-doc-refs.sh` | No `core/**` file cites a `docs/` design doc `install.sh` does not ship. |
 | `core/scripts/sync-taught-schema.sh --check` | The rendered-region + byte-compare pattern, already pre-push step 1. |
-| `core/scripts/validate-reattach-budget.sh:99` | A resident-size budget — **`--skill`-scoped to `SKILL.md` only**. |
+| `core/scripts/validate-reattach-budget.sh:100` | A resident-size budget — **`--skill`-scoped to `SKILL.md` only**. |
 | 147 fixture directories | `plan-shape/` and `claude-rules-joins/` prove those two validators can FAIL. |
 
 ## C. The 46 memory clusters, and where each belongs
@@ -195,7 +195,7 @@ every time it is taken.
 ## G4 — The compaction-durable channel has no budget
 
 `.githooks/pre-push`'s re-attach budget step runs the resident-size budget, and
-`core/scripts/validate-reattach-budget.sh:99` shows it is `--skill`-scoped to `SKILL.md`.
+`core/scripts/validate-reattach-budget.sh:100` shows it is `--skill`-scoped to `SKILL.md`.
 Sixteen scripts reference `CLAUDE.md`; none measures it. Part 3 adds 24 rules to that channel,
 and nothing would notice if it doubled — a cost paid on every compaction of every session.
 

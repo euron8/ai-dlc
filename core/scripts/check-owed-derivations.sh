@@ -114,6 +114,7 @@
 #   (b) K is named by `SUPERSEDED: <f>:<K> by <f>:<later>` on stderr: open iff a FAIL or UNRUN line
 #       exists for <later>, the copy that actually ran;
 #   (c) otherwise open iff a FAIL or UNRUN line exists for K.
+cod_main() {
 set -uo pipefail
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -157,7 +158,7 @@ SLOT_RE='^s[0-9]+$'
 CUR=""
 resolve_sprint() {
   local ss="$SELF_DIR/sprint-status.sh" out
-  [ -f "$ss" ] || { echo "REFUSED: no sprint-status.sh beside $0, so the current sprint cannot be resolved. A scope is never guessed." >&2; exit 2; }
+  [ -f "$ss" ] || { echo "REFUSED: no sprint-status.sh beside ${BASH_SOURCE[0]}, so the current sprint cannot be resolved. A scope is never guessed." >&2; exit 2; }
   out="$(AI_DLC_PROJECT_ROOT="$ROOT" bash "$ss" sprint-id --root "$ROOT" 2>/dev/null)" \
     || { echo "REFUSED: sprint-status.sh sprint-id failed, so the current sprint cannot be resolved. A scope is never guessed." >&2; exit 2; }
   out="$(printf '%s' "$out" | tr -d '[:space:]')"
@@ -204,10 +205,10 @@ sprint_split() {
 #     items into the third. The dist-only battery derives that pair list from SKILL.md and fails when a
 #     companion is missing here. Each LIVE side (`prd.md`, `carry-over-backlog.md`, ...) is NOT history.
 #   - `push-candidate-ledger.archive.md`: core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:136.
-#   - `pipeline-history/pipeline-snapshot-archive.md`: core/scripts/rotate-snapshot-archive.sh:149.
-#   - `operator-answers-history.md`: core/hooks/ai-dlc-answer-capture.sh:105 (path) and :242 (append).
-#   - `operator-requests-history.md`: core/hooks/ai-dlc-pause.sh:210 (path) and :261 (append).
-#   - `pipeline-snapshot-history.md`: fed by the `trim` remedy that core/scripts/validate-artifact-budget.sh:2148,
+#   - `pipeline-history/pipeline-snapshot-archive.md`: core/scripts/rotate-snapshot-archive.sh:150.
+#   - `operator-answers-history.md`: core/hooks/ai-dlc-answer-capture.sh:106 (path) and :243 (append).
+#   - `operator-requests-history.md`: core/hooks/ai-dlc-pause.sh:211 (path) and :262 (append).
+#   - `pipeline-snapshot-history.md`: fed by the `trim` remedy that core/scripts/validate-artifact-budget.sh:2149,
 #     core/skills/ai-dlc/steps/_gate-procedures.md:71,:82 and steps/route.md:327 tell the lead to write; its path
 #     is named in core/schemas/pipeline-state-paths.json, and rotate-snapshot-archive.sh:5 rotates it.
 #   - the rotated gate-adjudication directories, core/scripts/rotate-gate-adjudication.sh:155-157 (header) and
@@ -244,7 +245,7 @@ is_history() { # <root-relative path> -> 0 when HISTORY
     push-candidate-ledger.archive.md) return 0 ;;
     operator-answers-history.md|operator-requests-history.md|pipeline-snapshot-history.md) return 0 ;;
   esac
-  # rotate-snapshot-archive.sh:149 writes the archive beside the snapshot history, in its pipeline-history
+  # rotate-snapshot-archive.sh:150 writes the archive beside the snapshot history, in its pipeline-history
   # directory. Matched on the part below the pipeline root: this reader classifies that path and never
   # creates it, and the state-path schema is the writer's to declare.
   case "$p" in _bmad-output/*) case "${p#_bmad-output/}" in pipeline-history/pipeline-snapshot-archive.md) return 0 ;; esac ;; esac
@@ -569,7 +570,7 @@ living_sweep() {
   # core-paths.sh --is-core, a SIBLING of this script, with cwd at the root (its manifest candidates are
   # root-relative). Unavailable is a refusal, never a silent pass.
   [ -f "$SELF_DIR/core-paths.sh" ] \
-    || { echo "REFUSED: no core-paths.sh beside $0, so whether a LIVING derivation reads an ai-dlc core file cannot be decided; it is never assumed consumer-owned." >&2; exit 2; }
+    || { echo "REFUSED: no core-paths.sh beside ${BASH_SOURCE[0]}, so whether a LIVING derivation reads an ai-dlc core file cannot be decided; it is never assumed consumer-owned." >&2; exit 2; }
   ( cd "$ROOT" && AI_DLC_PROJECT_ROOT="$ROOT" bash "$VALIDATOR" --explain-cmd - < "$TMP/ls.cand" > "$TMP/ls.explain" 2>/dev/null ) \
     || { echo "REFUSED: validate-artifact-derivations.sh --explain-cmd failed, so the operands of a LIVING derivation are unknown." >&2; exit 2; }
   _i="$(awk -F'\t' '$2 == "VERDICT" { v[$1] = 1 } END { for (k in v) n++; print n + 0 }' "$TMP/ls.explain")"
@@ -854,3 +855,6 @@ while IFS="$SEP" read -r key cmd range logn sc tkey tcmd hops; do
 done < "$TMP/targets"
 
 sweep_and_exit "$nopen"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+cod_main "$@"

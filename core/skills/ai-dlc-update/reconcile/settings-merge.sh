@@ -188,6 +188,13 @@ if [ "$CHECK" -eq 1 ]; then
   echo "sensor_wired=${SENSOR_WIRED}"
   echo "declared_model_windows=${DECLARED_FAMILIES:-<none>}"
   echo "model_window_needed=${MODEL_WINDOW_NEEDED}"
+  if printf '%s' "$BASE_JSON" | jq -e '(.env // {}) | type == "object" and has("AI_DLC_SUITE_ADMISSION_PROBE")' >/dev/null 2>&1; then
+    echo "suite_admission_probe=declared"
+  else
+    echo "suite_admission_probe=none"
+    echo "optional: AI_DLC_SUITE_ADMISSION_PROBE in .claude/settings.json env names a shell command that exits 0 to admit a suite run and 3 to refuse it;"
+    echo "optional:   with it, suite runs wait their turn instead of starving a loaded box. Leaving it unset changes nothing. The reconcile never writes env."
+  fi
   if [ "$MODEL_WINDOW_NEEDED" = yes ]; then
     echo "ask: This project's context sensor has no model window declared."
     echo "ask:   It assumes a 200,000-token ceiling for an undeclared model family:"

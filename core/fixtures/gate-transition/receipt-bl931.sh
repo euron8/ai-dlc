@@ -10,8 +10,8 @@
 #
 #   ra1  p1 APPROVED, p2 APPROVED at G1 (GO < G1 <= the frozen sha), a p3 .md.draft: exit 0, `gate: 2`,
 #        `rule-a-base: gate1 <G1> <p2 file>`, a GATE1-SKIP gate-log line.
-#   ra0  the same world without p2: exit 0, `gate: rerun`, `rule-a-base: qa <GO> ...`, next: naming `5.1` and `--pass 2`.
-#   ran  p9 APPROVED and p10 NEEDS_REWORK: p10 decides, exit 0, `gate: rerun`, base qa.
+#   ra0  the same world without p2: exit 0, `gate: 2`, `rule-a-base: qa <GO> ...`, a gate1-plan: line naming the `5.1` pass-2 gate-1 plan.
+#   ran  p9 APPROVED and p10 NEEDS_REWORK: p10 decides, exit 0, `gate: 2`, base qa.
 #   rax  the re-review on a side commit not ancestor-related to GO: exit 1, `REFUSED gate1-review`, no plan.
 #   raa  gate-1 files under both index forms: exit 1, `REFUSED gate1-review` ambiguous, no plan.
 #   ram  the re-review a MERGED file (several reviewed-sha and advisor lines): ra1's answer.
@@ -40,9 +40,9 @@ rc() { cat "$W/$1.rc"; }
 pl() { grep -qx -- "$2" "$W/$1.plan" 2> /dev/null; }
 bad=""
 [ "$(rc ra1)" = 0 ] && pl ra1 'gate: 2' && pl ra1 "rule-a-base: gate1 $G1 $R/5.1-code-review-p2.md" && grep -q '^gate-log: GATE1-SKIP' "$W/ra1.plan" || bad="$bad ra1"
-[ "$(rc ra0)" = 0 ] && pl ra0 'gate: rerun' && pl ra0 "rule-a-base: qa $GO $R/5-1-qa-validation.md" \
-  && grep -q '^next: gate-transition.sh 5\.1 1 --pass 2 ' "$W/ra0.plan" || bad="$bad ra0"
-[ "$(rc ran)" = 0 ] && pl ran 'gate: rerun' && pl ran "rule-a-base: qa $GO $R/6-1-qa-validation.md" || bad="$bad ran"
+[ "$(rc ra0)" = 0 ] && pl ra0 'gate: 2' && pl ra0 "rule-a-base: qa $GO $R/5-1-qa-validation.md" \
+  && grep -q '^gate1-plan: .*/5\.1-g1-p2\.plan$' "$W/ra0.plan" || bad="$bad ra0"
+[ "$(rc ran)" = 0 ] && pl ran 'gate: 2' && pl ran "rule-a-base: qa $GO $R/6-1-qa-validation.md" || bad="$bad ran"
 [ "$(rc rax)" = 1 ] && grep -q 'REFUSED gate1-review: .*not ancestor-related' "$W/rax.err" && [ ! -e "$W/rax.plan" ] || bad="$bad rax"
 [ "$(rc raa)" = 1 ] && grep -q 'REFUSED gate1-review: .*ambiguous' "$W/raa.err" && [ ! -e "$W/raa.plan" ] || bad="$bad raa"
 [ "$(rc ram)" = 0 ] && pl ram 'gate: 2' && pl ram "rule-a-base: gate1 $G1 $R/9.1-code-review-p2.md" || bad="$bad ram"

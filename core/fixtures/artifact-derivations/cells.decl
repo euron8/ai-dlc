@@ -1,0 +1,11 @@
+# artifact-derivations' starts of core/scripts/validate-artifact-derivations.sh (BL-879 grammar). Every other cell asks the
+# validator in process through vad_call (unit.sh). Section U runs ONE CLI start per distinct outcome of the validator, each
+# tagged FXCELL=cli-<label> and compared byte for byte (merged output and status) with the in-process call on the same input.
+cli core/scripts/validate-artifact-derivations.sh cli-ok
+cli core/scripts/validate-artifact-derivations.sh cli-stale
+cli core/scripts/validate-artifact-derivations.sh cli-unrun
+cli core/scripts/validate-artifact-derivations.sh cli-walk
+cli core/scripts/validate-artifact-derivations.sh cli-missing
+cli core/scripts/validate-artifact-derivations.sh cli-usage
+cli core/scripts/validate-artifact-derivations.sh cli-list
+cli core/scripts/validate-artifact-derivations.sh cli-explain

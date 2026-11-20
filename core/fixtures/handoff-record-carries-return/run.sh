@@ -46,6 +46,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 NAME="handoff-record-carries-return"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
 broken() { printf '%s: FIXTURE BROKEN — %s\n' "$NAME" "$1" >&2; exit 2; }
 
 resolve_root() {  # <start-dir> -> "<layout> <root>", or rc 1
@@ -65,6 +68,23 @@ case "$LAYOUT" in
   consumer) SKILL_DIR="$ROOT/.claude/skills/ai-dlc"; ROLES_DIR="$ROOT/.claude/team-roles"; SUBJ="$ROOT/scripts/ai-dlc/wait-for-deliverable.sh" ;;
 esac
 [ -f "$SUBJ" ] || broken "subject absent: $SUBJ"
+# PRE-WRAP CONSUMER GATE. A core fixture ships ahead of its subject: a present subject with neither wrap half (the
+# `wfd_beat_main() {` line, the column-0 source guard) predates the in-process wrap, and sourcing it would run its whole
+# body: SKIP (FIXTURE BROKEN in the distribution). Exactly one half is a respelled subject this fixture cannot drive: FAIL.
+# An unreadable subject is FIXTURE ERROR, rc 2. Nothing below sources or runs the subject before this line.
+_wd=0; _wg=0
+grep -qxF 'wfd_beat_main() {' "$SUBJ"; _x=$?
+[ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_x)" >&2; exit 2; }
+[ "$_x" -ne 0 ] || _wd=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SUBJ"; _x=$?
+[ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $SUBJ (grep exit $_x)" >&2; exit 2; }
+[ "$_x" -ne 0 ] || _wg=1
+case "$_wd$_wg" in
+  11) : ;;
+  00) echo "SKIP: $NAME: $SUBJ predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$SUBJ carries one half of the in-process wrap (entry line, column-0 source guard: $_wd$_wg) -- a respelled subject this fixture cannot drive"
+     report_end "$NAME" ;;
+esac
 
 MODE="full"
 case "${1:-}" in
@@ -125,10 +145,27 @@ line_is() {
 }
 
 a_status() {  # $1 = workdir, $2 = since ; rest = targets -> OUT
-  OUT="$( cd "$1" && env -u CLAUDE_CODE_SESSION_ID AI_DLC_PROJECT_ROOT="$1" \
+  OUT="$( cd "$1" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_PROJECT_ROOT="$1" \
           AI_DLC_TEAMMATE_DIR="$A_NOBEAT" AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_MAX_WAIT_BEATS=1 \
-          bash "$SUBJ" --complete --status --since "$2" "${@:3}" 2>&1 )"
+          && inproc_run "$SUBJ" wfd_beat_main --complete --status --since "$2" "${@:3}" 2>&1 )"
 }
+a_mark() {  # <file> <mark args...>: wfd_mark_main in process (the --mark writer); stdout and stderr to the caller
+  inproc_run "$SUBJ" wfd_mark_main --mark "$@"
+}
+# eqv <cell-id> <entry> <args...>: the CLI cell. The in-process call (inproc_run on <entry>) and the program
+# (FXCELL=<id> bash "$SUBJ" <args>) each run on the same input, EQ_PRE (a function name) re-seeding it before each;
+# files $EQ/<id>.{ip,cl}.{out,err,rc}; rc 0 when stdout, stderr and exit agree byte for byte.
+EQ="$WORK/eq"; mkdir -p "$EQ" || broken "mkdir eq"
+eqv() {
+  local id="$1" ent="$2"; shift 2
+  ${EQ_PRE:-true}
+  inproc_run "$SUBJ" "$ent" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ${EQ_PRE:-true}
+  FXCELL="$id" bash "$SUBJ" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -1 "$EQ/$1.ip.out")" "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
 
 probe_a() {
   echo "-- (a) self-probe: the whole-line verdict matcher"
@@ -152,16 +189,43 @@ arm_a() {
 
   # Sealed pair: --mark seals; then S1 lands before (ok) or after (bad) the marker.
   a_body "$W/sealed-before.md"; a_s1 "$W/sealed-before.md"
-  bash "$SUBJ" --mark "$W/sealed-before.md" $A_ARGS > "$W/mark.out" 2>&1 \
+  a_mark "$W/sealed-before.md" $A_ARGS > "$W/mark.out" 2>&1 \
     || broken "--mark refused sealed-before.md: $(cat "$W/mark.out")"
   a_body "$W/sealed-after.md"
-  bash "$SUBJ" --mark "$W/sealed-after.md" $A_ARGS > "$W/mark.out" 2>&1 \
+  a_mark "$W/sealed-after.md" $A_ARGS > "$W/mark.out" 2>&1 \
     || broken "--mark refused sealed-after.md: $(cat "$W/mark.out")"
   a_s1 "$W/sealed-after.md"
   a_status "$W" "$since" sealed-before.md sealed-after.md
   if line_is "$OUT" "DELIVERED sealed-before.md" && line_is "$OUT" "UNFINISHED sealed-after.md $A_NOTLAST"; then
     ok "(a) sealed marker: S1 before it DELIVERS, S1 after it is UNFINISHED, in one --status call"
   else bad "(a) sealed marker: wanted DELIVERED sealed-before.md and UNFINISHED sealed-after.md; got: $OUT"; fi
+
+  # THE CLI CELLS (cells.decl): each distinct CLI outcome run once as a program, compared with the in-process call.
+  # cli-mark / cli-mark-refuse: the --mark writer on a seeded record (re-seeded before each twin) and on a missing file.
+  a_body "$W/cm.seed"; a_s1 "$W/cm.seed"
+  eq_pre_mark() { cp "$W/cm.seed" "$W/cm.md"; }
+  EQ_PRE=eq_pre_mark
+  if eqv cli-mark wfd_mark_main --mark "$W/cm.md" $A_ARGS && [ "$(cat "$EQ/cli-mark.cl.rc")" = 0 ] \
+     && grep -q '^MARKED ' "$EQ/cli-mark.cl.out"; then
+    ok "(a) cli-mark: the program marks the record, prints MARKED, exit 0, exactly as the in-process call does"
+  else bad "(a) cli-mark: the program and the in-process call differ, or the outcome is not MARKED with exit 0 ($(eq_twin cli-mark))"; fi
+  EQ_PRE=true
+  if eqv cli-mark-refuse wfd_mark_main --mark "$W/absent.md" $A_ARGS && [ "$(cat "$EQ/cli-mark-refuse.cl.rc")" = 64 ] \
+     && grep -q '^FAIL: --mark: ' "$EQ/cli-mark-refuse.cl.err" && [ ! -s "$EQ/cli-mark-refuse.cl.out" ]; then
+    ok "(a) cli-mark-refuse: the program refuses a missing record on stderr, exit 64, exactly as the in-process call does"
+  else bad "(a) cli-mark-refuse: the program and the in-process call differ, or the outcome is not the exit-64 refusal ($(eq_twin cli-mark-refuse))"; fi
+  # cli-status / cli-status-refuse: a --status beat on the sealed record, and the no-path usage refusal.
+  if ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_PROJECT_ROOT="$W" AI_DLC_TEAMMATE_DIR="$A_NOBEAT" \
+         AI_DLC_WAIT_SETTLE_SECS=1 AI_DLC_MAX_WAIT_BEATS=1 \
+       && eqv cli-status wfd_beat_main --complete --status --since "$since" sealed-before.md sealed-after.md ) \
+     && grep -qxF "DELIVERED sealed-before.md" "$EQ/cli-status.cl.out"; then
+    ok "(a) cli-status: the program prints the same --status verdict lines as the in-process call, byte for byte"
+  else bad "(a) cli-status: the program and the in-process call differ, or the DELIVERED row is absent ($(eq_twin cli-status))"; fi
+  if ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_PROJECT_ROOT="$W" \
+       && eqv cli-status-refuse wfd_beat_main ) && [ "$(cat "$EQ/cli-status-refuse.cl.rc")" = 64 ] \
+     && grep -q '^usage: ' "$EQ/cli-status-refuse.cl.err"; then
+    ok "(a) cli-status-refuse: the program refuses a call with no path, exit 64 with the usage line, exactly as the in-process call does"
+  else bad "(a) cli-status-refuse: the program and the in-process call differ, or the outcome is not the exit-64 usage refusal ($(eq_twin cli-status-refuse))"; fi
   rm -rf "$W"
 }
 

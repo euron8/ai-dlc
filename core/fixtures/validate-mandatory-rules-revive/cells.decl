@@ -1,0 +1,8 @@
+# validate-mandatory-rules-revive's starts of core/scripts/validate-mandatory-rules.sh (BL-879 grammar). Every other
+# drive is in process (vmr_f). One cli cell per distinct CLI outcome (exit 0 on a closed envelope, exit 1 on an
+# un-closed one), each started as FXCELL=<id> bash in eqv() and compared byte for byte with the in-process call.
+cli core/scripts/validate-mandatory-rules.sh cli-vmr-pass
+cli core/scripts/validate-mandatory-rules.sh cli-vmr-fail
+nested core/scripts/validate-mandatory-rules.sh core/scripts/validate-retro-evidence.sh why=Check 1 starts the retro-evidence validator as a program by path on every run of the series
+e2e core/scripts/validate-retro-evidence.sh e2e-cli-vmr-pass why=Check 1 of the in-process vmr_main EXECS the validator directly by path (no bash word to shim), one start, tagged by vmr_f exporting FXCELL
+e2e core/scripts/validate-retro-evidence.sh e2e-cli-vmr-fail why=Check 1 of the in-process vmr_main EXECS the validator directly by path (no bash word to shim), one start, tagged by vmr_f exporting FXCELL

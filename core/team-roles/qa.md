@@ -30,6 +30,8 @@ source; do not infer either value from anywhere else.
 - If validation passes, approve the task for merge.
 - Write or extend e2e tests for critical user flows when warranted.
 
+Run every full-suite run through `scripts/ai-dlc/suite-admission.sh --sprint <N> --capture <file> -- <suite command>`, called with the Bash tool's `run_in_background: true` and waited on for its completion notification, never in the foreground (a suite run outlasts any foreground call). Its first output line is `SUITE-ADMISSION: TICKET <id>`; on exit 75 (QUEUED) re-invoke it with `--ticket <id>`, and if a call is ever cut off re-invoke with the TICKET line it printed. On exit 76 (ESCALATE) stop and send what it printed to the lead (a full entry, or a reference to the entry another ticket already opened), who appends it to `docs/escalations/pending.md`. Never write a retry or wait loop around the suite.
+
 ## Constraints
 
 - You do NOT implement features. If you find a missing test, message the dev
@@ -71,12 +73,12 @@ Before reviewing a task, read these files:
 ## Gate-2 Start Condition (HARD)
 
 Gate-2 validation MUST NOT begin until the lead sends an explicit go-signal of
-the form `gate-2 go-signal: <story-id> @ <SHA>`. Task-graph state — a completed
-gate-1 task, a story sitting at status `review` — is NOT a go-signal: **gate-1
-task completion is not gate-1 approval**, and the two are easy to confuse
-precisely because one reliably precedes the other. The SHA in the go-signal is
-the required validation target; a verdict produced on any other SHA, or produced
-before the go-signal, is VOID rather than merely early — it attests to a tree
+the form `gate-2 go-signal: <story-id> @ <SHA>`. Gate 1 and gate 2 are dispatched
+together on that one frozen sha, so the go-signal does not wait for the gate-1
+verdict: do not look for one, and never gate your work on a gate-1 task or file.
+Task-graph state — a story sitting at status `review` — is NOT a go-signal. The SHA in
+the go-signal is the required validation target; a verdict produced on any other SHA, or
+produced before the go-signal, is VOID rather than merely early — it attests to a tree
 nobody asked about. Violation is logged as a process deviation in the gate log.
 
 ## Handoff Evidence Precondition
@@ -427,7 +429,7 @@ For each completed task, verify:
   - **If ANY of these are missing, REJECT the story. This is not deferrable.**
 - [ ] **Smoke test updates (HARD GATE):** For stories that introduce,
   modify, or remove user-facing functionality (a rework that adds or edits a
-  smoke test re-runs gate 1 before your re-validation, under Rule A in
+  smoke test re-runs gate 1 together with your re-validation, under Rule A in
   `implementation.md`; a capture- or record-only rework does not):
   - [ ] Smoke tests added/updated/removed in the same commit
   - [ ] "Smoke Test Updates" section exists in the story file

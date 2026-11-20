@@ -103,6 +103,7 @@
 # 4. Restart Claude Code
 # 5. Verify with /hooks
 
+hkcont_main() {
 set -u
 
 # -----------------------------------------------------------------------------
@@ -508,7 +509,7 @@ stall_run_why() {
 # rather than by a log line: core/fixtures/handoff-resume-guard asserts the declaration
 # resolves before it asserts anything about the guard, so an install that lost the schema
 # fails at the consumer's own pre-push instead of quietly disarming the guard.
-_hg_self="$(cd "$(dirname "$0")" && pwd)"
+_hg_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAUSE_ROUTING_SCHEMA=""
 for _prs in "${AI_DLC_PAUSE_ROUTING_SCHEMA:-}" \
             "${_hg_self}/../schemas/pause-routing.json" \
@@ -2088,3 +2089,6 @@ jq -n \
   }'
 
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+hkcont_main "$@"

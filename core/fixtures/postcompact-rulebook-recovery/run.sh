@@ -60,6 +60,36 @@ _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.cla
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. The postcompact hook and the budget validator are wrapped (hpcm_main, vrab_main
+# behind a column-0 source guard); a present subject with NEITHER half predates the wrap, and sourcing it would run its whole
+# body: SKIP and exit 0 (FIXTURE BROKEN in the distribution). Exactly one half is a respelled subject this fixture cannot
+# drive, which FAILS; an unreadable subject is FIXTURE ERROR. This gate runs before any source, fx_inproc or hook_run below.
+pr_halves() { # pr_halves <file> <entry> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_pr_pre=""
+pr_check() { # pr_check <file> <entry>
+  [ -n "$1" ] && [ -f "$1" ] || return 0
+  _ph="$(pr_halves "$1" "$2")" || exit 2
+  case "$_ph" in
+    11) : ;;
+    00) _pr_pre="$_pr_pre $1" ;;
+    *) bad "$1 carries one half of the in-process wrap ($2 line, column-0 source guard: $_ph) -- a respelled subject this fixture cannot drive"
+       report_end postcompact-rulebook-recovery ;;
+  esac
+}
+pr_check "${POSTCOMPACT:-}" hpcm_main
+pr_check "$VAL" vrab_main
+if [ -n "$_pr_pre" ]; then echo "SKIP: postcompact-rulebook-recovery:$_pr_pre predate(s) the in-process wrap"; fx_skip_exit "$HERE"; fi
 skip() { # skip <what> <why> — tolerated only where the subject legitimately has not arrived
   if [ "${IS_DIST:-0}" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
@@ -88,10 +118,17 @@ hook_run() { # hook_run <subject> <project> [args...] -- stdin is the payload
   _hr_f="$1"; _hr_p="$2"; shift 2
   # `hash -r`: a shim PATH given for this call (the sed and sleep shims) must win over a command this
   # script already looked up, exactly as it does in a fresh bash that has looked up nothing.
-  ( set +u +e +o pipefail; hash -r; CLAUDE_PROJECT_DIR="$_hr_p"; export CLAUDE_PROJECT_DIR; [[ "$_hr_f" != */core/hooks/* ]] || fx_inproc "$_hr_f"; . "$_hr_f" "$@" )
+  # The postcompact hook is wrapped: its entry hpcm_main is called after the source, paired with fx_inproc. The
+  # recovery hook and the gate are unwrapped whole scripts, sourced (each source is one pass).
+  case "$_hr_f" in
+    */ai-dlc-postcompact.sh)
+      ( set +u +e +o pipefail; hash -r; CLAUDE_PROJECT_DIR="$_hr_p"; export CLAUDE_PROJECT_DIR; fx_inproc "$_hr_f"; . "$_hr_f" && hpcm_main "$@" ) ;;
+    *)
+      ( set +u +e +o pipefail; hash -r; CLAUDE_PROJECT_DIR="$_hr_p"; export CLAUDE_PROJECT_DIR; [[ "$_hr_f" != */core/hooks/* ]] || fx_inproc "$_hr_f"; . "$_hr_f" "$@" ) ;;
+  esac
 }
 val_run() { # val_run [args...] -- the budget validator, in process; stdout, stderr and the exit are its own
-  ( set +u +e +o pipefail; hash -r; fx_inproc "$VAL" && . "$VAL" "$@" )
+  ( set +u +e +o pipefail; hash -r; fx_inproc "$VAL" && . "$VAL" && vrab_main "$@" )
 }
 # THE PAYLOADS ARE BUILT WITH printf, NOT jq, and they carry only fixture-chosen ids and paths under
 # $WORK. A $WORK that a JSON string could not carry verbatim is refused here, once, so a TMPDIR with a
@@ -308,7 +345,7 @@ if [ ! -f "$VD" ]; then
 elif [ "$vb_owns" = 1 ]; then
   defer "verdict.sh delivery of the byte figure" "assertion 6b"
 else
-  VD_OUT="$(bash "$VD" "$(basename "$VAL")" --skill "$SKILL" 2>&1)"
+  VD_OUT="$(FXCELL=cli-verdict bash "$VD" "$(basename "$VAL")" --skill "$SKILL" 2>&1)"
   vd_fig="$(grep -cF "$VB_REAL" <<<"$VD_OUT")" || vd_fig=0
   vd_ctl="$(grep -c 'tokens of slack' <<<"$VD_OUT")" || vd_ctl=0
   if [ "$vd_ctl" -eq 0 ]; then
@@ -2608,7 +2645,7 @@ cp_world() { _cw="$(mktemp -d "$WORK/eq.XXXXXX")" && cp -R "$1/." "$_cw/" && pri
 # recover: <project> <mode cli|inproc> -> the demarked context, the exit, and the marker without fired_at
 eq_rec() {
   if [ "$2" = cli ]; then
-    _eo="$(printf '{"source":"compact","session_id":"sess-A"}' | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>&1)"; _er=$?
+    _eo="$(printf '{"source":"compact","session_id":"sess-A"}' | CLAUDE_PROJECT_DIR="$1" FXCELL="$EQ_CELL" bash "$HOOK" 2>&1)"; _er=$?
   else
     _eo="$(printf '{"source":"compact","session_id":"sess-A"}' | hook_run "$HOOK" "$1" 2>&1)"; _er=$?
   fi
@@ -2616,7 +2653,7 @@ eq_rec() {
 }
 eq_gate() { # <project> <cli|inproc> <json> -> raw stdout, exit, and the gate state left on disk
   if [ "$2" = cli ]; then
-    _eo="$(printf '%s' "$3" | CLAUDE_PROJECT_DIR="$1" bash "$GATE" 2>&1)"; _er=$?
+    _eo="$(printf '%s' "$3" | CLAUDE_PROJECT_DIR="$1" FXCELL="$EQ_CELL" bash "$GATE" 2>&1)"; _er=$?
   else
     _eo="$(printf '%s' "$3" | hook_run "$GATE" "$1" 2>&1)"; _er=$?
   fi
@@ -2625,23 +2662,24 @@ eq_gate() { # <project> <cli|inproc> <json> -> raw stdout, exit, and the gate st
 eq_pc() { # <project> <cli|inproc> <session> -> stdout, exit, and the log without its time heading
   _ej="$(printf '{"trigger":"auto","session_id":"%s","compact_summary":"seeded"}' "$3")"
   if [ "$2" = cli ]; then
-    _eo="$(printf '%s' "$_ej" | CLAUDE_PROJECT_DIR="$1" bash "$POSTCOMPACT" 2>&1)"; _er=$?
+    _eo="$(printf '%s' "$_ej" | CLAUDE_PROJECT_DIR="$1" FXCELL="$EQ_CELL" bash "$POSTCOMPACT" 2>&1)"; _er=$?
   else
     _eo="$(printf '%s' "$_ej" | hook_run "$POSTCOMPACT" "$1" 2>&1)"; _er=$?
   fi
   printf 'rc=%s\n%s\n--log--\n%s' "$_er" "$_eo" "$(grep -v '^## ' "$1/_bmad-output/compaction-log.md" 2>/dev/null)"
 }
 eq_val() { # <cli|inproc> <skill> -> stdout+stderr and exit of the validator
-  if [ "$1" = cli ]; then _eo="$(bash "$VAL" --skill "$2" 2>&1)"; _er=$?
+  if [ "$1" = cli ]; then _eo="$(FXCELL="$EQ_CELL" bash "$VAL" --skill "$2" 2>&1)"; _er=$?
   else _eo="$(val_run --skill "$2" 2>&1)"; _er=$?; fi
   printf 'rc=%s\n%s' "$_er" "$_eo"
 }
 eq_n=0
+EQ_CELL=""
 # recovery hook: PASSING = a resolvable single position (a mandate naming the file); REFUSING = two
 # live position bullets (no mandate path, step_file_resolved=0).
 _ew_pass="$(posproj eqp "$POS_LIVE")"; _ew_ref="$(posproj eqr '- **Current step file:** stale.md' "$POS_LIVE")"
 _a="$(cp_world "$_ew_pass")"; _b="$(cp_world "$_ew_pass")"; _c="$(cp_world "$_ew_ref")"; _d="$(cp_world "$_ew_ref")"
-_rp_cli="$(eq_rec "$_a" cli)"; _rp_in="$(eq_rec "$_b" inproc)"; _rr_cli="$(eq_rec "$_c" cli)"; _rr_in="$(eq_rec "$_d" inproc)"
+_rp_cli="$(EQ_CELL=e2e-rec-pass eq_rec "$_a" cli)"; _rp_in="$(eq_rec "$_b" inproc)"; _rr_cli="$(EQ_CELL=e2e-rec-refuse eq_rec "$_c" cli)"; _rr_in="$(eq_rec "$_d" inproc)"
 if [ "$_rp_cli" = "$_rr_cli" ] || ! grep -q '^step_file_resolved=1$' <<<"$_rp_cli" || ! grep -q '^step_file_resolved=0$' <<<"$_rr_cli"; then
   bad "EQUIVALENCE: recover -- the passing and refusing inputs did not separate under the CLI (resolved=1 vs 0), so the comparison below measures nothing"
 else
@@ -2654,8 +2692,8 @@ if [ -n "${GATE:-}" ] && command -v jq >/dev/null 2>&1; then
   # payload is the same call in every copy (an absolute path would name the template, not the copy).
   _ew="$(armed_proj "$HOOK" architecture.md flat)"
   _jd="$(jcall Edit decoy.md)"; _ja="$(jfull _bmad-output/pipeline-snapshot.md)"
-  _gd_cli="$(eq_gate "$(cp_world "$_ew")" cli "$_jd")"; _gd_in="$(eq_gate "$(cp_world "$_ew")" inproc "$_jd")"
-  _ga_cli="$(eq_gate "$(cp_world "$_ew")" cli "$_ja")"; _ga_in="$(eq_gate "$(cp_world "$_ew")" inproc "$_ja")"
+  _gd_cli="$(EQ_CELL=e2e-gate-deny eq_gate "$(cp_world "$_ew")" cli "$_jd")"; _gd_in="$(eq_gate "$(cp_world "$_ew")" inproc "$_jd")"
+  _ga_cli="$(EQ_CELL=e2e-gate-allow eq_gate "$(cp_world "$_ew")" cli "$_ja")"; _ga_in="$(eq_gate "$(cp_world "$_ew")" inproc "$_ja")"
   if [ "$_gd_cli" = "$_ga_cli" ] || ! grep -q '"permissionDecision": *"deny"' <<<"$_gd_cli" || ! grep -q 'progress=step$' <<<"$_ga_cli"; then
     bad "EQUIVALENCE: gate -- the deny and the allow did not separate under the CLI, so the comparison below measures nothing"
   else
@@ -2664,8 +2702,8 @@ if [ -n "${GATE:-}" ] && command -v jq >/dev/null 2>&1; then
   if [ -n "${POSTCOMPACT:-}" ]; then
     # postcompact: the marker's owner compacts -> `yes`; another session compacts -> `no`.
     _ew="$(armed_proj "$HOOK" architecture.md flat)"
-    _py_cli="$(eq_pc "$(cp_world "$_ew")" cli sess-A)"; _py_in="$(eq_pc "$(cp_world "$_ew")" inproc sess-A)"
-    _pn_cli="$(eq_pc "$(cp_world "$_ew")" cli sess-Z)"; _pn_in="$(eq_pc "$(cp_world "$_ew")" inproc sess-Z)"
+    _py_cli="$(EQ_CELL=cli-pc-owner eq_pc "$(cp_world "$_ew")" cli sess-A)"; _py_in="$(eq_pc "$(cp_world "$_ew")" inproc sess-A)"
+    _pn_cli="$(EQ_CELL=cli-pc-foreign eq_pc "$(cp_world "$_ew")" cli sess-Z)"; _pn_in="$(eq_pc "$(cp_world "$_ew")" inproc sess-Z)"
     if [ "$_py_cli" = "$_pn_cli" ] || ! grep -q 'recovery_injected: yes' <<<"$_py_cli" || ! grep -q 'recovery_injected: no' <<<"$_pn_cli"; then
       bad "EQUIVALENCE: postcompact -- the owner's and a foreign session's compaction did not separate under the CLI"
     else
@@ -2680,17 +2718,17 @@ if [ -n "${POSTCOMPACT:-}" ] && grep -qF 'printf '"'"'session_id=%s' "$HOOK"; th
   _ew="$(newproj architecture.md consumer)"
   { printf '%s\n' '{"type":"user","message":{"role":"user","content":"<command-message>ai-dlc-update</command-message>\n<command-name>/ai-dlc-update</command-name>"}}'; } > "$_ew/tU.jsonl"
   eq_silent() { # <project> <cli|inproc> <subject> <json>
-    if [ "$2" = cli ]; then _eo="$(printf '%s' "$4" | CLAUDE_PROJECT_DIR="$1" bash "$3" 2>&1)"; _er=$?
+    if [ "$2" = cli ]; then _eo="$(printf '%s' "$4" | CLAUDE_PROJECT_DIR="$1" FXCELL="$EQ_CELL" bash "$3" 2>&1)"; _er=$?
     else _eo="$(printf '%s' "$4" | hook_run "$3" "$1" 2>&1)"; _er=$?; fi
     printf 'rc=%s out=[%s] marker=%s log=%s' "$_er" "$_eo" "$([ -e "$1/$mk" ] && echo y || echo n)" "$([ -e "$1/_bmad-output/compaction-log.md" ] && echo y || echo n)"
   }
   _sa="$(cp_world "$_ew")"; _sb="$(cp_world "$_ew")"; _sc="$(cp_world "$_ew")"; _sd2="$(cp_world "$_ew")"
   _js="$(printf '{"source":"compact","session_id":"S-U","transcript_path":"%s/tU.jsonl"}' "$_sa")"
-  _rs_cli="$(eq_silent "$_sa" cli "$HOOK" "$_js")"
+  _rs_cli="$(EQ_CELL=e2e-rec-silent eq_silent "$_sa" cli "$HOOK" "$_js")"
   _js="$(printf '{"source":"compact","session_id":"S-U","transcript_path":"%s/tU.jsonl"}' "$_sb")"
   _rs_in="$(eq_silent "$_sb" inproc "$HOOK" "$_js")"
   _js="$(printf '{"trigger":"auto","session_id":"S-U","transcript_path":"%s/tU.jsonl","compact_summary":"seeded"}' "$_sc")"
-  _ps_cli="$(eq_silent "$_sc" cli "$POSTCOMPACT" "$_js")"
+  _ps_cli="$(EQ_CELL=cli-pc-silent eq_silent "$_sc" cli "$POSTCOMPACT" "$_js")"
   _js="$(printf '{"trigger":"auto","session_id":"S-U","transcript_path":"%s/tU.jsonl","compact_summary":"seeded"}' "$_sd2")"
   _ps_in="$(eq_silent "$_sd2" inproc "$POSTCOMPACT" "$_js")"
   if [ "$_rs_cli" != 'rc=0 out=[] marker=n log=n' ] || [ "$_ps_cli" != 'rc=0 out=[] marker=n log=n' ]; then
@@ -2701,8 +2739,8 @@ if [ -n "${POSTCOMPACT:-}" ] && grep -qF 'printf '"'"'session_id=%s' "$HOOK"; th
   fi
 fi
 # validator: PASSING = the shipped SKILL.md; REFUSING = the no-mandate copy built above.
-_vp_cli="$(eq_val cli "$SKILL")"; _vp_in="$(eq_val inproc "$SKILL")"
-_vr_cli="$(eq_val cli "$NOMANDATE_SKILL")"; _vr_in="$(eq_val inproc "$NOMANDATE_SKILL")"
+_vp_cli="$(EQ_CELL=cli-val-pass eq_val cli "$SKILL")"; _vp_in="$(eq_val inproc "$SKILL")"
+_vr_cli="$(EQ_CELL=cli-val-refuse eq_val cli "$NOMANDATE_SKILL")"; _vr_in="$(eq_val inproc "$NOMANDATE_SKILL")"
 if [ "$_vp_cli" = "$_vr_cli" ] || [ "${_vp_cli%%$'\n'*}" != rc=0 ] || [ "${_vr_cli%%$'\n'*}" != rc=1 ]; then
   bad "EQUIVALENCE: validator -- the shipped and the no-mandate SKILL.md did not separate under the CLI (rc 0 vs 1)"
 else

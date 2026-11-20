@@ -59,7 +59,75 @@ echo "HERMETIC-CONSUMED core/scripts/verdict.sh"
 
 # shellcheck source=/dev/null
 . "$DIR/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
-VD="$(dirname "$V")"
+. "$DIR/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+VD="$(cd "$(dirname "$V")" && pwd)"; V="$VD/validate-artifact-budget.sh"; VW="$VD/verdict.sh" # normalised: the subjects locate their siblings by `pwd`, and the shim matches paths by string
+
+# IN PROCESS (BL-878). Every start of the three subjects goes through the `bash` shim below, which runs the subject's entry
+# (vab_main, vrd_main or wfd_beat_main) in a subshell made fresh the way inproc_run makes one. The shim
+# is the one place that sources a subject, so verdict.sh's own `bash <validator>` start and the validator's own
+# `bash wait-for-deliverable.sh --dispatch-ts` starts route the same way. A core fixture ships ahead of its subjects: a
+# subject with neither the `<p>_main() {` line nor the column-0 source guard predates the wrap and SKIPs (FIXTURE BROKEN
+# in the distribution); exactly one half FAILs; an unreadable subject is FIXTURE ERROR.
+bs_halves() { # <file> <entry> -> "<def><guard>"
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+bs_pre=""
+bs_gate() { # bs_gate <file>:<entry> -- one call line per wrapped subject, so each carries its own gate
+  local _s="$1" _h
+  [ -f "${_s%%:*}" ] || return 0 # an absent wfd keeps the LATE section's own FIXTURE ERROR
+  _h="$(bs_halves "${_s%%:*}" "${_s##*:}")" || exit 2
+  case "$_h" in
+    11) : ;;
+    00) bs_pre="$bs_pre ${_s%%:*}" ;;
+    *) bad "${_s%%:*} carries one half of the in-process wrap (${_s##*:} line, column-0 source guard: $_h) -- a respelled subject this fixture cannot drive"
+       report_end budget-summary-verdict ;;
+  esac
+}
+bs_gate "$V:vab_main"
+bs_gate "$VW:vrd_main"
+bs_gate "$VD/wait-for-deliverable.sh:wfd_beat_main"
+if [ -n "$bs_pre" ]; then echo "SKIP: subject predates the in-process wrap:$bs_pre"; fx_skip_exit "$DIR"; fi
+
+. "$DIR/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+export FX_VAB="$V" FX_VRD="$VW" FX_WFD="$VD/wait-for-deliverable.sh" # exported: a fresh subshell keeps exported variables only
+FORKLOG=""; export FX_FORKLOG="" # the LATE section points it at its own log: one row per `--dispatch-ts` resolver start
+bash() { # a `bash <subject>` start runs the subject's entry in a fresh-options subshell; any other start is real
+  local _p="${1:-}" _e=""
+  case "$_p" in
+    "$FX_VAB") _e="vab_main" ;;
+    "$FX_VRD") _e="vrd_main" ;;
+    "$FX_WFD") _e="wfd_beat_main" ;;
+  esac
+  if [ -z "$_e" ]; then command bash "$@"; return; fi
+  shift
+  [ "$_e" != wfd_beat_main ] || [ "${1:-}" != --dispatch-ts ] || [ -z "$FX_FORKLOG" ] || printf '%s\t%s\n' "${AI_DLC_STATE_DIR:-}" "${2:-}" >> "$FX_FORKLOG"
+  (
+    _x=" $(compgen -e) "; _x="${_x//$'\n'/ }"
+    for _v in $(compgen -v); do
+      case "$_x" in *" $_v "*) continue ;; esac
+      case "$_v" in
+        _x|_v|_e|_p) continue ;;
+        BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
+        IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
+        SHLVL|TERM|UID|_) continue ;;
+      esac
+      unset "$_v" 2>/dev/null
+    done
+    OPTIND=1; set +eufx +o pipefail; hash -r
+    case "$_e" in
+      vab_main) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$FX_VAB"; . "$FX_VAB" && vab_main "$@" ;;
+      vrd_main) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$FX_VRD"; . "$FX_VRD" && vrd_main "$@" ;;
+      wfd_beat_main) ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$FX_WFD"; . "$FX_WFD" && wfd_beat_main "$@" ;; # wfd_mark_main returns at once for any first argument but --mark and --mark-repair
+    esac
+  )
+}
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "run.sh: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"
@@ -564,19 +632,9 @@ for _s in wait-for-deliverable.sh validate-adversarial-convergence.sh; do
 done
 echo "HERMETIC-CONSUMED core/scripts/wait-for-deliverable.sh"
 echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"
-# THE FORK COUNTER. A `bash` shim first on PATH logs every `bash .../wait-for-deliverable.sh
-# --dispatch-ts <tok>` as `<AI_DLC_STATE_DIR>\t<tok>` and execs the real bash, so a change in the
-# arm's cost is an assertion, not a guess.
-REALBASH="$(command -v bash)" || { echo "FIXTURE ERROR: no bash on PATH" >&2; exit 2; }
-SHIM="$WORK/shim"; FORKLOG="$WORK/forks.log"; mkdir -p "$SHIM" || exit 2
-{ printf '#!%s\n' "$REALBASH"
-  printf 'FORKLOG=%q\nREALBASH=%q\n' "$FORKLOG" "$REALBASH"
-  cat <<'SHIMEOF'
-case "${1:-}" in */wait-for-deliverable.sh)
-  [ "${2:-}" = --dispatch-ts ] && printf '%s\t%s\n' "${AI_DLC_STATE_DIR:-}" "${3:-}" >> "$FORKLOG" ;; esac
-exec "$REALBASH" "$@"
-SHIMEOF
-} > "$SHIM/bash" && chmod +x "$SHIM/bash" || { echo "FIXTURE ERROR: cannot write the bash shim" >&2; exit 2; }
+# THE FORK COUNTER. The `bash` shim above logs every `bash .../wait-for-deliverable.sh --dispatch-ts <tok>` as
+# `<AI_DLC_STATE_DIR>\t<tok>` into $FORKLOG, so a change in the arm's cost is an assertion, not a guess.
+FORKLOG="$WORK/forks.log"; export FX_FORKLOG="$FORKLOG"; : > "$FORKLOG" || { echo "FIXTURE ERROR: cannot write $FORKLOG" >&2; exit 2; }
 forks_world() { # forks_world <arm name> -> resolver calls made for that world's state dir
   awk -F'\t' -v s="/$1/_bmad-output" 'substr($1, length($1) - length(s) + 1) == s { n++ } END { print n + 0 }' "$FORKLOG" 2>/dev/null || echo 0
 }
@@ -598,7 +656,7 @@ $2"
 }
 ldrive() { # ldrive <label> <validator> <world> [args...] -- the gate, teammate dir set, forks counted
   _ll="$1"; _lv="$2"; _lw="$3"; shift 3
-  AI_DLC_TEAMMATE_DIR="$_lw/sub" PATH="$SHIM:$PATH" drive_now "$_ll" "$_lv" "$_lw" --only pipeline-snapshot.md "$@"
+  AI_DLC_TEAMMATE_DIR="$_lw/sub" drive_now "$_ll" "$_lv" "$_lw" --only pipeline-snapshot.md "$@"
 }
 lout() { printf '%s' "$WORK/runs/$1.out"; }
 nlate() { _n="$(grep -c '^LATE ' "$(lout "$1")")" || _n=0; printf '%s' "$_n"; }
@@ -864,7 +922,7 @@ fi
 : > "$FORKLOG"
 SPAY="$WORK/runs/stamps.payload"
 printf '%s\n' 'a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:00:03Z | in-flight' > "$SPAY"
-AI_DLC_TEAMMATE_DIR="$LW/sub" PATH="$SHIM:$PATH" drive_now cost-stamps "$V" "$LW" \
+AI_DLC_TEAMMATE_DIR="$LW/sub" drive_now cost-stamps "$V" "$LW" \
   --stamps-only "$LW/_bmad-output/pipeline-snapshot.md" --payload "$SPAY"
 s_w="$(forks_world cost-bare)"
 if [ "$(status_of cost-stamps)" = 0 ] && [ "$s_w" = 1 ]; then
@@ -876,6 +934,38 @@ fi
 # F-history: a future stamp in the history file is not read by the shipped arm
 if arm_f_history "$VD" "$VW"; then ok "F-history a future stamp in the history file is not read by the shipped arm (rc 0)"
 else bad "F-history the shipped arm refused a snapshot whose history file carries a future stamp"; fi
+
+# --- the cli cells (cells.decl): each program run as a PROGRAM once per distinct CLI outcome ---------------------------
+# One `FXCELL=<id> bash <subject>` start per outcome, compared with the in-process answer (the `bash` shim) on the same input:
+# stdout+stderr merged and exit, byte for byte. A cell asserts its own outcome too, so two runs that both printed nothing
+# cannot read as equivalent. The nested starts of a cli cell (the wrapper's validator, the validator's resolver) are real
+# processes: the program starts them itself.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+cell() { # <id> <subject> <world> <args...> -> $EQ/<id>.{ip,cl}.{out,rc}
+  local id="$1" subj="$2" w="$3"; shift 3
+  ( cd "$w" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$VD" AI_DLC_TEAMMATE_DIR="$w/sub" bash "$subj" "$@" ) > "$EQ/$id.ip.out" 2>&1; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$w" && AI_DLC_SNAPSHOT_NOW_EPOCH="$NOW_PIN" AI_DLC_SCRIPTS_DIR="$VD" AI_DLC_TEAMMATE_DIR="$w/sub" FXCELL="$id" command bash "$subj" "$@" ) > "$EQ/$id.cl.out" 2>&1; echo "$?" > "$EQ/$id.cl.rc"
+}
+cell_ok() { # <id> <rc> <text the answer names>
+  if cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc" && [ "$(cat "$EQ/$1.cl.rc")" = "$2" ] && grep -qF -- "$3" "$EQ/$1.cl.out"; then
+    ok "$1: the program matches the in-process answer (exit $2, names '$3')"
+  else bad "$1: the program and the in-process call disagree (rc cl=$(cat "$EQ/$1.cl.rc") ip=$(cat "$EQ/$1.ip.rc"), wanted $2 naming '$3'; first line: $(head -n 1 "$EQ/$1.cl.out" | cut -c1-160))"; fi
+}
+CWC="$(arm_dir cell-clean)"; seed_clean "$CWC"
+CWB="$(arm_dir cell-breach)"; seed_breach "$CWB"
+cell cli-vab-pass "$V" "$CWC" --root "$CWC"
+cell cli-vab-over "$V" "$CWB" --root "$CWB"
+late_world cell-late "a7ffc8dcd555207b8 | remediator | r1 | 2026-10-14T10:01:00Z | in-flight"
+CWL="$LW"
+cell cli-vab-late "$V" "$CWL" --root "$CWL" --only pipeline-snapshot.md
+cell cli-vrd-pass "$VW" "$CWC" validate-artifact-budget --root "$CWC"
+cell cli-vrd-fail "$VW" "$CWB" validate-artifact-budget --root "$CWB"
+cell_ok cli-vab-pass 0 "$PASS_LINE"
+cell_ok cli-vab-over 1 'OVER  '
+cell_ok cli-vab-late 1 "$LATE_HEAD"
+cell_ok cli-vrd-pass 0 'PASS  validate-artifact-budget.sh'
+cell_ok cli-vrd-fail 1 'FAIL  validate-artifact-budget.sh'
+if ! cmp -s "$EQ/cli-vab-pass.cl.out" "$EQ/cli-vab-over.cl.out"; then ok "the validator's pass and breach cells differ"; else bad "the validator's pass and breach cells are identical"; fi
 
 echo ""
 report_end budget-summary-verdict

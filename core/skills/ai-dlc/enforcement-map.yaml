@@ -40,6 +40,9 @@
 #             --expected derives it). H1/H2 are deliberately NOT llm: escalating the
 #             recursion/forgery self-tests into the mechanism they police is a trust
 #             circularity.
+# Optional `adjudication_by_gate: {<gate_type>: <class>}` on a check entry overrides `adjudication` for the
+#   named gate types only; every gate type not named keeps `adjudication`. The escalation derivation and the
+#   --expected worklist read it; a key that is no declared gate_type, or a class outside the set above, exits 2.
 # Paths are repo-relative (distribution layout). enforcer/ci_workflow are the
 #   files a validator stats for existence. fixtures name adversarial self-tests
 #   (H1/H2 drive these) under tests/fixtures/.
@@ -154,6 +157,22 @@ checks:
           forced a re-run would be a no-op. Past expiry a still-failing named
           check needs fresh authorization; a suppression whose cause was fixed
           reports nothing.
+    ci_workflow: ~
+    fixtures: [tests/fixtures/escalation-status-vocabulary, tests/fixtures/suppression-lifetime]
+
+  - id: "2c"
+    title: Escalation vocabulary and suppression lifetimes
+    gate_types: [implementation]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-escalation-status-vocabulary.sh
+      - core/scripts/validate-suppression-lifetime.sh
+    call_sites:
+      - site: core/scripts/gate-transition.sh gate 3 (arm 2)
+        posture: refuses the gate-3 plan on a non-zero exit of either script, before the adjudicator is dispatched
+        why: the vocabulary and lifetime halves of Check 2 are decided by a script, so the implementation
+          adjudicator is left the hard-block half alone
     ci_workflow: ~
     fixtures: [tests/fixtures/escalation-status-vocabulary, tests/fixtures/suppression-lifetime]
 
@@ -335,6 +354,7 @@ checks:
     title: Stub audit (hot-path files) content verification
     gate_types: [universal]
     adjudication: llm
+    adjudication_by_gate: {implementation: script}
     enforcer:
       - core/scripts/validate-stub-audit.sh
     call_sites:

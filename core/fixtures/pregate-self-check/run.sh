@@ -48,17 +48,33 @@ WANT='A=0 B=1 C=2 noparse=2 nostep=2 noverdict=2 D=2 Dran=no Dnamed=yes U=2 Unam
 
 cd "$REPO" || exit 2
 
+# --- every drive is IN PROCESS (BL-878). The self-check is loaded once (inproc_load) and each world asks psc_main through
+# the receipt's psc_drive; the receipt itself is sourced here and asked blr_main in a subshell; the seeder runs inside the
+# self-check as svs_main. Command-line starts, one per distinct CLI outcome, are the FXCELL-tagged twins in cells.decl:
+# the receipt's eqv() runs them for the self-check and the seeder.
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+psc_drive() { inproc_run "$REPO/scripts/pregate-self-check.sh" psc_main "$@"; } # <self-check args> -> its answer, in process
+export FX_SVS="$REPO/scripts/seed-verdict-store.sh" # exported: inproc_run keeps exported variables and drops the rest
+bash() { # the self-check's own `bash "$SEED" ...` starts run the seeder's svs_main in a fresh-options subshell; any other bash start is real
+  if [ "${1:-}" = "$FX_SVS" ]; then
+    shift
+    ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$FX_SVS"; ( set +eufx +o pipefail; . "$FX_SVS" && svs_main "$@" )
+  else command bash "$@"; fi
+}
+inproc_load "$REPO/scripts/pregate-self-check.sh" || { echo "FIXTURE ERROR: $SUBJECT defines no psc_main (not loadable)" >&2; exit 2; }
+# inproc_run strips every function the subject did not define; the bash shim above is kept through that strip by naming it with
+# the loaded set (inproc_run then checks the set's definitions are unchanged, and bash is part of it).
+INPROC_FNS="${INPROC_FNS}bash "; INPROC_DEFS="$(declare -f $INPROC_FNS)"
+# shellcheck source=/dev/null
+fx_inproc "$RECEIPT"; . "$REPO/core/fixtures/pregate-self-check/receipt-bl643.sh" || { echo "FIXTURE ERROR: cannot source $RECEIPT" >&2; exit 2; }
+declare -F blr_main >/dev/null 2>&1 || { echo "FIXTURE ERROR: $RECEIPT defines no blr_main (not loadable)" >&2; exit 2; }
+
 # --- a1: the unmutated control ----------------------------------------------------------------
-# The literal repo-relative path (not "$RECEIPT") is what lets validate-fixture-git-env.sh resolve the init site.
-bash core/fixtures/pregate-self-check/receipt-bl643.sh "$SUBJECT" > "$WORK/a1.out" 2>&1; a1=$?
+( fx_inproc "$RECEIPT"; blr_main "$SUBJECT" ) > "$WORK/a1.out" 2>&1; a1=$?
 if [ "$a1" -eq 9 ]; then echo "FIXTURE BROKEN: the receipt could not build its worlds" >&2; sed 's/^/     /' "$WORK/a1.out" >&2; exit 2; fi
-# THE THREE SENTINELS BELOW ARE KEYED ON THE RECEIPT'S OUTPUT, NOT ON ITS EXIT CODE. A sentinel attests a
-# read that happened. The receipt prints its `A=...` summary line (its :86) only after it has tested (-s,
-# its :17) and copied (cp, its :24-25) the probe and the self-check into its SELF tree and driven that copy
-# of the self-check in every world (its :55-58, :68). An exit code alone cannot attest that: a1 may be one
-# the receipt never wrote -- 126/127 when bash cannot run the file, 128+n when a signal kills it, 2 when a
-# syntax error stops it before its first line runs -- and any of those passes an a1 != 9 test. `grep -q` on
-# the file, never fed from a pipe. Its own `A| ` echo of world A (its :85) cannot match `^A=`.
+# THE SENTINELS BELOW ARE KEYED ON THE RECEIPT'S OUTPUT, NOT ON ITS EXIT CODE: the receipt prints its `A=...` summary line
+# only after it has tested and driven the self-check in every world, which an exit code alone cannot attest.
+# `grep -q` on the file, never fed from a pipe. Its own `A| ` echo of world A cannot match `^A=`.
 if [ "$a1" -ne 9 ] && grep -q '^A=' "$WORK/a1.out"; then
   echo "HERMETIC-CONSUMED core/fixtures/procsub-staged-refusal/procsub-spell-probe.diff"
   echo "HERMETIC-CONSUMED scripts/pregate-self-check.sh"
@@ -67,17 +83,23 @@ if [ "$a1" -ne 9 ] && grep -q '^A=' "$WORK/a1.out"; then
 fi
 if [ "$a1" -eq 0 ]; then ok "a1 control: receipt exit 0 on the unmutated self-check"; B_a1_exit=1; else bad "a1 control: receipt exit $a1, expected 0"; fi
 if grep -qxF "$WANT" "$WORK/a1.out"; then ok "a1 control: the line '$WANT' is present"; B_a1_line=1; else bad "a1 control: the line '$WANT' is absent (got: $(tail -1 "$WORK/a1.out"))"; fi
+# The command-line twins of the self-check and the seeder (cells cli-psc-*, cli-svs-*), run by the receipt: each outcome's
+# exit is the in-process one and stdout, stderr and exit agree between the two (refusal 2, pass 0, for each subject).
+EWANT='EQV psc-refuse=2/yes psc-pass=0/yes svs-refuse=2/yes svs-pass=0/yes'
+if grep -qxF "$EWANT" "$WORK/a1.out"; then ok "a1 twins: '$EWANT' is present"; else bad "a1 twins: the line '$EWANT' is absent (got: $(grep '^EQV ' "$WORK/a1.out"))"; fi
 
 GWANT='Gdeny=1 Gdenyn=yes Gempty=0 Gallow=0 Gtree=1 Gtreen=yes Gdirty=1 Gdirtyn=yes E2E=1 E2En=yes'
 # --- the BL-1055 push gate: the PREGATE_GATE span of the distribution hook, cut and driven ---------------------
 # The hook resolved here is .githooks/pre-push by name (core/git-hooks/pre-push carries no gate). gc is the control,
-# with one whole-hook drive (E2E) proving the call site stops the hook before any step.
+# with one whole-hook drive (E2E) proving the call site stops the hook before any step. That hook start is no start of a
+# subject of this fixture.
 HOOK_FILE="$REPO/.githooks/pre-push"
 printf '  hook  %s\n' "$HOOK_FILE"
-bash core/fixtures/pregate-self-check/receipt-bl643.sh --gate "$HOOK_FILE" > "$WORK/gc.out" 2>&1; gc=$?
+( fx_inproc "$RECEIPT"; blr_main --gate "$HOOK_FILE" ) > "$WORK/gc.out" 2>&1; gc=$?
 if [ "$gc" -eq 9 ]; then echo "FIXTURE BROKEN: the gate receipt could not build its world" >&2; sed 's/^/     /' "$WORK/gc.out" >&2; exit 2; fi
 grep -q '^Gdeny=' "$WORK/gc.out" && echo "HERMETIC-CONSUMED .githooks/pre-push"
 if [ "$gc" -eq 0 ]; then ok "gc control: gate receipt exit 0 on the distribution hook"; B_gc_exit=1; else bad "gc control: gate receipt exit $gc, expected 0"; fi
 if grep -qxF "$GWANT" "$WORK/gc.out"; then ok "gc control: the line '$GWANT' is present"; B_gc_line=1; else bad "gc control: the line '$GWANT' is absent (got: $(tail -1 "$WORK/gc.out"))"; fi
-# 4 = a1: 2 ok, gc: 2 ok.
-report_end pregate-self-check 4
+
+# 5 = a1: 3 ok, gc: 2 ok.
+report_end pregate-self-check 5

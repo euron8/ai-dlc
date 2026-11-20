@@ -243,6 +243,7 @@
 # INSTALL: wired by templates/settings.json.template (PreToolUse matcher
 #   "Agent|Task"); upserted by reconcile/settings-merge.sh on pull.
 
+dg_main() {
 set -u
 
 DG_CAP_TEXT='Concurrent subagent limit reached'
@@ -1478,8 +1479,9 @@ esac
 # the unsharded one is: its part key is the gate type, not a story, so it binds through the plan's
 # gate and nonce. ROLE TO GATE: the adjudicator takes only a `gate: 3` plan; a `3` or `close` plan
 # is otherwise accepted only for the `1/1` code-reviewer (the closing writer); every other
-# reviewer takes only a `1` plan and QA only a `2` plan; a `rerun` plan (gate 2 answered
-# GATE1-RERUN, so the transition is a gate-1 re-review) authorizes no seat. The gate is always
+# reviewer takes only a `1` plan and QA only a `2` plan, whichever seat is dispatched first: gate 1
+# and gate 2 are dispatched together on one frozen sha, each seat citing its own plan, and no seat
+# waits on the other's verdict. Any other `gate:` value (a stale `rerun` plan included) authorizes no seat. The gate is always
 # read from the plan's `gate:` line, never from its filename.
 dg_gp_check() {
   local rem rel abs line k v p_story="" p_gate="" p_sha="" p_man="" p_nonce="" nmap=0 hit=0
@@ -1998,3 +2000,7 @@ emit() {
   exit 0
 }
 emit
+}
+# Loadable: a source defines dg_main and runs nothing; the harness runs the file, and the guard stands.
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+dg_main "$@"

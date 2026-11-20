@@ -1,0 +1,10 @@
+# verdict-pass-content's starts of core/scripts/verdict.sh (BL-878 item 7; BL-879 grammar). Every drive is in process: run.sh
+# loads verdict.sh once and asks vrd_main through inproc_run, and verdict.sh's own `bash "$validator"` start of
+# validate-artifact-budget.sh runs vab_main in a subshell through run.sh's `bash` shim. One command-line start per distinct CLI
+# outcome (exit 0 with a PASS line, exit 1 with a FAIL line), started as FXCELL=<id> bash verdict.sh and compared on stdout,
+# stderr and exit with the in-process answer on the same input. No end-to-end cell: verdict.sh holds no process group, `$$`
+# holder, exec of itself or EXIT trap that a subshell would end differently.
+cli core/scripts/verdict.sh cli-pass
+cli core/scripts/verdict.sh cli-fail
+# The validator starts of the two cli cells are real processes (verdict.sh, run as a program, starts them itself).
+nested core/scripts/verdict.sh core/scripts/validate-artifact-budget.sh why=the two cli cells start verdict.sh as a program, whose own validator start is a real process the run.sh shim cannot route

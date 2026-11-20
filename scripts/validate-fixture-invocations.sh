@@ -1943,30 +1943,33 @@ fxc_self_probe() {
 }
 
 # ---------------------------------------------------------------------------------------------------------------
+# fiv_main is the whole command-line body: sourcing this file defines it and returns at the guard below; running it calls it.
+fiv_main() {
+  set -u
 FXC_FX=""; FXC_DECL=""; FXC_LOG=""; FXC_ROOT=""
 case "${1:-}" in
   --impl-of) shift; fxc_impl_of "$@"; exit $? ;;
   --cells-parse) shift; fxc_cells_parse "$@"; exit $? ;;
   --guarded) shift; fxc_guarded "$@"; exit 0 ;;
   --static-join)
-    [ -n "${2:-}" ] && [ -d "$2/core/fixtures" ] || { echo "usage: $0 --static-join <root> [--p2-base <dir>]" >&2; exit 2; }
+    [ -n "${2:-}" ] && [ -d "$2/core/fixtures" ] || { echo "usage: ${BASH_SOURCE[0]} --static-join <root> [--p2-base <dir>]" >&2; exit 2; }
     if [ "${3:-}" = --p2-base ]; then
-      [ -n "${4:-}" ] && [ -d "$4/core/fixtures" ] || { echo "usage: $0 --static-join <root> [--p2-base <dir>]" >&2; exit 2; }
+      [ -n "${4:-}" ] && [ -d "$4/core/fixtures" ] || { echo "usage: ${BASH_SOURCE[0]} --static-join <root> [--p2-base <dir>]" >&2; exit 2; }
       fxc_static_join "$2" "$4"; exit $?
     fi
     fxc_static_join "$2"; exit $? ;;
-  --gen-rc) [ $# -eq 2 ] || { echo "usage: $0 --gen-rc <dir>" >&2; exit 2; }; fxc_gen_rc "$2"; exit $? ;;
-  --key-rows) [ $# -ge 2 ] && [ -d "$2" ] || { echo "usage: $0 --key-rows <root> [<fixture>...]" >&2; exit 2; }; shift; fxc_key_rows "$@"; exit $? ;;
+  --gen-rc) [ $# -eq 2 ] || { echo "usage: ${BASH_SOURCE[0]} --gen-rc <dir>" >&2; exit 2; }; fxc_gen_rc "$2"; exit $? ;;
+  --key-rows) [ $# -ge 2 ] && [ -d "$2" ] || { echo "usage: ${BASH_SOURCE[0]} --key-rows <root> [<fixture>...]" >&2; exit 2; }; shift; fxc_key_rows "$@"; exit $? ;;
   --identity-check) fxc_identity_check; exit $? ;;
   --store-key) fxc_store_key; exit $? ;;
-  --legacy-ok) [ $# -eq 4 ] || { echo "usage: $0 --legacy-ok <old allowlist> <key rows> <format>" >&2; exit 2; }; fxc_legacy_ok "$2" "$3" "$4"; exit $? ;;
+  --legacy-ok) [ $# -eq 4 ] || { echo "usage: ${BASH_SOURCE[0]} --legacy-ok <old allowlist> <key rows> <format>" >&2; exit 2; }; fxc_legacy_ok "$2" "$3" "$4"; exit $? ;;
   --self-probe)
     SP_VERBOSE=1; fxc_self_probe; r=$?
     if [ "$r" = 0 ]; then printf 'self-probe: %s cells, all green\n' "$SP_N"; exit 0; fi
     printf 'self-probe: FIXTURE BROKEN\n'; exit 2 ;;
   --b2-census)
     FXC_ROOT="${FXC_SELF%/scripts/*}"
-    [ "${2:-}" = --root ] && { [ -n "${3:-}" ] || { echo "usage: $0 --b2-census [--root R]" >&2; exit 2; }; FXC_ROOT="$3"; }
+    [ "${2:-}" = --root ] && { [ -n "${3:-}" ] || { echo "usage: ${BASH_SOURCE[0]} --b2-census [--root R]" >&2; exit 2; }; FXC_ROOT="$3"; }
     [ -d "$FXC_ROOT/core/fixtures" ] || { echo "b2-census: REFUSED: no core/fixtures under $FXC_ROOT" >&2; exit 2; }
     fxc_census "$FXC_ROOT"; exit $? ;;
 esac
@@ -1980,6 +1983,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$FXC_FX" ] && [ -n "$FXC_DECL" ] && [ -n "$FXC_LOG" ] && [ -n "$FXC_ROOT" ] \
-  || { echo "usage: $0 --fixture F --decl D --log L --root R | --self-probe | --gen-rc DIR" >&2; exit 2; }
+  || { echo "usage: ${BASH_SOURCE[0]} --fixture F --decl D --log L --root R | --self-probe | --gen-rc DIR" >&2; exit 2; }
 fxc_judge "$FXC_FX" "$FXC_DECL" "$FXC_LOG" "$FXC_ROOT"
 exit $?
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+fiv_main "$@"
+# FXC-IDENTITY 1 736ce02f923b7615282844c8d2a9592dd951298ad356dfaed73e4191602bb233 the command-line body is wrapped as fiv_main behind a column-0 source guard so a fixture can ask this judge in process (BL-878); the dispatch, the usage lines (now read from BASH_SOURCE) and every judgement are unchanged, so no counted fixture's judgement moves

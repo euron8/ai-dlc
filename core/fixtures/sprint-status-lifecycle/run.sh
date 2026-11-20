@@ -28,6 +28,28 @@ trap 'rm -rf "$WORK"' EXIT
 echo "HERMETIC-CONSUMED core/scripts/sprint-status.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+
+# PRE-WRAP CONSUMER GATE. A core fixture ships ahead of its subject: a present subject with neither wrap half (the
+# `ss_main() {` line, the column-0 source guard) predates the in-process wrap, and sourcing it would run its whole body:
+# SKIP (FIXTURE BROKEN in the distribution). Exactly one half is a respelled subject this fixture cannot drive: FAIL.
+# An unreadable subject is FIXTURE ERROR, rc 2. Nothing below sources or runs the subject before this gate.
+_wd=0; _wg=0
+grep -qxF 'ss_main() {' "$TOOL"; _x=$?
+[ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $TOOL (grep exit $_x)" >&2; exit 2; }
+[ "$_x" -ne 0 ] || _wd=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$TOOL"; _x=$?
+[ "$_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $TOOL (grep exit $_x)" >&2; exit 2; }
+[ "$_x" -ne 0 ] || _wg=1
+case "$_wd$_wg" in
+  11) : ;;
+  00) echo "SKIP: sprint-status-lifecycle: $TOOL predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$TOOL carries one half of the in-process wrap (entry line, column-0 source guard: $_wd$_wg) -- a respelled subject this fixture cannot drive"
+     report_end sprint-status-lifecycle ;;
+esac
+inproc_load "$TOOL" || { echo "FIXTURE BROKEN: cannot load $TOOL in process" >&2; exit 2; }
 
 
 P="$WORK/proj"
@@ -42,8 +64,9 @@ put() { printf '%s\n' "$2" > "$1"; }
 
 # rt: the shipping tool resolves its own schema; a copy lives outside core/scripts/ and would
 # resolve a different schema (or none), so it is handed the schema explicitly. rte: always explicit.
-rt() { local t="$1"; shift; if [ "$t" = "$TOOL" ]; then bash "$t" "$@"; else AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA" bash "$t" "$@"; fi; }
-rte() { local t="$1"; shift; AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA" bash "$t" "$@"; }
+# IN PROCESS: every arm asks ss_main through inproc_run (loaded once above); the programs run only in the cli cells at the end.
+rt() { local t="$1"; shift; [ "$t" = "$TOOL" ] || { echo "FIXTURE BROKEN: rt was handed $t, not the subject" >&2; return 125; }; inproc_run "$TOOL" ss_main "$@"; }
+rte() { local t="$1"; shift; ( export AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA"; rt "$t" "$@" ); }
 sid() { rt "$1" sprint-id --root "$P" 2>/dev/null; }
 
 # Each arm appends `<id> PASS|FAIL` to RES in THE CURRENT SHELL (never a command substitution), so
@@ -254,7 +277,7 @@ status: in_progress'
   # A NON-EXISTENT override path falls back to the real schema by design (the resolver skips it), so
   # that would prove nothing. Point it at a REAL but corrupt file — the state that actually fails.
   printf 'not json{' > "$WORK/corrupt.json"
-  if AI_DLC_SPRINT_STATUS_SCHEMA="$WORK/corrupt.json" bash "$1" sprint-id --root "$P" >/dev/null 2>&1; then res R11 FAIL; else res R11 PASS; fi
+  if ( export AI_DLC_SPRINT_STATUS_SCHEMA="$WORK/corrupt.json"; rt "$1" sprint-id --root "$P" ) >/dev/null 2>&1; then res R11 FAIL; else res R11 PASS; fi
 }
 
 # ===== PART 1b — BL-938: a BMAD copy in the freeze slot, and roll decides every view before a write ==
@@ -917,7 +940,7 @@ a_J1CASE() { # `[ac4]` against `AC4`: ids are compared case-sensitively, so J1 s
 # L1 and L2 seed BOTH views identically, so a wrong-view read cannot reach them; L4 is the
 # near-miss where the views differ, and only it may die when the wrong view is read.
 ls_run() {
-  LS_OUT="$(AI_DLC_SPRINT_STATUS_SCHEMA="$SCHEMA" bash "$1" list-stories --root "$CS" 2>"$CS.err")"
+  LS_OUT="$(rte "$1" list-stories --root "$CS" 2>"$CS.err")"
   LS_RC=$?
   LS_ERR="$(cat "$CS.err")"
 }
@@ -1127,6 +1150,32 @@ case "$r938" in
   9) echo "FIXTURE BROKEN: receipt-bl938.sh refused to measure: $(head -1 "$WORK/r938.out")" >&2; exit 2 ;;
   *) bad "BL-938 receipt exited $r938: $(tr '\n' ' ' < "$WORK/r938.out")" ;;
 esac
+
+# ===== THE CLI CELLS (cells.decl): the tool as a PROGRAM once per distinct CLI outcome, each compared with the in-process
+# call on the same read-only input: stdout, stderr and exit byte for byte. Each cell also asserts its own exit code and a
+# line of output, so two runs that both printed nothing cannot read as equivalent.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # eqv <cell-id> <args...> -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when all three agree
+  local id="$1"; shift
+  rt "$TOOL" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" bash "$TOOL" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+eq_twin() { printf 'in-process rc=%s out=[%s] err=[%s] / program rc=%s out=[%s] err=[%s]' "$(cat "$EQ/$1.ip.rc")" \
+  "$(head -1 "$EQ/$1.ip.out")" "$(head -1 "$EQ/$1.ip.err")" "$(cat "$EQ/$1.cl.rc")" "$(head -1 "$EQ/$1.cl.out")" "$(head -1 "$EQ/$1.cl.err")"; }
+reset_tree; put "$IMPL/sprint-status.yaml" 'sprint: 290
+status: done'
+if eqv cli-sprint-id sprint-id --root "$P" && [ "$(cat "$EQ/cli-sprint-id.cl.rc")" = 0 ] && [ "$(cat "$EQ/cli-sprint-id.cl.out")" = 291 ]; then
+  ok "cli-sprint-id: the program answers sprint-id 291 for a closed sprint 290, exit 0, exactly as the in-process call does"
+else bad "cli-sprint-id: the program and the in-process call differ, or the outcome is not exit 0 printing 291 ($(eq_twin cli-sprint-id))"; fi
+reset_tree; put "$IMPL/sprint-status.yaml" '# preamble only, no sprint key'
+if eqv cli-sprint-id-refuse sprint-id --root "$P" && [ "$(cat "$EQ/cli-sprint-id-refuse.cl.rc")" = 1 ] \
+   && [ -s "$EQ/cli-sprint-id-refuse.cl.err" ] && [ ! -s "$EQ/cli-sprint-id-refuse.cl.out" ]; then
+  ok "cli-sprint-id-refuse: the program refuses a canonical with no sprint key on stderr, exit 1, no id, exactly as the in-process call does"
+else bad "cli-sprint-id-refuse: the program and the in-process call differ, or the outcome is not the exit-1 refusal ($(eq_twin cli-sprint-id-refuse))"; fi
+if eqv cli-usage && [ -s "$EQ/cli-usage.cl.err" ] && grep -q '^usage: sprint-status.sh' "$EQ/cli-usage.cl.err" && [ "$(cat "$EQ/cli-usage.cl.rc")" != 0 ]; then
+  ok "cli-usage: the program prints the usage line on stderr and exits non-zero with no mode, exactly as the in-process call does"
+else bad "cli-usage: the program and the in-process call differ, or no usage refusal ($(eq_twin cli-usage))"; fi
 
 # J1 reads its ids through the sibling validator beside the tool.
 J1_SIB="$(dirname "$TOOL")/validate-ac-falsifiability.sh"

@@ -2,5 +2,6 @@
 # the gate's own join and reader calls: the validator keeps no self-probe, so no drive pays one. The awk shim of
 # Dc-reader-dies is `#!/bin/bash` so the counter sees each start it serves; the settled-tree net's end-to-end stubs
 # (st-stop.sh, st-exit.sh) are two starts. The net's own poll forks no bash.
-114 *
-60 core/scripts/validate-spawn-ledger.sh
+62 *
+3 core/scripts/validate-spawn-ledger.sh
+63 inproc:core/scripts/validate-spawn-ledger.sh

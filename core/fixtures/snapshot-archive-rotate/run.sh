@@ -94,6 +94,84 @@ command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq is required to drive 
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 
+# IN PROCESS (BL-878). Every drive of the rotator and of the two hooks is `bash <subject> <args>` spelled as before, and the
+# `bash` function below answers it in a subshell made to look like a fresh `bash <subject>` (ip_call). The command-line
+# starts that remain are the cli cells at the end, each started as `env FXCELL=<id> bash <subject>` and compared byte for byte
+# with the in-process answer (cells.decl). THE KILL-POINT SWEEP IS IN PROCESS TOO: the DEBUG trace is installed in the
+# in-process subshell right before the entry call, and the kill point SIGKILLs that subshell by its pid.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A subject with neither wrap half (the `<p>_main() {` line, the column-0 source
+# guard) predates the wrap: SKIP and exit 0 on a consumer, FIXTURE BROKEN in the distribution (lib/layout.sh fx_skip_exit),
+# never an ok. Exactly one half of any subject is a respelled file this fixture cannot drive, which FAILS. Both halves are
+# read BEFORE any source, so an unwrapped subject is never run by the load. An unreadable subject is FIXTURE ERROR.
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+[ -r "$ROT" ] && [ -r "$HOOK_C" ] && [ -r "$HOOK_P" ] \
+  || { echo "FIXTURE ERROR: cannot read $ROT, $HOOK_C or $HOOK_P -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+_pw_r_d=0; _pw_r_g=0; _pw_c_d=0; _pw_c_g=0; _pw_p_d=0; _pw_p_g=0
+grep -qxF 'rsa_main() {' "$ROT" && _pw_r_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$ROT" && _pw_r_g=1
+grep -qxF 'hkcont_main() {' "$HOOK_C" && _pw_c_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK_C" && _pw_c_g=1
+grep -qxF 'hkpause_main() {' "$HOOK_P" && _pw_p_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK_P" && _pw_p_g=1
+case "$_pw_r_d$_pw_r_g$_pw_c_d$_pw_c_g$_pw_p_d$_pw_p_g" in
+  111111) : ;;
+  *00*) case "$_pw_r_d$_pw_r_g$_pw_c_d$_pw_c_g$_pw_p_d$_pw_p_g" in
+          *01*|*10*) bad "a subject carries one half of the in-process wrap (rotator $_pw_r_d$_pw_r_g, continue hook $_pw_c_d$_pw_c_g, pause hook $_pw_p_d$_pw_p_g) -- a respelled file this fixture cannot drive"; report_end "$NAME"; exit 1 ;;
+        esac
+        echo "SKIP: $NAME: a subject predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "a subject carries one half of the in-process wrap (rotator $_pw_r_d$_pw_r_g, continue hook $_pw_c_d$_pw_c_g, pause hook $_pw_p_d$_pw_p_g) -- a respelled file this fixture cannot drive"; report_end "$NAME"; exit 1 ;;
+esac
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+ip_entry() { case "${1##*/}" in
+  rotate-snapshot-archive.sh) echo rsa_main ;; ai-dlc-continue.sh) echo hkcont_main ;; ai-dlc-pause.sh) echo hkpause_main ;; *) return 1 ;; esac; }
+IP_KEEP=" bash ip_call ip_scrub ip_entry fx_inproc "
+ip_scrub() { # this subshell reduced to what a fresh `bash <script>` child has: exported variables only, no fixture function
+  local _v _e
+  _e=" $(compgen -e | tr '\n' ' ') "
+  for _v in $(compgen -v); do
+    case "$_e" in *" $_v "*) continue ;; esac
+    case "$_v" in
+      BASH*|IFS|OPTIND|OPTERR|PPID|UID|EUID|SHELLOPTS|HISTCMD|LINENO|RANDOM|SECONDS|FUNCNAME|PIPESTATUS|GROUPS|DIRSTACK|HOSTTYPE|MACHTYPE|OSTYPE|HOSTNAME|SHLVL|PWD|OLDPWD|_|PS4|_v|_e|IP_*) continue ;;
+    esac
+    unset -v "$_v" 2>/dev/null
+  done
+  for _v in $(compgen -A function); do case "$IP_KEEP" in *" $_v "*) ;; *) unset -f "$_v" ;; esac; done
+  OPTIND=1; set +eufx +o pipefail; hash -r
+}
+# ip_call <script> [args...] -- the answer of `bash <script> args`: stdout, stderr, stdin and the status are the subject's.
+# IP_ULIM=<KiB>: the entry runs under `ulimit -f` with SIGXFSZ ignored, set AFTER the load and the pass is counted, so the
+# limit binds the subject only. SNAPROT_KN set: the kill-point trace (SNAPROT_KENV) is installed after the subshell has
+# recorded its own pid (a child's PPID, as bash 3.2 has no BASHPID) and the entry is the first traced command.
+ip_call() {
+  local IP_F="$1" IP_E; shift
+  IP_E="$(ip_entry "$IP_F")" || { command bash "$IP_F" "$@"; return; }
+  ( ip_scrub
+    if [ -n "${SNAPROT_KN:-}" ]; then command bash -c 'echo $PPID' > "$SNAPROT_KC/pid" && read -r IP_PID < "$SNAPROT_KC/pid" || exit 126; fi
+    fx_inproc "$IP_F"; . "$IP_F" || exit 126
+    [ -z "${IP_ULIM:-}" ] || { trap '' XFSZ; ulimit -f "$IP_ULIM"; }
+    [ -z "${SNAPROT_KN:-}" ] || . "$SNAPROT_KENV"
+    "$IP_E" "$@" )
+}
+# A `bash <subject> ...` anywhere in this fixture is answered in process; every other `bash` is the real one.
+# `env FXCELL=<id> bash <subject>` (env execs the real bash) is a cli cell.
+bash() {
+  if [ -z "${FXCELL:-}" ] && [ -n "${1:-}" ] && ip_entry "$1" > /dev/null 2>&1 && [ -r "$1" ]; then ip_call "$@"; else command bash "$@"; fi
+}
+# cli_eqv <id> <subject> <args...> -- one `env FXCELL=<id> bash <subject>` start and one in-process call over the SAME
+# input; stdout, stderr and exit compared byte for byte, and one of them must be non-empty. Neither may write.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+cli_eqv() {
+  local id="$1" s="$2"; shift 2
+  ip_call "$s" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  env FXCELL="$id" bash "$s" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  if cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+     && { [ -s "$EQ/$id.cl.out" ] || [ -s "$EQ/$id.cl.err" ]; }; then
+    ok "$id: the command line and the in-process call agree byte for byte (exit $(cat "$EQ/$id.cl.rc"))"
+  else
+    bad "$id: command line and in-process differ: exit $(cat "$EQ/$id.cl.rc") vs $(cat "$EQ/$id.ip.rc"); stdout $(cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && echo equal || echo DIFFERS), stderr $(cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && echo equal || echo DIFFERS)"
+  fi
+}
+
 # The conservation corpus, built exactly the way validate-snapshot-conservation.sh builds it.
 corpus() { ( cd "$PROJ" && git ls-files -z -- '*.md' | xargs -0 cat 2>/dev/null ) \
              | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort -u; }
@@ -473,7 +551,7 @@ arm_ulim() {
     prefill_archive "$w" || { MSG="cannot pre-fill the archive"; return 1; }
     pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
     hpre="$w.hist"; if [ -f "$w/$HIST_REL" ]; then cp "$w/$HIST_REL" "$hpre"; else : > "$hpre"; fi
-    ( trap '' XFSZ; ulimit -f "$ULIM_KIB"; bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply ) >/dev/null 2>&1; rc=$?
+    IP_ULIM="$ULIM_KIB" bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; rc=$?
     sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
     hid=n/a
     if [ "$s" = above ]; then hid=no; cmp -s "$hpre" "$w/$HIST_REL" && hid=yes; fi
@@ -547,7 +625,7 @@ arm_rew() {
   w="$(world bigtail)" || { MSG="world copy failed"; return 1; }
   pre="$(snap_copy "$w")" || { MSG="snapshot copy failed"; return 1; }
   hpre="$w.hist"; cp "$w/$HIST_REL" "$hpre" || { MSG="history copy failed"; return 1; }
-  out="$( ( trap '' XFSZ; ulimit -f "$ULIM_KIB"; bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply ) 2>&1 >/dev/null )"; rc=$?
+  out="$(IP_ULIM="$ULIM_KIB" bash "$R_" "$w/$HIST_REL" --absorb "$w/$SNAP_REL" --apply 2>&1 >/dev/null)"; rc=$?
   hid=no; cmp -s "$hpre" "$w/$HIST_REL" && hid=yes
   sid=no; cmp -s "$pre" "$w/$SNAP_REL" && sid=yes
   sort -u "$hpre" > "$w.want"
@@ -664,7 +742,7 @@ chmod +x "$RSHIM/cat" "$RSHIM/mv" "$GSHIM/git" || { echo "FIXTURE ERROR: cannot 
 KENV="$WORK/sweep-env.sh"
 cat > "$KENV" <<'ENVEOF'
 set -T
-trap '_kp_n=""; read -r _kp_n < "$SNAPROT_KC/h"; _kp_n=$(( ${_kp_n:-0} + 1 )); case $- in *C*) _kp_c=1 ;; *) _kp_c="" ;; esac; set -C; while ! : 2>/dev/null > "$SNAPROT_KC/$_kp_n"; do _kp_n=$(( _kp_n + 1 )); done; [ -n "$_kp_c" ] || set +C; printf "%s\n" "$BASH_COMMAND" 2>/dev/null >> "$SNAPROT_KC/$_kp_n"; echo "$_kp_n" 2>/dev/null >| "$SNAPROT_KC/h"; if [ "$_kp_n" -eq "$SNAPROT_KN" ]; then trap "" XFSZ; ulimit -f "$SNAPROT_KL"; elif [ "$SNAPROT_KN" -gt 0 ] && [ "$_kp_n" -gt "$SNAPROT_KN" ]; then kill -KILL $$; exit 137; fi' DEBUG
+trap '_kp_n=""; read -r _kp_n < "$SNAPROT_KC/h"; _kp_n=$(( ${_kp_n:-0} + 1 )); case $- in *C*) _kp_c=1 ;; *) _kp_c="" ;; esac; set -C; while ! : 2>/dev/null > "$SNAPROT_KC/$_kp_n"; do _kp_n=$(( _kp_n + 1 )); done; [ -n "$_kp_c" ] || set +C; printf "%s\n" "$BASH_COMMAND" 2>/dev/null >> "$SNAPROT_KC/$_kp_n"; echo "$_kp_n" 2>/dev/null >| "$SNAPROT_KC/h"; if [ "$_kp_n" -eq "$SNAPROT_KN" ]; then trap "" XFSZ; ulimit -f "$SNAPROT_KL"; elif [ "$SNAPROT_KN" -gt 0 ] && [ "$_kp_n" -gt "$SNAPROT_KN" ]; then kill -KILL $IP_PID; exit 137; fi' DEBUG
 ENVEOF
 # The kill-point sweep runs this many workers at once; every kill point has its own world, its own
 # TMPDIR and its own counter. KL is the limit at the point, in 1024-byte blocks: 1, so a write of a
@@ -927,7 +1005,7 @@ sweep_one() {  # <N> <L> <dir>: one kill point at limit L; writes <dir>/r.<N>.<L
   local N="$1" L="$2" d="$3" w c rc1 rc2 post heq miss hb pb f at
   w="$d/w$N.$L"; c="$d/c$N.$L"
   cp -R "$TMPL/above" "$w" && mkdir -p "$c" "$w.tmp" && echo 0 > "$c/h" || { echo "ERR $N" > "$d/r.$N.$L"; : > "$d/stop"; return; }
-  ( cd "$w" && TMPDIR="$w.tmp" SNAPROT_KC="$c" SNAPROT_KN="$N" SNAPROT_KL="$L" BASH_ENV="$KENV" \
+  ( cd "$w" && TMPDIR="$w.tmp" SNAPROT_KC="$c" SNAPROT_KN="$N" SNAPROT_KL="$L" SNAPROT_KENV="$KENV" \
       bash "$R_" "$HIST_REL" --absorb "$SNAP_REL" --apply ) >/dev/null 2>"$w.err1"; rc1=$?
   if [ "$rc1" -ne 137 ]; then
     # Not killed: N = 0 (the counted run) or N = T (the last point, whose command is the run's own
@@ -1176,9 +1254,9 @@ arm_same() {
   local w h s rc1 rc2 alias; w="$(world above)" || { MSG="world copy failed"; return 1; }
   h="$w.hist"; s="$w.snap"; cp "$w/$HIST_REL" "$h"; cp "$w/$SNAP_REL" "$s"
   alias="$w/_bmad-output/../_bmad-output/pipeline-snapshot.md"
-  ( ulimit -f 4096; bash "$R_" "$w/$HIST_REL" --archive "$alias" --absorb "$w/$SNAP_REL" --apply ) >/dev/null 2>&1; rc1=$?
+  IP_ULIM=4096 bash "$R_" "$w/$HIST_REL" --archive "$alias" --absorb "$w/$SNAP_REL" --apply >/dev/null 2>&1; rc1=$?
   local u1=no; cmp -s "$h" "$w/$HIST_REL" && cmp -s "$s" "$w/$SNAP_REL" && u1=yes
-  ( ulimit -f 4096; bash "$R_" "$w/$HIST_REL" --archive "$w/$HIST_REL" --apply ) >/dev/null 2>&1; rc2=$?
+  IP_ULIM=4096 bash "$R_" "$w/$HIST_REL" --archive "$w/$HIST_REL" --apply >/dev/null 2>&1; rc2=$?
   local u2=no; cmp -s "$h" "$w/$HIST_REL" && cmp -s "$s" "$w/$SNAP_REL" && [ ! -e "$w/$ARCH_REL" ] && u2=yes
   MSG="archive==absorb rc=${rc1} unchanged=${u1} (snapshot $(fbytes "$w/$SNAP_REL") bytes); archive==history rc=${rc2} unchanged=${u2}"
   [ "$rc1" -eq 2 ] && [ "$u1" = yes ] && [ "$rc2" -eq 2 ] && [ "$u2" = yes ]
@@ -1306,5 +1384,35 @@ for a in $ARMS; do
     else ok "$what"; fi
   else bad "$what ($MSG)"; fi
 done
+
+# --- The cli cells (cells.decl): one `env FXCELL=<id> bash <subject>` start per distinct command-line outcome, each
+# compared with the in-process call over the same input. The rotator's report-only answer (exit 0), its usage refusal
+# (exit 2) and its no-cut-point refusal (exit 1) write nothing. The two hooks are each started once on a copy of one
+# world; their answer is the stdout, stderr, exit and whether the pause flag exists, with the world's path and the
+# provenance nonce (random per run) masked.
+w="$(world above)" || { echo "FIXTURE ERROR: cannot copy a world for the cli cells" >&2; exit 2; }
+cli_eqv cli-report "$R_" "$w/$HIST_REL"
+cli_eqv cli-usage "$R_" "$w/$HIST_REL" --keep-entries 0 --absorb "$w/$SNAP_REL" --apply
+cli_eqv cli-refuse "$R_" "$NOBOUND" --apply
+hk_eqv() {  # <id> <hook> <payload> <want: block|flag>
+  local id="$1" h="$2" p="$3" want="$4" w1 w2 m x
+  w1="$(world above)" && w2="$(world above)" || { bad "$id: cannot copy the worlds"; return; }
+  rm -f "$w1/_bmad-output/pipeline-paused.flag" "$w1/_bmad-output/pipeline-block-state.txt" "$w2/_bmad-output/pipeline-paused.flag" "$w2/_bmad-output/pipeline-block-state.txt"
+  printf '%s' "$p" | CLAUDE_PROJECT_DIR="$w1" ip_call "$h" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  printf '%s' "$p" | CLAUDE_PROJECT_DIR="$w2" env FXCELL="$id" bash "$h" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  for m in ip cl; do
+    if [ "$m" = ip ]; then x="$w1"; else x="$w2"; fi
+    sed "s|$x|@W|g; s|nonce=[0-9a-f]*|nonce=@N|g" "$EQ/$id.$m.out" > "$EQ/$id.$m.outm"; sed "s|$x|@W|g" "$EQ/$id.$m.err" > "$EQ/$id.$m.errm"
+    { grep -c '"decision"[[:space:]]*:[[:space:]]*"block"' "$EQ/$id.$m.out"; if [ -f "$x/_bmad-output/pipeline-paused.flag" ]; then echo flag; else echo noflag; fi; } > "$EQ/$id.$m.eff"
+  done
+  if cmp -s "$EQ/$id.ip.outm" "$EQ/$id.cl.outm" && cmp -s "$EQ/$id.ip.errm" "$EQ/$id.cl.errm" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+     && cmp -s "$EQ/$id.ip.eff" "$EQ/$id.cl.eff" && case "$want" in block) [ "$(head -1 "$EQ/$id.cl.eff")" = 1 ] ;; flag) [ "$(tail -1 "$EQ/$id.cl.eff")" = flag ] ;; esac; then
+    ok "$id: the command line and the in-process call agree (exit $(cat "$EQ/$id.cl.rc"), $want)"
+  else
+    bad "$id: command line and in-process differ or the hook did not $want: effects $(tr '\n' ' ' < "$EQ/$id.cl.eff")vs $(tr '\n' ' ' < "$EQ/$id.ip.eff"); stdout $(cmp -s "$EQ/$id.ip.outm" "$EQ/$id.cl.outm" && echo equal || echo DIFFERS), stderr $(cmp -s "$EQ/$id.ip.errm" "$EQ/$id.cl.errm" && echo equal || echo DIFFERS), exit $(cat "$EQ/$id.cl.rc") vs $(cat "$EQ/$id.ip.rc"): $(diff "$EQ/$id.ip.outm" "$EQ/$id.cl.outm" | head -3 | cut -c1-200)"
+  fi
+}
+hk_eqv cli-stop "$HC_" "$STOP_JSON" block
+hk_eqv cli-prompt "$HP_" "$PROMPT_JSON" flag
 
 report_end "$NAME"

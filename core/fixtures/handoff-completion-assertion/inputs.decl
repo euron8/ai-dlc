@@ -9,3 +9,6 @@ core/hooks/
 !core/schemas/pause-routing.json
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+# Loaded in process (BL-878): the pre-wrap SKIP gate ends through lib/layout.sh, and fx_inproc is lib/mutant.sh.
+core/fixtures/lib/layout.sh
+core/fixtures/lib/mutant.sh

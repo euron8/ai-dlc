@@ -42,7 +42,7 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 # shellcheck source=/dev/null
 . "$MUT_LIB"
 # each in-process pass of a subject below is logged by fx_inproc (lib/mutant.sh) under its root-relative path
-RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
+UA_ROOT="$PWD"; RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
 # UA_ONLY=<group ...> runs a subset while a cell is developed; such a run never exits 0.
 ua_on() { [ -z "${UA_ONLY:-}" ] && return 0; case " $UA_ONLY " in *" $1 "*) return 0 ;; esac; return 1; }
 
@@ -64,30 +64,39 @@ ua_scrub() { # <keep vars> <keep funcs> -- this subshell's names reduced to a CL
   _ue=" $(compgen -e | tr '\n' ' ') "
   for _uv in $(compgen -v); do
     case "$_uv" in
-      BASH*|IFS|OPTIND|OPTERR|OPTARG|PPID|UID|EUID|SHELLOPTS|HISTCMD|LINENO|RANDOM|SECONDS|FUNCNAME|PIPESTATUS|GROUPS|DIRSTACK|HOSTTYPE|MACHTYPE|OSTYPE|HOSTNAME|SHLVL|PWD|OLDPWD|_|UA_*|_uv|_ue|PS1|PS2|PS4) continue ;;
+      BASH*|IFS|OPTIND|OPTERR|OPTARG|PPID|UID|EUID|SHELLOPTS|HISTCMD|LINENO|RANDOM|SECONDS|FUNCNAME|PIPESTATUS|GROUPS|DIRSTACK|HOSTTYPE|MACHTYPE|OSTYPE|HOSTNAME|SHLVL|PWD|OLDPWD|_|SRCDIR|UA_*|_uv|_ue|PS1|PS2|PS4) continue ;;
     esac
     case "$_ue" in *" $_uv "*) continue ;; esac
     case " $1 " in *" $_uv "*) continue ;; esac
     unset -v "$_uv" 2>/dev/null; unset -v "$_uv" 2>/dev/null
   done
   for _uv in $(compgen -A function); do
-    case " $2 bash ua_scrub ua_lc0 " in *" $_uv "*) ;; *) unset -f "$_uv" ;; esac
+    case " $2 bash fx_inproc ua_scrub ua_lc0 " in *" $_uv "*) ;; *) unset -f "$_uv" ;; esac
   done
 }
 bash() {
-  if [ -n "${UA_IN:-}" ] || [ -n "${UA_CLI:-}" ]; then command bash "$@"; return; fi
+  [ -z "${UA_CLI:-}" ] || { command bash "$@"; return; }
+  # a start a routed subject makes from inside its own in-process call (the join runs the seal and the worklist) is
+  # routed the same way, in a subshell of that call; every other child start is a real one
+  if [ -n "${UA_IN:-}" ]; then case "${1:-}" in "${SRCDIR:-/nonexistent/rj}/content-seal.sh"|"${SRCDIR:-/nonexistent/rj}/serial-remediation-worklist.sh") ;; *) command bash "$@"; return ;; esac; fi
   case "${1:-}" in
     "${UA_OLDSIB:-/nonexistent/ua}") UA_K=join ;;
-    "$JOIN") if [ -n "${UA_OLDSIB:-}" ]; then command bash "$@"; return; fi; UA_K=join ;;
+    "${JOIN:-/nonexistent/rj}") if [ -n "${UA_OLDSIB:-}" ]; then command bash "$@"; return; fi; UA_K=join ;;
     */ai-dlc-gate-remediation-guard.sh) UA_K=hook ;;
+    "${DVAL:-/nonexistent/rj}") UA_K=vad ;;
+    "${SRCDIR:-/nonexistent/rj}/content-seal.sh") UA_K=seal ;;
+    "${SRCDIR:-/nonexistent/rj}/serial-remediation-worklist.sh") UA_K=srw ;;
     *) command bash "$@"; return ;;
   esac
   UA_F="$1"; shift
   (
     UA_IN=1; set +o pipefail
     case "$UA_K" in
+      vad) ua_scrub "" ""; . "${UA_F%/*}/validate-artifact-derivations.sh" || exit 125; fx_inproc "$UA_ROOT/core/scripts/validate-artifact-derivations.sh"; vad_cli "$@" ;; # the loadable validator: sourcing runs nothing
+      seal) ua_scrub "" ""; unset -v SRCDIR; . "${UA_F%/*}/content-seal.sh" || exit 125; fx_inproc "$UA_ROOT/core/scripts/content-seal.sh"; seal_main "$@" ;;
+      srw) ua_scrub "" ""; unset -v SRCDIR; . "${UA_F%/*}/serial-remediation-worklist.sh" || exit 125; fx_inproc "$UA_ROOT/core/scripts/serial-remediation-worklist.sh"; srw_main "$@" ;;
       join) fx_inproc $RSJ_J; ua_scrub "$UA_JV" "$UA_JF"; export LC_ALL=C; join_main "$@" ;;
-      hook) fx_inproc $RSJ_H; ua_scrub "" ""; ua_lc0; set --; ( . "$UA_F"; hook_pretool_head
+      hook) fx_inproc $RSJ_H; ua_scrub "" ""; ua_lc0; set --; ( . "$UA_F"; grg_config; fx_inproc "$UA_ROOT/core/hooks/ai-dlc-gate-remediation-guard.sh"; hook_pretool_head
             : > "$UA_LEADF" ) ;;
     esac
   )
@@ -194,15 +203,16 @@ if ua_on SEAM; then
     bad "SEAM-A-TPL: g6 restored=fresh $([ "$_tA" = "$_tB" ] && echo y || echo n), control differs $([ "$_tA" != "$_tC" ] && echo y || echo n); three-writer copied=driven $([ "$_w1" = "$_w2" ] && echo y || echo n), root-kept differs $([ "$_w1" != "$_w3" ] && echo y || echo n)"
   fi
   # SEAM-A-HOOK: one pinned dispatched drive, in process and as a CLI child, writes the same row (root aside).
-  ua_hook() { # <cli 0|1> <agent> <ts> -> the ledger row and the hook's output|rc
+  ua_hook() { # <cli 0|1> <agent> <ts> <cell tag> -> the ledger row and the hook's output|rc
     local w o rc; w="$(new_world)"
     jq -nc --arg f "$w/$REL/$S21" --arg a "$2" --arg tp "$w/projects/s.jsonl" '{session_id:"t", tool_name:"Edit", transcript_path:$tp, tool_use_id:"toolu_SEAM", tool_input:{file_path:$f}} + (if $a == "" then {} else {agent_id:$a} end)' > "$WORK/uah.payload"
-    o="$(UA_CLI="${1#0}" FIX_DRIVE_TS="$3" PATH="$DSHIM:$PATH" CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/uah.payload" 2>&1)"; rc=$?
+    if [ "$1" = 1 ]; then o="$(FXCELL="cli-a-hook-$4" UA_CLI=1 FIX_DRIVE_TS="$3" PATH="$DSHIM:$PATH" CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/uah.payload" 2>&1)"; rc=$?
+    else o="$(FIX_DRIVE_TS="$3" PATH="$DSHIM:$PATH" CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/uah.payload" 2>&1)"; rc=$?; fi
     jq -c 'del(.root)' "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null | sed "s#$w#WORLD#g"
     printf '%s|%s' "${o//$w/WORLD}" "$rc"
   }
-  _hi="$(ua_hook 0 "$AG1" 2026-10-15T19:25:00Z)"; _hc="$(ua_hook 1 "$AG1" 2026-10-15T19:25:00Z)"
-  _gi="$(ua_hook 0 "$G_NEW" 2026-10-15T19:50:00Z)"; _gc="$(ua_hook 1 "$G_NEW" 2026-10-15T19:50:00Z)"
+  _hi="$(ua_hook 0 "$AG1" 2026-10-15T19:25:00Z ag1)"; _hc="$(ua_hook 1 "$AG1" 2026-10-15T19:25:00Z ag1)"
+  _gi="$(ua_hook 0 "$G_NEW" 2026-10-15T19:50:00Z gnew)"; _gc="$(ua_hook 1 "$G_NEW" 2026-10-15T19:50:00Z gnew)"
   if [ "$_hi" = "$_hc" ] && [ "$_gi" = "$_gc" ] && [ "$_hc" != "$_gc" ] && grep -qF '"ts":"2026-10-15T19:25:00Z"' <<<"$_hc" \
      && grep -qF '"tool_use_id":"toolu_SEAM"' <<<"$_hc"; then
     ok "SEAM-A-HOOK: hook_pretool_head in process writes the CLI hook's row byte-for-byte (root aside), the shim's pinned ts and the payload's tool_use_id included, for two agents and two ts, and the two rows differ"
@@ -216,7 +226,8 @@ if ua_on SEAM; then
   _su="$(jnow)"
   ua_sj() { # <cli 0|1> <snapshot pass|refuse> -> "rc|output|record"
     local o rc; mv "$_sw" "$(mktemp -d "$WORK/ua-used.XXXXXX")/w" && cp -Rp "$_sw.$2" "$_sw" || return 1
-    o="$(UA_CLI="${1#0}" AI_DLC_PROJECT_ROOT="$_sw" bash "$JOIN" --subject 9 --pass 1 --since 2000-01-01T00:00:00Z --until "$_su" 2>&1)"; rc=$?
+    if [ "$1" = 1 ]; then o="$(FXCELL="cli-a-subj-$2" UA_CLI=1 AI_DLC_PROJECT_ROOT="$_sw" bash "$JOIN" --subject 9 --pass 1 --since 2000-01-01T00:00:00Z --until "$_su" 2>&1)"; rc=$?
+    else o="$(AI_DLC_PROJECT_ROOT="$_sw" bash "$JOIN" --subject 9 --pass 1 --since 2000-01-01T00:00:00Z --until "$_su" 2>&1)"; rc=$?; fi
     printf '%s|%s|%s' "$rc" "$o" "$(cat "$(sj_out "$_sw")" 2>/dev/null)"
   }
   _pi="$(ua_sj 0 pass)"; _pc="$(ua_sj 1 pass)"; _ri="$(ua_sj 0 refuse)"; _rc="$(ua_sj 1 refuse)"
@@ -366,7 +377,7 @@ fi
 if ua_on LN; then
 # ---- serial lanes (BL-716): one serial remediator per lane of FILES, then one fan-in. LN3 is the world that
 # kills "one LANE per part": its three prd parts share prd.md, and a MOVED-CITE joins architecture-impact to it.
-[ -f "$SRCDIR/serial-remediation-worklist.sh" ] || { echo "FIXTURE BROKEN: serial-remediation-worklist.sh is not beside the join; the lane arms would read every edge UNASSESSED" >&2; exit 2; }
+[ -f "${SRCDIR:-/nonexistent/rj}/serial-remediation-worklist.sh" ] || { echo "FIXTURE BROKEN: serial-remediation-worklist.sh is not beside the join; the lane arms would read every edge UNASSESSED" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/scripts/serial-remediation-worklist.sh"
 p_lanefiles "$JOIN" && ok "LN1: files mode, three disjoint parts -> 3 lanes, each file-less escalation and the sweep to FANIN, no worklist edge" \
   || bad "LN1: files-mode lanes answered wrongly (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
@@ -490,25 +501,8 @@ else
 fi
 fi
 
-# ------------------------------------------------------------------------- CLI-A: one end to end per mode (clause 6)
-# The same predicates with every subject a CLI child and every world built afresh by the CLI hook. A pass and a
-# refusal for each join mode this half owns: subject (SJ1, SJ2), files parts (J-shaped lanes LN1, EC32), document
-# --rerun (RR1, which refuses then joins), the two-record --escalations (LN6), and the explicit window (NL1, NL3).
-if ua_on CLI; then
-ua_cli() { # <label> <predicate>
-  local l="$1"; shift
-  if UA_CLI=1 "$@" "$JOIN"; then ok "CLI-A $l: $1 holds end to end, every subject a CLI child"
-  else bad "CLI-A $l: $1 failed end to end (rc=${RC:-?}): $(head -3 "$JO" 2>/dev/null)"; fi
-}
-ua_cli subject-pass p_sjoin
-ua_cli subject-refuse p_sjspec2
-ua_cli files-refuse p_partsilent
-ua_cli files-lanes-pass p_lanefiles
-ua_cli document-rerun p_rrgraph
-ua_cli escalations-two-records p_lanerec
-ua_cli window-pass p_nl2lane
-ua_cli window-refuse p_nlcites
-fi
+# CLI-A: the CLI twin of each join mode this half owns is the same predicate asked in process above; the CLI itself
+# answers once per outcome in the SEAM-A cells (cells.decl), never once per mode.
 
 # LEAD-A: no hook drive above fell past arm 2 (a lead or non-edit payload), where in process and CLI part ways.
 # Its self-probe first: one lead drive in process, with the marker pointed at a scratch path, must write it.

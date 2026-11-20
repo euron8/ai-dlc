@@ -1,0 +1,11 @@
+# adversarial-shard-merge's starts of the merge, content-seal.sh and the two siblings that start them (BL-879 grammar). Every other
+# drive is in process: mx (lib.sh) sources the merge and calls merge_main, and answers each `bash content-seal.sh` the merge starts
+# with seal_main in a clean subshell (a pass of content-seal.sh). The cli cells are the EQ/CS7 seam's CLI halves: eq_pair starts the
+# merge as FXCELL=cli-<label> bash "$MERGE" and compares it byte for byte with the in-process answer on the same world (stdout,
+# stderr, rc, pass file). The e2e cells are the gate validator (dv_gate and its siblings in lib.sh) and wait-for-deliverable.sh
+# --mark (cs_seal), each run as a program because the merge and seal starts under it need it as their logged parent, numbered
+# e2e-<vac|wfd>-<n> in the order asm_cell hands them out. Their children, and a CLI merge's seal starts, are the nested rows.
+nested core/scripts/merge-adversarial-shards.sh core/scripts/content-seal.sh why=the CLI merge hands every marked shard and the seal rows to content-seal.sh, which an in-process merge answers with seal_main
+nested core/scripts/validate-adversarial-convergence.sh core/scripts/merge-adversarial-shards.sh why=the gate validator starts the merge for its derived set; its logged parent is a start of the validator
+nested core/scripts/validate-adversarial-convergence.sh core/scripts/content-seal.sh why=the gate validator reads the seal rows through content-seal.sh; its logged parent is a start of the validator
+nested core/scripts/wait-for-deliverable.sh core/scripts/content-seal.sh why=--mark seals the shard through content-seal.sh; its logged parent is a start of wait-for-deliverable.sh

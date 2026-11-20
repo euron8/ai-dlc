@@ -28,17 +28,25 @@ done
 command -v jq >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq or python3 absent" >&2; exit 2; }
 SRCDIR="$(cd "$(dirname "$V")" && pwd)"
 . "$CS_HERE/seal-lib.sh"
+. "$CS_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; } # fx_inproc, for the in-process passes
+cs_route "$V"
 echo "HERMETIC-CONSUMED $V"
 echo "HERMETIC-CONSUMED $(dirname "$V")/gate_adjudication.py"
 [ -f "$CS_HERE/gate-unit.py" ] || { echo "FIXTURE ERROR: $CS_HERE/gate-unit.py is absent; no in-process cell can run" >&2; exit 2; }
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/$NAME.XXXXXX")" || exit 2
 trap 'rm -rf "$WORK"' EXIT
+# gate-unit.py tags each start of the shipped seal that gate_adjudication.py makes (FXCELL=cs-gate-seal-<n>, n from this counter file).
+CS_GATE_CTR="$WORK/gate-seal.ctr"; echo 0 > "$CS_GATE_CTR"; export CS_GATE_CTR
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails + 1)); }
 TOKEN="changed after its last sealed write"
 GT=implementation; NONCE=implementation-20261017T120000Z
 IDS="$(AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" bash "$V" --expected "$GT")" || { echo "FIXTURE ERROR: --expected failed" >&2; exit 2; }
+# The validator's other mode, --expected, is asked in process (the shim); its one end-to-end start is the cell below, held byte-identical.
+if AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" cs_eq cs-gate-expected "" "$V" --expected "$GT" && [ "$(cat "$CS_EQ_OUT")" = "$IDS" ]; then
+  ok "CS-GEX: validate-gate-adjudication.sh --expected in process answers byte-for-byte what the CLI does (the gate's escalated check ids)"
+else bad "CS-GEX: the in-process --expected differs from the CLI:$CS_EQ_WHY"; fi
 NIDS="$(printf '%s\n' $IDS | grep -c .)"
 [ "$NIDS" -ge 2 ] || { echo "FIXTURE ERROR: the $GT gate escalates $NIDS check(s); two parts need two" >&2; exit 2; }
 A1=a0000000000000001; A2=a0000000000000002
@@ -81,7 +89,7 @@ eqcell() {
   vj="$d/$NONCE.verdict.json"
   local e="$WORK/eq.$1"
   cp -Rp "$w" "$w.snap" || return 1
-  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" bash "$V" --merge "$GT" "$vj" "$d/$NONCE.part-1of2.jsonl" "$d/$NONCE.part-2of2.jsonl" >"$e.cout" 2>"$e.cerr"; cr=$?
+  AI_DLC_ENFORCEMENT_MAP="$MAP" AI_DLC_VERDICT_SCHEMA="$SCHEMA" FXCELL="cs-gate-$1" command bash "$V" --merge "$GT" "$vj" "$d/$NONCE.part-1of2.jsonl" "$d/$NONCE.part-2of2.jsonl" >"$e.cout" 2>"$e.cerr"; cr=$?
   mv "$w" "$w.cli" && mv "$w.snap" "$w" || return 1
   python3 "$CS_HERE/gate-unit.py" "$SRCDIR" merge "$GT" "$vj" "$SCHEMA" "$MAP" "$d/$NONCE.part-1of2.jsonl" "$d/$NONCE.part-2of2.jsonl" >"$e.uout" 2>"$e.uerr" </dev/null; ur=$?
   # The CLI's answer, for the arm that owns this world; its verdict file is in "$w.cli".

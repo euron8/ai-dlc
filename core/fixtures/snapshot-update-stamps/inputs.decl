@@ -11,3 +11,7 @@
 !core/scripts/validate-mandatory-rules.sh
 # graph-skeleton.md and swallowed-row.md sit in the fixture's own directory, copied with it.
 core/fixtures/lib/report.sh
+# Loaded in process (BL-878): run.sh sources lib/layout.sh and lib/inproc.sh, which sources lib/mutant.sh for fx_inproc.
+core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh

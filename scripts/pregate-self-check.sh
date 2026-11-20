@@ -50,6 +50,7 @@
 # same cut) in place of the resolved one, and the byte-identity refusal is not applied; sections c and d run as above.
 # It NEVER writes the pregate record, so its pass never stands in for the gate: the push still needs a run without
 # --member where the resolved hook equals the tree's.
+psc_main() {
 set -uo pipefail
 export LC_ALL=C
 
@@ -72,7 +73,7 @@ trap on_exit EXIT
 MEMBER=0
 if [ "${1:-}" = --member ]; then MEMBER=1; shift; fi
 BASE="${1:-origin/main}"
-[ "$#" -le 1 ] || { echo "usage: $(basename "$0") [--member] [<base>]" >&2; exit 2; }
+[ "$#" -le 1 ] || { echo "usage: $(basename "${BASH_SOURCE[0]}") [--member] [<base>]" >&2; exit 2; }
 
 # Walk UP for the marker, never count `..` hops.
 walk_up() {
@@ -82,7 +83,7 @@ walk_up() {
   printf '%s\n' "$d"
 }
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SELF_ROOT="$(walk_up "$SELF_DIR")" || { echo "pregate-self-check: no VERSION marker above $0" >&2; exit 2; }
+SELF_ROOT="$(walk_up "$SELF_DIR")" || { echo "pregate-self-check: no VERSION marker above ${BASH_SOURCE[0]}" >&2; exit 2; }
 if [ -n "${AI_DLC_PREGATE_ROOT:-}" ]; then
   ROOT="$(cd "$AI_DLC_PREGATE_ROOT" 2>/dev/null && pwd)" || { echo "pregate-self-check: AI_DLC_PREGATE_ROOT is not a directory" >&2; exit 2; }
   [ -f "$ROOT/VERSION" ] || { echo "pregate-self-check: no VERSION marker in AI_DLC_PREGATE_ROOT $ROOT" >&2; exit 2; }
@@ -614,3 +615,7 @@ else
   printf 'pregate-self-check: NO RECORD written: the work tree was not clean, or moved, during this run; a push of it will be refused\n' >&2
 fi
 exit 0
+}
+# Loadable: sourced, this file defines psc_main and runs nothing; executed, it runs it (core/fixtures/lib/inproc.sh).
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+psc_main "$@"

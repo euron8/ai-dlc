@@ -1,0 +1,7 @@
+# fold-architect-ledger-join's starts of core/scripts/validate-spawn-ledger.sh (BL-879 grammar). Every other drive of the
+# subject is in process: run.sh asks vsl_main through vsl_f. One cli cell per distinct CLI outcome of --fold-architect
+# (exit 0 PASS, exit 1 FAIL, the exit-2 refusal), each started as FXCELL=<id> bash in eqv() and compared byte for byte
+# with the in-process call on the same input.
+cli core/scripts/validate-spawn-ledger.sh cli-fold-pass
+cli core/scripts/validate-spawn-ledger.sh cli-fold-fail
+cli core/scripts/validate-spawn-ledger.sh cli-fold-refuse

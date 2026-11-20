@@ -1,0 +1,10 @@
+# scope-confirmation's starts of core/scripts/validate-scope-confirmation.sh and core/hooks/ai-dlc-answer-capture.sh
+# (BL-879 grammar). Every other drive is in process: run.sh asks vscf_main and aac_main through vsc / aac. One cli cell
+# per distinct CLI outcome of the validator (exit 0, the exit-1 refusal, the exit-2 unreadable snapshot, the exit-3
+# PENDING) and one for the hook's capture, each started as FXCELL=<id> bash in the CLI CELLS block of run.sh and compared
+# byte for byte with the in-process call on the same input.
+cli core/scripts/validate-scope-confirmation.sh cli-vscf-pass
+cli core/scripts/validate-scope-confirmation.sh cli-vscf-fail
+cli core/scripts/validate-scope-confirmation.sh cli-vscf-missing
+cli core/scripts/validate-scope-confirmation.sh cli-vscf-pending
+cli core/hooks/ai-dlc-answer-capture.sh cli-aac-capture

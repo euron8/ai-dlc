@@ -1,5 +1,7 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-86 *
+9 *
 1 core/hooks/ai-dlc-answer-capture.sh
 0 core/hooks/ai-dlc-context-provenance.sh
-81 core/scripts/validate-scope-confirmation.sh
+4 core/scripts/validate-scope-confirmation.sh
+2 inproc:core/hooks/ai-dlc-answer-capture.sh
+85 inproc:core/scripts/validate-scope-confirmation.sh

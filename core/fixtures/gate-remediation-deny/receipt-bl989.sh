@@ -16,6 +16,11 @@ V="${2:-$(pick "$D/../../scripts/validate-adversarial-convergence.sh" "$D/../../
 [ -n "$H" ] && [ -f "$H" ] || { echo "receipt-bl989: cannot locate the hook" >&2; exit 2; }
 [ -n "$V" ] && [ -f "$V" ] || { echo "receipt-bl989: cannot locate validate-adversarial-convergence.sh" >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "receipt-bl989: jq absent" >&2; exit 2; }
+# The hook runs IN PROCESS (BL-878): both halves of the wrap are required before the load, as run.sh requires them.
+grep -qxF 'grg_main() {' "$H" && grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$H" \
+  || { echo "receipt-bl989: $H predates the in-process wrap, or carries one half of it" >&2; exit 2; }
+. "$D/../lib/inproc.sh" || { echo "receipt-bl989: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$H" || { echo "receipt-bl989: sourcing $H defined nothing" >&2; exit 2; }
 rfail=0
 rok()  { printf '  ok    receipt-bl989 %s\n' "$1"; }
 rbad() { printf '  FAIL  receipt-bl989 %s\n' "$1"; rfail=1; }
@@ -27,7 +32,7 @@ printf '# Gate repair record\n- gate_nonce: story-20260811T193044Z\n- remediator
   > "$W/_bmad-output/gate-adjudication/story-20260811T193044Z.repair.md"
 out="$(jq -nc --arg f "$W/_bmad-output/planning-artifacts/s302/test-strategy.md" --arg tr "$W/transcript.jsonl" \
   '{session_id:"t", tool_name:"Edit", transcript_path:$tr, tool_input:{file_path:$f}}' \
-  | CLAUDE_PROJECT_DIR="$W" AI_DLC_GATE_METRICS="" bash "$H" 2>/dev/null)"
+  | CLAUDE_PROJECT_DIR="$W" AI_DLC_GATE_METRICS="" inproc_run "$H" grg_main 2>/dev/null)"
 case "$out" in *'"permissionDecision": "deny"'*|*'"permissionDecision":"deny"'*) dn=1 ;; *) dn=0 ;; esac
 if [ "$dn" = 0 ] && grep -q 'GATE_REMEDIATION_LIFTED' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
   rok "R1 a bound, corroborated bullet record lifts the deny and logs GATE_REMEDIATION_LIFTED"

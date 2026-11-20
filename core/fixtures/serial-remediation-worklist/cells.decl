@@ -1,0 +1,6 @@
+# serial-remediation-worklist's starts of core/scripts/serial-remediation-worklist.sh (BL-879 grammar). Every other drive is in process:
+# run.sh answers each `bash <script>` through ip_call (the `bash` function), the splitters' calls included. The two cli cells are started
+# as `env FXCELL=<id> bash <script>` in cli_eqv() and compared byte for byte (stdout, stderr, exit) with the in-process call over the
+# same world: the emitting worklist (exit 0, the post-build state put back before each side) and the refusal (--bogus, exit 2).
+cli core/scripts/serial-remediation-worklist.sh cli-worklist
+cli core/scripts/serial-remediation-worklist.sh cli-bogus

@@ -35,11 +35,29 @@ _PRS=""; for _c in "$HERE/../../schemas/pause-routing.json" "$HERE/../../../.cla
 [ -n "$_PRS" ] && echo "HERMETIC-CONSUMED core/schemas/pause-routing.json"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: cannot source lib/layout.sh" >&2; exit 2; }
 
-# Drive a hook with a prompt. $1 hook, $2 project dir, $3 prompt.
+# PRE-WRAP GATE. A hook without the wrap would RUN when sourced (reading this shell's stdin and exiting), a silent
+# green, so both halves are required before the load. Neither half predates the wrap: SKIP on a consumer, FIXTURE
+# BROKEN in the distribution. Exactly one half is a respelled hook this fixture cannot drive, which FAILS.
+[ -r "$HOOK" ] || { echo "FIXTURE ERROR: cannot read $HOOK -- an unreadable hook is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'hkpause_main() {' "$HOOK" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$HOOK" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: operator-request-capture: $HOOK predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) echo "  FAIL  $HOOK carries one half of the in-process wrap (hkpause_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive" >&2; echo "operator-request-capture: 1 assertion(s) FAILED" >&2; exit 1 ;;
+esac
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "${HOOK%/*}/ai-dlc-pause.sh" || { echo "FIXTURE BROKEN: sourcing $HOOK defined nothing" >&2; exit 2; }
+declare -F hkpause_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $HOOK defined no hkpause_main" >&2; exit 2; }
+
+# The payload the harness writes for UserPromptSubmit.
+payload() { jq -cn --arg p "$1" '{session_id:"sess-1",prompt:$p}'; }
+# Drive the hook IN PROCESS with a prompt. $1 hook, $2 project dir, $3 prompt.
 fire() {
-  python3 -c 'import json,sys; print(json.dumps({"session_id":"sess-1","prompt":sys.argv[1]}))' "$3" \
-    | CLAUDE_PROJECT_DIR="$2" bash "$1" >/dev/null 2>&1 || true
+  payload "$3" | CLAUDE_PROJECT_DIR="$2" inproc_run "${1%/*}/ai-dlc-pause.sh" hkpause_main >/dev/null 2>&1 || true
 }
 entries() { [ -f "$1" ] && grep -c '^## ' "$1" || echo 0; }
 # The fenced body of the LAST entry.
@@ -201,6 +219,37 @@ if grep -q 'HARNESS_ORIGIN_UNRESOLVED' "$C_MUT/_bmad-output/pipeline-continuatio
 else
   bad "no declaration — a missing declaration was silent; the hook fell back to the safe direction and said nothing"
 fi
+
+# --- the cli cells (cells.decl): the hook started as a PROGRAM once per distinct outcome ------------------------
+# The hook exits 0 and prints nothing on every path; what differs is what it writes into the project. A start on a
+# copy of the live project is compared with the in-process call on another copy of it: stdout, stderr, exit and the
+# project tree (timestamps and the copy's path normalised) must agree, and each cell asserts its own outcome so two
+# runs that both did nothing cannot read as equal.
+EQ="$WORK/eq"; rm -rf "$EQ"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir $EQ" >&2; exit 2; }
+proj_sig() { # <dir> -> the tree's file list and contents, timestamps and the dir path normalised
+  ( cd "$1" && find . -type f | sort | while read -r f; do printf '== %s\n' "$f"; cat "$f"; done ) \
+    | sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z?/TS/g' -e 's/^TS [0-9a-f]{16}$/TS NONCE/' -e 's/[0-9]{10}/EPOCH/g' -e "s|$1|DIR|g"
+}
+cli_cell() { # <id> <prompt> <outcome test on $cl> <outcome words>
+  local id="$1" prompt="$2" ip="$EQ/$1/ip" cl="$EQ/$1/cl"
+  mkdir -p "$EQ/$id" && cp -R "$LIVE" "$ip" && cp -R "$LIVE" "$cl" || { bad "$id: could not copy the live project"; return; }
+  rm -f "$ip/_bmad-output/pipeline-paused.flag" "$cl/_bmad-output/pipeline-paused.flag"
+  payload "$prompt" | CLAUDE_PROJECT_DIR="$ip" inproc_run "${HOOK%/*}/ai-dlc-pause.sh" hkpause_main > "$EQ/$id/ip.out" 2> "$EQ/$id/ip.err"; echo "$?" > "$EQ/$id/ip.rc"
+  payload "$prompt" | CLAUDE_PROJECT_DIR="$cl" FXCELL="$id" bash "$HOOK" > "$EQ/$id/cl.out" 2> "$EQ/$id/cl.err"; echo "$?" > "$EQ/$id/cl.rc"
+  # the provenance block carries a fresh nonce per start; the rest of stdout must be byte-equal
+  for _s in ip cl; do sed -E 's/nonce=[0-9a-f]+/nonce=N/g' "$EQ/$id/$_s.out" > "$EQ/$id/$_s.out.n" && mv "$EQ/$id/$_s.out.n" "$EQ/$id/$_s.out"; done
+  proj_sig "$ip" > "$EQ/$id/ip.sig"; proj_sig "$cl" > "$EQ/$id/cl.sig"
+  if cmp -s "$EQ/$id/ip.out" "$EQ/$id/cl.out" && cmp -s "$EQ/$id/ip.err" "$EQ/$id/cl.err" && cmp -s "$EQ/$id/ip.rc" "$EQ/$id/cl.rc" \
+     && cmp -s "$EQ/$id/ip.sig" "$EQ/$id/cl.sig" && [ "$(cat "$EQ/$id/cl.rc")" = 0 ] && [ -s "$EQ/$id/cl.sig" ] && eval "$3"; then
+    ok "$id: the program $4 exactly as the in-process call does (stdout, stderr, exit 0 and the project tree)"
+  else
+    bad "$id: the program and the in-process call differ, or the outcome is not: $4"
+  fi
+}
+cli_cell cli-capture 'Sprint 302: the third thing.' \
+  '[ "$(entries "$cl/_bmad-output/operator-requests-history.md")" = "$(( $(entries "$LIVE_REQ") + 1 ))" ] && [ -f "$cl/_bmad-output/pipeline-paused.flag" ]' "captures the request and raises the pause flag"
+cli_cell cli-skip "$NOTIF" \
+  '[ "$(entries "$cl/_bmad-output/operator-requests-history.md")" = "$(entries "$LIVE_REQ")" ] && [ ! -f "$cl/_bmad-output/pipeline-paused.flag" ] && grep -q "raised by the harness" "$cl/_bmad-output/pipeline-continuation-log.md"' "skips a harness-raised prompt and logs why"
 
 echo
 report_end operator-request-capture

@@ -1,0 +1,56 @@
+# content-seal's starts of its subjects (BL-878 grammar). Every other drive is in process: the arm scripts call the seal's
+# functions directly, drive the recorder through acs_main in a subshell, and reach every other subject through
+# seal-lib.sh's `bash` shim, which runs a registered subject's entry (merge_main, join_main, vga_main, wfd_mark_main and
+# wfd_beat_main, seal_main) in a subshell; a subject that is itself asked in process reaches the seal the same way. The
+# programs run only in the cells below, each started FXCELL=<id> command bash and held byte-identical to the in-process
+# answer on the same world (seal-lib.sh cs_eq; the wfd cells compare their own pair in merge-arms.sh).
+# The merge, one outcome each: the sealed untouched set merges, a sealed shard rewritten through Bash is refused.
+cli core/scripts/merge-adversarial-shards.sh cs-merge-merged
+cli core/scripts/merge-adversarial-shards.sh cs-merge-refused
+# The join: sealed untouched parts join, a python3-rewritten sealed part is refused.
+cli core/scripts/join-remediator-shards.sh cs-join-joined
+cli core/scripts/join-remediator-shards.sh cs-join-refused
+# The gate validator: --expected, and --merge's two outcomes.
+cli core/scripts/validate-gate-adjudication.sh cs-gate-expected
+cli core/scripts/validate-gate-adjudication.sh cs-gate-pass
+cli core/scripts/validate-gate-adjudication.sh cs-gate-refuse
+# wait-for-deliverable.sh: --mark refused and passing, --status on a CURRENT and a LEGACY role world.
+cli core/scripts/wait-for-deliverable.sh cs-wfd-mark-refuse
+cli core/scripts/wait-for-deliverable.sh cs-wfd-mark-pass
+cli core/scripts/wait-for-deliverable.sh cs-wfd-status-current
+cli core/scripts/wait-for-deliverable.sh cs-wfd-status-legacy
+# gate_adjudication.py, which gate-unit.py runs for every in-process --merge decision, starts the shipped seal as a program (subprocess) for
+# --agent-ere, --check, --row and --first-tool-ts; python cannot call a shell function, so those starts cannot be in process.
+e2e core/scripts/content-seal.sh cs-gate-seal-1 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-2 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-3 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-4 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-5 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-6 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-7 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-8 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-9 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-10 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-11 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-12 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-13 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-14 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-15 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-16 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-17 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-18 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-19 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-20 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-21 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-22 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-23 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-24 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-25 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-26 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+e2e core/scripts/content-seal.sh cs-gate-seal-27 why=gate_adjudication.py starts the shipped seal with subprocess.run on every in-process --merge decision, and python cannot call a shell function
+# The programs those cells start start the shipped seal (and the join its merge) as child programs.
+nested core/scripts/merge-adversarial-shards.sh core/scripts/content-seal.sh why=the merge CLI runs of cs-merge-merged and cs-merge-refused start the shipped seal as a program for --check, --last-tool-row, --admit-marker, --program-row and --record
+nested core/scripts/join-remediator-shards.sh core/scripts/content-seal.sh why=the join CLI runs of cs-join-joined and cs-join-refused start the shipped seal as a program for --check and --record
+nested core/scripts/join-remediator-shards.sh core/scripts/merge-adversarial-shards.sh why=the join CLI runs ask the merge for its pair separator as a program
+nested core/scripts/wait-for-deliverable.sh core/scripts/content-seal.sh why=the wfd CLI runs of cs-wfd-mark-pass and the two --status cells start the shipped seal as a program for --record-expect and the marker admission
+nested core/scripts/validate-gate-adjudication.sh core/scripts/content-seal.sh why=the validator CLI runs of cs-gate-pass and cs-gate-refuse start the shipped seal as a program for --check, --row and --first-tool-ts

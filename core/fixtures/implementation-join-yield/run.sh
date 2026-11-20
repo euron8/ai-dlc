@@ -65,10 +65,27 @@ _HD="$(cd "$(dirname "$STOP_HOOK")" && pwd)"; echo "HERMETIC-CONSUMED $_HD/ai-dl
 [ -f "$_HD/ai-dlc-handoff-pending.sh" ] && echo "HERMETIC-CONSUMED $_HD/ai-dlc-handoff-pending.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: cannot source lib/layout.sh" >&2; exit 2; }
+
+# PRE-WRAP GATE. A hook without the wrap would RUN when sourced (reading this shell's stdin and exiting), a silent
+# green, so both halves are required before the load. Neither half predates the wrap: SKIP on a consumer, FIXTURE
+# BROKEN in the distribution. Exactly one half is a respelled hook this fixture cannot drive, which FAILS.
+[ -r "$STOP_HOOK" ] || { echo "FIXTURE ERROR: cannot read $STOP_HOOK -- an unreadable hook is not one that predates the wrap" >&2; exit 2; }
+_pw_d=0; _pw_g=0
+grep -qxF 'hkcont_main() {' "$STOP_HOOK" && _pw_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$STOP_HOOK" && _pw_g=1
+case "$_pw_d$_pw_g" in
+  11) : ;;
+  00) echo "SKIP: implementation-join-yield: $STOP_HOOK predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) echo "  FAIL  $STOP_HOOK carries one half of the in-process wrap (hkcont_main line, column-0 source guard: $_pw_d$_pw_g) -- a respelled hook this fixture cannot drive" >&2; echo "implementation-join-yield: 1 assertion(s) FAILED" >&2; exit 1 ;;
+esac
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$STOP_HOOK" || { echo "FIXTURE BROKEN: sourcing $STOP_HOOK defined nothing" >&2; exit 2; }
+declare -F hkcont_main > /dev/null || { echo "FIXTURE BROKEN: sourcing $STOP_HOOK defined no hkcont_main" >&2; exit 2; }
 
 drive_stop() { # <work> [hook] -> stdout (block JSON, or empty on allow)
   printf '{"session_id":"t","transcript_path":""}' \
-    | CLAUDE_PROJECT_DIR="$1" bash "${2:-$STOP_HOOK}" 2>/dev/null
+    | CLAUDE_PROJECT_DIR="$1" inproc_run "${STOP_HOOK%/*}/ai-dlc-continue.sh" hkcont_main 2>/dev/null
 }
 blocked()     { case "$1" in *'"decision":"block"'*|*'"decision": "block"'*) return 0 ;; esac; return 1; }
 LOG='_bmad-output/pipeline-continuation-log.md'
@@ -339,9 +356,9 @@ tx_seq() {
     esac
     _in="$(printf '{"session_id":"%s","transcript_path":"%s"}' "$(cat "$_w/.sid")" "$_w/transcript.jsonl")"
     if [ "$_cap" = - ]; then
-      _r="$(PATH="$_w/.bin:$PATH" CLAUDE_PROJECT_DIR="$_w" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$_h" <<< "$_in" 2>/dev/null)"
+      _r="$(PATH="$_w/.bin:$PATH" CLAUDE_PROJECT_DIR="$_w" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" inproc_run "$_h" hkcont_main <<< "$_in" 2>/dev/null)"
     else
-      _r="$(CLAUDE_CODE_STOP_HOOK_BLOCK_CAP="$_cap" PATH="$_w/.bin:$PATH" CLAUDE_PROJECT_DIR="$_w" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" bash "$_h" <<< "$_in" 2>/dev/null)"
+      _r="$(CLAUDE_CODE_STOP_HOOK_BLOCK_CAP="$_cap" PATH="$_w/.bin:$PATH" CLAUDE_PROJECT_DIR="$_w" AI_DLC_PAUSE_ROUTING_SCHEMA="$SCHEMA" inproc_run "$_h" hkcont_main <<< "$_in" 2>/dev/null)"
     fi
     case "$_r" in *'HANDOFF GUARD'*) _s="${_s}H" ;; *'"decision":"block"'*|*'"decision": "block"'*) _s="${_s}b" ;; *) _s="${_s}a" ;; esac
   done
@@ -546,6 +563,33 @@ while [ "$_i" -lt "$JOB_N" ]; do
 done
 [ "$JOB_N" -eq "$JOBS_WANT" ] || bad "section 8 dispatched $JOB_N jobs, expected $JOBS_WANT -- a job line was lost"
 rm -rf "$JOBS"
+
+# --- the cli cells (cells.decl): the hook started as a PROGRAM once per distinct outcome -----------------------
+# The hook exits 0 on every path; its outcomes here are a block verdict on stdout and a silent allow (a live beat
+# yields). Each is started as FXCELL=<id> bash "$STOP_HOOK" on a seeded world and compared with the in-process call on
+# another copy of it: stdout, stderr, exit and the world's tree (timestamps, epochs and the copy's path normalised).
+# Each cell asserts its own outcome, so two runs that both did nothing cannot read as equal.
+EQ="$JY_RUN/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir $EQ" >&2; exit 2; }
+proj_sig() { # <dir> -> the tree's file list and contents, timestamps, epochs and the dir path normalised
+  ( cd "$1" && find . -type f | sort | while read -r f; do printf '== %s\n' "$f"; cat "$f"; done ) \
+    | sed -E -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z?/TS/g' -e 's/^TS [0-9a-f]{16}$/TS NONCE/' -e 's/[0-9]{10}/EPOCH/g' -e "s|$1|DIR|g"
+}
+cli_cell() { # <id> <seed-case> <outcome test on $EQ/<id>/cl.out> <outcome words>
+  local id="$1" ip="$EQ/$1/ip" cl="$EQ/$1/cl" w
+  w="$(bash "$HERE/seed.sh" "$2")" && mkdir -p "$EQ/$id" && cp -R "$w" "$ip" && cp -R "$w" "$cl" || { bad "$id: could not seed the world"; return; }
+  rm -rf "$w"
+  printf '{"session_id":"t","transcript_path":""}' | CLAUDE_PROJECT_DIR="$ip" inproc_run "$STOP_HOOK" hkcont_main > "$EQ/$id/ip.out" 2> "$EQ/$id/ip.err"; echo "$?" > "$EQ/$id/ip.rc"
+  printf '{"session_id":"t","transcript_path":""}' | CLAUDE_PROJECT_DIR="$cl" FXCELL="$id" bash "$STOP_HOOK" > "$EQ/$id/cl.out" 2> "$EQ/$id/cl.err"; echo "$?" > "$EQ/$id/cl.rc"
+  proj_sig "$ip" > "$EQ/$id/ip.sig"; proj_sig "$cl" > "$EQ/$id/cl.sig"
+  if cmp -s "$EQ/$id/ip.out" "$EQ/$id/cl.out" && cmp -s "$EQ/$id/ip.err" "$EQ/$id/cl.err" && cmp -s "$EQ/$id/ip.rc" "$EQ/$id/cl.rc" \
+     && cmp -s "$EQ/$id/ip.sig" "$EQ/$id/cl.sig" && [ "$(cat "$EQ/$id/cl.rc")" = 0 ] && [ -s "$EQ/$id/cl.sig" ] && eval "$3"; then
+    ok "$id: the program $4 exactly as the in-process call does (stdout, stderr, exit 0 and the world's tree)"
+  else
+    bad "$id: the program and the in-process call differ, or the outcome is not: $4"
+  fi
+}
+cli_cell cli-block no-marker 'blocked "$(cat "$EQ/$id/cl.out")"' "blocks the stop with a decision on stdout"
+cli_cell cli-yield live-marker '[ ! -s "$EQ/$id/cl.out" ] && fired_live "$cl"' "allows the stop silently and logs ALLOWED_BY_LIVE_BEAT"
 
 echo
 report_end implementation-join-yield

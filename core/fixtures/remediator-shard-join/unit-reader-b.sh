@@ -39,7 +39,7 @@ MUT_LIB="$(cd "$HERE/../lib" 2>/dev/null && pwd)/mutant.sh"
 # shellcheck source=/dev/null
 . "$MUT_LIB"
 # each in-process pass of a subject below is logged by fx_inproc (lib/mutant.sh) under its root-relative path
-RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
+UB_ROOT="$PWD"; RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remediation-guard.sh
 
 # ------------------------------------------------------------------------- the in-process route
 UB_V0=" $(compgen -v | tr '\n' ' ') "; UB_F0=" $(compgen -A function | tr '\n' ' ') "
@@ -55,38 +55,45 @@ ub_scrub() { # <keep vars> <keep funcs> -- this subshell's names reduced to a CL
   _ue=" $(compgen -e | tr '\n' ' ') "
   for _uv in $(compgen -v); do
     case "$_uv" in
-      BASH*|IFS|OPTIND|OPTERR|OPTARG|PPID|UID|EUID|SHELLOPTS|HISTCMD|LINENO|RANDOM|SECONDS|FUNCNAME|PIPESTATUS|GROUPS|DIRSTACK|HOSTTYPE|MACHTYPE|OSTYPE|HOSTNAME|SHLVL|PWD|OLDPWD|_|UB_*|_uv|_ue|PS1|PS2|PS4) continue ;;
+      BASH*|IFS|OPTIND|OPTERR|OPTARG|PPID|UID|EUID|SHELLOPTS|HISTCMD|LINENO|RANDOM|SECONDS|FUNCNAME|PIPESTATUS|GROUPS|DIRSTACK|HOSTTYPE|MACHTYPE|OSTYPE|HOSTNAME|SHLVL|PWD|OLDPWD|_|SRCDIR|UB_*|_uv|_ue|PS1|PS2|PS4) continue ;;
     esac
     case "$_ue" in *" $_uv "*) continue ;; esac
     case " $1 " in *" $_uv "*) continue ;; esac
     unset -v "$_uv" 2>/dev/null; unset -v "$_uv" 2>/dev/null
   done
   for _uv in $(compgen -A function); do
-    case " $2 bash ub_scrub " in *" $_uv "*) ;; *) unset -f "$_uv" ;; esac
+    case " $2 bash fx_inproc ub_scrub " in *" $_uv "*) ;; *) unset -f "$_uv" ;; esac
   done
 }
 bash() {
-  if [ -n "${UB_IN:-}" ] || [ -n "${UB_CLI:-}" ]; then command bash "$@"; return; fi
+  [ -z "${UB_CLI:-}" ] || { command bash "$@"; return; }
+  # a start a routed subject makes from inside its own in-process call (the join runs the seal and the worklist) is
+  # routed the same way, in a subshell of that call; every other child start is a real one
+  if [ -n "${UB_IN:-}" ]; then case "${1:-}" in "${SRCDIR:-/nonexistent/rj}/content-seal.sh"|"${SRCDIR:-/nonexistent/rj}/serial-remediation-worklist.sh") ;; *) command bash "$@"; return ;; esac; fi
   case "${1:-}" in
-    "$JOIN") UB_K=join ;;
+    "${JOIN:-/nonexistent/rj}") UB_K=join ;;
     */ai-dlc-gate-remediation-guard.sh) UB_K=hook ;;
     */ai-dlc-derivation-capture.sh) UB_K=cap ;;
     */validate-artifact-derivations.sh|*/validate-adversarial-convergence.sh) UB_K=dval ;;
+    "${SRCDIR:-/nonexistent/rj}/content-seal.sh") UB_K=seal ;;
+    "${SRCDIR:-/nonexistent/rj}/serial-remediation-worklist.sh") UB_K=srw ;;
     *) command bash "$@"; return ;;
   esac
   UB_F="$1"; shift
   (
     UB_IN=1; set +o pipefail
     case "$UB_K" in
+      seal) ub_scrub "" ""; unset -v SRCDIR; . "${UB_F%/*}/content-seal.sh" || exit 125; fx_inproc "$UB_ROOT/core/scripts/content-seal.sh"; seal_main "$@" ;;
+      srw) ub_scrub "" ""; unset -v SRCDIR; . "${UB_F%/*}/serial-remediation-worklist.sh" || exit 125; fx_inproc "$UB_ROOT/core/scripts/serial-remediation-worklist.sh"; srw_main "$@" ;;
       join) fx_inproc $RSJ_J; ub_scrub "$UB_JV" "$UB_JF"; join_main "$@" ;;
-      hook) fx_inproc $RSJ_H; ub_scrub "" ""; set --; ( . "$UB_F"; hook_pretool_head ) ;;
-      cap) [[ "$UB_F" != */core/* ]] || fx_inproc "$UB_F"; ub_scrub "" ""; set --; . "$UB_F" ;;
+      hook) fx_inproc $RSJ_H; ub_scrub "" ""; set --; ( . "$UB_F"; grg_config; fx_inproc "$UB_ROOT/core/hooks/ai-dlc-gate-remediation-guard.sh"; hook_pretool_head ) ;;
+      cap) ub_scrub "" ""; set --; . "${UB_F%/*}/ai-dlc-derivation-capture.sh"; [[ "$UB_F" != */core/* ]] || fx_inproc "$UB_ROOT/core/hooks/ai-dlc-derivation-capture.sh"; adc_main ;; # wrapped: sourcing defines adc_main only
       dval)
         # A pass is logged only when the file is the subject itself ($DVAL, $CONV): a world's installed copy and
         # p_vcrash's crash-injected copy are no pass of it. Decided before ub_scrub, which unsets DVAL and CONV.
         UB_P=""; case "$UB_F" in "$DVAL") UB_P="$DVAL" ;; "$CONV") UB_P="$CONV" ;; esac
         case "$UB_F" in
-          */validate-artifact-derivations.sh) [ -z "$UB_P" ] || fx_inproc "$UB_P"; ub_scrub "" ""; . "$UB_F"; vad_cli "$@" ;; # the loadable validator: sourcing runs nothing
+          */validate-artifact-derivations.sh) ub_scrub "" ""; . "${UB_F%/*}/validate-artifact-derivations.sh"; [ -z "$UB_P" ] || fx_inproc "$UB_ROOT/core/scripts/validate-artifact-derivations.sh"; vad_cli "$@" ;; # the loadable validator: sourcing runs nothing
           *) [ -z "$UB_P" ] || fx_inproc "$UB_P"; ub_scrub "" ""; ( . "$UB_F"; vac_main "$@" ) ;; # wrapped: sourcing defines vac_main only
         esac ;;
     esac
@@ -95,17 +102,18 @@ bash() {
 
 # ------------------------------------------------------------------------- SEAM-B: each route byte-identical to the CLI
 sj_world_pass() { local w; w="$(new_world)"; three_writers "$w"; part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1; stamp "$w"; printf '%s' "$w"; }
-ub_join() { # <cli 0|1> <world> args... -> "rc|output", run on a fresh copy of the world
-  local c="$1" d o rc; d="$(mktemp -d "$WORK/ub.XXXXXX")" && cp -R "$2" "$d/w" || return 1
-  shift 2
-  o="$(UB_CLI="${c#0}" AI_DLC_PROJECT_ROOT="$d/w" bash "$JOIN" "$@" 2>&1)"; rc=$?
+ub_join() { # <cli 0|1> <world> <cell tag> args... -> "rc|output", run on a fresh copy of the world
+  local c="$1" d o rc t="$3"; d="$(mktemp -d "$WORK/ub.XXXXXX")" && cp -R "$2" "$d/w" || return 1
+  shift 3
+  if [ "$c" = 1 ]; then o="$(FXCELL="cli-b-join-$t" UB_CLI=1 AI_DLC_PROJECT_ROOT="$d/w" bash "$JOIN" "$@" 2>&1)"; rc=$?
+  else o="$(AI_DLC_PROJECT_ROOT="$d/w" bash "$JOIN" "$@" 2>&1)"; rc=$?; fi
   printf '%s|%s' "$rc" "${o//$d/WORLD}"
 }
 _w="$(sj_world_pass)"; _u="$(jnow)"
 _pa=(--sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" --since 2000-01-01T00:00:00Z --until "$_u")
 _ra=(--sprint 305 --artifact stories --pass 1 --since 2000-01-01T00:00:00Z --until "$_u")
-_pi="$(ub_join 0 "$_w" "${_pa[@]}")"; _pc="$(ub_join 1 "$_w" "${_pa[@]}")"
-_ri="$(ub_join 0 "$_w" "${_ra[@]}")"; _rc="$(ub_join 1 "$_w" "${_ra[@]}")"
+_pi="$(ub_join 0 "$_w" pass "${_pa[@]}")"; _pc="$(ub_join 1 "$_w" pass "${_pa[@]}")"
+_ri="$(ub_join 0 "$_w" refuse "${_ra[@]}")"; _rc="$(ub_join 1 "$_w" refuse "${_ra[@]}")"
 if [ "${_pc%%|*}" = 0 ] && [ "${_rc%%|*}" = 2 ] && [ "$_pi" = "$_pc" ] && [ "$_ri" = "$_rc" ] && [ "$_pc" != "$_rc" ]; then
   ok "SEAM-B-JOIN: the bash override's in-process join (scrubbed names, pipefail off) answers byte-identically to the CLI child on a passing join (rc 0) and a refusing one (rc 2), and the two differ"
 else
@@ -115,10 +123,12 @@ ub_hook() { # <cli 0|1> <agent> [ts] -> the world's ledger rows (ts and root rem
   local w o rc; w="$(new_world)"
   jq -nc --arg f "$w/$REL/$S21" --arg a "$2" '{session_id:"t", tool_name:"Edit", transcript_path:"", tool_input:{file_path:$f}} + (if $a == "" then {} else {agent_id:$a} end)' > "$WORK/ubh.payload"
   if [ -n "${3:-}" ]; then
-    o="$(UB_CLI="${1#0}" FIX_DRIVE_TS="$3" PATH="$DSHIM:$PATH" CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/ubh.payload" 2>&1)"; rc=$?
+    if [ "$1" = 1 ]; then o="$(FXCELL=cli-b-hook-pinned UB_CLI=1 FIX_DRIVE_TS="$3" PATH="$DSHIM:$PATH" CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/ubh.payload" 2>&1)"; rc=$?
+    else o="$(FIX_DRIVE_TS="$3" PATH="$DSHIM:$PATH" CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/ubh.payload" 2>&1)"; rc=$?; fi
     jq -c 'del(.root)' "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null | sed "s#$w#WORLD#g"
   else
-    o="$(UB_CLI="${1#0}" CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/ubh.payload" 2>&1)"; rc=$?
+    if [ "$1" = 1 ]; then o="$(FXCELL=cli-b-hook-unpinned UB_CLI=1 CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/ubh.payload" 2>&1)"; rc=$?
+    else o="$(CLAUDE_PROJECT_DIR="$w" bash "$HOOK" < "$WORK/ubh.payload" 2>&1)"; rc=$?; fi
     jq -c 'del(.ts, .root)' "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null | sed "s#$w#WORLD#g"
   fi
   printf '%s|%s' "${o//$w/WORLD}" "$rc"
@@ -135,9 +145,9 @@ ub_cap() { # <cli 0|1> -> the D5 world's stale control (rc 2) and accepted docum
   w="$(deriv_world)" || { printf 'NOWORLD'; return; }
   c="$w/_bmad-output/ctl.md"
   printf '```derived\n$ grep -c Repaired %s\n5\n```\n' "$DOCREL" > "$c"
-  UB_CLI="${1#0}" capture "$DHOOK" "$w" "$c"; r1=$CAP_RC; e1="$(sed -e "s#$w#WORLD#g" -e 's#ai-dlc-derivcap\.[A-Za-z0-9]*#DERIVCAP#g' "$CAP_ERR")"
+  if [ "$1" = 1 ]; then FXCELL=cli-b-cap-stale UB_CLI=1 capture "$DHOOK" "$w" "$c"; else capture "$DHOOK" "$w" "$c"; fi; r1=$CAP_RC; e1="$(sed -e "s#$w#WORLD#g" -e 's#ai-dlc-derivcap\.[A-Za-z0-9]*#DERIVCAP#g' "$CAP_ERR")"
   fence_part "$w" "$DOCREL"
-  UB_CLI="${1#0}" capture "$DHOOK" "$w" "$w/$RDREL/2.md"; r2=$CAP_RC; e2="$(cat "$CAP_ERR")"
+  if [ "$1" = 1 ]; then FXCELL=cli-b-cap-doc UB_CLI=1 capture "$DHOOK" "$w" "$w/$RDREL/2.md"; else capture "$DHOOK" "$w" "$w/$RDREL/2.md"; fi; r2=$CAP_RC; e2="$(cat "$CAP_ERR")"
   printf '%s:%s|%s|%s' "$r1" "$r2" "$e1" "$e2"
 }
 _ci="$(ub_cap 0)"; _cc="$(ub_cap 1)"
@@ -469,10 +479,10 @@ pass_file 1 3 EXIT_CONDITION_NOT_MET 2026-08-24T15:08:19Z
 pass_file 2 0 EXIT_CONDITION_MET 2026-08-24T15:30:09Z
 echo "HERMETIC-CONSUMED core/scripts/validate-adversarial-convergence.sh"  # SEAM-B-CONV, H1 and H2 drive it below
 bash "$CONV" --series "$pa/stories-adversarial-p" > "$WORK/h1.out" 2>&1; h1=$?
-UB_CLI=1 command bash "$CONV" --series "$pa/stories-adversarial-p" > "$WORK/h1.cli" 2>&1; h1c=$?
+FXCELL=cli-b-conv-h1 UB_CLI=1 command bash "$CONV" --series "$pa/stories-adversarial-p" > "$WORK/h1.cli" 2>&1; h1c=$?
 run_join "$JOIN" "$w"; jrc=$RC
 bash "$CONV" --series "$pa/stories-adversarial-p" > "$WORK/h2.out" 2>&1; h2=$?
-UB_CLI=1 command bash "$CONV" --series "$pa/stories-adversarial-p" > "$WORK/h2.cli" 2>&1; h2c=$?
+FXCELL=cli-b-conv-h2 UB_CLI=1 command bash "$CONV" --series "$pa/stories-adversarial-p" > "$WORK/h2.cli" 2>&1; h2c=$?
 # SEAM-B-CONV: the convergence validator sourced in process answers H1's refusal and H2's pass byte-identically to
 # the CLI child, on the same world, and the two answers differ.
 if [ "$h1" = "$h1c" ] && [ "$h2" = "$h2c" ] && cmp -s "$WORK/h1.out" "$WORK/h1.cli" && cmp -s "$WORK/h2.out" "$WORK/h2.cli" \
@@ -491,19 +501,8 @@ if [ "$jrc" -eq 0 ] && [ "$h2" -eq 0 ] && ! has "$WORK/h2.out" "H -- REPAIR-RECO
 else
   bad "H2: after the join (rc=$jrc) the convergence gate did not pass (rc=$h2): $(cat "$WORK/h2.out")"
 fi
-# CLI-B: one end-to-end pass and one end-to-end refusal per join mode this half owns, the same predicates with every
-# subject a CLI child. Files mode is SEAM-B-JOIN's; --check-part and --agent-writes each hold rc 0 and rc 2 in one predicate.
-ub_cli() { # <label> <predicate>... -> ok when it holds through the CLI
-  local l="$1"; shift
-  if UB_CLI=1 "$@" "$JOIN"; then ok "CLI-B $l: $1 holds end to end, every subject a CLI child"
-  else bad "CLI-B $l: $1 failed end to end (rc=${RC:-?}): $(head -3 "$JO" 2>/dev/null)"; fi
-}
-ub_cli document-pass p_docjoin
-ub_cli document-refuse p_docoverlap
-ub_cli escalations-refuse p_specstale
-ub_cli escalations-pass p_specfresh
-ub_cli check-part p_checkpart
-ub_cli agent-writes p_agentwrites
+# CLI-B: the CLI twin of each join mode this half owns is the same predicate asked in process above; the CLI itself
+# answers once per outcome in the SEAM-B cells (cells.decl), never once per mode.
 # ---- BL-807, claim 2: an --until later than the join's own clock + 120s is refused; one inside the slack proceeds.
 p_untilfut "$JOIN" 3600
 if [ "$RC" -eq 2 ] && has "$JO" "$FUT_TXT" && ! has "$JO" "JOINED:"; then

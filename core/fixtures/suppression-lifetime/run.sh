@@ -46,6 +46,75 @@ VERDICT="$(dirname "$VALIDATOR")/verdict.sh"
 [ -f "$VERDICT" ] && echo "HERMETIC-CONSUMED $VERDICT"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The validator and verdict.sh are loaded once each and asked through inproc_run (vlt_drive, vrd_drive);
+# verdict.sh's own `bash <validator>` start and the receipt's two validator starts go through the `bash` shim below, which runs
+# vlt_main in a subshell made fresh the way inproc_run makes one. A core fixture ships ahead of its subjects: a subject with
+# neither the `<p>_main() {` line nor the column-0 source guard predates the wrap and SKIPs (FIXTURE BROKEN in the
+# distribution); exactly one half FAILs; an unreadable subject is FIXTURE ERROR.
+sl_halves() { # <file> <entry> -> "<def><guard>"
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+sl_pre=""
+sl_gate() { # sl_gate <file>:<entry> -- one call line per wrapped subject, so each carries its own gate
+  local _s="$1" _h
+  _h="$(sl_halves "${_s%%:*}" "${_s##*:}")" || exit 2
+  case "$_h" in
+    11) : ;;
+    00) sl_pre="$sl_pre ${_s%%:*}" ;;
+    *) bad "${_s%%:*} carries one half of the in-process wrap (${_s##*:} line, column-0 source guard: $_h) -- a respelled subject this fixture cannot drive"
+       report_end suppression-lifetime ;;
+  esac
+}
+sl_gate "$VALIDATOR:vlt_main"
+sl_gate "$VERDICT:vrd_main"
+if [ -n "$sl_pre" ]; then echo "SKIP: subject predates the in-process wrap:$sl_pre"; fx_skip_exit "$HERE"; fi
+
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+export FX_VLT="$VALIDATOR" # exported: inproc_run keeps exported variables and drops the rest
+bash() { # a `bash <validator>` start runs vlt_main in a fresh-options subshell; any other start is real
+  if [ "${1:-}" != "$FX_VLT" ]; then command bash "$@"; return; fi
+  shift
+  (
+    _x=" $(compgen -e) "; _x="${_x//$'\n'/ }"
+    for _v in $(compgen -v); do
+      case "$_x" in *" $_v "*) continue ;; esac
+      case "$_v" in
+        _x|_v) continue ;;
+        BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
+        IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
+        SHLVL|TERM|UID|_) continue ;;
+      esac
+      unset "$_v" 2>/dev/null
+    done
+    OPTIND=1; set +eufx +o pipefail; hash -r
+    ! declare -F fx_inproc >/dev/null 2>&1 || fx_inproc "$FX_VLT"; . "$FX_VLT" && vlt_main "$@"
+  )
+}
+inproc_load "$VALIDATOR" || { echo "FIXTURE ERROR: $VALIDATOR defines no vlt_main (not loadable)" >&2; exit 2; }
+SL_VLT_FNS="${INPROC_FNS}bash "
+inproc_load "$VERDICT" || { echo "FIXTURE ERROR: $VERDICT defines no vrd_main (not loadable)" >&2; exit 2; }
+SL_VRD_FNS="${INPROC_FNS}bash "
+# inproc_run strips every function the loaded subject did not define; use_subj selects which loaded subject is current and
+# names the shim with its set (inproc_run then checks the set's definitions are unchanged, and bash is part of it).
+use_subj() {
+  case "$1" in
+    vlt) INPROC_LOADED="$VALIDATOR"; INPROC_FNS="$SL_VLT_FNS" ;;
+    vrd) INPROC_LOADED="$VERDICT"; INPROC_FNS="$SL_VRD_FNS" ;;
+  esac
+  INPROC_DEFS="$(declare -f $INPROC_FNS)"
+}
+vlt_drive() { use_subj vlt; inproc_run "$VALIDATOR" vlt_main "$@"; } # <validator args> -> its answer, in process
+vrd_drive() { use_subj vrd; inproc_run "$VERDICT" vrd_main "$@"; }   # <verdict args> -> its answer, in process
+RCPT="$HERE/receipt-bl959.sh" # a library: its guard returns after defining r959_main, which starts the validator twice through the shim
 
 DRIVES=0           # validator runs actually executed (the cost this fixture is held to)
 
@@ -177,18 +246,18 @@ drive_run() { # <validator path> <drive> -> O E RC X
   esac
   case "$d" in
     nocat)
-      O="$(bash "$v" --escalations "$CASES/expired-still-failing/pending.md" \
+      O="$(vlt_drive --escalations "$CASES/expired-still-failing/pending.md" \
             --gate-metrics "$GM_FAILING" --enforcement-map "$WORK/nope.yaml" 2>&1)"; RC=$? ;;
     nomet)
-      O="$(bash "$v" --escalations "$CASES/malformed-no-target/pending.md" \
+      O="$(vlt_drive --escalations "$CASES/malformed-no-target/pending.md" \
             --enforcement-map "$MAP" --gate-metrics "$WORK/absent.jsonl" 2>&1)"; RC=$? ;;
     ident_a|ident_b)
       f="$IDA"; [ "$d" = ident_b ] && f="$IDB"
-      O="$(bash "$v" --escalations "$f/pending.md" --gate-metrics "$f/gm.jsonl" \
+      O="$(vlt_drive --escalations "$f/pending.md" --gate-metrics "$f/gm.jsonl" \
             --enforcement-map "$f/catalog.yaml" --baseline "$f/baseline.txt" 2>&1)"; RC=$? ;;
     cand_a|cand_b)
       f="$CDA"; [ "$d" = cand_b ] && f="$CDB"
-      O="$(AI_DLC_PROJECT_ROOT="$f" bash "$v" --escalations "$f/pending.md" --gate-metrics "$GM_FAILING" 2>&1)"; RC=$? ;;
+      O="$(AI_DLC_PROJECT_ROOT="$f" vlt_drive --escalations "$f/pending.md" --gate-metrics "$GM_FAILING" 2>&1)"; RC=$? ;;
     cwA_decoy|cwA_root|cwB_decoy)
       case "$d" in
         cwA_decoy) root="$SL_CWD_A_ROOT"; cwd="$SL_CWD_A_DECOY" ;;
@@ -199,17 +268,17 @@ drive_run() { # <validator path> <drive> -> O E RC X
       # callers use. The catalog is seeded at the ROOT-anchored candidate, so a run that never
       # received AI_DLC_PROJECT_ROOT refuses rather than answering from somewhere else.
       rows="$WORK/inforce.rows"
-      O="$( cd "$cwd" && AI_DLC_PROJECT_ROOT="$root" bash "$v" --in-force --escalations "$root/pending.md" 2>&1 >"$rows" )"; RC=$?
+      O="$( cd "$cwd" && AI_DLC_PROJECT_ROOT="$root" vlt_drive --in-force --escalations "$root/pending.md" 2>&1 >"$rows" )"; RC=$?
       X="$(grep -c . "$rows")" || X=0 ;;
     sen_empty|sen_blank|sen_never|sen_head|sen_l4|sen_exp)
       case "$d" in
         sen_empty) f=empty-file ;; sen_blank) f=blank-file ;; sen_never) f=never-written ;;
         sen_head) f=heading-only ;; sen_l4) f=level4-entry ;; sen_exp) f=expired-still-failing ;;
       esac
-      O="$(AI_DLC_PROJECT_ROOT="$WORK" bash "$v" --escalations "$CASES/$f/pending.md" \
+      O="$(AI_DLC_PROJECT_ROOT="$WORK" vlt_drive --escalations "$CASES/$f/pending.md" \
              --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>/dev/null)"; RC=$? ;;
     sen_if)
-      E="$( AI_DLC_PROJECT_ROOT="$WORK" bash "$v" --in-force --escalations "$CASES/empty-file/pending.md" \
+      E="$( AI_DLC_PROJECT_ROOT="$WORK" vlt_drive --in-force --escalations "$CASES/empty-file/pending.md" \
               --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>&1 >"$WORK/sen-inforce.out" )"; RC=$?
       O="$(cat "$WORK/sen-inforce.out")" ;;
     sr_lock_g|sr_lock_i|sr_dir_g|sr_dir_i|sr_link_g|sr_io_g|sr_io_i|sr_blank_g|sr_blank_i|sr_exp_g)
@@ -226,35 +295,35 @@ drive_run() { # <validator path> <drive> -> O E RC X
         sr_exp_g)   f="$CASES/expired-still-failing/pending.md" ;;
       esac
       : > "$SR_STUB/LOG"
-      O="$(PATH="$p" AI_DLC_PROJECT_ROOT="$WORK" bash "$v" $m --escalations "$f" \
+      O="$(PATH="$p" AI_DLC_PROJECT_ROOT="$WORK" vlt_drive $m --escalations "$f" \
             --gate-metrics "$GM_FAILING" --enforcement-map "$MAP" 2>"$SR/err")"; RC=$?
       E="$(cat "$SR/err")"
       X=0; [ -s "$SR_STUB/LOG" ] && X=1 ;;
     clkself)
-      O="$(bash "$v" --now "$CLK_NOW" --escalations "$CASES/clk-self/pending.md" --gate-metrics "$GM_CLK" \
+      O="$(vlt_drive --now "$CLK_NOW" --escalations "$CASES/clk-self/pending.md" --gate-metrics "$GM_CLK" \
             --enforcement-map "$MAP" 2>&1)"; RC=$? ;;
     clksup)
-      O="$(bash "$v" --now "$CLK_NOW" --escalations "$CASES/clk-sup/pending.md" --gate-metrics "$GM_SL_W" \
+      O="$(vlt_drive --now "$CLK_NOW" --escalations "$CASES/clk-sup/pending.md" --gate-metrics "$GM_SL_W" \
             --enforcement-map "$MAP" 2>&1)"; RC=$? ;;
     clkinf)
       # The clock worlds' query drive: stdout (the rows) in O, stderr in E.
-      E="$( bash "$v" --in-force --now "$CLK_NOW" --escalations "$CASES/clk-inf/pending.md" --gate-metrics "$GM_SL_W" \
+      E="$( vlt_drive --in-force --now "$CLK_NOW" --escalations "$CASES/clk-inf/pending.md" --gate-metrics "$GM_SL_W" \
               --enforcement-map "$MAP" 2>&1 >"$WORK/clk-inf.out" )"; RC=$?
       O="$(cat "$WORK/clk-inf.out")" ;;
     sli_*|slw_*)
       # The two query modes on a supersession world: stdout (the rows) in O, stderr in E.
       m="--in-force"; [ "${d%%_*}" = slw ] && m="--waivers"
-      E="$( bash "$v" $m --escalations "$CASES/sl-${d#*_}/pending.md" --gate-metrics "$GM_SL_W" \
+      E="$( vlt_drive $m --escalations "$CASES/sl-${d#*_}/pending.md" --gate-metrics "$GM_SL_W" \
               --enforcement-map "$MAP" 2>&1 >"$WORK/sl-query.out" )"; RC=$?
       O="$(cat "$WORK/sl-query.out")" ;;
     sl_vd)
       # The T1 world through verdict.sh, as gate-transition.sh arm 2 runs it: the shipping validator by
       # name.
       f="validate-suppression-lifetime"; [ "$v" = "$VALIDATOR" ] || f="$v"
-      O="$(bash "$VERDICT" "$f" --escalations "$CASES/sl-t1/pending.md" --gate-metrics "$GM_SL_W" \
+      O="$(vrd_drive "$f" --escalations "$CASES/sl-t1/pending.md" --gate-metrics "$GM_SL_W" \
             --enforcement-map "$MAP" 2>&1)"; RC=$? ;;
     *)
-      O="$(bash "$v" --escalations "$CASES/$c/pending.md" --gate-metrics "$gm" \
+      O="$(vlt_drive --escalations "$CASES/$c/pending.md" --gate-metrics "$gm" \
             --enforcement-map "$MAP" $ex 2>&1)"; RC=$? ;;
   esac
 }
@@ -747,9 +816,12 @@ for a in $ARMS; do
     _m="BAD_$a"; bad "${!_m}"
   fi
 done
-# BL-959's receipt, run as its own program: the T1 world and the T9 control in one invocation, against
-# the validator it resolves by walking up from its own directory.
-SL_RCPT_O="$(bash "$HERE/receipt-bl959.sh" 2>&1)"; SL_RCPT_RC=$?
+# BL-959's receipt, a fixture-local library sourced here (not a declared subject: nothing outside this fixture reads it):
+# the T1 world and the T9 control in one call, against the validator it resolves by walking up from its own directory; its
+# `bash <validator>` starts route through run.sh's `bash` shim.
+. "$RCPT" || { echo "FIXTURE ERROR: cannot source $RCPT" >&2; exit 2; }
+declare -F r959_main >/dev/null 2>&1 || { echo "FIXTURE ERROR: $RCPT defines no r959_main (not loadable)" >&2; exit 2; }
+SL_RCPT_O="$(r959_main 2>&1)"; SL_RCPT_RC=$?
 if in_set sl1 "$SKIPPED"; then
   printf '  SKIP  receipt-bl959 -- the installed validator predates BL-959\n'
 elif [ "$SL_RCPT_RC" = 0 ] && grep -qxF 'receipt-bl959: PASS' <<<"$SL_RCPT_O"; then
@@ -757,6 +829,32 @@ elif [ "$SL_RCPT_RC" = 0 ] && grep -qxF 'receipt-bl959: PASS' <<<"$SL_RCPT_O"; t
 else
   bad "receipt-bl959 exited $SL_RCPT_RC: $(printf '%s' "$SL_RCPT_O" | tr '\n' ' ')"
 fi
+
+# --- the cli cells (cells.decl): each program run as a PROGRAM once per distinct CLI outcome --------------------------
+# One `FXCELL=<id> bash <subject>` start per outcome, compared with the in-process answer on the same input (stdout+stderr
+# merged and exit, byte for byte); a cell asserts its own outcome too, so two runs that both printed nothing cannot read as
+# equivalent.
+EQ="$WORK/eq"; mkdir -p "$EQ"
+cell() { # <id> <subject> <drive fn> <args...> -> $EQ/<id>.{ip,cl}.{out,rc}
+  local id="$1" subj="$2" fn="$3"; shift 3
+  "$fn" "$@" > "$EQ/$id.ip.out" 2>&1; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" command bash "$subj" "$@" > "$EQ/$id.cl.out" 2>&1; echo "$?" > "$EQ/$id.cl.rc"
+}
+cell_ok() { # <id> <rc> <text the answer names>
+  if cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc" && [ "$(cat "$EQ/$1.cl.rc")" = "$2" ] && grep -qF -- "$3" "$EQ/$1.cl.out"; then
+    ok "$1: the program matches the in-process answer (exit $2, names '$3')"
+  else bad "$1: the program and the in-process call disagree (rc cl=$(cat "$EQ/$1.cl.rc") ip=$(cat "$EQ/$1.ip.rc"), wanted $2 naming '$3'; first line: $(head -n 1 "$EQ/$1.cl.out" | cut -c1-160))"; fi
+}
+cell cli-vlt-ok "$VALIDATOR" vlt_drive --escalations "$CASES/expired-but-fixed/pending.md" --gate-metrics "$GM_FIXED" --enforcement-map "$MAP"
+cell cli-vlt-fail "$VALIDATOR" vlt_drive --escalations "$CASES/expired-still-failing/pending.md" --gate-metrics "$GM_FAILING" --enforcement-map "$MAP"
+cell cli-vlt-refuse "$VALIDATOR" vlt_drive --escalations "$CASES/expired-still-failing/pending.md" --gate-metrics "$GM_FAILING" --enforcement-map "$WORK/nope.yaml"
+cell cli-vrd-pass "$VERDICT" vrd_drive validate-suppression-lifetime --escalations "$CASES/sl-t1/pending.md" --gate-metrics "$GM_SL_W" --enforcement-map "$MAP"
+cell cli-vrd-fail "$VERDICT" vrd_drive validate-suppression-lifetime --escalations "$CASES/expired-still-failing/pending.md" --gate-metrics "$GM_FAILING" --enforcement-map "$MAP"
+cell_ok cli-vlt-ok 0 'OK: entries_scanned=1 suppressed=1'
+cell_ok cli-vlt-fail 1 'is past its lifetime'
+cell_ok cli-vlt-refuse 2 'FAIL: enforcement-map.yaml not found'
+cell_ok cli-vrd-pass 0 'PASS  validate-suppression-lifetime.sh'
+cell_ok cli-vrd-fail 1 'FAIL  validate-suppression-lifetime.sh'
 echo "DRIVE-COUNT validator runs=$DRIVES"
 
 echo

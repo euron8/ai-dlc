@@ -67,10 +67,10 @@ print(json.dumps({
 }))
 PY
 
-CLAUDE_PROJECT_DIR="$WORK/proj" bash "$HOOK" < "$WORK/payload.json" >/dev/null 2>&1 || true
+# The capture hook is run by run.sh, in process; this seed names the cite as the hash of the answer, computed here independently.
 
 ANSWERS="$WORK/proj/_bmad-output/operator-answers-history.md"
-SHA="$(sed -n 's/^- SHA256: //p' "$ANSWERS" 2>/dev/null | tail -1)"
+SHA="$(printf %s "$ANSWER" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d" " -f1)"
 
 # An empty capture file: header only, no entries. This is the operator dismissing the
 # prompt, and it is the ONLY state in which `scope_confirmed_cite: none` is honest.

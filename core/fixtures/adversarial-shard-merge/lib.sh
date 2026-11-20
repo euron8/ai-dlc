@@ -485,6 +485,19 @@ bind_scratch "$WORK"
 # PATH=) reach it as they reach the CLI; redirections stay at the call site. Every arm drives the merge
 # through ASM_RUN, `bash` (the CLI, the default and content-seal/merge-arms.sh's) or `mx` (run.sh sets it).
 ASM_RUN="${ASM_RUN:-bash}"
+# asm_cell <vac|wfd> <script path> -> ASM_FX, the FXCELL tag of the next start of that declared subject (cells.decl: e2e-<kind>-<n>, one
+# per start, numbered in the order this run makes them). Only the in-process fixture (ASM_RUN=mx) tags, and only a start of the shipped
+# sibling under core/scripts/ (a copy in a world is no start of the declared subject); content-seal/merge-arms.sh, which sources this
+# lib with ASM_RUN=bash, declares its own cells.
+asm_cell() {
+  ASM_FX=""
+  [ "${ASM_RUN:-bash}" = mx ] || return 0
+  case "$2" in */core/scripts/*) ;; *) return 0 ;; esac
+  case "$1" in
+    vac) ASM_N_VAC=$(( ${ASM_N_VAC:-0} + 1 )); ASM_FX="e2e-vac-$ASM_N_VAC" ;;
+    wfd) ASM_N_WFD=$(( ${ASM_N_WFD:-0} + 1 )); ASM_FX="e2e-wfd-$ASM_N_WFD" ;;
+  esac
+}
 mx() {
   ( set +o pipefail +u
     _mx_keep='^(BASH.*|IFS|OPTIND|OPTERR|LINENO|RANDOM|SRANDOM|SECONDS|EPOCH.*|PIPESTATUS|FUNCNAME|GROUPS|EUID|UID|PPID|SHELLOPTS|HOSTNAME|HOSTTYPE|MACHTYPE|OSTYPE|DIRSTACK|PS[0-9]|SHLVL|PWD|OLDPWD|HOME|PATH|TMPDIR|_mx_.*)$'
@@ -504,6 +517,46 @@ mx() {
     # MX_HOOK (exported, so the sweep above keeps it): code eval'd after the merge is sourced and before merge_main,
     # to inject a fault at a point the SHIPPED merge reaches (p_pcmv). Unset everywhere else, so nothing changes.
     [ -z "${MX_HOOK:-}" ] || eval "$MX_HOOK"
+    # THE SEAL SIBLING, IN PROCESS. The merge starts content-seal.sh as a program (`bash "$SEAL" ...`, a path it derives
+    # beside itself); in a shipped-tree merge that start is answered by seal_main in a clean subshell (_mx_sweep: the
+    # functions and unexported variables of anything but content-seal.sh are gone, as inproc_run leaves them), logged as
+    # a pass of content-seal.sh. Every other `bash` the merge runs is the real one. The CLI twin of this seam is the EQ
+    # arms, whose merge CLI start runs the real seal, covered by cells.decl's nested row.
+    # `mx <dir>/content-seal.sh <args...>` asks the sibling itself, in process: seal_main under the merge's own sweep.
+    case "$1" in */content-seal.sh) [[ "$1" != */core/scripts/content-seal.sh ]] || fx_inproc "$1"; shift; seal_main "$@"; exit $? ;; esac
+    _mx_sealp="$(cd "$(dirname "$1")" && pwd)/content-seal.sh"
+    if [[ "$1" == */core/scripts/merge-adversarial-shards.sh && "$_mx_sealp" == */core/scripts/content-seal.sh && -f "$_mx_sealp" ]]; then
+      _mx_f0=" $(compgen -A function | tr '\n' ' ') "; _mx_v0=" $(compgen -v | tr '\n' ' ') "
+      . "$_mx_sealp" || exit 90
+      _mx_sf=" fx_inproc _mx_sweep "; _mx_sv=" "
+      for _mx_i in $(compgen -A function); do case "$_mx_f0" in *" $_mx_i "*) ;; *) _mx_sf="$_mx_sf$_mx_i " ;; esac; done
+      for _mx_i in $(compgen -v); do case "$_mx_v0" in *" $_mx_i "*) ;; *) _mx_sv="$_mx_sv$_mx_i " ;; esac; done
+      _mx_sweep() {
+        local _mx_k='^(BASH.*|IFS|OPTIND|OPTERR|LINENO|RANDOM|SRANDOM|SECONDS|EPOCH.*|PIPESTATUS|FUNCNAME|GROUPS|EUID|UID|PPID|SHELLOPTS|HOSTNAME|HOSTTYPE|MACHTYPE|OSTYPE|DIRSTACK|PS[0-9]|SHLVL|PWD|OLDPWD|HOME|PATH|TMPDIR|_mx_.*)$'
+        local _mx_x _mx_a _mx_b _mx_c _mx_n
+        _mx_x=" $(compgen -e | tr '\n' ' ') "
+        for _mx_a in 1 2 3 4 5 6 7 8; do
+          _mx_n=0
+          for _mx_b in $(compgen -v); do
+            [[ $_mx_b =~ $_mx_k ]] && continue
+            case "$_mx_x$_mx_sv" in *" $_mx_b "*) continue ;; esac
+            unset "$_mx_b" 2>/dev/null && _mx_n=$((_mx_n + 1))
+          done
+          [ "$_mx_n" -eq 0 ] && break
+        done
+        for _mx_c in $(compgen -A function); do case "$_mx_sf" in *" $_mx_c "*) ;; *) unset -f "$_mx_c" ;; esac; done
+      }
+      bash() { # bash <content-seal.sh beside the merge> <args...> -> seal_main's stdout, stderr and status
+        case "${1:-}" in
+          */content-seal.sh)
+            [ "$(cd "$(dirname "$1")" && pwd)/content-seal.sh" = "$_mx_sealp" ] || { command bash "$@"; return; }
+            shift
+            ( _mx_sweep; unset -f _mx_sweep bash; IFS=$' \t\n'; OPTIND=1; set +eufx +o pipefail; hash -r
+              fx_inproc "$_mx_sealp"; unset -f fx_inproc; seal_main "$@" ) ;;
+          *) command bash "$@" ;;
+        esac
+      }
+    fi
     [[ "$1" != */core/scripts/merge-adversarial-shards.sh ]] || fx_inproc "$1"; shift; merge_main "$@" )
 }
 run_merge() { # <merge-script> <shard-dir> -> RC, $MO
@@ -523,7 +576,7 @@ p_b3() { # <merge> <merged B3 world> <the merge's output on it> <its rc>: the re
   cp "$3" "$MO" || return 1; RC="$4"
   [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_NOT_MET shards=6" && has "$MO" "blocking=6" \
     && [ -f "$o" ] && has "$o" "verdict: EXIT_CONDITION_NOT_MET" || return 1
-  bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
+  asm_cell vac "$c"; FXCELL="$ASM_FX" bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
   has "$CO" "CONTINUE"
 }
 p_clean() { # every shard stamped NOT_MET, summed blocking == the ceiling -> MET, CONVERGED
@@ -531,7 +584,7 @@ p_clean() { # every shard stamped NOT_MET, summed blocking == the ceiling -> MET
   d="$(clean_world)"; o="$(out_of "$d")"; c="$(dirname "$m")/validate-adversarial-convergence.sh"
   run_merge "$m" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_MET shards=6" && has "$o" "verdict: EXIT_CONDITION_MET" || return 1
-  bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
+  asm_cell vac "$c"; FXCELL="$ASM_FX" bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
   has "$CO" "CONVERGED"
 }
 p_ceiling() { # the ceiling is READ from the sibling: a copy whose sibling says 6 merges B3 as MET
@@ -549,7 +602,7 @@ p_ceiling() { # the ceiling is READ from the sibling: a copy whose sibling says 
   d="$(b3_world)"; o="$(out_of "$d")"
   run_merge "$sd/merge-adversarial-shards.sh" "$d"
   [ "$RC" -eq 0 ] && has "$MO" "verdict=EXIT_CONDITION_MET" && has "$MO" "ceiling=6" || return 1
-  bash "$sd/validate-adversarial-convergence.sh" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
+  asm_cell vac "$sd/validate-adversarial-convergence.sh"; FXCELL="$ASM_FX" bash "$sd/validate-adversarial-convergence.sh" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
   has "$CO" "CONVERGED"
 }
 p_miss_ord() { # ordinal 1 -- the NON-story file -- has no shard
@@ -590,7 +643,7 @@ p_ms() { # a shard stamped with milliseconds merges, and the merged invoked_at i
   [ "$RC" -eq 0 ] && has "$o" "invoked_at: 2026-08-24T15:00:19Z" || return 1
   # The validator must ACCEPT the merged value; which state it reaches is A1/A2's property, not
   # this cell's, so either healthy state passes here (asserting one entangled this cell with MX1).
-  bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
+  asm_cell vac "$c"; FXCELL="$ASM_FX" bash "$c" --series "$(dirname "$o")/stories-adversarial-p" --cycle-state > "$CO" 2>&1 || return 1
   has "$CO" "CONTINUE" || has "$CO" "CONVERGED"
 }
 
@@ -670,7 +723,7 @@ p_doc_b3() { # sums, recomputes, ONE artifact_sha, a shard_wall entry per shard,
   n_wall="$(grep '^shard_wall:' "$o" | tr ' ' '\n' | grep -cE '^(1|2|3|cross-1|cross-2|cross-3)=[0-9T:.Z-]+/[0-9T:Z-]+$')" || n_wall=0
   [ "$n_wall" -eq 6 ] || return 1
   # The per-file line of the validator's report (not --cycle-state, whose exit is the cycle's).
-  bash "$c" --series "$(dirname "$o")/test-strategy-adversarial-p" > "$CO" 2>&1
+  asm_cell vac "$c"; FXCELL="$ASM_FX" bash "$c" --series "$(dirname "$o")/test-strategy-adversarial-p" > "$CO" 2>&1
   has "$CO" "verdict=EXIT_CONDITION_NOT_MET critical=0 major=6"
 }
 p_doc_axis() { # one sections: line AND a stories: line on the same finding -> the axis guard refuses
@@ -1662,7 +1715,7 @@ sd_oracle() { # <merge> <pass> <name:crit>... -> 0 when stamp and arm C agree; O
   cp "$(sd_s1 "$d")"/stories-adversarial-p* "$t/" || return 1
   sed 's/^verdict: DIVERGENT_HARD_BLOCK$/verdict: EXIT_CONDITION_NOT_MET/' "$o" > "$t/$(basename "$o")"
   n="$(ls "$t" | grep -c .)" || n=0
-  bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$t/stories-adversarial-p" > "$CO" 2>&1
+  asm_cell vac "$(dirname "$m")/validate-adversarial-convergence.sh"; FXCELL="$ASM_FX" bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$t/stories-adversarial-p" > "$CO" 2>&1
   has "$CO" "adversarial convergence -- $n pass artifact(s)" || return 1
   OR_C=0; has "$CO" "FAIL (C -- DIVERGENCE)" && OR_C=1
   [ "$OR_ST" = "$OR_C" ]
@@ -2022,7 +2075,7 @@ p_dv5() {
   [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "1 2 3 4 5 6 7 8" ] && case "$DV_HDR" in *"full width: stories-adversarial-p1.md notarizes no"*) true ;; *) false ;; esac
 }
 # dv_gate <merge> <s1 dir>: the GATE (arm N) on the stories series, run with the validator beside <merge>.
-dv_gate() { bash "$(dirname "$1")/validate-adversarial-convergence.sh" --series "$2/stories-adversarial-p" > "$CO" 2>&1; }
+dv_gate() { asm_cell vac "$(dirname "$1")/validate-adversarial-convergence.sh"; FXCELL="$ASM_FX" bash "$(dirname "$1")/validate-adversarial-convergence.sh" --series "$2/stories-adversarial-p" > "$CO" 2>&1; }
 # DV10: a GAP in the series. A p3 dispatched with no p2 on disk derives from p1, the predecessor IN SERIES
 # ORDER, never literal M-1 (graph's s320 stories has no p5).
 # The GATE side of the same gap: that p3, merged over {3 6}, stamps shard_set_derived_from: p1, and arm N
@@ -2120,15 +2173,15 @@ dvrs_tail() {
   [ -n "$xo" ] || return 1
   $ASM_RUN "$m" "$@" "$sd" < /dev/null > "$MO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$p" "shard_set_derived_from: $art-adversarial-p1.md" && has "$p" "part_sha: " || return 1
-  bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/$art-adversarial-p" < /dev/null > "$CO" 2>&1
+  asm_cell vac "$(dirname "$m")/validate-adversarial-convergence.sh"; FXCELL="$ASM_FX" bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/$art-adversarial-p" < /dev/null > "$CO" 2>&1
   has "$CO" "pass artifact" && ! has "$CO" "FAIL (N" || return 1
   cp "$p" "$WORK/dvrs.p2" || return 1
   awk -v x="$xo" '/^shard_tool_use_ids:/ { print $0 " " x "=toolu_01DvExtra000000000000"; next } { print }' "$WORK/dvrs.p2" > "$p" || return 1
-  bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/$art-adversarial-p" < /dev/null > "$CO" 2>&1
+  asm_cell vac "$(dirname "$m")/validate-adversarial-convergence.sh"; FXCELL="$ASM_FX" bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/$art-adversarial-p" < /dev/null > "$CO" 2>&1
   l="$(grep -F "but owed {$want}, derived from $art-adversarial-p1.md" "$CO")" || return 1
   grep -qE "parts \{([0-9]+ )*$xo( [0-9]+)*\} but" <<< "$l" || return 1
   awk -v x="${want%% *}" '/^shard_tool_use_ids:/ { sub(" 0*" x "=[^ ]+", "") } { print }' "$WORK/dvrs.p2" > "$p" || return 1
-  bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/$art-adversarial-p" < /dev/null > "$CO" 2>&1
+  asm_cell vac "$(dirname "$m")/validate-adversarial-convergence.sh"; FXCELL="$ASM_FX" bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/$art-adversarial-p" < /dev/null > "$CO" 2>&1
   has "$CO" "but owed {$want}, derived from $art-adversarial-p1.md"
 }
 # DVRS: document mode, the shipped sequence; and, in the same arm, a FILES-mode twin that still narrows to {3 6}

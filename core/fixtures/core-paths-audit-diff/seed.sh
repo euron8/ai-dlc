@@ -400,7 +400,7 @@ while [ "$d" != "/" ]; do
   d="$(dirname "$d")"
 done
 [ -n "$RESOLVER" ] || { echo "seed: no core-paths.sh found walking up from $HERE" >&2; exit 2; }
-cp "$RESOLVER" "$WORK/control-core-paths.sh" || exit 2
+cp "$RESOLVER" "$WORK/core-paths.sh" || exit 2
 
 # The citation arm DELEGATES to a sibling — it asks validate-escalation-resolution.sh whether
 # the file carries an operator citation rather than restating that script's grammar. The
@@ -416,7 +416,7 @@ cp "$ESR_SRC" "$WORK/validate-escalation-resolution.sh" || exit 2
 cat > "$WORK/env.sh" <<ENVEOF
 PROJ="$PROJ"
 VALIDATOR="$RESOLVER"
-CONTROL_VALIDATOR="$WORK/control-core-paths.sh"
+CONTROL_VALIDATOR="$WORK/core-paths.sh"
 WORKDIR="$WORK"
 PRESPLIT="$PRESPLIT"
 BASE="$BASE"

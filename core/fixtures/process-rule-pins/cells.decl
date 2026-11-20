@@ -1,0 +1,5 @@
+# Arm (d) drives wait-for-deliverable.sh --mark in process (wfd_mark_main through inproc_run). One cli cell per distinct CLI
+# outcome of --mark, each started as FXCELL=<id> bash in eqv() and compared byte for byte (stdout, stderr, exit) with the
+# in-process call on the same input: the seal that exits 0 and the exit-64 refusal on a missing file.
+cli core/scripts/wait-for-deliverable.sh cli-mark
+cli core/scripts/wait-for-deliverable.sh cli-mark-refuse

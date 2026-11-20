@@ -60,9 +60,10 @@ wrap_gate() { # wrap_gate <file> <entry> -> 0 wrapped, 3 predates the wrap, 1 on
 }
 wrap_gate "$LINTER" vle_main; g_vle=$?
 g_rec=0; [ -z "$RELABEL" ] || { wrap_gate "$RELABEL" rec_main; g_rec=$?; }
-if [ "$g_vle" = 2 ] || [ "$g_rec" = 2 ]; then exit 2; fi
-if [ "$g_vle" = 1 ] || [ "$g_rec" = 1 ]; then echo "layer-catalog-collision: 1 FAILED" >&2; exit 1; fi
-if [ "$g_vle" = 3 ] || [ "$g_rec" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
+g_ld=0; [ -z "$DRIFT" ] || { wrap_gate "$DRIFT" ld_main; g_ld=$?; }
+if [ "$g_vle" = 2 ] || [ "$g_rec" = 2 ] || [ "$g_ld" = 2 ]; then exit 2; fi
+if [ "$g_vle" = 1 ] || [ "$g_rec" = 1 ] || [ "$g_ld" = 1 ]; then echo "layer-catalog-collision: 1 FAILED" >&2; exit 1; fi
+if [ "$g_vle" = 3 ] || [ "$g_rec" = 3 ] || [ "$g_ld" = 3 ]; then echo "SKIP: subject predates the in-process wrap"; fx_skip_exit "$HERE"; fi
 # Neither subject is inproc_load-ed: inproc_run then sources each one inside its own subshell, so every pass is logged
 # under the path it sourced (a loaded subject would claim the other subject's passes as its own).
 vle_ip() { inproc_run "$LINTER" vle_main "$@"; }

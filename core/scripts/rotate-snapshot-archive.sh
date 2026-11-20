@@ -129,6 +129,7 @@
 #   - ONE RUN ASSUMES NO CONCURRENT WRITER TO THE HISTORY. A writer holding it open with `>>`
 #     across a rotation writes into the replaced inode and its lines are lost; a trim appending
 #     between this run's read and its rename is lost too (as it was under the in-place design).
+rsa_main() {
 set -uo pipefail
 
 SELF_NAME="rotate-snapshot-archive"
@@ -693,3 +694,6 @@ absorb_truncate
 echo "${SELF_NAME}: moved ${N_MOVE} entr(ies), ${L_MOVE} lines (${B_MOVE} bytes) to ${ARCHIVE};${ABSORB_NOTE} history is now $(wc -l < "$HISTORY" | tr -d ' ') lines."
 echo "  Verify: validate-snapshot-conservation.sh must report the same verdict as before this ran."
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+rsa_main "$@"

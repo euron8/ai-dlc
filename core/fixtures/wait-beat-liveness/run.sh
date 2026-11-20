@@ -60,6 +60,7 @@ echo "HERMETIC-CONSUMED core/scripts/wfd-start-of.sh"
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
 . "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
 # PRE-WRAP CONSUMER GATE (BL-878): a consumer one pull behind carries this fixture with a subject that predates the
 # in-process wrap, and loading it would run its whole body. Neither half is SKIP (FIXTURE BROKEN in the distribution,
 # exit 0 on a consumer); exactly one half FAILS; an unreadable subject is FIXTURE ERROR.
@@ -70,6 +71,17 @@ case "$_wg1$_wg2" in
   00) : ;;
   11) echo "SKIP: wait-beat-liveness: $SUBJ predates the in-process wrap"; fx_skip_exit "$HERE" ;;
   *) bad "$SUBJ carries one half of the in-process wrap (wfd_beat_main line: rc $_wg1, column-0 source guard: rc $_wg2) -- a respelled subject this fixture cannot drive"
+     report_end wait-beat-liveness ;;
+esac
+# The same gate for the merge sibling, which hdr_msg asks in process (merge_main through inproc_run). Neither half: SKIP;
+# exactly one half: FAIL; unreadable: FIXTURE ERROR. Nothing below loads the merge before this line.
+grep -qxF 'merge_main() {' "$MERGE"; _wg3=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$MERGE"; _wg4=$?
+[ "$_wg3" -le 1 ] && [ "$_wg4" -le 1 ] || { echo "FIXTURE ERROR: cannot read $MERGE (grep exit $_wg3/$_wg4)" >&2; exit 2; }
+case "$_wg3$_wg4" in
+  00) : ;;
+  11) echo "SKIP: wait-beat-liveness: $MERGE predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$MERGE carries one half of the in-process wrap (merge_main line: rc $_wg3, column-0 source guard: rc $_wg4) -- a respelled subject this fixture cannot drive"
      report_end wait-beat-liveness ;;
 esac
 broken() { printf 'wait-beat-liveness: FIXTURE BROKEN — %s\n' "$1" >&2; exit 2; }
@@ -150,6 +162,14 @@ fx_onsleep_off() { rm -f "$(fx_clock_file "$1").onsleep"; }
 fx_settime() {  # $1 = file, $2 = epoch -- BSD then GNU, refuses on neither
   st_t_="$("$WBL_REAL_DATE" -r "$2" +%Y%m%d%H%M.%S 2>/dev/null || "$WBL_REAL_DATE" -d "@$2" +%Y%m%d%H%M.%S 2>/dev/null)"
   [ -n "$st_t_" ] && touch -t "$st_t_" "$1" || broken "cannot set the mtime of $1 to $2"
+}
+# THE SUBJECT'S MARKS ARE ON THE REAL CLOCK. A beat re-stamps a target's own mark with `: > <mark>`
+# (wait-for-deliverable.sh target_progressed), and that write takes the real time, while the injected
+# clock is the world's real arming instant plus the virtual seconds slept. A target stamped at the virtual
+# now is therefore older than its mark once more real seconds have passed than virtual ones, which is load.
+# An edit that must read as written AFTER the mark is stamped no earlier than one real second past now.
+fx_after_mark() {  # $1 = virtual epoch -> the later of it and the real now + 1
+  am_r_=$(( $("$WBL_REAL_DATE" +%s) + 1 )); [ "$1" -gt "$am_r_" ] && am_r_="$1"; printf '%s' "$am_r_"
 }
 
 # THE CLOCK'S OWN PROBE, BOTH DIRECTIONS, before any arm leans on it: in a clocked world a
@@ -289,6 +309,22 @@ fx_clock_copy() {  # $1 = source world, $2 = destination world: the destination 
 wbl_ip() {  # $1 = subject; rest = its argv. Call it inside a subshell.
   wi_s_="$1"; shift
   set +o pipefail
+  # A beat on the real subject starts the merge sibling as a program (wfd's `bash "$SHARD_CHECK" --check-header ...`). Route
+  # that one start in process: a `bash` function in this subshell hands `bash <the real merge> args` to merge_main through
+  # inproc_run (which logs the pass with fx_inproc), so the start is an `inproc:` pass of the merge, not a start. Any other
+  # `bash` call, and a beat on a COPY of the subject (its merge is the copy beside it), runs as the program it always did.
+  if [ "$wi_s_" = "$SUBJ" ]; then
+    wbl_merge_real_="$(cd "$(dirname "$MERGE")" && pwd -P)/merge-adversarial-shards.sh"
+    bash() {
+      case "${1:-}" in
+        */merge-adversarial-shards.sh)
+          if [ "$(cd "${1%/*}" 2>/dev/null && pwd -P)/merge-adversarial-shards.sh" = "$wbl_merge_real_" ]; then
+            wi_m_="$1"; shift; inproc_run "$wi_m_" merge_main "$@"; return
+          fi ;;
+      esac
+      command bash "$@"
+    }
+  fi
   unset -f wfd_start_of
   wbl_clock_fns
   case " $* " in *" --status "*|*" --dispatch-ts "*|" --mark "*|" --mark-repair "*) ;;
@@ -864,7 +900,7 @@ S13b_complete_progress_per_target() {
   printf '%s\n' "$SKELETON" > "$W/grow.md"; printf '%s\n' "$SKELETON" > "$W/static.md"
   cbeat "$SUBJ" "$W" --complete grow.md static.md     # charges the only beat, stamps each mark
   fx_advance "$W" 1
-  printf -- '- a second finding, verified\n' >> "$W/grow.md"; fx_settime "$W/grow.md" "$(fx_now "$W")"
+  printf -- '- a second finding, verified\n' >> "$W/grow.md"; fx_settime "$W/grow.md" "$(fx_after_mark "$(fx_now "$W")")"
   cbeat "$SUBJ" "$W" --complete grow.md static.md     # sequence spent
   if has "PROGRESS  grow.md" && ! has "NON-DELIVERY grow.md"; then
     ok "complete: the target that grew since its own mark is granted PROGRESS"
@@ -891,12 +927,14 @@ S13b_complete_progress_per_target() {
 # cross seat that wrote once and then made seven in-place Edits. It is the world's poll hook (see THE
 # INJECTED CLOCK), so it edits between two observations of the subject's own loop -- the same order
 # a writer racing the poll cadence produced, with no process and no wall clock. A counter makes every
-# rewrite distinct bytes and stamps the virtual now as the file's mtime. `churn_stop` removes the
+# rewrite distinct bytes and stamps the later of the virtual now and the real now + 1 as the file's
+# mtime (fx_after_mark: the beat's own mark is a real-clock write, so an edit stamped at the virtual now
+# alone reads as older than it once the box is slow). `churn_stop` removes the
 # hook and REFUSES (exit 2) when it never fired: a file the arms below read as being edited that was
 # in fact static would turn every verdict on it into a statement about a still file.
 churn() {  # $1 = file, $2 = world
   CHURN_FILE="$1"; CHURN_W="$2"; printf '0' > "$1.revs"
-  fx_onsleep "$2" "i_=0; read -r i_ < '$1.revs'; i_=\$(( i_ + 1 )); printf '%s' \"\$i_\" > '$1.revs'; printf '%s\n- an in-place edit, revision %d\n%s\n' '$SKELETON' \"\$i_\" '$MARKER' > '$1'; fx_vtouch '$1'"
+  fx_onsleep "$2" "i_=0; read -r i_ < '$1.revs'; i_=\$(( i_ + 1 )); printf '%s' \"\$i_\" > '$1.revs'; printf '%s\n- an in-place edit, revision %d\n%s\n' '$SKELETON' \"\$i_\" '$MARKER' > '$1'; vn_=\${wck_n_:-\$n_}; rn_=\$(( \$(\"\$WBL_REAL_DATE\" +%s) + 1 )); [ \"\$vn_\" -gt \"\$rn_\" ] && rn_=\$vn_; touch -t \"\$(\"\$WBL_REAL_DATE\" -r \"\$rn_\" +%Y%m%d%H%M.%S 2>/dev/null || \"\$WBL_REAL_DATE\" -d \"@\$rn_\" +%Y%m%d%H%M.%S)\" '$1'"
 }
 churn_stop() {
   fx_onsleep_off "$CHURN_W"
@@ -1448,8 +1486,15 @@ mk_shard() {  # $1 = file, $2 = skill, $3 = verdict ('' = no verdict line), $4 =
   } > "$ms_t" && mv -f "$ms_t" "$1" || broken "cannot write shard $1"
 }
 hdr_msg() {  # $1 = workdir, $2 = shard (relative), $3 = axis -> HM (the merge's text, no `REFUSED: `), HRC
-  HM="$( cd "$1" && bash "$MERGE" --check-header "$2" --axis "$3" 2>&1 )"; HRC=$?
+  HM="$( cd "$1" && inproc_run "$MERGE" merge_main --check-header "$2" --axis "$3" 2>&1 )"; HRC=$?
+  HM_RAW="$HM"
   HM="${HM#REFUSED: }"
+}
+hdr_cli_eq() {  # $1 = cell id, $2 = workdir, $3 = shard, $4 = axis: the merge as a PROGRAM (FXCELL=<id>) against hdr_msg's in-process answer (HM_RAW, HRC)
+  local hc_o hc_rc
+  hdr_msg "$2" "$3" "$4"
+  hc_o="$( cd "$2" && FXCELL="$1" bash "$MERGE" --check-header "$3" --axis "$4" 2>&1 )"; hc_rc=$?
+  [ "$hc_rc" = "$HRC" ] && [ "$hc_o" = "$HM_RAW" ]
 }
 hdr_line() {  # $1 = shard, $2 = refusal text: is the beat's exact UNFINISHED line in BEATOUT?
   grep -qxF "UNFINISHED $1 ${HDR_REFUSE}$2" "$BEATOUT"
@@ -1467,6 +1512,12 @@ S17a_shard_header_convergence() {
   hdr_msg "$W" s-nov.md convergence;  c_nov=$HRC;  m_nov="$HM"
   hdr_msg "$W" s-pend.md convergence; c_pend=$HRC; m_pend="$HM"
   hdr_msg "$W" s-nolr.md convergence; c_nolr=$HRC; m_nolr="$HM"
+  # THE CLI CELLS for the merge (cells.decl): --check-header as a program on a passing shard (rc 0) and a refusing one
+  # (rc 1), each byte-identical (output and exit) to the in-process answer on the same input.
+  if hdr_cli_eq cli-header-pass "$W" s-ok.md convergence && [ "$HRC" -eq 0 ] \
+     && hdr_cli_eq cli-header-refuse "$W" s-nov.md convergence && [ "$HRC" -eq 1 ] && [ -n "$HM_RAW" ]; then
+    ok "shard-header: the merge as a program and the in-process call answer a passing and a refusing shard byte-for-byte alike (rc 0 and rc 1)"
+  else bad "shard-header: the merge as a program and the in-process call differ on --check-header (pass rc/out, refuse rc/out)"; fi
   if [ "$c_ok" -eq 0 ] && [ "$c_nov" -eq 1 ] && [ "$c_pend" -eq 1 ] && [ "$c_nolr" -eq 1 ]; then
     ok "shard-header: CONTROL — the merge itself passes the MET shard and refuses no-verdict, PENDING-LEAD and no-lead_role"
   else bad "shard-header: CONTROL FAILED — the merge does not discriminate the seeds (ok=$c_ok nov=$c_nov pend=$c_pend nolr=$c_nolr), so the beat arms below mean nothing"; fi
@@ -3190,7 +3241,8 @@ wr_pair() {  # $1 = label, $2 = world; rest = argv -> WR_<label> = "rc|<stdout c
   wp_l_="$1" wp_w_="$2"; shift 2
   wp_s_="$TMPROOT/wr-snap.$wp_l_"; rm -rf "$wp_s_"; cp -Rp "$wp_w_" "$wp_s_" || broken "wiring: cannot snapshot $wp_w_"
   wp_o_="$(fx_offset "$wp_w_")"
-  ( cd "$wp_w_" && wr_env && bash "$SUBJ" "$@" ) > "$TMPROOT/wr.$wp_l_.cli.out" 2> "$TMPROOT/wr.$wp_l_.cli.err"; wp_rc1_=$?
+  wp_t_="wiring-$wp_l_"; case "$SUBJ" in "$TMPROOT"/sib.*) wp_t_="" ;; esac   # --dispatch-ts runs on a sib.* copy of the subject: no cell
+  ( cd "$wp_w_" && wr_env && FXCELL="$wp_t_" bash "$SUBJ" "$@" ) > "$TMPROOT/wr.$wp_l_.cli.out" 2> "$TMPROOT/wr.$wp_l_.cli.err"; wp_rc1_=$?
   rm -rf "$wp_w_" && cp -Rp "$wp_s_" "$wp_w_" || broken "wiring: cannot restore $wp_w_"
   printf '%s' "$wp_o_" > "$(fx_clock_file "$wp_w_")"
   ( cd "$wp_w_" && wr_env && wbl_ip "$SUBJ" "$@" ) > "$TMPROOT/wr.$wp_l_.ip.out" 2> "$TMPROOT/wr.$wp_l_.ip.err"; wp_rc2_=$?

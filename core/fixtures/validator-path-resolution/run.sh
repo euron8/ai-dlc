@@ -241,6 +241,8 @@ argv_for() {
     sprint-status.sh)               printf '%s' "--render" ;;
     # with no op it refuses "no op given" before it resolves a path; this op reaches "no snapshot at <root>/...", which names the root
     snapshot-update.sh)             printf '%s' "--activity vpr-probe" ;;
+    # four args reach "no snapshot at <root>/...", which names the root (the usage refusal comes before it)
+    story-transition.sh)            printf '%s' "vpr-1 a b vpr" ;;
     validate-audit-anchors.sh)     printf '%s' "--render" ;;
     validate-gate-adjudication.sh)  printf '%s' "--expected implementation" ;;
     validate-provenance-block.sh)   printf '%s' "$WORK/docs/artifact.md" ;;

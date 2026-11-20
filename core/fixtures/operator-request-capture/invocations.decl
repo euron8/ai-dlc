@@ -1,4 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-11 *
+4 *
 0 core/hooks/ai-dlc-context-provenance.sh
-9 core/hooks/ai-dlc-pause.sh
+2 core/hooks/ai-dlc-pause.sh
+11 inproc:core/hooks/ai-dlc-pause.sh

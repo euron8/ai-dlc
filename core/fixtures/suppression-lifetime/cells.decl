@@ -1,0 +1,14 @@
+# suppression-lifetime's starts (BL-878 item 7; BL-879 grammar). Every drive is in process: run.sh loads
+# validate-suppression-lifetime.sh and verdict.sh once each and asks vlt_main / vrd_main through inproc_run, and the starts a
+# subject or the receipt makes of the validator (`bash <validator>`) run vlt_main in a subshell through run.sh's `bash` shim.
+# One command-line start per distinct CLI outcome, started as FXCELL=<id> bash <subject> and compared on stdout+stderr and exit
+# with the in-process answer on the same input: the validator exits 0 (OK line), 1 (an expiry FAIL) and 2 (the catalog is
+# missing); verdict.sh exits 0 (PASS) and 1 (FAIL). No end-to-end cell: neither subject holds a process group, `$$` holder,
+# exec of itself or EXIT trap a subshell would end differently.
+cli core/scripts/validate-suppression-lifetime.sh cli-vlt-ok
+cli core/scripts/validate-suppression-lifetime.sh cli-vlt-fail
+cli core/scripts/validate-suppression-lifetime.sh cli-vlt-refuse
+cli core/scripts/verdict.sh cli-vrd-pass
+cli core/scripts/verdict.sh cli-vrd-fail
+# The validator start of each verdict.sh cli cell is a real process (verdict.sh, run as a program, starts it itself).
+nested core/scripts/verdict.sh core/scripts/validate-suppression-lifetime.sh why=the two verdict.sh cli cells start it as a program, whose own validator start is a real process the run.sh shim cannot route

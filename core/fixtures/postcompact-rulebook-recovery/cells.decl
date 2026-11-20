@@ -1,0 +1,24 @@
+# postcompact-rulebook-recovery's starts of its declared subjects (BL-878 item 7; BL-879 grammar). Every other drive is in
+# process: hook_run sources the postcompact hook and calls hpcm_main, val_run sources the budget validator and calls
+# vrab_main, each paired with fx_inproc, and the unwrapped recovery hook and gate are sourced in a subshell the same way.
+# The command-line starts left are the EQUIVALENCE cells at the end of run.sh: one per distinct outcome of each subject,
+# each started as FXCELL=<id> bash <subject> and compared byte for byte (stdout, stderr, exit and what is left on disk)
+# with the in-process answer on a second copy of the same world.
+# postcompact: the marker's owner compacts (logs yes), a foreign session compacts (logs no), an update session compacts (silent).
+cli core/hooks/ai-dlc-postcompact.sh cli-pc-owner
+cli core/hooks/ai-dlc-postcompact.sh cli-pc-foreign
+cli core/hooks/ai-dlc-postcompact.sh cli-pc-silent
+# the budget validator: the shipped SKILL.md (PASS, exit 0) and the no-mandate copy (FAIL, exit 1).
+cli core/scripts/validate-reattach-budget.sh cli-val-pass
+cli core/scripts/validate-reattach-budget.sh cli-val-refuse
+cli core/scripts/verdict.sh cli-verdict
+# the verdict.sh cli cell renders the validator's evidence by starting it as a program.
+nested core/scripts/verdict.sh core/scripts/validate-reattach-budget.sh why=the verdict.sh cli cell starts the budget validator itself, a real process the fixture cannot route in process
+# The recovery hook and the gate carry no source guard and no entry function (core/hooks/ai-dlc-recover.sh and
+# ai-dlc-recover-gate.sh are not wrapped, and this change does not edit them), so a cli cell cannot be declared on them:
+# each distinct outcome stays an end-to-end start of the program the harness runs.
+e2e core/hooks/ai-dlc-recover.sh e2e-rec-pass why=an unwrapped hook (no source guard, no entry function): the end-to-end start is the only command-line answer to compare with the sourced pass, on a passing input
+e2e core/hooks/ai-dlc-recover.sh e2e-rec-refuse why=an unwrapped hook (no source guard, no entry function): the end-to-end start on a refusing input, the unresolved-position outcome
+e2e core/hooks/ai-dlc-recover.sh e2e-rec-silent why=an unwrapped hook (no source guard, no entry function): the end-to-end start of the silent outcome, an update session's compaction
+e2e core/hooks/ai-dlc-recover-gate.sh e2e-gate-deny why=an unwrapped hook (no source guard, no entry function): the end-to-end start on the refusing input, a deny
+e2e core/hooks/ai-dlc-recover-gate.sh e2e-gate-allow why=an unwrapped hook (no source guard, no entry function): the end-to-end start on the passing input, an allow

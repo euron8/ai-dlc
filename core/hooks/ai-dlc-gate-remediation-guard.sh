@@ -220,7 +220,7 @@
 # all 3216 graph metas, measured on 2026-10-16. It is read first only because the probe's expression reads
 # it first; nothing the harness emits exercises it.
 #
-# THIS ARM DEPENDS ON `ai-dlc-dispatch-guard.sh:1267`, the `del(.name)` in its role-bound rewrite.
+# THIS ARM DEPENDS ON `ai-dlc-dispatch-guard.sh:1949`, the `del(.name)` in its role-bound rewrite.
 # On a NAMED teammate the harness writes the spawn NAME into `agentType` --
 # `{"agentType":"remediator-serial-cross","name":...,"teamName":...}` -- and this arm then ALLOWS a
 # real remediator. The dispatch guard deletes `name` on every role-bound dispatch, so the meta
@@ -357,7 +357,6 @@
 #    "Edit|Write|MultiEdit" matcher block. NotebookEdit is deliberately absent:
 #    no ai-dlc artifact is a notebook, and the pause surface already covers it.
 
-set -u
 
 # A DIRECTORY IS NOT A CORPUS. `-d` answers whether the path EXISTS, never whether it holds
 # any ground truth. Here the dirname of an unreadable `transcript_path` still exists, so the
@@ -469,45 +468,6 @@ cite_ts() { # $1 authline
         printf "%s", substr($0, RSTART, RLENGTH); got = 1 } }'
 }
 
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
-# `AI_DLC_STATE_DIR` may be absolute or relative; the role files and
-# `_gate-procedures.md:153` both write it as `${AI_DLC_STATE_DIR:-_bmad-output}`.
-# The NAME is what the path patterns below match on (payload paths arrive both
-# absolute and relative, exactly as `ai-dlc-acknowledge.sh:776` handles them).
-_STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
-STATE_DIR_NAME="$(basename "$_STATE_DIR")"
-case "$_STATE_DIR" in
-  /*) LOG_DIR="$_STATE_DIR" ;;
-  *)  LOG_DIR="${PROJECT_DIR}/${_STATE_DIR}" ;;
-esac
-SNAPSHOT_FILE="${LOG_DIR}/pipeline-snapshot.md"
-LOG_FILE="${LOG_DIR}/pipeline-continuation-log.md"
-GATE_DIR="${LOG_DIR}/gate-adjudication"
-STEER_SCRIPT="${PROJECT_DIR}/scripts/ai-dlc/validate-steering-budget.sh"
-# The two records arm 7a joins on, and what each half of a row is worth. `ts` in both comes
-# from `date -u` inside a hook, and `agent_id` in the write ledger is the harness's
-# attribution of a tool call to a dispatched agent -- neither is copied from the tool input.
-# The spawn ledger's `role`, though, is what `ai-dlc-dispatch-guard.sh` reads out of the
-# lead's OWN dispatch prompt, so a dispatch naming the adjudicator role is a genuine
-# `gate-adjudicator` row whatever that dispatch then does. Both files are guarded roots below
-# (the write ledger by its directory, the spawn ledger by name), and so is the subagent probe
-# ledger the shard merge joins through, so a denied lead cannot
-# rewrite any of them through Write or Edit; through Bash it can rewrite all three, as it can every
-# artifact this guard reads, and that limit is the guard's, not this arm's.
-WRITE_LEDGER="${GATE_DIR}/.verdict-writes.jsonl"
-SPAWN_LEDGER="${LOG_DIR}/spawn-ledger.jsonl"
-# Inside the first guarded root (arm 7), so a denied lead cannot rewrite it through Write or Edit
-# to erase an overlap; `join-remediator-shards.sh` is its only reader.
-ARTIFACT_LEDGER_DIR="${LOG_DIR}/planning-artifacts"
-ARTIFACT_LEDGER="${ARTIFACT_LEDGER_DIR}/.artifact-writes.jsonl"
-# Seconds. The B2 arm's only constant, picked by measurement (see arm 7a) and a HARD CONSTANT
-# in this file for the reason validate-gate-adjudication.sh gives for its stall threshold K: a
-# window the environment can widen is an opt-out shipped inside the mechanism. Measured: with
-# it overridable, `AI_DLC_GATE_DISPATCH_WINDOW_S=1000000000` bound every forged nonce to the
-# next real dispatch and passed the receipt and all three fixtures.
-DISPATCH_WINDOW_S=900
-
-TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 log_event() { # <event> <line>...
   local ev="$1"; shift
@@ -725,34 +685,6 @@ record_artifact_write() { # $1 file_path -- silent no-op unless this is a planni
 # status and the newest stem that is NOT unbound -- because a per-stem shell loop would be one
 # jq per verdict and the reference consumer holds 195 of them.
 # Reads the stem list on stdin; prints exactly two lines, `live:<status>` and `bound:<stem>`.
-BIND_PROG='
-def ep(s): (s | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime);
-def epn(s): (s | strptime("%Y%m%dT%H%M%SZ") | mktime);
-def nts(st): (if (st|length) < 16 then null else (try epn(st[-16:]) catch null) end);
-[inputs | select(length > 0)] as $stems
-| [ $sl[] | select(type == "object") | select(.ts | type == "string")
-    | (try ep(.ts) catch empty) ] as $SALL
-| [ $sl[] | select(type == "object") | select((.role // "") == "gate-adjudicator")
-    | select(.ts | type == "string") | (try ep(.ts) catch empty) ] as $G
-| [ $wl[] | select(type == "object") | select(.ts | type == "string")
-    | (try ep(.ts) catch empty) ] as $WALL
-| (($SALL + $WALL) | min) as $EPOCH
-| def status(st):
-    (nts(st)) as $N
-    | if $N == null then "unbound-malformed"
-      elif $EPOCH == null then "nocorpus"
-      elif $N < $EPOCH then "exempt"
-      elif ([ $wl[] | select(type == "object") | select(.stem == st)
-              | select((.agent_id // "") != "") | select(.ts | type == "string")
-              | (try ep(.ts) catch empty) | select(. >= $N) ] | length) > 0
-        then "bound-write"
-      elif ([ $G[] | select(. >= $N and . <= ($N + $win)) ] | length) > 0
-        then "bound-dispatch"
-      else "unbound" end;
-  "live:" + status($live),
-  "bound:" + ([ $stems[] | select(status(.) | startswith("unbound") | not) ]
-              | if length == 0 then "" else (max_by(nts(.))) end)
-'
 verdict_binding() { # $1 live stem; stem list on stdin -> two lines, or nothing on a tool error
   _vb_wl="$WRITE_LEDGER"; [ -f "$_vb_wl" ] || _vb_wl=/dev/null
   _vb_sl="$SPAWN_LEDGER"; [ -f "$_vb_sl" ] || _vb_sl=/dev/null
@@ -885,7 +817,78 @@ if [ -n "$AGENT_ID" ]; then
 fi
 
 }
-[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+grg_config() {  # the guard's globals: set -u, the paths, the ledgers, TIMESTAMP, BIND_PROG; hook_pretool_head reads them
+set -u
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+# `AI_DLC_STATE_DIR` may be absolute or relative; the role files and
+# `_gate-procedures.md:153` both write it as `${AI_DLC_STATE_DIR:-_bmad-output}`.
+# The NAME is what the path patterns below match on (payload paths arrive both
+# absolute and relative, exactly as `ai-dlc-acknowledge.sh:776` handles them).
+_STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
+STATE_DIR_NAME="$(basename "$_STATE_DIR")"
+case "$_STATE_DIR" in
+  /*) LOG_DIR="$_STATE_DIR" ;;
+  *)  LOG_DIR="${PROJECT_DIR}/${_STATE_DIR}" ;;
+esac
+SNAPSHOT_FILE="${LOG_DIR}/pipeline-snapshot.md"
+LOG_FILE="${LOG_DIR}/pipeline-continuation-log.md"
+GATE_DIR="${LOG_DIR}/gate-adjudication"
+STEER_SCRIPT="${PROJECT_DIR}/scripts/ai-dlc/validate-steering-budget.sh"
+# The two records arm 7a joins on, and what each half of a row is worth. `ts` in both comes
+# from `date -u` inside a hook, and `agent_id` in the write ledger is the harness's
+# attribution of a tool call to a dispatched agent -- neither is copied from the tool input.
+# The spawn ledger's `role`, though, is what `ai-dlc-dispatch-guard.sh` reads out of the
+# lead's OWN dispatch prompt, so a dispatch naming the adjudicator role is a genuine
+# `gate-adjudicator` row whatever that dispatch then does. Both files are guarded roots below
+# (the write ledger by its directory, the spawn ledger by name), and so is the subagent probe
+# ledger the shard merge joins through, so a denied lead cannot
+# rewrite any of them through Write or Edit; through Bash it can rewrite all three, as it can every
+# artifact this guard reads, and that limit is the guard's, not this arm's.
+WRITE_LEDGER="${GATE_DIR}/.verdict-writes.jsonl"
+SPAWN_LEDGER="${LOG_DIR}/spawn-ledger.jsonl"
+# Inside the first guarded root (arm 7), so a denied lead cannot rewrite it through Write or Edit
+# to erase an overlap; `join-remediator-shards.sh` is its only reader.
+ARTIFACT_LEDGER_DIR="${LOG_DIR}/planning-artifacts"
+ARTIFACT_LEDGER="${ARTIFACT_LEDGER_DIR}/.artifact-writes.jsonl"
+# Seconds. The B2 arm's only constant, picked by measurement (see arm 7a) and a HARD CONSTANT
+# in this file for the reason validate-gate-adjudication.sh gives for its stall threshold K: a
+# window the environment can widen is an opt-out shipped inside the mechanism. Measured: with
+# it overridable, `AI_DLC_GATE_DISPATCH_WINDOW_S=1000000000` bound every forged nonce to the
+# next real dispatch and passed the receipt and all three fixtures.
+DISPATCH_WINDOW_S=900
+
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+BIND_PROG='
+def ep(s): (s | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime);
+def epn(s): (s | strptime("%Y%m%dT%H%M%SZ") | mktime);
+def nts(st): (if (st|length) < 16 then null else (try epn(st[-16:]) catch null) end);
+[inputs | select(length > 0)] as $stems
+| [ $sl[] | select(type == "object") | select(.ts | type == "string")
+    | (try ep(.ts) catch empty) ] as $SALL
+| [ $sl[] | select(type == "object") | select((.role // "") == "gate-adjudicator")
+    | select(.ts | type == "string") | (try ep(.ts) catch empty) ] as $G
+| [ $wl[] | select(type == "object") | select(.ts | type == "string")
+    | (try ep(.ts) catch empty) ] as $WALL
+| (($SALL + $WALL) | min) as $EPOCH
+| def status(st):
+    (nts(st)) as $N
+    | if $N == null then "unbound-malformed"
+      elif $EPOCH == null then "nocorpus"
+      elif $N < $EPOCH then "exempt"
+      elif ([ $wl[] | select(type == "object") | select(.stem == st)
+              | select((.agent_id // "") != "") | select(.ts | type == "string")
+              | (try ep(.ts) catch empty) | select(. >= $N) ] | length) > 0
+        then "bound-write"
+      elif ([ $G[] | select(. >= $N and . <= ($N + $win)) ] | length) > 0
+        then "bound-dispatch"
+      else "unbound" end;
+  "live:" + status($live),
+  "bound:" + ([ $stems[] | select(status(.) | startswith("unbound") | not) ]
+              | if length == 0 then "" else (max_by(nts(.))) end)
+'
+}
+grg_main() {
+grg_config
 hook_pretool_head
 
 # --- 3. Only edits.
@@ -2117,3 +2120,6 @@ jq -n --arg reason "$REASON" \
   }'
 
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+grg_main "$@"

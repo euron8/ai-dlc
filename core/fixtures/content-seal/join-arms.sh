@@ -12,6 +12,16 @@ _rsj="$CS_HERE/../remediator-shard-join/lib.sh"
 . "$CS_HERE/seal-lib.sh"
 . "$CS_HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; } # fx_inproc, for the in-process passes
 echo "HERMETIC-CONSUMED $JOIN"
+cs_route "$JOIN"
+# join_eq <cell id> <world> -> RC, $JO: run_join's command line as a program (the cell's one tagged start) and in process on the
+# SAME world, compared byte for byte; the world is left as the in-process run made it. Every other join call is in process.
+join_eq() {
+  local u; u="$(jnow)"; stamp "$2"
+  if AI_DLC_PROJECT_ROOT="$2" cs_eq "$1" "$2" "$JOIN" --sprint 305 --artifact stories --pass 1 --artifact-path "$SLOT" --since 2000-01-01T00:00:00Z --until "$u"; then
+    ok "$1: the join in process answers byte-for-byte what the CLI does ($(head -1 "$CS_EQ_OUT" | cut -c1-40))"
+  else bad "$1: the in-process join differs from the CLI:$CS_EQ_WHY"; fi
+  RC="$CS_EQ_RC"; cp "$CS_EQ_OUT" "$JO"
+}
 TOKEN="changed after its last sealed write"
 PD=_bmad-output/planning-artifacts/s305/shards/stories-repair-p1
 world3() { local w; w="$(new_world)"; three_writers "$w"; part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1; stamp "$w"; printf '%s' "$w"; }
@@ -26,7 +36,7 @@ else bad "CS-J0: the unsealed control did not join (rc=$RC): $(head -3 "$JO")"; 
 
 # CS-J1: each part sealed by its writer, untouched -> JOINED; the program seals its record.
 w1="$(world3)"; seal3 "$w1"; L1="$w1/_bmad-output/planning-artifacts/.artifact-writes.jsonl"; n1="$(seal_count "$L1")"
-run_join "$JOIN" "$w1"
+join_eq cs-join-joined "$w1"
 if [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ "$n1" -ge 3 ]; then ok "CS-J1: three sealed untouched parts ($n1 seal rows): JOINED"
 else bad "CS-J1: sealed untouched parts: rc=$RC seals=$n1: $(head -3 "$JO")"; fi
 if grep -q '"actor":"program:join-remediator-shards"' "$L1" 2>/dev/null; then ok "CS-J1b: the join appended its own program seal row"
@@ -35,7 +45,7 @@ else bad "CS-J1b: no program:join-remediator-shards seal row after a sealed join
 # CS-J2: a python3 open-for-write of a sealed part -> REFUSED, naming the part and its sealed writer.
 w2="$(world3)"; seal3 "$w2"
 python3 -c "import sys;p=sys.argv[1];t=open(p).read();open(p,'w').write(t.replace('repaired','repaired '))" "$w2/$PD/02.md"
-run_join "$JOIN" "$w2"
+join_eq cs-join-refused "$w2"
 if refused "$w2" "02.md $TOKEN" && has "$JO" "agent $AG2 (Write)"; then ok "CS-J2: python3 open-for-write of a sealed part: REFUSED naming 02.md and agent $AG2"
 else bad "CS-J2: a python3 rewrite of a sealed part was not refused (rc=$RC): $(head -3 "$JO")"; fi
 

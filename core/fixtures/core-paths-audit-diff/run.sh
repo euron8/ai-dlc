@@ -24,12 +24,50 @@ OUT="$WORK/out.txt"
 ESC="$PROJ/docs/escalations/pending.md"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
 broken() { printf '  FAIL  %s\n' "$1" >&2; echo; echo "core-paths-audit-diff: FIXTURE BROKEN" >&2; exit 2; }
+
+# IN PROCESS (BL-878). core-paths.sh is asked through cp_f, which hands the file (the subject, or the control copy in
+# the world) to lib/inproc.sh's inproc_run: the file is sourced inside inproc_run's own fresh-bash subshell and cpth_main
+# is called there, logged under INPROC_LOADED, so the copy's pass is a pass of the subject it copies. THE OPERAND IS A
+# LITERAL TAIL, "${_f%/*}/core-paths.sh": the wrapper refuses (125) a file whose basename is not the subject's, so the
+# tail can never substitute a sibling. The program runs as a program only in the cells of cells.decl.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present subject with neither the `<p>_main() {` line nor the column-0
+# source guard predates the wrap, and sourcing it would run its whole body: SKIP and exit 0 on a consumer (FIXTURE
+# BROKEN in the distribution). Exactly one half is a respelled subject this fixture cannot drive, which FAILS. An
+# unreadable subject is FIXTURE ERROR.
+cp_halves() { # cp_halves <file> <entry> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_cp_h="$(cp_halves "$VALIDATOR" cpth_main)" || exit 2
+case "$_cp_h" in
+  11) : ;;
+  00) echo "SKIP: core-paths-audit-diff: $VALIDATOR predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$VALIDATOR carries one half of the in-process wrap (cpth_main line, column-0 source guard: $_cp_h) -- a respelled subject this fixture cannot drive"
+     report_end core-paths-audit-diff ;;
+esac
+cp_f() { # cp_f <dir> <file> [args...] -> cpth_main's stdout, stderr and exit from <dir>, logged as a pass of $VALIDATOR
+  local _d="$1" _f="$2"; shift 2
+  case "$_f" in */core-paths.sh) ;; *) echo "FIXTURE BROKEN: cp_f was handed $_f, not a core-paths.sh" >&2; return 125 ;; esac
+  ( cd "$_d" || exit 99; [ "$_f" = "$VALIDATOR" ] || INPROC_LOADED="$VALIDATOR"; inproc_run "${_f%/*}/core-paths.sh" cpth_main "$@" )
+}
 
 # audit <script> <base> <head> — never through a pipe: RC must be the script's own.
 audit() {
   local v="$1" b="$2" h="$3"
-  ( cd "$PROJ" && bash "$v" --audit-diff "$b" "$h" ) >"$OUT" 2>&1
+  cp_f "$PROJ" "$v" --audit-diff "$b" "$h" >"$OUT" 2>&1
   RC=$?
 }
 
@@ -48,7 +86,7 @@ says() { grep -qF "$1" "$OUT"; }
 # audit_in <script> <dir under PROJ> <base> <head> — the same, run from a SUBDIRECTORY (BL-945).
 audit_in() {
   local v="$1" d="$2" b="$3" h="$4"
-  ( cd "$PROJ/$d" && bash "$v" --audit-diff "$b" "$h" ) >"$OUT" 2>&1
+  cp_f "$PROJ/$d" "$v" --audit-diff "$b" "$h" >"$OUT" 2>&1
   RC=$?
 }
 # audit_rel <script> — DIRTY from docs/ with the repo's diff.relative=true, which makes a plain
@@ -82,6 +120,26 @@ says "scripts/ai-dlc/verdict.sh" || broken "control: the un-claiming range did n
 audit "$CONTROL_VALIDATOR" "$BASE" "$SQUASH"
 [ "$RC" -eq 0 ] && says "PASS (content arm)" || broken "control: the squash of a reconcile's tree did not pass by the content arm (rc=$RC)"
 ok "the control copy reproduces all six verdicts"
+
+# --- Equivalence cells: one program run per distinct CLI outcome ---------------
+# Each is started as FXCELL=<id> bash from the project root and compared byte for byte (stdout, stderr, exit) with the
+# in-process answer on the same input. cells.decl names them. Every other arm asks the function.
+EQ="$WORK/eq"; mkdir -p "$EQ" || broken "could not make the equivalence dir"
+eqv() { # eqv <cell-id> <base> <head> -> 0 when the in-process answer and the program's agree on stdout, stderr and exit
+  local id="$1" b="$2" h="$3"
+  cp_f "$PROJ" "$VALIDATOR" --audit-diff "$b" "$h" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  ( cd "$PROJ" && FXCELL="$id" bash "$VALIDATOR" --audit-diff "$b" "$h" ) > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+if eqv cli-core-pass "$BASE" "$CLEAN" && [ "$(cat "$EQ/cli-core-pass.cl.rc")" = 0 ] && grep -qF "PASS: no core path touched" "$EQ/cli-core-pass.cl.out"; then
+  ok "cli-core-pass: the program passes a consumer-only range, exit 0, exactly as the in-process call does"
+else bad "cli-core-pass: the program and the in-process call differ, or the outcome is not a clean pass (rc $(cat "$EQ/cli-core-pass.cl.rc"))"; fi
+if eqv cli-core-fail "$BASE" "$DIRTY" && [ "$(cat "$EQ/cli-core-fail.cl.rc")" = 1 ] && grep -qF "FAIL: core path(s) edited in place" "$EQ/cli-core-fail.cl.out"; then
+  ok "cli-core-fail: the program flags an in-place core edit, exit 1, exactly as the in-process call does"
+else bad "cli-core-fail: the program and the in-process call differ, or the outcome is not exit 1 with the FAIL text (rc $(cat "$EQ/cli-core-fail.cl.rc"))"; fi
+if eqv cli-core-refuse "$BASE" "$QQ" && [ "$(cat "$EQ/cli-core-refuse.cl.rc")" = 2 ] && grep -qF "refused: git quoted a changed core path" "$EQ/cli-core-refuse.cl.out"; then
+  ok "cli-core-refuse: the program refuses a C-quoted core path, exit 2, exactly as the in-process call does"
+else bad "cli-core-refuse: the program and the in-process call differ, or the outcome is not exit 2 with the refusal (rc $(cat "$EQ/cli-core-refuse.cl.rc"))"; fi
 
 # --- Assertion 1: a consumer-only change is clean -----------------------------
 audit "$VALIDATOR" "$BASE" "$CLEAN"

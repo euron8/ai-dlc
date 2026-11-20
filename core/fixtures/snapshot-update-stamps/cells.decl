@@ -1,0 +1,20 @@
+# snapshot-update-stamps' starts of its subjects (BL-878 item 7; BL-879 grammar). Every drive is in process: run.sh loads
+# snapshot-update.sh once and asks snu_main through snu_run, and every other start a cell makes (the budget validator, the
+# mandatory-rules validator, the continue hook, the unwrapped recover hook) runs in a subshell through run.sh's `bash` shim.
+# One command-line start per distinct CLI outcome, started as FXCELL=<id> command bash <subject> and compared on stdout, stderr,
+# exit and the written snapshot with the in-process answer on the same input (eq_check): snapshot-update.sh exits 0, 1 (a
+# refused stamp), 2 (a target matching no line) and 3 (the lock held for the whole run); validate-artifact-budget.sh exits 0 and
+# 1 (a refused snapshot); validate-mandatory-rules.sh and the continue hook one outcome each. The recover hook has no
+# source guard (cli needs one), so it has no command-line start here: it is sourced in a subshell paired with fx_inproc, and
+# postcompact-rulebook-recovery holds its CLI equivalence. No end-to-end cell: no subject holds a process group or `$$` holder
+# a subshell would end differently.
+cli core/scripts/snapshot-update.sh cli-snu-ok
+cli core/scripts/snapshot-update.sh cli-snu-refuse
+cli core/scripts/snapshot-update.sh cli-snu-ambig
+cli core/scripts/snapshot-update.sh cli-snu-lock
+cli core/scripts/validate-artifact-budget.sh cli-vab-ok
+cli core/scripts/validate-artifact-budget.sh cli-vab-refuse
+cli core/scripts/validate-mandatory-rules.sh cli-vmr-ok
+cli core/hooks/ai-dlc-continue.sh cli-cont-ok
+# The nested starts of the snapshot-update.sh cli cells are real processes (the program starts its sibling validator itself).
+nested core/scripts/snapshot-update.sh core/scripts/validate-artifact-budget.sh why=the snapshot-update.sh cli cells start it as a program, whose own validator start is a real process the run.sh shim cannot route

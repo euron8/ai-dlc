@@ -14,3 +14,7 @@ core/scripts/partition-review-diff.sh
 # filter, bound to the UI path gate-validation.md Check 9 states inline.
 !core/scripts/validate-mandatory-rules.sh
 core/fixtures/lib/report.sh
+# inproc_run (the in-process --mark pass), fx_inproc (inproc.sh sources mutant.sh) and fx_skip_exit (the pre-wrap consumer gate).
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

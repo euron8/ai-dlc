@@ -544,7 +544,7 @@ smap_load "$RH" "$(printf '%s\n' $HSHAPES \
 SMAP_RH="$SMAP"; SMAP_RH_RC="$SMAP_RC"
 smap_load "$RN" "$NEARS"; SMAP_RN="$SMAP"; SMAP_RN_RC="$SMAP_RC"
 # Hr: ONE record of thirteen stale rows, one per shape, and ONE reader call. Each shape's arm asserts its
-# OWN key's INFO history line (the reader's text at check-owed-derivations.sh:799, `<key> is in a history
+# OWN key's INFO history line (the reader's text at check-owed-derivations.sh:802, `<key> is in a history
 # file`) appears exactly once and no OPEN line carries that key, so a classifier that drops one shape fails
 # that shape's arm and no other. Hr0 asserts the record as a whole: exit 0, no OPEN line, thirteen INFO.
 : > "$WORK/h1.tsv"; nh=0

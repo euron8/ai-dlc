@@ -1385,8 +1385,8 @@ fi
 
 vad_args() {
 LIST_ONLY=0; WALK_ALL=0; EXPLAIN=0
-USAGE="usage: $0 [--list] [--all] <file-or-dir>...
-       $0 --explain-cmd '<command>' | --explain-cmd -   (stdin: one '<id><TAB><command>' per line)"
+USAGE="usage: ${BASH_SOURCE[0]} [--list] [--all] <file-or-dir>...
+       ${BASH_SOURCE[0]} --explain-cmd '<command>' | --explain-cmd -   (stdin: one '<id><TAB><command>' per line)"
 EXPLAIN_ARG=""
 while [ "$#" -gt 0 ]; do
   case "$1" in

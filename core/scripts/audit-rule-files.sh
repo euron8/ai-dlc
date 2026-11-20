@@ -625,7 +625,7 @@ else:
 # acquitted by it. `core/hooks/`, `core/scripts/`, `core/rules/` and `templates/` are
 # outside the population too; over that whole wider set the grammar scores 117 lines
 # against the pre-review grammar's 113. Outside this file the two differ by exactly one
-# line, `ai-dlc-dispatch-guard.sh:1326`, a hook comment the pin clause adds (94 against
+# line, `ai-dlc-dispatch-guard.sh:1327`, a hook comment the pin clause adds (94 against
 # 93); the rest is this file's own MODEL_RX source and comments, which move with
 # every edit here.
 #

@@ -27,8 +27,127 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+
+# IN PROCESS (BL-878). The two subjects this fixture asks directly (section 15t) are asked through vsl_f / vga_f, which
+# hand the file to lib/inproc.sh's inproc_run; each distinct CLI outcome keeps one program start in eqv() below, compared
+# byte for byte with the in-process answer. THE OPERAND IS A LITERAL TAIL, "${_f%/*}/<subject>.sh": this fixture drives
+# unguarded bash subjects (the hooks), and arm P2 of scripts/validate-fixture-invocations.sh rows an inproc_run whose
+# operand no literal path resolves in such a fixture. The guard HOOK runs in process too (dgrun -> dg_main, a pass of
+# $HOOK); one program start per distinct outcome (cli-dg-set, cli-dg-deny, cli-dg-quiet) is compared byte for byte with
+# the in-process answer at the end. The starts the hook makes of validate-spawn-ledger.sh and merge-adversarial-shards.sh
+# (--remediated-keys, --check-shard-dir) are routed by dg_bash to vsl_main / merge_main in a subshell (the fixture-side bash
+# shim); the stand-in validator that exits 2 stays a program start, the e2e cell dg-vsl-stub of cells.decl.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present subject with neither the `<p>_main() {` line nor the column-0
+# source guard predates the wrap: SKIP and exit 0 (FIXTURE BROKEN in the distribution). Exactly one half FAILS. An
+# unreadable subject is FIXTURE ERROR.
+echo "HERMETIC-CONSUMED $HOOK"
+REM_ROOT="$(cd "$(dirname "$HOOK")/../.." && pwd)"
+VSL=""; for _c in "$REM_ROOT/core/scripts/validate-spawn-ledger.sh" "$REM_ROOT/scripts/ai-dlc/validate-spawn-ledger.sh"; do
+  [ -f "$_c" ] && { VSL="$_c"; break; }; done
+VGA=""; for _c in "$REM_ROOT/core/scripts/validate-gate-adjudication.sh" "$REM_ROOT/scripts/ai-dlc/validate-gate-adjudication.sh"; do
+  [ -f "$_c" ] && { VGA="$_c"; break; }; done
+MRG=""; for _c in "$REM_ROOT/core/scripts/merge-adversarial-shards.sh" "$REM_ROOT/scripts/ai-dlc/merge-adversarial-shards.sh"; do
+  [ -f "$_c" ] && { MRG="$_c"; break; }; done
+dm_halves() { # dm_halves <file> <entry> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qxF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_dm_pre=""
+dm_check() { # dm_check <file> <entry>
+  [ -n "$1" ] || return 0
+  _gh="$(dm_halves "$1" "$2")" || exit 2
+  case "$_gh" in
+    11) : ;;
+    00) _dm_pre="$_dm_pre $1" ;;
+    *) bad "$1 carries one half of the in-process wrap ($2 line, column-0 source guard: $_gh) -- a respelled subject this fixture cannot drive"
+       report_end dispatch-model-guard ;;
+  esac
+}
+dm_check "$HOOK" dg_main
+dm_check "$VSL" vsl_main
+dm_check "$VGA" vga_main
+dm_check "$MRG" merge_main
+if [ -n "$_dm_pre" ]; then echo "SKIP: dispatch-model-guard:$_dm_pre predate(s) the in-process wrap"; fx_skip_exit "$HERE"; fi
+vsl_f() { # vsl_f <file> [args...] -> vsl_main's stdout, stderr and exit, logged as a pass of $VSL
+  local _f="$1"; shift
+  case "$_f" in */validate-spawn-ledger.sh) ;; *) echo "FIXTURE BROKEN: vsl_f was handed $_f, not a validate-spawn-ledger.sh" >&2; return 125 ;; esac
+  ( [ "$_f" = "$VSL" ] || INPROC_LOADED="$VSL"; inproc_run "${_f%/*}/validate-spawn-ledger.sh" vsl_main "$@" )
+}
+vga_f() { # vga_f <file> [args...] -> vga_main's stdout, stderr and exit, logged as a pass of $VGA
+  local _f="$1"; shift
+  case "$_f" in */validate-gate-adjudication.sh) ;; *) echo "FIXTURE BROKEN: vga_f was handed $_f, not a validate-gate-adjudication.sh" >&2; return 125 ;; esac
+  ( [ "$_f" = "$VGA" ] || INPROC_LOADED="$VGA"; inproc_run "${_f%/*}/validate-gate-adjudication.sh" vga_main "$@" )
+}
+dg_fresh() { # unset every unexported variable a fresh bash does not start with (the loaded-subject discipline of lib/inproc.sh)
+  local _x _v
+  _x=" $(compgen -e) "; _x="${_x//$'\n'/ }"
+  for _v in $(compgen -v); do
+    case "$_x" in *" $_v "*) continue ;; esac
+    case "$_v" in
+      _x|_v|_f|_e|_p|_h) continue ;;
+      BASH|BASH_*|BASHOPTS|BASHPID|COMP_WORDBREAKS|DIRSTACK|EUID|FUNCNAME|GROUPS|HISTCMD|HOSTNAME|HOSTTYPE) continue ;;
+      IFS|LINENO|MACHTYPE|OPTERR|OPTIND|OSTYPE|PIPESTATUS|PPID|PS4|PWD|OLDPWD|RANDOM|SECONDS|SHELL|SHELLOPTS) continue ;;
+      SHLVL|TERM|UID|_) continue ;;
+    esac
+    unset "$_v" 2>/dev/null
+  done
+  OPTIND=1; set +eufx +o pipefail; hash -r
+}
+dg_vsl() { # dg_vsl <file> [args...] -> vsl_main in a fresh-options subshell, logged as a pass of the file
+  local _p="$1"; shift
+  (
+    dg_fresh
+    fx_inproc "$_p"
+    . "$_p" && vsl_main "$@"
+  )
+}
+dg_mrg() { # dg_mrg <file> [args...] -> merge_main in a fresh-options subshell, logged as a pass of the file
+  local _p="$1"; shift
+  (
+    dg_fresh
+    fx_inproc "$_p"
+    . "$_p" && merge_main "$@"
+  )
+}
+dg_bash() { # the guard's own `bash <sibling>` start of the ledger validator or the merge runs its entry in process; any other start is real
+  local _p="${1:-}"
+  case "$_p" in
+    */validate-spawn-ledger.sh) grep -qxF 'vsl_main() {' "$_p" 2>/dev/null && { dg_vsl "$@"; return; } ;;
+    */merge-adversarial-shards.sh) grep -qxF 'merge_main() {' "$_p" 2>/dev/null && { dg_mrg "$@"; return; } ;;
+  esac
+  command bash "$@"
+}
+dgrun() { # dgrun <guard file> [args...] -> dg_main's stdout, stderr and exit, logged as a pass of $HOOK (stdin and prefix assignments pass through)
+  local _f="$1" _h="$HOOK"; shift
+  (
+    dg_fresh
+    bash() { dg_bash "$@"; }
+    fx_inproc "$_h"
+    . "$_f" || exit 126
+    dg_main "$@"
+  )
+}
+vsl() { vsl_f "$VSL" "$@"; }
+vga() { vga_f "$VGA" "$@"; }
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eqv() { # eqv <cell-id> <file> <in-process fn> [args...] -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when all three agree
+  local id="$1" f="$2" fn="$3"; shift 3
+  "$fn" "$@" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  FXCELL="$id" command bash "$f" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
 # raw <project_dir> <json> -> hook stdout (decision JSON on a set, empty on a plain allow).
-raw() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null; }
+raw() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" dgrun "$HOOK" 2>/dev/null; }
 
 # setmodel <project> <json> -> the injected updatedInput.model (empty if the hook emitted nothing).
 setmodel() { raw "$1" "$2" | jq -r '.hookSpecificOutput.updatedInput.model // empty' 2>/dev/null; }
@@ -474,8 +593,8 @@ EPOCHJ="$(mkjson Agent gate-adjudicator opus)"
 ccell() {
   local n d o c=-
   rm -f "$LEDGER"
-  printf '%s' "$EPOCHJ" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" >/dev/null 2>&1
-  o="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  printf '%s' "$EPOCHJ" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" >/dev/null 2>&1
+  o="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" 2>/dev/null)"
   d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$o" 2>/dev/null)"; [ -n "$d" ] || d=none
   n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
   [ "$n" = 2 ] && c="$(tail -1 "$LEDGER" | jq -r --arg r "$3" \
@@ -534,7 +653,7 @@ TIP_E="$(ccell "$HOOK" "$CW_E" remediator)"
 # selection was not delivered. Asserted so a change to it is seen, in either direction.
 CW_F="$(printf '%s {"x":1}' "$CW_A")"
 rm -f "$LEDGER"
-F_OUT="$(printf '%s' "$CW_F" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" 2>/dev/null)"
+F_OUT="$(printf '%s' "$CW_F" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$HOOK" 2>/dev/null)"
 [ -z "$F_OUT" ] \
   && ok "(f) CONTROL: the two-document input takes the fail-open path (no decision emitted)" \
   || bad "(f) CONTROL: the guard emitted on the two-document input, so this world is not the fail-open path: '$F_OUT'"
@@ -587,8 +706,8 @@ SH_TITLE="$(shard_payload 'Shard: None (4)')"
 scell() {
   local n
   rm -f "$LEDGER"
-  printf '%s' "$SHARD_EPOCH" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" >/dev/null 2>&1
-  printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" >/dev/null 2>&1
+  printf '%s' "$SHARD_EPOCH" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" >/dev/null 2>&1
+  printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" >/dev/null 2>&1
   n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
   [ "$n" = 2 ] || { printf 'ROWS=%s' "${n:-0}"; return; }
   tail -1 "$LEDGER" | jq -r 'if .role == "dev-escalated" then "\(.shard | tostring)|\(.shard_raw | tostring)" else "WRONGROW:\(.role)" end' 2>/dev/null
@@ -645,8 +764,8 @@ dcell() { # dcell <guard> <role> [brief line] -> prints "<decision>:<rows added>
   # and sets DCELL to it and DOUT to the hook's stdout (call without $( ) to keep the two).
   local n d s
   rm -f "$LEDGER"
-  printf '%s' "$SHARD_EPOCH" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" >/dev/null 2>&1
-  DOUT="$(dpayload "$2" "${3-}" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  printf '%s' "$SHARD_EPOCH" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" >/dev/null 2>&1
+  DOUT="$(dpayload "$2" "${3-}" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" 2>/dev/null)"
   d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$DOUT" 2>/dev/null)"
   [ -n "$d" ] || d=none
   n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
@@ -700,11 +819,11 @@ esac
 # A DENIED BRIEF RE-SENT WITH A VALID LINE IS ALLOWED, AND ONLY THE RE-SEND WRITES A ROW. The
 # ledger is NOT cleared between the two drives, so the deny must have left exactly the epoch.
 rm -f "$LEDGER"
-printf '%s' "$SHARD_EPOCH" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" >/dev/null 2>&1
-_rs1="$(dpayload remediator "$DINV" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" 2>/dev/null)"
+printf '%s' "$SHARD_EPOCH" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$HOOK" >/dev/null 2>&1
+_rs1="$(dpayload remediator "$DINV" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$HOOK" 2>/dev/null)"
 _rs1d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$_rs1" 2>/dev/null)"
 _rs1n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
-_rs2="$(dpayload remediator 'shard: none (authoring-chain)' | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$HOOK" 2>/dev/null)"
+_rs2="$(dpayload remediator 'shard: none (authoring-chain)' | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$HOOK" 2>/dev/null)"
 _rs2d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$_rs2" 2>/dev/null)"
 _rs2n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
 _rs2s="$(tail -1 "$LEDGER" 2>/dev/null | jq -r '.shard | tostring' 2>/dev/null)"
@@ -790,7 +909,7 @@ MCELL=""; MOUT=""
 mcell() { # mcell <guard> <brief line> -> sets MCELL and MOUT
   local d n m
   rm -f "$LEDGER"
-  MOUT="$(dpayload remediator "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  MOUT="$(dpayload remediator "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" 2>/dev/null)"
   d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$MOUT" 2>/dev/null)"; [ -n "$d" ] || d=none
   n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
   if [ "$n" = 1 ]; then m="$(jq -r '.mark | tostring' "$LEDGER" 2>/dev/null)"; else m=-; fi
@@ -891,7 +1010,7 @@ GCELL=""
 gcell() { # gcell <guard> <brief line> -> sets GCELL
   local d n m f
   rm -f "$LEDGER"
-  MOUT="$(dpayload remediator "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  MOUT="$(dpayload remediator "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" 2>/dev/null)"
   d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$MOUT" 2>/dev/null)"; [ -n "$d" ] || d=none
   n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
   if [ "$n" = 1 ]; then m="$(jq -r '"\(.mark):\(.mark_file)"' "$LEDGER" 2>/dev/null)"; else m="-:-"; fi
@@ -989,7 +1108,7 @@ chmod +x "$ML_SHIM/awk"
 fo_cell() { # fo_cell <guard> <path-prefix> -> "<decision>:<rows>:<mark>"
   local o d n m
   rm -f "$LEDGER"
-  o="$(dpayload remediator "$ML_ROWS" | PATH="$2$PATH" CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  o="$(dpayload remediator "$ML_ROWS" | PATH="$2$PATH" CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" 2>/dev/null)"
   d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$o" 2>/dev/null)"; [ -n "$d" ] || d=none
   n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
   if [ "$n" = 1 ]; then m="$(jq -r 'if has("mark") then .mark else "NOKEY" end' "$LEDGER" 2>/dev/null)"; else m=-; fi
@@ -1289,7 +1408,7 @@ CAPPAD="$CAPDIR/pad.jsonl"
 CAP_LIM_KB=4
 cap_lim() { # cap_lim <script> <transcript> <description> -> decision or empty, under the size limit
   ( trap '' XFSZ; ulimit -f "$CAP_LIM_KB" || exit 3
-    printf '%s' "$(capj "$2" "$3")" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null ) \
+    printf '%s' "$(capj "$2" "$3")" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" 2>/dev/null ) \
     | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null
 }
 _lt="$WORK/cap-limtail.out"
@@ -1309,7 +1428,7 @@ _cl="$(cap_lim "$HOOK" "$CAPPAD" "Party seat 7")"
 # PreToolUse arm uses (dg_hold_compute): 0 no hold, 1 a hold is live, 2 cannot tell. Cells differ from
 # the live-hold cell in ONE input each: b.jsonl (a launch released it), a missing transcript, a
 # different description. The PreToolUse path is re-asserted beside them: 14a still denies.
-hs() { bash "$HOOK" --hold-status "$@" >/dev/null 2>&1; echo $?; }
+hs() { dgrun "$HOOK" --hold-status "$@" >/dev/null 2>&1; echo $?; }
 [ "$(hs --transcript "$CAPDIR/a.jsonl")" = 1 ] && ok "14h hold-status, a live hold, any description -> exit 1" \
   || bad "14h hold-status on a seeded live hold did not exit 1"
 [ "$(hs "Party seat 7" --transcript "$CAPDIR/a.jsonl")" = 1 ] && ok "14h hold-status, a live hold for the description -> exit 1" \
@@ -1550,11 +1669,6 @@ BCX="$(adj "$WXS")"; expect_quiet "$BCX" "15p''' a cited exception with a negato
 # directory, and reads any failure of that call as an EMPTY set (deny stands, one could-not-run line).
 # R is written by the REAL guard from a real brief, never hand-seeded; V is hand-seeded because a
 # current guard refuses an invented exception (THE SHARD DENY) and never writes one.
-REM_ROOT="$(cd "$(dirname "$HOOK")/../.." && pwd)"
-VSL=""; for _c in "$REM_ROOT/core/scripts/validate-spawn-ledger.sh" "$REM_ROOT/scripts/ai-dlc/validate-spawn-ledger.sh"; do
-  [ -f "$_c" ] && { VSL="$_c"; break; }; done
-VGA=""; for _c in "$REM_ROOT/core/scripts/validate-gate-adjudication.sh" "$REM_ROOT/scripts/ai-dlc/validate-gate-adjudication.sh"; do
-  [ -f "$_c" ] && { VGA="$_c"; break; }; done
 [ -n "$VSL" ] && echo "HERMETIC-CONSUMED $VSL" || bad "15q FIXTURE BROKEN: validate-spawn-ledger.sh not found beside $HOOK"
 [ -n "$VGA" ] && [ -f "$(dirname "$VGA")/gate_adjudication.py" ] && echo "HERMETIC-CONSUMED $(dirname "$VGA")/gate_adjudication.py"
 [ -n "$VGA" ] && echo "HERMETIC-CONSUMED $VGA" || bad "15q FIXTURE BROKEN: validate-gate-adjudication.sh not found beside $HOOK"
@@ -1627,7 +1741,7 @@ rem_tree() { # rem_tree <tag> <validator source> -> path of a guard copy whose w
 }
 printf '#!/usr/bin/env bash\nexit 2\n' > "$WORK/q0-vsl-exit2.sh"
 REM_X2="$(rem_tree exit2 "$WORK/q0-vsl-exit2.sh")"
-X2_OUT="$(printf '%s' "$(adjj)" | CLAUDE_PROJECT_DIR="$WRA" bash "$REM_X2" 2>/dev/null)"
+X2_OUT="$(printf '%s' "$(adjj)" | FXCELL=dg-vsl-stub CLAUDE_PROJECT_DIR="$WRA" dgrun "$REM_X2" 2>/dev/null)"
 expect_deny "$X2_OUT" "15s the 15r world, the validator exiting 2"
 grep -qF 'The remediation predicate could not run, so no row was counted remediated: validate-spawn-ledger.sh --remediated-keys exited rc 2' <<<"$X2_OUT" \
   && grep -qF "$REM_V" <<<"$X2_OUT" \
@@ -1672,8 +1786,12 @@ for _t in toolu_01NOPEPOCH00000000000001:dev "$NV_S:remediator" "$NV_C:analyst" 
   && ok "15t world: seven guard-written rows in ledger order (epoch, three V, three R)" \
   || bad "15t FIXTURE BROKEN: the ledger is '$(jq -sr 'map(.tool_use_id // "?") | join(" ")' "$NOP_L" 2>/dev/null)' -- a dispatch was denied or misordered"
 expect_quiet "$(adj "$NOP")" "15t the guard: an implementation adjudicator over a sprint whose only violations are remediated"
-NOP_VO="$(bash "$VSL" --ledger "$NOP_L" --sprint 317 --settings "$NOP/.claude/settings.json" \
-  --probe "$NOP/_bmad-output/subagent-context.jsonl" --context "$NOP/_bmad-output/subagent-context.jsonl" 2>&1)"; NOP_VR=$?
+eqv cli-vsl-pass "$VSL" vsl --ledger "$NOP_L" --sprint 317 --settings "$NOP/.claude/settings.json" \
+  --probe "$NOP/_bmad-output/subagent-context.jsonl" --context "$NOP/_bmad-output/subagent-context.jsonl"; _eq1=$?
+NOP_VO="$(cat "$EQ/cli-vsl-pass.ip.out" "$EQ/cli-vsl-pass.ip.err")"; NOP_VR="$(cat "$EQ/cli-vsl-pass.ip.rc")"
+[ "$_eq1" = 0 ] && [ "$(cat "$EQ/cli-vsl-pass.cl.rc")" = 0 ] \
+  && ok "  cli-vsl-pass: the program's stdout, stderr and exit 0 equal the in-process call's" \
+  || bad "  cli-vsl-pass: the program and the in-process call differ, or the outcome is not exit 0"
 [ "$NOP_VR" = 0 ] && grep -qF "REMEDIATED: $NV_S by $NR_S (shard)" <<<"$NOP_VO" \
   && grep -qF "REMEDIATED: $NV_C by $NR_C (cite)" <<<"$NOP_VO" && grep -qF "REMEDIATED: $NV_X by $NR_X (cover)" <<<"$NOP_VO" \
   && grep -qE '^COUNTS:' <<<"$NOP_VO" && grep -qE 'remediation \(classes: cite shard cover\): remediated=3 pending-remedy=0' <<<"$NOP_VO" \
@@ -1682,8 +1800,12 @@ NOP_VO="$(bash "$VSL" --ledger "$NOP_L" --sprint 317 --settings "$NOP/.claude/se
 # THE SAME LEDGER WITHOUT R's RUN: every V is still a violation, so exit 1 -- the 15t exit 0 is
 # the remedies' doing, not a validator that judges nothing.
 grep -vF "$NR_S" "$NOP/_bmad-output/subagent-context.jsonl" | grep -vF "$NR_C" | grep -vF "$NR_X" > "$WORK/q0-nop-norun.jsonl"
-bash "$VSL" --ledger "$NOP_L" --sprint 317 --settings "$NOP/.claude/settings.json" \
-  --probe "$WORK/q0-nop-norun.jsonl" --context "$WORK/q0-nop-norun.jsonl" >/dev/null 2>&1; _nr=$?
+eqv cli-vsl-refuse "$VSL" vsl --ledger "$NOP_L" --sprint 317 --settings "$NOP/.claude/settings.json" \
+  --probe "$WORK/q0-nop-norun.jsonl" --context "$WORK/q0-nop-norun.jsonl"; _eq2=$?
+_nr="$(cat "$EQ/cli-vsl-refuse.ip.rc")"
+[ "$_eq2" = 0 ] && [ "$(cat "$EQ/cli-vsl-refuse.cl.rc")" = 1 ] \
+  && ok "  cli-vsl-refuse: the program's stdout, stderr and exit 1 equal the in-process call's" \
+  || bad "  cli-vsl-refuse: the program and the in-process call differ, or the outcome is not exit 1"
 [ "$_nr" = 1 ] && ok "  its control: the same ledger with no R joined exits 1" || bad "  15t control: no R joined exited $_nr, expected 1"
 cat > "$NOP/_bmad-output/planning-artifacts/s317/gate-implementation-resolution-p1.md" <<NOPEOF
 # Gate resolution record — implementation gate, pass 1
@@ -1705,10 +1827,16 @@ for _p in "implementation-20261010T230257Z FAIL 2026-10-10T23:02:57Z" "implement
     > "$NOP/_bmad-output/gate-adjudication/$1.verdict.json"
 done
 set --
-bash "$VGA" --series "$NOP/_bmad-output/gate-adjudication" >/dev/null 2>&1; _sr=$?
+eqv cli-vga-pass "$VGA" vga --series "$NOP/_bmad-output/gate-adjudication"; _eq3=$?; _sr="$(cat "$EQ/cli-vga-pass.ip.rc")"
+[ "$_eq3" = 0 ] && [ "$(cat "$EQ/cli-vga-pass.cl.rc")" = 0 ] \
+  && ok "  cli-vga-pass: the program's stdout, stderr and exit 0 equal the in-process call's" \
+  || bad "  cli-vga-pass: the program and the in-process call differ, or the outcome is not exit 0"
 [ "$_sr" = 0 ] && ok "15t --series: 22 FAIL -> PASS with the resolution record exits 0" || bad "15t --series exited $_sr, expected 0"
 mv "$NOP/_bmad-output/planning-artifacts/s317/gate-implementation-resolution-p1.md" "$WORK/q0-nop-record.md"
-bash "$VGA" --series "$NOP/_bmad-output/gate-adjudication" >/dev/null 2>&1; _sr=$?
+eqv cli-vga-refuse "$VGA" vga --series "$NOP/_bmad-output/gate-adjudication"; _eq4=$?; _sr="$(cat "$EQ/cli-vga-refuse.ip.rc")"
+[ "$_eq4" = 0 ] && [ "$(cat "$EQ/cli-vga-refuse.cl.rc")" = 1 ] \
+  && ok "  cli-vga-refuse: the program's stdout, stderr and exit 1 equal the in-process call's" \
+  || bad "  cli-vga-refuse: the program and the in-process call differ, or the outcome is not exit 1"
 [ "$_sr" = 1 ] && ok "  its control: the same series without the record exits 1" || bad "  15t --series without the record exited $_sr, expected 1"
 [ ! -s "$NOP/docs/escalations/pending.md" ] && ok "15t pending.md is EMPTY throughout: no path above required an operator entry" \
   || bad "15t pending.md was written"
@@ -1748,7 +1876,7 @@ PA_MATE="$(printf '%s' "$PA_LEAD" | jq -c --arg a "$PA_ID" '.agent_id = $a | .to
 pa_cell() {
   local out n p
   rm -f "$LEDGER"
-  out="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null \
+  out="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" 2>/dev/null \
     | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
   n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
   p="$(tail -1 "$LEDGER" 2>/dev/null | jq -c 'if has("parent_agent_id") then .parent_agent_id else "ABSENT" end' 2>/dev/null)"
@@ -1771,7 +1899,7 @@ case "$PA_M" in 1\|none\|*) ok "16a a teammate-issued general-purpose spawn writ
 rl_cell() {
   local out n r
   rm -f "$LEDGER"
-  out="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null \
+  out="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" 2>/dev/null \
     | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
   n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
   r="$(tail -1 "$LEDGER" 2>/dev/null | jq -r '"\(.role | tojson)|\(.parent_agent_id | tojson)"' 2>/dev/null)"
@@ -1805,7 +1933,7 @@ AB_MATE="$(printf '%s' "$AB_LEAD" | jq -c --arg a "$AB_ID" '.agent_id = $a | .to
 ab_cell() {
   local out n d m r
   rm -f "$LEDGER"
-  out="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" bash "$1" 2>/dev/null)"
+  out="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$1" 2>/dev/null)"
   d="$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null)"
   m="$(printf '%s' "$out" | jq -r '.hookSpecificOutput.updatedInput.model // empty' 2>/dev/null)"
   n="$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')"
@@ -1886,7 +2014,7 @@ gp_pay() { # gp_pay <role> <brief lines...> -> an Agent dispatch of <role> carry
 }
 gp_run() { # gp_run <guard> <world> <role> <brief lines...> -> "<decision>:<note>:<reason>"
   local g="$1" w="$2" o d n r rs; shift 2
-  o="$(gp_pay "$@" | CLAUDE_PROJECT_DIR="$w" bash "$g" 2>/dev/null)"
+  o="$(gp_pay "$@" | CLAUDE_PROJECT_DIR="$w" dgrun "$g" 2>/dev/null)"
   d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$o" 2>/dev/null)"; [ -n "$d" ] || d=none
   case "$o" in *"LEGACY: gate-plan deny inactive"*) n=L ;; *"gate-plan deny inactive: Pipeline Position unresolved (EMPTY)"*) n=E ;; *) n=- ;; esac
   r=-
@@ -2105,7 +2233,7 @@ DL_MARKBAD='Run `scripts/ai-dlc/wait-for-deliverable.sh --mark _bmad-output/part
 dl_base() { mkjson Agent dev sonnet | jq -c '.tool_use_id = "toolu_dl" | .transcript_path = "/nonexistent" | .tool_input.run_in_background = true'; }
 dl_add() { jq -c --arg s "$2" '.tool_input.prompt += $s' <<<"$1"; } # dl_add <json> <text appended to the prompt>
 dl_rows() { local n=0; [ -f "$1/_bmad-output/spawn-ledger.jsonl" ] && n="$(wc -l < "$1/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')"; printf '%s' "${n:-0}"; }
-dl_run() { printf '%s' "$3" | CLAUDE_PROJECT_DIR="$2" bash "$1" 2>/dev/null; } # dl_run <guard> <world> <json> -> hook stdout
+dl_run() { printf '%s' "$3" | CLAUDE_PROJECT_DIR="$2" dgrun "$1" 2>/dev/null; } # dl_run <guard> <world> <json> -> hook stdout
 dl_kind() { # dl_kind <hook stdout> -> dl (THIS deny) | other (a different deny) | pass
   local d rs
   d="$(jq -r '.hookSpecificOutput.permissionDecision // empty' <<<"$1" 2>/dev/null)"
@@ -2205,7 +2333,7 @@ sd_pay() { # sd_pay <role> <brief lines...>
 sd_run() { # sd_run <guard> <role> <brief lines...> -> "<decision>:<rows added>:<reason>"
   local g="$1" o d r rs n0 n1; shift
   n0="$(grep -c . "$SD_W/_bmad-output/spawn-ledger.jsonl")" || n0=0
-  o="$(sd_pay "$@" | CLAUDE_PROJECT_DIR="$SD_W" bash "$g" 2>/dev/null)"
+  o="$(sd_pay "$@" | CLAUDE_PROJECT_DIR="$SD_W" dgrun "$g" 2>/dev/null)"
   n1="$(grep -c . "$SD_W/_bmad-output/spawn-ledger.jsonl")" || n1=0
   d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$o" 2>/dev/null)"; [ -n "$d" ] || d=none
   r=-
@@ -2243,5 +2371,31 @@ IFS="$_old_ifs"
 SD_OPEN="$(sd_cell "$(mk_hooks_copy sd-open)" sdbad)"
 [ "$SD_OPEN" = "allow:1:-" ] && ok "SHARD-DIR sdopen: no merge reachable -> '$SD_OPEN' (fail open; sdbad denies with one)" \
   || bad "SHARD-DIR sdopen: no merge reachable -> '$SD_OPEN', expected 'allow:1:-'"
+# --- EQUIVALENCE: the guard run as a program answers what the in-process call answers -----------------------------
+# One program start per distinct outcome: a correcting allow (updatedInput set), a deny, and no decision. Each compares
+# stdout, stderr and exit with dgrun's, over the same world with the ledger reset before each run.
+eqh() { # eqh <id> <project> <json> -> 0 when the program and the in-process call agree on stdout, stderr and exit
+  local id="$1"
+  rm -f "$LEDGER"
+  printf '%s' "$3" | CLAUDE_PROJECT_DIR="$2" dgrun "$HOOK" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  rm -f "$LEDGER"
+  printf '%s' "$3" | CLAUDE_PROJECT_DIR="$2" FXCELL="$id" command bash "$HOOK" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  rm -f "$LEDGER"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+EQ_SET="$(mkjson Agent gate-adjudicator)"
+EQ_DENY="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-1",model:"sonnet",subagent_type:"remediator",prompt:"Do the work."}}')"
+eqh cli-dg-set "$CONSUMER" "$EQ_SET"; _e1=$?
+[ "$_e1" = 0 ] && [ "$(cat "$EQ/cli-dg-set.cl.rc")" = 0 ] && [ "$(jq -r '.hookSpecificOutput.updatedInput.model // empty' < "$EQ/cli-dg-set.cl.out")" = opus ] \
+  && ok "  cli-dg-set: the program's stdout, stderr and exit equal the in-process call's, and it set the pinned tier" \
+  || bad "  cli-dg-set: the program and the in-process call differ, or the program did not set the pinned tier"
+eqh cli-dg-deny "$CONSUMER" "$EQ_DENY"; _e2=$?
+[ "$_e2" = 0 ] && [ -s "$EQ/cli-dg-deny.cl.out" ] && [ "$(jq -r '.hookSpecificOutput.permissionDecision // empty' < "$EQ/cli-dg-deny.cl.out")" = deny ] \
+  && ok "  cli-dg-deny: the program's stdout, stderr and exit equal the in-process call's, and both deny" \
+  || bad "  cli-dg-deny: the program and the in-process call differ, or the program did not deny"
+eqh cli-dg-quiet "$NOSTAMP" "$EQ_SET"; _e3=$?
+[ "$_e3" = 0 ] && [ "$(cat "$EQ/cli-dg-quiet.cl.rc")" = 0 ] && [ ! -s "$EQ/cli-dg-quiet.cl.out" ] && [ "$(cat "$EQ/cli-dg-set.ip.rc")" = 0 ] \
+  && ok "  cli-dg-quiet: the program's stdout, stderr and exit equal the in-process call's, and neither decides" \
+  || bad "  cli-dg-quiet: the program and the in-process call differ, or one of them decided"
 echo
 report_end dispatch-model-guard
