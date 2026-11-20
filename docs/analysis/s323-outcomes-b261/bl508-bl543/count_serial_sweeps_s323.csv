@@ -1,0 +1,76 @@
+agent_id,lead_session,step,description,tool_calls,executed,fixed_string_sweeps,worklist_runs,usd_api
+a37305a67843ee413,0ef7ba46,carry-over-evaluation,Serial repair after assembly,150,146,4,2,8.12
+a2bef7a446b6dd63e,0ef7ba46,carry-over-evaluation,Adjudication remediator for CoE,201,197,0,0,6.82
+a17291df8cda397a6,68cf8de7,carry-over-evaluation,Serial cross-section remediator p1,171,167,38,0,6.58
+a62fc38282e350551,68cf8de7,carry-over-evaluation,Serial remediator pass 2 X-F-2,36,34,7,0,1.30
+a54112aee4a933815,68cf8de7,carry-over-evaluation,Adjudicator lane-1 batch 3,31,30,0,0,0.95
+a6dee7ea914bc33cf,68cf8de7,carry-over-evaluation,Adjudicator lane-1 batch 1,43,41,5,0,1.75
+ae7b901030deb9d27,68cf8de7,carry-over-evaluation,Adjudicator lane-1 batch 4,38,36,5,0,1.63
+a75afc4bcfa9b41d3,68cf8de7,carry-over-evaluation,Adjudicator lane-1 batch 2,33,31,0,0,1.07
+a9f4f1ca24e50f477,68cf8de7,carry-over-evaluation,Lane-1 serial remediator,73,70,6,0,1.81
+a84222f8fe7c532c6,68cf8de7,carry-over-evaluation,Serial lane repair p2,54,51,6,0,1.59
+a58a3bdb77f75c9af,68cf8de7,carry-over-evaluation,Lane record-only rewrite,8,7,0,0,0.28
+a93de8c771628374a,68cf8de7,requirements,Adjudicator lane1 batch1,28,26,11,0,1.12
+a68c1ba27edd2eb25,68cf8de7,requirements,Adjudicator lane1 batch2,9,8,1,0,0.37
+aa9504ec0e6936963,68cf8de7,requirements,Adjudicator lane1 batch4,9,8,1,0,0.36
+ac2b4b146af01e014,68cf8de7,requirements,Adjudicator lane2 batch1,7,5,2,0,0.32
+ae2b1078011941398,68cf8de7,requirements,Adjudicator lane2 batch2,9,8,3,0,0.35
+af870bc5a081bb57a,68cf8de7,requirements,Adjudicator lane1 batch3,8,7,3,0,0.37
+ae83b38830046801d,68cf8de7,requirements,Adjudicator fanin batch1,8,7,0,0,0.32
+ad2bcbb1c3eeec2de,68cf8de7,requirements,Adjudicator lane2 batch4,7,6,0,0,0.29
+a0b8f9ae37873a2ef,68cf8de7,requirements,Adjudicator fanin batch4,22,20,8,0,0.83
+abee8f16619138065,68cf8de7,requirements,Adjudicator lane2 batch3,7,6,0,0,0.26
+a50d3fba34bb259e0,68cf8de7,requirements,Adjudicator fanin batch2,11,10,3,0,0.44
+a034a39be72e2b63e,68cf8de7,requirements,Adjudicator fanin batch3,20,18,2,0,0.69
+ac8d974450613804e,68cf8de7,requirements,Lane 4 remediator SPEC,21,19,2,0,0.83
+a7cf83fa2ff6153ec,68cf8de7,requirements,Lane 2 remediator brief,20,19,2,0,0.71
+ae6d025f4d4fbb094,68cf8de7,requirements,Lane 1 remediator prd,47,45,6,0,1.27
+a61828fd147367109,68cf8de7,requirements,Lane 3 remediator arch-impact,29,27,1,0,0.86
+a6f2ec0e0b283f88f,68cf8de7,requirements,Fan-in serial remediator,97,96,18,0,4.05
+a300545cdd1be3b40,68cf8de7,requirements,Serial repair p2 remediator,97,94,8,0,4.14
+a6737c78a6454feab,68cf8de7,requirements,Serial repair p3 remediator,124,121,14,0,3.60
+a77dd6f8716b808c1,68cf8de7,requirements,Serial repair p4 remediator,55,53,9,0,1.44
+a14082c7282d3dbff,68cf8de7,requirements,Serial repair p5 remediator,43,41,3,1,1.21
+adc79f892b4b305d2,68cf8de7,requirements,Serial repair p6 remediator,73,72,7,0,1.75
+a35a7568595df6a1c,4b34031d,requirements,Lane 1 serial elicitation remediator,60,58,8,0,2.48
+a2410f96b5b6d36af,4b34031d,requirements,Fan-in serial elicitation remediator,64,62,12,0,2.53
+a04157532f46fca5c,4b34031d,requirements,Repair part 11 prd adjudications,22,21,0,0,0.52
+aba599c7c5b6b2088,4b34031d,requirements,Adjudicate lane-1 batch 4,5,4,0,0,0.26
+a051f77334fb28639,4b34031d,requirements,Adjudicate lane-1 batch 2,21,19,9,0,0.78
+a88d7323f57845f49,4b34031d,requirements,Adjudicate lane-1 batch 3,8,7,1,0,0.34
+a148253a47ba5bd5e,4b34031d,requirements,Adjudicate fanin batch 2,20,17,3,0,0.58
+a91b20b98d1cc35ca,4b34031d,requirements,Adjudicate lane-1 batch 1,9,8,0,0,0.33
+a65c5ccdd91c017a5,4b34031d,requirements,Adjudicate fanin batch 1,6,5,1,0,0.28
+a4a26cc840187476c,4b34031d,requirements,Serial lane 2 SPEC remediation,21,19,0,0,0.64
+ab4d942911baf3403,4b34031d,requirements,Serial lane 1 remediation,34,32,6,0,1.18
+a0cd4750184a5b7ad,4b34031d,requirements,Fan-in serial remediation,213,208,29,0,8.18
+ae787f451b46cb234,4b34031d,architecture,Adjudicate lane batch 2/2,6,5,0,0,0.27
+a1b62d7df14fe1deb,4b34031d,architecture,Adjudicate fanin batch 2/2,6,5,0,0,0.29
+aa245c7401841c752,4b34031d,architecture,Adjudicate lane batch 1/2,12,11,0,0,0.47
+a3c577ee2f181ad43,4b34031d,architecture,Adjudicate fanin batch 1/2,6,5,0,0,0.33
+a03ebfeceecafd98a,4b34031d,architecture,Lane serial repair spine,236,230,24,0,9.29
+a350bc7d699dfc107,4b34031d,architecture,Fan-in repair docs fold,60,58,3,0,1.58
+af4dc8a02f8dbd8d9,4b34031d,architecture,Elicitation serial cross repair,88,86,14,0,2.75
+a6f2c180746969e50,4b34031d,architecture,Serial cross-section repair,33,31,5,0,1.39
+a88d5ead0dc16cdcf,53b4296a,stories-test-strategy,Lane 2 remediator,32,29,7,0,0.90
+a5d9c0eacdd652ecf,53b4296a,stories-test-strategy,Lane 8 remediator,8,7,0,0,0.39
+a92d78df8257ca0bc,53b4296a,stories-test-strategy,Lane 4 remediator,13,12,0,0,0.43
+a6943e30bc005886f,53b4296a,stories-test-strategy,Lane 1 remediator,25,23,1,0,0.76
+a2da5758e0137adb3,53b4296a,stories-test-strategy,Lane 10 remediator,20,18,2,0,0.62
+aebbe4aa8d29d8905,53b4296a,stories-test-strategy,Lane 3 remediator,23,22,3,0,0.65
+a4b5cfdaf17bf8fed,53b4296a,stories-test-strategy,Lane 13 remediator,14,12,0,0,0.52
+a98a47275cb3944dd,53b4296a,stories-test-strategy,Lane 6 remediator,23,21,2,0,0.69
+ab8d3133be5784a87,53b4296a,stories-test-strategy,Lane 9 remediator,23,21,1,0,0.70
+a270544977d9b6186,53b4296a,stories-test-strategy,Lane 7 remediator,12,11,0,0,0.41
+af61dfb13efe05857,53b4296a,stories-test-strategy,Lane 15 remediator,18,16,0,0,0.54
+a0c53b982d9122a98,53b4296a,stories-test-strategy,Lane 11 remediator,12,11,0,0,0.43
+a9cee3f222b00b80f,53b4296a,stories-test-strategy,Lane 12 remediator,16,15,0,0,0.53
+a7a7f5453caf7165d,53b4296a,stories-test-strategy,Lane 18 remediator,7,6,1,0,0.31
+aa7dd57c3531c836f,53b4296a,stories-test-strategy,Lane 16 remediator,6,5,0,0,0.28
+a8be14922d4f25a31,53b4296a,stories-test-strategy,Lane 17 remediator,8,7,0,0,0.32
+a6492dd96f044016a,53b4296a,stories-test-strategy,Lane 14 remediator,11,9,0,0,0.47
+adcc4134fe5ebd014,53b4296a,stories-test-strategy,"Fan-in remediator, stories serial repair",237,228,25,0,13.52
+afc1e75f0fb7177ce,53b4296a,stories-test-strategy,Cross seat for elicitation serial round,53,50,10,0,1.45
+a91f8fa501b2dc475,53b4296a,stories-test-strategy,Fan-in seat for elicitation serial,80,76,13,0,1.99
+a5dd7880a041c9010,53b4296a,stories-test-strategy,Fan-in for adversarial repair,74,71,13,0,2.31
+a7573b6ff8d8d611e,53b4296a,stories-test-strategy,Serial repair lane-1,15,13,2,0,0.55

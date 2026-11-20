@@ -1,0 +1,11 @@
+# extract.py/roll.py = af44929cc (C5 monotone clock default; blobs extract.py 67e7a72f7, roll.py a6880f3ac); EXTRACT_WIN_END main 2026-11-20T04:20:00Z; graph ref a9b015557
+s321: ledger rows with a tool_use_id 1245, extract subagent units with a toolUseId 1233, in both 1231, ledger-only 14, extract-only 2
+s322: ledger rows with a tool_use_id 672, extract subagent units with a toolUseId 668, in both 663, ledger-only 9, extract-only 5
+s323: ledger rows with a tool_use_id 1163, extract subagent units with a toolUseId 1137, in both 1112, ledger-only 51, extract-only 25
+   ledger-only (first 5): [('974326_0', '2026-11-13T13:02:54Z'), ('035635_0', '2026-11-17T17:37:15Z'), ('814714_0', '2026-11-17T20:20:14Z'), ('091134_0', '2026-11-17T20:24:51Z'), ('225546_0', '2026-11-17T21:33:45Z')]
+   extract-only (first 5): [('935173_0', '2026-11-13T08:35:35', 'general-purpose'), ('370219_0', '2026-11-18T03:59:30', 'general-purpose'), ('307166_0', '2026-11-18T04:31:47', 'general-purpose'), ('332784_0', '2026-11-18T05:55:33', 'general-purpose'), ('872307_0', '2026-11-18T06:21:12', 'general-purpose')]
+   s323 ledger ts range 2026-11-13T08:21:41Z 2026-11-20T04:08:52Z
+   extract-only s323 units that the ledger carries under another sprint label: {} ; carried by no ledger row: 25
+   ledger-only suffix shapes: [('_0', 20), ('_1', 7), ('_2', 6), ('_3', 6)]
+   ledger-only whose bare id (suffix stripped) matches an extract unit: 0
+   s323 extract-only agentTypes: Counter({'general-purpose': 13, 'ops': 10, 'dev-escalated': 1, 'code-reviewer-escalated': 1})

@@ -1,0 +1,53 @@
+agent_id,lead_session,step,description,tool_calls,executed,fixed_string_sweeps,worklist_runs,usd_api
+a26e4183951d6d152,6c14d949,carry-over-evaluation,Serial lane 1 of party repair,89,86,8,0,4.39
+a6f8c4c017c321dc8,6c14d949,carry-over-evaluation,Fan-in party repair remediator,48,45,12,0,2.40
+af6fc7402f568f803,6c14d949,carry-over-evaluation,coe serial lane 1,70,68,4,0,1.57
+a678f6b408c997cfa,6c14d949,carry-over-evaluation,coe serial fan-in,23,21,4,0,0.54
+a42bd92a401e0e693,6c14d949,carry-over-evaluation,coe serial lane p2,58,54,5,0,2.24
+a1c9c8b7f66c16bce,6c14d949,requirements,Serial lane 1 (prd),89,87,32,0,7.96
+a643882c881dfb32d,6c14d949,requirements,Serial lane 3 (arch-impact),20,19,3,0,0.73
+a997e79bcb46cd9f6,6c14d949,requirements,Serial lane 2 (brief),20,18,3,0,0.73
+a303c1ba44647c71d,6c14d949,requirements,Serial lane 4 (SPEC),41,35,2,0,1.49
+a61426d9c288c5d31,6c14d949,requirements,Re-run lane 3 (arch),17,15,3,0,0.46
+a31840a57ea3c9307,6c14d949,requirements,Re-run lane 1 (prd),69,68,1,0,0.78
+aede4a5595c661503,6c14d949,requirements,Re-run lane 2 (brief),17,15,0,0,0.33
+acdfae3dd3eda4bc6,6c14d949,requirements,Re-run lane 4 (SPEC),31,30,1,0,0.57
+a980eeea949bd6beb,6c14d949,requirements,Fan-in serial remediator s322,46,45,12,0,1.32
+a2f68bc880e623455,80c96d42,requirements,Serial remediation repair p1,141,132,15,0,5.07
+a7a848191428d4001,9a646a3b,requirements,Lane 1 serial (prd),56,50,10,0,1.74
+a948a420cc0c5b299,9a646a3b,requirements,Lane 2 serial (brief),34,30,8,0,0.90
+ad8b7345c382cca7c,9a646a3b,requirements,Lane 3 serial (SPEC),22,20,6,0,0.64
+a31228eb913ba64c8,9a646a3b,requirements,Record-only re-run lane-1,13,12,0,0,0.25
+a20b8514bf67e41c4,9a646a3b,requirements,Record-only re-run lane-3,8,6,0,0,0.31
+a3974350b376c7e22,9a646a3b,requirements,Fan-in serial remediator,46,43,1,0,1.40
+a09e9e046ed54fc9c,9a646a3b,requirements,Supersede stale lane fences,15,12,2,0,0.39
+ab759737d2b591bba,9a646a3b,gate-validation[architecture],Serial lane repair: spine cross findings,106,100,20,1,6.27
+ad7c78099964f9e1e,9a646a3b,architecture,Fan-in repair: spine escalations,66,63,11,0,1.91
+a5a3f76534b010145,9a646a3b,architecture,Serial lane repair spine,69,63,9,0,2.76
+a9fa2a62dbb2dfbf1,9a646a3b,architecture,Serial lane repair p2 cross items,70,64,6,2,1.66
+a6dd48107311e66e2,9a646a3b,architecture,Serial lane for p3 repair,16,15,1,0,0.46
+a8d4c967a2e5e5777,9a646a3b,stories-test-strategy,Serial lane 3,20,17,1,0,0.52
+aa2dc84b755699fab,9a646a3b,stories-test-strategy,Serial lane 5,25,23,1,0,0.58
+ab899723eaafea340,9a646a3b,stories-test-strategy,Serial lane 1,19,16,0,0,0.61
+a5ad79d50e7928545,9a646a3b,stories-test-strategy,Serial lane 2,15,13,3,0,0.42
+a54a7b8470855e55f,9a646a3b,stories-test-strategy,Fan-in writer,119,116,23,0,9.75
+a9d3d15ae4d14b516,fdc4249a,stories-test-strategy,Serial lane 2,15,12,2,0,0.43
+ad83fb0de01a47683,fdc4249a,stories-test-strategy,Serial lane 1,13,11,2,0,0.41
+a2702826478772068,fdc4249a,stories-test-strategy,Serial lane 5,16,14,2,0,0.48
+a213dcdd9577b393d,fdc4249a,stories-test-strategy,Serial lane 4,14,12,3,0,0.41
+a2d9cb1795cca2efc,fdc4249a,stories-test-strategy,Serial lane 3,19,16,3,0,0.47
+a48b06e8d018da1f2,fdc4249a,stories-test-strategy,Fan-in elicitation repair fan-in,44,42,5,0,1.06
+a48761c0c4e7bb1a8,fdc4249a,stories-test-strategy,Serial lane 1 sibling sweep,13,11,1,0,0.40
+a29b0561d64f48cfe,fdc4249a,stories-test-strategy,Serial lane 3 sibling sweep,16,15,3,0,0.39
+a592a0bc4802bf3c8,fdc4249a,stories-test-strategy,Serial lane 4 sibling sweep,20,18,3,0,0.51
+a410bd3ff5fec694c,fdc4249a,stories-test-strategy,Serial lane 2 sibling sweep,21,19,3,0,0.48
+afdfff8e5d5de8158,fdc4249a,stories-test-strategy,Serial lane 5 sibling sweep,15,12,2,0,0.37
+ae458ed2907ed5179,fdc4249a,stories-test-strategy,Stories serial fan-in,42,40,13,0,1.21
+a3097dff5a7b5c9a4,fdc4249a,stories-test-strategy,Lane 3 sweep p2,15,13,1,0,0.37
+ad559338c5139fa50,fdc4249a,stories-test-strategy,Lane 4 sweep p2,14,12,1,0,0.43
+a2d91ef396fc255b9,fdc4249a,stories-test-strategy,Lane 1 sweep p2,14,12,3,0,0.40
+aafb542f2756c3129,fdc4249a,stories-test-strategy,Lane 2 sweep p2,17,16,3,0,0.42
+a5922b5db013e46c1,fdc4249a,stories-test-strategy,Lane 5 sweep p2,17,15,2,0,0.39
+af308d51c98ec3672,fdc4249a,stories-test-strategy,Fan-in remediator p2,38,35,5,0,0.99
+a9e44bd81ba457427,fdc4249a,stories-test-strategy,Cure lane-1 stale fence,15,12,2,0,0.39
+a576aad22aa4b5f1d,fdc4249a,stories-test-strategy,TS repair serial lane 1,34,31,4,0,0.93

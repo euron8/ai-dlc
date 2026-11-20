@@ -37,6 +37,9 @@ REF="${2:-main}"
 GREP=/usr/bin/grep
 P=_bmad-output/implementation-artifacts
 NEG=ZZNOPE-8f3a1q
+# Sprints read: DERIVE_G3_SPRINTS (space-separated, for example "s321 s322 s323"); default "s321 s322". The two
+# positive controls below name s322 stories, so a list without s322 refuses.
+SPRINTS="${DERIVE_G3_SPRINTS:-s321 s322}"
 
 # The GATE1-RERUN control below reads the gate-transition fixture's own expectation. Find it FIRST,
 # by walking up from this script for core/fixtures/gate-transition/run.sh, and refuse before any
@@ -82,14 +85,15 @@ c0="$(printf '# Code Review\n\nSerial re-review of the fix delta.\n\n## Verdict\
 v1="$(printf '# x\n\n## Verdict\n\nNEEDS_REWORK\n' | verdict_of)"; v2="$(printf '# x\n\n**Verdict:** PASS\n' | verdict_of)"
 echo "remedy matcher control: seeded remedy -> ${c1} (must be 1); citation after the verdict -> ${c0} (must be 0); verdict reader -> ${v1} / ${v2} (must be NEEDS_REWORK / PASS)"
 [ "$c1" = 1 ] && [ "$c0" = 0 ] && [ "$v1" = NEEDS_REWORK ] && [ "$v2" = PASS ] || { echo "derive-g3.sh: remedy or verdict control failed" >&2; exit 2; }
-for S in s321 s322; do
+for S in $SPRINTS; do
   for k in GATE1-RERUN GATE1-SKIP; do
     c="$(git -C "$GRAPH" grep -l -F -- "$k" "$SHA" -- "$P/$S/gate-transition" | $GREP -c .)" || c=0
     printf '%s plans carrying %s: %s\n' "$S" "$k" "$c"
   done
 done
 
-TREE="$(git -C "$GRAPH" ls-tree -r --name-only "$SHA" -- "$P/s321/gate-transition" "$P/s322/gate-transition" docs/reviews/s321 docs/reviews/s322)"
+PS_ARGS=""; for S in $SPRINTS; do PS_ARGS="$PS_ARGS $P/$S/gate-transition docs/reviews/$S"; done
+TREE="$(git -C "$GRAPH" ls-tree -r --name-only "$SHA" -- $PS_ARGS)"
 nneg="$(printf '%s\n' "$TREE" | $GREP -c "/${NEG}-g[123]-p[0-9]*\.plan$")" || nneg=0
 echo "negative control: plans for impossible story ${NEG}: ${nneg} (must be 0)"
 [ "$nneg" = 0 ] || exit 2
@@ -109,7 +113,7 @@ review_of() {
 }
 
 NR=0; NNONE=0; NA=0; NB=0; NC=0; SA=0; SB=0; SC=0; CTL=""
-for S in s321 s322; do
+for S in $SPRINTS; do
   STREE="$(printf '%s\n' "$TREE" | $GREP "^${P}/${S}/gate-transition/")"
   stories="$(printf '%s\n' "$STREE" | $GREP -E -- '-g3-p[0-9]+\.plan$' | sed -e 's#.*/##' -e 's/-g3-p[0-9]*\.plan$//' | tr . - | sort -u)"
   for st in $stories; do

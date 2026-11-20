@@ -1,0 +1,8 @@
+re-dispatches (not pass reads): [('p2 adversary shard 06 re-run', 1.527, 8.3)]
+spawn cost pass 1: 19 shard rows (incl cross) $40.75 2.14 spawn-hours
+spawn cost pass 2: 19 shard rows (incl cross) $28.32 2.37 spawn-hours
+p1: 18 part shards, 18 with a sha, C/M total 27, spawn rows matched 19
+p2: 18 part shards, 18 with a sha, C/M total 2, spawn rows matched 19
+   p2 shards on the same bytes as p1: 0 of 18:  | $0.00, 0.00 spawn-hours (sum of spawn minutes) | C/M 0
+p3: no shards at a9b015557
+TOTAL p2+p3 unchanged shard reads 0 of 18, $0.00, 0.00 spawn-hours, C/M 0

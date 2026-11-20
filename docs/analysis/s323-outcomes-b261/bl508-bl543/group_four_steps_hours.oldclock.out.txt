@@ -1,0 +1,23 @@
+== four steps as labelled (hours per story, gap-inclusive = active + op-wait + agent-wait; gap = op-wait + agent-wait)
+  s318 (s317 truncated in the corpus, not used) (13 stories): 2.93 h gap-inclusive (gap 1.79 h, lead active 1.14 h), total 38.1 h
+  s319 (20 stories): 2.09 h gap-inclusive (gap 1.19 h, lead active 0.91 h), total 41.9 h
+  s320 (13 stories): 5.75 h gap-inclusive (gap 4.37 h, lead active 1.38 h), total 74.8 h
+  s321 (25 stories): 1.61 h gap-inclusive (gap 0.84 h, lead active 0.78 h), total 40.4 h
+  s322 (8 stories): 5.16 h gap-inclusive (gap 3.28 h, lead active 1.88 h), total 41.3 h
+  s323 (18 stories): 7.19 h gap-inclusive (gap 6.14 h, lead active 1.06 h), total 129.5 h
+== upper bound (plus four gate rows) (hours per story, gap-inclusive = active + op-wait + agent-wait; gap = op-wait + agent-wait)
+  s318 (s317 truncated in the corpus, not used) (13 stories): 3.05 h gap-inclusive (gap 1.81 h, lead active 1.24 h), total 39.7 h
+  s319 (20 stories): 2.21 h gap-inclusive (gap 1.21 h, lead active 1.00 h), total 44.1 h
+  s320 (13 stories): 5.84 h gap-inclusive (gap 4.37 h, lead active 1.47 h), total 75.9 h
+  s321 (25 stories): 1.72 h gap-inclusive (gap 0.89 h, lead active 0.83 h), total 43.0 h
+  s322 (8 stories): 5.50 h gap-inclusive (gap 3.34 h, lead active 2.16 h), total 44.0 h
+  s323 (18 stories): 7.40 h gap-inclusive (gap 6.16 h, lead active 1.24 h), total 133.1 h
+== s323 per step, hours total (as labelled)
+  architecture: 5.0 h gap-inclusive (gap 1.9 h)
+  carry-over-evaluation: 25.3 h gap-inclusive (gap 21.2 h)
+  requirements: 89.6 h gap-inclusive (gap 83.9 h)
+  stories-test-strategy: 9.6 h gap-inclusive (gap 3.5 h)
+== roll.py seat_line, four steps as labelled (lead and subagent seats separately)
+  s319: 2.09 h gap-inclusive (gap 1.19 h), token-equivalent $55.4 (API $55.4), 98.9M tokens; lead active 0.91 h, lead $7.8, subagent active 4.30 h, subagent $47.6; lead-seat local share 0% of 2164 calls; subagent local calls 0
+  s322: 5.16 h gap-inclusive (gap 3.28 h), token-equivalent $100.1 (API $82.5), 208.0M tokens; lead active 1.88 h, lead $17.6 (API $0.0), subagent active 8.30 h, subagent $82.5; lead-seat local share 100% of 3640 calls; subagent local calls 0
+  s323: 7.19 h gap-inclusive (gap 6.14 h), token-equivalent $55.5 (API $46.9), 126.8M tokens; lead active 1.06 h, lead $8.6 (API $0.0), subagent active 2.64 h, subagent $46.9; lead-seat local share 100% of 3766 calls; subagent local calls 26

@@ -34,6 +34,9 @@ python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/operator_asks.py
 EXTRACT_WIN_END=<ISO instant> python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py $OUT; python3 docs/analysis/pipeline-efficiency-s317-s320/scripts/roll.py $OUT --seats   # pinned snapshot, lead and subagent per story (b244-snapshot/)
 ```
 
+Clock: extract.py measures the segs interval on a monotone clock by default (BL-1174); `EXTRACT_MONOTONE_SEGS=0` selects
+the old clock, which charges an out-of-order record twice, to reproduce an output taken before it.
+
 Token control: the units==segs sums must be equal; they were at 15.66 B on both sides at measurement. s320 was
 still running, so a re-run reads a larger total and slightly different s320 figures. 1 of 4098 subagents is
 unjoined.
@@ -103,6 +106,8 @@ active as the "out-of-order overcount", and it prints the `other` share beside e
 | s316 | 100.1 | 71.0 | 1307 | 1307 | sonnet 100% |
 | s317 | 112.8 | 51.4 | 2172 | 2357 | sonnet 56%, qwen 44%, opus 1% |
 | s318 | 74.8 | 42.6 | 1720 | 1721 | sonnet 100% |
+
+Hours in this table are on the old segs clock (BL-1174) and cannot be regenerated on the monotone one: graph's transcripts for s314 to early s317 are no longer on disk (oldest mtime 2026-10-07; 175 leads and 7305 subagents now, against 158 and 5236 at the snapshot; token control 14.86 B against 21.44 B; s317 has 13 steps against 19), so the old-clock run at the pin does not reproduce it and a regeneration on the monotone clock is impossible (BL-1174).
 | s319 | 110.0 | 55.2 | 2234 | 2234 | sonnet 97%, opus 3% |
 | s320 (partial) | 75.3 | 58.5 | 1048 | 1048 | sonnet 100% |
 

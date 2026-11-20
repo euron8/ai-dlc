@@ -44,6 +44,10 @@ NOTE_TUID = re.compile(r"<tool-use-id>([^<]*)</tool-use-id>")
 def die2(msg):
     print("REFUSED: " + msg, file=sys.stderr); sys.exit(2)
 
+# Same clock and same switch as extract.py's segs: monotone by default (an out-of-order record charges 0 and does not
+# move the clock back); EXTRACT_MONOTONE_SEGS=0 selects the old per-record clock.
+MONOTONE_SEGS = os.environ.get("EXTRACT_MONOTONE_SEGS") != "0"
+
 def ts(s):
     return dt.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
 
@@ -123,7 +127,7 @@ def scan(path, win_start, win_end_ts):
                 else: k = "other"
                 ctext = (user_text(r) and json.dumps(content(r))[:300]) or ""
                 out.append((g, k, t, cmds, dict(prev_text=atext[-300:], close_text=ctext)))
-        prev_t = tt; prev = typ
+        prev_t = max(prev_t, tt) if (MONOTONE_SEGS and prev_t is not None) else tt; prev = typ
         if notification(r):
             s_ = note_text(r)
             done = set(NOTE_TASK.findall(s_)); tus = set(NOTE_TUID.findall(s_))

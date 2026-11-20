@@ -1,0 +1,18 @@
+planning (four steps + gates), pipeline bucket, hours. machine h = active + agent-wait (op-wait excluded)
+sprint | BL-911 recorded | default clock: machine | elapsed | active | op-wait | agent-wait || monotone clock: machine | elapsed | active | op-wait | agent-wait
+s317 | 38.3 | 10.8 | 12.0 | 5.5 | 1.2 | 5.3 || 10.6 | 11.8 | 5.3 | 1.2 | 5.3
+s318 | 33.1 | 33.1 | 39.7 | 16.1 | 6.6 | 17.0 || 25.5 | 32.1 | 15.0 | 6.6 | 10.5
+s319 | 35.5 | 35.5 | 44.1 | 20.0 | 8.6 | 15.5 || 30.1 | 38.8 | 18.4 | 8.6 | 11.7
+s320 | 34.8 | 34.8 | 75.9 | 19.1 | 41.0 | 15.8 || 24.4 | 65.4 | 17.5 | 41.0 | 6.9
+s321 | 35.9 | 39.0 | 43.0 | 20.7 | 4.0 | 18.3 || 36.8 | 40.8 | 19.5 | 4.0 | 17.3
+s322 | - | 37.1 | 44.0 | 17.3 | 6.9 | 19.8 || 30.0 | 36.9 | 16.3 | 6.9 | 13.7
+s323 | - | 120.6 | 133.1 | 22.3 | 12.5 | 98.3 || 27.0 | 39.6 | 20.4 | 12.5 | 6.6
+CONTROL s318 default-clock machine h 33.13 vs recorded 33.1: REPRODUCED
+CONTROL s319 default-clock machine h 35.51 vs recorded 35.5: REPRODUCED
+CONTROL s320 default-clock machine h 34.84 vs recorded 34.8: REPRODUCED
+NOT reproduced s317 default-clock machine h 10.85 vs recorded 38.3 (s321 was open when recorded; s317 cause not investigated)
+NOT reproduced s321 default-clock machine h 38.98 vs recorded 35.9 (s321 was open when recorded; s317 cause not investigated)
+recorded band s317-s321 (old clock): 33.1 to 38.3
+recomputed band s318-s321, default clock machine h (s317 excluded: partial planning, 10.8 h): 33.1 to 39.0
+recomputed band s318-s321, monotone clock machine h: 24.4 to 36.8
+s322: default 37.1 monotone 30.0; s323: default 120.6 monotone 27.0

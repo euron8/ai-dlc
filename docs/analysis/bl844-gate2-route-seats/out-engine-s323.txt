@@ -1,0 +1,89 @@
+plan | gate | sha7 | committer time | version | skill_version | route | marks
+1-1-g1-p1.plan | gate:1 | 35a529d | 2026-11-18T09:07:26-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+1-1-g1-p2.plan | gate:1 | e4130b7 | 2026-11-18T15:05:51-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 5 reviewable file(s) (12  | -
+1-1-g2-p1.plan | gate:2 | 74e85e4 | 2026-11-18T15:13:51-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+1-1-g3-p1.plan | gate:3 | 74e85e4 | 2026-11-18T15:13:51-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+1-2-g1-p1.plan | gate:1 | e0568e7 | 2026-11-18T16:53:55-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 7 reviewable file(s) (17  | -
+1-2-g1-p2.plan | gate:1 | e512e38 | 2026-11-18T17:26:27-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 2 reviewable file(s) (6 i | -
+1-2-g2-p1.plan | gate:2 | 6d644fb | 2026-11-18T17:44:32-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+1-2-g3-p1.plan | gate:3 | 3ba807e | 2026-11-18T18:10:57-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+1-3-g1-p1.plan | gate:1 | 1d99fc5 | 2026-11-18T16:30:13-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 5 reviewable file(s) (13  | -
+1-3-g1-p2.plan | gate:1 | 15eb4ed | 2026-11-18T16:44:03-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 1 reviewable file(s) (4 i | -
+1-3-g1-p3.plan | gate:1 | 4c84749 | 2026-11-18T17:44:18-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 3 reviewable file(s) (10  | -
+1-3-g2-p1.plan | gate:2 | 15eb4ed | 2026-11-18T16:44:03-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 5 reviewable file(s) (15  | -
+1-3-g2-p2.plan | gate:2 | ed31a12 | 2026-11-18T17:59:22-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 7 reviewable file(s) (24  | GATE1-SKIP,
+1-3-g3-p1.plan | gate:3 | 2a63bb2 | 2026-11-18T18:13:16-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+1-4-g1-p1.plan | gate:1 | 34235d3 | 2026-11-18T16:47:16-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+1-4-g2-p1.plan | gate:2 | c38e16e | 2026-11-18T17:44:23-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+1-4-g3-p1.plan | gate:3 | ebe5c1b | 2026-11-18T17:59:21-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+1.2-g3-p1.plan | gate:3 | 3ba807e | 2026-11-18T18:10:57-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+3-1-g1-p1.plan | gate:1 | c8bfcff | 2026-11-18T08:29:02-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 6 reviewable file(s) (16  | -
+3-1-g1-p2.plan | gate:1 | 36164a6 | 2026-11-18T09:33:48-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 1 reviewable file(s) (4 i | -
+3-1-g2-p1.plan | gate:2 | fb52d7b | 2026-11-18T08:30:12-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 6 reviewable file(s) (17  | -
+3-1-g2-p2.plan | gate:2 | e1d89b3 | 2026-11-18T09:42:33-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 6 reviewable file(s) (19  | GATE1-SKIP,
+3-1-g3-p1.plan | gate:3 | c38bc4c | 2026-11-18T14:35:00-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+3-2-g1-p1.plan | gate:1 | fe542d6 | 2026-11-18T16:47:15-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+3-2-g1-p2.plan | gate:1 | 140bc00 | 2026-11-18T18:44:54-05:00 | 0.1164.0 | 0.1164.0 | narrowed | -
+3-2-g1-p3.plan | gate:1 | b4655c3 | 2026-11-18T20:04:57-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 2 reviewable file(s) (22  | -
+3-2-g1-p4.plan | gate:1 | 1e63602 | 2026-11-18T20:15:58-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 1 reviewable file(s) (2 i | -
+3-2-g2-p1.plan | gate:2 | fc76e63 | 2026-11-18T19:17:34-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+3-2-g2-p2.plan | gate:2 | 1e63602 | 2026-11-18T20:15:58-05:00 | 0.1164.0 | 0.1164.0 | partitioned | GATE1-SKIP,
+3-2-g3-p1.plan | gate:3 | b150440 | 2026-11-18T20:54:15-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+3.2-g3-p2.plan | gate:3 | 7565833 | 2026-11-18T21:16:15-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+4-1-g1-p1.plan | gate:1 | 84f82ff | 2026-11-18T08:26:58-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 0 reviewable file(s) (5 i | -
+4-1-g2-p1.plan | gate:2 | 27110f1 | 2026-11-18T08:33:45-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 0 reviewable file(s) (6 i | -
+4-1-g2-p2.plan | gate:2 | 70c528c | 2026-11-18T10:06:00-05:00 | 0.1164.0 | 0.1164.0 | record-only ROUTE: 1 Critical/Important  | GATE1-SKIP,
+4-2-g1-p1.plan | gate:1 | 48928b9 | 2026-11-18T07:53:25-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 0 reviewable file(s) (2 i | -
+4-2-g2-p1.plan | gate:2 | dac9e02 | 2026-11-18T08:03:08-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 0 reviewable file(s) (3 i | -
+4-2-g3-p1.plan | gate:3 | 7440fc4 | 2026-11-18T08:20:10-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+4-3-g1-p1.plan | gate:1 | 4cbad70 | 2026-11-18T07:55:52-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 2 reviewable file(s) (8 i | -
+4-3-g2-p1.plan | gate:2 | c39f526 | 2026-11-18T08:04:40-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 2 reviewable file(s) (9 i | -
+4-3-g2-p2.plan | gate:2 | d774ffe | 2026-11-18T08:29:17-05:00 | 0.1164.0 | 0.1164.0 | record-only ROUTE: 1 Critical/Important  | GATE1-SKIP,
+4-3-g3-p1.plan | gate:3 | 7fb1f01 | 2026-11-18T09:10:13-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+4-4-g1-p1.plan | gate:1 | 98afa35 | 2026-11-18T07:58:28-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 3 reviewable file(s) (17  | -
+4-4-g1-p2.plan | gate:1 | b7f27dc | 2026-11-18T09:33:48-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 2 reviewable file(s) (8 i | -
+4-4-g2-p1.plan | gate:2 | 4955b7b | 2026-11-18T08:04:16-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 3 reviewable file(s) (18  | -
+4-4-g2-p2.plan | gate:2 | 9602256 | 2026-11-18T09:42:33-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 3 reviewable file(s) (23  | GATE1-SKIP,
+4.1-g3-p1.plan | gate:3 | 923e958 | 2026-11-18T10:26:09-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+4.4-g3-p1.plan | gate:3 | 6f5dbd8 | 2026-11-18T11:42:41-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+5-1-g1-p1.plan | gate:1 | f3db80f | 2026-11-18T08:00:22-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 4 reviewable file(s) (13  | -
+5-1-g2-p1.plan | gate:2 | 78c4a61 | 2026-11-18T08:08:50-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 4 reviewable file(s) (14  | -
+5-1-g3-p1.plan | gate:3 | da15cf3 | 2026-11-18T09:47:48-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+5-2-g1-p1.plan | gate:1 | bb5d5c3 | 2026-11-18T16:35:53-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+5-2-g1-p2.plan | gate:1 | 9280264 | 2026-11-18T17:08:31-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 3 reviewable file(s) (6 i | -
+5-2-g1-p3.plan | gate:1 | cad7692 | 2026-11-18T18:13:14-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 5 reviewable file(s) (24  | -
+5-2-g2-p1.plan | gate:2 | 9280264 | 2026-11-18T17:08:31-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+5-2-g2-p2.plan | gate:2 | fc53c36 | 2026-11-18T18:47:01-05:00 | 0.1164.0 | 0.1164.0 | partitioned | GATE1-SKIP,
+5-2-g2-p3.plan | gate:2 | dd9857e | 2026-11-18T19:14:37-05:00 | 0.1164.0 | 0.1164.0 | record-only ROUTE: 1 Critical/Important  | GATE1-SKIP,
+5-2-g3-p1.plan | gate:3 | cdbe474 | 2026-11-18T19:22:13-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+5-2-g3-p2.plan | gate:3 | e154f3a | 2026-11-18T19:41:34-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+5-3-g1-p1.plan | gate:1 | e8cd118 | 2026-11-18T08:00:27-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 4 reviewable file(s) (10  | -
+5-3-g2-p1.plan | gate:2 | f110af3 | 2026-11-18T08:08:20-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 4 reviewable file(s) (11  | -
+5-3-g3-p1.plan | gate:3 | 14cad80 | 2026-11-18T08:24:37-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+5-4-g1-p1.plan | gate:1 | 1f599fc | 2026-11-18T08:13:52-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+5-4-g1-p2.plan | gate:1 | b8918e0 | 2026-11-18T08:29:50-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 3 reviewable file(s) (6 i | -
+5-4-g2-p1.plan | gate:2 | c8b64c1 | 2026-11-18T08:33:22-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+5-4-g2-p2.plan | gate:2 | 3f6c18a | 2026-11-18T09:35:22-05:00 | 0.1164.0 | 0.1164.0 | record-only ROUTE: 3 Critical/Important  | GATE1-SKIP,
+5-4-g3-p1.plan | gate:3 | 496deae | 2026-11-18T12:19:13-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+5-4-g3-p2.plan | gate:3 | 496deae | 2026-11-18T12:19:13-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+5-4-g3-p3.plan | gate:3 | d7a8e25 | 2026-11-18T12:30:32-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+5-5-g1-p1.plan | gate:1 | 8de03aa | 2026-11-18T14:35:38-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+5-5-g1-p2.plan | gate:1 | 3ee43d6 | 2026-11-18T15:03:38-05:00 | 0.1164.0 | 0.1164.0 | record-only ROUTE: 5 Critical/Important  | -
+5-5-g1-p3.plan | gate:1 | 13a0b95 | 2026-11-18T15:43:49-05:00 | 0.1164.0 | 0.1164.0 | serial SERIAL: 1 reviewable file(s) (18  | -
+5-5-g2-p1.plan | gate:2 | 941603f | 2026-11-18T15:17:16-05:00 | 0.1164.0 | 0.1164.0 | partitioned | -
+5-5-g2-p2.plan | gate:2 | 13a0b95 | 2026-11-18T15:43:49-05:00 | 0.1164.0 | 0.1164.0 | partitioned | GATE1-SKIP,
+5-5-g2-p3.plan | gate:2 | 0617fce | 2026-11-18T16:23:54-05:00 | 0.1164.0 | 0.1164.0 | record-only ROUTE: 3 Critical/Important  | GATE1-SKIP,
+5-5-g3-p1.plan | gate:3 | 5c1d808 | 2026-11-18T16:58:26-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+5-g1-p1.plan | gate:1 | 20133c6 | 2026-11-19T08:04:59-05:00 | 0.1174.0 | 0.1174.0 | serial SERIAL: 7 reviewable file(s) (18  | -
+5-g2-p1.plan | gate:2 | 20133c6 | 2026-11-19T08:04:59-05:00 | 0.1174.0 | 0.1174.0 | serial SERIAL: 7 reviewable file(s) (18  | -
+5-g3-p1.plan | gate:3 | 20133c6 | 2026-11-19T08:04:59-05:00 | 0.1174.0 | 0.1174.0 | gate3 adjudicator | -
+5.3-g3-p1.plan | gate:3 | 8f03c8c | 2026-11-18T10:43:05-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+5.3-g3-p2.plan | gate:3 | 8f03c8c | 2026-11-18T10:43:05-05:00 | 0.1164.0 | 0.1164.0 | gate3 adjudicator | -
+6-g1-p1.plan | gate:1 | c2694ab | 2026-11-19T08:02:53-05:00 | 0.1174.0 | 0.1174.0 | serial SERIAL: 2 reviewable file(s) (11  | -
+6-g2-p1.plan | gate:2 | c2694ab | 2026-11-19T08:02:53-05:00 | 0.1174.0 | 0.1174.0 | serial SERIAL: 2 reviewable file(s) (11  | -
+6-g3-p1.plan | gate:3 | c2694ab | 2026-11-19T08:02:53-05:00 | 0.1174.0 | 0.1174.0 | gate3 adjudicator | -
+7-g3-p1.plan | gate:3 | a44c80e | 2026-11-19T10:24:05-05:00 | 0.1174.0 | 0.1174.0 | gate3 adjudicator | -
+== plans: 84
+== by version (field 5):
+  0.1164.0 77
+  0.1174.0 7

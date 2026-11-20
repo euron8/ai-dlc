@@ -31,9 +31,12 @@ HOSTED = ('opus', 'sonnet', 'haiku', 'fable')
 # top-level "model" key, and aiDlcModels only maps role names to ids. So s314 is priced at the NEAREST sprint's
 # hosted lead mix (s315) and labelled a fallback wherever printed.
 FALLBACK = {314: 315, 322: 321, 323: 321}   # s322's and s323's lead seats ran only local models (qwen38flash, deepseek41)
-# graph sprint-status.yaml at each close; s321 is still open, so its 25 is the planned count from
+# graph sprint-status.yaml at each close; s323's 18 is the count of story-<sprint>-<n> keys in
+# _bmad-output/implementation-artifacts/sprint-status.yaml at 16fd227d9 (all done), which also equals the 18
+# s323/stories/*.md files; the planning-artifacts copy is empty at that close (0 keys). Control: both files give 8
+# at f7e60625b, s322's 8. s321 is still open, so its 25 is the planned count from
 # _bmad-output/planning-artifacts/s321/sprint-status.yaml@e32f9ce2f (written once, a6afc3eba "6 epics, 25 stories").
-STORIES = {317: 21, 318: 13, 319: 20, 320: 13, 321: 25, 322: 8}   # s322: 8 stories, all done at the s322 close (sprint-status.yaml of graph commit f7e60625b)
+STORIES = {317: 21, 318: 13, 319: 20, 320: 13, 321: 25, 322: 8, 323: 18}   # s322: 8 stories, all done at the s322 close (sprint-status.yaml of graph commit f7e60625b)
 
 def hosted_mix(rows, pre):
     """{sprint: {family: calls}} over the pipeline bucket: the HOSTED calls on one seat, per sprint."""

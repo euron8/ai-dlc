@@ -1,0 +1,8 @@
+s323 round -> engine (skill_version) -> evidence. Spawns per round from spawns.jsonl (extract.py at af44929cc, window end 2026-11-20T04:20:00Z).
+requirements (lead 68cf8de7 then 4b34031d; 176 spawns, 2026-11-17T03:02Z..19:52Z): 0.1160.0
+  graph lead f8934707-53cd-4516-b2f2-5470ea986c64.jsonl line 983 (2026-11-16T22:58:04Z) prints the stamp "version: 0.1160.0 commit: 619bfde9 skill_version: 0.116..." after self-update 0.1157.0 -> 0.1160.0 (line 264, 22:13Z); reconcile commit lines 1062-1064 (23:00Z). Lead 68cf8de7 starts 23:16:51Z, after it.
+architecture, ARCHITECTURE-SPINE p1/p2 (lead 4b34031d; 59 spawns 2026-11-17T20:48Z..2026-11-18T00:15Z): 0.1160.0
+  lead 17d27721 (starts 2026-11-18T00:41:44Z, after the last of these spawns) is the session that pulls 0.1160.0 -> 0.1164.0; its first records read 0.1160.0 as the installed version.
+architecture, 1 spawn (lead 53b4296a, 2026-11-18T02:25:29Z): 0.1164.0 (after the 0.1164.0 pull; 17d27721 ends 02:07Z). Not a BL-974/BL-976 subject (no shard dir named).
+All rounds are on 0.1157.0 or later: IN population.
+The version read here is the stamp's skill_version; the stamp's version field stays 0.1157.0 until the reconcile.

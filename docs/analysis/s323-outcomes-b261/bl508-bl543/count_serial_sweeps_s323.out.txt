@@ -1,0 +1,3 @@
+sprints [323] planning serial/adjudicator/lane/fan-in remediator spawns 75, readable 75, unreadable 0; executed calls 3100, fixed-string sweeps 370, worklist runs 3
+CONTROL s319 agent-a4b9c05a506fc183b: calls 168, executed 166, sweeps 32, worklist runs 0 (b257 recorded 129 by the first key / 32 by the second; the key here is the second)
+CONTROL s323 agent-a37305a67843ee413 (b257 recorded 146 of 150 executed, 4 sweep calls, worklist 1): calls 150, executed 146, sweeps 4, worklist runs 2; impossible token 0 (must be 0)

@@ -1,0 +1,5 @@
+s318 (13 stories), 6 steps: gate[architecture], gate[carry-over-evaluation], gate[implementation], gate[requirements], gate[sprint-review], gate[stories-test-strategy]
+  per story: gap-inclusive h 0.50; gap h 0.17; token-equivalent $ 7.80; API $ 7.80; M tokens 19.00; lead active h 0.34; lead $ 3.60; subagent active h 0.42; subagent $ 4.10
+s323 (18 stories), 8 steps: gate[architecture], gate[carry-over-evaluation], gate[implementation], gate[requirements], gate[retro], gate[route], gate[sprint-review], gate[stories-test-strategy]
+  per story: gap-inclusive h 0.84; gap h 0.05; token-equivalent $ 23.50; API $ 13.60; M tokens 65.60; lead active h 0.78; lead $ 9.90; subagent active h 1.14; subagent $ 13.60
+control: sprint s999 gate lines = 0 (must be 0)

@@ -1,0 +1,19 @@
+== as labelled (four steps)
+  s318 (s317 is truncated in today's transcript corpus, not used): 13 stories: token-equivalent $79.74 per story (API $79.72), 144.65M tokens per story; lead $10.27 (API $10.25), subagent $69.47; total $1036.6 (API $1036.4), 1880.4M tokens, lead calls 2085, subagent calls 13004, lead local share 0%
+  s319: 20 stories: token-equivalent $55.38 per story (API $55.38), 98.86M tokens per story; lead $7.81 (API $7.81), subagent $47.57; total $1107.7 (API $1107.7), 1977.1M tokens, lead calls 2164, subagent calls 14277, lead local share 0%
+  s320: 13 stories: token-equivalent $87.44 per story (API $87.44), 151.96M tokens per story; lead $11.16 (API $11.16), subagent $76.28; total $1136.7 (API $1136.7), 1975.4M tokens, lead calls 2008, subagent calls 14313, lead local share 0%
+  s321 (no carry-over-evaluation): 25 stories: token-equivalent $50.87 per story (API $50.13), 90.47M tokens per story; lead $6.59 (API $5.85), subagent $44.29; total $1271.8 (API $1253.4), 2261.7M tokens, lead calls 2530, subagent calls 16126, lead local share 15%
+  s322: 8 stories: token-equivalent $100.11 per story (API $82.47), 207.98M tokens per story; lead $17.64 (API $0.00), subagent $82.47; total $800.9 (API $659.8), 1663.8M tokens, lead calls 3640, subagent calls 11782, lead local share 100%
+  s323: 18 stories: token-equivalent $55.47 per story (API $46.86), 126.76M tokens per story; lead $8.61 (API $0.00), subagent $46.87; total $998.5 (API $843.4), 2281.6M tokens, lead calls 3766, subagent calls 16324, lead local share 100%
+== upper bound (four steps plus their four planning-gate rows)
+  s318 (s317 is truncated in today's transcript corpus, not used): 13 stories: token-equivalent $82.53 per story (API $82.51), 151.36M tokens per story; lead $11.55 (API $11.53), subagent $70.98; total $1072.9 (API $1072.7), 1967.7M tokens, lead calls 2312, subagent calls 13449, lead local share 0%
+  s319: 20 stories: token-equivalent $60.21 per story (API $60.21), 107.27M tokens per story; lead $8.79 (API $8.79), subagent $51.41; total $1204.2 (API $1204.2), 2145.4M tokens, lead calls 2413, subagent calls 15417, lead local share 0%
+  s320: 13 stories: token-equivalent $89.22 per story (API $89.22), 157.07M tokens per story; lead $12.30 (API $12.30), subagent $76.92; total $1159.9 (API $1159.9), 2041.8M tokens, lead calls 2176, subagent calls 14553, lead local share 0%
+  s321 (no carry-over-evaluation): 25 stories: token-equivalent $51.91 per story (API $51.18), 93.51M tokens per story; lead $7.31 (API $6.58), subagent $44.60; total $1297.9 (API $1279.4), 2337.7M tokens, lead calls 2729, subagent calls 16333, lead local share 14%
+  s322: 8 stories: token-equivalent $111.10 per story (API $89.99), 233.59M tokens per story; lead $21.11 (API $0.00), subagent $89.99; total $888.8 (API $719.9), 1868.7M tokens, lead calls 4287, subagent calls 13326, lead local share 100%
+  s323: 18 stories: token-equivalent $59.47 per story (API $48.65), 138.09M tokens per story; lead $10.82 (API $0.00), subagent $48.66; total $1070.5 (API $875.7), 2485.6M tokens, lead calls 4623, subagent calls 17108, lead local share 100%
+== per step, s323, token-equivalent $ (API), tokens, lead calls, subagent calls
+  architecture: $155.9 (API $125.4), 387.5M, 750, 2291
+  carry-over-evaluation: $200.7 (API $171.4), 493.2M, 718, 3120
+  requirements: $265.8 (API $222.1), 595.3M, 1045, 4489
+  stories-test-strategy: $376.2 (API $324.5), 805.6M, 1253, 6424

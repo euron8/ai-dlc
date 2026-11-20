@@ -6,7 +6,9 @@ WORK holds one extract per (side, window), named <side>-<window with ':' and '-'
 --build makes any that are missing: EXTRACT_WIN_END=<window> python3 -I <extract.py> OUT (stderr kept as
 OUT/extract.stderr), then the s317-s318 spawns.py and analyze.py. The OLD extract.py is
 `git show e3cb7710f:docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` (the parent of 0.1100.0, which
-added the gate terminator); the NEW one is this tree's. Every other script is this tree's, on both sides.
+added the gate terminator), patched at build time to honour EXTRACT_MONOTONE_SEGS as the NEW one (this tree's) does,
+so both sides run on ONE segs clock (default monotone, BL-1174; =0 the old clock). Every other script is this tree's,
+on both sides. The member list reads docs/backlog.md BL-1003; when that entry has left the backlog use --only w1,w2,w3.
 
 Windows (each reading at the window it was recorded at):
   W1 2026-11-11T10:30:00Z  BL-808 b255, BL-397 b255 F4, BL-510 Outcome measured and its archived copy under BL-507,
@@ -76,6 +78,13 @@ def build(work, side, w):
         if not os.path.exists(ex):
             src = subprocess.run(['git', '-C', REPO, 'show', OLD_SHA + ':docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py'],
                                  capture_output=True, text=True, check=True).stdout
+            # The old extractor predates the monotone segs clock (BL-1174). Give it the same switch the tree's extract.py
+            # has, so both sides run on ONE clock (EXTRACT_MONOTONE_SEGS, default monotone; =0 the old clock) and a
+            # DIFFER line isolates the gate-span fix, never the clock change.
+            old_ln = '        prev_t = tt\n'
+            if src.count(old_ln) != 1:
+                no_root('old extract.py has no single "prev_t = tt" line to carry the clock switch')
+            src = src.replace(old_ln, "        prev_t = max(prev_t, tt) if (os.environ.get('EXTRACT_MONOTONE_SEGS') != '0' and prev_t is not None) else tt\n")
             open(ex, 'w').write(src)
     env = dict(os.environ, EXTRACT_WIN_END=w)
     with open(os.path.join(o, 'extract.stderr'), 'w') as fe:

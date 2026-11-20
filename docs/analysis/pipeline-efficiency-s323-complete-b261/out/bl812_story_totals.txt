@@ -1,0 +1,5 @@
+whole pipeline bucket, per story, summed over every step row (machine h = lead active + agent wait, operator wait excluded; spawns, subagent $, tokens, calls are clock-invariant)
+s323: machine h/story 3.20 monotone | 9.39 default; spawns/story 63.2; subagent $/story 87.9; lead tokens M/story 102.3; lead calls/story 652; step rows 22
+s322: machine h/story 7.01 monotone | 8.36 default; spawns/story 83.5; subagent $/story 124.1; lead tokens M/story 169.4; lead calls/story 1163; step rows 20
+s321: machine h/story 3.43 monotone | 3.80 default; spawns/story 49.4; subagent $/story 75.2; lead tokens M/story 71.5; lead calls/story 285; step rows 16
+s319: machine h/story 3.85 monotone | 4.64 default; spawns/story 78.0; subagent $/story 88.3; lead tokens M/story 80.7; lead calls/story 318; step rows 19

@@ -1,0 +1,11 @@
+adversary     off-round              None seats=2 lines=2 with_cited_paths=0 first=2026-10-20T09:57:28.706Z last=2026-10-22T19:07:02.378Z
+adversary     round                  None seats=199 lines=52 with_cited_paths=0 first=2026-10-15T21:30:14.752Z last=2026-10-20T21:47:02.298Z
+elicitation   -                      None seats=93 lines=62 with_cited_paths=0 first=2026-10-15T20:36:57.254Z last=2026-10-20T22:49:05.252Z
+party         architecture           None seats=48 lines=11 with_cited_paths=0 first=2026-10-17T16:25:43.763Z last=2026-10-17T16:29:02.037Z
+party         carry-over-evaluation  None seats=48 lines=17 with_cited_paths=0 first=2026-10-15T19:09:52.733Z last=2026-10-15T19:13:31.360Z
+party         ff-rewards-status-bar  None seats=1 lines=0 with_cited_paths=0 first=2026-10-22T23:51:39.769Z last=2026-10-22T23:51:39.769Z
+party         requirements           None seats=36 lines=26 with_cited_paths=0 first=2026-10-15T22:31:28.126Z last=2026-10-15T22:32:55.952Z
+party         retro                  None seats=5 lines=1 with_cited_paths=0 first=2026-10-23T01:57:40.367Z last=2026-10-23T01:58:13.237Z
+party         sprint-review          None seats=104 lines=24 with_cited_paths=0 first=2026-10-22T19:31:55.183Z last=2026-10-22T19:43:46.084Z
+party         stories                None seats=100 lines=33 with_cited_paths=0 first=2026-10-18T14:38:01.286Z last=2026-10-18T17:19:09.471Z
+party-unkeyed -                      None seats=9 lines=11 with_cited_paths=0 first=2026-10-15T10:44:03.804Z last=2026-10-23T02:03:00.795Z

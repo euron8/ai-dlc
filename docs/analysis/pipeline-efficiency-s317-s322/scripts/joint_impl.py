@@ -113,13 +113,17 @@ def main():
         for l in g:
             print(f"   {l}")
     print(f"DIFFER lines: {ndiff}")
-    # Controls: the b255 figures recorded in BL-808 (docs/backlog.md), read off OUT_OLD's own lines.
+    # Controls: the b255 figures recorded in BL-808 (docs/backlog.md), read off OUT_OLD's own lines. The hour figures
+    # are pinned on the MONOTONE segs clock (BL-1174, extract.py's default; both OUTs must be built with it). The b255
+    # values on the old clock (EXTRACT_MONOTONE_SEGS=0) were: s319 '2.09 h gap-inclusive (gap 0.77 h)' and 'lead
+    # active 1.31 h, ..., subagent active 3.51 h'; s321 '1.13 h gap-inclusive (gap 0.28 h)' and 'lead active 0.85 h,
+    # ..., subagent active 1.48 h'; s320 '1.94 h gap-inclusive'. Dollars, spawns and passes do not move.
     want = [
-        ('s319', 'SEATS', '2.09 h gap-inclusive (gap 0.77 h), token-equivalent $41.3 (API $41.3)'),
-        ('s319', 'SEATS', 'lead active 1.31 h, lead $10.6, subagent active 3.51 h, subagent $30.7'),
-        ('s321', 'SEATS', '1.13 h gap-inclusive (gap 0.28 h), token-equivalent $25.5 (API $25.5)'),
-        ('s321', 'SEATS', 'lead active 0.85 h, lead $7.6, subagent active 1.48 h, subagent $17.9'),
-        ('s320', 'SEATS', '1.94 h gap-inclusive'),
+        ('s319', 'SEATS', '1.63 h gap-inclusive (gap 0.49 h), token-equivalent $41.3 (API $41.3)'),
+        ('s319', 'SEATS', 'lead active 1.15 h, lead $10.6, subagent active 3.45 h, subagent $30.7'),
+        ('s321', 'SEATS', '0.90 h gap-inclusive (gap 0.18 h), token-equivalent $25.5 (API $25.5)'),
+        ('s321', 'SEATS', 'lead active 0.71 h, lead $7.6, subagent active 1.44 h, subagent $17.9'),
+        ('s320', 'SEATS', '1.52 h gap-inclusive'),
         ('s320', 'SEATS', 'token-equivalent $20.7'),
         ('s317', 'SPAWNS', '14.1 spawns per story, subagent spawn $24.3 per story'),
         ('s319', 'SPAWNS', '31.5 spawns per story'),

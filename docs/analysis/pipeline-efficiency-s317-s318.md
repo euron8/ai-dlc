@@ -4,6 +4,8 @@ Measured 2026-10-14 against the graph consumer's own Claude Code transcripts. Pu
 where the AI/DLC pipeline spends wall clock and tokens, step by step, with each step's stated
 reason for existing, so optimisation targets can be chosen from data.
 
+> **Clock note (BL-1174).** The hours from `steps.csv` here are on the old segs clock and cannot be reproduced: graph's transcripts for s314 to early s317 are no longer on disk (oldest mtime 2026-10-07; 175 leads and 7305 subagents now, against 158 and 5236 at the snapshot; token control 14.86 B against 21.44 B; s317 has 13 steps against 19), so the old-clock run at the pin does not reproduce it and a regeneration on the monotone clock is impossible (BL-1174).
+
 > **Correction, 2026-11-18 (batch 259, C4b).** This report's hours come from its own copy of the extractor
 > (`pipeline-efficiency-s317-s318/scripts/extract.py`), whose segment clock charges an out-of-order record's
 > interval twice. The later extractor, run on a monotone clock, reads s317 at 72.8 h against 80.8 h and s318 at

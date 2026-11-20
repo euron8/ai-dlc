@@ -1,0 +1,5 @@
+# AI_DLC_XDIR=<af44929cc archive in scratch> python3 -I bl398/prestep_bound.py docs/analysis/pipeline-efficiency-s317-s320/b244-snapshot
+before stories-test-strategy per story: $20.25, 34.8M tokens (control: must read 20.25 / 34.8)
+pre-step bucket per story (upper bound on what the pre-BL-927 extractor left out): $0.80, 1.73M tokens
+before plus the whole bound: $21.05, 36.5M tokens
+absent step (control, must be 0): $0.00, 0.00M
