@@ -371,6 +371,25 @@ saying what it is, because the operator reads the question, not the
 artifact behind it. (4) Dispatch, then ask, as Rule 12's
 `#### Operator decisions: dispatch, then ask`.
 
+**Item (3)'s plain-language duty binds every piece of lead prose the
+operator reads, not only question text:** the Production Validation
+Checkpoint and every other checkpoint or pause presentation, status
+reports, answers to the operator's own questions, and the handoff,
+resume and next-sprint prompts the operator reads or pastes. In that
+prose a label the lead coined itself -- in its planning artifacts or
+earlier in the session, such as a name it gave one piece of an
+operator's item -- is replaced by the plain phrase it stands for;
+defining the label beside it does not satisfy this rule. Every id that
+names a requirement, check, record, story or decision -- an `LR-`,
+`CO-`, `HB-`, `D-<n>`, escalation, story or check id -- carries a
+plain-language clause saying what it is, whether or not the operator
+has seen it before; one clause may cover a contiguous range or a class
+of ids. A commit sha or an image digest is not such an id. Where a
+template slot or another rule requires the id or label itself -- a
+verbatim quote of a requirement bullet, a cited entry id, a disposition
+key, failing output -- keep it unchanged and put the plain-language
+clause beside it or after the quotation, never inside the quoted text.
+
 **One shape for every operator decision, the sort before asking, and no re-ask of an attested act** -- stated in full under Rule 12's four `#### Operator decisions` subsections; apply all four to every question you put to the operator.
 
 **(b) In-flight interpretation preamble.** The first line of the

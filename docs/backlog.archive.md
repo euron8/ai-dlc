@@ -46799,3 +46799,63 @@ Provenance: batch 257, wave 11, W11-01 item 1 (ai-dlc-9c); id allocated by the l
 
 verify: manual
 
+## BL-1181 — the plain-language duty covers only the question text, so checkpoint prose, status reports and the lead's own coined labels reach the operator unexplained
+
+**LANDED (v0.1183.0).** **DEFECT.** Filed by the consumer as PC-S323-PLAIN-GLOSS-DUTY-SCOPED-TO-QUESTION-TEXT-ONLY-LEAVES-OPERATOR-PROSE-AND-COINED-TERMS-UNBOUNDED. Owner: `core/skills/ai-dlc/SKILL.md` Rule 11(a), `core/skills/ai-dlc/steps/deploy-validate.md` §5 and `core/skills/ai-dlc/steps/retro.md` step 7d.
+
+At 67f584233 the rulebook's only gloss duty was Rule 11(a) item (3), "Gloss every project-internal term in the question text itself", scoped to the question put to the operator and to pre-existing artifact ids. The Production Validation Checkpoint (`deploy-validate.md` §5), the largest surface where the operator reads the lead's prose, carried no gloss duty, and its template told the lead to cite "the escalation entry id it comes from" and "the HARD_BLOCK id and its disposition token" raw. Nothing addressed a label the lead coined itself: in graph's sprint 323 the lead split an operator item into pieces it named "wall 1" and "wall 2" and then wrote "venue wall 2" to the operator as if it were a known term, and the same kind of coinage had already reached the operator's own kickoff text through a previous sprint's close-out prompt.
+
+Goal: every piece of lead prose the operator reads explains its ids in plain words and uses no label the lead invented.
+
+1. `SKILL.md` Rule 11(a): a new paragraph after "Before any question reaches the operator, do four things to it." Item (3)'s duty binds every piece of lead prose the operator reads: every checkpoint or pause presentation, status reports, answers to the operator's own questions, and the handoff, resume and next-sprint prompts. A label the lead coined is replaced by the plain phrase it stands for; defining it beside the label does not satisfy the rule. Every requirement, check, record, story or decision id carries a plain-language clause, one clause may cover a range or class, and commit shas and image digests are not such ids. A slot that requires the id or text verbatim keeps it, with the clause beside it or after the quotation.
+2. `deploy-validate.md` §5: a paragraph after the checkpoint template citing that duty for every line of the checkpoint, with the verbatim slots (Locked-Requirement Coverage bullets, persistent-failure ids, failing output) kept verbatim; the template's escalation-entry-id and coverage HARD_BLOCK-id slots each gain "with a plain-language clause saying what it is".
+3. `retro.md` step 7d: a paragraph after the paste-ready block's instruction citing the duty for the whole handoff block, the prompt body included.
+
+No validator is added: whether a label was coined by the lead has no closed vocabulary, so no mechanical check is free of false positives. The duty is carried by `SKILL.md`, which every lead loads.
+
+Done condition: the receipt below exits 0.
+
+BL-868: no test is added, so none depends on load.
+
+Provenance: batch 261, C1; id allocated by the lead.
+
+verify: sh grep -q 'Before any question reaches' core/skills/ai-dlc/SKILL.md || exit 9; grep -q 'Production Validation Checkpoint' core/skills/ai-dlc/steps/deploy-validate.md || exit 9; grep -q 'pipeline-paused.flag' core/skills/ai-dlc/steps/retro.md || exit 9; grep -qF 'plain-language duty binds every piece of lead prose' core/skills/ai-dlc/SKILL.md && grep -qF 'is replaced by the plain phrase it stands for;' core/skills/ai-dlc/SKILL.md && grep -qF '**Plain language in the checkpoint.**' core/skills/ai-dlc/steps/deploy-validate.md && grep -qF 'the escalation entry id it comes from, with a plain-language clause' core/skills/ai-dlc/steps/deploy-validate.md && grep -qF '**Plain language in the handoff block.**' core/skills/ai-dlc/steps/retro.md
+
+## BL-1182 — the sprint-merge record block cannot commit its record under a consumer `*.txt` ignore rule
+
+**LANDED (v0.1183.0).** **DEFECT.** Filed by the consumer as PC-S323-DEPLOY-VALIDATE-STEP-2-BARE-ADD-UNEXECUTABLE-UNDER-CONSUMER-BLANKET-TXT-IGNORE. Owner: `core/skills/ai-dlc/steps/deploy-validate.md` §2, the "record the sprint-PR merge" block.
+
+At 67f584233 the block committed `_bmad-output/implementation-artifacts/s<N>/sprint-pr-merge.txt` with a bare `git add -- "$REC"` (`deploy-validate.md:87`, the only site in the tree). On a consumer whose `.gitignore` ignores `*.txt` (graph's `.gitignore:29`), `git add` refuses the path, the chain falls to `else`, and the block prints `RECORD: HARD_BLOCK write`; its stated remedy, "correct the values and re-run the block", cannot fix it because the values are correct. graph's first run of the block, in sprint 323, committed the record only after a manual `git add -f`, and graph now carries a local `.gitignore` negation as a workaround. `retro.md` Step 1 depends on the record being committed.
+
+Goal: the pipeline's own record commits whatever the consumer ignores.
+
+1. `git add -- "$REC"` becomes `git add -f -- "$REC"`. No other line of the block changes; the HARD_BLOCK remedy sentence stays, since an ignore rule can no longer be the reason the block fails.
+
+Probe (hand-run once, in the unit commit message): the block extracted at base and at tip, run in a scratch repository whose `.gitignore` is `*.txt` and whose `origin/main` carries the squash. Base prints `RECORD: HARD_BLOCK write`; tip prints `committed at` and `git ls-files --error-unmatch` finds the record while an unrelated ignored `.txt` stays untracked; the tip with `-f` removed prints `HARD_BLOCK write` (killed). Control, no `.gitignore`: base prints `committed at`.
+
+Done condition: the receipt below exits 0.
+
+BL-868: no test is added, so none depends on load.
+
+Provenance: batch 261, C1; id allocated by the lead.
+
+verify: sh grep -q 'sprint-pr-merge' core/skills/ai-dlc/steps/deploy-validate.md || exit 9; grep -qF 'git add -f -- "$REC"' core/skills/ai-dlc/steps/deploy-validate.md && ! grep -qF 'git add -- "$REC"' core/skills/ai-dlc/steps/deploy-validate.md
+
+## BL-1183 — a scope exclusion the sprint close-out proposes reaches the next sprint as the operator's own words, and the scope confirmation asks the operator to confirm it as their ask
+
+**DEFECT.** OPEN. Filed 2026-11-19. Owner: `core/skills/ai-dlc/steps/retro.md` §7d (the next-sprint handoff block) and `core/skills/ai-dlc/steps/route.md` Step 6 (the scope confirmation).
+
+§7d drafts the next-sprint prompt "in the same voice the user would use". When the close-out proposes leaving something out ("X stays with me", "operator-owned, not dev work: X"), the operator pastes that line, the request-capture hook records it as the operator's own bytes, it is copied into `user_request_verbatim`, and Step 6 puts it back to the operator as part of what they asked for. The operator confirms a scope exclusion without knowing the pipeline proposed it. The handoff prompt is not persisted, so the only carrier that survives the paste is the text itself. A consumer filed it from a real sprint, where the carve-out was a clause inside an in-scope item line.
+
+1. §7d: every line that defers or excludes work, or leaves an item with the operator, goes on its own line, in the third person, opening with the literal tag `[S<N> close-out proposes]`; the parent item stays in the operator's voice; the scope outline lists the tagged lines under `Pipeline carve-outs`.
+2. Step 6: a tagged line is the prior close-out's proposal. Each one is its own keep/strike question inside the one scope `AskUserQuestion` (one combined question when they exceed the call's limit), with the disposition of a struck, a kept-deferral and a kept-operator-owned line stated. An untagged line in a captured entry with the close-out's shape is treated the same way and named as possibly inherited.
+3. Pin both new paragraphs in `core/fixtures/process-rule-pins/run.sh` (`retro-7d-carveout-tag`, `route-carveout-confirm`).
+
+Done when all three ship: the close-out tags each carve-out, Step 6 asks about each one as the close-out's proposal, and both paragraphs are pinned. No validator changes: the tag does not match the identifier grammar Check 33 and 34 read.
+
+Provenance: batch 261, cluster C2, from a consumer filing; id allocated by lead ai-dlc-1d.
+
+**LANDED (v0.1183.0).** Batch 261, C2. All three items shipped. `retro.md` §7d puts each carve-out on its own third-person line tagged `[S<N> close-out proposes]` and lists the tagged lines under `Pipeline carve-outs` in the scope outline. `route.md` Step 6 asks keep or strike for each tagged line, and for each carve-out-shaped line of an untagged close-out prompt named as possibly inherited, inside the one scope `AskUserQuestion`; it states what a struck, a kept-deferral and a kept-operator-owned line each become, admits a kept carve-out's open `CO-` id in the `scope_deferred_items` field text, and never takes a carve-out line as a prior answer for Rule 11(a). `process-rule-pins` rows `retro-7d-carveout-tag` and `route-carveout-confirm` pin both paragraphs; each was proven by hand to fail with its paragraph deleted.
+
+verify: manual
+

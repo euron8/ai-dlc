@@ -1689,13 +1689,15 @@ Scope outline (for context, not part of the prompt):
 - Unexercised gates: [list or "none"]
 - Retro follow-ups: [list or "none"]
 - Related-epic stretch scope: [list or "none"]
+- Pipeline carve-outs: [each tagged line the prompt carries, or "none"]
 
 Copy the prompt below to start the next sprint.
 
 ----
 /ai-dlc
 
-[Draft prompt body — written in the same voice the user would use.
+[Draft prompt body — written in the same voice the user would use,
+ except carve-outs (see the paragraph on carve-outs below).
  Lead with the theme. Then name the epic explicitly and say whether
  the goal is to continue it or close it out. Then enumerate the
  in-scope items from 7b in priority order: epic-remaining stories
@@ -1708,6 +1710,27 @@ Copy the prompt below to start the next sprint.
 Replace the bracketed placeholders with actual content. The prompt body
 between the `----` markers must be directly pasteable — no meta
 commentary, no "here is your prompt", no surrounding quotes.
+
+**Plain language in the handoff block.** `SKILL.md` Rule 11(a)'s
+plain-language duty binds the whole block, the prompt body included: a
+label the lead coined is replaced by the plain phrase it stands for,
+and every id listed -- a story, escalation, gate or
+requirement id -- carries a plain-language clause saying what it is.
+
+**A carve-out is the close-out's proposal, never the operator's words.**
+A prompt-body item that defers or excludes work from the next sprint, or
+leaves an item with the operator ("X stays with me", "leave X to me",
+"operator-owned, not dev work: X"), is a carve-out; marking an item
+"stretch", as the placeholder requires, is not. Put each carve-out on its
+own line, as an indented sub-line under the item it qualifies where it
+qualifies one, and keep that item in the operator's voice without the
+clause. Write the carve-out in the third
+person, opening with the literal tag `[S<N> close-out proposes]`, `<N>`
+being the sprint just closed:
+`[S<N> close-out proposes] the <item> stays with the operator.` The tag is
+the one bracketed text the pasteable body carries and is not meta
+commentary: `route.md` Step 6 finds the line by it after the paste. List
+every tagged line under `Pipeline carve-outs` in the scope outline.
 
 Mark the pause before ending the turn (Rule 3 — the snapshot outlives
 the sprint, so without the flag the Stop hook blocks this terminal

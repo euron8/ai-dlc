@@ -84,7 +84,7 @@ elif ! git cat-file -e "${R_H}^{commit}" 2>/dev/null; then
   echo "RECORD: HARD_BLOCK head — PR head $R_H is not a local commit"
 elif [ "$(git show "HEAD:$REC" 2>/dev/null)" = "$ROW" ]; then
   echo "RECORD: PR #$R_N head $R_H squash $R_M already committed at $REC"
-elif mkdir -p "$(dirname "$REC")" && printf '%s\n' "$ROW" > "$REC" && git add -- "$REC" \
+elif mkdir -p "$(dirname "$REC")" && printf '%s\n' "$ROW" > "$REC" && git add -f -- "$REC" \
     && git commit -q -m "deploy-validate: sprint-merge record, PR #$R_N squash $R_M" -- "$REC"; then
   echo "RECORD: PR #$R_N head $R_H squash $R_M committed at $REC"
 else
@@ -555,14 +555,15 @@ See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
     with <the writing service's deployed sha> beside that row id]
   - [for each deferred or descoped bullet, each undelivered clause of a
     partial bullet, and each bullet deferred and
-    then delivered — the HARD_BLOCK id and its disposition token
+    then delivered — the HARD_BLOCK id, with a plain-language clause
+    saying what it is, and its disposition token
     (approved-deferral / do-now / descope)]
 - [carried from an earlier checkpoint of this plan: one line per bullet it marked phased, and each phased clause of a line it marked partial]
 - [no locked-requirements.md for this sprint: none recorded]
 
 ### Decisions for You
 [One item per decision owed at this checkpoint, or "none":]
-- [The decision asked, one sentence; the escalation entry id it comes from, if any]
+- [The decision asked, one sentence; the escalation entry id it comes from, with a plain-language clause saying what it is, if any]
   - [Option] (Recommended, unless unbadged under Rule 11(a)): [its effect and the value it leaves in force] — [the consequence of choosing it]
   - [Option]: [its effect and the value it leaves in force] — [the consequence of choosing it]
 
@@ -574,6 +575,15 @@ See: _bmad-output/planning-artifacts/s<N>/locked-requirements.md
 before proceeding to Sprint 2."]
 [If single sprint: "Sprint complete. Retro will run next."]
 ```
+
+**Plain language in the checkpoint.** `SKILL.md` Rule 11(a)'s
+plain-language duty binds every line of this checkpoint: every id and
+check number carries a plain-language clause saying what it is, and a
+label the lead coined is replaced by the plain phrase it stands for. A
+slot that requires the id or text verbatim -- a Locked-Requirement
+Coverage bullet, a persistent-failure id, failing output -- keeps it
+unchanged, with the clause beside it or after the quotation, never
+inside it.
 
 **Fix-forward cluster accounting.** The checkpoint MUST report the
 post-deploy fix-forward PR cluster: the PRs merged to the trunk after
