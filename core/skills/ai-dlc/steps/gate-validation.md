@@ -2024,9 +2024,11 @@ is judged by the model its own transcript recorded in the `--probe` file, joined
 
 **`role_contract_cited` records DELIVERY of the Rule 19(b) line, by one of two
 carriers, and `contract_via` names which:** `prompt` when the dispatch prompt
-names `team-roles/<role>.md`, `definition` when the dispatch is definition-bound
-and the body of the `.claude/agents/<role>.md` it selects carries that role's
-rendered line. `null` means neither carried it, and that row FAILS. Both are
+names `team-roles/<role>.md` (as the lead wrote it, or as the dispatch guard
+put it at the head of the prompt because the selected definition was not a
+current carrier for the session), `definition` when the dispatch is
+definition-bound and this session's start-up copy of the `.claude/agents/<role>.md`
+it selects carries that role's rendered line and embeds the current role file. `null` means neither carried it, and that row FAILS. Both are
 recorded at PreToolUse, so neither proves the spawn launched (another hook can
 still deny it) and neither proves the teammate read its role file. Do not read
 `contract_via: definition` as weaker than `prompt`: both put the same line in

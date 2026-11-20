@@ -22,6 +22,9 @@
 # So the floor is not enforced at copy time at all. The file always ships; this hook is
 # the single detector, and it runs every session regardless of how the file arrived.
 #
+# IT ALSO SNAPSHOTS `.claude/agents/` per session (THE AGENT-DEFINITION SNAPSHOT below), because it is
+# the one SessionStart hook registered for every source.
+#
 # FAIL-OPEN, ALWAYS. A detector that blocks a session is worse than the defect it
 # reports. Every path exits 0.
 
@@ -29,7 +32,7 @@
 # the guard at the end runs in the sourcing shell except that definition.
 arf_main() {
 set -u
-hook_in="$(cat 2>/dev/null || true)"   # SessionStart input; only `source` is read
+hook_in="$(cat 2>/dev/null || true)"   # SessionStart input; `source` and `session_id` are read
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 RULES_DIR="$PROJECT_DIR/.claude/rules"
@@ -57,6 +60,29 @@ if command -v jq >/dev/null 2>&1 && [ -r "$cm_f" ] \
   claude plugin marketplace add mksglu/context-mode
   claude plugin install context-mode@context-mode --scope user"
   fi
+fi
+
+# THE AGENT-DEFINITION SNAPSHOT. The harness loads `.claude/agents/*.md` once, when the process
+# starts, so the bodies a session's spawns receive are the ones on disk at `startup` or `resume`.
+# They are copied to `<state dir>/.agent-definitions/<session_id>/`, and the dispatch guard
+# credits a definition as the role-contract carrier only from this copy. NEVER on `compact` or
+# `clear`: the process keeps its start-up definitions through both, so a copy taken then would
+# record a body re-rendered mid-session that the process does not hold. Copies older than seven
+# days are pruned first; a session that outlives that falls back to the prompt carrier.
+if command -v jq >/dev/null 2>&1; then
+  snap_kv="$(printf '%s' "$hook_in" | jq -r '"\(.source // "") \(.session_id // "")"' 2>/dev/null || true)"
+  snap_src="${snap_kv%% *}"; snap_sid="${snap_kv#* }"
+  case "$snap_sid" in ''|*[!A-Za-z0-9_-]*) snap_sid="" ;; esac
+  STATE_DIR="${PROJECT_DIR}/${AI_DLC_STATE_DIR:-_bmad-output}"
+  SNAP_ROOT="${STATE_DIR}/.agent-definitions"
+  case "$snap_src" in
+    startup|resume)
+      if [ -n "$snap_sid" ] && [ -d "$PROJECT_DIR/.claude/agents" ]; then
+        [ -d "$SNAP_ROOT" ] && find "$SNAP_ROOT" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} + 2>/dev/null
+        mkdir -p "$SNAP_ROOT/$snap_sid" 2>/dev/null \
+          && cp -p "$PROJECT_DIR/.claude/agents/"*.md "$SNAP_ROOT/$snap_sid/" 2>/dev/null
+      fi ;;
+  esac
 fi
 
 # Nothing shipped here -> nothing to be inert -> say nothing. This is also what keeps

@@ -230,7 +230,7 @@ each dispatch prompt as a **stable shared block first, variable tail
 last**. The shared block — sprint conventions, architecture pointer,
 the Rule 19(b) role-contract line (*"Your operating contract is
 `.claude/team-roles/<role>.md`. Read it and follow it as your FIRST
-action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`."*), branch/merge protocol — MUST be byte-identical across every
+action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`."*) on a dispatch that does not select the role's rendered definition (a selected definition carries it, Rule 19(b)), branch/merge protocol — MUST be byte-identical across every
 dispatch of the same role in the sprint. Put only the per-story content
 (worktree path, story id, acceptance criteria, dev-brief findings)
 after it. Prompt-cache entries are content-addressed: an identical

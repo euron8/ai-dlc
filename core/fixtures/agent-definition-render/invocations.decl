@@ -2,4 +2,4 @@
 25 *
 0 core/git-hooks/pre-push
 5 core/scripts/render-agent-definitions.sh
-35 inproc:core/scripts/render-agent-definitions.sh
+38 inproc:core/scripts/render-agent-definitions.sh

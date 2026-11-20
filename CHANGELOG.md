@@ -19,6 +19,13 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1190.0] - 2026-11-20
+
+### BL-1187 (PARTIAL): teammates start with their role contract in hand
+
+- For every consumer's subagents: each rendered agent definition now carries its role file's text, so later spawns of the same role read the contract from the prompt cache instead of reading the file and caching it again (about 5K tokens of cache writes saved per later spawn, measured once on the analyst role; siblings launched in one wave do not share it). A snapshot taken when a session starts or resumes tells the dispatch guard whether this session holds the current text; when it does not (a role file edited mid-session, a `/clear`, a session older than this release), the guard adds the read-your-role-file instruction to the brief and never refuses the dispatch. A definition that carries another role's contract is refused, with the re-render remedy.
+- Consumers: after this pull, and after any later pull that changes a role file, re-run `bash scripts/ai-dlc/render-agent-definitions.sh`; until then `--check` (consumer pre-push and the reconcile worklist) fails and names the role file that changed.
+
 ## [0.1189.0] - 2026-11-20
 
 ### BL-878 (PARTIAL): more fixtures drive their subjects in process, and the checker that gates shipping conversions no longer has an owed list

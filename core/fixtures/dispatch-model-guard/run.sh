@@ -569,15 +569,20 @@ raw "$CONSUMER" "$(mkjson Agent - opus)" >/dev/null
 # THE WORLDS, each keyed to one property, scored `<decision>:<rows added>:<cited/via>`:
 #   a  defok, subagent_type only, no prompt citation      -> allow:1:true/definition
 #   b  defok, prompt cites the role AND definition bound  -> allow:1:true/prompt   (prompt wins)
-#   c  defnoline, bound, body carries neither line         -> deny:0:-
-#   d  defwrongrole, bound, body carries defok line 1 + 2  -> deny:0:-
+#   c  defnoline, bound, body carries neither line         -> allow:1:true/prompt (line injected)
+#   d  defwrongrole, bound, body carries defok's line 1 and region -> deny:0:- (a foreign body)
 #   e  remediator, no definition at all                    -> deny:0:-
 #   f  defok, a two-document input the emit cannot amend  -> see its own comment
-# THE CARRIER'S `false` IS NOW A DECISION, NOT A ROW. The carrier runs only on a BOUND definition,
-# which needs the role's pin, so the role is a declared aiDlcRoles key -- and THE CITATION DENY
-# refuses every uncited declared role before the append. c, d and e therefore read deny with no
-# row; a carrier crediting the line would flip its cell to allow:1:true/definition. The uncited
-# false/null ROW survives only where the deny cannot decide (the fail-open world above).
+# a, c, d and f carry session_id `s-dmg-1`, whose SessionStart snapshot seed.sh wrote: the guard
+# reads the definition body from that copy. c's snapshot body is not a carrier for its role, so
+# the guard puts the Rule 19(b) line at the head of the prompt (THE CITATION INJECTION) and the
+# row reads true/prompt; a carrier crediting the body would read true/definition. d's body is
+# ANOTHER role's (line 1 and region name defok), so no line is injected and the deny decides.
+# THE CARRIER'S `false` IS NOW A DECISION, NOT A ROW. A declared role with no bound definition
+# and no prompt citation is refused by THE CITATION DENY before the append, so e reads deny with
+# no row, and so does d, whose body is another role's; a bound definition that is merely not a
+# current carrier gets the injected line instead, so c reads allow:1:true/prompt. The uncited false/null ROW survives only where the deny cannot
+# decide (the fail-open world above).
 # c and d are MARKED and AGREE with settings, so the guard binds them exactly as it binds
 # defok; only the body differs, which is the property under test. The definition_bound
 # controls below say so in this run, or a false there would be a false for the wrong reason.
@@ -601,10 +606,10 @@ ccell() {
     'if .role == $r then "\(.role_contract_cited | tostring)/\(.contract_via | tostring)" else "WRONGROW:\(.role)" end' 2>/dev/null)"
   printf '%s:%s:%s' "$d" "$((n - 1))" "$c"
 }
-CW_A="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-a",subagent_type:"defok",prompt:"Do the work."}}')"
+CW_A="$(jq -nc '{session_id:"s-dmg-1",tool_name:"Agent",tool_input:{name:"t-a",subagent_type:"defok",prompt:"Do the work."}}')"
 CW_B="$(mkjson Agent defok)"
-CW_C="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-c",subagent_type:"defnoline",prompt:"Do the work."}}')"
-CW_D="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-d",subagent_type:"defwrongrole",prompt:"Do the work."}}')"
+CW_C="$(jq -nc '{session_id:"s-dmg-1",tool_name:"Agent",tool_input:{name:"t-c",subagent_type:"defnoline",prompt:"Do the work."}}')"
+CW_D="$(jq -nc '{session_id:"s-dmg-1",tool_name:"Agent",tool_input:{name:"t-d",subagent_type:"defwrongrole",prompt:"Do the work."}}')"
 CW_E="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-e",subagent_type:"remediator",prompt:"Do the work."}}')"
 
 # CONTROLS: c and d are bound (so the body is what decides), e is not. Their uncited dispatch is
@@ -632,13 +637,13 @@ TIP_B="$(ccell "$HOOK" "$CW_B" defok)"
   && ok "(b) prompt citation with a definition ALSO bound -> allowed, contract_via=prompt (the prompt wins)" \
   || bad "(b) scored '$TIP_B', expected 'allow:1:true/prompt'"
 TIP_C="$(ccell "$HOOK" "$CW_C" defnoline)"
-[ "$TIP_C" = "deny:0:-" ] \
-  && ok "(c) marked, agreeing definition whose body lacks the line -> DENIED, no row (the frontmatter is not the carrier)" \
-  || bad "(c) scored '$TIP_C', expected 'deny:0:-' — a bound definition was credited without its body being read"
+[ "$TIP_C" = "allow:1:true/prompt" ] \
+  && ok "(c) marked, agreeing definition whose body lacks the line -> the line is injected into the prompt, contract_via=prompt (the frontmatter is not the carrier)" \
+  || bad "(c) scored '$TIP_C', expected 'allow:1:true/prompt' — a bound definition was credited without its body being read"
 TIP_D="$(ccell "$HOOK" "$CW_D" defwrongrole)"
 [ "$TIP_D" = "deny:0:-" ] \
-  && ok "(d) role R definition carrying role S line 1 and the shared line 2 -> DENIED, no row (the match is role-specific)" \
-  || bad "(d) scored '$TIP_D', expected 'deny:0:-' — another role's contract line was credited to this role"
+  && ok "(d) role R definition carrying role S line 1 and S's embedded contract -> DENIED, no row (a foreign body is never patched with a line)" \
+  || bad "(d) scored '$TIP_D', expected 'deny:0:-' — another role's contract would reach this role's teammate"
 TIP_E="$(ccell "$HOOK" "$CW_E" remediator)"
 [ "$TIP_E" = "deny:0:-" ] \
   && ok "(e) no definition file, no prompt citation -> DENIED, no row" \
@@ -661,6 +666,53 @@ TIP_F="$(ccell "$HOOK" "$CW_F" defok)"
 [ "$TIP_F" = "none:1:true/definition" ] \
   && ok "(f) fail-open emit: the row still records true/definition — a record of the selection, not of a rewrite that reached the harness" \
   || bad "(f) fail-open emit recorded '$TIP_F', expected 'true/definition' (the recorded behaviour changed; decide whether that is intended)"
+
+# --- THE SESSION SNAPSHOT: the definition carrier is read from the copy THIS session loaded -------
+# The harness loads .claude/agents/ once per process, so the guard credits the embedded role contract
+# only from <state dir>/.agent-definitions/<session_id>/, and only when its ROLE-CONTRACT region equals
+# the installed role file. Every other case cites the role file at the head of the prompt; none is denied.
+# Scored `<decision>:<contract_via>:<prompt head>` (`line` when the prompt starts with the role line,
+# `brief` when it is the brief as sent, `-` when no updatedInput prompt came back):
+#   sa  positive: snapshot current, region equals the role file   -> allow:definition:brief
+#   sm  missing snapshot (a session the snapshot step never saw)   -> allow:prompt:line
+#   ss  stale: role file edited AND re-rendered after the snapshot -> allow:prompt:line
+# ss is the mid-session re-render: the on-disk definition is current again, so a guard reading it
+# instead of the snapshot would credit a body this session does not hold and score sa's cell.
+snapcell() { # snapcell <consumer> <json> -> the score above
+  local o d v h
+  rm -f "$1/_bmad-output/spawn-ledger.jsonl"
+  o="$(printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" dgrun "$HOOK" 2>/dev/null)"
+  d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$o" 2>/dev/null)"; [ -n "$d" ] || d=none
+  v="$(tail -1 "$1/_bmad-output/spawn-ledger.jsonl" 2>/dev/null | jq -r '.contract_via | tostring' 2>/dev/null)"
+  h="$(jq -r '.hookSpecificOutput.updatedInput.prompt // "-"' <<<"$o" 2>/dev/null | head -1)"
+  case "$h" in
+    'Your operating contract is `.claude/team-roles/defok.md`. Read it and follow it as your FIRST action'*) h=line ;;
+    'Do the work.') h=brief ;;
+    *) h="-" ;;
+  esac
+  printf '%s:%s:%s' "$d" "${v:--}" "$h"
+}
+SN_SA="$(snapcell "$CONSUMER" "$CW_A")"
+[ "$SN_SA" = "allow:definition:brief" ] \
+  && ok "(sa) snapshot current and its region equals the role file -> the definition carries the contract, the brief is sent as written" \
+  || bad "(sa) scored '$SN_SA', expected 'allow:definition:brief'"
+SN_SM="$(snapcell "$CONSUMER" "$(jq -c '.session_id = "s-dmg-nosnap"' <<<"$CW_A")")"
+[ "$SN_SM" = "allow:prompt:line" ] \
+  && ok "(sm) no snapshot for this session -> the role line is put at the head of the prompt, contract_via=prompt, never a deny" \
+  || bad "(sm) scored '$SN_SM', expected 'allow:prompt:line'"
+SS_W="$WORK/snapstale"
+rm -rf "$SS_W"; cp -R "$CONSUMER" "$SS_W"
+printf 'A clause added mid-session.\n' >> "$SS_W/.claude/team-roles/defok.md"
+awk -v rf="$SS_W/.claude/team-roles/defok.md" '/^<!-- ROLE-CONTRACT BEGIN /{print; while ((getline l < rf) > 0) print l; skip=1; next}
+  /^<!-- ROLE-CONTRACT END -->$/{skip=0} !skip' "$CONSUMER/.claude/agents/defok.md" > "$SS_W/.claude/agents/defok.md"
+grep -qxF 'A clause added mid-session.' "$SS_W/.claude/agents/defok.md" \
+  && ! grep -qxF 'A clause added mid-session.' "$SS_W/_bmad-output/.agent-definitions/s-dmg-1/defok.md" \
+  && ok "(ss) CONTROL: the on-disk definition carries the edited role file and the snapshot does not" \
+  || bad "(ss) CONTROL: the re-render or the snapshot is not the world this arm claims"
+SN_SS="$(snapcell "$SS_W" "$CW_A")"
+[ "$SN_SS" = "allow:prompt:line" ] \
+  && ok "(ss) role file edited and re-rendered after the snapshot -> the snapshot body is stale, the role line is put at the head of the prompt" \
+  || bad "(ss) scored '$SN_SS', expected 'allow:prompt:line' — a body this session does not hold was credited"
 
 # --- THE SHARD LINE: AN INVENTED SERIAL EXCEPTION IS RECORDED, NEVER LAUNDERED TO NULL --------
 # Rule 28 names four serial exceptions. A `none` naming anything else records

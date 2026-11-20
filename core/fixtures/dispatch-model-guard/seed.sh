@@ -115,6 +115,14 @@ done
 # here stay honest and the renderer's own fixture is where that divergence shows.
 mkdir -p "$CONSUMER/.claude/agents"
 DEF_MARKER='<!-- AI/DLC GENERATED: rendered by scripts/ai-dlc/render-agent-definitions.sh from .claude/settings.json aiDlcRoles.<role>. Edit the settings entry, then re-render. -->'
+# embed_role <role>: line 2 and the ROLE-CONTRACT region the renderer writes below line 1, the
+# role file verbatim between the markers.
+embed_role() {
+  printf '%s\n' 'contract: its text follows below, between the ROLE-CONTRACT BEGIN and END markers, so you hold it without a Read. If your brief tells you to Read that file, Read it: the file is then newer than the copy below. Read an appendix only when a pointer in the contract tells you to.'
+  printf '<!-- ROLE-CONTRACT BEGIN .claude/team-roles/%s.md -->\n' "$1"
+  cat "$CONSUMER/.claude/team-roles/$1.md"
+  printf '<!-- ROLE-CONTRACT END -->\n'
+}
 render_def() {            # render_def <name> <model-key> [effort]
   {
     printf -- '---\n'
@@ -125,7 +133,7 @@ render_def() {            # render_def <name> <model-key> [effort]
     printf -- '---\n'
     printf '%s\n' "$DEF_MARKER"
     printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your\n' "$1"
-    printf 'FIRST action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`.\n'
+    embed_role "$1"
   } > "$CONSUMER/.claude/agents/$1.md"
 }
 
@@ -179,8 +187,16 @@ render_def defnoeffort opus
   printf -- '---\nname: defwrongrole\ndescription: AI/DLC role defwrongrole — rendered from aiDlcRoles.defwrongrole; do not edit by hand\nmodel: opus\neffort: high\n---\n'
   printf '%s\n' "$DEF_MARKER"
   printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your\n' defok
-  printf 'FIRST action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`.\n'
+  embed_role defok
 } > "$CONSUMER/.claude/agents/defwrongrole.md"
+
+# THE SESSION SNAPSHOT ai-dlc-rules-floor.sh takes at SessionStart startup/resume: a copy of
+# .claude/agents/*.md under <state dir>/.agent-definitions/<session_id>/. The guard credits a
+# definition as the role-contract carrier only from this copy. Session `s-dmg-1` holds every
+# definition above as rendered; a dispatch carrying no session_id, or one with no snapshot,
+# falls back to the prompt carrier.
+mkdir -p "$CONSUMER/_bmad-output/.agent-definitions/s-dmg-1"
+cp "$CONSUMER/.claude/agents/"*.md "$CONSUMER/_bmad-output/.agent-definitions/s-dmg-1/"
 
 # NO definition at all for `defnodef`, nor for tea/architect/badeffort/nocfg.
 
