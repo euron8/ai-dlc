@@ -1,0 +1,45 @@
+== s321 notifications of subagent end matched 1427 (unmatched task-ids 0), with a following state change 1425
+   subagent end -> notification enqueued: median 0.2s p90 0.6s max 2s
+   enqueue -> delivered into lead context: median 1.8s p90 138.0s
+   ALL n=1425: enqueue->next dispatch/edit/gate/commit: median 126s p90 950s sum 142.1h | capped(<=300s) sum 60.41h
+      lead busy         n 590 median    17s sum(cap300) 10.71h sum(all) 24.48h
+      lead idle         n 673 median   322s sum(cap300) 37.96h sum(all) 80.21h
+      lead idle-textend n  21 median   204s sum(cap300) 1.05h sum(all) 1.96h
+      compaction inside window n 127 sum(all) 23.19h sum(cap300) 9.53h
+      operator ask inside window n  14 sum(all) 12.30h sum(cap300) 1.17h
+   LAST-of-round n=256: enqueue->next dispatch/edit/gate/commit: median 25s p90 302s sum 10.1h | capped(<=300s) sum 5.26h
+      lead busy         n 155 median    15s sum(cap300) 2.12h sum(all) 2.78h
+      lead idle         n  82 median    30s sum(cap300) 2.04h sum(all) 3.15h
+      lead idle-textend n   5 median    66s sum(cap300) 0.15h sum(all) 0.15h
+      compaction inside window n   8 sum(all) 1.02h sum(cap300) 0.45h
+      operator ask inside window n   6 sum(all) 2.97h sum(cap300) 0.50h
+== s322 notifications of subagent end matched 787 (unmatched task-ids 0), with a following state change 786
+   subagent end -> notification enqueued: median 0.4s p90 0.7s max 308s
+   enqueue -> delivered into lead context: median 2.9s p90 145.1s
+   ALL n=786: enqueue->next dispatch/edit/gate/commit: median 144s p90 1152s sum 96.7h | capped(<=300s) sum 34.71h
+      lead busy         n 310 median    35s sum(cap300) 6.56h sum(all) 15.43h
+      lead idle         n 385 median   441s sum(cap300) 22.87h sum(all) 69.17h
+      lead idle-textend n  12 median   148s sum(cap300) 0.51h sum(all) 2.63h
+      compaction inside window n  76 sum(all) 8.65h sum(cap300) 4.57h
+      operator ask inside window n   3 sum(all) 0.80h sum(cap300) 0.20h
+   LAST-of-round n=234: enqueue->next dispatch/edit/gate/commit: median 59s p90 320s sum 15.7h | capped(<=300s) sum 6.16h
+      lead busy         n 136 median    47s sum(cap300) 2.58h sum(all) 8.35h
+      lead idle         n  66 median    48s sum(cap300) 1.82h sum(all) 3.66h
+      lead idle-textend n   4 median    18s sum(cap300) 0.09h sum(all) 0.17h
+      compaction inside window n  27 sum(all) 3.16h sum(cap300) 1.58h
+      operator ask inside window n   1 sum(all) 0.32h sum(cap300) 0.08h
+== s323 notifications of subagent end matched 1355 (unmatched task-ids 4), with a following state change 1355
+   subagent end -> notification enqueued: median 0.5s p90 1.8s max 85s
+   enqueue -> delivered into lead context: median 7.4s p90 87.4s
+   ALL n=1355: enqueue->next dispatch/edit/gate/commit: median 119s p90 885s sum 202.0h | capped(<=300s) sum 54.91h
+      lead busy         n 728 median    39s sum(cap300) 15.63h sum(all) 95.54h
+      lead idle         n 394 median   246s sum(cap300) 22.77h sum(all) 51.62h
+      lead idle-textend n   7 median   184s sum(cap300) 0.33h sum(all) 0.49h
+      compaction inside window n 220 sum(all) 44.87h sum(cap300) 15.67h
+      operator ask inside window n   6 sum(all) 9.52h sum(cap300) 0.50h
+   LAST-of-round n=220: enqueue->next dispatch/edit/gate/commit: median 56s p90 489s sum 24.1h | capped(<=300s) sum 5.96h
+      lead busy         n 150 median    42s sum(cap300) 3.27h sum(all) 15.48h
+      lead idle         n  48 median    64s sum(cap300) 1.41h sum(all) 4.03h
+      lead idle-textend n   2 median   112s sum(cap300) 0.06h sum(all) 0.06h
+      compaction inside window n  16 sum(all) 1.01h sum(cap300) 0.88h
+      operator ask inside window n   4 sum(all) 3.47h sum(cap300) 0.33h

@@ -1,0 +1,7 @@
+s321 n=55  (summarizer dur>=1s: 55, <1s: 0)
+   dur>=1s  pre-call end -> boundary stamp: median 71s p90 110s | boundary -> first post call end: median 5s p90 22s | first post call own latency median 5.1s p90 14.4s; uncached tok median 76k
+s322 n=71  (summarizer dur>=1s: 71, <1s: 0)
+   dur>=1s  pre-call end -> boundary stamp: median 73s p90 128s | boundary -> first post call end: median 12s p90 21s | first post call own latency median 12.4s p90 20.2s; uncached tok median 30k
+s323 n=134  (summarizer dur>=1s: 58, <1s: 76)
+   dur>=1s  pre-call end -> boundary stamp: median 80s p90 136s | boundary -> first post call end: median 19s p90 39s | first post call own latency median 18.8s p90 39.1s; uncached tok median 52k
+   dur<1s   pre-call end -> boundary stamp: median 3s p90 22s | boundary -> first post call end: median 21s p90 46s | first post call own latency median 20.4s p90 46.1s; uncached tok median 58k

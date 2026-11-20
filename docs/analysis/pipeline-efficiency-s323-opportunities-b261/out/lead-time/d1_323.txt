@@ -1,0 +1,7 @@
+s323 lead hook records 4542, sum of durationMs 0.11 h (sequential upper bound), injected bytes 5.5 MB
+  SessionStart       ai-dlc-recover.sh                        hook_success             n   134  sum   0.04 h  mean    975 ms max   3825 ms  bytes   0.00 MB
+  PostToolBatch      ai-dlc-context-sensor.sh                 hook_success             n   524  sum   0.03 h  mean    203 ms max   1228 ms  bytes   0.00 MB
+  PreToolUse         ai-dlc-dispatch-guard.sh                 hook_success             n   179  sum   0.02 h  mean    405 ms max   2573 ms  bytes   0.00 MB
+  PostToolUse        claude-code                              hook_success             n   537  sum   0.01 h  mean     95 ms max    650 ms  bytes   0.00 MB
+  SessionStart       ai-dlc-rules-floor.sh                    hook_success             n   139  sum   0.01 h  mean    144 ms max   2510 ms  bytes   0.00 MB
+  PostToolUse        post_tool_hook.py                        hook_success             n   210  sum   0.00 h  mean     35 ms max    167 ms  bytes   0.00 MB

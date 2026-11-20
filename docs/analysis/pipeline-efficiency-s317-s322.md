@@ -4,7 +4,8 @@ Measured 2026-11-11. This extends [`pipeline-efficiency-s317-s318.md`](pipeline-
 and [`pipeline-efficiency-s317-s320/`](pipeline-efficiency-s317-s320/README.md) through graph s321
 (closed 2026-11-08) and s322 (open: planning complete, 3 of 8 stories done at the snapshot). Scripts
 and their raw output are in [`pipeline-efficiency-s317-s322/`](pipeline-efficiency-s317-s322/).
-Nothing was written to graph.
+Nothing was written to graph. The analysis continues through s323 in
+[`pipeline-efficiency-s323-opportunities-b261.md`](pipeline-efficiency-s323-opportunities-b261.md).
 
 > **Clock, 2026-11-19 (BL-1174).** Hours in this report are now on the monotone segs clock; the report first
 > measured them on the old clock, which charged an out-of-order record's interval twice. Tokens, dollars and call

@@ -1,0 +1,12 @@
+text-only turn (no tool)                     n  294 act 3.67h | mod 0.35 tool 0.00 wait 3.32 | fr 0.26M out 0.07M
+Bash shell read (grep/sed/cat/ls/awk/..)     n  367 act 0.72h | mod 0.65 tool 0.03 wait 0.04 | fr 0.39M out 0.22M
+ctx_execute shell read                       n  300 act 0.69h | mod 0.64 tool 0.02 wait 0.03 | fr 0.37M out 0.16M
+advisor consult                              n   44 act 0.61h | mod 0.15 tool 0.43 wait 0.03 | fr 0.37M out 0.01M
+AskUserQuestion (operator)                   n   12 act 0.60h | mod 0.08 tool 0.12 wait 0.40 | fr 0.01M out 0.03M
+ctx_search/index/batch                       n   83 act 0.29h | mod 0.26 tool 0.02 wait 0.01 | fr 0.41M out 0.02M
+ToolSearch                                   n   31 act 0.17h | mod 0.15 tool 0.00 wait 0.03 | fr 0.26M out 0.02M
+ctx_execute python                           n   53 act 0.14h | mod 0.13 tool 0.01 wait 0.00 | fr 0.07M out 0.04M
+Write other-path                             n   18 act 0.12h | mod 0.12 tool 0.00 wait 0.00 | fr 0.02M out 0.06M
+ctx_execute shell python-inline              n   29 act 0.12h | mod 0.11 tool 0.00 wait 0.01 | fr 0.10M out 0.03M
+Read claude-skill/rules                      n   64 act 0.11h | mod 0.10 tool 0.00 wait 0.01 | fr 0.17M out 0.02M
+Edit planning-artifacts                      n   33 act 0.10h | mod 0.05 tool 0.01 wait 0.04 | fr 0.02M out 0.03M

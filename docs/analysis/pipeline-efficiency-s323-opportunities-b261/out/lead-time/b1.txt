@@ -1,0 +1,53 @@
+== sprint 321 model claude-sonnet-5-5 n=6631 | lat median 5.3s p90 16.5s mean 10.4s | ctx median 255k p90 362k max 771k | out median 538 p90 1785
+   ctx  40- 80k n   36 lat med   3.2 p90    6.7 | out med  145 | uncached med  62198 | lat/out-tok med 0.015
+   ctx  80-120k n  160 lat med   4.8 p90    8.3 | out med  468 | uncached med   4476 | lat/out-tok med 0.009
+   ctx 120-160k n  730 lat med   4.9 p90   10.7 | out med  507 | uncached med   1272 | lat/out-tok med 0.009
+   ctx 160-200k n 1039 lat med   4.7 p90   11.8 | out med  497 | uncached med   1120 | lat/out-tok med 0.009
+   ctx 200-999k n 4666 lat med   5.5 p90   20.3 | out med  569 | uncached med   1243 | lat/out-tok med 0.009
+   OLS lat = -18.5 + 0.21 s/1k uncached + 0.092 s/1k cache-read + 5.3 s/1k out tok ; R2 0.34
+   out     0-50        n  149 lat med   1.9 p90    6.5 | ctx med 276k
+   out    50-200       n  884 lat med   2.3 p90    4.6 | ctx med 250k
+   out   200-1000      n 4042 lat med   4.8 p90    8.3 | ctx med 247k
+   out  1000-5000      n 1459 lat med  12.2 p90   25.3 | ctx med 275k
+   out  5000-1000000000 n   97 lat med  43.6 p90   84.4 | ctx med 292k
+== sprint 321 model qwen38flash-mlx n=441 | lat median 5.9s p90 30.2s mean 12.5s | ctx median 149k p90 198k max 229k | out median 421 p90 2783
+   ctx  80-120k n  100 lat med   8.1 p90   22.2 | out med  621 | uncached med   1519 | lat/out-tok med 0.012
+   ctx 120-160k n  136 lat med   5.2 p90   28.8 | out med  396 | uncached med   1278 | lat/out-tok med 0.012
+   ctx 160-200k n  142 lat med   4.2 p90   19.9 | out med  283 | uncached med    896 | lat/out-tok med 0.012
+   ctx 200-999k n   41 lat med  10.5 p90   85.2 | out med  730 | uncached med   2193 | lat/out-tok med 0.011
+   OLS lat = -0.4 + 0.52 s/1k uncached + 0.011 s/1k cache-read + 8.8 s/1k out tok ; R2 0.97
+   out    50-200       n   98 lat med   2.4 p90    5.3 | ctx med 163k
+   out   200-1000      n  206 lat med   5.2 p90    9.9 | ctx med 149k
+   out  1000-5000      n  113 lat med  19.3 p90   37.1 | ctx med 139k
+== sprint 322 model qwen38flash n=9206 | lat median 3.5s p90 15.3s mean 7.0s | ctx median 148k p90 212k max 232k | out median 327 p90 1451
+   ctx  40- 80k n 1084 lat med   3.5 p90   14.1 | out med  300 | uncached med    458 | lat/out-tok med 0.010
+   ctx  80-120k n 2035 lat med   3.4 p90   15.8 | out med  328 | uncached med    327 | lat/out-tok med 0.010
+   ctx 120-160k n 2143 lat med   3.6 p90   17.0 | out med  344 | uncached med    259 | lat/out-tok med 0.010
+   ctx 160-200k n 2341 lat med   3.5 p90   14.4 | out med  310 | uncached med    251 | lat/out-tok med 0.010
+   ctx 200-999k n 1594 lat med   3.7 p90   15.1 | out med  343 | uncached med    252 | lat/out-tok med 0.010
+   OLS lat = 0.4 + 0.28 s/1k uncached + 0.003 s/1k cache-read + 9.0 s/1k out tok ; R2 0.67
+   out    50-200       n 2714 lat med   1.7 p90    2.5 | ctx med 148k
+   out   200-1000      n 4956 lat med   4.1 p90    8.5 | ctx med 150k
+   out  1000-5000      n 1458 lat med  15.5 p90   33.9 | ctx med 144k
+   out  5000-1000000000 n   58 lat med  57.5 p90   94.2 | ctx med 159k
+== sprint 323 model deepseek41 n=1061 | lat median 4.8s p90 19.5s mean 8.9s | ctx median 142k p90 207k max 229k | out median 292 p90 1078
+   ctx  40- 80k n   63 lat med   4.5 p90   23.5 | out med  260 | uncached med    890 | lat/out-tok med 0.016
+   ctx  80-120k n  306 lat med   4.0 p90   13.5 | out med  234 | uncached med   1089 | lat/out-tok med 0.016
+   ctx 120-160k n  264 lat med   5.1 p90   18.7 | out med  333 | uncached med   1172 | lat/out-tok med 0.016
+   ctx 160-200k n  277 lat med   5.3 p90   23.5 | out med  306 | uncached med    954 | lat/out-tok med 0.016
+   ctx 200-999k n  151 lat med   5.9 p90   26.1 | out med  331 | uncached med    960 | lat/out-tok med 0.016
+   OLS lat = -0.8 + 0.45 s/1k uncached + 0.025 s/1k cache-read + 8.8 s/1k out tok ; R2 0.75
+   out    50-200       n  319 lat med   2.4 p90    3.6 | ctx med 126k
+   out   200-1000      n  592 lat med   6.0 p90   12.3 | ctx med 143k
+   out  1000-5000      n  118 lat med  22.3 p90   35.6 | ctx med 157k
+== sprint 323 model qwen38flash n=10683 | lat median 4.0s p90 18.3s mean 7.9s | ctx median 159k p90 216k max 229k | out median 378 p90 1672
+   ctx  40- 80k n  388 lat med   4.0 p90   22.3 | out med  390 | uncached med    774 | lat/out-tok med 0.010
+   ctx  80-120k n 2036 lat med   3.4 p90   17.0 | out med  322 | uncached med    456 | lat/out-tok med 0.010
+   ctx 120-160k n 3017 lat med   3.8 p90   16.0 | out med  385 | uncached med    311 | lat/out-tok med 0.009
+   ctx 160-200k n 3009 lat med   3.8 p90   15.3 | out med  387 | uncached med    302 | lat/out-tok med 0.009
+   ctx 200-999k n 2233 lat med   5.5 p90   24.6 | out med  399 | uncached med    288 | lat/out-tok med 0.012
+   OLS lat = -2.6 + 0.27 s/1k uncached + 0.024 s/1k cache-read + 8.7 s/1k out tok ; R2 0.66
+   out    50-200       n 2743 lat med   1.6 p90    3.3 | ctx med 152k
+   out   200-1000      n 5779 lat med   4.2 p90    8.9 | ctx med 161k
+   out  1000-5000      n 2037 lat med  15.4 p90   34.7 | ctx med 159k
+   out  5000-1000000000 n  100 lat med  56.6 p90  111.3 | ctx med 165k

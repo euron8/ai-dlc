@@ -1,0 +1,91 @@
+===== ALL calls 6159 active h 25.25 gap h 18.55 model h 12.36 tool h 4.02 fresh+out Mtok 16.3 cacheread Mtok 932
+  no-tool / text/thinking only                         calls   708 act  6.20h (31.5 s/call) model 0.94h tool 0.00h  fresh+out   0.69M  cr   120.0M
+  AskUserQuestion /                                    calls    36 act  2.59h (259.0 s/call) model 0.23h tool 0.25h  fresh+out   0.08M  cr     5.7M
+  mcp__advisor__consult /                              calls   204 act  2.56h (45.1 s/call) model 0.66h tool 1.68h  fresh+out   1.47M  cr    28.1M
+  Bash / sh:grep                                       calls   613 act  1.21h ( 7.1 s/call) model 0.98h tool 0.16h  fresh+out   1.01M  cr    96.4M
+  ctx_execute / shell:sh:grep                          calls   316 act  0.91h (10.4 s/call) model 0.78h tool 0.05h  fresh+out   0.59M  cr    47.2M
+  ctx_search /                                         calls   233 act  0.65h (10.0 s/call) model 0.58h tool 0.05h  fresh+out   0.72M  cr    33.0M
+  Read / claude-skill/rules                            calls   300 act  0.61h ( 7.3 s/call) model 0.54h tool 0.02h  fresh+out   1.62M  cr    40.4M
+  ToolSearch /                                         calls    78 act  0.56h (25.6 s/call) model 0.35h tool 0.00h  fresh+out   0.75M  cr    10.3M
+  Write / other-path                                   calls    85 act  0.52h (22.2 s/call) model 0.49h tool 0.00h  fresh+out   0.27M  cr    13.5M
+  ctx_execute / shell:sh:sed                           calls   210 act  0.45h ( 7.7 s/call) model 0.42h tool 0.02h  fresh+out   0.44M  cr    25.7M
+  Bash / sh:sleep                                      calls    46 act  0.44h (34.7 s/call) model 0.05h tool 0.26h  fresh+out   0.03M  cr     7.6M
+  Bash / sh:cat                                        calls   199 act  0.43h ( 7.8 s/call) model 0.37h tool 0.02h  fresh+out   0.77M  cr    31.8M
+  Read / other-path                                    calls   180 act  0.39h ( 7.7 s/call) model 0.35h tool 0.01h  fresh+out   0.22M  cr    29.0M
+  Bash / git push                                      calls    43 act  0.38h (31.9 s/call) model 0.05h tool 0.33h  fresh+out   0.03M  cr     6.7M
+  Bash / python-inline                                 calls   108 act  0.30h (10.1 s/call) model 0.22h tool 0.06h  fresh+out   0.13M  cr    17.7M
+  Bash / sh:ls                                         calls   162 act  0.28h ( 6.3 s/call) model 0.26h tool 0.01h  fresh+out   0.40M  cr    23.7M
+  Bash / sh:sed                                        calls   183 act  0.28h ( 5.5 s/call) model 0.25h tool 0.01h  fresh+out   0.22M  cr    25.5M
+  ctx_execute / python                                 calls    68 act  0.28h (14.6 s/call) model 0.26h tool 0.01h  fresh+out   0.13M  cr    10.1M
+  ctx_execute / shell:python-inline                    calls    71 act  0.25h (12.9 s/call) model 0.22h tool 0.03h  fresh+out   0.19M  cr    10.6M
+  ctx_execute / shell:sh:awk                           calls    87 act  0.25h (10.2 s/call) model 0.23h tool 0.01h  fresh+out   0.15M  cr    13.2M
+  Edit / gate-records                                  calls    76 act  0.24h (11.2 s/call) model 0.18h tool 0.02h  fresh+out   0.12M  cr    12.5M
+  Edit / planning-artifacts                            calls    90 act  0.22h ( 8.7 s/call) model 0.15h tool 0.02h  fresh+out   0.13M  cr    15.5M
+  Bash / sh:tail                                       calls   146 act  0.20h ( 5.0 s/call) model 0.17h tool 0.01h  fresh+out   0.25M  cr    24.4M
+  Bash / gh pr                                         calls    45 act  0.17h (13.2 s/call) model 0.11h tool 0.04h  fresh+out   0.05M  cr     6.7M
+  Bash / sh:awk                                        calls    63 act  0.16h ( 9.2 s/call) model 0.12h tool 0.04h  fresh+out   0.07M  cr    10.0M
+  ctx_execute / shell:sh:cat                           calls    56 act  0.14h ( 9.3 s/call) model 0.14h tool 0.00h  fresh+out   0.08M  cr     7.9M
+  Bash / sh:date                                       calls    57 act  0.14h ( 8.5 s/call) model 0.11h tool 0.01h  fresh+out   0.12M  cr     9.0M
+  Bash / sh:aws                                        calls    45 act  0.13h (10.5 s/call) model 0.06h tool 0.04h  fresh+out   0.05M  cr     7.2M
+  Bash / git status                                    calls    58 act  0.13h ( 7.8 s/call) model 0.10h tool 0.02h  fresh+out   0.17M  cr     9.6M
+  Bash / sh:wc                                         calls    70 act  0.11h ( 5.9 s/call) model 0.10h tool 0.01h  fresh+out   0.19M  cr     9.9M
+===== planning calls 1657 active h 8.04 gap h 10.37 model h 3.37 tool h 0.71 fresh+out Mtok 4.2 cacheread Mtok 243
+  no-tool / text/thinking only                         calls   294 act  3.67h (44.9 s/call) model 0.35h tool 0.00h  fresh+out   0.34M  cr    48.9M
+  mcp__advisor__consult /                              calls    44 act  0.61h (50.1 s/call) model 0.15h tool 0.43h  fresh+out   0.39M  cr     5.4M
+  AskUserQuestion /                                    calls    12 act  0.60h (179.8 s/call) model 0.08h tool 0.12h  fresh+out   0.04M  cr     1.8M
+  Bash / sh:grep                                       calls   179 act  0.32h ( 6.5 s/call) model 0.30h tool 0.01h  fresh+out   0.38M  cr    26.4M
+  ctx_search /                                         calls    83 act  0.29h (12.4 s/call) model 0.26h tool 0.02h  fresh+out   0.43M  cr    11.0M
+  ctx_execute / shell:sh:grep                          calls   111 act  0.27h ( 8.7 s/call) model 0.24h tool 0.01h  fresh+out   0.21M  cr    16.2M
+  ctx_execute / shell:sh:sed                           calls   101 act  0.21h ( 7.6 s/call) model 0.20h tool 0.01h  fresh+out   0.16M  cr    12.1M
+  ToolSearch /                                         calls    31 act  0.17h (20.2 s/call) model 0.15h tool 0.00h  fresh+out   0.28M  cr     4.0M
+  ctx_execute / python                                 calls    53 act  0.14h ( 9.5 s/call) model 0.13h tool 0.01h  fresh+out   0.11M  cr     7.7M
+  Write / other-path                                   calls    18 act  0.12h (23.9 s/call) model 0.12h tool 0.00h  fresh+out   0.08M  cr     3.0M
+  ctx_execute / shell:python-inline                    calls    29 act  0.12h (14.3 s/call) model 0.11h tool 0.00h  fresh+out   0.13M  cr     4.1M
+  Read / claude-skill/rules                            calls    64 act  0.11h ( 5.9 s/call) model 0.10h tool 0.00h  fresh+out   0.19M  cr     7.4M
+  Edit / planning-artifacts                            calls    33 act  0.10h (10.6 s/call) model 0.05h tool 0.01h  fresh+out   0.05M  cr     5.6M
+  Bash / sh:sed                                        calls    45 act  0.09h ( 7.0 s/call) model 0.08h tool 0.00h  fresh+out   0.04M  cr     6.5M
+===== impl+gate calls 1433 active h 6.51 gap h 0.24 model h 2.81 tool h 1.12 fresh+out Mtok 2.6 cacheread Mtok 232
+  AskUserQuestion /                                    calls     2 act  1.52h (2731.2 s/call) model 0.03h tool 0.00h  fresh+out   0.00M  cr     0.3M
+  mcp__advisor__consult /                              calls    88 act  1.20h (49.0 s/call) model 0.30h tool 0.74h  fresh+out   0.45M  cr    12.7M
+  no-tool / text/thinking only                         calls   123 act  0.77h (22.5 s/call) model 0.19h tool 0.00h  fresh+out   0.12M  cr    22.6M
+  Read / claude-skill/rules                            calls   136 act  0.29h ( 7.6 s/call) model 0.24h tool 0.01h  fresh+out   0.40M  cr    21.2M
+  Bash / sh:grep                                       calls   151 act  0.27h ( 6.4 s/call) model 0.24h tool 0.02h  fresh+out   0.19M  cr    25.4M
+  ctx_search /                                         calls    99 act  0.23h ( 8.3 s/call) model 0.20h tool 0.02h  fresh+out   0.11M  cr    14.8M
+  Bash / python-inline                                 calls    67 act  0.20h (10.8 s/call) model 0.14h tool 0.05h  fresh+out   0.07M  cr    11.2M
+  Edit / gate-records                                  calls    56 act  0.18h (11.6 s/call) model 0.13h tool 0.02h  fresh+out   0.08M  cr     9.5M
+  ctx_execute / shell:sh:grep                          calls    52 act  0.16h (11.2 s/call) model 0.12h tool 0.02h  fresh+out   0.09M  cr     7.7M
+  Bash / sh:cat                                        calls    70 act  0.13h ( 6.9 s/call) model 0.12h tool 0.01h  fresh+out   0.09M  cr    11.9M
+  Write / other-path                                   calls     7 act  0.13h (66.7 s/call) model 0.12h tool 0.00h  fresh+out   0.02M  cr     1.3M
+  Bash / sh:ls                                         calls    63 act  0.12h ( 6.7 s/call) model 0.11h tool 0.01h  fresh+out   0.10M  cr    10.4M
+  Bash / sh:sed                                        calls    58 act  0.06h ( 3.7 s/call) model 0.05h tool 0.01h  fresh+out   0.05M  cr     8.3M
+  ctx_execute / shell:python-inline                    calls    17 act  0.06h (12.5 s/call) model 0.04h tool 0.02h  fresh+out   0.02M  cr     2.8M
+===== sprint-review calls 342 active h 1.50 gap h 4.33 model h 0.70 tool h 0.15 fresh+out Mtok 0.8 cacheread Mtok 52
+  no-tool / text/thinking only                         calls    56 act  0.63h (40.2 s/call) model 0.08h tool 0.00h  fresh+out   0.04M  cr     9.9M
+  mcp__advisor__consult /                              calls    12 act  0.15h (45.5 s/call) model 0.04h tool 0.11h  fresh+out   0.11M  cr     1.5M
+  ctx_search /                                         calls    17 act  0.09h (19.1 s/call) model 0.08h tool 0.01h  fresh+out   0.02M  cr     1.9M
+  AskUserQuestion /                                    calls     3 act  0.07h (89.9 s/call) model 0.03h tool 0.00h  fresh+out   0.01M  cr     0.4M
+  ctx_execute / shell:sh:grep                          calls    18 act  0.06h (12.8 s/call) model 0.06h tool 0.00h  fresh+out   0.04M  cr     2.6M
+  ToolSearch /                                         calls     6 act  0.05h (28.1 s/call) model 0.04h tool 0.00h  fresh+out   0.01M  cr     0.8M
+  Write / other-path                                   calls     6 act  0.04h (21.4 s/call) model 0.03h tool 0.00h  fresh+out   0.01M  cr     1.0M
+  Bash / sh:grep                                       calls    33 act  0.03h ( 3.7 s/call) model 0.03h tool 0.00h  fresh+out   0.03M  cr     5.1M
+  Bash / sh:tail                                       calls    19 act  0.03h ( 6.1 s/call) model 0.03h tool 0.00h  fresh+out   0.02M  cr     3.3M
+  ctx_execute / shell:sh:sed                           calls     5 act  0.03h (20.1 s/call) model 0.03h tool 0.00h  fresh+out   0.01M  cr     0.9M
+  Read / claude-skill/rules                            calls    10 act  0.03h ( 9.5 s/call) model 0.02h tool 0.00h  fresh+out   0.02M  cr     1.1M
+  Edit / planning-artifacts                            calls    13 act  0.02h ( 6.5 s/call) model 0.02h tool 0.01h  fresh+out   0.02M  cr     1.9M
+  Read / step-file                                     calls     5 act  0.02h (15.8 s/call) model 0.00h tool 0.00h  fresh+out   0.00M  cr     0.8M
+  ctx_execute / shell:sh:awk                           calls     2 act  0.02h (36.7 s/call) model 0.02h tool 0.00h  fresh+out   0.00M  cr     0.3M
+===== rest calls 2727 active h 9.20 gap h 3.62 model h 5.48 tool h 2.04 fresh+out Mtok 8.7 cacheread Mtok 406
+  no-tool / text/thinking only                         calls   235 act  1.14h (17.5 s/call) model 0.33h tool 0.00h  fresh+out   0.19M  cr    38.6M
+  mcp__advisor__consult /                              calls    60 act  0.59h (35.6 s/call) model 0.17h tool 0.40h  fresh+out   0.52M  cr     8.5M
+  Bash / sh:grep                                       calls   250 act  0.59h ( 8.5 s/call) model 0.42h tool 0.13h  fresh+out   0.41M  cr    39.5M
+  ctx_execute / shell:sh:grep                          calls   135 act  0.42h (11.2 s/call) model 0.36h tool 0.02h  fresh+out   0.24M  cr    20.7M
+  Bash / sh:sleep                                      calls    33 act  0.42h (45.5 s/call) model 0.04h tool 0.25h  fresh+out   0.02M  cr     5.4M
+  AskUserQuestion /                                    calls    19 act  0.40h (75.4 s/call) model 0.08h tool 0.13h  fresh+out   0.03M  cr     3.2M
+  Bash / git push                                      calls    43 act  0.38h (31.9 s/call) model 0.05h tool 0.33h  fresh+out   0.03M  cr     6.7M
+  ToolSearch /                                         calls    23 act  0.31h (48.4 s/call) model 0.15h tool 0.00h  fresh+out   0.44M  cr     2.9M
+  Read / other-path                                    calls   116 act  0.26h ( 8.2 s/call) model 0.25h tool 0.01h  fresh+out   0.14M  cr    18.7M
+  Write / other-path                                   calls    54 act  0.24h (15.9 s/call) model 0.22h tool 0.00h  fresh+out   0.15M  cr     8.1M
+  Bash / sh:cat                                        calls    97 act  0.21h ( 7.7 s/call) model 0.18h tool 0.02h  fresh+out   0.65M  cr    14.6M
+  Read / claude-skill/rules                            calls    90 act  0.19h ( 7.7 s/call) model 0.18h tool 0.01h  fresh+out   1.00M  cr    10.7M
+  Bash / gh pr                                         calls    45 act  0.17h (13.2 s/call) model 0.11h tool 0.04h  fresh+out   0.05M  cr     6.7M
+  ctx_execute / shell:sh:sed                           calls    72 act  0.16h ( 8.0 s/call) model 0.15h tool 0.00h  fresh+out   0.19M  cr     8.7M

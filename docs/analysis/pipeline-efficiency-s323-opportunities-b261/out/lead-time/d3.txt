@@ -1,0 +1,24 @@
+== s321 denied tool results 62, calls' own active 0.38h, next-call-same-tool (retry) 30 with active 0.46h
+   Bash | AI/DLC: this Bash call writes pipeline-s                denied  13  active 0.03h  retried-next-call   8 (0.05h)  fresh+out 0.04M
+   Bash | post-compact recovery                                   denied  11  active 0.01h  retried-next-call   1 (0.00h)  fresh+out 0.25M
+   Edit | post-compact recovery                                   denied  10  active 0.24h  retried-next-call   4 (0.35h)  fresh+out 0.05M
+   Bash | steering budget                                         denied   8  active 0.05h  retried-next-call   8 (0.01h)  fresh+out 0.02M
+   Bash | AI/DLC: this Bash call backgrounds wait-                denied   7  active 0.02h  retried-next-call   7 (0.01h)  fresh+out 0.03M
+   Write | AI/DLC Rule 29: the pipeline is PAUSED -               denied   2  active 0.01h  retried-next-call   0 (0.00h)  fresh+out 0.01M
+   Edit | AI/DLC: pipeline-snapshot.md is written                 denied   2  active 0.00h  retried-next-call   0 (0.00h)  fresh+out 0.00M
+== s322 denied tool results 211, calls' own active 0.39h, next-call-same-tool (retry) 113 with active 0.44h
+   Read | context-mode                                            denied 107  active 0.16h  retried-next-call  73 (0.17h)  fresh+out 0.22M
+   Bash | post-compact recovery                                   denied  31  active 0.04h  retried-next-call   0 (0.00h)  fresh+out 0.35M
+   Bash | steering budget                                         denied  17  active 0.02h  retried-next-call  17 (0.14h)  fresh+out 0.02M
+   Agent | dispatch guard                                         denied  16  active 0.05h  retried-next-call  14 (0.10h)  fresh+out 0.03M
+   Edit | AI/DLC: pipeline-snapshot.md is written                 denied  11  active 0.03h  retried-next-call   0 (0.00h)  fresh+out 0.01M
+   Edit | AI/DLC Rule 28: GATE REMEDIATION IS DELE                denied   6  active 0.03h  retried-next-call   1 (0.00h)  fresh+out 0.02M
+   Read | post-compact recovery                                   denied   5  active 0.01h  retried-next-call   5 (0.02h)  fresh+out 0.01M
+== s323 denied tool results 343, calls' own active 0.72h, next-call-same-tool (retry) 169 with active 0.52h
+   Read | context-mode                                            denied 155  active 0.23h  retried-next-call 101 (0.22h)  fresh+out 0.31M
+   Bash | post-compact recovery                                   denied  46  active 0.07h  retried-next-call   1 (0.00h)  fresh+out 1.08M
+   Agent | dispatch guard                                         denied  44  active 0.21h  retried-next-call  34 (0.23h)  fresh+out 0.09M
+   ctx_execute | AI/DLC post-comp                                 denied  16  active 0.02h  retried-next-call   0 (0.00h)  fresh+out 0.13M
+   Bash | steering budget                                         denied  14  active 0.01h  retried-next-call  13 (0.02h)  fresh+out 0.01M
+   Read | post-compact recovery                                   denied  13  active 0.01h  retried-next-call  13 (0.02h)  fresh+out 0.12M
+   Agent | post-compact recovery                                  denied  12  active 0.02h  retried-next-call   0 (0.00h)  fresh+out 0.02M

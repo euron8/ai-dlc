@@ -1,0 +1,12 @@
+AskUserQuestion (operator)                   n    2 act 1.52h | mod 0.03 tool 0.00 wait 1.48 | fr 0.00M out 0.00M
+advisor consult                              n   88 act 1.20h | mod 0.30 tool 0.74 wait 0.16 | fr 0.42M out 0.03M
+Bash shell read (grep/sed/cat/ls/awk/..)     n  451 act 0.79h | mod 0.67 tool 0.05 wait 0.07 | fr 0.40M out 0.24M
+text-only turn (no tool)                     n  123 act 0.77h | mod 0.19 tool 0.00 wait 0.58 | fr 0.08M out 0.04M
+ctx_execute shell read                       n  118 act 0.35h | mod 0.24 tool 0.04 wait 0.06 | fr 0.15M out 0.07M
+Read claude-skill/rules                      n  136 act 0.29h | mod 0.24 tool 0.01 wait 0.04 | fr 0.36M out 0.04M
+ctx_search/index/batch                       n   99 act 0.23h | mod 0.20 tool 0.02 wait 0.01 | fr 0.07M out 0.04M
+Bash python-inline                           n   67 act 0.20h | mod 0.14 tool 0.05 wait 0.01 | fr 0.04M out 0.03M
+Edit gate-records                            n   56 act 0.18h | mod 0.13 tool 0.02 wait 0.03 | fr 0.01M out 0.07M
+Write other-path                             n    7 act 0.13h | mod 0.12 tool 0.00 wait 0.00 | fr 0.00M out 0.02M
+Bash git/gh                                  n   49 act 0.11h | mod 0.08 tool 0.02 wait 0.01 | fr 0.04M out 0.04M
+Bash other prog                              n   29 act 0.10h | mod 0.05 tool 0.05 wait 0.00 | fr 0.03M out 0.03M

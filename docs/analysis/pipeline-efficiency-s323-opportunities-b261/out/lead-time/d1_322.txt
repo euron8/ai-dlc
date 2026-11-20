@@ -1,0 +1,7 @@
+s322 lead hook records 3196, sum of durationMs 0.13 h (sequential upper bound), injected bytes 3.5 MB
+  PostToolBatch      ai-dlc-context-sensor.sh                 hook_success             n   329  sum   0.02 h  mean    244 ms max   6981 ms  bytes   0.00 MB
+  PostToolBatch      ai-dlc-context-sensor.sh                 hook_non_blocking_error  n     2  sum   0.02 h  mean  38342 ms max  59222 ms  bytes   0.00 MB
+  PreToolUse         ai-dlc-dispatch-guard.sh                 hook_success             n   119  sum   0.01 h  mean    445 ms max   1340 ms  bytes   0.00 MB
+  PreToolUse         ai-dlc-core-guard.sh                     hook_non_blocking_error  n     3  sum   0.01 h  mean  17020 ms max  28445 ms  bytes   0.00 MB
+  PostToolUse        claude-code                              hook_success             n   409  sum   0.01 h  mean    108 ms max   2361 ms  bytes   0.00 MB
+  PreToolUse         ai-dlc-gate-remediation-guard.sh         hook_success             n     2  sum   0.01 h  mean  14383 ms max  19578 ms  bytes   0.00 MB

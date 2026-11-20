@@ -1,0 +1,12 @@
+text-only turn (no tool)                     n   56 act 0.63h | mod 0.08 tool 0.00 wait 0.54 | fr 0.02M out 0.02M
+advisor consult                              n   12 act 0.15h | mod 0.04 tool 0.11 wait 0.00 | fr 0.11M out 0.01M
+ctx_execute shell read                       n   29 act 0.12h | mod 0.11 tool 0.00 wait 0.00 | fr 0.03M out 0.03M
+Bash shell read (grep/sed/cat/ls/awk/..)     n   95 act 0.11h | mod 0.10 tool 0.01 wait 0.01 | fr 0.07M out 0.03M
+ctx_search/index/batch                       n   17 act 0.09h | mod 0.08 tool 0.01 wait 0.00 | fr 0.01M out 0.01M
+AskUserQuestion (operator)                   n    3 act 0.07h | mod 0.03 tool 0.00 wait 0.04 | fr 0.00M out 0.01M
+Bash git/gh                                  n   35 act 0.07h | mod 0.06 tool 0.01 wait 0.00 | fr 0.03M out 0.05M
+ToolSearch                                   n    6 act 0.05h | mod 0.04 tool 0.00 wait 0.01 | fr 0.01M out 0.00M
+Write other-path                             n    6 act 0.04h | mod 0.03 tool 0.00 wait 0.00 | fr 0.00M out 0.01M
+Read claude-skill/rules                      n   10 act 0.03h | mod 0.02 tool 0.00 wait 0.00 | fr 0.02M out 0.00M
+Edit planning-artifacts                      n   13 act 0.02h | mod 0.02 tool 0.01 wait 0.00 | fr 0.01M out 0.01M
+Read step-file                               n    5 act 0.02h | mod 0.00 tool 0.00 wait 0.02 | fr 0.00M out 0.00M

@@ -1,0 +1,9 @@
+s323 lead hook records 4542, sum of durationMs 0.11 h (sequential upper bound), injected bytes 5.5 MB
+  UserPromptSubmit   UserPromptSubmit                         hook_additional_context  n  1706  sum   0.00 h  mean      0 ms max      0 ms  bytes   3.42 MB
+  SessionStart       SessionStart                             hook_additional_context  n   139  sum   0.00 h  mean      0 ms max      0 ms  bytes   1.52 MB
+  PostToolBatch      PostToolBatch                            hook_additional_context  n   524  sum   0.00 h  mean      0 ms max      0 ms  bytes   0.42 MB
+  PreToolUse         PreToolUse:Agent                         hook_additional_context  n   179  sum   0.00 h  mean      0 ms max      0 ms  bytes   0.06 MB
+  PreToolUse         PreToolUse:Read                          hook_additional_context  n    52  sum   0.00 h  mean      0 ms max      0 ms  bytes   0.02 MB
+  PreToolUse         PreToolUse:Bash                          hook_additional_context  n    46  sum   0.00 h  mean      0 ms max      0 ms  bytes   0.02 MB
+  Stop               Stop                                     hook_additional_context  n    26  sum   0.00 h  mean      0 ms max      0 ms  bytes   0.02 MB
+  PreToolUse         PreToolUse:mcp__plugin_context-mode_cont hook_additional_context  n    16  sum   0.00 h  mean      0 ms max      0 ms  bytes   0.01 MB

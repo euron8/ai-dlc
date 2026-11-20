@@ -1,0 +1,28 @@
+== s321 LAST-of-round subagent completions with a later dispatch/edit/gate/commit: n=254  | enqueue->next action: median 39s p90 389s sum 13.22h; capped at 600s per event 8.78h
+   enqueue->first lead response record: median 9s sum(cap600) 4.20h ; delivery lag median 3.3s sum(cap600) 3.80h
+      idle(turn ended)                         n 119  first-response median     5s sum(cap600) 2.05h | to-next-action median    29s sum(cap600) 4.58h | compaction in window 2
+      model generating / between calls         n 103  first-response median    15s sum(cap600) 1.37h | to-next-action median    55s sum(cap600) 3.11h | compaction in window 9
+      operator ask pending                     n   6  first-response median   321s sum(cap600) 0.51h | to-next-action median   323s sum(cap600) 0.52h | compaction in window 0
+      in other tool: Bash                      n  22  first-response median     9s sum(cap600) 0.25h | to-next-action median    25s sum(cap600) 0.34h | compaction in window 0
+      in own sleep                             n   1  first-response median    62s sum(cap600) 0.02h | to-next-action median  5275s sum(cap600) 0.17h | compaction in window 0
+      in advisor consult                       n   1  first-response median    13s sum(cap600) 0.00h | to-next-action median   220s sum(cap600) 0.06h | compaction in window 1
+      in other tool: TaskStop                  n   2  first-response median     7s sum(cap600) 0.00h | to-next-action median    12s sum(cap600) 0.01h | compaction in window 0
+== s322 LAST-of-round subagent completions with a later dispatch/edit/gate/commit: n=229  | enqueue->next action: median 83s p90 985s sum 26.41h; capped at 600s per event 10.58h
+   enqueue->first lead response record: median 17s sum(cap600) 5.75h ; delivery lag median 5.2s sum(cap600) 5.02h
+      idle(turn ended)                         n  91  first-response median    20s sum(cap600) 3.84h | to-next-action median    93s sum(cap600) 5.28h | compaction in window 24
+      model generating / between calls         n 115  first-response median    15s sum(cap600) 1.27h | to-next-action median    68s sum(cap600) 4.23h | compaction in window 19
+      in other tool: Bash                      n  13  first-response median    37s sum(cap600) 0.17h | to-next-action median    69s sum(cap600) 0.38h | compaction in window 1
+      operator ask pending                     n   3  first-response median   677s sum(cap600) 0.35h | to-next-action median   699s sum(cap600) 0.35h | compaction in window 0
+      in other tool: Edit                      n   1  first-response median   114s sum(cap600) 0.03h | to-next-action median  1973s sum(cap600) 0.17h | compaction in window 1
+      in own wait-for-deliverable.sh poll      n   4  first-response median    68s sum(cap600) 0.07h | to-next-action median   137s sum(cap600) 0.16h | compaction in window 0
+      in other tool: TaskStop                  n   2  first-response median     5s sum(cap600) 0.00h | to-next-action median    39s sum(cap600) 0.02h | compaction in window 0
+== s323 LAST-of-round subagent completions with a later dispatch/edit/gate/commit: n=216  | enqueue->next action: median 64s p90 565s sum 26.31h; capped at 600s per event 8.85h
+   enqueue->first lead response record: median 14s sum(cap600) 3.37h ; delivery lag median 3.9s sum(cap600) 2.72h
+      model generating / between calls         n 130  first-response median    18s sum(cap600) 1.18h | to-next-action median    58s sum(cap600) 4.17h | compaction in window 15
+      idle(turn ended)                         n  65  first-response median     5s sum(cap600) 0.79h | to-next-action median   100s sum(cap600) 3.11h | compaction in window 7
+      operator ask pending                     n  10  first-response median  1646s sum(cap600) 1.36h | to-next-action median  1654s sum(cap600) 1.39h | compaction in window 0
+      in other tool: Bash                      n   7  first-response median    16s sum(cap600) 0.03h | to-next-action median    48s sum(cap600) 0.12h | compaction in window 1
+      in other tool: ctx_execute               n   1  first-response median    29s sum(cap600) 0.01h | to-next-action median   110s sum(cap600) 0.03h | compaction in window 0
+      in other tool: Read                      n   1  first-response median    14s sum(cap600) 0.00h | to-next-action median    62s sum(cap600) 0.02h | compaction in window 0
+      in other tool: Write                     n   1  first-response median    12s sum(cap600) 0.00h | to-next-action median    51s sum(cap600) 0.01h | compaction in window 0
+      in Agent dispatch call                   n   1  first-response median     4s sum(cap600) 0.00h | to-next-action median     8s sum(cap600) 0.00h | compaction in window 0
