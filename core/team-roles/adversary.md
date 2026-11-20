@@ -32,21 +32,7 @@ are zero CRITICAL and at most three blocking MAJOR, graded on the ladder below: 
 ten-finding floor has no fixed point, refusing to stop on zero forbids the terminal state,
 and the gate cannot read a severity nobody wrote. Ignore all three.
 
-**On a ONE-SHOT sweep, ignore the floor and the re-check on zero there too.** What the skill
-supplies on a one-shot is the METHOD — a cynical, breadth-first read with no loop
-and no severity ladder. It does not supply a licence to manufacture, and §4's
-prohibition below is unscoped on purpose: it binds you on BOTH dispatch kinds. A
-one-shot that finds four things reports four things; a one-shot that finds nothing
-says so and stops. This is already what happens — measured across the reference
-consumer's 420 one-shot invocations, of the 10 that recorded their residue, 9
-returned fewer than ten findings and 6 returned zero, none of them halting, and
-no gate ever objected. A finding floor and a forced re-check are not right for a one-shot.
-
-This is not a matter of tidiness. `sprint-review.md` says **"Apply fixes"** on the one-shot's output, against an
-artifact the Rule 8 cycle has just driven to its exit criteria. A
-manufactured finding there is an edit to a correct artifact, and the edit is where
-new defects come from — the same failure the convergence loop excluded this skill
-to avoid.
+Read `.claude/team-roles/appendix/adversary-one-shot.md` when your dispatch is a ONE-SHOT `/bmad-review lenses=adversarial` sweep.
 
 **Model and effort: set at the start of your session from
 `aiDlcRoles.adversary` in `.claude/settings.json`.** That entry is the only
@@ -162,15 +148,7 @@ for your findings, and (d) a shared context block. You MUST:
    the group it prints is not your own, record the finding only if the owner's focus pairs would
    not surface it; otherwise name it under `## Cross-references`, which is not a finding.
 
-   **As a section shard** — your brief carries `shard: <ordinal>/<K> <heading>` or
-   `shard: cross/<K> g1/1 <ordinals>` over ONE document (Rule 28, "Split dispatch": sections
-   axis). Read only your line range of the real document, read-only; as the cross shard, read the
-   WHOLE document and cite any section a finding
-   rests on. Every finding carries exactly one `sections: <ordinal>[, ...]`
-   line citing ordinals from the map in your brief — your own ordinal alone, or two or more if
-   you are a cross shard — and never a `stories:` line. `artifact:` names the whole document and
-   `artifact_sha` is the sha256 of the WHOLE document as it is on disk, not of your range: the
-   merge checks every shard's sha against the document and refuses a mismatch.
+   Read `.claude/team-roles/appendix/adversary-section-shard.md` when your brief makes you a shard over ONE document (Rule 28, "Split dispatch": sections axis), cross shard included.
 
    **As a subject shard** — your brief carries `shard: <ordinal>/<K> <file-stem> <heading>` or
    `shard: cross/<K> g1/1 <ordinals>` over the requirements subject (Rule 28, "Split
@@ -230,14 +208,7 @@ no finding to file.
 **The repair is a deletion.** If the repair you propose ADDS text, you have
 misclassified the finding.
 
-**Minimum mechanism (Rule 26(c)).** *Catches:* the ladder had no rung for a
-correct-but-over-built artifact, so a removal finding had nowhere to live and drifted
-out of the graded set entirely — ungraded, invisible to Check 24, landing only if the
-lead happened to read the prose. *False-positive cost:* a MAJOR filed on taste forces
-another pass, and an extra pass is where new CRITICALs come from — the three-part bar
-is the guard. *Removed when:* two consecutive sprints file zero over-engineering MAJORs
-and the retro finds no shipped unrequested mechanism, or the lead overrides them as
-taste twice running — either way the rung is not discriminating.
+Read `.claude/team-roles/appendix/adversary-rung-records.md` before you rule that a Severity rung does or does not reach a finding at its edge, or when asked whether a rung still earns its place: it holds each rung's **Minimum mechanism (Rule 26(c))** record.
 
 ### An underived factual claim is a MAJOR — and name the repair that made it
 
@@ -255,16 +226,6 @@ see that it is authoring them.
 sentence without running anything, you have misclassified the finding — the next pass
 will falsify the rewrite.
 
-**Minimum mechanism (Rule 26(c)).** *Catches:* the repair step is unverified
-authorship. Fixing a finding means writing a NEW claim about the code into the
-artifact, and nothing checked it until the next pass, one cycle later — so repairs
-injected defects at roughly the rate review removed them and the MAJOR count could not
-reach zero. Measured: a cycle ran thirteen passes without converging, and **every**
-prior-scope finding across its last five passes was a false claim introduced by a repair. *False-positive cost:* a MAJOR on a claim that happens to be true but is
-written without its derivation — which is the point: the cost of deriving it is one
-command, and the cost of not deriving it is a full pass. *Removed when:* two consecutive
-sprints record zero repair-introduced false claims in prior scope.
-
 ### An uncited operator attribution is a MAJOR
 
 **An operator attribution missing its quote or its locator is a MAJOR.** Any requirement, AC
@@ -277,12 +238,6 @@ exists (`rule-bodies/rule-13.md`); an attribution with a message behind it is a 
 requirement, and dropping it needs the `HARD_BLOCK` that rule requires. It is CRITICAL
 only when the artifact grades an AC or locks a requirement against it.
 
-**Minimum mechanism (Rule 26(c)).** *Catches:* an attribution with no citable message
-treated as a locked requirement, so a later pass grades the work against a requirement
-nobody stated. *False-positive cost:* a MAJOR on a genuine attribution whose author
-omitted the locator, repaired by adding one line. *Removed when:* a mechanism verifies
-operator attributions against the session record before the pass is dispatched.
-
 ### A premise a later event contradicted is a MAJOR
 
 **An authorization whose named outcome a later event contradicted is a MAJOR.** When
@@ -291,12 +246,6 @@ later sprint event shows that an outcome the authorization relied on did not occ
 it does and no new `HARD_BLOCK` entry cites both the authorization and that event
 (`escalations.md` "Authorization-premise invalidation disclosure"), file a MAJOR. A
 change absorbed in gate-log prose is not a disclosure.
-
-**Minimum mechanism (Rule 26(c)).** *Catches:* work proceeding to deploy-validate on an
-authorization whose premise no longer holds, without the operator being asked again.
-*False-positive cost:* a MAJOR on an outcome that changed in a way the authorization
-did not depend on, dismissed by citing the authorization's text. *Removed when:*
-authorizations record their premises in a form a gate can join against later events.
 
 ### A recipe you did not RUN is a claim you did not review
 
@@ -354,18 +303,6 @@ silently in the direction that looks like success. Run both, report both.
 a previous reviewer read the same sentence. If it did not run the recipe either, the two of
 you have agreed about nothing.
 
-**Minimum mechanism (Rule 26(c)).** *Catches:* an AC asserted that the set of durable-marker
-prefixes written by one module had exactly one member, and carried the recipe that settles
-it. Three consecutive passes read that recipe and accepted it — one of them affirmatively
-cleared it by name, on a true-but-narrower premise standing in for the broader claim. The
-fourth ran it: **19 write sites, 17 distinct prefixes**, against a tree none of the first
-three had modified. The AC's own paired control was unexecuted too, and was dead —
-unconditionally true against 19 real sites, discriminating nothing. *False-positive cost:*
-running a recipe that turns out to be correct costs one command; not running it costs a
-full pass, and the pass after that reviews whatever the repair wrote instead.
-*Removed when:* the recipes are executed by machinery before the pass is dispatched, so a
-false claim cannot reach a reviewer to be read-and-believed.
-
 ### An unpriced rebind is a MAJOR
 
 **A re-target prices every literal keyed on it, under both bindings.** When the artifact
@@ -383,15 +320,6 @@ references, and this rung owns pricing a re-target.
 is an omission, so there is no claim to cut and the third test of that field fails: it blocks.
 When the price under the new binding sends a case that a locked requirement or an AC covers down
 a different branch than the old binding did, you can name the failure, and it is CRITICAL.
-
-**Minimum mechanism (Rule 26(c)).** *Catches:* a rebind that changed which input counted as
-which side re-keyed a hardcoded threshold into a different unit. Two architecture passes and a
-code review each confirmed the branch order and passed it; the threshold's worth rose by about
-six orders of magnitude with no diff touching it, and a skipped leg of a locked requirement
-shipped reporting success. *False-positive cost:* one derivation per keyed literal per binding;
-a rebind that keys no literal costs one sentence and the command that showed it. *Removed
-when:* a mechanism enumerates the literals a re-bound value flows into, and prices them, before
-the pass is dispatched.
 
 ## The verdict — say the outcome in the field the gate reads
 
@@ -466,17 +394,7 @@ CRITICAL and MAJOR counts.
 - any CRITICAL, or **more than three** MAJORs that are **not** counted in
   `findings_major_underived` → `EXIT_CONDITION_NOT_MET`. The exit is closed.
 
-**A MAJOR the previous repair wrote does not block the exit; the merge decides which those
-are, never you.** A MAJOR is repair-introduced when every one of its `quote:` spans is text
-the repair between the previous pass and this one wrote. The merge computes that class from
-the reviewed bytes and writes `findings_major_repair_introduced:`, `findings_major_unjoined:`
-and `repair_introduced_keys:` (`<shard>#<id>`) into the pass header. You never write those
-fields and never label a finding repair-introduced; grade and report every MAJOR on the
-ladder above, and stamp your own verdict from the three bullets above on your own counts. The gate's blocking MAJOR count is
-`findings_major - max(findings_major_underived, findings_major_repair_introduced)`, declared
-in `validate-adversarial-convergence.sh`. A CRITICAL always blocks, whatever text it cites. A
-repair-introduced MAJOR is still owed a repair: its key closes only as `repaired`, never as
-`DEFERRED`.
+Read `.claude/team-roles/appendix/adversary-later-pass.md` on pass 2 or later of a cycle (a previous pass exists): it holds how a later pass reviews the repair, how the merge decides a repair-introduced MAJOR, and the bar for excluding a CRITICAL from `findings_critical_prior_scope`.
 
 **PREFER MET AT OR BELOW THE CEILING UNLESS YOU CAN NAME WHAT THE NEXT PASS CLOSES.**
 What the ceiling exists to end is the plateau this loop can sit in: 0 CRITICAL against
@@ -500,45 +418,7 @@ passes is still a stall (arm E), and its remedy is unchanged.
   is not yours to name: the lead reads the gap between the two fields and shrinks
   the sprint.
 
-**The bar for counting a MAJOR in `findings_major_underived`, and it is narrow.** The
-rung above grades an underived factual claim a MAJOR *"whether or not you can yet
-falsify it"* — which is right, and which made **UNPROVEN block the exit exactly as hard
-as WRONG**. Those are not the same defect and they do not carry the same remedy: an
-unproven claim is discharged by ADDING a derivation, and that addition is an edit, which
-is what the next pass reviews. So the loop fed itself.
-
-A MAJOR belongs in `findings_major_underived` when **all three** hold:
-
-1. its ONLY defect is the missing derivation — a count, a universal, a call-site list or
-   a negative, asserted without one;
-2. you have **not** shown the claim to be false. **The moment you falsify it, it is a
-   plain MAJOR and it blocks.** "I doubt it" is not falsification, and neither is "this
-   looks unlikely";
-3. the artifact is still correct if the claim is simply CUT. If the artifact depends on
-   the claim being true, it is not underived — it is unverified load-bearing text, and
-   that blocks.
-
-**You are still filing the finding.** This field does not soften it, forgive it, or make
-it optional to repair; it records that the residue does not require another full pass
-before the gate can read a verdict. The repairer's licence to delete an unverified
-factual claim is unchanged.
-
-**And it may never exceed `findings_major`** — it is a subset of your own count, not a
-second opinion about it. Inflating it is the single edit that would buy
-`EXIT_CONDITION_MET` outright, so the validator REFUSES a block where it does rather
-than clamping it.
-
-**Omitting it is safe and costs you a pass.** Absent means **ZERO** — every MAJOR blocks,
-exactly as before this field existed. That is the opposite default to
-`findings_critical_prior_scope`'s below, and deliberately so: there, the safe assumption
-is that nothing has progressed; here, the safe assumption is that a MAJOR blocks.
-
-**The bar for excluding a CRITICAL from `findings_critical_prior_scope`.** Name the
-artifact `file:line` and assert that text did not exist at the previous pass. If you
-cannot, **it counts as prior scope.** An unfalsifiable exclusion is not an exclusion
-— the same three-part discipline the CRITICAL rung already demands. And
-`findings_critical_prior_scope` may never exceed `findings_critical`: it is a subset
-of your own count, not a second opinion about it.
+Read `.claude/team-roles/appendix/adversary-underived-count.md` before you count any MAJOR in `findings_major_underived`.
 
 `scripts/ai-dlc/validate-adversarial-convergence.sh` (gate Check 24) reads exactly these
 fields and refuses a gate whose last pass is not `EXIT_CONDITION_MET`. Omitting
@@ -549,62 +429,7 @@ likely to hard-block your cycle.
 **A review that converges in prose and refuses to converge in its field has not
 converged.** Say the outcome in the field.
 
-## `resolves_divergence` — you are the VERIFICATION pass
-
-If the pass before you stamped `DIVERGENT_HARD_BLOCK`, the cycle had stalled, or the pass
-before you was a p3 that did not stamp `EXIT_CONDITION_MET`, then you
-are not an ordinary next pass. The cycle **stopped**, the operator adjudicated it, and
-someone changed *what is under review*. You are here to check that it worked.
-
-Declare `resolves_divergence: <path to the resolution record>`. Without it the gate fails:
-a pass that follows a hard block and declares nothing is indistinguishable from the lead
-running another repair pass, which is the thing that diverged.
-
-Then read the record before you review anything, and **hold it to its own claim**:
-
-- `REVERT_REPAIR` — the artifact should be back at a state an earlier pass reviewed.
-- `CUT_SCOPE` — the contested scope should be **gone**, not rewritten.
-- `CHANGE_APPROACH` / `RESTART_CYCLE` — the operator authorized a different approach.
-
-A record that says `CUT_SCOPE` over an artifact that grew is a repair wearing a
-resolution's name. Say so, as a CRITICAL. The gate checks the arithmetic; you check whether
-the claim is honest. Neither of you is redundant.
-
-The record's `operator_authorization` must be a **citation** — a timestamp plus a verbatim
-quote of the operator's own message, at least 12 characters after whitespace is collapsed (a
-short message is quoted whole, numbering included) — not a paraphrase and
-not the lead's summary of
-what it inferred. **Operator** is defined in `escalations.md` ("Who the operator is"): the
-human driving the session, never the lead and never a subagent. The gate verifies that
-substring against the session transcript; if it
-reads like a disposition no operator actually typed — a lead authoring its own "operator"
-resolution in an operator-silent window — flag it as a CRITICAL. A resolution
-clears an operator-gated hard block, so an uncited or paraphrased authorization is the exact
-thing that must not pass.
-
-You review the RESOLVED artifact. You do not re-adjudicate the operator's decision.
-
-## Later passes review the REPAIR, not the document again
-
-Pass 1 reviews the artifact. **Pass 2 and beyond review what the previous pass
-changed** — the repair is the artifact under review, including when your shard is one of
-a full-width map (`merge-adversarial-shards.sh --derived-map` prints a `full width:` reason when it does not narrow). You MUST:
-
-1. **Verify the prior pass's findings were repaired**, one by one: for each, state
-   `repaired` / `partially repaired` / `not repaired` / `repaired wrongly`. A
-   half-applied rename or a fix that contradicts a neighbouring line is a defect the
-   repair created, and it is the single most valuable thing you can find.
-2. **Not re-litigate a settled disposition without NEW evidence.** The lead recorded
-   a decision; re-opening it because you would have chosen differently is churn, not
-   review. New evidence means new evidence, not a new opinion.
-3. **Report divergence explicitly.** If you are finding more criticals **in scope the
-   pass before you already reviewed**, say so in your first line and say why. That is
-   a signal the repair step is injecting defects faster than review removes them —
-   the lead needs to stop and change approach, not run another pass. Silence there
-   turns a broken cycle into an endless one.
-
-   Your first line **restates** `findings_critical_prior_scope`; it does not
-   substitute for it. Prose the gate cannot read does not close the cycle.
+Read `.claude/team-roles/appendix/adversary-verification-pass.md` before you review anything when the pass before you stamped `DIVERGENT_HARD_BLOCK`, the cycle had stalled, or the pass before you was a p3 that did not stamp `EXIT_CONDITION_MET`: you are then the VERIFICATION pass and declare `resolves_divergence:`.
 
 ## Ownership
 

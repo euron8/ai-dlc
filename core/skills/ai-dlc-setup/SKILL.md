@@ -414,6 +414,9 @@ below and note what you find. Do NOT ask the user anything yet.
 **Existing configuration:**
 - Check if `CLAUDE.md` still contains `{project_operations_protocol}`
   (literal string) — if not, it was already configured
+- Check if `docs/operator-runbooks/deploy-protocol.md` still contains
+  `{operations_protocol_full}` (literal string) — if the file is absent or
+  lacks it, it is the project's own and Steps 3 and 5 do not write it
 - Check if `docs/coding-conventions.md` still contains
   `{project_general_conventions}` (literal string)
 
@@ -591,6 +594,11 @@ Replace in these files:
 - `{deploy_command}` (in the Deployment Commands section)
 - `{smoke_test_command}` (in the Deployment Commands section)
 
+**`docs/operator-runbooks/deploy-protocol.md`** (only while it still carries
+these tokens):
+- `{deploy_command}` (in the Deployment Commands section)
+- `{smoke_test_command}` (in the Deployment Commands section)
+
 **`.claude/skills/ai-dlc/steps/deploy-validate.md`:**
 - `{deploy_command}` (in the Deploy section)
 - `{smoke_test_command}` (in the Smoke Tests section)
@@ -642,8 +650,10 @@ After confirmation, replace:
 
 ## STEP 5: Operations Protocol
 
-This section defines your project's deployment infrastructure rules in
-`CLAUDE.md`. Based on Step 1 detection — and any infrastructure rules
+This section defines your project's deployment infrastructure rules. The
+full protocol lives in the on-demand file
+`docs/operator-runbooks/deploy-protocol.md`; `CLAUDE.md` keeps only the
+rules every engineer holds on every turn. Based on Step 1 detection — and any infrastructure rules
 absorbed from the archived CLAUDE.md in Step 0 — generate a scaffold.
 If Step 0 found existing operations content, use it as the starting
 draft and augment with AI/DLC-specific sections (pre-deploy checks,
@@ -705,8 +715,18 @@ Default: `docker compose build <service> && docker compose up -d <service>`
 Present the scaffold and ask: "Here's a draft operations protocol based
 on your project. Edit as needed, or confirm to use as-is."
 
-After confirmation, replace `{project_operations_protocol}` in
-`CLAUDE.md` with the confirmed content.
+After confirmation:
+
+- Replace `{operations_protocol_full}` in
+  `docs/operator-runbooks/deploy-protocol.md` with the confirmed content.
+  If that file no longer carries the token, it is the project's own: leave
+  it unchanged and show the user that it was kept.
+- Replace `{project_operations_protocol}` in `CLAUDE.md` with the rules
+  from the confirmed content that bind on every turn (production target,
+  prohibited deploy paths, operations that need human approval), as a
+  short bullet list. When none bind on every turn, write
+  `None beyond docs/operator-runbooks/deploy-protocol.md.` Never leave the
+  token unreplaced.
 
 ---
 

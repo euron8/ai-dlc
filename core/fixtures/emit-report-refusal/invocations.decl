@@ -1,6 +1,6 @@
 # Measured by one counted run through scripts/seed-verdict-store.sh (the judge's own J3 output), after the mutation battery was removed.
 # BL-878 (batch 258 C4): emit-report.sh runs in process (the sibling seed and run.sh: inproc_load once, er_main through inproc_run); its two starts are the cli cells of cells.decl. One counted run through core/scripts/hermetic-run.sh on the final tree.
-476 *
+477 *
 0 core/scripts/validate-hook-registration.sh
 2 core/skills/ai-dlc-update/reconcile/emit-report.sh
 19 inproc:core/skills/ai-dlc-update/reconcile/emit-report.sh

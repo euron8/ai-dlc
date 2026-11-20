@@ -309,7 +309,8 @@ dirs_for() { # dirs_for "<layout> <root>" -> sets SKILL_DIR ROLES_DIR ROOT LAYOU
 #   prints "<in-span hits> <whole-file hits> <span start line> <span end line> <first hit line>"
 #   Fenced lines and <!-- --> comments are invisible to every test, the span markers
 #   included. A comment opened MID-LINE hides everything after it until its close, exactly
-#   as a renderer does. An empty start means the span opens at line 1. rc 2 on an
+#   as a renderer does. An empty start means the span opens at line 1; an end of `<EOF>`
+#   means an open span closes at the end of the file (a role appendix carries no `##`). rc 2 on an
 #   unbalanced fence or comment, which would otherwise make every later line invisible.
 #
 #   para mode tests PARAGRAPHS, not lines: blank-line separated, whitespace collapsed, so a
@@ -368,13 +369,14 @@ pin_scan() {
   END { if (m == "absentw") { r = all; whole = 0; while ((c = index(r, l)) > 0) { whole++; r = substr(r, c + length(l)) }; print whole, whole, 1, 1, fl; exit 0 }
         if (m == "absent") { print whole, whole, 1, 1, fl; exit 0 }
         if (m == "para") flush()
+        if (e == "<EOF>" && state == 1) el = NR + 1
         if (x && np != 1) ins = 0
         if (fence != "" || com) { print "UNBALANCED"; exit 2 }
         print ins, whole, sl, el, fl }' "$1"
 }
 
 # The pin table. Fields: id | S (skill dir) or R (roles dir) | relative file | span start
-# (empty = top of file) | span end | lead | match mode | token (para mode only).
+# (empty = top of file) | span end (`<EOF>` = end of file) | lead | match mode | token (para mode only).
 #
 # The para rows pin the BINDING sentence beneath a lead: a lead-only pin passes a body
 # rewritten to say the opposite. Each token is the clause whose negation inverts the rule.
@@ -480,19 +482,19 @@ r20-v-writer|S|rule-bodies/rule-20.md|**(iv) Gate-check adjudication|**Provenanc
 r20-v-noblock|S|rule-bodies/rule-20.md|**(iv) Gate-check adjudication|**Provenance block.**|**(v) Per-seat sharded party round|para|Its seats write no `SKILL_INVOCATION_PROVENANCE` block, and Check 17 runs no arm on a seat file; a block stamped onto a seat file after the fact is a forged record
 gv17-seat-record|S|steps/gate-validation.md|### 17. Skill-invocation provenance|### 18.|**Scope.** Runs at the retro gate|para|the record of a seat is the dispatch guard's spawn-ledger row for its spawn, written by the hook, and the seat's `--mark` line (Rule 20 (v)). This check runs no arm on a seat file.
 gv17-seat-join|S|steps/gate-validation.md|### 17. Skill-invocation provenance|### 18.|**Scope.** Runs at the retro gate|para|A sharded party round's seat record is joined by `join-remediator-shards.sh` (`seat_row_check`, in the party parts join and in `--sources`), which refuses any sharded seat file `<step>-<seat>-<ordinal|cross>.md` of a cited step that has no `spawn-ledger.jsonl` row of that sprint, role, `role_contract_cited: true` and shard `<ordinal>/<K>` or `cross/<K>`.
-rem-party-source|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**A party repair names the seat finding behind every entry.**|para|every entry carries a `source:` line
+rem-party-source|R|appendix/remediator-party.md||<EOF>|**A party repair names the seat finding behind every entry.**|para|every entry carries a `source:` line
 rem-sib-field|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|carries a `- siblings:` field
 rem-sib-own-files|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|Never grep the sprint slot, `shards/` or any repair record
 rem-sib-control|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|whose output is 1 or more
 rem-sib-own-only|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|A files-mode shard greps ONLY its own files
 rem-sib-insertion|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|writes `- siblings: n/a (insertion)`
 rem-sib-section|R|remediator.md|## Contract|## The evidence contract|**As a section shard**|para|carries `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`
-rem-sib-subject|R|remediator.md|## Contract|## The evidence contract|**As a subject shard**|para|carries `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`
+rem-sib-subject|R|appendix/remediator-shard.md||<EOF>|**As a subject shard**|para|carries `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`
 gp-esc-sources|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|In `--sources` mode the `ESCALATED:` lines are the lead's to adjudicate, never a re-dispatch of the serial remediator
 gp-cross-sib|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Moved cites are the serial remediator's, after the join.**|para|It also owns the cross-file sibling grep
-rem-esc-outside|R|remediator.md|## Contract|## The evidence contract|**A fix that lies outside your files is escalated, never set aside.**|para|report it in your part as escalated
-rem-esc-split|R|remediator.md|## Contract|## The evidence contract|**A fix that lies outside your files is escalated, never set aside.**|para|A partial repair is TWO entries carrying the same `source:` token
-rem-esc-never|R|remediator.md|## Contract|## The evidence contract|**A fix that lies outside your files is escalated, never set aside.**|para|is never dispositioned `repaired` on the grounds
+rem-esc-outside|R|appendix/remediator-shard.md||<EOF>|**A fix that lies outside your files is escalated, never set aside.**|para|report it in your part as escalated
+rem-esc-split|R|appendix/remediator-shard.md||<EOF>|**A fix that lies outside your files is escalated, never set aside.**|para|A partial repair is TWO entries carrying the same `source:` token
+rem-esc-never|R|appendix/remediator-shard.md||<EOF>|**A fix that lies outside your files is escalated, never set aside.**|para|is never dispositioned `repaired` on the grounds
 gp-esc-dispatch|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|In every mode (files, sections, subject), dispatch the serial remediators after the join whenever SERIAL-REQUIRED or ESCALATED-COUNT is above 0
 gp-serial-lanes|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|Dispatch ONE serial remediator per lane, in parallel
 gp-serial-fanin|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|A `HIT` never joins lanes, and neither does an escalation
@@ -502,15 +504,15 @@ gp-serial-count|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Au
 gp-esc-closes|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|never by a shared `source:` token
 gp-serial-why|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Moved cites are the serial remediator's, after the join.**|para|That is why SERIAL-REQUIRED dispatches it
 gp-serial-lane-own|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Moved cites are the serial remediator's, after the join.**|para|A lane remediator runs it for its lane's entries and edits only its lane's files
-rem-serial-lane-own|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**As the serial remediator after a join**|para|As a lane remediator you edit ONLY the files your `LANE:` line names
+rem-serial-lane-own|R|appendix/remediator-serial.md||<EOF>|**As the serial remediator after a join**|para|As a lane remediator you edit ONLY the files your `LANE:` line names
 rem-sib-fence-after|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|run the fence after your last edit; its output is empty, or lists only sites you dispositioned not to change
 rem-sib-text-fence|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|The fence is `text`, never `derived`
 rem-sib-forms-only|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|Any other spelling of the field (`- siblings: checked`, a value with no fence, a `derived` fence) is refused
 rem-esc-edit-form|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|that file as `- edit: <project-relative path>:<line(s)> (escalated)`
 gp-esc-nonparty|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|join-remediator-shards.sh --escalations <the joined record> [--escalations <its -serial-repair record>] --sprint <N>
 rem-sib-deletion|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**Re-check every sibling of the text you replaced.**|para|writes `- siblings: n/a (deletion)`
-rem-serial-scope|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**As the serial remediator after a join**|para|after a files-mode join that is `_bmad-output/planning-artifacts/s<N>/stories _bmad-output/planning-artifacts/s<N>/epics`
-rem-serial-closes|R|remediator.md|## The evidence contract|## A REPAIR IS NOT A RESOLUTION|**As the serial remediator after a join**|para|carries `- closes: <part> <heading>`, copied from the tail of its `ESCALATED:` line
+rem-serial-scope|R|appendix/remediator-serial.md||<EOF>|**As the serial remediator after a join**|para|after a files-mode join that is `_bmad-output/planning-artifacts/s<N>/stories _bmad-output/planning-artifacts/s<N>/epics`
+rem-serial-closes|R|appendix/remediator-serial.md||<EOF>|**As the serial remediator after a join**|para|carries `- closes: <part> <heading>`, copied from the tail of its `ESCALATED:` line
 gp-esc-brief|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Every escalated entry reaches the serial remediator.**|para|each brief carrying its `LANE:` line, its `LANE-ITEM:` lines and every `ESCALATED:` line verbatim
 gp-moved-cites|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|**Moved cites are the serial remediator's, after the join.**|para|re-reads every cite into each edited file AFTER the join or assembly
 gp-rerun-trigger|S|steps/_gate-procedures.md|## Adversarial repair dispatch|## Auto-handoff evaluation|After a join refusal naming a file|para|or a file `written by more than one agent in the window`
@@ -543,7 +545,7 @@ elic-shape-onefile|S|steps/_gate-procedures.md|## Validation cycle|## Where a ch
 gp-revised-seats|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|The remediator brief also carries `revised-seats:`
 gp-revised-token|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|`REVISED-AFTER-MARKER <n> <path> --`
 gp-revised-status|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**One repair writer applies them.**|para|wait-for-deliverable.sh --complete --status --since <the round epoch> --dispatch <agentId>
-rem-revised-seats|R|remediator.md|## Contract|## The evidence contract|**A brief that carries `revised-seats: <path>…`**|para|Re-read each named seat's findings from the file on disk
+rem-revised-seats|R|appendix/remediator-party.md||<EOF>|**A brief that carries `revised-seats: <path>…`**|para|Re-read each named seat's findings from the file on disk
 elic-shape-expectsha|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|split into that same shard dir with `--expect-sha` the sha every elicitation shard notarized
 elic-shape-lead|S|steps/_gate-procedures.md|## Validation cycle|## Where a changelog is written|**Elicitation takes the axis and the shape of the step's adversarial pass, for every subject.**|para|a lighter shape is not the lead's to choose
 sts-elic-sharded|S|steps/stories-test-strategy.md|### 4.|### 5.|Elicitation is sharded per|contains
@@ -570,20 +572,20 @@ adv-rebind-unit|R|adversary.md|## Severity|## |**A re-target prices every litera
 adv-rebind-untouched|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|A literal the diff does not touch is in scope for exactly that reason
 adv-rebind-oldnew|R|adversary.md|## Severity|## |**A re-target prices every literal keyed on it, under both bindings.**|para|record `old -> new` for each
 adv-rebind-major|R|adversary.md|## Severity|## |**An unpriced rebind is a plain MAJOR, and it never counts in `findings_major_underived`.**|para|the third test of that field fails: it blocks
-cr-rebind-head|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|### A Rebind Without Priced Literals = Important (minimum)|prefix
-cr-rebind-trigger|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
-cr-rebind-every|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|every literal and threshold the re-bound value flows into
-cr-rebind-unit|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|in the unit it is compared against
-cr-rebind-untouched|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|**A re-target prices every literal keyed on it, under both bindings.**|para|A literal the diff does not touch is in scope for exactly that reason
-cr-rebind-sev|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|An unpriced keyed literal is **Important** at minimum.|para|derives each input the price depends on, meaning the literal's own line and the decimals or units entry under each binding, using commands that name the source file as an operand
+cr-rebind-head|R|appendix/code-reviewer-value-shapes.md||<EOF>|### A Rebind Without Priced Literals = Important (minimum)|prefix
+cr-rebind-trigger|R|appendix/code-reviewer-value-shapes.md||<EOF>|**A re-target prices every literal keyed on it, under both bindings.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+cr-rebind-every|R|appendix/code-reviewer-value-shapes.md||<EOF>|**A re-target prices every literal keyed on it, under both bindings.**|para|every literal and threshold the re-bound value flows into
+cr-rebind-unit|R|appendix/code-reviewer-value-shapes.md||<EOF>|**A re-target prices every literal keyed on it, under both bindings.**|para|in the unit it is compared against
+cr-rebind-untouched|R|appendix/code-reviewer-value-shapes.md||<EOF>|**A re-target prices every literal keyed on it, under both bindings.**|para|A literal the diff does not touch is in scope for exactly that reason
+cr-rebind-sev|R|appendix/code-reviewer-value-shapes.md||<EOF>|An unpriced keyed literal is **Important** at minimum.|para|derives each input the price depends on, meaning the literal's own line and the decimals or units entry under each binding, using commands that name the source file as an operand
 cr-smoke-head|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|### Missing or Mismatched Smoke Test Updates = Critical|prefix
 cr-smoke-cite|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|If a story introduces, modifies, or removes user-facing functionality|para|`qa.md` "Smoke test updates (HARD GATE)"
 cr-smoke-defer|R|code-reviewer.md|## Mandatory Severity Classifications|## Self-Discrimination Map|This is non-deferrable. The smoke spec|para|`qa.md`'s "Deferred-AC discharge predicate (HARD GATE)"
-arch-rebind-trigger|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
-arch-rebind-fence|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|derives each input the price depends on, meaning the literal's own line and the decimals or units entry under each binding, using commands that name the source file as an operand
-arch-rebind-unit|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|in the unit it is compared against
-arch-rebind-oldnew|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|records `old -> new` for each
-arch-rebind-untouched|R|architect.md|## The evidence contract|## A fold architecture dispatch|**A re-target is priced in a `derived` fence, input by input.**|para|A literal the diff does not touch is in scope for exactly that reason
+arch-rebind-trigger|R|architect.md|## The evidence contract|## As a party seat|**A re-target is priced in a `derived` fence, input by input.**|para|while its text stays the same, where a literal or threshold downstream is computed from or compared against it
+arch-rebind-fence|R|architect.md|## The evidence contract|## As a party seat|**A re-target is priced in a `derived` fence, input by input.**|para|derives each input the price depends on, meaning the literal's own line and the decimals or units entry under each binding, using commands that name the source file as an operand
+arch-rebind-unit|R|architect.md|## The evidence contract|## As a party seat|**A re-target is priced in a `derived` fence, input by input.**|para|in the unit it is compared against
+arch-rebind-oldnew|R|architect.md|## The evidence contract|## As a party seat|**A re-target is priced in a `derived` fence, input by input.**|para|records `old -> new` for each
+arch-rebind-untouched|R|architect.md|## The evidence contract|## As a party seat|**A re-target is priced in a `derived` fence, input by input.**|para|A literal the diff does not touch is in scope for exactly that reason
 qa-verdict-exclusive|R|qa.md|## Verdict|## As a Shard|The two forms are EXCLUSIVE.|contains
 qa-verdict-union|R|qa.md|## Verdict|## As a Shard|A `## Verdict` heading followed by `Verdict: PASS` fails Check 1 in `gate-validation.md`, which reads the heading's next non-blank line and gets `Verdict:`, not a member.|contains
 qa-carried-sentence|R|qa.md|## Carried Findings|## Validation Checklist|`PASS`. Gate 2 runs `validate-carried-findings.sh` on the two validation files|contains
@@ -597,12 +599,13 @@ qa-lrdiv-exempt|R|qa.md|## Validation Checklist|## Communication|value), (2) a T
 qa-lrdiv-exempt3|R|qa.md|## Validation Checklist|## Communication|(3) the AC's outcome performs none of the requirement's actions and reports that to the caller as a non-success (a refusal or error status, a disabled control, a dry-run marker), unless the requirement's verbatim text forbids that refusal.|contains
 qa-lrdiv-other-type|R|qa.md|## Validation Checklist|## Communication|An entry of another blocker type, or one that names no LR, does not exempt.|contains
 qa-sweep-class|R|qa.md|## Class Sweep (HARD GATE)|## Verdict|sweeps for that class, and lists EVERY instance it found on an `Instances:` line|contains
-qa-sweep-shard|R|qa.md|## As a Shard|## Escalation Protocol|the first cross shard sweeps the captures it runs and replays|contains
+qa-sweep-shard|R|appendix/qa-shard.md||<EOF>|the first cross shard sweeps the captures it runs and replays|contains
 qa-sweep-template|R|qa.md|## Findings Template|## As a Shard|The `Instances:` line is the `## Class Sweep (HARD GATE)` result|contains
 gv-smoke-surface-def|S|steps/gate-validation.md|### 11. Smoke test coverage|### 11a.|**Smoke surface.**|para|one git pathspec per line
 qa-sweep-template-lines|R|qa.md|## Findings Template|## As a Shard|Instances: <every instance of this finding's defect class, or `none` for a Suggestion>|fenced
 qa-sweep-template-lines2|R|qa.md|## Findings Template|## As a Shard|Instances: <every instance of this finding's defect class>|fenced
 smoke-def-absent-qa|R|qa.md|||one git pathspec per line|absent
+smoke-def-absent-qa-shard|R|appendix/qa-shard.md|||one git pathspec per line|absent
 smoke-def-absent-stories|S|steps/stories-test-strategy.md|||one git pathspec per line|absent
 impl-rework-instances|S|steps/implementation.md|### 6. Orchestrate|### 7. All Gates Passed|The dev rework brief carries each finding's `Instances:` list verbatim.|contains
 dev-dar-before-submit|R|dev.md|## Workflow Per Task|## QA Handoff Evidence|Populate the Dev Agent Record in the story file|contains
@@ -773,7 +776,7 @@ pred-lit-qa|R|qa.md|## Validation Checklist|## Communication|A literal this repo
 pred-lit-qa-fence|R|qa.md|## Validation Checklist|## Communication|`git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded|contains
 pred-lit-pm|R|pm.md|## Responsibilities|## The evidence contract|so the predicate names the AC of this story that requires the literal, and|contains
 pred-lit-pm-gate|R|pm.md|## Responsibilities|## The evidence contract|is owed at gate 2|contains
-pred-lit-arch|R|architect.md|## The evidence contract|## A fold architecture dispatch|**An ADR probe keyed on a literal this repository writes cites its producer.**|para|carries a `derived` fence pinned to a sha, `git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded output is the producing line, or names the literal's external source
+pred-lit-arch|R|architect.md|## The evidence contract|## As a party seat|**An ADR probe keyed on a literal this repository writes cites its producer.**|para|carries a `derived` fence pinned to a sha, `git grep -n -F '<literal>' <sha> -- <producing file>`, whose recorded output is the producing line, or names the literal's external source
 def-copy-cr-section|R|code-reviewer.md|## Ownership|## Responsibilities|At `done` the closing writer also writes a `## Deferred ACs` section into the story file.|contains
 def-copy-cr-id|R|code-reviewer.md|## Ownership|## Responsibilities|Each entry opens with `- **<id>**`, the IDENTICAL string written to `deferred_acs`,|contains
 def-copy-cr-pred|R|code-reviewer.md|## Ownership|## Responsibilities|and carries that AC's predicate text copied from the verdict file the gate-2 check read|contains
@@ -816,7 +819,7 @@ bug-2c-lens|S|steps/bug-investigation.md|### 2c.|### 3.|Rule 19) to run `/bmad-r
 bug-4-lens-adv|S|steps/bug-investigation.md|### 4. Validation|### 5. Sprint Setup|per SKILL.md Rule 19) to run `/bmad-review lenses=adversarial` on the fix story|prefix
 bug-4-lens-arch|S|steps/bug-investigation.md|### 4. Validation|### 5. Sprint Setup|1. Runs `/bmad-review lenses=adversarial` on the fix story, scoped to|prefix
 srev-lens|S|steps/sprint-review.md|### 1. Sprint-Level Adversarial Review|### 2. Sprint-Level Party Mode|`/bmad-review lenses=adversarial` — final adversarial pass on the|prefix
-arch-role-fold-lens|R|architect.md|## A fold architecture dispatch|## As a party seat|1. **Run `/bmad-review lenses=adversarial` yourself, via the Skill tool**|prefix
+arch-role-fold-lens|R|appendix/architect-fold-dispatch.md|## A fold architecture dispatch|<EOF>|1. **Run `/bmad-review lenses=adversarial` yourself, via the Skill tool**|prefix
 rr-recon-domain|S|steps/research-requirements.md|### 1. Research|### 2. PRD Creation|1. `/bmad-deep-recon type=domain intent=run|prefix
 rr-recon-market|S|steps/research-requirements.md|### 1. Research|### 2. PRD Creation|2. `/bmad-deep-recon type=market intent=run|prefix
 rr-recon-technical|S|steps/research-requirements.md|### 1. Research|### 2. PRD Creation|3. `/bmad-deep-recon type=technical intent=run|prefix
@@ -933,10 +936,35 @@ retro-gate-invoked|S|steps/retro.md|### 5c. Pre-Commit Validation Gate|### 6. Co
 retro-gate-blocks|S|steps/retro.md|### 5c. Pre-Commit Validation Gate|### 6. Commit, Push, and PR|**An unclearable check in this gate escalates; it never self-clears.**|para|(checks 2, 3, 4, 5 and 6)
 retro-gate-d2|S|steps/retro.md|### 5c. Pre-Commit Validation Gate|### 6. Commit, Push, and PR|**An unclearable check in this gate escalates; it never self-clears.**|para|For check 6 the operator's disposition on a gate FAIL is recorded in the form `gate-validation.md` Check 26 reads
 retro-gate-count|S|steps/retro.md|### 5c. Pre-Commit Validation Gate|### 6. Commit, Push, and PR|Before committing retro artifacts,|para|run all six checks in order.
+ptr-adversary-one-shot|R|adversary.md||<EOF>|Read `.claude/team-roles/appendix/adversary-one-shot.md` when your dispatch is a ONE-SHOT `/bmad-review lenses=adversarial` sweep.|contains
+ptr-adversary-section-shard|R|adversary.md||<EOF>|Read `.claude/team-roles/appendix/adversary-section-shard.md` when your brief makes you a shard over ONE document (Rule 28, "Split dispatch": sections axis), cross shard included.|contains
+ptr-adversary-rung-records|R|adversary.md||<EOF>|Read `.claude/team-roles/appendix/adversary-rung-records.md` before you rule that a Severity rung does or does not reach a finding at its edge, or when asked whether a rung still earns its place: it holds each rung's **Minimum mechanism (Rule 26(c))** record.|contains
+ptr-adversary-later-pass|R|adversary.md||<EOF>|Read `.claude/team-roles/appendix/adversary-later-pass.md` on pass 2 or later of a cycle (a previous pass exists): it holds how a later pass reviews the repair, how the merge decides a repair-introduced MAJOR, and the bar for excluding a CRITICAL from `findings_critical_prior_scope`.|contains
+ptr-adversary-underived-count|R|adversary.md||<EOF>|Read `.claude/team-roles/appendix/adversary-underived-count.md` before you count any MAJOR in `findings_major_underived`.|contains
+ptr-adversary-verification-pass|R|adversary.md||<EOF>|Read `.claude/team-roles/appendix/adversary-verification-pass.md` before you review anything when the pass before you stamped `DIVERGENT_HARD_BLOCK`, the cycle had stalled, or the pass before you was a p3 that did not stamp `EXIT_CONDITION_MET`: you are then the VERIFICATION pass and declare `resolves_divergence:`.|contains
+ptr-architect-fold-dispatch|R|architect.md||<EOF>|Read `.claude/team-roles/appendix/architect-fold-dispatch.md` when `bug-investigation.md` §4 dispatches you over a folded bug-fix story (a fold architecture dispatch).|contains
+ptr-code-reviewer-closing-writer|R|code-reviewer.md||<EOF>|Read `.claude/team-roles/appendix/code-reviewer-closing-writer.md` when your brief names you the closing writer, after gate 3 passes.|contains
+ptr-code-reviewer-api-fields|R|code-reviewer.md||<EOF>|Read `.claude/team-roles/appendix/code-reviewer-api-fields.md` when the story consumes API data for display, or the diff adds a field to a query or request, or adds, removes, renames or retypes a field in what a handler, endpoint or producer returns. It holds the field-verification procedure and the Unverifiable API Field Names classification.|contains
+ptr-code-reviewer-bug-class|R|code-reviewer.md||<EOF>|Read `.claude/team-roles/appendix/code-reviewer-bug-class.md` when a finding locates the source of a production error for a fix-forward dispatch, when a finding is a bug class (a pattern-based defect, not a one-off), or when the story declares it fixes a class of bug. It holds Bug-Site Anchoring, the Bug-class Audit and the Missing Bug-Class Audit classification.|contains
+ptr-code-reviewer-error-handling|R|code-reviewer.md||<EOF>|Read `.claude/team-roles/appendix/code-reviewer-error-handling.md` when the diff adds or modifies a `try`/`except` or `try`/`catch` block, modifies a function that already had error-handling (a `finally`, a null/undefined guard, an `allSettled`/`Promise.all` rejection path), or adds a validity guard (suppress, clamp, default-fill, null/sentinel emit, exception-swallow) on a value another module or consumer reads. It holds Async Error-Handler Coverage and the Silent Validity-Guard and Diff Removes Existing Error-Handling classifications.|contains
+ptr-code-reviewer-value-shapes|R|code-reviewer.md||<EOF>|Read `.claude/team-roles/appendix/code-reviewer-value-shapes.md` when the diff changes a function's return type, changes the key set or value types of a context-build path, converts between unit systems, or makes an existing name, role or unit resolve to a different value, party or unit while its text stays the same. It holds those three severity classifications.|contains
+ptr-code-reviewer-ac-discrimination|R|code-reviewer.md||<EOF>|Read `.claude/team-roles/appendix/code-reviewer-ac-discrimination.md` when the story carries an AC tagged UNIVERSAL, a `LOCKED_REQUIREMENT`, or an AC guarding a bound, limit or ceiling. It holds those three severity classifications.|contains
+ptr-code-reviewer-gate2-discrimination|R|code-reviewer.md||<EOF>|Read `.claude/team-roles/appendix/code-reviewer-gate2-discrimination.md` when you review at Gate 2 a PR carrying discrimination-evidence acceptance criteria, or a PR that flips a CI gate from advisory mode to enforce-fail-on-detect. It holds the map, its mandates and the self-reflexive Gate 2 failure patterns `gate-validation.md` Check 19 enforces.|contains
+ptr-dev-ci-divergence|R|dev.md||<EOF>|Read `.claude/team-roles/appendix/dev-ci-divergence.md` when CI fails on a check that passes locally, before you change anything to fix it.|contains
+ptr-qa-shard|R|qa.md||<EOF>|Read `.claude/team-roles/appendix/qa-shard.md` when your brief carries a `shard:` line other than `shard: 1/1 <story-index>`.|contains
+ptr-remediator-shard|R|remediator.md||<EOF>|Read `.claude/team-roles/appendix/remediator-shard.md` when your brief's `shard:` line names a part (a file set, a section file or a requirements-subject part) rather than `none (…)`: it holds the escalation of a fix outside your files, the subject shard's edit scope and the `--check-part` run before `--mark`.|contains
+ptr-remediator-party|R|remediator.md||<EOF>|Read `.claude/team-roles/appendix/remediator-party.md` when your brief hands you a party round's seat findings (`_bmad-output/party-mode/s<N>/…`) or carries `revised-seats:`.|contains
+ptr-remediator-serial|R|remediator.md||<EOF>|Read `.claude/team-roles/appendix/remediator-serial.md` when your brief carries `shard: none (authoring-chain)`, `adjudicator: read-only`, a `LANE:`, `FANIN:` or `ADJUDICATE:` line, adjudicator batch files, or an item carrying `CROSS:`.|contains
+ptr-remediator-mechanism|R|remediator.md||<EOF>|Read `.claude/team-roles/appendix/remediator-mechanism.md` when you need this role's Rule 26(c) record: the failure it was created for, its false-positive cost, or its removal condition.|contains
+qa-deploy-protocol|R|qa.md|## Context Loading|## Gate-2 Start Condition (HARD)|**Before any command against a deployed environment, read the project's operations protocol.**|contains
+cr-deploy-protocol|R|code-reviewer.md|## Context Loading|## Review Document Template|**Before any command against a deployed environment, read the project's operations protocol.**|contains
 PINS
 }
 
 pin_path() { case "$1" in S) printf '%s/%s\n' "$SKILL_DIR" "$2" ;; R) printf '%s/%s\n' "$ROLES_DIR" "$2" ;; esac; }
+# role_mds — every role file and every role appendix (`appendix/<role>-<topic>.md`), one path per line.
+# A scan over the roles reads both: an appendix holds role text moved out of its role file whole.
+role_mds() { local f; for f in "$ROLES_DIR"/*.md "$ROLES_DIR"/appendix/*.md; do [ -f "$f" ] && printf '%s\n' "$f"; done; return 0; }
 
 # The retired range. Alternation, never a bracket class: the en dash is multibyte.
 RANGE_OLD='0(–|-)2b'
@@ -1428,7 +1456,7 @@ if [ "$n_off" = 1 ] && [ "$n_ex" = 0 ] && [ "$n_exc" = 1 ] && [ "$n_mx" = 0 ] &&
 else
   bad "join-pre: FIXTURE BROKEN -- off=$n_off exempt=$n_ex (calls $n_exc) mixed=$n_mx fenced=$n_fc; want 1 0 (1) 0 0"
 fi
-JSCOPE="$SKILL_DIR/steps/*.md $SKILL_DIR/rule-bodies/*.md $ROLES_DIR/*.md"
+JSCOPE="$SKILL_DIR/steps/*.md $SKILL_DIR/rule-bodies/*.md $(role_mds | tr '\n' ' ')"
 # shellcheck disable=SC2086 # the scope globs are expanded on purpose; no path carries a blank
 n_seat="$(join_scan $JSCOPE | awk -F'\t' '$2 == "P=1"' | grep -c .)" || n_seat=0
 # shellcheck disable=SC2086
@@ -1538,8 +1566,10 @@ printf 'append, with Edit, the bare line\n`repair-complete: serial <pass>` inste
 printf 'It appends `seat-complete: <step> <seat> <shard> sha=<hex> findings=<n>`, whose `sha=` binds every line.\nappends `repair-complete: serial <pass> sha=<hex>`, the line only --complete-repair waits for\nthe bare line of a table\n' > "$BM/near.md"
 bm1="$(carriers "$BM/off1.md")"; bm2="$(carriers "$BM/off2.md")"; bm3="$(carriers "$BM/off3.md")"; bmn="$(carriers "$BM/near.md")"
 if [ "$bm1" = 1 ] && [ "$bm2" = 1 ] && [ "$bm3" = 1 ] && [ "$bmn" = 0 ]; then
-  bm_real="$(carriers "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md)"
-  bm_ctl="$(cat "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md | grep -c 'sha=<hex>')" || bm_ctl=0
+  # shellcheck disable=SC2046 # role_mds prints one blank-free path per line on purpose
+  bm_real="$(carriers $(role_mds) "$SKILL_DIR"/steps/*.md)"
+  # shellcheck disable=SC2046
+  bm_ctl="$(cat $(role_mds) "$SKILL_DIR"/steps/*.md | grep -c 'sha=<hex>')" || bm_ctl=0
   if [ "$bm_real" = 0 ] && [ "$bm_ctl" -ge 1 ]; then
     ok "bare-marker: 0 hand-written-marker carriers across the role and step files (control: $bm_ctl sha=<hex> descriptions; probe: fallback and bare spellings read 1 each, sha= description reads 0)"
   else
@@ -1580,7 +1610,8 @@ printf 'Run the call from `<lead engine>` as defined in the section above.\n\nA 
 le1="$(le_scan "$LE/f1.md" | grep -c 'form=1')" || le1=0
 le2="$(le_scan "$LE/f2.md" | grep -c 'form=2')" || le2=0
 leb="$(le_scan "$LE/bad.md" | grep -c 'form=NONE')" || leb=0
-LE_FILES=( "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md )
+# shellcheck disable=SC2207 # role_mds prints one blank-free path per line on purpose
+LE_FILES=( $(role_mds) "$SKILL_DIR"/steps/*.md )
 if [ "$le1" = 2 ] && [ "$le2" = 1 ] && [ "$leb" = 1 ]; then
   le_out="$(le_scan "${LE_FILES[@]}")"
   le_occ="$(grep -c 'form=' <<<"$le_out")" || le_occ=0
@@ -1843,7 +1874,8 @@ dl_scan() { # dl_scan <files...> -> "<file>:<first line> deliverable=0|1" per bl
   { if (st == 0) st = FNR; para = para "\n" $0; if (index($0, "<lead engine>/wait-for-deliverable.sh --mark <file>")) hit = 1 }
   END { flush() }' "$@"
 }
-dl_out="$(dl_scan "$ROLES_DIR"/*.md "$SKILL_DIR"/steps/*.md "$SKILL_DIR"/rule-bodies/*.md)"
+# shellcheck disable=SC2046 # role_mds prints one blank-free path per line on purpose
+dl_out="$(dl_scan $(role_mds) "$SKILL_DIR"/steps/*.md "$SKILL_DIR"/rule-bodies/*.md)"
 dl_n="$(grep -c 'deliverable=' <<<"$dl_out")" || dl_n=0
 dl_bad="$(grep 'deliverable=0' <<<"$dl_out" | sed "s|$ROOT/||" | tr '\n' ' ')"
 dl_dev="$(grep -c "/dev.md:.* deliverable=1" <<<"$dl_out")" || dl_dev=0
@@ -1890,6 +1922,8 @@ p_step() { # <file>
   [ -n "$t" ] && grep -qF 'partition-review-diff.sh' <<<"$t" && grep -qF 'merge-review-shards.sh' <<<"$t"
 }
 role_sect() { awk '/^## As a Shard/ { p = 1; next } p && /^## / { exit } p { print }' "$1"; }
+# qa.md's `## As a Shard` points at appendix/qa-shard.md, which holds the shard clauses whole: read both.
+qa_shard_sect() { role_sect "$1"; [ ! -f "$(dirname "$1")/appendix/qa-shard.md" ] || cat "$(dirname "$1")/appendix/qa-shard.md"; }
 p_role() { # <file>
   local t; t="$(role_sect "$1")"
   [ -n "$t" ] && grep -qF 'shard-verdict:' <<<"$t" && grep -qF 'reviewed-sha:' <<<"$t" && grep -qF 'parts:' <<<"$t"
@@ -1936,7 +1970,7 @@ step2_para() { awk '/^```/ { f = !f; next } f { next }
 p_step2() { local t; t="$(step2_para "$1")"
   [ -n "$t" ] && grep -qF 'partition-review-diff.sh' <<<"$t" && grep -qF 'merge-review-shards.sh' <<<"$t" \
     && grep -qF -- '--gate qa' <<<"$t"; }
-p_qrole() { local t; t="$(role_sect "$1")"
+p_qrole() { local t; t="$(qa_shard_sect "$1")"
   [ -n "$t" ] && grep -qF 'shard-verdict:' <<<"$t" && grep -qF 'reviewed-sha:' <<<"$t" && grep -qF 'parts:' <<<"$t" \
     && grep -qF '## Acceptance Criteria' <<<"$t"; }
 # Read WHITESPACE-NORMALISED: the base text wrapped "Gate 2" / "is dispatched serially" across
@@ -1956,8 +1990,11 @@ fi
 _ser=""
 p_noserial "$STEP_MD" || _ser="$_ser implementation.md"
 p_noserial "$QA_MD" || _ser="$_ser qa.md"
+for _f in "$ROLES_DIR"/appendix/qa-*.md; do
+  [ ! -f "$_f" ] || p_noserial "$_f" || _ser="$_ser appendix/${_f##*/}"
+done
 if [ -z "$_ser" ]; then
-  ok "S9: neither 'Gate 2 is dispatched serially' nor 'it has no shard merge' appears anywhere in implementation.md or qa.md"
+  ok "S9: neither 'Gate 2 is dispatched serially' nor 'it has no shard merge' appears anywhere in implementation.md, qa.md or a qa appendix"
 else
   bad "S9: [${_ser# }] still says gate 2 is serial or has no shard merge"
 fi
@@ -2003,7 +2040,10 @@ p_own_step() { local t g s
     && grep -qF 'the closing writer has landed every story'"'"'s closing commit, leaving every story `done` with a `deferred_acs` field in both sprint-status views' <<<"$s" \
     && grep -qF 'The closing writer has not run for a story past gate 3 that is still `review`, or `done` with no `deferred_acs` field in a view: dispatch the closing writer now (section 3, item 4)' <<<"$s"; }
 p_own_role() { local o r s c
-  o="$(role_named "$1" Ownership | joined)"; s="$(role_sect "$1" | joined)"; c="$(role_named "$1" 'As the Closing Writer' | joined)"
+  o="$(role_named "$1" Ownership | joined)"; s="$(role_sect "$1" | joined)"
+  # `## As the Closing Writer` points at appendix/code-reviewer-closing-writer.md, which holds its brief whole.
+  c="$( { role_named "$1" 'As the Closing Writer'; [ ! -f "$(dirname "$1")/appendix/code-reviewer-closing-writer.md" ] \
+          || cat "$(dirname "$1")/appendix/code-reviewer-closing-writer.md"; } | joined)"
   r="$(role_bullet "$1" Responsibilities '- Dispatched as the closing writer' | joined)"
   grep -qF 'The closing writes belong to the closing writer, and only to it.' <<<"$o" \
     && grep -qF 'A gate-1 reviewer — serial `shard: 1/1`, a part shard or the cross shard — does NOT make any of them. After gate 3 passes, the lead dispatches one `code-reviewer` as the closing writer (see "As the Closing Writer")' <<<"$o" \
@@ -2051,6 +2091,9 @@ else
 fi
 _sref=""
 p_write_refuse "$ROLE_MD" 3>/dev/null || _sref="$_sref code-reviewer.md"
+for _f in "$ROLES_DIR"/appendix/code-reviewer-*.md; do
+  [ ! -f "$_f" ] || p_write_refuse "$_f" 3>/dev/null || _sref="$_sref appendix/${_f##*/}"
+done
 p_write_refuse "$STEP_MD" 3>/dev/null || _sref="$_sref implementation.md"
 if [ -z "$_sref" ]; then
   ok "S4b: no clause in code-reviewer.md or implementation.md, As the Closing Writer included, gives a closing write to anyone but the closing writer unless its write verb is negated"
@@ -2072,7 +2115,7 @@ fi
 # shard as a `#### ` finding, and the cross shard owning the handed-over replays), the Gate-2
 # dispatch paragraph (the same three duties), and qa.md's "Deliver before idle" bullet (a part
 # shard delivers its shard file path and shard-verdict, never per-AC rows).
-p_qsetup_role() { local t; t="$(role_sect "$1" | joined)"
+p_qsetup_role() { local t; t="$(qa_shard_sect "$1" | joined)"
   grep -qF 'in it you first run the project'"'"'s canonical dependency setup, the setup the dev'"'"'s QA Handoff Evidence records or else the story'"'"'s documented setup, and confirm the canonical run of the anchor'"'"'s test is GREEN there before any mutation.' <<<"$t" \
     && grep -qF 'An AC whose replay cannot reach a GREEN baseline in your worktree is handed to the cross shard rather than scored: list it under `## Findings` as a `#### ` finding citing `parts: <your ordinal>` that names the AC and the reason.' <<<"$t" \
     && grep -qF 'the RED replays for any AC whose anchor lies in no part'"'"'s files or that a part shard handed over' <<<"$t"; }
@@ -2105,7 +2148,7 @@ p_ho_step() { local t; t="$(step2_para "$1" | joined)"
     && grep -qF 'the first cross QA in the first wave whatever the cap leaves for the rest' <<<"$t" \
     && grep -qF 'and only then joins the part shard files itself with `AI_DLC_WAIT_BEAT_SECS=540 AI_DLC_STATE_DIR=<that directory> wait-for-deliverable.sh --complete --since <epoch> <part paths>`, each call in the foreground at the Bash `timeout: 600000`, re-called until every path is DELIVERED;' <<<"$t" \
     && grep -qF 'Once that join completes, the first cross QA reads every part shard file for `handover:` lines, runs each handed-over replay and records it as a `handover-run:` line' <<<"$t"; }
-p_ho_role() { local t; t="$(role_sect "$1" | joined)"
+p_ho_role() { local t; t="$(qa_shard_sect "$1" | joined)"
   grep -qF 'The hand-over finding goes under `### Important`, never under a `### Deferred` container, and carries exactly one column-0 `handover: <AC-id>` line beside its `parts:` line.' <<<"$t" \
     && grep -qF 'You are dispatched in the same wave as the part shards, so the part files may not exist yet.' <<<"$t" \
     && grep -qF 'with `AI_DLC_WAIT_BEAT_SECS=540 AI_DLC_STATE_DIR=<the beat state directory your brief names> scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`, each call in the foreground at the Bash `timeout: 600000`, re-called until every path is DELIVERED.' <<<"$t" \

@@ -2,7 +2,7 @@
 # agent-definition-render/seed.sh — build a scratch project whose `.claude/settings.json`
 # declares a role set the arms can DISCRIMINATE on. Echoes the project root.
 #
-# THE SEEDED SET IS FOUR ROLES AND EVERY ONE OF THEM EXISTS TO SEPARATE TWO OUTCOMES:
+# EVERY MEMBER OF THE SEEDED SET EXISTS TO SEPARATE TWO OUTCOMES:
 #
 #   alpha   model + a valid effort            -> a full definition, with an `effort:` line, AND
 #           + omitClaudeMd: true                an `omitClaudeMd: true` line (the declaration the
@@ -21,7 +21,15 @@
 #   sm      a PARTY PERSONA name WITH a model -> a full definition, exactly like alpha. A persona's
 #                                               model is optional; set (as the shipped template
 #                                               sets it), the persona is defined like any role.
-#                                               Last, so it is never the first member read.
+#                                               Never the first member read.
+#   echo    model + omitClaudeMd: true        -> a `disallowedTools:` line carrying the declared
+#           + a VALID disallowedTools           string verbatim, inside the fences, after the
+#                                               omitClaudeMd line
+#   foxtrot model + disallowedTools ""        -> a definition with NO disallowedTools line
+#   golf    model + disallowedTools `true`    -> OMITTED and reported: a boolean is not a string,
+#                                               and stringified it would pass the name grammar
+#   hotel   model + "Skill,Agent" (no space)  -> OMITTED and reported: a string off the grammar
+#   The four sit after every older member, so each older arm's first-match pick is unchanged.
 #
 # `alpha` IS DELIBERATELY NOT THE ONLY MEMBER AND NOT THE ONLY INTERESTING ONE. A seeded set of
 # one cannot tell "iterated the declared roles" from "rendered the first one", and `charlie` and
@@ -47,7 +55,11 @@ cat > "$WORK/project/.claude/settings.json" <<'JSON'
     "bravo":   { "model": "sonnet" },
     "charlie": { "effort": "high" },
     "delta":   { "model": "opus",   "effort": "turbo", "omitClaudeMd": "sometimes" },
-    "sm":      { "model": "sonnet", "effort": "medium" }
+    "sm":      { "model": "sonnet", "effort": "medium" },
+    "echo":    { "model": "sonnet", "omitClaudeMd": true, "disallowedTools": "Skill, Agent" },
+    "foxtrot": { "model": "sonnet", "disallowedTools": "" },
+    "golf":    { "model": "sonnet", "disallowedTools": true },
+    "hotel":   { "model": "sonnet", "disallowedTools": "Skill,Agent" }
   },
   "env": { "SOMETHING_ELSE": "1" }
 }

@@ -29,13 +29,19 @@
 #
 # `omitClaudeMd` IS RENDERED INTO THE FRONTMATTER WHEN THE ENTRY DECLARES `true`, and never
 # otherwise. A non-fork subagent receives every CLAUDE.md level plus the unscoped rules unless
-# its definition says not to -- on the reference consumer roughly 25 KB of resident rulebook per
-# spawn, which for the three roles the template flags is content none of their contracts cites
-# (derived: a grep for `CLAUDE.md|core/rules|.claude/rules` and for paths that ONLY the consumer
-# rulebook defines matches neither of the three, while it matches `dev` and
-# `protected-path-editor`, which are exactly the roles the template leaves unflagged). The
-# harness default is already "do not omit", so a declared `false` and an absent key render the
-# same bytes.
+# its definition says not to. The template flags every role whose contract does not need the
+# consumer rulebook resident on every dispatch -- all but `dev`, `dev-escalated` and
+# `protected-path-editor`, whose contracts edit or cite it throughout; a flagged role that needs
+# one section of it is told to Read the project's `CLAUDE.md` by the step passage that needs it.
+# The harness default is already "do not omit", so a declared `false` and an absent key render
+# the same bytes.
+#
+# `disallowedTools` IS RENDERED VERBATIM AS A FRONTMATTER LINE WHEN THE ENTRY DECLARES A
+# NON-EMPTY STRING of tool names separated by `, ` (for example "Skill, Agent"). It is a
+# denylist: tools the role's contract never uses are removed from its first request, and every
+# tool not named stays, deferred and MCP tools included. An absent key or an empty string
+# renders no line. Any other value -- a non-string, or a string outside the grammar -- is
+# OMITTED and reported, like an invalid effort.
 #
 # THE VALUE IS LOADED WITH A NULL-SAFE jq EXPRESSION, NOT `// empty`, AND THAT IS A TRAP. `//`
 # treats jq's `false` as an absent left side: `.omitClaudeMd // empty` prints EMPTY for a
@@ -166,7 +172,17 @@ omit_valid() {
   esac
 }
 
-# render_one <role> <model-key> <effort-or-empty> <omit-true-or-empty> -> the definition text.
+# The disallowedTools grammar: one or more tool names, each `[A-Za-z][A-Za-z0-9_*-]*`, joined by
+# exactly `, `. The value reaches this test as the loader printed it; a non-string arrives
+# type-tagged (`(boolean)true`) and so can never match.
+DT_NAME='[A-Za-z][A-Za-z0-9_*-]*'
+DT_RE="^${DT_NAME}(, ${DT_NAME})*\$"
+dt_valid() {
+  [[ "$1" =~ $DT_RE ]]
+}
+
+# render_one <role> <model-key> <effort-or-empty> <omit-true-or-empty> <disallowedTools-or-empty>
+#   -> the definition text.
 #
 # THE LAST TWO BODY LINES RESTORE WHAT A CUSTOM BODY REPLACES. A subagent spawned with no
 # definition gets the harness's general-purpose prompt, which carries a no-proactive-`.md` rule
@@ -180,6 +196,7 @@ render_one() {
   printf 'model: %s\n' "$2"
   [ -n "$3" ] && printf 'effort: %s\n' "$3"
   [ "${4:-}" = "true" ] && printf 'omitClaudeMd: true\n'
+  [ -n "${5:-}" ] && printf 'disallowedTools: %s\n' "$5"
   printf -- '---\n'
   printf '%s from .claude/settings.json aiDlcRoles.%s. Edit the settings entry, then re-render. -->\n' \
     "$GEN_PREFIX" "$1"
@@ -191,11 +208,11 @@ render_one() {
 }
 
 # ONE jq FOR EVERY ROLE. A line is `F` US `<role>` US `<model key>` US `<model string>` US `<effort>` US `<omitClaudeMd>`
-# (US = \037, a separator that is not IFS whitespace, so an empty field survives the split), the four values the
-# per-role calls below load. A role whose fields hold a newline or US, a non-scalar, or a lookup jq errors on, and a
-# role name outside the role-file grammar, is printed as `S` US `<name>`; the loop then loads that role's fields with
-# the four per-field calls, so the value is exactly what they return. The path is read from the tag alone, never
-# inferred from a US inside the name.
+# US `<disallowedTools>` (US = \037, a separator that is not IFS whitespace, so an empty field survives the split), the
+# five values the per-role calls below load. A role whose fields hold a newline or US, a non-scalar, a non-string
+# disallowedTools, or a lookup jq errors on, and a role name outside the role-file grammar, is printed as `S` US
+# `<name>`; the loop then loads that role's fields with the five per-field calls, so the value is exactly what they
+# return. The path is read from the tag alone, never inferred from a US inside the name.
 US="$(printf '\037')"
 ROLES="$(jq -r '. as $d | .aiDlcRoles | keys[] as $r
   | if ($r | test("^[a-z][a-z0-9-]*$") | not) then "S\u001f" + $r else
@@ -205,7 +222,8 @@ ROLES="$(jq -r '. as $d | .aiDlcRoles | keys[] as $r
         | (if $m == "" then "" else (($d.aiDlcModels[$m] // "") | sc) end) as $ms
         | (($d.aiDlcRoles[$r].effort // "") | sc) as $e
         | ($d.aiDlcRoles[$r].omitClaudeMd | if . == null then "" else tostring end) as $o
-        | [$m, $ms, $e, $o] | if any(.[]; test("[\n\u001f]")) then error("slow") else . end
+        | ($d.aiDlcRoles[$r].disallowedTools | if . == null then "" elif type == "string" then . else error("slow") end) as $t
+        | [$m, $ms, $e, $o, $t] | if any(.[]; test("[\n\u001f]")) then error("slow") else . end
         | (["F", $r] + .) | join("\u001f")
       ) catch ("S\u001f" + $r)) end' "$SETTINGS" 2>/dev/null)"
 
@@ -215,6 +233,7 @@ skipped_nomodel=0
 unresolved=""
 bad_effort=""
 bad_omit=""
+bad_dt=""
 bad_name=""
 # RENDERED NAMES ARE RECORDED AS A NEWLINE-DELIMITED STRING, not an array: bash 3.2 under
 # `set -u` errors on expanding an EMPTY array, and the empty case is reachable (every role a
@@ -227,7 +246,7 @@ while IFS= read -r role; do
   [ -n "$role" ] || continue
   fast=""
   case "$role" in
-    "F$US"*) fast=1; role="${role#F"$US"}"; IFS="$US" read -r role mkey mstr eff om <<EOR
+    "F$US"*) fast=1; role="${role#F"$US"}"; IFS="$US" read -r role mkey mstr eff om dt <<EOR
 $role
 EOR
     ;;
@@ -275,9 +294,21 @@ EOR
     om=""
   fi
 
+  # A non-string is TYPE-TAGGED, not stringified: `tojson` alone prints a boolean `true` as
+  # `true`, which the tool-name grammar accepts. The trailing `.` keeps a value's own trailing
+  # newline from being stripped by the command substitution, so it fails the grammar too.
+  if [ -z "$fast" ]; then
+    dt="$(jq -r --arg r "$role" '.aiDlcRoles[$r].disallowedTools | (if . == null then "" elif type == "string" then . else "(" + type + ")" + tojson end) + "."' "$SETTINGS" 2>/dev/null)"
+    dt="${dt%.}"
+  fi
+  if [ -n "$dt" ] && ! dt_valid "$dt"; then
+    bad_dt="$bad_dt ${role}(${dt})"
+    dt=""
+  fi
+
   RENDERED_NAMES="$RENDERED_NAMES$role
 "
-  want="$(render_one "$role" "$mkey" "$eff" "$om")"
+  want="$(render_one "$role" "$mkey" "$eff" "$om" "$dt")"
   target="$AGENTS_DIR/$role.md"
 
   if [ "$MODE" = "check" ]; then
@@ -333,6 +364,8 @@ fi
   echo "render-agent-definitions.sh: invalid effort level(s), OMITTED from the rendered definition (valid: low medium high xhigh max):${bad_effort}" >&2
 [ -n "${bad_omit// /}" ] && \
   echo "render-agent-definitions.sh: invalid omitClaudeMd value(s), OMITTED from the rendered definition (valid: true false):${bad_omit}" >&2
+[ -n "${bad_dt// /}" ] && \
+  echo "render-agent-definitions.sh: invalid disallowedTools value(s), OMITTED from the rendered definition (valid: a JSON string of tool names joined by ', '):${bad_dt}" >&2
 [ -n "${unresolved// /}" ] && \
   echo "render-agent-definitions.sh: role(s) whose model key resolves in no aiDlcModels entry, so NO definition was rendered and their spawns keep the parent's effort:${unresolved}" >&2
 

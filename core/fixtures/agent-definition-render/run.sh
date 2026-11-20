@@ -154,11 +154,20 @@ BAD_EFFORT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and .value
 WITH_OMIT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.omitClaudeMd == true) | .key' "$S0" | sed -n 1p)"
 NO_OMIT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and (.value.omitClaudeMd == null)) | .key' "$S0" | sed -n 1p)"
 BAD_OMIT="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and (.value.omitClaudeMd != null) and (.value.omitClaudeMd | tostring | test("^(true|false)$") | not)) | .key' "$S0" | sed -n 1p)"
+# The disallowedTools token sets. The valid one also carries omitClaudeMd: true, so its line ORDER
+# against that line is observable. The boolean one is selected by TYPE, because it is the input a
+# loader that stringifies scalars would accept: `true` matches the tool-name grammar.
+DT_RE='^[A-Za-z][A-Za-z0-9_*-]*(, [A-Za-z][A-Za-z0-9_*-]*)*$'
+DT_OK="$(jq -r --arg re "$DT_RE" '.aiDlcRoles | to_entries[] | select(.value.model and .value.omitClaudeMd == true and (.value.disallowedTools | type) == "string" and (.value.disallowedTools | test($re))) | .key' "$S0" | sed -n 1p)"
+DT_EMPTY="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and .value.disallowedTools == "") | .key' "$S0" | sed -n 1p)"
+DT_BOOL="$(jq -r '.aiDlcRoles | to_entries[] | select(.value.model and (.value.disallowedTools | type) == "boolean") | .key' "$S0" | sed -n 1p)"
+DT_MAL="$(jq -r --arg re "$DT_RE" '.aiDlcRoles | to_entries[] | select(.value.model and (.value.disallowedTools | type) == "string" and .value.disallowedTools != "" and (.value.disallowedTools | test($re) | not)) | .key' "$S0" | sed -n 1p)"
 N_WITH_MODEL="$(printf '%s\n' "$WITH_MODEL" | grep -c .)"
 if [ -z "$WITH_EFFORT" ] || [ -z "$NO_EFFORT" ] || [ -z "$BAD_EFFORT" ] \
    || [ -z "$WITH_OMIT" ] || [ -z "$NO_OMIT" ] || [ -z "$BAD_OMIT" ] \
+   || [ -z "$DT_OK" ] || [ -z "$DT_EMPTY" ] || [ -z "$DT_BOOL" ] || [ -z "$DT_MAL" ] \
    || [ -z "${NO_MODEL// /}" ] || [ "$N_WITH_MODEL" -lt 2 ] || [ -z "$PERSONA_WITH_MODEL" ]; then
-  echo "FIXTURE BROKEN: the seeded declaration yields with-effort='$WITH_EFFORT' no-effort='$NO_EFFORT' bad-effort='$BAD_EFFORT' with-omit='$WITH_OMIT' no-omit='$NO_OMIT' bad-omit='$BAD_OMIT' no-model='$NO_MODEL' with-model=$N_WITH_MODEL persona-with-model='$PERSONA_WITH_MODEL' — the arms below cannot discriminate" >&2
+  echo "FIXTURE BROKEN: the seeded declaration yields with-effort='$WITH_EFFORT' no-effort='$NO_EFFORT' bad-effort='$BAD_EFFORT' with-omit='$WITH_OMIT' no-omit='$NO_OMIT' bad-omit='$BAD_OMIT' dt-ok='$DT_OK' dt-empty='$DT_EMPTY' dt-bool='$DT_BOOL' dt-malformed='$DT_MAL' no-model='$NO_MODEL' with-model=$N_WITH_MODEL persona-with-model='$PERSONA_WITH_MODEL' — the arms below cannot discriminate" >&2
   drop "$P0"
   exit 2
 fi
@@ -304,6 +313,74 @@ arm_omit_claude_md_tracks_the_declaration() {
   grep -qi 'omitclaudemd' <<<"$out" || return 1
   grep -qF -- "$BAD_OMIT" <<<"$out" || return 1
   return 0
+}
+
+# Arm 4c: a valid `disallowedTools` string renders VERBATIM as a frontmatter line inside the
+# fences, after the omitClaudeMd line; a role without the key gets no such line. Presence-shaped.
+arm_disallowed_tools_renders() {
+  local p="$1" f want n_close n_omit n_dt
+  [ "$SH_RC" -eq 0 ] || return 1
+  f="$p/.claude/agents/$DT_OK.md"
+  [ -f "$f" ] || return 1
+  want="$(jq -r --arg r "$DT_OK" '.aiDlcRoles[$r].disallowedTools' "$p/.claude/settings.json")"
+  grep -qxF -- "disallowedTools: $want" "$f" || return 1
+  [ "$(grep -c '^disallowedTools:' "$f")" -eq 1 ] || return 1
+  n_close="$(grep -nxF -- '---' "$f" | sed -n 2p | cut -d: -f1)"
+  n_omit="$(grep -n '^omitClaudeMd:' "$f" | sed -n 1p | cut -d: -f1)"
+  n_dt="$(grep -n '^disallowedTools:' "$f" | sed -n 1p | cut -d: -f1)"
+  [ -n "$n_close" ] && [ -n "$n_omit" ] && [ -n "$n_dt" ] || return 1
+  [ "$n_dt" -gt "$n_omit" ] && [ "$n_dt" -lt "$n_close" ] || return 1
+  [ -f "$p/.claude/agents/$NO_OMIT.md" ] || return 1
+  grep -q '^disallowedTools:' "$p/.claude/agents/$NO_OMIT.md" && return 1
+  return 0
+}
+
+# Arm 4d: an EMPTY disallowedTools string renders no line and is not reported, while its
+# definition is still written.
+arm_disallowed_tools_empty_renders_nothing() {
+  local p="$1" f
+  [ "$SH_RC" -eq 0 ] || return 1
+  f="$p/.claude/agents/$DT_EMPTY.md"
+  [ -f "$f" ] || return 1
+  grep -q '^name: ' "$f" || return 1
+  grep -q '^disallowedTools' "$f" && return 1
+  grep -qF -- "$DT_EMPTY(" <<<"$SH_ERR" && return 1
+  return 0
+}
+
+# Arm 4e: a non-string value (a boolean, which stringified would pass the name grammar) and a
+# string off the grammar are each OMITTED from their definition and NAMED on stderr.
+arm_disallowed_tools_invalid_omitted_and_reported() {
+  local p="$1" r
+  [ "$SH_RC" -eq 0 ] || return 1
+  grep -q 'invalid disallowedTools' <<<"$SH_ERR" || return 1
+  for r in "$DT_BOOL" "$DT_MAL"; do
+    [ -f "$p/.claude/agents/$r.md" ] || return 1
+    grep -q '^disallowedTools' "$p/.claude/agents/$r.md" && return 1
+    grep -qF -- " $r(" <<<"$SH_ERR" || return 1
+  done
+  return 0
+}
+
+# Arm 4f: --check sees a disallowedTools change in either direction: the SETTINGS value moved
+# (red, naming the role), the rendered LINE deleted by hand (red), and a re-render (green).
+arm_disallowed_tools_check_drift() {
+  local p subj="$2" f out rc_set rc_hand rc_after
+  [ "$SH_RC" -eq 0 ] || return 1
+  p="$(clone "$1" a4f)" || return 1
+  jq --arg r "$DT_OK" '.aiDlcRoles[$r].disallowedTools = "Agent"' "$p/.claude/settings.json" > "$p/.s.new" || return 1
+  mv "$p/.s.new" "$p/.claude/settings.json"
+  out="$(render "$subj" "$p" --check)"; rc_set=$?
+  grep -q "DRIFTED.*$DT_OK" <<<"$out" || return 1
+  render "$subj" "$p" >/dev/null || return 1
+  f="$p/.claude/agents/$DT_OK.md"
+  grep -qxF 'disallowedTools: Agent' "$f" || return 1
+  grep -v '^disallowedTools:' "$f" > "$f.cut" || return 1
+  mv "$f.cut" "$f"
+  render "$subj" "$p" --check >/dev/null 2>&1; rc_hand=$?
+  render "$subj" "$p" >/dev/null || return 1
+  render "$subj" "$p" --check >/dev/null 2>&1; rc_after=$?
+  [ "$rc_set" -eq 1 ] && [ "$rc_hand" -eq 1 ] && [ "$rc_after" -eq 0 ]
 }
 
 # Arm 5: the declaration and its projection are BYTE-JOINED, and `--check` is what holds them
@@ -536,7 +613,9 @@ arm_cli_cells_discriminate() {
 }
 
 ARMS="renders_model_bearing_roles persona_with_model_is_defined marker_sits_below_the_frontmatter no_file_for_model_less_role effort_line_tracks_the_declaration
-invalid_effort_omitted_and_reported omit_claude_md_tracks_the_declaration check_joins_declaration_to_projection
+invalid_effort_omitted_and_reported omit_claude_md_tracks_the_declaration
+disallowed_tools_renders disallowed_tools_empty_renders_nothing disallowed_tools_invalid_omitted_and_reported disallowed_tools_check_drift
+check_joins_declaration_to_projection
 foreign_definition_untouched stale_projection_is_caught_and_cleared check_never_writes
 three_states_are_distinct idempotent body_carries_protected_read_line
 cli_write cli_check_current cli_check_drifted cli_refuse cli_not_applicable cli_cells_discriminate"
@@ -569,6 +648,10 @@ while IFS=: read -r name rc; do
     effort_line_tracks_the_declaration)  msg="a declared effort is rendered and an undeclared one produces no effort line" ;;
     invalid_effort_omitted_and_reported) msg="an invalid effort level is OMITTED from the file and named on stderr" ;;
     omit_claude_md_tracks_the_declaration) msg="omitClaudeMd: true renders inside the fences, an absent key renders no line, a non-boolean value is omitted and named on stderr" ;;
+    disallowed_tools_renders)            msg="a valid disallowedTools string renders verbatim inside the fences after the omitClaudeMd line; an absent key renders no line" ;;
+    disallowed_tools_empty_renders_nothing) msg="an empty disallowedTools string renders no line and is not reported" ;;
+    disallowed_tools_invalid_omitted_and_reported) msg="a boolean disallowedTools and a string off the name grammar are each omitted and named on stderr" ;;
+    disallowed_tools_check_drift)        msg="--check is red when the disallowedTools declaration moves and when its rendered line is deleted, green after a re-render" ;;
     check_joins_declaration_to_projection) msg="--check joins the declaration to its projection: green fresh, red when the SETTINGS entry moves, red when the DEFINITION is hand-edited, red when its MARKER is hoisted above the fence with every key intact, green after a re-render" ;;
     foreign_definition_untouched)        msg="an unmarked consumer-written definition is neither reported nor deleted, in either mode" ;;
     stale_projection_is_caught_and_cleared) msg="a generated definition for a role that left aiDlcRoles is reported and removed" ;;

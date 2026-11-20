@@ -152,6 +152,7 @@ core_manifest:
   - templates/*.md
   - templates/smoke-surface.txt
   - team-roles/*.md
+  - team-roles/appendix/*.md
   - hooks/ai-dlc-*.sh
   - session-driver/*.sh
   - schemas/*.json
@@ -408,6 +409,7 @@ rulebook:
   - rule-authoring.md
   - artifact-path-grammar.md
   - team-roles/*.md
+  - team-roles/appendix/*.md
 
 consumer_machinery_home: scripts/ai-dlc-local/
 consumer_machinery_subdirs: lib/ hooks/ fixtures/ config/ tests/

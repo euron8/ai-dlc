@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1188.0] - 2026-11-20
+
+### BL-1187 (PARTIAL): subagents start with less fixed context — no project CLAUDE.md where the role never reads it, no Skill or Agent tool where the role never calls it, shorter role files, and the deploy protocol out of the always-loaded CLAUDE.md
+
+- For every consumer's subagents: every role but dev, dev-escalated and protected-path-editor is spawned without the project's `CLAUDE.md` (`omitClaudeMd: true` in the settings template); step passages that needed it for those roles now tell the agent to Read it, and the dev, qa and code-reviewer roles name the architecture-document paths directly. The rulebook's Rule 1 now says `CLAUDE.md` loads on its own only for the lead and roles without that setting, and the qa, code-reviewer and pre-reviewer role files carry the template's KISS and command-reproducible-evidence rules themselves (gate-adjudicator the evidence rule). qa and code-reviewer, the flagged roles that run commands against a deployed environment, read the operations protocol (`deploy-protocol.md` when it exists, otherwise the `CLAUDE.md` section) before any such command.
+- For every consumer's subagents: a new `aiDlcRoles.<role>.disallowedTools` setting is rendered into each agent definition as `disallowedTools:`. Ten roles drop the Skill and Agent tools and four drop the Agent tool, chosen from the sprint-323 record of which roles called them. In a headless test one spawn's first request fell from 17,027 to 8,583 tokens; a `tools:` allowlist was rejected because it also removed ToolSearch and the deferred tools.
+- For every consumer's subagents: situational paragraphs of six role files moved, byte-identical, into `.claude/team-roles/appendix/` files read on demand. architect is now under the 16 KB single-read limit; dev, adversary, remediator, code-reviewer and qa shrink but stay over it, because what remains is read on every dispatch or bound by invariants and machine readers. The appendix directory installs, uninstalls, is write-protected and is scanned like the role files.
+- For new consumers and the ops and deploy-validate seats: the consumer `CLAUDE.md` template's operations and deployment sections keep their fill-in regions but lose their long boilerplate, which now ships as `docs/operator-runbooks/deploy-protocol.md`, installed only where absent. The ops role and deploy-validate read that file when present. An existing consumer's `CLAUDE.md` is classified TEMPLATE-PROSE-MERGE on its next update; its own operations and deployment text is kept byte-identical.
+- For the operator: the release ships alone, because it edits a bootstrapping-set file (`core/skills/ai-dlc-update/reconcile/setup-sites.md`).
+- Still owed: reaching existing consumers with the two new role settings (the settings merge keeps a consumer's role entry whole, so this waits on BL-1190); byte-identical sibling shard briefs (waits on BL-819's rendered briefs); and the outcome reading on graph's next complete sprint.
+
 ## [0.1187.0] - 2026-11-20
 
 ### context-mode is a user-level install; a project only enables or disables it (BL-1188)

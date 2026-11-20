@@ -37,15 +37,7 @@ source; do not infer either value from anywhere else.
    doubly-written file: every file you edit under `s<N>/` — stories, `epics/epics.md`, any
    sibling — appears on an `edit:` line. Your part file under `s<N>/shards/` is not counted.
 
-   **A fix that lies outside your files is escalated, never set aside.** A finding whose fix
-   lies in a file your `shard:` line does not name is not yours: report it in your part as
-   escalated, and the serial remediator after the join owns it. Your siblings fence greps only
-   your own files; a sibling outside them is named on an `escalated` entry, unfenced (the
-   evidence contract, "Re-check every sibling of the text you replaced"). A partial repair is TWO entries
-   carrying the same `source:` token: `repaired` for the part inside your files, `escalated` for
-   the remainder. A MAJOR or CRITICAL is never dispositioned `repaired` on the grounds that the
-   rest of it is outside this shard or not required: the join refuses a `repaired` MAJOR whose
-   claim says so without naming the hand-off, and a scope decision is the lead's.
+   Read `.claude/team-roles/appendix/remediator-shard.md` when your brief's `shard:` line names a part (a file set, a section file or a requirements-subject part) rather than `none (…)`: it holds the escalation of a fix outside your files, the subject shard's edit scope and the `--check-part` run before `--mark`.
 
    In a repair dispatch, every edit to a file under the sprint slot goes through Edit, Write or
    MultiEdit, never a Bash redirect, `sed -i`, `tee` or a script's `open(…, 'w')`: only those
@@ -63,19 +55,6 @@ source; do not infer either value from anywhere else.
    entry with an edit carries `- siblings: n/a (section shard; re-checked by the serial
    remediator after assembly)`. A finding citing another section is not yours; report it in
    your part as escalated.
-
-   **As a subject shard** over the requirements subject (Rule 28, "Split dispatch": subject
-   axis), your brief names either a section file or, for a whole-file part such as the SPEC,
-   the file itself. What you edit, your `edit:` citations, the SPEC part's render path and the
-   per-stem sha lines of the record are exactly those `steps/_gate-procedures.md`, "Adversarial
-   repair dispatch", prescribes in its paragraph **Shard the requirements subject's repair**;
-   follow it. A finding whose fix lies in text
-   outside your part — another part, or PRD text outside every in-scope part — is not
-   yours: report it in your part as escalated, and the serial remediator after assembly owns it.
-   A subject shard writes no siblings fence either: every `repaired` entry with an edit carries
-   `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`.
-
-   **Check your part before you mark it.** Run `scripts/ai-dlc/join-remediator-shards.sh --check-part <part path>`, fix every `REFUSED:` line it prints, and run it again until it exits 0; only then `--mark`. It checks only the `siblings:` field, the set-aside and the disposition contract; exit 0 does not mean the join will accept the part. The `advisor:` and `derivations:` lines and each finding's `derivation:` field stay your own job under "the two lines after each triple", and the join refuses a part that lacks them.
 
    **Close your part with `--mark`.** As any shard (files, section or subject), your LAST act
    is ONE Bash call on your part file:
@@ -99,10 +78,7 @@ source; do not infer either value from anywhere else.
    it. Rule 20: the file IS the deliverable.
 4. **Return `{artifact_path, repair_record_path, repaired, escalated}`** — counts, not prose.
 
-   **A brief that carries `revised-seats: <path>…`** names seat files that changed after their
-   `seat-complete:` line was first seen (a seat marked without `sha=`, which the beat still
-   settles). Re-read each named seat's findings from the file on disk
-   before you repair from it, and never from a summary the brief or an earlier turn gave you.
+   Read `.claude/team-roles/appendix/remediator-party.md` when your brief hands you a party round's seat findings (`_bmad-output/party-mode/s<N>/…`) or carries `revised-seats:`.
 
 **A gate repair record carries the live gate nonce, `remediator_agent_id:` and `repaired_checks:`.** The gate's record is `${AI_DLC_STATE_DIR:-_bmad-output}/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md`, the record `steps/gate-validation.md` "Gate Failure" names and the only remediator home the gate reads (its other is the lead's own `gate-<type>-resolution-p<M>.md`); it is always written as the full repair record this file teaches, its entries included. When the lead dispatches you for a FAILed gate check as the unsharded remediator, put the three lines in that record, beside its entries. `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<nonce>.repair.md` is a second home, and it needs only the three lines. The gate-remediation guard reads either home, and lifts on one only when the live nonce appears in its text. The gate never reads the second home, so writing it never discharges the sprint-directory record. A shard writes no agent id (item 1), so when the gate repair is sharded the join's record carries none: the lead gives the gate nonce and an id to ONE serial-round remediator, the fan-in remediator when the round-one join prints `FANIN-COUNT:` above 0 and otherwise the lane-1 remediator, and in the sharded case only that one writes `gate-adjudication/<nonce>.repair.md`, carrying its own id; as the lane-1 remediator, that file is the one exception to editing only the files your `LANE:` line names. When the join prints `SERIAL-REQUIRED: 0` and `ESCALATED-COUNT: 0`, no serial remediator runs, nobody writes that file, and the guard has no record to lift on. The nonce may sit anywhere in the record's text; write it as `gate_nonce: <nonce>`. Each field opens its own line, at column 0 or after a `- ` bullet, with emphasis on the label allowed and the colon immediately after the label, the same rule every repair record here follows; the FIRST row bearing each label is the one read. `remediator_agent_id:` is the teammate name or agentId the lead's dispatch gave you, or sent you after the spawn: one token of at least 8 characters, carrying a digit, made of letters, digits and `_@.:-` only, its first character a letter or digit. With neither, OMIT the field and tell the lead so when you return; never write prose in that field. `repaired_checks:` lists the bare check ids you repaired, or, as the sharded case's serial-round remediator, the pass's FAILed check ids your brief names, comma- or space-separated; the guard lifts only when it names a check the live pass FAILed. In addition to the record's entries, it carries these three lines:
 
@@ -214,70 +190,7 @@ and the serial remediator's cross-file grep still covers what it deleted). Cites
 moved are re-checked by the serial remediator after the join, never inside a shard. The join
 refuses a `repaired` entry with an edit and no `siblings:` field.
 
-**As the serial remediator after a join**, your brief carries `shard: none (authoring-chain)`
-(Rule 28 exception 3: you read the joined output the shards produced), the join's `ESCALATED:` lines and
-its `SERIAL-REQUIRED:` count, and either ONE `LANE:` line with its `LANE-ITEM:` lines or the
-`FANIN:` lines. As a lane remediator you edit ONLY the files your `LANE:` line names, work only
-your lane's parts and items, and write your entries as the part your brief names
-(`shards/<lane artifact>-repair-p<M>/lane-<n>.md`, `<lane artifact>` as `_gate-procedures.md` defines it, closed with `--mark`), never an append to a
-record: a fix that needs a file outside your lane is escalated, and the fan-in owns it. As the
-fan-in remediator you work every `FANIN:` item after the lanes have joined, and append to the
-lanes' joined record. For every shard entry `repaired` with an edit, and every escalated
-sibling, run `grep -rn -F '<the text that entry replaced>'` over the artifact's own files: after
-a files-mode join that is `_bmad-output/planning-artifacts/s<N>/stories
-_bmad-output/planning-artifacts/s<N>/epics`; after a section or subject join it is the assembled
-document or subject files. After a section or subject join the brief also carries the lead's
-`serial-remediation-worklist.sh` output (`REPLACED`, `HIT` and `MOVED-CITE` lines): adjudicate
-those hits and moved cites rather than deriving them, and still run the grep for any replaced
-text the worklist did not list. A files-mode join has no worklist, so there you run the grep
-yourself. Never grep the sprint slot `s<N>/` itself, `shards/` or any repair
-record. Record each as its own entry with a `siblings:` fence, and re-read every `<file>:<n>`
-cite into each edited file. An entry of yours that resolves an escalated one carries
-`- closes: <part> <heading>`, copied from the tail of its `ESCALATED:` line (`01.md F-3 — MAJOR`):
-the join closes an escalation only by that line, never by a shared `source:` token, so a half
-repair of another conjunct leaves it open for the lead.
-
-**As an adjudicator** (your brief carries `adjudicator: read-only` and your batch's `ADJUDICATE:`
-lines), you decide each item and write NOTHING but your one batch file: never an artifact, a
-record or a part. The lane join refuses an adjudicator with any other write, at any time. For each
-item write `### <the item, verbatim>`, then `- decision: repair`, `no change` or `escalate`, the
-evidence as `derived` fences, and for a repair `- edit: <file>:<line(s)>` followed by a `text`
-fence opening `old` and a `text` fence opening `new`, holding the exact text to replace and its
-replacement. For a `no change` record the sibling or cite `grep` you decided on, as a `text` fence.
-Your LAST act is `<lead engine>/wait-for-deliverable.sh --mark <your file> <step> adjudicator <b>/<k> findings=<items>`,
-`<b>/<k>` copied from your `shard:` line. `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree.
-
-If that `--mark` refuses your file's NAME (an adjudicator batch file is `lane-<n>-b<b>.md` or
-`fanin-b<b>.md`, its `<b>` the `<b>` of your `shard:` line), Write your decisions to the name your
-`shard:` line gives, then remove the refused file with the `rm` line the refusal prints (run the rm
-only if the file still holds your own decisions; otherwise leave it and report the collision), then
-mark the file you wrote, which stays your last act. That removal is the one other change an
-adjudicator makes. Never `mv` it.
-
-**As the lane or fan-in remediator after adjudicators**, your brief carries their batch files. You
-apply them, and never edit a batch file: make each repair's edit where its `old` text still stands, and write each item's entry
-as above, taking its claim and derivation from the adjudicator's. Decide an item yourself only when
-its `old` text no longer matches. After your last edit, re-run every fence the adjudicators
-recorded, in one Bash call; an item whose output changed from theirs is yours to decide again.
-
-**An item that carries `CROSS: <key> files: <files | ->`** is a finding the lead routed serial. As an
-adjudicator you read the finding from the file its key names (`<shard-file>#<id>` or
-`<seat-basename>.md#<id>`), re-read its cited text in the assembled files, may run the read-only
-`validate-artifact-derivations.sh`, and decide it with the vocabulary above: `repair` with its `old`
-and `new` fences, `no change`, or `escalate` for an item you cannot settle. As the writer you own every
-serial-routed finding: you apply the decisions, and you adjudicate yourself any finding whose decision is
-`escalate`, missing, or never dealt as an item. As the fan-in writer, run
-`scripts/ai-dlc/validate-artifact-derivations.sh` on the assembled files after every lane has joined,
-and before you apply any fan-in `CROSS:` decision, because the fan-in adjudicators ran while the
-lanes were still changing bytes. The sibling grep, the moved-cite check and the sweep stay yours. The writer's entry for a serial-routed finding carries `- source: <key>`, the item's key copied verbatim from its `CROSS:` line, in every round, adversarial rounds included; `join-remediator-shards.sh --escalations` and `--sources` read that line for `CROSS-OPEN`.
-
-An `escalated` entry of yours that restates a part's escalation, carrying the same open
-decision forward, carries one `- supersedes: <part> <heading>` line per escalation it restates,
-copied from the tail of that escalation's `ESCALATED:` line exactly as `closes:` is. Leave its
-`source:` line as it is. The entry that later resolves the decision, yours or the fold of the
-operator's answer, carries one `- closes:` line per member of the chain, the restating entry
-and every part escalation it supersedes: an escalation with no `closes:` line of its own stays
-open however many of its links were closed.
+Read `.claude/team-roles/appendix/remediator-serial.md` when your brief carries `shard: none (authoring-chain)`, `adjudicator: read-only`, a `LANE:`, `FANIN:` or `ADJUDICATE:` line, adjudicator batch files, or an item carrying `CROSS:`.
 
 **As the serial remediator, or as the one unsharded remediator**, your LAST act is ONE Bash call
 closing what you wrote: `<lead engine>/wait-for-deliverable.sh --mark-repair <record> <pass>`,
@@ -310,13 +223,6 @@ never hand back a record it refuses. A part or shard remediator writes no `repai
 nothing in the joined record: the lead's beat on that record keys on `repair-complete: serial`
 alone, and the join reads a `seat-complete:` line as neither a block terminator nor a sha
 triple, so the serial pass's block still opens at its own triple.
-
-**A party repair names the seat finding behind every entry.** When your brief hands you a
-party round's seat findings (`_bmad-output/party-mode/s<N>/<step>-<seat>-<ordinal>.md`), every
-entry carries a `source:` line with one `<seat-file>#<finding-id>` token per seat finding the
-edit applies, the id being the first token of that finding's `##` heading. Finding ids collide
-across seats, so the file is never dropped. `join-remediator-shards.sh` refuses an entry with no
-`source:` and a token that resolves to no finding of that seat file.
 
 **A deferral record, when your brief asks for one**, is `s<N>/<artifact>-deferral-p<M>.md` in the
 grammar of `_gate-procedures.md`, "Every MAJOR the terminal MET pass leaves is closed on a record".
@@ -464,21 +370,7 @@ entry naming that part.
 a finding is wrong, say so in the record with the derivation that refutes it — that is
 evidence, and it is welcome. "I disagree" without a derivation is not.
 
-## Minimum mechanism (Rule 26(c))
-
-*Failure caught:* repair was unverified authorship performed by the most context-saturated
-agent in the system. No role owned it, so it fell to the orchestrator by default, and
-`steps/discovery.md` explicitly forbade offloading it. Fixing a finding meant writing a NEW
-unchecked claim about the code into the artifact, so repairs injected defects at roughly the
-rate review removed them and the MAJOR count could not reach zero. Measured: 13 passes, ~12
-hours, no convergence; 7 of 7 repair-authored claims false.
-
-*False-positive cost:* one extra subagent dispatch per adversarial pass (one per file set when sharded), and a repair record
-to read. Against a cycle that ran thirteen passes, this is not close.
-
-*Removed when:* two consecutive sprints record zero repair-introduced false claims in prior
-scope with the lead repairing inline — i.e. the context pressure that created this role is
-gone, and the dispatch is buying nothing.
+Read `.claude/team-roles/appendix/remediator-mechanism.md` when you need this role's Rule 26(c) record: the failure it was created for, its false-positive cost, or its removal condition.
 
 ## Ownership
 
