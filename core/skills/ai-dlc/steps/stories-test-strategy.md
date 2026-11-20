@@ -67,7 +67,7 @@ Absent any routing tag, a story is dispatched to `dev` as usual.
 **Model escalation** uses one frontmatter field:
 
 - `escalate_model: true` — routes per the map above to `dev-escalated`
-  instead of `dev`. That role reads and follows `dev.md` in full — same
+  instead of `dev`. That role reads and follows `dev.md` in full (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) — same
   ownership boundaries and constraints — and differs ONLY in the model key
   it names. Use it for a story whose difficulty warrants the escalated
   route, and for a story whose owned paths meet the capital-path /
@@ -565,7 +565,7 @@ risk assessment suggests phasing:
 MUST-ASK or by operator direction — is triaged, not written straight into a
 story.** For each one:
 
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/bug-investigation.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/bug-investigation.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
 sections 0–4 for that defect, §2c's adversarial verification of the root-cause
 claim included, then resume here at section 4. A defect that `route.md` already
 took through sections 0–2c runs sections 3–4 here.
@@ -789,7 +789,7 @@ layout changes):
   `_gate-procedures.md` \"Auto-handoff evaluation\"). If evaluation
   returns CONTINUE, run gate validation [story] (`gate-validation.md`),
   then:
-  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/ui-direction.md`
+  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/ui-direction.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
 
 - If **no new visual surfaces**: set `is_ui_epic = false` with
   `snapshot-update.sh --set is_ui_epic false 'Sprint Context'`.
@@ -798,4 +798,4 @@ layout changes):
   `_gate-procedures.md` \"Auto-handoff evaluation\"). If evaluation
   returns CONTINUE, run gate validation [story] (`gate-validation.md`),
   then:
-  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md`
+  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

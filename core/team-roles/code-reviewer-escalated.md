@@ -52,7 +52,7 @@ the paragraph above names.
 
 ## Contract
 
-Read `.claude/team-roles/code-reviewer.md` and follow it IN FULL — identity, ownership,
+Read `.claude/team-roles/code-reviewer.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) and follow it IN FULL — identity, ownership,
 responsibilities, constraints, context loading, workflow, and verdict format. This role
 adds nothing to and removes nothing from the Code Reviewer contract except the
 session-setup declarations (model and effort) above. The verification, advisor and

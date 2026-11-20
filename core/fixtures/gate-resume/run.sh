@@ -839,9 +839,9 @@ if [ -z "$_G3_SKIP" ]; then
           g3_rd "$d" create-story S >/dev/null
           if [ -e "$d/_bmad-output/.gate-checkpoint" ]; then t=Dy; else t=Dn; fi ;;
         forced|forced-offset1|sub-forced)
-          ex=""; [ "$w" = forced-offset1 ] && ex=',"offset":1'
+          ex=',"offset":1,"limit":2000'; [ "$w" = forced-offset1 ] && ex=',"offset":1'
           t="$(g3_fire "$d")"
-          g3_pre "$d" "$d/_bmad-output/pipeline-snapshot.md"
+          g3_pre "$d" "$d/_bmad-output/pipeline-snapshot.md" ',"offset":1,"limit":2000'
           g3_pre "$d" "$d/.claude/skills/ai-dlc/steps/dev-story.md" "$ex"
           t="$t/B$(g3_bc "$d")"
           if [ "$w" = sub-forced ]; then
@@ -852,8 +852,8 @@ if [ -z "$_G3_SKIP" ]; then
         forced-noopen)
           g3_ck "$d" --nonce "$_g3N" close
           t="$(g3_fire "$d")"
-          g3_pre "$d" "$d/_bmad-output/pipeline-snapshot.md"
-          g3_pre "$d" "$d/.claude/skills/ai-dlc/steps/dev-story.md"
+          g3_pre "$d" "$d/_bmad-output/pipeline-snapshot.md" ',"offset":1,"limit":2000'
+          g3_pre "$d" "$d/.claude/skills/ai-dlc/steps/dev-story.md" ',"offset":1,"limit":2000'
           t="$t/B$(g3_bc "$d")"
           t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story S)")/b$(g3_bc "$d")"
           g3_ck "$d" --nonce "$_g3N" open
@@ -870,8 +870,8 @@ if [ -z "$_G3_SKIP" ]; then
           mkdir -p "$d/state"; mv "$d/_bmad-output/.gate-checkpoint" "$d/_bmad-output/pipeline-snapshot.md" "$d/state/"
           _g3_sd=state
           t="$(g3_fire "$d")"
-          g3_pre "$d" "$d/state/pipeline-snapshot.md"
-          g3_pre "$d" "$d/.claude/skills/ai-dlc/steps/dev-story.md"
+          g3_pre "$d" "$d/state/pipeline-snapshot.md" ',"offset":1,"limit":2000'
+          g3_pre "$d" "$d/.claude/skills/ai-dlc/steps/dev-story.md" ',"offset":1,"limit":2000'
           t="$t/B$([ -f "$d/state/.recover-satisfied" ] && echo y || echo n)$([ -f "$d/_bmad-output/.recover-satisfied" ] && echo y || echo n)"
           t="$t/$(g3_st "$d" "$(g3_rd "$d" dev-story S)")/b$(g3_bc "$d")"
           t="$t/$(g3_st "$d" "$(g3_rd "$d" code-review S)" code-review)" ;;

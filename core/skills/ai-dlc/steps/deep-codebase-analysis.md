@@ -76,4 +76,4 @@ Check `pipeline_variant` from the router:
   outlives the run, so without the flag the Stop hook blocks this
   terminal turn). **STOP.**
 - If `brownfield-b`: Run gate validation [planning] (`gate-validation.md`), then
-  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`
+  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

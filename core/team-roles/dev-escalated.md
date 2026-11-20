@@ -50,7 +50,7 @@ the paragraph above names.
 
 ## Contract
 
-Read `.claude/team-roles/dev.md` and follow it IN FULL — identity, ownership,
+Read `.claude/team-roles/dev.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) and follow it IN FULL — identity, ownership,
 responsibilities, constraints, context loading, workflow, and escalation. This
 role adds nothing to and removes nothing from the Dev contract except the
 session-setup declarations (model and effort) above. The verification, advisor and

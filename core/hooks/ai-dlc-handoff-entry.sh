@@ -116,6 +116,15 @@ TOOL="$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)"
 FPATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
 [ -n "$FPATH" ] || exit 0
 
+# THE PER-CALL BREADCRUMB. `ai-dlc-recover-gate.sh` writes `.recover-satisfied.<tool_use_id>` for every
+# recovery-compelled Read of a handoff.md step file, so a chunk that is not the last one still
+# suppresses the arming below. This call consumes only its OWN id's file; with no id, or no such
+# file, it reads the shared `.recover-satisfied` as before, and failing that it arms.
+_RS_TU="$(printf '%s' "$INPUT" | jq -r '.tool_use_id // empty' 2>/dev/null)"
+_RS_TU="${_RS_TU//[^A-Za-z0-9_-]/}"
+_RS_PC=""
+[ -z "$_RS_TU" ] || _RS_PC="${STATE_DIR}/.recover-satisfied.${_RS_TU}"
+
 # THE GATE-LEAVE CLOSE (header: "IT ALSO CLOSES A GATE"). Every path through it falls through to
 # the handoff block below unchanged; it never exits.
 case "$FPATH" in
@@ -136,8 +145,8 @@ case "$FPATH" in
     [ -f "${_m1_dir}/STEP" ] && IFS="$(printf '\t')" read -r _m1_st _m1_ss < "${_m1_dir}/STEP" 2>/dev/null
     # Forced Read: the breadcrumb under the state dir names this step.
     _m1_forced=0
-    for _m1_rs in "${STATE_DIR}/.recover-satisfied"; do
-      [ -n "$_m1_x" ] && [ -f "$_m1_rs" ] || continue
+    for _m1_rs in "$_RS_PC" "${STATE_DIR}/.recover-satisfied"; do
+      [ -n "$_m1_x" ] && [ -n "$_m1_rs" ] && [ -f "$_m1_rs" ] || continue
       _m1_rsf="$(sed -n 's/^step_file=//p' "$_m1_rs" 2>/dev/null | head -1)"
       case "$_m1_rsf" in
         */steps/"$_m1_x".md|steps/"$_m1_x".md)
@@ -302,6 +311,7 @@ AID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)"
 # is mid-handoff loses the routing this whole file exists to provide, and a compaction then
 # sends the successor to the interrupted step instead of to the procedure.
 _RS="${STATE_DIR}/.recover-satisfied"
+[ -n "$_RS_PC" ] && [ -f "$_RS_PC" ] && _RS="$_RS_PC"
 if [ -f "$_RS" ]; then
   _RS_STEP="$(sed -n 's/^step_file=//p' "$_RS" 2>/dev/null | head -1)"
   rm -f "$_RS" 2>/dev/null || true

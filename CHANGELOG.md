@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1184.0] - 2026-11-20
+
+### Post-compact recovery works when the context-mode plugin caps a Read at 16 KB (BL-1184)
+
+- For a consumer running the context-mode plugin: the recovery gate no longer deadlocks. The plugin refuses an unbounded Read of a text file over 16384 bytes, and the gate used to refuse every bounded Read of the snapshot and step file, so no Read was allowed. The gate now credits each bounded Read with the lines it loads and is satisfied when the chunks cover the file from line 1 to its last line; every refusal names the next uncovered range as an exact `Read <path> offset=<a> limit=<b>`, at most 16 KB a chunk. The plugin also replaces a large unbounded Read result (2.1.7: over 4096 bytes) with a search pointer, so the gate refuses an unbounded Read of the snapshot, the step file or the digest at any size, naming the chunk, with no size threshold because one would key on one plugin version's internals (graph's active install is 2.1.5); only a Read carrying `offset` or `limit` is credited. The digest may be read bounded and is never credited.
+- For the handoff step: reading `steps/handoff.md` in chunks during a recovery no longer starts a handoff, because each bounded chunk leaves its own per-call breadcrumb, written before the chunk's credit once the snapshot is covered, and a handoff.md chunk read before the snapshot is covered is neither credited nor allowed.
+- The recovery text, the protect hook's refusal texts and every instruction that mandated a full native Read of a verbatim-load file (SKILL.md, route, handoff, carry-over evaluation, stories test strategy, gate validation, the three escalated role files) now say: native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`.
+- Not done here: the plugin's own allowlist setting, or a non-blocking advisory in place of its refusal, is the plugin's upstream to build (`github.com/mksglu/context-mode`). The graph ledger entry stays open for the plugin's upstream, because its remedy and its manual check read the plugin's guard, which this release does not change. Recorded residuals: crediting happens before the Read runs, so a Read another hook later refuses is still credited; a line over 2000 characters is credited whole; a chunk's byte count ignores the Read tool's line-number prefix; a redundant handoff.md chunk whose PreToolUse starts after the satisfying call has finished can still leave early with no breadcrumb.
+
 ## [0.1183.0] - 2026-11-19
 
 ### PC-S323-PLAIN-GLOSS-DUTY-SCOPED-TO-QUESTION-TEXT-ONLY-LEAVES-OPERATOR-PROSE-AND-COINED-TERMS-UNBOUNDED (BL-1181 closed): everything the lead shows the operator explains its ids in plain words and uses no label the lead made up

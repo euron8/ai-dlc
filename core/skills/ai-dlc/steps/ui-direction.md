@@ -72,4 +72,4 @@ for reference during implementation and production validation.
 
 ### 5. Proceed (Do Not Wait)
 
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

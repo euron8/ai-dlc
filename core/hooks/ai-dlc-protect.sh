@@ -423,11 +423,11 @@ if [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
     else
       OFF_NEXT="No command in this batch is free of protected paths."
     fi
-    REASON="AI/DLC protected path(s) detected: $(printf '%s, ' "${PROTECTED_HITS[@]}" | sed 's/, $//'). Offending: ${OFF_DESC}. ${OFF_NEXT} Use native Read for the protected paths' verbatim content."
-    CONTEXT="This path is protected by AI/DLC integrity rules. Use the native Read tool for verbatim file content. Protected categories: rule files, schemas, pipeline snapshot, gate log, escalations, audit anchors, sprint status, story files."
+    REASON="AI/DLC protected path(s) detected: $(printf '%s, ' "${PROTECTED_HITS[@]}" | sed 's/, $//'). Offending: ${OFF_DESC}. ${OFF_NEXT} Use native Read (in offset/limit chunks) for the protected paths' verbatim content."
+    CONTEXT="This path is protected by AI/DLC integrity rules. Use the native Read tool (in offset/limit chunks) for verbatim file content. Protected categories: rule files, schemas, pipeline snapshot, gate log, escalations, audit anchors, sprint status, story files."
   else
-    REASON="AI/DLC protected path(s) detected: $(printf '%s, ' "${PROTECTED_HITS[@]}" | sed 's/, $//'). Use native Read for verbatim content."
-    CONTEXT="This path is protected by AI/DLC integrity rules. Use the native Read tool for verbatim file content. Protected categories: rule files, schemas, pipeline snapshot, gate log, escalations, audit anchors, sprint status, story files."
+    REASON="AI/DLC protected path(s) detected: $(printf '%s, ' "${PROTECTED_HITS[@]}" | sed 's/, $//'). Use native Read (in offset/limit chunks) for verbatim content."
+    CONTEXT="This path is protected by AI/DLC integrity rules. Use the native Read tool (in offset/limit chunks) for verbatim file content. Protected categories: rule files, schemas, pipeline snapshot, gate log, escalations, audit anchors, sprint status, story files."
   fi
 
   # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The

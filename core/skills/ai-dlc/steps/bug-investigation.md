@@ -286,7 +286,7 @@ in parallel.** On any FAIL, before routing:
 Then:
 
 If design flaw detected:
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
 
 If implementation error:
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

@@ -40,7 +40,7 @@ change.
 **(b) Role contract.** The dispatch prompt MUST carry, as a standing
 line, the instruction: *"Your operating contract is
 `.claude/team-roles/<role>.md`. Read it and follow it as your FIRST
-action before any other work."* This puts the role's identity,
+action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`."* This puts the role's identity,
 ownership, constraints, and escalation protocol into the *subagent's*
 context (not the lead's, per Rule 23), and mirrors Rule 21 -- the read
 IS the binding, not the lead's recall. Keep the line byte-identical

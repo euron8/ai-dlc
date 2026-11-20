@@ -49,7 +49,7 @@ contract.
 line — byte-identical across dispatches, in the shared block (see
 Dispatch-prompt cache discipline below): *"Your operating contract is
 `.claude/team-roles/<role>.md`. Read it and follow it as your FIRST
-action before any other work."* The subagent reads its own
+action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`."* The subagent reads its own
 identity/ownership/constraints/escalation from that file (Rule 19(b));
 the lead does not restate them per dispatch.
 
@@ -112,7 +112,7 @@ gh auth status
 MUST succeed. Failure = HARD_BLOCK (environment not authenticated).
 
 
-**The dispatch protocol — READ AND FOLLOW `_dispatch-protocol.md` before
+**The dispatch protocol — READ AND FOLLOW `_dispatch-protocol.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before
 issuing the first `Agent` call of this step.** That file carries the full,
 binding text of: worktree-explicit dev dispatch (the 8-point protocol,
 including the no-`git stash` standing line and the worktree-relative
@@ -750,4 +750,4 @@ in a view: dispatch the closing writer now (section 3, item 4) and route only af
 the closing writer's closing commit lands. The lead does NOT make these writes
 itself.
 Run `scripts/ai-dlc/validate-held-stories.sh`; a STALE-HOLD blocks the exit.
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

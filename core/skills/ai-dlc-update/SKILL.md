@@ -2408,7 +2408,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
 
    **If `reconcile/post-write-gates.sh` is absent**, run each gate below on its own line, UNPIPED,
    with its output sent to a file, and capture the code on the very next statement:
-   `<gate> > <file> 2>&1` then `rc=$?`. Read `rc` before anything else; then read the whole file.
+   `<gate> > <file> 2>&1` then `rc=$?`. Read `rc` before anything else; then read the whole file (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB, never `ctx_*`).
    On a pull whose step 2 self-update landed, the re-invocation step 2 prescribes already runs
    this text and this script, so it is present. It is absent only when step 2 returned
    `SELF-UPDATE-DEFER` or the skill's branch was not synced — the pull then runs the skill copy
@@ -3309,7 +3309,7 @@ is exactly what the reverted attempt got wrong). Before delivery:
    reverted attempt caused.
 5. **Run `reconcile/setup-site-drift.sh <dist> <consumer> <theirs>`; exit 0
    required** — observed, not inferred: run it unpiped with its output sent to a file and
-   `rc=$?` on the very next statement, then read the whole file. Do not run
+   `rc=$?` on the very next statement, then read the whole file (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB, never `ctx_*`). Do not run
    `reconcile/post-write-gates.sh` here: that is the ordinary pull's step 7 runner, and its
    `hard-blockers --post-apply` gate needs the pull's base, which untangle does not have. A run
    whose exit code was not observed is UNDECIDED and fails this criterion. It diffs every file declaring a setup site against `theirs` over

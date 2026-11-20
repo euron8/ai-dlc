@@ -700,7 +700,7 @@ When a step file says "run an adversarial review pass", execute this. It is the 
 the Rule 8 cycle; the repair half is below.
 
 **No Skill runs.** The convergence review is ai-dlc-native: the method is `team-roles/adversary.md`,
-in full. The bmad skill `/bmad-review lenses=adversarial` is NOT invoked here — its contract
+read with the native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`. The bmad skill `/bmad-review lenses=adversarial` is NOT invoked here — its contract
 (*find at least ten issues; re-check rather than stop on zero findings; emit no severity, priority, or ranking*) has
 no fixed point in a loop whose exit criteria are a bounded severity residue, and it forbids the
 severity fields Check 24 reads. It remains correct for a ONE-SHOT cynical sweep, and the step

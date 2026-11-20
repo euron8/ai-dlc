@@ -175,8 +175,22 @@
       "name": ".recover-satisfied",
       "transient": true,
       "producer": "core/hooks/ai-dlc-recover-gate.sh",
-      "ignore": "_bmad-output/.recover-satisfied",
-      "reason": "Written by the recovery gate on the call that satisfies the SECOND mandated Read, naming that read's step file, and consumed by ai-dlc-handoff-entry.sh. It exists because that gate is PreToolUse and the entry hook is PostToolUse: the gate deletes .recover-fired on the same call, so the entry hook cannot decide from the in-flight marker and would arm the handoff entry marker on a Read the recovery compelled. Only the satisfying call writes it, which is also what lets a voluntary open during a half-satisfied recovery still arm. ai-dlc-recover.sh clears it when a new recovery starts. A tracked copy tells a fresh checkout that a mandate it never received was already discharged."
+      "ignore": "_bmad-output/.recover-satisfied*",
+      "reason": "Written by the recovery gate on the call that satisfies the SECOND mandated Read, naming that read's step file, and consumed by ai-dlc-handoff-entry.sh. It exists because that gate is PreToolUse and the entry hook is PostToolUse: the gate deletes .recover-fired on the same call, so the entry hook cannot decide from the in-flight marker and would arm the handoff entry marker on a Read the recovery compelled. The shared file is written only by the satisfying call, and a per-call `.recover-satisfied.<tool_use_id>` by each admitted handoff.md chunk once the snapshot is covered; a voluntary open during a half-satisfied recovery has neither, so it still arms. ai-dlc-recover.sh clears it when a new recovery starts. A tracked copy tells a fresh checkout that a mandate it never received was already discharged."
+    },
+    {
+      "name": ".recover-credit",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-recover-gate.sh",
+      "ignore": "_bmad-output/.recover-credit*",
+      "reason": "Per-call Read credits for the recovery gate: .recover-credit.<role>.<pid>.<n>, one record per credited Read, holding the first and last line it loaded and the file's size-mtime. Written whole as a sibling temp and renamed into place, never modified; removed by the satisfying call and by ai-dlc-recover.sh when a new recovery starts."
+    },
+    {
+      "name": ".recover-credit-tmp",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-recover-gate.sh",
+      "ignore": "_bmad-output/.recover-credit-tmp*",
+      "reason": "The sibling temp a credit record is written to before its rename; a leftover is from a hook killed between the write and the rename, and ai-dlc-recover.sh removes it."
     },
     {
       "name": ".recover-gate-progress",
