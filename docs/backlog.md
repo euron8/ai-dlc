@@ -3589,6 +3589,13 @@ Owed:
 - The parent story-evidence-scaffold also runs world.sh's `mk_tree` (`run.sh:434`, `mk_tree control`, in every group), so its copy stops reading `hermetic-run.sh` too. Its `core/scripts/ whole` row in `docs/inputs-decl-whole-rows.tsv` still covers the file. That row now over-declares and is left unchanged.
 - Each edited fixture was run once from the root: gate-transition, story-evidence-scaffold, -b, -c, -d and -g.
 - Owed to the lead after landing: a confirming `--declared-out` re-trace of gate-transition and story-evidence-scaffold-b, -c, -d and -g, which must read PLUS=0.
+- Re-trace taken (lead ai-dlc-ff, batch 260):
+  - Command: `--list "<the 5>" --tracer sandbox --declared-out`, main checkout detached at 2a600210e (0.1182.0), rc 0. 5 of 5 recorded, 569 paths, map not written. File: `~/.cache/ai-dlc/readset-windows/batch-260/trace-r1182/declared.tsv`.
+  - Judged with the shipping parser (the READSET_TOOLS and READSET_KEYROWS spans sourced from `.githooks/pre-push`, then `readset_decl_parse`, C1's method). PLUS=0 for all five; `core/scripts/hermetic-run.sh` appears 0 times.
+  - Control, same comparator on the pre-change window (`batch-260/trace-10/declared.tsv`, 3147ee648): PLUS=1 for all five, each row `core/scripts/hermetic-run.sh`, matching the C5 paragraph. Positive control in both windows: `core/scripts/gate-transition.sh` appears once per fixture.
+  - Per fixture, the only other difference between the two windows: one lookup of the literal pattern `core/scripts/.[!.]*`. That is the loop's dotfile glob: it matches nothing, and the `[ -e ]` test then looks up the pattern itself. It is not a file, and it keys nothing.
+  - This resolves owed item 2 for these five fixtures.
+  - For these five, this window supersedes `batch-260/trace-10` (the C5 bullet above). The comparator here computed PLUS only. The MINUS half of their per-fixture `inputs.decl` decisions stays owed against this window.
 - Cost: none in process starts. Catch on record: the batch-259 C1 and batch-260 C5 paragraphs above, where every remaining PLUS row is this read. Who would notice it gone: the read-set skip, because before this change an edit to `hermetic-run.sh` outside its marked spans did not re-run these five fixtures.
 
 Provenance: batch 257, wave 12, W12-16 (ai-dlc-68), split out of BL-1144 on landing; id allocated by the lead.
