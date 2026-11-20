@@ -46730,3 +46730,72 @@ Provenance: batch 259, C1 tip adversary; id allocated by the lead (ai-dlc-64).
 
 verify: manual
 
+## BL-1133 — the push runs every selected `<fx>@consumer` twin, though a static join would make the one catch the twins have on record
+
+**DEFECT.** OPEN. Filed 2026-11-15. Owner: `.githooks/pre-push` consumer-layout selection (`fixture_suite_step`, `run_fixtures`), with `scripts/predict-push-set.sh` mirroring it.
+
+BL-1124 (e) measured the `@consumer` twin set: 823 unit runs and one catch event (pw2), about 302 s of wall clock per push at width 12 on r1135 (BL-1124's PARTIAL text). pw2's catch was a shipping shard driver declaring a `.dist-only` fixture's files, which a static join over the declarations finds without running the twins.
+
+Fix: add that join (a shipping fixture's declarations name no `.dist-only` fixture's files) at the selection step, then skip a `<fx>@consumer` unit whose distribution twin passed on the same key and whose read set holds no layout-sensitive input; mirror the selection in `predict-push-set.sh`. Weigh the remaining twin set again against what it catches.
+
+Provenance: batch 257, wave 6, the BL-1124 (e) remainder named by ai-dlc-48 (W6-13); id allocated by the lead.
+
+**PARTIAL (v0.1145.0) — the distribution-twin skip shipped; the re-weigh of the remaining twin set stays owed to the push that delivers it.** `cl_select` (both hooks, identical lines under I66) now decides a `<fx>@consumer` unit `skip` with flag `d`, instead of `run` on a changed key, when two things hold. First, its distribution twin's `.kdec` row is a `skip`, meaning a pass is recorded on this tree's distribution key. Second, no key row that moved between the unit's prospective record and its placement record is layout-sensitive. Layout-sensitive rows are these: an added or removed row; a listing, tool or span row; any row under `tests/fixtures/`; the runner or the mapper; and any row that is not a byte copy of ITS OWN distribution source. That source is the declared path the consumer-layout parse (`.cl/.dparse`) mapped the row from, and its hash in the distribution `.now` must equal the row's. So a row no declaration maps runs, which covers every row of an undeclared unit, and so does a file `install.sh` renders over another path's bytes. A unit with a `.dunres` row never takes the skip. That row means a declared input the installed tree lacks, which has no key row on either side, so it stays selected and `hermetic-run.sh` refuses it. That refusal is the join the entry asked for: pw2's shape, a shard driver declaring `core/fixtures/adversarial-shard-merge-b/run.sh`, ran under a forced all-skip distribution decision in the hand probe. Every `d` unit is named on its own gate line. It publishes no record and stays out of `.k.always`, `.rskip` and `.vs.all`. Its PENDING count is still read from its old placement record. `scripts/predict-push-set.sh` hands its distribution decisions to `census-consumer-layout.sh --predict` through `AI_DLC_CL_DIST_OUT`, so the prediction takes the same skip. The census and `--only` never take it. Byte-identical code that resolves paths differently once installed is acquitted, and I33 owns that class (lead ruling D2). Owed: weigh the twin set the delivering push still runs against what it catches.
+
+**PARTIAL (v0.1151.0).** Batch 257, W12-01, ai-dlc-5a. What the pushes since the skip shipped ran, read from the gate logs of 0.1145.0 to 0.1149.0 (every gate exit 0):
+
+| push | `<fx>@consumer` run | `d` skips | red `@consumer` |
+|---|---|---|---|
+| 0.1145.0 | 207 of 220 | 12 | 0 |
+| 0.1146.0 | 45 of 220 | 0 | 0 |
+| 0.1147.0 | 13 of 220 | 0 | 0 |
+| 0.1148.0 | 2 of 220 | 0 | 0 |
+| 0.1149.0 | 7 of 220 | 10 | 0 |
+
+The `ok … @consumer` rows in each log equal its run count, so no unit went unreported. The consumer `verdict store:` line, which joins store hits with unconfirmed-record skips, named 1 unit at 0.1145.0 and 38 at 0.1146.0, and none at the other three pushes. In the record, the last red `@consumer` unit is in the failure record of 2026-11-15T00:04:45Z, 20 units, which predates the skip. BL-1146 changes this set: before it, a counted push could not reuse an `@consumer` store pass. The gate logs carry no per-unit cost. Owed: the weigh on the push that delivers BL-1146, meaning twins run, their loaded cost from `.git/ai-dlc-fixture-durations`, and catches. The weigh is the batch-259 C2 paragraph below. The operator then rules whether the remaining twin set stays.
+
+**PARTIAL (v0.1165.0).** batch 259, C2. The weigh of the remaining `<fx>@consumer` twin set, on the push that delivered BL-1146 (0.1151.0, commit 9df22fafa). Population: NOT the twins the 0.1151.0 push ran. Its gate log was not found: the CHANGELOG `## [0.1151.0]` and BL-1146's archive entry name no path, and a search of every `/private/tmp/claude-501/-Users-n8-git-ai-dlc/*/scratchpad` (maxdepth 3, names `*push*`, `*gate*`, `*.log`, `*1151*`; 3543 candidate files) found no file naming `0.1151.0` that also carries `@consumer` rows (control: the same candidate list does hold files carrying `@consumer`). The population is the recorded `@consumer` twins in `.git/ai-dlc-fixture-durations`, read from a frozen copy (md5 `1ce00e1c2d44c9d6e317c7c0710b7b4a`, 743 rows, 2026-11-18). That record holds ONE LOADED cost per unit (the latest), not one per push, so each figure below is a loaded cost and an upper bound on a push that selects every twin.
+
+| quantity | value |
+|---|---|
+| green `<fx>@consumer` rows (distinct twins; no name repeats) | 221 |
+| sum of loaded seconds | 7995 s |
+| longest single twin | 240 s (`remediator-shard-join-b@consumer`) |
+| wall clock at width 12, sum / 12 (at least the longest) | 666 s |
+| `<fx>@consumer@red` rows (red-push costs, 110 rows; their failure records are pruned beyond the 20 dated copies) | not summed |
+| red `@consumer` units in a push since the d-skip shipped (0.1145.0) | 0 |
+| red `@consumer` catch events on record, ever | 1 (pw2, BL-1124 (e)) |
+
+Catches, from every failure record. The record format is written at `.githooks/pre-push` (the `.failures` loop, ~:3866): a `===== <unit> =====` section is written for a unit whose verdict file is not `ok`, so a section is a unit that FAILED, and the closing `===== dispatch order this run =====` block lists every unit dispatched (plain units as `core/fixtures/<fx>/`). Parsed over the 20 dated `.git/ai-dlc-fixture-failures.<stamp>.<pid>` copies (2026-11-09 to 2026-11-15T16:00:38Z) plus the live primary file (a duplicate of the last copy), read-only, 21 files: (a) `@consumer` units that FAILED, 20, all in one record (20261115T000445Z.28480, 20 of 100 units red) and none in the other 20 records; (b) of those 20, twins whose plain copy was dispatched and not failed in the same push, 13 (the other 7 had no plain copy dispatched in that push, so they are unknown, not green); (c) the pw2 record is that record: 20 failed, 13 with a green plain twin, one cause (`declared file absent: tests/fixtures/adversarial-shard-merge-b/run.sh`, a shipping shard driver declaring a `.dist-only` fixture's files). Control, same parse: every one of the 21 files shows failed >= 1 (for example 20261112T081548Z: 1 failed, a plain unit). The five gate logs of 0.1145.0 to 0.1149.0 show 0 red `@consumer`, and every record is dated before the 0.1145.0 commit (2026-11-15 22:22 -0500), so 0 red `@consumer` in a record since the skip shipped. The pushes 0.1150.0 to 0.1164.0 have no per-unit log on hand, so that 0 is a floor of what was looked at. The pw2 shape is covered by the `.dunres` refusal of the shipped d-skip join. Byte-identical code that resolves paths differently once installed is I33's class (lead ruling D2).
+
+Outcome. One catch event on record (pw2, 13 twins green on the plain copy), caught before the d-skip shipped and since covered statically; 0 since. The twins cost up to 666 s of wall clock per push at width 12 (loaded; a push runs only the selected subset, 207 / 45 / 13 / 2 / 7 of 220 at 0.1145.0 to 0.1149.0). No removal ships in this release. BL-868: the figures are recorded counts and loaded costs, and no test or bound was added, so nothing here moves with load. Owed: the operator rules whether the remaining twin set stays.
+
+**Operator ruling, 2026-11-19.** The `<fx>@consumer` twin set stays as it is.
+
+**LANDED (v0.1182.0).** Closed by the operator ruling above. The distribution-twin skip shipped in v0.1145.0, the weigh is recorded in the batch-259 C2 paragraph, and the remaining twin set stays, so nothing further is owed.
+
+verify: manual
+
+## BL-1148 — while the main checkout holds an unlanded hook-editing squash, every other session's pregate is refused
+
+**NOTE.** OPEN. Filed 2026-11-16. Owner: `scripts/pregate-self-check.sh` (HOOK-RESOLVE), with `.githooks/pre-push` (`pregate_gate`).
+
+`core.hooksPath` is the main checkout's `.githooks`, so a push of a release that edits `.githooks/pre-push` runs the edit only once the main checkout holds it. The lead therefore detaches the main checkout at the unlanded squash for that push. Measured from the code at 5a38afcc9:
+- `pregate-self-check.sh:143-147` resolves the hook a push would run with `git rev-parse --git-path hooks/pre-push`, which is the main checkout's hook in every worktree. `:148` compares it with the tree's own `.githooks/pre-push` by `cmp -s`, unless `--member` is given.
+- In any other session's tree, still at `origin/main`, the resolved hook differs and the tree hook equals `origin/main:.githooks/pre-push`. That takes `:153`, "the resolved hook moved", which sets no remedy, and the script exits 2 at `:169`.
+- `--member` skips the comparison but never writes the pregate record (`:44-48`). `pregate_gate` at `.githooks/pre-push:107-109` refuses any push whose tree has no record. While the window is open, no other session can produce a pushable tree.
+
+Cost: every builder's pregate and push stalls for the hook-editing push's whole duration, from the detach to the landing and re-detach. The refusing builder reads "the resolved hook moved" with no remedy, so the stall reads like a defect in the builder's own tree. Who notices it gone: the builders who hold pregate slots during a hook-editing push, and the lead, who schedules those slots. No mechanism proposed. The record is keyed on the tree alone, `<root commit>/<HEAD tree>` (`.githooks/pre-push:74`, `:106`; written at `pregate-self-check.sh:531-534`). So the stall comes only from the comparison at `:148`, which refuses before any step runs. That comparison is what makes a record attest a run by the hook a push runs, so relaxing it is not a simple change.
+
+Provenance: batch 257, wave 11, W11-01 item 1 (ai-dlc-9c); id allocated by the lead.
+
+**Progress, batch 258 (stays OPEN; mitigation only).** The `the resolved hook moved` refusal now names its remedy: the push will run the hook held by the main checkout; if that checkout is detached at an unlanded hook-editing release for that release's push, wait for the landing and the re-detach at origin/main, then rerun; otherwise it is stale or locally edited, so ask the lead to re-detach it (`scripts/pregate-self-check.sh:176`), and for a stacked base also: if `${BASE}` is an unlanded predecessor release that edited the hook, wait for it to land, then rebase and rerun. The `both hooks moved` refusal also names a remedy now (`:188`): if the checkout holding the hook is detached at an unlanded hook-editing release for its push, or `${BASE}` is a stacked base not yet landed, wait for it to land, then rebase and rerun; if the edit is the branch's own and must be gated, run this script with `--member` before READY (the push runs the checkout's hook, not the edit); otherwise the checkout is stale or locally edited, so ask the lead to re-detach it. No receipt asserts either remedy text; they rest on the hand probe recorded in the release commit. The stall itself is unchanged: while the window is open no other session's pregate can record a pushable tree. Cite corrections for the 5a38afcc9 measurement above: at the new tree the branch is `:174` (side `:175`, remedy `:176`) and the refusal exits at `:195`; `:153` and `:169` named the same lines before the remedy was added. No mechanism proposed. Section f's "N to run" figure still counts units later dropped as undeclared, and the undeclared line beneath it names them. No receipt cell asserts the undeclared drop itself, which rests on the hand probe recorded in the 0.1161.0 release commit.
+
+**Progress, batch 259, C3 (unit a; the entry stays OPEN).** The count half is built. Section f of `scripts/pregate-self-check.sh` now runs `drop_undeclared` before its count line, writing the drop's lines to `$W/f/undeclared` (`:577`). The count line prints `f_k - u_drop` as "N to run" (`:578-580`), and the undeclared lines print after the selection list (`:582`). Probe on the extracted block, run once by hand (3 selected, 1 undeclared): the tip prints "2 to run" and the old order "3 to run". No receipt cell asserts it. Cost: one file write and read per pregate run, no exec. Catch on record: the batch-258 paragraph above, where "N to run" counted units that were then dropped. Who would notice it gone: the builder and the lead, who read "N to run" to size a pregate. The stall, this entry's first subject, is unchanged and stays OPEN: while the main checkout holds an unlanded hook-editing squash, the `:174` branch still refuses every other session's pregate. No mechanism is proposed. Relaxing the comparison, now at `:169` (`cmp -s "$HOOK" "$TREE_HOOK"`, which the 5a38afcc9 measurement above cites as `:148`), is the operator's decision.
+
+**Operator ruling, 2026-11-19.** The pregate wait during a hook-editing push is accepted. The comparison stays as it is.
+
+**LANDED (v0.1182.0).** Closed by the operator ruling above. The stall is accepted and the `:169` comparison is kept, so nothing further is owed. The count half shipped in batch 259, C3.
+
+verify: manual
+

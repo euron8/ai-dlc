@@ -148,12 +148,18 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 # --- trees of the subject ---------------------------------------------------------------------
 # mk_tree <dir> : a whole copy of the scripts directory at <dir>/core/scripts (so every copy of the
 # subject ends in core/scripts/gate-transition.sh) plus a gate-3 copy at <dir>/stub/core/scripts whose
-# eight check siblings are stubs. Prints nothing; 1 when a copy failed.
+# eight check siblings are stubs. Prints nothing; 1 when a copy failed. Both copies carry every entry of the
+# scripts directory except hermetic-run.sh, which no script in either tree reads: copying it would make the
+# fixture read an input its inputs.decl cannot declare.
 STUBS="verdict.sh validate-escalation-resolution.sh sprint-status.sh validate-stub-audit.sh validate-spawn-ledger.sh validate-provenance-block.sh validate-steering-budget.sh validate-h2-attestation.sh"
 mk_tree() {
   local d="$1" s
   mkdir -p "$d/core/scripts" "$d/stub/core/scripts" || return 1
-  cp -R "$SCR/." "$d/core/scripts/" && cp -R "$SCR/." "$d/stub/core/scripts/" || return 1
+  set --
+  for s in "$SCR"/* "$SCR"/.[!.]*; do
+    [ "${s##*/}" != hermetic-run.sh ] && [ -e "$s" ] && set -- "$@" "$s"
+  done
+  cp -R "$@" "$d/core/scripts/" && cp -R "$@" "$d/stub/core/scripts/" || return 1
   for s in $STUBS; do
     [ -f "$d/stub/core/scripts/$s" ] || return 1
     printf '#!/usr/bin/env bash\n# gate-transition fixture stub for %s: PASS unless GT_FX_REFUSE names it.\n[ %s != validate-spawn-ledger.sh ] || [ -z "${GT_FX_RC22:-}" ] || { [ "$GT_FX_RC22" != 3 ] || { if [ "${GT_FX_MSG22:-}" = norole ]; then echo "NO ROLE-BOUND ROWS: EXAMINED NOTHING -- 2 S1 row(s) exist and NONE of them was judged"; else echo "PRE-LEDGER: 4 row(s) in ledger.jsonl, NONE of them S1."; fi; echo "COUNTS: examined 0 S1 spawn row(s) of 4 in ledger.jsonl;"; }; exit "$GT_FX_RC22"; }\n[ "${GT_FX_REFUSE:-}" != %s ] || { echo "stub %s: REFUSED by the fixture" >&2; exit 1; }\n[ %s != validate-h2-attestation.sh ] || echo "H2_ATTESTED v1 sprint=1 stub"\n[ %s != validate-steering-budget.sh ] || echo "steering-count 0"\nexit 0\n' \

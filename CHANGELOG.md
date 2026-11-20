@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1182.0] - 2026-11-19
+
+### Five fixtures stop copying the hermetic runner into their worlds, and five operator rulings are recorded (BL-1155 advances, stays PARTIAL; BL-1133 and BL-1148 closed)
+
+- For the push gate's read-set skip: the gate-transition fixture and the story-evidence-scaffold family copy the scripts directory into their test worlds, and that copy no longer includes `hermetic-run.sh`. No script in those worlds uses the file, so the copy was an input the five fixtures could not declare. Every other file in the directory is still copied, and no process start is added. (BL-1155)
+- For the lead: five operator rulings are now in the backlog. The `<fx>@consumer` twin set stays as it is, which closes BL-1133. The pregate wait during a hook-editing push is accepted and the comparison stays, which closes BL-1148. Strict mechanism B is not built, and BL-847 still owes the gate-2 outcome on s323. BL-809's promotion goal is dropped, and arm (q) stays a WARN permanently. BL-878 records how the `hermetic-run.sh` read was resolved.
+- Still owed: a confirming `--declared-out` re-trace of the five fixtures after landing (BL-1155).
+
 ## [0.1181.0] - 2026-11-19
 
 ### Planning gates trust only pass-file counts the merge itself wrote, and agents waiting on their own jobs get one clear instruction when the wait runs out (BL-1175, BL-538 advance, stay PARTIAL)
