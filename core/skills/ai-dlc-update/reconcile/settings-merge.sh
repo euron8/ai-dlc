@@ -15,7 +15,14 @@
 #                      per-event: SessionStart is shared with context-mode and
 #                      other tools), then append the template's blocks. Event-key
 #                      set is the union of consumer's and template's.
-#   2. enabledPlugins— additive only, user wins on conflict. Never removed.
+#   2. enabledPlugins— additive only, user wins on conflict, with ONE retirement:
+#                      `context-mode@context-mode` set to exactly `true` is removed
+#                      (context-mode is installed once at user scope; a project-level
+#                      enable makes Claude Code record a per-project install). `false`
+#                      and every other entry are untouched. The key is written only
+#                      when non-empty, and dropped when the retirement empties it. The
+#                      retirement runs only when the template wires hooks, so the
+#                      uninstall call (an empty `{}` template) never retires anything.
 #   2b. aiDlcModels / aiDlcRoles
 #                    — additive only, user wins on conflict. Same shape as
 #                      enabledPlugins, and load-bearing for the same reason in
@@ -57,7 +64,8 @@
 #   settings-merge.sh --consumer <path> --template <path>
 #   settings-merge.sh --consumer <path> --template <path> --check
 #
-#   --check   Report what would change and exit 0 WITHOUT writing. Prints
+#   --check   Report what would change and exit 0 WITHOUT writing. Prints one
+#             `enabledPlugins:` line when the context-mode retirement will fire. Prints
 #             `model_window_needed=yes` when the operator must be asked (no
 #             family window declared and the template wires the sensor). Use
 #             this to build the step-5 dry-run report.
@@ -157,7 +165,26 @@ if [ "$SENSOR_WIRED" = "true" ] && [ -z "$DECLARED_FAMILIES" ]; then
   MODEL_WINDOW_NEEDED=yes
 fi
 
+# The context-mode enable is retired only on a merge against a real template (one that wires
+# hooks). uninstall.sh merges against an empty `{}` template to strip ai-dlc blocks, and a
+# `true` the consumer held before install must survive that.
+RETIRE_CM=false
+if printf '%s' "$BASE_JSON" | jq -e --slurpfile tmpl "$TEMPLATE" '
+     (($tmpl[0].hooks // {}) | type == "object" and length > 0)
+     and (.enabledPlugins | type == "object") and (.enabledPlugins["context-mode@context-mode"] == true)
+   ' >/dev/null 2>&1; then
+  RETIRE_CM=true
+fi
+RETIRE_FLAG=false
+if printf '%s' "$BASE_JSON" | jq -e --slurpfile tmpl "$TEMPLATE" '
+     ($tmpl[0].hooks // {}) | type == "object" and length > 0' >/dev/null 2>&1; then
+  RETIRE_FLAG=true
+fi
+
 if [ "$CHECK" -eq 1 ]; then
+  if [ "$RETIRE_CM" = true ]; then
+    echo "enabledPlugins: this project's context-mode enable is retired (context-mode is installed once at user scope); every user of this project needs it: claude plugin install context-mode@context-mode --scope user"
+  fi
   echo "sensor_wired=${SENSOR_WIRED}"
   echo "declared_model_windows=${DECLARED_FAMILIES:-<none>}"
   echo "model_window_needed=${MODEL_WINDOW_NEEDED}"
@@ -194,7 +221,7 @@ else
 fi
 
 if ! printf '%s' "$BASE_JSON" | jq \
-      --slurpfile tmpl "$TEMPLATE" '
+      --argjson retire "$RETIRE_FLAG" --slurpfile tmpl "$TEMPLATE" '
     . as $u |
     ($tmpl[0]) as $t |
 
@@ -215,7 +242,12 @@ if ! printf '%s' "$BASE_JSON" | jq \
     (($uh | keys) + ($th | keys) | unique) as $events |
 
     $u
-    | .enabledPlugins = (($t.enabledPlugins // {}) + ($u.enabledPlugins // {}))
+    | (($t.enabledPlugins // {}) + ($u.enabledPlugins // {})) as $merged
+    | ($retire and $merged["context-mode@context-mode"] == true) as $fires
+    | ($merged | if $fires then del(.["context-mode@context-mode"]) else . end) as $plugins
+    | if ($plugins | length) > 0 then .enabledPlugins = $plugins
+      elif $fires then del(.enabledPlugins)
+      else . end
     # Guarded so a tree where NEITHER side declares a block is left alone, rather
     # than gaining an empty `{}` that reads like config.
     #

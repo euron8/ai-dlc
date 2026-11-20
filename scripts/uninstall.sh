@@ -321,7 +321,8 @@ fi
 #                     entry -- a role pinned to another model, say -- is consumer data: it is
 #                     KEPT and named in the closing listing. Uninstall never destroys consumer
 #                     configuration by default.
-#   every other template key (enabledPlugins entries, env entries, bashOutputMaxChars)
+#   every other template key (env entries, bashOutputMaxChars; the template no longer
+#                     carries enabledPlugins, and an empty-template merge never retires one)
 #                  -- SHARED, and the merge is "user wins", so the installed file cannot say
 #                     who set one. A key is removed only when it still equals the template
 #                     value AND the consumer's pre-install settings.json lacked it. The

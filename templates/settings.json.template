@@ -88,9 +88,6 @@
     }
   },
   "bashOutputMaxChars": 8000,
-  "enabledPlugins": {
-    "context-mode@context-mode": true
-  },
   "env": {
     "ENABLE_PROMPT_CACHING_1H": "1"
   },

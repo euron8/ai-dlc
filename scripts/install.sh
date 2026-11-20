@@ -457,7 +457,8 @@ echo "  session-driver installed (.claude/session-driver/)"
 #   * Preserve user-owned permissions, env, mcpServers, etc.
 #   * Upsert ai-dlc hook blocks (stale ai-dlc entries from prior installs are
 #     stripped before template entries are appended, so reinstalls propagate).
-#   * Shallow-merge enabledPlugins; user values win on conflict.
+#   * Shallow-merge enabledPlugins; user values win on conflict, except that a
+#     `context-mode@context-mode: true` enable is retired (user-scope install).
 # A block counts as ai-dlc-owned when any inner command references
 # .claude/hooks/ai-dlc-*.sh OR the legacy "RULE 3 CONTINUATION MANDATE" echo
 # (left over from pre-hook-script versions of this installer).
