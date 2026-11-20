@@ -1,0 +1,57 @@
+== stage totals, pipeline bucket, h (S0 old == steps.csv elapsed; relabel and operator-wait moves leave it unchanged)
+s321: old  110.96  fork copies  0.95  idle tail  9.91  corrected  100.10
+s322: old   66.41  fork copies  0.00  idle tail  1.24  corrected   65.17
+s323: old   75.38  fork copies  0.00  idle tail  0.00  corrected   75.38
+
+== class hours: old (active / op / agent) and new (lead model, tool, idle, wait-on-agents, op, long agent)
+s321: OLD active 51.28 op 24.92 agent 34.77 | NEW model 13.16 tool  3.11 idle(no agent)  5.35 wait-agent<300s 26.96 op 29.01 long-agent 22.51
+s322: OLD active 36.44 op 10.28 agent 19.68 | NEW model 16.68 tool  3.08 idle(no agent)  2.69 wait-agent<300s 13.22 op 11.97 long-agent 17.54
+s323: OLD active 48.63 op 17.88 agent  8.87 | NEW model 22.39 tool  5.56 idle(no agent)  2.86 wait-agent<300s 15.36 op 20.34 long-agent  8.87
+
+spawn owner resolution {'none': 24, 'direct': 2329, 'time': 687}
+control sub $ (hour-rate cw) from units vs spawns.jsonl usd, per sprint: {321: (1879.5, 1879.5), 322: (992.7, 992.7), 323: (1582.3, 1582.3)}
+
+##### s321   (h; $ = subagent list-price, hour-rate cache write | five-minute cache write)
+step                      | elapsed old -> new | lead-own(model+tool) | idle | lead wait<300s on agents | operator wait old -> new | long agent wait old -> new | spawns old->new | sub$ old -> new (hr | 5min) | lead calls old->new | compactions old->new
+requirements              |  11.1 ->  11.1 |   1.5 |  0.6 |   3.7 |   1.9 ->   2.4 |   3.1 ->   3.0 |  168 ->  168 |  260.6 ->  260.6 ( 260.6 |  232.9) |   812 ->   812 |   3 ->   3
+architecture              |  10.0 ->   9.9 |   1.0 |  0.3 |   2.7 |   0.0 ->   0.0 |   5.8 ->   5.8 |  122 ->  122 |  262.6 ->  262.6 ( 262.6 |  237.2) |   558 ->   555 |   5 ->   5
+ui-direction              |   0.1 ->   0.1 |   0.0 |  0.0 |   0.1 |   0.0 ->   0.0 |   0.0 ->   0.0 |    1 ->    1 |    0.9 ->    0.9 (   0.9 |    0.7) |     6 ->     6 |   0 ->   0
+stories-test-strategy     |  19.7 ->  17.6 |   2.9 |  0.6 |   5.4 |   2.1 ->   1.9 |   8.3 ->   6.9 |  431 ->  430 |  591.9 ->  591.5 ( 591.5 |  524.2) |  1353 ->  1349 |  11 ->  10
+implementation build      |  14.3 ->  16.6 |   3.4 |  0.4 |   6.9 |   1.1 ->   3.9 |   2.0 ->   2.0 |  154 ->  155 |  286.5 ->  286.9 ( 286.9 |  247.6) |  1565 ->  1588 |  12 ->  13
+implementation gates      |   8.1 ->   7.9 |   3.1 |  0.5 |   2.6 |   1.2 ->   1.4 |   0.3 ->   0.3 |  126 ->  126 |  160.7 ->  160.7 ( 160.7 |  139.5) |   943 ->   927 |  11 ->  11
+sprint-review             |   2.9 ->   2.9 |   0.8 |  0.3 |   1.7 |   0.0 ->   0.1 |   0.0 ->   0.0 |  169 ->  169 |  209.1 ->  209.1 ( 209.1 |  176.8) |   396 ->   396 |   3 ->   3
+deploy-validate           |  29.0 ->  28.0 |   2.3 |  1.7 |   3.4 |  18.2 ->  18.1 |   2.6 ->   2.5 |   45 ->   45 |  100.2 ->  100.2 ( 100.2 |   84.2) |  1021 ->   978 |   7 ->   7
+retro                     |   3.1 ->   1.8 |   0.4 |  0.4 |   0.1 |   0.0 ->   0.8 |   2.1 ->   0.1 |   14 ->   14 |    5.5 ->    5.5 (   5.5 |    4.2) |   170 ->   170 |   1 ->   1
+route/handoff/pre-step    |  12.7 ->   4.0 |   0.8 |  0.5 |   0.3 |   0.4 ->   0.4 |  10.6 ->   1.9 |    4 ->    4 |    1.6 ->    1.6 (   1.6 |    1.3) |   303 ->   301 |   4 ->   3
+TOTAL                     | 111.0 -> 100.1 |  16.3 |  5.4 |  27.0 |  24.9 ->  29.0 |  34.8 ->  22.5 | 1234 -> 1234 | 1879.5 -> 1879.5 (1879.5 | 1648.6) |  7127 ->  7082 |  57 ->  56
+
+##### s322   (h; $ = subagent list-price, hour-rate cache write | five-minute cache write)
+step                      | elapsed old -> new | lead-own(model+tool) | idle | lead wait<300s on agents | operator wait old -> new | long agent wait old -> new | spawns old->new | sub$ old -> new (hr | 5min) | lead calls old->new | compactions old->new
+carry-over-evaluation     |  13.7 ->  13.7 |   1.9 |  0.2 |   1.8 |   5.7 ->   5.7 |   4.2 ->   4.2 |  112 ->  112 |  191.2 ->  191.2 ( 191.2 |  173.9) |  1050 ->  1050 |   8 ->   8
+requirements              |   9.9 ->   9.9 |   2.1 |  0.1 |   3.0 |   1.2 ->   1.3 |   3.4 ->   3.4 |  128 ->  128 |  249.5 ->  249.5 ( 249.5 |  225.9) |  1202 ->  1196 |  11 ->  11
+architecture              |   5.8 ->   5.7 |   1.4 |  0.1 |   1.4 |   0.0 ->   0.0 |   2.9 ->   2.9 |   68 ->   68 |  110.0 ->  110.0 ( 110.0 |   99.8) |   687 ->   677 |   7 ->   6
+stories-test-strategy     |   7.5 ->   7.5 |   2.0 |  0.3 |   1.9 |   0.0 ->   0.0 |   3.3 ->   3.3 |  125 ->  125 |  169.2 ->  169.2 ( 169.2 |  151.4) |  1348 ->  1328 |  11 ->  12
+implementation build      |   7.9 ->   8.0 |   3.5 |  0.3 |   2.2 |   1.4 ->   1.5 |   0.6 ->   0.6 |   68 ->   68 |   65.4 ->   65.4 (  65.4 |   55.4) |  1413 ->  1435 |   8 ->   8
+implementation gates      |   5.1 ->   5.1 |   2.2 |  0.2 |   1.1 |   0.6 ->   0.7 |   0.9 ->   0.9 |   39 ->   39 |   71.2 ->   71.2 (  71.2 |   61.5) |   849 ->   863 |   8 ->   8
+sprint-review             |   2.3 ->   2.0 |   0.8 |  0.1 |   0.6 |   0.0 ->   0.0 |   0.6 ->   0.6 |   65 ->   65 |   82.1 ->   82.1 (  82.1 |   68.8) |   497 ->   387 |   4 ->   3
+deploy-validate           |   3.5 ->   3.7 |   1.1 |  0.5 |   0.2 |   0.8 ->   1.9 |   1.0 ->   0.1 |    3 ->    3 |    5.2 ->    5.2 (   5.2 |    4.3) |   544 ->   652 |   3 ->   4
+retro                     |   5.3 ->   4.1 |   2.5 |  0.5 |   0.4 |   0.4 ->   0.5 |   1.4 ->   0.2 |   31 ->   31 |   17.7 ->   17.7 (  17.7 |   14.3) |   896 ->   898 |   8 ->   8
+route/handoff/pre-step    |   3.9 ->   3.9 |   1.8 |  0.4 |   0.2 |   0.2 ->   0.5 |   1.1 ->   1.1 |   12 ->   12 |    3.5 ->    3.5 (   3.5 |    2.5) |   529 ->   529 |   2 ->   2
+other steps (bug-investigation etc.) |   1.6 ->   1.6 |   0.6 |  0.0 |   0.5 |   0.0 ->   0.0 |   0.3 ->   0.3 |   17 ->   17 |   27.7 ->   27.7 (  27.7 |   23.3) |   289 ->   289 |   2 ->   2
+TOTAL                     |  66.4 ->  65.2 |  19.8 |  2.7 |  13.2 |  10.3 ->  12.0 |  19.7 ->  17.5 |  668 ->  668 |  992.7 ->  992.7 ( 992.7 |  881.2) |  9304 ->  9304 |  72 ->  72
+
+##### s323   (h; $ = subagent list-price, hour-rate cache write | five-minute cache write)
+step                      | elapsed old -> new | lead-own(model+tool) | idle | lead wait<300s on agents | operator wait old -> new | long agent wait old -> new | spawns old->new | sub$ old -> new (hr | 5min) | lead calls old->new | compactions old->new
+carry-over-evaluation     |  11.8 ->   8.4 |   2.0 |  0.2 |   1.9 |   6.3 ->   3.1 |   1.2 ->   1.2 |   89 ->   88 |  173.4 ->  166.1 ( 166.1 |  143.2) |   828 ->   811 |   9 ->   8
+requirements              |  13.5 ->  16.9 |   2.9 |  0.3 |   1.6 |   6.2 ->  10.0 |   2.1 ->   2.1 |  179 ->  182 |  223.9 ->  233.0 ( 233.0 |  196.8) |  1178 ->  1182 |  13 ->  13
+architecture              |   5.2 ->   5.2 |   2.2 |  0.3 |   1.2 |   0.0 ->   0.0 |   1.4 ->   1.4 |   67 ->   67 |  130.0 ->  130.0 ( 130.0 |  112.1) |  1021 ->  1032 |  12 ->  13
+ui-direction              |   0.3 ->   0.1 |   0.0 |  0.0 |   0.1 |   0.0 ->   0.0 |   0.0 ->   0.0 |    8 ->    1 |   19.8 ->    1.3 (   1.3 |    1.1) |    86 ->    25 |   1 ->   0
+stories-test-strategy     |   9.1 ->   9.1 |   3.3 |  0.4 |   3.6 |   0.0 ->   0.0 |   1.9 ->   1.9 |  264 ->  264 |  348.3 ->  348.3 ( 348.3 |  291.2) |  1596 ->  1598 |  19 ->  19
+implementation build      |   5.6 ->   5.8 |   2.7 |  0.1 |   1.5 |   0.1 ->   1.6 |   0.0 ->   0.0 |  111 ->  118 |  221.7 ->  240.1 ( 240.1 |  203.3) |  1130 ->  1183 |  11 ->  12
+implementation gates      |   9.5 ->  10.5 |   6.9 |  0.1 |   2.6 |   0.2 ->   0.3 |   0.3 ->   0.5 |  196 ->  200 |  191.5 ->  202.4 ( 202.4 |  169.0) |  2600 ->  2875 |  39 ->  42
+sprint-review             |  11.1 ->   9.9 |   2.5 |  0.3 |   1.9 |   4.2 ->   4.2 |   1.3 ->   1.0 |  171 ->  167 |  225.5 ->  214.7 ( 214.7 |  178.5) |  1291 ->   958 |  14 ->  11
+deploy-validate           |   5.3 ->   5.5 |   2.4 |  0.8 |   0.6 |   0.9 ->   1.2 |   0.4 ->   0.4 |   14 ->   14 |   20.4 ->   20.4 (  20.4 |   16.5) |  1145 ->  1208 |   9 ->   9
+retro                     |   2.7 ->   2.7 |   2.0 |  0.2 |   0.3 |   0.0 ->   0.0 |   0.1 ->   0.1 |   28 ->   28 |   23.1 ->   23.1 (  23.1 |   19.5) |   602 ->   605 |   7 ->   7
+route/handoff/pre-step    |   1.3 ->   1.3 |   0.9 |  0.2 |   0.0 |   0.0 ->   0.0 |   0.2 ->   0.2 |    9 ->    8 |    3.1 ->    2.1 (   2.1 |    1.4) |   267 ->   267 |   0 ->   0
+other steps (bug-investigation etc.) |   0.0 ->   0.0 |   0.0 |  0.0 |   0.0 |   0.0 ->   0.0 |   0.0 ->   0.0 |    2 ->    1 |    1.4 ->    0.7 (   0.7 |    0.6) |     0 ->     0 |   0 ->   0
+TOTAL                     |  75.4 ->  75.4 |  28.0 |  2.9 |  15.4 |  17.9 ->  20.3 |   8.9 ->   8.9 | 1138 -> 1138 | 1582.3 -> 1582.3 (1582.3 | 1333.3) | 11744 -> 11744 | 134 -> 134

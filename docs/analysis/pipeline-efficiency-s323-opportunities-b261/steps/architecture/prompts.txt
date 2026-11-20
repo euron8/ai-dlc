@@ -1,0 +1,28 @@
+('implem', 'code-reviewer') 31 {}
+('implem', 'code-reviewer-escalated') 3 {}
+('implem', 'dev') 18 {'AD': 2, 'ARCHREFS': 9}
+('implem', 'dev-escalated') 4 {'ARCHREFS': 4}
+('implem', 'gate-adjudicator') 1 {}
+('implem', 'ops') 2 {}
+('implem', 'pre-reviewer') 2 {}
+('implem', 'qa') 50 {}
+('sprint', 'adversary') 3 {}
+('sprint', 'architect') 28 {}
+('sprint', 'code-reviewer') 3 {}
+('sprint', 'code-reviewer-escalated') 2 {}
+('sprint', 'dev') 33 {}
+('sprint', 'dev-escalated') 5 {}
+('sprint', 'general-purpose') 2 {}
+('sprint', 'pm') 20 {}
+('sprint', 'pre-reviewer') 1 {}
+('sprint', 'qa') 26 {}
+('sprint', 'remediator') 2 {}
+('sprint', 'tea') 33 {}
+('storie', 'adversary') 58 {'IMPACT': 20, 'SPINE': 1, 'AD': 1}
+('storie', 'analyst') 1 {}
+('storie', 'architect') 19 {'ARCHDOC': 18, 'AD': 19, 'IMPACT': 19, 'ARCHREFS': 18}
+('storie', 'dev') 19 {'IMPACT': 19}
+('storie', 'general-purpose') 9 {}
+('storie', 'remediator') 98 {'AD': 52}
+('storie', 'sm') 19 {'IMPACT': 19}
+('storie', 'tea') 20 {'IMPACT': 19}

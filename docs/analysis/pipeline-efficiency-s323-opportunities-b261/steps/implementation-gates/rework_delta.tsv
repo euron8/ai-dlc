@@ -1,0 +1,64 @@
+321	1-2	qa-validation	2	NEEDS_REWORK	CODE=1,TEST=1	g1p7	1	1	14	.env_empty
+321	1-2	qa-validation	1	NEEDS_REWORK	BOOKKEEPING=2,TEST=2	g1p5	0	4	12	
+321	1-1	code-review	1	NEEDS_REWORK	TEST=1	g1p2	0	0	7	
+321	1-2	code-review	2	NEEDS_REWORK	TEST=3	g1p3	0	5	32	
+321	1-2	code-review	3	NEEDS_REWORK	TEST=1	g1p4	0	2	7	
+321	1-2	code-review	5	NEEDS_REWORK	TEST=1	g1p6	0	1	5	
+321	1-2	code-review	1	NEEDS_REWORK	CODE=3,EVIDENCE=1,TEST=5	g1p2	2	17	33	rebalancer/api.py;rebalancer/main.py
+321	1-3	code-review	1	NEEDS_REWORK	TEST=1	g1p2	0	1	7	
+321	1-4	code-review	1	NEEDS_REWORK	CODE=1	g1p2	2	2	11	rebalancer/api.py;rebalancer/safeguards.py
+321	1-6	code-review	1	?		g2p1	0	0	1	
+321	2-4	qa-validation	1	NEEDS_REWORK	BOOKKEEPING=2	g2p2	0	0	2	
+321	2-1	code-review	1	NEEDS_REWORK	BOOKKEEPING=1	g1p2	0	0	3	
+321	2-3	code-review	1	NEEDS_REWORK	CODE=1	g1p2	1	1	13	rebalancer/execution.py
+321	3-2	qa-validation	1	NEEDS_REWORK	BOOKKEEPING=1	g2p2	0	0	4	
+321	3-3	code-review	1	NEEDS_REWORK	CODE=2,EVIDENCE=1,TEST=4	g1p2	8	3	31	scripts/chain_cache_retention_ecs.sh;scripts/deploy-validate/run-deployed-ranges.sh;scripts/ecs-deploy.sh;scripts/ecs-st
+321	3-4	qa-validation	1	NEEDS_REWORK	EVIDENCE=2	g2p2	0	0	20	
+321	3-1	code-review	2	NEEDS_REWORK	EVIDENCE=1	g1p3	0	0	4	
+321	3-1	code-review	1	NEEDS_REWORK	BOOKKEEPING=1,CODE=2	g1p2	1	1	5	scripts/lib/rebalancer-idle.sh
+321	3-2	code-review	1	NEEDS_REWORK	EVIDENCE=1,TEST=1	g1p2	1	1	5	scripts/lib/ssm-tunnel.sh
+321	3-4	code-review	2	NEEDS_REWORK	TEST=1	g1p3	1	2	10	infra/lib/cicd-stack.ts
+321	3-4	code-review	1	NEEDS_REWORK	CODE=2,TEST=1	g1p2	2	2	10	infra/lambda/execution-state-gate/index.py;infra/lib/cicd-stack.ts
+321	4-1	qa-validation	1	NEEDS_REWORK	EVIDENCE=1	g2p2	0	0	8	
+321	4-3	qa-validation	2	NEEDS_REWORK	BOOKKEEPING=1,EVIDENCE=1	g2p3	0	0	11	
+321	4-3	qa-validation	1	NEEDS_REWORK	BOOKKEEPING=1,TEST=2	g1p3	0	1	13	
+321	4-1	code-review	1	NEEDS_REWORK	TEST=1	g1p2	1	1	7	server/aggregator.py
+321	4-3	code-review	1	NEEDS_REWORK	CODE=1,TEST=3	g1p2	3	1	13	web/src/components/ConfigEditor/AuditLogPanel.jsx;web/src/components/PositionRangeGauge.jsx;web/src/pages/RebalancerPage
+321	5-2	qa-validation	1	NEEDS_REWORK	EVIDENCE=1	g2p2	0	0	4	
+321	5-1	code-review	1	NEEDS_REWORK	TEST=1	g1p2	0	1	5	
+321	5-3	code-review	1	NEEDS_REWORK	CODE=1	g1p2	1	1	5	config/rebalancer-base.yaml
+321	5-4	code-review	2	NEEDS_REWORK	BOOKKEEPING=1	g1p3	0	0	3	
+321	5-4	code-review	1	NEEDS_REWORK	BOOKKEEPING=1	g1p2	0	0	2	
+321	6-1	qa-validation	2	NEEDS_REWORK	BOOKKEEPING=2	g2p3	0	0	4	
+321	6-1	qa-validation	1	NEEDS_REWORK	BOOKKEEPING=4	g2p2	0	0	3	
+321	6-1	code-review	2	NEEDS_REWORK	BOOKKEEPING=1,EVIDENCE=1	g1p3	0	0	3	
+321	6-1	code-review	1	NEEDS_REWORK	BOOKKEEPING=2,EVIDENCE=4	g1p2	0	0	5	
+322	4	qa-validation	3	NEEDS_REWORK	BOOKKEEPING=1	g2p4	0	0	3	
+322	3	code-review	2	NEEDS_REWORK	none=1	g1p3	0	1	9	
+322	4	code-review	2	NEEDS_REWORK	CODE=1	g1p3	0	1	4	
+322	4	qa-validation	3	NEEDS_REWORK	BOOKKEEPING=1	g2p4	0	0	3	
+322	4	qa-validation	1	NEEDS_REWORK	BOOKKEEPING=1	g2p2	0	0	2	
+322	6	code-review	1	NEEDS_REWORK	BOOKKEEPING=2,EVIDENCE=1	g1p2	0	0	4	
+322	7	code-review	1	NEEDS_REWORK	CODE=1,EVIDENCE=2	g1p2	1	0	11	scripts/ci-local.sh
+322	7	qa-validation	1	NEEDS_REWORK	BOOKKEEPING=1	g2p2	0	0	9	
+322	8	code-review	1	NEEDS_REWORK	BOOKKEEPING=1,EVIDENCE=1	g1p2	0	0	9	
+322	8	qa-validation	1	NEEDS_REWORK	TEST=2	g1p3	1	0	9	scripts/test-pytest-admission.sh
+323	1-1	code-review	1	NEEDS_REWORK	BOOKKEEPING=1,EVIDENCE=2,TEST=1	g1p2	0	1	11	
+323	1-2	code-review	1	NEEDS_REWORK	TEST=1	g1p2	0	1	5	
+323	1-3	code-review	1	NEEDS_REWORK	TEST=1	g1p2	0	1	3	
+323	1-3	qa-validation	1	NEEDS_REWORK	EVIDENCE=1,TEST=1	g1p3	0	1	9	
+323	3-1	qa-validation	1	NEEDS_REWORK	CODE=1	g1p2	1	0	2	scripts/ci-local.sh
+323	3-2	code-review	3	NEEDS_REWORK	TEST=1	g1p4	0	1	1	
+323	3-2	code-review	1	NEEDS_REWORK	BOOKKEEPING=1,EVIDENCE=2,TEST=2	g1p2	2	5	31	scripts/ai-dlc-local/s323-3-2-junit-reconcile.py;scripts/ci-local.sh
+323	3-2	qa-validation	1	NEEDS_REWORK	TEST=2	g1p3	1	1	14	scripts/ai-dlc-local/s323-3-2-junit-reconcile.py
+323	4-1	qa-validation	1	NEEDS_REWORK	EVIDENCE=1	g2p2	0	0	4	
+323	4-3	qa-validation	1	NEEDS_REWORK	EVIDENCE=1	g2p2	0	0	3	
+323	4-4	qa-validation	1	NEEDS_REWORK	TEST=1	g1p2	0	2	5	
+323	5-2	code-review	1	NEEDS_REWORK	CODE=1,TEST=1	g1p2	1	2	3	rebalancer/execution.py
+323	5-2	qa-validation	2	NEEDS_REWORK	EVIDENCE=1	g2p3	0	0	9	
+323	5-2	qa-validation	1	NEEDS_REWORK	CODE=1,EVIDENCE=1	g1p3	1	1	22	rebalancer/execution.py
+323	5-4	code-review	1	NEEDS_REWORK	BOOKKEEPING=1,TEST=1	g1p2	1	2	3	web/src/components/ConfigEditor/ConfigEditor.jsx
+323	5-4	qa-validation	1	NEEDS_REWORK	BOOKKEEPING=1,EVIDENCE=2	g2p2	0	0	5	
+323	5-5	code-review	1	NEEDS_REWORK	BOOKKEEPING=2,EVIDENCE=3	g1p2	0	0	6	
+323	5-5	qa-validation	2	NEEDS_REWORK	none=1,BOOKKEEPING=2,EVIDENCE=1	g2p3	0	0	13	
+323	5-5	qa-validation	1	NEEDS_REWORK	none=1,EVIDENCE=2,TEST=1	g1p3	1	0	9	web/playwright.s323-5-5.config.mjs

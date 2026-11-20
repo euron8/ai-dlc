@@ -1,0 +1,29 @@
+story n ACs  same@gate  same@final amended(marker) changed-other gone | AC bytes0 same bytes | file bytes0->final | esc pp
+story-1-1-estimate-gas-shared-retry-fail 15 15 12 3 0 0 19536 13082 33616 53672 true  0.93
+story-1-2-build-gas-fields-merkl-claim-c 11 11 11 0 0 0 18535 18535 29334 55290 true  None
+story-1-3-standalone-fee-collect-ceiling 9 9 8 1 0 0 8577 7062 18205 35686 true  0.81
+story-1-4-permit2-broadcast-subscribe-ca 9 9 8 1 0 0 8757 6454 18449 38941 true  0.8
+story-2-1-hodl-leaf-accepts-zero-address 8 8 8 0 0 0 7096 7096 14828 26431 false  None
+story-2-2-interim-native-input-refusal.m 5 5 5 0 0 0 5821 5821 14645 30674 false  None
+story-2-3-native-leg1-pays-by-value.md 6 6 6 0 0 0 7150 7150 17343 44864 true  None
+story-3-1-scripts-load-env-lazily.md 6 6 6 0 0 0 6678 6678 13476 20345 false  None
+story-3-2-smoke-browser-tests-both-route 10 10 10 0 0 0 12376 12376 21501 47542 true  None
+story-4-1-item4-adjudication-record.md 5 5 5 0 0 0 6324 6324 16808 20685 false  None
+story-4-2-903b-close-and-928-clause.md 5 5 3 0 2 0 8913 3508 16802 28071 false  0.95
+story-4-3-mtls-app-env-staged.md 12 12 12 0 0 0 10043 10043 22545 27964 false  None
+story-4-4-aggregator-forwards-client-cer 8 8 6 0 2 0 7146 5118 15750 27469 false  0.92
+story-5-1-rewards-cards-follow-chain.md 8 8 8 0 0 0 10542 10542 18316 28368 false  None
+story-5-2-base-merkl-claim-reachable.md 10 10 9 0 1 0 11634 11003 22641 56556 true  0.83
+story-5-3-base-total-portfolio-card.md 5 5 5 0 0 0 5446 5446 12700 21651 false  None
+story-5-4-config-sections-default-collap 6 6 6 0 0 0 10701 10701 18130 26948 false  None
+story-5-5-collect-section-renames.md 8 8 8 0 0 0 8198 8198 17276 38653 false  None
+n 146
+same_c1 146
+same_f 136
+amend 5
+chg 5
+gone 0
+b0 173473
+bs 155137
+len0 342365
+lenf 629810

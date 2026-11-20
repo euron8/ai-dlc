@@ -1,0 +1,40 @@
+stems 87 Counter({'implementation': 68, 'planning': 9, 'sprint': 5, 'story': 3, 'retro': 2})
+('planning', '1') {'PASS': 9}
+('planning', '2') {'PASS': 8, 'FAIL': 1}
+('planning', '3') {'PASS': 9}
+('planning', '4') {'PASS': 9}
+('planning', '7') {'PASS': 9}
+('planning', '16') {'PASS': 9}
+('planning', '1c') {'PASS': 9}
+('planning', '20') {'PASS': 9}
+('planning', '27') {'PASS': 9}
+('planning', '29') {'PASS': 9}
+('retro', '1') {'PASS': 2}
+('retro', '2') {'PASS': 2}
+('retro', '3') {'PASS': 2}
+('retro', '4') {'PASS': 2}
+('retro', '7') {'PASS': 2}
+('retro', '8') {'PASS': 2}
+('retro', '9') {'PASS': 2}
+('retro', '16') {'PASS': 2}
+('retro', 'core-layer-immutability') {'PASS': 2}
+('sprint', '1') {'PASS': 4, 'FAIL': 1}
+('sprint', '2') {'PASS': 5}
+('sprint', '3') {'PASS': 4, 'FAIL': 1}
+('sprint', '4') {'PASS': 5}
+('sprint', '7') {'PASS': 5}
+('sprint', '16') {'PASS': 5}
+('sprint', '20') {'PASS': 5}
+('sprint', '21') {'PASS': 5}
+('story', '1') {'PASS': 3}
+('story', '2') {'PASS': 3}
+('story', '3') {'PASS': 3}
+('story', '4') {'PASS': 3}
+('story', '5') {'PASS': 3}
+('story', '7') {'PASS': 3}
+('story', '16') {'PASS': 3}
+('story', '3a') {'PASS': 3}
+--- non-impl fails
+s322 sprint-review-20261112T051649Z chk 3 FAIL | Check 3 (gate-validation.md:466-493), last bullet :480-483: a story with no LOCKED_REQUIREMENTS block that is derived from user input FAILS. Stories 1.1-1.7 pass: each carries one block (story-1-1:38-45, 1-2:95-100, 1-3:54-59, 1-4:50-55, 1-5:69-76, 1-6:144-148
+s323 planning-20261118T025210Z chk 2 FAIL | Mechanical arms pass: verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md -> exit 0 'OK: n=234 all escalation status tokens are in the derived set'; verdict.sh validate-suppression-lifetime --escalations docs/escalations/pending.md -> 
+s323 sprint-review-20261119T193613Z chk 1 FAIL | Comparison surface read. (a) Party round: 95 files match _bmad-output/party-mode/s323/sprint-review-*.md and each ends in a seat-complete line (loop printed no BAD file). (b) Step 1: _bmad-output/implementation-artifacts/s323/sprint-adversarial-p1.md is one-sh

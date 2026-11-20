@@ -1,0 +1,26 @@
+results with REFUSED (excluding admission/dispatch guard) 282 control 0
+145 line | dex>`. On exit 2 (a REFUSED line on 407	stderr, e.g. a base that is not an ancestor of the frozen SHA), likewise 408	dispatch one reviewer w
+35 empty-cell | plan.work.70449.out:REFUSED empty-cell _bmad-output/planning-artifacts/s323/stories/story-4-1-item4-adjudication-record.md: ST323-80 case - 
+32 lines |  send the dev these REFUSED lines verbatim; once the dev re-hands off, re-run gate-transition.sh gate-transition: REFUSED handoff-strategy: 
+30 escalation | FUSAL (exit 2, 479	`REFUSED: escalation archive ...`), never a pass. 480	 481	**Pass `--transcript-dir` too. It is MANDATORY: `--transcript`
+25 dar-fold | == gate-transition: REFUSED dar-fold: the canonical _bmad-output/planning-artifacts/s323/stories/story-4-4-aggregator-forwards-client-cert.m
+9 handoff-evidence | 59 gate-transition: REFUSED handoff-evidence: validate-handoff-evidence.sh _bmad-output/planning-artifacts/s323/stories/story-4-1-item4-adju
+9 no-command | plan.work.44161.out:REFUSED no-command test-results/s323-4-1-collect.txt: none of its first 25 lines is a command line ('$ <command>', 'comm
+5 dar-heads-missing | plan.work.75451.out:REFUSED dar-heads-missing _bmad-output/planning-artifacts/s323/stories/story-5-3-base-total-portfolio-card.md: the story
+5 since | hdog admission loop REFUSED since 09:52; finding 2 done). 3.1 QA seat: file still header-only. Beats: bxd9ohrp1 (5.3 part 8), b7a32fasl (3.1
+5 verbatim | ntent seal; --merge REFUSED verbatim (seal agent a7582cada20123f40, recorded sha aa010bd…, disk 0652403…). Shard 6/8 RE-DISPATCHED (a2bd917d
+4 handoff-strategy | sh gate-transition: REFUSED handoff-strategy: validate-handoff-evidence.sh --strategy 36fca7265c6bbdea3b4b7fd9f076b2ea197d7e59 _bmad-output/
+4 stub-audit |  PASS 0C/0I; 1.2 g3 REFUSED stub-audit test:698 'Sweep stub' comment -> reword 3ba807e23 -> g3 plan written (nonce 225443Z). 5.2 QA merged N
+3 unknown | snapshot-update: REFUSED: unknown argument '2026-11-18T13:52:40Z GATE [implementation g3 story 4.2] CLOSED'; the ops are: --activity --open-
+2 full-collection-none | plan.work.70449.out:REFUSED full-collection-none _bmad-output/planning-artifacts/s323/stories/story-4-1-item4-adjudication-record.md: 'Full-
+2 dar-heads-stale | plan.work.74740.out:REFUSED dar-heads-stale _bmad-output/planning-artifacts/s323/stories/story-5-1-rewards-cards-follow-chain.md: the captur
+2 version |       lines.append("REFUSED version: " + verr) 101	    else: 102	        lines.append("version ok: pytest %s" % ver) 103	    n = workers_fro
+2 workers |       lines.append("REFUSED workers: " + werr) 108	    if isinstance(n, int) and not werr: 109	        if p is None: 110	            lines.a
+2 predicate |       lines.append("REFUSED predicate: unmeasured p and version check failed") 113	        else: 114	            avail = available_gib() if 
+2 full-collection-missing | d7148a2aa exited 1: REFUSED full-collection-missing _bmad-output/planning-artifacts/s323/stories/story-3-1-scripts-load-env-lazily.md: no 'F
+2 dependency-setup-missing | diff is record-only REFUSED dependency-setup-missing _bmad-output/planning-artifacts/s323/stories/story-3-1-scripts-load-env-lazily.md: no '
+2 dar-missing |  before the handoff REFUSED dar-missing _bmad-output/planning-artifacts/s323/stories/story-3-1-scripts-load-env-lazily.md: the '## Dev Agent
+2 full-collection-filtered | plan.work.44472.out:REFUSED full-collection-filtered _bmad-output/planning-artifacts/s323/stories/story-3-1-scripts-load-env-lazily.md: 'Ful
+2 prior-review | gate-transition: REFUSED prior-review: no pass 1 review file docs/reviews/s323/5.5-code-review.md in /Users/n8/git/graph-s323-story-5-5 or /
+2 once | y this diff). Merge REFUSED once on the cross's Canonical run line (recorder parenthetical inside the backticks parsed as node-id; cross fix
+2 node-missing | plan.work.14868.out:REFUSED node-missing _bmad-output/planning-artifacts/s323/stories/story-1-4-permit2-broadcast-subscribe-capped.md: ST323

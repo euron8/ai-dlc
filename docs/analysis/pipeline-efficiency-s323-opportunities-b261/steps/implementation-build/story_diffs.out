@@ -1,0 +1,27 @@
+commits: 231 dev-window, 109 other
+dev total added lines 209568
+    code     touches    40 added    551    0% deleted 171
+    docs-md  touches     5 added     24    0% deleted 15
+    record   touches   719 added 202153   96% deleted 47264
+    tests    touches   102 added   6840    3% deleted 533
+gate/lead total added lines 87808
+    code     touches    10 added     64    0% deleted 36
+    docs-md  touches    10 added    162    0% deleted 18
+    record   touches   429 added  87403  100% deleted 61348
+    tests    touches    11 added    179    0% deleted 37
+per story (dev commits): code/tests/record/docs added
+1-1 {'code': 98, 'tests': 861, 'record': 18081, 'docs-md': 0} commits dev 10 other 2
+3-1 {'code': 38, 'tests': 101, 'record': 4020, 'docs-md': 0} commits dev 11 other 4
+4-1 {'code': 0, 'tests': 0, 'record': 234, 'docs-md': 0} commits dev 9 other 2
+4-2 {'code': 0, 'tests': 0, 'record': 69, 'docs-md': 0} commits dev 1 other 5
+4-3 {'code': 2, 'tests': 12, 'record': 1247, 'docs-md': 0} commits dev 7 other 3
+4-4 {'code': 3, 'tests': 106, 'record': 899, 'docs-md': 0} commits dev 9 other 5
+5-1 {'code': 15, 'tests': 258, 'record': 395, 'docs-md': 0} commits dev 4 other 3
+5-3 {'code': 3, 'tests': 175, 'record': 32557, 'docs-md': 0} commits dev 3 other 3
+5-4 {'code': 17, 'tests': 200, 'record': 46644, 'docs-md': 0} commits dev 8 other 6
+5-5 {'code': 32, 'tests': 89, 'record': 32265, 'docs-md': 20} commits dev 16 other 4
+3-2 {'code': 130, 'tests': 1132, 'record': 3287, 'docs-md': 0} commits dev 25 other 1
+1-2 {'code': 47, 'tests': 968, 'record': 8670, 'docs-md': 0} commits dev 14 other 2
+1-3 {'code': 80, 'tests': 1351, 'record': 20156, 'docs-md': 2} commits dev 35 other 42
+1-4 {'code': 5, 'tests': 247, 'record': 9587, 'docs-md': 0} commits dev 17 other 1
+5-2 {'code': 81, 'tests': 1340, 'record': 24042, 'docs-md': 2} commits dev 62 other 26

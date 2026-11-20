@@ -1,0 +1,36 @@
+## 1a. Audit anchor
+
+Entry for sprint 322 is present and its `sha` resolves in the repo (`git rev-parse --verify` printed the same 40-hex value). Resolved `<prior_sprint_sha>` = `78817f315c6efb972f6999d7dcdf060e0ff266da` (closed_at 2026-11-12, audit window `ec443477d..e0ebaf019`). No HARD_BLOCK candidate from the anchor.
+
+```derived
+$ grep -n 'sha: 78817f315c6efb972f6999d7dcdf060e0ff266da' _bmad-output/audit-anchors.md
+62:  sha: 78817f315c6efb972f6999d7dcdf060e0ff266da
+```
+
+## 1b. Post-merge trunk audit and backlog health
+
+`scripts/ai-dlc/validate-cycle-commits.sh --audit-trunk` was run from the repo root: exit code 0. Verdict line: `AUDIT-TRUNK: audited=11 of=11 clean=11 findings=0 classes=6 watermark=c8ab65397b30bca2ee43e4bea663820f39b9376f`. All eleven commits (`e0ebaf019` through `c8ab65397`) read CLEAN; classes seen were provenance-in-non-ret
+
+**Backlog health.** The OPEN count is far above the 15-item triage threshold, so triage is itself a sprint deliverable candidate (the operator scope does not include it; recorded for the lead, no re-scope proposed).
+
+```derived
+$ grep -c 'Status:\*\* OPEN' _bmad-output/planning-artifacts/carry-over-backlog.md
+251
+$ grep -c 'Status:\*\* PARTIAL' _bmad-output/planning-artifacts/carry-over-backlog.md
+5
+$ grep -c 'Status:\*\* DEFERRAL_REQUESTED' _bmad-output/planning-artifacts/carry-over-backlog.md
+0
+$ grep -c 'Status:\*\* DEFERRED' _bmad-output/planning-artifacts/carry-over-backlog.md
+5
+$ grep -c 'Status:\*\* CLOSED' _bmad-output/planning-artifacts/carry-over-backlog.md
+9
+$ grep -c '^#\+ \[\?CO-' _bmad-output/planning-artifacts/carry-over-backlog.md
+281
+```
+
+**Authoritative number: 285 distinct ids** (the fenced command's 281 heading lines hold 280 distinct ids, because `CO-S310-ADR-CLAUSE-TRACE-GATE-ENFORCEMENT` carries two headings, an inline wrapper and a `###` heading; plus the 5 bullet-form entries, none of which is also a heading; re-derived against the backlog as the lead upd
+
+```derived
+$ grep -c '^#\+ \[\?CO-' _bmad-output/planning-artifacts/carry-over-backlog.md
+281
+$ grep -c '^#\+ \[\?CO-S310-ADR-CLAUSE-TRACE-GATE-ENFORCEMENT' _bmad-output/planning-artifacts/carry-over-backlog.md

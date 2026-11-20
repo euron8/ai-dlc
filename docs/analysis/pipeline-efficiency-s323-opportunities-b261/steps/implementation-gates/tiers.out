@@ -1,0 +1,11 @@
+('321', 'co') {'X-other': 1, 'B-test-changed': 8, 'A-code-changed': 8, 'C-records-only': 7}
+('321', 'qa') {'A-code-changed': 1, 'B-test-changed': 2, 'C-records-only': 8}
+('322', 'co') {'X-other': 2, 'C-records-only': 2, 'A-code-changed': 1}
+('322', 'qa') {'C-records-only': 4, 'B-test-changed': 1}
+('323', 'co') {'B-test-changed': 6, 'A-code-changed': 1, 'C-records-only': 1}
+('323', 'qa') {'B-test-changed': 4, 'A-code-changed': 2, 'C-records-only': 5}
+TOTAL s321-s323 {'A-code-changed': 13, 'B-test-changed': 21, 'C-records-only': 27, 'X-other': 3}
+X rows:
+  ('321', '1-1', 'co', '1', 'TEST=1', 'g1p2', 0, 0)
+  ('322', '3', 'co', '2', 'none=1', 'g1p3', 0, 1)
+  ('322', '4', 'co', '2', 'CODE=1', 'g1p3', 0, 1)

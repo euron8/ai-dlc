@@ -1,0 +1,18 @@
+sprint 321 dispatchers 1 $ 4.6
+   11-04T06:34 Run stories party round (104 members)            dur 29.0 children 104 last-child-end->disp-end lag min 0.2
+  total lag 0.2
+sprint 322 dispatchers 1 $ 1.8
+   11-10T08:40 Round-dispatcher stories-party                   dur 26.2 children 24 last-child-end->disp-end lag min 0.1
+  total lag 0.1
+sprint 323 dispatchers 10 $ 20.3
+   11-18T03:59 Dispatch stories-party round                     dur 26.9 children 76 last-child-end->disp-end lag min 0.5
+   11-18T04:31 Dispatch stories-party-repair round              dur 18.7 children 18 last-child-end->disp-end lag min 0.1
+   11-18T05:55 Dispatch elicitation round, 19 members           dur 21.3 children 19 last-child-end->disp-end lag min 0.0
+   11-18T06:21 Dispatch elicitation repair round, 17 seats      dur 52.7 children 17 last-child-end->disp-end lag min 47.2
+   11-18T07:41 Round-dispatcher for adversarial pass 1          dur 13.9 children 19 last-child-end->disp-end lag min 0.1
+   11-18T08:00 Round-dispatcher for adversarial repair          dur 8.9 children 18 last-child-end->disp-end lag min 0.1
+   11-18T08:38 p2 round-dispatcher min 1.3 no children
+   11-18T08:40 p2 round-dispatcher retry                        dur 53.5 children 19 last-child-end->disp-end lag min 0.1
+   11-18T09:50 p2 repair round-dispatcher                       dur 5.0 children 15 last-child-end->disp-end lag min 0.2
+   11-18T10:46 Round dispatcher p1 strategy                     dur 13.0 children 9 last-child-end->disp-end lag min 0.1
+  total lag 48.3

@@ -1,0 +1,33 @@
+planning-artifacts/s323/shards/coe-elicitation CRITICAL        0
+planning-artifacts/s323/shards/coe-elicitation MAJOR       24
+planning-artifacts/s323/shards/coe-elicitation MINOR       16
+planning-artifacts/s323/shards/coe-p1 CRITICAL        0
+planning-artifacts/s323/shards/coe-p1 MAJOR       13
+planning-artifacts/s323/shards/coe-p1 MINOR        5
+planning-artifacts/s323/shards/coe-p2 CRITICAL        0
+planning-artifacts/s323/shards/coe-p2 MAJOR        7
+planning-artifacts/s323/shards/coe-p2 MINOR        6
+planning-artifacts/s323/shards/coe-p3 CRITICAL        0
+planning-artifacts/s323/shards/coe-p3 MAJOR        1
+planning-artifacts/s323/shards/coe-p3 MINOR        2
+planning-artifacts/s323/shards/coe-elicitation:
+1.md
+2.md
+3.md
+4.md
+cross.md
+
+planning-artifacts/s323/shards/coe-p1:
+1.md
+2.md
+3.md
+cross.md
+party CRITICAL        0
+party MAJOR        0
+party MINOR        0
+# PM seat findings: sprint 323 carry-over evaluation, part 1 (## 1a. Audit anchor, lines 1-127)
+shard: 1/6 ## 1a. Audit anchor
+
+## F-1 (major) sections: 1
+## F-2 (major) sections: 1
+## F-3 (major) sections: 1

@@ -1,0 +1,8 @@
+code-reviewer-escalated {'n': 20, 'prompt_chars': 45979, 'prompt_has_ST323_ids': 1}
+qa {'n': 68, 'prompt_chars': 169416, 'prompt_names_test-strategy': 1, 'prompt_has_ST323_ids': 3}
+gate-adjudicator {'n': 134, 'prompt_chars': 183564}
+dev-escalated {'n': 6, 'prompt_chars': 16658}
+code-reviewer {'n': 50, 'prompt_chars': 131081, 'prompt_has_ST323_ids': 1}
+dev {'n': 25, 'prompt_chars': 79717, 'prompt_has_ST323_ids': 1, 'prompt_names_test-strategy': 9}
+ops {'n': 2, 'prompt_names_test-strategy': 1, 'prompt_chars': 4342}
+pre-reviewer {'n': 2, 'prompt_chars': 2447}

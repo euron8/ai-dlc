@@ -1356,10 +1356,30 @@ Work items added (the draft's labels 1a to 1g in parentheses), each an upper bou
 6. (1c) `gate-validation.md` is 247 KB. The lead read it 391 times (5.9 MB); 65 of the 134 compactions happened inside gate validation; 155 lead reads were denied as over the one-read limit. 0.1184.0 names the exact chunk to read after a refusal, which removes the blind retry and not the sixteen chunks. Change: ship the gate procedure as per-check sections under the read limit, with the section list rendered by script. Reach: 0.45 h in denied reads; the larger effect, fewer compactions, is not sized.
 7. (1d) 280 `snapshot-update.sh` calls ran immediately after another one (0.86 h), though the script already takes many operations per call; 131 calls carry snapshot text the lead typed (0.79 h); the class is 3.57 h. Change: the gate and step programs that know the state change write the snapshot row themselves. Reach: up to 0.86 h and 0.79 h.
 8. (1e) Sprint review, deploy-validate and retro are prose the lead re-derives: `retro.md` is 1,740 lines with 8 code blocks, and the lead wrote 9 scratch scripts in s323's retro; each gate runs its arms one call at a time. Change: a retro-close runner and a gate-arms runner. Reach: up to 3.0 h; 1.5 to 2 h expected.
+   MOVED, 2026-11-20: the late-step scripts (sprint review, deploy-validate, retro, including the retro gate script) are built under BL-1189; the program that runs a step-closing gate's checks stays in this entry (the item that replaces item 6).
 9. (1f) 1,739 separate shell reads (3.4 h) look up what a finding cites. Change: one call that prints a finding's cited lines. Reach: up to 1.7 h.
 10. (1g) A text-only turn while agents run draws a 3.4 KB forced-continuation message (69 times). Change: allow the stop when a background agent is running. Reach: 0.2 h.
 
 Overlap: items 4, 6 and the re-read part of 7 overlap; item 5 is disjoint from the rest. Found efficient, no change: hook wall time (0.12 h all sprint), notification delivery (0.5 s median), validator re-runs (none), exact-repeat polls (0.09 h), linters, commits, CI (graph runs none).
+
+### Progress / work items revised, 2026-11-20 (batch 261, C10, per-step analysis)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, sections 6.6 to 6.12 and 7.
+
+Item 6 (1c, split `gate-validation.md` into per-check sections): REPLACED, operator 2026-11-20, by item 11 below. Item 4 (1a): its clause that folds the post-compaction advisor call into the once-per-gate call, or drops it, is superseded by item 18 below; its other clauses stand.
+
+Work items added (numbering continues; each reach an upper bound on s323):
+
+11. Run each gate as a program, plus one adjudicator for the judgment checks (3, 27, 29 and the core-layer check), under the same goal as item 6. Three build conditions: fix the two validators that pass on an unexamined subject (`validate-escalation-status-vocabulary.sh` skips entries with no Status line; `validate-locked-anchor.sh` prints PASS having examined nothing); prove each scripted arm against a seeded failure and a near-miss; diff the program's output against s323's hand-written gate entries. The same three conditions bind the rule-table checks proposed for implementation gate 3 (BL-1186).
+12. Validators move to the producing step's last action; `gate_types` is declared on consumer extension checks.
+13. A resume pre-flight script that keeps checks 5, 6 and 7 (they never fired); the fresh-start path goes in its own file.
+14. The snapshot budget is enforced at write, and the programs that know a state change write the snapshot row themselves (the 280 back-to-back `snapshot-update.sh` calls of item 7).
+15. Handoff is one beat and then stop, and dispatches nothing new; the guard treats a live backgrounded push as pending.
+16. A recovery state hand-off (a state excerpt) is still proposed for the reads it saves. It needs a scratch-copy rehearsal before it ships, and it is not claimed to fix stale beliefs. Not established: whether the excerpt is sufficient.
+17. The advisor tool is loaded at session start.
+18. The post-compaction advisor call (Rule 32 touchpoint R) is KEPT unchanged, including the dispatch hold. Evidence: 116 calls read, CAUGHT 49, CAUGHT* 18, ADJUSTED 44, CONFIRMED 3, IGNORED 0; of the 49, JUDG 19, OTHER 14, SNAP 9, TRUNC 4, GIT 2, snapshot-wrong 1; in all 27 snapshot-state cases the lead had already read the snapshot; the highest yield is when the call follows a refused draft (21 of 29); cost 0.95 h for the 105 R-timed calls. Withdrawn: "fold R", "call the advisor first", "state hand-off fixes stale beliefs". Not established: s322 was not read for the advisor value.
+19. The main skill file is reduced to a core (about 8 KB: initialization, post-compact and the rule index) with the 32 rule bodies read on demand (rule bodies were read on demand 16 times, 72 KB, in s323). Value is tokens and headroom; hours are not sized.
+20. Boundary records (the extractor change is BL-1174's): every redesign that replaces a file the lead reads (a gate run as a program, a split step file, a scripted late step) still writes the pipeline's own boundary records, the snapshot's `current_step_file` sets and the gate open and close records. Operator statement, 2026-11-20, as relayed to the builder: "I won't run a graph sprint until all of the backlog items from this analysis are built and pulled to graph." It records the operator's intent about running a sprint; it does not authorize a pull. Consequence: that sprint measures the items together, so the per-step tables attribute an effect to a step, not to one change inside it.
 
 Step: pipeline
 
@@ -2993,6 +3013,13 @@ Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 4.
 
 1. (report item 4c) A review shard hung 49 minutes on a permission prompt while four 10-minute waits saw nothing. Change: each wait beat prints every undelivered shard's silence, and a shard silent two beats is re-dispatched. Reach: 0.7 h per occurrence; one such stall in 377 long spawns over s321 to s323.
 
+### Progress / work items revised, 2026-11-20 (batch 261, C10, per-step analysis)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, section 6.5. Both items are upper bounds on s323 and neither touches this entry's PARTIAL, Outcome or Step lines.
+
+2. The silent-shard rule of item 1 keys on the transcript, not on elapsed time: the shard's last event is a `tool_use` with no `tool_result` older than N minutes and the command is not a known long runner (`wait-for-deliverable.sh:205-233` documents why plain silence is tolerated: 57 of 844 episodes ran past 1200 s on a live teammate). The stall measured: p2 adversary shard 06 issued one Bash call that did not return for 49.1 minutes (a permission hold is the likely cause; inference, not verified), 52.9 minutes against a median 4.9 and a p90 11.6; up to 41 minutes of wall, one shard in one round; the other rounds' longest shard was 13.3 minutes.
+3. `core/scripts/wait-for-deliverable.sh` (the `--shard-header` parse near line 1115 and the `--complete` path near line 1190) refuses at the first beat when a marked shard fails its header check permanently, instead of looping its beat budget. The case: the s323 elicitation-repair dispatcher waited 6 beats of 540 s for 17 remediators that had all ended by 06:26, a dispatcher idle of 47.2 minutes and $4.0, because the lead's dispatcher brief carried `--shard-header elicitation` and the 17 part briefs carried none; up to 47.2 minutes, one dispatcher of 10 in s323 (s321 and s322 had one dispatcher each with 0.2 and 0.1 minutes of lag).
+
 verify: manual
 
 
@@ -3114,6 +3141,14 @@ Work items added:
 6. A standing-rulings record that the lead and the update skill consult before asking, with the three update-session families as its first rows: "delete a pristine file upstream removed" asked 28 times before s323 and answered yes in 24; "extension still additive" asked 48 times, 42 as recommended; override drift asked 23 times. Reach: up to 380 minutes of s323's asks (214 pipeline, 166 update).
 7. Proceed on a marked recommendation with a recorded veto window, where the work under it is cheap to redo. This needs an ask that does not hold the turn. Reach: up to 83 minutes, not the 422 a naive count gives, because the lead reaches its next operator-gated question within minutes and waits in the same absence.
 8. DEFECT. A question's factual premises carry their evidence: one `file:line` per premise the question states as fact. Six s323 asks on one certificate-header premise (asks 3, 14, 15, 19, 29 and 37 in the operator-asks reader's numbering) total 577 minutes; the facts that contradicted the premise were in graph's tree (`infra/lib/ingress-stack.ts:111`, `rebalancer/api.py:635`, as reported by the reader, not re-derived here). One 195-minute sprint-review ask quoted the operator's own earlier answers in its question text; Rule 11(a)(i), decide when a source settles it, had shipped before s321 and did not stop it.
+
+### Progress / work items revised, 2026-11-20 (batch 261, C10, per-step analysis)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, section 7 and `docs/analysis/pipeline-efficiency-s323-opportunities-b261/findings/value-open-items.md`.
+
+Correction to the operator-wait figures above: on the corrected clock operator wait is 20.3 h in s323, 29.0 h in s321 and 12.0 h in s322 (the earlier 17.9, 24.9 and 10.3 charged an ask that received background notifications to lead active or to agent wait; BL-1174 holds the defect). Requirements held 10.0 of the 20.3 h in s323.
+
+9. Fix-forward push and merge asks stop being asked. Engine text mandates only the destructive-operation authorization (`core/skills/ai-dlc/steps/deploy-validate.md:107-109`) and the checkpoint stop; the 16 sprint-PR and fix-PR push and merge asks of s317 to s323, 586 minutes, were all answered with the default option (16 of 16) and none is required by engine text. The PR-merge approvals are graph's rules (`docs/operator-runbooks/deploy-protocol.md` Rule (b) and (h)); the fix-forward push asks have no mandating text in the engine or in the graph files read. The sprint-PR merge approval is graph's seam and is unchanged. Not derivable: whether the lead's habit came from graph's auto-memory or from the operator's earlier verbal rulings.
 
 
 verify: manual
@@ -3674,6 +3709,14 @@ Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 5.
 
 3. First-pass rework is mostly paperwork: of 55 classified review findings, 30 are evidence or bookkeeping form and 5 are code. A recurring one is evidence captured on a commit other than the frozen one; `core/scripts/validate-handoff-evidence.sh` runs before gate 1 and does not compare them. Change: a capture-commit check in `core/scripts/validate-handoff-evidence.sh`. Reach: up to 6 agent-hours and $43 of rework, by allocation.
 
+### Progress / work items revised, 2026-11-20 (batch 261, C10, per-step analysis)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, sections 6.7 and 9.
+
+Item 3 (the capture-commit check): WITHDRAWN by the operator, 2026-11-20. Evidence: `core/scripts/validate-handoff-evidence.sh:1617` already compares the capture commit and WARNs (the comment at :614 says the warning is deliberate); the head-tree comparison fires on 54 of 59 s323 plans, 499 lines; 4 of 5 unmatched samples were false (a tracked `.pyc` counted as code; a `(+dirty)` head; two captures citing the sprint base by design). The "55 classified review findings" in item 3 counted list lines (80 raw items), not findings: an independent recount of graph's s323 review files gives 47 first-pass findings (18 TEST, 15 EVIDENCE, 8 BOOKKEEPING, 5 CODE, 1 unclassed), so 23 are evidence or bookkeeping form.
+
+4. Replacement for item 3, a new shape and not a filed item before this line: refuse a capture with the head missing, a placeholder head, or an empty section, after fixing the capture-unresolved tokenizer (7 of 7 unresolved tokens read were false: prose tokens containing a slash). The head-tree comparison stays a WARN, for the reason above (4 of 5 unmatched samples false). Evidence is thin: 3 stories.
+
 
 Step: implementation
 
@@ -3848,6 +3891,19 @@ Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 8.
 
 1. DEFECT. `extract.py` charges an ask to operator wait only where a gap exceeds 300 s, so an ask that receives background notifications is charged to lead active: one 88-minute ask reads 5 minutes, and about 2 h of s323's lead-active time is an ask pending.
 2. DEFECT. `roll.py` prices cache writes at the one-hour rate (`P` gives cw = 2 x input), while every s323 subagent call wrote five-minute cache. At the five-minute rate subagent dollars are about $249 lower a sprint. Which rate is billed was not established.
+
+### Progress / work items revised, 2026-11-20 (batch 261, C10, per-step analysis)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, section 10, and the reconciler's tables (`findings/reconcile.md`, part 2 and 3). The corrected tables were taken by a copy of `extract.py` that dumps every lead record; its unmodified-label aggregation reproduces `steps.csv` on all 37 (sprint, step) rows for s321 to s323 with 0 diffs, and its `roll.txt` is `cmp`-identical to `roll.monotone-clock.txt`. Instrument defects with their sizes, numbering continues:
+
+3. DEFECT. Step attribution by the last step-file Read (`extract.py:411-431`): the label changes only on a whole Read of a `steps/*.md`, and a Read of an earlier step file moves it back. Cases found from the lead's own declarations: carry-over charged with 3.41 h of requirements and $7.3 of spawns (s323; it includes the 198-minute ask); ui-direction charged with 0.22 h and 7 spawns ($18.5) of implementation; sprint-review charged with 1.03 h and 4 spawns of gate 3 for stories 2.1 to 2.3, and with 0.19 h (s322 0.23 h) of deploy-validate; s321 stories charged with 2.27 h of implementation. Only 16 explicit transitions exist to detect (12 `snapshot-update.sh --set current_step_file`, 1 planning gate close, 3 gate-nonce spans), so a leak with no declaration is not found; 24 of 3,040 spawns in s321 to s323 have no resolvable owner.
+4. DEFECT. Operator wait is undercounted: an ask is charged only where a gap exceeds 300 s and the next record is a human prompt, and the retro commentary pause is charged to agent wait. Corrected operator hours, old to new: s321 24.9 to 29.0, s322 10.3 to 12.0, s323 17.9 to 20.3.
+5. DEFECT. One forked session is counted twice: lead `df56108b` duplicates 357 uuids of `4f12d1d9` in s321 deploy-validate, 0.95 h and 45 lead calls; no other sprint.
+6. DEFECT. Idle tails after a session's last tool call are counted: s321 9.91 h (`d9d2b30c` 7.18 including 6.26 h before a final prompt, `0ec8b044` 1.48, `df56108b` 1.25), s322 1.24 h (`e444bf13`), s323 0.00. With items 3 to 6 the sprint totals read s321 111.0 to 100.1 h and s322 66.4 to 65.2 h; s323 stays 75.4 h.
+7. DEFECT. Sprint edges are hand-kept in `extract.py`; the s323 end edge is `2026-11-20T04:20:00Z` by a hand reading of graph commit stamps.
+8. NOTE. `roll.py` prices cache writes at 2 x input (the one-hour rate); at the five-minute rate (1.25 x input) subagent dollars are s321 1,879.5 to 1,648.6, s322 992.7 to 881.2, s323 1,582.3 to 1,333.3. Which rate is billed is not established.
+
+Ordering and boundaries: the extractor takes step and gate boundaries from what the pipeline declares (the snapshot's `current_step_file` sets, the gate open and close records) and sprint boundaries from the consumer's sprint-close commits, and that change exists before the next sprint's reading is taken. Every redesign that replaces a file the lead reads (a gate run as a program, a split step file, a scripted late step) still writes those boundary records. Operator statement, 2026-11-20, as relayed to the builder: "I won't run a graph sprint until all of the backlog items from this analysis are built and pulled to graph." It records the operator's intent about running a sprint; it does not authorize a pull. Because every item lands before the next graph sprint, that sprint measures the items together: the per-step tables attribute an effect to a step, not to one change inside it.
 
 Step: pipeline
 
@@ -4103,6 +4159,23 @@ Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, group 4.
 
 Correction to item 3's estimate: item 3 sizes the readiness and trace calls at 0.5 to 1.2 h and $5 to $11 a sprint; in s323 they took about 2 minutes, and the architecture readiness call caught 4 repaired findings, so the saving is about a tenth of that estimate and the call stays. Kept on evidence: pass 2 (14 major findings in s323, nearly all on text the repair added or left stale; the count is a reading of finding headings) and party rounds (465 repaired entries across the four steps). Not proposed: overlapping the planning steps reaches up to 5.7 h, but late operator decisions in requirements were cited by architecture, so the rework risk is real.
 
+### Progress / work items revised, 2026-11-20 (batch 261, C10, per-step analysis)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, sections 6.2 to 6.5 and 9. Population: graph s321 to s323, monotone clock, `EXTRACT_WIN_END=2026-11-20T04:20:00Z`, in-session time only.
+
+Item 2: CLOSED ON ITS OWN CONDITION, operator 2026-11-20 (the item reads "Ships only if item 0 shows survivors cluster in tagged stories"). s323 by routing tag: tagged 7 stories, 6 survivors, 0 CRITICAL; untagged 11 stories, 11 survivors, 2 CRITICAL (the entry's own table); all 3 per-story CRITICALs sit in the untagged stories 2.2 and 5.1; party CRITICAL plus MAJOR 16.0 per tagged story against 10.0 untagged; p1 1.4 against 1.2. The tag predicts downstream cost (67% of implementation and review dollars), not planning yield. s321 and s322 were not read by tag. Item 1 is untouched.
+
+Work items added (numbering continues; each reach an upper bound on s323 unless it says measured; the readings are in the report sections named):
+
+23. Requirements reshaped (section 6.3): the brief and the architecture-impact document leave the reviewed subject (the brief has no downstream reader); SPEC is rendered once, after the serial tail; the bookkeeping passes and the mechanical pre-checks before p1 are scripted; cheaply checkable premises are settled in the authoring dispatch; post-convergence MINORs are recorded, not repaired; the 1,015-line NFR shard is split. Concurrent party and elicitation rounds are NOT adopted.
+24. Carry-over evaluation reshaped (section 6.2): the analyst evaluates operator-scoped items only and the join waits for completion (the 262 unscoped items stay in the backlog); live reads are dispatched with the party round; edits to sections 4 to 6 come before the fences; a decision the operator stood is not re-decided by a repair. Adversarial pass 2 is REPLACED by one final pass with four conditions: (a) scoped by the document's file diff from the analyst draft, so lead hand-edits are included, and not by repair records; (b) free to read the rest of the document, the code and the backlog to check each written line; (c) a mechanical join of every pass-1 CRITICAL and MAJOR id to a repair entry; (d) if pass 1 is also removed, the pass covers party and elicitation repair text only, and pass 1's own catches on standing text need their own check. Basis: 25 MAJOR read, 21 repair-written, 3 repair-touched, 1 a dropped pass-1 finding; the s320 capital-path catch was repair-written text, traced through five blob versions.
+25. Stories (section 6.5): strategy ids and case rows by script; a self-check script at the end of authoring; a shipped brief generator for round briefs; the Kind vocabulary enforced by a validator, or the word "exactly" deleted from the step text (27 of 178 Kind cells in s323 are off the stated set and nothing refuses them). Party, p1, p2 and the gate are KEPT.
+26. Architecture (section 6.4): a pre-nonce script arm for the record-format checks; a changelog, index and commit script; `snapshot-update.sh` refuses a trim that destroys lines; the step-label leak is fixed. The "size the lane to 41" saving is WITHDRAWN: 61 and 41 are different populations and 40 of the 61 needed edits.
+27. One commit after each review round in the four planning steps, so the next sprint can decide whether the elicitation round can merge with the party round.
+28. Elicitation is KEPT as a separate round in all four planning steps: it has unique shipped catches in every step, including CRITICALs on capital paths (requirements s321 `08.md` F-1; architecture s321 `3.md` F-1), and the merge proposals rest on proxies that failed their own control. Not established: uniqueness of the party and elicitation catches in s323 (one planning commit).
+
+The correction to item 3's estimate above stands.
+
 
 Step: requirements
 
@@ -4163,6 +4236,29 @@ Expected movement: the fix removes the agent-hours implementation spends refused
 
 Provenance: batch 261, cluster C10 (session ai-dlc-d5), from the s323 opportunities report; id allocated by the C10 session.
 
+### Progress / work items revised, 2026-11-20 (batch 261, C10, per-step analysis)
+
+Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, sections 6.6, 6.7 and 7. Population as above.
+
+Item 4: CORRECTED, 2026-11-20. It is a real saving, not 0 h: the wave plan held shared-source-file stories behind a predecessor's full gate cycle, and seven stories (1.2, 1.3, 1.4, 5.2, 3.2, 5.5 and the 2.x group) started 5.0 to 8.4 h late. Up to 6 h on the second-longest chain (1.1 gated 8.2 h; the successor cycle was 6.3 h; critical path 14.5 h to about 8.2 h), realised only after the admission wall and the lead's call load fall, because the lead is saturated (busy 843 of 855 minutes). Four of the stories, all on `execution.py`, were dispatched together and merged without conflict resolution; combined-diff hunks exist in 7 of the 18 merge commits, none on the `execution.py` chain. The wave plan is by real content dependency only, `held:` for by-content edges such as 3.1 then 3.2.
+
+Refusal count (corrects the population paragraph): 134 distinct refused readings (a floor; retry loops hide more attempts) in 177 result blocks, 162 in 36 subagents and 15 in the two lead sessions; 123 of the 134 fall on 2026-11-18 between 13:00Z and 23:59Z. The 261 and "206" figures are not reproduced under any definition tried (blocks 177 or 338, lines 179, 295, 366 or 514); 373 is a raw line count of payloads that every transcript stores twice.
+
+Critical path (a model on measured durations, `chain_decomp.out` of the gates reader): the window is 841 minutes (14.0 h in-session); three chains bind, C1 3.1 then 3.2 at 841 minutes, C2 1.1 then 5.2 at 737, C3 5.4 then 5.5 at 582. Fixing both admission waits (3.1 QA pass 2, 289.9-minute seat, 277 minutes of waiting; 1.1 dev-escalated rework, 322.7-minute seat, 114 attempts) saves 259 minutes (4.3 h, 31% of the step), because wall then falls to C3. Fixing the 3.1 wait alone saves 104 minutes; the 1.1 wait alone saves 0. Both waits fixed plus the redesign items below: up to 427 minutes (7.1 h), upper bound. Not established: what held the memory (the coordinator's message to one seat names the local model server releasing memory at about 14:27 local).
+
+Work items added (numbering continues; each an upper bound on s323):
+
+6. Gate 1 and gate 2 are dispatched together on one frozen sha with one merged rework. Up to 116 minutes of step wall on the binding chain.
+7. Gate 3 becomes script arms plus one adjudicator: script arms for checks 22, 16, 5 and the vocabulary half of 2 now; a rule table for 19, 10, 8, 4, 7 and 3 after each arm is proved against a seeded failure and a near-miss and its output diffed against s323's gate entries (the three build conditions of BL-819 item 11); one adjudicator for 1, 11, 11a and the hard-block half of 2. Up to 29 minutes of step wall.
+8. One dispatch script per story.
+9. The dev runs the handoff-evidence check as its last action.
+10. Commit run summaries, not logs.
+11. A per-story bookkeeping script, so the lead does not do the transitions by hand.
+12. Cut the dead step sections (the task list and the self-validate section of `implementation.md`).
+13. Records-only reworks refused at handoff: 0 minutes on the binding chain in s323 (it has none); it lowers C3 by 90 and C2 by 15 minutes, which matters only once C1 falls.
+
+Item 5 stays as filed this morning: it is already the surface-with-a-default design.
+
 Step: implementation
 
 verify: manual
@@ -4196,6 +4292,10 @@ Expected movement: the fix removes the share of each subagent's first request th
 
 Provenance: batch 261, cluster C10 (session ai-dlc-d5), from the s323 opportunities report; id allocated by the C10 session.
 
+### Progress / work items revised, 2026-11-20 (batch 261, C10, per-step analysis)
+
+Subagent dollars on both cache-write rates, for reading baseline and items 1 to 4: 1,582.3 at the one-hour rate (`roll.py` prices cache writes at 2 x input) and 1,333.3 at the five-minute rate (1.25 x input); which rate is billed is not established. The fixed first-request context figures above are at the one-hour rate. No other figure in this entry is contradicted by the reconciler.
+
 Step: pipeline
 
 verify: manual
@@ -4212,6 +4312,104 @@ verify: manual
 **PARTIAL (v0.1187.0).** Batch 261, C11. Items 1, 2 and 3 are built; item 4, the consumer-side measurement, is owed and is the done condition.
 
 Provenance: operator ruling 2026-11-20; id allocated by the lead.
+
+verify: manual
+
+## BL-1189 — the late steps (sprint review, deploy-validate, retro) are prose the lead re-derives: 18.1 h of s323 across three steps, with scripts the lead wrote by hand and rounds nothing reads
+
+**DEFECT (efficiency).** Filed 2026-11-20 (batch 261, C10b). Owner: `core/skills/ai-dlc/steps/sprint-review.md`, `core/skills/ai-dlc/steps/sprint-review-next.md`, `core/skills/ai-dlc/steps/deploy-validate.md`, `core/skills/ai-dlc/steps/retro.md`, `core/skills/ai-dlc/steps/implementation.md` (its closing step) and new scripts under `core/scripts/`. Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, sections 6.9, 6.10 and 6.11.
+
+Goal: the late steps keep every catch on record and stop re-deriving by hand what a program can carry. One done condition: the `Outcome measured:` line on the first complete sprint after items 1 to 3 ship, read against the baseline below.
+
+Population: graph s321 to s323, read only, monotone clock with the corrected step attribution (`findings/reconcile.md` part 2 and 3), `EXTRACT_WIN_END=2026-11-20T04:20:00Z`, in-session time only. Hours are elapsed per step with its gate.
+
+Baseline: s323 sprint review 9.9 h (167 spawns, $214.7 subagent at the one-hour cache-write rate, $178.5 at the five-minute rate, 958 lead calls, 11 compactions), deploy-validate 5.5 h (14 spawns, $20.4 and $16.5, 1,208 lead calls, 9 compactions), retro 2.7 h (28 spawns, $23.1 and $19.5, 605 lead calls, 7 compactions). The same steps in s322: 2.0 h, 3.7 h and 4.1 h; in s321: 2.9 h, 28.0 h (one new chain went live under deploy-validate, 17.7 of 29.0 h were 17 operator asks) and 1.8 h.
+
+Work list, each measured waste an upper bound on s323 unless it says measured; the part tables, catches and verdicts are in the report sections named:
+
+1. An integration script, run at implementation close and again at sprint-review open (`core/skills/ai-dlc/steps/implementation.md` closing step; `sprint-review.md` Step 0): every done story's tip is an ancestor of the sprint branch, every line a story branch appended to an append-only log is present at the tip, exactly one Dev Agent Record per story, every new test file registered in `ci-local`. The s323 sprint review spent 53 minutes and $10.03 repairing story-branch integration that no engine file owns (SA-1: 5 of 15 done stories never merged; a story-4.1 gate-log entry dropped by a merge; duplicate Dev Agent Records in 9 of 18 story files; new tests in no CI lane, recurring in 2 of 3 sprints). A script verdict also replaces adversary pass 2 ($8.06, 18 agent-minutes).
+2. One sprint-adversary pass per composed tree (`sprint-review.md:54-86`; the step text says one-shot), with the repair verified by script. Passes 2 and 3 cost $13.31 and 33 agent-minutes in s323; pass 3 was legitimate (stories 2.1 to 2.3 added code), pass 2 was repair verification.
+3. Retry of errored seat spawns by script (`sprint-review.md:88-122`, party round): 34 seat spawns and 2 dispatchers errored on rate limits, 32 seats' work lost, $22.49 and 19 minutes; the engine says nothing about a rate-limit failure and the lead re-dispatched by hand.
+4. The sprint-review gate's verdict-line grammar as a script run before dispatch: Check 1 failed in s323 on a QA verdict line outside the set and on an open MAJOR in a sibling file, and the gate then cost 51 minutes.
+5. Operator decisions raised inside sprint review go to the deploy-validate list, except scope: s323 had the lead blocked 57 minutes in one ask with both reviewers finished, and a 195-minute ask (BL-1186 item 5 holds the label check).
+6. Cut `sprint-review-next.md`: 0 reads in 176 lead transcripts (control 87).
+7. Deploy-validate becomes a scripted spine plus four judgments: a merge-record script (`deploy-validate.md:67-96`, three commit attempts in 70 seconds in s323), the digest check (2b: PASS three times in s323, never failed), the smoke four-field record from the junit, the deferred-AC literal checks at the deployed sha, the routing writes, and a rendered checkpoint (Locked-Requirement Coverage, fix-forward cluster and escalation counts derived from `locked-requirements.md`, `git log` and `pending.md`, about 12 KB the lead hand-composes; the model writes only "What Was Built" and "Decisions for You"). The four judgments stay: smoke red triage, post-activation reads, 4b predicate discharge, PVC decisions.
+8. The visual confirm merges into browser smoke (up to 15 minutes of wall; the s323 ask returned "All four look right"); the quiet-window PASS (3b) requires a controlled event, because a window with zero attempts cannot read RED; fix branches are pushed from a clean checkout at their tip, and an approval already given for a fix is not re-asked (s321: 4.4 h to re-confirm a merge the operator had approved six minutes earlier).
+9. Retro: cut the seven-analyst document drafting (Dispatch A, `retro.md:373-433`) and keep the finding-class shard the graph override requires (up to 12 to 14 minutes of wall, about $6.7); cut the `gate[retro]` adjudicators (0 FAIL in two sprints; script the checks, derive the 914/915/929 counts, append the entry and the 32 GATE_METRIC rows; up to 30 to 35 minutes, $5.1) and add `validate-artifact-paths` to the retro checks (its absence cost one s322 retro about 40 minutes and a refused push); cut the 7b next-inputs bundle (0 readers in s323; up to about 9 minutes, $2.96).
+10. Retro party mode shrinks to three seats (test architect, QA, dev): strict party-only persisted survivors were 0 (s321), 3 (s322), 0 (s323), and in s323 the lead's facts sheet already held every changed item. It runs beside the close-out gather, not before it.
+11. Script retro open and close, the mutations (archive moves with a no-loss byte check, status close, anchor entry and prune), the commit, and the post-merge rotation into one push (up to 3 to 8 minutes, 8 to 12, 10 and about 6 minutes; the s323 lead wrote 11 scratch scripts for these). Move the operator commentary pause to after the PR push (it ran 0.44 to 6.4 h of unbounded operator wait in s318 to s322). Route the steerability audit's recurring FAIL to the engine instead of re-narrating it each sprint. Fix the contradictory `rm -rf _bmad-output/retro-artifacts` at 4b, which deletes tables 4a still needs. The sprint-ship counters are cut unless a validator names them.
+12. The late-step scripts BL-819 item 8 (1e) named (a retro-close runner and a gate-arms runner for sprint review, deploy-validate and retro, including the retro gate script) are built here, as items 1, 4, 7 and 11 above; BL-819 carries a MOVED mark on that item and keeps the program that runs a step-closing gate's checks (the item that replaces its item 6).
+
+Kept on a named catch: the sprint-review party round (13 distinct major defects in s323, 10 changed a shipped artifact) and the fix re-review (both s323 fix batches came back NEEDS_REWORK with repair-introduced defects, one a live test that could never pass); adversary pass 1 (SA-1); deploy-validate's post-activation reads (the mTLS verify-mode defect, graph PR #1338) and the s321 capital-path catches (#1305, #1306, #1307); retro's carry and close-out sweep (the s322 carry HARD_BLOCK; four bright-line fixes in s323). The sprint-review panel keeps all five roles.
+
+Graph's own, not touched here: the sprint-PR merge approval (graph's seam) and graph's extensions and overrides layered on these steps (graph's `deploy-validate-domain.md` and `deploy-validate-push.md`, and its retro override `steps__retro__domain-sections.md`). The engine items change only what the engine ships.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`). Related: BL-819 (gate programs, rendered briefs), BL-1186, BL-972.
+
+Expected movement: the fix removes the hours the lead spends re-deriving these steps by hand and the rounds nothing reads; the outcome is read against the baseline above, step elapsed hours, lead calls and subagent dollars per step, on the first complete sprint after the items ship.
+
+Provenance: batch 261, cluster C10b (session ai-dlc-d5), from the s323 opportunities report; id allocated by the lead.
+
+Step: pipeline
+
+verify: manual
+
+## BL-1190 — the engine-update flow hands the model about twelve deterministic scripts to chain and re-read: 4.72, 5.92 and 8.12 lead hours in s321 to s323, outside the sprint figure
+
+**DEFECT (efficiency).** Filed 2026-11-20 (batch 261, C10b). Owner: `core/skills/ai-dlc-update/SKILL.md`, `core/skills/ai-dlc-update/reconcile/` (`emit-report.sh`, `apply.sh`, `layer-drift.sh`, `classify-block.md`) and a new driver under `core/scripts/`. Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, section 6.13.
+
+Goal: a pull runs as one program that hands the model only the decisions that need it. One done condition: the `Outcome measured:` line on the first complete sprint after items 1 to 5 ship, read against the baseline below.
+
+Population: lead sessions that loaded `ai-dlc-update` in graph s321 to s323, read only, monotone clock, `EXTRACT_WIN_END=2026-11-20T04:20:00Z`. These sessions are outside each sprint's in-session figure.
+
+Baseline: s321, s322 and s323 had 13, 8 and 8 pulls; lead active 4.72, 5.92 and 8.12 h; elapsed 25.2, 14.1 and 16.4 h (includes waits); lead calls 881, 1,317 and 1,751; compactions 2, 10 and 16; lead API $89.73, $21.38 and $10.93 (s322 and s323 ran a local lead; token-equivalent at the s321 hosted mix $64.39 and $78.92 for s322 and s323); subagents 4, 11 and 8 spawns, $1.64, $3.26 and $2.05. An ask-free pull (5, 3 and 2 of the pulls) costs the lead 0.35, 0.63 and 0.85 h and 64, 147 and 148 calls, about as much as a pull with asks (0.37, 0.80 and 1.07 h): the orchestration drives the cost, not the asks. Every invocation loads a 261,327 B, 3,378-line skill, 32, 21 and 19 loads a sprint (about 65 to 75 thousand tokens at an assumed 3.5 to 4 B per token).
+
+Work list, each measured waste an upper bound on s323 (the part-by-part readings are in the report section):
+
+1. One program runs fetch, the self-update gate (the DEFER decision made from the file set), classify, the detectors once, the report, the branch, the clean applies, the push and the PR. The model is started only on a decisions list: conflict hunks, in-place edits of engine-owned files, extensions not provably additive, and the diagnosis of a red push. Of 46 self-update gate logs in s321 to s323, 34 say SELF-UPDATE-DEFER (nothing done). `emit-report.sh` re-runs every detector and `--verify` and `apply.sh --for-apply --verify` run them again: up to 4 runs per detector per pull, 21 `emit-report` runs for 8 pulls in s323 (mean 2.9 minutes, about 38 minutes a sprint). Classify and detector reading cost the lead 0.46, 0.75 and 1.33 h.
+2. Ask only on conflict. The skill contradicts itself: `core/skills/ai-dlc-update/SKILL.md:1968` says to "ask ONE closed question per blocker", while `:2001-2002` says a CONFLICT "is the one place a human is genuinely required" (the reader cited :1966-1967 and :1999-2000; read at the main checkout, the lines are two off). Across s317 to s323 the operator answered 4 of 167 questions other than the recommended or first option; in s321 to s323, 34 of 52 questions were default-accepted (override drift 13, extension still-additive 15, pristine delete 6). Ask wait was 118, 118 and 196 minutes a sprint. The standing-rulings record is BL-972 item 6.
+3. The dry run becomes the PR body: no pull ended at the dry run (all 29 went on to apply), the pause between them had a median of about 3 minutes, and the report stage costs the lead 0.82, 1.12 and 2.65 h. `blocker-adjudication-<ts>.md` (120 files in graph) is read by the model and by no program.
+4. The semantic classify agents (4, 11 and 8 spawns, $1.64, $3.26 and $2.05) become a script: in all 8 s323 verdicts conflict was 0 and the same `dev.md`, `qa.md` and `deploy-validate.md` recurred every pull; consumer equal to base outside declared setup spans means take theirs, and an agent is dispatched only where it differs.
+5. Untangle the always-loaded part of `SKILL.md` and mask or re-inject its sections: after each compaction the first-response gaps total 0.24, 0.46 and 2.08 h (upper bound; each gap also contains real work).
+
+Kept for safety: branch isolation, the conflict stop, deletes only when byte-equal to base, the stop on in-place edits to engine-owned files, the consumer's pre-push suite, and the operator's merge. Not measured: whether a pull-only push (one push per pull) saves the 0.3 to 1.7 h a sprint it bounds; the pre-push suite runs a mean 11.5 to 15.3 minutes, maximum 86.9.
+
+The operator chose on 2026-11-20 to keep the engine-update pace as it is; this entry changes the cost per pull, not how often one is delivered, and dispatches no pull.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`). Related: BL-972 (standing-rulings record), BL-819.
+
+Expected movement: the fix removes the lead hours and calls a pull spends chaining and re-reading scripts; the outcome is read against the baseline above, lead active hours, lead calls and compactions in the update sessions, on the first complete sprint after the items ship.
+
+Provenance: batch 261, cluster C10b (session ai-dlc-d5), from the s323 opportunities report; id allocated by the lead.
+
+Step: pipeline
+
+verify: manual
+
+## BL-1191 — the pipeline-efficiency analysis is not repeatable: its method lived in a session, and its first reading was taken without a per-step pass
+
+**DEFECT (efficiency).** Filed 2026-11-20 (batch 261, C10b). Owner: `docs/plans/pipeline-efficiency-analysis.md`, `docs/analysis/pipeline-efficiency-s323-opportunities-b261/` and a new push-time validator under `scripts/`. Source: `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md`, sections 1 and 13.
+
+Goal: the analysis can be run again by a later session from the record alone, covers every pipeline step, and cannot be published with a step missing. One done condition: the next run of the analysis under the runbook lands a report that the coverage check accepts, and the check's false-positive measurement over the four earlier reports is recorded. Items 1 to 3 are delivered by the commit that files this entry (batch 261, C10b); item 4 is open.
+
+Baseline: s323, the first reading covered the cross-cutting classes (lead time, tokens, operator asks, late steps, tool runtime) and took no per-step pass; the per-step pass changed published figures: s321 111.0 to 100.1 h, s322 66.4 to 65.2 h, s323 operator wait 17.9 to 20.3 h, requirements 13.5 to 16.9 h, carry-over 11.8 to 8.4 h, sprint review 11.1 to 9.9 h, refused suite launches 261 to 134 distinct (floor).
+
+Work list:
+
+1. The runbook `docs/plans/pipeline-efficiency-analysis.md`: the handoff a later session reads and follows when the operator asks for this analysis again, shaped for `scripts/validate-plan-shape.sh`.
+2. The readers committed under `docs/analysis/pipeline-efficiency-s323-opportunities-b261/` with one entry point, its `README.md`.
+3. The report's first lines point at the runbook.
+4. A push-time check that a pipeline-efficiency report declaring itself under the runbook carries a section per step file, the list derived from the `core/skills/ai-dlc/steps/` directory and never from the manifest's wildcard (`core-manifest.md` declares `steps/*.md`). The false-positive measurement over the four existing pipeline-efficiency reports is a build condition: none of them may fail. It proves coverage, not quality, and says so in its remedy text. It needs its own validator id.
+
+Boundaries and ordering belong to BL-1174: the extractor takes step and gate boundaries from what the pipeline declares and sprint boundaries from the consumer's sprint-close commits, and that change exists before the next sprint's reading is taken. Operator statement, 2026-11-20, as relayed to the builder: "I won't run a graph sprint until all of the backlog items from this analysis are built and pulled to graph." It records the operator's intent about running a sprint; it does not authorize a pull. Consequence for this entry: the next sprint's reading measures the items together.
+
+Decision rule: the step-value ruling, "A step with no measured value goes" (`.claude/rules/operator-rulings.md`). Related: BL-1174, BL-819.
+
+Expected movement: the fix removes the cost of re-deriving the method in a new session and the figures a single-pass reading gets wrong; the outcome is read the next time the analysis is run, against the baseline above, by whether every step has its section and the corrected tables reproduce.
+
+Provenance: batch 261, cluster C10b (session ai-dlc-d5), operator decision of 2026-11-20 (durable form agreed); id allocated by the lead.
+
+Step: pipeline
 
 verify: manual
 

@@ -1,0 +1,8 @@
+control sprint 999 spawns: 0 (must be 0)
+spawns 92 unparsed story by gate {'g1': 11, 'g3': 2, 'build': 1, 'g2': 6}
+gate: seats, waves, sum wave-wall min, union wall min (all stories), $
+build 21 12 115 100 23.1
+g1 33 23 194 188 25.1
+g2 20 10 167 120 22.9
+g3 13 13 99 99 20.5
+rework 5 5 65 39 15.1

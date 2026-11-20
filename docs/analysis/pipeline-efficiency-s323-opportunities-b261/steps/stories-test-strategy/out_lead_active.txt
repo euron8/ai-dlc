@@ -1,0 +1,13 @@
+A pre/readiness/epics/briefs   active   23.0 min  gap>300s    0.0 min
+B party round                  active   32.0 min  gap>300s    0.0 min
+C party repair+serial          active   64.2 min  gap>300s   19.8 min
+D elicitation                  active   26.0 min  gap>300s    0.0 min
+E elicitation repair           active   74.8 min  gap>300s    5.4 min
+F adv p1                       active   18.8 min  gap>300s    0.0 min
+G adv p1 repair                active   22.2 min  gap>300s   16.1 min
+H adv p2                       active   45.7 min  gap>300s   26.1 min
+I adv p2 repair                active   21.2 min  gap>300s    8.6 min
+J ts author                    active    8.5 min  gap>300s   17.5 min
+K ts p1+repair+bind+commit     active   57.4 min  gap>300s    0.0 min
+L gate                         active   51.7 min  gap>300s    5.8 min
+TOTAL active 445.4 gap>300 99.5 (control: segs say active 355.0, agent_wait 104.5, step+gate)

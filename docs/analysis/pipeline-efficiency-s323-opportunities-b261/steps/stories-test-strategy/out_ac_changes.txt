@@ -1,0 +1,10 @@
+story-1-1-esti AC2 ops 1 +  [Sprint-review amendment: at the sprint head `await self._estimate_gas(` has SEVEN call sites, not five: the five below plus the batch-collect gate (story 1.3, `:21998`) | - 
+story-1-1-esti AC5 ops 1 +  [Sprint-review amendment: fix-forward `ce1305dd3` (`fix(s323-ff1)`) appends the `_estimate_gas` cause to every non-flag not-ok string, so the persisted text is `<literal | - 
+story-1-1-esti AC14 ops 3 +  || : five when written, SEVEN at the sprint head after stories 1.2 and 1.3 each added one; the test pins `len(callers) == 7` | - five 
+story-1-3-stan AC8 ops 1 +  [Sprint-review amendment: fix-forward `ce1305dd3` appends ` (<cause>)`, so the persisted `error` is `batch_collect_gas_estimate_not_ok (<cause>)` / `standalone_collect_g | - 
+story-1-4-perm AC3 ops 2 +  [Sprint-review amendment, lead's recorded interpretation of LR-S323-12/36: "one bounded retry" is read PER READ SITE, not per signing decision. On the real (unstubbed) r || Cross-story dependency (lead ruling 2026-11-18): with `_build_gas_fields` unstubbed and every read above the ceiling, its own legacy read (`:17919`, capped by story 1.2)  | - 
+story-4-2-903b AC1 ops 21 + a token that occurs only inside  ||  | - 's unique marker
+story-4-2-903b AC3 ops 2 + `, the "Stale cause and floor (i)" paragraph, line 887 at the review sha; the earlier ` ||  cite shifted with this sprint's own edit | - 
+story-4-4-aggr AC1 ops 2 +  at base `ae63caf`, `:21113` at the review sha ||  at base, `:21560` at the review sha; the mutation captures below were taken at base line numbers | - 
+story-4-4-aggr AC8 ops 2 + `, the block under the comment `# Story S321-4.1: Base instance under its own prefix` (symbol anchor; it starts at line 19124 at the review sha, the citation ` ||  having shifted with a sibling story's edits) | - 
+story-5-2-base AC10 ops 2 + , ||  and every later roll included (the marker supplements this read and never replaces it: the API-triggered fee collect, wallet sweep and offramp sweep hold the lock row bu | -  up to and including

@@ -1,0 +1,30 @@
+s317: no spawns with step requirements
+== s318 requirements spawns 167
+  authoring    n=  2 agent-h=  0.23 usd=    4.3 wall-h= 0.24  10-12T08:41..10-12T08:55
+  party        n= 50 agent-h=  8.20 usd=   70.2 wall-h= 1.35  10-12T08:57..10-12T10:18
+  elicitation  n= 37 agent-h=  6.55 usd=   71.4 wall-h= 4.87  10-12T10:20..10-12T15:12
+  adversarial  n= 78 agent-h= 12.18 usd=  146.2 wall-h= 3.49  10-12T15:12..10-12T18:41
+== s319 requirements spawns 156
+  authoring    n=  2 agent-h=  0.39 usd=    8.4 wall-h= 0.39  10-15T21:57..10-15T22:21
+  party        n= 50 agent-h=  9.64 usd=   63.9 wall-h= 2.12  10-15T22:31..10-16T00:38
+  elicitation  n= 35 agent-h=  5.98 usd=   67.7 wall-h= 1.89  10-16T00:37..10-16T02:30
+  adversarial  n= 69 agent-h=  7.10 usd=   94.1 wall-h=19.62  10-16T02:31..10-16T22:08
+== s320 requirements spawns 138
+  authoring    n=  4 agent-h=  1.56 usd=   14.9 wall-h= 5.66  10-24T16:59..10-24T22:39
+  party        n= 55 agent-h=  8.47 usd=   70.3 wall-h= 3.31  10-24T22:14..10-25T01:33
+  elicitation  n= 36 agent-h=  3.95 usd=   51.8 wall-h= 0.95  10-25T01:34..10-25T02:31
+  adversarial  n= 43 agent-h=  1.85 usd=   41.9 wall-h= 0.59  10-25T02:35..10-25T03:11
+== s321 requirements spawns 164
+  authoring    n=  2 agent-h=  0.99 usd=    9.8 wall-h= 1.00  10-30T00:35..10-30T01:35
+  party        n= 52 agent-h=  3.16 usd=   54.2 wall-h= 1.83  10-30T01:36..10-30T03:26
+  elicitation  n= 38 agent-h= 12.20 usd=   95.7 wall-h= 8.18  10-30T03:29..10-30T11:40
+  adversarial  n= 72 agent-h= 11.80 usd=   97.7 wall-h= 6.52  10-30T11:42..10-30T18:14
+== s322 requirements spawns 106
+  authoring    n=  2 agent-h=  0.55 usd=    7.5 wall-h= 0.56  11-09T14:00..11-09T14:33
+  party        n= 39 agent-h=  8.24 usd=   84.3 wall-h= 1.96  11-09T14:35..11-09T16:33
+  adversarial  n= 65 agent-h= 25.28 usd=  148.2 wall-h= 9.43  11-09T16:37..11-10T02:02
+== s323 requirements spawns 176
+  authoring    n=  2 agent-h=  0.66 usd=   16.0 wall-h= 0.70  11-17T03:02..11-17T03:44
+  party        n= 68 agent-h=  3.86 usd=   76.4 wall-h= 7.30  11-17T07:21..11-17T14:39
+  elicitation  n= 47 agent-h=  2.79 usd=   47.7 wall-h= 2.49  11-17T14:44..11-17T17:13
+  adversarial  n= 59 agent-h=  4.58 usd=   82.0 wall-h= 2.80  11-17T17:16..11-17T20:04

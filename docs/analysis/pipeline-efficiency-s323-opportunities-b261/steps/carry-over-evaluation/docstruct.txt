@@ -1,0 +1,14 @@
+## 1a. Audit anchor 5 13 9
+## 1b. Post-merge trunk audit and backlog health 14 80 67
+## Operator-scoped items 81 882 802
+## Escalation state (`docs/escalations/pending.md`), reported for Item 6 883 911 29
+## Aged items (origin sprint 312 or earlier): 71 items 912 1227 316
+## Cluster S313-S316: 48 items 1228 1443 216
+## Cluster S317: 12 items 1444 1512 69
+## Cluster S318: 34 items 1513 1652 140
+## Cluster S319: 21 items 1653 1758 106
+## Cluster S320: 28 items 1759 1890 132
+## Cluster S321: 22 items 1891 1997 107
+## Cluster S322: 26 items 1998 2135 138
+## Gaps 2136 2220 85
+  329409 carry-over-evaluation.md
