@@ -4580,3 +4580,24 @@ Step: pipeline
 
 verify: manual
 
+## BL-1193 — a release's reds surface at the lead's counted run, not at the owner: builder step 4 ran each edited fixture plainly, and a plain run cannot show C1-C7 or an undeclared tool
+
+**DEFECT.** Filed 2026-11-20 (batch 261, E10). Owner: `CLAUDE.md` "Build process" builder step 4; `scripts/seed-verdict-store.sh` (the armed runner, unchanged); `scripts/seed-triage.sh` (new, E11).
+
+Goal: a release's reds surface at the owner, not at the lead. One done condition: items 1 and 2 are on `origin/main`.
+
+Record, from the lead's batch-261 rulings log (lines 456 to 505, read by the lead, not re-derived here): bundle B ran about four combine, counted-run, route and fix passes at 30 to 45 minutes each, and five owner reds first showed in the lead's counted runs: E3's undeclared `awk`, E1's untagged `continue.sh` starts (C1), E1's gate-transition C2, C3 and J4 on 15 cells, E5's removed Check-1 directive, and E5's fix prose tripping the enforcement map. Each owner had run its edited fixtures plainly, per builder step 4.
+
+Work list:
+
+1. Builder step 4's fixture run is armed: each edited fixture runs once through `scripts/seed-verdict-store.sh`, which runs it through `core/scripts/hermetic-run.sh` with the hook's own `fxcount_arm`, exactly as the push judges it. It replaces the plain run and adds none.
+2. The lead's triage script, `scripts/seed-triage.sh`, reads the lead's single counted run on a bundle and routes each red to its owner. Owner: E11 (ai-dlc-6d).
+
+Not built, by operator ruling: a seed of a scratch combine of all bundle members before READY. "No seeds" stands (`.claude/rules/operator-rulings.md`, "The burden of verifying a change is proportional to the change"); combine reds stay with the lead's counted run, read by item 2.
+
+**PARTIAL (batch 261, E10; no LANDED line).** Item 1 is built: `CLAUDE.md` builder step 4 runs each edited fixture through `scripts/seed-verdict-store.sh` in place of the plain run, and plainly only for a fixture marked `.undeclarable` (today `hook-registration-join` and `retro-compliance-workflow`), which the runner refuses and the push also runs plainly. No script changed; the runner already extracts the hook's own `fxcount_arm`. Probe, run once by hand on `advisor-gate-deny` copies at e85281761. World A adds one untagged `bash "$HOOK"` start. A plain `run.sh` reads rc 0 PASS, and so does an unarmed `core/scripts/hermetic-run.sh` (the mutant). The armed runner reads rc 1, `FAIL (C1): core/hooks/ai-dlc-advisor-gate.sh started as a separate program with no FXCELL tag` and J3 `21 *` measured 22. World B adds an undeclared `uname`. A plain run reads rc 0 PASS; the armed runner reads rc 1 `FAIL undeclared tool(s) called: uname`. The judge runs only after a green fixture (`core/scripts/hermetic-run.sh:709`), so an undeclared-tool FAIL hides any C1 behind it until it is fixed. Owed: item 2 (E11).
+
+Step: n/a
+
+verify: manual
+
