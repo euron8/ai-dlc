@@ -181,6 +181,28 @@ dt_valid() {
   [[ "$1" =~ $DT_RE ]]
 }
 
+# role_file <role> -> the role file a definition embeds: the INSTALLED copy, which carries the
+# consumer's layering as the lead loads it, else core/team-roles/ (the distribution layout), else
+# nothing (the body then tells the teammate to Read the file, as before embedding).
+role_file() {
+  if [ -f "$PROJECT_ROOT/.claude/team-roles/$1.md" ]; then printf '%s' "$PROJECT_ROOT/.claude/team-roles/$1.md"
+  elif [ -f "$PROJECT_ROOT/core/team-roles/$1.md" ]; then printf '%s' "$PROJECT_ROOT/core/team-roles/$1.md"
+  fi
+}
+
+# contract_region < <definition> -> the lines between the ROLE-CONTRACT markers, builtins only.
+contract_region() {
+  local _l _f=0
+  while IFS= read -r _l || [ -n "$_l" ]; do
+    case "$_l" in
+      '<!-- ROLE-CONTRACT BEGIN '*) _f=1; continue ;;
+      '<!-- ROLE-CONTRACT END -->') _f=0; continue ;;
+    esac
+    [ "$_f" = 1 ] && printf '%s\n' "$_l"
+  done
+  return 0
+}
+
 # render_one <role> <model-key> <effort-or-empty> <omit-true-or-empty> <disallowedTools-or-empty>
 #   -> the definition text.
 #
@@ -189,6 +211,14 @@ dt_valid() {
 # and a no-re-delegation rule; a definition's body substitutes for that prompt and takes both
 # with it. The report-as-text and absolute-path rules are appended by the harness to every
 # subagent regardless of type and are not restated.
+#
+# THE ROLE CONTRACT IS EMBEDDED, VERBATIM, BETWEEN ROLE-CONTRACT MARKERS. Sibling spawns diverge at
+# their first tool call, so a role file reached by a Read is written to the prompt cache by every
+# spawn; text in the definition body sits in the shared prefix and later spawns of the role read it
+# from cache. The FIRST body line stays the role-specific Rule 19(b) line the dispatch guard keys
+# on. The harness loads definitions once per process, so a re-render reaches only later sessions;
+# the guard credits the embedded copy only from the session's SessionStart snapshot and otherwise
+# cites the role file in the prompt. A role-file edit is therefore drift, and --check names it.
 render_one() {
   printf -- '---\n'
   printf 'name: %s\n' "$1"
@@ -201,7 +231,16 @@ render_one() {
   printf '%s from .claude/settings.json aiDlcRoles.%s. Edit the settings entry, then re-render. -->\n' \
     "$GEN_PREFIX" "$1"
   printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your\n' "$1"
-  printf 'FIRST action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`.\n'
+  _rf="$(role_file "$1")"
+  if [ -n "$_rf" ]; then
+    printf 'contract: its text follows below, between the ROLE-CONTRACT BEGIN and END markers, so you hold it without a Read. If your brief tells you to Read that file, Read it: the file is then newer than the copy below. Read an appendix only when a pointer in the contract tells you to.\n'
+    printf '<!-- ROLE-CONTRACT BEGIN .claude/team-roles/%s.md -->\n' "$1"
+    # Builtins only: each line as read, a final newline added only where the file lacks one.
+    while IFS= read -r _l || [ -n "$_l" ]; do printf '%s\n' "$_l"; done < "$_rf"
+    printf '<!-- ROLE-CONTRACT END -->\n'
+  else
+    printf 'FIRST action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`.\n'
+  fi
   printf 'Never create documentation or report files unless your brief names the path; return findings\n'
   printf 'as text. Do not re-delegate your assignment to another agent.\n'
   printf 'A path `.claude/hooks/ai-dlc-protect.sh` protects (its PROTECTED_PATTERNS) is read with the native Read tool, never with a context-mode tool (ctx_*): the hook denies those calls.\n'
@@ -240,6 +279,7 @@ bad_name=""
 # party persona).
 RENDERED_NAMES=""
 drift=""
+drift_rf=""
 missing=""
 
 while IFS= read -r role; do
@@ -316,7 +356,14 @@ EOR
       missing="$missing $role"
       rc=1
     elif ! printf '%s\n' "$want" | cmp -s - "$target"; then
-      drift="$drift $role"
+      _rf="$(role_file "$role")"
+      # The region is compared against the region THIS render would write, never against the file
+      # bytes, so a role file without a final newline is not reported forever.
+      if [ -n "$_rf" ] && [ "$(printf '%s\n' "$want" | contract_region)" != "$(contract_region < "$target")" ]; then
+        drift_rf="$drift_rf ${role}(${_rf#"$PROJECT_ROOT"/})"
+      else
+        drift="$drift $role"
+      fi
       rc=1
     fi
   else
@@ -376,8 +423,10 @@ if [ "$MODE" = "check" ]; then
   fi
   [ -n "${missing// /}" ] && echo "FAIL: no .claude/agents/<role>.md for pinned role(s):${missing}"
   [ -n "${drift// /}" ]   && echo "FAIL: .claude/agents/<role>.md has DRIFTED from aiDlcRoles for:${drift}"
+  [ -n "${drift_rf// /}" ] && echo "FAIL: .claude/agents/<role>.md embeds a stale copy of its role file, which changed since the last render, for:${drift_rf}"
   [ -n "${stale// /}" ]   && echo "FAIL: generated .claude/agents/<role>.md for role(s) no longer in aiDlcRoles:${stale}"
   [ -n "${unresolved// /}" ] && echo "FAIL: unresolvable model key(s):${unresolved}"
+  [ -n "${drift_rf// /}" ] && echo "  The role file is the source of the embedded contract: keep the role-file edit and re-render."
   echo "  These are a rendered region: change .claude/settings.json aiDlcRoles, then run:"
   echo "  bash scripts/ai-dlc/render-agent-definitions.sh"
   exit 1

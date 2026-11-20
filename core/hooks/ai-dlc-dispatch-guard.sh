@@ -581,13 +581,84 @@ fi
 # a stale or unmarked file is never read here. The body is everything below the closing
 # frontmatter fence, and the match is `-x -F` on the role-specific first line, built from
 # ROLE with the same format `render-agent-definitions.sh` emits it with.
+#
+# THE BODY READ IS THE SESSION'S SNAPSHOT, NEVER THE ON-DISK FILE. The harness loads
+# `.claude/agents/` once, at process start, so a definition re-rendered mid-session is not the
+# body a later spawn of this session receives. `ai-dlc-rules-floor.sh` copies the definitions
+# at SessionStart `startup`/`resume` to `<state dir>/.agent-definitions/<session_id>/`; the
+# carrier is credited only when that copy carries the role line AND its embedded ROLE-CONTRACT
+# region equals the installed role file line for line. One awk reads both files. A missing
+# snapshot (a session older than the snapshot step, a `/clear`, a bad session id), a stale
+# region or a body without the line credits nothing here, and THE CITATION INJECTION below
+# carries the line in the prompt instead: the dispatch is never refused for it.
+#
+# A FOREIGN BODY IS REFUSED, NOT PATCHED. A body (the snapshot, else the on-disk file when no
+# snapshot exists) whose Rule 19(b) line or ROLE-CONTRACT BEGIN marker names ANOTHER role file,
+# or whose region equals another installed role file line for line, would put role X's contract
+# into a role-Y teammate whatever the prompt says. The awk exits 3 for it; no line is injected,
+# the dispatch stays uncited, and THE CITATION DENY refuses it with its re-render remedy. The
+# other installed role files are read only when the region differs from this role's own.
+DG_INJECT_TI=""
 if [ "$ROLE_CONTRACT_CITED" = false ] && [ "$DEFINITION_BOUND" = true ]; then
-  _dg_body="$(awk 'NR==1 && $0!="---"{exit} NR==1{next} f{print; next} /^---$/{f=1}' \
-                "$DEF_FILE" 2>/dev/null || true)"
   _dg_line="$(printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your' "$ROLE")"
-  if [ -n "$_dg_body" ] && grep -qxF -- "$_dg_line" <<<"$_dg_body" 2>/dev/null; then
+  _dg_sid="$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)"
+  case "$_dg_sid" in ''|*[!A-Za-z0-9_-]*) _dg_sid="" ;; esac
+  _dg_snap="${PROJECT_DIR}/${AI_DLC_STATE_DIR:-_bmad-output}/.agent-definitions/${_dg_sid:-/nonexistent}/$ROLE.md"
+  _dg_src="$DEF_FILE"; _dg_have_snap=false
+  if [ -n "$_dg_sid" ] && [ -r "$_dg_snap" ]; then _dg_src="$_dg_snap"; _dg_have_snap=true; fi
+  _dg_others=""
+  for _dg_o in "$ROLES_DIR"/*.md; do
+    [ -f "$_dg_o" ] && [ "$_dg_o" != "$ROLE_FILE" ] && _dg_others="${_dg_others}${_dg_o}
+"
+  done
+  _dg_rc=1
+  if [ -r "$ROLE_FILE" ]; then
+    DG_OTHERS="$_dg_others" awk -v rf="$ROLE_FILE" -v want="$_dg_line" -v role="$ROLE" '
+          BEGIN { n = 0; while ((r = (getline l < rf)) > 0) R[++n] = l; if (r < 0) bad = 1
+                  pre = "Your operating contract is `.claude/team-roles/"; suf = ".md`. Read it and follow it as your"
+                  beg = "<!-- ROLE-CONTRACT BEGIN .claude/team-roles/" }
+          NR == 1 { if ($0 != "---") bad = 1; next }
+          !body { if ($0 == "---") body = 1; next }
+          inr == 1 && $0 == "<!-- ROLE-CONTRACT END -->" { inr = 2; next }
+          inr == 1 { m++; G[m] = $0; if (m > n || $0 != R[m]) bad = 1; next }
+          $0 == want { cited = 1; next }
+          index($0, pre) == 1 && substr($0, length($0) - length(suf) + 1) == suf { foreign = 1 }
+          inr == 0 && index($0, beg) == 1 { inr = 1; if ($0 != beg role ".md -->") foreign = 1 }
+          END {
+            if (foreign) exit 3
+            if (inr == 2 && (bad || m != n)) {
+              k = split(ENVIRON["DG_OTHERS"], O, "\n")
+              for (i = 1; i <= k; i++) {
+                if (O[i] == "") continue
+                j = 0; same = 1
+                while ((r = (getline l < O[i])) > 0) { j++; if (j > m || l != G[j]) { same = 0; break } }
+                close(O[i])
+                if (r < 0) same = 0
+                if (same && j == m) exit 3
+              }
+            }
+            exit (bad || !cited || inr != 2 || m != n) ? 1 : 0
+          }' "$_dg_src" 2>/dev/null
+    _dg_rc=$?
+  fi
+  if [ "$_dg_rc" = 0 ] && [ "$_dg_have_snap" = true ]; then
     ROLE_CONTRACT_CITED=true
     CONTRACT_VIA=definition
+  elif [ "$_dg_rc" = 3 ]; then
+    :   # A FOREIGN BODY: left uncited, so THE CITATION DENY decides.
+  elif [ "$ROLE_FILE_READABLE" = true ]; then
+    # THE CITATION INJECTION. The selected definition is not a current carrier for this session,
+    # so the standing Rule 19(b) line is put at the head of the prompt, where the prompt carrier
+    # reads it. Built HERE, before the ledger row, so a row reads cited=true only for a prompt
+    # that was amended; a jq failure leaves the dispatch uncited and the deny below decides.
+    DG_INJECT_TI="$(printf '%s' "$INPUT" | jq -c --arg l "Your operating contract is \`.claude/team-roles/${ROLE}.md\`. Read it and follow it as your FIRST action before any other work, reading it with native Read in consecutive \`offset\`/\`limit\` chunks of at most 16 KB covering the whole file, never \`ctx_*\`." \
+      '.tool_input | .prompt = ($l + "\n\n" + (.prompt // ""))' 2>/dev/null || true)"
+    case "$DG_INJECT_TI" in
+      *"
+"*) DG_INJECT_TI="" ;;
+      '{'*'}') ROLE_CONTRACT_CITED=true; CONTRACT_VIA=prompt ;;
+      *) DG_INJECT_TI="" ;;
+    esac
   fi
 fi
 
@@ -1900,13 +1971,13 @@ dg_gp_note_only() {
 }
 if [ -n "$DG_GP_NOTE" ]; then
   [ "$ROLE_FILE_READABLE" = true ] || dg_gp_note_only
-  [ "$NEEDS_MODEL" = true ] || [ "$NEEDS_TYPE" = true ] || dg_gp_note_only
+  [ "$NEEDS_MODEL" = true ] || [ "$NEEDS_TYPE" = true ] || [ -n "$DG_INJECT_TI" ] || dg_gp_note_only
 fi
 
 [ "$ROLE_FILE_READABLE" = true ] || exit 0   # recorded above; never correct blind
 
 # Nothing to set — exit 0 with no decision.
-[ "$NEEDS_MODEL" = true ] || [ "$NEEDS_TYPE" = true ] || exit 0
+[ "$NEEDS_MODEL" = true ] || [ "$NEEDS_TYPE" = true ] || [ -n "$DG_INJECT_TI" ] || exit 0
 
 # OTHERWISE the model is ABSENT, a WRONG key, or a value that does not carry the pinned key —
 # none of which is what the role file pins. SET it, do not deny it. This is the v0.79.x flip:
@@ -1925,7 +1996,7 @@ fi
 # than emit a broken decision.
 emit() {
   local note reason ctx updated jqargs
-  updated="$(printf '%s' "$INPUT" | jq -c '.tool_input' 2>/dev/null)"
+  updated="${DG_INJECT_TI:-$(printf '%s' "$INPUT" | jq -c '.tool_input' 2>/dev/null)}"
   [ -n "$updated" ] || exit 0
 
   note=""
@@ -1954,11 +2025,13 @@ emit() {
   reason="AI/DLC dispatch guard: bound \`${ROLE}\` from \`aiDlcRoles.${ROLE}\` in .claude/settings.json."
   [ "$NEEDS_MODEL" = true ] && reason="${reason} Set \`model\` to \"${EXPECT}\" (${PIN_MODEL}) — ${note}."
   [ "$NEEDS_TYPE" = true ] && reason="${reason} Set \`subagent_type\` to \"${ROLE}\" and removed \`name\` and \`model\`, so .claude/agents/${ROLE}.md is selected: a definition binds the role's effort, which no tool parameter can, and a \`name\` routes the spawn to the teammate runner that drops it."
+  [ -n "$DG_INJECT_TI" ] && reason="${reason} Added the Rule 19(b) role-contract line for \`.claude/team-roles/${ROLE}.md\` to the head of the prompt, because the selected .claude/agents/${ROLE}.md is not a current carrier for this session (no snapshot of it taken at this session's start, or its embedded contract differs from the role file)."
   reason="${reason} Config is authoritative for both; a call site does not override it. To change either value, edit that config entry."
 
   ctx="dispatch-guard: ${ROLE} bound from aiDlcRoles.${ROLE}"
   [ "$NEEDS_MODEL" = true ] && ctx="${ctx} — model=${EXPECT} (${PIN_MODEL}), requested: ${REQUESTED:-<absent>}"
   [ "$NEEDS_TYPE" = true ] && ctx="${ctx} — subagent_type=${ROLE} (definition .claude/agents/${ROLE}.md: model=${DEF_MODEL}, effort=${DEF_EFFORT:-<none>}); name and model params removed"
+  [ -n "$DG_INJECT_TI" ] && ctx="${ctx} — the Rule 19(b) line for .claude/team-roles/${ROLE}.md was added to the prompt: the definition is not a current role-contract carrier for this session"
   # THE MISSING DEFINITION IS REPORTED, NOT SILENTLY TOLERATED, and the remedy is NAMED.
   # On these paths the configured effort reaches the teammate through NOTHING, so a lead
   # reading its own context can see that the binding did not happen and can run the

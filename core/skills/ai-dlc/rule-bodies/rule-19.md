@@ -37,26 +37,35 @@ config. Do not flag, question, or negotiate either -- not in a dispatch
 prompt, a gate log, a handoff, or a retro. Config is the operator's to
 change.
 
-**(b) Role contract.** The dispatch prompt MUST carry, as a standing
+**(b) Role contract.** Every role-bound spawn MUST deliver, as a standing
 line, the instruction: *"Your operating contract is
 `.claude/team-roles/<role>.md`. Read it and follow it as your FIRST
 action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`."* This puts the role's identity,
 ownership, constraints, and escalation protocol into the *subagent's*
-context (not the lead's, per Rule 23), and mirrors Rule 21 -- the read
-IS the binding, not the lead's recall. Keep the line byte-identical
-across dispatches so it rides the shared-block cache
-(`implementation.md` dispatch-prompt cache discipline); vary only the
-`<role>` token. A spawn that names a role but omits this line binds
-model without contract and is a Rule 19 violation.
+context (not the lead's, per Rule 23), and mirrors Rule 21 -- the
+contract in the subagent's context IS the binding, not the lead's recall.
+A dispatch that selects the role's rendered definition (`subagent_type:
+<role>`) omits the line from its brief: the definition carries it. Any
+other dispatch carries it in the prompt, byte-identical across dispatches
+so it rides the shared-block cache (`implementation.md` dispatch-prompt
+cache discipline); vary only the `<role>` token. A spawn that names a
+role but delivers this line by neither carrier binds model without
+contract and is a Rule 19 violation.
 
 The line is DELIVERED by either of two carriers: the dispatch prompt, or
 the rendered `.claude/agents/<role>.md` definition the dispatch selects,
-whose body is the subagent's system prompt and carries the line for that
-role. The dispatch guard records which carrier delivered it
-(`role_contract_cited`, `contract_via`), at PreToolUse. That record is
-of delivery as selected: it does not prove the spawn launched, and it
-does not prove the teammate read the file. Delivery puts the line in
-front of the teammate; the read is still the binding.
+whose body is the subagent's system prompt, carries the line for that
+role, and embeds the role file itself between ROLE-CONTRACT markers, so
+the teammate holds its contract without a Read and later spawns of the
+role read it from the prompt cache. The harness loads definitions once
+per session, so the dispatch guard credits a definition only when the
+copy this session loaded (its SessionStart snapshot) embeds the current
+role file; otherwise the guard puts the line at the head of the prompt
+itself and the teammate Reads the file. The guard records which carrier
+delivered it (`role_contract_cited`, `contract_via`), at PreToolUse. That
+record is of delivery as selected: it does not prove the spawn launched,
+and it does not prove the teammate read the contract. Delivery puts the
+contract in front of the teammate; following it is still the binding.
 
 **(c) No `name` on a role-bound dispatch.** The spawn MUST NOT pass a
 `name` parameter. Passing one routes the spawn to the teammate runner

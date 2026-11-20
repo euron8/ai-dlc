@@ -207,6 +207,13 @@
       "reason": "Written by the recovery gate on the lead's call that satisfies the second mandated Read, holding the session id, a deny count, the message id last refused and a safety-net expiry count; while it exists the gate refuses the lead's dispatches and writes until an advisor attempt follows the postcompact-digest Read (Rule 32 touchpoint R). Deleted on that attempt, on any stand-down, and by ai-dlc-recover.sh when a new recovery starts. The gate writes it as a sibling temp file, .recover-advisor-owed.<pid>, renamed into place, so a hook killed between the write and the rename can leave that temp file behind; the trailing * ignores it too, and ai-dlc-recover.sh clears both. A tracked copy would hold a fresh checkout's lead on a touchpoint it never owed."
     },
     {
+      "name": ".agent-definitions",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-rules-floor.sh",
+      "ignore": "_bmad-output/.agent-definitions/",
+      "reason": "One directory per session_id holding a copy of .claude/agents/*.md taken at SessionStart startup or resume, the bodies that session's process loaded. The dispatch guard credits a rendered definition as the role-contract carrier only from this copy. Transient because it describes one running process on one machine; a tracked copy would name sessions no checkout ran."
+    },
+    {
       "name": ".subagent-final",
       "transient": true,
       "producer": "core/hooks/ai-dlc-subagent-probe.sh",

@@ -560,6 +560,29 @@ arm_body_carries_protected_read_line() {
   grep -qxF -- 'A path `.claude/hooks/ai-dlc-protect.sh` protects (its PROTECTED_PATTERNS) is read with the native Read tool, never with a context-mode tool (ctx_*): the hook denies those calls.' "$f"
 }
 
+# Arm 15: the INSTALLED role file is embedded verbatim between the ROLE-CONTRACT markers, below the role-specific
+# first line the dispatch guard keys on, and --check names a later role-file edit as the cause. Presence-shaped on
+# both halves: the region must equal the role file byte for byte, and the drift line must name the role file. The
+# seeded role file carries a `---` line, the shape that would end a region read off a frontmatter fence.
+arm_role_contract_embedded_and_named_on_drift() {
+  local p subj="$2" f rf out rc
+  [ "$SH_RC" -eq 0 ] || return 1
+  p="$(clone "$1" a15)" || return 1
+  rf="$p/.claude/team-roles/$WITH_EFFORT.md"; f="$p/.claude/agents/$WITH_EFFORT.md"
+  mkdir -p "$p/.claude/team-roles" || return 1
+  printf '# Role: %s\n\n## Contract\nDo the role.\n\n---\n\n## Escalation\nAsk the lead.\n' "$WITH_EFFORT" > "$rf" || return 1
+  render "$subj" "$p" >/dev/null || return 1
+  awk 'f && /^<!-- ROLE-CONTRACT END -->$/{exit} f{print} /^<!-- ROLE-CONTRACT BEGIN /{f=1}' "$f" | cmp -s - "$rf" || return 1
+  local l1
+  l1="$(awk 'NR==1{next} /^---$/{b=1; next} b && /^<!-- AI\/DLC GENERATED:/{next} b{print; exit}' "$f")" || return 1
+  [ "$l1" = "Your operating contract is \`.claude/team-roles/$WITH_EFFORT.md\`. Read it and follow it as your" ] || return 1
+  out="$(render "$subj" "$p" --check)"; rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  printf 'Also: report to the lead.\n' >> "$rf"
+  out="$(render "$subj" "$p" --check)"; rc=$?
+  [ "$rc" -eq 1 ] && grep -q "embeds a stale copy of its role file.*$WITH_EFFORT(.claude/team-roles/$WITH_EFFORT.md)" <<<"$out"
+}
+
 # THE CLI CELLS (cells.decl). The subject run as a PROGRAM once per distinct CLI outcome, each compared with the in-process
 # call on the same input: stdout, stderr, exit and the definitions left on disk, separately, byte for byte. Both sides get
 # a fresh copy of the same seed at the SAME path, because the report names the settings path and a write leaves files. A
@@ -617,7 +640,7 @@ invalid_effort_omitted_and_reported omit_claude_md_tracks_the_declaration
 disallowed_tools_renders disallowed_tools_empty_renders_nothing disallowed_tools_invalid_omitted_and_reported disallowed_tools_check_drift
 check_joins_declaration_to_projection
 foreign_definition_untouched stale_projection_is_caught_and_cleared check_never_writes
-three_states_are_distinct idempotent body_carries_protected_read_line
+three_states_are_distinct idempotent body_carries_protected_read_line role_contract_embedded_and_named_on_drift
 cli_write cli_check_current cli_check_drifted cli_refuse cli_not_applicable cli_cells_discriminate"
 
 run_arms() { # <subject> [arms...] -> "<name>:<0|1>" per arm. ONE seed and ONE render per subject.
@@ -658,6 +681,8 @@ while IFS=: read -r name rc; do
     check_never_writes)                  msg="--check over a DRIFTED tree writes nothing" ;;
     three_states_are_distinct)           msg="NOT APPLICABLE(3), drifted(1) and current(0) are three distinct exit codes" ;;
     body_carries_protected_read_line)    msg="the rendered body carries the line telling a teammate to read a protected path with native Read, never a context-mode tool" ;;
+    role_contract_embedded_and_named_on_drift) msg="the installed role file is embedded byte-identical between the ROLE-CONTRACT markers below the role line, --check is green after the render, and a role-file edit is reported naming that role file"
+                                         ;;
     idempotent)                          msg="four renders are byte-identical and leave no duplicate" ;;
     cli_write)                           msg="cli-write: the program writes the definitions exactly as the in-process call does (stdout, stderr, exit 0, files)" ;;
     cli_check_current)                   msg="cli-check-current: the program says OK over a current tree exactly as the in-process call does (exit 0)" ;;

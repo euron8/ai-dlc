@@ -47,12 +47,17 @@ hardcode a role-to-model table here. Omitted `model` on the fallback
 path inherits from the parent conversation and bypasses the role
 contract.
 
-**(b) Role contract.** Every dispatch prompt MUST carry the standing
-line — byte-identical across dispatches, in the shared block (see
+**(b) Role contract.** Every role-bound dispatch MUST deliver the
+standing line (Rule 19(b)). A dispatch that selects the role's rendered
+definition (`subagent_type: <role>`) omits it from the brief: the
+definition carries the line and embeds the role file, and the dispatch
+guard puts the line at the head of the prompt itself when this session's
+copy of the definition is not current. Any other dispatch carries it in
+the prompt — byte-identical across dispatches, in the shared block (see
 Dispatch-prompt cache discipline below): *"Your operating contract is
 `.claude/team-roles/<role>.md`. Read it and follow it as your FIRST
-action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`."* The subagent reads its own
-identity/ownership/constraints/escalation from that file (Rule 19(b));
+action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`."* The subagent takes its own
+identity/ownership/constraints/escalation from that contract (Rule 19(b));
 the lead does not restate them per dispatch.
 
 **(c) No `name`.** A role-bound dispatch MUST NOT pass a `name`
