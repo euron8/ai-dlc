@@ -139,7 +139,7 @@ through the refusal channel** (action 6).
      `extensions/roles/dev-push.md`, both `hooks: team-roles/dev.md`. Each needs a verdict recorded
      in `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl` under the `clause` and
      `subject_digest` copied from the row; step 7 has the record shape
-     (`core/skills/ai-dlc-update/SKILL.md:1981`). Read each extension against the changed `dev.md`
+     (`core/skills/ai-dlc-update/reconcile/detector-rows.md:696`). Read each extension against the changed `dev.md`
      before recording its verdict. At rehearsal neither carried "next unblocked", "shared task
      list", "subsequent story", "go idle" or "git -C" (control in the same count: "gate-1" read 8 in
      `dev-domain.md`), and `dev-push.md` is a retirement notice pointing at
@@ -160,13 +160,13 @@ through the refusal channel** (action 6).
    in `reconcile/push-refusals.tsv` (refuse) or close this entry (absorbed)." 0.789.0 landed the
    answer in `push-refusals.tsv`, so the close is the refusal channel. In step 8:
 
-   - **Run `push-drain.sh` the way step 8 prescribes** (`core/skills/ai-dlc-update/SKILL.md:2517`,
+   - **Run `push-drain.sh` the way step 8 prescribes** (`core/skills/ai-dlc-update/SKILL.md:1285`,
      usage at `core/skills/ai-dlc-update/reconcile/push-drain.sh:34`), from the consumer root, with
      absolute paths. **Expect all 5 blocks of `implementation-push.md` to read `PUSH-REFUSED`**,
      block 1 now included. If block 1 still reads `PUSH-CANDIDATE`, STOP and ping: do not drain it
      and do not close the entry.
    - **The governing disposition is the all-refused bullet**
-     (`core/skills/ai-dlc-update/SKILL.md:2578`): an entry whose every live block reads
+     (`core/skills/ai-dlc-update/SKILL.md:1346`): an entry whose every live block reads
      `PUSH-REFUSED` is annotated by hand, with an `Edit`, directly under its `###` heading, with
      exactly `**CLOSED AS REJECTED — BY DESIGN, adjudicated <today's date>**`. That is the one form
      this file prescribes; do not write `ADOPTED UPSTREAM` for this entry.
@@ -178,9 +178,9 @@ through the refusal channel** (action 6).
    - **Take step 8's "before" row set AFTER the annotation.** Taken before it, both of this id's rows
      vanish and read as a mismatch.
    - **Run `ledger-rotate.sh` the way step 8 prescribes
-     (`core/skills/ai-dlc-update/SKILL.md:2629`, usage at
+     (`core/skills/ai-dlc-update/SKILL.md:1397`, usage at
      `core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:94`), and expect exactly one entry to
-     move.** Then step 8's acceptance test (`core/skills/ai-dlc-update/SKILL.md:2640`): the
+     move.** Then step 8's acceptance test (`core/skills/ai-dlc-update/SKILL.md:1408`): the
      re-verifier's `cut -f1,2 | sort` row set is identical before and after `--apply`. Run
      `ledger-reverify.sh` **from the consumer root**, with absolute paths, both ref arguments being
      distribution refs.
@@ -191,7 +191,7 @@ through the refusal channel** (action 6).
      the unanchored id counts 2 in the archive because its annotation line quotes the id. If it is
      back in the live ledger, STOP and ping.
    - **The PR merge needs the operator's explicit approval**
-     (`core/skills/ai-dlc-update/SKILL.md:2664`), separate from the `apply` argument.
+     (`core/skills/ai-dlc-update/SKILL.md:1444`), separate from the `apply` argument.
 
 7. **The entry's "local work remaining" is NOT part of this pull.** It says to narrow
    `implementation-push.md` §2 to the consumer-specific points once upstream confirms absorption.

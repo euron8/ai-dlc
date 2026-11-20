@@ -321,6 +321,7 @@ core_manifest:
   - fixtures/reconcile-emit-report/**
   - fixtures/reconcile-emit-report-b/**
   - fixtures/reconcile-emit-report-c/**
+  - fixtures/reconcile-pull-driver/**
   - fixtures/emit-report-refusal/**
   - fixtures/relabel-theirs-collision/**
   - fixtures/relocation-preclassify/**

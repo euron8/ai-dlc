@@ -142,9 +142,9 @@ filed by hand (action 8).
    step 8:
 
    - **The governing disposition is the `NAMED-UPSTREAM` bullet**
-     (`core/skills/ai-dlc-update/SKILL.md:2588`), which allows a hand annotation on absorption. The
+     (`core/skills/ai-dlc-update/SKILL.md:1356`), which allows a hand annotation on absorption. The
      "close ONLY `CLOSE-CANDIDATE` rows" sentence above it
-     (`core/skills/ai-dlc-update/SKILL.md:2575`) does not forbid this. None of the five entries
+     (`core/skills/ai-dlc-update/SKILL.md:1343`) does not forbid this. None of the five entries
      carries a `verify:` receipt, so `NAMED-UPSTREAM` is the only mechanical signal any of them will
      ever get.
    - **The rehearsal could NOT show the five `NAMED-UPSTREAM` rows.** At rehearsal no distribution
@@ -175,12 +175,12 @@ filed by hand (action 8).
    - **Take step 8's "before" row set AFTER the annotations.** Taken before them, the five
      `NAMED-UPSTREAM` rows vanish and read as a mismatch.
    - **Run `ledger-rotate.sh` the way step 8 prescribes
-     (`core/skills/ai-dlc-update/SKILL.md:2629`, usage at
+     (`core/skills/ai-dlc-update/SKILL.md:1397`, usage at
      `core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:94`), and expect exactly five entries to
-     move.** Then step 8's acceptance test (`core/skills/ai-dlc-update/SKILL.md:2640`): the
+     move.** Then step 8's acceptance test (`core/skills/ai-dlc-update/SKILL.md:1408`): the
      re-verifier's `cut -f1,2 | sort` row set is identical before and after `--apply`.
    - **The PR merge needs the operator's explicit approval**
-     (`core/skills/ai-dlc-update/SKILL.md:2664`), separate from the `apply` argument.
+     (`core/skills/ai-dlc-update/SKILL.md:1444`), separate from the `apply` argument.
 
 7. **IF the next implementation-gate adjudicator dispatch is REFUSED by the dispatch guard, write
    the Check 22 waiver it names; otherwise do nothing.** This is a consequence of 0.784.0, which

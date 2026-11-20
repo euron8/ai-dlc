@@ -1,0 +1,55 @@
+# reconcile-pull-driver drives the pull driver and the reconcile programs it calls from a WORLD COPY of the
+# reconcile directory (run.sh cp -R, then seed.sh prd_instrument stub-wraps the seven detectors and emit-report.sh in
+# the copy), and pull-key.sh hashes every file beside it into F, so every file there is read: one row per file (the
+# whole-rows list may only shrink). The subjects run.sh starts (as world copies) are REQUIRED.
+core/skills/ai-dlc-update/reconcile/adopt-extension-checks.sh
+!core/skills/ai-dlc-update/reconcile/apply.sh
+core/skills/ai-dlc-update/reconcile/ask-families.tsv
+core/skills/ai-dlc-update/reconcile/classify-block.md
+core/skills/ai-dlc-update/reconcile/consumer-read.sh
+core/skills/ai-dlc-update/reconcile/derivation-differential.sh
+core/skills/ai-dlc-update/reconcile/detector-rows.md
+core/skills/ai-dlc-update/reconcile/dist-clone.sh
+!core/skills/ai-dlc-update/reconcile/emit-report.sh
+core/skills/ai-dlc-update/reconcile/hard-blockers.sh
+core/skills/ai-dlc-update/reconcile/layer-drift.sh
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/ledger-rotate.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/mask-reinject.md
+core/skills/ai-dlc-update/reconcile/post-write-gates.sh
+core/skills/ai-dlc-update/reconcile/preclassify.sh
+core/skills/ai-dlc-update/reconcile/predicate-differential.sh
+core/skills/ai-dlc-update/reconcile/predicate-sites.md
+!core/skills/ai-dlc-update/reconcile/pull-key.sh
+!core/skills/ai-dlc-update/reconcile/pull.sh
+core/skills/ai-dlc-update/reconcile/push-drain.sh
+core/skills/ai-dlc-update/reconcile/push-refusals.tsv
+!core/skills/ai-dlc-update/reconcile/readopt-override.sh
+core/skills/ai-dlc-update/reconcile/register-drift.sh
+core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
+core/skills/ai-dlc-update/reconcile/retired-fixtures.sh
+core/skills/ai-dlc-update/reconcile/retired-layer-contract.sh
+core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
+core/skills/ai-dlc-update/reconcile/retired-layer-token.sh
+core/skills/ai-dlc-update/reconcile/retired-tokens.sh
+core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh
+core/skills/ai-dlc-update/reconcile/self-update-fixtures.sh
+core/skills/ai-dlc-update/reconcile/self-update-gate.sh
+core/skills/ai-dlc-update/reconcile/self-update-push.sh
+core/skills/ai-dlc-update/reconcile/self-update-refusals.md
+core/skills/ai-dlc-update/reconcile/settings-merge.sh
+core/skills/ai-dlc-update/reconcile/setup-site-drift.sh
+core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/skills/ai-dlc-update/reconcile/template-sites.md
+core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
+core/skills/ai-dlc-update/reconcile/untangle.md
+core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
+# The answer-capture hook writes the operator answers the conflict guard reads (copied into the world).
+!core/hooks/ai-dlc-answer-capture.sh
+# The escalation-status validator (escalation-validator.seed, in this directory) reads its vocabulary from here.
+core/skills/ai-dlc/escalations.md
+core/fixtures/lib/preamble.sh
+core/fixtures/lib/report.sh
+core/fixtures/lib/world.sh
+core/fixtures/lib/layout.sh

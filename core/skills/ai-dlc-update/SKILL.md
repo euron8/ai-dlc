@@ -1,6 +1,6 @@
 ---
 name: ai-dlc-update
-description: "Reconcile upstream AI/DLC distribution changes into a diverged consumer project via a base-aware semantic three-way merge (the distribution→consumer pull path). Run bare for a dry-run report, or with `apply` to reconcile after review. Prefix either with a distribution ref (`<ref>`, `<ref> apply`) to stop short of upstream HEAD — needed when the self-update gate reports SELF-UPDATE-DEFER and names a SELF-UPDATE-SAFE-STOP ref, because a deferred machinery slice lands after the classify that would have used it. Run with `untangle` (or `untangle apply`) for the one-time Phase-2 core/extensions/overrides migration on a still-tangled consumer. Use when the user says \"ai-dlc-update\", \"pull upstream\", \"update ai-dlc\", \"reconcile with distribution\", or \"untangle\"."
+description: "Reconcile upstream AI/DLC distribution changes into a diverged consumer project via a base-aware semantic three-way merge (the distribution→consumer pull path). Run bare for a dry-run report, or with `apply` to reconcile and open the update PR, which the operator merges. Prefix either with a distribution ref (`<ref>`, `<ref> apply`) to stop short of upstream HEAD — needed when the self-update gate reports SELF-UPDATE-DEFER and names a SELF-UPDATE-SAFE-STOP ref, because a deferred machinery slice lands after the classify that would have used it. Run with `untangle` (or `untangle apply`) for the one-time Phase-2 core/extensions/overrides migration on a still-tangled consumer. Use when the user says \"ai-dlc-update\", \"pull upstream\", \"update ai-dlc\", \"reconcile with distribution\", or \"untangle\"."
 ---
 
 # AI/DLC Update — the distribution→consumer pull path
@@ -73,52 +73,29 @@ ai-dlc-update <ref> apply         reconcile to <ref>
 ai-dlc-update untangle [apply]    one-time Phase-2 migration (unaffected by <ref>)
 ```
 
-`<ref>` is anything the DISTRIBUTION repo resolves — a sha, a tag, a branch. It
-sets `theirs` and nothing else; `base` still comes from the stamp.
+`<ref>` is anything the DISTRIBUTION repo resolves — a sha, a tag, a branch, a full 40-hex
+sha. It sets `theirs` and nothing else; `base` still comes from the stamp.
 
-**WHY A CONSUMER WOULD EVER STOP SHORT OF HEAD.** Step 2's self-update lands the
-engine and re-invokes, so an improvement to the classifier normally classifies
-its own pull. But `self-update-gate.sh` returns `SELF-UPDATE-DEFER` when the
-machinery slice cannot stand alone, and a deferred slice lands in the **gated
-apply at step 7 — after step 3's classify**. On such a pull the report is written
-by the engine the pull was going to replace, and any new signal in the range
-reports nothing at all. Measured on the reference consumer at 0.274.0 → 0.277.0:
-three overrides upstream had just ABSORBED came back as ordinary
-`HARD-OVERRIDE-DRIFT-SECTION`, which reads as *re-adopt the new wording* — the
-exact misreading `override_supersessions` exists to end.
+A bare invocation is a TERMINAL dry run: steps 1-2 run as written, then `reconcile/pull.sh
+dry-run` writes the report and the run ends. It asks nothing and writes nothing else. `apply`
+is the full run: steps 1-2, the step-6 checks, then ONE `reconcile/pull.sh apply`, the rows it
+hands back, `pull.sh finish` and `pull.sh deliver`. There is no approval stop between the dry run
+and the apply: the operator's merge of the update PR approves everything the pull decided.
 
-The remedy is to stop at a release whose slice IS machinery-only, let the engine
-land, then pull the rest. **Do not hunt for that ref by hand:** every `DEFER`
-now carries a `SELF-UPDATE-SAFE-STOP` row naming it, derived by running the gate
-against each release in the range. Take the ref from that row.
+**Stopping short of HEAD.** When step 2's gate returns `SELF-UPDATE-DEFER`, the deferred
+machinery slice lands only with the gated apply, after the report was rendered by the engine
+the pull was going to replace. Every `DEFER` carries a `SELF-UPDATE-SAFE-STOP` row naming a
+release whose slice IS machinery-only; take the ref from that row, pull to it, then pull the
+rest. That row acquits itself ("SPLIT BUYS NOTHING HERE") only on a run whose carry arm reached
+a clean decision: a `SELF-UPDATE-CARRY` or `SELF-UPDATE-UNDECIDED` row withholds the acquittal.
 
-That row acquits itself — "SPLIT BUYS NOTHING HERE ... its machinery has already
-landed" — when the consumer's own `skill_commit` is at or past the ref it names,
-**and ONLY on a run where the gate's carry arm reached a clean decision.** A
-`SELF-UPDATE-CARRY` row withholds it: a carried machinery path is one the stamp
-says landed and step 2 deliberately did not write. So does a `SELF-UPDATE-UNDECIDED`
-row from that arm, because a gate that cannot tell whether a path was carried has
-not established that none was. The original pull-first advice stands in both cases.
+**`<ref>` is validated before use — all four, and the failing one is named.** It resolves in
+the **distribution** repo; `base` is an ancestor of it; it is reachable from the distribution's
+default branch; it is not equal to `base`. `reconcile/pull.sh resolve` runs the four and prints
+`REFUSED resolve <check> rc=2` for the one that failed. A refused `<ref>` STOPS the run; never
+fall back to HEAD.
 
-**VALIDATE `<ref>` BEFORE USING IT — all four, and report which failed:**
-
-1. It resolves in the **distribution** repo. A ref that resolves only in the
-   consumer is the `base_sha` poisoning trap one layer up.
-2. `base` is an ancestor of it (`git merge-base --is-ancestor <base> <ref>`).
-   Otherwise the pull is a DOWNGRADE, and the stamp would record a version the
-   consumer has already moved past.
-3. It is reachable from the distribution's default branch. Pinning to an
-   unmerged branch stamps the consumer to content that may never land.
-4. It is not equal to `base`. That is a no-op pull, and it must say so rather
-   than produce an empty report that reads like a clean one.
-
-A `<ref>` that fails any of these STOPS the run. Do not silently fall back to
-HEAD — the operator asked for a specific target, and substituting a different
-one is the class of failure this whole skill is written against.
-
-`base` and `theirs` are fetched from the distribution git repo. `ours` is the
-working tree. See §6.1 of the design record — this is a vendored-dep updater
-(`npm update` runs in your project and reaches the registry), not the reverse.
+`base` and `theirs` are fetched from the distribution git repo. `ours` is the working tree.
 
 ## Path mapping (core/ → consumer)
 
@@ -158,15 +135,6 @@ command it prints. A `DETECTOR-REFUSED  orientation …` line in place of a file
 that sample was never computed, not that the side is empty: derive that file's sides by running
 the diff yourself. Do not describe a side from having read the file earlier in the run.
 
-Failure caught: the sides get swapped, and because the recommended ACTION is written from
-the comparison, the swap propagates into it. Observed on the 0.106.1 → 0.113.1 pull — a
-BOTH-ADDED template's table assigned each side the other's rows, and the resolution would
-have filed the consumer's override carrying *upstream's* content (an override restating
-core, which `layer-drift.sh` flags on the next pull) while dropping the two domain classes
-that were the consumer's whole reason for the file. False-positive cost: none — it
-constrains where a claim comes from, not what it may say. Removed when the resolution
-prose is itself generated rather than composed.
-
 ## Procedure
 
 **Run every long call in the background.** Step 1's push, `reconcile/self-update-gate.sh`,
@@ -179,6 +147,58 @@ still has to deliver one: send its output to a file under your session scratchpa
 status last — `<call> > <file> 2>&1; echo "rc=$?" >> <file>` — then read `rc=` from that file.
 Never pipe the call into `tail`, which replaces its status with its own. Scratch files go under
 the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions share.
+
+
+### The driver: `reconcile/pull.sh`
+
+`reconcile/pull.sh` runs the deterministic part of a pull: the render, the detectors (once per
+invocation), the branch, the clean applies, the decisions record, the push and the PR. You run it
+and work only what it hands back. Its header is the contract; the subcommands are:
+
+- `pull.sh resolve <consumer> [<ref>]` — step 1's clone and ref checks: `RESOLVE dist=<path>
+  base=<sha> theirs=<sha>` (exit 0), `REFUSED resolve <check> rc=2`, or `ASK upstream-url …` (exit 3).
+- `pull.sh gate <dist> <base> <consumer> <theirs>` — step 2's gate: `GATE OK|DEFER|UNDECIDED`, then
+  the gate's `SELF-UPDATE-SAFE-STOP`, `SELF-UPDATE-CARRY` and `SELF-UPDATE-UNDECIDED` rows verbatim.
+- `pull.sh dry-run <dist> <base> <consumer> <theirs>` — the bare invocation's report; asks nothing.
+- `pull.sh apply [--carried-machinery-slice] <dist> <base> <consumer> <theirs>` — the whole apply (step 7).
+- `pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>` — the stamp.
+- `pull.sh merge <dist> <base> <consumer> <theirs> <override>` — an override re-adoption merge.
+- `pull.sh deliver <dist> <base> <consumer> <theirs>` — commit, push, `gh pr create` (step 8).
+- `pull.sh pr-body <consumer>` — the rendered PR body.
+
+**Its lines.** `PULL run=<dir> key=<12> renders=<n>`; `REFUSED <what> rc=<n>`;
+`ASK <kind> <path> <digest> <question>`; `DECIDE <kind> <path> <verdict>`; `WORK classify <path>`;
+`HARD <row>`. **Exit** 0 done, 2 refused or usage, 3 pending (an ASK row awaits an answer, a HARD
+row must be resolved before anything is written, or `finish` withheld the stamp). A `REFUSED`
+names the step that refused; clear its cause and re-run the same subcommand. Never edit the
+report's `reconcile-mechanical` region or the files under `<consumer git-dir>/ai-dlc-pull/`.
+
+**THE PULL ASKS ONLY ON CONFLICT.** The question families that ask the operator are the rows of
+`reconcile/ask-families.tsv`, and only those; read that file for the list, and the driver prints
+each as an `ASK` row. Answer an `ASK` row with AskUserQuestion, one question per row, whose
+question line QUOTES the row's digest; the answer-capture hook records it in
+`_bmad-output/operator-answers-history.md`, and that record is the only proof of an answer. Then
+act on the answer and re-run the subcommand that printed the row. A typed operator message is not
+that answer, and neither is a decisions row.
+
+**Every other decision is yours or the script's, and it is RECORDED, never asked.** That covers
+override drift with a clean merge, extension additivity, an in-place edit of an engine-owned file,
+a red push, a ledger close-candidate, a derivation-unassessable row, a setup token given its
+nearest-equivalent value, `gate_types`, a retired-fixture orphan, a check-number collision,
+`model_window_needed`, and every `HARD` row's disposition. The script appends its own rows to
+`_bmad-output/ai-dlc-update/pull-decisions.tsv`. Append each of yours to the same file: one line,
+real tabs, six columns `kind  path  digest  decider  verdict  evidence`, `decider` = `model`; when
+the file is absent write its header line first, because the PR-body renderer skips line 1.
+`pull.sh deliver` renders the file into the update PR body, and the operator's merge of that PR
+is the approval of every row in it.
+
+**A decision row CARRIES the command that verified it, exactly as a step-8 defect filing does.**
+Its `evidence` column names the literal command run and its decisive output line, then what you
+could NOT verify. A claim about WHY a detector emitted a row
+is an INFERENCE — label it or verify it. A resolution command written there is given with every placeholder resolved: a literal
+`<dist>` is a path nobody can walk without guessing. Treat every recommendation as a hypothesis
+and run the command that would falsify it. A decisions row records a decision; it is never an
+operator answer, and it NEVER authorizes a write on its own: only `apply` on this invocation does.
 
 1. **Resolve inputs.** Read the stamp: `base` = the `commit` field (rulebook
    merge-base), per the schema above; fall back to legacy single-line parsing if
@@ -201,6 +221,12 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    after the fetch and prints it as its `theirs` line; a named `<ref>` resolves to its
    full sha the same way. That full sha is the `theirs` every later step and the step-2
    re-invocation receive.
+
+   **Run it through the driver:** `reconcile/pull.sh resolve <consumer> [<ref>]` reads the stamp,
+   runs that clone, applies the four `<ref>` checks of *Invocation*, and prints
+   `RESOLVE dist=<path> base=<sha> theirs=<sha>`. Those three values are the `<dist>`, `<base>`
+   and `<theirs>` of every later step. `ASK upstream-url` (exit 3) is the no-`upstream:` case
+   above; a `REFUSED resolve dist-clone rc=<n>` carries the clone's own STOP line on stderr.
 
    **Git preflight — the consumer branch must be in a reconcilable state.**
    Shell to git in the consumer tree and check the current branch BEFORE the
@@ -332,146 +358,39 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    lands on its OWN cycle, **autonomously — no operator approval**, distinct from
    the operator-gated rulebook reconcile (step 8).
 
-   **That declaration does NOT extend to the rest of the machinery set, and reading it as
-   if it did is how this step overwrites a consumer edit.** Machinery is upstream-OWNED —
-   a statement about who decides its content, not a claim that no consumer has ever edited
-   its copy. The reference consumer edited its `.githooks/pre-push`, a `machinery:` entry,
-   and this cycle would otherwise have written `theirs` over it autonomously and
-   auto-merged the result. The second subtraction below is what disposes of that state,
-   and `reconcile/self-update-gate.sh` names every such path in its output. Where the
-   two sentences here and at "only the paths that diff names" below appear to conflict,
-   the subtraction is the resolution: a consumer-modified machinery path is never written
-   by this cycle.
 
-   Diff `base→theirs` restricted to **the MACHINERY set** — read
-   `reconcile/setup-sites.md`'s `machinery:` list (the manifest, `git-hooks/pre-push`,
-   hooks, `scripts/ai-dlc/*`, schemas, session-driver, templates, and the `ai-dlc-setup` /
-   `ai-dlc-update` subtrees) — **plus the fixtures that cover THE CHANGED PATHS**: every
-   `core/fixtures/<dir>/` whose `*.sh` names one of the machinery paths **this diff actually
-   touched**, EXCLUDING — read AT `theirs` — any dir carrying a `.dist-only` marker (never
-   shipped, so it cannot run on a consumer) and any dir **upstream does not ship at `theirs`**
-   (nothing to write; a dir upstream ships with no `run.sh`, such as the shared `lib/` or a
-   seed-only dir, is written whole). Derive both sets rather than enumerating either here, and grep
-   `seed.sh` as well as `run.sh` (a fixture commonly resolves the tooling path in its seed,
-   so a run.sh-only derivation misses it).
+   **That declaration does NOT extend to the rest of the machinery set.** Machinery is
+   upstream-OWNED, which is not a claim that no consumer edited its copy: a consumer-modified
+   machinery path is never written by this cycle (the second subtraction below).
 
-   **BOTH exclusions bind BOTH terms, not only the first.** The
-   enforcer applies them to every fixture directory the self-update commit writes, so a dir
-   reaching this term through the grep — legitimately, because the grep reads `seed.sh` and a dir
-   may carry a `seed.sh` and no `run.sh` — and written here is refused at the push when it
-   carries `.dist-only` or does not exist at `theirs`, when it has a `run.sh` at `theirs`
-   that the write omits, or when its state at `theirs` cannot be read (UNCONFIRMED).
+   **The slice.** Diff `base→theirs` restricted to **the MACHINERY set** — read
+   `reconcile/setup-sites.md`'s `machinery:` list, substituting `core/scripts/ai-dlc/` →
+   `core/scripts/` before matching diff paths against it — **plus the fixtures that cover THE
+   CHANGED PATHS**: every `core/fixtures/<dir>/` whose `run.sh` or `seed.sh` names a machinery
+   path this diff touched, and every `core/fixtures/<dir>/` the diff itself touches. Exclude,
+   read AT `theirs`, any dir carrying `.dist-only` and any dir upstream does not ship at
+   `theirs`; subtract every path `preclassify.sh` buckets `DIST-ONLY-SKIP`; write each fixture
+   directory WHOLE, its `run.sh` included. The tooling and the fixtures that guard it move
+   together, because a red derived fixture DEFERS the cycle. The gate detects the couplings a
+   machinery-only slice cannot carry (an enforcement-map anchor the rulebook lacks, a fixture
+   asserting on rulebook, a deleted fixture the consumer holds) and returns `SELF-UPDATE-DEFER`
+   for them, so on a check-adding pull the deferral is the expected outcome.
 
-   **The fixture term has a SECOND half, and the first cannot see it: every
-   `core/fixtures/<dir>/` THE DIFF ITSELF TOUCHES.** The grep above runs over the fixtures
-   and keys on machinery that MOVED, so a fixture the pull REPAIRS — one whose only change
-   is its own `run.sh` or `seed.sh` — names no moved machinery path and is outside the slice
-   by construction. The consumer's pre-push runs the WHOLE suite, not the slice, so its
-   unrepaired copy stays red and blocks the very push this cycle is making. Measured over 69
-   release-to-release ranges of the distribution: **16 carry at least one SHIPPING fixture in
-   exactly that state**. Two exclusions, both read AT `theirs`, and both stated as the
-   ENFORCER spells them rather than as a paraphrase: a dir carrying `.dist-only` never ships,
-   and a dir **upstream does not ship at `theirs`** has nothing to write. A dir upstream ships
-   with no `run.sh` (a support dir: the shared `lib/`, seed-only dirs) is written whole like any
-   other covered path and is not refused; a dir with a `run.sh` at `theirs` is written with it.
-   That second exclusion is not "a dir the diff deletes" — deriving this term by hand from the
-   looser wording yields a slice the push then refuses. **Subtract every path `preclassify.sh` buckets `DIST-ONLY-SKIP` from the write set,
-   and write each fixture directory WHOLE, its `run.sh` included.** The gate-record checker the
-   push runs (`reconcile/self-update-fixtures.sh`, called by `reconcile/self-update-push.sh`)
-   refuses a self-update commit that wrote a fixture directory carrying `.dist-only` at `theirs`,
-   a dir upstream does not ship at `theirs`, a dir whose `run.sh` at `theirs` the commit omits,
-   or a dir whose state at `theirs` cannot be read (UNCONFIRMED), before any hook runs and before
-   anything is pushed. That refusal exists
-   because a hand derivation on the reference consumer named `backlog-size-ceiling`, which carries
-   `.dist-only`, and wrote it into that consumer's `tests/fixtures/` as a RETIRED-FIXTURE-ORPHAN.
+   **Run the gate through the driver:** `reconcile/pull.sh gate <dist> <base> <consumer>
+   <theirs>` runs the gate below and prints `GATE OK|DEFER|UNDECIDED`, then its
+   `SELF-UPDATE-SAFE-STOP`, `SELF-UPDATE-CARRY` and `SELF-UPDATE-UNDECIDED` rows; the gate writes
+   its record exactly as when run by hand. The cycle after an OK verdict stays yours.
 
-   **Against the CHANGED paths, not the whole machinery list — the difference is two orders
-   of magnitude.** `machinery:` carries `core/scripts/ai-dlc/*`, which the substitution below
-   turns into *every distribution script*; and a fixture's whole job is to invoke a validator,
-   so naming a `core/scripts/…` path is the norm. Measured at 0.168.1: **45 of 66** shippable
-   fixtures name one, so a whole-list reading demands 45 fixture runs to gate a one-script
-   change and is indistinguishable from "run the entire suite." The changed-paths reading
-   yields the one covering fixture, which is what the step means and what makes the write
-   instruction below — "the covering fixtures, never the derived set per directory" — a
-   distinction the reader can act on rather than a contradiction.
-
-   **One entry is CONSUMER-shaped; translate it and match dist-to-dist.** `machinery:`
-   entries carry a `core/` prefix and are otherwise consumer-shaped, which matters for
-   exactly one of them: `core/scripts/ai-dlc/*` is where a validator LANDS, while upstream
-   it is `core/scripts/<name>`. Testing a `git diff` path against that entry directly
-   matches `scripts/` not at all and silently yields an EMPTY slice. Every other machinery
-   entry is already a valid distribution glob (verified: only that one resolves to zero
-   files under `git ls-files`). So substitute `core/scripts/ai-dlc/` → `core/scripts/`
-   and match the diff paths against the result.
-
-   Do NOT reach for `to_consumer_glob()` here. It lives in `core/scripts/core-paths.sh`
-   and `core/hooks/ai-dlc-core-guard.sh` — outside `reconcile/`, so this skill's HARD
-   CONSTRAINT forbids reading it, and an earlier draft of this step sent the reader there
-   anyway. The one substitution above needs no helper.
-
-   **The whole machinery set moves together, not just this skill.** Machinery is exactly
-   the core with no layer grain — no `overrides/` shadow, no `extensions/` entry, nothing
-   for an operator to adjudicate — which is the same property that makes this cycle
-   autonomous in the first place. `validate-enforcement-map.sh` I28 asserts the
-   `machinery:`/`rulebook:` lists partition the manifest, so the set cannot silently
-   narrow. The rulebook stays operator-gated at step 8.
-
-   **The tooling and the fixtures that guard it move together or the suite goes red on a
-   pull that broke nothing.** Pulling `reconcile/*` alone leaves the consumer running new
-   tooling against fixtures written for the old, and the suite fails on a fixture correctly
-   reporting that its subject changed underneath it — not a regression, not consumer-caused,
-   and it blocks the run before the reconcile that would have shipped the matching fixture.
-   A self-update that carries a validator without the fixture asserting its behaviour
-   strands the fixture against code it no longer describes.
-
-   **Restricting the slice to this skill was itself that bug.** A fixture covering
-   `ai-dlc-update` can depend on machinery elsewhere, and two of them do: `check-15-bypass`
-   resolves `scripts/ai-dlc/core-paths.sh` and `core-manifest.md`, `core-write-guard`
-   resolves the core guard hook. Pulling only `skills/ai-dlc-update/**` left both asserting
-   against machinery this cycle did not carry, and a red derived fixture DEFERS the
-   cycle — so the self-update wedged on a pull that broke nothing. The machinery set is the
-   smallest slice that closes that ~~, because a fixture's subject is always machinery~~.
-
-   **CORRECTED — "a fixture's subject is always machinery" is FALSE, and widening the slice
-   cannot fix it, because the only thing left to widen into is the rulebook this step
-   deliberately excludes.** Measured on the reference consumer pulling 0.249.0 → 0.261.0:
-   **7 of that tree's 109 fixtures are red in the state this step constructs**, and the
-   operator had to cut a branch, write the 17-path slice and run 43 derived fixtures to
-   find out. Three distinct couplings, all real:
-
-   - **`enforcement-map.yaml` is machinery; its `CHECK_LOADED` anchors are rulebook.** A
-     release that adds a check makes the incoming map reference an anchor that does not
-     exist in the consumer's `steps/gate-validation.md` yet, so `validate-enforcement-map.sh`
-     fails on the consumer's own tree and every fixture driving it goes red. Measured:
-     checks 33, 34 and 35.
-   - **Some fixtures assert on rulebook directly.** `postcompact-rulebook-recovery` runs
-     `validate-reattach-budget.sh` against the SHIPPED `SKILL.md` and mutates its mandate.
-     Its subject is rulebook, so it cannot be green while machinery is at theirs and
-     rulebook at ours — whatever the slice contains.
-   - **A fixture file the pull deletes stays in the consumer's tree.** This step never
-     deletes, so the slice ships a deleted fixture file's new siblings beside the stale copy,
-     and a sibling that enumerates its own directory runs or asserts on the file upstream
-     removed. Only the step-7 gated apply performs the deletion (`UPSTREAM-DELETED`). The
-     gate's `deletion-coupled-fixtures` row names each deleted `core/fixtures/` path the
-     consumer still holds at its `tests/fixtures/` mapping; a deleted path the consumer
-     already lacks is quiet.
-
-   **So the deferral is structural, not exceptional**, and for any pull spanning a
-   check-adding release it is the expected outcome. `reconcile/self-update-gate.sh` now
-   detects all three couplings BEFORE the branch is cut and returns `SELF-UPDATE-DEFER`, so the
-   slice folds into the gated apply without the branch/write/run/revert cycle. Its two
-   rulebook arms fire only when the rulebook is ALSO about to change (verified against 0.256.0
-   → 0.257.0, which touches no rulebook file), and its deletion arm only when the pull deletes
-   a fixture file the consumer still holds: a machinery-only pull that deletes no held fixture
-   file still proceeds autonomously.
+   **Detail on demand.** The derivation's full rules (both exclusions and both fixture terms as
+   the enforcer spells them), the gate record's refusals and tolerances, and the carried-pair
+   note live in `reconcile/self-update-refusals.md`. Read it when deriving the slice by hand or
+   when the push wrapper or its checker refuses: read it in consecutive bounded native Read
+   chunks (offset+limit) of at most 16 KB, never `ctx_*`, and re-read it on need after a
+   compaction.
 
    **EMPTY is a CONTENT question, not a diff question — or this step never terminates.**
-   The slice is `git diff base→theirs`, and `base` is the stamp's `commit`, which advances
-   only under a gated `apply` at step 7. So once a self-update has written every machinery
-   path, the diff STILL lists them on the next bare invocation: the cycle re-runs, re-invokes,
-   and re-runs again. Measured on the reference consumer after both its self-update PRs
-   merged — the diff still yielded every machinery path while a per-path content check
-   reported all of them already at `theirs`.
+   `base` advances only under a gated `apply`, so after a self-update the diff still lists every
+   machinery path it wrote.
    
    So drop from the slice every path whose consumer copy already matches `theirs`. Do not
    hand-roll that comparison: `reconcile/preclassify.sh` already buckets exactly this as
@@ -549,24 +468,6 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      apply. A carry row and an OK verdict together mean "self-update the rest, hand this path
      to the operator" — the case this step had no disposition for.
 
-   The gate's verdict is a DIFFERENTIAL — the incoming script and the consumer's current one, run
-   under identical conditions — so a script that merely fails to resolve from a temp path cannot
-   masquerade as a new finding and strand the slice for no reason.
-
-   **A push failure that predates the pull is NOT a differential, and the gate does not judge it.**
-   It sits outside every incoming-versus-current comparison by construction, so it is answered at
-   the push, by `reconcile/self-update-push.sh`, which runs the consumer's pre-push hook EXACTLY
-   ONCE per self-update: the hook git would run (resolved by `git rev-parse --git-path
-   hooks/pre-push`, so `core.hooksPath` and a `.git/hooks/` shim both count, and a hook git would
-   skip is skipped), on the WRITTEN tree, with the hook the slice may just have replaced, fed the
-   ref line the push sends. That is the push's own run of the hook, not a rehearsal of it: the
-   wrapper pushes with `--no-verify` only after that run exited 0. A non-zero run is
-   `HOOK-REFUSED` (exit 3) with nothing pushed, and the push paragraph below discards the branch
-   and DEFERs. The gate never runs the hook; its only `pre-push` rows are UNDECIDED — a consumer
-   that is a subdirectory of an enclosing repository (the push would run that repository's hook),
-   or a range whose hook change could not be read. **The one hook run is the consumer's whole
-   pre-push and can take minutes; it is the run the push would have made anyway.**
-
    **THE APPROVAL ARTIFACT FOR THIS AUTONOMOUS CYCLE IS THE GATE RECORD, AND IT IS THE ONLY
    ONE.** This cycle cuts a branch, writes the machinery slice, pushes and auto-merges with no
    operator gate, only when step 1 reached sync (on an UN-SYNCED branch step 2 defers and
@@ -576,21 +477,6 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    range it classified.
    **Commit the gate record in the self-update commit**, so the auto-merged PR carries the evidence
    of its own approval rather than a claim about it.
-
-   **The push REFUSES without that record.** `reconcile/self-update-push.sh` runs the gate-record
-   checker `reconcile/self-update-fixtures.sh` (the name is historical; it runs no fixture) before
-   the consumer's pre-push hook. The checker looks for a recorded `# verdict: OK` whose range
-   matches its own — compared as RESOLVED COMMITS, so a tag and the sha it names are the same
-   range — and exits 2 with a `GATE-RECORD:` line naming the exact gate command when there is
-   none; the wrapper then exits 2 with `GATE-RECORD-REFUSED`, runs no hook and pushes nothing.
-   That is what makes the gate's verdict load-bearing rather than advisory: a classifier printing
-   to stdout can refuse nothing, and the program this step must call to push is the one that can.
-
-   **The record also binds the CONSUMER TREE its verdict was taken against, not just the range.**
-   The verdict is a differential against the consumer's own copies, so the same command over one
-   range answers differently once this cycle has written the slice — the record therefore names
-   every consumer file the verdict read, with its digest and the core path it maps from, and the
-   checker re-reads each one.
 
    **THE ORDER IS GATE, THEN WRITE, THEN COMMIT, THEN PUSH, AND THE GATE RUNS ONCE.** Run
    `self-update-gate.sh` BEFORE writing anything, on the tree as the operator left it; write the
@@ -602,18 +488,6 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    record.** A gate run on the written tree compares each incoming script with a copy of itself,
    so it reports OK for the one reason that means nothing, and the checker refuses such a record
    as `PRE-WRITTEN`.
-
-   **A script a PRIOR self-update landed is not pre-written.** The gate identifies it by the
-   stamp's `skill_commit` and the consumer's committed copy, and reports it as `SELF-UPDATE-OK …
-   landed by the prior self-update`. A script that is already at theirs but that the hook only
-   mentions and never runs reads `not gating`. In both cases the slice still subtracts the script
-   as ALREADY-AT-THEIRS and does not write it.
-
-   **One tolerance, and it exists because a fix to a bootstrapping step cannot be delivered by that
-   step.** On the pull that delivers the recording gate the OLD gate runs and records nothing, so
-   the checker proceeds with a `NOT-REQUIRED` line when no record exists AND the gate at `base` —
-   the engine the consumer installed — carries no record-writing site. Where that gate does record,
-   an empty record directory is a refusal: the records were deleted or the gate was never run.
 
    If NON-EMPTY and the gate says OK:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
@@ -708,16 +582,6 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      is NOT UN-SYNCED: step 1 reached sync and nothing was pushed, so steps 3–5 run and step 6
      does not refuse `apply` on this account.
 
-     **The pair advances even on a cycle that CARRIED a path, and that is what the gate's
-     `GATE_CARRY_STATE` refusal compensates for.** A carried path is the one thing this cycle
-     did not write, so the advanced `skill_commit` then attests machinery that did not
-     land; nothing here corrects it, because the correction would need per-path granularity
-     the stamp has no field for. `machinery_at_or_past()` in
-     `reconcile/self-update-gate.sh` therefore refuses on the carry row instead of on the
-     stamp, so the SAFE-STOP acquittal is withheld on the runs where the stamp is ahead of
-     the tree. Do NOT hand-hold the stamp back — the carry row already reaches the operator
-     and step 7's gated apply is what closes it.
-
      **A derived fixture is a consumer edit when `preclassify.sh`'s BUCKET for that path says
      so, or, for a path it has no row for, under the rule below — never overwrite one that is.** Report the path, leave the file, and
      continue the cycle. Only `.claude/skills/ai-dlc-update/**` is overwrite-safe by declaration;
@@ -754,21 +618,6 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      divergence, and its own header says keying on anything narrower names a set the downstream
      half does not agree with. Read the arm; do not restate it here and do not re-enumerate the
      buckets, which have no single owning declaration.
-
-     **CITED BY TOKEN AND NOT BY LINE NUMBER, DELIBERATELY.** A consumer runs whatever version it
-     last installed, so a line number written into shipped prose resolves against a DIFFERENT file
-     on every tree that is not at this exact release — it does not fail, it silently lands on
-     unrelated text. Caught by the reference consumer against a citation in this very passage.
-     Cite something greppable.
-
-     **THE FIRST COUNT OF HOW MANY OTHERS EXIST WAS WRONG, BY A GRAMMAR THAT COULD NOT SPELL ITS
-     OWN SUBJECT.** It matched the path-plus-number form and not the bare colon-number form this
-     passage had used, so it scored this very citation as a non-instance and reported it as the
-     only one. Re-run over both forms, with a seeded positive control and a negative control, FOUR
-     remain across shipped core prose. Point a search grammar at its own subject before believing
-     its number, and re-run the scan rather than taking this paragraph as the corpus. Note also
-     that writing either form here as an EXAMPLE would make this passage an instance of its own
-     subject, which is why neither is spelled out.
 
      **A SECOND DERIVATION OF THIS QUESTION RETURNED THE OPPOSITE VERDICT, AND THE TOOL WAS
      RIGHT.** Measured on the reference consumer, in ONE invocation: `preclassify.sh` bucketed
@@ -862,279 +711,25 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      issued automatically in this harness, say so in one line and tell the
      operator to run `/ai-dlc-update` themselves — never fall through to stale
      logic. This applies even when the following reconcile would be empty.
-3. **Mechanical pre-classification** (cheap, deterministic — no agents):
-   run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
-   **Exit 2 is a refusal, not a result.** When a git call it depends on fails, it exits 2 and
-   prints one stderr line naming that call. Any rows it printed before stopping are partial and
-   must not be read as buckets. Fix what the line names and re-run.
-   It hashes base/theirs/ours per changed file and buckets each into:
-   - `UPSTREAM-ONLY-ADD` (net-new upstream, consumer lacks it) → **apply (pure)**
-   - `UPSTREAM-ONLY` (upstream changed, consumer untouched vs base) → **apply**
-   - `ALREADY-AT-THEIRS` / `ALREADY-PRESENT` → **noop**
-   - `UPSTREAM-DELETED` (upstream removed it, consumer untouched vs base) →
-     **delete the consumer file (gated — destructive, see step 7)**
-   - `UPSTREAM-DELETED-NOOP` (upstream removed it, consumer already lacks it) → **noop**
-   - `PRE-RELOCATION-NOOP` (a changed `core/scripts/*` path on a consumer still holding
-     it at the pre-relocation `scripts/<name>`; the relocation pass owns that copy) → **noop**
-   - `CONSUMER-MISSING-NOOP` (the consumer opted out of this destination — today only
-     `.github/workflows/`, which `install.sh` has always written *only* if the directory
-     already exists) → **noop**. Updating a workflow a consumer HAS is a fix; creating
-     CI on a consumer that has none is a change nobody asked the pull to make.
-   - `ORPHANED-RELOCATED` (status `O`) — a file at a consumer path an earlier release of
-     this distribution wrote and the current one no longer targets, whose content still hash-matches the blob
-     we shipped, so it is provably our copy → **delete the consumer file (gated —
-     destructive, see step 7)**. When a core subtree's destination changes, the copies
-     already written to the old path do not move and do not vanish; every later pull
-     refreshes only the new path, so the orphan silently diverges from the file it is a
-     copy of. Retiring it is the pull's job — a migration note in a CHANGELOG is how it
-     never gets done. Emitted **level-triggered**: an orphan is a *state* of the consumer
-     tree, not an event in the upstream diff, so a pull that touches no file in the moved
-     subtree must still report it.
-   - `ORPHANED-UNKNOWN` / `ORPHANED-RELOCATED+consumer-modified` → **needs semantic
-     classify, never auto-deleted.** The orphan is either something upstream never
-     shipped or something the consumer edited. The pull only ever proposes destroying a
-     file whose bytes it can prove it wrote.
-   - `BOTH-CHANGED` / `BOTH-ADDED` / `UPSTREAM-MOD+consumer-deleted` /
-     `UPSTREAM-DELETED+consumer-modified` → **needs semantic classify**
-3a-ii. **Retired contract tokens** (cheap, deterministic — no agents):
-   run `reconcile/retired-tokens.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
-   Every `CLASSIFY` file's semantic merge MUST clear this before it counts as done.
-   It names the one merge defect no other detector here can see: upstream retired a
-   shared contract (a channel, a scratch path, a state file) and the consumer's own
-   code — inside the same upstream-maintained file — still speaks the old one. That
-   merges cleanly, parses cleanly, and yields a gate that cannot fire. It happened:
-   on the 0.114.0 → 0.118.2 pull a consumer's pool block kept writing to a retired
-   temp path and its budget gate reported PASS at **1212% of budget, exit 0**. Nothing
-   flagged it; a person found it by hand-building a functional test.
-   **A non-empty result means the merge is NOT complete.** Re-point the consumer's
-   reference at whatever THEIRS replaced it with, then re-run until the output is
-   empty — or record in the report why a survivor is safe. `apply.sh` carries the
-   token list on the worklist item itself, so the obligation arrives with the work.
-   Note what it does NOT catch: a consumer path upstream never had (there is no
-   retirement to detect). A clean result is not proof the merge is semantically whole.
-   **Read its stderr, not only its rows.** A pull that lists no `CLASSIFY` file (every
-   path already at theirs, or untouched by the consumer) opens nothing, and its zero
-   rows are byte-identical to a full scan that matched nothing; the NOTE it prints in
-   that state, the `M of N … opened` denominator it prints when it opened files and
-   matched nothing, and the refusal it prints when `preclassify.sh` listed nothing at
-   all are the difference between a scan that found nothing and a scan that never ran.
-3a-iii. **Retired contract shapes in consumer layer files** (cheap, deterministic
-   — no agents): run `reconcile/retired-layer-contract.sh <dist-repo> <base-sha>
-   <theirs-ref> <consumer-root>`. `retired-tokens.sh` above scans only `CLASSIFY`
-   core files, so `overrides/` and `extensions/` are outside every bucket and no
-   detector opens them. A layer file that shadows, quotes, or restates a core
-   construct upstream retired therefore survives the pull unreported, and the layer
-   is what the teammate reads.
-   Output is `RETIRED-LAYER-CONTRACT<TAB><layer-path><TAB><shape>`. Each row is a
-   layer file to re-read against `theirs`: either re-point it at the replacement
-   construct, or record in the report why the stale reference is harmless.
-   **Read its stderr, not only its rows.** When the release retired no shape it opens
-   no layer file at all, and says so; that NOTE is the difference between a scan that
-   found nothing and a scan that never ran.
-3a-iv. **Retired core PASSAGES still carried by a layer file** (cheap, deterministic
-   — no agents): run `reconcile/retired-layer-passage.sh <dist-repo> <base-sha>
-   <theirs-ref> <consumer-root>`. 3a-iii matches retired contract SHAPES — labelled
-   directives and `{token}` placeholders — and cannot see a layer file that reproduces
-   a retired core directive as ordinary prose. This one asks the complementary question:
-   does a layer file still contain a LINE core carried at base and deleted by theirs?
-   Output is `RETIRED-LAYER-PASSAGE<TAB><layer-path>:<line><TAB><deleted core line>`.
-   Each row is a passage the layer reproduces and core no longer has — **RE-POINT it at
-   the wording core carries now.** Do not delete it. This detector's input is one path
-   glob's removed-line set, so it cannot tell a MOVE from a retirement, and on a release
-   that re-sites text every row cites wording core still carries somewhere else.
-   Its limit, and read its stderr for the same reason: it matches reproductions, not
-   paraphrases. Reword any clause and the line stops matching.
-   **This does NOT block the apply** — a layer file is consumer-owned and the pull
-   does not rewrite it.
-   **Step 7's apply emits a `WORKLIST retired-layer-passage` row for this same class**,
-   from its own run of this detector, so the work is tracked there whether or not you
-   run the scan here. Running it now is the earlier look, not a second finding; the row
-   is what the re-stamp waits on. The row's own detail is authoritative about the remedy
-   — work the row, not this paragraph.
-   Note what it does NOT catch: a shape the consumer invented that core never had,
-   and a layer file that paraphrases a retired construct without using its literal
-   shape. A clean result is not proof every layer file survived the release.
-3a-v. **Core fixtures the consumer still carries after core stopped shipping them**
-   (cheap, deterministic — no agents): run
-   `reconcile/retired-fixtures.sh <dist-repo> <theirs-ref> <consumer-root>`.
-   `install.sh` and `apply.sh` copy a core fixture into the consumer; when core later
-   marks it `.dist-only` or deletes it, both stop copying it — correctly — and the copy
-   already installed becomes unreachable by every mechanism core has. It is not drift
-   (nobody edited it) and not a missing file (the consumer has one), so no bucket claims
-   it, and it freezes at whatever core last shipped.
-   Output is `RETIRED-FIXTURE-ORPHAN<TAB><consumer-path><TAB><remedy>`.
-   **This does NOT block the apply**, and core does not remove the directory — the file
-   is the consumer's. Each row is a `rm -rf` the operator confirms, or a rename if the
-   consumer has adopted the fixture as its own.
-   Two rows are NOT orphans and mean the scan was incomplete: `HARD-RETIRED-FIXTURE-
-   SCAN-UNAVAILABLE` (the path mapper could not be loaded — nothing was scanned) and
-   `RETIRED-FIXTURE-HISTORY-UNAVAILABLE` (a shallow clone, so a fixture core DELETED
-   cannot be told from one the consumer wrote; the `.dist-only` half is unaffected).
-   Note what it does NOT catch: a core fixture the consumer RENAMED, which by design
-   reads as the consumer's own.
-3a-vi. **Retired status tokens reused in a layer file's own prose** (cheap, deterministic
-   — no agents): run `reconcile/retired-layer-token.sh <dist-repo> <base-sha>
-   <theirs-ref> <consumer-root>`. 3a-iii matches contract SHAPES and 3a-iv matches whole
-   deleted core LINES; a consumer sentence that merely REUSES a status word core renamed
-   is neither, and both print their clean NOTE over it. It happened: on the
-   0.373.0 → 0.378.0 pull `VACUOUS` became `EXAMINED NOTHING`, an override's rendered
-   body still read `stock exits 78 VACUOUS`, and every mechanical signal was clean — a
-   person found it by grepping the body.
-   The retired set is derived, never listed: every ALL-CAPS word of four or more
-   characters that the core rulebook carried at base and carries nowhere at theirs, kept
-   when it is JOINED (`-` or `_`, the shape emphasis never has) or when some core program
-   printed it at base and stopped in that same file at theirs — a plain word with neither
-   witness is read as emphasis and the NOTE names it. Output is
-   `RETIRED-LAYER-TOKEN<TAB><layer-path>:<line><TAB><token>`.
-   Each row is a sentence to re-read against `theirs`: re-point it at the replacement
-   token, or record in the report why the old word is still correct there. A row inside
-   a layer file's frontmatter `reason:` is usually a stale grep control and is owed the
-   same re-read.
-   **Read its stderr, not only its rows.** When the release retired no token it opens no
-   layer file at all and says so; a scanned-but-no-match run prints both counts; an
-   unreadable rulebook at either ref is a refusal with exit 2, never a clean line — an
-   unresolvable theirs would otherwise retire every token — and the report renders that
-   section as `DETECTOR-REFUSED`, which must not be approved.
-   **This does NOT block the apply** — a layer file is consumer-owned. It is a worklist
-   item, owed before the pull counts as done.
-   Note what it does NOT catch: a token the consumer invented that core never had, a
-   word core still carries anywhere in its rulebook at theirs, a plain word no core
-   program ever printed, a vocabulary whose owner sits outside the rulebook (a
-   `layer-contract.yaml` clause code, a ledger status) unless the rulebook also spells
-   it, a space-separated status whose other word survived (matched one word at a time),
-   a hyphen chain the layer carries only a prefix or one segment of (a chain is one token,
-   retired whole), and a paraphrase that drops the literal word. A clean result is not
-   proof every layer file survived the release.
+3. **Detect — the driver runs every detector once; you never chain them by hand.** One render
+   of `reconcile/emit-report.sh` inside `pull.sh dry-run` or `pull.sh apply` runs, on one
+   pre-write state: the mechanical pre-classification (`reconcile/preclassify.sh`), the template
+   pre-classification (`--templates`), layer drift (`reconcile/layer-drift.sh`), unregistered core
+   drift (`reconcile/unregistered-drift.sh`), the consumer-catalog collisions and the newly
+   unloadable extension checks, the push-candidate ledger re-verify (3f below) and the predicate
+   reclassification. Their rows land in the report's `BEGIN/END GENERATED: reconcile-mechanical`
+   region, and the union gate and `apply.sh`'s pre-write calls answer from that same render while
+   its fingerprint holds. Do NOT hand-verify overrides with ad-hoc `git diff` calls and do not
+   re-run a detector to "check" the region: a hand check is what let overrides whose `base_sha`
+   named the consumer's own repo go unseen.
 
-3b. **Template pre-classification** (the generated files outside `core/`):
-   `reconcile/emit-report.sh` runs `reconcile/preclassify.sh <dist-repo>
-   <base-sha> <theirs-ref> <consumer-root> --templates` for you and renders
-   its rows into the step-5 region's **Template pre-classification** section.
-   You do not run it and you do not narrate its rows; run it by hand only to
-   investigate a `DETECTOR-REFUSED` line. The `core/` reconcile above never sees
-   `CLAUDE.md`, `docs/coding-conventions.md`, `QUICKSTART.md`, or
-   `.claude/settings.json` — they are generated from `templates/*.template`
-   and filled with consumer config, so an upstream edit to the template
-   boilerplate (a removed section, a reworded rule) would otherwise never
-   reach a consumer. This pass buckets each per `reconcile/template-sites.md`:
-   - `TEMPLATE-UNCHANGED-NOOP` (upstream template boilerplate identical vs base) → **noop**
-   - `CONSUMER-MISSING-NOOP` (consumer lacks the generated file) → **skip**
-   - `TEMPLATE-PROSE-MERGE` (token-prose file, boilerplate changed) → **marker-anchored mask/reinject (step 7)**
-   - `TEMPLATE-JSON-MERGE` (`settings.json`, changed) → **jq strip/merge (step 7)**
-   Reconciling these is per `template-sites.md`'s transforms; the consumer's
-   filled config is preserved, only upstream boilerplate is synced.
-3c. **Layer-drift detection** (cheap, deterministic — no agents):
-   run `reconcile/layer-drift.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
-   This MECHANIZES the "Layered consumers" rule below. Do NOT
-   hand-verify overrides with ad-hoc `git diff` calls: a hand check is what lets a
-   consumer accumulate overrides
-   whose `base_sha` pointed at its OWN repo — every diff would have died on
-   `fatal: bad revision`, and two shipped upstream changes were discarded unseen.
-   Statuses:
-   - `HARD-OVERRIDE-BASE-CONSUMER-SHA` / `HARD-OVERRIDE-BASE-UNRESOLVABLE` →
-     **blocks `apply`** (see step 7). The `base_sha` is unusable, so drift for
-     that override is undecidable. Never skip it; never "assume unchanged."
-     Resolution: operator re-stamps `base_sha` to the correct distribution sha.
-   - `HARD-OVERRIDE-DRIFT-SECTION` → the shadowed section changed upstream, so the
-     override is now shadowing **a rule that no longer exists**. **Blocks `apply`**
-     (see step 7). Resolution is not freehand — run the re-adoption workflow:
+   **What each row means and what you do with it** — every status of steps 3-3e and 3g, each
+   `HARD-*` row's disposition, the per-bucket apply actions and the post-write gates' rows —
+   lives in `reconcile/detector-rows.md`. Read the section for a row when the driver hands you
+   that row: read it in consecutive bounded native Read chunks (offset+limit) of at most 16 KB,
+   never `ctx_*`, and re-read it on need after a compaction. Two `HARD-*` statuses carry a layer
+   clause and are stated here, because this file is their clause's home:
 
-         reconcile/readopt-override.sh <dist> <theirs> <consumer> <override>
-
-     It prints the dossier (the core section's `base_sha..theirs` diff, the override's
-     body, its stated `reason:`, and the superseded core lines still sitting in that
-     body) and asks the one question that decides the outcome: **does upstream's change
-     supersede the reason this override exists?** Three outcomes, all ending in a
-     re-stamped `base_sha`: `--stamp retire` (upstream absorbed it), `--stamp readopt`
-     (merge the new core text into the override, preserving the consumer's delta),
-     `--stamp reaffirm --note "<why>"` (the override still stands).
-
-     **`--merge` performs the re-adoption; you do not hand-edit the body.** It is a
-     three-way merge (base = core@`base_sha`, ours = the override body, theirs =
-     core@`theirs`), so upstream's change lands and the consumer's delta survives. A
-     conflict leaves markers and is the only case needing a human.
-
-     **`--stamp readopt` is REFUSED while the body still carries core text `theirs`
-     superseded, or while conflict markers remain.** Drift is computed
-     `base_sha..theirs`, so a bare re-stamp makes the HARD status evaporate with nothing
-     migrated — the lead reads the OVERRIDE, not core, and would go on obeying the rule
-     the fix replaced. Doing nothing is not an available outcome.
-
-     The full procedure — **you do the surgery, the operator approves it** — is the
-     adjudication loop in step 7. Do not hand the operator a blocker list.
-     **Why this blocks, when a check-number collision does not.** A collision is
-     cosmetic and consumer-fixable. This changes **the rules the lead obeys**: the
-     lead reads the override, not core, so an un-adjudicated drift means the core fix
-     landed on disk and the pipeline went on running the rule it replaced. That is
-     not hypothetical: a core fix routinely targets a section some consumer shadows
-     verbatim, and under an advisory status the fix is inert on exactly the pipelines
-     it was written for.
-   - `OVERRIDE-DRIFT-FILE` → the anchor is not a locatable heading AND the file
-     changed, so the section cannot be *proven* safe. Surface for re-confirmation.
-     Conservative on purpose — an unprovable section is never reported as OK.
-   - `OVERRIDE-ANCHOR-UNRESOLVED` → upstream restructured the anchor away.
-   - `OVERRIDE-DELEGATES-INTO-SHADOW` → the override's body names a construct
-     defined INSIDE a section it shadows, so precedence deletes the delegation
-     target along with the section. **Report-only, never blocking** — pointing the
-     lead at core is sometimes deliberate. Every other status here asks whether
-     UPSTREAM moved; this one is true or false today, independent of any pull, so a
-     clean drift result says nothing about it. Record it and offer the three
-     remedies: restate the construct in the override, narrow `shadows:` to the
-     sub-headings actually rewritten, or delegate to something outside the span.
-     Left alone, every future change to that construct silently fails to arrive.
-   - `OVERRIDE-ASSERTS-SHADOW-SURVIVES` → the body states that the span it shadows
-     is unchanged and still governs. The sibling of the above and the same mechanism:
-     precedence replaces the WHOLE span, so that sentence is false about the entry's
-     own effect. **Report-only.** Remedy: narrow `shadows:`, or restate the surviving
-     text in the body.
-   - `OVERRIDE-BODY-UNCLAIMED` → a section of the body that NO `shadows:` anchor
-     claims. Both rows above ask whether the body describes its own effect truthfully;
-     this asks whether the body is REACHED. The body is sliced per anchor, so a section
-     no anchor names is applied by nothing — it renders nowhere while still reading as
-     live consumer machinery. **Report-only.** It is reached by REMOVING an anchor and
-     leaving the body, so it is the companion row to an `OVERRIDE-SUPERSEDED` narrowing:
-     read them together before executing one. Remedy: restore the anchor, move the text
-     under a section an anchor does claim, or delete it.
-   - `OVERRIDE-LOOSE-ANCHOR` → a `shadows:` anchor resolves only by the REVERSE arm
-     of the containment match, so it names something finer than a heading and quietly
-     widens the shadow to the whole section. **Report-only.** The row names the exact
-     heading to substitute. E7 errors on this at authoring time; that validator is
-     consumer-run and skippable, and this pull is not.
-   - `OVERRIDE-DOUBLE-SHADOW` → two entries declare the same (file, anchor). Each is
-     well-formed alone; precedence picks one body silently, and every commit touching
-     the span invalidates BOTH stamps, so reconciling one looks complete.
-     **Report-only** — a deliberate split is allowed, but it has to be stated in the
-     bodies. Filed under EVERY participating entry, not just the first.
-   - `EXTENSION-RETIRE-CANDIDATE` → upstream **absorbed** a section this extension
-     defines: the titles agree (never merely the number — consumer gate-check numbers
-     are a sanctioned separate namespace) and core did not carry it at `base`. The
-     match is number-agnostic, so it fires even when upstream absorbed the check under
-     a *different* number. Per Rule 27(b) the consumer MUST retire the entry; list it
-     in the report's retirement list. Without this signal every successful absorption
-     leaves a duplicate behind.
-   - `EXTENSION-RESTATES-CORE` → the same title agreement, but core already carried
-     the section **at `base`**. The consumer has been duplicating a core section for
-     some number of releases without being told. The retirement signal is
-     level-triggered: it fires on every pull while the duplication stands, not only on
-     the pull that landed the absorption. Rule 27(c) forbids restating core (the copy
-     cannot drift-check against the original, so it forks silently and then contradicts
-     it). List it in the retirement list too, but the remedy is a judgement: retire it
-     if it merely duplicates core; refile it in `overrides/` with a `base_sha` if it
-     hardens or restricts core.
-   - `EXTENSION-CHECK-NUMBER-COLLISION` → core defines this extension's check *number*
-     with a **different title**. Extensions are additive, so the two catalogs render
-     into one merged list under one integer and the bare `Check N` the lead commits to
-     the gate log stops having a referent. The exact complement of the absorption
-     signal. Tagged `NEW-THIS-PULL` (this pull created it — route to the
-     needs-confirmation list so the operator acknowledges it) or `PRE-EXISTING` (the
-     migration worklist). **Report-only: it never blocks `apply`.** A collision is
-     decidable and consumer-fixable, and a consumer must never be unable to take a
-     security fix because its own catalog needs relabelling.
-   - `EXTENSION-HOOK-DRIFT` → the hooked core file changed. Extensions have no
-     section anchor (`hooks:` is file-grain), so this is the strongest statement
-     available: re-read the entry against the new core text. Its clause is at
-     `level: ADJUDICATED`, so the re-read must be RECORDED — see the two statuses below
-     and step 7.
    - `HARD-LAYER-ADJUDICATION-MISSING` [LC-A1] → a row of a clause at `level: ADJUDICATED` has no
      recorded verdict in `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`
      under the `subject_digest` the row carries. **Blocks `apply`.** The remedy is to make
@@ -1148,151 +743,6 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    - `HARD-REGISTER-CONTRADICTION` [LC-A2] → that register states two different verdicts under one
      key and the later record declares no `supersedes` plus `reason`. **Blocks `apply`**,
      because a lookup would otherwise answer with whichever record was read last.
-   - `EXTENSION-HOOK-MISSING`, `OVERRIDE-OK`, `EXTENSION-OK` → as named.
-   - **Exit 2 with `layer-drift: REFUSED — a row could not be written to stdout after N row(s)
-     were`** → the scan stopped at that write, and every entry after it went unscanned. The rows
-     you have are NOT the result, and a missing `HARD-` row is not an absence. Re-run it with a
-     writable stdout. `apply.sh` renders this exit as `DECISION layer-drift-refused`.
-   - **Exit 1 with `layer-drift: REFUSED — <input> could not be staged`** → an input the scan
-     reads (the layer contract, a core file an override shadows, a producer's output) could not
-     be written to its staging file or did not run, so reading on would have treated it as EMPTY
-     and reported the layer cleaner than it is. **Exit 1 with `layer-drift: REFUSED — … carries N
-     clause(s) at level ADJUDICATED and the code set read out of it is EMPTY`** → the adjudication
-     tier would have been switched off. Both usually mean `ulimit -f` or a full or read-only
-     `$TMPDIR`; clear that and re-run. `--adjudicated-codes` refuses the same way, so its empty
-     output is an answer only when it exits 0.
-   - **Exit 1 with `layer-drift: REFUSED — <base|theirs> ref '<value>' does not resolve to a
-     commit`** → the ref names nothing in the distribution clone: a typo, a ref it never fetched,
-     or a consumer sha passed where a distribution one belongs. THEIRS is checked in all three
-     modes and BASE in classify and list mode, before anything is read. Fetch the ref or correct
-     it, and re-run. **Exit 1 with `layer-drift: REFUSED — <path> at <ref> could not be
-     read`** → an object the scan needs is missing from the distribution clone's
-     object store, and reading on would have treated a present file as an absent one. Repair the
-     clone (re-fetch, or re-clone) and re-run. A path genuinely ABSENT at theirs, which the
-     tree does not name, is not a refusal, and neither is a `hooks:` or `shadows:` path spelled
-     other than the tree spells it (`steps/./x.md`): that is the advisory absent row. Exit 2 with a `usage:` line, or exit 1 with any other
-     reason, is a refusal to start. Any other run exits 0, whatever it found.
-
-3d. **Unregistered core drift — the layer system's blind spot.** `layer-drift.sh`
-   walks `overrides/` and `extensions/`. A core file edited **in place** appears in
-   neither, so no entry describes it, no `base_sha` tracks it, and `apply` — which
-   overwrites upstream-owned core — **deletes it without a word.** Run:
-
-       reconcile/unregistered-drift.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref>
-
-   **Pass `<theirs-ref>`.** Without it the absorption check cannot run, and a consumer
-   whose hardening upstream just adopted keeps being told to refile a delta core already
-   carries — forever.
-
-   - `HARD-CORE-DRIFT-ABSORBED` → **upstream took this change.** Lines the consumer added
-     (absent from core at `base`) are present in core at `theirs`. The remedy is a
-     **revert**, not an override, and telling the operator to refile it would be actively
-     wrong advice. It still **blocks**: a revert DELETES consumer text, so the operator
-     confirms the upstream version covers their delta first. Show them the diff, then run
-     the `git -C <dist> show …` command the status carries, substituting the consumer root
-     for its literal `<consumer>` placeholder. This is the core-drift twin of
-     `EXTENSION-RETIRE-CANDIDATE`. **Any read of the distribution at a ref is
-     `git -C <dist> show "${ref}:core/…"`, naming the CORE path** (the Path mapping table
-     above, read backwards), never the consumer's `scripts/ai-dlc/…`. In the consumer a bare
-     `git show "${dist_sha}:…"` exits 128 because the consumer does not hold that commit, and
-     behind `2>/dev/null` that failure is an empty read that every count scores as 0.
-
-   - `HARD-CORE-BEHIND` → **this copy is STALE, not forked.** It best-matches a historical
-     blob of that path which is a strict ancestor of `base` and older than it, so the file
-     predates the consumer's own stamp and most of what reads as consumer drift is
-     upstream's change since then. The remedy is **take theirs**. It still **blocks**,
-     because the residual against that ancestor IS the consumer's: show them that diff —
-     the status carries the command — and confirm nothing in it is still wanted before
-     overwriting. **Do not adjudicate this row from the base-relative line count**; that
-     number grows with staleness on its own. A file excluded from `apply` by a standing
-     per-entry acceptance is the usual way one gets here, and the acceptance is then
-     self-perpetuating: each pull it skips makes the next pull's diff larger and the
-     "fork" reading more convincing.
-
-   - `HARD-UNREGISTERED-CORE-DRIFT` → **blocks `apply`** (step 7). Undecidable by the
-     tool (deliberate hardening → refile as an `overrides/` entry with a `base_sha`;
-     accident → revert) and lossy if ignored. Same bar as the other `HARD-` statuses.
-     Reached only after `HARD-CORE-BEHIND` has been ruled out, so the consumer's copy is
-     anchored at `base` and the delta really is its own.
-     **`reconcile/register-drift.sh <dist> <base> <consumer> <core-rel-path> --apply`
-     does the refiling**: it authors the override from the consumer's own changed
-     sections, anchors it to real headings, stamps `base_sha` at **base**, and reverts
-     core. It leaves `reason:` as `TODO` — propose one, have the operator confirm it.
-     Hooks are refused by design (no override grain exists for them); say so plainly.
-   - `CORE-TEMPLATE-SUBSTITUTED` → differs only where the distribution carries a
-     `{token}` site. That is what `install.sh` does; it is not drift, and it must
-     never be reported as such.
-   - `CORE-OK` → byte-identical to the distribution at base.
-   - `CORE-AT-THEIRS` → byte-identical to the distribution at `theirs`: already applied,
-     never drift. A row here is the tell that the base passed in was stale.
-   - `CORE-AT-SELF-UPDATE` → byte-identical to the distribution at `skill_commit`, the OTHER
-     sha in this consumer's own stamp. **Not drift, and no action.** Step 2's autonomous
-     self-update writes the `base→theirs` diff RESTRICTED to the MACHINERY set — not the whole
-     set, and minus whatever arm C carried out of the slice — so on a multi-hop pull the files
-     it did write sit at an INTERMEDIATE ref while `commit` — the base every predicate here
-     measures against — stays where it was. **41 files are in both the machinery set and this
-     scan** (control: 88 machinery files are outside it; both sides derived, neither
-     hand-listed), and without this row each one reads as a consumer
-     edit and draws a HARD status whose printed remedy is to revert upstream's own text.
-     Reproduced at ground truth on the distribution's own history: the same file at the
-     intermediate ref gives `HARD-CORE-DRIFT-ABSORBED`, and at base gives `CORE-OK`.
-     The script reads `skill_commit` from the stamp ITSELF rather than taking it as an
-     argument — a fifth argument is a fifth thing a caller can omit, and step 7 below records
-     what that cost the last time one instruction had to be remembered for two scripts.
-   - `CORE-MACHINERY-CARRIED` → a machinery path `reconcile/self-update-gate.sh`'s arm C
-     CARRIED out of step 2's autonomous slice: the consumer diverged on it, so step 2 refused
-     to write `theirs` over it and handed it to this gated apply. **Not drift, and the action
-     is elsewhere** — `apply` already emits a `WORKLIST semantic-merge` row for the same path
-     off the same preclassify bucket, which the row names verbatim. Do NOT refile it as an
-     override and do NOT act on the drift remedy; do the worklist row. Without this row one
-     path draws two contradictory instructions in one report, and for a hook there is no
-     override grain to refile into at all. Non-blocking. It is the LAST specific status:
-     `HARD-CORE-BEHIND` still wins (a stale copy has no residual to merge), and
-     `HARD-CORE-DRIFT-ABSORBED` wins only when absorption is TOTAL — on a partially absorbed
-     carried path that row's whole-file revert would delete the lines upstream did not take.
-   - `HARD-DRIFT-SCAN-UNAVAILABLE` → **blocks `apply`**. The scan could not load its path
-     mapper, so it scanned NOTHING and its empty output is not a clean tree. Restore
-     `reconcile/preclassify.sh` beside `unregistered-drift.sh` and re-run.
-   - **Exit 2 with `unregistered-drift: REFUSED — a row could not be written to stdout after N
-     row(s) were`** → the scan stopped at that write, and every path after it went unscanned.
-     The rows you have are NOT the result, and a
-     missing HARD row is not an absence. Re-run it with a writable stdout. Any other run exits 0,
-     whatever it found.
-
-3e. **Consumer-catalog collisions.** Run `reconcile/relabel-extension-checks.sh
-   <consumer-root> --dist <dist-repo> --theirs <theirs-ref>` (dry-run). Every extension
-   check whose number core also defines needs the labelled form `### <n>. [ext:<id>]
-   <title>`. **Pass `--dist`/`--theirs`** so the number set is the UNION of the installed
-   core and the INCOMING core: a collision the pull *creates* (upstream adds `### 26.`
-   while an extension already carries it) is invisible to a plain dry-run — the installed
-   core does not carry the new number yet — so without theirs the tool reports "none"
-   while the needs-confirmation list flags it, and the operator gets no relabel preview at
-   the one moment they can decide it. An exit 2 with a `relabel: REFUSED —` line means an
-   anchor set could not be staged for reading, and it is no verdict, not "none". **Report-only
-   here; it never blocks `apply`** — a
-   collision is decidable and consumer-fixable, and a consumer must never be unable to take
-   a fix because its own catalog needs relabelling. The updater OFFERS the rewrite at step
-   7. The integer never moves; only the label is added, so existing gate history maps by
-   identity.
-
-3ea. **Extension checks the incoming core makes newly-unloadable.** Run
-   `reconcile/adopt-extension-checks.sh <consumer-root>` (dry-run). It lists, per
-   `kind: check` extension entry, the check ids defined only as a HEADING — no
-   `<!-- CHECK_LOADED: <id> -->` anchor, named by no manifest row — which is
-   `validate-gate-manifest.sh`'s GM1 finding: neither MISSING nor an ORPHAN, so every
-   gate passes without ever running them. **Report-only; it never blocks `apply`** — a
-   consumer must never be unable to take a fix because the fix newly-fails its own
-   content. The updater OFFERS the write at step 7.
-   **The two writes are atomic and that is the reason a tool exists.** An anchor with no
-   `gate_types:` is an ORPHAN (exit 1); a `gate_types:` with no anchor trips GM2 (exit 2).
-   A hand edit doing one half trades one FAIL for another, so an operator working down a
-   23-item list is red the whole way and cannot tell progress from regression.
-   **`--apply` requires `--gate-types` and there is no default.** The anchor is derivable
-   from the heading id; the gate slice is not. The only inferable default, `universal`,
-   would promote every adopted check to run at every gate — unauthorised, and invisible
-   afterwards because an over-broad slice passes vacuously. The dry-run prints the
-   question once per ENTRY (`gate_types:` is entry frontmatter), which is why the
-   reference consumer's 23 checks are 4 questions and not 23.
 
 3f. **Push-candidate ledger re-verify — the CLOSE path.** Run
    `reconcile/ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref>`.
@@ -1533,251 +983,51 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    contains a backslash is anchored on a backslash-free neighbour or written as `sh`. Rendered
    into the step-5 report by `emit-report.sh`, so a CLOSE-CANDIDATE cannot be silently dropped.
 
-3g. **Predicate reclassification — what this pull re-decides about artifacts nobody touched.**
-   Run `reconcile/predicate-differential.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
+4. **Semantic per-block classify — the `WORK classify <path>` rows.** A CLASSIFY file whose
+   only consumer delta is its declared setup values merges by script (a `DECIDE setup-site-merge
+   <path> script` row) and needs no agent. For every `WORK classify` row, dispatch ONE generic
+   agent per file (batch trivial single-block diffs) with `reconcile/classify-block.md` as the
+   prompt. Block granularity = per-file + per-numbered-item (rule / `###` section / check). Each
+   agent computes the file's own base/theirs/ours three-way with git and returns DATA (bucket
+   tallies + only the conflict/flag details), never echoed file content. Write each file's
+   returned blocks into the report OUTSIDE the generated region, under a `FILE: <core path>` line.
+   A block in `bucket: conflict` or with `confirmation_kind: blend` is an ASK family: the driver's
+   next run prints its `ASK` row. A `confirmation_kind: judgment` block is yours: decide it and
+   it becomes a `DECIDE judgment` row.
 
-   Every other detector in `reconcile/` compares TEXT: core against core, or core against a
-   consumer layer file. A release that moves an ADJUDICATION PREDICATE produces no text
-   difference at all on the consumer's side — the stored artifacts do not change, and only the
-   verdict the incoming script renders on them does. So every bucket reads clean while the
-   consumer's own history quietly comes to mean something else. Measured on the reference
-   consumer at `0.438.0 -> 0.443.0` and filed as
-   `PC-S307-PULL-CANNOT-SEE-WHAT-A-PREDICATE-CHANGE-RECLASSIFIES`: 0.442.0 moved one ceiling
-   constant and turned 33 of 105 stored adversarial series from pass to fail, three of them in a
-   sprint that had been PAUSED, with the pull reporting 15 UPSTREAM-ONLY pure applies and zero
-   conflicts. It was caught by hand.
+   **Every ours/theirs claim is DERIVED, never recalled.** Take each side from the report's
+   **Semantic worklist orientation** block, which labels both sides and shows their exclusive
+   lines; where a side is truncated, run the `full:` diff command it prints. A
+   `DETECTOR-REFUSED  orientation …` line means that sample was never computed, not that the side
+   is empty: derive that file's sides yourself.
 
-   **IT COMPARES THE RANGE'S ENDPOINTS, AND THAT IS NOT THE SAME QUESTION AS "WHAT DID ANY
-   RELEASE IN HERE DO".** A release inside the range that reclassifies and a later one that
-   corrects it CANCEL. Measured on the reference consumer over one corpus of 119 series:
-   `0.441.0 -> 0.442.0` moves 48, and `0.438.0 -> 0.443.0` — the real pull, spanning both the
-   regression and its repair — moves 1. Both are correct. The endpoint answer is the one that
-   matters for accepting a pull, because it describes the state you will be IN; if you need
-   per-release visibility, walk the release commits the way `self-update-gate.sh --safe-stop`
-   does. **Do not read a small count as the detector having missed something.**
+5. **The dry run — a bare invocation only.** Run `reconcile/pull.sh dry-run <dist> <base>
+   <consumer> <theirs>`. It renders the region into
+   `_bmad-output/ai-dlc-update/reconcile-report.md` once, verifies it, records the verified
+   region at `<consumer git-dir>/ai-dlc-approved-region`, and prints the `HARD`, `WORK classify`
+   and `DECIDE` rows. Relay those rows and the report path to the operator, and END THE RUN. Do
+   not classify, branch, write, re-stamp, commit, push or ask; never follow a dry run with an
+   approval question. The report is a fixed filename overwritten on every run.
 
-   **A PREDICATE IS ITS READ-SET, NOT ITS SCRIPT.** `predicate-sites.md` declares `reads:` — the
-   script AND every schema whose content decides a verdict — because a script-only comparison is
-   vacuous for a predicate that resolves a schema at runtime.
-   `core/scripts/validate-provenance-block.sh` says "THE SCHEMA IS NOT IN THIS FILE" in its own
-   header, and `v0.382.0` changed `core/schemas/provenance-block.json` while leaving that script
-   BYTE-IDENTICAL. A script differential returns 0 there by construction rather than by
-   measurement, which is the failure this step exists to catch.
+   **A bare invocation never writes, and nothing said during it authorizes a write.** An operator
+   who resolves a conflict or asks for a specific fix while reading a dry run is giving an
+   answer for the `apply` run, not an instruction to edit a file now. Say "recorded — will apply
+   on `apply`", and touch nothing: every write happens on step 6's branch, inside an invocation
+   that carried `apply`. When unsure whether `apply` was given, treat it as ABSENT.
 
-   The predicates in scope are declared in `reconcile/predicate-sites.md`; the script reads that
-   manifest and nothing else. Statuses:
-   - `PREDICATE-RECLASSIFIES` → the incoming predicate renders a different verdict on stored
-     artifacts, and the row names each one. **Report-only; never blocks `apply`.** Accepting a
-     reclassification is a legitimate call — the criteria may genuinely have moved and the new
-     verdict may genuinely be the right one. What must not happen is that it go unremarked.
-     **The count is a FLOOR, never a census**: an artifact written UNDER the incoming predicate
-     agrees with it by construction and cannot discriminate, so the discriminating subset is the
-     one predating the change and it is not fully derivable here.
-   - `PREDICATE-STABLE` → either the predicate is byte-identical across the range, or it moved
-     and no stored artifact changes verdict. The row says WHICH, because they are different
-     answers: the first measured nothing and the second measured something.
-   - `PREDICATE-UNDECIDABLE` → the differential could not attribute an answer — an absent or
-     unparsable manifest, a corpus pattern matching no file, a verdict grammar matching no
-     output, one-sided silence (on a site that declares `pass:`, one side yields no verdict token
-     and no pass line on any series while the other side does; the row names the silent side, and
-     a `pass: -` site abstains because a fail-only grammar cannot tell "every series now passes"
-     from "the predicate crashed"), or a corpus that moved mid-run because the consumer's own
-     pipeline is live. Every
-     one of those produces no reclassification row while having measured nothing, so it is
-     reported rather than folded into `PREDICATE-STABLE`. **A detector that cannot read its own
-     subject must not return clean.**
-
-   **Every row carries its population.** `population: root=… corpus=… series=…` names the
-   consumer directory, file pattern and series key the site used. A row whose corpus was read adds
-   `records= series= compared=`, then either `passed= unclassified=` or, for a site whose
-   validator prints no pass line, `unclassified=n/a (grammar spells failures only)` — there a
-   series with no verdict token may be a pass or an unparseable output, and nothing says which.
-   In the step-5 report a STABLE site renders as one line carrying only the population
-   definition, so a null can be re-derived rather than read as `none`. The counts stay in the
-   detector's own output: they come from a live corpus, and the report region is byte-compared
-   at step 7.
-
-   **This check cannot be sited upstream and that is structural, not an oversight.**
-   `consumer-boundary.md` is unconditional: no gate in the distribution reaches a consumer tree.
-   The distribution DID run the same differential over its own fixture seeds before shipping
-   0.442.0 and could not tell the intended effect from the regression, because one session had
-   authored both the predicate and the seed declaring the result correct. The pull is the only
-   process holding `base`, `theirs` and the consumer root at once.
-
-4. **Semantic per-block classify** — for every file the pre-pass marked
-   `…CLASSIFY`, dispatch ONE generic agent per file (batch trivial single-block
-   diffs) using `reconcile/classify-block.md` as the prompt. Block granularity
-   = per-file + per-numbered-item (rule / `###` section / check). Each agent
-   computes the file's own base/theirs/ours three-way with git and returns
-   structured per-block buckets. Agents return DATA (bucket tallies + only the
-   conflict/flag details), never echoed file content — keeps the orchestrator
-   context clean.
-5. **Emit the dry-run report, then HARD STOP (unconditional).**
-
-   **The mechanical sections are RENDERED by a driver, not narrated by you.** Run
-   `reconcile/emit-report.sh <dist> <base> <consumer> <theirs>` and paste its
-   `BEGIN/END GENERATED: reconcile-mechanical` region into the report **VERBATIM**. That region
-   is the per-file buckets, the semantic worklist, deletions, the **blocking-layer list**,
-   unregistered drift, layer drift, catalog relabel, and the push-candidate ledger re-verify —
-   every mechanical finding, complete, from every detector. You write ONLY the genuinely semantic sections AROUND it: for each file in
-   the region's "Semantic worklist", its 3-way merge result (`classify-block`), the conflict list,
-   and the needs-confirmation questions. **Do NOT restate, summarise, or edit anything inside the
-   region** — a mechanical finding narrated by you is a finding you can drop, and one already was
-   (a HARD core-schema drift, twice). After writing the report, run
-   `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>`; **it MUST exit 0
-   before the HARD STOP.** A nonzero exit here means the region is missing, stale, or was hand-edited —
-   the report is unsound; regenerate and re-emit. `--verify` always re-renders: no earlier verdict is accepted in place of a fresh render. When the fresh render carries a
-   `DETECTOR-REFUSED  preclassify.sh` line, `--verify` exits 1 with `cause: PRECLASSIFY-REFUSED`,
-   even if the report carries the same line. The five sections built from preclassify's rows
-   (per-file buckets, semantic worklist, orientation, deletions, scripts relocation) are then
-   unknown, not empty. Run `reconcile/preclassify.sh` directly, fix what it reports, and re-render;
-   a re-emit alone cannot pass. (Exit 3, `BLOCKERS-RESOLVED`, is a step-7 state
-   and cannot arise at this step, where nothing has been resolved yet.) This check is not optional, and the operator can
-   run the same `--verify` to trust any report without re-running the detectors by hand.
-   Its exit 0 also records the verified region at `<consumer git-dir>/ai-dlc-approved-region`
-   (first-wins for this base and theirs; `emit-report.sh`'s header owns the record). That record is
-   what `apply.sh` compares against in step 7, so run this `--verify` on the report you put in front
-   of the operator at the HARD STOP, and do not delete the record.
-
-   Write
-   `_bmad-output/ai-dlc-update/reconcile-report.md`: a header stating
-   `Generated: <UTC timestamp> by ai-dlc-update skill_version <X> @ <sha>`
-   (read `skill_version`/`skill_commit` from the stamp), then per-file +
-   per-block bucket, proposed action, the push-candidate list, the conflict
-   list, a **needs-confirmation list** — every block any classify agent
-   returned with `needs_operator_confirmation: true` (per
-   `reconcile/classify-block.md`), each with its specific question, listed
-   separately from and in addition to the conflict list (a block can be in
-   neither, either, or both), **plus every step-3c
-   `EXTENSION-CHECK-NUMBER-COLLISION` tagged `NEW-THIS-PULL`** — that collision did
-   not exist before this pull and this pull is what created it, so the operator
-   learns of it here, at the moment it is introduced, rather than from a confused
-   gate log months later. The question is: which catalog does a bare `Check <n>` in
-   your gate log now mean, and when will this entry be relabelled `[ext:<id>]`? —
-   a **settings-provisioning question**, obtained by
-   running (no writes; `--template` needs a FILESYSTEM path, and `theirs` is a ref,
-   so materialize it first — the bare `--check` form exits 1 with usage):
+   The settings-provisioning check is part of the apply's decisions, and a dry run may show it
+   (no writes; `--template` needs a FILESYSTEM path, and `theirs` is a ref, so materialize it
+   first — the bare `--check` form exits 1 with usage):
    `t=$(mktemp); git -C <dist> show "${theirs}:templates/settings.json.template" > "$t";`
    `reconcile/settings-merge.sh --consumer .claude/settings.json --template "$t" --check`
-   — when it reports
-   `model_window_needed=yes`, reproduce its `ask:` lines verbatim as an operator
-   question (no `AI_DLC_MODEL_<FAMILY>_WINDOW` is declared in the settings `env`
-   block; the operator adds the declarations themselves, and the reconcile never
-   writes `env`, so nothing is passed at apply) — when it reports
-   `suite_admission_probe=none`, reproduce its `optional:` lines verbatim as an
-   optional setting the operator may add themselves (never required, never
-   written by the reconcile) — a
-   **deletions list**: every
-   `UPSTREAM-DELETED` **and `ORPHANED-RELOCATED`** path (upstream removed the file, or
-   moved where it ships it and the stale copy at the old path is provably ours — for an
-   orphan, name the path it now lives at, so the operator can see the file is being
-   retired, not lost), consumer untouched,
-   each with its reason line, since applying one `git rm`s a consumer file
-   (step 7 approves the `UPSTREAM-DELETED` rows as one listed batch and each
-   `ORPHANED-RELOCATED` row per path) — and, for the **template changes**,
-   the region's own "Template pre-classification" section carries every bucket
-   row, so you add ONLY what it does not: a one-line summary of the upstream
-   boilerplate delta being synced per `TEMPLATE-PROSE-MERGE` /
-   `TEMPLATE-JSON-MERGE` row (e.g. "CLAUDE.md: remove Context-Mode Usage
-   section"), and, for any file that hit anchor-drift, its flag for
-   adjudication. Do not restate the rows themselves — and, from step 3c, a
-   **layer-drift list** (every `OVERRIDE-DRIFT-*` / `OVERRIDE-ANCHOR-UNRESOLVED` /
-   `OVERRIDE-DELEGATES-INTO-SHADOW` /
-   `EXTENSION-HOOK-DRIFT` / `EXTENSION-CHECK-NUMBER-COLLISION` entry with its target
-   and reason — a collision tagged `NEW-THIS-PULL` ALSO goes in the
-   needs-confirmation list below, because this pull is what created it), a
-   **retirement list**
-   (every `EXTENSION-RETIRE-CANDIDATE` and `EXTENSION-RESTATES-CORE`: the entry, the
-   core section it duplicates, and the note that retirement is an operator-gated
-   delete per Rule 27(b) — upstream never writes the layer, so it cannot remove the
-   entry for you), and a
-   **blocking-layer list** — this is part of the driver-rendered `reconcile-mechanical` region
-   (step 5's `emit-report.sh`), which lists every `HARD-*` the detectors emit and blocks `apply`.
-   Beneath the region, write each blocker's resolution command (a block with no path out is a block
-   someone routes around), **with every placeholder resolved** — a command carrying a literal
-   `<dist>` is a path the operator cannot walk without guessing, which is the same block one step
-   later. Do NOT re-author the list from memory of the tool output — a `HARD-*`
-   line was silently dropped from two real reports that way, hiding a data-loss-grade core-schema
-   drift; `emit-report.sh --verify` now fails if the rendered list drifts from the tools. Also relay any `enabledPlugins:` line from the settings dry-run output
-   above to the operator verbatim: it says the project's
+   — a `model_window_needed=yes` line is a MODEL decision: record it as a decisions row quoting
+   its `ask:` lines, so the PR body carries them to the operator (the reconcile never writes
+   `env`). A `suite_admission_probe=none` line is likewise a MODEL decision: record it as a
+   decisions row quoting its `optional:` lines verbatim, an optional setting the operator may add
+   themselves (never required, never written by the reconcile). Relay any `enabledPlugins:` line
+   it prints verbatim in the PR body: the project's
    context-mode enable will be retired and every user needs the user-level install.
 
-   **A blocker DISPOSITION carries the command that verified it, exactly as a step-8 defect
-   filing does.** Name the disposition (retire / readopt / reaffirm / refile / revert), then the
-   literal command run and its decisive output line, then what you could NOT verify. A claim
-   about WHY a detector emitted the row is an INFERENCE — label it or verify it. The asymmetry
-   this closes ran the wrong way: filing a complaint against upstream already required a receipt,
-   while deciding to RETIRE — which DELETES a consumer-owned override — required none, and it is
-   the more destructive act. Treat every recommendation here as a hypothesis and run the command
-   that would falsify it; in one real pull a defect was filed against a checker that was
-   correctly obeying an over-wide declaration, and a version correction was itself three releases
-   wrong because it sampled the refs already loaded instead of walking history.
-
-   **Record the operator's answers in `_bmad-output/ai-dlc-update/blocker-adjudication-<ts>.md`.**
-   A named, timestamped file, because the two destinations previously named for an answer cannot
-   hold one: this report is a fixed filename overwritten by the next dry run (below), and
-   `reconcile-log-<ts>.md` is not written until step 7 under `apply`. An answer recorded in
-   either is an answer lost — three dry runs in one day is normal. The file records, per blocker:
-   the disposition, its verification, the fully-resolved resolution command, and any answer the
-   operator gave. It ends with one readiness line: all blockers decided and `apply` may proceed,
-   or which remain open and what closes them. `apply` reads it; it is never a substitute for the
-   `apply` argument, and writing it is not authorization to resolve anything. And a
-   **catalog-relabel list** (step 3e: every extension check heading that needs the
-   `[ext:<id>]` label, report-only).
-   This is a fixed filename
-   overwritten on every
-   run (a snapshot, not a log) — the header stamp is what lets anyone tell a
-   fresh report from a stale leftover of a prior invocation, since the
-   filename alone can't.
-
-   **Producing this report is the TERMINAL action of the run unless the
-   invocation carried an explicit `apply` argument.** After writing it, STOP and
-   return it to the operator. Do NOT branch-for-apply, write, re-stamp, commit,
-   push, open a PR, or merge.
-
-   **The stop is unconditional — the following DO NOT authorize proceeding, and
-   inferring authorization from any of them is a defect:**
-   - zero conflicts, an "obviously clean" pull, or an all-`apply`-bucket report;
-   - the pull looking safe, small, or already-verified;
-   - inferred operator intent, urgency, or "they clearly want the update";
-   - the fact that applying would be convenient or save a round-trip;
-   - the operator answering a question about the report, adjudicating a
-     conflict, or asking for a specific fix ("restore X", "just fix the Y
-     bullet") in the conversation while reviewing it.
-
-   The ONLY authorization to move past this stop is an explicit `apply` argument
-   on THIS invocation (e.g. `/ai-dlc-update apply`). A bare `/ai-dlc-update` is a
-   dry-run: report and stop, every time, no exceptions. If the invocation did not
-   contain `apply`, you MUST NOT apply — full stop. When unsure whether `apply`
-   was given, treat it as ABSENT and stop. Never write "operator directed" into
-   the report unless the operator's invocation literally contained `apply`.
-
-   **Adjudication is not authorization to write (incident-confirmed failure
-   mode — do not repeat it).** An operator resolving a conflict, or asking for a
-   specific fix, while reviewing a dry-run report ("restore the dropped KISS
-   bullet") is giving an ANSWER — record it in
-   `_bmad-output/ai-dlc-update/blocker-adjudication-<ts>.md` for the `apply` run to act on.
-   NOT in this report, which the next dry run overwrites, and not in
-   `reconcile-log-<ts>.md`, which does not exist until step 7.
-   It is NOT an instruction to edit any file right now.
-   A real run misread exactly this: the operator adjudicated a conflict in
-   conversation and the agent edited the live working tree immediately,
-   uncommitted, off-branch, before `apply` was ever invoked. Every write,
-   without exception, happens only inside step 6's isolated branch, reached
-   only via an explicit `apply` argument on a fresh invocation — a one-line,
-   obviously-correct fix is not a carve-out from that. If the operator gives
-   you a fix mid-review, say so explicitly: "recorded — will apply on
-   `untangle apply`/`apply`," and touch nothing.
-
-   **Already-current case (empty reconcile).** If the report shows NO
-   consumer-rulebook changes to apply — every bucket is noop/already-present, e.g.
-   a self-update-only pull whose sole delta was the skill's own files — then the
-   consumer core already equals `theirs` and only the `.ai-dlc-version` stamp
-   lags. State this in the report: `consumer core already at <theirs>; stamp
-   behind at <base> — re-invoke with 'apply' to advance the stamp (bookkeeping,
-   no rulebook change)`. Do NOT advance the stamp on this bare run — re-stamping
-   is a write, forbidden here like any other. The stamp advances under `apply`
-   (step 7), which for an empty reconcile is a stamp-only bump.
 6. **Isolate — branch before ANY write (apply only, MANDATORY).** The reconcile
    MUST NOT mutate the consumer's live branch in place. Before the first write
    in step 7:
@@ -1802,103 +1052,43 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      push refuses anything. A consumer with no remote configured has no upstream
      to match and is not refused here, exactly as step 1 lets it proceed. The
      reconcile branch cut here must sit on a base that matches `origin`.
-   - `git checkout -b ai-dlc-update/<theirs-version>-reconcile-<ts>` off the
-     current branch. ALL step-7 writes land here, so the operator reviews a
-     clean diff / opens a PR — never a silently-mutated working branch.
+   - `pull.sh apply` cuts `ai-dlc-update/<theirs-version>-reconcile-<ts>` off the current
+     branch before its first write (a resolution round already on that branch stays on it).
+     ALL step-7 writes land there, so the operator reviews a clean diff / opens a PR — never
+     a silently-mutated working branch. Run the checks above BEFORE `pull.sh apply`.
    This is a hard requirement, symmetric with the pipeline's own branch-per-unit
    discipline; the `_divergence/` archive (step 9) is a backstop, not a
    substitute for the branch.
-7. **Apply — reached ONLY when the invocation carried `apply` (step 5), on the
-   step-6 branch.** If there are conflicts, apply only operator-adjudicated
-   resolutions; zero conflicts does not remove the `apply`-arg requirement — it
-   only removes the adjudication sub-step.
+7. **Apply — reached ONLY when the invocation carried `apply`, after the step-6 checks.** Run
+   ONE `reconcile/pull.sh apply [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`. In order, it renders the
+   region once, records the approved region, prints every `ASK` and `HARD` row and exits 3 before
+   any write if there is one, cuts the step-6 branch, runs `reconcile/apply.sh` (every MECHANICAL
+   resolution, reusing that render's detector outputs), then prints the `WORK classify`, `ASK
+   deletion` and `DECIDE` rows and writes the decisions record. Work what it hands back, then run
+   `pull.sh finish`.
 
-   **Blocking-layer gate (step 3c `HARD-*` statuses).** If layer-drift reported
-   **any status whose name begins `HARD-`** — match on the PREFIX, not on a list of
-   names you remember; today that is `HARD-OVERRIDE-BASE-CONSUMER-SHA` and
-   `HARD-OVERRIDE-BASE-UNRESOLVABLE`, and the set is meant to grow —
-   STOP before any write. `layer-drift.sh` documents the prefix as the contract
-   ("statuses prefixed HARD- must block `apply`") and the report above builds its
-   blocking list from `HARD-*`, so enumerating the two names here instead would mean
-   the next `HARD-` status anyone adds is silently non-blocking: it would appear in
-   the report under "blocks apply" and then not block it.
-   Those overrides have an unusable `base_sha`, so whether
-   upstream changed the rule they shadow is **undecidable** — applying the core
-   overwrite would let a stale override silently keep shadowing a rule that moved.
-   `HARD-` is reserved for exactly that: a condition the tool cannot DECIDE. A
-   decidable, consumer-fixable finding (e.g. `EXTENSION-CHECK-NUMBER-COLLISION`)
-   must never be `HARD-`, or a consumer becomes unable to take a security fix until
-   it has relabelled its own catalog — and someone will comment out the gate.
-   Present each to the operator with the correct distribution sha to re-stamp
-   (Rule 27(a)); apply only after they are fixed or the operator explicitly
-   accepts the risk per entry. `apply` authorizes writes; it does not authorize
-   proceeding on an undecidable override — the same distinction the deletion gate
-   below draws. Never infer that an unresolvable base means "unchanged."
-   A layer-drift run that exited non-zero reported no `HARD-` status because it did not finish,
-   not because there is none: exit 2 with a `layer-drift: REFUSED` line means a row could not be
-   written, and exit 1 with one means an input could not be staged or read, or a base or theirs
-   ref does not resolve (step 3c lists each line). Re-run it before reading this gate as clear.
+   **On exit 3, nothing was written.** For each `ASK` row, ask its question (*The driver* above)
+   and act on the answer. For each `HARD` row, resolve it as `reconcile/detector-rows.md` gives
+   that code — a `HARD-*` row is a condition the tool cannot DECIDE, so the write waits for its
+   resolution, never for a guess — and record your disposition as a decisions row with its
+   evidence. Then run `pull.sh apply` again with the same four arguments: each resolution round
+   costs exactly one more render. A HARD row you resolved by `--stamp readopt` or a register
+   record no longer renders, and the driver's union gate accepts that on its own; an `ASK-UNANSWERED`
+   refusal means a conflict reached the tree without an operator answer, so ask it.
 
-   **Mechanical union gate — the driver, not memory.** `apply` may write only after BOTH hold:
-   (1) `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0 — the
-   report the operator approved carries a current, complete mechanical region (`--verify` always re-renders); exit 1 means
-   the approval was given without sight of a finding, so STOP and re-emit rather than write, and
-   exit 3 means the approval saw findings that have since been resolved — the paragraph after
-   clause (2) says what to do; and
-   (2) re-running the blocking list, every `HARD-*` is resolved —
-   `reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>` prints `0 HARD blockers.`, or the
-   operator has explicitly accepted each remaining one per-path. An exit 1 with a
-   `hard-blockers: REFUSED —` line is neither: the blocking list could not be staged for reading,
-   so no list was checked. Clear the cause it names (usually a full `$TMPDIR`) and re-run. This is the gap that shipped a
-   data-loss drift past two reports: the detector caught it, the narrated report did not.
+   **Override merges go ONLY through `reconcile/pull.sh merge <dist> <base> <consumer> <theirs>
+   <override>` — never call `readopt-override.sh --merge` directly.** A clean merge prints
+   `DECIDE override-drift <rel> merged` and is recorded; a CONFLICT leaves markers in the body and
+   prints `ASK conflict-hunk <rel> <digest> <question>` (exit 3): present that hunk, nothing else,
+   and write the answer into the body. Never hand-edit a body that the merge can produce.
 
-   **Resolving a blocker rewrites the region clause (1) verifies, and `apply.sh` decides that
-   case itself, against the report the operator APPROVED. Do not re-render it.** `--stamp readopt` turns a
-   `HARD-OVERRIDE-DRIFT-SECTION` row into `OVERRIDE-OK`; a register row removes a
-   `HARD-LAYER-ADJUDICATION-MISSING` [LC-A1] row. The blocking-layer gate above requires those resolutions
-   BEFORE any write, so on every pull that had a blocker the approved report lists findings that no
-   longer exist, and `--verify` fails on a region whose only fault is that its blockers were fixed.
-   `--verify` says which direction it failed in: it exits **3** with `cause: BLOCKERS-RESOLVED`
-   when the refs are unchanged and the approved region lists `HARD-*` rows the detectors no longer
-   render and none they newly do, and only then prints a `re-approval:` line (the fresh region's
-   digest, the count of `unseen:` rows, and the option label); exit **1** is the other
-   direction — upstream moved, the consumer's stamp moved, a detector did not run (for
-   preclassify, `cause: PRECLASSIFY-REFUSED`), or a finding the approval never saw — and is the
-   stop the gate exists for. `apply.sh` also runs preclassify itself before phase 1, and stops
-   before writing anything when that run exits non-zero, or returns no rows while `base..theirs`
-   changes `core/`, or when that range cannot be read. Its refusal says nothing was written. Run
-   `reconcile/preclassify.sh` with the same four arguments, fix what it reports, and re-run apply
-   with the same arguments. So: resolve every blocker, then run `apply.sh` against the APPROVED
-   report, unchanged. A re-render does not clear the gate: `apply.sh` runs
-   `emit-report.sh --for-apply --verify`, which compares the fresh render against the region step
-   5's `--verify` recorded at `<consumer git-dir>/ai-dlc-approved-region`, not against the report
-   file, and prints `approved-region: first=<digest|NONE>`. A re-rendered region that differs from
-   that record with no new `HARD-*` row exits **3** with `cause: RE-RENDERED-SINCE-APPROVAL` and the
-   same `re-approval:` line, decided exactly as below. `first=NONE` (no record for this pull: one
-   already mid-flight when the record shipped, or a `SELF-UPDATE-DEFER` pull) proceeds as before
-   and its NOTE says the re-render binding was not evaluated. On exit 3 `apply.sh` reads
-   the `re-approval:` line. With `unseen=0` it proceeds and records a `NOTE blockers-resolved` row:
-   the approval saw a superset of what renders now. With `unseen>0` it proceeds only when
-   `_bmad-output/operator-answers-history.md` holds an AskUserQuestion record whose question
-   carries that full digest and whose answer is exactly that label; otherwise it refuses, writes
-   nothing, and prints the question, the option label and the `unseen:` rows. Ask that question
-   with AskUserQuestion, offering that label as an option, then re-run `apply.sh` with the same
-   four arguments. A typed operator message is not that ask, and an approval of something else
-   (a PR merge, say) is not this re-approval. `emit-report.sh --verify` is the label's one source,
-   so copy it from the refusal; never compose it. The re-approval is not a formality: a resolution
-   can leave rows the first approval never saw, and this question is the only place they get read.
-   The check has limits: the question line is lead-authored, so a session that writes the
-   answers history by hand instead of asking is not caught, and a session that deletes the
-   approved-region record gets `first=NONE` and the gate as it was before the record existed.
-
-   **THE ADJUDICATION LOOP — YOU do the work; the operator APPROVES it.**
-
-   **First, run the resolution driver — it does the mechanical bulk.**
-   `reconcile/apply.sh <dist> <base> <consumer> <theirs>` executes every MECHANICAL resolution and
-   prints a tab-separated manifest. **Add `--carried-machinery-slice` — first, before the four
-   paths — if and only if step 2 deferred its self-update and handed this run the machinery
-   slice**; that is what advances the stamp's `skill_version`/`skill_commit` beside
-   `version`/`commit` (see the re-stamp bullet at the end of this step).
+   **The rows `apply.sh` hands back, by class** (each detail field is authoritative about its
+   remedy; the driver prints each `WORKLIST` and `DECISION` row as a `DECIDE <kind> <path> pending`
+   row). **Add `--carried-machinery-slice` — first, before the four paths — to
+   `pull.sh apply` and `pull.sh finish` if and only if step 2 deferred its self-update and handed
+   this run the machinery slice**; that is what advances the
+   stamp's `skill_version`/`skill_commit` beside `version`/`commit` (see the re-stamp bullet at
+   the end of this step).
    - `RESOLVED …` — already done, no operator step: pure applies (core overwritten from theirs),
      new-role arrivals (a new role file states no model or effort, so there is nothing to fill: its model and effort come from its `aiDlcRoles` entry), **known-drift refiles**
      (`provenance-block.json` `known_skills` → `extensions/known-skills.json`, core reverted — the
@@ -1921,9 +1111,10 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      configuration BEFORE deleting the entry, because deleting first re-imposes the core
      constraint the entry was widening onto a consumer whose artifacts already violate it, and
      the next gate then fails on a tree you just repaired. Each step states its own consequence.
-   - `DECISION …` — a genuine operator call: an unknown drift's refile-vs-revert, a deletion, a
-     token with no default. Ask ONE closed question per row, except the `DECISION deletion` rows
-     for `UPSTREAM-DELETED` paths, which step 7 asks as one listed question.
+   - `DECISION …` — a call the apply could not make on its own: an unknown drift's
+     refile-vs-revert, a deletion, a token with no default. Decide each and record it as a
+     decisions row; a row in an ASK family (`reconcile/ask-families.tsv`) reaches you as an
+     `ASK` row instead, and a deletion the script could not prove safe as `ASK deletion`.
    - `DECISION <detector>-refused` (`unregistered-drift`, `retired-tokens`,
      `retired-layer-passage`, `layer-drift`) — that detector refused, or could not write all of
      its rows, so its section is **NOT a finding of "none"**. The detail carries its exit and its
@@ -1948,420 +1139,38 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      `<kind>` of a `derivation-info-<kind>` row is field 2 of the `INFO` row
      `derivation-differential.sh` printed.
 
-   **`apply.sh` runs the derivation differential on every ordinary pull and records what it finds; you do not run it for the record.** After its writes and before the stamp it executes `derivation-differential.sh --record-owed _bmad-output/ai-dlc-update/owed-derivations.tsv --log-name <name>` itself (not under `--finish`). A derivation this pull broke is RECORDED OWED by that run and drawn as a `WORKLIST artifact-derivations` row (one row per cause: when a fence named a moved path it carries the finding; otherwise `WORKLIST artifact-derivations-owed`), so LEAVING it needs no further step. A refused measurement is a `DECISION artifact-derivations-differential` row and leaves the record ABSENT: a refusal is no measurement. An absent record means no reconcile measured the tree and a present one with 0 OWED rows means measured, nothing owed. **The log name:** `apply.sh` mints `reconcile-log-<UTC stamp>.md` once per pull, passes it as `--log-name`, and prints it as the path of a `NOTE reconcile-log-name` row; write your reconcile log at exactly that path (step 7), because the record's last field (field 7) carries that name and the reader's OPEN line points at it. A re-run of the same range reuses the name already on its OWED rows. Do not run the helper by hand with `--record-owed` unless a DECISION row tells you to, and then pass `--log-name` with the name you will use for your log: the record dedups on key and range, never on field 7, so a wrong name cannot be repaired by a later run. The record is append-only with no status cell; `scripts/ai-dlc/check-owed-derivations.sh` derives which rows are still open. Only CURRENT-sprint and living-document artifacts are recorded; a past sprint's file or a history file is named by the differential's `INFO out-of-scope` row and is neither run, recorded nor enforced. **The differential's own rows reach the manifest as `NOTE` rows**, from every run whatever its exit: each `INFO <kind>` row as `NOTE derivation-info-<kind>` (the out-of-scope one as `NOTE derivation-info-out-of-scope`), each `NOTE` row as `NOTE derivation-note` with its key or path in the path field, each `UNASSESSABLE` row as `NOTE derivation-unassessable` with the derivation's key in the path field, and its `SUMMARY` row as `NOTE derivation-summary`. A `derivation-unassessable` row is a derivation the validator refused on either side, so no verdict cleared it: adjudicate each one by hand, and relay EACH IN FULL, one by one with its key and detail, never only as a count. To close a row, append `REPOINTED<TAB><old file:line><TAB><new file:line><TAB>$ <new command>` to the record: the reader re-derives the new derivation on every read, so the row closes only if it reproduces.
+   **A printed remedy that names the raw engine is run through the driver.** A row or refusal
+   that tells you to run `apply.sh --finish`, `apply.sh --carried-machinery-slice` or
+   `readopt-override.sh --merge` is run as `pull.sh finish`, `pull.sh apply` or `pull.sh merge`,
+   with the same arguments and flag. Both paths refuse to stamp over an unanswered ask; the
+   driver is the documented path because it also prints the `ASK` rows and flushes the
+   decisions record.
+
+   **`apply.sh` runs the derivation differential and records what it finds; you do not run it for
+   the record.** A derivation this pull broke is RECORDED OWED in
+   `_bmad-output/ai-dlc-update/owed-derivations.tsv` and drawn as a `WORKLIST artifact-derivations`
+   row; a refused measurement is a `DECISION artifact-derivations-differential` row. `apply.sh`
+   mints the reconcile log's name once per pull and prints it as a `NOTE reconcile-log-name` row;
+   write your log at exactly that path. Each `NOTE derivation-unassessable` row is a derivation the
+   validator refused on either side: adjudicate it by hand, record it as a decisions row, and relay
+   it IN FULL in the PR body. To close an owed row, append `REPOINTED<TAB><old file:line><TAB><new
+   file:line><TAB>$ <new command>` to the record; the reader re-derives it on every read. The
+   record's full contract is `reconcile/detector-rows.md`'s.
 
    Do NOT re-do a `RESOLVED` row by hand. Work the `WORKLIST` and `DECISION` rows, and every
-   `NOTE` row as the NOTE bullet above says. **This is what makes the update end-to-end**: the
-   operator runs it and it lands; you handle the semantic remainder, not the mechanical bulk.
+   `NOTE` row as the NOTE bullet above says. **The adjudication loop for `HARD-*` and
+   `override-readopt` rows** — build the evidence with `reconcile/readopt-override.sh <dist>
+   <theirs> <consumer> <override>`, decide retire / readopt / reaffirm in one sentence, do it,
+   stamp it, re-run the two drift detectors on their own bases — is in `reconcile/detector-rows.md`,
+   with the per-bucket actions (`UPSTREAM-DELETED`, `ORPHANED-RELOCATED`, setup-token substitution,
+   `TEMPLATE-PROSE-MERGE`) and the flagged-block checkpoint. You do the surgery; the decision is
+   recorded, not asked, unless its family is in `reconcile/ask-families.tsv`.
 
-   **IF THE MANIFEST CARRIES ANY `WORKLIST` OR `DECISION` ROW, THE RE-STAMP WAS WITHHELD AND THE
-   PULL IS NOT OVER WHEN THE ROWS ARE.** You will see `DECISION restamp-withheld` in place of
-   `RESOLVED restamp`, and `.claude/.ai-dlc-applying` is still on the consumer, blocking its
-   fixture suite on purpose. Dispose of every row, then do what the `restamp-withheld` row says:
-   it names the finisher, or — when a row only a fresh ordinary run clears is outstanding — the
-   re-render / re-approve / re-run procedure instead, and in that case the finisher is NOT the next
-   step. The re-stamp bullet at the end of this step has both and the reason. A pull left
-   un-finished leaves the consumer at `<base>` with its own gate refusing to run.
+   `WORKLIST pre-gate-repair <path>:<line> <header>` rows (or one `SKIP pre-gate-repair <reason>`
+   line) follow the apply: each names an escalation entry with no Status line. List them in the PR
+   body, which the script already does; they never block and never withhold the stamp.
 
-   Do NOT hand the operator a list of blockers and ask them how to respond. A blocker
-   list is a to-do list with extra steps: it makes them hand-merge prose, hand-author
-   YAML frontmatter, and hand-pick a `shadows:` anchor — the three things this repo has
-   most often gotten wrong (four overrides have had to be anchor-repointed after
-   naming a heading that did not exist, and drift detection was dead for each of them
-   until it was). You have the tools. Use them, then ask ONE closed question per
-   blocker.
-
-   **First, read the newest `_bmad-output/ai-dlc-update/blocker-adjudication-<ts>.md`, if one
-   exists.** It carries the dispositions the dry run verified and any answer the operator
-   already gave, so a decided blocker is executed rather than re-litigated. Two rules on it:
-   a row whose verification does not resolve against THIS run's refs is stale — re-verify it
-   here rather than trusting it; and the file NEVER authorizes a write on its own. It records
-   an answer; the `apply` argument on this invocation is what authorizes acting on it. A
-   blocker absent from the file, or present with no disposition, is worked from scratch below.
-
-   Work the `HARD-*` rows **one at a time**. For each:
-
-   **(1) Build the evidence.** Run `reconcile/readopt-override.sh <dist> <theirs>
-   <consumer> <override>` with no flag. It prints the dossier: the core section's
-   `base_sha..theirs` diff, the override's body, its stated `reason:`, the superseded
-   core lines still sitting in that body, and the lines core ADDED to the shadowed
-   section that the body does not carry. Read both panels: a purely additive upstream
-   change leaves the first empty and the second full.
-
-   **(2) Decide, against the dossier, and say which and why in ONE sentence:**
-   - upstream's change makes the override redundant → **retire**
-   - the override's `reason:` still holds AND upstream changed the shadowed text →
-     **readopt**
-   - the override's `reason:` still holds AND upstream changed only text this override
-     does not depend on (e.g. a prose/rationale edit elsewhere in the section) →
-     **reaffirm**
-
-   **(3) DO IT.**
-   - **readopt** → `readopt-override.sh … --merge`. This is a three-way merge (base =
-     core@`base_sha`, ours = the override body, theirs = core@`theirs`): it applies
-     upstream's change and keeps the consumer's delta. **Never hand-edit the body when
-     `--merge` can do it** — a hand-merge is where half an upstream clause gets
-     silently dropped. On CONFLICT, markers are left in the body and that is the one
-     place a human is genuinely required; present the conflict hunk, nothing else.
-   - **`HARD-UNREGISTERED-CORE-DRIFT`** → `reconcile/register-drift.sh <dist> <base>
-     <consumer> <core-rel-path> --apply`. It authors the `overrides/` entry from the
-     consumer's own sections, anchors it to real headings, stamps `base_sha` at **base**
-     (where the delta forked from — NOT the sha being pulled; stamping `theirs` would
-     claim the consumer had already read a change it has not), and reverts core.
-     **Then write the `reason:` line, which it leaves as `TODO`** — propose one from the
-     diff and have the operator confirm it. An override whose reason nobody stated is
-     one nobody can ever retire.
-     If the delta merely **duplicates an existing override**, do not register a second
-     one: revert core and say which override already carries it.
-     `register-drift.sh` refuses by design on **two** classes, and both refusals are
-     structural rather than a missing case. If it is a **hook**, the layer system has no
-     override grain for hooks. If it is **`skills/ai-dlc-setup/*` or `schemas/*`**, the
-     same is true for a different reason: overrides shadow a HEADING inside the ai-dlc
-     skill, and a second core skill and schema data have no heading to shadow. Both are
-     `scan`-marked, so the pull DOES report them and hands you this command — which then
-     refuses. `validate-enforcement-map.sh` I31 binds the two lists so a newly scan-marked
-     subtree cannot reach an unnamed refusal. In both cases the dispositions are: keep the
-     consumer's version (accept per-entry, and it re-reports every pull), or upstream it.
-     Reverting destroys the divergence; say so before anyone chooses it.
-     Its other exit-2 refusals are NOT structural. In every one, core was NOT reverted and the
-     edit is still in place, in a dry run and under `--apply` alike. Never revert core to get
-     past one; that deletes the edit the refusal kept. The refusal's last line says which kind
-     it is:
-     - **`Re-run; if it repeats, register by hand`: a step failed mid-run.** Re-run it. These
-       are `cannot classify section '<h>': diff did not run`; `cannot list the headings`;
-       `cannot read the consumer's section` or `core's section`; `conservation: diff of core
-       at <base> … did not run`; `conservation: the staged override is empty` (or `extension`);
-       `conservation: cannot resolve core's span`; `conservation: the check did not run` or `did
-       not report`; and any `cannot stage`, `cannot write`, `cannot create`, `cannot set the
-       mode` or `cannot move`. One of them differs: `the revert did not land` means the override
-       IS written and the edit is in both places, so remove nothing — re-run to finish the revert.
-     - **`re-running without changing the file refuses the same way`: a verdict on the file.** Do
-       not re-run; change the file or choose a disposition.
-       - `conservation: the consumer DELETED core heading "<h>" (core line N)`. Follow its `Way
-         through`: put the heading back with a body stating the retirement, then run it again.
-         The section is then a changed section, and the override carries it.
-       - `conservation: core line N (…) was changed or removed by the consumer…` and `conservation:
-         consumer line N (…) is carried by nothing that was written…`. These cover a preamble edit,
-         a heading an earlier heading's name swallows (`## Review` below `## Review Process`), a
-         repeated heading, and a consumer-only heading whose name resolves to a core one.
-         Overrides anchor by heading name, so do what the message says: move the edit into a
-         uniquely named `##` / `###` section, or upstream it.
-       - `conservation: the override shadows '<h>', which resolves to no heading`, and `<path>
-         exists and is not a regular file`. Clear the path, or fix the heading, before running it
-         again.
-     Exit 1, `no ## / ### section differs`, writes nothing. The delta is outside every heading, and
-     that includes an EOF append with no other edit.
-     Check the row's status before you conclude anything:
-     if it is `HARD-CORE-DRIFT-ABSORBED`, the disposition below applies. Otherwise say
-     so, and let the operator keep it (it will report every pull) or upstream it. Do not
-     paper over it.
-   - **`HARD-CORE-BEHIND`** → **the copy is stale; the remedy is TAKE THEIRS.** Do not reach
-     for `register-drift.sh`: there is little here to refile, and an override authored from a
-     three-month-old blob anchors to headings upstream may have rewritten. Read the residual
-     the detail names — `git -C <dist> show "${ancestor}:<core-path>" | diff - <consumer-path>` —
-     and dispose of THAT, not of the base-relative diff. Typically the residual is small and
-     already absorbed upstream by another route, in which case take theirs and say which
-     upstream mechanism now carries each piece. If part of it is genuinely still consumer-only,
-     that part — not the whole file — is the override candidate.
-     **A recurring per-entry acceptance on a `HARD-` row is the signal to check for this.**
-     An acceptance excludes the file from `apply`, which is what freezes it, which is what
-     makes the next pull's diff larger. Three consecutive pulls on the reference consumer
-     accepted a "genuine fork" that was a stale file whose two additions upstream had already
-     absorbed elsewhere.
-   - **`HARD-CORE-DRIFT-ABSORBED`** → **upstream took this change; the remedy is a REVERT,
-     not an override.** `unregistered-drift.sh` proves the consumer's added lines are
-     already present in core at `theirs` (it reports the hit count and percentage). So the
-     delta is not consumer-specific behavior to preserve — it is a duplicate of core, and
-     keeping it means carrying a fork of a file upstream now maintains. Revert with the
-     command the detail string hands you:
-     `git -C <dist> show "${theirs}:<core-path>" > <consumer-path>`.
-     **Before you propose it, prove nothing is destroyed**: diff ours against theirs and
-     confirm no consumer-only guard, path, flag, or exit code exists in ours that theirs
-     lacks. If something does, it is a genuine consumer delta wearing an absorbed file's
-     clothes — escalate it as such and do not revert. This is the one `HARD-*` row whose
-     resolution DELETES consumer text, so it is gated on an explicit operator yes like any
-     other, with the diff shown.
-
-   **(4) Ask the operator to approve THAT ONE disposition** — a closed question with
-   your recommendation and its one-line reason, and the evidence you used. Not "how do
-   you want to handle five blockers." Their answer is *yes* / *no, do X instead*.
-
-   **(5) Stamp**: `--stamp readopt` / `--stamp reaffirm --note "<their words>"` /
-   `--stamp retire`. `--stamp readopt` is refused while superseded core text or
-   conflict markers remain, so a stamp cannot outrun the merge.
-
-   Then **re-run `layer-drift.sh` and `unregistered-drift.sh` and require ZERO `HARD-*`
-   rows from runs that both exited 0.** Either one exits 2 with a `: REFUSED` line when a row
-   could not be written, and `layer-drift.sh` exits 1 with one when an input could not be staged
-   or read, or a base or theirs ref does not resolve;
-   its short output is then not a zero. Do not carry forward your memory of having discussed them: the re-run is the
-   evidence, and re-stamping is what makes it pass. A `HARD-` status that clears because
-   you decided it was fine is the check-that-cannot-fail defect, in the tool built to
-   prevent it.
-
-   **THE TWO SCRIPTS TAKE DIFFERENT BASES ON THIS RE-RUN, and one instruction for both
-   disarmed one of them.** The unqualified instruction *"pass `theirs` as the base on this
-   re-run, not the pull's base"* is right for one script and
-   wrong for the other, and the wrong half is silent.
-
-   - **`unregistered-drift.sh` — pass `theirs`.** It measures the consumer against
-     `<base-sha>` and presumes core still sits there. Core is now at `theirs`, so the pull's
-     original base reports every line upstream ADDED as a consumer addition upstream
-     absorbed — `HARD-CORE-DRIFT-ABSORBED` on a file `apply` just wrote, whose remedy is a
-     revert to what it already is. The post-apply base IS `theirs`; that is the only base
-     against which "consumer edits vs base" means what these status names claim.
-     `CORE-AT-THEIRS` rows are the tell that the base was stale.
-   - **`layer-drift.sh` — pass the PULL's base.** Its subject is what moved between base and
-     theirs, not what the consumer edited. Most `ADJUDICATED` clauses are computed over
-     that range, and `HARD-LAYER-ADJUDICATION-MISSING` (**LC-A1**) is demanded only on rows
-     a clause at that level produces. With `base == theirs` those arms find no drift, so no
-     adjudication is demanded, so the check cannot fail, and `hard-blockers.sh` prints a clean
-     sheet on a tree where the verdicts are still owed. **Do not read a clause list here — a
-     list of that set has already gone stale once, on the release that changed it.** Not every
-     clause at this level is range-keyed: **LC-O15** (`OVERRIDE-SUPERSEDED`) compares a
-     declaration at theirs against the entry on disk, so a degenerate range leaves its duty
-     live and its rows above are real. Ask the reader which codes the version you are pulling
-     holds you to: `layer-drift.sh --adjudicated-codes <dist> <theirs>`.
-     Reported by the reference consumer — `0 HARD blockers.`
-     with eighteen adjudications unrecorded — and reproduced on a scratch consumer: same
-     tree, the pull's base gives `EXTENSION-HOOK-DRIFT` + `HARD-LAYER-ADJUDICATION-MISSING`,
-     `theirs` gives `EXTENSION-OK` and nothing else. The register's own digest is
-     spend-on-move, so re-running on the pull base cannot re-demand a verdict recorded this
-     run.
-
-   **You do not have to remember this.** `layer-drift.sh` emits `DRIFT-RANGE-DEGENERATE` when
-   its two refs resolve to the same commit, naming the arms that cannot fire. If you see that
-   row, the run said nothing about the layer — re-run it with the pull's base.
-
-   **Re-running the WRAPPER post-apply takes a flag, and without it the wrapper is wrong
-   whichever base you give it.** `reconcile/hard-blockers.sh` drives both detectors, so a single
-   base has to be wrong for one of them: the pull's base makes `unregistered-drift.sh` report
-   `HARD-UNREGISTERED-CORE-DRIFT` against text `apply` itself just wrote, and `theirs` disarms
-   the arm above. Post-apply, call it as
-   `reconcile/hard-blockers.sh --post-apply <dist> <pull-base> <consumer> <theirs>` — it passes
-   `theirs` to `unregistered-drift.sh` and keeps the pull's base for `layer-drift.sh`.
-   `reconcile/post-write-gates.sh` runs exactly this call as its `hard-blockers` gate. It also
-   renders the `DRIFT-RANGE-DEGENERATE` row, which a `HARD-`-only filter would discard;
-   a `0 HARD blockers.` line with that row beneath it is not a clean sheet.
-
-   **Dispose of every `WORKLIST extension-reread` row — this is *the layer conformance
-   adjudication*.** `apply.sh` emits one per `EXTENSION-HOOK-DRIFT`: the core file the extension
-   hooks changed, and an extension has no section anchor, so nothing can locate what to
-   re-merge. Read the entry against the new core text and record a verdict per entry —
-   **still-additive**, **contradicts-core**, or **retire** — with the evidence of that read:
-   `read.entry_line` and `read.core_line`, each ONE line copied verbatim from what you read (the
-   entry's body, never its frontmatter, and the core text the blocking row names for its clause), at
-   least 20 characters with at least 10 letters or digits, and not
-   a heading. A verdict without them does not clear the row. A grep with no hit gives you nothing
-   to quote, which is the point: the row never prints a line that would pass.
-
-   **ORDER: make every edit this pull prescribes for the entry FIRST, then read the digest from a
-   fresh run, then record.** Recording before an edit to the same entry spends the record you just
-   wrote: the digest covers the entry's bytes, so the row re-fires under a new key and the verdict
-   you wrote is addressed to text that no longer exists.
-
-   **Recording is now the mechanism, not a note to self.** `layer-contract.yaml` carries these
-   clauses at `level: ADJUDICATED`: the candidate set is mechanized and the verdict is yours.
-   `layer-drift.sh` emits `HARD-LAYER-ADJUDICATION-MISSING` (**LC-A1**) for every such row with
-   no recorded verdict, and a `HARD-` status blocks `apply`. Write one JSON object per line into
-   `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`, shape in
-   `.claude/schemas/layer-adjudication-register.json`, copying `clause` AND `subject_digest`
-   **verbatim from the blocking row** — the row prints both, and the example below is one
-   clause of several that produce these rows, so its `LC-E4` is an illustration and never the
-   value to reuse:
-
-   ```json
-   {"clause":"LC-E4","entry":".claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md","subject_digest":"<copied from the row>","verdict":"still-additive","recorded_utc":"2026-07-29T10:00:00Z","reason":"core's change was to the gate-type enum; this entry adds a check row and does not restate it","read":{"entry_line":"<one line of the entry, verbatim>","core_line":"<one line of the core text the row names, verbatim>"}}
-   ```
-
-   **Where `core_line` comes from depends on the clause**, and the blocking row says which:
-   LC-E4 / LC-E6, an added or removed line of the range diff of the hooked file (marker
-   stripped); LC-E14, a line of the declared `extends:` span at base or theirs; LC-O15, a line of
-   the shadowed section at the entry's `base_sha` or at theirs; LC-E19, a line of the matched core
-   section at theirs. A record that exists and does not clear says so in the row and in
-   `--list-adjudications` (`recorded, not clearing: <which half>`): append a NEW record with
-   `read`, never edit the old one.
-
-   **If the verdict leaves work OWED, declare it — do not write it into `reason`.** A
-   `still-additive` that is only true because somebody intends to fix something has recorded a
-   decision and lost the obligation. Add an `owed` object (`id`, `what`, optional `closes_when`)
-   and a later row discharges it by naming the id in `closes_owed`; the register is append-only,
-   so a debt is never closed by editing the row that opened it. Measured on the reference
-   consumer before this existed: 46 rows, verdict distribution 45 `still-additive` / 1
-   `contradicts-core` / 0 `retire`, with four rows carrying obligations reachable only by
-   grepping prose — one of which said, in as many words, *"Nothing but this reason field is
-   tracking that debt."*
-
-   ```json
-   {"clause":"LC-E4","entry":"…","subject_digest":"…","verdict":"still-additive","recorded_utc":"…","reason":"…","read":{"entry_line":"…","core_line":"…"},"owed":{"id":"OWED-921-SPLIT","what":"split Check 921 into an overrides/ entry shadowing core Check 20","closes_when":"after this pull's apply"}}
-   ```
-
-   **Run `scripts/ai-dlc/audit-layer-debt.sh` and put its OPEN, UNDECLARED and
-   CONTRADICTS-CORE-WITHOUT-AN-`owed` lists in the report, every pull.** OPEN is what this
-   consumer owes; UNDECLARED is the migration backlog — rows whose prose reads like an
-   obligation while declaring none. A debt nothing enumerates is a debt nobody acts on, which is
-   the whole reason the field exists.
-
-   The third list is the one that cannot be re-derived. A `contradicts-core` verdict is a
-   judgement no detector can reach — that is stated where the verdict is defined below — and it
-   is keyed on a `subject_digest` that expires the next time the entry or its hooked core file
-   moves. After that the ruling is not overwritten; it is unaddressable, and every later row on
-   the entry carries a different digest and so disagrees with nothing. `owed` is the only handle
-   in this register that survives a digest change, because the debt join reads `owed.id` and
-   never a digest. **Scoped per ENTRY, not per row**: the register is append-only, so a
-   historical row can never acquire an `owed`, and the debt is declared by a later row — which
-   is how both real ones on the reference consumer were in fact recorded.
-
-   **TO RE-READ A KEY YOU HAVE ALREADY RECORDED A VERDICT UNDER, run
-   `layer-drift.sh --list-adjudications <dist> <base> <theirs> <consumer>`.** It prints every
-   keyed subject this pass can see — entry, target, `subject_digest`, the recorded verdict
-   if there is one, and the `clause` id in the last column — and nothing else: no classification
-   rows, no blockers, and no dependence on
-   whether the row is still blocking. Pass the SAME base the pull uses, for the reason step 7
-   states per script: base decides which rows the pass produces, so a degenerate range gives a
-   short listing rather than a visibly missing one. **Do not withhold the register to re-fire the
-   block.** That was the only way to read a key before this mode existed, and it means
-   deliberately breaking your own gate state to read a value the tool already computed. You need
-   the key AFTER the first write more often than before it: updating an `owed` object, and
-   re-verifying a subject, both name it.
-
-   The digest covers the entry AND the core file it hooks at `theirs`, so a verdict is spent the
-   next time either one moves. It is a record of a reading, not an exemption for a path — which
-   is why the register is keyed per SUBJECT and never per run. Changing your mind is allowed and
-   has to be declared: a second record under one key stating a different verdict needs
-   `supersedes` and a `reason`, or it is `HARD-REGISTER-CONTRADICTION` (**LC-A2**), because
-   otherwise a lookup answers with whichever record happened to be read last.
-
-   `contradicts-core` is the verdict `layer-drift.sh` cannot reach on its own. It emits
-   `EXTENSION-RESTATES-CORE` when an extension COPIES a core section, but an extension that
-   asserts the opposite of core in its own words restates nothing and matches nothing —
-   `extensions/README.md`'s "Additive only" has no detector, and an extension carries no
-   `base_sha` to compute one against. This re-read is that check. Do not add a textual
-   contradiction detector instead: agreement between two prose rules is not a substring
-   property, and a scanner that guesses would fire on every extension that legitimately
-   narrows a core default.
-
-   **Post-apply, verify against the RENDERED pipeline, never against core alone.** A
-   core fix is effective only if it survives `overrides > extensions > core`
-   resolution. After the core overwrite, for every override you re-adopted, grep the
-   OVERRIDE for the new clause — that is the text the lead actually obeys. Core
-   containing the fix proves nothing about a section the consumer shadows.
-
-   **Offer the catalog relabel (step 3e).** Run `reconcile/relabel-extension-checks.sh
-   <consumer-root> --apply` once core is in place, since the collision set is defined
-   against the NEW core. An exit 2 with a `relabel: REFUSED —` line moved no file for the
-   extension it names, and it is not "nothing to label": clear its cause and re-run it.
-   Then run `scripts/ai-dlc/validate-layer-entries.sh` and report its
-   errors/warnings in the apply summary. This never blocks the apply.
-
-   **Offer the extension-check adoption (step 3ea).** Run
-   `reconcile/adopt-extension-checks.sh <consumer-root>` once core is in place — the
-   anchor set it subtracts against is the NEW core's, so a check the incoming release
-   started anchoring drops out on its own. Put its per-entry `gate_types:` question to
-   the operator and apply only their explicit answer, one entry at a time:
-   `--apply --gate-types <list>`. Never guess the slice; refusing is what the tool does
-   on its own if you pass `--apply` without it. Re-run
-   `scripts/ai-dlc/validate-gate-manifest.sh` afterwards and report its verdict in the
-   apply summary. This never blocks the apply.
-
-   **Flagged-block checkpoint (mid-apply, every block, not just conflicts).**
-   Before executing a block's mechanical bucket action, check whether it (or
-   its file, if flagged at file grain) carries `needs_operator_confirmation:
-   true` from `classify-block.md` — this is orthogonal to bucket; a
-   `domain-local` or `innovation` block can still need one. Being inside an
-   authorized `apply` run on the step-6 branch does NOT waive this: writing is
-   authorized here, but a specific judgment call the classifier flagged is
-   not resolved by that authorization. When you reach such a block: STOP
-   before acting on it, present its specific question to the operator (same
-   footing as a conflict), and apply only their explicit answer for that
-   block — never your own best guess, and never silently fall through to the
-   bucket's default action because the rest of the run is "obviously fine" to
-   continue. A real run hit this: two blocks a dry-run report explicitly
-   flagged for operator review (a naming/kind decision, a genuine 3-way
-   prose blend) reached `apply` with no formal gate forcing the question to
-   actually be asked — nothing stopped the bucket's default action from
-   silently deciding them. This checkpoint is that gate. Applies identically
-   in untangle's 7u below.
-   - apply-bucket blocks → write theirs into ours (path-mapped). If the file
-     is listed in `reconcile/setup-sites.md`, run the **mask/reinject
-     transform** (below) instead of a blind overwrite — extract the
-     consumer's live values at each declared site before writing theirs, then
-     reinject them at the same sites afterward. A blind overwrite of a
-     manifest-listed file blanks the consumer's real model strings/ownership
-     paths/deploy commands back to `{placeholder}` tokens — this happened
-     once (the reverted Phase-2B spike) and must not happen again.
-   - `UPSTREAM-ONLY-ADD+SETUP-TOKENS->SUBSTITUTE` → **a NEW core file carrying
-     setup-substitution sites. mask/reinject CANNOT do this one**: that transform
-     reinjects the CONSUMER's live values, and a file the consumer does not have yet
-     has none to extract. A blind copy leaves `{token}` on a live line, and the
-     leftover-token gate below then blocks delivery after every other write has
-     landed. Substitute BEFORE the write: for each site `setup-sites.md` declares on
-     that path, **ask the operator one closed question**, proposing the value the
-     consumer already uses for its nearest-equivalent role as the default (a new
-     team-role's model and effort are not such a site: they come from its
-     `aiDlcRoles` entry, never from the role file). Then write theirs with the answers substituted in.
-     Every role file predates the consumer's install, so `ai-dlc-setup` filled these
-     tokens once and the pull never had to. This bucket exists for the case that
-     breaks: a template-bearing core file that postdates the consumer's install, of
-     which `team-roles/remediator.md` is one.
-   - keep/domain-local/innovation blocks → leave ours; for domain-local, layer
-     theirs' non-conflicting additions; for innovation, append to the
-     push-candidate ledger. **The push asymmetry between those two is a
-     decision, not a default, and it is the same one the untangle bucket list
-     makes below.** Before leaving a block as domain-local, answer the
-     dependency question against `theirs`: does any core text at the block's
-     hook target — a gate, a breach message, a budget row, a cross-reference —
-     presuppose the machinery being kept local? If it does, core is incomplete
-     without the block; treat it as innovation and append it to the ledger.
-     A block left domain-local is the positive claim that nothing core does.
-   - conflicts → apply only operator-adjudicated resolutions.
-   - `UPSTREAM-DELETED` files (upstream removed the file, consumer untouched
-     vs base) → **`git rm` the consumer file, but ONLY after an explicit
-     operator confirmation.** Deletion is destructive and
-     irreversible in a way an overwrite is not, so every `UPSTREAM-DELETED`
-     path is gated: at the dry-run report (step
-     5) it appears in a dedicated **deletions list** with the reason
-     (`upstream removed <path> at <theirs>; consumer copy unmodified since
-     base`), and mid-apply you STOP and ask ONE question that lists every
-     such path with its reason line, then apply the removals only on the
-     operator's explicit yes to that question. Any answer other than an
-     unqualified yes declines the batch: ask per path. Never infer approval from the `apply` argument —
-     `apply` authorizes writes, not this specific destroy. A `UPSTREAM-DELETED-NOOP`
-     path (consumer already lacks it) is a silent noop — nothing to remove,
-     no gate. A `UPSTREAM-DELETED+consumer-modified` path went through
-     semantic classify (the consumer changed a file upstream then deleted):
-     treat the classifier's finding as a **conflict** — the consumer's
-     modifications may be an un-pushed innovation worth preserving as an
-     extension rather than deleting; operator adjudicates, default keep-ours.
-   - `ORPHANED-RELOCATED` files (this distribution moved where it ships a subtree;
-     the copy left at the old consumer path still hash-matches the blob we wrote
-     there) → **`git rm` the stale copy, only after an explicit operator
-     confirmation for that path.** Each orphan is its own question: never
-     batch-approve, never infer approval from the `apply` argument. State the new
-     path in the prompt — the file is being *retired*, not lost, and an operator who
-     cannot see that will refuse a safe deletion. `ORPHANED-UNKNOWN` and
-     `ORPHANED-RELOCATED+consumer-modified` are **never deleted**: the first is a
-     file upstream never shipped, the second the consumer edited, and the pull only
-     ever proposes destroying bytes it can prove it wrote. Both go to the operator
-     as conflicts, default keep-ours.
-   - `TEMPLATE-PROSE-MERGE` files (from step 3b, listed by name in the report
-     region's "Template pre-classification" section) → run the **marker-anchored mask/reinject
-     transform** in `reconcile/template-sites.md`: capture the consumer's
-     filled config at each `{token}` fill region, apply the upstream
-     base→theirs boilerplate delta, reinject the captured config. The
-     boilerplate-only shortcut applies when the delta touches no fill region
-     (the Context-Mode Usage removal is this case). On anchor-drift (a
-     base-template token/marker not locatable in the consumer file), STOP and
-     flag that file for operator adjudication — never best-effort-place a
-     preserved value.
-     `apply.sh` hands each such file back as a `WORKLIST template-prose-merge` row, which
-     withholds the re-stamp, and records the file as the pull found it on a `template:` line
-     (under a `template-hashes:` line) in `.claude/.ai-dlc-applying`. `--finish` re-checks the
-     record: the file's bytes or its mode must have moved, or it prints
-     `WORKLIST finish-template-unmerged` and withholds. A file deleted since the record clears
-     it, because a deletion is a disposition. The deliberate-no-op exit is deleting that file's
-     own `template:` line.
-   - `TEMPLATE-JSON-MERGE` (from step 3b, same section) → run
+   - `TEMPLATE-JSON-MERGE` (from the template pre-classification) → run
      `t=$(mktemp); git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"`
      then `reconcile/settings-merge.sh --consumer .claude/settings.json --template
      "$t"`. `--template` is read with `-r` and
@@ -2369,7 +1178,7 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      **Do not hand-write the jq** — the script is the contract. It strips stale
      `ai-dlc-*.sh` hook blocks + appends the template's, and preserves user
      permissions/env/mcpServers/statusLine. It writes nothing into `env`: the
-     `AI_DLC_MODEL_<FAMILY>_WINDOW` declarations the step-5 report asked about
+     `AI_DLC_MODEL_<FAMILY>_WINDOW` declarations the `model_window_needed` decisions row names
      are the operator's to add, and an existing value is never touched.
      `enabledPlugins` is additive-only with one retirement: the script removes the
      project's `context-mode@context-mode` entry when its value is exactly `true`
@@ -2386,8 +1195,6 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      it by running `settings-merge.sh` on a copy again, which must change nothing, or it
      prints `WORKLIST finish-template-json-unmerged` and withholds. The deliberate-no-op
      exit is deleting that file's own `template:` line.
-   - (The skill's OWN files are NOT touched here — they were already refreshed by
-     the autonomous self-update cycle in step 2.)
 
    **RUN THE POST-WRITE GATES THROUGH ONE SCRIPT, AND READ ITS VERDICT LINES — NEVER A GATE'S
    PROSE.** The five gates below (leftover tokens, setup-site drift, hook registration, taught
@@ -2407,152 +1214,22 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    whole output. The `hard-blockers` line carries `hard=<n>`: those are the HARD rows still
    standing, and each must be one the operator accepted per path before apply.
 
-   **A gate whose exit code was not observed is UNDECIDED, and UNDECIDED is never a pass.** Not on
-   a clean-looking last line, not on "each check's own output reports clean", not on an empty
-   `rc=`. A pipe (`| tail -3`, `| head`, `| grep`) makes the status you read the status of the last
-   stage and cuts away the lines a refusal is printed on; a consumer session passed two gates
-   exactly that way, on `rc=` with nothing after it.
+   **A gate whose exit code was not observed is UNDECIDED, and UNDECIDED is never a pass.** Each
+   gate's rows, its fallback form (when `reconcile/post-write-gates.sh` is absent) and its remedy
+   are in `reconcile/detector-rows.md`.
 
-   **If `reconcile/post-write-gates.sh` is absent**, run each gate below on its own line, UNPIPED,
-   with its output sent to a file, and capture the code on the very next statement:
-   `<gate> > <file> 2>&1` then `rc=$?`. Read `rc` before anything else; then read the whole file (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB, never `ctx_*`).
-   On a pull whose step 2 self-update landed, the re-invocation step 2 prescribes already runs
-   this text and this script, so it is present. It is absent only when step 2 returned
-   `SELF-UPDATE-DEFER` or the skill's branch was not synced — the pull then runs the skill copy
-   that predates it, and this fallback form is the capture.
-
-   **Leftover-token gate — hard, runs after the last write, blocks delivery.**
-   After every overwrite above and BEFORE the re-stamp, grep the consumer's core
-   for a template token that survived on a LIVE line:
-
-   ```
-   grep -rn '{[a-z_]*}' <consumer>/.claude/team-roles/ | grep -v '<!--'
-   ```
-
-   `post-write-gates.sh` runs this as `post-write-gates.sh --leftover-tokens <consumer>`, which
-   stages the first grep's output to a file so that its own exit 2 (unreadable) is a refusal: in
-   the two-stage pipe above the status is the second grep's and says nothing about the first.
-
-   A hit is a FAIL. STOP before the re-stamp and name the file and the token — then
-   tell the two causes APART, because they have opposite remedies:
-
-   - **The site is NOT declared in `setup-sites.md`.** The overwrite blanked a live
-     consumer value back to its `{placeholder}`. Add the missing site to
-     `setup-sites.md` and redo that file's overwrite through **mask/reinject**.
-   - **The site IS declared, and the file is NEW to this consumer** (bucket
-     `UPSTREAM-ONLY-ADD+SETUP-TOKENS->SUBSTITUTE`). Nothing was blanked — the file has
-     simply never been through `ai-dlc-setup`, so there was no consumer value to
-     reinject and mask/reinject is the WRONG tool. Substitute the declared sites from
-     the operator's answer (step 7), then rewrite the file.
-
-   Do not deliver a tree that dispatches a teammate against an unfilled `{token}`.
-
-   Exclude `<!-- ... -->` doc comments — those legitimately carry the token text
-   and MUST survive from `theirs` (per the mask/reinject transform, the doc
-   comment is not part of the captured span). The token only matters on a live
-   line. Match the same idea for non-role manifest files (`steps/*.md`), whose
-   sites are commands and paths rather than `/model` strings.
-
-   **Setup-site drift gate — the OTHER direction, and it is a script.** The gate
-   above catches theirs' `{token}` surviving where the consumer's value belonged.
-   This catches the reverse: OURS surviving where THEIRS's content belonged.
-
-   ```
-   reconcile/setup-site-drift.sh <dist> <consumer> <theirs>
-   ```
-
-   Exit 0 required — observed as `post-write-gates.sh`'s `GATE setup-site-drift PASS` line, or
-   by the unpiped fallback form above; never read off the tail of its output. Same place in the
-   sequence — after the last write, before the re-stamp. It asserts that every file declaring a setup site equals `theirs`
-   byte-for-byte outside that file's declared spans, and names the file and line
-   where it does not.
-
-   **Its failure direction is upstream content NOT ARRIVING**, which is why it is
-   worth a program: the pull reports success and the consumer is quietly behind,
-   with nothing downstream disagreeing. Measured on the reference consumer during
-   the 0.297.0 → 0.300.0 hop, `deploy-validate.md` kept OURS at line 26 — outside
-   both of that file's declared spans — and the line it kept prescribed the OLD
-   artifact-path grammar that release had just replaced. It surfaced only because
-   `HARD-CORE-BEHIND` flagged it independently: the safety net working, not the
-   mechanism working.
-
-   **This existed as prose and the prose was not enough.** §7v criterion 5 states
-   exactly this rule, was untangle-only, and has already reported PASS on an
-   instance of it (`dev.md`, three of theirs' model-option comment lines) — because
-   the agent asked to check the transform is the agent that just performed it.
-
-   *Why this exists.* `untangle`'s §7v criterion 4 already asserts "zero remaining
-   `{...}` tokens in any team-role file" — but 7v is untangle-only, and the
-   ORDINARY pull had no equivalent, so a manifest miss landed silently on the one
-   path consumers actually run. It did: a role file carrying model tokens shipped
-   while `setup-sites.md` went untouched for nine minor versions, so the manifest
-   did not declare that role's model sites at all. The first
-   consumer pull to touch that file would have overwritten a live
-   a live model string with that role's unfilled placeholder and broken
-   every adversary dispatch — with nothing in the run to catch it. A manifest is a
-   hand-maintained list and WILL go stale again; this gate is what makes the next
-   staleness loud instead of silent.
-
-   Role files carry no model string, so no model site can be omitted from the
-   manifest. This gate covers the sites that remain — ownership paths and
-   deploy/smoke commands.
-
-   **Hook-registration gate — hard, runs after the last write, blocks delivery.**
-
-   ```
-   scripts/ai-dlc/validate-hook-registration.sh
-   ```
-
-   Exit 0 required — observed as `post-write-gates.sh`'s `GATE hook-registration PASS` line, or
-   by the unpiped fallback form above. Same place in the sequence as the two gates above — after
-   the last write, before delivery. It asserts that every `.claude/hooks/ai-dlc-*.sh`
-   on disk is registered in `.claude/settings.json`, and that every registration
-   names a hook that is there. Both sides are derived; nothing is hand-listed.
-
-   A nonzero exit is a FAIL. STOP and run the settings reconcile — the
-   `TEMPLATE-JSON-MERGE` bullet above is the same command — then re-run this gate
-   until it exits 0. Exit 2 means the check could not run at all, which is a FAIL
-   for the same reason: an unknown reads exactly like a clean.
-
-   *Why this exists.* The two halves of a hook delivery are enforced differently.
-   `apply.sh` writes the hook FILE mechanically, with a manifest row. The
-   REGISTRATION is `settings-merge.sh`, and its only invocation sites in the whole
-   distribution are prose — the two in this file. A pull that skips them ships a
-   hook that is on disk, looks installed, and never fires, with no error and no
-   absence anywhere to notice. `apply.sh` now emits a `WORKLIST settings-merge` row
-   naming each such hook at the moment it creates the state; this is the gate that
-   makes the row impossible to walk past.
-
-   *Why it does not key on the `TEMPLATE-JSON-MERGE` bucket.* That bucket is a
-   DELTA — preclassify emits it only when the template itself moved between `base`
-   and `theirs`, and `TEMPLATE-UNCHANGED-NOOP` otherwise. A consumer whose
-   settings.json went stale on an EARLIER pull produces no delta at all, so the
-   bucket is silent on exactly the tree that is already broken. This gate reads
-   disk state, so it fires on that tree too. Measured on the reference consumer
-   while it was written: `ai-dlc-rules-floor.sh` — which `install.sh` calls "the
-   SINGLE detector, running every session" — present and unregistered for six
-   releases, across pulls that reported success.
-
-   **Taught-schema gate — hard, runs after the last write, blocks delivery.**
-
-   ```
-   AI_DLC_PROJECT_ROOT=<consumer> bash <consumer>/scripts/ai-dlc/sync-taught-schema.sh --check > <file> 2>&1; rc=$?
-   ```
-
-   Exit 0 required — observed as `post-write-gates.sh`'s `GATE taught-schema PASS` line, or by
-   the unpiped fallback form above. Same place in the sequence as the gates above — after the
-   last write, before delivery. It asserts that every generated taught-schema example under
-   `.claude/skills` and `.claude/team-roles`, extensions included, is rendered from the schemas
-   in `.claude/schemas/`. It only checks and writes nothing. Its `FAIL` lines go to stderr, so
-   capture both streams. An absent script is UNDECIDED; exit 2 (root unresolved) is a FAIL.
-
-   A `FAIL` naming a STALE example is cleared by `bash scripts/ai-dlc/sync-taught-schema.sh` (no
-   arguments; it rewrites only the generated regions). Run it only after every semantic-merge
-   and `finish-unapplied` row is resolved, because the merge brings theirs' region and a sync
-   before it moves the file's blob; then re-run this gate. A hand-written example, an unknown
-   profile or a region never closed is not cleared by the sync: edit the file as the check's
-   `FIX` text says, then re-run this gate. Re-run `apply.sh --finish` after it only while the
-   `.claude/.ai-dlc-applying` marker stands; an apply that already stamped owes no re-stamp.
+   **THE STAMP IS WITHHELD WHILE ANY ROW IS OUTSTANDING, AND `pull.sh finish` IS HOW YOU ADVANCE
+   IT. THIS IS A REQUIRED STEP, NOT A RECOVERY PATH.** A first `apply.sh` run that hands back any
+   `WORKLIST` or `DECISION` row prints `DECISION restamp-withheld`, leaves the stamp at `<base>` and
+   leaves `.claude/.ai-dlc-applying` in place, so the consumer's fixture suite refuses on purpose.
+   When every row is disposed, run `reconcile/pull.sh finish [--carried-machinery-slice] <dist>
+   <base> <consumer> <theirs>`. It runs `apply.sh --finish`, which first checks the CONFLICT
+   GUARD (an `ASK` row means a conflict or blend reached the tree without an answer: exit 3),
+   then checks the tree and does the stamp and the marker clear; it writes no core file. A `DECIDE
+   <kind> <path> withheld` row (exit 3) is a check `--finish` failed: dispose of it and run `finish`
+   again. When the `restamp-withheld` row says a fresh ordinary run is the remedy instead, run
+   `pull.sh apply` again with the same arguments; `finish` is not the next step there. Every row
+   `--finish` can emit is listed in `reconcile/detector-rows.md`.
 
    - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
      `<theirs-sha>`, **preserving `skill_version`/`skill_commit`/`installed_at`/
@@ -2563,205 +1240,15 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      **THE ONE EXCEPTION, AND IT IS A FLAG RATHER THAN A JUDGEMENT CALL.** If step 2
      reported `SELF-UPDATE-DEFER`/`SELF-UPDATE-UNDECIDED` and handed its machinery
      slice to this apply, then this run DID install machinery, and the skill pair
-     must advance with the rulebook pair — run
-     `reconcile/apply.sh --carried-machinery-slice <dist> <base> <consumer> <theirs>`
-     and it writes all four. Preserve is the default because a rulebook-only apply
-     must not claim a machinery version it did not install; advance is correct only
-     when it did. Withholding still applies to BOTH pairs or neither: a mechanical
-     failure holds the machinery pair back exactly as it holds the rulebook pair.
+     must advance with the rulebook pair — pass `--carried-machinery-slice` to
+     `pull.sh apply` and `pull.sh finish`, which pass it to `apply.sh`, and it writes all four.
+     Withholding still applies to BOTH pairs or neither. A stale `skill_commit` makes every
+     machinery file this apply wrote read as consumer drift on the next pull.
 
-     *Why this is a flag.* A stale `skill_commit` is not cosmetic.
-     `unregistered-drift.sh` suppresses a machinery file as `CORE-AT-SELF-UPDATE`
-     when it is byte-identical to the distribution at `skill_commit`, which it reads
-     from this stamp. Leave the field behind and every machinery file this apply
-     wrote from theirs reads as consumer drift on the next pull, with a printed
-     remedy that reverts upstream's own text. That is the same false-drift failure
-     the intermediate-ref suppression exists to prevent, reaching the operator
-     through the stamp instead of through the scan.
-     **The re-stamp
-     fires whenever the consumer core now equals `theirs` — INCLUDING an empty
-     reconcile (zero rulebook blocks applied, e.g. a self-update-only pull). In
-     that already-current case this step is a stamp-only bump: the point of the
-     `apply` run is to advance the stamp; the log records "already current, stamp
-     advanced <base> → <theirs>." Without this, a skill-only pull would leave the
-     stamp stuck forever and every later pull would re-diff from a stale base.**
-
-     **THE STAMP IS WITHHELD WHILE ANY ROW IS OUTSTANDING, AND `--finish` IS HOW YOU
-     ADVANCE IT. THIS IS A REQUIRED STEP, NOT A RECOVERY PATH.** The first `apply.sh`
-     run of a pull that hands back ANY `WORKLIST` or `DECISION` row now emits
-     `DECISION restamp-withheld` instead of `RESOLVED restamp`, leaves the stamp at
-     `<base>`, and leaves `.claude/.ai-dlc-applying` in place — so the consumer's
-     `pre-push` keeps refusing the fixture suite. That is correct: the tree really is
-     a mixture until you have done the rows. **When every `WORKLIST` and `DECISION`
-     row above is disposed, run
-     `reconcile/apply.sh --finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`.**
-     It checks the tree, then does the stamp and the marker clear — it runs no resolution
-     phase and writes no core file, so it cannot undo or redo your merges. Carry `--carried-machinery-slice`
-     through to it if the first run had it; the withheld row prints the exact command,
-     flag included.
-
-     **`restamp-withheld` has two forms, and one of them does NOT name `--finish`.** When an
-     outstanding row's remedy is a step only a fresh ordinary run performs — the known_skills
-     refile whose diff did not run, an exec-bit finding, a staging refusal after the writes — the
-     row says to re-render the report with `emit-report.sh` and re-run apply with the same four
-     arguments, and that `--finish` is not the next step. This is the one path where a re-render
-     is still the remedy, because this run already wrote the tree. Re-run apply: it compares the
-     re-rendered region against the one step 5 recorded, and when a re-approval is owed it prints
-     the question and the option label. Ask exactly that question with AskUserQuestion, offering
-     exactly that label, wait for the answer, and re-run apply. The finisher re-checks those rows
-     and withholds while they are undone. It does not re-check a `scaffold-ignored` row; take that row's own exit, or the next pull raises it again.
-
-     *Why a second invocation rather than a smarter first one.* The rows are work YOU
-     complete after this program has exited, so there is no moment during the first run
-     at which the stamp is true. And the finisher cannot simply re-run the phases: a file
-     you semantically merged keeps a consumer delta by definition, so it re-buckets
-     `BOTH-CHANGED->CLASSIFY` on every subsequent run and the hand-back would never
-     clear. Filed by the reference consumer as
-     `PC-S304-APPLY-SH-RESTAMPS-BEFORE-THE-WORKLIST-IS-DONE`, reproduced across two pulls
-     a month apart — one run printed `RESOLVED restamp` beside 37 outstanding rows. The
-     stamp is the next pull's merge base, so an abandoned apply left a tree claiming to
-     be at theirs, and the un-merged files then read as `ALREADY-AT-THEIRS` to every
-     detector that compares against it.
-
-     *What `--finish` checks before it stamps.* It does not take your word that the rows
-     are done. In this order, and every failure is a `WORKLIST` row that withholds the
-     stamp and leaves the marker in place:
-
-     1. **`<theirs>` is the ref this tree was written from.** It compares the `core/` tree
-        of the `theirs:` recorded in `.claude/.ai-dlc-applying` against the `<theirs>` you
-        typed. On a mismatch it prints `DECISION restamp-identity-mismatch`, writes nothing,
-        and skips the two checks below — an unapplied set computed against the wrong ref
-        names content this tree was never approved for.
-     2. **`<base>` is the base the tree started from.** It must resolve to a commit, and its
-        `core/` tree must equal that of the stamp's own `commit:`. Otherwise
-        `WORKLIST finish-base-unverified`: re-run with the stamp's own `commit:` as `<base>`.
-        The `DECISION restamp-withheld` row beside it echoes the `<base>` you typed, so do
-        not copy its command on this row.
-        A `<base>` typed as `<theirs>` makes every range empty, so this is not optional.
-     3. **No file still reads as a pure apply.** It runs `preclassify.sh` with the same four
-        arguments, and every row still bucketed `UPSTREAM-ONLY`, `UPSTREAM-ONLY-ADD` or
-        `…SETUP-TOKENS…` is a `WORKLIST finish-unapplied` row naming the file — missing,
-        still at base, or lacking theirs' exec bit. Write theirs' copy and re-run `--finish`.
-        A file bucketed `…CLASSIFY` never counts HERE, so a merged file — which keeps a
-        consumer delta by definition — cannot wedge this check; a `.dist-only` fixture at
-        `<theirs>` is skipped. If `preclassify.sh` fails, or returns nothing while the range
-        moves `core/`, that is `WORKLIST finish-unverified-tree`, never a pass.
-     4. **No file handed back as a semantic merge is still untouched.** The ordinary run
-        records, in `.claude/.ai-dlc-applying`, the consumer blob AND exec bit of every file it
-        handed back under a `…CLASSIFY` bucket, as `classify: <blob> <755|644><TAB><path>`. A
-        recorded file whose blob and mode both still match is `WORKLIST finish-classify-unmerged`:
-        the merge was never done. Do it and re-run `--finish`. A file you merged by hand differs
-        from the record in its bytes or its mode (a merge that is only `chmod +x` counts), so it
-        does not hold the finisher up; one you deleted does not either. A marker that exists and
-        could not be read, an unreadable record, or an unreadable file is
-        `WORKLIST finish-classify-unverified`.
-
-        The record is written once per BASE: a later ordinary run from the same `base:` — the
-        re-run a withheld row prescribes, a pull re-pointed at a newer `<theirs>`, a second pull
-        before finishing — keeps every line already there and adds only new paths, so a copy you
-        already merged never becomes the reference. `UPSTREAM-DELETED+consumer-modified` and
-        `ORPHANED-UNKNOWN` files are still handed back but are NOT recorded, because keeping the
-        consumer's copy is their normal disposition.
-        Such a later pull runs from the working branch, never from the reconcile branch an
-        unfinished apply left checked out: step 1 stops on a skill branch whose PR is not
-        merged and names the continuations.
-
-        **If keeping a recorded copy as it is IS the disposition** — the merge is deliberately a
-        no-op, which is common for `BOTH-ADDED` — delete that file's own `classify: … <path>`
-        line from `.claude/.ai-dlc-applying` and re-run `--finish`. Every other check still runs,
-        and the marker keeps the fixture suite blocked until the stamp clears it. Removing the
-        whole marker (`rm .claude/.ai-dlc-applying`) is the LAST resort: it unblocks the fixture
-        suite on a tree that may still be mid-pull, and stamps with
-        `DECISION restamp-identity-unchecked`, forfeiting check 1 and this check for every other
-        handed-back file.
-
-        A marker written by an apply that predates the record carries no `classify-hashes:`
-        line, and a later run from the same base leaves it that way (the tree may already hold
-        your merges, so nothing read then is the copy the apply found). `--finish` then says so on
-        a `NOTE finish-classify-unrecorded` and does not withhold, so this check cannot fire on
-        that marker. On the pull that delivers the record that happens only under
-        `SELF-UPDATE-DEFER` or a leftover same-base marker; when step 2's self-update lands, step 7
-        runs the new apply and the check is live. A path carrying a TAB or a `"` reaches the record C-quoted by
-        `preclassify.sh` and is not recorded either; confirm such a file's merge by hand.
-     5. **No template-derived file handed back as a merge is still untouched.** The ordinary
-        run records, under its own `template-hashes: <n>` line, the consumer blob AND exec bit of
-        every `TEMPLATE-PROSE-MERGE` file, and the path of every `TEMPLATE-JSON-MERGE` file whose
-        merge is owed or could not be tested, as `template: <blob> <755|644><TAB><path>`. A prose
-        file whose blob and mode both still match is `WORKLIST finish-template-unmerged`; a change
-        to either clears it, and so does deleting the file, because a deletion is a disposition. A
-        recorded `settings.json` is
-        judged by `settings-merge.sh` run on a copy, never by its blob, and a copy that still
-        changes is `WORKLIST finish-template-json-unmerged`. A marker that exists and could not be
-        read, a record that could not be read, or a recorded file that could not, is
-        `WORKLIST finish-template-unverified`; an absent marker is not checked. An ordinary run
-        whose `preclassify.sh --templates` scan refused records nothing and writes
-        `template-hashes: refused`; `--finish` withholds on that with
-        `WORKLIST finish-template-unscanned`, which a fresh ordinary run with the same four
-        arguments clears, once the cause of the refusal is fixed. That run's completed scan
-        replaces the `refused` line with the record. Deleting the `template-hashes: refused`
-        line from `.claude/.ai-dlc-applying` and re-running `--finish` is the LAST resort: it
-        stamps with only `NOTE finish-template-unrecorded`, forfeiting this check for this pull,
-        so every template-derived file's merge is then confirmed by hand. `--finish` does
-        not re-run the template classification, which reads the same on a merged tree as on an
-        untouched one. The record is written once per base, exactly as in check 4. Nothing
-        compares file content to the template, because a correctly merged file keeps consumer
-        edits that any such comparison would count against it.
-
-        **If leaving the file as it is IS the disposition**, delete that file's own
-        `template: … <path>` line from `.claude/.ai-dlc-applying` and re-run `--finish`. Every
-        other check still runs.
-
-        A marker written by an apply that predates the record carries no `template-hashes:`
-        line, and a later run from the same base leaves it that way. `--finish` then says so on a
-        `NOTE finish-template-unrecorded` and does not withhold, so this check cannot fire on
-        that marker.
-     6. **The two remedies only a fresh ordinary run performs are done.** A known_skills entry
-        the consumer added in place and never refiled is `WORKLIST finish-refile-owed`; a refile
-        check that could not run is `WORKLIST finish-refile-unverified`; a shipped file whose
-        exec bit disagrees with upstream is `WORKLIST finish-exec-owed`.
-
-     A changed setup-sited file never byte-matches base or theirs, so it usually buckets
-     CLASSIFY; `--finish` checks it with `setup-site-drift.sh --file` and, when that does not
-     pass, names it on a `NOTE finish-unverified` row and does not withhold,
-     and check 4 does not record it. Confirm those by hand.
-     Every `NOTE` row `--finish` prints is read, worked and relayed as step 7's `NOTE` bullet says.
-     Nothing here checks that a merge is
-     CORRECT — only that no file the ordinary run would have overwritten from theirs is still
-     waiting for it, and that no handed-back file is still the copy the apply found.
-
-     It also runs the hook-registration validator and withholds again on a
-     `WORKLIST settings-merge` row, because by then the settings merge has happened and
-     the answer is verifiable rather than attested. It does not gate on a `DECISION` row:
-     those you have already adjudicated, or they are the tool saying it could not look,
-     and gating on one that cannot clear would wedge the consumer with no exit.
-
-     It also runs the consumer's `scripts/ai-dlc/sync-taught-schema.sh --check` and withholds on
-     a `WORKLIST taught-schema` row (each file whose generated example is stale; the remedy is
-     the sync, after every merge row is done) or a `WORKLIST taught-schema-region` row (`file:line`
-     of a hand-written example, an unknown profile or an unclosed region; the remedy is a hand
-     edit). A stale file still owed a semantic merge is named on a `NOTE taught-schema-merge-first`
-     row instead of the sync row: merge it first. Either WORKLIST row's remedy ends in one of two
-     forms. While the marker stands (under `--finish`, or an ordinary apply that withheld) it
-     ends "then re-run post-write-gates, then re-run `apply.sh --finish`". On an ordinary apply
-     that stamped, the row prints after the stamp and ends "then re-run post-write-gates; this
-     apply already stamped, so no re-stamp is owed": do not run `--finish` there, because with
-     no marker it records the re-stamp as `DECISION restamp-identity-unchecked`. A check that
-     could not run or be read is a `DECISION taught-schema-unchecked`, `taught-schema-unparsed`
-     or `taught-schema-unreadable` row and does not withhold.
-
-     **Every row `--finish` can emit that withholds the stamp**, derived from the `say WORKLIST`
-     sites outside `apply.sh`'s resolution phases, plus `staging-refused`, which
-     `ap_staging_refused` emits as a `WORKLIST` under `--finish`: `finish-marker-directory` (the marker's path is a directory), `finish-base-unverified`,
-     `finish-unverified-tree`, `finish-unapplied`, `finish-classify-unmerged`,
-     `finish-classify-unverified`, `finish-template-unmerged`, `finish-template-json-unmerged`,
-     `finish-template-unverified`, `finish-template-unscanned`, `finish-refile-owed`,
-     `finish-refile-unverified`,
-     `finish-exec-owed`, `staging-refused`, `hook-unshipped`, `settings-merge`,
-     `settings-local-dangling`, `transient-ignore`, `transient-ignore-tracked`,
-     `agent-definitions`, `taught-schema`, `taught-schema-region`. Three `DECISION` rows stop it without stamping, because they write
-     nothing: `restamp-identity-mismatch`, `restamp-unresolvable` and `restamp-absent` (no stamp
-     file at all). `restamp-failed` and `skill-restamp-failed` also leave the stamp short of
-     `<theirs>`, but only after a write was attempted.
+     **The re-stamp fires whenever the consumer core now equals `theirs` — INCLUDING an empty
+     reconcile** (zero rulebook blocks applied, e.g. a self-update-only pull): the `apply` run is
+     then a stamp-only bump, and the log records "already current, stamp advanced <base> →
+     <theirs>."
 
    - **YOU write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, and `apply.sh` does NOT.** When the apply drew a `NOTE reconcile-log-name` row, `<ts>` is the stamp in that row's path: write the log at exactly that path, because the owed-derivations record's field 7 names it.
      Write it LAST, after the post-apply re-runs, because it records them. It carries the gates
@@ -2769,75 +1256,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      their own bases, the validator outcomes, the ledger decisions, and what was deliberately not
      done.
 
-     *Why this is its own bullet.* It stays out of the re-stamp paragraph above: one
-     sentence after "**`apply.sh` does this; you do not edit the stamp**", a reader
-     reasonably attributes both to the tool, and the reference consumer filed exactly that
-     (`PC-S329-APPLY-SH-NEVER-WRITES-THE-RECONCILE-LOG`). Measured when they did: **zero
-     occurrences of the token in `apply.sh` against nine files here that name the artifact** —
-     the contract stated everywhere except in the program a reader took to be honouring it.
-     The run succeeded, the stamp advanced, and the only durable record of what the apply
-     decided was absent.
-
-     *Why the tool does not write it instead.* Every section above except the manifest and the
-     stamp is outside what `apply.sh` can observe. A skeleton it could fill would ship a file
-     whose empty sections read as written ones. **It says so on every successful run** — naming
-     this path and stating that it does not write it — because prose alone is what failed here
-     the first time.
-
 ### Mask/reinject transform (setup-substitution sites)
 
-Some core-manifest files carry consumer config `ai-dlc-setup` filled in at
-install time — model strings, ownership paths, deploy/smoke commands — living
-inside otherwise upstream-owned files (team-role files, `deploy-validate.md`,
-`implementation.md`). These are consumer config, not rulebook divergence, and
-a plain overwrite would destroy them. `reconcile/setup-sites.md` is the
-declared list of every such site (file, anchor, capture pattern). This
-transform is used by BOTH step 7 above (every ordinary pull, once any manifest
-site exists) and by `untangle` mode's core-overwrite below — it is not
-untangle-specific. On an ordinary pull `apply.sh` resolves the clean case itself
-(`RESOLVED setup-site-merge`), so the steps below apply to the setup-sited
-files it still hands back as `semantic-merge`.
-
-For each file listed in `setup-sites.md`, before overwriting with `theirs`:
-1. Locate each declared site in `ours` (its regex `match`, or its
-   `heading`/`next_heading` span) and extract the captured value(s).
-2. Overwrite the file with `theirs` — **the complete `theirs` content,
-   verbatim**. This is a genuine whole-file replacement: theirs' surrounding
-   structure (HTML `<!-- ... -->` config comments, blank lines, adjacent
-   prose) is what the file now IS. Do NOT carry over `ours`'s structure around
-   the sites — the whole point is that core becomes byte-reconcilable with
-   theirs everywhere except the declared value spans.
-3. Re-locate each site by the SAME locator in the freshly-written `theirs`
-   content and reinject ONLY the extracted value into the captured span
-   (single-line sites) or the heading-block body (heading-block sites).
-   Touch nothing outside the captured span — a single-line site's
-   `<!-- {token} -->` doc comment two lines up is NOT part of the span and
-   MUST survive from `theirs` untouched. After reinject, the file must equal
-   `theirs` byte-for-byte EXCEPT inside the declared site spans; if it differs
-   anywhere else, the transform over-reached — redo it from a clean `theirs`
-   copy.
-4. **Anchor-drift:** if a site's locator cannot be found in the freshly-written
-   `theirs` content (upstream restructured or reworded that section), STOP and
-   flag the site for operator adjudication in the report/log — do not drop the
-   value, and do not guess a new location for it.
-
-**Setup site inside an overridden section.** A setup site can sit inside a
-section that ALSO has a consumer `overrides/` entry shadowing it (e.g. a
-`#Identity` override on a team-role file whose own lines are declared sites
-within that same section). These are two independent layers and
-must not be conflated: **core** is still restored to `theirs` verbatim and the
-setup value reinjected into its span (per above) — core stays byte-reconcilable;
-the **override** shadows the section at load time per Rule 27 (`overrides >
-core`) using its own body, which describes only its deliberate change (e.g.
-"remove the Local (Ollama) bullet") and explicitly does NOT restate the setup
-`/model` lines (those live concrete in core and are reinjected there, not in
-the override). Do NOT let the override's presence cause core to keep `ours`'s
-structure at the site — that is the exact over-reach step 3 forbids, and it
-leaves a non-site core deviation from theirs that the §7v gate (criterion 5)
-must catch.
-
-This is why "Layered consumers" below is a fast-forward everywhere EXCEPT at
-declared sites, not everywhere unconditionally.
+Lives in `reconcile/mask-reinject.md`. Read it when `apply` hands back a `semantic-merge` row for a file `reconcile/setup-sites.md` lists: read it in consecutive bounded native Read chunks (offset+limit) of at most 16 KB, never `ctx_*`, and re-read it on need after a compaction.
 
 **Probe the installed BMAD before Deliver (step 7z).** After step 7's apply and before
 step 8, run `scripts/ai-dlc/validate-bmad-invocations.sh` from the consumer root. It is
@@ -2847,6 +1268,18 @@ report each `FAIL:` line in the apply summary as a delivery finding, naming the 
 the line prints and the remedy `npx bmad-method install`. Exit 2 (DISARMED or usage):
 report it in the apply summary as SKIP, with the line it printed. This never blocks the
 delivery.
+
+   **Deliver through the driver.** Step 8's commit, push and PR are one
+   `reconcile/pull.sh deliver <dist> <base> <consumer> <theirs>`, run after `finish` exits 0 and
+   after the ledger work step 8 gives you. It runs on the `ai-dlc-update/*` branch only, stages by
+   explicit pathspec, pushes so the consumer's pre-push runs, and opens the PR against the branch
+   the reflog says this one was cut from, with a script-rendered body: the decisions record, the
+   reconcile region and, where it differs, the dry-run region. A `DECIDE <status> <block> drain` row
+   is a push-drain row for step 8's drain. `DECIDE push-red <log>` (exit 3) is yours: diagnose the
+   red push from that log, fix the cause on this branch, record the diagnosis as a decisions row,
+   and run `deliver` again. `ASK base-confirm` (exit 3) is step 8's no-reflog-line case. The driver
+   NEVER merges: on `DECIDE pr <url> opened`, the merge and the RETURN PROCEDURE are yours, exactly
+   as step 8 states them.
 
 8. **Deliver — branch → commit → push → PR → merge.** The reconcile is landed
    through the consumer's normal review flow, never force-written to the working
@@ -3124,7 +1557,8 @@ delivery.
 9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
    (the working branch is never touched), the consumer's
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the
-   dry-run report. Nothing is destroyed without an operator confirm.
+   dry-run report. Nothing the pull cannot prove it wrote is destroyed without an operator
+   confirm.
 
    Both literal `gh pr merge` commands pass `--delete-branch=false`, so gh's merge moves no
    checkout, and the RETURN PROCEDURE in step 8 is the only move onto a working branch.
@@ -3143,7 +1577,7 @@ When the consumer has the Phase 2 layer split (a populated
 collapses:
 
 - **core** (the protected-manifest files) → overwrite from theirs wholesale,
-  running the **mask/reinject transform** (above) first for any file listed in
+  running the **mask/reinject transform** (`reconcile/mask-reinject.md`) first for any file listed in
   `reconcile/setup-sites.md`. No per-block classify needed for rulebook prose
   — the consumer never edited core in place there (the gate-validation
   Core-layer immutability check guarantees it) — but base→ours is NOT empty
@@ -3160,194 +1594,21 @@ collapses:
   only its `PUSH-CANDIDATE` rows enter the push-candidate ledger (spec §8.1).
 - **overrides/** → the ONLY genuine three-way surface. For each override, its
   base is the core rule it shadows (`base_sha` in the entry). If theirs changed
-  that core rule between `base_sha` and HEAD, surface the override for operator
-  re-confirmation (override-drift, spec §10). **This is computed by step 3c's
+  that core rule between `base_sha` and HEAD, the override is re-adopted through
+  `pull.sh merge` (override-drift, spec §10): a clean merge is a recorded decision, a
+  conflict hunk is asked. **This is computed by step 3c's
   `layer-drift.sh`, not by hand** — it was prose here for its whole existence and
   consequently never ran. An override whose `base_sha` does not resolve in the
   distribution is a HARD finding that blocks `apply` (Rule 27(a)); it is never
   treated as "unchanged."
 
 On a pre-Phase-2 (tangled) consumer like graph's first pull, none of the above
-applies yet — run the full per-block classify. The Phase-2 untangle is what
+applies yet — run the full per-block classify. The Phase-2 untangle (`reconcile/untangle.md`) is what
 moves a consumer from the full reconcile to this cheap one.
 
 ## Untangle mode — one-time Phase-2 migration (`untangle` = dry-run, `untangle apply` = execute)
 
-For a still-tangled consumer (core files mix upstream prose with in-place
-consumer divergence — domain-local machinery, rewordings, un-pushed
-innovations — because the Phase 2 layer split was never done), `untangle`
-performs that split as a one-time migration, invoked from the consumer exactly
-like the ordinary pull. It reuses the same self-contained, consumer-side
-posture and the same shared classifier — it is one of the four jobs
-`reconcile/classify-block.md` already serves (see "Shared engine" below).
-
-**Precondition check.** If `{skill}/extensions/` or `{skill}/overrides/`
-already hold more than their scaffold `README.md`, this consumer has already
-untangled — refuse and report that, rather than re-running blindly.
-
-**Steps 1–4: identical to the pull procedure above**, with one change: step 3
-runs `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root> --untangle`.
-This exists because untangle is typically invoked when the consumer's stamp
-already equals upstream HEAD (`base == theirs` — no upstream delta to pull,
-only accumulated in-place divergence to split out). A plain `base`→`theirs`
-diff is empty in that case, so `--untangle` mode enumerates the core-manifest
-file list from `reconcile/setup-sites.md` and, for the fixture entries,
-`fixture-manifest.md` beside `reconcile/` instead, and buckets purely by
-`ours` vs `base`. `classify-block.md` itself needs no changes: a manifest file
-that lands in `BOTH-CHANGED->CLASSIFY` still gets diffed and classified
-exactly as it is for an ordinary pull, and any block the consumer touched
-while upstream (at `base`, standing in for `theirs`) did not is already
-handled by the classifier's existing `consumer-only-in-block` bucket.
-
-Before any block in a manifest-listed file reaches the classifier, mask
-declared `setup-sites.md` sites (per the mask/reinject transform above) so
-setup config is never misclassified as rulebook divergence and never routed
-into an `extensions/`/`overrides/` file.
-
-**5u. Migration-plan dry-run.** Write
-`_bmad-output/ai-dlc-update/untangle-plan.md` (own filename; coexists with the
-ordinary pull's `reconcile-report.md` in the same directory) with a header
-stating `Generated: <UTC timestamp> by ai-dlc-update skill_version <X> @
-<sha>` — same reason as step 5's report: a fixed filename overwritten on
-every run, so the stamp is the only way to tell a fresh plan from a stale one
-left over from before a skill update. Then: per-file bucket
-tally, proposed `extensions/`/`overrides/` file list (`hooks:`/`shadows:`+`id`
-per the entry contracts in `extensions/README.md`/`overrides/README.md`),
-push-candidate list, conflict list, a **needs-confirmation list** (every
-`needs_operator_confirmation: true` block per `classify-block.md`, each with
-its specific question — separate from the conflict list, same as step 5),
-the masked-site list (so the operator can
-catch a manifest miss before it's acted on), **and an explicit list of any
-consumer-only files with no upstream equivalent at all** (e.g. an extra
-team-role file, an extra subdirectory under the skill root) — name them, state
-they will be left untouched and queued to the push-candidate ledger. Silence
-on these reads as "not found," not "found and intentionally skipped" — say so
-explicitly. **Unconditional stop unless invoked with `apply`** — identical
-discipline to step 5: zero conflicts, an obviously-clean plan, inferred
-intent, or convenience do NOT authorize proceeding. A bare `untangle` is a
-dry-run, every time, no exceptions. **This includes conflict adjudication
-given in conversation** — if the operator resolves the one conflict, or asks
-for a specific fix, while reviewing this report, record their answer in the
-plan for the `apply` run to act on; do NOT edit any file now (see step 5's
-"Adjudication is not authorization to write" — the same rule, no exception for
-untangle).
-
-**6. Isolate branch.** Reused as-is (`git checkout -b
-ai-dlc-update/untangle-<ts>` off the current branch).
-
-**7u. Extract + mask-aware overwrite — reached ONLY when the invocation
-carried `apply`.** The **flagged-block checkpoint** from step 7 applies here
-unchanged: before executing any block's bucket action below, check
-`needs_operator_confirmation` — if true, stop and get the operator's explicit
-answer for that specific block before authoring anything for it, regardless
-of bucket. This is not optional for untangle just because most blocks here
-are mechanical — the two most consequential open items in graph's first
-apply (a layer-`kind` naming decision, a genuine 3-way prose blend) were
-exactly this shape. Per classify bucket, act:
-- **rewording** → discard the consumer's version; core is restored to
-  `theirs` at that block (rewording is by definition already-upstream in
-  substance).
-- **domain-local** → extract the block to `extensions/` with an explicit
-  `push_candidate: false`, then restore core to `theirs` at that block. The
-  flag is never omitted and never defaulted here: writing `false` is the
-  positive claim that no core text at the entry's `hooks:` target — no gate, no
-  breach message, no budget row, no cross-reference — depends on the machinery
-  being kept local. Derive that claim against `theirs` before writing it; a
-  flag written without asking is an unmade decision recorded as a made one. If
-  core text DOES depend on it, core is incomplete without the block and the
-  block is NOT domain-local: assign **un-pushed-innovation** and take the next
-  bullet instead. `domain-local` carries no push route of its own, and that
-  flag is the entire distinction between these two bullets. This decision is
-  per-BLOCK, so it never reaches a consumer-only FILE (queued to the ledger
-  below) or anything already sitting in `overrides/` — ask the same dependency
-  question at those two sites, where no bucket is assigned to carry it.
-- **un-pushed-innovation** → extract to `extensions/` with `push_candidate:
-  true`, then restore core to `theirs`.
-- **conflict** → extract to `overrides/` with `shadows: <file>#<id>` and
-  `base_sha: <current stamp sha>`, then restore core to `theirs` (the override
-  now shadows the core rule for this consumer; core itself stays
-  byte-reconcilable with upstream).
-
-Then apply the **mask/reinject transform** to every manifest-listed file as
-part of its final overwrite. Files upstream has no equivalent for at all —
-e.g. a consumer-only team-role file, or a whole consumer-only subdirectory
-under the skill root — are left untouched entirely and queued to the
-push-candidate ledger; core-overwrite by construction only ever touches paths
-`theirs` actually has.
-
-**The file-grain rows step 3 printed are acted on here too, and the bucket list
-above never reaches them.** `ALREADY-AT-THEIRS` → write nothing.
-`BOTH-CHANGED->CLASSIFY` → the per-block list above. `UPSTREAM-ONLY-ADD` →
-write theirs' copy (path-mapped, through mask/reinject if manifest-listed) AND
-set its exec bit from theirs. That bucket also holds a copy already carrying
-base's bytes with the wrong bit, in either direction; for it the content write
-changes nothing and the mode IS the action. Read the mode with `git -C <dist>
-ls-tree <theirs> -- <path>`, where `<path>` is the row's second column exactly as step 3
-printed it (it already begins with `core/`): `100755` → `chmod +x`, `100644` →
-`chmod -x`, any other mode → leave the bit alone, and an EMPTY answer is a STOP, never a
-no-op. The same rule binds every file this step
-writes: a file the write creates takes the umask's mode, not theirs'.
-
-**7v. Runtime-verification gate — hard, unconditional, blocks delivery on any
-failure.** Byte-equality is not sufficient evidence the migration worked (this
-is exactly what the reverted attempt got wrong). Before delivery:
-1. For every `overrides/*` entry, resolve its `shadows: <file>#<id>` against
-   the just-overwritten core file — FAIL on a dangling shadow (id not found).
-2. For every `extensions/*` entry, confirm its `hooks:` target file exists in
-   core. **Resolve the `hooks:` path via the core→consumer path mapping (the
-   same one `preclassify.sh` uses), NOT skill-relative:** a `steps/<x>.md` or
-   bare `SKILL.md` hook lives under the skill dir
-   (`.claude/skills/ai-dlc/…`), but a `team-roles/<role>.md` hook (used by
-   `roles/*` extensions) lives at `.claude/team-roles/<role>.md` — OUTSIDE
-   the skill dir. A naive skill-relative join (`.claude/skills/ai-dlc/team-roles/…`)
-   would falsely report every role extension's target MISSING. `hooks:` values
-   mirror the `core/`-relative path convention (`team-roles/x`, `steps/x`,
-   `SKILL.md`); map each the same way core files map to consumer files.
-3. Render 2–3 sample overrides and extensions to show what Rule 27's
-   precedence (`overrides > extensions > core`) would actually produce at
-   load time — proof the shadow/addition takes effect, not just that the id
-   string matches somewhere.
-4. Confirm zero remaining `{...}` template tokens in any team-role file; that
-   every role file has an `aiDlcRoles` entry in `.claude/settings.json`, that
-   each entry's `model` resolves in `aiDlcModels`, and that each `effort` is one
-   of `low`/`medium`/`high`/`xhigh`/`max`. The dispatch guard fails open on any
-   of those, so a role would dispatch with nothing bound — silently. This is the
-   concrete proof teammate dispatch will not break, the exact failure the
-   reverted attempt caused.
-5. **Run `reconcile/setup-site-drift.sh <dist> <consumer> <theirs>`; exit 0
-   required** — observed, not inferred: run it unpiped with its output sent to a file and
-   `rc=$?` on the very next statement, then read the whole file (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB, never `ctx_*`). Do not run
-   `reconcile/post-write-gates.sh` here: that is the ordinary pull's step 7 runner, and its
-   `hard-blockers --post-apply` gate needs the pull's base, which untangle does not have. A run
-   whose exit code was not observed is UNDECIDED and fails this criterion. It diffs every file declaring a setup site against `theirs` over
-   the WHOLE file and confirms every differing line falls INSIDE a span declared
-   for that file in `reconcile/setup-sites.md` (a single-line site's matched
-   line, or a heading-block site's span). A difference at ANY line outside a
-   declared span — a dropped `<!-- {token} -->` config comment, a removed blank
-   line, reordered prose — is a FAIL, even if the setup values themselves
-   reinjected correctly: it means the overwrite kept `ours`'s structure instead
-   of `theirs`'s and core is no longer byte-reconcilable.
-
-   **This criterion was prose, and the prose was not enough.** A
-   real run checked only the value lines and declared pass: `dev.md` lost three
-   of theirs' model-option HTML comment lines and this criterion still reported
-   PASS. Asking the agent that just performed the transform whether the transform
-   was correct is not a check. The script is now the criterion, it also runs on
-   the ORDINARY pull (step 7's post-write gate, where nothing equivalent existed
-   at all), and a site it cannot locate FAILS rather than being skipped.
-
-Any failure here STOPS the run before delivery — the branch holds the
-in-progress state for inspection/fix, nothing is delivered. This gate is not
-optional and not skippable by any of the same rationalizations forbidden at
-step 5 (clean-looking result, zero conflicts, etc.).
-
-**8, 9. Deliver, safety.** Reused as-is: branch → commit → push → PR →
-operator-approved merge (PR body = the migration plan summary + the 7v gate
-results); the same three recover layers (branch, `_divergence/` archive,
-dry-run report — here, `untangle-plan.md`).
-
-After the merge, step 8's RETURN PROCEDURE returns the checkout from
-`ai-dlc-update/untangle-<ts>` to the working branch, exactly as on an ordinary pull.
+Lives in `reconcile/untangle.md`. Read it only when the invocation carries `untangle`: read it in consecutive bounded native Read chunks (offset+limit) of at most 16 KB, never `ctx_*`, and re-read it on need after a compaction.
 
 ## Shared engine, thin orchestrator
 
@@ -3356,31 +1617,3 @@ that serves four jobs (design §8): pull-reconcile (this skill), push-mine,
 Phase-2 untangle, and N→1 fan-in dedupe. `ai-dlc-update` is only the **pull
 entry point** that calls it — it does not own it. Keep the classifier prompt
 free of pull-only assumptions so the other three jobs can reuse it.
-
-## Not yet wired (design §6.1 gaps — call out, don't silently skip)
-
-- **Generated files outside `core/`** (`CLAUDE.md`, `coding-conventions.md`,
-  `QUICKSTART.md`, `settings.json`) ARE now reconciled — step 3b's `--templates`
-  pass + `reconcile/template-sites.md` sync the upstream template boilerplate
-  while preserving consumer config, and `emit-report.sh` renders the buckets
-  inside the step-5 region, so a dropped row now fails `--verify` instead of
-  being narrated away. This closed the gap where a template-only
-  upstream change (e.g. a removed CLAUDE.md section) never reached a consumer
-  through the `core/`-only reconcile. (Consumer `enabledPlugins` is the
-  exception — additive-only, except the retirement of a project
-  `context-mode@context-mode: true`, per `template-sites.md`.)
-- **Upstream URL** is carried in the stamp's `upstream` field (written by
-  install, preserved on every re-stamp). Read it in step 1; only fall back to
-  asking the operator when the field is absent (a legacy stamp).
-- **Self-update** is handled in step 2 as its own autonomous branch→commit→push
-  →PR→auto-merge cycle (the skill's files are overwrite-safe upstream tooling, no
-  operator gate), only when step 1 reached sync, separate from the operator-gated
-  rulebook reconcile (step 8). When step 1 could not sync the branch, step 2 defers
-  and writes nothing, and the run continues to the dry-run.
-  After it merges the run stops and **automatically re-invokes `/ai-dlc-update`**
-  (carrying the operator's original argument) to run the reconcile on the updated
-  logic — no operator prompt. The in-flight agent can't hot-reload its own
-  instructions, so the re-invocation is the only way to run the fresh logic;
-  continuing on stale logic is forbidden.
-  Before that re-invoke, step 2 runs step 8's RETURN PROCEDURE for the merged
-  self-update PR, so the re-invocation starts on the working branch.

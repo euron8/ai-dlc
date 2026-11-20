@@ -1,3 +1,5 @@
-# blocker-adjudication-record greps the ai-dlc-update SKILL.md under test, resolved from the fixture's own root walk.
+# blocker-adjudication-record greps the ai-dlc-update SKILL.md under test and the pull driver's decisions-record emission sites, resolved from the fixture's own root walk.
 !core/skills/ai-dlc-update/SKILL.md
+!core/skills/ai-dlc-update/reconcile/pull.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/layout.sh

@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1191.0] - 2026-11-20
+
+### An engine update runs as one program and asks the operator only where a person is needed (BL-1190)
+
+- For the operator and every consumer: an `/ai-dlc-update` pull is now driven by one script, `reconcile/pull.sh`. It runs the fetch, the self-update gate, classify, the detectors, the report, the update branch, the clean applies, the push and the PR, and hands the model only the decisions that need judgment.
+- These questions no longer go to the operator: override drift that merges cleanly, an extension that is still additive, deleting a file that is byte-equal to its base (a pristine delete), an in-place edit of an engine-owned file, a red push (the model now diagnoses it), the ledger and derivation questions, and a setup token that has a nearest equivalent. Each such decision is written to `_bmad-output/ai-dlc-update/pull-decisions.tsv` and appears in the update PR body, so the operator's merge of that PR approves it.
+- Still asked, exactly the five families listed in `reconcile/ask-families.tsv`: a conflict hunk left by the override merge (`conflict-hunk`), a rule upstream and the consumer changed incompatibly (`classify-conflict`), a blend within one block (`blend`), a file upstream removed or relocated that the consumer modified (`delete-consumer-modified`), and a file at a relocated path that upstream never shipped (`orphaned-unknown`). The PR merge itself stays the operator's.
+- The conflict guard refuses an ask with no recorded operator answer on both `pull.sh finish` and a bare `apply.sh --finish`, with nothing written, and a conflict is recorded in the pull's ask ledger however the override merge was run, including by hand.
+- `apply` now runs straight through with no dry-run approval stop. A bare invocation is still a dry run that writes only the report.
+- The detectors run once per apply instead of up to four times per pull.
+- The always-loaded skill file `SKILL.md` went from 261,802 B to 128,009 B. The untangle and the mask/re-inject procedures moved to `reconcile/untangle.md` and `reconcile/mask-reinject.md`, and detector-row and self-update-refusal detail moved to `reconcile/detector-rows.md` and `reconcile/self-update-refusals.md`; each is read only when needed. Pinned spans of up to about 88 KB remain in `SKILL.md`.
+- The settings merge now fills the template-owned role keys `omitClaudeMd` and `disallowedTools` into an existing consumer role that lacks them; setting `omitClaudeMd: false` or `disallowedTools: ""` in a role keeps it out, and the report names each role changed (BL-1187).
+- After apply and before the PR, the pull runs the consumer's installed escalation-status validator and lists each offender as a report-only `WORKLIST pre-gate-repair` row in the PR body; it never blocks the pull. It depends on E1's release: until the consumer's installed validator carries `STATUSLESS-ENTRY`, it prints one `SKIP pre-gate-repair` line and lists nothing (BL-819).
+- New fixture `reconcile-pull-driver` drives the pull driver end to end; `blocker-adjudication-record` is retargeted from the retired adjudication file to the decisions file.
+- Partial: the entry stays open until the outcome reading on the next complete graph sprint that runs this release, against the update-session baseline; when a pull runs stays the operator's decision (BL-1190).
+
 ## [0.1190.0] - 2026-11-20
 
 ### BL-1187 (PARTIAL): teammates start with their role contract in hand

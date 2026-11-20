@@ -1,5 +1,6 @@
-# extract-push-flag-decision scores the ai-dlc-update SKILL.md against seeded probe corpora that seed.sh writes under mktemp;
+# extract-push-flag-decision scores the ai-dlc-update reconcile/untangle.md against seeded probe corpora that seed.sh writes under mktemp;
 # the preamble is sourced. The fixture's own directory (run.sh, seed.sh) is copied by the runner, never declared.
-!core/skills/ai-dlc-update/SKILL.md
+!core/skills/ai-dlc-update/reconcile/untangle.md
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/layout.sh

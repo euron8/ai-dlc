@@ -184,9 +184,9 @@ leg B owes; the rehearsal reproduced all four and found a fifth. **No ledger ent
 5. **Compare the RENDERED report against `## Rehearsal`, then put each decision apply needs to the operator.** Compare
    the rendered report, not raw engine output: each `HARD-*` row and the `UPSTREAM-DELETED` row print twice in it; compare distinct paths, not line counts. If it disagrees on any bucket, any
    `HARD-*` row or any ledger row, STOP and ping. Each item below is the operator's decision, recorded the way the
-   skill's adjudication loop prescribes (`core/skills/ai-dlc-update/SKILL.md:1759`, record at
+   skill's adjudication loop prescribes (`core/skills/ai-dlc-update/SKILL.md:176`, record at
    `core/skills/ai-dlc-update/SKILL.md:1584`; layer verdicts in the register at
-   `core/skills/ai-dlc-update/SKILL.md:2017`). The five leg-B items graph has to settle are marked (a) to (e).
+   `core/skills/ai-dlc-update/reconcile/detector-rows.md:689`). The five leg-B items graph has to settle are marked (a) to (e).
    - **2 `BOTH-CHANGED->CLASSIFY` files, `core/team-roles/dev.md` and `core/team-roles/qa.md`**, the semantic
      worklist. Both are `CORE-TEMPLATE-SUBSTITUTED` in graph and both change in leg B. This file's rule, not the
      skill's, and unrehearsed (it fails safe as a STOP): take THEIRS on every changed
@@ -220,14 +220,14 @@ leg B owes; the rehearsal reproduced all four and found a fifth. **No ledger ent
    must still confirm two things, from the consumer root, with absolute paths and both ref arguments being
    DISTRIBUTION refs (usage `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:117`): no new ledger entry appears,
    and the re-verifier's `cut -f1,2 | sort` row set is identical before and after `ledger-rotate.sh --apply`
-   (`core/skills/ai-dlc-update/SKILL.md:2727`). Expect the rotate to report "0 closed entries — nothing to rotate".
+   (`core/skills/ai-dlc-update/SKILL.md:1401`). Expect the rotate to report "0 closed entries — nothing to rotate".
    Any change is a STOP. A `CLOSE-CANDIDATE` row is a hypothesis, not a verdict: for any such id, run that entry's
    receipt directly, read the raw exit code, and ask what ELSE satisfies it.
 
 8. **Open the PR into the carry-over branch, and merge it only on the operator's explicit approval.** The PR targets
-   the working branch (`core/skills/ai-dlc-update/SKILL.md:2750`), which action 2 established is
+   the working branch (`core/skills/ai-dlc-update/SKILL.md:1424`), which action 2 established is
    `ai-dlc/carry-over/offramp-config-and-rewards`, never `main`. The merge needs separate explicit approval
-   (`core/skills/ai-dlc-update/SKILL.md:2752`).
+   (`core/skills/ai-dlc-update/SKILL.md:1426`).
 
 9. **Tell the operator about the BL-740 expected post-pull refusal; do nothing about it inside the pull.** See
    `## Hazards`. It is graph's sprint work, it bites at the next `--gate qa` merge of graph's s319 story 3.1, and

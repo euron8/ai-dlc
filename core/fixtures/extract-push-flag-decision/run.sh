@@ -7,7 +7,7 @@
 # its arm sits above CWD INVARIANCE).
 #
 # WHAT THE SUBJECT IS, AND WHAT THIS CANNOT OBSERVE. The subject is the bucket action
-# list in `ai-dlc-update/SKILL.md` step 7u — the site where the extract decision is
+# list in `ai-dlc-update/reconcile/untangle.md` step 7u — the site where the extract decision is
 # DECLARED. That file is a prompt: no executable reads it (`grep -rl` over the shipped
 # `.sh` set matches the classifier prompt in 0 of them), so nothing here can observe
 # whether a pull's classifier actually applied the rule, whether a written `false` was
@@ -38,16 +38,21 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # ROOT IN BOTH LAYOUTS, named side by side, never by walking up for a VERSION file (I106):
 # a consumer has no VERSION at its root, and the walk would exit 2 there on every push.
+#
+# The subject is `reconcile/untangle.md`. A consumer can hold this fixture before the engine
+# that ships that file (the fixture ships ahead of its subject): absent in both layouts is a
+# SKIP, exit 0 on a consumer and FIXTURE BROKEN in the distribution (fx_skip_exit).
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
-if [ -n "$ROOT" ] && [ -f "$ROOT/core/skills/ai-dlc-update/SKILL.md" ]; then
-  SUBJ="$ROOT/core/skills/ai-dlc-update/SKILL.md"
-  echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/SKILL.md"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/.claude/skills/ai-dlc-update/SKILL.md" ]; then
-  SUBJ="$ROOT/.claude/skills/ai-dlc-update/SKILL.md"
-  echo "HERMETIC-CONSUMED .claude/skills/ai-dlc-update/SKILL.md"
+if [ -n "$ROOT" ] && [ -f "$ROOT/core/skills/ai-dlc-update/reconcile/untangle.md" ]; then
+  SUBJ="$ROOT/core/skills/ai-dlc-update/reconcile/untangle.md"
+  echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/untangle.md"
+elif [ -n "$ROOT" ] && [ -f "$ROOT/.claude/skills/ai-dlc-update/reconcile/untangle.md" ]; then
+  SUBJ="$ROOT/.claude/skills/ai-dlc-update/reconcile/untangle.md"
+  echo "HERMETIC-CONSUMED .claude/skills/ai-dlc-update/reconcile/untangle.md"
 else
-  echo "extract-push-flag-decision: FIXTURE BROKEN — ai-dlc-update/SKILL.md not found in either layout" >&2
-  exit 2
+  echo "extract-push-flag-decision: SKIP — ai-dlc-update/reconcile/untangle.md is absent in both layouts (subject predates the untangle move)"
+  fx_skip_exit "$HERE"
 fi
 
 WORK="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }

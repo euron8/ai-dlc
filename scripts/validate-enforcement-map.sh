@@ -3030,10 +3030,16 @@ done
 # Shipped once: step 2 said "Both helpers are in reconcile/" of map_consumer() (true) and
 # to_consumer_glob() (in core/scripts/core-paths.sh and core/hooks/ai-dlc-core-guard.sh).
 # Bind the claim to the directory rather than trusting prose.
+# The scanned prose is SKILL.md plus every reconcile/*.md: a section moved out of SKILL.md into
+# reconcile/ carries its citations with it, and the reader is told to follow that file too.
 UPD_SKILL="$REPO_ROOT/core/skills/ai-dlc-update/SKILL.md"
 UPD_RECON="$REPO_ROOT/core/skills/ai-dlc-update/reconcile"
+upd_md_n=0
+for _f in "$UPD_RECON"/*.md; do [ -f "$_f" ] && upd_md_n=$((upd_md_n + 1)); done
 if [ ! -r "$UPD_SKILL" ] || [ ! -d "$UPD_RECON" ]; then
   err "I29 cannot read core/skills/ai-dlc-update/SKILL.md and/or its reconcile/ dir. A check that cannot locate either side scans nothing and reports clean."
+elif [ "$upd_md_n" -eq 0 ]; then
+  err "I29 finds no core/skills/ai-dlc-update/reconcile/*.md. A check that cannot locate the prose it scans reports clean."
 else
   # Every `name()` the skill cites in backticks, that reconcile/ does not define.
   #
@@ -3047,11 +3053,11 @@ else
     [ -n "$fn" ] || continue
     grep -rqE "^[[:space:]]*(function[[:space:]]+)?${fn}\(\)" "$UPD_RECON" 2>/dev/null || upd_missing="$upd_missing $fn"
   done <<EOF
-$(awk '/Do NOT reach for/{skip=1} skip&&/^[[:space:]]*$/{skip=0} !skip' "$UPD_SKILL" \
+$(awk 'FNR==1{skip=0} /Do NOT reach for/{skip=1} skip&&/^[[:space:]]*$/{skip=0} !skip' "$UPD_SKILL" "$UPD_RECON"/*.md \
    | grep -oE '`[a-z_][a-z0-9_]*\(\)`' | tr -d '`()' | sort -u)
 EOF
   if [ -n "$upd_missing" ]; then
-    err "I29 ai-dlc-update/SKILL.md cites helper(s) that reconcile/ does not define:${upd_missing}. This skill's HARD CONSTRAINT is that it reads only its own reconcile/ files, so naming a helper from elsewhere instructs the reader to violate it — and the fallback is hand-writing the mapping the helper existed to make derivable. Either move the logic into reconcile/, or state the rule inline and say explicitly that the outside helper must NOT be read."
+    err "I29 ai-dlc-update/SKILL.md or reconcile/*.md cites helper(s) that reconcile/ does not define:${upd_missing}. This skill's HARD CONSTRAINT is that it reads only its own reconcile/ files, so naming a helper from elsewhere instructs the reader to violate it — and the fallback is hand-writing the mapping the helper existed to make derivable. Either move the logic into reconcile/, or state the rule inline and say explicitly that the outside helper must NOT be read."
   fi
 fi
 

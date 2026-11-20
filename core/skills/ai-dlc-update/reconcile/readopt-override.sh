@@ -692,6 +692,12 @@ case "$MODE" in
 
     echo "$(basename "$OVR"): ${n_merged} merged, ${n_unchanged} unchanged, ${n_conflict} conflicted."
     if [ "$n_conflict" -gt 0 ]; then
+      # THE CONFLICT IS RECORDED WHOEVER RAN THIS (BL-1190): a conflict hunk is an operator question,
+      # and the pull's ask ledger is how apply.sh's CONFLICT GUARD and `pull.sh finish` see one that
+      # was resolved by hand. pull-key.sh's pk_conflict_ledger is its one writer.
+      if ! { . "$SELF/pull-key.sh" 2>/dev/null && pk_conflict_ledger "$CONSUMER" "$OVR" >/dev/null; }; then
+        echo "readopt-override: NOTE — this conflict was not recorded in the pull's ask ledger (no git-dir resolves for $CONSUMER, reconcile/pull-key.sh is absent, or no sha256 tool works); the pull driver's conflict guard cannot see it." >&2
+      fi
       echo "  Conflict markers are in the body. Resolve them, then: --stamp readopt" >&2
       echo "  (--stamp readopt is refused while superseded core text remains, so an" >&2
       echo "   unresolved conflict cannot be stamped away.)" >&2
