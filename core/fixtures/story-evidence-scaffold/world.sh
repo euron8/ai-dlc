@@ -665,10 +665,16 @@ done
 # its schema script-relative and its root by its own walk. A lone validator copy finds no
 # sibling and turns every status arm into a SKIP, which reads as a kill or a survival for the
 # wrong reason. mk_tree <name> -> path of the validator in that tree, sibling asserted present.
+# Every entry of the scripts directory except hermetic-run.sh, which no script in the tree reads:
+# copying it would make the fixture read an input its inputs.decl cannot declare.
 mk_tree() {
-  local t="$WORK/tree-$1"
+  local t="$WORK/tree-$1" s f
   mkdir -p "$t/core/scripts" "$t/core/schemas" "$t/core/skills/ai-dlc" || return 1
-  cp -R "$(dirname "$HE")/." "$t/core/scripts/" && cp "$SCHEMA" "$t/core/schemas/sprint-status.json" || return 1
+  s="$(dirname "$HE")"; set --
+  for f in "$s"/* "$s"/.[!.]*; do
+    [ "${f##*/}" != hermetic-run.sh ] && [ -e "$f" ] && set -- "$@" "$f"
+  done
+  cp -R "$@" "$t/core/scripts/" && cp "$SCHEMA" "$t/core/schemas/sprint-status.json" || return 1
   [ -f "$t/core/scripts/sprint-status.sh" ] && [ -f "$t/core/scripts/validate-handoff-evidence.sh" ] || return 1
   printf '%s\n' "$t/core/scripts/validate-handoff-evidence.sh"
 }
