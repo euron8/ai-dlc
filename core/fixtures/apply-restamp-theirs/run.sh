@@ -423,7 +423,8 @@ fi
 
 # --- BL-886: TEMPLATE-DERIVED FILES ARE HANDED BACK, RECORDED, AND RE-CHECKED BY --finish ---------
 # receipt-bl886.sh beside this file owns the worlds and the cells (its header lists them): the prose
-# claim (pa..pg, pe), the json claim (ja..jd, jn) and one row per remedy (c3a..c3c), each read off the
+# claim (pa..pg, pe), the json claim (ja..jd, jn), one row per remedy (c3a..c3c) and the context-mode
+# retirement on a range that leaves the template alone (ea, eb, en), each read off the
 # STAMP and the MARKER, never off a row name alone. The shipped reconcile directory must answer every
 # cell.
 if [ -f "$HERE/receipt-bl886.sh" ]; then
@@ -432,7 +433,7 @@ if [ -f "$HERE/receipt-bl886.sh" ]; then
   TP_WC="$WORK/bl886-worlds"
   tp_out="$(bash "$HERE/receipt-bl886.sh" "$TP_REC" "" "$TP_WC" 2>&1)"; tp_rc=$?
   if [ "$tp_rc" -eq 0 ]; then
-    ok "BL-886: a changed prose template hands its file back (stamp at base, template: line recorded), --finish withholds while it is untouched and stamps once it changes or its line is deleted, a same-base re-run keeps the pre-merge record, an older engine's marker stamps with a NOTE, a --templates refusal withholds; a settings.json the merge would change is handed back and recorded, --finish re-tests it by merging a copy (an edit that is not the merge still withholds) and stamps after the merge or the line's deletion, one the merge would not change is neither handed back nor recorded; the settings-merge hook row stands down while the json row owns the remedy and returns when its line is deleted"
+    ok "BL-886: a changed prose template hands its file back (stamp at base, template: line recorded), --finish withholds while it is untouched and stamps once it changes or its line is deleted, a same-base re-run keeps the pre-merge record, an older engine's marker stamps with a NOTE, a --templates refusal withholds; a settings.json the merge would change is handed back and recorded, --finish re-tests it by merging a copy (an edit that is not the merge still withholds) and stamps after the merge or the line's deletion, one the merge would not change is neither handed back nor recorded; the settings-merge hook row stands down while the json row owns the remedy and returns when its line is deleted; on a range that leaves the template alone a settings.json still enabling context-mode at project scope is handed back and stamps once merged, and one holding that id false beside another plugin is not"
   else
     bad "BL-886: receipt-bl886.sh exited $tp_rc on the shipped reconcile directory: $(printf '%s\n' "$tp_out" | head -12 | tr '\n' ' ')"
   fi

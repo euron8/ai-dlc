@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1193.0] - 2026-11-20
+
+### A pull retires a consumer's per-project context-mode enable even when the settings template did not change (BL-1188)
+
+- For every consumer still carrying `"enabledPlugins": {"context-mode@context-mode": true}` in `.claude/settings.json`: the retirement shipped in 0.1187.0 ran only when `templates/settings.json.template` changed in the pulled range. A consumer that took that template change under an engine without the retirement kept the enable, and its per-project context-mode install, through every later pull. Graph did, until the operator removed it by hand.
+- `reconcile/apply.sh` now prints `WORKLIST template-json-merge .claude/settings.json` on any pull where the template did not move and `settings-merge.sh --check` says the retirement will fire. The row withholds the stamp until the settings merge is run, exactly like the row a template change prints, and `--finish` re-tests it the same way. An explicit `false`, any other plugin and an absent key raise no row.
+- Which pull first runs it: the pull that delivers this release, from step 3, when its step-2 self-update gate passes. Under `SELF-UPDATE-DEFER` (graph's last two pulls), an un-synced step 2 or a failed step-2 push, that pull runs the consumer's old engine, and the row first appears on the following pull, or at the `SELF-UPDATE-SAFE-STOP` ref.
+- Fixture `apply-restamp-theirs` (`receipt-bl886.sh`) gains cells `ea`, `eb` and `en` on a range that changes no template.
+- Self-update gate: a consumer whose pulled range carries 0.1189.0's core-paths.sh change no longer gets SELF-UPDATE-UNDECIDED for core-paths.sh: the gate reads a string comparison against a machinery path (the pre-push hook's `k == "scripts/ai-dlc/core-paths.sh"`) as a mention.
+
 ## [0.1192.0] - 2026-11-20
 
 ### Planning rounds cost less: serial tails, silent shards and the planning steps reshaped (BL-1175, BL-716, BL-975)

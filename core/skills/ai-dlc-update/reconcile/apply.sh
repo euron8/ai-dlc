@@ -1301,7 +1301,8 @@ ap_write_marker() {
 # directory: never the live file. Equal is no row and no record. A json file is judged by this
 # test under `--finish` too, never by its blob, and only while its `template:` line is present --
 # deleting that line is the decline exit an idempotency test otherwise would not have. This catches
-# only a template that moved base->theirs, since `--templates` buckets on that delta.
+# a template that moved base->theirs, since `--templates` buckets on that delta, and, with no such
+# row for settings.json, a context-mode enable settings-merge.sh retires (tp_cm_retire_scan).
 #
 # ONE ROW HERE NAMES `reapply_remedy`, AND ONLY ONE: `finish-template-unscanned`, for a marker
 # whose scan refused. Nothing was recorded, so `--finish` cannot clear it; a fresh ordinary run whose
@@ -1348,7 +1349,7 @@ tp_json_test() {
 # not be tested owns the settings-merge remedy exactly as an owed one does, so it sets TP_JSON_OWED
 # too and the hook row's `settings-merge` row stands down beside it (one row per remedy).
 template_scan() {
-  local _rc=0 _t _tm _c _b _tab
+  local _rc=0 _t _tm _c _b _tab _js=0
   _tab="$(printf '\t')"
   detector_reuse tpl preclassify.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER" --templates || _rc=$?
   if [ "$_rc" -ne 0 ]; then
@@ -1363,6 +1364,7 @@ template_scan() {
         say WORKLIST template-prose-merge "$_c" "upstream changed \`${_tm}\` between \`${BASE}\` and \`${THEIRS}\`, and this file is rendered from it with your values filled in, so the pull does not write it: merge the template's boilerplate change into it by the marker-anchored mask/reinject in reconcile/template-sites.md (keep every \`{token}\` fill region's live value; if a marker anchor no longer locates, STOP and merge that region by hand). Then run --finish, which withholds while this file is still byte-identical to the copy this run found. If no change is wanted, delete this file's own \`template:\` line from .claude/.ai-dlc-applying and run --finish."
         TP_LINES="${TP_LINES}$(tp_rec_line "$_c")${NL_CH}" ;;
       TEMPLATE-JSON-MERGE)
+        [ "$_c" = .claude/settings.json ] && _js=1
         tp_json_test "$_tm" "$_c"
         case "$TP_JT" in
           equal) : ;;
@@ -1377,7 +1379,40 @@ template_scan() {
         esac ;;
     esac
   done < "$DT_DIR/tpl.out"
+  [ "$_js" = 1 ] || tp_cm_retire_scan
   TP_SCANNED=1
+  return 0
+}
+# tp_cm_retire_scan -- the context-mode retirement, whether or not the range moved the template.
+# template_scan's json row comes from the base->theirs template delta, so a consumer that took the
+# template change under an engine without the retirement keeps `enabledPlugins
+# ["context-mode@context-mode"]: true` through every later pull that leaves the template alone. The
+# predicate is settings-merge.sh's own: its `--check` prints the `enabledPlugins:` line when the
+# retirement fires, so a `false`, another plugin, an absent key and a template that wires no hooks
+# all stay silent here as they do there. A builtin read gates it: a file that never names the id
+# forks nothing. The row, its `template:` line and --finish's re-test are template_scan's own.
+tp_cm_retire_scan() {
+  local _c=.claude/settings.json _tm=templates/settings.json.template _s="" _o _crc=0
+  [ -f "$CONSUMER/$_c" ] || return 0
+  IFS= read -r -d '' _s < "$CONSUMER/$_c" || :
+  case "$_s" in *'"context-mode@context-mode"'*) ;; *) return 0 ;; esac
+  tp_json_test "$_tm" "$_c"
+  [ "$TP_JT" = equal ] && return 0
+  if [ "$TP_JT" = differs ]; then
+    _o="$(bash "$SELF/settings-merge.sh" --consumer "$CONSUMER/$_c" --template "$AP_TMP/tpj/template" --check < /dev/null 2> /dev/null)" || _crc=$?
+    if [ "$_crc" -ne 0 ]; then
+      TP_JT=refused; TP_JW="settings-merge.sh --check exited ${_crc}"
+    else
+      case "${NL_CH}${_o}" in *"${NL_CH}enabledPlugins: "*) ;; *) return 0 ;; esac
+      TP_JSON_OWED=1
+      say WORKLIST template-json-merge "$_c" "this file still enables \`context-mode@context-mode\` at project scope, which settings-merge.sh retires (context-mode is a user-level install), and \`${_tm}\` did not change between \`${BASE}\` and \`${THEIRS}\`, so no earlier row asked for the merge: it is owed. ${tp_remedy_json} Every user of this project then needs \`claude plugin install context-mode@context-mode --scope user\`. Then run --finish, which re-runs this same test."
+      TP_LINES="${TP_LINES}$(tp_rec_line "$_c")${NL_CH}"
+      return 0
+    fi
+  fi
+  TP_JSON_OWED=1
+  say DECISION template-json-refused "$_c" "this file names \`context-mode@context-mode\`, and whether settings-merge.sh would retire its project enable could not be tested (${TP_JW}) -- this is NOT a finding that it is retired. Fix that, then ${tp_remedy_json}"
+  TP_LINES="${TP_LINES}$(tp_rec_line "$_c")${NL_CH}"
   return 0
 }
 # tp_finish_read -- `--finish` only, and run BEFORE hook_registration_row so the settings-merge row

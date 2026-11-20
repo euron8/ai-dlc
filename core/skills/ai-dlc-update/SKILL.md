@@ -1191,7 +1191,10 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      `apply.sh` hands this back too, as a `WORKLIST template-json-merge` row that withholds
      the re-stamp, after running `settings-merge.sh` on a copy of the file: a copy that
      changes means the merge is owed, a copy that does not means it is done and no row is
-     printed. A file that is owed is recorded on a `template:` line, and `--finish` re-checks
+     printed. The same row is printed when the range left the template alone but the
+     consumer's file still carries the context-mode enable the merge retires (the
+     `enabledPlugins:` line `--check` prints). A file that is owed is recorded on a
+     `template:` line, and `--finish` re-checks
      it by running `settings-merge.sh` on a copy again, which must change nothing, or it
      prints `WORKLIST finish-template-json-unmerged` and withholds. The deliberate-no-op
      exit is deleting that file's own `template:` line.

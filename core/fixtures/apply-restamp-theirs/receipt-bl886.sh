@@ -54,6 +54,14 @@
 #                                        -> template-json-refused rows|settings-merge rows|stamp            1|0|1.0.0
 #   c3e c3a, --finish with settings-merge.sh absent beside apply.sh (the recorded json test refuses)
 #                                        -> finish-template-json-unmerged rows|settings-merge rows|stamp     1|0|1.0.0
+# A SECOND RANGE, T -> T2, changes the core script only, so `--templates` buckets no template. Two
+# worlds stand at T:
+#   E  settings.json merged at T plus `"context-mode@context-mode": true`   (the retirement claim)
+#   F  settings.json the merge WOULD change (no hook block), with that id `false` and another plugin
+#      `true` (the near-miss: the copy differs, so only the retirement predicate keeps the row away)
+#   ea  E ordinary                       -> stamp|template-json-merge rows|json template: lines             2.0.0|1|1
+#   eb  ea, settings-merge.sh applied to the live file, --finish -> stamp|finish rows|enable entries left   3.0.0|0|0
+#   en  F ordinary                       -> template-json-merge rows|template-json-refused rows|stamp        0|0|3.0.0
 # 0 = every cell answered as above. 1 = a cell did not (one `FAIL <cell>` line each). 9 = the receipt
 # could not run (no reconcile dir, or a world could not be built).
 set -uo pipefail
@@ -91,14 +99,14 @@ Project: acme
 NEW-BOILERPLATE line'
 merge_live() { bash "$REC/settings-merge.sh" --consumer "$1/.claude/settings.json" --template "$R/t.json" >/dev/null 2>&1; }
 # The world set: what the cells read from $R, and nothing a cell writes. B and T travel with it.
-WSET="dist t.json w-P w-J w-N w-C w-P0"
+WSET="dist t.json w-P w-J w-N w-C w-P0 w-E w-F"
 if [ -n "$WCACHE" ] && [ -e "$WCACHE" ]; then
   [ -f "$WCACHE/.complete" ] || { echo "REFUSED: world cache $WCACHE exists without its completion sentinel" >&2; exit 9; }
   _sm="$(git hash-object "$REC/settings-merge.sh" 2>/dev/null)" && [ -n "$_sm" ] && [ "$_sm" = "$(cat "$WCACHE/SM" 2>/dev/null)" ] \
     || { echo "REFUSED: world cache $WCACHE was built with a different settings-merge.sh than $REC/settings-merge.sh" >&2; exit 9; }
   for _w in $WSET; do cp -R "$WCACHE/$_w" "$R/$_w" || { echo "REFUSED: could not copy $_w out of the world cache" >&2; exit 9; }; done
-  B="$(cat "$WCACHE/B")" && T="$(cat "$WCACHE/T")" && [ -n "$B" ] && [ -n "$T" ] \
-    && [ "$(gd rev-parse -q --verify "${T}^{commit}")" = "$T" ] \
+  B="$(cat "$WCACHE/B")" && T="$(cat "$WCACHE/T")" && T2="$(cat "$WCACHE/T2")" && [ -n "$B" ] && [ -n "$T" ] && [ -n "$T2" ] \
+    && [ "$(gd rev-parse -q --verify "${T}^{commit}")" = "$T" ] && [ "$(gd rev-parse -q --verify "${T2}^{commit}")" = "$T2" ] \
     || { echo "REFUSED: the world cache's B/T do not resolve in its own distribution" >&2; exit 9; }
 else
 mkdir -p "$R/dist/core/scripts" "$R/dist/templates" && gd init -q || exit 9
@@ -115,6 +123,11 @@ printf '%s\n' "$TJSON" > "$R/dist/templates/settings.json.template"
 gd add -A && gd commit -qm theirs || exit 9
 T="$(gd rev-parse HEAD)" || exit 9
 gd show "${T}:templates/settings.json.template" > "$R/t.json" || exit 9
+printf '3.0.0\n' > "$R/dist/VERSION"
+printf '#!/usr/bin/env bash\necho v3\n' > "$R/dist/core/scripts/validate-synthetic.sh"
+gd add -A && gd commit -qm theirs2 || exit 9
+T2="$(gd rev-parse HEAD)" || exit 9
+gd diff --quiet "$T" "$T2" -- templates || exit 9
 # mk <world> <quickstart: old|-> <settings: unmerged|merged|-> <validator: ok|unreg>
 mk() {
   local c="$R/w-$1"
@@ -134,15 +147,38 @@ mk() {
   esac
   printf 'version: 1.0.0\ncommit: %s\n' "$B" > "$c/.claude/.ai-dlc-version"
 }
+# mk2 <world> <settings json>: a consumer at T, for the T -> T2 range.
+mk2() {
+  local c="$R/w-$1"
+  mkdir -p "$c/.claude/hooks" "$c/scripts/ai-dlc" || return 1
+  printf '#!/usr/bin/env bash\necho v2\n' > "$c/scripts/ai-dlc/validate-synthetic.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$c/scripts/ai-dlc/validate-hook-registration.sh"
+  chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh" || return 1
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$c/.claude/hooks/ai-dlc-x.sh"
+  printf '%s\n' "$2" > "$c/.claude/settings.json"
+  printf 'version: 2.0.0\ncommit: %s\n' "$T" > "$c/.claude/.ai-dlc-version"
+}
+# E is merged at T before the enable goes in, so the retirement is the only change a merge makes; F
+# must be a file the merge changes, or the near-miss could not tell the predicate from the copy test.
+mk_e() {
+  mk2 E '{"hooks":{}}' && merge_live "$R/w-E" || return 1
+  jq '.enabledPlugins = {"context-mode@context-mode": true}' "$R/w-E/.claude/settings.json" > "$R/e.tmp" \
+    && cat "$R/e.tmp" > "$R/w-E/.claude/settings.json"
+}
+mk_f() {
+  mk2 F '{"hooks":{},"enabledPlugins":{"context-mode@context-mode":false,"other@x":true}}' || return 1
+  mkdir -p "$R/f-copy/.claude" && cp "$R/w-F/.claude/settings.json" "$R/f-copy/.claude/settings.json" && merge_live "$R/f-copy" || return 1
+  ! cmp -s "$R/f-copy/.claude/settings.json" "$R/w-F/.claude/settings.json"
+}
 mk P old - ok && mk J - unmerged ok && mk N old merged ok && mk C - unmerged unreg \
-  && cp -R "$R/w-P" "$R/w-P0" \
+  && cp -R "$R/w-P" "$R/w-P0" && mk_e && mk_f \
   || { echo "REFUSED: a consumer world could not be built" >&2; exit 9; }
 # Snapshot BEFORE any cell runs: the sentinel is written last, so a cache it does not carry is half-built.
 if [ -n "$WCACHE" ]; then
   mkdir "$WCACHE" || { echo "REFUSED: could not create the world cache $WCACHE" >&2; exit 9; }
   for _w in $WSET; do cp -R "$R/$_w" "$WCACHE/$_w" || { echo "REFUSED: could not fill the world cache" >&2; exit 9; }; done
   _sm="$(git hash-object "$REC/settings-merge.sh")" && [ -n "$_sm" ] && printf '%s\n' "$_sm" > "$WCACHE/SM" \
-    && printf '%s\n' "$B" > "$WCACHE/B" && printf '%s\n' "$T" > "$WCACHE/T" && : > "$WCACHE/.complete" \
+    && printf '%s\n' "$B" > "$WCACHE/B" && printf '%s\n' "$T" > "$WCACHE/T" && printf '%s\n' "$T2" > "$WCACHE/T2" && : > "$WCACHE/.complete" \
     || { echo "REFUSED: could not fill the world cache" >&2; exit 9; }
 fi
 fi
@@ -251,5 +287,17 @@ if want c3a || want c3b || want c3c || want c3e; then
   if want c3e; then x="$(cp_from "$C" c3e)"; fin "$x" "$R/c3e.out" "$R/rec-nosm"
     check c3e '1|0|1.0.0' "$(rows "$R/c3e.out" WORKLIST finish-template-json-unmerged "$SJ")|$(rows "$R/c3e.out" WORKLIST settings-merge "$SJ")|$(stampv "$x")"; fi
 fi
+# --- the context-mode retirement on a range that leaves the template alone -------------------------
+ord2() { bash "$REC/apply.sh" "$R/dist" "$T" "$1" "$T2" > "$2" 2>/dev/null; }
+fin2() { bash "$REC/apply.sh" --finish "$R/dist" "$T" "$1" "$T2" > "$2" 2>/dev/null; }
+if want ea || want eb; then E="$R/w-E"; ord2 "$E" "$R/ea.out"
+  want ea && check ea '2.0.0|1|1' "$(stampv "$E")|$(rows "$R/ea.out" WORKLIST template-json-merge "$SJ")|$(mline "$E" "$SJ")"
+  if want eb; then x="$(cp_from "$E" eb)"; merge_live "$x" || { echo "REFUSED: settings-merge.sh failed on the eb world" >&2; exit 9; }
+    fin2 "$x" "$R/eb.out"
+    en_left="$(jq '[.enabledPlugins // {} | keys[] | select(. == "context-mode@context-mode")] | length' "$x/$SJ")"
+    check eb '3.0.0|0|0' "$(stampv "$x")|$(rows "$R/eb.out" WORKLIST finish-template-json-unmerged "$SJ")|$en_left"; fi
+fi
+if want en; then F="$R/w-F"; ord2 "$F" "$R/en.out"
+  check en '0|0|3.0.0' "$(rows "$R/en.out" WORKLIST template-json-merge "$SJ")|$(rows "$R/en.out" DECISION template-json-refused "$SJ")|$(stampv "$F")"; fi
 [ "$fails" -eq 0 ] || exit 1
 exit 0

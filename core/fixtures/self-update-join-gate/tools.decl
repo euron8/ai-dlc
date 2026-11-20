@@ -22,6 +22,7 @@ ls
 mkdir
 mktemp
 mv
+python3
 rm
 sed
 sleep

@@ -163,7 +163,10 @@ a consumer that reconciles and a consumer that reinstalls converge):
   `claude plugin install context-mode@context-mode --scope user` once. Apart
   from that entry the consumer's `enabledPlugins` is preserved in full, like
   permissions/env/mcpServers, and disabling any other plugin is the consumer's
-  decision, never the reconcile's.
+  decision, never the reconcile's. `apply.sh` asks for this merge on every pull
+  whose consumer file still carries the enable the retirement would remove, as
+  a `WORKLIST template-json-merge` row, whether or not the pulled range changed
+  the template.
 - **permissions / env / mcpServers / other user keys:** preserved untouched.
 
 ### `env.AI_DLC_MODEL_<FAMILY>_WINDOW` — consumer-owned, surfaced by `--check`, never written
