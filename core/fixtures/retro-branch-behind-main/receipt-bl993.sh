@@ -43,7 +43,8 @@ while [ -n "$d" ] && [ "$d" != "/" ] && { [ -z "$RETRO" ] || [ -z "$DV" ]; }; do
 done
 [ -n "$RETRO" ] && [ -f "$RETRO" ] || { echo "receipt-bl993: no retro.md (given: ${1:-none}; none found above $HERE)" >&2; exit 9; }
 [ -n "$DV" ] && [ -f "$DV" ] || { echo "receipt-bl993: no deploy-validate.md (given: ${2:-none}; none found above $HERE)" >&2; exit 9; }
-grep -q '^# retro Step 1: cut the retro branch' "$RETRO" || { echo "receipt-bl993: $RETRO has no '# retro Step 1:' block" >&2; exit 9; }
+[ -n "${RETRO_OPEN:-}" ] && [ -f "$RETRO_OPEN" ] || { echo "receipt-bl993: RETRO_OPEN (retro-open.sh) is not set to a file" >&2; exit 9; }
+grep -q '^# retro Step 1: cut the retro branch' "$RETRO_OPEN" || { echo "receipt-bl993: $RETRO_OPEN has no '# retro Step 1:' block" >&2; exit 9; }
 command -v git >/dev/null 2>&1 || { echo "receipt-bl993: git not on PATH" >&2; exit 9; }
 
 W="$(mktemp -d)" || exit 9
@@ -66,11 +67,13 @@ exit 97
 STUB
 chmod +x "$W/gh/gh" || exit 9
 
-awk '/^### 1\. Context Loading/{s=1} s && /^### 2\./{exit}
-     s && /^# retro Step 1:/{on=1} on && /^```$/{exit} on{print}' "$RETRO" \
+{ printf "set -- '<sprint-branch>' '<N>'\n"; cat "$RETRO_OPEN"; } \
   | sed -e "s@<sprint-branch>@$SB@g" -e 's@<N>@900@g' > "$W/step1.sh"
-[ -s "$W/step1.sh" ] || die "the Step 1 block did not extract from $RETRO"
-awk '/^# deploy-validate Step 2: record the sprint-PR merge$/{on=1} on && /^```$/{exit} on{print}' "$DV" > "$W/record.tmpl"
+[ -s "$W/step1.sh" ] || die "retro-open.sh did not load from $RETRO_OPEN"
+DVRUN="$(dirname "$RETRO_OPEN")/deploy-validate-run.sh"
+[ -f "$DVRUN" ] || { echo "receipt-bl993: deploy-validate-run.sh is not beside $RETRO_OPEN" >&2; exit 9; }
+{ awk '/^# deploy-validate Step 2: record the sprint-PR merge$/{on=1} on && /^```$/{exit} on{print}' "$DV" \
+    | sed -e "s@bash scripts/ai-dlc/deploy-validate-run.sh@bash $DVRUN@"; } > "$W/record.tmpl"
 
 # world <name> <block|bad> -> builds $W/<name>-c (the retro clone) and sets P, M, ROUT. A non-empty
 # SD is the AI_DLC_STATE_DIR the record block and Step 1 run under; empty runs both on the default.
@@ -94,7 +97,7 @@ world() {
     block)
       sed -e 's@<N>@900@g' -e 's@<pr-number>@7@g' -e "s@<pr-head>@$P@g" -e "s@<squash>@$M@g" \
         "$W/record.tmpl" > "$W/$n-record.sh" || die "$n: record block"
-      ROUT="$( cd "$dc" && env ${SD:+AI_DLC_STATE_DIR="$SD"} bash "$W/$n-record.sh" 2>&1 )" ;;
+      ROUT="$( cd "$dc" && env AI_DLC_PROJECT_ROOT="$dc" ${SD:+AI_DLC_STATE_DIR="$SD"} bash "$W/$n-record.sh" 2>&1 )" ;;
     bad)
       mkdir -p "$dc/$(dirname "$REC")" && printf '7 %s %s\n' "$P" 0123456789abcdef0123456789abcdef01234567 > "$dc/$REC" \
         && cm "$dc" "hand-written record" || die "$n: bad record" ;;

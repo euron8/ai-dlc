@@ -2,6 +2,6 @@
 # .githooks/pre-push arms them, a fresh --gen-rc dir per run), then verified by a second counted run.
 # Hook starts: 16 shipped cells (12 hook drives), 1 control, 2 per hook mutant (8 mutants). Waiter starts: 4 shipped,
 # 1 control, 2 for m-wstatus, 2 for m-wnoera. The world's own scripts/ai-dlc/ siblings do not end in the declared paths.
-44 *
-12 core/hooks/ai-dlc-inflight-row.sh
+63 *
+16 core/hooks/ai-dlc-inflight-row.sh
 4 core/scripts/wait-for-deliverable.sh

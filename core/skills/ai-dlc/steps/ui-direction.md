@@ -12,6 +12,8 @@ to the human but continue working — this is NOT a blocking gate.
 
 ## EXECUTION SEQUENCE
 
+**Step entry.** Before anything else in this step, run `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file ui-direction.md 'Pipeline Position'`, so a resume or a compaction names this step.
+
 ### 0. Design dispatch (Rule 28)
 
 UI mockup generation, copy, CSS-class specification, and the accessibility /

@@ -5,3 +5,5 @@
 3 *
 2 core/scripts/resolve-cited-paths.sh
 6 inproc:core/scripts/resolve-cited-paths.sh
+0 core/scripts/show-cites.sh
+5 inproc:core/scripts/show-cites.sh

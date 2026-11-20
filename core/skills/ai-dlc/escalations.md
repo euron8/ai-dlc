@@ -19,7 +19,7 @@ authority has made a `DECIDED_AUTONOMOUSLY` call, whatever it labels it.
 
 ```
 ## [STORY-ID] [Teammate Name] - [Date/Time]
-**Status:** HARD_BLOCK | DECIDED_AUTONOMOUSLY | DEFERRAL_REQUEST
+**Status:** HARD_BLOCK | DECIDED_AUTONOMOUSLY | DEFERRAL_REQUEST | OPERATOR_DECISION
 **Blocker type:** [contradicts decision | requirement divergence | trade-off | missing requirement | scope change | deferral]
 **Context:** [What you were doing when you hit the issue]
 **Evidence observed:** [HARD_BLOCK REQUIRED: only concrete, directly-verifiable facts actually observed — log lines anchored to file:line, command output, measured values, tool results, file contents. Nothing inferred.]
@@ -64,7 +64,11 @@ validation checkpoint are both eliminated, or a separate verification
 step independently re-confirms every root-cause claim before it can be
 acted on.
 
-**Resolution lifecycle:** HARD_BLOCK / DEFERRAL_REQUEST resolved by human
+An `OPERATOR_DECISION` entry is a non-scope operator decision a step raised and deferred to the
+production validation checkpoint (`steps/sprint-review.md` files them); it defers no item, so it
+names no locked requirement as deferred and blocks nothing.
+
+**Resolution lifecycle:** HARD_BLOCK / DEFERRAL_REQUEST / OPERATOR_DECISION resolved by human
 at the production validation checkpoint; status updated to RESOLVED with a
 decision. A HARD_BLOCK on a locked requirement is the exception: it is
 resolved BEFORE the checkpoint, which is not presented while it lacks a

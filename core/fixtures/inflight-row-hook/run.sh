@@ -229,6 +229,26 @@ cell() {
       waiter "$wp" "$w" "$t.wbeatold" --dispatch toolu_01abc x/y.md
       grep -q '^DELIVERED x/y.md' <<<"$OUT" && [ "$(cksum < "$(snap "$w")")" = "$cs" ] && return 0
       CELL_MSG="rc=$RC changed=$([ "$(cksum < "$(snap "$w")")" = "$cs" ] && echo no || echo yes) out=$(printf '%s' "$OUT" | head -3 | tr '\n' ' ')"; return 1 ;;
+    BRIEFOK|BRIEFNODL|BRIEFMISS|BRIEFESC)
+      # The prompt carries one `Brief: <path>` line; the Deliverable line lives only in the brief file. toolu_01nomk has
+      # no mark_file, so the ledger fallback cannot stand in for the expansion.
+      local bp="_bmad-output/planning-artifacts/b.md" rowb="$AGENT toolu_01nomk | dev | x/y.md | 2026-11-01T10:05:00Z | in-flight"
+      w="$(mkworld "$t-$c")"; cs="$(cksum < "$(snap "$w")")"
+      mkdir -p "$w/_bmad-output/planning-artifacts"
+      printf '# Brief\nDeliverable: x/y.md\n' > "$w/_bmad-output/escape.md"
+      case "$c" in
+        BRIEFOK) printf '# Brief\nDeliverable: x/y.md\n' > "$w/$bp" ;;
+        BRIEFNODL) printf '# Brief\nnothing to find\n' > "$w/$bp" ;;
+        BRIEFMISS) ;;
+        BRIEFESC) bp="_bmad-output/planning-artifacts/../escape.md" ;;
+      esac
+      hook "$hp" "$w" "$t.$(printf '%s' "$c" | tr 'A-Z' 'a-z')" "$(post async_launched toolu_01nomk "You are the dev."$'\n'"Brief: $bp")"
+      if [ "$c" = BRIEFOK ]; then
+        [ "$RC" = 0 ] && [ "$(grep -cxF -- "$rowb" "$(snap "$w")")" = 1 ] && return 0
+        CELL_MSG="rc=$RC row=$(grep 'toolu_01nomk' "$(snap "$w")" | tr '\n' ' ') err=$(printf '%s' "$ERR" | head -2 | tr '\n' ' ')"; return 1
+      fi
+      [ "$RC" = 2 ] && [ "$(cksum < "$(snap "$w")")" = "$cs" ] && return 0
+      CELL_MSG="rc=$RC rows=$(rows_of "$w")"; return 1 ;;
     *) echo "FIXTURE BROKEN unknown cell $c" >&2; exit 2 ;;
   esac
 }
@@ -255,6 +275,9 @@ say_cell WSTATUS "the waiter's --status on a --dispatch-armed target says DELIVE
 say_cell WDTS "the waiter's --dispatch-ts prints the ledger ts and leaves the file byte-identical"
 say_cell WBEAT "a --dispatch-armed beat that says DELIVERED sets the row delivered-reachable"
 say_cell WBEATOLD "in the old era the same armed beat says DELIVERED and leaves the lead's bare-agentId row byte-identical"
-
+say_cell BRIEFOK "a prompt whose Deliverable line is only in its Brief: file under planning-artifacts writes the row"
+say_cell BRIEFNODL "a Brief: file with no Deliverable line writes no row (exit 2)"
+say_cell BRIEFMISS "a Brief: path that does not exist writes no row (exit 2)"
+say_cell BRIEFESC "a Brief: path that climbs out of planning-artifacts with .. writes no row though its target carries a Deliverable line"
 
 report_end inflight-row-hook

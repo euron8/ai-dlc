@@ -726,4 +726,7 @@ in a view: dispatch the closing writer now (section 3, item 4) and route only af
 the closing writer's closing commit lands. The lead does NOT make these writes
 itself.
 Run `scripts/ai-dlc/validate-held-stories.sh`; a STALE-HOLD blocks the exit.
+
+Run `scripts/ai-dlc/sprint-integration-check.sh --onto <sprint branch> --base <sprint base> --append-only <each append-only log> --story-file <each story file> --registry <the test registry, ci-local> --suite <the sprint's suite command> --suite-summary _bmad-output/implementation-artifacts/s<N>/integration-suite-summary.txt <every story branch>` in the sprint tree: it refuses (exit 2) unless the tree is `--onto`, merges each story branch not yet an ancestor of the sprint branch, aborts and reports a conflicting one, and reports a lost append-only log line, a story file without exactly one `## Dev Agent Record`, a new test file the registry does not name, and a failing suite. It writes the suite's pass and fail counts and failing lines, never its log, to the summary file; commit that file. A `RESULT FAIL` blocks the exit: send each finding to a dev teammate, then re-run until `RESULT PASS`.
+
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

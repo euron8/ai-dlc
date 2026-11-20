@@ -28,7 +28,7 @@ Rule 19 — both bindings: `model` and the standing role-contract Read line) sco
 — it reads the input artifacts and any codebase context the brief needs and writes a context
 digest to `_bmad-output/planning-artifacts/s<N>/requirements-context.md` (Rule 24 sprint
 stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint Context, resolved at
-`route.md` Step 6), returning only `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at
+`route-fresh-start.md` Step 6), returning only `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at
 section 1.
 **Join it with the bounded-join beat** (`_gate-procedures.md`, "Bounded-join beat"):
 `scripts/ai-dlc/wait-for-deliverable.sh <artifact_path>`, `run_in_background: true`. A
@@ -182,6 +182,8 @@ No slot is edited, and no bullet is copied into a later slot.
 The stop blocks by operator ruling: a question asked while the build proceeds is answered after the clause is already built.
 False-positive cost: one operator stop per sprint that has a lead clause, one question per labelled bullet, up to four in one `AskUserQuestion` call; a sprint with no labelled bullet asks nothing.
 Removal condition: retire when a mechanism records each bullet's author and the operator's confirmation and the gate reads it, so no question text has to carry the id.
+
+**Locked-anchor check, the last action of this section.** For each story file already present under `_bmad-output/planning-artifacts/s<N>/stories/`, run `bash scripts/ai-dlc/verdict.sh validate-locked-anchor <story-file>` (the argument is the story file's path); the required result is exit 0 whose output carries no `EXAMINED NOTHING` line for a story that cites a `full_text_source:`, because that token means no citation was read and is not a pass. With no story file yet present, make no run here: Check 3b runs the same command at the story gate.
 
 ### 4. Authoring Dispatch
 
@@ -370,6 +372,10 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
   `_bmad-output/planning-artifacts/s<N>/changelog-requirements.md` (`_gate-procedures.md` —
   "Where a changelog is written"; NOT the artifacts themselves), then proceed to gate
   validation.
+
+**Provenance check, run once the convergence cycle has ended.** Run `bash scripts/ai-dlc/verdict.sh validate-provenance-block <run-folder>/validation-report.md --require-skill bmad-prd`, where `<run-folder>` is the directory this step's §4 validate call wrote its report pair into; the required result is a `PASS` line and exit 0. `--allow-missing` is never passed: an artifact with no block is the finding, and Check 17's PRD-gate arm at this gate runs the same command.
+
+**Escalation vocabulary check, the step's last action before the gate.** Run `bash scripts/ai-dlc/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md`; the required result is a `PASS` line and exit 0. A `FAIL` names every escalation header whose status is outside the derived vocabulary, and a dated entry with no status line is one of them: repair each named entry (`escalations.md`) and re-run before the gate, because Check 2's script arm refuses the same file and the gate then fails with no adjudicator running.
 
 ### 6. Gate Validation and Proceed
 

@@ -434,7 +434,7 @@ retired; an archive covering more than its own sprint states the span in its fir
 reader can act on it, instead of in a filename nothing parses).
 
 **AN INTER-SPRINT EPOCH TAKES THE CLOSED SPRINT'S SLOT PLUS AN ORDINAL, AND THAT IS WHAT THE
-ORDINAL IS FOR.** A hook-written log re-fills after its retro rotation, so route.md Step 1a can
+ORDINAL IS FOR.** A hook-written log re-fills after its retro rotation, so route-fresh-start.md Step 1a can
 find it over budget at the START of the next sprint. The only `s<N>/` on disk is the closed
 sprint's, and its `<basename>-archive.md` is already that retro's output, so the epoch goes to
 `<basename>-archive-2.md` beside it. **Never overwrite the existing archive** (Rule 25(a)

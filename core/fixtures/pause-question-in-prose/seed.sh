@@ -84,6 +84,25 @@ ASK="gate 3 is showing an injection pattern in two checks"
 # (A7) the non-firing flag-down baseline: same reply, no terminal question mark.
 { u_text "$ASK"; a_text "$NOQTEXT"; } > "$ROOT/noq.jsonl"
 
+# (P1-P5) DECISION PENDING block, route A. HEAD is the grammar's heading line; the option lines end
+# on a `?` so the base predicate FIRES on every case here and only the DP join can silence it.
+HEAD="$(printf 'DECISION PENDING \xe2\x80\x94 DP-308-1 \xe2\x80\x94 proceeding on (Recommended) unless you veto')"
+BLOCK="$HEAD
+1. Keep the 30-day window (Recommended)
+2. Use a 7-day window instead?"
+{ u_text "$ASK"; a_text "Gate 3 is green.
+
+$BLOCK"; } > "$ROOT/dpopen.jsonl"
+# (P2) same options, NO heading line: an unheaded question.
+{ u_text "$ASK"; a_text "Gate 3 is green.
+
+1. Keep the 30-day window (Recommended)
+2. Use a 7-day window instead?"; } > "$ROOT/dpnohead.jsonl"
+# (P5) heading + options, then a different trailing question.
+{ u_text "$ASK"; a_text "$BLOCK
+
+Should I also rerun gate 3?"; } > "$ROOT/dptrail.jsonl"
+
 # EVERY CASE ABOVE IS AN /ai-dlc SESSION. The Stop hook's Check 2a lets a session that is NOT an
 # /ai-dlc session stop (its transcript's last ai-dlc marker absent or ai-dlc-update), so a flag-DOWN
 # case seeded without one reaches an ALLOW before the default block and F2/A7 would test nothing.
@@ -91,7 +110,7 @@ ASK="gate 3 is showing an injection pattern in two checks"
 # opens the transcript as an earlier turn -- a genuine-text user record, so it is a turn boundary
 # and never inside the turn the pause-question predicate reads.
 u_cmd() { jq -nc --arg n "$1" '{type:"user",message:{role:"user",content:("<command-message>"+$n+"</command-message>\n<command-name>/"+$n+"</command-name>")}}'; }
-for _c in fire asked midq prevturn answered othertool noq; do
+for _c in fire asked midq prevturn answered othertool noq dpopen dpnohead dptrail; do
   { u_cmd ai-dlc; cat "$ROOT/$_c.jsonl"; } > "$ROOT/$_c.jsonl.tmp"
   cat "$ROOT/$_c.jsonl.tmp" > "$ROOT/$_c.jsonl"; rm -f "$ROOT/$_c.jsonl.tmp"
 done

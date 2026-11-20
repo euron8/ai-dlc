@@ -13,6 +13,8 @@ rather than creating from scratch.
 
 ## EXECUTION SEQUENCE
 
+**Step entry.** The first action of this step, before anything else: `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file discovery.md 'Pipeline Position'`, so a resume after a compaction names this step.
+
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
@@ -21,7 +23,7 @@ an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-
 needs and writes a context digest to
 `_bmad-output/planning-artifacts/s<N>/discovery-context.md` (Rule 24
 sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
-Context, resolved at `route.md` Step 6), returning only
+Context, resolved at `route-fresh-start.md` Step 6), returning only
 `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section 2.
 **Join it with the bounded-join beat** (`_gate-procedures.md`, "Bounded-join beat"):
 `scripts/ai-dlc/wait-for-deliverable.sh <artifact_path>`, `run_in_background: true`. A
@@ -186,6 +188,8 @@ message is struck here and never enters `LOCKED_REQUIREMENTS`.
 Be exhaustive. Every concrete detail the user specified (placement, scope,
 behavior, approach) is a locked requirement. Do not paraphrase — quote
 verbatim or as close to verbatim as the source allows.
+
+**Locked-anchor check, the last action of this section.** For each story file already present under `_bmad-output/planning-artifacts/s<N>/stories/`, run `bash scripts/ai-dlc/verdict.sh validate-locked-anchor <story-file>` (the argument is the story file's path); the required result is exit 0 whose output carries no `EXAMINED NOTHING` line for a story that cites a `full_text_source:`, because that token means no citation was read and is not a pass. With no story file yet present, make no run here: Check 3b runs the same command at the story gate.
 
 ### 4b. Derive the Spec Kernel (dispatched)
 

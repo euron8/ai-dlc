@@ -1223,9 +1223,13 @@ gate_stage r2-cand "$R2_CAND" "the rulebook candidate list"
 while IFS= read -r r2p; do
   [ -n "$r2p" ] || continue
   r2_consumer="$CONSUMER/.claude/${r2p#core/}"
-  # Absent at the consumer means this pull ADDS it, which is a change by definition.
+  # Absent at the consumer: a change only when THEIRS holds the file (this pull ADDS it); absent at both is a match.
+  # Present at the consumer: compared against THEIRS below, so a file THEIRS deleted reads as a change.
   if [ ! -f "$r2_consumer" ]; then
-    R2_RB="$R2_RB $(basename "$r2p")"; continue
+    if git -C "$DIST" cat-file -e "${THEIRS}:${r2p}" 2>/dev/null; then
+      R2_RB="$R2_RB $(basename "$r2p")"
+    fi
+    continue
   fi
   if ! git -C "$DIST" show "${THEIRS}:${r2p}" 2>/dev/null | cmp -s - "$r2_consumer"; then
     R2_RB="$R2_RB $(basename "$r2p")"

@@ -398,6 +398,9 @@ times on first contact gets disabled and then catches nothing.
   manifest, it carries at least one anchor to file under the declared types, and every type it
   names is a row in the rendered manifest. Declared against a type, a file or an anchor set that
   does not exist, the key reads as a registration and performs none.
+- **[LC-E21]** ERROR — a gate's `gates/<gate-id>.arms` file agrees with the rendered manifest and the
+  enforcement map (a per-check `<!-- GATE_TYPES: ... -->` marker is read by the same resolve; a `non_catalog_units`
+  map entry naming the gate type is a row of that gate though outside the rendered set, and one with no row is reported), reported as `GM3`.
 - **[LC-E20]** WARN — an entry whose body carries **no markdown heading at all** is reported as
   `EXTENSION-NO-HEADINGS`. Both absorption joins key on a heading — **[LC-E5]**/**[LC-E6]** on a
   numbered anchor, **[LC-E19]** on a prose title — so an entry carrying no heading this row can

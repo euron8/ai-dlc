@@ -503,11 +503,11 @@ if [ ! -f "$REQMD" ]; then
   echo "SKIP requirements-step: subject not installed"
   exit 0
 fi
-for _hc in steps/route.md steps/requirements.md steps/carry-over-evaluation.md steps/gate-validation.md SKILL.md; do
+for _hc in steps/route-fresh-start.md steps/requirements.md steps/carry-over-evaluation.md steps/gate-validation.md SKILL.md; do
   echo "HERMETIC-CONSUMED core/skills/ai-dlc/$_hc"
 done
 
-ROUTEMD="$STEPS/route.md"
+ROUTEMD="$STEPS/route-fresh-start.md"
 COEMD="$STEPS/carry-over-evaluation.md"
 GVMD="$STEPS/gate-validation.md"
 SKILLMD="$SKILLDIR/SKILL.md"

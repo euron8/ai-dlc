@@ -22,6 +22,49 @@
 #
 # The whole program is rcp_main, so a fixture can SOURCE this file and call it in process; nothing above the guard at
 # the end runs in the sourcing shell except that definition.
+# THE SPAN RULE, one copy. rcp_span_scan <mode> <file>...  mode `paths`: each distinct cited path, in order of first
+# citation. mode `cites`: one line per citation, `<path><TAB><a-b or empty><TAB><line number in its file>`; a span is
+# the `:<line>` or `:<line>-<line>` suffix the path rule strips. A backticked span is a candidate; in `cites` mode a
+# bare `path:<line>[-<line>]` token outside backticks is one too, and goes through the same normalisation.
+rcp_span_scan() {
+  local mode="$1"; shift
+  LC_ALL=C awk -v mode="$mode" -v ext='\.(py|pyi|ts|tsx|js|jsx|mjs|cjs|sh|bash|md|json|jsonl|ya?ml|toml|ini|cfg|conf|txt|log|sql|csv|tsv|html|css|scss|go|rs|rb|java|kt|c|h|cpp|hpp|sol|tf|lua|xml|lock|pem|env)$' '
+    function norm(tok,    sp) {
+      sp = ""
+      sub(/::.*$/, "", tok)
+      if (match(tok, /:[0-9]+(-[0-9]+)?$/)) { sp = substr(tok, RSTART + 1); sub(/:[0-9]+(-[0-9]+)?$/, "", tok) }
+      sub(/[.,;:)]+$/, "", tok)
+      sub(/^\.\//, "", tok)
+      if (tok == "" || tok ~ /[*?<>{}$,^="|]/ || tok ~ /\[/ || tok ~ /\]/ || tok ~ /\047/) return ""
+      if (tok ~ /^[\/~-]/ || tok ~ /:/ || tok ~ /\.\./) return ""
+      if (tok !~ /\// && tok !~ ext) return ""
+      if (tok ~ /^\.+\/?$/) return ""
+      nspan = sp
+      return tok
+    }
+    function emit(tok,    t) {
+      t = norm(tok)
+      if (t == "") return
+      if (mode == "cites") { print t "\t" nspan "\t" FNR; return }
+      if (!(t in seen)) { seen[t] = 1; print t }
+    }
+    {
+      line = $0
+      rest = ""
+      while (match(line, /`[^` \t]+`/)) {
+        rs = RSTART; rl = RLENGTH
+        emit(substr(line, rs + 1, rl - 2))
+        rest = rest substr(line, 1, rs - 1) " "
+        line = substr(line, rs + rl)
+      }
+      if (mode == "cites") {
+        rest = rest line
+        n = split(rest, w, /[ \t]+/)
+        for (k = 1; k <= n; k++) if (w[k] ~ /:[0-9]+(-[0-9]+)?[.,;)]*$/) { sub(/[.,;)]+$/, "", w[k]); emit(w[k]) }
+      }
+    }' "$@"
+}
+
 rcp_main() {
 set -uo pipefail
 
@@ -40,24 +83,8 @@ if ! git ls-files -z > "$rcp_tmp/ls.z"; then
 fi
 tr '\0' '\n' < "$rcp_tmp/ls.z" > "$rcp_tmp/ls"
 
-# Pass 1: the distinct cited paths, in order of first citation.
-LC_ALL=C awk -v ext='\\.(py|pyi|ts|tsx|js|jsx|mjs|cjs|sh|bash|md|json|jsonl|ya?ml|toml|ini|cfg|conf|txt|log|sql|csv|tsv|html|css|scss|go|rs|rb|java|kt|c|h|cpp|hpp|sol|tf|lua|xml|lock|pem|env)$' '
-  {
-    line = $0
-    while (match(line, /`[^` \t]+`/)) {
-      tok = substr(line, RSTART + 1, RLENGTH - 2)
-      line = substr(line, RSTART + RLENGTH)
-      sub(/::.*$/, "", tok)
-      sub(/:[0-9]+(-[0-9]+)?$/, "", tok)
-      sub(/[.,;:)]+$/, "", tok)
-      sub(/^\.\//, "", tok)
-      if (tok == "" || tok ~ /[*?<>{}$,^="|]/ || tok ~ /\[/ || tok ~ /\]/ || tok ~ /\047/) continue
-      if (tok ~ /^[\/~-]/ || tok ~ /:/ || tok ~ /\.\./) continue
-      if (tok !~ /\// && tok !~ ext) continue
-      if (tok ~ /^\.+\/?$/) continue
-      if (!(tok in seen)) { seen[tok] = 1; print tok }
-    }
-  }' "$@" > "$rcp_tmp/cited"
+# Pass 1: the distinct cited paths, in order of first citation (rcp_span_scan, defined above rcp_main).
+rcp_span_scan paths "$@" > "$rcp_tmp/cited"
 
 # Pass 2: on-disk presence for an exact cited path that git does not track (an installed, ignored tree).
 : > "$rcp_tmp/disk"

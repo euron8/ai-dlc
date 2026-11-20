@@ -48,7 +48,7 @@ case "$LAYOUT" in
 esac
 VSL="$SD/validate-spawn-ledger.sh"; GS="$SD/gate-slice.sh"; VPB="$SD/validate-provenance-block.sh"
 SS="$SD/stamp-story-provenance.sh"
-GV="$STEPS/gate-validation.md"; BI="$STEPS/bug-investigation.md"; ROUTE="$STEPS/route.md"
+GV="$STEPS/gate-validation.md"; BI="$STEPS/bug-investigation.md"; ROUTE="$STEPS/route-fresh-start.md"
 LEDGER_SRC="$HERE/graph-ledger.jsonl"; BLOCK_SRC="$HERE/graph-oneshot-s313.block"
 command -v jq >/dev/null 2>&1 || { echo "FIXTURE ERROR: jq not on PATH" >&2; exit 2; }
 for f in "$VSL" "$GS" "$VPB" "$SS" "$GV" "$BI" "$ROUTE" "$LEDGER_SRC" "$BLOCK_SRC"; do
@@ -717,7 +717,7 @@ dev_evidence() {
   sed 's/^Status: ready-for-dev$/Status: review/' "$W/$1" > "$WORK/st.tmp" && mv "$WORK/st.tmp" "$W/$1"
   grep -qx 'Status: review' "$W/$1" || { echo "FIXTURE BROKEN: the Status: rewrite did not apply" >&2; exit 1; }
 }
-route_in_world() { mkdir -p "$W/.claude/skills/ai-dlc/steps"; cp "$ROUTE" "$W/.claude/skills/ai-dlc/steps/route.md"; }
+route_in_world() { mkdir -p "$W/.claude/skills/ai-dlc/steps"; cp "$ROUTE" "$W/.claude/skills/ai-dlc/steps/route-fresh-start.md"; }
 # The B1 world: the reference consumer's one-shot, a story STAMPED by the shipped writer, the
 # architect residue, a carry-over snapshot AND a carry-over sprint-status (the cross-check's
 # agreeing near-miss), both in graph's grammar, and route.md at the consumer path the fold command

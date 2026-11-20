@@ -540,6 +540,13 @@ B MERGE SILENT 'gh pr list --state merged --limit 3'
 
 B CLOSE DENY 'bash scripts/ai-dlc/gate-checkpoint.sh --nonce implementation-20261006T120000Z close'
 B CLOSE SILENT 'scripts/ai-dlc/gate-checkpoint.sh --nonce implementation-20261006T120000Z record 12 PASS'
+# gate-run.sh: `arms` is the gate entry (G1, kinded gatelog) and `close` writes the log entry and closes (G2);
+# `--help`, `--self-probe` and a path that merely names the script are the near-misses.
+B GATELOG DENY 'bash scripts/ai-dlc/gate-run.sh arms --gate planning --sprint 323 --step requirements.md'
+B CLOSE DENY 'bash scripts/ai-dlc/gate-run.sh close --gate planning --nonce planning-20261006T120000Z --sprint 323 --step requirements.md'
+B GATELOG SILENT 'bash scripts/ai-dlc/gate-run.sh --help'
+B CLOSE SILENT 'bash scripts/ai-dlc/gate-run.sh --self-probe'
+B CLOSE SILENT 'cat scripts/ai-dlc/gate-run.sh arms'
 
 for x in 'git push origin --delete release/0.1.0' 'git push -d origin release/0.1.0' 'git push origin :release/0.1.0'; do
   B DELETE SILENT "$x"

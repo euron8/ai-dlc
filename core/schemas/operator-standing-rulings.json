@@ -1,0 +1,43 @@
+{
+  "description": "Row grammar of the operator standing-rulings record: an index over operator-answers-history.md. Read by standing-rulings.sh; no second copy exists.",
+  "record_path": "_bmad-output/operator-standing-rulings.md",
+  "answers_history_path": "_bmad-output/operator-answers-history.md",
+  "requests_history_path": "_bmad-output/operator-requests-history.md",
+  "decision_entry_paths": ["docs/escalations/pending.md", "docs/escalations/pending-archive.md"],
+  "proposal_marker": {
+    "prefix": "Standing ruling proposal: match=",
+    "class_prefix": "; class=",
+    "note": "the proposing question text (answers kind) or the DP entry's Decision/Question line (decision kind) carries prefix + the row's match EXACTLY + class_prefix + a class; the match ends where class_prefix begins",
+    "classes": ["pipeline-family", "update-family"],
+    "outside_classes": ["scope-confirmation", "gate-stop", "operator-relief", "tier1", "locked-requirement", "step-reserved"],
+    "outside_note": "the classes of Rule 11(a)'s sort Outside list; a proposal naming one never becomes a row, and a proposal naming no class or an unknown one never becomes a row"
+  },
+  "row_heading_pattern": "^### SR-[0-9]+$",
+  "fields": {
+    "match":  { "pattern": "^.+$" },
+    "ruling": { "pattern": "^.+$", "note": "the operator's answer, verbatim; sha256 of it must equal the SHA256 line of the cited entry" },
+    "source": { "pattern": "^_bmad-output/operator-answers-history\\.md:[0-9]+$", "note": "the line number of the entry heading `## <ts> -- AskUserQuestion`", "alt_pattern": "^_bmad-output/operator-requests-history\\.md:## .+$", "alt_note": "the heading line of a requests-history entry carrying `- Pending decision: DP-...`; the typed message is the ruling verbatim" },
+    "scope":  { "values": ["pipeline", "update", "both"] },
+    "status": { "values": ["active", "revoked"] }
+  },
+  "forbidden_matches": [
+    {
+      "name": "lr-lock-ask",
+      "pattern": "^LR-S[0-9]+-[0-9]+",
+      "emitter": "core/skills/ai-dlc/steps/requirements.md",
+      "anchor": "(lead interpretation): "
+    },
+    {
+      "name": "update-re-approval",
+      "pattern": "^Re-approve",
+      "emitter": "core/skills/ai-dlc-update/reconcile/apply.sh",
+      "anchor": "Re-approve the reconcile report for this pull?"
+    },
+    {
+      "name": "sprint-scope-confirmation",
+      "pattern": "[Ss]cope",
+      "emitter": "core/skills/ai-dlc/steps/route-fresh-start.md",
+      "anchor": "Confirm the resolved sprint scope"
+    }
+  ]
+}

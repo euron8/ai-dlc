@@ -139,7 +139,7 @@ directory be read as a kickoff, here or in your report.
 close` and then `roll`, and it did (graph `d1f3a1fe4`). That instruction contradicts core's own rule,
 which is stated in the script it invokes — `core/scripts/sprint-status.sh:63`: *"ROTATION HAPPENS AT
 PIPELINE START, NOT AT CLOSE… Rotating at start keeps the predecessor's terminal state readable
-exactly until its successor exists."* `core/skills/ai-dlc/steps/route.md:400` is where the roll
+exactly until its successor exists."* `core/skills/ai-dlc/steps/route-fresh-start.md:132` is where the roll
 belongs. So the roll is early. **The question this file had to settle before it could ask you to
 reverse anything was whether a reversal has a source to restore from, and what it costs at
 kickoff.** Both are settled, and the answer changed the recommendation.

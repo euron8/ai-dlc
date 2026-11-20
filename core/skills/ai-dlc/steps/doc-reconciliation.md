@@ -12,6 +12,8 @@ in the docs against the actual codebase to determine accuracy.
 
 ## EXECUTION SEQUENCE
 
+**Step entry.** Before anything else in this step, run `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file doc-reconciliation.md 'Pipeline Position'`, so a resume or a compaction names this step.
+
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–5 inline.

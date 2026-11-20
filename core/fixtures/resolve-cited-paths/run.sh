@@ -121,4 +121,70 @@ if eqv cli-usage && [ "$(cat "$EQ/cli-usage.cl.rc")" = 2 ] && [ ! -s "$EQ/cli-us
   ok "cli-usage: no argument is refused with the usage line and exit 2, as the in-process call does"
 else bad "cli-usage: program rc=$(cat "$EQ/cli-usage.cl.rc") err=[$(cat "$EQ/cli-usage.cl.err")] in-process rc=$(cat "$EQ/cli-usage.ip.rc")"; fi
 
-report_end resolve-cited-paths 5
+# --- show-cites.sh (BL-819 item 10): sourced in process, one call per distinct state --------------------------------
+# It sources the SAME file's span rule (rcp_span_scan), so the arms prove the wiring: one world, three findings. F-3 carries a
+# resolving span, a quote found once and a cite to an absent file; F-30 comes FIRST as the near-miss for the heading match (F-3 must not
+# slice it); F-5 carries an out-of-range span and a quote found twice.
+SCS=""
+for c in "$HERE/../../scripts/show-cites.sh" "$HERE/../../../scripts/ai-dlc/show-cites.sh"; do
+  [ -f "$c" ] && { SCS="$c"; break; }
+done
+[ -n "$SCS" ] || { echo "FIXTURE ERROR: cannot locate show-cites.sh in either layout" >&2; exit 2; }
+SCS="$(cd "$(dirname "$SCS")" && pwd)/$(basename "$SCS")"
+echo "HERMETIC-CONSUMED $SCS"
+grep -qxF 'sc_main() {' "$SCS"; g1=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$SCS"; g2=$?
+[ "$g1" -le 1 ] && [ "$g2" -le 1 ] || { echo "FIXTURE BROKEN: cannot read $SCS" >&2; exit 2; }
+if [ "$g1$g2" != 00 ]; then
+  bad "$SCS lacks the in-process wrap (sc_main line: rc $g1, column-0 source guard: rc $g2)"
+  report_end resolve-cited-paths
+fi
+fx_inproc "$SCS"
+. "$SCS" || { echo "FIXTURE BROKEN: sourcing $SCS failed" >&2; exit 2; }
+declare -F sc_main >/dev/null || { echo "FIXTURE BROKEN: sourcing $SCS defined no sc_main" >&2; exit 2; }
+scs_ip() { fx_inproc "$SCS"; ( sc_main "$@" ); }
+SC="$WORK/sc"; mkdir -p "$SC"
+for i in 1 2 3 4 5 6 7 8 9 10; do printf 'line %s\n' "$i"; done > "$SC/a.md"
+printf 'twice here\nfiller\ntwice here\n' > "$SC/dup.md"
+cat > "$SC/f.md" <<'MD'
+## Findings
+### F-30 — MAJOR — second
+See `a.md:9`.
+### F-3 — MAJOR — first
+stories: 01
+See `a.md:4-5` and `gone.md:3`.
+quote: a: line 6
+### F-5 — MAJOR — third
+Past the end: `a.md:9-12`.
+quote: dup: twice here
+## Probes
+Not a finding: `a.md:1`.
+MD
+SC_EXPECT='CITE a.md:4-5
+4: line 4
+5: line 5
+UNRESOLVED gone.md:3 absent
+CITE a.md:6
+6: line 6
+show-cites: 3 examined, 2 printed, 1 unresolved'
+OUT="$(scs_ip "$SC/f.md" --finding F-3 --root "$SC" 2>&1)"; RC=$?
+if [ "$RC" -eq 0 ] && [ "$OUT" = "$SC_EXPECT" ]; then
+  ok "show-cites F-3: a span and a quote print their numbered lines, the absent file is UNRESOLVED, and the counts read 3 examined, 2 printed, 1 unresolved"
+else bad "show-cites F-3: rc=$RC out=[$OUT]"; fi
+OUT="$(scs_ip "$SC/f.md" --finding F-30 --root "$SC" 2>&1)"; RC=$?
+if [ "$RC" -eq 0 ] && [ "$OUT" = "CITE a.md:9
+9: line 9
+show-cites: 1 examined, 1 printed, 0 unresolved" ]; then
+  ok "show-cites F-30: its own cite prints and F-3's do not (the id match stops at a digit)"
+else bad "show-cites F-30: rc=$RC out=[$OUT]"; fi
+OUT="$(scs_ip "$SC/f.md" --finding F-5 --root "$SC" 2>&1)"; RC=$?
+if [ "$RC" -eq 0 ] && [ "$(grep -c '^UNRESOLVED a.md:9-12 out of range' <<<"$OUT")" = 1 ] \
+   && [ "$(grep -c '^UNRESOLVED quote:dup quote found 2 times' <<<"$OUT")" = 1 ] \
+   && [ "$(tail -1 <<<"$OUT")" = "show-cites: 2 examined, 0 printed, 2 unresolved" ]; then
+  ok "show-cites F-5: an out-of-range span and a quote found twice are each UNRESOLVED with a reason, never skipped"
+else bad "show-cites F-5: rc=$RC out=[$OUT]"; fi
+OUT="$(scs_ip 2>&1)"; RC=$?
+if [ "$RC" -eq 2 ] && grep -qF 'usage: show-cites.sh' <<<"$OUT"; then ok "show-cites with no argument is refused with the usage line and exit 2"
+else bad "show-cites usage: rc=$RC out=[$OUT]"; fi
+
+report_end resolve-cited-paths 9

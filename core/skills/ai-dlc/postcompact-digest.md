@@ -60,7 +60,7 @@ FOUR pause points exist where you stop and wait for human input:
   stop before it while a locked requirement awaits its recorded
   disposition (`steps/deploy-validate.md` §5).
 - (c) **Retro commentary prompt**.
-- (d) **Sprint-scope confirmation** (`route.md` Step 6) -- the only
+- (d) **Sprint-scope confirmation** (`route-fresh-start.md` Step 6) -- the only
   pause point upstream of planning. Confirm or correct the scope you
   already resolved; it is never a question about what to build.
 
@@ -87,7 +87,7 @@ stamps `EXIT_CONDITION_MET`, a finding is DEFERRED to the next step's
 artifact or it re-opens the series on this record.
 
 ### Rule 8 -- Run the validation cycle per declared intensity
-Validation intensity is declared at route time (see route.md Step 6)
+Validation intensity is declared at route time (see route-fresh-start.md Step 6)
 and recorded in the pipeline snapshot as `validation_intensity`. The
 intensity determines the MINIMUM validation cycle at each planning
 phase. The lead MUST NOT run less than the declared minimum.
@@ -122,8 +122,26 @@ path, a check's placement, which component reads what), the tree. It is
 a HOW decision under Rule 13 (`rule-bodies/rule-13.md`): record it as a
 Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry naming its source and a
 one-line reason; it reaches the operator only under `### For Your
-Information` at the checkpoint (`steps/deploy-validate.md` §5). This
-holds on a money path, a config leaf or a pinned span, PROVIDED the
+Information` at the checkpoint (`steps/deploy-validate.md` §5). The
+standing-rulings record `_bmad-output/operator-standing-rulings.md` is
+consulted before a question is asked (`scripts/ai-dlc/standing-rulings.sh
+lookup <header>`; a hook denies a `AskUserQuestion` whose header equals an
+active row's `match:`, until the question text carries `not SR-<n>:
+<reason>`). A header match is a consult: if the row's `ruling:` decides the
+question, record a Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry citing the
+row instead of asking; if it does not, re-ask with `not SR-<n>: <reason>`.
+A row is created only from the operator's answer to a proposal whose text
+carries `Standing ruling proposal: match=<match>; class=<class>`, where
+`<match>` is the row's `match:` exactly and `<class>` is `pipeline-family`
+or `update-family`; a proposal naming a class of this sort's Outside list
+(`scope-confirmation`, `gate-stop`, `operator-relief`, `tier1`,
+`locked-requirement`, `step-reserved`), no class or another class never
+becomes a row, and a row never decides a question on that list. `source:`
+cites one of two entries: the answer's `operator-answers-history.md` entry
+for an `AskUserQuestion` proposal, or the `operator-requests-history.md`
+entry tagged `- Pending decision: DP-<s>-<n>` for a pending decision whose
+Decision/Question line carries the same marker; `ruling:` is the reply
+verbatim. This holds on a money path, a config leaf or a pinned span, PROVIDED the
 choice leaves every operator-owned value in force or sets it to the
 operator's verbatim value or that value exactly converted between units.
 Such a choice decides no value, so Rule 11(a)'s UNBADGED trigger does
@@ -161,7 +179,7 @@ settles a value**: a literal found in config, code or a staged artifact
 is a derivation to put for veto under Rule 11(a)'s item (2), not a
 source; and words a lead wrote into a `LOCKED_REQUIREMENTS` entry are no
 source for what they add. **Outside this sort, each asked as its own
-rule says:** the sprint-scope confirmation (`steps/route.md` Step 6),
+rule says:** the sprint-scope confirmation (`steps/route-fresh-start.md` Step 6),
 operator relief (Rule 11(a), `bug-investigation.md` §2b), a choice that
 moves a locked requirement's boundary (Rule 13), any Rule 12 Tier 1
 matter (a choice that contradicts an operator-approved decision, a
@@ -177,9 +195,11 @@ the decision asked,
 gives every option with its effect and the consequence of choosing it,
 and marks exactly one option `(Recommended)`. A question that carries no
 badge -- an UNBADGED question (Rule 11(a)), or the sprint-scope confirmation
-(`steps/route.md` Step 6) --
+(`steps/route-fresh-start.md` Step 6) --
 says so in its own text, with the reason,
 so the missing badge does not read as an omission.
+Each premise the question states as fact carries one `path:line`
+evidence locator.
 
 #### Operator decisions: an attested act is not raised again (Rule 11(a))
 **An act the operator has attested is not raised again.** When the
@@ -208,6 +228,9 @@ question, not inside it. Then send the question at once, in
 lane before asking, and never hold back, defer or drop a question, or
 fold it into a later one, to suit the lanes.
 
+#### Operator decisions: proceed on the recommendation (Rule 11(a))
+**A decision whose work is cheap to redo may be put as a pending decision instead of a question.** Number it `DP-<sprint>-<n>`, file a Rule 12 Tier 2 entry in `docs/escalations/pending.md` with `**Status:** DECIDED_AUTONOMOUSLY`, a `**Decision/Question:**` line opening `source: recommendation`, and `**Veto window:** open — DP-<sprint>-<n>`, dispatch the work under the `(Recommended)` option, then end the turn on a block whose heading line is `DECISION PENDING — DP-<sprint>-<n> — proceeding on (Recommended) unless you veto`, followed only by the option lines. The Stop hook then does not raise the Rule 11(a) warning for that turn. The window stays open until you close it: read the operator's reply, clear the pause flag, record the answer, and set the window to `closed — DP-<sprint>-<n> — _bmad-output/operator-requests-history.md:<heading line of the reply's entry>`. The window has no age limit and survives a resume; a resumed lead may re-ask an open decision with `AskUserQuestion`, and that answer closes it. A decision whose work is not cheap to redo is asked with `AskUserQuestion`.
+
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 Concrete details specified by carry-over items, brainstorming sessions or direct user instructions are **locked requirements**: validation cycles may challenge them but MUST NOT silently change them, and any divergence requires human sign-off via `HARD_BLOCK` escalation. READ AND FOLLOW `rule-bodies/rule-13.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
@@ -218,6 +241,7 @@ sprints without human approval. Requirements: document the phasing
 rationale, define phase boundaries, ensure each phase delivers
 standalone value. Each sprint is deployed and validated at the
 production checkpoint before the next sprint begins.
+READ AND FOLLOW `rule-bodies/rule-14.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 15 -- Document what you changed
 After each validation cycle, append a brief changelog noting what was improved
@@ -225,12 +249,14 @@ and why to `_bmad-output/planning-artifacts/s<N>/changelog-<artifact>.md` -- the
 sprint's slot, NEVER the durable artifact. A story's changelog stays inline in the
 story, which already carries its sprint in its directory. See `steps/_gate-procedures.md`,
 "Where a changelog is written".
+READ AND FOLLOW `rule-bodies/rule-15.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 16 -- Err on the side of doing
 When in doubt, apply the improvement. The human reviews the final
 production deployment, not intermediate artifacts. "Doing" means the
 smallest change that resolves the doubt (Rule 26); this rule is never
 license to add mechanism no requirement demands.
+READ AND FOLLOW `rule-bodies/rule-16.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 17 -- Write large files in sections
 When creating or updating a file that exceeds ~200 lines, break the
@@ -238,6 +264,7 @@ write into multiple sequential operations. Single large writes risk
 output token limits and timeouts that leave files incomplete. Applies
 to all file types: planning artifacts, story files, code, tests,
 reviews.
+READ AND FOLLOW `rule-bodies/rule-17.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 18 -- Rules are hard, directive, and self-contained
 A rule in this skill, CLAUDE.md, coding-conventions.md, step files,
@@ -245,6 +272,7 @@ or team role files must be writable as a standalone mandate without
 supporting narrative. A rule that needs origin context to survive is
 not a rule -- it is a suggestion leaning on a story. Rewrite it hard
 or move it to a retro doc as a lesson.
+READ AND FOLLOW `rule-bodies/rule-18.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 19 -- Agent spawns MUST bind the full role contract
 When the lead invokes the `Agent` tool to spawn a teammate, the spawn MUST bind that teammate to its full role contract -- the role file, its rendered definition, and every mandatory binding -- not the model alone. READ AND FOLLOW `rule-bodies/rule-19.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
@@ -272,57 +300,14 @@ When a pipeline pause point (Rule 3(a)-(d)) receives human input and
 the lead resumes execution, the lead's FIRST action MUST be a `Read`
 tool call for the current step file. The lead MUST then enumerate the
 remaining numbered sections in output before executing any of them.
+READ AND FOLLOW `rule-bodies/rule-22.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 23 -- Resident-context discipline
 Cache-read cost scales with the size of the working context times the
 number of turns it stays resident. Every byte re-injected into context
 is re-read on every subsequent turn until compaction. Three controls
-keep the resident set lean without weakening step fidelity:
-**(a) No redundant re-loads.** Re-Read only the *current* step file
-(per Rules 21-22). The lead MUST NOT re-Read a completed step file or
-a planning artifact to "refresh" — that permanently duplicates it into
-the working context. The pipeline snapshot is the authoritative source
-for prior-step state (per the Handoff Protocol); query it instead of
-re-loading the producing artifact. State files the gate checks must
-re-verify (`gate-log.md`, `pipeline-snapshot.md`) are exempt — their
-re-read IS the verification. That exemption is conditional on their
-staying small, which is not automatic. The snapshot is the most-read
-file in the pipeline (every gate, every resume, every compaction
-recovery) and carries the tightest Rule 25(d) threshold of any
-artifact. Enforce its schema at each gate rather than letting it
-accrete.
-**(b) Sliced re-read of large step files.** When a Rule 22 resume
-targets a large step file whose earlier numbered sections are already
-complete, the lead MAY issue the mandatory `Read` with an `offset` to
-the remaining sections rather than the whole file. The Read tool call
-— the attention interrupt that defeats run-from-memory — remains
-mandatory; only its span narrows. Never slice past a section the lead
-has not completed. This applies equally to a POST-COMPACTION resume
-that lands inside a gate: the mandated re-read of `gate-validation.md`
-is the `gate-slice.sh` plan narrowed by `gate-checkpoint.sh done`
-(Rule 21), not the whole file.
-**(c) Offload high-volume observational Bash (context-mode).** Large
-*read-only* command output (test-suite runs, gate-validation script output,
-`git log`/`diff`/`status` inspection, log scans) MUST be run via
-`ctx_batch_execute` / `ctx_execute` so its bytes stay out of the resident
-prefix. Two hard limits: (1) state-mutating commands (`git`
-commit/branch/merge/worktree, `gh`, `chmod`, file writes) MUST run via
-native Bash — a context-mode subprocess discards filesystem changes, so
-routing a mutation through ctx silently no-ops it; when in doubt whether a
-command mutates, use native Bash. (2) Verbatim-load files (rule/step/role
-files, schemas, snapshot, `gate-log.md`, escalations, `audit-anchors.md`,
-`sprint-status.yaml`, story files) MUST NOT be routed through
-`ctx_execute_file` / `ctx_batch_execute` / `ctx_index` — consolidation drops
-directives and breaks load fidelity. `ai-dlc-protect.sh` hard-blocks it and
-is the SET's source of record: `PROTECTED_PATTERNS` there, extended per
-project by `extensions/protected-paths.json`. A directory or glob that spans
-one of those files is blocked too. Archives and the planning corpus (`prd.md`,
-`product-brief.md`, `carry-over-backlog.md`) are deliberately NOT protected —
-offload them freely.
-**Carrier:** `.claude/rules/ai-dlc-resident-discipline.md` (floor CC 2.0.64; detector: `.claude/hooks/ai-dlc-rules-floor.sh`, a SessionStart hook that resolves the running version and reports LOUDLY when these files are present but the loader is too old to read them -- the detector does not gate the COPY, because `apply.sh` is a second copy path that knows nothing about versions and a downgrade is a third) -- an UNCONDITIONAL `.claude/rules/` file, which is re-injected on every compaction (`load_reason:"compact"`, measured). It DUPLICATES this rule rather than replacing it, so below the floor the carrier is absent and this rule is exactly as carried as it is without the carrier. The floor is named because a bare `rule-file` here would be a claim nothing can falsify, which is worse than `none` -- measured the sharpest collapse in the band, 13x across a compaction boundary. A PATH-SCOPED rule could not have carried it: the per-session memo SURVIVES compaction, so a scoped rule is gone for the rest of the session once the first one lands. The detector cannot be receipt-only either: a subagent's read writes the same `InstructionsLoaded` receipt a parent's read does, while the parent never receives the rule. Do not mistake `context-mode-protection-log.md` for a carrier: that is an artifact-budget file under Rule 25, and matching its NAME is how a scanner wrongly scores this rule as carried.
-<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
-     or declares `none` and is counted as a gap. A compacted lead does not hold this
-     rule; whatever is named here is what survives instead of its memory. -->
+keep the resident set lean without weakening step fidelity.
+READ AND FOLLOW `rule-bodies/rule-23.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 24 -- Planning and retro exploration is dispatched to analyst subagents
 Read-heavy exploration in the planning and retro steps is the lead's largest avoidable cache-read cost and MUST be dispatched to an `analyst` subagent, whose raw reading never enters the lead's context. READ AND FOLLOW `rule-bodies/rule-24.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
@@ -334,14 +319,13 @@ sprint becomes larger than the context window, so reading it forces
 compaction and dominates cache-read. Living artifacts MUST stay
 current-state; historical and superseded content MUST move out of the
 read path.
-
-## [MOVED <ISO-8601 timestamp> from <source basename> — <trigger>]
-```
+READ AND FOLLOW `rule-bodies/rule-25.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 26 -- Minimum mechanism (KISS)
 Every produced artifact -- design, code, test, guard, or process
 machinery -- MUST use the smallest mechanism that satisfies the
 locked requirements and acceptance criteria.
+READ AND FOLLOW `rule-bodies/rule-26.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 27 -- Layered rulebook: core, extensions, overrides
 The consumer rulebook is three layers -- core, extensions, overrides -- and a consumer self-improves through the layer contract, never by re-tangling core against upstream. READ AND FOLLOW `rule-bodies/rule-27.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
@@ -358,6 +342,7 @@ MUST NOT be reimplemented in this rulebook: the spec kernel by `bmad-spec`, the
 design spine by `bmad-architecture`, and epics and the FR coverage map by
 `bmad-create-epics-and-stories`. BMAD is a prerequisite; a second implementation of a
 workflow it ships is a parallel path beside a proven one and violates Rule 26(b).
+READ AND FOLLOW `rule-bodies/rule-30.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 31 -- A countable assertion carries the derivation that produced it
 Any sentence asserting a count over a corpus -- "N sites", "all N", "N of M",
@@ -365,6 +350,7 @@ Any sentence asserting a count over a corpus -- "N sites", "all N", "N of M",
 citation set that produced the number. A count authored without one is a fact
 the reader cannot check and the author did not run, and it is indistinguishable
 from a guess.
+READ AND FOLLOW `rule-bodies/rule-31.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 32 -- Consult the advisor tool at named touchpoints when it is available
 When the harness gives you an `advisor` tool, you MUST call it at each touchpoint below; it

@@ -27,7 +27,7 @@ scoped to the AS-IS / existing-architecture read — it reads the code and the
 current architecture doc and writes a context digest to
 `_bmad-output/planning-artifacts/s<N>/architecture-context.md` (Rule 24
 sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
-Context, resolved at `route.md` Step 6), returning only
+Context, resolved at `route-fresh-start.md` Step 6), returning only
 `{artifact_path, summary, gaps}`, with every gap also
 in the `## Gaps` section of the artifact. Then resume at section 1. **Section 1
 stays inline in the lead; sections 2 and 3 are ONE dispatched `architect`
@@ -340,6 +340,8 @@ changelog, the index and the architecture doc in one commit by explicit path. Th
 that lost lines Check 35 will count; repair each before the gate.
 
 **Then immediately proceed to gate validation:**
+
+**Escalation vocabulary check, the step's last action before the gate.** Run `bash scripts/ai-dlc/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md`; the required result is a `PASS` line and exit 0. A `FAIL` names every escalation header whose status is outside the derived vocabulary, and a dated entry with no status line is one of them: repair each named entry (`escalations.md`) and re-run before the gate, because Check 2's script arm refuses the same file and the gate then fails with no adjudicator running.
 
 ### 5. Gate Validation and Proceed
 

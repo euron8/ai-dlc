@@ -61,7 +61,7 @@
 #
 # Exit code 0 has TWO roads and they now print DIFFERENT lines. A story that
 # verified nothing (no resolvable citation of either form) is reported as
-# `PASS — EXAMINED NOTHING`. It is not failed: a block that claims nothing has
+# `EXAMINED NOTHING` (no PASS word). It is not failed: a block that claims nothing has
 # nothing to substantiate. It is no longer spelled like a verified story.
 #
 # AND THE POINTER ROAD REPORTS ITS BULLETS WITHOUT FAILING THEM. Where a
@@ -750,7 +750,7 @@ if failures:
 # an unverified one. They are separable now without moving the exit code.
 if claims_checked == 0 and pointers_checked == 0:
     print(
-        f"VALIDATE-LOCKED-ANCHOR: PASS — EXAMINED NOTHING ({story_path}, "
+        f"VALIDATE-LOCKED-ANCHOR: EXAMINED NOTHING ({story_path}, "
         f"{len(blocks)} block(s) carried no resolvable citation). This is not a "
         f"defect on its own; it is the absence of evidence, and it is reported "
         f"rather than spelled the same as a verified story."

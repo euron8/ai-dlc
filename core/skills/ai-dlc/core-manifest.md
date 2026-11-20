@@ -145,6 +145,7 @@ core_manifest:
   - SKILL.md
   - steps/*.md
   - rule-bodies/*.md
+  - gates/*.arms
   - escalations.md
   - rule-authoring.md
   - artifact-path-grammar.md
@@ -297,8 +298,10 @@ core_manifest:
   - fixtures/trunk-push-bound/**
   - fixtures/file-mtime/**
   - fixtures/resolve-cited-paths/**
+  - fixtures/resume-preflight/**
   - fixtures/pause-hook-origin/**
   - fixtures/pause-question-in-prose/**
+  - fixtures/standing-rulings-hook/**
   - fixtures/postcompact-rulebook-recovery/**
   - fixtures/gate-resume/**
   - fixtures/gate-transition/**
@@ -406,6 +409,7 @@ rulebook:
   - SKILL.md
   - steps/*.md
   - rule-bodies/*.md
+  - gates/*.arms
   - escalations.md
   - rule-authoring.md
   - artifact-path-grammar.md

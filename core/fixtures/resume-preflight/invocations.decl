@@ -1,0 +1,6 @@
+# Provisional until a counted run sets them (the push's counted run is the second): run.sh itself is one bash start, and each of
+# the nine in-process calls starts verdict.sh and the budget validator it runs. The subject is never started as a program (0 row):
+# run.sh sources it once and calls rpf_main in process. inproc rows: the source once plus the nine calls.
+17 *
+0 core/scripts/resume-preflight.sh
+10 inproc:core/scripts/resume-preflight.sh

@@ -96,7 +96,7 @@ same run.
 
 **The filing says this "defeats the budget-blocking callers' own read path". It does not.** The
 enforcement map lists five call sites (`core/skills/ai-dlc/enforcement-map.yaml:1050`), and not
-one of them greps the final line: `core/skills/ai-dlc/steps/route.md:168` reads the exit code,
+one of them greps the final line: `core/skills/ai-dlc/steps/route.md:146` reads the exit code,
 `core/skills/ai-dlc/steps/gate-validation.md:889` reads the exit code, and
 `core/skills/ai-dlc/steps/gate-validation.md:875` explicitly FORBIDS the grep the filing
 describes. The one caller that reaches the defect state is retro

@@ -206,6 +206,27 @@ if [ "$EVENT" = SubagentStop ]; then
   exit 0
 fi
 
+# BRIEF EXPANSION: a prompt line `Brief: <path>` names a brief file the lead rendered with render-brief.sh. The FIRST such line
+# only; the path is canonicalized (dir by `pwd -P`) BEFORE it must sit under <root>/_bmad-output/planning-artifacts/, a
+# symlink or a file over 16384 bytes is not read. Prints the prompt, then the file. Its text feeds ONLY the Deliverable, shard,
+# remediates and --mark readers, never the role, contract or model scans (the teammate never receives the file's bytes).
+# THIS FUNCTION IS BYTE-IDENTICAL in ai-dlc-dispatch-guard.sh and ai-dlc-inflight-row.sh (dispatch-model-guard fixture binds them).
+brief_expand() { # brief_expand <project root>; the prompt on stdin
+  local p l f d b r
+  p="$(cat)"; printf '%s\n' "$p"
+  l="$(printf '%s\n' "$p" | grep -m1 '^Brief:')" || return 0
+  f="${l#Brief:}"; f="$(printf '%s' "$f" | tr -d '`' | sed -E 's/^[[:blank:]]+//; s/[[:blank:]]+$//')"
+  [ -n "$f" ] || return 0
+  case "$f" in /*) ;; *) f="$1/$f" ;; esac
+  d="$(cd "$(dirname "$f")" 2>/dev/null && pwd -P)" || return 0
+  r="$(cd "$1" 2>/dev/null && pwd -P)" || return 0
+  b="$d/$(basename "$f")"
+  case "$b" in "$r/_bmad-output/planning-artifacts/"*) ;; *) return 0 ;; esac
+  [ -f "$b" ] && [ ! -L "$b" ] && [ -r "$b" ] || return 0
+  [ "$(wc -c < "$b" | tr -d ' ')" -le 16384 ] || return 0
+  cat "$b"
+}
+
 # --- PostToolUse -------------------------------------------------------------
 TOOL="$(jq -r '.tool_name // empty' <<< "$INPUT" 2> /dev/null)"
 case "$TOOL" in Agent|Task) ;; *) exit 0 ;; esac
@@ -229,7 +250,7 @@ ROLE="$(jq -r '.role // empty' <<< "$LROW" 2> /dev/null | tr -d '|')"
 [ -n "$ROLE" ] || ROLE="$(jq -r '.tool_input.subagent_type // empty' <<< "$INPUT" 2> /dev/null | tr -d '|')"
 [ -n "$ROLE" ] || ROLE=unknown
 
-DL="$(jq -r '.tool_input.prompt // empty' <<< "$INPUT" 2> /dev/null | deliverable_of)"
+DL="$(jq -r '.tool_input.prompt // empty' <<< "$INPUT" 2> /dev/null | brief_expand "$ROOT" 2> /dev/null | deliverable_of)"
 if [ -z "$DL" ]; then
   DL="$(jq -r '.mark_file // empty' <<< "$LROW" 2> /dev/null)"
   case "$DL" in \"*\"|\'*\') DL="${DL#?}"; DL="${DL%?}" ;; esac

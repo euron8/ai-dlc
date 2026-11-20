@@ -1607,6 +1607,17 @@ while IFS= read -r f; do
     err E14 "$(rel "$f"): gate_types '$gate_types' is declared on kind '$kind'. Only a check is loaded from a GATE_MANIFEST row, so on this kind nothing reads the key and it states a loading rule that never happens. Use kind 'check' if this entry defines gate checks."
   fi
 
+  # A per-check `<!-- GATE_TYPES: a, b -->` marker (read by gate-slice.sh and by GM2 of
+  # validate-gate-manifest.sh, which holds the rendered manifest and so rejects a type it has no
+  # row for) is the same key one level down: on a non-check entry nothing reads it, and a marker
+  # that is not a comma list of lowercase type names declares nothing.
+  _gm_all="$(grep -E '^<!-- GATE_TYPES:' "$f" 2>/dev/null)" || _gm_all=""
+  if [ -n "$_gm_all" ]; then
+    [ "$kind" = check ] || err E14 "$(rel "$f"): a '<!-- GATE_TYPES: ... -->' marker sits on kind '$kind'. Only a check is loaded from a GATE_MANIFEST row, so nothing reads it."
+    _gm_bad="$(printf '%s\n' "$_gm_all" | grep -Ev '^<!-- GATE_TYPES:[[:space:]]*[a-z][a-z-]*([[:space:]]*,[[:space:]]*[a-z][a-z-]*)*[[:space:]]*-->[[:space:]]*$')" || _gm_bad=""
+    [ -z "$_gm_bad" ] || err E14 "$(rel "$f"): malformed GATE_TYPES marker (want '<!-- GATE_TYPES: type[, type] -->' with lowercase type names): $(printf '%s' "$_gm_bad" | head -1)"
+  fi
+
   if [ -n "$position" ]; then
     case "$position" in
       append|prepend) : ;;

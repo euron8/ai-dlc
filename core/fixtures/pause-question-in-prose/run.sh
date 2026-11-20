@@ -75,16 +75,17 @@ if [ -n "$SCHEMA" ] && [ -f "$SCHEMA" ]; then echo "HERMETIC-CONSUMED core/schem
 # A fresh project dir per case, so the rapid-fire counter cannot leak between them and turn a
 # BLOCKED into a BACKOFF. The project is LEFT ON DISK: the continuation log is half the
 # verdict, and the arms below read it by event line.
-mkproj() { # <dir> <flag 0|1> <snapshot 0|1>
+mkproj() { # <dir> <flag 0|1> <snapshot 0|1> [pending.md to copy under docs/escalations]
   rm -rf "$1"; mkdir -p "$1/_bmad-output"
+  if [ -n "${4:-}" ]; then mkdir -p "$1/docs/escalations"; cp "$4" "$1/docs/escalations/pending.md"; fi
   [ "$2" = "1" ] && touch "$1/_bmad-output/pipeline-paused.flag"
   [ "$3" = "1" ] && cp "$ROOT/snapshot.md" "$1/_bmad-output/pipeline-snapshot.md"
   return 0
 }
 drive() {
-  local case="$1" t="$2" flag="$3" snap="$4" hk="${5:-$HOOK}"
+  local case="$1" t="$2" flag="$3" snap="$4" hk="${5:-$HOOK}" pend="${6:-}"
   local proj="$ROOT/proj-$case"
-  mkproj "$proj" "$flag" "$snap"
+  mkproj "$proj" "$flag" "$snap" "$pend"
   jq -nc --arg t "$t" --arg s "fx-$case" '{transcript_path:$t,session_id:$s}' \
     | CLAUDE_PROJECT_DIR="$proj" AI_DLC_PAUSE_ROUTING_SCHEMA="${SCHEMA:-}" \
       inproc_run "$hk" hkcont_main > "$ROOT/out-$case.json" 2>"$ROOT/err-$case.txt"
@@ -268,6 +269,72 @@ if blocked s4 && ! logged s4 'ALLOWED_NOT_AIDLC_SESSION'; then
 else
   bad "S4 a Stop whose transcript cannot be read was ALLOWED: $(cat "$ROOT/out-s4.json") — a lost transcript path now lets a stalled lead end its turn"
 fi
+
+# --- P1-P6: a DECISION PENDING block whose token joins one open entry stops the warning ----------
+# The entries are written in the shape escalations.md gives (## header, **Status:** line,
+# **Decision/Question:** line, **Veto window:** line). Each silent arm has a firing twin one property
+# apart, and every case ends on a `?` so the base predicate fires on all of them.
+DASH="$(printf '\342\200\224')"
+mkentry() { # <file> <status> <window text>
+  { echo "# Pending escalations"; echo ""
+    echo "## [S308-1] lead - 2026-11-20 10:00"
+    echo "**Status:** $2"
+    echo "**Decision/Question:** source: recommendation -- keep the 30-day window"
+    echo "**Veto window:** $3"
+    echo ""; } > "$1"
+}
+mkentry "$ROOT/p-open.md" DECIDED_AUTONOMOUSLY "open $DASH DP-308-1"
+mkentry "$ROOT/p-closed.md" DECIDED_AUTONOMOUSLY "closed $DASH _bmad-output/operator-requests-history.md:## 2026-11-20 -- /ai-dlc"
+mkentry "$ROOT/p-other.md" DECIDED_AUTONOMOUSLY "open $DASH DP-308-2"
+{ cat "$ROOT/p-open.md"; sed -n '3,$p' "$ROOT/p-open.md"; } > "$ROOT/p-two.md"
+
+drive p1 "$ROOT/dpopen.jsonl" 1 0 "$HOOK" "$ROOT/p-open.md"
+haskey p1 systemMessage \
+  && bad "P1 a headed DECISION PENDING block with one open entry still raised the prose-question warning" \
+  || ok "P1 headed block + one open entry (flag UP) -> no systemMessage"
+logged p1 '^## .*-- ALLOWED_BY_PAUSE$' \
+  && ok "P1 control: the hook reached Check 1 and allowed the stop (the silence is a verdict)" \
+  || bad "P1 HARNESS BROKEN — no ALLOWED_BY_PAUSE row"
+logged p1 '^## .*-- PAUSE_QUESTION_IN_PROSE$' \
+  && bad "P1 PAUSE_QUESTION_IN_PROSE was logged for a joined open decision" \
+  || ok "P1 no PAUSE_QUESTION_IN_PROSE row"
+
+drive p1b "$ROOT/dpopen.jsonl" 0 1 "$HOOK" "$ROOT/p-open.md"
+case "$(reason p1b)" in
+  *"$RULE11"*) bad "P1b flag DOWN: the Rule 11(a) paragraph rode on the block reason of a joined open decision" ;;
+  *) ok "P1b flag DOWN + open entry -> block reason carries no Rule 11(a) paragraph" ;;
+esac
+blocked p1b && ok "P1b the default block verdict is unchanged (no new stop-allow branch)" \
+  || bad "P1b the verdict is no longer block: $(cat "$ROOT/out-p1b.json")"
+case "$(reason p1b)" in
+  *"Pipeline is active. You ended your turn without a tool call."*) ok "P1b the standing block reason is intact" ;;
+  *) bad "P1b the standing block reason is gone" ;;
+esac
+
+drive p2 "$ROOT/dpnohead.jsonl" 1 0 "$HOOK" "$ROOT/p-open.md"
+haskey p2 systemMessage \
+  && ok "P2 an UNHEADED question with an open entry on disk -> still fires" \
+  || bad "P2 an unheaded question went silent: the join keys on the entry, not on the heading"
+drive p3 "$ROOT/dpopen.jsonl" 1 0 "$HOOK" "$ROOT/p-other.md"
+haskey p3 systemMessage \
+  && ok "P3 headed block, no entry for ITS token -> fires" \
+  || bad "P3 a headed block with no recorded decision went silent"
+drive p3b "$ROOT/dpopen.jsonl" 1 0
+haskey p3b systemMessage \
+  && ok "P3b headed block, pending.md absent -> fires (fail closed)" \
+  || bad "P3b a missing pending.md silenced the warning"
+drive p4 "$ROOT/dpopen.jsonl" 1 0 "$HOOK" "$ROOT/p-closed.md"
+haskey p4 systemMessage \
+  && ok "P4 stale: same token, window closed -> fires" \
+  || bad "P4 a closed window still silences the warning"
+drive p5 "$ROOT/dptrail.jsonl" 1 0 "$HOOK" "$ROOT/p-open.md"
+haskey p5 systemMessage \
+  && ok "P5 a different trailing question after the block -> fires" \
+  || bad "P5 a trailing question after the block went silent"
+drive p6 "$ROOT/dpopen.jsonl" 1 0 "$HOOK" "$ROOT/p-two.md"
+haskey p6 systemMessage \
+  && ok "P6 two entries naming the token -> fires (fail closed)" \
+  || bad "P6 two matching entries went silent"
 
 # --- the cli cells (cells.decl): the hook started as a PROGRAM once per distinct outcome -----------------------
 # The hook exits 0 on every path; its outcomes are a block verdict, an allow carrying an operator systemMessage, and

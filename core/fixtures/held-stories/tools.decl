@@ -6,9 +6,11 @@ cat
 cksum
 cmp
 cp
+cut
 date
 dirname
 env
+find
 grep
 head
 mkdir
@@ -19,3 +21,4 @@ rm
 rmdir
 sed
 tr
+wc

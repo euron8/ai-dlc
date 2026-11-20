@@ -273,6 +273,7 @@ empty_shadow = []   # overrides that claim the section but carry no region
 
 ext_hooking = set()   # entries whose `hooks:` names this file
 ext_gt = {}           # those entries' declared gate types, by file
+ext_per = {}          # per-check effective types by file: the `<!-- GATE_TYPES: ... -->` marker, else the entry's
 gt_wrong_hook = []    # entries declaring gate_types: that hook something else
 
 
@@ -298,15 +299,37 @@ def gate_types_of(text):
     return [t.strip() for t in v.split(",") if t.strip()]
 
 
+def check_types(text, gts):
+    """{check id: types}: the `<!-- GATE_TYPES: a, b -->` line directly after an anchor (blank lines
+    allowed) selects that check alone; an anchor without one takes the entry's `gate_types:`.
+    gate-slice.sh reads the same marker, by the same rule."""
+    out, lines = {}, text.split("\n")
+    for i, l in enumerate(lines):
+        m = re.match(ANCHOR_RE, l)
+        if not m:
+            continue
+        out[m.group(1)] = list(gts)
+        for nl in lines[i + 1:]:
+            if not nl.strip():
+                continue
+            mm = re.match(r"^<!-- GATE_TYPES:([^>]*)-->[ \t]*$", nl)
+            if mm:
+                out[m.group(1)] = [t.strip() for t in mm.group(1).split(",") if t.strip()]
+            break
+    return out
+
+
 if skill_dir and os.path.isdir(ext_dir):
     for f in layer_entries(ext_dir):
         body = read(f)
         gts = gate_types_of(body)
+        per = check_types(body, gts)
         if target_file(frontmatter(body, "hooks")) == this_file:
             ext_hooking.add(f)
             ext_anchors |= anchors_in(body)
-            if gts:
-                ext_gt[f] = gts
+            if gts or any(v for v in per.values()):
+                ext_gt[f] = sorted({t for v in per.values() for t in v} | set(gts))
+                ext_per[f] = per
         elif gts:
             gt_wrong_hook.append(f)
 
@@ -398,7 +421,7 @@ if gm2:
 declared = {}
 for f in sorted(ext_gt):
     for i in sorted(anchors_in(read(f))):
-        declared[i] = ext_gt[f]
+        declared[i] = ext_per.get(f, {}).get(i) or ext_gt[f]
 ids |= set(declared)
 
 missing = sorted(i for i in ids if i not in anchors)
@@ -471,6 +494,103 @@ if missing or orphan or unloadable:
     if missing or orphan:
         sys.stderr.write("validate-gate-manifest: FAIL — the manifest and the anchors disagree.\n")
     sys.exit(1)
+# --- GM3: the gates/*.arms files bind to the RENDERED set and to the enforcement map ----------
+# Rendered = universal row + the declared type's row of the manifest resolved above (overrides
+# applied), the same set gate-slice.sh plans. A gate whose id equals its gate_type declares the
+# whole set; any other id (implementation-g3) declares a subset of it. Class agreement reads the
+# EFFECTIVE class: adjudication_by_gate[<gate_type>] when the map names the type, else adjudication.
+gm3 = []
+gm3_note = "no gates/ directory"
+if skill_dir and os.path.isdir(os.path.join(skill_dir, "gates")):
+    arms_files = sorted(f for f in os.listdir(os.path.join(skill_dir, "gates")) if f.endswith(".arms"))
+    gm3_note = "%d .arms file(s)" % len(arms_files)
+    mp = os.path.join(skill_dir, "enforcement-map.yaml")
+    mapped = {}
+    if os.path.isfile(mp):
+        cur = None
+        in_nc = False
+        for line in read(mp).split("\n"):
+            if re.match(r"^non_catalog_units:\s*$", line):
+                in_nc = True
+            m = re.match(r'^  - id:\s*"?([^"\n]+?)"?\s*$', line)
+            if m:
+                cur = m.group(1)
+                mapped[cur] = {"adj": None, "by": {}, "gts": [], "nc": in_nc}
+                continue
+            if cur is None:
+                continue
+            m = re.match(r"^    adjudication:\s*([A-Za-z0-9_]+)", line)
+            if m:
+                mapped[cur]["adj"] = m.group(1)
+            m = re.match(r"^    adjudication_by_gate:\s*\{(.*)\}\s*$", line)
+            if m:
+                for kv in m.group(1).split(","):
+                    if ":" in kv:
+                        k, v = kv.split(":", 1)
+                        mapped[cur]["by"][k.strip().strip("\"'")] = v.strip().strip("\"'")
+            m = re.match(r"^    gate_types:\s*\[(.*)\]\s*$", line)
+            if m:
+                mapped[cur]["gts"] = [t.strip() for t in m.group(1).split(",") if t.strip()]
+    if not arms_files:
+        gm3.append("    gates/ holds no .arms file: the runner has no gate to run")
+    if not mapped:
+        gm3.append("    enforcement-map.yaml is absent or lists no check: the .arms ids bind to nothing")
+    by_type = {}
+    for g, cell in rows:
+        by_type[g] = [c.strip() for c in cell.split(",") if c.strip()]
+    for fn in arms_files:
+        gid = fn[:-5]
+        gtype, rws, seen = None, [], set()
+        for ln, line in enumerate(read(os.path.join(skill_dir, "gates", fn)).split("\n"), 1):
+            m = re.match(r"^#\s*gate_type:\s*(\S+)\s*$", line)
+            if m:
+                gtype = m.group(1)
+                continue
+            if not line.strip() or line.startswith("#"):
+                continue
+            f = line.split("\t")
+            if len(f) < 4:
+                gm3.append("    %s:%d: %d column(s), want 4 or 5" % (fn, ln, len(f)))
+                continue
+            if f[0] in seen:
+                gm3.append("    %s:%d: duplicate id %s" % (fn, ln, f[0]))
+            seen.add(f[0])
+            rws.append((f[0], f[1]))
+        if gtype is None or gtype not in by_type or gtype == "universal":
+            gm3.append("    %s: header gate_type %r is not a declarable gate type (rows: %s)" % (fn, gtype, " ".join(sorted(by_type))))
+            continue
+        rendered = list(dict.fromkeys(by_type["universal"] + by_type[gtype]))
+        have = {i for i, _ in rws}
+        if gid == gtype:
+            for i in rendered:
+                if i not in have:
+                    gm3.append("    %s: rendered check %s has no row" % (fn, i))
+        if gid == gtype:
+            for i in sorted(mapped):
+                if mapped[i]["nc"] and gtype in mapped[i]["gts"] and i not in have:
+                    gm3.append("    %s: non-catalog map unit %s names gate type %s and has no row" % (fn, i, gtype))
+        for i in sorted(have):
+            nc = mapped.get(i)
+            if i not in rendered and not (nc and nc["nc"] and gtype in nc["gts"]):
+                gm3.append("    %s: row %s is not in the rendered %s set" % (fn, i, gtype))
+        for i, kind in rws:
+            ent = mapped.get(i)
+            if ent is None:
+                if mapped:
+                    gm3.append("    %s: row %s is in no enforcement-map entry" % (fn, i))
+                continue
+            eff = ent["by"].get(gtype) or ent["adj"]
+            want = {"llm": ("judgment",), "script": ("script", "rule", "multi"), "project": ("script", "rule", "multi"),
+                    "lead": ("lead",)}.get(eff)
+            if want is None or kind not in want:
+                gm3.append("    %s: row %s is kind %s but its effective class at %s is %s (wants %s)" % (
+                    fn, i, kind, gtype, eff, "|".join(want) if want else "?"))
+        # extension-style ids that are not map ids never appear in .arms (they are lead rows at run time)
+if gm3:
+    sys.stderr.write("validate-gate-manifest: FAIL GM3 — a gates/*.arms file disagrees with the rendered set or the map:\n"
+                     + "\n".join(gm3) + "\n")
+    sys.exit(1)
+print("gates: GM3 ok (%s)" % gm3_note)
 print("validate-gate-manifest: PASS — both directions resolve.")
 PY
 }

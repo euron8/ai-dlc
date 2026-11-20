@@ -882,6 +882,23 @@ clauses:
     code: GM2
     fixture: extension-check-adoption
 
+  - id: LC-E21
+    subject: extension
+    level: ERROR
+    since: 20
+    normative: >-
+      A gate's `gates/<gate-id>.arms` file binds to the rendered manifest and the enforcement map: its
+      rows are the rendered set of its gate type (a gate id that is not its type may declare a
+      subset), and each row's kind agrees with the check's effective class. A per-check
+      `<!-- GATE_TYPES: ... -->` marker is read by the same resolve. A `non_catalog_units` map entry
+      that names the gate type is a row of that gate though it is outside the rendered set, and one
+      with no row is reported. A file that disagrees runs a gate other than the one the manifest
+      declares.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-gate-manifest.sh
+    code: GM3
+    fixture: gate-transition
+
   # --- extensions/: additivity and retirement ------------------------------------------
   - id: LC-E5
     subject: extension

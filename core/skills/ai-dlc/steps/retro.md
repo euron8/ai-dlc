@@ -11,227 +11,48 @@ nextStepFile: STOP
 improvements. The agent runs the retro autonomously. The human gets
 a chance to comment or ask questions before it closes.
 
+**Step entry.** The first action of this step, before any other read or command, is:
+`bash scripts/ai-dlc/snapshot-update.sh --set current_step_file retro.md 'Pipeline Position'`.
+
 ## EXECUTION SEQUENCE
 
 ### 1. Context Loading
 
-Land on the merged trunk FIRST, then cut the retro branch from it, using the
-canonical name that `scripts/ai-dlc/validate-mandatory-rules.sh` expects, then
-carry onto it every sprint commit made after the sprint PR's head. Substitute
-`<sprint-branch>` with the sprint's own branch (the one deploy-validate committed
-to) and `<N>` with the sprint number, and run the block as written:
+Substitute `<sprint-branch>` with the sprint's own branch (the one deploy-validate
+committed to) and `<N>` with the sprint number, and run, from the repository root:
 
 ```bash
-# retro Step 1: cut the retro branch from the trunk, then carry the post-squash sprint commits
-SPRINT_TIP="$(git rev-parse --verify -q '<sprint-branch>^{commit}')"
-git fetch origin main
-TRUNK_HOLD="$( cd "$(git rev-parse --show-toplevel)" || exit
-  { git rev-parse -q --verify refs/heads/main >/dev/null && git diff -z --name-only --no-renames HEAD main
-    git diff -z --name-only --no-renames HEAD origin/main; } | sort -zu |
-  while IFS= read -r -d '' p; do
-    if ! git cat-file -e "HEAD:$p" 2>/dev/null && { [ -e "$p" ] || [ -L "$p" ]; }; then echo "ON-DISK $p"; fi
-  done )"
-if [ -n "$TRUNK_HOLD" ]; then
-  echo "CARRY: HARD_BLOCK on-disk — main at origin/main tracks these paths, HEAD does not, and a file is on disk at each; move each aside and re-run the block"
-  printf '%s\n' "$TRUNK_HOLD"
-else
-git checkout main && git merge --ff-only origin/main
-git rev-list --count HEAD..origin/main   # MUST be 0
-git checkout -b ai-dlc/retro/sprint-<N> origin/main
-if [ -z "$SPRINT_TIP" ]; then
-  echo "CARRY: HARD_BLOCK unresolved — the sprint branch does not resolve, so its post-squash commits cannot be located"
-elif git merge-base --is-ancestor "$SPRINT_TIP" origin/main; then
-  echo "CARRY: none — the sprint tip is already on origin/main"
-else
-  FORK="$(git rev-list --first-parent "$SPRINT_TIP" \
-    | while read -r c; do git merge-base --is-ancestor "$c" origin/main && { echo "$c"; break; }; done)"
-  PR_HEAD=""; REC_SRC=""; REC_WHY=""
-  REC="$(git show "${SPRINT_TIP}:${AI_DLC_STATE_DIR:-_bmad-output}/implementation-artifacts/s<N>/sprint-pr-merge.txt" 2>/dev/null)"
-  if [ -n "$REC" ]; then
-    if [ "$(grep -c '' <<<"$REC")" != 1 ] || grep -vqxE '[0-9]+ [0-9a-f]{40} [0-9a-f]{40}' <<<"$REC"; then
-      REC_WHY="the record is not one line: PR number, head sha, squash sha"
-    else
-      read -r R_N R_H R_M <<<"$REC"
-      if ! git merge-base --is-ancestor "$R_M" origin/main 2>/dev/null; then
-        REC_WHY="squash $R_M of #$R_N is not on origin/main"
-      elif ! git cat-file -e "${R_H}^{commit}" 2>/dev/null \
-          && ! { git fetch -q origin "pull/$R_N/head" 2>/dev/null && git cat-file -e "${R_H}^{commit}" 2>/dev/null; }; then
-        REC_WHY="PR head $R_H of #$R_N not local and not fetchable"
-      elif git merge-base --is-ancestor "$R_H" "$SPRINT_TIP" 2>/dev/null || [ "$R_M" = "$FORK" ]; then
-        PR_HEAD="$R_H"; REC_SRC=" (merged PR #$R_N, from the sprint-merge record)"
-      else
-        REC_WHY="PR head $R_H of #$R_N is not an ancestor of the sprint tip and squash $R_M is not its fork point"
-      fi
-    fi
-  fi
-  if [ -z "$REC" ] && [ -n "$FORK" ]; then
-    TRUNK_TREES="$(git log --format=%T origin/main --not "$FORK")"
-    PR_HEAD="$(git log --first-parent --format='%T %H' "$SPRINT_TIP" --not "$FORK" \
-      | while read -r t h; do grep -qxF "$t" <<<"$TRUNK_TREES" && { echo "$h"; break; }; done)"
-  fi
-  PR_SRC="$REC_SRC"; GH_WHY=""
-  [ -n "$REC" ] && FORK=""
-  if [ -z "$PR_HEAD" ] && [ -n "$FORK" ]; then
-    if ! command -v gh >/dev/null 2>&1; then
-      GH_WHY="gh unavailable"
-    elif ! GH_ROWS="$(gh pr list --head '<sprint-branch>' --state merged --json number,headRefOid,mergeCommit \
-        --jq '.[] | "\(.number) \(.headRefOid) \(.mergeCommit.oid)"')"; then
-      GH_WHY="gh pr list exited non-zero"
-    elif [ -z "$GH_ROWS" ]; then
-      GH_WHY="gh lists no merged PR from <sprint-branch>"
-    elif grep -vqE '^[0-9]+ [0-9a-f]{40} [0-9a-f]{40}$' <<<"$GH_ROWS"; then
-      GH_WHY="gh printed a row that is not: PR number, head sha, merge sha"
-    elif [ "$(awk -v f="$FORK" '$3 == f {n++} END {print n+0}' <<<"$GH_ROWS")" != 1 ]; then
-      GH_WHY="not exactly one merged PR from <sprint-branch> has merge commit $FORK"
-    else
-      read -r GH_N GH_H GH_M <<<"$(awk -v f="$FORK" '$3 == f' <<<"$GH_ROWS")"
-      GH_NEWER="$(while read -r n h m; do
-          [ "$m" = "$GH_M" ] && continue
-          git merge-base --is-ancestor "$GH_M" "$m" 2>/dev/null; r=$?
-          [ "$r" = 1 ] || printf ' #%s' "$n"
-        done <<<"$GH_ROWS")"
-      if [ -n "$GH_NEWER" ]; then
-        GH_WHY="merged PR(s)$GH_NEWER from <sprint-branch> descend from #$GH_N or cannot be compared with it"
-      elif ! git cat-file -e "${GH_H}^{commit}" 2>/dev/null \
-          && ! { git fetch -q origin "pull/$GH_N/head" 2>/dev/null && git cat-file -e "${GH_H}^{commit}" 2>/dev/null; }; then
-        GH_WHY="PR head $GH_H of #$GH_N not local and not fetchable"
-      elif [ "$(git rev-parse "${GH_H}^{tree}")" != "$(git rev-parse "${GH_M}^{tree}")" ]; then
-        GH_WHY="the tree of PR head $GH_H differs from the tree of merge commit $GH_M of #$GH_N"
-      else
-        PR_HEAD="$GH_H"; PR_SRC=" (merged PR #$GH_N, from gh)"
-      fi
-    fi
-  fi
-  if [ -z "$PR_HEAD" ]; then
-    [ -n "$REC_WHY" ] && echo "CARRY: HARD_BLOCK underivable — the sprint-merge record at the sprint tip is refused: $REC_WHY"
-    [ -z "$REC_WHY" ] && echo "CARRY: HARD_BLOCK underivable — no sprint commit's tree equals a trunk commit's tree, so the squash's PR head is unknown${GH_WHY:+; gh fallback: $GH_WHY}"
-  else
-    CARRY_N="$(git rev-list --count --no-merges "$SPRINT_TIP" --not "$PR_HEAD" origin/main)"
-    if [ "$CARRY_N" = 0 ]; then
-      echo "CARRY: none — no sprint commit follows PR head $PR_HEAD$PR_SRC"
-    elif git cherry-pick --no-merges "$SPRINT_TIP" --not "$PR_HEAD" origin/main; then
-      echo "CARRY: $CARRY_N commit(s) past PR head $PR_HEAD$PR_SRC carried onto the retro branch"
-    else
-      git cherry-pick --abort
-      echo "CARRY: HARD_BLOCK conflict — a carried commit did not apply; the pick was aborted and the retro branch is back at origin/main"
-    fi
-  fi
-fi
-fi
+bash scripts/ai-dlc/retro-open.sh <sprint-branch> <N>
 ```
 
-**Both landing blocks refuse before the checkout when a file sits on disk at a path the trunk
+`retro-open.sh` lands on the merged trunk, cuts `ai-dlc/retro/sprint-<N>` from `origin/main`
+(the name MUST contain `sprint-<N>`; `scripts/ai-dlc/validate-mandatory-rules.sh` expects it), and
+carries onto it every sprint commit made after the sprint PR's head. The PR head comes from the
+sprint-merge record `${AI_DLC_STATE_DIR:-_bmad-output}/implementation-artifacts/s<N>/sprint-pr-merge.txt`
+that deploy-validate Step 2 commits (`<PR number> <PR head sha> <squash sha>`); a sprint with no record
+derives it by tree match, then by one `gh pr list`. The script owns every refusal and prints one
+`CARRY:` line. It writes no snapshot, gate-log or escalation record.
+
+**Both landing scripts refuse before the checkout when a file sits on disk at a path the trunk
 would write.** `git checkout main && git merge --ff-only origin/main` overwrites an IGNORED file
-at a path that `main` or `origin/main` tracks and `HEAD` does not, and exits 0; an untracked one
-it refuses. So this block and 7a-post step 1 first list those paths and print an `ON-DISK <path>`
-line for each one present on disk, under a `HARD_BLOCK on-disk` line, and move nothing. Move each
-named file aside and re-run the block. The predicate is `ai-dlc-update`'s working-tree check.
+at a path that `main` or `origin/main` tracks and `HEAD` does not, and exits 0. `retro-open.sh` and
+`retro-close.sh land` therefore print an `ON-DISK <path>` line for each such path under a
+`HARD_BLOCK on-disk` line and move nothing.
 
-**The carry exists because deploy-validate does not stop at the squash.** It
-keeps committing to the sprint branch after the sprint PR squash-merges — gate-log
-revisions, escalation updates, dev reports, the snapshot at its live position —
-and a cut from `origin/main` alone holds none of it. The retro would then read,
-sweep and validate incomplete files, and Step 7a-post would rotate a gate log
-that lacks the deploy-validate block. Carrying the commits onto a trunk-cut
-branch keeps the squash as an ancestor (the property required below) and
-delivers those commits to `main` through the retro PR.
+**Every `CARRY:` line is one of five outcomes, and four of them STOP.** Exit 0 (a count or `none`)
+continues to the next paragraph. Exit 2, `HARD_BLOCK on-disk`, STOPs before anything moved and
+files nothing: move each `ON-DISK` path aside and re-run the script. Exit 3 is
+`HARD_BLOCK unresolved`, `HARD_BLOCK underivable` or `HARD_BLOCK conflict`: each files a Tier 1
+`HARD_BLOCK` in `docs/escalations/pending.md` carrying the line verbatim, and the retro STOPS. On
+`underivable` the operator supplies the sprint PR's head and merge commit
+(`gh pr view <sprint-PR> --json headRefOid,mergeCommit`); the lead accepts it when the PR head is an
+ancestor of the sprint tip, OR when the merge commit equals the newest first-parent ancestor of the
+sprint tip that is on `origin/main` (the re-pointed state), and then runs
+`git cherry-pick --no-merges <sprint-tip> --not <pr-head> origin/main` on the retro branch. Never
+continue past a HARD_BLOCK line on a branch that holds only the trunk.
 
-**The sprint-merge record comes first.** Deploy-validate Step 2 commits
-`${AI_DLC_STATE_DIR:-_bmad-output}/implementation-artifacts/s<N>/sprint-pr-merge.txt`
-to the sprint branch: one line, `<PR number> <PR head sha> <squash sha>`. The block reads it at
-the sprint tip and accepts it when the squash is on `origin/main`, the PR head is
-local or fetchable as `pull/<number>/head`, and the PR head is an ancestor of the
-sprint tip or the squash is the fork point. An accepted record becomes `PR_HEAD`
-and the count line names the PR and `from the sprint-merge record`. A record that
-fails any of these prints `HARD_BLOCK underivable` naming the refusal, and neither
-the tree match nor `gh` runs. Only a sprint with no record reaches the two
-derivations below.
-
-**Without a record, the PR head is derived, and the derivation is the control.**
-A squash commit's tree equals its PR head's
-tree whenever the trunk did not move between the PR's last sync and the merge,
-so the block walks the sprint branch's first-parent chain back to the first
-commit already on `origin/main`, and takes the newest commit on that chain whose
-tree equals the tree of a trunk commit made since. Every candidate is on the
-sprint tip's own chain, so the PR head is an ancestor of the tip by construction.
-The walk is first-parent because a sprint branch that merged the trunk after the
-squash has the squash as an ancestor, and a plain `<tip> --not origin/main` walk
-would see no trunk commit at all. The carry list is the sprint tip's non-merge
-commits that are in neither the PR head nor `origin/main` — a `<pr-head>..<tip>`
-range is NOT used, because on that same branch it would re-pick trunk commits
-and stop on them.
-
-**When the tree match finds nothing, one `gh` lookup covers the re-pointed state
-and nothing else.** Deploy-validate can reset the sprint branch onto the squash
-commit itself and keep committing there; the fork point is then the squash, no
-commit on the chain above it carries a trunk tree, and the derivation above
-finds no PR head. Only on that miss, the block lists the merged PRs whose head
-branch is `<sprint-branch>` and accepts one only when its merge commit EQUALS the
-fork point. Ancestry never accepts: an older PR's merge commit sits under every
-later tip. It also refuses when another listed PR's merge commit descends from
-the selected one (or cannot be compared with it, which covers a branch name
-reused by a later sprint), when the PR head is neither local nor fetchable as
-`pull/<number>/head`, and when the PR head's tree differs from the merge commit's
-tree, which is the squash-source check. A missing `gh`, a non-zero exit, empty
-output or a row that is not `<number> <head sha> <merge sha>` is likewise
-`underivable`, and the line names the reason after `gh fallback:`. An accepted
-head becomes `PR_HEAD` and the count line names the PR and `from gh`. It is a
-fallback rather than the primary derivation because the tree match needs no
-network and no authentication, and it is keyed on the fork point so that it
-cannot accept a PR whose squash is not the sprint branch's own base. A miss
-whose fork point is not a merged PR's merge commit stays `underivable`.
-
-**Every `CARRY:` line is one of five outcomes, and four of them STOP.** A
-count or `none` continues to the next paragraph. `HARD_BLOCK on-disk` STOPs
-before anything moved and files nothing: move each `ON-DISK` path aside and
-re-run the block. `HARD_BLOCK unresolved`,
-`HARD_BLOCK underivable` and `HARD_BLOCK conflict` each file a Tier 1
-`HARD_BLOCK` in `docs/escalations/pending.md` carrying the line verbatim, and
-the retro STOPS. On `underivable` the operator supplies the sprint PR's head and
-merge commit (`gh pr view <sprint-PR> --json headRefOid,mergeCommit`); the lead
-accepts it when the PR head is an ancestor of the sprint tip, OR when the merge
-commit equals the newest first-parent ancestor of the sprint tip that is on
-`origin/main` (the re-pointed state, where the old PR head is off the tip's
-ancestry), and then runs
-`git cherry-pick --no-merges <sprint-tip> --not <pr-head> origin/main` on the
-retro branch. Never continue past a HARD_BLOCK line on a branch that holds only
-the trunk: that is the incomplete-retro state the carry exists to prevent.
-
-**The retro branch MUST be cut from `main` at `origin/main`, never from
-whatever ref happens to be checked out.** A squash merge never fast-forwards
-the sprint's feature branch, so a retro branch cut from that leftover branch
-lacks the squash commit as an ancestor: its PR re-includes the whole sprint
-diff against a `main` that already carries it and reports CONFLICTING at
-Step 7a. If the fast-forward refuses because local `main` holds commits
-`origin/main` lacks, STOP and resolve that before branching. Step 5c's
-Check 7 fails a retro branch that is behind `origin/main`.
-
-**Minimum mechanism (Rule 26(c)).** Failure caught: a retro PR that carries
-the sprint's diff a second time and cannot merge; and a retro branch that lacks
-every sprint commit made after the sprint PR squash-merged, so the retro reads
-incomplete files and Step 7a-post rotates a gate log missing its deploy-validate
-block. False-positive cost: one `git fetch` per retro, the count 0 in the steady
-state, one `git show` of the sprint-merge record, and, only with no record, one
-tree comparison over the sprint-only commits and one `gh pr list` call made only
-when that comparison finds no PR head. Removal condition:
-the `checkout -b` above now names `origin/main` as its base, so a session
-running that line alone cuts from the trunk rather than from wherever it is —
-but `origin/main` is a local ref and the `fetch` is what makes it current, so
-the fetch and the `rev-list` assertion are NOT retired. Retire them only if the
-base ref is guaranteed fresh without a fetch. Retire the carry only when
-deploy-validate can no longer commit to the sprint branch after the sprint PR
-merges. Do not retire it by cutting the retro branch from the sprint tip
-instead: that branch lacks the squash commit as an ancestor, which is the
-defect the paragraph above describes. Retire the tree match and the `gh`
-fallback when no sprint the retro still runs on lacks the sprint-merge record.
-
-The branch name MUST contain `sprint-<N>` (literal word "sprint"
-followed by the sprint number). Abbreviated forms (`s<N>`,
-`retro-<N>`) cause validation failures because the script's
-branch-detection regex requires the `sprint-<N>` substring.
-
-Branch creation stays inline — it is a git mutation (Rule 28(a) / Rule
-23(c): mutations run native, never through a subagent that discards the FS).
+If the fast-forward refuses because local `main` holds commits `origin/main` lacks, STOP and resolve
+that before branching.
 
 **Analyst dispatch binding — read once, applies to every dispatch in this
 file.** Where a step below says "dispatch an `analyst`", it means: the Agent
@@ -243,10 +64,6 @@ non-delivery → the lead re-dispatches. Every dispatch is conditional on
 `planning_offload: on` (the default); with it `off`, the lead does that read
 inline. Per SKILL.md Rule 24.
 
-The sprint-artifact read is NOT issued here. It is folded into the Step-3
-dispatch, which needs the same corpus plus the party-mode transcript that does
-not exist until Step 2 closes.
-
 Run auto-handoff evaluation at `Seam E` with the label
 `retro Step 1 pre-flight` (see `_gate-procedures.md` \"Auto-handoff
 evaluation\"). If evaluation returns FIRE, the session ends;
@@ -257,22 +74,28 @@ otherwise continue to Step 2.
 Execute all sub-skills back-to-back without pausing for human input
 between them.
 
+**Start the Step 4a close-out gather in this step.** Dispatch the 4a gather (Dispatch B) in the
+background in the same turn that spawns the party seats; it needs no transcript, and Step 3 reads its
+tables.
+
 **Invoke `/bmad-party-mode --mode subagent --non-interactive` via the Skill tool.**
 The Skill invocation
-IS the satisfier for this step — role-playing PM/Architect/Dev/SM/
-TEA/QA perspectives inline in the retro doc without invoking the
+IS the satisfier for this step — role-playing the test architect/QA/dev
+perspectives inline in the retro doc without invoking the
 Skill is a Rule 20 violation per SKILL.md, regardless of how
 well-formed the output appears. This is non-negotiable.
 Each agent MUST be spawned as a real subagent for independent perspective. Solo mode (roleplaying agents inline) is forbidden.
 **The flags are what make that true — the sub-skill's own default is solo.**
 SKILL.md Rule 20 (i) owns why; pass both, every time.
-**Pass the Rule 20 role-manifest preamble** so each persona Reads and
-debates from its `.claude/team-roles/<role>.md` (PM→`pm.md`,
-Architect→`architect.md`, Dev→`dev.md`, SM→`sm.md`, TEA→`tea.md`,
-QA→`qa.md`).
 
-Bring all agent perspectives (PM, Architect, Dev, SM, TEA, QA) into
-the discussion:
+**Three seats only: test architect, QA, dev.** Pass the Rule 20 role-manifest preamble so each
+seat Reads and debates from its `.claude/team-roles/<role>.md` (test architect→`tea.md`,
+QA→`qa.md`, dev→`dev.md`). PM, Architect and SM are not seated. Brief every seat with the lead's
+facts sheet: every changed item of the sprint (stories, review findings, gate results,
+escalations), drawn from the sprint artifacts. Label each seat's lines with both its emoji icon and
+its `Name (Role):` prefix from `PERSONA_MARKERS`.
+
+The seats cover:
 - Walk through every story's journey from plan to merge
 - What worked well in the pipeline
 - What caused friction or rework
@@ -372,34 +195,20 @@ directory runs them locally only.
 
 ### 3. Write Retro Document
 
-**Doc split (Dispatch A — Rule 24).** Dispatch analysts sharded by surface per Rule 24's
-Dispatch contract (Rule 28, "Split dispatch": surfaces axis). Each read-source group below is
-one surface, and the join is that contract's part count plus `cat`. Dispatch an `analyst` to read the sprint
-corpus and draft the **descriptive/analytical** sections only — the sprint
-summary, `hard_block_count` + `hard_block_class[]`, and the **Agent-findings
-summary**. It reads:
-- Sprint stories in `_bmad-output/planning-artifacts/s<N>/stories/`
-- Code reviews in `docs/reviews/`
-- Gate log at `_bmad-output/implementation-artifacts/gate-log.md`
-- Escalation log at `docs/escalations/pending.md`
-- Sprint-status.yaml
-- Context-mode protection log at `_bmad-output/context-mode-protection-log.md` (if it exists)
-- The committed party-mode transcript from Step 2
+**The lead writes the retro document inline from the sprint corpus**: sprint stories in
+`_bmad-output/planning-artifacts/s<N>/stories/`, code reviews in `docs/reviews/`, the gate log
+`_bmad-output/implementation-artifacts/gate-log.md`, the escalation log `docs/escalations/pending.md`,
+`sprint-status.yaml`, the context-mode protection log `_bmad-output/context-mode-protection-log.md`
+(if it exists), the Step 4a gather tables, and the facts sheet from Step 2.
 
-and writes the draft to
-`_bmad-output/retro-artifacts/s<N>/retro-draft.md`. Gaps go in a carrier file, never in the
-draft or a part. Sharded, each shard writes its own carrier,
-`_bmad-output/retro-artifacts/s<N>/retro-gaps-parts/<surface>.md`; unsharded, the analyst
-writes the single `_bmad-output/retro-artifacts/s<N>/retro-gaps.md`. Each carrier holds a
-`## Gaps` section (the section reads `none` when there are none), and the lead reads every
-carrier file. No part, no joined draft and no retro doc carries a `## Gaps` section, and no
-carrier is assembled into the retro doc. Each analyst brief names its carrier path: each
-shard's brief names `_bmad-output/retro-artifacts/s<N>/retro-gaps-parts/<surface>.md`, and the
-unsharded brief names `_bmad-output/retro-artifacts/s<N>/retro-gaps.md`. A missing carrier is
-non-delivery exactly as a missing part is: the carrier paths go into the same
-`scripts/ai-dlc/wait-for-deliverable.sh` call as the part paths, and the count of carrier files
-must equal the surface count. Two hard
-constraints on that draft:
+**One analyst shard stays: the party-mode transcript.** Dispatch one `analyst` (Rule 24) to read the
+committed party-mode transcript from Step 2 and draft the Agent-findings summary with a finding-class
+per pass (`templates/retro-finding-class-tracking.md`), written to
+`_bmad-output/retro-artifacts/s<N>/retro-draft.md`. Its gaps go in the carrier
+`_bmad-output/retro-artifacts/s<N>/retro-gaps.md`, never in the draft: the carrier holds a `## Gaps`
+section (`none` when there are none), the lead reads it, and no retro doc carries a `## Gaps`
+section. The brief names both paths, and both go into the `scripts/ai-dlc/wait-for-deliverable.sh`
+call; a missing carrier is non-delivery exactly as a missing draft is. Two hard constraints:
 - The Agent-findings summary MUST cite the existing `transcript_path:
   path@<sha>` verbatim and summarize that already-byte-cited transcript.
   It NEVER re-derives party-mode findings from scratch (that path is
@@ -408,12 +217,11 @@ constraints on that draft:
   24: the analyst produces inputs, not validated outputs; the provenance
   block stays the lead's, written in Step 2 / verified in Step 5c).
 
-The **prescriptive** sections stay lead-authored inline — they are the
-retro's decision content (pipeline self-governance), as non-delegable as
-gate decisions: "specific, actionable improvements," "improvement routing,"
-and the Step-4
-5-layer enforcement decisions. The lead assembles the analyst draft and
-its own prescriptive sections into the final retro doc.
+Every other section, the descriptive ones included, is lead-authored inline: the sprint summary,
+`hard_block_count` + `hard_block_class[]`, "specific, actionable improvements," "improvement
+routing," and the Step-4 5-layer enforcement decisions. The lead assembles the analyst's summary and
+its own sections into the final retro doc.
+
 
 Write the retro to `docs/retro/s<N>/retro.md` with:
 - Sprint summary (planned vs delivered, rework cycles, autonomous decisions)
@@ -817,15 +625,26 @@ gate.
 
    Then **close the envelope mechanically** — do NOT hand-edit `status:`:
 
-       scripts/ai-dlc/sprint-status.sh close \
-         --evidence "<what proves the sprint closed: PR/merge, deploy, smoke>" \
-         --retro-doc docs/retro/s<N>/retro.md
+       bash scripts/ai-dlc/retro-close.sh sprint-close <N> "<what proves the sprint closed: PR/merge, deploy, smoke>"
 
-   This flips `status: done` and writes the `sprint_<N>_housekeeping:` block
-   (`envelope_status: done` + non-empty `closure_evidence`) that Step 5c's
-   `validate-mandatory-rules.sh` Check 3 reads — the ONLY writer of that block
-   (`.claude/schemas/sprint-status.json`), write-verified and idempotent. The next
-   sprint's `roll` (route.md Step 6) freezes this closed envelope.
+   It runs `scripts/ai-dlc/sprint-status.sh close --evidence "<evidence>" --retro-doc docs/retro/s<N>/retro.md`,
+   which flips `status: done` and writes the `sprint_<N>_housekeeping:` block (`envelope_status: done` +
+   non-empty `closure_evidence`) that Step 5c's `validate-mandatory-rules.sh` Check 3 reads — the ONLY
+   writer of that block (`.claude/schemas/sprint-status.json`), write-verified and idempotent. A non-zero
+   exit prints `SPRINT-CLOSE: HARD_BLOCK`. The next sprint's `roll` (route-fresh-start.md Step 6) freezes this closed
+   envelope.
+
+
+**The archive moves are scripts that take the lead's decision list.** After dispositioning the sweep, write
+the ids to move into a file, one id per line, and run:
+
+    bash scripts/ai-dlc/retro-close.sh archive-backlog <ids-file>
+    bash scripts/ai-dlc/retro-close.sh archive-escalations <ids-file>
+
+An entry moves when its heading line carries the id as a whole token; whole entries move verbatim to
+`carry-over-backlog-archive.md` and `docs/escalations/pending-archive.md`, and the script refuses with
+`ARCHIVE: HARD_BLOCK` and writes nothing unless live plus moved reproduces the original line for line.
+Marking an entry `CLOSED` or `RESOLVED` stays the lead's inline edit, made before the move.
 
 **Record results in the retro doc** under a `## Close-Out Sweep`
 section: carry-over items closed/partial, escalations resolved or
@@ -843,7 +662,7 @@ are NOT restated here. A project overrides a budget with `AI_DLC_BUDGET_<NAME>`
 
 `--warn-only` is deliberate for the PLANNING artifacts. Retro reports on a sprint
 that has already paid for every oversized read; blocking it now helps nobody.
-**The blocking copy of this check runs at sprint start** (`route.md` Step 1a),
+**The blocking copy of this check runs at sprint start** (`route-fresh-start.md` Step 1a),
 which is the last moment an oversized artifact is still cheap to fix, plus at
 gate Check 14 for `pipeline-snapshot.md` — the one artifact that grows within a
 sprint. Retro NEVER runs the consolidation itself: it is a fidelity-critical
@@ -975,6 +794,13 @@ retro then cites.
   call before the pause flag was released. The lead received a steer and executed
   through it. Each is a **lead-conduct finding**.
 
+**A recurring FAIL goes to the engine, not into the retro narrative.** When Check A or Check B names the
+same lead-conduct finding that the previous sprint's retro already recorded, do not re-narrate it:
+file a push candidate in `_bmad-output/ai-dlc-update/push-candidate-ledger.md` as
+`PC-S<N>-STEERING-<check>` through the routing at the head of Step 4 (`core-paths.sh --is-core`), citing
+the previous retro's finding and this sprint's transcript evidence, and list the id in the retro doc.
+A finding new this sprint is recorded as a lead-conduct finding as above.
+
 Then read the flow log, `_bmad-output/pipeline-continuation-log.md`. **Count entries with
 `grep -c '^## .*-- <EVENT>'`, never a bare `grep -c <EVENT>`** — the log's own header
 legend names every event type, so the bare form counts documentation as data and inflates
@@ -996,7 +822,7 @@ visibly repeated themselves has run the audit wrong.
 
 **READ THE ORDINAL SIBLINGS BESIDE THIS SPRINT'S ARCHIVE, NOT ONLY THE LIVE LOG.**
 `_bmad-output/implementation-artifacts/s<N>/pipeline-continuation-log-archive-*.md`
-holds any epoch route.md Step 1a rotated out mid-flight — the INTER-SPRINT window
+holds any epoch route-fresh-start.md Step 1a rotated out mid-flight — the INTER-SPRINT window
 between the previous retro's rotation and this sprint's start. Nothing else opens
 it: the previous sprint's audit had already run when those events were written,
 and they left the live log before this one began. Skipping them is not a smaller
@@ -1042,75 +868,24 @@ the class, and this rotates the instance:
 Same contract: the hook re-seeds the header on its next write, the archive is
 write-only, rotation is unconditional and per-sprint.
 
-**Discard the retro scratch directory.** `_bmad-output/retro-artifacts/` holds
-this step's dispatch inputs — the retro draft, the close-out tables, the
-next-sprint bundle. Every one of them has already been consumed and its
-conclusions committed in `docs/retro/s<N>/retro.md`, which is the record. They
-are scratch, not a log, so Rule 25(a)'s no-loss archive duty does not apply and
-they are deleted rather than rotated:
-
-    rm -rf _bmad-output/retro-artifacts
-
-Unrotated, this directory accumulates every sprint's inputs forever — measured
-at 61 files / 1.0 MB on the reference consumer, growing ~77 KB per sprint, read
-by nothing after the dispatch that wrote it returned.
+**The retro scratch directory is removed once, after its last reader.** `_bmad-output/retro-artifacts/`
+holds this step's dispatch inputs (the analyst draft and gaps carrier, the close-out tables); the
+Step 4a tables and the analyst draft are read through Step 6. `retro-close.sh finish` (Step 7a-post)
+runs `rm -rf _bmad-output/retro-artifacts` on that literal path; nothing deletes it earlier, and no
+other step writes there.
 
 **Two more logs rotate at Step 7a-post, not here.** `gate-log.md` and
 `compaction-log.md` must wait until the retro PR has merged — see 7a-post for
 why. This section is not the whole rotation set.
 
-### Sprint-Ship Verification
-
-Sprint-ship counters track smoke-quality across deploy-validate runs.
-
-- **`consecutive-deploy-clean`** — increments on each deploy-validate run
-  with zero smoke FAILs. Resets to 0 on ANY smoke FAIL, regardless of
-  whether the FAIL is new or pre-existing. Strictest counter; reflects
-  ship-quality without grandfathering.
-- **`consecutive-no-regression`** — increments on each deploy-validate run
-  with zero NEW smoke FAILs (pre-existing FAILs may persist without
-  resetting this counter). Resets to 0 ONLY on a NEW smoke FAIL not
-  present in the prior deploy-validate run. Looser counter; reflects
-  whether THIS sprint introduced regressions versus carrying pre-existing
-  debt.
-
-Both counters MUST be reported in every retro under the standard template
-line:
-
-```
-dual-counter: consecutive-deploy-clean: <N>/5; consecutive-no-regression: <M>/5 (run-id: <CI-run-id>).
-```
-
-Each counter is tracked against its own 5/5 target, and the two do not
-carry equal authority. `consecutive-deploy-clean` at 5/5 declares a sprint
-ship-quality on its own. `consecutive-no-regression` at 5/5 declares it
-only where every smoke FAIL still outstanding is a recorded carry-over —
-the retro names the failing check, the run-id it first failed under, and
-the sprint it was carried from. An outstanding FAIL missing any of those
-three leaves the sprint short of ship-quality whatever the looser counter
-reads.
-
-### 5. Human Commentary
-
-Present the retro summary and ask:
-
-"Retro complete. Any comments or questions before I close out the sprint?"
-
-Before ending the turn, mark the pause (Rule 3):
-`touch _bmad-output/pipeline-paused.flag`.
-
-Wait for the human's response. If they have commentary:
-- Incorporate it into the retro doc
-- Apply any additional process changes they request
-If they have nothing to add, proceed.
-
 ### 5b. Append Audit-Anchor SHA
 
-After human commentary returns and before commit, append a new entry
-to `_bmad-output/audit-anchors.md` with the current sprint's
-retro-PR-merge SHA placeholder. The merge SHA is unknown until the
-retro PR merges; lead writes the entry with sprint + closed_at fields
-and updates the SHA in a follow-on commit on `main` after merge.
+Before the Step 6a commit, append this sprint's entry to `_bmad-output/audit-anchors.md`:
+
+    bash scripts/ai-dlc/retro-close.sh anchor <N>
+
+The entry carries `sha: PENDING`: the retro PR's merge SHA is unknown until it merges, and
+`retro-close.sh finish` (7a-post) backfills it in the follow-on commit on `main` after the merge.
 
 That follow-on commit is the one THIS step licenses to reach `main` outside a
 PR — not a count of the pipeline's out-of-PR commits. §7a-post commits the log
@@ -1128,15 +903,15 @@ It bounds this commit only and states no branch policy — so put nothing else
 in it: other retro changes go in the retro PR, and a commit another step
 licenses stays with that step.
 
-The schema is canonical in `.claude/schemas/audit-anchors.json` — NOT the live
-header or the template. Re-seed the header first: replace the file's
-`BEGIN GENERATED: audit-anchors-schema … END GENERATED` region with the output
-of `scripts/ai-dlc/validate-audit-anchors.sh --render` (a new file gets that whole
-block), then append the entry below `## Entries` in the shape it documents. Do
-NOT hand-write the header. Step 5c runs `scripts/ai-dlc/validate-audit-anchors.sh`,
-which fails the commit on header drift or a malformed entry. No SHA for the
-prior sprint = audit-gate fails closed at the next sprint's per-class test-debt
-audit (`gate-validation.md` Check 18).
+The schema is canonical in `.claude/schemas/audit-anchors.json`, not the live header or the template.
+`retro-close.sh anchor` replaces the file's `BEGIN GENERATED: audit-anchors-schema … END GENERATED`
+region with the output of `scripts/ai-dlc/validate-audit-anchors.sh --render` (a new file gets that
+whole block), appends the entry below `## Entries`, keeps the **3 most recent** entries and moves
+every older one, verbatim, to `_bmad-output/audit-anchors-archive.md` (created with the single header
+line `# Audit Anchors — Archive` if absent), refuses with `ANCHOR: HARD_BLOCK` when live plus moved
+entries differ from the pre-prune total, and runs `scripts/ai-dlc/validate-audit-anchors.sh` on the
+result. Never hand-write the header. No SHA for the prior sprint = audit-gate fails closed at the next
+sprint's per-class test-debt audit (`gate-validation.md` Check 18).
 
 **A sprint that ends WITHOUT a retro-PR merge still owes an anchor.** A sprint
 reset or abandoned after its number was consumed reaches neither this step nor a
@@ -1152,19 +927,6 @@ schema's closed set, an unresolvable or PENDING sha, and a second entry for a
 sprint that already has one. It fills the hole; it does not waive the anchor, and
 Check 18 still fails closed when no entry exists at all.
 
-**Then prune (Rule 25(a)/(c)).**
-
-1. Keep the **3 most recent** entries in `_bmad-output/audit-anchors.md`.
-2. Move every older entry, verbatim cut-and-paste, to
-   `_bmad-output/audit-anchors-archive.md`, appending in sprint order. Create it
-   with the single header line `# Audit Anchors — Archive` if absent. The archive
-   is a write-only sink: no rendered schema region, no validator, no budget.
-3. **Verify no-loss:** live entry count + archive entry count MUST equal the
-   pre-prune total. A mismatch is a HARD_BLOCK — restore from git, do not commit.
-
-If the file holds 3 entries or fewer, there is nothing to move; that is a pass,
-not a skipped step.
-
 ### 5c. Pre-Commit Validation Gate
 
 Before committing retro artifacts, run all six checks in order.
@@ -1177,53 +939,53 @@ commit.
 **Gate type for validation loading (Rule 21 / Lever 2).** This is the
 `retro` gate. When running gate validation (`gate-validation.md`) at
 sprint close, declare it `run gate validation [retro]` so the loader
-loads the retro slice (universal core + Checks 8, 9, 17,
-core-layer-immutability).
+loads the retro slice (the checks `gate-validation.md` lists for `retro`).
+
+**Run the gate's arms as one call.** After item 1, run items 2-5 and the gate's other scripted checks together:
+
+    bash scripts/ai-dlc/gate-run.sh arms --gate retro --sprint <N> --step retro.md --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>
+
+It prints one `GATE-RESULT <check-id> <PASS|FAIL|SKIP|PENDING> examined=<n> evidence=<path:line|reason=<token>> <message>`
+line per check; items 2-5 and `scripts/ai-dlc/validate-artifact-paths.sh` arrive as `retro-2`, `retro-3`,
+`retro-4`, `retro-5` and `retro-artifact-paths` (these are not the catalog's Checks 2-5), all from one
+`retro-gate.sh` run. A `SKIP` carries `reason=validator-absent` or `reason=examined-nothing` and is never a
+pass: name each in the gate entry. A `FAIL` blocks the Step 6 commit: the run exits 1, prints a `REMEDY` line per
+`FAIL` and mints no nonce. Exit 0 minted `gate_nonce`, opened it and recorded every arm, so no separate mint, `open`
+or `record` call is made; item 6 dispatches against it. Exit 2: the gate could not run, which is never a pass.
+Once the adjudicator has returned, `bash scripts/ai-dlc/gate-run.sh close --gate retro --nonce <gate_nonce> --sprint <N> --step retro.md --transcript <this session's transcript_path>` adopts its verdict and writes the gate-log entry (Check 12).
 
 1. **Rule file audit commit.** If the rule file audit (Step 4)
    produced file changes, commit them NOW as a separate commit:
    `docs(rules): rule file audit (retro) — strip narrative, harden weak rules`.
    If the audit was clean, skip.
 
-2. **Provenance block verification.** Run
+2. **Provenance block verification** (`retro-2`).
    `scripts/ai-dlc/validate-provenance-block.sh docs/retro/s<N>/retro.md --require-skill bmad-party-mode`
-   — it owns the block's shape and
-   is also its own CI step. MUST exit 0. **Never invent a `tool_use_id`:**
-   if it is not accessible in the conversation (common after compact),
-   write `tool_use_id: NOT_ACCESSIBLE`. A fabricated id is a forged block.
+   MUST exit 0. **Never invent a `tool_use_id`:** if it is not accessible in the conversation (common
+   after compact), write `tool_use_id: NOT_ACCESSIBLE`. A fabricated id is a forged block.
 
-3. **Mandatory rules validation.** Run:
-   `scripts/ai-dlc/validate-mandatory-rules.sh <N>` (where N is the sprint
-   number). It runs `validate-retro-evidence.sh` (Check 1) and inline
-   Checks 3/5/6/7/8; Checks 2 (`validate-cycle-commits.sh`) and 4
-   (`validate-retro-prereq.sh`) are consumer-provided and SKIP when their
-   sibling script is absent from core. Check 3 reads the envelope you closed
-   in the Close-Out Sweep above via `sprint-status.sh close`. Check 7
-   refreshes `origin/main` itself and fails a retro branch that is behind it
-   (Step 1 is where the branch is cut from the merged trunk); if its line says
-   the ref was NOT refreshed, a PASS there has not established freshness —
-   fetch by hand and re-run.
-   MUST exit 0. If it fails, fix the issues before proceeding to Step 6.
+3. **Mandatory rules validation** (`retro-3`). `scripts/ai-dlc/validate-mandatory-rules.sh <N>` runs
+   `validate-retro-evidence.sh` (Check 1) and inline Checks 3/5/6/7/8; Checks 2
+   (`validate-cycle-commits.sh`) and 4 (`validate-retro-prereq.sh`) are consumer-provided and SKIP when
+   their sibling script is absent from core. Check 3 reads the envelope closed in the Close-Out Sweep.
+   Check 7 refreshes `origin/main` itself and fails a retro branch that is behind it; if its line says
+   the ref was NOT refreshed, a PASS there has not established freshness — fetch by hand and re-run.
+   MUST exit 0.
 
-4. **Audit-anchor schema validation.** Run
-   `scripts/ai-dlc/validate-audit-anchors.sh _bmad-output/audit-anchors.md`. It
-   fails closed if the Step-5b header drifted from the canonical schema
-   (`.claude/schemas/audit-anchors.json`) or the appended entry is malformed.
-   MUST exit 0 — a drifted housekeeping schema is the defect this check exists
-   to catch, not a clean file.
+4. **Audit-anchor schema validation** (`retro-4`).
+   `scripts/ai-dlc/validate-audit-anchors.sh _bmad-output/audit-anchors.md` fails closed if the Step-5b
+   header drifted from the canonical schema or the appended entry is malformed. MUST exit 0.
 
-5. **Whole-read pool recorded.** Re-run
-   `scripts/ai-dlc/validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md --fail-on whole-read-pool`.
-   MUST exit 0. A non-zero exit on the pool means the pool is over and §4a's
-   OPEN carry-over item citing `WHOLE-READ-POOL` was not filed: file it as §4a
-   says, then re-run. This blocks the Step 6 commit, so the breach is recorded
-   before the sprint closes rather than discovered at the next route.
+5. **Whole-read pool recorded** (`retro-5`).
+   `scripts/ai-dlc/validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md --fail-on whole-read-pool`
+   MUST exit 0. A non-zero exit on the pool means the pool is over and §4a's OPEN carry-over item citing
+   `WHOLE-READ-POOL` was not filed: file it as §4a says, then re-run `retro-gate.sh`.
 
 6. **Run gate validation [retro]** (`gate-validation.md`), declared as the paragraph above says, after checks 1-5 because they repair the artifacts the gate reads.
    Before the gate, every Step 4 core edit is committed: check 1 commits the rule file audit, and any other Step 4 edit to a core file is committed now as its own commit.
    The `<sprint-base>` the core-layer-immutability check diffs from is the prior sprint's audit-anchor SHA, as `scripts/ai-dlc/validate-audit-anchors.sh --prior-sprint-sha _bmad-output/audit-anchors.md <N>` resolves it, the same base `validate-mandatory-rules.sh` Check 5 uses.
-   Dispatch it as every gate is dispatched: READ AND FOLLOW `_gate-procedures.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) "Gate-adjudication dispatch". The retro gate is storyless, so its brief carries no `story:` line.
-   The lead adopts the verdict only through `gate-validation.md` Check 26, which MUST exit 0. A gate FAIL blocks the Step 6 commit, as a failing check 2-5 does.
+   Dispatch ONE adjudicator, taking every id `scripts/ai-dlc/validate-gate-adjudication.sh --expected retro` prints (the arms `retro-gate.sh` runs are its own, not the adjudicator's), at the nonce opened above, as every gate is dispatched: READ AND FOLLOW `_gate-procedures.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) "Gate-adjudication dispatch". The retro gate is storyless, so its brief carries no `story:` line. Check 17 is a script check and runs through its script as `gate-validation.md` Check 17 prescribes; it is not handed to the adjudicator.
+   The lead adopts that adjudicator's verdict only through `gate-validation.md` Check 26, which MUST exit 0. A gate FAIL blocks the Step 6 commit, as a failing check 2-5 does.
 
 **An unclearable check in this gate escalates; it never self-clears.** The
 five absolute `MUST exit 0` mandates above (checks 2, 3, 4, 5 and 6) are
@@ -1274,57 +1036,16 @@ missing or malformed provenance block, and a retro gate verdict that FAILs. Do n
 (The next-sprint prompt cannot be checked at this point at all — Step 7d
 emits it after this commit, after the merge gate.)
 
-Run `git status` to identify any uncommitted files. Stage and commit
-everything produced during the sprint that hasn't been committed yet.
-This typically includes:
+Run:
 
-**Implementation artifacts** (if not already committed per-story):
-- `_bmad-output/implementation-artifacts/gate-log.md`
-- `_bmad-output/implementation-artifacts/sprint-status.yaml`
-- `docs/reviews/*.md` (code review output)
-- `docs/escalations/pending.md` (escalation entries)
+    bash scripts/ai-dlc/retro-close.sh commit <N>
 
-**Retro artifacts** (produced in steps 3-5 above):
-- `docs/retro/s<N>/retro.md` (the retro document)
-- Any files modified by process improvements (CLAUDE.md, team roles,
-  coding-conventions.md, pipeline step files)
-- `docs/ai-dlc-feedback.md` (if updated)
-
-**Close-out sweep artifacts** (produced in step 4a above):
-- `_bmad-output/planning-artifacts/carry-over-backlog.md` (closures)
-- `docs/escalations/pending.md` (resolutions and deferrals)
-- `_bmad-output/implementation-artifacts/sprint-status.yaml`
-  (any drift corrections)
-
-**Ambient pipeline state** — AI/DLC's own hooks write files under `_bmad-output/`
-throughout the sprint, and they are dirty at this step on essentially every sprint.
-**The three lists above name none of them, and their disposition is NOT a judgment
-call**: `.claude/schemas/pipeline-state-paths.json` declares every such path as
-DURABLE or TRANSIENT, with a reason on each.
-
-- **DURABLE paths are committed here**, with the rest of the retro. They are
-  evidence later sessions read — the spawn ledger the dispatch guard joins against,
-  the operator request and answer trails, the compaction and continuation logs a
-  retro measurement reads, the snapshot pair the post-compact recovery diffs.
-  Leaving them uncommitted silently loses cross-session state at every sprint
-  boundary.
-- **TRANSIENT paths are not committed and not deleted** — they are in-run markers
-  and flags, meaningless outside the run that wrote them, and the `.gitignore`
-  block keeps them out of the way.
-
-**Do not hand-copy either list into this file.** The declaration is the single
-source, it is machine-readable, and it grows as hooks are added — a roster written
-here would be stale the first time that happens, and nothing would announce it.
-Read the schema; `git status` against it is the completeness check.
-
-**This was previously left to precedent, and precedent is not discoverable.** A lead
-with no prior-sprint history — a first sprint, or one correctly declining to read
-unrelated history — would find Step 6a's list complete and leave that state behind.
-
-Use a conventional commit message:
-`docs(retro): sprint N retrospective, reviews, and process improvements`
-
-If there are no uncommitted changes, skip this step.
+It stages every tracked change, every DURABLE path that `.claude/schemas/pipeline-state-paths.json`
+declares under the pipeline output directory, and `docs/retro`, `docs/reviews`, `docs/escalations` and
+`docs/ai-dlc-feedback.md`, and makes ONE commit
+`docs(retro): sprint N retrospective, reviews, and process improvements`. TRANSIENT paths are neither
+committed nor deleted. With nothing to commit it prints `COMMIT: none`. A refusal prints
+`COMMIT: HARD_BLOCK` and commits nothing. Do not hand-copy the declaration's lists into a command.
 
 **6b. Push the branch.**
 
@@ -1399,6 +1120,18 @@ Then announce:
 
 The pipeline's only terminal announcement is Step 7d's handoff block.
 
+### 5. Human Commentary
+
+Runs after the retro PR is pushed (Step 6b); the commit, push and PR hooks have already run, so nothing
+upstream waits on it. This is the Rule 3 (c) retro-commentary pause point: announce the PR with "Retro PR
+pushed. Any comments or questions? Your reply is added to the retro.", run `touch _bmad-output/pipeline-paused.flag`
+and end the turn. The operator's reply resumes the pipeline at the merge gate (7a).
+
+If the operator replies before `retro-close.sh finish` runs, write the reply to a file and pass it as
+`--commentary-file <file>`: `finish` appends it to `docs/retro/s<N>/retro.md` under
+`## Operator Commentary` in its own commit, inside the post-merge push. Apply any process change the
+operator requests as an ordinary commit on `main` before `finish`; it never delays the merge.
+
 ### 7. Merge and Next-Sprint Handoff
 
 SKILL.md Rule 32 touchpoint I applies before the merge.
@@ -1410,43 +1143,26 @@ epic scope, and residual risks are still in the lead's working context.
 
 **7a. Merge gate.**
 
-- **If a PR was created in 6d:** Merge it. Do NOT ask for approval.
-  Substitute `<pr-number>` with the PR's number and run the block as written
-  (use the merge strategy the repo's PRs normally use in place of `--squash`;
-  check recent merges with
-  `gh pr list --state merged --limit 3 --json number,title,mergedAt` if unsure).
-  The exit of `gh pr merge` does not decide whether the PR merged: it exits
-  non-zero AFTER a successful remote merge whenever its local cleanup (checking
-  out the base branch, deleting the local branch) fails, and it exits 0 with
-  the PR still open when a merge queue or auto-merge takes it. The block
-  therefore always reads the PR's state from GitHub after the attempt, and only
-  an exact `MERGED` counts as merged.
+- **If a PR was created in 6d:** Merge it. Do NOT ask for approval. Substitute `<pr-number>` with
+  the PR's number and run:
 
-```bash
-# retro 7a: merge the retro PR, then read its state from GitHub
-gh pr merge <pr-number> --squash --delete-branch; MERGE_RC=$?
-PR_STATE="$(gh pr view <pr-number> --json state --jq .state)" || PR_STATE=""
-if [ "$PR_STATE" = MERGED ] && [ "$MERGE_RC" = 0 ]; then
-  echo "MERGE: merged"
-elif [ "$PR_STATE" = MERGED ]; then
-  echo "MERGE: merged — gh's local cleanup failed; 7a-post lands explicitly"
-else
-  echo "MERGE: HARD_BLOCK failed — ${PR_STATE:-state unreadable}"
-  false
-fi
-```
+      bash scripts/ai-dlc/retro-close.sh merge <pr-number>
 
-  On `MERGE: HARD_BLOCK` — branch protection, required review, failing
+  It merges with `gh pr merge <pr-number> --squash --delete-branch` (use the merge strategy the repo's
+  PRs normally use in place of `--squash`; check recent merges with
+  `gh pr list --state merged --limit 3 --json number,title,mergedAt` if unsure) and then always reads the
+  PR's state from GitHub; only an exact `MERGED` counts. The exit of `gh pr merge` does not decide it:
+  it exits non-zero AFTER a successful remote merge whenever its local cleanup fails, and exits 0
+  with the PR still open when a merge queue or auto-merge takes it.
+
+  On `MERGE: HARD_BLOCK` (exit 1) — branch protection, required review, failing
   checks, conflicts, a PR left open by a queue — surface the error verbatim and
   STOP: do not rotate (7a-post), do not emit the next-sprint prompt. Do NOT
   retry with `--admin`. On either `MERGE: merged` line, proceed to
-  **7a-post**, whose step 1 block lands on the trunk or STOPs. On the
+  **7a-post**, whose step 1 lands on the trunk or STOPs. On the
   cleanup-failed line gh has also skipped deleting the remote branch, so the
   remote `ai-dlc/retro/sprint-<N>` branch survives; it is harmless unless a
-  retro is re-run for the same sprint, and then delete it by hand first. This
-  block and the 7a-post step 1 block both exit non-zero on their `HARD_BLOCK`
-  line and zero otherwise, so a refused merge or landing is an errored tool
-  result rather than a shipped action.
+  retro is re-run for the same sprint, and then delete it by hand first.
 - **If no PR was created (direct-to-main in 6c):** Skip the merge and
   proceed to **7a-post** — not straight to 7b. The artifacts are already on
   `main`, so the rotation's precondition is met and it still has to run.
@@ -1474,40 +1190,15 @@ The other two `rotate` artifacts — `pipeline-continuation-log.md` and
 audit that reads them. Two sites, because the two constraints differ: those must
 follow their audit, these must follow the merge.
 
-1. Land on the merged state, and run the block as written. A
-   `LAND: HARD_BLOCK` line STOPs: no rotation and no 7b; surface the line
-   verbatim. 7a never relies on `gh pr merge` switching the checkout to `main`;
-   this block is the only return to the trunk. The chain's exit refuses a
-   failed fetch, a `main` held by another worktree and a `main` that cannot
-   fast-forward; the branch check refuses a `main` that resolved to a tag and
-   detached `HEAD`, where the fast-forward itself succeeds. The on-disk check
-   runs first, as in Step 1, and refuses a file on disk at a path the landing
-   would write.
+1. Land on the merged state:
 
-```bash
-# retro 7a-post step 1: land on the merged trunk
-git fetch origin main
-LAND_HOLD="$( cd "$(git rev-parse --show-toplevel)" || exit
-  { git rev-parse -q --verify refs/heads/main >/dev/null && git diff -z --name-only --no-renames HEAD main
-    git diff -z --name-only --no-renames HEAD origin/main; } | sort -zu |
-  while IFS= read -r -d '' p; do
-    if ! git cat-file -e "HEAD:$p" 2>/dev/null && { [ -e "$p" ] || [ -L "$p" ]; }; then echo "ON-DISK $p"; fi
-  done )"
-if [ -n "$LAND_HOLD" ]; then
-  echo "LAND: HARD_BLOCK on-disk — main at origin/main tracks these paths, HEAD does not, and a file is on disk at each; move each aside and re-run the block"
-  printf '%s\n' "$LAND_HOLD"
-  false
-elif git fetch origin main && git checkout main && git merge --ff-only origin/main \
-    && [ "$(git symbolic-ref -q --short HEAD)" = main ]; then
-  echo "LAND: main at origin/main"
-else
-  MAIN_WT="$(git worktree list --porcelain | awk '/^worktree /{w=substr($0,10)} $0=="branch refs/heads/main"{print w}')"
-  SELF_WT="$(cd "$(git rev-parse --show-toplevel)" && pwd -P)"
-  [ -n "$MAIN_WT" ] && [ "$(cd "$MAIN_WT" 2>/dev/null && pwd -P)" = "$SELF_WT" ] && MAIN_WT=""
-  echo "LAND: HARD_BLOCK — not on main at origin/main; main is checked out in worktree: ${MAIN_WT:-none}"
-  false
-fi
-```
+       bash scripts/ai-dlc/retro-close.sh land
+
+   A `LAND: HARD_BLOCK` line (exit 1) STOPs: no rotation and no 7b; surface the line
+   verbatim. 7a never relies on `gh pr merge` switching the checkout to `main`;
+   this is the only return to the trunk. It refuses a failed fetch, a `main` held by
+   another worktree, a `main` that cannot fast-forward, and a `main` that resolved to a tag
+   and detached `HEAD`. The on-disk check runs first, as in Step 1.
 
 2. Confirm no further gate-log writes remain this sprint. Every gate-log write this sprint is
    committed before the Step 6b push, the retro gate's own entry included:
@@ -1515,31 +1206,28 @@ fi
    appends it, one entry per dispatch. All of it is on `main` by now, through the retro PR or,
    on the direct-to-main path, through those commits. Step 3 archives it with the rest of the log.
 
-3. Archive the WHOLE live log verbatim:
+3. Archive the WHOLE live log verbatim, rotate the other records and finish, in one call:
 
-       mkdir -p _bmad-output/implementation-artifacts/s<N>
-       git mv _bmad-output/implementation-artifacts/gate-log.md \
-              _bmad-output/implementation-artifacts/s<N>/gate-log-archive.md
+       bash scripts/ai-dlc/retro-close.sh finish <N> <pr-number> [--commentary-file <file>]
 
-   If it holds more than this sprint — a missed prior rotation — archive all of
-   it under the sprint you are closing and **state the span in the archive's
-   first line** (`<!-- covers s<first>..s<N> -->`). The span does NOT go in the
-   filename: a basename carrying a sprint token is what forces a reader to
-   search, and there is exactly one `gate-log-archive.md` per sprint directory
-   so nothing needs disambiguating.
-4. Recreate the live log with only the header line `# Gate Log` and a trailing
-   newline. No retained entries: no step reads a prior sprint's gate entries,
-   counters carry forward in the retro doc, and the cluster audit is git-derived.
-5. **Rotate `compaction-log.md` the same way, IF IT EXISTS.** Most sprints never
-   compact and the file is absent — that absence is a pass, not a missed
-   rotation; record "no compactions this sprint" and skip to 6. Otherwise
-   `git mv` it to `implementation-artifacts/s<N>/compaction-log-archive.md` and
-   recreate it empty; the
-   `PostCompact` hook re-seeds its header on the next write. Confirm §4a's
-   artifact-size audit already read it first — its `recovery_injected: no`
-   entries must reach the retro doc, because after rotation the live log no
-   longer carries them.
-5b. **Rotate this sprint's gate-adjudication verdicts.** Run
+   It runs, in order: the operator-commentary commit (when given); the retro scratch removal of 4b;
+   the `gate-log.md` archive to `implementation-artifacts/s<N>/gate-log-archive.md` with a fresh
+   `# Gate Log` header; the `compaction-log.md` archive to `s<N>/compaction-log-archive.md` IF the file
+   exists (absence is a pass: "no compactions this sprint"), recreated empty; the gate-adjudication
+   rotation of item 5b; the rotation commit
+   `chore(s<N>): rotate gate-log, compaction-log and gate-adjudication post-retro-merge`, which touches
+   only those files; the audit-anchor SHA backfill, in the follow-on commit that Step 5b licenses; the TERMINAL Pipeline
+   Position write (`current_step_file retro.md`, `last_completed_step_file 'retro.md (sprint <N> closed —
+   retro PR merged, records rotated)'`, `last_gate_passed` untouched, the routing-record keys dropped) with
+   `snapshot-update.sh`, committed as `chore(s<N>): finalize snapshot — sprint <N> closed`; and ONE
+   `git push origin main`. Run it in the foreground with `timeout: 600000`, nothing chained or piped. A log
+   holding more than this sprint (a missed prior rotation) is archived whole under the sprint you
+   are closing, and its span goes in the archive's first line (`<!-- covers s<first>..s<N> -->`), never
+   in the filename; `finish` writes that line itself. A `FINISH:` or `ROTATE:` line carrying `HARD_BLOCK` STOPs the close: do not
+   commit by hand, read the refusal, repair, and re-run `finish`; a rotation already done is skipped.
+   If the push output ends `pre-push: REFUSED.`, re-run `finish` once; never `--no-verify`.
+
+5b. **Rotate this sprint's gate-adjudication verdicts.** `finish` runs
 
        bash scripts/ai-dlc/rotate-gate-adjudication.sh --sprint s<N> --apply
 
@@ -1586,45 +1274,18 @@ fi
    A sprint's close commit is its `chore(s<N>): rotate ... post-retro-merge` commit from
    7a-post; where a sprint has none, it is the merge commit of that sprint's retro PR.
 
-6. **Verify no-loss per file:** each archive's byte count MUST equal that file's
-   pre-rotation live byte count, and each new live log MUST contain only its
-   header. A mismatch is a HARD_BLOCK — do not commit; restore from git and
-   investigate.
-7. Commit to `main`:
-   `chore(s<N>): rotate gate-log, compaction-log and gate-adjudication post-retro-merge`.
-   The commit touches only those files.
-8. **Write the TERMINAL Pipeline Position.** The snapshot outlives the sprint
-   (7d), so this write is what makes the outliving copy true. In
-   `_bmad-output/pipeline-snapshot.md`'s `## Pipeline Position`, OVERWRITE the
-   existing `current_step_file` bullet — never add a second live one; see
-   `steps/gate-validation.md`'s Pipeline Position bullet for the rule and its
-   labelled-key exception — with `snapshot-update.sh`:
-   `--set current_step_file retro.md 'Pipeline Position'` and
-   `--set last_completed_step_file 'retro.md (sprint <N> closed — retro PR merged,
-   records rotated)' 'Pipeline Position'`. Leave `last_gate_passed` as it stands. DROP the routing
-   record fields — they belong to the sprint that just closed and the next
-   `route.md` Step 6 writes its own — with one
-   `snapshot-update.sh --key-delete 'Pipeline Position' <field>` per field. Commit to `main`:
-   `chore(s<N>): finalize snapshot — sprint <N> closed`. Without this write the
-   snapshot still names `deploy-validate.md` and the next session reads a
-   shipped sprint as pending deploy work.
+   After the last `--series` move, re-run `retro-close.sh finish`; a rotation already done is skipped.
 
-**7b. Assemble next-sprint inputs.**
+6. **Verify no-loss per file:** `finish` compares each archive's byte count with that file's
+   pre-rotation live byte count, and requires each new live log to hold only its header. A mismatch
+   prints `ROTATE: HARD_BLOCK` and stops: do not commit; restore from git and investigate.
 
-Issued AFTER the 7a merge (no dispatch before Step 5 can cover post-merge
-inputs, §2 blocker 2). Dispatch an `analyst` —
-**Dispatch C** — to gather all six input classes below (including the
-relatedness analysis in input 6). Inputs 1-5 are surfaces, one analyst each (Rule 28, "Split
-dispatch": surfaces axis, joined per Rule 24's Dispatch contract). Input 6 needs input 1's
-current-epic state, so it runs after the join (serial exception 3). Write the structured bundle to
-`_bmad-output/retro-artifacts/s<N>/next-inputs.md`. The lead derives
-the theme (7c) and authors the paste-able prompt (7d) from that bundle
-**plus its own retained retro findings** — the Step-3 improvements and
-Step-4 dispositions stay resident because the lead decided them; only the
-raw file reads move to the analyst.
+**7b. Read the next-sprint inputs.**
 
-Gather the material the next-sprint prompt will draw from. Read, do not
-summarize prematurely:
+Issued AFTER the 7a merge. Read the six input classes below directly; there is no bundle file and no
+dispatch. The lead derives the theme (7c) and authors the paste-able prompt (7d) from them **plus its own
+retained retro findings** — the Step-3 improvements and Step-4 dispositions stay resident because the lead
+decided them. Read, do not summarize prematurely:
 
 1. **Current epic state.** Read the active epic file under
    `_bmad-output/planning-artifacts/` (epic files are created by
@@ -1729,7 +1390,7 @@ person, opening with the literal tag `[S<N> close-out proposes]`, `<N>`
 being the sprint just closed:
 `[S<N> close-out proposes] the <item> stays with the operator.` The tag is
 the one bracketed text the pasteable body carries and is not meta
-commentary: `route.md` Step 6 finds the line by it after the paste. List
+commentary: `route-fresh-start.md` Step 6 finds the line by it after the paste. List
 every tagged line under `Pipeline carve-outs` in the scope outline.
 
 Mark the pause before ending the turn (Rule 3 — the snapshot outlives

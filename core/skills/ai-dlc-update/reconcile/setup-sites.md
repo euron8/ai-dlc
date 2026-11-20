@@ -68,6 +68,7 @@ core_manifest:
   - core/skills/ai-dlc/SKILL.md
   - core/skills/ai-dlc/steps/*.md
   - core/skills/ai-dlc/rule-bodies/*.md
+  - core/skills/ai-dlc/gates/*.arms
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
   - core/skills/ai-dlc/artifact-path-grammar.md
@@ -104,6 +105,7 @@ rulebook:
   - core/skills/ai-dlc/SKILL.md
   - core/skills/ai-dlc/steps/*.md
   - core/skills/ai-dlc/rule-bodies/*.md
+  - core/skills/ai-dlc/gates/*.arms
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
   - core/skills/ai-dlc/artifact-path-grammar.md

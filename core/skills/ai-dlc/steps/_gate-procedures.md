@@ -216,6 +216,8 @@ was never created and answers a different question than the join does.
 
 ## Gate-adjudication dispatch (referenced by the gate)
 
+**The `Deliverable:`, shard and `--mark` lines are rendered by `scripts/ai-dlc/render-brief.sh`, never typed.** Run `render-brief.sh --role <role> --step <step> [--shard <id>] --deliverable <path> --mark-step <step> [--field k=v ...] [--plan <join output>] --out <project>/_bmad-output/planning-artifacts/briefs`; it prints the brief file's path and refuses an empty deliverable or a brief over 16384 bytes. The dispatch prompt then carries the role binding as always plus one line at line start, `Brief: <printed path>`; the dispatch guard and the in-flight row hook read that file for the `Deliverable:`, shard and `--mark` lines, and a path outside `_bmad-output/planning-artifacts/` or a file without a `Deliverable:` line is refused like a brief with none.
+
 When `gate-validation.md` says "dispatch the gate-adjudicator", execute this. It escalates
 the read-and-compare (`adjudication: llm`) checks of ONE gate to a fresh, independent subagent
 context, so no judgment is made in the lead's own context. The lead still owns PASS/FAIL: it
@@ -269,6 +271,8 @@ which refuses (exit 2, `REFUSED:`, nothing written) unless the parts are exactly
 1..N, no check_id appears twice, and their union equals `--expected`; it then writes the one v1
 verdict and runs the coverage arms on it. Check 26 reads that file as it reads an unsharded one.
 
+**The retro gate is not sharded.** At the retro gate one adjudicator takes the whole `--expected retro` set in one unsharded dispatch, whatever count it prints.
+
 **A re-dispatch is a whole new dispatch.** The escalation preamble at the top of
 `gate-validation.md` governs: a fresh `gate_nonce`, every escalated check re-derived from current
 state, and no verdict carried forward, cited or merged from a superseded dispatch. The
@@ -305,6 +309,8 @@ the underived-claim bar all live in `team-roles/adversary.md` and
 `team-roles/remediator.md`, and the gate enforces them mechanically
 (`scripts/ai-dlc/validate-adversarial-convergence.sh`, invoked by Check 24). A copy in a
 step file is a copy that drifts.
+
+**Convergence check, run when a series ends.** After the terminal pass stamps `EXIT_CONDITION_MET`, and before leaving the step, run `bash scripts/ai-dlc/verdict.sh validate-adversarial-convergence --series <path-prefix-of-this-step's-pass-series> --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`; the required result is a `PASS` line and exit 0. A `FAIL` names the arm that refused: repair it on the series' own record before the gate, where Check 24 runs the same command.
 
 **Join every spawn on its DELIVERABLE** — one `scripts/ai-dlc/wait-for-deliverable.sh
 <path> [<path> ...]` call per wave, `run_in_background: true` ("Bounded-join beat"
@@ -412,6 +418,8 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    output still reproduces; an unfenced `file:line` citation or quoted line is not checked, so
    the remediator re-reads every cross finding's cited text in the assembled document before
    editing on it.
+
+   **The lead reads a finding's cited lines with `scripts/ai-dlc/show-cites.sh <findings-file> --finding F-<n> --root <project root> --subject-dir <the artifact's directory>`, never from the finding's own account of them.** It prints each `path:a-b` cite and each `quote: <stem>: <span>` line as `CITE <path>:<a-b>` followed by the numbered lines, and prints `UNRESOLVED <cite> <reason>` for a cite whose file is absent or ambiguous, whose span passes the file's last line, or whose quote is not found exactly once; its last line is `show-cites: <n> examined, <p> printed, <u> unresolved`. An `UNRESOLVED` cite is read by hand before the finding is applied or refuted.
 
    **An unsharded round has the same write model.** One agent per seat over the whole subject
    (a `SERIAL:` map, a one-part subject, or a subject that meets none of the cases below), run
@@ -1014,6 +1022,8 @@ and the merge stamps `shard_set_derived_from:`.
    **A key the pass header lists in `repair_introduced_keys:` closes only by way 1, REPAIRED**;
    a deferral naming it does not close it (`team-roles/adversary.md`, "The verdict").
 
+   **Convergence check after a repair or deferral closes a key.** Re-run `bash scripts/ai-dlc/verdict.sh validate-adversarial-convergence --series <the series prefix> --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>` before dispatching the next pass; the required result is a `PASS` line and exit 0, and a `FAIL` naming arm J3 means the key is still open.
+
    **THE AMENDMENT PROCEDURE — a notarized artifact that must move after MET.** Check 24 arm J2
    compares the file the terminal MET pass notarized against the bytes on disk. Amend it one of
    these ways, in the same dispatch as the edit:
@@ -1077,6 +1087,8 @@ and the merge stamps `shard_set_derived_from:`.
    **next pass number in the SAME series**, declaring `resolves_divergence: <the record>`. Do not
    open a new series: `--series` spans both, the pass numbers collide, and the gate then fails on
    a cycle that did nothing wrong. That pass is the terminal clean pass Check 24 requires.
+
+**Convergence check after a verify pass.** When the verify pass stamps `EXIT_CONDITION_MET`, run `bash scripts/ai-dlc/verdict.sh validate-adversarial-convergence --series <the series prefix> --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`; the required result is a `PASS` line and exit 0, the same command Check 24 runs at the gate.
 
 ## Adversarial repair dispatch (referenced by step files and by the gate)
 

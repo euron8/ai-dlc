@@ -199,6 +199,7 @@ archive_if_exists "$PROJECT_ROOT/docs/coding-conventions.md"
 # consumer drift lives only under _divergence/ for historical reference.
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc/SKILL.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc/steps" "*.md"
+archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc/gates" "*.arms"
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/SKILL.md"
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-update/SKILL.md"
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-update/fixture-manifest.md"
@@ -275,6 +276,14 @@ if [ -d "$SCRIPT_DIR/../core/skills/ai-dlc/rule-bodies" ]; then
   mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc/rule-bodies"
   cp "$SCRIPT_DIR/../core/skills/ai-dlc/rule-bodies/"*.md \
      "$PROJECT_ROOT/.claude/skills/ai-dlc/rule-bodies/" 2>/dev/null || true
+fi
+
+# Gate arms: the per-gate rows `gate-run.sh` reads (gates/<gate-id>.arms). Shipped whole, upstream is
+# authoritative on reinstall (the archive_tree_glob above keeps any divergent copy); guarded glob.
+if [ -d "$SCRIPT_DIR/../core/skills/ai-dlc/gates" ]; then
+  mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc/gates"
+  cp "$SCRIPT_DIR/../core/skills/ai-dlc/gates/"*.arms \
+     "$PROJECT_ROOT/.claude/skills/ai-dlc/gates/" 2>/dev/null || true
 fi
 
 # Layered rulebook (Rule 27 / spec §7): consumer-owned extensions/ + overrides/.

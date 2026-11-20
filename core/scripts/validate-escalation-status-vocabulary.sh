@@ -223,11 +223,26 @@ fi
 # that file, an impossible token 0). pending-archive.md 35 findings before and 48 after,
 # and the 35 are a strict SUBSET of the 48 — this reading loses no finding the previous one
 # made. Last-anywhere scores 1 on pending.md, and that one is the `I` above.
+# ENTRY DEFINITION (fail-closed): an ENTRY is a `## ` header whose text carries a YYYY-MM-DD date; an undated
+# `## ` header is a SECTION header and is exempt; `### ` headers belong to the entry above them. An entry with
+# no Status field in its header-to-next-`## ` span (any `### ` block under it included) is STATUSLESS, which is
+# out of vocabulary. The awk prints `R<TAB>header<TAB>status` per status and `S<TAB>line<TAB>header` per
+# statusless entry.
 RECORDS="$(awk '
   function flush() {
-    if (header != "" && status != "") printf "%s\t%s\n", header, status
+    if (header != "" && status != "") printf "R\t%s\t%s\n", header, status
   }
-  /^#{2,3} / { flush(); header = $0; status = ""; canon = 0; next }
+  function endentry() {
+    if (ehdr != "" && !ehas) printf "S\t%d\t%s\n", eline, ehdr
+  }
+  /^#{2,3} / {
+    flush(); header = $0; status = ""; canon = 0
+    if ($0 ~ /^## /) {
+      endentry(); ehdr = ""; ehas = 0
+      if ($0 ~ /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/) { ehdr = $0; eline = NR }
+    }
+    next
+  }
   /\*\*[Ss]tatus:\*\*/ {
     # A prose mention cannot displace a field, in either direction.
     if (canon && $0 !~ /^\*\*[Ss]tatus:\*\*/) next
@@ -235,11 +250,12 @@ RECORDS="$(awk '
     sub(/^.*\*\*[Ss]tatus:\*\*[[:space:]]*/, "", s)
     if (match(s, /[A-Z_]+/)) {
       status = substr(s, RSTART, RLENGTH)
+      ehas = 1
       if ($0 ~ /^\*\*[Ss]tatus:\*\*/) canon = 1
     }
     next
   }
-  END { flush() }
+  END { flush(); endentry() }
 ' "$ESCALATIONS")"
 
 if [ -z "$RECORDS" ]; then
@@ -250,7 +266,14 @@ fi
 # ---- 4. Compare ------------------------------------------------------------
 bad=0
 n=0
-while IFS="$(printf '\t')" read -r header status; do
+nostatus=0
+while IFS="$(printf '\t')" read -r kind a b; do
+  if [ "$kind" = "S" ]; then
+    nostatus=$((nostatus + 1))
+    echo "FAIL: STATUSLESS $ESCALATIONS:$a $b"
+    continue
+  fi
+  header="$a"; status="$b"
   [ -n "${status:-}" ] || continue
   n=$((n + 1))
   if ! grep -qx "$status" <<<"$VOCAB"; then
@@ -263,6 +286,12 @@ while IFS="$(printf '\t')" read -r header status; do
 done <<EOF
 $RECORDS
 EOF
+
+if [ "$nostatus" -gt 0 ]; then
+  echo "FAIL: $nostatus dated escalation entries carry no **Status:** field (STATUSLESS-ENTRY, fail-closed): no status is outside the closed set." >&2
+  echo "FAIL: remedy: add the field, or drop the date from a header that is a section and not an entry." >&2
+  exit 1
+fi
 
 if [ "$bad" -gt 0 ]; then
   echo "FAIL: $bad of $n escalation entries carry a status outside the closed set." >&2

@@ -130,49 +130,22 @@ case "$verdict" in
   *)   badm "artifact-not-swallowed" "could not decide (heading or span unresolvable) — a check that cannot fire reads exactly like one that passed" ;;
 esac
 
-# --- THE SPRINT-SHIP SLICER. Each is a pure helper of its arguments and of $STEPS-shaped files; arms 5-9 below call them.
-SS_START='^### Sprint-Ship Verification'
+# --- THE HEADING-LEVEL SLICER. Each is a pure helper of its arguments and of $STEPS-shaped files; arms 5 and 6 call them.
+# The subject section is `### 5b. Append Audit-Anchor SHA`, a `###` section whose span ends at the NEXT heading at `###` or shallower.
+SS_START='^### 5b\. Append Audit-Anchor SHA'
 SS_BAND_MAX=60
 # grep -c prints its zero AND exits 1. Capture first, default on failure.
 ss_cF() { local n; n="$(grep -cF -- "$1" <<<"$2")" || n=0; printf '%s' "$n"; }
-ss_cE() { local n; n="$(grep -cE -- "$1" <<<"$2")" || n=0; printf '%s' "$n"; }
 # The span: from the heading to the NEXT heading at `###` or shallower. Keying on heading
-# LEVEL rather than on the literal `### 5. Human Commentary` survives an ordinary rename of
-# the neighbour, which is not this work; the band below is what speaks when it does not.
-ss_span() { awk '/^### Sprint-Ship Verification/{f=1} f&&/^#{1,3} /&&!/^### Sprint-Ship Verification/{exit} f' "$1"; }
+# LEVEL rather than on the literal next heading survives an ordinary rename of the neighbour,
+# which is not this work; the band below is what speaks when the neighbour is demoted.
+ss_span() { awk '/^### 5b\. Append Audit-Anchor SHA/{f=1} f&&/^#{1,3} /&&!/^### 5b\. Append Audit-Anchor SHA/{exit} f' "$1"; }
 ss_norm() { printf '%s ' $1; }
 
-# =======================================================================================
-# ARMS 5-9: THE SPRINT-SHIP DISJUNCTION. Same file, same materialised blob, same `$STEPS`.
-#
-# THE DEFECT. `### Sprint-Ship Verification` defines two counters and then declared a
-# sprint ship-quality when EITHER reached 5/5. `consecutive-deploy-clean` resets on ANY
-# smoke FAIL "regardless of whether the FAIL is new or pre-existing"; a FAIL carried across
-# a sprint boundary pins it at 0 forever while `consecutive-no-regression` climbs to 5/5,
-# and the disjunction then declares ship-quality with the FAIL live. The strict counter
-# could not decide anything the loose one did not already decide.
-#
-# THE FIX IS A QUALIFIED DISJUNCTION AND A BARE CONJUNCTION IS A REGRESSION. Measured
-# read-only over the reference consumer's `docs/retro/`: 105 dual-counter readings, 4 in
-# the exact wedge state (deploy-clean=0 AND no-regression>=5), and 32 readings at
-# deploy-clean>=5 as the same-invocation control that the strict counter IS reachable. So
-# the defect is live — and requiring BOTH counters would have blocked that consumer's
-# ship-quality declaration across an essentially unbroken run of `deploy-clean: 0/5`
-# sprints, on a pre-existing FAIL it could not fix. That is `mechanism-design.md`'s "never
-# ship a check that wedges live work", and arm 8 convicts the conjunction by name rather
-# than letting it read as an acceptable second spelling.
-#
-# WHY THE ANCHOR IS READ OFF WHITESPACE-NORMALISED TEXT. The disjunction is a WRAP-SPANNING
-# string — it sat on one line only by accident of the current wrap. A literal line-keyed
-# `grep -qF` scores a REFLOW-ONLY copy, defect word for word intact, as CLOSED while the
-# control still reads 1: a control agreeing with the verdict. Normalising first reads the
-# defect through any wrap.
-#
 # WHY THE SPAN LENGTH IS ASSERTED. `awk '/start/,/end/'` runs to EOF when either boundary
-# moves, and a span of the whole file trivially satisfies every content assertion in it.
-# Derived with THIS slicer on the subject: the span is 30 lines and the file is 1336, so a
-# runaway reads 496. The band refuses rather than scoring such a tree either way.
-# (SS_START, SS_BAND_MAX and the ss_* slicer helpers are declared once, above.)
+# moves, and a span of the whole file trivially satisfies every content assertion in it. A
+# neighbouring `### 5c.` demoted to `####` stops being a terminator, so the span runs through it
+# and past the band; the band refuses rather than scoring such a tree either way.
 
 # Counted through `printf '%s\n' "$raw"`. A direct `ss_span | wc -l` answers ONE HIGHER, because the pipe
 # carries the final newline the command substitution strips.
@@ -184,49 +157,17 @@ ss_txt="$(ss_norm "$ss_raw")"
 if [ "$ss_lines" -gt 0 ] && [ "$ss_lines" -le "$SS_BAND_MAX" ]; then
   okm "ss-span-band" "'$SS_START' span is $ss_lines lines (band 1..$SS_BAND_MAX)"
 else
-  badm "ss-span-band" "span is $ss_lines lines, outside 1..$SS_BAND_MAX — the range ran past its terminator, and every content assertion below it is satisfied by the rest of the file rather than by this section"
+  badm "ss-span-band" "span is $ss_lines lines, outside 1..$SS_BAND_MAX — the range ran past its terminator (a neighbouring heading demoted below \`###\`), and every content assertion below it is satisfied by the rest of the file rather than by this section"
 fi
 
 # --- ARM 6: the CONTROL, run against the same extraction in the same invocation ---------
-# Absence here is a RESTRUCTURE, not a live defect: the counters have been renamed or the
-# section moved, and arms 7-9 are then reading text that is not the subject. It is reported
-# separately from the subject for exactly that reason.
-ss_ctl="$(ss_cF 'consecutive-no-regression' "$ss_txt")"
-ss_ctl2="$(ss_cF 'dual-counter: consecutive-deploy-clean:' "$ss_txt")"
+# Absence here is a RESTRUCTURE: the section was renamed or moved, and arm 5 is then reading text that is not the subject.
+ss_ctl="$(ss_cF 'retro-close.sh anchor' "$ss_txt")"
+ss_ctl2="$(ss_cF 'audit-anchors.md' "$ss_txt")"
 if [ "$ss_ctl" -gt 0 ] && [ "$ss_ctl2" -gt 0 ]; then
-  okm "ss-control" "the span still names both counters and the template line ($ss_ctl/$ss_ctl2) — the extraction ran"
+  okm "ss-control" "the span still names the anchor call and audit-anchors.md ($ss_ctl/$ss_ctl2) — the extraction ran"
 else
-  badm "ss-control" "the span names consecutive-no-regression $ss_ctl time(s) and the dual-counter template $ss_ctl2 time(s); at zero the section has been restructured and the arms below assert nothing about it"
-fi
-
-# --- ARM 7: the DEFECT is gone, read through any wrap ----------------------------------
-ss_def="$(ss_cF 'EITHER counter reaches 5/5' "$ss_txt")"
-if [ "$ss_def" -eq 0 ]; then
-  okm "ss-disjunction-gone" "the bare 'EITHER counter reaches 5/5' does not appear in the normalised span"
-else
-  badm "ss-disjunction-gone" "the span still declares a sprint ship-quality when EITHER counter reaches 5/5 — a smoke FAIL carried across a sprint boundary pins consecutive-deploy-clean at 0 forever while the loose counter climbs, and the sprint is declared ship-quality with the FAIL live"
-fi
-
-# --- ARM 8: the CONJUNCTION REGRESSION is convicted by name ----------------------------
-ss_conj="$(ss_cE '(BOTH counters reach|both counters reach|only when BOTH)' "$ss_txt")"
-if [ "$ss_conj" -eq 0 ]; then
-  okm "ss-not-a-conjunction" "the span does not require BOTH counters at 5/5"
-else
-  badm "ss-not-a-conjunction" "the span requires BOTH counters to reach 5/5. That is not a stricter spelling of the fix, it is a wedge: the reference consumer ran an essentially unbroken sequence of sprints at consecutive-deploy-clean 0/5 on a pre-existing FAIL it could not fix, and a conjunction blocks every one of their ship-quality declarations. The required shape is a QUALIFIED disjunction."
-fi
-
-# --- ARM 9: the QUALIFICATION is present, as three separate properties -----------------
-# Three, not one, because a single anchor on any one of them is satisfied by prose that
-# drops the other two — and the carry-over RECORD is the whole of what makes the loose
-# counter safe to rely on. A competent second spelling of the fix satisfies all three; the
-# conjunction and the pre-fix disjunction satisfy none.
-ss_strict="$(ss_cE 'consecutive-deploy-clean`?[^.]*(on its own|alone)' "$ss_txt")"
-ss_loose="$(ss_cE 'consecutive-no-regression`?[^.]*(only where|only when|sufficient only)' "$ss_txt")"
-ss_carry="$(ss_cE 'carry-over|carried over' "$ss_txt")"
-if [ "$ss_strict" -gt 0 ] && [ "$ss_loose" -gt 0 ] && [ "$ss_carry" -gt 0 ]; then
-  okm "ss-qualified" "the strict counter declares ship-quality alone, the loose one only conditionally, and the condition is a recorded carry-over"
-else
-  badm "ss-qualified" "the span does not carry the qualified disjunction (strict-alone=$ss_strict loose-conditional=$ss_loose carry-over-record=$ss_carry, each wanted >0) — without all three the two counters carry equal authority again"
+  badm "ss-control" "the span names 'retro-close.sh anchor' $ss_ctl time(s) and audit-anchors.md $ss_ctl2 time(s); at zero the section has been restructured and arm 5 asserts nothing about it"
 fi
 
 echo

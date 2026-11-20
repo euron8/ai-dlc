@@ -57,12 +57,13 @@ gi() { git -c init.defaultBranch=main init -q "$1" && git -C "$1" config user.em
 cm() { git -C "$1" add -A && git -C "$1" commit -q -m "$2"; }
 LOGS='e.log é.log sub/x.log'
 
-awk '/^### 1\. Context Loading/{s=1} s && /^### 2\./{exit}
-     s && /^# retro Step 1:/{on=1} on && /^```$/{exit} on{print}' "$RETRO" \
+[ -n "${RETRO_OPEN:-}" ] && [ -f "$RETRO_OPEN" ] && [ -n "${RETRO_CLOSE:-}" ] && [ -f "$RETRO_CLOSE" ] \
+  || die "RETRO_OPEN and RETRO_CLOSE (retro-open.sh, retro-close.sh) are not set to files"
+{ printf "set -- '<sprint-branch>' '<N>'\n"; cat "$RETRO_OPEN"; } \
   | sed -e "s@<sprint-branch>@$SB@g" -e 's@<N>@900@g' > "$W/step1.sh"
-[ -s "$W/step1.sh" ] || die "the Step 1 block did not extract from $RETRO"
-awk '/^# retro 7a-post step 1: land on the merged trunk$/{on=1} on && /^```$/{exit} on{print}' "$RETRO" > "$W/land.sh"
-[ -s "$W/land.sh" ] || die "the 7a-post step 1 LAND block did not extract from $RETRO"
+[ -s "$W/step1.sh" ] || die "retro-open.sh did not load from $RETRO_OPEN"
+{ printf 'set -- land\n'; cat "$RETRO_CLOSE"; } > "$W/land.sh"
+[ -s "$W/land.sh" ] || die "retro-close.sh did not load from $RETRO_CLOSE"
 
 # world <name> <branch to stand on> <seed: logs|none|untracked> -> $W/<name>/c, a clone whose
 # origin/main (after the block's own fetch) force-adds the three logs and adds u.txt.

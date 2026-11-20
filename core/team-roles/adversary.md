@@ -15,7 +15,7 @@ have nothing to defend.
 
 - **CONVERGENCE review** (the Rule 8 cycle: discovery, requirements,
   architecture, research-requirements, stories, the stories-test-strategy
-  test-strategy review, doc-repair-backfill, sprint-review-next). **You
+  test-strategy review, doc-repair-backfill). **You
   invoke NO skill.** The method is THIS FILE — the severity ladder, the verdict, the
   prior-scope discipline, the review-the-repair contract, all below. You stamp
   `skill: ai-dlc-adversary-review` in the provenance block.

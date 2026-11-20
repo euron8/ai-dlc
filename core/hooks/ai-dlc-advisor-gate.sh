@@ -75,6 +75,9 @@
 #       steps/retro.md:1427 7a merge                         -- touchpoint I, :1404
 #   - `gate-checkpoint.sh ... close` (NOT `record`: G1, N records, G2, close is the sequence):
 #       steps/gate-validation.md:210                         -- touchpoint G2, :211
+#   - `gate-run.sh arms ...` (kinded G1, the gate's entry) and `gate-run.sh close ...` (kinded G2: it
+#     appends the gate-log entry and runs the checkpoint close). The subcommand is the first word
+#     after the script; `gate-run.sh --help` and `--self-probe` are not gated.
 #   - the Check 12 append to `gate-log.md`, keyed on the ENTRY, not the path: an Edit/MultiEdit
 #     that adds a `## Gate Log:` heading, a Write whose content holds more such headings than the
 #     file on disk, or a Bash `>`/`>>`/`tee` onto `gate-log.md` whose command carries one:
@@ -395,6 +398,8 @@ def leadkind:
     | if ($s | map(gitpush and (isdelete | not) and (pushupd($v; $cut) | not)) | any) then "push"
       elif ($s | map(ghmerge) | any) then "merge"
       elif ($s | map(test("^((bash|sh)\\s+)?\\S*gate-checkpoint\\.sh(\\s.*)?\\sclose(\\s|$)")) | any) then "close"
+      elif ($s | map(test("^((bash|sh)\\s+)?\\S*gate-run\\.sh\\s+arms(\\s|$)")) | any) then "gatelog"
+      elif ($s | map(test("^((bash|sh)\\s+)?\\S*gate-run\\.sh\\s+close(\\s|$)")) | any) then "close"
       elif ($c | contains("## Gate Log:"))
            and ((($c | redirs) + [$s[] | words | select(length > 0 and .[0] == "tee") | .[1:][]])
                 | map(test("(^|/)gate-log\\.md$")) | any) then "gatelog"

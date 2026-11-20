@@ -12,6 +12,8 @@ creation with full validation cycle.
 
 ## EXECUTION SEQUENCE
 
+**Step entry.** Before anything else in this step, run `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file research-requirements.md 'Pipeline Position'`, so a resume or a compaction names this step.
+
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
@@ -20,7 +22,7 @@ an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-
 research notes to
 `_bmad-output/planning-artifacts/s<N>/research-notes.md` (Rule 24 sprint
 stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint Context,
-resolved at `route.md` Step 6), returning only
+resolved at `route-fresh-start.md` Step 6), returning only
 `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section 2 (PRD
 Creation) using the notes. **Sections 2 onward stay inline in the
 lead** — PRD authoring and the Rule 8 / PRD validation cycles are never
