@@ -35,7 +35,24 @@ EXTRACT_WIN_END=<ISO instant> python3 docs/analysis/pipeline-efficiency-s317-s32
 ```
 
 Clock: extract.py measures the segs interval on a monotone clock by default (BL-1174); `EXTRACT_MONOTONE_SEGS=0` selects
-the old clock, which charges an out-of-order record twice, to reproduce an output taken before it.
+the old clock, which charges an out-of-order record twice, to reproduce an output taken before it. `pipeline-efficiency-s317-s322/scripts/lead_time.py` has the same default and
+switch, `LEAD_TIME_MONOTONE=0`.
+
+Boundary and clock corrections (BL-1174), each a switch, ON by default. With `EXTRACT_WIN_END=2026-11-20T04:20:00Z EXTRACT_EDGES=hand EXTRACT_RELABEL=0 EXTRACT_OPWAIT=0 EXTRACT_FORK_DEDUPE=0 EXTRACT_IDLE_TAIL=0 EXTRACT_SPLIT_SEGS=0` the output is byte-identical to the pre-correction extractor.
+
+| Switch | Default | Effect |
+|---|---|---|
+| `EXTRACT_EDGES` | `derived` | `derived`: sprint ends come from `git log --first-parent main` of `$EXTRACT_GRAPH_REPO` (default `/Users/n8/git/graph`) and the lead transcripts; `hand`: the `EDGES` list in extract.py. close(N) is the committer time of the last commit whose subject matches `[Ss]print N closed` or `chore(sN): finalize snapshot`; edge(N) = min(last record of the lead active at close(N), first record of the earliest lead starting after it), close(N) when none is active; the open sprint ends at 2099. Exit 2 when git fails or finds no close commit. Prints `edge sprint=N derived= hand= diff_min=` to stderr and writes `$OUT/edges.tsv` (sprint, edge, close sha, rule). |
+| `EXTRACT_RELABEL` | 1 | Lead step labels follow `snapshot-update.sh --set current_step_file <step>`, an edit of `pipeline-snapshot.md` that sets that line, gate nonce spans and the planning-gate close; the read rule is the fallback and a read of an earlier step after a declaration does not move the label back. Prints `boundary-source sprint=N declared= inferred=` to stderr. |
+| `EXTRACT_OPWAIT` | 1 | Operator wait covers the whole span of every AskUserQuestion (tool_use to tool_result, all gap sizes) and a touch of `pipeline-paused.flag` to the next human prompt. Moves time between classes; elapsed is unchanged. A pause span counts only when its human prompt is in the sprint of the touch, and a compaction-summary record is not an operator prompt. |
+| `EXTRACT_SPLIT_SEGS` | 1 | Segments are keyed by (step, sprint of the record): one that crosses a sprint edge is one row per sprint in segs.jsonl and classes.jsonl; units.tok stays per step. roll.py joins by (unit, step, sprint). Row and segment counts are not comparable with an output taken with it off. |
+| `EXTRACT_EDGE_GAP` | 1800 | Seconds. With `EXTRACT_EDGES=derived` an edge is the last record before the first gap longer than this in the lead active at the close, counted from its last record at or before the close, bounded by the next lead's first record; rule labels in edges.tsv: `close`, `gap`, `active-lead-last`, `next-lead-first`, `open-sprint`. |
+| `EXTRACT_FORK_DEDUPE` | 1 | A lead record whose uuid is in an earlier-started lead transcript is charged nothing; leads are scanned in first-record order. |
+| `EXTRACT_IDLE_TAIL` | 1 | A gap over 300 s after a lead's last tool_use record, outside an AskUserQuestion span, is not charged. |
+
+Cache writes: roll.py's stdout prices them at the one-hour rate (2 x input). It also writes `$OUT/roll_cachewrite.txt`,
+per sprint lead, subagent and total dollars at both that rate and the five-minute rate (1.25 x input); which is billed
+is not established.
 
 Token control: the units==segs sums must be equal; they were at 15.66 B on both sides at measurement. s320 was
 still running, so a re-run reads a larger total and slightly different s320 figures. 1 of 4098 subagents is

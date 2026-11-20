@@ -17,7 +17,7 @@ Walks every lead transcript in record order. Each inter-record interval of <= 30
 Also prints, per sprint: assistant API calls (unique message.id), output tokens, and the mean
 model seconds per call, so "fewer lead calls" can be priced in hours.
 
-usage: python3 -I lead_time.py [TOP]     (honours $EXTRACT_ROOT, $EXTRACT_WIN_END)
+usage: python3 -I lead_time.py [TOP]     (honours $EXTRACT_ROOT, $EXTRACT_WIN_END, $LEAD_TIME_MONOTONE)
 """
 import ast, collections, datetime as dt, glob, json, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -27,6 +27,11 @@ EDGES = next(ast.literal_eval(n.value) for n in ast.parse(open(EX).read()).body
 ROOT = os.environ.get("EXTRACT_ROOT") or os.path.expanduser("~/.claude/projects/-Users-n8-git-graph")
 WIN_START = "2026-10-05T14:00:00Z"
 WIN_END = os.environ.get("EXTRACT_WIN_END") or "2099"
+# The interval is measured on a MONOTONE clock, as extract.py does (EXTRACT_MONOTONE_SEGS): an out-of-order record
+# charges 0 and does not move the clock back. This is the DEFAULT. LEAD_TIME_MONOTONE=0 selects the old clock (last =
+# this record) so a committed pre-BL-1174 output can be reproduced byte for byte. The old clock overstates: it counts
+# one pause once per replayed record stamped before it.
+MONOTONE = os.environ.get("LEAD_TIME_MONOTONE") != "0"
 TOP = int(sys.argv[1]) if len(sys.argv) > 1 else 14
 FAM = re.compile(r"(?:pytest|npm (?:run )?\w+|npx \w+|[\w.-]+\.sh|git (?:push|fetch|merge|pull|rebase|commit|log|diff|status|worktree)|cargo \w+|python3? -m \w+|sleep|until|while)")
 
@@ -69,7 +74,7 @@ for p in glob.glob(ROOT + "/*.jsonl"):
         if prev_end: key = "idle-wait"
         if last is not None and 0 <= now - last <= 300:
             sec[s][key] += now - last; cnt[s][key] += 1
-        last = now; prev_api = (typ == "api-request"); prev_end = (typ == "system" and r.get("subtype") == "turn_duration"); ends[s] += prev_end
+        last = max(last, now) if (MONOTONE and last is not None) else now; prev_api = (typ == "api-request"); prev_end = (typ == "system" and r.get("subtype") == "turn_duration"); ends[s] += prev_end
     for mid, (s, o) in seen_out.items(): outtok[s] += o
 print(f"root {ROOT}; lead transcripts {files}; window {WIN_START} .. {WIN_END}")
 for s in sorted(k for k in sec if k):

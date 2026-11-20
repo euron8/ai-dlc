@@ -21,6 +21,9 @@ Dollars come in two bases, always printed together:
 """
 import csv, collections, json, os, sys
 P = {'opus': (4, 20, 0.2, 8), 'sonnet': (2, 10, 0.2, 4), 'haiku': (.1, .5, .01, .2), 'fable': (10, 50, .25, 20)}
+# The same table at the five-minute cache-write rate (1.25 x input), derived from P so the two cannot drift. P's cw is
+# the one-hour rate (2 x input). Which rate is billed is not established, so roll_cachewrite.txt states both.
+P5 = {f: (i, o, cr, 1.25 * i) for f, (i, o, cr, cw) in P.items()}
 LOCAL = ('qwen38flash-mlx', 'qwen38flash', 'deepseek41')   # every local model family analyze.py has emitted
 
 def lsum(r, pre, k):
@@ -47,9 +50,9 @@ def hosted_mix(rows, pre):
             m[int(r['sprint'])][f] += float(r.get(f"{pre}_{f}_calls", 0) or 0)
     return m
 
-def usd(r, pre, tokeq=False, mix=None):
+def usd(r, pre, tokeq=False, mix=None, prices=P):
     t = 0
-    for f, (i, o, cr, cw) in P.items():
+    for f, (i, o, cr, cw) in prices.items():
         g = lambda k: float(r.get(f"{pre}_{f}_{k}", 0) or 0)
         t += (g('in') * i + g('out') * o + g('cr') * cr + g('cw') * cw) / 1e6
     if tokeq:
@@ -58,7 +61,7 @@ def usd(r, pre, tokeq=False, mix=None):
         n = sum((mix or {}).values())
         if n <= 0:
             return None if lsum(r, pre, "calls") else t
-        i, o, cr, cw = (sum(mix.get(f, 0) * P[f][k] for f in HOSTED) / n for k in range(4))
+        i, o, cr, cw = (sum(mix.get(f, 0) * prices[f][k] for f in HOSTED) / n for k in range(4))
         g = lambda k: lsum(r, pre, k)
         t += (g('in') * i + g('out') * o + g('cr') * cr + g('cw') * cw) / 1e6
     return t
@@ -166,9 +169,9 @@ def classes(out):
     segs = {}; cls = collections.defaultdict(list)
     for l in open(os.path.join(out, 'segs.jsonl')):
         s = json.loads(l)
-        if s['kind'] == 'lead': segs[(s['unit'], s['step'])] = s
+        if s['kind'] == 'lead': segs[(s['unit'], s['step'], s['sprint'])] = s   # a segment that crosses a sprint edge is one row per sprint
     for l in open(os.path.join(out, 'classes.jsonl')):
-        c = json.loads(l); cls[(c['unit'], c['step'])].append(c)
+        c = json.loads(l); cls[(c['unit'], c['step'], c['sprint'])].append(c)
     def toks(tok): return {m: list(d) for m, d in (tok or {}).items()}
     bad = 0
     for k in set(segs) | set(cls):
@@ -179,7 +182,7 @@ def classes(out):
                 g = got.setdefault(m, [0, 0, 0, 0, 0])
                 for i in range(5): g[i] += d[i]
         if got != want: bad += 1
-    print(f"class tokens == segs tok (in, cw, cr, out, calls per model) on {len(set(segs) | set(cls)) - bad} of {len(set(segs) | set(cls))} (lead unit, step) pairs")
+    print(f"class tokens == segs tok (in, cw, cr, out, calls per model) on {len(set(segs) | set(cls)) - bad} of {len(set(segs) | set(cls))} (lead unit, step, sprint) rows")
     if bad: print("INVARIANT FAILED: class token sum differs from segs"); sys.exit(1)
     # idle-wait is time only: a row of it carrying a call or a token would mean extract.py charged a usage-bearing
     # message to it, and the class-sum above would still balance.
@@ -189,10 +192,10 @@ def classes(out):
     # (sprint, step_base) -> class -> sums; segs active per (sprint, step_base) for the overcount line.
     A = collections.defaultdict(lambda: collections.defaultdict(lambda: collections.defaultdict(float)))
     SA = collections.defaultdict(float)
-    for (unit, st), s in segs.items():
+    for (unit, st, _sp), s in segs.items():
         if bucket.get(s['sess']) != 'pipeline' or s['sprint'] not in STORIES: continue
         SA[(s['sprint'], step_base(RELABEL.get((s['sess'], st), st)))] += s['active']
-        for c in cls.get((unit, st), []):
+        for c in cls.get((unit, st, _sp), []):
             a = A[(s['sprint'], step_base(RELABEL.get((s['sess'], st), st)))][c['cls']]
             a['act'] += c['active']; a['gap'] += c['gap']; a['calls'] += c['calls']
             for m, d in c['tok'].items():
@@ -248,6 +251,7 @@ if __name__ == '__main__':
         a = A[(n, base)]
         a['el'] += float(r['elapsed_h']); a['act'] += float(r['active_h']); a['aw'] += float(r['agent_wait_h']); a['op'] += float(r['op_wait_h'])
         a['lead$'] += usd(r, 'lead'); a['sub$'] += usd(r, 'sub')
+        a['lead$5'] += usd(r, 'lead', prices=P5); a['sub$5'] += usd(r, 'sub', prices=P5)
         for seat in ('lead', 'sub'):
             mix = HM[seat][n]
             if sum(mix.values()) <= 0 and n in FALLBACK:
@@ -258,6 +262,8 @@ if __name__ == '__main__':
             for pin in ('sonnet', 'opus'):   # bracket: every local call at one model's price
                 a[seat + '$' + pin] += usd(r, seat, True, {pin: 1.0})
             a[seat + '$e'] += v
+            v5 = usd(r, seat, True, mix, prices=P5)
+            a[seat + '$e5'] += usd(r, seat, prices=P5) if v5 is None else v5
         a['subh'] += float(r['sub_active_h']); a['comp'] += float(r['compactions'])
         a['tok'] += sum(float(v or 0) for c, v in r.items() if c.endswith(('_in', '_out', '_cr', '_cw')))
         for seat in ('lead', 'sub'):
@@ -306,3 +312,14 @@ if __name__ == '__main__':
         for seat in ('lead', 'sub'):
             c = MIX[(n, seat)]; tot = sum(c.values()) or 1
             print(f"     {seat} model mix (calls): " + ', '.join(f"{f} {v:.0f} ({100*v/tot:.0f}%)" for f, v in c.most_common()))
+    # Both cache-write rates, per sprint, beside roll.txt (which stays at the one-hour rate). Same rows, same mixes.
+    with open(os.path.join(sys.argv[1], 'roll_cachewrite.txt'), 'w') as fh:
+        fh.write("cache-write rate: 1h = 2 x input (roll.py P), 5m = 1.25 x input (P5); pipeline bucket; $ per sprint\n")
+        for n in sprints:
+            T = collections.defaultdict(float)
+            for (m, s_), a in A.items():
+                if m == n:
+                    for k, v in a.items(): T[k] += v
+            for basis, k1, k5 in (('API', '$', '$5'), ('token-eq', '$e', '$e5')):
+                l1, s1, l5, s5 = T['lead' + k1], T['sub' + k1], T['lead' + k5], T['sub' + k5]
+                fh.write(f"s{n} {basis}: lead 1h {l1:.1f} 5m {l5:.1f} | subagent 1h {s1:.1f} 5m {s5:.1f} | total 1h {l1 + s1:.1f} 5m {l5 + s5:.1f}\n")

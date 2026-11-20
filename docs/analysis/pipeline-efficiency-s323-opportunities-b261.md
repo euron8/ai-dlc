@@ -271,6 +271,8 @@ Step 0a :118-267) is 17.6 KB (33%). The fresh-start path (Steps 1-6, :269-863) i
 4, 5, 6 and 7, the layers listing and the owed counts. Judgment: what to do when a check fails. Source:
 `findings/step-route.md`.
 
+Step files: `route.md`
+
 **What it costs.** The row "route/handoff/pre-step" of the per-step tables is the lead's work before the first step
 file is read, plus handoff work (6.12). It is small and entirely on the critical path (the lead is otherwise idle):
 
@@ -376,6 +378,8 @@ File: `core/skills/ai-dlc/steps/carry-over-evaluation.md` (292 lines, 17,779 B, 
 are Catches, Removed-when and false-positive-cost rationale. The only procedure a script could carry is sub-steps 1a and
 1b. Graph's installed copy differs in lines 41 and 291 wording only. The step ran in s322 and s323; it did not run in
 s321 (why route skipped it was not read). Sources: `findings/step-carryover.md`, `findings/value-carryover-p2.md`.
+
+Step files: `carry-over-evaluation.md`
 
 **What it costs** (hours on the monotone clock, `steps/reconcile/B_tables.txt`):
 
@@ -524,6 +528,8 @@ s1 dispositions, s2, locked-bullet extraction, authoring and scope calls. The au
 `requirements.md:202` and `:236` say "carry it unchanged" from `discovery.md` section 4b and
 `research-requirements.md` section 2. `discovery.md` and `research-requirements.md` never ran as steps in s317 to
 s323; their only rows are two "PRD rubric walker" spawns charged to them by the extractor's label.
+
+Step files: `requirements.md`, `discovery.md`
 
 #### Cost
 
@@ -744,12 +750,14 @@ brief-cite grep returned 0 beside locked-slot cites 27, 8 and 21; locked-require
 
 ### 6.4 Architecture and ui-direction
 
-Step files: `core/skills/ai-dlc/steps/architecture.md` (20,749 B, 344 lines, one code block: the fast-track awk
+The step files read: `core/skills/ai-dlc/steps/architecture.md` (20,749 B, 344 lines, one code block: the fast-track awk
 predicate at `:309-311`; graph's installed copy differs in one line, the `:344` READ AND FOLLOW tail) and
 `ui-direction.md` (3,546 B, 75 lines, 0 code blocks). About 70% of `architecture.md` is judgment prose addressed to the
 architect role (`:128-258`, 12.2 KB: history rotation, Rule 26, HPE, spike mandate, 2d, 2e); about 15% is procedure a
 script already carries (join, lint, index, predicate). The cycle the step invokes is not in the file:
 `_gate-procedures.md` (148,448 B) and `gate-validation.md` (247,205 B) are re-read by the lead on every compaction.
+
+Step files: `architecture.md`, `ui-direction.md`
 
 #### Cost
 
@@ -939,6 +947,8 @@ The procedure a script could carry is briefs, joins, stamping (already scripts) 
 content of the review and repair loop. Every sprint runs the same shape: party round, repair, elicitation round,
 repair, adversarial pass 1 (p1), repair, adversarial pass 2 (p2), repair, test strategy, story gate.
 Source: `findings/step-stories.md`, `findings/value-elicitation-merge.md`.
+
+Step files: `stories-test-strategy.md`
 
 #### Cost (monotone clock; hours; the step with its gate)
 
@@ -1186,6 +1196,8 @@ About 60% of the build half is procedure a script could carry (worktree cut, rec
 read, merge and worktree removal, status transitions); the judgment is the routing tag, the wave plan, the brief and
 conflict resolution. Source: `findings/step-impl-build.md`; admission-wall figures from `findings/reconcile.md`.
 
+Step files: `implementation.md`, `_dispatch-protocol.md`
+
 #### Cost (monotone clock; hours; the build half only)
 
 | | s321 | s322 | s323 |
@@ -1399,6 +1411,8 @@ lines 296-700 is about 60% of the file and roughly 80% of it is procedure a scri
 `code-reviewer-escalated.md` (68 lines, same contract), `qa.md` (745 lines, 50 KB), `gate-adjudicator.md` (234 lines,
 16 KB) and `core/scripts/gate-transition.sh` (638 lines). Source: `findings/step-impl-gates.md`; its scripts are under
 `steps/implementation-gates/`.
+
+Step files: `implementation.md`
 
 #### Cost
 
@@ -1640,6 +1654,8 @@ review, retro). The implementation gate 3 is in section 6.7. Engine files: `core
 (247,205 B, 3,703 lines, 4 code blocks, all prose; 6 of its 40 checks are judgment), `_gate-procedures.md` (148,145 B,
 1,822 lines, 5 code blocks), graph's `gate-validation-domain.md` extension (73 KB), `core/scripts/gate-transition.sh`.
 Source: `findings/step-gate-validation.md`; its scripts are under `steps/gate-validation/`.
+
+Step files: `gate-validation.md`, `_gate-procedures.md`
 
 #### Cost
 
@@ -1897,6 +1913,8 @@ from the gate-log narrative. No timing run was taken.
 
 Files: `core/skills/ai-dlc/steps/sprint-review.md` (186 lines, 10,167 B, 1 code block; graph's installed copy is 10,057 B and differs only by the read-and-follow chunk-size clause at line 186) and `core/skills/ai-dlc/steps/sprint-review-next.md` (76 lines, 3,705 B). The step delegates to `_gate-procedures.md` (1,821 lines, 148 KB) and `gate-validation.md` (3,703 lines, 247 KB). About 70 lines of the step are procedure a program already carries or could carry (Step 0, the joins at L56-60 and L103-109, the validator at L170-177, the gate call); about 60 lines are judgment (L63-80, L110-115, L132-166); the rest is rule prose. Source: `findings/step-review.md`.
 
+Step files: `sprint-review.md`, `sprint-review-next.md`
+
 #### Cost
 
 Step plus its gate (`B_tables.txt`, hours on the monotone clock, in-session time only):
@@ -1986,6 +2004,8 @@ UPPER BOUNDS, one sprint each (s323): 48 min (ask) + 19 min (rate limit) + about
 ### 6.10 Deploy-validate
 
 File: `core/skills/ai-dlc/steps/deploy-validate.md`, 46,451 B, 770 lines, 5 code blocks (4.9 KB), 8 "Minimum mechanism" rationale paragraphs (4.7 KB), 5 HTML placeholder comments (1.4 KB). Graph runs an older copy of the file (it lacks `git add -f` in the merge record, lacks the "Plain language in the checkpoint" paragraph, and has a shorter read-and-follow cap text) and layers two extensions on the step: `deploy-validate-domain.md` (32,140 B) and `deploy-validate-push.md` (14,750 B), about 93 KB of step text in all. About 18 KB is judgment (smoke triage 3.4 KB, the 3b and 4b predicates 2 KB, 2a, routing); about 28 KB (merge record, 2b, smoke field record, PVC skeleton, coverage, cluster, routing) is procedure a script can carry or render. Sources: `findings/step-deploy.md`, `findings/value-open-items.md` (items 1 and 2).
+
+Step files: `deploy-validate.md`
 
 #### Cost
 
@@ -2081,6 +2101,8 @@ UPPER BOUNDS, per sprint: for an s323-like sprint, lead active about 1 to 1.5 h 
 
 Step file: `core/skills/ai-dlc/steps/retro.md`, 1,739 lines, 101,094 B, 8 code fences (170 lines, 10,205 B, 10% of the file), 4 "Minimum mechanism (Rule 26(c))" paragraphs (4,079 B), 16 named scripts. Graph's installed copy differs by 33 lines (1,716 lines) and a 41 KB graph override, `overrides/steps__retro__domain-sections.md`, shadows sections 3, 5 and 7 (it restates Dispatch A, 7a and 7a-post). Which of the two renders the lead obeys was not verified. Sources: `findings/step-retro.md`, `findings/value-retro-party.md`.
 
+Step files: `retro.md`
+
 **Cost** (reconciled, step with its gate; hours on the monotone clock; subagent dollars at the one-hour cache-write rate, five-minute rate in parentheses):
 
 | | Elapsed | Lead own (model+tool) | Idle, no agent | Waiting on agents under 5 min | Operator | Long agent wait | Spawns | Subagent $ | Lead calls | Compactions |
@@ -2172,6 +2194,8 @@ These are the duties the lead carries around the steps: handoff, snapshot writes
 touchpoints, the Stop-hook forced continuation, the hook-written records, and the loaded SKILL.md. Sources:
 `findings/step-route.md` (duties 3 to 9), `findings/value-advisor-r.md`. Session start and the fresh-start path are in
 6.1.
+
+Step files: `handoff.md`
 
 **What it costs.** Handoff work sits in the "route/handoff/pre-step" row of the per-step tables (the table is in 6.1;
 s321 4.0 h, s322 3.9 h, s323 1.3 h elapsed; lead calls 301, 529, 267). Recovery, snapshot writes and advisor calls sit
@@ -2314,6 +2338,8 @@ lead's own working reads (391 `gate-validation.md` Reads) are what fill the wind
 
 The engine-update flow (`/ai-dlc-update`, `core/skills/ai-dlc-update/SKILL.md`) is not a pipeline step. It runs in separate lead sessions between and during sprints, and none of its time is inside the sprint totals of section 4. Sources: `findings/step-update-minor.md`. Population: lead sessions that loaded the skill, from the extraction's `units.jsonl`: s321 13, s322 8, s323 8 sessions (s317 to s320: 55 more sessions, read only for operator answers). Pulls are the `ai-dlc-update/<version>-reconcile` branches in the transcripts: s321 0.970 to 0.1028 (13), s322 0.1036 to 0.1101 (8), s323 0.1128 to 0.1174 (8). Clock: monotone.
 
+Step files: `ai-dlc-update/SKILL.md`
+
 **Cost.**
 
 | | s321 | s322 | s323 |
@@ -2388,6 +2414,8 @@ Safety kept: branch isolation (step 6), conflicts stop, deletes only when the co
 
 Seven conditional steps sit outside the eight steps of a normal sprint: `bug-investigation`, `artifact-consolidation`, `discovery`, `codebase-inventory`, `deep-codebase-analysis`, `doc-reconciliation` and `doc-repair-backfill`. Source: `findings/step-update-minor.md`, subject 2.
 
+Step files: `artifact-consolidation.md`, `bug-investigation.md`, `codebase-inventory.md`, `deep-codebase-analysis.md`, `doc-reconciliation.md`, `doc-repair-backfill.md`, `research-requirements.md`
+
 **Population limit, binding every row.** Graph is the only consumer measured (175 lead transcripts, s317 to s323). `core/skills/ai-dlc/steps/route.md:381-414` sends a project with trusted planning artifacts to feature, carry-over, sprint-execute or bug; the greenfield, brownfield and analysis-only variants are unreachable for graph. "Never ran" therefore describes graph, not the distribution. The verdict wording for those steps is "unreachable for this consumer, no evidence either way for others". None is cut on this evidence.
 
 **How "ran" was established.** `minor_reads.py` counts assistant `tool_use` Reads (and Bash or ctx commands) naming `steps/<step>.md` in lead transcripts; prose mentions do not count. Controls in the same run: `implementation.md` 679 reads in 53 sessions; a nonexistent step name 0. Hits inside update sessions are `git diff` commands over the engine's own files, not runs (checked for the 4 sessions behind discovery's 8 hits and the 4 behind bug-investigation's non-s322 hits). Graph branch variants across all refs: carry-over 15, feature 2, bug, greenfield, brownfield and analysis 0 (control: 34 `ai-dlc/` refs in total).
@@ -2404,6 +2432,7 @@ Seven conditional steps sit outside the eight steps of a normal sprint: `bug-inv
 | `codebase-inventory.md` (3,222 B, 67 lines) | s0 L15; scan L27; audit L37; gap L52; gate L58; proceed L62 | 0; trigger `route.md:405-409` (artifacts exist but stale, code mid-implementation, brownfield-a) | 4 files name it, 0 fixtures | n/a | Unreachable for this consumer |
 | `deep-codebase-analysis.md` (3,450 B, 79 lines) | s0 L16; structure L27; architecture AS-IS L35; features L44; quality L51; write L61; route L69 | 0; triggers `route.md:396-397` (analysis-only) and `:410-412` (brownfield-b) | 3 files name it, 0 fixtures | n/a | Unreachable for this consumer |
 | `doc-reconciliation.md` (2,642 B, 63 lines) and `doc-repair-backfill.md` (2,814 B, 57 lines) | not listed | 0; trigger `route.md:405-407` (artifacts exist, trustworthiness NOT SURE, brownfield-c) | 8 files name each, 2 and 1 fixtures | n/a | Unreachable for this consumer |
+| `research-requirements.md` | not listed | 0 as a step in s317 to s323 (section 6.3: it never ran as a step; its only rows are two "PRD rubric walker" spawns charged to it by the extractor's label) | n/a | Read three times per sprint by the requirements authoring chain for contract text (`requirements.md:236`; section 6.3) | n/a | Analysed in section 6.3, not here |
 
 For the five never-run steps the reading is: do not cut or merge on graph's evidence. The four small ones total 12.1 KB, so the saving is nil either way. A distribution-level reading (other consumers, sprints before s317) was not available in this corpus.
 
@@ -2791,7 +2820,7 @@ The instrument is `extract.py` and its siblings (`roll.py`, `lead_time.py`, `ana
 
 | Defect | Tier | Size | Corrected in this report |
 |---|---|---|---|
-| Step attribution by last step-file read: the label moves only on a whole Read of a `steps/*.md`, and a Read of an earlier step file (a lookup) moves it back (`extract.py:411-431`) | DEFECT | Known leaks: 3.41 h of requirements charged to carry-over-evaluation (SET `current_step_file` at 11-17T03:40:26, which includes a 198-minute ask); ui-direction to implementation 0.22 h, 7 spawns, $18.5; sprint-review to implementation 1.03 h, 4 spawns (gate 3 of stories 2.1 to 2.3); sprint-review to deploy-validate 0.19 h (s323) and 0.23 h (s322); s321 stories to implementation 2.27 h | Yes, by the lead's own declarations: 12 `snapshot-update.sh --set current_step_file` events, 1 planning gate close, 3 `gate-checkpoint.sh --nonce implementation-...` spans |
+| Step attribution by last step-file read: the label moves only on a whole Read of a `steps/*.md`, and a Read of an earlier step file (a lookup) moves it back (`extract.py`, the step-label assignment in `scan()`) | DEFECT | Known leaks: 3.41 h of requirements charged to carry-over-evaluation (SET `current_step_file` at 11-17T03:40:26, which includes a 198-minute ask); ui-direction to implementation 0.22 h, 7 spawns, $18.5; sprint-review to implementation 1.03 h, 4 spawns (gate 3 of stories 2.1 to 2.3); sprint-review to deploy-validate 0.19 h (s323) and 0.23 h (s322); s321 stories to implementation 2.27 h | Yes, by the lead's own declarations: 12 `snapshot-update.sh --set current_step_file` events, 1 planning gate close, 3 `gate-checkpoint.sh --nonce implementation-...` spans |
 | Operator wait charged only where a gap exceeds 300 s, so an ask that receives notifications is charged to the lead as active; the retro commentary pause is charged to agent wait (`extract.py:374-377`) | DEFECT | s321 +4.64 h (2.40 from active, 2.24 from long agent wait, less 0.54 inside the fork copies); s322 +1.68 h (0.77 and 0.91); s323 +2.46 h (all from active) | Yes: whole span `tool_use` to `tool_result` of every `AskUserQuestion`, plus the pause flag to the next human prompt |
 | One forked session counted twice | DEFECT | s321 deploy-validate 0.95 h, 45 lead calls ($2.86 sonnet-priced); no other sprint | Yes |
 | Idle tail after a session's last tool call counted | DEFECT | s321 9.91 h (one session 7.18 h, including 6.26 h before a final prompt; 1.48 h; 1.25 h); s322 1.24 h; s323 0.00 | Yes |

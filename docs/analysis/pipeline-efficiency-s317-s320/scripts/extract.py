@@ -27,7 +27,7 @@ Two attribution rules beyond the step-file reads:
     close (replaced by a later open or still open at the end of the scan) and LEFT events are printed to stderr as
     "gate-terminator sprint=N opens= closed= unclosed= left=" lines.
 """
-import json, os, re, sys, glob, datetime as dt
+import json, os, re, sys, glob, bisect, datetime as dt
 
 ROOT = os.environ.get("EXTRACT_ROOT") or os.path.expanduser("~/.claude/projects/-Users-n8-git-graph")
 OUT = sys.argv[1]
@@ -43,6 +43,36 @@ WIN_END = (sys.argv[3] if len(sys.argv) > 3 else os.environ.get("EXTRACT_WIN_END
 # transcripts replay a burst of `attachment` records stamped BEFORE an operator pause after the record that ends
 # it, and it counts the one pause once per replayed record (lead 68cf8de7: a 4.73 h pause read as 75 h).
 MONOTONE_SEGS = os.environ.get("EXTRACT_MONOTONE_SEGS") != "0"
+# BL-1174 corrections. Each has its own switch, ON by default; with all six OFF (EXTRACT_EDGES=hand, the others 0,
+# including EXTRACT_SPLIT_SEGS=0; run as `EXTRACT_WIN_END=2026-11-20T04:20:00Z EXTRACT_EDGES=hand EXTRACT_RELABEL=0 EXTRACT_OPWAIT=0 EXTRACT_FORK_DEDUPE=0 EXTRACT_IDLE_TAIL=0 EXTRACT_SPLIT_SEGS=0`)
+# the output is byte-identical to the pre-correction extractor.
+# EXTRACT_EDGES: `derived` (default) takes each sprint's end from graph's first-parent log and the lead transcripts
+# (see derive_edges()); `hand` selects the hand-kept EDGES list below. Derivation failure exits 2, never falls back.
+EDGES_MODE = os.environ.get("EXTRACT_EDGES", "derived")
+# EXTRACT_EDGE_GAP (seconds): a derived edge is the last record before the first gap longer than this in the lead
+# active at the close commit, counted from the last record at or before the close.
+EDGE_GAP_DEFAULT = 1800   # seconds: 30 min
+EDGE_GAP = float(os.environ.get("EXTRACT_EDGE_GAP") or EDGE_GAP_DEFAULT)
+GRAPH_REPO = os.environ.get("EXTRACT_GRAPH_REPO") or "/Users/n8/git/graph"
+# EXTRACT_RELABEL: lead step labels follow the pipeline's own declarations (snapshot-update.sh --set current_step_file,
+# an edit of pipeline-snapshot.md, gate nonce spans, the planning-gate close that advances to the next step); the
+# step-file read rule stays as the fallback, and a read of an EARLIER step after a declaration does not move the label
+# back. 0 keeps the read rule alone. Only moves elapsed time and tokens between steps.
+RELABEL = os.environ.get("EXTRACT_RELABEL") != "0"
+# EXTRACT_OPWAIT: operator wait covers the WHOLE span of an AskUserQuestion (tool_use to tool_result, every gap in it,
+# not only those over 300 s) and the span from a touch of pipeline-paused.flag to the next human prompt. Moves time
+# from active / agent wait to operator wait; the elapsed total is unchanged.
+OPWAIT = os.environ.get("EXTRACT_OPWAIT") != "0"
+# EXTRACT_FORK_DEDUPE: a lead record whose uuid is already in an EARLIER-STARTED lead transcript (a forked session
+# replays its parent's records) is read for state but charged nothing; leads are scanned in first-record order.
+FORK_DEDUPE = os.environ.get("EXTRACT_FORK_DEDUPE") != "0"
+# EXTRACT_IDLE_TAIL: a gap over 300 s after a lead's last tool_use record, outside an AskUserQuestion span, is not
+# charged (the session sits idle after its work ended).
+IDLE_TAIL = os.environ.get("EXTRACT_IDLE_TAIL") != "0"
+# EXTRACT_SPLIT_SEGS: a segment is keyed by (step, sprint of the RECORD), so one that crosses a sprint edge becomes one
+# row per sprint, tokens and class rows split alike. 0 keys by step alone: the row takes the sprint of its first record,
+# and a lead's tail after the edge stays in the sprint that segment opened in.
+SPLIT_SEGS = os.environ.get("EXTRACT_SPLIT_SEGS") != "0"
 os.makedirs(OUT, exist_ok=True)
 
 STEP_RE = re.compile(r"skills/ai-dlc(?:-update)?/steps/([A-Za-z0-9_.-]+)\.md")
@@ -77,10 +107,109 @@ EDGES = [("2026-09-28T19:10:00Z",314),("2026-09-30T20:58:00Z",315),("2026-10-05T
 # record to bound the edge from above (s324 has not started); 04:20:00Z sits after the last record. An edge at
 # 16fd227d9 plus a few minutes (04:05Z) would put the lead's closing 7b/7d work and three subagents' records
 # (04:05:12Z to 04:09:53Z) into s324.
+EDGE_CMP = None   # derived edges: [(instant, sprint)] in order; set by derive_edges() before any scan
+_TS_CACHE = {}
 def sprint_of(t):
     if t < WIN_START: return None
+    if EDGE_CMP is not None:
+        x = _TS_CACHE.get(t)
+        if x is None:
+            if len(_TS_CACHE) > 400000: _TS_CACHE.clear()
+            x = _TS_CACHE[t] = ts(t)
+        for e, n in EDGE_CMP:
+            if x < e: return n
+        return None
     for e, n in EDGES:
         if t < e: return n
+
+# Step order, the planning successor and the nonce-overridden steps for RELABEL (port of build_true.py's relabel()).
+STEP_ORDER = {"route": 0, "carry-over-evaluation": 1, "requirements": 2, "architecture": 3, "ui-direction": 3.5,
+              "stories-test-strategy": 4, "implementation": 5, "sprint-review": 6, "deploy-validate": 7, "retro": 8, "handoff": 9}
+PLAN_SUCC = {"carry-over-evaluation": "requirements", "requirements": "architecture", "architecture": "stories-test-strategy",
+             "stories-test-strategy": "implementation"}
+NONCE_OVR = {"implementation", "sprint-review", "deploy-validate", "retro"}
+SET_RE = re.compile(r"--set\s+[\"']?current_step_file[\"']?\s+[\"']?([\w./-]+)")
+SNAPLINE_RE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?`?current_step_file`?(?:\*\*)?[ \t]*[:=][ \t]*`?([\w./-]+)", re.M)
+
+def step_name(v):
+    v = os.path.basename(v)
+    return v[:-3] if v.endswith(".md") else v
+
+def nonce_prefix(cmd):
+    m = re.search(r"--nonce\s+[\"']?([^\s\"']+)", cmd)
+    if not m: return None
+    n = m.group(1)
+    if n.startswith("$"):
+        m2 = re.search(r"NONCE=[\"']?([a-z][a-z-]*?)-(?:\$|\d)", cmd)
+        return m2.group(1) if m2 else None
+    m3 = re.match(r"([a-z][a-z-]*?)-\d{8}T", n)
+    return m3.group(1) if m3 else None
+
+def gate_kind(cmd):
+    """'open' / 'close' for a gate-checkpoint.sh invocation (first segment after the script name)."""
+    i = cmd.find("gate-checkpoint.sh")
+    if i < 0: return None
+    w = re.split(r"[;&|\n]", cmd[i:])[0].split()
+    if "close" in w: return "close"
+    if "open" in w: return "open"
+    return None
+
+class Rel:
+    """RELABEL state of one lead: the corrected main step `tm`, ahead of the read rule's main after a declaration."""
+    def __init__(self):
+        self.tm = "pre-step"; self.omn = "pre-step"; self.ahead = False; self.gp = None; self.gprefix = None
+        self.gateM = None; self.closed = set()
+    def cur(self): return self.gp or self.tm
+    def label(self, oldgate):
+        return "gate-validation[" + self.cur() + "]" if (oldgate or self.gp is not None) else self.tm
+    def update(self, omn, cmds, bs):
+        """Advance past one record. omn is the read rule's main AFTER the record; cmds are the record's
+        ("Bash", command) and ("Snap", new snapshot text) tool inputs; bs(src) counts a label change by source."""
+        b = self.cur()
+        if omn != self.omn:
+            si, ti = STEP_ORDER.get(omn), STEP_ORDER.get(self.tm)
+            if self.ahead and si is not None and ti is not None and si < ti: pass
+            else: self.tm = omn; self.ahead = False
+            self.omn = omn
+            if self.cur() != b: bs("inferred"); b = self.cur()
+        oi, ti = STEP_ORDER.get(self.omn), STEP_ORDER.get(self.tm)
+        if self.ahead and oi is not None and ti is not None and oi >= ti: self.ahead = False
+        def declare(v):
+            nonlocal b
+            if v in STEP_ORDER and v != self.tm:
+                self.tm = v; self.gp = None
+                oi = STEP_ORDER.get(self.omn); self.ahead = oi is not None and oi < STEP_ORDER[v]
+                if self.cur() != b: bs("declared"); b = self.cur()
+        for kind, text in cmds:
+            if kind == "Snap":
+                for m in SNAPLINE_RE.finditer(text): declare(step_name(m.group(1)))
+                continue
+            s = strip_heredocs(text)
+            if "snapshot-update.sh" in s:
+                for m in SET_RE.finditer(s): declare(step_name(m.group(1)))
+            gk = gate_kind(s)
+            nn = re.search(r"--nonce\s+[\"']?(\w[\w-]*\d{8}T\d{6}Z)", s)
+            if nn and nn.group(1) in self.closed: gk = None if gk != "close" else gk
+            elif nn and gk is None and self.gp is None:
+                pf = nonce_prefix(s)
+                ti = STEP_ORDER.get(self.tm)
+                if pf == "implementation" and ti is not None and ti > STEP_ORDER["implementation"] and "gate-checkpoint.sh" in s:
+                    self.gp = pf; self.gprefix = pf; self.gateM = self.tm
+                    if self.cur() != b: bs("declared"); b = self.cur()
+            if gk == "open":
+                self.gateM = self.tm; self.gprefix = nonce_prefix(s)
+                self.gp = self.gprefix if (self.gprefix in NONCE_OVR and self.gprefix != self.tm) else None
+                if self.cur() != b: bs("declared"); b = self.cur()
+            elif gk == "close":
+                if nn: self.closed.add(nn.group(1))
+                self.gp = None
+                if self.cur() != b: bs("declared"); b = self.cur()
+                ti = STEP_ORDER.get(self.tm)
+                if self.gprefix == "planning" and self.gateM in PLAN_SUCC and ti is not None and ti < STEP_ORDER[PLAN_SUCC[self.gateM]]:
+                    self.tm = PLAN_SUCC[self.gateM]
+                    oi = STEP_ORDER.get(self.omn); self.ahead = oi is not None and oi < STEP_ORDER[self.tm]
+                    if self.cur() != b: bs("declared"); b = self.cur()
+                self.gprefix = None
 
 def strip_heredocs(cmd):
     out = []; end = None
@@ -240,10 +369,12 @@ class Classer:
         self.descs = set(); self.read_steps = set(); self.ptoks = set()
         self.prompts = []; self.plen = 0; self.writes = []   # (message.id, [paths], prompt offset at the Write)
 
-    def interval(self, step, tt):
-        if self.clk is not None:
+    def interval(self, step, tt, mode=None):
+        # mode follows what scan() charged segs for this record: None the 300 s split, "g" the gap slot whatever the
+        # size (an operator span), "x" nothing (a fork copy or an idle tail). The clock moves in every case.
+        if self.clk is not None and mode != "x":
             d = max(0.0, tt - self.clk)
-            self.iv.setdefault((step, self.key), [0.0, 0.0])[0 if d <= 300 else 1] += d
+            self.iv.setdefault((step, self.key), [0.0, 0.0])[1 if (mode == "g" or d > 300) else 0] += d
         self.clk = tt if self.clk is None else max(self.clk, tt)
 
     def merge_hit(self, inp, cwd):
@@ -331,10 +462,14 @@ class Classer:
             d[3] += u.get("output_tokens", 0) or 0
             d[4] += 1; R["calls"] += 1
         for (s, k), R in sorted(rows.items()):
-            cfh.write(json.dumps(dict(unit=unit, sess=sess, kind="lead", step=s, cls=k,
+            cfh.write(json.dumps(dict(unit=unit, sess=sess, kind="lead", step=s[0], cls=k,
                                       sprint=sprint_of(segs[s]["first"]), **R)) + "\n")
 
 GATE_EV = []   # (sprint, "open" | "closed" | "unclosed" | "left"), lead scans only
+
+BSRC = {}      # sprint -> {"declared": n, "inferred": n}: RELABEL label changes by source, lead scans only
+PRIOR = set()  # uuids of the lead transcripts scanned so far (FORK_DEDUPE)
+PRE = {}       # lead path -> prescan() result
 
 def scan(path, kind, meta):
     usage = {}           # message.id -> (model, usage, ts, step)
@@ -352,9 +487,16 @@ def scan(path, kind, meta):
     unit = os.path.basename(path)[:-6]
     compactions = 0; humans = 0; skills = {}
     K = Classer() if kind == "lead" else None
-    def seg(s):
+    def seg(s):   # s is the segment key (step, sprint or None)
         return segs.setdefault(s, dict(first=None, last=None, active=0.0, op_wait=0.0, agent_wait=0.0,
                                        reads=0, compactions=0, humans=0, tool_bytes=0, hook_bytes=0, lines=0, gap=0.0))
+    lead = kind == "lead"
+    pre = PRE.get(path) if lead else None
+    rel = Rel() if (RELABEL and lead) else None
+    rlab = "pre-step"    # the corrected label the NEXT record is charged to (RELABEL)
+    def ST():            # the label this record is charged to
+        return rlab if rel is not None else step
+    ri = -1; mine = []
     for line in open(path, errors="replace"):
         try: r = json.loads(line)
         except Exception: continue
@@ -362,47 +504,77 @@ def scan(path, kind, meta):
         if not t or t < WIN_START: continue
         tt = ts(t)
         if WIN_END_TS is not None and tt > WIN_END_TS: continue
-        first = first or t; last = t
+        ri += 1
+        dup = False
+        if lead and FORK_DEDUPE:
+            u = r.get("uuid")
+            if u:
+                dup = u in PRIOR; mine.append(u)
+        if not dup:
+            first = first or t; last = t
         typ = r.get("type")
-        S = seg(step); S["lines"] += 1
+        kk = (ST(), sprint_of(t) if SPLIT_SEGS else None)
+        S = seg(kk) if not dup else dict(first=None, last=None, active=0.0, op_wait=0.0, agent_wait=0.0, reads=0,
+                                           compactions=0, humans=0, tool_bytes=0, hook_bytes=0, lines=0, gap=0.0)
+        S["lines"] += 1
         S["first"] = S["first"] or t; S["last"] = t
+        mode = None
         if prev_t is not None:
             gap = max(0.0, tt - prev_t)
-            # "gap" is the time between consecutive records that exceeds 300 s. It is charged to op_wait or
-            # agent_wait below AND recorded here on its own, so op_wait + agent_wait == gap. Hours built
-            # from active + op_wait + agent_wait are therefore gap-inclusive.
-            if gap <= 300: S["active"] += gap
-            else: S["gap"] += gap
-            if gap <= 300: pass
-            elif (typ == "user" and human_prompt(r)) or any(v[0] == "AskUserQuestion" for v in pend.values()): S["op_wait"] += gap
-            else: S["agent_wait"] += gap
+            ask = any(v[0] == "AskUserQuestion" for v in pend.values())
+            inpause = OPWAIT and pre is not None and ri in pre["op"]
+            force = OPWAIT and (ask or inpause)
+            if dup or (IDLE_TAIL and pre is not None and ri > pre["lt"] and gap > 300 and not ask):
+                mode = "x"    # not charged
+            else:
+                # "gap" is the time between consecutive records that exceeds 300 s, or any time inside an operator
+                # span (EXTRACT_OPWAIT). It is charged to op_wait or agent_wait below AND recorded here on its own,
+                # so op_wait + agent_wait == gap. Hours built from active + op_wait + agent_wait are therefore
+                # gap-inclusive.
+                if gap <= 300 and not force: S["active"] += gap
+                else:
+                    S["gap"] += gap
+                    if gap <= 300: mode = "g"
+                if gap <= 300 and not force: pass
+                # EXTRACT_OPWAIT: a compaction summary is a user text record but not an operator prompt; its gap is agent wait.
+                elif (typ == "user" and human_prompt(r) and not (OPWAIT and r.get("isCompactSummary"))) or ask or inpause: S["op_wait"] += gap
+                else: S["agent_wait"] += gap
         prev_t = max(prev_t, tt) if (MONOTONE_SEGS and prev_t is not None) else tt
-        if K: K.interval(step, tt)
-        if r.get("isCompactSummary"):
+        if K: K.interval(kk, tt, mode)
+        if r.get("isCompactSummary") and not dup:
             compactions += 1; S["compactions"] += 1
-        if human_prompt(r):
+        if human_prompt(r) and not dup:
             humans += 1; S["humans"] += 1
+        rcmds = []
         if typ == "assistant":
             m = r.get("message", {})
             a = r.get("attributionSkill")
             if a: skills[a] = skills.get(a, 0) + 1
-            if m.get("usage") and m.get("id"):
-                usage[m["id"]] = (m.get("model"), m["usage"], t, step)
+            if m.get("usage") and m.get("id") and not dup:
+                usage[m["id"]] = (m.get("model"), m["usage"], t, kk)
             for c in m.get("content") or []:
                 if not isinstance(c, dict) or c.get("type") != "tool_use": continue
                 inp = json.dumps(c.get("input", {}))
-                pend[c["id"]] = (c.get("name"), tt, step)
-                if c.get("name") in ("Agent", "Task"):
-                    owner[c["id"]] = (sess, step, t)
+                pend[c["id"]] = (c.get("name"), tt, ST())
+                if c.get("name") in ("Agent", "Task") and not dup:
+                    owner[c["id"]] = (sess, ST(), t)
                     rec_by[c["id"]] = (meta or {}).get("toolUseId") if kind == "sub" else None
+                if rel is not None:
+                    ci = c.get("input") or {}
+                    if not isinstance(ci, dict): ci = {}
+                    if c.get("name") == "Bash": rcmds.append(("Bash", str(ci.get("command") or "")))
+                    elif c.get("name") in ("Edit", "Write", "MultiEdit") and str(ci.get("file_path") or "").endswith("pipeline-snapshot.md"):
+                        rcmds.append(("Snap", "\n".join([str(ci.get("new_string") or ""), str(ci.get("content") or "")] +
+                                                      [str((e or {}).get("new_string") or "") for e in (ci.get("edits") or []) if isinstance(e, dict)])))
                 if kind == "lead" and c.get("name") == "Bash":
                     ev = gate_event(str((c.get("input") or {}).get("command") or ""))
                     if ev == "open":
-                        if glabel is not None: GATE_EV.append((sprint_of(gopen), "unclosed"))
+                        if glabel is not None and not dup: GATE_EV.append((sprint_of(gopen), "unclosed"))
                         glabel = "gate-validation[" + main + "]"; gate = glabel; gmain = main; gopen = t; garmed = False
-                        GATE_EV.append((sprint_of(t), "open")); step = gate
+                        if not dup: GATE_EV.append((sprint_of(t), "open"))
+                        step = gate
                     elif ev == "close":
-                        if glabel is not None: GATE_EV.append((sprint_of(gopen), "closed"))
+                        if glabel is not None and not dup: GATE_EV.append((sprint_of(gopen), "closed"))
                         gate = None; glabel = None; garmed = False; step = main
                     elif ev in ("verb", "terminal") and glabel is not None:
                         if ev == "terminal": garmed = True
@@ -427,7 +599,7 @@ def scan(path, kind, meta):
                             main = name
                             if leave:
                                 gate = None   # LEFT: a whole read of another step ends the span
-                                GATE_EV.append((sprint_of(t), "left"))
+                                if not dup: GATE_EV.append((sprint_of(t), "left"))
                             if gate is None: step = name
         elif typ == "user":
             c = r.get("message", {}).get("content")
@@ -437,7 +609,7 @@ def scan(path, kind, meta):
                         p = pend.pop(x.get("tool_use_id"), None)
                         b = rbytes(x.get("content"))
                         S["tool_bytes"] += b
-                        if p:
+                        if p and not dup:
                             fh["tools"].write(json.dumps(dict(unit=unit, sess=sess, kind=kind, step=p[2], tool=p[0],
                                 lat=round(tt - p[1], 2), bytes=b, sprint=sprint_of(t))) + "\n")
         elif typ == "attachment":
@@ -446,15 +618,22 @@ def scan(path, kind, meta):
                 b = len((a.get("content") if isinstance(a.get("content"), str) else json.dumps(a.get("content") or "")).encode())
                 if a.get("type") == "hook_additional_context": S["hook_bytes"] += b
                 cmd = a.get("command") or a.get("hookName")
-                fh["hooks"].write(json.dumps(dict(unit=unit, sess=sess, kind=kind, step=step, att=a["type"],
+                if not dup: fh["hooks"].write(json.dumps(dict(unit=unit, sess=sess, kind=kind, step=ST(), att=a["type"],
                     hook=os.path.basename(str(cmd).split()[-1].strip('"')) if a.get("command") else a.get("hookName"),
                     event=a.get("hookEvent"), ms=float(a.get("durationMs") or 0), bytes=b, sprint=sprint_of(t))) + "\n")
         if K: K.record(r, typ)
+        if rel is not None:
+            sp = sprint_of(t)
+            def bs(src):
+                if not dup: BSRC.setdefault(sp, {"declared": 0, "inferred": 0})[src] += 1
+            rel.update(main, rcmds, bs)
+            rlab = rel.label(step.startswith("gate-validation"))
         prev_type = typ
-    if glabel is not None: GATE_EV.append((sprint_of(gopen), "unclosed"))
+    if glabel is not None and first is not None: GATE_EV.append((sprint_of(gopen), "unclosed"))
+    if lead and FORK_DEDUPE: PRIOR.update(mine)
     if first is None: return
     if K: K.write(unit, sess, usage, segs)
-    tok = {}
+    tok = {}; utok = {}
     for mid, (model, u, t, s) in usage.items():
         k = (s, model)
         d = tok.setdefault(k, [0, 0, 0, 0, 0])
@@ -465,12 +644,14 @@ def scan(path, kind, meta):
         d[4] += 1
     for (s, model), d in tok.items():
         S = seg(s); S.setdefault("tok", {})[model or "?"] = d
+        e = utok.setdefault(f"{s[0]}|{model}", [0, 0, 0, 0, 0])   # units.tok is per step, summed over its sprints
+        for i in range(5): e[i] += d[i]
     fh["units"].write(json.dumps(dict(unit=unit, sess=sess, kind=kind, first=first, last=last,
         sprint=sprint_of(first), compactions=compactions, humans=humans, skills=skills, meta=meta,
-        tok={f"{s}|{m}": d for (s, m), d in tok.items()})) + "\n")
+        tok=utok)) + "\n")
     for s, S in segs.items():
         if S["first"] is None: continue
-        fh["segs"].write(json.dumps(dict(unit=unit, sess=sess, kind=kind, step=s, sprint=sprint_of(S["first"]), **S)) + "\n")
+        fh["segs"].write(json.dumps(dict(unit=unit, sess=sess, kind=kind, step=s[0], sprint=sprint_of(S["first"]), **S)) + "\n")
 
 def last_ts(path):
     """Timestamp of the last timestamped record in the file, read from its tail. None if there is none."""
@@ -490,10 +671,114 @@ def in_window(p):
     t = last_ts(p)
     return t is None or t >= WIN_START
 
+def prescan(path):
+    """One pass over a lead transcript, in the same record window scan() uses. Returns first / last / n over every
+    timestamped record up to WIN_END (no WIN_START clip; the lead's span for derive_edges()), and for the windowed
+    records, indexed as scan() indexes them: lt, the index of the last record carrying a tool_use block (IDLE_TAIL),
+    and spans, one (indices, touch t, prompt t) per touch of pipeline-paused.flag through the next human prompt that
+    is not a compaction summary (OPWAIT; a touch with no later human prompt has none). The module turns spans into op."""
+    first = last = None; n = 0; ri = -1; lt = -1; spans = []; buf = []; pending = False; tss = []; t0 = None
+    for line in open(path, errors="replace"):
+        try: r = json.loads(line)
+        except Exception: continue
+        t = r.get("timestamp")
+        if not t: continue
+        tt = ts(t)
+        if WIN_END_TS is not None and tt > WIN_END_TS: continue
+        n += 1; tss.append(tt)
+        if first is None or tt < first[0]: first = (tt, t)
+        if last is None or tt >= last[0]: last = (tt, t)
+        if t < WIN_START: continue
+        ri += 1
+        if pending:
+            buf.append(ri)
+            if human_prompt(r) and not r.get("isCompactSummary"): spans.append((buf, t0, t)); buf = []; pending = False
+        c = (r.get("message") or {}).get("content") if r.get("type") == "assistant" else None
+        if isinstance(c, list):
+            for x in c:
+                if not isinstance(x, dict) or x.get("type") != "tool_use": continue
+                lt = ri
+                cmd = str((x.get("input") or {}).get("command") or "") if x.get("name") == "Bash" else ""
+                if "pipeline-paused.flag" in cmd and re.search(r"\btouch\b", cmd):
+                    if not pending: t0 = t
+                    pending = True
+    return dict(first=first, last=last, n=n, lt=lt, spans=spans, ts=sorted(tss))
+
+def edge_iso(x):
+    s = dt.datetime.fromtimestamp(x, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    ms = int(round((x - int(x)) * 1000))
+    return s + (".%03d" % ms if ms else "") + "Z"
+
+def derive_edges(info):
+    """EXTRACT_EDGES=derived. close(N) is the committer time of the LAST first-parent commit on graph's main whose
+    subject matches `[Ss]print N closed` or `chore(sN): finalize snapshot`. active(N) is the lead transcript (at least
+    3 records) whose first record <= close(N) <= its last record, the one with the latest last record if several.
+    edge(N) = min(last record of active(N), first record of the earliest lead starting after close(N)); with no
+    active lead, close(N). The open sprint ends at the 2099 sentinel. Exits 2 when git fails or finds no close commit."""
+    import subprocess
+    def die(m): print("extract.py: EXTRACT_EDGES=derived: " + m, file=sys.stderr); sys.exit(2)
+    p = subprocess.run(["git", "-C", GRAPH_REPO, "log", "--first-parent", "main", "--format=%H|%cI|%s"],
+                       capture_output=True, text=True)
+    if p.returncode != 0: die("git log failed in %s: %s" % (GRAPH_REPO, p.stderr.strip()))
+    close = {}
+    for ln in p.stdout.splitlines():
+        h, ci, subj = ln.split("|", 2)
+        m = re.search(r"[Ss]print (\d+) closed", subj) or re.match(r"chore\(s(\d+)\): finalize snapshot", subj)
+        if not m: continue
+        x = dt.datetime.fromisoformat(ci).timestamp(); n = int(m.group(1))
+        if n not in close or x > close[n][0]: close[n] = (x, h)
+    if not close: die("no sprint close commit found in %s" % GRAPH_REPO)
+    w0 = ts(WIN_START)
+    leadsp = [(i["first"][0], i["last"][0], i["ts"]) for i in info.values() if i["n"] >= 3]
+    rows = []; cmp_ = []
+    for n in sorted(k for k in close if close[k][0] >= w0):
+        c, sha = close[n]
+        act = [(l, t) for f, l, t in leadsp if f <= c <= l]
+        nxt = [f for f, l, t in leadsp if f > c]
+        if act:
+            la, tl = max(act, key=lambda x: x[0]); nf = min(nxt) if nxt else None
+            # the active lead goes quiet: the last record before the first gap over EDGE_GAP seconds, counting from
+            # the last record at or before the close; no such gap, the lead's last record
+            i = max(0, bisect.bisect_right(tl, c) - 1); e = la; br = "active-lead-last"
+            while i + 1 < len(tl):
+                if tl[i + 1] - tl[i] > EDGE_GAP: e = tl[i]; br = "gap"; break
+                i += 1
+            if nf is not None and nf < e: e, br, cm = nf, "next-lead-first", nf
+            else: cm = e + 0.001   # the active lead's own last record is still sprint n
+        else: e, br, cm = c, "close", c
+        rows.append((n, e, sha, br)); cmp_.append((cm, n))
+    if not rows: die("no sprint closed inside the window")
+    if any(cmp_[i][0] >= cmp_[i + 1][0] for i in range(len(cmp_) - 1)): die("derived edges are not increasing: %r" % (rows,))
+    last_n = rows[-1][0]
+    rows.append((last_n + 1, ts("2099-01-01T00:00:00Z"), "-", "open-sprint")); cmp_.append((ts("2099-01-01T00:00:00Z"), last_n + 1))
+    hand = {n: e for e, n in EDGES}
+    with open(os.path.join(OUT, "edges.tsv"), "w") as f:
+        f.write("sprint\tedge\tclose_sha\trule\n")
+        for n, e, sha, br in rows: f.write("%d\t%s\t%s\t%s\n" % (n, edge_iso(e), sha, br))
+    for n, e, sha, br in rows:
+        h = hand.get(n)
+        print("edge sprint=%d derived=%s hand=%s diff_min=%s" % (n, edge_iso(e), h or "-",
+              "%.1f" % ((e - ts(h)) / 60) if h else "-"), file=sys.stderr)
+    return cmp_
+
 leads = [p for p in glob.glob(ROOT + "/*.jsonl") if in_window(p)]
 subs = [p for p in glob.glob(ROOT + "/*/subagents/*.jsonl") if in_window(p)]
 print("leads", len(leads), "subs", len(subs), file=sys.stderr)
-for p in sorted(leads): scan(p, "lead", None)
+if EDGES_MODE not in ("derived", "hand"):
+    print("extract.py: EXTRACT_EDGES must be derived or hand", file=sys.stderr); sys.exit(2)
+if EDGES_MODE == "derived" or FORK_DEDUPE or IDLE_TAIL or OPWAIT:
+    for p in leads: PRE[p] = prescan(p)
+if EDGES_MODE == "derived": EDGE_CMP = derive_edges(PRE)
+# a pause span marks operator wait only when its human prompt is in the sprint the touch was in (EXTRACT_OPWAIT): the
+# prompt that ends a sprint's closing pause, arriving in the next sprint, is not charged back to the closing sprint
+for _i in PRE.values():
+    _i["op"] = set()
+    for _idx, _a, _b in _i["spans"]:
+        if sprint_of(_a) == sprint_of(_b): _i["op"].update(_idx)
+if FORK_DEDUPE:
+    lead_order = sorted(leads, key=lambda p: ((PRE[p]["first"][0] if PRE[p]["first"] else float("inf")), p))
+else: lead_order = sorted(leads)
+for p in lead_order: scan(p, "lead", None)
 for i, p in enumerate(sorted(subs)):
     mp = p[:-6] + ".meta.json"
     meta = json.load(open(mp)) if os.path.exists(mp) else {}
@@ -506,6 +791,8 @@ for sp in sorted(gtab, key=lambda x: (x is None, x)):
     g = gtab[sp]
     print("gate-terminator sprint=%s opens=%d closed=%d unclosed=%d left=%d" % (
         sp, g.get("open", 0), g.get("closed", 0), g.get("unclosed", 0), g.get("left", 0)), file=sys.stderr)
+for sp in sorted(BSRC, key=lambda x: (x is None, x)):
+    print("boundary-source sprint=%s declared=%d inferred=%d" % (sp, BSRC[sp]["declared"], BSRC[sp]["inferred"]), file=sys.stderr)
 for k in list(owner):
     seen = {k}; cur = k
     while owner[k][1] == "pre-step" and rec_by.get(cur) and rec_by[cur] in owner and rec_by[cur] not in seen:
