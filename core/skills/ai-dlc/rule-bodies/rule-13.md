@@ -105,7 +105,7 @@ as `SKILL.md` Handoff Protocol "<subsection>".
 **(a) Human-requested handoff** -- user explicitly asks to continue
 in a new session (directly, or in response to a Rule 2(b)/(c)
 reminder). Rule 11(b) preamble applies. Only path (a) initiates a
-handoff. When it fires, **READ AND FOLLOW** `steps/handoff.md` — the
+handoff. When it fires, **READ AND FOLLOW** `steps/handoff.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) — the
 ordered 5-step procedure (stop teammates → commit → finalize snapshot →
 emit the bare `/ai-dlc resume` line → pause flag + end session) and the
 resume-line template. Resume is snapshot-driven: the entry line carries

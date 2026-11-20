@@ -125,7 +125,7 @@ render_def() {            # render_def <name> <model-key> [effort]
     printf -- '---\n'
     printf '%s\n' "$DEF_MARKER"
     printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your\n' "$1"
-    printf 'FIRST action before any other work.\n'
+    printf 'FIRST action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`.\n'
   } > "$CONSUMER/.claude/agents/$1.md"
 }
 
@@ -179,7 +179,7 @@ render_def defnoeffort opus
   printf -- '---\nname: defwrongrole\ndescription: AI/DLC role defwrongrole — rendered from aiDlcRoles.defwrongrole; do not edit by hand\nmodel: opus\neffort: high\n---\n'
   printf '%s\n' "$DEF_MARKER"
   printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your\n' defok
-  printf 'FIRST action before any other work.\n'
+  printf 'FIRST action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`.\n'
 } > "$CONSUMER/.claude/agents/defwrongrole.md"
 
 # NO definition at all for `defnodef`, nor for tea/architect/badeffort/nocfg.

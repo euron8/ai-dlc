@@ -26,3 +26,5 @@ git
 ls
 ln
 sleep
+stat
+touch

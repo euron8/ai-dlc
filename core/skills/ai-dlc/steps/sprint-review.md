@@ -183,4 +183,4 @@ gate validation [sprint-review] (`gate-validation.md`). Check 20 loads at this
 gate and reads the minimum from Steps 1 and 2 above, so the gate log entry records
 `validation_intensity:` and `minimum_met:` here as it does at every planning gate.
 Then:
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/deploy-validate.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/deploy-validate.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

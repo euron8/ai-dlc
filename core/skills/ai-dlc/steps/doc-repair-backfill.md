@@ -54,4 +54,4 @@ Run auto-handoff evaluation at `Seam B` with the label
 `doc-repair-backfill end-of-step pre-gate` (see `_gate-procedures.md`
 \"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
 gate validation [planning] (`gate-validation.md`), then:
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

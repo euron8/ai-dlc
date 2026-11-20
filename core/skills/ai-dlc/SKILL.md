@@ -27,7 +27,7 @@ in a single conversation.
 **This protocol governs a COMPACTION inside a session that has already
 routed. It is not the resume procedure.** A session whose input is
 `/ai-dlc resume` -- or any other `/ai-dlc` invocation -- has not
-compacted and has not routed: **READ AND FOLLOW**
+compacted and has not routed: **READ AND FOLLOW** (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
 `{project-root}/.claude/skills/ai-dlc/steps/route.md` before any
 pipeline action, as INITIALIZATION requires. Its Step 0 dispatches
 `resume` after Step 0a's snapshot integrity checks, and
@@ -49,7 +49,7 @@ replaced by a summary (e.g., missing earlier turns referenced by the
 snapshot's Recent Activity, a summary-style opening rather than a
 user directive, or the agent cannot recall specifics that the
 snapshot records), the agent's FIRST action MUST be to read
-`_bmad-output/pipeline-snapshot.md` in full before any pipeline
+`_bmad-output/pipeline-snapshot.md` in full (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before any pipeline
 action. The first output line MUST acknowledge the recovery, naming
 the current step file and last gate passed. This supersedes the
 Rule 11(b) interpretation-preamble requirement for the first
@@ -444,7 +444,7 @@ issue where a professional default exists. Just do it.
 The escalation entry format (append, do not overwrite) and the
 resolution lifecycle (how HARD_BLOCK / DEFERRAL_REQUEST / DECIDED
 statuses are closed at the production checkpoint) live in
-`escalations.md` alongside this file. READ AND FOLLOW it when writing or
+`escalations.md` alongside this file. READ AND FOLLOW it (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) when writing or
 resolving an escalation.
 
 When resolving a HARD_BLOCK changes how an acceptance criterion is
@@ -560,7 +560,7 @@ fold it into a later one, to suit the lanes.
 
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 
-Concrete details specified by carry-over items, brainstorming sessions or direct user instructions are **locked requirements**: validation cycles may challenge them but MUST NOT silently change them, and any divergence requires human sign-off via `HARD_BLOCK` escalation. READ AND FOLLOW `rule-bodies/rule-13.md` before acting under this rule; that file carries the full, binding text of this rule.
+Concrete details specified by carry-over items, brainstorming sessions or direct user instructions are **locked requirements**: validation cycles may challenge them but MUST NOT silently change them, and any divergence requires human sign-off via `HARD_BLOCK` escalation. READ AND FOLLOW `rule-bodies/rule-13.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 **Carrier:** `scripts/ai-dlc/validate-locked-anchor.sh`
 
@@ -643,7 +643,7 @@ FOLLOW it when authoring or auditing a rule file (`retro.md` Step 4).
      rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 19 -- Agent spawns MUST bind the full role contract
 
-When the lead invokes the `Agent` tool to spawn a teammate, the spawn MUST bind that teammate to its full role contract -- the role file, its rendered definition, and every mandatory binding -- not the model alone. READ AND FOLLOW `rule-bodies/rule-19.md` before acting under this rule; that file carries the full, binding text of this rule.
+When the lead invokes the `Agent` tool to spawn a teammate, the spawn MUST bind that teammate to its full role contract -- the role file, its rendered definition, and every mandatory binding -- not the model alone. READ AND FOLLOW `rule-bodies/rule-19.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 **Carrier:** `scripts/ai-dlc/validate-spawn-ledger.sh`
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,
@@ -651,7 +651,7 @@ When the lead invokes the `Agent` tool to spawn a teammate, the spawn MUST bind 
      rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 20 -- Validation evaluations run in independent subagents with provenance
 
-Validation evaluations -- the four `/bmad-*` sub-skills and the native `ai-dlc-adversary-review` convergence review -- MUST be evaluated by real, independent subagents with `mode: subagent` provenance, never roleplayed solo in the lead's own context. READ AND FOLLOW `rule-bodies/rule-20.md` before acting under this rule; that file carries the full, binding text of this rule.
+Validation evaluations -- the four `/bmad-*` sub-skills and the native `ai-dlc-adversary-review` convergence review -- MUST be evaluated by real, independent subagents with `mode: subagent` provenance, never roleplayed solo in the lead's own context. READ AND FOLLOW `rule-bodies/rule-20.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 **Carrier:** `.claude/skills/ai-dlc/steps/_gate-procedures.md`
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,
@@ -659,7 +659,7 @@ Validation evaluations -- the four `/bmad-*` sub-skills and the native `ai-dlc-a
      rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 21 -- READ AND FOLLOW is a Read tool call, not recall
 
-A `READ AND FOLLOW` directive MUST produce a `Read` tool call for the
+A `READ AND FOLLOW` directive MUST produce a `Read` tool call (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) for the
 target step file as the FIRST tool call in the response. No other
 action (Bash, Edit, Write, Agent, Skill) before the Read. The lead
 MUST NOT substitute memory, prior-session knowledge, or accumulated
@@ -814,7 +814,7 @@ offload them freely.
      rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 24 -- Planning and retro exploration is dispatched to analyst subagents
 
-Read-heavy exploration in the planning and retro steps is the lead's largest avoidable cache-read cost and MUST be dispatched to an `analyst` subagent, whose raw reading never enters the lead's context. READ AND FOLLOW `rule-bodies/rule-24.md` before acting under this rule; that file carries the full, binding text of this rule.
+Read-heavy exploration in the planning and retro steps is the lead's largest avoidable cache-read cost and MUST be dispatched to an `analyst` subagent, whose raw reading never enters the lead's context. READ AND FOLLOW `rule-bodies/rule-24.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 **Carrier:** `scripts/ai-dlc/validate-draft-stamps.sh`
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,
@@ -832,7 +832,7 @@ read path.
 **Where an artifact LIVES is a separate rule, and it has one home.** The
 path grammar — the directory is the only sprint slot, `<area>/s<N>/`, and
 no basename may carry a sprint token — lives in
-`artifact-path-grammar.md` alongside this file. READ AND FOLLOW it before
+`artifact-path-grammar.md` alongside this file. READ AND FOLLOW it (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before
 writing a pipeline artifact to a path this rulebook does not already
 name — **and before handing a session or run name to a `/bmad-*`
 sub-skill, because those compose their own output directory from it and
@@ -1012,7 +1012,7 @@ contract is flagged by the retro rule-file audit (`retro.md` Step 4).
      rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 27 -- Layered rulebook: core, extensions, overrides
 
-The consumer rulebook is three layers -- core, extensions, overrides -- and a consumer self-improves through the layer contract, never by re-tangling core against upstream. READ AND FOLLOW `rule-bodies/rule-27.md` before acting under this rule; that file carries the full, binding text of this rule.
+The consumer rulebook is three layers -- core, extensions, overrides -- and a consumer self-improves through the layer contract, never by re-tangling core against upstream. READ AND FOLLOW `rule-bodies/rule-27.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 **Carrier:** `scripts/ai-dlc/validate-layer-entries.sh`
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,
@@ -1020,7 +1020,7 @@ The consumer rulebook is three layers -- core, extensions, overrides -- and a co
      rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 28 -- Delegation is the default; inline execution is the exception
 
-The lead MUST delegate any action a subagent can service; inline execution is permitted only for the non-delegable set. READ AND FOLLOW `rule-bodies/rule-28.md` before acting under this rule; that file carries the full, binding text of this rule.
+The lead MUST delegate any action a subagent can service; inline execution is permitted only for the non-delegable set. READ AND FOLLOW `rule-bodies/rule-28.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 **Carrier:** `.claude/skills/ai-dlc/steps/implementation.md`
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,
@@ -1028,7 +1028,7 @@ The lead MUST delegate any action a subagent can service; inline execution is pe
      rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 29 -- Steering budget: the operator must always be able to reach you
 
-Claude Code delivers a queued operator message only at a tool-call boundary, so what silences the operator is a long single foreground tool call, and the lead MUST bound foreground call duration within the steering budget. READ AND FOLLOW `rule-bodies/rule-29.md` before acting under this rule; that file carries the full, binding text of this rule.
+Claude Code delivers a queued operator message only at a tool-call boundary, so what silences the operator is a long single foreground tool call, and the lead MUST bound foreground call duration within the steering budget. READ AND FOLLOW `rule-bodies/rule-29.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 **Carrier:** `scripts/ai-dlc/validate-steering-budget.sh`
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,
@@ -1193,4 +1193,4 @@ when applying: overrides > extensions > core.
 Load the router step to determine the pipeline variant and begin
 execution:
 
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/route.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/route.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

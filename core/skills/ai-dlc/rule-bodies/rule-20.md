@@ -194,7 +194,7 @@ not left to the sub-skill's generic persona. Every such invocation MUST
 carry this preamble, defined ONCE here and *referenced* (never restated)
 by the call sites -- same single-source-of-truth discipline as Rule 19:
 
-> Each participant persona MUST, as its FIRST action, Read and follow
+> Each participant persona MUST, as its FIRST action, Read (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) and follow
 > its ai-dlc role contract file, then debate from that lens:
 > PM -> `.claude/team-roles/pm.md`,
 > Architect -> `.claude/team-roles/architect.md`,

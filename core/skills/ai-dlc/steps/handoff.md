@@ -137,7 +137,7 @@ Execute this 5-step procedure in order:
 
 **Resume is snapshot-driven.** The entry line is the bare skill
 invocation; the resume path (`route.md` Step 0) reads
-`_bmad-output/pipeline-snapshot.md` for ALL state. Do NOT narrate
+`_bmad-output/pipeline-snapshot.md` for ALL state (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`). Do NOT narrate
 pipeline state (sprint, branch, step, open items, decisions) into the
 resume line — the snapshot is the single source of truth, and any
 handoff-only instruction that is not derivable from other snapshot fields

@@ -184,7 +184,7 @@ render_one() {
   printf '%s from .claude/settings.json aiDlcRoles.%s. Edit the settings entry, then re-render. -->\n' \
     "$GEN_PREFIX" "$1"
   printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your\n' "$1"
-  printf 'FIRST action before any other work.\n'
+  printf 'FIRST action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`.\n'
   printf 'Never create documentation or report files unless your brief names the path; return findings\n'
   printf 'as text. Do not re-delegate your assignment to another agent.\n'
   printf 'A path `.claude/hooks/ai-dlc-protect.sh` protects (its PROTECTED_PATTERNS) is read with the native Read tool, never with a context-mode tool (ctx_*): the hook denies those calls.\n'

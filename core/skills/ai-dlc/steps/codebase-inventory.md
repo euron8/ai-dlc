@@ -61,7 +61,7 @@ Run gate validation [planning] (`gate-validation.md`). Check 1 (validation cycle
 
 ### 5. Proceed
 
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
 
 The discovery step will use the inventory to ground brainstorming and
 brief creation in what actually exists.

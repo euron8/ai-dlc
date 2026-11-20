@@ -313,7 +313,7 @@ if [ -z "$AGENT_ID" ] && [ "$AIDLC_SESSION" = "1" ] && [ -n "$TRANSCRIPT" ] && [
         ROUTE_REASON="AI/DLC: this session was invoked with /ai-dlc and has not read the router.
 
 SKILL.md INITIALIZATION is unconditional: \"Load the router step to determine the pipeline
-variant and begin execution: READ AND FOLLOW .claude/skills/ai-dlc/steps/route.md\".
+variant and begin execution: READ AND FOLLOW .claude/skills/ai-dlc/steps/route.md (native Read, in consecutive \`offset\`/\`limit\` chunks of at most 16 KB covering the whole file, never \`ctx_*\`)\".
 Nothing below it runs until that happens -- variant detection, the Step 1a artifact-budget
 gate, sprint_id, the envelope roll, the Rule 3(d) sprint-scope pause, story files and every
 gate all live behind it.
@@ -321,7 +321,7 @@ gate all live behind it.
 This is not a judgement about the task being small. Rule 4: \"This is simple\" is never a
 valid reason to bypass a step. Rule 5: follow the routing, not your own read of the work.
 
-READ .claude/skills/ai-dlc/steps/route.md now and follow it. If you had already routed in an
+READ .claude/skills/ai-dlc/steps/route.md (native Read, in consecutive \`offset\`/\`limit\` chunks of at most 16 KB covering the whole file, never \`ctx_*\`) now and follow it. If you had already routed in an
 earlier turn, reading it again is cheap and the envelope roll is a documented no-op. Reads,
 Bash, Skill and Agent are all still allowed -- only this write is denied."
         {

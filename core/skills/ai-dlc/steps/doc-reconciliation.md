@@ -60,4 +60,4 @@ Write the reconciliation report and gap analysis to:
 ### 6. Gate Validation and Proceed
 
 Run gate validation [planning] (`gate-validation.md`), then:
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/doc-repair-backfill.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/doc-repair-backfill.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

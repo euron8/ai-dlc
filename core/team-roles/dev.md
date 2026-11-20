@@ -280,7 +280,7 @@ Before starting any task, read these files in order:
   `Agent` tool: `subagent_type: pre-reviewer`, no `name`, and a brief that
   carries the standing line *"Your operating contract is
   `.claude/team-roles/pre-reviewer.md`. Read it and follow it as your FIRST
-  action before any other work."*, the story's acceptance criteria, and
+  action before any other work, reading it with native Read in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`."*, the story's acceptance criteria, and
   `git diff <story base>..HEAD` from your worktree. The brief carries no
   `shard:` line. Repair each finding in the same session, or record in the
   Dev Agent Record why you did not. This check is part of your own

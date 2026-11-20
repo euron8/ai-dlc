@@ -51,6 +51,7 @@ echo "HERMETIC-CONSUMED $VAL"
 [ -n "${GATE:-}" ] && [ -f "$GATE" ] && echo "HERMETIC-CONSUMED $GATE"
 [ -n "${GATE:-}" ] && [ -f "$(dirname "$GATE")/ai-dlc-advisor-detect.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$GATE")/ai-dlc-advisor-detect.sh"
 [ -n "${POSTCOMPACT:-}" ] && [ -f "$POSTCOMPACT" ] && echo "HERMETIC-CONSUMED $POSTCOMPACT"
+[ -n "${GATE:-}" ] && [ -f "$(dirname "$GATE")/ai-dlc-handoff-entry.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$GATE")/ai-dlc-handoff-entry.sh"
 [ -f "$(dirname "$HOOK")/ai-dlc-context-provenance.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$HOOK")/ai-dlc-context-provenance.sh"
 [ -f "$(dirname "$HOOK")/ai-dlc-handoff-pending.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$HOOK")/ai-dlc-handoff-pending.sh"
 [ -f "$(dirname "$VAL")/verdict.sh" ] && echo "HERMETIC-CONSUMED $(dirname "$VAL")/verdict.sh"
@@ -417,6 +418,9 @@ jbounded() { # jbounded <file_path> <limit|-> <offset|->
   [ "$3" != "-" ] && _j="$_j,\"offset\":$3"
   printf '%s}}' "$_j"
 }
+# A bounded Read that covers a small file whole: the gate refuses every UNBOUNDED Read of a mandated file,
+# so the compliant spelling carries offset and limit (the plugin exempts those and the gate credits them).
+jfull() { jbounded "$1" 2000 1; } # jfull <file_path>
 
 # A fresh project per scenario. The gate's whole state is two dotfiles under _bmad-output/, so
 # scenarios that shared a root would silently inherit each other's progress.
@@ -556,10 +560,10 @@ p_ladder() { # p_ladder <gate> <abs|rel|consumer>
       f="$_p/$f"
       ;;
   esac
-  d="$(gate_call "$1" "$_p" "$(jcall Read "$s")")"
+  d="$(gate_call "$1" "$_p" "$(jfull "$s")")"
   allowed "$d" || { printf 'FAIL:%s: denied the mandated snapshot Read\n' "$2"; return; }
   [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] || { printf 'FAIL:%s: the mandated snapshot Read did not advance the gate\n' "$2"; return; }
-  d="$(gate_call "$1" "$_p" "$(jcall Read "$f")")"
+  d="$(gate_call "$1" "$_p" "$(jfull "$f")")"
   allowed "$d" || { printf 'FAIL:%s: denied the mandated step-file Read\n' "$2"; return; }
   [ -e "$_p/$mk" ] && { printf 'FAIL:%s: both mandated Reads happened and the gate stayed armed\n' "$2"; return; }
   [ -e "$_p/$pg" ] && { printf 'FAIL:%s: progress state survived the disarm\n' "$2"; return; }
@@ -661,54 +665,205 @@ p_fastpath() {
   printf 'PASS\n'
 }
 
-# 9/10. "IN FULL" IS PART OF THE MANDATE AND THE GATE USED TO JOIN ON TOOL NAME AND PATH ALONE.
-#    `Read <mandated file> limit=1` cleared the marker exactly as a full Read did: measured on
-#    the pre-fix gate, the bounded snapshot Read was ALLOWED and advanced the stage, and the
-#    bounded step Read was ALLOWED and disarmed the gate -- 1 line of 1210 loaded, gate inert.
-#    That is the THIRD skip shape the filing records, and it was the one taken in the open.
+# 9/10. A MANDATED FILE IS READ IN FULL = COVERED (BL-1184). The context-mode plugin replaces the result of a Read with
+#    neither offset nor limit of a large file with a search pointer, so the gate refuses every such Read and the gate credits the lines each
+#    bounded Read loads, one record per call, and a file is satisfied when the credited ranges are
+#    contiguous from line 1 to its last line. The pre-BL-1184 gate DENIED every bounded Read of the
+#    snapshot or step file; with the plugin present that left no admissible Read at all.
 #
-#    TWO PREDICATES, ONE PER STAGE, BECAUSE THEY ARE TWO CALL SITES. A single predicate would be
-#    satisfied by a gate that tests only the stage it happened to reach first, and the pre-fix
-#    gate had exactly two places to fix.
-#
-#    EACH CARRIES ITS OWN CONTROL, IN THE SAME PREDICATE. A deny is easy to produce by breaking
-#    the gate, so the arm is not "the bounded Read is refused" but "the bounded Read is refused
-#    AND the unbounded one is allowed". The `offset:1` call is the near-miss: a Read starting at
-#    line 1 is a full read and must be allowed, so a test widened to "any offset field is a
-#    partial" fails here rather than passing as a stricter gate.
-p_full_snapshot() {
-  _p="$(armed_proj "$HOOK" architecture.md flat)"
-  for _b in "1:-" "-:800"; do
-    d="$(gate_call "$1" "$_p" "$(jbounded "$_p/_bmad-output/pipeline-snapshot.md" "${_b%%:*}" "${_b#*:}")")"
-    allowed "$d" && { printf 'FAIL:a snapshot Read bounded by {limit=%s offset=%s} was allowed as the mandated FIRST call\n' "${_b%%:*}" "${_b#*:}"; return; }
-    grep -q 'IN FULL' <<<"${d#*|}" || { printf 'FAIL:the bounded snapshot Read {limit=%s offset=%s} was denied for some other reason than being partial\n' "${_b%%:*}" "${_b#*:}"; return; }
-    [ -e "$_p/$pg" ] && { printf 'FAIL:a bounded snapshot Read advanced the gate — the partial cleared the stage\n'; return; }
-  done
-  # CONTROL: the same Read with neither field, and the near-miss that must NOT be treated as
-  # partial. Without these the arm would pass against a gate that denies every Read there is.
-  d="$(gate_call "$1" "$_p" "$(jbounded "$_p/_bmad-output/pipeline-snapshot.md" - 1)")"
-  allowed "$d" || { printf 'FAIL:a snapshot Read at offset 1 is a FULL read and was denied — the test widened past its subject\n'; return; }
-  [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] || { printf 'FAIL:the offset-1 snapshot Read did not advance the gate\n'; return; }
+#    EVERY DENY CELL CARRIES ITS ALLOW TWIN IN THE SAME PREDICATE, one property apart, so a gate that
+#    denies unconditionally (or allows unconditionally) fails one of the two. The seeds are built by
+#    arithmetic the assertions quote: a body line is 61 bytes, so 268 lines are 16348 bytes (under the
+#    16384 cap) and 269 are 16409 (over). Chunk 1 of a 400-line body is therefore lines 1-268.
+mkbody() { # mkbody <file> <lines> <width> -- <lines> lines of exactly <width> bytes each, newline included
+  awk -v n="$2" -v w="$3" 'BEGIN { s = sprintf("%*s", w - 1, ""); gsub(/ /, "x", s); for (i = 1; i <= n; i++) print s }' > "$1"
+}
+# cg: one gate call carrying a RANDOM seed of its own. The gate names a credit `<role>.$$.${RANDOM}`; every
+# in-process call here shares this script's `$$` and forks from the same RANDOM state, so without a seed
+# two calls of one project would collide on a name, which no two real hooks (own pid) ever do.
+cg() { # cg <gate> <project> <json> -> "<decision>|<reason>"
+  _cn="$(cat "$WORK/cg.n" 2>/dev/null)"; _cn=$((${_cn:-0} + 1)); printf '%s\n' "$_cn" > "$WORK/cg.n"
+  ( RANDOM=$_cn; gate_call "$1" "$2" "$3" )
+}
+jtu() { # jtu <file_path> <offset|-> <limit|-> <tool_use_id> -- a Read carrying its tool_use_id
+  _j="{\"tool_name\":\"Read\",\"session_id\":\"sess-A\",\"tool_use_id\":\"$4\",\"tool_input\":{\"file_path\":\"$1\""
+  [ "$2" != "-" ] && _j="$_j,\"offset\":$2"
+  [ "$3" != "-" ] && _j="$_j,\"limit\":$3"
+  printf '%s}}' "$_j"
+}
+# bigw <snap lines> <snap width> <step lines> <step width> [handoff] -> an armed project (stage snapshot)
+# whose snapshot and step file were rewritten AFTER arming; the gate judges the files live.
+bigw() {
+  if [ "${5:-}" = handoff ]; then
+    _bp="$(newproj handoff.md consumer)"; arm_marker "$HOOK" "$_bp"
+  else
+    _bp="$(armed_proj "$HOOK" architecture.md flat)"
+  fi
+  mkbody "$_bp/_bmad-output/pipeline-snapshot.md" "$1" "$2"
+  mkbody "$(stepabs "$_bp")" "$3" "$4"
+  printf '%s\n' "$_bp"
+}
+stepabs() { # stepabs <project> -> the absolute step file the marker names
+  _sa="$(marker_step "$1")"; case "$_sa" in /*) printf '%s\n' "$_sa" ;; *) printf '%s/%s\n' "$1" "$_sa" ;; esac
+}
+ncred() { # ncred <project> <snap|step> -> how many credit records of that role are on disk
+  _nc=0; for _cf in "$1"/_bmad-output/.recover-credit."$2".*; do [ -e "$_cf" ] && _nc=$((_nc + 1)); done; printf '%s\n' "$_nc"
+}
+# cov_world <gate> <spec: "offset:limit ..."> -> a project at stage step whose step file was read by those chunks
+cov_world() {
+  _w="$(bigw 3 40 400 61)"; _ws="$(stepabs "$_w")"
+  cg "$1" "$_w" "$(jfull "$_w/_bmad-output/pipeline-snapshot.md")" >/dev/null
+  for _c in $2; do cg "$1" "$_w" "$(jtu "$_ws" "${_c%%:*}" "${_c#*:}" "toolu_${_c%%:*}")" >/dev/null; done
+  printf '%s\n' "$_w"
+}
+p_cov() { # a full chunk set satisfies; a gap set is denied naming exactly the gap; an overlapping set satisfies
+  _g="$1"
+  _w="$(cov_world "$_g" "1:268 269:132")"
+  { [ ! -e "$_w/$mk" ] && [ -e "$_w/_bmad-output/.recover-satisfied" ]; } || { printf 'FAIL:the full chunk set 1-268, 269-400 did not satisfy (marker kept, or no .recover-satisfied)\n'; return; }
+  _w="$(cov_world "$_g" "1:100 150:251")"
+  [ -e "$_w/$mk" ] || { printf 'FAIL:the gap set 1-100 and 150-400 disarmed the gate\n'; return; }
+  d="$(cg "$_g" "$_w" "$(jcall Read "$_w/decoy.md")")"
+  allowed "$d" && { printf 'FAIL:a decoy Read was allowed with a gap in the step file\n'; return; }
+  grep -qF 'offset=101 limit=268' <<<"${d#*|}" || { printf 'FAIL:the deny for the gap set does not name `offset=101 limit=268`: %s\n' "${d#*|}"; return; }
+  _w="$(cov_world "$_g" "1:200 150:151 250:151")"
+  { [ ! -e "$_w/$mk" ] && [ -e "$_w/_bmad-output/.recover-satisfied" ]; } || { printf 'FAIL:the overlapping set 1-200, 150-300, 250-400 did not satisfy\n'; return; }
   printf 'PASS\n'
 }
-
-p_full_step() {
-  _p="$(armed_proj "$HOOK" architecture.md flat)"
-  gate_call "$1" "$_p" "$(jcall Read "$_p/_bmad-output/pipeline-snapshot.md")" >/dev/null
-  [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] \
-    || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the full snapshot Read did not reach stage two\n'; return; }
-  for _b in "1:-" "-:800"; do
-    d="$(gate_call "$1" "$_p" "$(jbounded "$_p/architecture.md" "${_b%%:*}" "${_b#*:}")")"
-    allowed "$d" && { printf 'FAIL:a step-file Read bounded by {limit=%s offset=%s} satisfied the SECOND mandate\n' "${_b%%:*}" "${_b#*:}"; return; }
-    grep -q 'IN FULL' <<<"${d#*|}" || { printf 'FAIL:the bounded step Read {limit=%s offset=%s} was denied for some other reason than being partial\n' "${_b%%:*}" "${_b#*:}"; return; }
-    [ -e "$_p/$mk" ] || { printf 'FAIL:a bounded step Read disarmed the gate\n'; return; }
-    [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] || { printf 'FAIL:a bounded step Read moved the gate off stage two\n'; return; }
+p_over() { # an unbounded Read of a mandated file is denied at ANY size naming a chunk and credits nothing; its bounded twin is allowed and credited
+  _g="$1"
+  # 255 lines of 64 B plus one line of 65 B is exactly 16385 B, one over the cap
+  _p="$(bigw 255 64 3 40)"; printf '%064d\n' 0 >> "$_p/_bmad-output/pipeline-snapshot.md"
+  [ "$(wc -c < "$_p/_bmad-output/pipeline-snapshot.md" | tr -d ' ')" = 16385 ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the snapshot is not 16385 bytes\n'; return; }
+  d="$(cg "$_g" "$_p" "$(jcall Read "$_p/_bmad-output/pipeline-snapshot.md")")"
+  allowed "$d" && { printf 'FAIL:an unbounded Read of a 16385 B snapshot was allowed\n'; return; }
+  grep -qF 'offset=1 limit=255' <<<"${d#*|}" || { printf 'FAIL:the deny does not name chunk 1 `offset=1 limit=255`: %s\n' "${d#*|}"; return; }
+  { [ "$(ncred "$_p" snap)" = 0 ] && [ ! -e "$_p/$pg" ]; } || { printf 'FAIL:the denied unbounded Read credited or advanced the gate\n'; return; }
+  _q="$(bigw 256 64 3 40)"
+  [ "$(wc -c < "$_q/_bmad-output/pipeline-snapshot.md" | tr -d ' ')" = 16384 ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE — the snapshot is not 16384 bytes\n'; return; }
+  # An unbounded Read is denied at ANY size, 16384 B included; its bounded twin (chunk 1, 256 lines) is allowed and credited.
+  d="$(cg "$_g" "$_q" "$(jcall Read "$_q/_bmad-output/pipeline-snapshot.md")")"
+  { ! allowed "$d" && grep -qF 'offset=1 limit=256' <<<"${d#*|}"; } || { printf 'FAIL:an unbounded Read of a 16384 B snapshot was not denied naming chunk 1: %s\n' "${d#*|}"; return; }
+  [ ! -e "$_q/$pg" ] || { printf 'FAIL:the denied 16384 B unbounded Read advanced the gate\n'; return; }
+  d="$(cg "$_g" "$_q" "$(jbounded "$_q/_bmad-output/pipeline-snapshot.md" 256 1)")"
+  allowed "$d" || { printf 'FAIL:the bounded chunk-1 Read of a 16384 B snapshot was denied\n'; return; }
+  [ "$(cat "$_q/$pg" 2>/dev/null)" = step ] || { printf 'FAIL:the allowed bounded Read did not advance the gate\n'; return; }
+  # F2: a SMALL snapshot (3 lines, 120 B) unbounded is denied naming a chunk and credits nothing; offset=1 limit=3 is allowed and credited.
+  _s="$(bigw 3 40 3 40)"
+  d="$(cg "$_g" "$_s" "$(jcall Read "$_s/_bmad-output/pipeline-snapshot.md")")"
+  { ! allowed "$d" && grep -qF 'offset=1 limit=3' <<<"${d#*|}"; } || { printf 'FAIL:an unbounded Read of a 120 B snapshot was not denied naming `offset=1 limit=3`: %s\n' "${d#*|}"; return; }
+  { [ "$(ncred "$_s" snap)" = 0 ] && [ ! -e "$_s/$pg" ]; } || { printf 'FAIL:the denied small unbounded Read credited or advanced the gate\n'; return; }
+  d="$(cg "$_g" "$_s" "$(jbounded "$_s/_bmad-output/pipeline-snapshot.md" 3 1)")"
+  { allowed "$d" && [ "$(ncred "$_s" snap)" = 1 ] && [ "$(cat "$_s/$pg" 2>/dev/null)" = step ]; } || { printf 'FAIL:the bounded twin offset=1 limit=3 was not allowed and credited once\n'; return; }
+  # The same small unbounded Read of the STEP file at stage step: denied naming the step chunk, no credit; bounded twin satisfies.
+  _z="$(stepabs "$_s")"
+  d="$(cg "$_g" "$_s" "$(jcall Read "$_z")")"
+  { ! allowed "$d" && grep -qF 'offset=1 limit=3' <<<"${d#*|}" && grep -qF "Read " <<<"${d#*|}"; } || { printf 'FAIL:an unbounded Read of a 120 B step file was not denied naming a chunk: %s\n' "${d#*|}"; return; }
+  [ "$(ncred "$_s" step)" = 0 ] || { printf 'FAIL:the denied small unbounded step Read credited\n'; return; }
+  d="$(cg "$_g" "$_s" "$(jbounded "$_z" 3 1)")"
+  { allowed "$d" && [ ! -e "$_s/$mk" ]; } || { printf 'FAIL:the bounded step twin did not satisfy the recovery\n'; return; }
+  # F2 digest: unbounded denied naming chunk 1 with no credit; bounded allowed, no credit, nothing moved.
+  _d="$(armed_proj "$HOOK" architecture.md consumer digest)"; _dg="$_d/.claude/skills/ai-dlc/postcompact-digest.md"
+  d="$(cg "$_g" "$_d" "$(jcall Read "$_dg")")"
+  { ! allowed "$d" && grep -qF 'offset=1 limit=1' <<<"${d#*|}"; } || { printf 'FAIL:an unbounded digest Read was not denied naming chunk 1: %s\n' "${d#*|}"; return; }
+  d="$(cg "$_g" "$_d" "$(jbounded "$_dg" 1 1)")"
+  { allowed "$d" && [ "$(ncred "$_d" snap)" = 0 ] && [ "$(ncred "$_d" step)" = 0 ] && [ ! -e "$_d/$pg" ] && [ -e "$_d/$mk" ]; } || { printf 'FAIL:a bounded digest Read was denied, credited or moved the gate\n'; return; }
+  # Snapshot COVERED: an unbounded snapshot (and digest) Read is denied naming the STEP file's next owed chunk,
+  # never a snapshot chunk, and that named chunk is allowed and credited (the loop a snapshot chunk named here made).
+  for _lp in snap dig; do
+    _w="$(bigw 3 40 400 61)"; _ws="$(stepabs "$_w")"; _wr="$(marker_step "$_w")"
+    mkdir -p "$_w/.claude/skills/ai-dlc"; printf 'digest\n' > "$_w/.claude/skills/ai-dlc/postcompact-digest.md"
+    cg "$_g" "$_w" "$(jfull "$_w/_bmad-output/pipeline-snapshot.md")" >/dev/null
+    [ "$_lp" = snap ] && _lf="$_w/_bmad-output/pipeline-snapshot.md" || _lf="$_w/.claude/skills/ai-dlc/postcompact-digest.md"
+    d="$(cg "$_g" "$_w" "$(jcall Read "$_lf")")"
+    { ! allowed "$d" && grep -qF "Read ${_wr} offset=1 limit=268" <<<"${d#*|}"; } || { printf 'FAIL:with the snapshot covered, an unbounded %s Read did not name the step chunk `Read %s offset=1 limit=268`: %s\n' "$_lp" "$_wr" "${d#*|}"; return; }
+    grep -qF 'pipeline-snapshot.md offset=' <<<"${d#*|}" && { printf 'FAIL:with the snapshot covered, an unbounded %s Read named a snapshot chunk\n' "$_lp"; return; }
+    d="$(cg "$_g" "$_w" "$(jtu "$_ws" 1 268 toolu_loop)")"
+    { allowed "$d" && [ "$(ncred "$_w" step)" = 1 ]; } || { printf 'FAIL:the step chunk named for the %s loop was not allowed and credited\n' "$_lp"; return; }
   done
-  # CONTROL: the unbounded Read of the same file must be allowed AND must disarm. This is the
-  # anti-wedge half -- the always-available action the deny above sends the lead to.
-  d="$(gate_call "$1" "$_p" "$(jcall Read "$_p/architecture.md")")"
-  allowed "$d" || { printf 'FAIL:the unbounded step Read was denied, so the deny above is not satisfiable and the gate is a wedge\n'; return; }
-  [ -e "$_p/$mk" ] && { printf 'FAIL:the unbounded step Read was allowed but the gate stayed armed\n'; return; }
+  # A bounded call spanning over 16384 B, and a zero limit, are allowed and credit nothing; 268 lines credit.
+  _w="$(bigw 3 40 400 61)"; _ws="$(stepabs "$_w")"
+  for _b in "1 400" "1 0"; do
+    set -- $_b
+    d="$(cg "$_g" "$_w" "$(jtu "$_ws" "$1" "$2" toolu_big)")"
+    allowed "$d" || { printf 'FAIL:a Read of offset=%s limit=%s was denied\n' "$1" "$2"; return; }
+  done
+  [ "$(ncred "$_w" step)" = 0 ] || { printf 'FAIL:an oversize or zero-limit Read credited a record\n'; return; }
+  d="$(cg "$_g" "$_w" "$(jtu "$_ws" 1 268 toolu_ok)")"
+  allowed "$d" && [ "$(ncred "$_w" step)" = 1 ] || { printf 'FAIL:the 268-line chunk was not allowed and credited exactly once\n'; return; }
+  printf 'PASS\n'
+}
+p_stale() { # a credit whose file identity moved, or from before a re-arm, is ignored: FIRST deny; the no-stale twin gets SECOND
+  _g="$1"
+  _w="$(bigw 3 40 3 40)"
+  cg "$_g" "$_w" "$(jfull "$_w/_bmad-output/pipeline-snapshot.md")" >/dev/null
+  [ "$(cat "$_w/$pg" 2>/dev/null)" = step ] || { printf 'FAIL:SEED — the snapshot Read did not reach stage two\n'; return; }
+  d="$(cg "$_g" "$_w" "$(jcall Read "$_w/decoy.md")")"
+  case "${d#*|}" in *'SECOND tool call'*) ;; *) printf 'FAIL:the no-stale twin was not denied SECOND: %s\n' "${d#*|}"; return ;; esac
+  # The same world, the snapshot touched to another mtime with its size unchanged: the credit no longer matches.
+  _x="$(bigw 3 40 3 40)"
+  cg "$_g" "$_x" "$(jfull "$_x/_bmad-output/pipeline-snapshot.md")" >/dev/null
+  touch -t 200001010000 "$_x/_bmad-output/pipeline-snapshot.md"
+  d="$(cg "$_g" "$_x" "$(jcall Read "$_x/decoy.md")")"
+  case "${d#*|}" in *'FIRST tool call'*) ;; *) printf 'FAIL:a credit with a stale mtime still counted (not a FIRST deny): %s\n' "${d#*|}"; return ;; esac
+  # The same world re-armed by the real producer: the old credits are removed with the progress file.
+  # (no bigw: the producer re-reads the snapshot for its Pipeline Position, so this one keeps its seeded body)
+  _y="$(armed_proj "$HOOK" architecture.md flat)"
+  cg "$_g" "$_y" "$(jfull "$_y/_bmad-output/pipeline-snapshot.md")" >/dev/null
+  [ "$(ncred "$_y" snap)" = 1 ] || { printf 'FAIL:SEED — no snapshot credit to go stale\n'; return; }
+  arm_marker "$HOOK" "$_y"
+  [ "$(ncred "$_y" snap)" = 0 ] || { printf 'FAIL:a new recovery left the previous recovery credits on disk\n'; return; }
+  d="$(cg "$_g" "$_y" "$(jcall Read "$_y/decoy.md")")"
+  case "${d#*|}" in *'FIRST tool call'*) ;; *) printf 'FAIL:after a re-arm the first call was not a FIRST deny: %s\n' "${d#*|}"; return ;; esac
+  printf 'PASS\n'
+}
+p_b3() { # step covered while the snapshot was not: the SECOND deny names the LAST chunk, never past the end, and that Read satisfies
+  _g="$1"
+  _w="$(bigw 3 40 400 61)"; _ws="$(stepabs "$_w")"
+  for _c in "1 268" "269 132"; do set -- $_c; cg "$_g" "$_w" "$(jtu "$_ws" "$1" "$2" "toolu_b3_$1")" >/dev/null; done
+  [ -e "$_w/$mk" ] || { printf 'FAIL:step chunks at stage snapshot disarmed the gate\n'; return; }
+  cg "$_g" "$_w" "$(jfull "$_w/_bmad-output/pipeline-snapshot.md")" >/dev/null
+  d="$(cg "$_g" "$_w" "$(jcall Read "$_w/decoy.md")")"
+  allowed "$d" && { printf 'FAIL:a decoy Read was allowed while the step Read is still owed\n'; return; }
+  grep -qF 'offset=133 limit=268' <<<"${d#*|}" || { printf 'FAIL:the deny does not name the last chunk `offset=133 limit=268`: %s\n' "${d#*|}"; return; }
+  grep -qF 'offset=401' <<<"${d#*|}" && { printf 'FAIL:the deny names a past-the-end offset\n'; return; }
+  d="$(cg "$_g" "$_w" "$(jtu "$_ws" 133 268 toolu_b3_last)")"
+  allowed "$d" && [ ! -e "$_w/$mk" ] || { printf 'FAIL:the Read of the named last chunk did not satisfy\n'; return; }
+  printf 'PASS\n'
+}
+p_par() { # K chunk calls fired out of order leave exactly one record per call (a repeated range counts once per call)
+  _g="$1"
+  _w="$(bigw 3 40 400 61)"; _ws="$(stepabs "$_w")"
+  for _o in 301 1 201 101 1; do cg "$_g" "$_w" "$(jtu "$_ws" "$_o" 100 "toolu_par_$_o")" >/dev/null; done
+  [ "$(ncred "$_w" step)" = 5 ] || { printf 'FAIL:5 chunk calls left %s step records, not 5\n' "$(ncred "$_w" step)"; return; }
+  [ "$(ncred "$_w" snap)" = 0 ] || { printf 'FAIL:step chunks left a snapshot record\n'; return; }
+  printf 'PASS\n'
+}
+p_ho() { # handoff.md: chunks at stage snapshot stay denied; at stage step Pre,Pre,Post,Post arms no .handoff-in-progress; a voluntary Read arms
+  _g="$1"; _eh="$(dirname "$_g")/ai-dlc-handoff-entry.sh"
+  [ -f "$_eh" ] || { printf 'FAIL:the handoff entry hook is absent at %s\n' "$_eh"; return; }
+  _w="$(bigw 3 40 400 61 handoff)"; _ws="$(stepabs "$_w")"
+  case "$_ws" in */steps/handoff.md) ;; *) printf 'FAIL:SEED — the step file is %s, not a steps/handoff.md\n' "$_ws"; return ;; esac
+  d="$(cg "$_g" "$_w" "$(jtu "$_ws" 1 268 toolu_ho_early)")"
+  case "${d#*|}" in *'FIRST tool call'*) ;; *) printf 'FAIL:a handoff.md chunk at stage snapshot was not denied FIRST: %s\n' "${d#*|}"; return ;; esac
+  [ "$(ncred "$_w" step)" = 0 ] || { printf 'FAIL:F1: the denied handoff.md chunk at stage snapshot was credited (%s step records)\n' "$(ncred "$_w" step)"; return; }
+  _f="$(bigw 3 40 400 61)"; _fs="$(stepabs "$_f")"
+  d="$(cg "$_g" "$_f" "$(jtu "$_fs" 1 268 toolu_fl_early)")"
+  allowed "$d" || { printf 'FAIL:the non-handoff twin: a step chunk at stage snapshot was denied\n'; return; }
+  [ "$(ncred "$_f" step)" = 1 ] || { printf 'FAIL:F1 twin: the non-handoff step chunk at stage snapshot was not credited\n'; return; }
+  cg "$_g" "$_w" "$(jfull "$_w/_bmad-output/pipeline-snapshot.md")" >/dev/null
+  d="$(cg "$_g" "$_w" "$(jtu "$_ws" 1 268 toolu_hoA)")"; allowed "$d" || { printf 'FAIL:handoff chunk A was denied at stage step\n'; return; }
+  d="$(cg "$_g" "$_w" "$(jtu "$_ws" 269 132 toolu_hoB)")"; allowed "$d" || { printf 'FAIL:handoff chunk B was denied at stage step\n'; return; }
+  [ ! -e "$_w/$mk" ] || { printf 'FAIL:the two handoff chunks did not satisfy the recovery\n'; return; }
+  for _t in toolu_hoA toolu_hoB; do
+    [ -e "$_w/_bmad-output/.recover-satisfied.$_t" ] || { printf 'FAIL:no per-call breadcrumb for %s\n' "$_t"; return; }
+  done
+  for _t in toolu_hoA toolu_hoB; do
+    printf '{"tool_name":"Read","session_id":"sess-A","tool_use_id":"%s","tool_input":{"file_path":"%s"}}' "$_t" "$_ws" | hook_run "$_eh" "$_w" >/dev/null 2>&1
+  done
+  [ ! -e "$_w/_bmad-output/.handoff-in-progress" ] || { printf 'FAIL:a recovery-compelled handoff.md chunk armed .handoff-in-progress\n'; return; }
+  { [ ! -e "$_w/_bmad-output/.recover-satisfied.toolu_hoA" ] && [ ! -e "$_w/_bmad-output/.recover-satisfied.toolu_hoB" ]; } || { printf 'FAIL:the entry hook left a per-call breadcrumb behind\n'; return; }
+  printf '{"tool_name":"Read","session_id":"sess-A","tool_use_id":"toolu_hoC","tool_input":{"file_path":"%s"}}' "$_ws" | hook_run "$_eh" "$_w" >/dev/null 2>&1
+  [ -e "$_w/_bmad-output/.handoff-in-progress" ] || { printf 'FAIL:a voluntary handoff.md Read with no breadcrumb did not arm .handoff-in-progress\n'; return; }
   printf 'PASS\n'
 }
 
@@ -748,16 +903,16 @@ p_mate_reads() {
   d="$(gate_call "$1" "$_p" "$(jmate Read "$f" agent-m1)")"
   allowed "$d" || { printf 'FAIL:a teammate Read of the step file was refused\n'; return; }
   [ -e "$_p/$mk" ] || { printf 'FAIL:a teammate two Reads disarmed the lead gate\n'; return; }
-  d="$(gate_call "$1" "$_p" "$(jcall Read "$s")")"
+  d="$(gate_call "$1" "$_p" "$(jfull "$s")")"
   allowed "$d" || { printf 'FAIL:the lead snapshot Read was denied after the teammate Reads\n'; return; }
   [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] || { printf 'FAIL:the lead snapshot Read did not advance the gate\n'; return; }
-  d="$(gate_call "$1" "$_p" "$(jcall Read "$f")")"
+  d="$(gate_call "$1" "$_p" "$(jfull "$f")")"
   allowed "$d" || { printf 'FAIL:the lead step Read was denied\n'; return; }
   [ -e "$_p/$mk" ] && { printf 'FAIL:the lead two Reads did not disarm the gate\n'; return; }
   printf 'PASS\n'
 }
 
-PREDS="inert deny_first ladder_abs ladder_rel ladder_consumer standdown_r0 standdown_missing legacy fastpath full_snapshot full_step mate_calls mate_reads"
+PREDS="inert deny_first ladder_abs ladder_rel ladder_consumer standdown_r0 standdown_missing legacy fastpath cov over stale b3 par ho mate_calls mate_reads"
 
 # --- the legacy producer ----------------------------------------------------
 # Built by REMOVING the three new keys from the real producer, so the legacy marker is what
@@ -775,8 +930,12 @@ for _n in $PREDS; do
     ladder_abs) r="$(p_ladder "$GATE" abs)"; label="the compliance ladder holds for ABSOLUTE spellings of both mandated paths" ;;
     ladder_rel) r="$(p_ladder "$GATE" rel)"; label="the compliance ladder holds for RELATIVE spellings of both mandated paths" ;;
     ladder_consumer) r="$(p_ladder "$GATE" consumer)"; label="ANTI-WEDGE on the REFERENCE layout: a bare basename in the snapshot, and full compliance is allowed end to end and disarms the gate" ;;
-    full_snapshot)   r="$(p_full_snapshot "$GATE")";   label="a BOUNDED Read of the snapshot is refused and does not advance the gate, while the unbounded one and an offset-1 Read are allowed" ;;
-    full_step)       r="$(p_full_step "$GATE")";       label="a BOUNDED Read of the step file is refused and does not disarm the gate, while the unbounded one is allowed and does" ;;
+    cov)    r="$(p_cov "$GATE")";   label="chunk coverage: the full chunk set satisfies, a gap set is denied naming exactly offset=101 limit=268, an overlapping set satisfies" ;;
+    over)   r="$(p_over "$GATE")";  label="an unbounded Read of a snapshot, step file or digest is denied at any size (16385 B, 16384 B, a few hundred bytes) naming a chunk and credits nothing, its bounded twin is allowed and credited; an oversize or zero-limit bounded Read is allowed and credits nothing" ;;
+    stale)  r="$(p_stale "$GATE")"; label="a credit with a moved mtime, or one left from before a re-arm, is ignored (FIRST deny), against its no-stale twin (SECOND deny)" ;;
+    b3)     r="$(p_b3 "$GATE")";    label="step covered before the snapshot: the SECOND deny names the last real chunk (never past the end) and a Read of it satisfies" ;;
+    par)    r="$(p_par "$GATE")";   label="five chunk calls fired out of order, one a repeat, leave exactly five step records and no snapshot record" ;;
+    ho)     r="$(p_ho "$GATE")";    label="handoff.md: a chunk at stage snapshot is denied FIRST (its non-handoff twin allowed); at stage step Pre,Pre,Post,Post arms no .handoff-in-progress, a voluntary Read arms it" ;;
     inert)              r="$(p_inert "$GATE")";              label="inert with no marker: an ordinary call in an ordinary session is untouched" ;;
     deny_first)         r="$(p_deny_first "$GATE")";         label="armed: an edit, a tool with no file_path, and a Read of the wrong file are all denied, each told what to Read" ;;
     standdown_r0)       r="$(p_standdown_r0 "$GATE")";       label="stands down when the snapshot resolved no step file, and keeps the injection record" ;;
@@ -821,7 +980,7 @@ pr_consumer() { # pr_consumer <recover-hook>
   [ -r "$_p/$sf" ] \
     || { printf 'FAIL:the producer recorded step_file=%s, which is not readable from the project root — the mandate names a file the lead cannot Read and the gate has nothing armable\n' "$sf"; return; }
   t="$(fire_at "$1" "$_p")"
-  grep -qF "Read ${sf}\` in full" <<<"$t" \
+  grep -qF "Read ${sf}"'` in full, with native Read in consecutive `offset`/`limit` chunks of at most 16 KB, never `ctx_*`.**' <<<"$t" \
     || { printf 'FAIL:the marker resolved to %s but the SECOND mandate does not name that path, so the lead is sent somewhere else\n' "$sf"; return; }
   d="$(gate_call "$GATE" "$_p" "$(jcall Edit "$_p/decoy.md")")"
   allowed "$d" \
@@ -909,7 +1068,7 @@ aproj() {
 areads() {
   _sf="$(marker_step "$2")"
   for _f in "$2/_bmad-output/pipeline-snapshot.md" "$2/$_sf"; do
-    if [ -n "${3:-}" ]; then _aj="$(jmate Read "$_f" "$3")"; else _aj="$(jcall Read "$_f")"; fi
+    if [ -n "${3:-}" ]; then _aj="$(jmate Read "$_f" "$3")"; else _aj="$(jfull "$_f")"; fi
     printf '%s' "$_aj" | hook_run "$1" "$2" >/dev/null 2>&1
   done
 }
@@ -1570,12 +1729,12 @@ else bad "R (BL-868): the no-wall seam — ${r_nw#FAIL:}"; fi
 # re-test and not to a copy that went inert.
 # =============================================================================
 RACE_FABS='[ -n "$FPATH" ] && FABS="$(resolve "$FPATH")"'
-RACE_STAGE='STAGE="$(cat "$PROGRESS" 2>/dev/null || printf '"'"'snapshot'"'"')"'
+RACE_STAGE='STEP_COV=0; [ "${STEP_NX:-1}" -gt "$STEP_N" ] 2>/dev/null && STEP_COV=1'
 RACE_RETEST='[ -f "$MARKER" ] || exit 0'
-RACE_LINE='rm -f "$MARKER" "$PROGRESS" 2>/dev/null; : > "${STATE_DIR}/.race-injected"'
+RACE_LINE='rm -f "$MARKER" "$PROGRESS" "${STATE_DIR}"/.recover-credit* 2>/dev/null; : > "${STATE_DIR}/.race-injected"'
 RACE_SENT="_bmad-output/.race-injected"
-# What directly follows the stage read: yes (the re-test), no, or none (no stage read at all).
-RACE_AT='prev == ENVIRON["S"] { print (($0 == ENVIRON["R"]) ? "yes" : "no"); f = 1; exit } { prev = $0 } END { if (!f) print "none" }'
+# What directly follows the coverage read (comment lines skipped): yes (the re-test), no, or none (no coverage read at all).
+RACE_AT='$0 == ENVIRON["S"] { w = 1; next } w && /^[[:space:]]*#/ { next } w { print (($0 == ENVIRON["R"]) ? "yes" : "no"); f = 1; exit } END { if (!f) print "none" }'
 # The two lines directly above the stage read, joined by a bar.
 RACE_AFTER='{ print } $0 == ENVIRON["A"] { print ENVIRON["L"] }'
 
@@ -1603,7 +1762,7 @@ race_edit() {
 # race_world <gate> -> project; the third Read's answer is in <project>/race.d
 race_world() {
   _p="$(armed_proj "$HOOK" architecture.md flat)"
-  gate_call "$GATE" "$_p" "$(jcall Read "$_p/_bmad-output/pipeline-snapshot.md")" >/dev/null
+  gate_call "$GATE" "$_p" "$(jfull "$_p/_bmad-output/pipeline-snapshot.md")" >/dev/null
   if [ "$(cat "$_p/$pg" 2>/dev/null)" = step ] && [ -e "$_p/$mk" ]; then
     gate_call "$1" "$_p" "$(jcall Read "$_p/decoy.md")" > "$_p/race.d"
   else
@@ -1666,6 +1825,37 @@ else
   if [ "$_rv" = first ]; then ok "race R2: the genuine first call (marker present, no progress file) is DENIED with the stage-one text"
   else bad "race R2: the genuine first call answered '${_rv}' where the stage-one deny was expected"; fi
 
+  # F3 (BL-1184): chunk B's breadcrumb exists BEFORE a satisfying sibling clears the marker. The satisfying call's
+  # effect (marker, progress and credits removed) is injected directly before B's marker re-test, so B is the call
+  # that reaches the re-test with the marker already gone; no pause and no timing. B leaves with an allow, its
+  # per-call breadcrumb on disk, and the entry hook's PostToolUse for B arms nothing; the twin, an uninjected copy,
+  # keeps the marker and denies B at stage two, and a voluntary Read with no breadcrumb still arms.
+  RD_F3="$(race_dir)"
+  if [ -z "$RD_F3" ] || ! race_edit "$GATE" "$RD_F3/$RG" "$RACE_AFTER" "$RACE_STAGE" "$RACE_LINE"; then
+    bad "FIXTURE STALE: F3 — the satisfying call's removal could not be injected before the marker re-test"
+  else
+    f3_world() { # f3_world <gate-copy-dir> -> a handoff.md project at stage step; chunk B (1-100) is read in <project>/f3.d
+      _fw="$(bigw 3 40 400 61 handoff)"; _fs="$(stepabs "$_fw")"
+      gate_call "$GATE" "$_fw" "$(jfull "$_fw/_bmad-output/pipeline-snapshot.md")" >/dev/null
+      printf "%s\n" "$_fs" > "$_fw/f3.s"
+      gate_call "$1/$RG" "$_fw" "$(jtu "$_fs" 1 100 toolu_f3B)" > "$_fw/f3.d"
+      printf '%s\n' "$_fw"
+    }
+    f3_post() { printf '{"tool_name":"Read","session_id":"sess-A","tool_use_id":"%s","tool_input":{"file_path":"%s"}}' "$2" "$3" | hook_run "$1/ai-dlc-handoff-entry.sh" "$4" >/dev/null 2>&1; }
+    _fw="$(f3_world "$RD_F3")"; _fs="$(cat "$_fw/f3.s")"; _fd="$(cat "$_fw/f3.d")"
+    if race_ran "$_fw" && allowed "$_fd" && [ -e "$_fw/_bmad-output/.recover-satisfied.toolu_f3B" ]; then
+      ok "race F3: chunk B reached the marker re-test with the marker already cleared, was allowed, and its per-call breadcrumb exists"
+    else bad "race F3: chunk B (injected removal ran: $(race_ran "$_fw" && echo yes || echo no); decision '${_fd}') left no per-call breadcrumb .recover-satisfied.toolu_f3B"; fi
+    f3_post "$RD_F3" toolu_f3B "$_fs" "$_fw"
+    if [ ! -e "$_fw/_bmad-output/.handoff-in-progress" ] && [ ! -e "$_fw/_bmad-output/.recover-satisfied.toolu_f3B" ]; then
+      ok "race F3: the entry hook's PostToolUse for B consumed the breadcrumb and did not arm .handoff-in-progress"
+    else bad "race F3: the entry hook's PostToolUse for B armed .handoff-in-progress or left the breadcrumb"; fi
+    f3_post "$RD_F3" toolu_f3C "$_fs" "$_fw"
+    if [ -e "$_fw/_bmad-output/.handoff-in-progress" ]; then
+      ok "race F3 twin: a Read with no breadcrumb arms .handoff-in-progress in the same world"
+    else bad "race F3 twin: a Read with no breadcrumb did not arm .handoff-in-progress, so the entry hook arm above proves nothing"; fi
+  fi
+
 
   # THE REMOVAL ORDER (BL-658). The fix holds only because the satisfying Read removes the MARKER
   # before the PROGRESS file: a concurrent call that sees the marker gone exits at the re-test, one
@@ -1705,7 +1895,7 @@ fi
   # when it is absent. Every arm here runs against the real hooks directory.
   # ===========================================================================
   RC_DIGREL=".claude/skills/ai-dlc/postcompact-digest.md"
-  RC_DIGKEY='"$FABS" = "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md"'
+  RC_DIGKEY='DIG1="$(norm "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md")"'
   RC_SWKEY="printf 'step\\n' >\""
   RC_RENKEY='mv -f "${PROGRESS}.$$" "$PROGRESS"'
   RC_CLRRE='^[[:space:]]*rm -f .*\.recover-gate-progress'
@@ -1720,7 +1910,7 @@ fi
     _rq="$(armed_proj "$1/$RC_RH" architecture.md flat rc)"
     { [ -e "$_rq/$mk" ] && [ ! -e "$_rq/$pg" ]; } || return 0
     if [ "$2" = step ]; then
-      gate_call "$1/$RG" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")" >/dev/null
+      gate_call "$1/$RG" "$_rq" "$(jfull "$_rq/_bmad-output/pipeline-snapshot.md")" >/dev/null
       { [ "$(cat "$_rq/$pg" 2>/dev/null)" = step ] && [ -e "$_rq/$mk" ]; } || return 0
     fi
     printf '%s\n' "$_rq"
@@ -1738,14 +1928,14 @@ fi
   # --- the predicates, each PASS or FAIL:<what it saw> ------------------------
   rp_d_step() { # (a) a full digest Read at stage step is allowed and advances nothing
     _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
-    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/$RC_DIGREL")")"
+    _rv="$(rc_call "$1" "$_rq" "$(jfull "$_rq/$RC_DIGREL")")"
     [ "$_rv" = allow ] || { echo "FAIL:a full digest Read at stage step answered '${_rv}'"; return; }
     _rm="$(rc_post "$_rq" step)"; [ -z "$_rm" ] || { echo "FAIL:the digest allow at stage step moved state: ${_rm}"; return; }
     echo PASS
   }
   rp_d_first() { # (b) case iii: marker present, no stage file, a full digest Read is allowed and advances nothing
     _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
-    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/$RC_DIGREL")")"
+    _rv="$(rc_call "$1" "$_rq" "$(jfull "$_rq/$RC_DIGREL")")"
     [ "$_rv" = allow ] || { echo "FAIL:a full digest Read with no stage file answered '${_rv}'"; return; }
     _rm="$(rc_post "$_rq" none)"; [ -z "$_rm" ] || { echo "FAIL:the digest allow with no stage file moved state: ${_rm}"; return; }
     echo PASS
@@ -1765,20 +1955,22 @@ fi
     [ "$_rv" = second ] || { echo "FAIL:the same-basename decoy at stage step answered '${_rv}'"; return; }
     echo PASS
   }
-  rp_d_bounded() { # control: a BOUNDED digest Read (limit=1) is denied at both stages
+  rp_d_bounded() { # a BOUNDED digest Read (limit=1) is ALLOWED at both stages and credits and moves nothing (the digest is never credited)
     _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
     _rv="$(rc_call "$1" "$_rq" "$(jbounded "$_rq/$RC_DIGREL" 1 -)")"
-    [ "$_rv" = first ] || { echo "FAIL:a limit=1 digest Read at stage one answered '${_rv}'"; return; }
+    [ "$_rv" = allow ] || { echo "FAIL:a limit=1 digest Read at stage one answered '${_rv}'"; return; }
+    _rm="$(rc_post "$_rq" none)"; [ -z "$_rm" ] || { echo "FAIL:the bounded digest allow at stage one moved state: ${_rm}"; return; }
     _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
     _rv="$(rc_call "$1" "$_rq" "$(jbounded "$_rq/$RC_DIGREL" 1 -)")"
-    [ "$_rv" = second ] || { echo "FAIL:a limit=1 digest Read at stage step answered '${_rv}'"; return; }
+    [ "$_rv" = allow ] || { echo "FAIL:a limit=1 digest Read at stage step answered '${_rv}'"; return; }
+    _rm="$(rc_post "$_rq" step)"; [ -z "$_rm" ] || { echo "FAIL:the bounded digest allow at stage step moved state: ${_rm}"; return; }
     echo PASS
   }
   rp_s_inode() { # the snapshot Read replaces the stage inode: a hard link to it still reads snapshot
     _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
     printf 'snapshot\n' > "$_rq/$pg"
     ln "$_rq/$pg" "$_rq/rc.link" 2>/dev/null || { echo 'FAIL:SEED — the hard link could not be made'; return; }
-    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
+    _rv="$(rc_call "$1" "$_rq" "$(jfull "$_rq/_bmad-output/pipeline-snapshot.md")")"
     [ "$_rv" = allow ] || { echo "FAIL:the full snapshot Read answered '${_rv}'"; return; }
     [ "$(cat "$_rq/$pg" 2>/dev/null)" = step ] || { echo "FAIL:the stage reads '$(cat "$_rq/$pg" 2>/dev/null)', not step"; return; }
     [ "$_rq/$pg" -ef "$_rq/rc.link" ] && { echo 'FAIL:the stage is still the linked inode, so it was written in place'; return; }
@@ -1791,17 +1983,20 @@ fi
   rp_s_ulimit() {
     _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
     printf 'snapshot\n' > "$_rq/$pg"
-    _rj="$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")"
+    _rj="$(jfull "$_rq/_bmad-output/pipeline-snapshot.md")"
     ( ulimit -f 0; gate_call "$1/$RG" "$_rq" "$_rj" >/dev/null ) 2>/dev/null
     [ "$(cat "$_rq/$pg" 2>/dev/null)" = snapshot ] || { echo "FAIL:a stage write cut off by ulimit left the stage reading '$(cat "$_rq/$pg" 2>/dev/null)'"; return; }
     echo PASS
   }
-  rp_s_garbage() { # control: a garbage stage is allowed through and the file removed
+  rp_s_garbage() { # the progress file DECIDES NOTHING: a `step` written with no snapshot coverage still gets the FIRST deny
     _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
-    printf 'garbage\n' > "$_rq/$pg"
-    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
-    [ "$_rv" = allow ] || { echo "FAIL:a garbage stage answered '${_rv}'"; return; }
-    [ -e "$_rq/$pg" ] && { echo 'FAIL:a garbage stage was not removed'; return; }
+    printf 'step\n' > "$_rq/$pg"
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/decoy.md")")"
+    [ "$_rv" = first ] || { echo "FAIL:a hand-written stage step with no coverage answered '${_rv}', not the FIRST deny"; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jfull "$_rq/_bmad-output/pipeline-snapshot.md")")"
+    [ "$_rv" = allow ] || { echo "FAIL:the snapshot Read after a hand-written stage answered '${_rv}'"; return; }
+    _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/decoy.md")")"
+    [ "$_rv" = second ] || { echo "FAIL:after the snapshot was covered a decoy Read answered '${_rv}', not the SECOND deny"; return; }
     echo PASS
   }
   rp_s_struct() { # the one stage write names a temp spelled from ${PROGRESS} with $$, renamed onto $PROGRESS
@@ -1848,10 +2043,10 @@ fi
       d_first)   echo "BL-658 (b): a full digest Read with the marker present and no stage file (case iii) is ALLOWED; marker kept, no stage written, no .recover-satisfied, no .recover-advisor-owed" ;;
       d_decoy)   echo "BL-658 control: a decoy Read at stage step still gets the SECOND deny" ;;
       d_base)    echo "BL-658 control: a same-basename decoy x/postcompact-digest.md is denied at both stages" ;;
-      d_bounded) echo "BL-658 control: a bounded digest Read (limit=1) is denied at both stages" ;;
+      d_bounded) echo "BL-658/BL-1184: a bounded digest Read (limit=1) is ALLOWED at both stages and moves nothing" ;;
       s_inode)   echo "BL-666: a full snapshot Read replaces the stage inode — the hard link still reads snapshot, the stage reads step" ;;
       s_ulimit)  echo "BL-666: a stage write cut off by ulimit -f 0 leaves the stage reading snapshot" ;;
-      s_garbage) echo "BL-666 control: a garbage stage is allowed through and the file removed" ;;
+      s_garbage) echo "BL-1184: the progress file decides nothing — a hand-written stage step with no coverage is denied FIRST, and the covered snapshot then gives SECOND" ;;
       s_struct)  echo "BL-666 structural: the stage write's temp is spelled from \${PROGRESS}, carries \$\$, and is renamed onto \$PROGRESS" ;;
       r_clear)   echo "BL-684: a new recovery clears the previous stage and its temp, and a first-call decoy Read gets the FIRST deny" ;;
       r_owed)    echo "BL-730: a new recovery clears an owed-file temp (.recover-advisor-owed.<pid>) left by an interrupted write" ;;
@@ -1910,7 +2105,7 @@ fi
     rp_w_snap() { # wedge 1: unwritable before the snapshot Read; the Edit after it is not denied, nothing moved
       _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
       chmod 555 "$_rq/_bmad-output"
-      _rs="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
+      _rs="$(rc_call "$1" "$_rq" "$(jfull "$_rq/_bmad-output/pipeline-snapshot.md")")"
       _rv="$(rc_call "$1" "$_rq" "$(jcall Edit "$_rq/decoy.md")")"
       chmod 755 "$_rq/_bmad-output"
       [ "$_rs" = allow ] || { echo "FAIL:the full snapshot Read under an unwritable _bmad-output answered '${_rs}'"; return; }
@@ -1921,7 +2116,7 @@ fi
     rp_w_step() { # wedge 2: unwritable after the stage reached step; the step Read and the Edit after it are not denied
       _rq="$(rc_proj "$1" step)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-two world formed'; return; }
       chmod 555 "$_rq/_bmad-output"
-      _rs="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/architecture.md")")"
+      _rs="$(rc_call "$1" "$_rq" "$(jfull "$_rq/architecture.md")")"
       _rv="$(rc_call "$1" "$_rq" "$(jcall Edit "$_rq/decoy.md")")"
       chmod 755 "$_rq/_bmad-output"
       [ "$_rs" = allow ] || { echo "FAIL:the full step Read under an unwritable _bmad-output answered '${_rs}'"; return; }
@@ -1931,7 +2126,7 @@ fi
     }
     rp_w_ctl() { # control: writable, the same snapshot Read advances to step and the Edit gets SECOND
       _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
-      _rs="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
+      _rs="$(rc_call "$1" "$_rq" "$(jfull "$_rq/_bmad-output/pipeline-snapshot.md")")"
       _rv="$(rc_call "$1" "$_rq" "$(jcall Edit "$_rq/decoy.md")")"
       [ "$_rs" = allow ] || { echo "FAIL:the full snapshot Read answered '${_rs}'"; return; }
       [ "$_rv" = second ] || { echo "FAIL:an Edit after the snapshot Read answered '${_rv}', not the SECOND deny"; return; }
@@ -1954,19 +2149,19 @@ fi
   # way ENOSPC does) must clear the marker: the snapshot Read is allowed and the call after it is
   # not denied. The control runs the same seed unlimited and keeps the marker (SECOND deny).
   # Detection key: "$MARKER" on the RC_SWKEY line, the unlink in the failure branch.
-  _rk="$(grep -F -- "$RC_SWKEY" "$GATE" | grep -cF -- '"$MARKER"')" || _rk=0
+  _rk="$(grep -cF -- 'rm -f "$_t" "$MARKER"' "$GATE")" || _rk=0
   if [ "$_rk" -lt 1 ]; then
-    skip "BL-725 failed-stage-write arms" "the stage-write line does not unlink the marker on failure (key '\"\$MARKER\"' on the RC_SWKEY line, found 0); this fixture ships one pull ahead of its subject"
+    skip "BL-725 failed-credit-write arms" "the credit write does not unlink the marker on failure (key 'rm -f \"\$_t\" \"\$MARKER\"', found 0); this fixture ships one pull ahead of its subject"
   else
     rp_s_fail() { # stage one, write fails: Read allowed, marker gone, no temp left, the next Edit allowed
       _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
-      _rj="$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")"
+      _rj="$(jfull "$_rq/_bmad-output/pipeline-snapshot.md")"
       _rs="$( trap '' XFSZ; ulimit -f 0; gate_call "$1/$RG" "$_rq" "$_rj" 2>/dev/null )"
       _rs="$(rc_dec "$_rs")"
       [ "$_rs" = allow ] || { echo "FAIL:the full snapshot Read with a failing stage write answered '${_rs}'"; return; }
-      [ -e "$_rq/$pg" ] && { echo "FAIL:the stage write was expected to fail and left '$(cat "$_rq/$pg" 2>/dev/null)'"; return; }
+      [ -e "$_rq/$pg" ] && { echo "FAIL:the credit write was expected to fail and the stage reads '$(cat "$_rq/$pg" 2>/dev/null)'"; return; }
       [ -e "$_rq/$mk" ] && { echo 'FAIL:a failed stage write left the marker, so the recovery stays armed'; return; }
-      _rt="$(ls "$_rq/_bmad-output" 2>/dev/null | grep -c 'recover-gate-progress')" || _rt=0
+      _rt="$(ls "$_rq/_bmad-output" 2>/dev/null | grep -c 'recover-gate-progress\|recover-credit')" || _rt=0
       [ "$_rt" = 0 ] || { echo "FAIL:a failed stage write left ${_rt} stage temp file(s) behind"; return; }
       _rv="$(rc_call "$1" "$_rq" "$(jcall Edit "$_rq/decoy.md")")"
       [ "$_rv" = allow ] || { echo "FAIL:an Edit after the failed stage write answered '${_rv}', not allow"; return; }
@@ -1974,7 +2169,7 @@ fi
     }
     rp_s_fail_ctl() { # control: the same seed without the limit advances to step, keeps the marker, and the Edit gets SECOND
       _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
-      _rs="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
+      _rs="$(rc_call "$1" "$_rq" "$(jfull "$_rq/_bmad-output/pipeline-snapshot.md")")"
       [ "$_rs" = allow ] || { echo "FAIL:the unlimited full snapshot Read answered '${_rs}'"; return; }
       [ "$(cat "$_rq/$pg" 2>/dev/null)" = step ] || { echo "FAIL:the unlimited stage write left '$(cat "$_rq/$pg" 2>/dev/null)', not step"; return; }
       [ -e "$_rq/$mk" ] || { echo 'FAIL:a successful stage write cleared the marker'; return; }
@@ -1997,30 +2192,31 @@ fi
   # The allow must not open a step Read alone as a way to satisfy the recovery, a bounded step
   # Read, any other Read, or a compelled handoff.md Read (which would arm the handoff marker).
   # Detection key: RC_FLINE, the full-step-Read allow line in the snapshot arm.
-  RC_FLINE='    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$STEP_ABS" ] && is_full_read; then'
+  RC_FLINE='    if [ "$ON_STEP" = 1 ] && [ "$IS_HO" = 0 ]; then exit 0; fi'
   _rk="$(grep -cxF -- "$RC_FLINE" "$GATE")" || _rk=0
   if [ "$_rk" -lt 1 ]; then
     skip "BL-687 full-step-Read allow arms" "the gate carries no full step Read allow in its snapshot arm (key '${RC_FLINE# *}', found 0); this fixture ships one pull ahead of its subject"
   else
     rp_f_allow() { # a full step Read with the marker present and no stage is allowed, and nothing moves
       _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
-      _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/architecture.md")")"
+      _rv="$(rc_call "$1" "$_rq" "$(jfull "$_rq/architecture.md")")"
       [ "$_rv" = allow ] || { echo "FAIL:a full step Read with no stage file answered '${_rv}'"; return; }
       _rm="$(rc_post "$_rq" none)"; [ -z "$_rm" ] || { echo "FAIL:the full step Read with no stage file moved state: ${_rm}"; return; }
       echo PASS
     }
     rp_f_seq() { # the sequential snapshot Read then step Read still satisfies the recovery
       _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
-      _rs="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/_bmad-output/pipeline-snapshot.md")")"
-      _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/architecture.md")")"
+      _rs="$(rc_call "$1" "$_rq" "$(jfull "$_rq/_bmad-output/pipeline-snapshot.md")")"
+      _rv="$(rc_call "$1" "$_rq" "$(jfull "$_rq/architecture.md")")"
       [ "$_rs" = allow ] && [ "$_rv" = allow ] || { echo "FAIL:snapshot then step Read answered '${_rs}' then '${_rv}'"; return; }
       { [ ! -e "$_rq/$mk" ] && [ -e "$_rq/_bmad-output/.recover-satisfied" ]; } || { echo 'FAIL:snapshot then step Read did not remove the marker and write .recover-satisfied'; return; }
       echo PASS
     }
-    rp_f_bound() { # control: a BOUNDED step Read (limit=1) with no stage is still denied FIRST
+    rp_f_bound() { # a BOUNDED step Read (limit=1) with no stage is ALLOWED and credited, and still satisfies nothing
       _rq="$(rc_proj "$1" first)"; [ -n "$_rq" ] || { echo 'FAIL:SEED — no stage-one world formed'; return; }
       _rv="$(rc_call "$1" "$_rq" "$(jbounded "$_rq/architecture.md" 1 -)")"
-      [ "$_rv" = first ] || { echo "FAIL:a limit=1 step Read with no stage file answered '${_rv}'"; return; }
+      [ "$_rv" = allow ] || { echo "FAIL:a limit=1 step Read with no stage file answered '${_rv}'"; return; }
+      _rm="$(rc_post "$_rq" none)"; [ -z "$_rm" ] || { echo "FAIL:the bounded step Read at stage snapshot moved state: ${_rm}"; return; }
       echo PASS
     }
     rp_f_decoy() { # control: any other Read with no stage is still denied FIRST
@@ -2035,7 +2231,7 @@ fi
       _rsf="$(marker_step "$_rq")"
       case "$_rsf" in */steps/handoff.md|steps/handoff.md) ;; *) echo "FAIL:SEED — the recovery recorded step_file '${_rsf}', not a steps/handoff.md"; return ;; esac
       { [ -e "$_rq/$mk" ] && [ ! -e "$_rq/$pg" ]; } || { echo 'FAIL:SEED — no stage-one world formed'; return; }
-      _rv="$(rc_call "$1" "$_rq" "$(jcall Read "$_rq/$_rsf")")"
+      _rv="$(rc_call "$1" "$_rq" "$(jfull "$_rq/$_rsf")")"
       [ "$_rv" = first ] || { echo "FAIL:a full handoff.md step Read with no stage file answered '${_rv}', not the FIRST deny"; return; }
       echo PASS
     }
@@ -2043,7 +2239,7 @@ fi
       case "$1" in
         f_allow) echo "BL-687: a full step Read with the marker present and no stage file is ALLOWED; marker kept, no stage written, no .recover-satisfied, no .recover-advisor-owed" ;;
         f_seq)   echo "BL-687: a sequential snapshot Read then step Read still satisfies the recovery (marker removed, .recover-satisfied written)" ;;
-        f_bound) echo "BL-687 control: a bounded step Read (limit=1) with no stage file is still denied FIRST" ;;
+        f_bound) echo "BL-1184: a bounded step Read (limit=1) with no stage file is ALLOWED, credited, and satisfies nothing" ;;
         f_decoy) echo "BL-687 control: a decoy Read with no stage file is still denied FIRST" ;;
         f_hand)  echo "BL-687 carve-out: a full Read of a steps/handoff.md step file with no stage file is still denied FIRST" ;;
       esac
@@ -2457,7 +2653,7 @@ if [ -n "${GATE:-}" ] && command -v jq >/dev/null 2>&1; then
   # The payload names a RELATIVE path, which the gate resolves against CLAUDE_PROJECT_DIR, so one
   # payload is the same call in every copy (an absolute path would name the template, not the copy).
   _ew="$(armed_proj "$HOOK" architecture.md flat)"
-  _jd="$(jcall Edit decoy.md)"; _ja="$(jcall Read _bmad-output/pipeline-snapshot.md)"
+  _jd="$(jcall Edit decoy.md)"; _ja="$(jfull _bmad-output/pipeline-snapshot.md)"
   _gd_cli="$(eq_gate "$(cp_world "$_ew")" cli "$_jd")"; _gd_in="$(eq_gate "$(cp_world "$_ew")" inproc "$_jd")"
   _ga_cli="$(eq_gate "$(cp_world "$_ew")" cli "$_ja")"; _ga_in="$(eq_gate "$(cp_world "$_ew")" inproc "$_ja")"
   if [ "$_gd_cli" = "$_ga_cli" ] || ! grep -q '"permissionDecision": *"deny"' <<<"$_gd_cli" || ! grep -q 'progress=step$' <<<"$_ga_cli"; then

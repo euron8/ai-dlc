@@ -32,7 +32,7 @@ previous session.
    is the WHOLE of the user's input — optionally preceded by `/ai-dlc`
    and whitespace, and nothing else besides surrounding whitespace:
 
-   - **`handoff`** — **READ AND FOLLOW** `steps/handoff.md` and skip the
+   - **`handoff`** — **READ AND FOLLOW** `steps/handoff.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) and skip the
      rest of this routing sequence.
    - **`resume`** — this is a resume signal for path 2 below. With the
      prefix it is `/ai-dlc resume`, which is the line `handoff.md` step 4
@@ -96,7 +96,7 @@ previous session.
    - Skip the rest of this routing sequence. Steps 1–6 are for fresh
      pipeline starts; on resume they would misclassify the input and
      overwrite the snapshot.
-   - **READ AND FOLLOW** the step file named in `current_step_file`:
+   - **READ AND FOLLOW** the step file named in `current_step_file` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`):
      `{project-root}/.claude/skills/ai-dlc/steps/{current_step_file}`
    - The snapshot is already current (kept fresh by
      `gate-validation.md` Check 14 on each gate passage throughout the
@@ -174,7 +174,7 @@ Run these integrity checks in order:
    > I will trim again."*
 
 2. **Load the snapshot.** Read `_bmad-output/pipeline-snapshot.md` **in
-   full**. This is the single load that serves every check below, the
+   full** (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`). This is the single load that serves every check below, the
    Step 0 dispatch, and the rest of the session. No check below re-reads
    or greps it.
 
@@ -441,7 +441,7 @@ because the two route to different pipelines (`bug` → repro-first triage;
 `yes` if you asked, `n-a` if the operator pre-directed the priority.
 
 **The question MUST offer triage now, then fold the fix** among its options:
-READ AND FOLLOW `bug-investigation.md` sections 0–2c for the defect — so any
+READ AND FOLLOW `bug-investigation.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) sections 0–2c for the defect — so any
 operator-applicable relief reaches the operator first — then return to this
 step and fold the fix story (sections 3–4) into the current sprint: through
 `stories-test-strategy.md` §3a if the sprint has not yet passed that step;

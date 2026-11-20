@@ -24,7 +24,7 @@ Then run `scripts/ai-dlc/sprint-status.sh check-stories --require-done` and
 read its exit. `0` — every story is `done`; proceed. `1` — one or more
 findings, each printed; a `NOT DONE` finding on a `review` story is a story
 past gate 3 whose closing writer never ran, so do not deploy: dispatch its
-closing writer (`implementation.md` section 3, item 4; READ AND FOLLOW
+closing writer (`implementation.md` section 3, item 4; READ AND FOLLOW (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
 `_gate-procedures.md`, "Bounded-join beat" for its brief and join) and re-run. A `NOT DONE`
 finding on any other status: do not deploy; follow that finding's own text.
 `3` or `4` — read them as
@@ -310,7 +310,7 @@ the gate log.
    Orchestration; a lead that edits product code here is applying a
    fix inline, which Rule 28 makes a lead-conduct finding.
 4. If deployment issue: dispatch the `ops` teammate to fix the
-   deployment (READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat"
+   deployment (READ AND FOLLOW `_gate-procedures.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`), "Bounded-join beat"
    for its brief and join), re-deploy, and re-run smoke tests.
 5. Repeat until all smoke tests pass.
 6. When the loop is exhausted — every diagnosis run, both routes taken,
@@ -419,7 +419,7 @@ If `is_ui_epic == true`:
 - Verify every new/modified UI surface renders correctly with production data
 - Compare against documented mockups (from ui-direction step)
 - For any drift: dispatch a `dev` teammate (role-bound per Rule 19) to correct
-  the UI source (READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat"
+  the UI source (READ AND FOLLOW `_gate-procedures.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`), "Bounded-join beat"
   for its brief and join); the lead then redeploys and re-verifies. Redeploy and
   re-verification are deploy-gate orchestration (Rule 28a) and stay on the lead.
   The fix-forward `dev` brief names the browser spec files covering the drifted
@@ -735,7 +735,7 @@ After human validates:
 
 - If **human requests fixes:** dispatch `dev` for the fixes, `code-reviewer`
   to re-review the changed files, and `qa` to re-validate affected stories
-  (READ AND FOLLOW `_gate-procedures.md`, "Bounded-join beat" for each brief
+  (READ AND FOLLOW `_gate-procedures.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`), "Bounded-join beat" for each brief
   and join); the lead then redeploys, re-validates the deploy gate, and presents the
   checkpoint again. Only the code edit is delegated — the redeploy and the
   checkpoint re-presentation stay on the lead.
@@ -747,7 +747,7 @@ After human validates:
   previous sprint's implementation may surface issues that affect
   upcoming stories.
 
-  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review-next.md`
+  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review-next.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
 
 - If **single sprint or final sprint:** Proceed to retro, once every
   locked requirement that needs a disposition under §5's
@@ -767,4 +767,4 @@ After human validates:
      overwriting it would claim one. Without this write the last field on disk
      still names this step, and a later session reads a shipped sprint as
      pending deploy work.
-  2. **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/retro.md`
+  2. **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/retro.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

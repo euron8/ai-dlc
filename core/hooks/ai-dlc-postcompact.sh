@@ -153,7 +153,7 @@ case "$RECOVERED" in
   yes)
     printf 'AI/DLC: compaction (%s); recovery directive injected (%s bytes).\n' "$TRIGGER" "$INJECTED_BYTES" ;;
   degraded-persisted)
-    printf 'AI/DLC: compaction (%s); recovery directive was %s bytes -- Claude Code stubbed it. Read _bmad-output/pipeline-snapshot.md before continuing.\n' "$TRIGGER" "$INJECTED_BYTES" ;;
+    printf 'AI/DLC: compaction (%s); recovery directive was %s bytes -- Claude Code stubbed it. Read _bmad-output/pipeline-snapshot.md before continuing (native Read, in consecutive offset/limit chunks of at most 16 KB covering the whole file, never ctx_*).\n' "$TRIGGER" "$INJECTED_BYTES" ;;
   *)
     printf 'AI/DLC: compaction (%s); recovery hook did not fire -- verify state before continuing.\n' "$TRIGGER" ;;
 esac

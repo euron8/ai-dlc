@@ -227,7 +227,7 @@ moves, 0 insertions and 0 deletions, so no operator ever renamed one.
 |---|---|---|
 | core's own prescriptions | `validate-enforcement-map.sh` **I82** — every artifact path core prescribes conforms or is in the ledger below | **LIVE** |
 | core's readers | readers compose a path from the declared sprint instead of searching | **LIVE** (10c) |
-| an authoring agent | `SKILL.md` Rule 25 points here — READ AND FOLLOW before writing an artifact to a path the rulebook does not already name | **LIVE** (10c) |
+| an authoring agent | `SKILL.md` Rule 25 points here — READ AND FOLLOW (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before writing an artifact to a path the rulebook does not already name | **LIVE** (10c) |
 | the consumer's tree | `scripts/ai-dlc/migrate-artifact-paths.sh` — dry run by default, `--apply` to move | **LIVE** (10d) |
 | the consumer's tree, ongoing | `scripts/ai-dlc/validate-artifact-paths.sh` on the consumer pre-push — real filenames, every push | **LIVE** (10e) |
 | all four of the above | `scripts/ai-dlc/artifact-path-config.sh` — the ONE reader of the blocks below, bound by **I83** | **LIVE** (10e) |

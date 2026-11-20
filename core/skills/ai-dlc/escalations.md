@@ -1,7 +1,7 @@
 # Escalation Entry Format and Resolution Lifecycle
 
 Referenced by SKILL.md Rule 12 and the team role files (`dev.md`,
-`qa.md`, `architect.md`, `code-reviewer.md`). READ AND FOLLOW when
+`qa.md`, `architect.md`, `code-reviewer.md`). READ AND FOLLOW (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) when
 writing or resolving an escalation in `docs/escalations/pending.md`. The
 three-tier decision (HARD_BLOCK / DECIDED_AUTONOMOUSLY / not-an-escalation)
 that governs *whether* to escalate stays in SKILL.md Rule 12; this file

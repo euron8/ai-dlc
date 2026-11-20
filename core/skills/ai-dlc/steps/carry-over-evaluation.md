@@ -38,7 +38,7 @@ SKILL.md Rule 24.
 
 ### 1. Context Loading
 
-Read in full (the live current-state files only — this evaluation is
+Read in full (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`; the live current-state files only — this evaluation is
 cross-cutting, so per Rule 25(b) it reads whole and relies on those
 files staying bounded; do NOT read the `*-history.md` / `*-archive.md`
 files):
@@ -288,4 +288,4 @@ Item IDs MUST use `CO-S<sprint>-<descriptor>` format.
 Run auto-handoff evaluation at `Seam B` with the label `carry-over-evaluation end-of-step pre-gate`
 (see `_gate-procedures.md` "Auto-handoff evaluation"). If evaluation returns CONTINUE, run
 gate validation [planning] (`gate-validation.md`), then:
-**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/requirements.md`
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/requirements.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

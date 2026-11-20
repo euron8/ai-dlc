@@ -1,7 +1,7 @@
 # Rule-Authoring Style Guide
 
 Referenced by SKILL.md Rule 18 and the retro rule-file audit (`retro.md`
-Step 4). READ AND FOLLOW when authoring or auditing a rule in this skill,
+Step 4). READ AND FOLLOW (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) when authoring or auditing a rule in this skill,
 CLAUDE.md, `docs/coding-conventions.md`, step files, or team role files.
 
 **Style:**

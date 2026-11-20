@@ -196,7 +196,7 @@ With no candidate, rule 3 mints, so a malformed id is never reused, and two stor
 
 Whether `gate-checkpoint.sh close` ran plays no part in the choice. The exact-form candidate test means a series still carrying an old-form id is not continued; the next pass mints a new-form one. The series id goes in the adjudicator's brief and every shard's brief, and it is never passed to `gate-checkpoint.sh --nonce`.
 
-READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch": dispatch the
+READ AND FOLLOW `_gate-procedures.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) "Gate-adjudication dispatch": dispatch the
 adjudicator `run_in_background`, join its verdict. While it runs, evaluate ONLY the remaining
 `project` / `lead` checks below — the script checks are already done;
 inline-evaluating an `llm` check is a Rule 20 solo violation.
@@ -1380,7 +1380,7 @@ consumer's pull series; it was never available any of those times.
 
 The snapshot is the only artifact whose budget is enforced *at gates* rather than
 only at sprint start: it is the only one that grows *within* a sprint. The protocol
-whole-reads it here (Checks 14/15), on every resume, and after every compaction
+whole-reads it here (Checks 14/15; native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`), on every resume, and after every compaction
 (`ai-dlc-recover.sh`).
 
 A snapshot over budget means the schema stopped being enforced at gate passages.
@@ -2707,14 +2707,14 @@ all three fit inside `--attest`, H2 becomes fully mechanical.
 
 **Moved to `_gate-procedures.md`.** This procedure is
 invoked by name from step files, not run in the gate sequence. When a step
-says "run sub-step snapshot update", READ AND FOLLOW `_gate-procedures.md`
+says "run sub-step snapshot update", READ AND FOLLOW `_gate-procedures.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
 "Sub-step snapshot update". The full Check 14 above still runs at every gate.
 
 ### Auto-handoff evaluation (referenced by step files)
 
 **Moved to `_gate-procedures.md`.** This helper is invoked
 by name from step files at defined seams, not run in the Check 1–H2 sequence.
-When a step says "run auto-handoff evaluation at Seam <X>", READ AND FOLLOW
+When a step says "run auto-handoff evaluation at Seam <X>", READ AND FOLLOW (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
 `_gate-procedures.md` "Auto-handoff evaluation".
 
 ### Core-layer immutability (§7.1 authoring guard — retro/close gate).

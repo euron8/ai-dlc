@@ -167,7 +167,8 @@ drive() { # drive <projdir> <session> <transcript> [hooksdir] -> raw stdout
 # accepts the fixture's own spelling; this one proves the two shipped halves agree.
 edrive() { # edrive <projdir> <tool> <file-path> [hooksdir] -> hook exit code
   local proj="$1" tool="$2" fp="$3" hd="${4:-$HOOKS_DIR}"
-  jq -nc --arg t "$tool" --arg p "$fp" '{tool_name:$t,tool_input:{file_path:$p}}' \
+  jq -nc --arg t "$tool" --arg p "$fp" --arg id "${GD_ID:-}" \
+    '{tool_name:$t,tool_input:{file_path:$p}} + (if $id != "" then {tool_use_id:$id} else {} end)' \
   | CLAUDE_PROJECT_DIR="$proj" bash "$hd/ai-dlc-handoff-entry.sh" >/dev/null 2>&1
   printf '%s' "$?"
 }
@@ -1621,7 +1622,7 @@ rassert() { # rassert <label> <projdir> <session> <expected-relpath> <failmsg> [
     bad "$1: the recover hook emitted NO additionalContext at all — it did not run, and every negative in this section would read the same way"
     return
   fi
-  sp="$(printf '%s' "$ctx" | sed -n 's/.*Your SECOND tool call MUST be `Read \([^`]*\)` in full.*/\1/p' | head -1)"
+  sp="$(printf '%s' "$ctx" | sed -n 's/.*Your SECOND tool call MUST be `Read \([^`]*\)` in full, with native Read in consecutive.*/\1/p' | head -1)"
   if [ -z "$sp" ]; then
     bad "$1: the emitted block names NO second-mandate path — it took the unresolved branch, so this case says nothing about the override"
     return
@@ -1905,7 +1906,10 @@ echo "  --    (e6-order) the registration order (gate on PreToolUse, entry on Po
 # assertion that can catch the two halves disagreeing about the breadcrumb.
 gdrive() { # gdrive <projdir> <tool> <file-path> [hooksdir] -> raw decision JSON
   local proj="$1" tool="$2" fp="$3" hd="${4:-$HOOKS_DIR}"
-  jq -nc --arg t "$tool" --arg p "$fp" '{tool_name:$t,tool_input:{file_path:$p}}' \
+  # The gate refuses every UNBOUNDED Read of a mandated file, so a Read is bounded (offset 1, limit 2000: the
+  # whole of a small file) unless GD_UNBOUNDED=1; GD_ID gives the call a tool_use_id.
+  jq -nc --arg t "$tool" --arg p "$fp" --arg id "${GD_ID:-}" --arg ub "${GD_UNBOUNDED:-0}" \
+    '{tool_name:$t,tool_input:({file_path:$p} + (if $t == "Read" and $ub != "1" then {offset:1,limit:2000} else {} end))} + (if $id != "" then {tool_use_id:$id} else {} end)' \
   | CLAUDE_PROJECT_DIR="$proj" bash "$hd/ai-dlc-recover-gate.sh" 2>/dev/null
 }
 gdenied() { printf '%s' "$1" | jq -e '.hookSpecificOutput.permissionDecision=="deny"' >/dev/null 2>&1; }
@@ -2046,6 +2050,17 @@ case "$_E8G" in
   *' no-marker') ok "(e8g) driven gate-then-entry only when the gate allows, a first-call handoff.md Read during a recovery does not arm key 1 (gate: ${_E8G% *})"; B_e8g=1 ;;
   *) bad "(e8g) the gate ALLOWED a full Read of handoff.md before the snapshot Read, and the entry hook then armed key 1 from a Read the recovery compelled — the snapshot stage's step-Read allow writes no breadcrumb, so it must not cover handoff.md" ;;
 esac
+# The Read above is BOUNDED (the gate refuses an unbounded one at any size); both spellings must be denied here,
+# and the gate's answer is asserted, not just the marker, so an allow that happened to leave no marker fails.
+case "$_E8G" in
+  'deny '*) ok "(e8g) the bounded handoff.md Read at stage snapshot is DENIED by the gate" ;;
+  *) bad "(e8g) the bounded handoff.md Read at stage snapshot was not denied (${_E8G})" ;;
+esac
+_E8GU="$(GD_UNBOUNDED=1 e8g_run "$P_REC")"
+case "$_E8GU" in
+  'deny no-marker') ok "(e8g) the UNBOUNDED handoff.md Read at stage snapshot is also DENIED and arms nothing" ;;
+  *) bad "(e8g) the unbounded handoff.md Read at stage snapshot answered '${_E8GU}', expected 'deny no-marker'" ;;
+esac
 
 # --- (e9) FAIL OPEN: a breadcrumb with no step_file key ----------------------------------
 # Every unreadable or ambiguous input falls through and arms. The two errors are not
@@ -2069,13 +2084,22 @@ reset_state "$P_REC"; rclean "$P_REC"
 cp "$SNAP_PLAIN" "$P_REC/_bmad-output/pipeline-snapshot.md"
 touch "$P_REC/_bmad-output/pipeline-paused.flag"
 mkmarker "$P_REC"; arm_to_step "$P_REC" "$SESS_A"
-_E10_FIRST="$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")"
-_E10_SECOND="$(seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")"
-if [ "$_E10_FIRST" = no-marker ] && [ "$_E10_SECOND" = marker ]; then
-  ok "(e10) the breadcrumb is CONSUMED: the mandated Read is suppressed and an immediate re-open of the same file arms"
+# Every bounded handoff.md chunk at stage step carries a tool_use_id and the gate writes its PER-CALL breadcrumb
+# `.recover-satisfied.<id>` BEFORE crediting it; the entry hook consumes only its own call's id. The first call
+# is driven in two halves so the breadcrumb is observed on disk between the hooks.
+_E10_DIR="$P_REC/_bmad-output"
+rm -f "$_E10_DIR/.handoff-in-progress"
+GD_ID=toolu_e10a gdrive "$P_REC" Read "$P_REC/$STEP_HANDOFF" >/dev/null
+_E10_CRUMB=absent; [ -e "$_E10_DIR/.recover-satisfied.toolu_e10a" ] && _E10_CRUMB=present
+GD_ID=toolu_e10a edrive "$P_REC" Read "$P_REC/$STEP_HANDOFF" >/dev/null
+_E10_LEFT=absent; [ -e "$_E10_DIR/.recover-satisfied.toolu_e10a" ] && _E10_LEFT=present
+_E10_FIRST=no-marker; [ -f "$_E10_DIR/.handoff-in-progress" ] && _E10_FIRST=marker
+_E10_SECOND="$(GD_ID=toolu_e10b seq_read "$P_REC" "$P_REC/$STEP_HANDOFF")"
+if [ "$_E10_CRUMB" = present ] && [ "$_E10_LEFT" = absent ] && [ "$_E10_FIRST" = no-marker ] && [ "$_E10_SECOND" = marker ]; then
+  ok "(e10) the per-call breadcrumb exists after the gate, is CONSUMED by the entry hook (mandated Read suppressed), and an immediate re-open with a new tool_use_id arms"
   B_e10=1
 else
-  bad "(e10) the two Reads scored '$_E10_FIRST' then '$_E10_SECOND', expected no-marker then marker. A breadcrumb left on disk answers for a later call, so a voluntary re-open right after the mandated one is read as the mandated one and silently fails to arm"
+  bad "(e10) breadcrumb after the gate '$_E10_CRUMB' (want present), left after the entry hook '$_E10_LEFT' (want absent), mandated Read '$_E10_FIRST' (want no-marker), re-open '$_E10_SECOND' (want marker). A breadcrumb left on disk answers for a later call, so a voluntary re-open right after the mandated one is read as the mandated one and silently fails to arm"
 fi
 
 # --- (e11) CONTROL FOR (e6): the SAME state, a DIFFERENT file read ------------------------

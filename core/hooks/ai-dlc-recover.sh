@@ -321,7 +321,7 @@ files or already-produced planning artifacts; Rule 23(a) still applies."
 # operator. The ambiguous branch names the count and the candidates and tells the lead to
 # decide and record the decision, because it is the one party that can.
 if [ "$STEP_FILE_RESOLVED" -eq 1 ]; then
-  SECOND_MANDATE="**Your SECOND tool call MUST be \`Read ${STEP_FILE}\` in full.** ${_MANDATE_WHY}"
+  SECOND_MANDATE="**Your SECOND tool call MUST be \`Read ${STEP_FILE}\` in full, with native Read in consecutive \`offset\`/\`limit\` chunks of at most 16 KB, never \`ctx_*\`.** ${_MANDATE_WHY}"
 elif [ "$POSITION_AMBIGUOUS" -ge 2 ]; then
   SECOND_MANDATE="**This snapshot's Pipeline Position names ${POSITION_AMBIGUOUS} DIFFERENT step
 files -- ${POSITION_NAMES} -- so this hook refuses to pick one and the second
@@ -330,7 +330,8 @@ and overwritten in place; two live position bullets mean a stale one was never
 overwritten, and whichever a hook picked would be a coin toss you could not see.
 Read the Pipeline Position section, decide which of those files the pipeline is
 actually at, say WHICH you chose and WHY in your verification turn, and your
-SECOND tool call MUST be \`Read <that path>\` in full. Then repair the snapshot so
+SECOND tool call MUST be \`Read <that path>\` in full, with native Read in
+consecutive \`offset\`/\`limit\` chunks of at most 16 KB, never \`ctx_*\`. Then repair the snapshot so
 it carries ONE live position bullet -- a superseded position is recorded under a
 labelled key (\`(prior)\`, \`superseded\`, \`retained history\`), never a second live
 bullet. ${_MANDATE_WHY}"
@@ -338,7 +339,7 @@ else
   SECOND_MANDATE="**This snapshot does not name a current step file in a form this hook could
 resolve, so the second mandate names an action instead of a path.** Take the step
 file's path from the Pipeline Position section of the snapshot you have just been
-told to Read, and your SECOND tool call MUST be \`Read <that path>\` in full. If
+told to Read, and your SECOND tool call MUST be \`Read <that path>\` in full, native Read in \`offset\`/\`limit\` chunks of <=16 KB, never \`ctx_*\`. If
 the snapshot names none, say so in your verification turn rather than proceeding
 as though it did. ${_MANDATE_WHY}"
 fi
@@ -566,7 +567,7 @@ cat <<EOF
 This conversation was just compacted. The summary above is lossy and is NOT the
 authoritative pipeline state. The snapshot on disk is.
 
-**Your FIRST tool call MUST be \`Read _bmad-output/pipeline-snapshot.md\` in full.**
+**Your FIRST tool call MUST be \`Read _bmad-output/pipeline-snapshot.md\` in full, in \`offset\`/\`limit\` chunks of <=16 KB.**
 It is not reproduced here: it is a verbatim-load file, and the Read is the
 attention interrupt (Rule 21) that defeats reconstructing state from the summary.
 Never route it through any \`ctx_*\` tool -- \`ai-dlc-protect.sh\` hard-blocks that
@@ -598,8 +599,8 @@ ${GATE_RESUME}
 
 ## Most of your rulebook is not in your context
 
-Then \`Read .claude/skills/ai-dlc/postcompact-digest.md\`. The harness re-attaches
-only the first ~5,000 tokens of an invoked skill -- measured at 20,121 bytes, under
+Then \`Read .claude/skills/ai-dlc/postcompact-digest.md\` the same way. The harness re-attaches
+only the first ~5,000 tokens of an invoked skill, under
 a QUARTER of SKILL.md. The back three quarters is gone: most of the numbered rules,
 the handoff triggers, and the snapshot schema. The digest is that missing part,
 SELECTED from SKILL.md's own bytes.
@@ -820,7 +821,7 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
 # registered, would leave one on disk where the NEXT recovery's first voluntary open would
 # read it and fail to arm. Clearing it here bounds its lifetime to the recovery that wrote it,
 # which is the same guarantee `$MARKER` gets from being rewritten above.
-rm -f "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
+rm -f "${STATE_DIR}/.recover-satisfied" "${STATE_DIR}"/.recover-satisfied.* 2>/dev/null || true
 # The gate's advisor stage (touchpoint R) is per recovery for the same reason: a window left
 # open by a session that ended inside it must not hold the next recovery's calls. The `.<pid>`
 # leftovers are temp files from an owed-file write killed before its rename.
@@ -830,6 +831,10 @@ rm -f "${STATE_DIR}"/.recover-advisor-owed.* 2>/dev/null || true
 # between the two mandated Reads would start this recovery past the snapshot mandate. The
 # `.<pid>` leftovers are temp files from a stage write killed before its rename.
 rm -f "${STATE_DIR}/.recover-gate-progress" "${STATE_DIR}"/.recover-gate-progress.* 2>/dev/null || true
+# The gate's per-file Read credits (`.recover-credit.<role>.*`, and the `.recover-credit-tmp.*` leftovers
+# of a write killed before its rename) are per recovery too: a record left by a session that ended
+# mid-recovery must not count toward the next recovery's coverage.
+rm -f "${STATE_DIR}"/.recover-credit* 2>/dev/null || true
 
 # The string measured above is the string emitted: the provenance wrap ran once, before the
 # budget, and EMITTED is its head and tail around the trimmed block.

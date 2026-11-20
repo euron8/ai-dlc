@@ -31,14 +31,68 @@
 #   - Both paths must exist on disk, checked HERE and again before any deny. A path that
 #     vanished mid-session disarms the gate instead of blocking every call the lead can make.
 #
-# Under those conditions "comply" is a Read of a file known to exist, so a deny can always be
-# satisfied on the next call. That is the whole safety argument, and it is why this hook is a
-# deny rather than the weaker instrumentation option.
+# Under those conditions "comply" is a Read of a file known to exist, and the Read every deny
+# names is a bounded chunk: `Read <path> offset=<a> limit=<b>` of at most 16384 bytes and never
+# fewer than one line. No size guard refuses it -- the context-mode plugin exempts a Read carrying
+# `offset`, `limit` or `view_range`, and the Read tool's token cap is far above a 16 KB chunk. So a
+# deny can always be satisfied on the next call. That is the whole safety argument, and it is why this
+# hook is a deny rather than the weaker instrumentation option. (The plugin replaces the result of a
+# large UNBOUNDED Read with a search pointer, so this gate refuses an unbounded Read of the snapshot,
+# the step file or the digest at any size, naming the chunk.)
 #
-# IN FULL IS ENFORCED, NOT ASSUMED. The mandate says "in full" and the first shipped version of
-# this gate joined on tool name and path only, so `Read <step file> limit=1` cleared the marker
-# exactly as a full Read did. `is_full_read()` below is the test. It does not narrow the safety
-# argument: the always-available action is the same Read with neither field.
+# IN FULL MEANS COVERED, NOT ONE UNBOUNDED CALL. The mandate says "in full" and the first shipped
+# version of this gate joined on tool name and path only, so `Read <step file> limit=1` cleared
+# the marker exactly as a full Read did; the second demanded a Read with neither field, which the
+# plugin denies for the two files that matter (60251 B snapshot, 99600 B step file measured), so
+# plugin and gate left no admissible Read. Now every Read of the snapshot or the step file that
+# carries `offset` or `limit` is CREDITED with the lines it loads (`offset` to `offset+limit-1`, an
+# absent offset 1, an absent limit 2000 lines), and a file is satisfied when the credited ranges are contiguous from line 1 to
+# its last line at judge time, a last line with no newline counting. The skip the old test caught,
+# stopping partway, is caught instead by the marker staying armed until coverage completes: every
+# other call is denied until then, and the deny names the next uncovered range.
+#
+#   - Credits are per ROLE (`snap`, `step`), one append-only record per call, written only when the
+#     call's path (`./` and `//` collapsed) IS the marker-resolved path. No record is ever read,
+#     modified and rewritten, so parallel chunk Reads issued together lose none. Each carries the
+#     file's size and mtime; a record whose identity no longer matches is ignored, so an edited
+#     file is owed again. `ai-dlc-recover.sh` removes all of them with the stage file when a new
+#     recovery starts, the satisfying call removes them with the marker, and so does the stand-down.
+#   - Stage and satisfaction are re-derived from coverage on EVERY call: the snapshot covered means
+#     stage `step` for whichever call this is, and only a Read of the step file satisfies. A step
+#     chunk under stage `snapshot` is credited and allowed, never satisfying (BL-687), except for
+#     handoff.md, which stays denied there. With the step file covered but unsatisfied, every deny
+#     names the LAST chunk, never an offset past the end.
+#   - A bounded call is credited only when its range spans at most 16384 bytes (or is one line). A
+#     larger one is allowed and credits nothing, and so is a non-integer or non-positive
+#     `offset`/`limit`. An UNBOUNDED Read of the snapshot or the step file, at any size, is denied
+#     naming the next uncovered chunk and credits nothing, because the plugin replaces an unbounded
+#     Read result over a size with a pointer. An unbounded digest Read (either layout), at any size,
+#     is denied naming chunk 1. With the snapshot covered, an unbounded snapshot or digest Read is
+#     denied naming the step file's next owed chunk (its last once covered), the call that advances
+#     the recovery. The digest is never credited; its bounded Reads are allowed at both
+#     stages. No size threshold is used: one would key on a single plugin version's internals (2.1.7
+#     replaces over 4096 bytes; an installed 2.1.5 differs), and a size-independent rule needs no
+#     plugin constant.
+#   - A handoff.md step chunk at stage `snapshot` is denied, so it is credited only once the snapshot
+#     is covered; a denied chunk advances nothing.
+#   - A failed credit write stands the recovery down: the marker is unlinked (BL-725) and a stderr
+#     WARN is printed. It never denies.
+#
+# RESIDUALS, recorded and not fixed. Crediting happens at PreToolUse, which records INTENT, so a
+# Read that a later PreToolUse hook denies is still credited. A line over 2000 characters is
+# truncated by the Read tool and credited whole. PostToolUse crediting was rejected: a consumer
+# whose settings registration lags the hook file would never credit and so wedge every recovery.
+# A chunk's byte count is taken over the file's lines, so it ignores the Read tool's line-number
+# prefix. A redundant handoff.md chunk whose PreToolUse starts after the satisfying call has finished
+# can still leave at the marker re-test with no breadcrumb.
+#
+# THE BREADCRUMB (handoff.md). `ai-dlc-handoff-entry.sh` arms `.handoff-in-progress` on a Read of
+# steps/handoff.md that no breadcrumb marks as compelled. Every Read of a recovery's handoff.md
+# step file at stage `step` therefore writes `.recover-satisfied.<tool_use_id>`, and the entry hook
+# consumes only its own call's; without an id the call writes the shared `.recover-satisfied` on
+# the satisfying call instead, which is also the file the entry hook falls back to. With the snapshot
+# covered, the bounded chunk writes its breadcrumb before its credit, so a sibling that satisfies in
+# between cannot leave it without one.
 #
 # WHAT IT DOES NOT DO. It does not police the THIRD mandated Read -- the post-compact digest,
 # `.claude/skills/ai-dlc/postcompact-digest.md`, which the injected text asks for and which
@@ -429,11 +483,24 @@ fi
 # ARMING PRECONDITION, RE-CHECKED ON EVERY CALL. If either mandated file is not readable now,
 # the gate stands down permanently for this recovery: it clears the marker so it does not
 # re-arm, and lets the call through. Denying a Read of something absent is the wedge.
-resolve() { case "$1" in /*) printf '%s\n' "$1" ;; *) printf '%s\n' "${PROJECT_DIR}/$1" ;; esac; }
+# norm collapses `//` and `/./` (and a trailing `/.`), so `./x`, `a//b` and `a/./b` meet the plain form.
+norm() {
+  local _p="$1" _d='//' _s='/' _dot='/./'
+  while :; do
+    case "$_p" in
+      *//*) _p="${_p//$_d/$_s}" ;;
+      */./*) _p="${_p//$_dot/$_s}" ;;
+      *) break ;;
+    esac
+  done
+  case "$_p" in */.) _p="${_p%/.}" ;; esac
+  printf '%s\n' "$_p"
+}
+resolve() { case "$1" in /*) norm "$1" ;; *) norm "${PROJECT_DIR}/$1" ;; esac; }
 SNAP_ABS="$(resolve "$SNAP_REL")"
 STEP_ABS="$(resolve "$STEP_REL")"
 if [ ! -r "$SNAP_ABS" ] || [ ! -r "$STEP_ABS" ]; then
-  rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true
+  rm -f "$MARKER" "$PROGRESS" "${STATE_DIR}"/.recover-credit* 2>/dev/null || true
   exit 0
 fi
 # AN UNWRITABLE STATE DIRECTORY STANDS THE GATE DOWN FOR THIS CALL (BL-688). Every way out of a
@@ -446,53 +513,150 @@ fi
 # the moment the directory is writable again.
 [ -w "$STATE_DIR" ] || exit 0
 
-TOOL="$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)"
-FPATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
-LIMIT="$(printf '%s' "$INPUT" | jq -r '.tool_input.limit // empty' 2>/dev/null)"
-OFFSET="$(printf '%s' "$INPUT" | jq -r '.tool_input.offset // empty' 2>/dev/null)"
-
-# "IN FULL" IS PART OF THE MANDATE AND IT WAS THE THIRD SKIP THE FILING RECORDED -- a lead that
-# started the second mandated Read and stopped 773 of 1210 lines in, reasoning live that the
-# remainder was duplicative. Until this test the gate joined on tool name and path alone, so
-# `Read <step file> limit=1` satisfied it exactly as a full Read did: marker cleared, gate inert,
-# 1 line of 1210 loaded. `limit` bounds the read; an `offset` past the first line starts it late.
-# Either is a partial. No limit and no offset past line 1 is the full read.
-#
-# IT CANNOT WEDGE, which is the same argument the arming precondition makes. The always-available
-# action is the identical Read with neither field -- the harness TRUNCATES an over-long Read
-# rather than refusing it, so that call is issuable for any file, and the block above has already
-# established this one is readable. A deny here is satisfiable on the very next call.
-is_full_read() {
-  [ -z "$LIMIT" ] || return 1
-  case "$OFFSET" in ""|0|1) return 0 ;; *) return 1 ;; esac
-}
-
-# Normalise the call's path the same way, so `Read _bmad-output/x.md` and an absolute form of
-# the same file are one answer. A gate that matched only one spelling would deny a compliant
-# call, which is a wedge wearing a different hat.
+RG_P="$(printf '%s' "$INPUT" | jq -r '(.tool_input // {}) as $ti | @sh "TOOL=\((.tool_name // "") | tostring) FPATH=\(($ti.file_path // "") | tostring) HAS_OFF=\(if ($ti.offset // null) == null then 0 else 1 end) OFFSET=\(($ti.offset // "") | tostring) HAS_LIM=\(if ($ti.limit // null) == null then 0 else 1 end) LIMIT=\(($ti.limit // "") | tostring) RG_TUID=\((.tool_use_id // "") | tostring)"' 2>/dev/null)" || exit 0
+TOOL=""; FPATH=""; HAS_OFF=0; OFFSET=""; HAS_LIM=0; LIMIT=""; RG_TUID=""
+eval "$RG_P"
+# Normalise the call's path the same way as the mandated ones (`./` and `//` collapsed), so
+# `Read _bmad-output/x.md` and an absolute form of the same file are one answer. A gate that matched
+# only one spelling would deny a compliant call, which is a wedge wearing a different hat.
 FABS=""
 [ -n "$FPATH" ] && FABS="$(resolve "$FPATH")"
 
-# THE MARKER IS RE-TESTED AFTER THE STAGE READ, BECAUSE A CONCURRENT SATISFYING CALL CAN REMOVE
-# BOTH FILES BETWEEN THE FAST-PATH ABOVE AND THIS LINE (BL-658). A lead issued the snapshot Read,
-# the step Read and the digest Read together, as parallel calls, so three invocations of this hook
-# ran side by side. The digest Read's invocation passed the marker fast-path while recovery was still owed;
-# the step Read's invocation then satisfied the mandate and removed the marker and the progress
-# file; the digest Read's invocation read no progress file here, took the default `snapshot`, and
-# was DENIED with the first-call text -- a refusal made after both mandated Reads had succeeded,
-# which cost a turn and told the lead it had skipped a Read it had just made.
-#
-# AFTER THE READ, NOT BEFORE IT, AND THE ORDER OF THE SATISFYING CALL'S REMOVAL IS WHY. That call
-# removes the MARKER FIRST and the progress file second, so a marker still on disk after this read
-# proves the progress file had not been removed yet when it was read, and the stage is the real
-# one. A test placed above the read leaves the window open: the test passes, the satisfying call
-# removes both, and the read then defaults to `snapshot` exactly as before.
-#
-# THE MARKER, NOT THE PROGRESS FILE. A missing progress file with the marker present is the
-# GENUINE first call of a recovery, which must be refused; testing the progress file here would
-# wave that call through and the gate would never deny anything at stage one.
-STAGE="$(cat "$PROGRESS" 2>/dev/null || printf 'snapshot')"
+# COVERAGE, NOT ONE UNBOUNDED CALL (header: IN FULL MEANS COVERED). A Read of a mandated file is
+# credited with the lines it loads, as its own record `${STATE_DIR}/.recover-credit.<role>.<pid>.<n>`
+# holding `<first> <last> <size>-<mtime>`. The role is `snap` or `step`, never a name derived from
+# the path, and a record is written only when the call's normalised path IS the marker-resolved
+# path of that role. One file per call, never a read-modify-write of a shared file, so parallel
+# chunk Reads issued together lose nothing (the BL-658 shape). A record whose size-mtime no longer
+# matches the file is ignored at judge time, so an edited file is owed again.
+CHUNK_CAP=16384      # bytes: the context-mode size guard and one chunk's ceiling
+READ_DEFAULT=2000    # lines a Read with no limit loads
+isint() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; [ "${#1}" -le 9 ] && [ "$((10#$1))" -ge 1 ]; }
+fid() { # fid <file> -> "<bytes>-<mtime>"; fails when either is unreadable
+  local _s _m
+  _s="$(wc -c < "$1" 2>/dev/null)" || return 1
+  _s="${_s//[[:space:]]/}"
+  _m="$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null)" || return 1
+  [ -n "$_s" ] && [ -n "$_m" ] || return 1
+  printf '%s-%s' "$_s" "$_m"
+}
+nlines() { awk 'END { print NR + 0 }' "$1" 2>/dev/null; }
+# range_bytes <file> <first> <last> -> the bytes of those lines, newline counted per line
+range_bytes() { LC_ALL=C awk -v a="$2" -v b="$3" 'NR >= a && NR <= b { s += length($0) + 1 } NR > b { exit } END { print s + 0 }' "$1" 2>/dev/null; }
+# chunk_of <file> <next-uncovered-line | 0> -> "<offset> <limit>": the chunk starting at that line,
+# or (0) the file's LAST chunk. At most CHUNK_CAP bytes and READ_DEFAULT lines, never fewer than 1 line.
+chunk_of() {
+  LC_ALL=C awk -v nx="$2" -v cap="$CHUNK_CAP" -v mx="$READ_DEFAULT" '
+    { L[NR] = length($0) + 1 }
+    END {
+      n = NR; if (n == 0) { print "1 1"; exit }
+      b = 0; c = 0
+      if (nx > 0) { s = (nx > n) ? n : nx; for (i = s; i <= n; i++) { if (c > 0 && (b + L[i] > cap || c >= mx)) break; b += L[i]; c++ } print s, c }
+      else { for (i = n; i >= 1; i--) { if (c > 0 && (b + L[i] > cap || c >= mx)) break; b += L[i]; c++ } print n - c + 1, c }
+    }' "$1" 2>/dev/null
+}
+# cov_next <role> <id> <lines> -> the first line the valid records of that role leave uncovered
+# (lines+1 when 1..lines is covered). A record carrying another identity is ignored.
+cov_next() {
+  cat "${STATE_DIR}"/.recover-credit."$1".* 2>/dev/null | awk -v id="$2" -v n="$3" '
+    $3 == id && $1 + 0 >= 1 && $2 + 0 >= $1 + 0 { k++; s[k] = $1 + 0; e[k] = $2 + 0 }
+    END { nx = 1; do { ch = 0; for (i = 1; i <= k; i++) if (s[i] <= nx && e[i] >= nx) { nx = e[i] + 1; ch = 1 } } while (ch && nx <= n); print nx }'
+}
+rm_credits() { rm -f "${STATE_DIR}"/.recover-credit* 2>/dev/null || true; }
+# credit <role> <id> <first> <last>: ONE new record, written whole then renamed into place. A failed
+# write stands the recovery down (B2): the marker is unlinked, which needs no free space, a WARN goes
+# to stderr, and nothing is denied.
+credit() {
+  local _t="${STATE_DIR}/.recover-credit-tmp.$$.${RANDOM}"
+  { printf '%s %s %s\n' "$3" "$4" "$2" > "$_t" && mv -f "$_t" "${STATE_DIR}/.recover-credit.$1.$$.${RANDOM}"; } 2>/dev/null \
+    || { rm -f "$_t" "$MARKER" 2>/dev/null || true
+         echo "WARN: ai-dlc-recover-gate: could not record a Read credit under ${STATE_DIR}; the recovery gate stands down" >&2
+         exit 0; }
+}
+
+IS_HO=0
+case "$STEP_REL" in */steps/handoff.md|steps/handoff.md) IS_HO=1 ;; esac
+DIG1="$(norm "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md")"
+DIG2="$(norm "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md")"
+IS_READ=0; [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && IS_READ=1
+ON_SNAP=0; ON_STEP=0; ON_DIG=0
+if [ "$IS_READ" = 1 ]; then
+  [ "$FABS" = "$SNAP_ABS" ] && ON_SNAP=1
+  [ "$FABS" = "$STEP_ABS" ] && ON_STEP=1
+  { [ "$FABS" = "$DIG1" ] || [ "$FABS" = "$DIG2" ]; } && ON_DIG=1
+fi
+SNAP_ID="$(fid "$SNAP_ABS")" || exit 0
+STEP_ID="$(fid "$STEP_ABS")" || exit 0
+SNAP_N="$(nlines "$SNAP_ABS")"; STEP_N="$(nlines "$STEP_ABS")"
+
+# AN UNBOUNDED READ OF A MANDATED FILE IS REFUSED AT ANY SIZE, because the context-mode plugin
+# replaces a large unbounded Read result with a search pointer, so such a Read can load nothing. The
+# snapshot, the step file and the digest are all refused unbounded, with no size test, so the rule
+# needs no plugin constant. The deny names the next uncovered chunk by number (the digest: chunk 1),
+# the remedy the plugin withholds (it recommends a `ctx_*` tool). It credits and advances nothing.
+OVER=0
+if [ "$IS_READ" = 1 ] && [ "$HAS_OFF" = 0 ] && [ "$HAS_LIM" = 0 ] && [ $((ON_SNAP + ON_STEP + ON_DIG)) -gt 0 ]; then
+  OVER=1
+fi
+
+# A handoff.md step chunk is credited only once the snapshot is covered, because at stage snapshot it is
+# denied below and a denied call must not advance the recovery. A step call writes no snapshot credit,
+# so the coverage read here is the live one.
+SNAP_NX="$(cov_next snap "$SNAP_ID" "$SNAP_N")"
+SNAP_COV=0; [ "${SNAP_NX:-1}" -gt "$SNAP_N" ] 2>/dev/null && SNAP_COV=1
+# THE BREADCRUMB RACE: with the snapshot covered, a handoff.md chunk leaves its per-call breadcrumb
+# BEFORE its credit, so a sibling chunk that satisfies and removes the marker in between cannot send
+# this one out at the marker re-test with no breadcrumb.
+_tu0="${RG_TUID//[^A-Za-z0-9_-]/}"
+if [ "$IS_READ" = 1 ] && [ "$ON_STEP" = 1 ] && [ "$IS_HO" = 1 ] && [ "$SNAP_COV" = 1 ] && [ -n "$_tu0" ] \
+   && { [ "$HAS_OFF" = 1 ] || [ "$HAS_LIM" = 1 ]; }; then
+  if ! printf 'step_file=%s\n' "$STEP_REL" > "${STATE_DIR}/.recover-satisfied.${_tu0}" 2>/dev/null; then
+    rm -f "${STATE_DIR}/.recover-satisfied.${_tu0}" 2>/dev/null
+  fi
+fi
+
+# CREDIT THIS CALL. Only a call carrying `offset` or `limit` is credited, and only when its range spans
+# at most CHUNK_CAP bytes (or is one line); a larger one, and a non-integer, zero or negative
+# offset/limit, is ALLOWED and credits nothing. An unbounded call never reaches here (OVER). A
+# handoff.md step chunk is credited only with the snapshot covered. The digest is never credited.
+if [ "$IS_READ" = 1 ] && [ "$OVER" = 0 ] && [ $((ON_SNAP + ON_STEP)) -gt 0 ]; then
+  for _role in snap step; do
+    if [ "$_role" = snap ]; then [ "$ON_SNAP" = 1 ] || continue; _f="$SNAP_ABS"; _id="$SNAP_ID"; _n="$SNAP_N"
+    else [ "$ON_STEP" = 1 ] || continue; { [ "$IS_HO" = 0 ] || [ "$SNAP_COV" = 1 ]; } || continue; _f="$STEP_ABS"; _id="$STEP_ID"; _n="$STEP_N"; fi
+    _a=1; _e="$_n"; _ok=1
+    if [ "$HAS_OFF" = 0 ] && [ "$HAS_LIM" = 0 ]; then
+      _ok=0
+    else
+      if [ "$HAS_OFF" = 1 ]; then isint "$OFFSET" && _a=$((10#$OFFSET)) || _ok=0; fi
+      if [ "$HAS_LIM" = 1 ]; then isint "$LIMIT" && _l=$((10#$LIMIT)) || _ok=0; else _l="$READ_DEFAULT"; fi
+      if [ "$_ok" = 1 ]; then
+        _e=$((_a + _l - 1)); [ "$_e" -gt "$_n" ] && _e="$_n"
+        [ "$_a" -le "$_n" ] || _ok=0
+      fi
+      if [ "$_ok" = 1 ] && [ "$_e" -gt "$_a" ] && [ "$(range_bytes "$_f" "$_a" "$_e")" -gt "$CHUNK_CAP" ] 2>/dev/null; then _ok=0; fi
+    fi
+    if [ "$_ok" = 1 ] && [ "$_e" -ge "$_a" ]; then credit "$_role" "$_id" "$_a" "$_e"; fi
+  done
+fi
+
+# STAGE AND SATISFACTION ARE RE-DERIVED FROM COVERAGE ON EVERY CALL. The snapshot covered means stage
+# `step`, whichever call this is; the step file covered at stage `step` is satisfaction, taken only
+# by a Read of the step file. `$PROGRESS` is kept as the record of the advance and decides nothing.
+SNAP_NX="$(cov_next snap "$SNAP_ID" "$SNAP_N")"
+STEP_NX="$(cov_next step "$STEP_ID" "$STEP_N")"
+SNAP_COV=0; [ "${SNAP_NX:-1}" -gt "$SNAP_N" ] 2>/dev/null && SNAP_COV=1
+STEP_COV=0; [ "${STEP_NX:-1}" -gt "$STEP_N" ] 2>/dev/null && STEP_COV=1
+# THE MARKER IS RE-TESTED AFTER THE CREDITS ARE READ (BL-658): the satisfying call removes the marker
+# first and the credits after, so a marker still on disk here proves the credits read above were
+# the live ones. Before the read, a concurrent satisfaction empties them and this call is denied FIRST.
 [ -f "$MARKER" ] || exit 0
+STAGE=snapshot
+if [ "$SNAP_COV" = 1 ]; then
+  STAGE=step
+  [ "$(cat "$PROGRESS" 2>/dev/null)" = step ] \
+    || { printf 'step\n' >"${PROGRESS}.$$" && mv -f "${PROGRESS}.$$" "$PROGRESS"; } 2>/dev/null \
+    || rm -f "${PROGRESS}.$$" 2>/dev/null || true
+fi
 
 # PROVENANCE MARKER -- PC-S306-UNSOLICITED-CONTEXT-HAS-NO-PROVENANCE-SIGNAL. The
 # library is a SIBLING in both layouts (core/hooks/, .claude/hooks/), so this is a
@@ -514,85 +678,73 @@ deny() {
     }'
   exit 0
 }
+# read_cmd <rel> <file> <next-uncovered-line | 0> -> the exact Read call the deny names
+read_cmd() { local _o _l; read -r _o _l <<<"$(chunk_of "$2" "$3")"; printf 'Read %s offset=%s limit=%s' "$1" "$_o" "$_l"; }
+
+if [ "$OVER" = 1 ]; then
+  _on=1
+  if { [ "$ON_SNAP" = 1 ] || [ "$ON_DIG" = 1 ]; } && [ "$SNAP_COV" = 1 ]; then _orel="$STEP_REL"; _of="$STEP_ABS"; if [ "$STEP_COV" = 1 ]; then _on=0; else _on="$STEP_NX"; fi
+  elif [ "$ON_SNAP" = 1 ]; then _orel="$SNAP_REL"; _of="$SNAP_ABS"; _on="$SNAP_NX"
+  elif [ "$ON_STEP" = 1 ] && [ "$STAGE" = snapshot ] && [ "$IS_HO" = 1 ]; then _orel="$SNAP_REL"; _of="$SNAP_ABS"; _on="$SNAP_NX"
+  elif [ "$ON_STEP" = 1 ]; then _orel="$STEP_REL"; _of="$STEP_ABS"; if [ "$STEP_COV" = 1 ]; then _on=0; else _on="$STEP_NX"; fi
+  else _orel="$FPATH"; _of="$FABS"; fi
+  deny "AI/DLC post-compact recovery: an unbounded Read of \`${FPATH}\` is refused -- the context-mode plugin replaces the result of a Read with neither \`offset\` nor \`limit\` with a search pointer when the file is large, so it can load nothing. Read in consecutive chunks of at most ${CHUNK_CAP} bytes, next: \`$(read_cmd "$_orel" "$_of" "$_on")\`." \
+"Use the native Read tool with offset and limit, never a \`ctx_*\` tool. The chunk is named above; each later chunk starts at the line after the previous one's last. This call credited nothing."
+fi
 
 case "$STAGE" in
   snapshot)
-    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$SNAP_ABS" ]; then
-      if is_full_read; then
-        # A STAGE WRITE THAT FAILS STANDS THE RECOVERY DOWN (BL-725). The per-call
-        # writability test cannot see a writable directory whose write fails (a full disk, a quota,
-        # a file-size limit), so without this the Read is allowed, the stage stays snapshot, and every later
-        # call is denied FIRST with a remedy that advances nothing. Unlinking the marker is the
-        # stand-down, and it needs no free space. The advisor stage is left unarmed, which is
-        # fail-open exactly as BL-688 is. RESIDUAL: a sticky-bit _bmad-output owned by another user
-        # passes [ -w ] but refuses the unlink, so the marker survives there.
-        { printf 'step\n' >"${PROGRESS}.$$" && mv -f "${PROGRESS}.$$" "$PROGRESS"; } 2>/dev/null || rm -f "${PROGRESS}.$$" "$MARKER" 2>/dev/null || true
-        exit 0
-      fi
-      deny "AI/DLC post-compact recovery: \`Read ${SNAP_REL}\` must be IN FULL, and this call bounds it with \`limit\`/\`offset\`. Re-issue the same Read with neither field." \
-"A bounded Read of the snapshot is the skip wearing the shape of compliance --
-the gate would clear and the pipeline state you did not load would be the state
-you act on. Call \`Read ${SNAP_REL}\` again with no \`limit\` and no \`offset\`;
-that call is available to you now."
-    fi
-    # THE DIGEST READ IS ALLOWED WITHOUT ADVANCING (BL-658). The injected block asks for it, and a
-    # lead that issues the three Reads in parallel can have this call's hook run before the
-    # snapshot call's stage write. Matched on the two paths `digest_readable` checks, never a
-    # basename; a bounded Read of it falls through to the deny. Writes nothing.
-    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && is_full_read \
-       && { [ "$FABS" = "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md" ] \
-            || [ "$FABS" = "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md" ]; }; then
-      exit 0
-    fi
-    # A FULL STEP READ IS ALLOWED WITHOUT ADVANCING OR SATISFYING (BL-687). A lead that issues the
-    # snapshot and step Reads in parallel can have this call's hook run before the snapshot call's
-    # stage write, and it was denied FIRST although the snapshot Read was succeeding beside it.
-    # It writes nothing -- no stage, no marker removal, no `.recover-satisfied`, no
-    # `.recover-advisor-owed` -- so a step Read alone never satisfies the recovery: only a step
-    # Read made once the stage is `step` does. A bounded step Read still falls through to the deny.
-    # EXCEPT handoff.md: `ai-dlc-handoff-entry.sh` arms `.handoff-in-progress` on a Read of it that
-    # no breadcrumb marks as compelled, and this allow writes none, so that Read stays denied.
-    # Matched at that hook's own grain, the basename under its steps/ parent.
-    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$STEP_ABS" ] && is_full_read; then
-      case "$STEP_REL" in
-        */steps/handoff.md|steps/handoff.md) : ;;
-        *) exit 0 ;;
-      esac
-    fi
-    deny "AI/DLC post-compact recovery: your FIRST tool call must be \`Read ${SNAP_REL}\` in full. This conversation was compacted and the summary is not the authoritative pipeline state." \
+    # A snapshot chunk is allowed and was credited above; the stage advances on the call that covers it.
+    [ "$ON_SNAP" = 1 ] && exit 0
+    # THE DIGEST READ IS ALLOWED WITHOUT CREDIT AND WITHOUT ADVANCING (BL-658): the injected block
+    # asks for it, and a lead that issues the Reads in parallel can have this call's hook run first.
+    [ "$ON_DIG" = 1 ] && exit 0
+    # A STEP READ AT STAGE `snapshot` IS ALLOWED AND CREDITED, NEVER SATISFYING (BL-687): a lead that
+    # issues the snapshot and step Reads in parallel can have this call's hook run before the
+    # snapshot is covered. EXCEPT handoff.md, which stays denied, chunks included:
+    # `ai-dlc-handoff-entry.sh` arms `.handoff-in-progress` on a Read of it that no breadcrumb marks
+    # as compelled, and a call at this stage writes none.
+    if [ "$ON_STEP" = 1 ] && [ "$IS_HO" = 0 ]; then exit 0; fi
+    deny "AI/DLC post-compact recovery: your FIRST tool call must be \`Read ${SNAP_REL}\` in full. This conversation was compacted and the summary is not the authoritative pipeline state. Next chunk: \`$(read_cmd "$SNAP_REL" "$SNAP_ABS" "$SNAP_NX")\`." \
 "The snapshot is a verbatim-load file and the Read is the attention interrupt that
-defeats reconstructing state from the summary. Call it now, in full, with the
-native Read tool -- never a \`ctx_*\` tool. Then \`Read ${STEP_REL}\` in full. Both
-files were confirmed present before this gate armed, so complying is available to
-you on the next call; there is nothing here to weigh."
+defeats reconstructing state from the summary. Read it with the native Read tool,
+in consecutive offset/limit chunks of at most ${CHUNK_CAP} bytes covering line 1 to
+the end -- never a \`ctx_*\` tool. Then \`Read ${STEP_REL}\` the same way. Both files
+were confirmed present before this gate armed, and the chunk above is always
+allowed, so complying is available to you on the next call; there is nothing here
+to weigh."
     ;;
   step)
-    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$STEP_ABS" ]; then
-      if is_full_read; then
-        # SATISFIED. Clear both, so the gate is inert for the rest of the session until the
-        # next compaction writes a fresh marker.
+    if [ "$ON_STEP" = 1 ]; then
+      # THE PER-CALL BREADCRUMB (header: THE BREADCRUMB). For handoff.md, every Read at this stage is
+      # the recovery's own, so each call leaves `.recover-satisfied.<tool_use_id>` for the entry hook
+      # that runs after it, which consumes only its own call's.
+      _tu="${RG_TUID//[^A-Za-z0-9_-]/}"
+      if [ "$IS_HO" = 1 ] && [ -n "$_tu" ]; then
+        if ! printf 'step_file=%s\n' "$STEP_REL" > "${STATE_DIR}/.recover-satisfied.${_tu}" 2>/dev/null; then
+          rm -f "${STATE_DIR}/.recover-satisfied.${_tu}" 2>/dev/null   # unwritten crumb: the entry hook arms (fail open)
+        fi
+      fi
+      if [ "$STEP_COV" = 1 ]; then
+        # SATISFIED. Clear all, so the gate is inert for the rest of the session until the next
+        # compaction writes a fresh marker.
         #
-        # THE BREADCRUMB IS WRITTEN BEFORE THE CLEAR, AND IT EXISTS FOR A HOOK THAT RUNS AFTER
-        # THIS ONE. `ai-dlc-handoff-entry.sh` is PostToolUse on `Read`; this gate is PreToolUse
-        # on every tool. So on the call that satisfies the second mandate the order is: this
-        # hook runs, the Read executes, the entry hook runs. If the entry hook tried to decide
-        # from `$MARKER` it would be testing a file this line removed one hook earlier, and it
-        # would arm the handoff marker on a Read the recovery COMPELLED -- the exact case it
-        # exists to prevent, invisible to any seed that does not drive both hooks in shipped
-        # order.
+        # THE BREADCRUMB IS WRITTEN BEFORE THE CLEAR, AND IT EXISTS FOR A HOOK THAT RUNS AFTER THIS
+        # ONE. `ai-dlc-handoff-entry.sh` is PostToolUse on `Read`; this gate is PreToolUse on every
+        # tool, and it removes the marker. The entry hook therefore cannot decide from `$MARKER`: it
+        # would arm the handoff marker on a Read the recovery COMPELLED. So the state is handed
+        # forward explicitly, and ONLY by a call this gate admitted. A lead that satisfied only the
+        # first mandate and then opened the step file of its own accord is a genuine initiation and
+        # must still arm, which the marker alone cannot tell apart.
         #
-        # SO THE STATE IS HANDED FORWARD EXPLICITLY. This records WHICH Read was the satisfying
-        # one, which is strictly more than `$MARKER` ever knew: the marker says "a recovery is
-        # in flight", never "THIS call is the one it demanded". A lead that satisfied only the
-        # FIRST mandate and then opened the step file of its own accord is a genuine
-        # initiation, and it must still arm -- the marker alone cannot tell that apart from
-        # this case, and this breadcrumb can, because only the satisfying call writes it.
-        #
-        # ONE-SHOT BY CONSTRUCTION. The consumer deletes it, so it cannot accumulate and it
-        # cannot answer for a later Read. A stale copy that somehow survives is bounded the
-        # same way the marker is: `ai-dlc-recover.sh` removes it when a NEW recovery starts,
-        # so it can never outlive the recovery that wrote it.
-        printf 'step_file=%s\n' "$STEP_REL" > "${STATE_DIR}/.recover-satisfied" 2>/dev/null || true
+        # The shared `.recover-satisfied` is written for a step other than handoff.md (the entry
+        # hook's gate-checkpoint rebind reads it) and for a handoff.md call that carried no
+        # `tool_use_id`; the entry hook reads it as key=value, never sources it.
+        if [ "$IS_HO" = 0 ] || [ -z "$_tu" ]; then
+          if ! printf 'step_file=%s\n' "$STEP_REL" > "${STATE_DIR}/.recover-satisfied" 2>/dev/null; then
+            rm -f "${STATE_DIR}/.recover-satisfied" 2>/dev/null   # unwritten crumb: the entry hook arms (fail open)
+          fi
+        fi
         # THE ADVISOR STAGE ARMS HERE (header: THE ADVISOR STAGE). Keyed on the session that
         # satisfied the reads, so another session's call in the same project stands it down.
         # Only the lead reaches this line (a teammate left at the BL-590 exit above), and a tree
@@ -602,37 +754,26 @@ you on the next call; there is nothing here to weigh."
           owed_put "$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)" 0
         fi
         rm -f "$MARKER" "$PROGRESS" 2>/dev/null || true
+        rm_credits
         exit 0
       fi
-      deny "AI/DLC post-compact recovery: \`Read ${STEP_REL}\` must be IN FULL, and this call bounds it with \`limit\`/\`offset\`. Re-issue the same Read with neither field." \
-"This is the exact skip this gate was filed for: the second mandated Read was
-started and abandoned partway on the judgment that the remainder was duplicative
--- a judgment made from inside the state the Read exists to replace. Call
-\`Read ${STEP_REL}\` again with no \`limit\` and no \`offset\`."
+      exit 0   # a step chunk, credited above, with the file not yet covered
     fi
-    # Re-reading the snapshot is not progress, but it is not a violation either -- it is the
-    # call this gate just demanded. Allow it without advancing, so a lead that reads it twice
-    # is not punished for the harness replaying a call.
-    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && [ "$FABS" = "$SNAP_ABS" ]; then
-      exit 0
-    fi
-    # The digest Read, as in the snapshot arm (BL-658): allowed in full, without advancing.
-    if [ "$TOOL" = "Read" ] && [ -n "$FABS" ] && is_full_read \
-       && { [ "$FABS" = "${PROJECT_DIR}/.claude/skills/ai-dlc/postcompact-digest.md" ] \
-            || [ "$FABS" = "${PROJECT_DIR}/core/skills/ai-dlc/postcompact-digest.md" ]; }; then
-      exit 0
-    fi
-    deny "AI/DLC post-compact recovery: your SECOND tool call must be \`Read ${STEP_REL}\` in full. Compaction cleared the harness's record of every file previously read, so the step file is not loaded no matter how recently you read it." \
+    # Re-reading the snapshot is not progress, but it is not a violation either. Allow it.
+    [ "$ON_SNAP" = 1 ] && exit 0
+    # The digest Read: allowed without credit, as in the snapshot arm (BL-658).
+    [ "$ON_DIG" = 1 ] && exit 0
+    # A COVERED STEP FILE IS NEVER NAMED PAST ITS END: the deny names the last chunk, and the Read
+    # of it satisfies.
+    if [ "$STEP_COV" = 1 ]; then _sn=0; else _sn="$STEP_NX"; fi
+    deny "AI/DLC post-compact recovery: your SECOND tool call must be \`Read ${STEP_REL}\` in full. Compaction cleared the harness's record of every file previously read, so the step file is not loaded no matter how recently you read it. Next chunk: \`$(read_cmd "$STEP_REL" "$STEP_ABS" "$_sn")\`." \
 "Measured across 265 real compactions, this Read lands 41% of the time against the
 snapshot Read's 66% -- it is the one most often skipped and the one this gate
-exists for. Read it IN FULL: stopping partway because the remainder looks
-duplicative is a judgment made from inside the state the Read exists to replace.
-The file was confirmed present before this gate armed."
-    ;;
-  *)
-    # An unreadable progress value means state this hook cannot reason about. Stand down
-    # rather than deny on a guess.
-    rm -f "$PROGRESS" 2>/dev/null || true
-    exit 0
+exists for. Read it with the native Read tool in consecutive offset/limit chunks of
+at most ${CHUNK_CAP} bytes covering line 1 to the end: stopping partway because the
+remainder looks duplicative is a judgment made from inside the state the Read
+exists to replace, and the marker stays armed until every line is covered. The
+chunk above is always allowed. The file was confirmed present before this gate
+armed."
     ;;
 esac

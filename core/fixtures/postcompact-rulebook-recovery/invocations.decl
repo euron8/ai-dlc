@@ -4,6 +4,7 @@
 56 *
 0 core/hooks/ai-dlc-advisor-detect.sh
 0 core/hooks/ai-dlc-context-provenance.sh
+0 core/hooks/ai-dlc-handoff-entry.sh
 0 core/hooks/ai-dlc-handoff-pending.sh
 3 core/hooks/ai-dlc-postcompact.sh
 2 core/hooks/ai-dlc-recover-gate.sh
@@ -13,6 +14,7 @@
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
 8 inproc:core/hooks/ai-dlc-postcompact.sh
 # B22: W10-02's recover cells A12-A15 add 7 in-process gate runs (holder 3, grantcons 2, blob 1, nolib's control 1; nolib's copy of the gate is a mktemp path, not logged): 124 to 131, from one counted seed.
-131 inproc:core/hooks/ai-dlc-recover-gate.sh
-41 inproc:core/hooks/ai-dlc-recover.sh
+177 inproc:core/hooks/ai-dlc-recover-gate.sh
+44 inproc:core/hooks/ai-dlc-recover.sh
+3 inproc:core/hooks/ai-dlc-handoff-entry.sh
 6 inproc:core/scripts/validate-reattach-budget.sh

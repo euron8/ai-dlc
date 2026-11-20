@@ -1222,7 +1222,7 @@ core-layer-immutability).
 6. **Run gate validation [retro]** (`gate-validation.md`), declared as the paragraph above says, after checks 1-5 because they repair the artifacts the gate reads.
    Before the gate, every Step 4 core edit is committed: check 1 commits the rule file audit, and any other Step 4 edit to a core file is committed now as its own commit.
    The `<sprint-base>` the core-layer-immutability check diffs from is the prior sprint's audit-anchor SHA, as `scripts/ai-dlc/validate-audit-anchors.sh --prior-sprint-sha _bmad-output/audit-anchors.md <N>` resolves it, the same base `validate-mandatory-rules.sh` Check 5 uses.
-   Dispatch it as every gate is dispatched: READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch". The retro gate is storyless, so its brief carries no `story:` line.
+   Dispatch it as every gate is dispatched: READ AND FOLLOW `_gate-procedures.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) "Gate-adjudication dispatch". The retro gate is storyless, so its brief carries no `story:` line.
    The lead adopts the verdict only through `gate-validation.md` Check 26, which MUST exit 0. A gate FAIL blocks the Step 6 commit, as a failing check 2-5 does.
 
 **An unclearable check in this gate escalates; it never self-clears.** The

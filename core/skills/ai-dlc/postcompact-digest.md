@@ -207,7 +207,7 @@ lane before asking, and never hold back, defer or drop a question, or
 fold it into a later one, to suit the lanes.
 
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
-Concrete details specified by carry-over items, brainstorming sessions or direct user instructions are **locked requirements**: validation cycles may challenge them but MUST NOT silently change them, and any divergence requires human sign-off via `HARD_BLOCK` escalation. READ AND FOLLOW `rule-bodies/rule-13.md` before acting under this rule; that file carries the full, binding text of this rule.
+Concrete details specified by carry-over items, brainstorming sessions or direct user instructions are **locked requirements**: validation cycles may challenge them but MUST NOT silently change them, and any divergence requires human sign-off via `HARD_BLOCK` escalation. READ AND FOLLOW `rule-bodies/rule-13.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 14 -- Multi-sprint phasing is autonomous
 When the agent determines a feature exceeds single-sprint scope due
@@ -245,13 +245,13 @@ not a rule -- it is a suggestion leaning on a story. Rewrite it hard
 or move it to a retro doc as a lesson.
 
 ### Rule 19 -- Agent spawns MUST bind the full role contract
-When the lead invokes the `Agent` tool to spawn a teammate, the spawn MUST bind that teammate to its full role contract -- the role file, its rendered definition, and every mandatory binding -- not the model alone. READ AND FOLLOW `rule-bodies/rule-19.md` before acting under this rule; that file carries the full, binding text of this rule.
+When the lead invokes the `Agent` tool to spawn a teammate, the spawn MUST bind that teammate to its full role contract -- the role file, its rendered definition, and every mandatory binding -- not the model alone. READ AND FOLLOW `rule-bodies/rule-19.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 20 -- Validation evaluations run in independent subagents with provenance
-Validation evaluations -- the four `/bmad-*` sub-skills and the native `ai-dlc-adversary-review` convergence review -- MUST be evaluated by real, independent subagents with `mode: subagent` provenance, never roleplayed solo in the lead's own context. READ AND FOLLOW `rule-bodies/rule-20.md` before acting under this rule; that file carries the full, binding text of this rule.
+Validation evaluations -- the four `/bmad-*` sub-skills and the native `ai-dlc-adversary-review` convergence review -- MUST be evaluated by real, independent subagents with `mode: subagent` provenance, never roleplayed solo in the lead's own context. READ AND FOLLOW `rule-bodies/rule-20.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 21 -- READ AND FOLLOW is a Read tool call, not recall
-A `READ AND FOLLOW` directive MUST produce a `Read` tool call for the
+A `READ AND FOLLOW` directive MUST produce a `Read` tool call (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) for the
 target step file as the FIRST tool call in the response. No other
 action (Bash, Edit, Write, Agent, Skill) before the Read. The lead
 MUST NOT substitute memory, prior-session knowledge, or accumulated
@@ -323,7 +323,7 @@ offload them freely.
      rule; whatever is named here is what survives instead of its memory. -->
 
 ### Rule 24 -- Planning and retro exploration is dispatched to analyst subagents
-Read-heavy exploration in the planning and retro steps is the lead's largest avoidable cache-read cost and MUST be dispatched to an `analyst` subagent, whose raw reading never enters the lead's context. READ AND FOLLOW `rule-bodies/rule-24.md` before acting under this rule; that file carries the full, binding text of this rule.
+Read-heavy exploration in the planning and retro steps is the lead's largest avoidable cache-read cost and MUST be dispatched to an `analyst` subagent, whose raw reading never enters the lead's context. READ AND FOLLOW `rule-bodies/rule-24.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 25 -- Artifact-size discipline
 Living planning artifacts that grow without bound are the single
@@ -342,13 +342,13 @@ machinery -- MUST use the smallest mechanism that satisfies the
 locked requirements and acceptance criteria.
 
 ### Rule 27 -- Layered rulebook: core, extensions, overrides
-The consumer rulebook is three layers -- core, extensions, overrides -- and a consumer self-improves through the layer contract, never by re-tangling core against upstream. READ AND FOLLOW `rule-bodies/rule-27.md` before acting under this rule; that file carries the full, binding text of this rule.
+The consumer rulebook is three layers -- core, extensions, overrides -- and a consumer self-improves through the layer contract, never by re-tangling core against upstream. READ AND FOLLOW `rule-bodies/rule-27.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 28 -- Delegation is the default; inline execution is the exception
-The lead MUST delegate any action a subagent can service; inline execution is permitted only for the non-delegable set. READ AND FOLLOW `rule-bodies/rule-28.md` before acting under this rule; that file carries the full, binding text of this rule.
+The lead MUST delegate any action a subagent can service; inline execution is permitted only for the non-delegable set. READ AND FOLLOW `rule-bodies/rule-28.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 29 -- Steering budget: the operator must always be able to reach you
-Claude Code delivers a queued operator message only at a tool-call boundary, so what silences the operator is a long single foreground tool call, and the lead MUST bound foreground call duration within the steering budget. READ AND FOLLOW `rule-bodies/rule-29.md` before acting under this rule; that file carries the full, binding text of this rule.
+Claude Code delivers a queued operator message only at a tool-call boundary, so what silences the operator is a long single foreground tool call, and the lead MUST bound foreground call duration within the steering budget. READ AND FOLLOW `rule-bodies/rule-29.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 30 -- The spec is BMAD's; the enforcement is ours
 Specification artifacts MUST be produced by the BMAD workflows that own them and
