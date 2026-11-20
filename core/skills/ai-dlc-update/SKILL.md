@@ -1695,7 +1695,9 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
    `<dist>` is a path the operator cannot walk without guessing, which is the same block one step
    later. Do NOT re-author the list from memory of the tool output — a `HARD-*`
    line was silently dropped from two real reports that way, hiding a data-loss-grade core-schema
-   drift; `emit-report.sh --verify` now fails if the rendered list drifts from the tools.
+   drift; `emit-report.sh --verify` now fails if the rendered list drifts from the tools. Also relay any `enabledPlugins:` line from the settings dry-run output
+   above to the operator verbatim: it says the project's
+   context-mode enable will be retired and every user needs the user-level install.
 
    **A blocker DISPOSITION carries the command that verified it, exactly as a step-8 defect
    filing does.** Name the disposition (retire / readopt / reaffirm / refile / revert), then the
@@ -2366,12 +2368,14 @@ the session scratchpad, never a bare `/tmp/<name>` that concurrent sessions shar
      permissions/env/mcpServers/statusLine. It writes nothing into `env`: the
      `AI_DLC_MODEL_<FAMILY>_WINDOW` declarations the step-5 report asked about
      are the operator's to add, and an existing value is never touched.
-     `enabledPlugins` is additive-only and
-     NEVER removed: a plugin the template dropped since base (e.g. ai-dlc's own
-     `context-mode@context-mode` decommission) removes ai-dlc's *use* of it,
-     not the consumer's right to keep it enabled — the consumer's
-     `enabledPlugins` is preserved in full. Disabling a plugin is the
-     consumer's decision, not the reconcile's.
+     `enabledPlugins` is additive-only with one retirement: the script removes the
+     project's `context-mode@context-mode` entry when its value is exactly `true`
+     (context-mode is a user-level install, so every user of the project needs
+     `claude plugin install context-mode@context-mode --scope user`), never a
+     `false` and never any other plugin; the rest of the consumer's
+     `enabledPlugins` is preserved in full. `--check` prints one `enabledPlugins:`
+     line when the retirement will fire; it runs only when the template wires
+     hooks, so uninstall never retires.
      `apply.sh` hands this back too, as a `WORKLIST template-json-merge` row that withholds
      the re-stamp, after running `settings-merge.sh` on a copy of the file: a copy that
      changes means the merge is owed, a copy that does not means it is done and no row is
@@ -3360,7 +3364,8 @@ free of pull-only assumptions so the other three jobs can reuse it.
   being narrated away. This closed the gap where a template-only
   upstream change (e.g. a removed CLAUDE.md section) never reached a consumer
   through the `core/`-only reconcile. (Consumer `enabledPlugins` is the
-  exception — additive-only, never removed, per `template-sites.md`.)
+  exception — additive-only, except the retirement of a project
+  `context-mode@context-mode: true`, per `template-sites.md`.)
 - **Upstream URL** is carried in the stamp's `upstream` field (written by
   install, preserved on every re-stamp). Read it in step 1; only fall back to
   asking the operator when the field is absent (a legacy stamp).

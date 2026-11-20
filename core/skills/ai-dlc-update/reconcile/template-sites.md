@@ -145,21 +145,25 @@ a consumer that reconciles and a consumer that reinstalls converge):
   (context-mode, for one, registers its own `SessionStart` hooks). Stripping the
   whole event would silently delete a consumer's own hooks; stripping the
   matching blocks leaves them in place beside ai-dlc's.
-- **enabledPlugins:** additive-only, NEVER remove. install.sh's merge is
+- **enabledPlugins:** additive-only, with one retirement. install.sh's merge is
   `$t + $u` (user wins); the reconcile follows the same rule — overlay the
   template's plugin keys onto the consumer and never drop a plugin the template
-  no longer carries. `enabledPlugins` is consumer-owned state. The template's
-  own `context-mode@context-mode: true` is overlaid
-  additively — it enables the plugin on consumers that lack the key and is a
-  no-op where the consumer already set it; it never overwrites a consumer who
-  explicitly set it `false`. A template dropping a plugin removes ai-dlc's
-  *use* of it, not the consumer's right to keep it enabled for their own
-  reasons. A leftover entry is benign — inert if the
-  plugin is uninstalled, honored if the consumer relies on it — whereas
-  removing it silently disables a plugin the consumer may depend on. So the
-  consumer's `enabledPlugins` is preserved in full, exactly like
-  permissions/env/mcpServers. Disabling a plugin is the consumer's decision,
-  never the reconcile's; this is NOT a deletions-list case.
+  no longer carries. `enabledPlugins` is consumer-owned state. The template no
+  longer carries `context-mode@context-mode`: context-mode is a user-level
+  install and a project only enables or disables it. `settings-merge.sh`
+  retires the consumer's `context-mode@context-mode` entry when its value is
+  exactly `true`, because a project-level `true` makes Claude Code install the
+  plugin once per project. A `false` is the consumer's deliberate opt-out and
+  is never touched, nor is any other plugin entry; an `enabledPlugins` the
+  retirement empties is dropped, and a consumer without the key gains none.
+  The retirement runs only when the merge's template wires hooks, so
+  uninstall itself never retires the enable (its merge uses an empty
+  template). `--check` prints one `enabledPlugins:` line when it
+  will fire; every user of the project then needs
+  `claude plugin install context-mode@context-mode --scope user` once. Apart
+  from that entry the consumer's `enabledPlugins` is preserved in full, like
+  permissions/env/mcpServers, and disabling any other plugin is the consumer's
+  decision, never the reconcile's.
 - **permissions / env / mcpServers / other user keys:** preserved untouched.
 
 ### `env.AI_DLC_MODEL_<FAMILY>_WINDOW` — consumer-owned, surfaced by `--check`, never written

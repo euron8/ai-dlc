@@ -29,17 +29,44 @@
 # the guard at the end runs in the sourcing shell except that definition.
 arf_main() {
 set -u
-cat >/dev/null 2>&1 || true   # drain stdin (unused)
+hook_in="$(cat 2>/dev/null || true)"   # SessionStart input; only `source` is read
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 RULES_DIR="$PROJECT_DIR/.claude/rules"
 FLOOR_MAJOR=2; FLOOR_MINOR=0; FLOOR_PATCH=64
 
+jstr() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/^/"/; s/$/"/'; }
+
+# CONTEXT-MODE USER-SCOPE PRESENCE. WARN only (a user-facing systemMessage, never additionalContext), on
+# source `startup` only. It sits BEFORE the no-rule-file exit below because a consumer with no shipped rule
+# file still needs context-mode installed at user scope. Silent whenever the oracle cannot be read.
+sysmsg=""
+cm_id="context-mode@context-mode"
+cm_cfg="${CLAUDE_CONFIG_DIR:-${HOME:-/nonexistent}/.claude}"
+cm_f="$cm_cfg/plugins/installed_plugins.json"
+if command -v jq >/dev/null 2>&1 && [ -r "$cm_f" ] \
+   && [ "$(printf '%s' "$hook_in" | jq -r '.source // ""' 2>/dev/null)" = "startup" ] \
+   && [ "$(jq -r --arg id "$cm_id" 'if (.version == 2 and (.plugins | type) == "object") then ([.plugins[$id][]? | select(.scope == "user" or .scope == "managed")] | length | tostring) else "unknown" end' "$cm_f" 2>/dev/null)" = "0" ]; then
+  cm_optout=0
+  for cm_s in "${CLAUDE_PROJECT_DIR:-.}/.claude/settings.json" "${CLAUDE_PROJECT_DIR:-.}/.claude/settings.local.json" "$cm_cfg/settings.json"; do
+    [ -r "$cm_s" ] || continue
+    [ "$(jq -r --arg id "$cm_id" '.enabledPlugins[$id] | if . == false then "off" else "" end' "$cm_s" 2>/dev/null)" = "off" ] && cm_optout=1
+  done
+  if [ "$cm_optout" = "0" ]; then
+    sysmsg="AI/DLC: context-mode has no user-scope install on this machine. Install it once, for every project:
+  claude plugin marketplace add mksglu/context-mode
+  claude plugin install context-mode@context-mode --scope user"
+  fi
+fi
+
 # Nothing shipped here -> nothing to be inert -> say nothing. This is also what keeps
 # the hook silent on a consumer that has never pulled a release carrying a rule file.
 shopt -s nullglob 2>/dev/null || true
 shipped=("$RULES_DIR"/ai-dlc-*.md)
-[ "${#shipped[@]}" -gt 0 ] || exit 0
+if [ "${#shipped[@]}" -eq 0 ]; then
+  [ -z "$sysmsg" ] || printf '{"systemMessage":%s}\n' "$(jstr "$sysmsg")"
+  exit 0
+fi
 
 # Resolve the running Claude Code version.
 #
@@ -77,9 +104,9 @@ else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
 # and carries almost no payload of its own, so it has the room. I98 binds the count to exactly
 # one: two carriers would double the cost, and zero would leave a marker the lead never learns
 # to check.
-emit() { printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":%s}}\n' \
-           "$(jstr "$(ai_dlc_provenance_wrap ai-dlc-rules-floor SessionStart "$1" contract)")"; }
-jstr() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/$/\\n/' | tr -d '\n' | sed 's/^/"/; s/$/"/'; }
+emit() { printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":%s}%s}\n' \
+           "$(jstr "$(ai_dlc_provenance_wrap ai-dlc-rules-floor SessionStart "$1" contract)")" \
+           "${sysmsg:+,\"systemMessage\":$(jstr "$sysmsg")}"; }
 
 if [ -z "$ver" ]; then
   emit "AI/DLC RULES FLOOR -- UNRESOLVED. Could not determine the Claude Code version from AI_AGENT or \`claude --version\`, so it is NOT known whether $names under .claude/rules/ is being read. Those files require Claude Code >= ${FLOOR_MAJOR}.${FLOOR_MINOR}.${FLOOR_PATCH}. Treat Rule 23 as carried by SKILL.md alone until this resolves."

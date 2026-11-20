@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1187.0] - 2026-11-20
+
+### context-mode is a user-level install; a project only enables or disables it (BL-1188)
+
+- For the operator and every consumer: ai-dlc no longer writes `enabledPlugins["context-mode@context-mode"]` into a project, because a project-level enable made Claude Code install the plugin once per project. The settings template drops the key, and the reconcile's settings merge retires a consumer's entry when its value is exactly `true`; a `false` and any other plugin are untouched, the retirement runs only when the merge wires hooks so an uninstall never retires, and `--check` prints one `enabledPlugins:` line when it fires. This reverses the 0.21.1 "additive-only, never removed" rule for that one entry, by operator ruling of 2026-11-20. Every user of the project then needs one user-level install: `claude plugin marketplace add mksglu/context-mode`, then `claude plugin install context-mode@context-mode --scope user`.
+- A SessionStart warning (never a block, on `startup` only) tells a session that has no user-scope context-mode record how to install it; it stays silent on compact and resume, when the install record or `jq` is missing or unreadable, or when the project or user settings set the plugin to `false`. A `--plugin-dir` session writes no record and can see a false warning, as can an install not recorded in installed_plugins.json.
+- `README.md`, the ai-dlc-update skill and `reconcile/template-sites.md` state the user-level install; the README no longer claims the install enables the plugin or names the non-existent `claude mcp add-plugin` command.
+- Partial: BL-1188 stays open until the operator runs the consumer-side measurement after the consumer's reconcile PR for this release merges (snapshot installed_plugins.json first, then uninstall the project-scope record, confirm no `false` is written, one user-scope row in `claude plugin list`, and no new per-project record from a fresh session, with a scratch project carrying the enable as the positive trigger).
+
 ## [0.1186.0] - 2026-11-20
 
 ### The roll call has one enforced definition (BL-1185)

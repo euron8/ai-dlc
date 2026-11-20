@@ -30,13 +30,18 @@ deployment, and retrospective — autonomously in one conversation.
 - [Claude Code](https://github.com/anthropics/claude-code) with Agent Teams enabled
 - [BMAD Method v6](https://github.com/bmad-code-org/BMAD-METHOD) installed
   (`npx bmad-method install` with BMM, CIS, TEA modules)
-- [context-mode](https://github.com/kianwoon/context-mode) plugin
-  installed (`claude mcp add-plugin context-mode`) — **required**. Provides
-  the sandbox execution (`ctx_*`) that AI/DLC routes large reads and batch
-  operations through to keep raw bytes out of the resident context. The
-  install enables it (`settings.json` `enabledPlugins`) and wires the
-  protection hook (`ai-dlc-protect.sh`) that prevents context-mode from
-  consolidating rule files that must load verbatim.
+- [context-mode](https://github.com/mksglu/context-mode) plugin installed
+  once at user level — **required**. Provides the sandbox execution (`ctx_*`)
+  that AI/DLC routes large reads and batch operations through to keep raw
+  bytes out of the resident context. Install it once per machine, not per
+  project:
+  `claude plugin marketplace add mksglu/context-mode`, then
+  `claude plugin install context-mode@context-mode --scope user`. A project
+  enables it; a project may only set `"context-mode@context-mode": false` in
+  its `enabledPlugins` to disable it. AI/DLC's install does not enable it and
+  the reconcile retires a project-level `true`. The install wires the protection hook
+  (`ai-dlc-protect.sh`) that prevents context-mode from consolidating rule
+  files that must load verbatim.
 
 ### Required environment for autonomous execution
 

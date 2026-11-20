@@ -211,6 +211,44 @@ else
   fi
 fi
 
+# --- Assertion 7: the context-mode enable is retired, nothing else (BL-1188) ---------------------------
+# The shipped template carries no enable; a consumer's `true` is removed on a merge against a template
+# that wires hooks, `false` and other plugins survive, a key nobody had stays absent (no `{}`), and the
+# uninstall call (an empty `{}` template) never retires. Each world is one in-process run.
+if [ -n "$TMPL" ]; then
+  CM='context-mode@context-mode'
+  [ "$(jq -r 'has("enabledPlugins")' "$TMPL")" = false ] \
+    && ok "7 the shipped template carries no enabledPlugins block" \
+    || bad "7 the shipped template still carries an enabledPlugins block"
+  printf '{}\n' > "$WORK/empty-tmpl.json"
+  sm7() { # <id> <seed-json> <template> [--check]; leaves $WORK/$id.json and $WORK/$id.out
+    printf '%s\n' "$2" > "$WORK/$1.json"
+    sm_run --consumer "$WORK/$1.json" --template "$3" ${4:+"$4"} > "$WORK/$1.out" 2>&1; }
+  A='{"enabledPlugins":{"context-mode@context-mode":true,"other@x":true}}'
+  B='{"enabledPlugins":{"context-mode@context-mode":false}}'
+  sm7 chkA "$A" "$TMPL" --check; sm7 chkB "$B" "$TMPL" --check
+  grep -q '^enabledPlugins: .*context-mode.*--scope user' "$WORK/chkA.out" \
+    && ok "7 --check names the retirement and the user-scope install when a true enable will be retired" \
+    || bad "7 --check printed no retirement line for a consumer holding the enable: $(head -c 200 "$WORK/chkA.out")"
+  grep -q '^model_window_needed=' "$WORK/chkB.out" && ! grep -q '^enabledPlugins:' "$WORK/chkB.out" \
+    && ok "7 --check prints no retirement line for a false enable (and still reports)" \
+    || bad "7 --check printed a retirement line where none fires, or no report: $(head -c 200 "$WORK/chkB.out")"
+  sm7 wA "$A" "$TMPL"; sm7 wB "$B" "$TMPL"; sm7 wC '{"permissions":{"allow":[]}}' "$TMPL"
+  sm7 wD '{"enabledPlugins":{"context-mode@context-mode":true}}' "$TMPL"
+  sm7 wE '{"enabledPlugins":{"context-mode@context-mode":true}}' "$WORK/empty-tmpl.json"
+  [ "$(jq -c '.enabledPlugins' "$WORK/wA.json")" = '{"other@x":true}' ] \
+    && ok "7 a true enable is removed and another plugin is kept" \
+    || bad "7 true/other-plugin world read $(jq -c '.enabledPlugins' "$WORK/wA.json")"
+  [ "$(jq -c '.enabledPlugins' "$WORK/wB.json")" = '{"context-mode@context-mode":false}' ] \
+    && ok "7 an explicit false enable is kept" || bad "7 false world read $(jq -c '.enabledPlugins' "$WORK/wB.json")"
+  [ "$(jq -r 'has("enabledPlugins")' "$WORK/wC.json")" = false ] \
+    && ok "7 a consumer with no enabledPlugins gains none (no {})" || bad "7 an absent enabledPlugins key appeared"
+  [ "$(jq -r 'has("enabledPlugins")' "$WORK/wD.json")" = false ] \
+    && ok "7 retiring a sole true entry leaves no enabledPlugins key (no {})" || bad "7 sole-true world left $(jq -c '.enabledPlugins' "$WORK/wD.json")"
+  [ "$(jq -c '.enabledPlugins' "$WORK/wE.json")" = '{"context-mode@context-mode":true}' ] \
+    && ok "7 a pre-install true survives the uninstall call (empty template)" || bad "7 the empty-template merge retired the enable"
+fi
+
 # --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome this fixture drives -----
 # The outcomes: exit 0 with the --check report on stdout, exit 1 with the usage line on stderr, and exit 0 with the
 # merge written and its confirmation on stdout. One `FXCELL=<id> bash "$MERGE"` start per outcome, each compared with

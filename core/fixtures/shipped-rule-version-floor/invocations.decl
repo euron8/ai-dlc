@@ -6,4 +6,4 @@
 2 core/hooks/ai-dlc-rules-floor.sh
 6 inproc:scripts/install.sh
 4 inproc:scripts/uninstall.sh
-7 inproc:core/hooks/ai-dlc-rules-floor.sh
+17 inproc:core/hooks/ai-dlc-rules-floor.sh

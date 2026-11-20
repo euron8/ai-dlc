@@ -230,8 +230,15 @@ hook_out() { # hook_out <project-dir> <AI_AGENT value or empty>
   # PATH is stripped to a dir with no `claude` so the AI_AGENT branch is what is under
   # test; otherwise the fallback would silently answer with THIS machine's real version
   # and every arm below would pass for the wrong reason.
-  CLAUDE_PROJECT_DIR="$d" AI_AGENT="$agent" PATH="$empty:/usr/bin:/bin" \
+  CLAUDE_CONFIG_DIR="$TMP/cfg-none" CLAUDE_PROJECT_DIR="$d" AI_AGENT="$agent" PATH="$empty:/usr/bin:/bin" \
     inproc_run "$HOOK" arf_main </dev/null 2>&1
+}
+# hook_cm <project-dir> <config-dir> <SessionStart source>: the context-mode presence check, driven with the
+# real SessionStart input shape and a fixture-made config dir so no verdict reads this machine's ~/.claude.
+hook_cm() {
+  local d="$1" cfg="$2" src="$3" empty; empty="$(mktemp -d "$TMP/nobin.XXXXXX")"
+  CLAUDE_CONFIG_DIR="$cfg" CLAUDE_PROJECT_DIR="$d" AI_AGENT=claude-code_2-1-226_agent PATH="$empty:/usr/bin:/bin" \
+    inproc_run "$HOOK" arf_main <<<"{\"hook_event_name\":\"SessionStart\",\"source\":\"$src\"}" 2>&1
 }
 
 proj() { local d; d="$(mktemp -d "$TMP/p.XXXXXX")"; mkdir -p "$d/.claude/rules"; printf '%s' "$d"; }
@@ -498,6 +505,38 @@ if [ "$(eq_rc cli-install-ok)" != "$(eq_rc cli-install-refuse)" ] && [ "$(eq_rc 
    && ! cmp -s "$EQ/cli-hook-silent.cl.out" "$EQ/cli-hook-loud.cl.out"; then
   note "ok    cli cells discriminate: install and uninstall each exit 0 and 1, and the hook's two outputs differ"
 else note "FAIL  cli cells do not discriminate: a subject's two cells gave one answer"; rc=1; fi
+
+# --- J: context-mode user-scope presence (BL-1188): WARN on startup only, fail-open everywhere else ---
+cmid='context-mode@context-mode'
+mkcfg() { # mkcfg <name> <json or empty for no file>
+  local c="$TMP/cfg-$1"; mkdir -p "$c/plugins"; [ -z "$2" ] || printf '%s\n' "$2" > "$c/plugins/installed_plugins.json"; printf '%s' "$c"; }
+c_user="$(mkcfg user "{\"version\":2,\"plugins\":{\"$cmid\":[{\"scope\":\"user\",\"version\":\"1\"}]}}")"
+c_proj="$(mkcfg proj "{\"version\":2,\"plugins\":{\"$cmid\":[{\"scope\":\"project\",\"projectPath\":\"/x\",\"version\":\"1\"}]}}")"
+c_bad="$(mkcfg bad 'not json')"
+c_unk="$(mkcfg unk "{\"version\":9,\"plugins\":{}}")"
+c_miss="$(mkcfg miss '')"
+pj="$(proj)"                       # no rule file: the warning must not depend on one
+pr="$(proj)"; printf 'x\n' > "$pr/.claude/rules/$RULE"
+po="$(proj)"; printf '{"enabledPlugins":{"%s":false}}\n' "$cmid" > "$po/.claude/settings.json"
+cm_warn() { # label expected(1|0) <hook_cm args>
+  local lab="$1" want="$2"; shift 2; local o got=0; o="$(hook_cm "$@")"
+  case "$o" in *'no user-scope install'*) got=1;; esac
+  if [ "$got" = "$want" ]; then note "ok    J $lab -- warn=$got"
+  else note "FAIL  J $lab -- expected warn=$want, got $got: ${o:0:100}"; rc=1; fi
+}
+cm_warn "project-only record on startup, no rule file" 1 "$pj" "$c_proj" startup
+cm_warn "project-only record on startup, rule file shipped" 1 "$pr" "$c_proj" startup
+cm_warn "user record on startup" 0 "$pj" "$c_user" startup
+cm_warn "project-only record on compact" 0 "$pj" "$c_proj" compact
+cm_warn "project-only record on resume" 0 "$pr" "$c_proj" resume
+cm_warn "explicit project false" 0 "$po" "$c_proj" startup
+cm_warn "missing file" 0 "$pj" "$c_miss" startup
+cm_warn "unparseable file" 0 "$pj" "$c_bad" startup
+cm_warn "unknown schema version" 0 "$pj" "$c_unk" startup
+o="$(hook_cm "$pr" "$c_proj" startup)"
+if grep -c additionalContext <<<"$o" | grep -qx 1 && jq -e '.systemMessage and .hookSpecificOutput.additionalContext' >/dev/null 2>&1 <<<"$o"; then
+  note "ok    J the warning rides the existing JSON object as systemMessage beside the one additionalContext"
+else note "FAIL  J warning is not one valid object with systemMessage and one additionalContext"; rc=1; fi
 
 # --- I --------------------------------------------------------------------------------------
 arm_i
