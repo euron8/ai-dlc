@@ -54,14 +54,24 @@
 #                                        -> template-json-refused rows|settings-merge rows|stamp            1|0|1.0.0
 #   c3e c3a, --finish with settings-merge.sh absent beside apply.sh (the recorded json test refuses)
 #                                        -> finish-template-json-unmerged rows|settings-merge rows|stamp     1|0|1.0.0
-# A SECOND RANGE, T -> T2, changes the core script only, so `--templates` buckets no template. Two
-# worlds stand at T:
-#   E  settings.json merged at T plus `"context-mode@context-mode": true`   (the retirement claim)
-#   F  settings.json the merge WOULD change (no hook block), with that id `false` and another plugin
-#      `true` (the near-miss: the copy differs, so only the retirement predicate keeps the row away)
+# A SECOND RANGE, T -> T2, changes the core script only, so `--templates` buckets no template. Three
+# worlds stand at T, each merged at T first and then edited, so the edit is the only change a merge
+# would make:
+#   E  plus `"context-mode@context-mode": true`                   (the retirement reaches the file)
+#   G  role `r` rewritten to `{"model":"m"}`, lacking the template-owned `omitClaudeMd` the T
+#      template's `r` carries, and no context-mode id                (a role-key fill reaches the file)
+#   F  that id `false` and another plugin `true`; the merge changes nothing (the near-miss)
+#   M  settings.json `[]`, not a JSON object: settings-merge.sh refuses it on every pull, so it is silent
+#   K  settings.json `{"hooks":[]}`, a JSON object settings-merge.sh refuses (a key of the wrong type)
 #   ea  E ordinary                       -> stamp|template-json-merge rows|json template: lines             2.0.0|1|1
 #   eb  ea, settings-merge.sh applied to the live file, --finish -> stamp|finish rows|enable entries left   3.0.0|0|0
+#   er  G ordinary                       -> stamp|template-json-merge rows|json template: lines|row names the fill
+#                                                                                                         2.0.0|1|1|1
+#   ez  G ordinary with settings-merge.sh absent beside apply.sh -> template-json-refused rows|stamp         1|2.0.0
+#   ex  G ordinary with a settings-merge.sh that exits 2 on every input (an engine error) -> the same       1|2.0.0
 #   en  F ordinary                       -> template-json-merge rows|template-json-refused rows|stamp        0|0|3.0.0
+#   em  M ordinary                       -> the same                                                       0|0|3.0.0
+#   ek  K ordinary                       -> the same                                                       0|0|3.0.0
 # 0 = every cell answered as above. 1 = a cell did not (one `FAIL <cell>` line each). 9 = the receipt
 # could not run (no reconcile dir, or a world could not be built).
 set -uo pipefail
@@ -86,7 +96,7 @@ R="$(mktemp -d "${TMPDIR:-/tmp}/receipt-bl886.XXXXXX")" || exit 9
 trap 'rm -rf "$R"' EXIT
 gd() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git -C "$R/dist" -c user.name=r -c user.email=r@example.invalid \
   -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
-TJSON='{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-x.sh"}]}]}}'
+TJSON='{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-x.sh"}]}]},"aiDlcRoles":{"r":{"omitClaudeMd":true}}}'
 QOLD='# Quickstart
 
 Project: acme
@@ -99,7 +109,7 @@ Project: acme
 NEW-BOILERPLATE line'
 merge_live() { bash "$REC/settings-merge.sh" --consumer "$1/.claude/settings.json" --template "$R/t.json" >/dev/null 2>&1; }
 # The world set: what the cells read from $R, and nothing a cell writes. B and T travel with it.
-WSET="dist t.json w-P w-J w-N w-C w-P0 w-E w-F"
+WSET="dist t.json w-P w-J w-N w-C w-P0 w-E w-F w-G w-M w-K"
 if [ -n "$WCACHE" ] && [ -e "$WCACHE" ]; then
   [ -f "$WCACHE/.complete" ] || { echo "REFUSED: world cache $WCACHE exists without its completion sentinel" >&2; exit 9; }
   _sm="$(git hash-object "$REC/settings-merge.sh" 2>/dev/null)" && [ -n "$_sm" ] && [ "$_sm" = "$(cat "$WCACHE/SM" 2>/dev/null)" ] \
@@ -158,20 +168,24 @@ mk2() {
   printf '%s\n' "$2" > "$c/.claude/settings.json"
   printf 'version: 2.0.0\ncommit: %s\n' "$T" > "$c/.claude/.ai-dlc-version"
 }
-# E is merged at T before the enable goes in, so the retirement is the only change a merge makes; F
-# must be a file the merge changes, or the near-miss could not tell the predicate from the copy test.
-mk_e() {
-  mk2 E '{"hooks":{}}' && merge_live "$R/w-E" || return 1
-  jq '.enabledPlugins = {"context-mode@context-mode": true}' "$R/w-E/.claude/settings.json" > "$R/e.tmp" \
-    && cat "$R/e.tmp" > "$R/w-E/.claude/settings.json"
-}
-mk_f() {
-  mk2 F '{"hooks":{},"enabledPlugins":{"context-mode@context-mode":false,"other@x":true}}' || return 1
-  mkdir -p "$R/f-copy/.claude" && cp "$R/w-F/.claude/settings.json" "$R/f-copy/.claude/settings.json" && merge_live "$R/f-copy" || return 1
-  ! cmp -s "$R/f-copy/.claude/settings.json" "$R/w-F/.claude/settings.json"
+# mk_t <world> <jq edit> <differs|equal>: merged at T, then the edit; a copy merged again must
+# change (differs) or not (equal), or the world could not tell the scan from a no-op.
+mk_t() {
+  local c="$R/w-$1"
+  mk2 "$1" '{"hooks":{}}' && merge_live "$c" || return 1
+  jq "$2" "$c/.claude/settings.json" > "$R/t.tmp" && cat "$R/t.tmp" > "$c/.claude/settings.json" || return 1
+  rm -rf "$R/t-copy" && mkdir -p "$R/t-copy/.claude" && cp "$c/.claude/settings.json" "$R/t-copy/.claude/settings.json" \
+    && merge_live "$R/t-copy" || return 1
+  if cmp -s "$R/t-copy/.claude/settings.json" "$c/.claude/settings.json"; then [ "$3" = equal ]; else [ "$3" = differs ]; fi
 }
 mk P old - ok && mk J - unmerged ok && mk N old merged ok && mk C - unmerged unreg \
-  && cp -R "$R/w-P" "$R/w-P0" && mk_e && mk_f \
+  && cp -R "$R/w-P" "$R/w-P0" \
+  && mk_t E '.enabledPlugins = {"context-mode@context-mode": true}' differs \
+  && mk_t G '.aiDlcRoles.r = {"model": "m"}' differs \
+  && mk_t F '.enabledPlugins = {"context-mode@context-mode": false, "other@x": true}' equal \
+  && mk2 M '[]' \
+  && mk2 K '{"hooks":[]}' && mkdir -p "$R/k-copy/.claude" && cp "$R/w-K/.claude/settings.json" "$R/k-copy/.claude/settings.json" \
+  && ! merge_live "$R/k-copy" \
   || { echo "REFUSED: a consumer world could not be built" >&2; exit 9; }
 # Snapshot BEFORE any cell runs: the sentinel is written last, so a cache it does not carry is half-built.
 if [ -n "$WCACHE" ]; then
@@ -191,6 +205,10 @@ mkdir -p "$R/rec-notpl" && cp "$REC"/* "$R/rec-notpl/" 2>/dev/null && rm -f "$R/
 mkdir -p "$R/rec-nosm" && cp "$REC"/* "$R/rec-nosm/" 2>/dev/null && rm -f "$R/rec-nosm/settings-merge.sh" \
   && [ -f "$R/rec-nosm/apply.sh" ] && [ -f "$R/rec-nosm/template-sites.md" ] && [ ! -e "$R/rec-nosm/settings-merge.sh" ] \
   || { echo "REFUSED: could not build the reconcile copy without settings-merge.sh" >&2; exit 9; }
+# The reconcile copy for ex: settings-merge.sh replaced by a stub that fails on every input (an engine error).
+mkdir -p "$R/rec-smfail" && cp "$REC"/* "$R/rec-smfail/" 2>/dev/null \
+  && printf '#!/usr/bin/env bash\necho "FAIL: stub" >&2\nexit 2\n' > "$R/rec-smfail/settings-merge.sh" \
+  || { echo "REFUSED: could not build the reconcile copy with a failing settings-merge.sh" >&2; exit 9; }
 
 stampv() { sed -n 's/^version: //p' "$1/.claude/.ai-dlc-version"; }
 rows() { awk -F'\t' -v k="$2" -v n="$3" -v p="$4" '$1==k && $2==n && $3==p {c++} END {print c+0}' "$1"; }
@@ -297,6 +315,18 @@ if want ea || want eb; then E="$R/w-E"; ord2 "$E" "$R/ea.out"
     en_left="$(jq '[.enabledPlugins // {} | keys[] | select(. == "context-mode@context-mode")] | length' "$x/$SJ")"
     check eb '3.0.0|0|0' "$(stampv "$x")|$(rows "$R/eb.out" WORKLIST finish-template-json-unmerged "$SJ")|$en_left"; fi
 fi
+# ez and ex first: they need the G world before er's ordinary run writes into it.
+if want ex; then x="$(cp_from "$R/w-G" ex)"; bash "$R/rec-smfail/apply.sh" "$R/dist" "$T" "$x" "$T2" > "$R/ex.out" 2>/dev/null
+  check ex '1|2.0.0' "$(rows "$R/ex.out" DECISION template-json-refused "$SJ")|$(stampv "$x")"; fi
+if want ez; then x="$(cp_from "$R/w-G" ez)"; bash "$R/rec-nosm/apply.sh" "$R/dist" "$T" "$x" "$T2" > "$R/ez.out" 2>/dev/null
+  check ez '1|2.0.0' "$(rows "$R/ez.out" DECISION template-json-refused "$SJ")|$(stampv "$x")"; fi
+if want er; then G="$R/w-G"; ord2 "$G" "$R/er.out"
+  fl=0; awk -F'\t' -v p="$SJ" '$1=="WORKLIST" && $2=="template-json-merge" && $3==p && index($4, "settings-merge: filled omitClaudeMd into aiDlcRoles.r") {f=1} END {exit !f}' "$R/er.out" && fl=1
+  check er '2.0.0|1|1|1' "$(stampv "$G")|$(rows "$R/er.out" WORKLIST template-json-merge "$SJ")|$(mline "$G" "$SJ")|$fl"; fi
+if want em; then M="$R/w-M"; ord2 "$M" "$R/em.out"
+  check em '0|0|3.0.0' "$(rows "$R/em.out" WORKLIST template-json-merge "$SJ")|$(rows "$R/em.out" DECISION template-json-refused "$SJ")|$(stampv "$M")"; fi
+if want ek; then K="$R/w-K"; ord2 "$K" "$R/ek.out"
+  check ek '0|0|3.0.0' "$(rows "$R/ek.out" WORKLIST template-json-merge "$SJ")|$(rows "$R/ek.out" DECISION template-json-refused "$SJ")|$(stampv "$K")"; fi
 if want en; then F="$R/w-F"; ord2 "$F" "$R/en.out"
   check en '0|0|3.0.0' "$(rows "$R/en.out" WORKLIST template-json-merge "$SJ")|$(rows "$R/en.out" DECISION template-json-refused "$SJ")|$(stampv "$F")"; fi
 [ "$fails" -eq 0 ] || exit 1
