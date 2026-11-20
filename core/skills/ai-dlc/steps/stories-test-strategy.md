@@ -568,7 +568,7 @@ risk assessment suggests phasing:
 
 ### 3a. Fold a Defect into This Sprint
 
-**A defect folded into this sprint — by `route.md` Step 4's mixed-defect
+**A defect folded into this sprint — by `route-fresh-start.md` Step 4's mixed-defect
 MUST-ASK or by operator direction — is triaged, not written straight into a
 story.** For each one:
 
@@ -775,6 +775,10 @@ strategy.
    Its last line is `STRATEGY-SELF-CHECK: PASS`, `FAIL` or `INCOMPLETE`; the step ends on PASS.
 
    **When done, immediately proceed to Commit Planning Artifacts:**
+
+**Escalation vocabulary check, the step's last action before the gate.** Run `bash scripts/ai-dlc/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md`; the required result is a `PASS` line and exit 0. A `FAIL` names every escalation header whose status is outside the derived vocabulary, and a dated entry with no status line is one of them: repair each named entry (`escalations.md`) and re-run before the gate, because Check 2's script arm refuses the same file and the gate then fails with no adjudicator running.
+
+**Spec-join check, the last action of this step's story work.** Run `bash scripts/ai-dlc/verdict.sh validate-spec-join --spec <spec-folder> --prd <prd> --story <each story file> --spine <ARCHITECTURE-SPINE.md> --spine-lint <lint JSON> --locked-requirements <this sprint's locked-requirements.md>` (one `--story` per story the sprint carries; `--locked-requirements` whenever the sprint has that file); the required result is a `PASS` line and exit 0, and a sprint below the Check 28 floor makes no run. Check 30 runs the same command at the gate.
 
 ### 6. Commit Planning Artifacts
 

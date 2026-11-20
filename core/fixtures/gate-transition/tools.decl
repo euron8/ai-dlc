@@ -42,3 +42,4 @@ tr
 uniq
 wc
 xargs
+cksum

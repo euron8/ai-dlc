@@ -836,6 +836,32 @@ rm -f "${STATE_DIR}/.recover-gate-progress" "${STATE_DIR}"/.recover-gate-progres
 # mid-recovery must not count toward the next recovery's coverage.
 rm -f "${STATE_DIR}"/.recover-credit* 2>/dev/null || true
 
+# THE SNAPSHOT SLICE (coverage credit only). A snapshot over one Read chunk (16384 bytes) takes
+# two Reads; the snapshot without its `## Recent Activity` section is written beside the marker
+# with the snapshot's own size-mtime identity and the slice's size. `ai-dlc-recover-gate.sh`
+# credits a Read of the slice toward SNAPSHOT coverage when both still match, and falls back to
+# the full-read mandate when either moved or a file is missing. Satisfaction never comes from
+# here: only a Read of the step file satisfies. A snapshot that fits one chunk, or a slice that
+# does not, leaves no slice (and removes a stale one).
+SLICE="${STATE_DIR}/.recover-snapshot-slice.md"; SLICE_ID="${STATE_DIR}/.recover-snapshot-slice.id"
+rm -f "$SLICE" "$SLICE_ID" 2>/dev/null || true
+_sl_sz="$(wc -c < "$SNAPSHOT" 2>/dev/null)" || _sl_sz=""; _sl_sz="${_sl_sz//[[:space:]]/}"
+_sl_mt="$(stat -c %Y "$SNAPSHOT" 2>/dev/null || stat -f %m "$SNAPSHOT" 2>/dev/null)" || _sl_mt=""
+if [ -n "$_sl_sz" ] && [ -n "$_sl_mt" ] && [ "$_sl_sz" -gt 16384 ] 2>/dev/null; then
+  # A failed slice write means no slice: _sl_n stays empty and the guard below writes nothing.
+  if awk '/^## /{skip = ($0 == "## Recent Activity")} !skip{print}' "$SNAPSHOT" > "${SLICE}.tmp.$$" 2>/dev/null; then
+    _sl_n="$(wc -c < "${SLICE}.tmp.$$" 2>/dev/null)" || _sl_n=""; _sl_n="${_sl_n//[[:space:]]/}"
+  else
+    _sl_n=""
+  fi
+  if [ -n "$_sl_n" ] && [ "$_sl_n" -gt 0 ] && [ "$_sl_n" -le 16384 ] 2>/dev/null \
+     && printf '%s-%s %s\n' "$_sl_sz" "$_sl_mt" "$_sl_n" > "${SLICE_ID}.tmp.$$" 2>/dev/null; then
+    mv -f "${SLICE}.tmp.$$" "$SLICE" 2>/dev/null && mv -f "${SLICE_ID}.tmp.$$" "$SLICE_ID" 2>/dev/null \
+      || rm -f "$SLICE" "$SLICE_ID" 2>/dev/null || true
+  fi
+  rm -f "${SLICE}.tmp.$$" "${SLICE_ID}.tmp.$$" 2>/dev/null || true
+fi
+
 # The string measured above is the string emitted: the provenance wrap ran once, before the
 # budget, and EMITTED is its head and tail around the trimmed block.
 jq -n --arg ctx "$EMITTED" \

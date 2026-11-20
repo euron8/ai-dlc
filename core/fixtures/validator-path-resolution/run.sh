@@ -239,10 +239,15 @@ argv_for() {
   case "$1" in
     sync-taught-schema.sh)          printf '%s' "--check" ;;
     sprint-status.sh)               printf '%s' "--render" ;;
+    # A bare run stops at its usage line from every root. `check` with no record is zero rows, exit 0,
+    # and its ok line names the record path it resolved under the root, so a wrong root answers differently.
+    standing-rulings.sh)            printf '%s' "check" ;;
     # with no op it refuses "no op given" before it resolves a path; this op reaches "no snapshot at <root>/...", which names the root
     snapshot-update.sh)             printf '%s' "--activity vpr-probe" ;;
     # four args reach "no snapshot at <root>/...", which names the root (the usage refusal comes before it)
     story-transition.sh)            printf '%s' "vpr-1 a b vpr" ;;
+    # A bare run stops at its usage refusal. An unknown gate id reaches the gates/ lookup, whose refusal names the root it resolved
+    gate-run.sh)                    printf '%s' "arms --gate vpr-probe --sprint 1 --step x.md" ;;
     validate-audit-anchors.sh)     printf '%s' "--render" ;;
     validate-gate-adjudication.sh)  printf '%s' "--expected implementation" ;;
     validate-provenance-block.sh)   printf '%s' "$WORK/docs/artifact.md" ;;
@@ -315,6 +320,10 @@ argv_for() {
     # A bare run stops at "the gate must be 1, 2, 3 or close", byte-identical from any root. With a
     # full argv and a -C that names no directory, the run removes any stale plan under the resolved
     # root and refuses naming that plan path, without creating a directory. Same floor: the root is CONSULTED.
+    # Each refusal names the project root it resolved, so the two roots answer differently: the root is CONSULTED.
+    deploy-validate-run.sh)         printf '%s' "cluster 1" ;;
+    retro-gate.sh)                  printf '%s' "--nonce vpr-1 --sprint 1" ;;
+    retro-close.sh)                 printf '%s' "commit 1" ;;
     gate-transition.sh)             printf '%s' "vpr-1 1 -C $WORK/vpr-no-worktree --base vpr-base --sprint 1 --story-file docs/stories/story-1.md" ;;
     *)                              printf '%s' "" ;;
   esac

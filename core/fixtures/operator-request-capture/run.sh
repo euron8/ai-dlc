@@ -220,6 +220,61 @@ else
   bad "no declaration — a missing declaration was silent; the hook fell back to the safe direction and said nothing"
 fi
 
+# --- A reply to an open DECISION PENDING block carries the token, and pauses as before ------
+# Entries are written in escalations.md's shape. The positive case needs one open entry; its twins
+# are one property apart: a closed window, and a second open entry.
+DASH="$(printf '\342\200\224')"
+pd_world() { # <dir> <entry-window>... : a live pipeline with one entry per window text
+  local d="$1"; shift
+  rm -rf "$d"; mkdir -p "$d/_bmad-output" "$d/docs/escalations"
+  cp "$LIVE/_bmad-output/pipeline-snapshot.md" "$d/_bmad-output/pipeline-snapshot.md"
+  { echo "# Pending escalations"; echo ""
+    local n=0 w
+    for w in "$@"; do
+      n=$((n+1))
+      echo "## [S308-$n] lead - 2026-11-20 10:00"
+      echo "**Status:** DECIDED_AUTONOMOUSLY"
+      echo "**Decision/Question:** source: recommendation -- keep the 30-day window"
+      echo "**Veto window:** $w"
+      echo ""
+    done; } > "$d/docs/escalations/pending.md"
+}
+PD_ANS='Keep the 30-day window. Treat this as a standing ruling.'
+PD1="$WORK/pd1"; pd_world "$PD1" "open $DASH DP-308-1"
+fire "$HOOK" "$PD1" "$PD_ANS"
+PD1_REQ="$PD1/_bmad-output/operator-requests-history.md"
+if grep -qx -- '- Pending decision: DP-308-1' "$PD1_REQ" 2>/dev/null; then
+  ok "a reply while exactly one DP entry is open records '- Pending decision: DP-308-1'"
+else
+  bad "the requests-history entry carries no '- Pending decision:' line although one DP entry is open"
+fi
+if [ -f "$PD1/_bmad-output/pipeline-paused.flag" ] && [ "$(entries "$PD1_REQ")" = "1" ]; then
+  ok "the same reply still raised the pause flag and wrote one entry (flag behaviour unchanged)"
+else
+  bad "the pending-decision reply changed pause behaviour (flag=$([ -f "$PD1/_bmad-output/pipeline-paused.flag" ] && echo yes || echo no))"
+fi
+PD1_SHA="$(sed -n 's/^- SHA256: //p' "$PD1_REQ" | tail -1)"
+PD1_REAL="$(printf '%s' "$PD_ANS" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)"
+[ -n "$PD1_SHA" ] && [ "$PD1_SHA" = "$PD1_REAL" ] \
+  && ok "the SHA256 beside the Pending decision line is the hash of the whole reply" \
+  || bad "the SHA256 on a pending-decision entry is not the hash of the typed message"
+PD2="$WORK/pd2"; pd_world "$PD2" "closed $DASH _bmad-output/operator-requests-history.md:## x"
+fire "$HOOK" "$PD2" "$PD_ANS"
+if [ "$(entries "$PD2/_bmad-output/operator-requests-history.md")" = "1" ] \
+   && ! grep -q 'Pending decision' "$PD2/_bmad-output/operator-requests-history.md"; then
+  ok "twin: a closed window records no Pending decision line (the entry itself is still written)"
+else
+  bad "a closed window still produced a Pending decision line, or the entry was lost"
+fi
+PD3="$WORK/pd3"; pd_world "$PD3" "open $DASH DP-308-1" "open $DASH DP-308-2"
+fire "$HOOK" "$PD3" "$PD_ANS"
+if [ "$(entries "$PD3/_bmad-output/operator-requests-history.md")" = "1" ] \
+   && ! grep -q 'Pending decision' "$PD3/_bmad-output/operator-requests-history.md"; then
+  ok "twin: two open DP entries record no Pending decision line (ambiguous, so nothing is claimed)"
+else
+  bad "two open DP entries produced a Pending decision line, or the entry was lost"
+fi
+
 # --- the cli cells (cells.decl): the hook started as a PROGRAM once per distinct outcome ------------------------
 # The hook exits 0 and prints nothing on every path; what differs is what it writes into the project. A start on a
 # copy of the live project is compared with the in-process call on another copy of it: stdout, stderr, exit and the

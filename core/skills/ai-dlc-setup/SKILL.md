@@ -209,7 +209,7 @@ section body up to the next same-or-higher-level header:
 | Autonomy Rules | SKILL.md Rules 1 through 20 |
 | Autonomy Rule (any individual rule) | SKILL.md Rules 1 through 20 |
 | Autonomous Gate Protocol | gate-validation.md |
-| Phase Reference / Phase Table | route.md Step 6 |
+| Phase Reference / Phase Table | route-fresh-start.md Step 6 |
 | Session Model | SKILL.md Handoff Protocol |
 | Post-Gate Deployment | deploy-validate.md |
 | Post-Compact Recovery Protocol | SKILL.md |

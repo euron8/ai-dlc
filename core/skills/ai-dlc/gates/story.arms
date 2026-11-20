@@ -1,0 +1,27 @@
+# gate_type: story
+# <check-id> TAB <kind> TAB <arm> TAB <count> [TAB skip=<tok>[,<tok>]]. One row per enforcement-map id
+# rendered for this gate type (universal expanded); validate-gate-manifest.sh binds this file to that set.
+# arm `@close` = run by `gate-run.sh close`; lead = recorded by the lead or by close; judgment = adjudicator.
+1	judgment	-	-
+2	judgment	-	-
+2a	script	validate-escalation-resolution.sh --escalations docs/escalations/pending.md --sprint {SPRINT} --transcript-dir {TRANSCRIPT_DIR}	legacy	skip=empty
+3	judgment	-	-
+4	judgment	-	-
+7	judgment	-	-
+12	lead	-	-
+13	lead	-	-
+14	lead	-	-
+15	lead	-	-
+16	judgment	-	-
+25	script	validate-steering-budget.sh --transcript {TRANSCRIPT} --count	legacy	skip=rc1
+26	script	@close	-
+H1	lead	-	-
+H2	script	validate-h2-attestation.sh --verify --sprint {SPRINT}	legacy
+failure	lead	-	-
+3a	judgment	-	-
+3b	script	validate-locked-anchor.sh {STORY}	legacy	skip=empty,no-stories
+5	judgment	-	-
+17	script	validate-provenance-block.sh --strays	legacy
+24	script	validate-adversarial-convergence.sh --series {SERIES} --transcript {TRANSCRIPT} --transcript-dir {TRANSCRIPT_DIR}	legacy
+30	script	validate-spec-join.sh --spec _bmad-output/specs/s{SPRINT}/* --prd _bmad-output/planning-artifacts/prd.md {STORIES:--story} --spine _bmad-output/planning-artifacts/s{SPRINT}/architecture-spine/ARCHITECTURE-SPINE.md --spine-lint _bmad-output/planning-artifacts/s{SPRINT}/architecture-spine-lint.json --locked-requirements _bmad-output/planning-artifacts/s{SPRINT}/locked-requirements.md	legacy	skip=no-stories,pre-adoption
+31	script	validate-ac-falsifiability.sh {STORIES}	legacy	skip=no-stories,pre-adoption

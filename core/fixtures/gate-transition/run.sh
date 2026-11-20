@@ -870,5 +870,131 @@ st_cp cp "$GTR"
 [ "$V_CLOSEP" = 1 ] && ok "CLOSEP a story-slug verdict ($NM3) wins over a newer storyless one ($NM2): no gate3-scope line" \
   || bad "CLOSEP rc=$RC: $(grep -E '^(nonce|gate3-scope):' "$P/3-1-gclose-p1.plan" 2> /dev/null | tr '\n' ' ') $(head -2 "$WD/cp.err" | tr '\n' ' ')"
 
+# --- GATE-RUN (BL-819): the real gate-run.sh over a toy world, and GM3's binding -----------------------------------
+# One toy root (a copy of the skill tree, schemas, a whole copy of the scripts directory plus three stub arms) and a
+# gate `toy` of gate_type planning: a legacy script row (2a) and the judgment row 1. Each arm names the opposite twin.
+#   GRF  a seeded legacy FAIL: exit 1, a REMEDY line naming 2a, no nonce, no OPEN marker, no worklist.
+#        control: GRO.
+#   GRO  the clean near-miss: exit 0, an ADJUDICATE line naming the worklist, and the printed GATE-RESULT ids equal the
+#        arms file's ids; the ledger carries 2a PASS and 1 PENDING. control: GRF.
+#   GRN  a native arm printing PASS with examined=0: exit 1, `examined-nothing`, no nonce. control: GRO (examined=4 passes).
+#   GRC1 close with no snapshot on disk: exit 1, no gate-log entry, OPEN still set. control: GRC2.
+#   GRC2 the same close once the snapshot exists: exit 0, exactly ONE `## Gate Log:` entry, OPEN cleared (D4). control: GRC1.
+#   GMX  validate-gate-manifest.sh over a skill tree whose planning.arms lost row 37: exit 1, GM3 names 37. control: GMO.
+#   GMO  the same tree with the row restored: exit 0.
+GRW="$T/gr"; GRR="$GRW/root"
+SKD="$(dirname "$(dirname "$STEPF")")"
+GRSCH=""; for _c in "$_d/core/schemas" "$_d/.claude/schemas"; do [ -d "$_c" ] && { GRSCH="$_c"; break; }; done
+mkdir -p "$GRW/core/scripts" "$GRR/.claude/skills" "$GRR/_bmad-output/implementation-artifacts" || { echo "FIXTURE BROKEN: gate-run toy world" >&2; exit 2; }
+cp -R "$SCR"/. "$GRW/core/scripts/" && cp -R "$SKD" "$GRR/.claude/skills/ai-dlc" && cp -R "$GRSCH" "$GRR/.claude/schemas" || { echo "FIXTURE BROKEN: gate-run toy copies" >&2; exit 2; }
+world_repo "$GRR" > /dev/null 2>&1 || { echo "FIXTURE BROKEN: gate-run toy repo" >&2; exit 2; }
+printf '#!/usr/bin/env bash\necho "FAIL seeded offender at x:3"\nexit 1\n' > "$GRW/core/scripts/stub-fail.sh"
+printf '#!/usr/bin/env bash\necho "ok fine"\n' > "$GRW/core/scripts/stub-ok.sh"
+printf '#!/usr/bin/env bash\necho "GATE-ARM 25 PASS examined=0 f:1 read nothing"\n' > "$GRW/core/scripts/stub-n0.sh"
+printf '#!/usr/bin/env bash\necho "GATE-ARM 25 PASS examined=4 f:1 read four"\n' > "$GRW/core/scripts/stub-n4.sh"
+for _gp in gate-run validate-gate-manifest validate-gate-adjudication; do printf 'HERMETIC-CONSUMED core/scripts/%s.sh\n' "$_gp"; done
+GRA="$GRR/.claude/skills/ai-dlc/gates/toy.arms"
+gr_arms() { printf '# gate_type: planning\n1\tjudgment\t-\t-\n2a\tscript\t%s\tlegacy\n%s\n' "$1" "$2" > "$GRA"; }
+gr_run() { # <cell> <args...>: the real program, one start, stdout+stderr in $GRW/<cell>.out; sets GRC
+  local c="$1"; shift
+  AI_DLC_PROJECT_ROOT="$GRR" FXCELL="$c" bash "$GRW/core/scripts/gate-run.sh" "$@" --root "$GRR" > "$GRW/$c.out" 2>&1 < /dev/null; GRC=$?
+}
+gr_ckpt() { ls "$GRR/_bmad-output/.gate-checkpoint" 2> /dev/null | wc -l | tr -d ' '; }
+GRX=(--gate toy --sprint 7 --step requirements.md)
+
+gr_arms stub-fail.sh $'25\tscript\tstub-n4.sh\tnative'; rm -rf "$GRR/_bmad-output/.gate-checkpoint" "$GRR/_bmad-output/gate-adjudication"
+gr_run grf arms "${GRX[@]}"
+if [ "$GRC" = 1 ] && grep -q '^REMEDY 2a ' "$GRW/grf.out" && grep -q 'nonce=- ' "$GRW/grf.out" && [ "$(gr_ckpt)" = 0 ] && [ ! -e "$GRR/_bmad-output/gate-adjudication" ]; then
+  ok "GRF a seeded FAIL: exit 1, REMEDY 2a, nonce=-, no OPEN, no ledger, no worklist"
+else bad "GRF rc=$GRC: $(grep -E '^(GATE-RUN|REMEDY)' "$GRW/grf.out" | head -2 | tr '\n' ' ') checkpoint-files=$(gr_ckpt)"; fi
+
+gr_arms stub-ok.sh $'25\tscript\tstub-n4.sh\tnative'
+gr_run gro arms "${GRX[@]}"
+GRN="$(grep -o 'nonce=[^ ]*' "$GRW/gro.out" | tail -1 | cut -d= -f2)"
+GRP="$(grep '^GATE-RESULT' "$GRW/gro.out" | awk '{print $2}' | sort | tr '\n' ' ')"; GRE="$(awk -F'\t' '!/^#/ && NF {print $1}' "$GRA" | sort | tr '\n' ' ')"
+GRL="$(bash "$GRW/core/scripts/gate-checkpoint.sh" --root "$GRR" --nonce "$GRN" list 2> /dev/null | awk -F'\t' '{print $1":"$2}' | sort | tr '\n' ' ')"
+if [ "$GRC" = 0 ] && grep -q '^ADJUDICATE .*\.worklist nonce=' "$GRW/gro.out" && [ "$GRP" = "$GRE" ] && [ -n "$GRP" ] && [ "$GRL" = "1:PENDING 25:PASS 2a:PASS " ] && [ -s "$GRR/_bmad-output/.gate-checkpoint/OPEN" ]; then
+  ok "GRO the clean near-miss: exit 0, ADJUDICATE, printed ids ($GRP) equal the arms ids, ledger $GRL, OPEN set"
+else bad "GRO rc=$GRC printed=[$GRP] arms=[$GRE] ledger=[$GRL]: $(grep -E '^(GATE-RUN|ADJ)' "$GRW/gro.out" | tr '\n' ' ')"; fi
+
+gr_arms stub-ok.sh $'25\tscript\tstub-n0.sh\tnative'; rm -rf "$GRR/_bmad-output/.gate-checkpoint"
+gr_run grn arms "${GRX[@]}"
+if [ "$GRC" = 1 ] && grep -q '^GATE-RESULT 25 FAIL examined=0 .* examined-nothing' "$GRW/grn.out" && [ "$(gr_ckpt)" = 0 ]; then
+  ok "GRN a native PASS with examined=0 records FAIL examined-nothing: exit 1, no nonce, no ledger (GRO's examined=4 passes)"
+else bad "GRN rc=$GRC: $(grep -E '^GATE-RESULT 25' "$GRW/grn.out")"; fi
+
+# close: seed the verdict (Check 26's dispatch binding reads the guard's .verdict-writes.jsonl) and no snapshot yet
+gr_arms stub-ok.sh $'25\tscript\tstub-n4.sh\tnative'; rm -rf "$GRR/_bmad-output/.gate-checkpoint" "$GRR/_bmad-output/gate-adjudication"
+gr_run gra arms "${GRX[@]}"
+GRN="$(grep -o 'nonce=[^ ]*' "$GRW/gra.out" | tail -1 | cut -d= -f2)"
+GRALL="$(AI_DLC_PROJECT_ROOT="$GRR" FXCELL="gr-all" bash "$GRW/core/scripts/validate-gate-adjudication.sh" --expected planning 2> /dev/null | tr '\n' ' ')"
+python3 - "$GRR" "$GRN" $GRALL <<'PYE'
+import json, sys, time
+r, n = sys.argv[1:3]
+ids = sys.argv[3:]
+doc = {"schema_id": "GATE_ADJUDICATION_VERDICT v1", "gate_type": "planning", "gate_series_id": "planning-s7-" + n.split("-")[1],
+       "gate_nonce": n, "generated_at": "2026-11-20T14:20:00Z", "adjudicator_agent_id": "probe", "catalog": "core",
+       "verdicts": [{"check_id": i, "verdict": "PASS", "evidence": "probe:1 seeded"} for i in ids]}
+d = r + "/_bmad-output/gate-adjudication/"
+json.dump(doc, open(d + n + ".verdict.json", "w"))
+open(d + ".verdict-writes.jsonl", "w").write(json.dumps({"v": 1, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "stem": n, "agent_id": "probe", "session": "t", "tool": "Write"}) + "\n")
+PYE
+GRG="$GRR/_bmad-output/implementation-artifacts/gate-log.md"
+gr_entries() { [ -f "$GRG" ] && grep -c '^## Gate Log:' "$GRG" || echo 0; }
+gr_run grc1 close --gate toy --nonce "$GRN" --sprint 7 --step requirements.md
+if [ "$GRC" = 1 ] && [ "$(gr_entries)" = 0 ] && [ -s "$GRR/_bmad-output/.gate-checkpoint/OPEN" ] && grep -q '^REMEDY 14 ' "$GRW/grc1.out"; then
+  ok "GRC1 close with no snapshot: exit 1, REMEDY 14, no gate-log entry, OPEN still set"
+else bad "GRC1 rc=$GRC entries=$(gr_entries): $(grep -E '^(GATE-RUN|REMEDY)' "$GRW/grc1.out" | head -2 | tr '\n' ' ')"; fi
+printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step_file: old.md\n- last_gate_passed: none\n- branch: main\n\n## Sprint Context\n- sprint_id: 7\n\n## Recent Activity\n- 2026-10-25T20:00Z older entry\n' > "$GRR/_bmad-output/pipeline-snapshot.md"
+gr_run grc2 close --gate toy --nonce "$GRN" --sprint 7 --step requirements.md
+if [ "$GRC" = 0 ] && [ "$(gr_entries)" = 1 ] && [ ! -e "$GRR/_bmad-output/.gate-checkpoint/OPEN" ] && grep -qx -- '- current_step_file: requirements.md' "$GRR/_bmad-output/pipeline-snapshot.md"; then
+  ok "GRC2 the retry once the snapshot exists: exit 0, exactly one gate-log entry, OPEN cleared, current_step_file=requirements.md (D4)"
+else bad "GRC2 rc=$GRC entries=$(gr_entries): $(grep -E '^(GATE-RUN|REMEDY)' "$GRW/grc2.out" | head -2 | tr '\n' ' ')"; fi
+
+GRSN="$GRR/_bmad-output/pipeline-snapshot.md"
+gr_act() { grep -cF "(nonce $GRN)" "$GRSN"; }
+[ "$(gr_act)" = 1 ] || bad "GRC2 the op wrote $(gr_act) activity line(s) naming the nonce, not one"
+gr_run grc3 close --gate toy --nonce "$GRN" --sprint 7 --step requirements.md
+if [ "$GRC" = 0 ] && [ "$(gr_entries)" = 1 ] && [ "$(gr_act)" = 1 ]; then
+  ok "GRC3 a close retried after the snapshot op had succeeded: exit 0, still one gate-log entry and one activity line (the op is not called twice)"
+else bad "GRC3 rc=$GRC entries=$(gr_entries) activity=$(gr_act): $(grep -E '^(GATE-RUN|REMEDY)' "$GRW/grc3.out" | head -2 | tr '\n' ' ')"; fi
+
+# GM3: the binding over a copy of the real skill tree
+GMS="$GRW/gm"; mkdir -p "$GMS/skills" && cp -R "$SKD" "$GMS/skills/ai-dlc" || { echo "FIXTURE BROKEN: gm copy" >&2; exit 2; }
+GMA="$GMS/skills/ai-dlc/gates/planning.arms"
+gm_run() { AI_DLC_PROJECT_ROOT="$GMS" FXCELL="$1" bash "$GRW/core/scripts/validate-gate-manifest.sh" "$GMS/skills/ai-dlc/steps/gate-validation.md" > "$GRW/$1.out" 2>&1 < /dev/null; GRC=$?; }
+cp "$GMA" "$GMA.orig"; awk -F'\t' '$1 != "37"' "$GMA.orig" > "$GMA"
+gm_run gmx
+if [ "$GRC" = 1 ] && grep -q 'planning.arms: rendered check 37 has no row' "$GRW/gmx.out" && ! cmp -s "$GMA" "$GMA.orig"; then
+  ok "GMX GM3 over a planning.arms that lost row 37: exit 1, names 37 (the two files differ)"
+else bad "GMX rc=$GRC: $(grep -E 'GM3|^    ' "$GRW/gmx.out" | head -2 | tr '\n' ' ')"; fi
+cp "$GMA.orig" "$GMA"; gm_run gmo
+if [ "$GRC" = 0 ] && grep -q '^gates: GM3 ok' "$GRW/gmo.out"; then ok "GMO GM3 over the intact planning.arms: exit 0, GM3 ok"
+else bad "GMO rc=$GRC: $(tail -3 "$GRW/gmo.out" | tr '\n' ' ')"; fi
+
+# GRP/GRQ: a row declaring skip=pre-adoption does not run below the spec-layer floor (Check 28's verdict, reported as that token)
+#   GRP  adopted_from_sprint 999, sprint 7: row 30 (a stub that would FAIL) is SKIP reason=pre-adoption, exit 0. control: GRQ.
+#   GRQ  adopted_from_sprint 1: the same row RUNS and FAILs, exit 1 (an IN-FORCE world runs it).
+mkdir -p "$GRR/_bmad-output/planning-artifacts"
+printf '# gate_type: story\n30\tscript\tstub-fail.sh\tlegacy\tskip=pre-adoption\n' > "$GRR/.claude/skills/ai-dlc/gates/toy2.arms"
+printf '<!-- SPEC_ADOPTION v1 -->\nadopted_from_sprint: 999\ndeclared_at_sha: abc1234\nrationale: fixture floor above the sprint\n' > "$GRR/_bmad-output/planning-artifacts/spec-adoption.md"
+rm -rf "$GRR/_bmad-output/.gate-checkpoint"
+gr_run grp arms --gate toy2 --sprint 7 --step stories-test-strategy.md
+if [ "$GRC" = 0 ] && grep -q '^GATE-RESULT 30 SKIP .*reason=pre-adoption' "$GRW/grp.out" && grep -q '^ADJUDICATE none' "$GRW/grp.out"; then
+  ok "GRP below the floor: row 30 is SKIP reason=pre-adoption and never ran, exit 0"
+else bad "GRP rc=$GRC: $(grep -E '^(GATE-RESULT|GATE-RUN)' "$GRW/grp.out" | tr '\n' ' ')"; fi
+printf '<!-- SPEC_ADOPTION v1 -->\nadopted_from_sprint: 1\ndeclared_at_sha: abc1234\nrationale: fixture floor below the sprint\n' > "$GRR/_bmad-output/planning-artifacts/spec-adoption.md"
+gr_run grq arms --gate toy2 --sprint 7 --step stories-test-strategy.md
+if [ "$GRC" = 1 ] && grep -q '^GATE-RESULT 30 FAIL ' "$GRW/grq.out"; then ok "GRQ in force: row 30 runs and its seeded FAIL refuses, exit 1"
+else bad "GRQ rc=$GRC: $(grep -E '^(GATE-RESULT|GATE-RUN)' "$GRW/grq.out" | tr '\n' ' ')"; fi
+
+# GRW: each shipped gate's judgment rows are the escalated set the shipping validator derives (the worklist the runner writes)
+for _t in planning story sprint-review retro; do
+  _ex="$(AI_DLC_PROJECT_ROOT="$GRR" FXCELL="ge-$_t" bash "$GRW/core/scripts/validate-gate-adjudication.sh" --expected "$_t" 2> /dev/null | sort | tr '\n' ' ')"
+  _jr="$(awk -F'\t' '$2 == "judgment" {print $1}' "$GRR/.claude/skills/ai-dlc/gates/$_t.arms" | sort | tr '\n' ' ')"
+  if [ -n "$_ex" ] && [ "$_ex" = "$_jr" ]; then ok "GRW $_t.arms judgment rows equal validate-gate-adjudication.sh --expected $_t ($_jr)"
+  else bad "GRW $_t: arms judgment [$_jr] vs --expected [$_ex]"; fi
+done
+
 echo
 report_end gate-transition

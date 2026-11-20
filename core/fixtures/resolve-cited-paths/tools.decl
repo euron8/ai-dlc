@@ -13,3 +13,5 @@ cmp
 awk
 tr
 basename
+head
+tail

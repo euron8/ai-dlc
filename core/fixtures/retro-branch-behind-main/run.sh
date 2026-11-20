@@ -105,6 +105,13 @@ if [ -z "$RETRO" ]; then
   echo "FIXTURE ERROR: steps/retro.md not found under $ROOT in either layout — an absent subject is not a passing one" >&2
   exit 2
 fi
+# The subjects of parts 2-4 and both receipts are the programs retro.md calls: retro-open.sh (Step 1)
+# and retro-close.sh (7a merge, 7a-post land). Same two layouts as the toolchain; an absent program is
+# /dev/null, so every marker counts 0 and the subject is PENDING on a consumer, RED in the distribution.
+RETRO_OPEN="$TOOLS/retro-open.sh"; RETRO_CLOSE="$TOOLS/retro-close.sh"
+[ -f "$RETRO_OPEN" ] || RETRO_OPEN=/dev/null
+[ -f "$RETRO_CLOSE" ] || RETRO_CLOSE=/dev/null
+export RETRO_OPEN RETRO_CLOSE
 DVSTEP="$(dirname "$RETRO")/deploy-validate.md"
 [ -f "$DVSTEP" ] || { echo "FIXTURE ERROR: steps/deploy-validate.md not found beside $RETRO" >&2; exit 2; }
 
@@ -118,6 +125,8 @@ for f in "$VMR" "$VAA" "$SS" "$ANCHOR_SCHEMA" "$STATUS_SCHEMA"; do
 done
 echo "HERMETIC-CONSUMED core/scripts/validate-mandatory-rules.sh"
 echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/retro.md"
+[ "$RETRO_OPEN" = /dev/null ] || echo "HERMETIC-CONSUMED core/scripts/retro-open.sh"
+[ "$RETRO_CLOSE" = /dev/null ] || echo "HERMETIC-CONSUMED core/scripts/retro-close.sh"
 command -v git >/dev/null 2>&1 || { echo "FIXTURE ERROR: git not on PATH" >&2; exit 2; }
 # Hermeticity (I10/I87): a fixture that inherits the operator's AI_DLC_* tunables tests the
 # CONFIG, not the code.
@@ -533,9 +542,9 @@ fi
 echo
 echo "retro-branch-behind-main: part 2 — retro.md Step 1 carry (subject $RETRO)"
 
-extract_block() { # <retro.md> -> the Step 1 carry block, fences excluded
-  awk '/^### 1\. Context Loading/{s=1} s && /^### 2\./{exit}
-       s && /^# retro Step 1:/{on=1} on && /^```$/{exit} on{print}' "$1"
+extract_block() { # <ignored> -> retro-open.sh behind its two placeholders (the argument is retro.md, kept for the callers)
+  [ "$RETRO_OPEN" = /dev/null ] && return 0
+  printf "set -- '<sprint-branch>' '<N>'\n"; cat "$RETRO_OPEN"
 }
 # ============================================================================
 # PENDING: A SUBJECT THAT HAS NOT ARRIVED YET IS NOT A FAILURE, AND A BROKEN ONE IS. This fixture
@@ -578,10 +587,10 @@ pending() { # <part> <subject> <what is not asserted> <skipped-arm-count>
 subject_state() { # <subject> <retro.md> -> absent | present
   local n=0 a b
   case "$1" in
-    carry) a="$(grep -c '^# retro Step 1:' "$2")" || a=0; b="$(grep -c 'CARRY: ' "$2")" || b=0; n=$((a + b)) ;;
+    carry) a="$(grep -c '^# retro Step 1:' "$RETRO_OPEN")" || a=0; b="$(grep -c 'CARRY: ' "$RETRO_OPEN")" || b=0; n=$((a + b)) ;;
     fallback) n="$(extract_block "$2" | grep -cE 'GH_WHY|GH_ROWS|PR_SRC|command -v gh|gh pr list')" || n=0 ;;
-    land) a="$(grep -c '^# retro 7a-post step 1:' "$2")" || a=0; b="$(grep -c 'LAND: ' "$2")" || b=0; n=$((a + b)) ;;
-    merge) a="$(grep -c '^# retro 7a:' "$2")" || a=0; b="$(grep -c 'MERGE: ' "$2")" || b=0; n=$((a + b)) ;;
+    land) a="$(grep -c '^# retro 7a-post step 1:' "$RETRO_CLOSE")" || a=0; b="$(grep -c 'LAND: ' "$RETRO_CLOSE")" || b=0; n=$((a + b)) ;;
+    merge) a="$(grep -c '^# retro 7a:' "$RETRO_CLOSE")" || a=0; b="$(grep -c 'MERGE: ' "$RETRO_CLOSE")" || b=0; n=$((a + b)) ;;
   esac
   if [ "$n" -eq 0 ]; then printf absent; else printf present; fi
 }
@@ -993,10 +1002,11 @@ echo
 echo "retro-branch-behind-main: part 3 — retro.md 7a-post step 1 land (subject $RETRO)"
 
 extract_land() { # <retro.md> -> the 7a-post step 1 block, fences excluded
-  awk '/^# retro 7a-post step 1: land on the merged trunk$/{on=1} on && /^```$/{exit} on{print}' "$1"
+  [ "$RETRO_CLOSE" = /dev/null ] && return 0
+  printf 'set -- land\n'; cat "$RETRO_CLOSE"
 }
 land_shape_ok() { # <retro.md>: exactly one comment-anchored LAND block printing both outcomes
-  local n; n="$(grep -c '^# retro 7a-post step 1: land on the merged trunk$' "$1")" || n=0
+  local n; n="$(grep -c '^# retro 7a-post step 1: land on the merged trunk$' "$RETRO_CLOSE")" || n=0
   case "$n:$(extract_land "$1")" in 1:*'LAND: main at origin/main'*'LAND: HARD_BLOCK'*) return 0 ;; esac
   return 1
 }
@@ -1007,7 +1017,7 @@ if [ "$ST_LAND" = absent ]; then
   pending "part 3" "the 7a-post step 1 LAND block (no '# retro 7a-post step 1:' comment and no LAND: token)" \
     "the worlds land-ok land-wt land-diverged land-tag are not asserted" 1
 else
-_ln="$(grep -c '^# retro 7a-post step 1: land on the merged trunk$' "$RETRO")" || _ln=0
+_ln="$(grep -c '^# retro 7a-post step 1: land on the merged trunk$' "$RETRO_CLOSE")" || _ln=0
 if ! land_shape_ok "$RETRO"; then
     echo "  FAIL  retro.md carries a LAND marker but ${_ln} '# retro 7a-post step 1: land on the merged trunk' block(s), not exactly one printing both LAND outcomes — a present subject that is broken is a finding, not PENDING" >&2
     echo "retro-branch-behind-main: FAIL (part 3 subject broken)" >&2
@@ -1150,10 +1160,11 @@ fi
 echo
 echo "retro-branch-behind-main: part 4 — retro.md 7a merge (subject $RETRO)"
 extract_merge() { # <retro.md> -> the 7a block, fences excluded
-  awk '/^# retro 7a: merge the retro PR, then read its state from GitHub$/{on=1} on && /^```$/{exit} on{print}' "$1"
+  [ "$RETRO_CLOSE" = /dev/null ] && return 0
+  printf "set -- merge '<pr-number>'\n"; cat "$RETRO_CLOSE"
 }
 merge_shape_ok() { # <retro.md>: exactly one comment-anchored 7a block naming <pr-number>, printing both outcomes
-  local n; n="$(grep -c '^# retro 7a: merge the retro PR, then read its state from GitHub$' "$1")" || n=0
+  local n; n="$(grep -c '^# retro 7a: merge the retro PR, then read its state from GitHub$' "$RETRO_CLOSE")" || n=0
   case "$n:$(extract_merge "$1")" in 1:*'<pr-number>'*'MERGE: merged'*'MERGE: HARD_BLOCK'*) return 0 ;; esac
   return 1
 }
@@ -1164,7 +1175,7 @@ if [ "$ST_MERGE" = absent ]; then
   pending "part 4" "the 7a MERGE block (no '# retro 7a:' comment and no MERGE: token)" \
     "the worlds merge-ok merge-exit0-open merge-cleanup-failed merge-open merge-view-fails merge-view-lowercase are not asserted" 1
 else
-_mn="$(grep -c '^# retro 7a: merge the retro PR, then read its state from GitHub$' "$RETRO")" || _mn=0
+_mn="$(grep -c '^# retro 7a: merge the retro PR, then read its state from GitHub$' "$RETRO_CLOSE")" || _mn=0
 if ! merge_shape_ok "$RETRO"; then
     echo "  FAIL  retro.md carries a MERGE marker but ${_mn} '# retro 7a: merge the retro PR, then read its state from GitHub' block(s), not exactly one naming <pr-number> and printing both MERGE outcomes — a present subject that is broken is a finding, not PENDING" >&2
     echo "retro-branch-behind-main: FAIL (part 4 subject broken)" >&2
@@ -1195,7 +1206,7 @@ run_merge() { # <block-file> <world> -> token
   d="$P4/run-$(basename "$b" .sh)-$w"
   cp -R "$P4/$w" "$d" && write_gh_stub "$d" || { echo "FIXTURE ERROR: could not copy world $w" >&2; exit 2; }
   mkdir "$d/cwd"
-  out="$( cd "$d/cwd" && PATH="$d:$PATH" "$BASH" "$b" 2>&1 )"; rc=$?
+  out="$( cd "$d/cwd" && AI_DLC_PROJECT_ROOT="$d/cwd" PATH="$d:$PATH" "$BASH" "$b" 2>&1 )"; rc=$?
   [ "$rc" = 0 ] || rc=nz
   printf '%s\n' "$out" > "$d.out"
   line="$(grep -m1 '^MERGE: ' <<<"$out")"
@@ -1245,7 +1256,7 @@ fi
 # ============================================================================
 RCPT997="$DIR/receipt-bl997.sh"
 [ -f "$RCPT997" ] || { echo "FIXTURE ERROR: missing $RCPT997" >&2; exit 2; }
-_hold="$(grep -c 'ON-DISK ' "$RETRO")" || _hold=0
+_hold="$(cat "$RETRO_OPEN" "$RETRO_CLOSE" | grep -c 'ON-DISK ')" || _hold=0
 if [ "$_hold" -eq 0 ] || [ "$ST_CARRY" = absent ] || [ "$ST_LAND" = absent ]; then
   pending "BL-997 receipt" "the on-disk check before Step 1's and the LAND block's checkout" "receipt-bl997.sh is not run" 1
 else

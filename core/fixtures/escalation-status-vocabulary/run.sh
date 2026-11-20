@@ -337,9 +337,13 @@ fi
 #   A empty                rc 0, the token, and the "present but empty" reason
 #   B whitespace           the same -- a `[ -s ]` fix calls this file populated and fails here
 #   C absent               rc 0, the token, the absent-file reason, NOT the empty one (unchanged)
-#   D populated-zero-record  heading-only AND the bullet-entry shape: rc 0, the `n=[]` line,
-#                          NO token. One cell, because no zero-record predicate can move one of
-#                          the two without the other.
+#   D populated-zero-record  heading-only AND a file of undated SECTION headers only: rc 0, the
+#                          `n=[]` line, NO token. One cell, because no zero-record predicate can
+#                          move one of the two without the other.
+#   F statusless           FAIL-CLOSED: a DATED `## ` entry with no Status field exits 1 with one
+#                          STATUSLESS line per entry and the STATUSLESS-ENTRY token. The bullet-entry
+#                          shape (UNPARSED) names both entries; MIXED names only the S2 entry, not the
+#                          section, the entry with a status, or the entry whose status sits under a `###`.
 #   E finding              the drifted file: rc 1 (unchanged)
 # Every cell is presence-shaped on at least one conjunct, so a subject that prints nothing
 # fails every one of them.
@@ -355,11 +359,17 @@ ven_cells() {  # <validator> -> sets VEN_CELLS
   if [ "$rc" -eq 0 ] && grep -qF "EXAMINED NOTHING" <<<"$o" && grep -qF "no escalations file" <<<"$o" \
      && ! grep -qF "present but empty" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
   o="$(ev "$v" "$HEADING" "$SPEC_SRC" 2>/dev/null)"; rc=$?
-  o2="$(ev "$v" "$UNPARSED" "$SPEC_SRC" 2>/dev/null)"; rc2=$?
+  o2="$(ev "$v" "$SECTIONS" "$SPEC_SRC" 2>/dev/null)"; rc2=$?
   if [ "$rc" -eq 0 ] && [ "$rc2" -eq 0 ] && ! grep -qF "EXAMINED NOTHING" <<<"$o$o2" \
      && grep -qF "n=[]" <<<"$o" && grep -qF "n=[]" <<<"$o2"; then c="${c}1"; else c="${c}0"; fi
   o="$(ev "$v" "$DRIFT" "$SPEC_SRC" 2>&1)"; rc=$?
   if [ "$rc" -eq 1 ] && grep -qF "out-of-vocabulary status" <<<"$o"; then c="${c}1"; else c="${c}0"; fi
+  o="$(ev "$v" "$UNPARSED" "$SPEC_SRC" 2>&1)"; rc=$?
+  o2="$(ev "$v" "$MIXED" "$SPEC_SRC" 2>&1)"; rc2=$?
+  if [ "$rc" -eq 1 ] && [ "$rc2" -eq 1 ] && [ "$(grep -c '^FAIL: STATUSLESS ' <<<"$o")" -eq 2 ] \
+     && grep -qF 'DA-283' <<<"$o" && grep -qF 'DA-284' <<<"$o" \
+     && [ "$(grep -c '^FAIL: STATUSLESS ' <<<"$o2")" -eq 1 ] && grep -qF '[S2 gate]' <<<"$(grep '^FAIL: STATUSLESS ' <<<"$o2")" \
+     && grep -qF 'STATUSLESS-ENTRY' <<<"$o$o2"; then c="${c}1"; else c="${c}0"; fi
   VEN_CELLS="$c"
 }
 VEN_IS_DIST=0
@@ -373,11 +383,27 @@ if [ "$(printf '%s' "$VEN_CELLS" | cut -c1-2)" = "00" ] && [ "$(printf '%s' "$VE
 else
   i=0
   for nm in "A empty file" "B whitespace-only file" "C absent file (unchanged)" \
-            "D populated file parsing to zero records carries NO token" "E a real finding still exits 1"; do
+            "D populated file parsing to zero records carries NO token" "E a real finding still exits 1" \
+            "F a dated entry with no Status field exits 1 naming it (fail-closed)"; do
     i=$((i + 1))
     if [ "$(printf '%s' "$VEN_CELLS" | cut -c"$i")" = "1" ]; then ok "empty-file cell $nm"
     else bad "empty-file cell $nm does not hold (cells=$VEN_CELLS)"; fi
   done
+
+  # --- THROUGH verdict.sh: every shipped call site runs this validator behind it, and it keeps only lines that
+  # begin with a verdict word. The offender world must surface the STATUSLESS line naming the entry AND the remedy;
+  # the near-miss (a world with no entries) prints PASS. verdict.sh is the one beside the subject.
+  VEN_VS="$(cd "$(dirname "$VALIDATOR")" && pwd)/verdict.sh"
+  if [ -f "$VEN_VS" ]; then
+    vo="$(AI_DLC_PROJECT_ROOT="$ESV_ROOT" bash "$VEN_VS" "$VALIDATOR" "$UNPARSED" "$SPEC_SRC" 2>&1)"; vrc=$?
+    vn="$(AI_DLC_PROJECT_ROOT="$ESV_ROOT" bash "$VEN_VS" "$VALIDATOR" "$HEADING" "$SPEC_SRC" 2>&1)"; vnrc=$?
+    if [ "$vrc" -eq 1 ] && grep -qF 'STATUSLESS' <<<"$vo" && grep -qF 'DA-283' <<<"$vo" && grep -qF 'DA-284' <<<"$vo" \
+       && grep -qF 'remedy' <<<"$vo" && [ "$vnrc" -eq 0 ] && grep -q '^PASS' <<<"$vn"; then
+      ok "through verdict.sh the offender world keeps its STATUSLESS lines and the remedy; the clean world prints PASS"
+    else
+      bad "through verdict.sh the STATUSLESS lines or remedy were dropped, or the clean world did not PASS (rc=$vrc/$vnrc)"
+    fi
+  fi
 
   # --- the whole-directory control: a copy of the WHOLE scripts dir at the subject's counted relative path ------
   VEN_SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
@@ -387,8 +413,8 @@ else
     VEN_CTL="$VEN_D/core/scripts/$VEN_BASE"
     # THE CWD-INVARIANCE ARM, whole-directory control: the same five cells from `/` (BL-1007).
     VEN_CWD="$(cd / && ven_cells "$VEN_CTL" && printf '%s' "$VEN_CELLS")"
-    if [ "$VEN_CWD" = 11111 ]; then ok "cwd-invariance: the whole-directory control scores $VEN_CWD from / as from the root"
-    else bad "cwd-invariance: the whole-directory control scores $VEN_CWD from /, wanted 11111"; fi
+    if [ "$VEN_CWD" = 111111 ]; then ok "cwd-invariance: the whole-directory control scores $VEN_CWD from / as from the root"
+    else bad "cwd-invariance: the whole-directory control scores $VEN_CWD from /, wanted 111111"; fi
   else bad "whole-dir control: could not copy $VEN_SRC_DIR"; fi
 fi
 

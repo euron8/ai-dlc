@@ -216,6 +216,32 @@ case "$FPATH" in
       printf '%s\t%s\n' "$_m1_w" "$_m1_sid" > "${_m1_dir}/STEP.$$" 2>/dev/null \
         && mv "${_m1_dir}/STEP.$$" "${_m1_dir}/STEP" 2>/dev/null || rm -f "${_m1_dir}/STEP.$$" 2>/dev/null || true
     fi
+    # THE STEP-ENTRY LOG (log only, never denies, never prints). A step file whose first action is
+    # `snapshot-update.sh --set current_step_file <its basename>` is DECLARED by that text, read from the
+    # file just Read. A lead's whole Read of a declared step leaves `.step-entry-pending` = `<x><TAB><session>`;
+    # the same session's NEXT whole Read of any non-excluded step finds it, compares the snapshot's
+    # current_step_file against `<x>.md`, and on a difference appends one line to
+    # `.step-entry-mismatch.log`. One-shot: the pending record is removed as it is read.
+    if [ -z "$_m1_aid" ] && [ -n "$_m1_x" ] && [ -n "$_m1_sid" ] && [ "$_m1_shape" = "W" ] && [ "$_m1_excl" = 0 ] && [ -d "$STATE_DIR" ]; then
+      _m1_pf="${STATE_DIR}/.step-entry-pending"
+      if [ -f "$_m1_pf" ]; then
+        _m1_px=""; _m1_ps=""
+        IFS="$(printf '\t')" read -r _m1_px _m1_ps < "$_m1_pf" 2>/dev/null
+        rm -f "$_m1_pf" 2>/dev/null || true
+        if [ -n "$_m1_px" ] && [ "$_m1_ps" = "$_m1_sid" ]; then
+          _m1_cur="$(awk '/^## Pipeline Position/{f=1;next} /^## /{f=0} f' "${STATE_DIR}/pipeline-snapshot.md" 2>/dev/null \
+            | grep -m1 -iE 'current_step_file' | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//' | sed -E 's/^`([^`]+)`.*/\1/' \
+            | awk '{print $1}' | sed 's/[`*,.;:)]*$//; s|^.*/||')"
+          if [ "$_m1_cur" != "${_m1_px}.md" ]; then
+            _m1_line="$(printf '%s\t%s\tentered=%s.md\tcurrent_step_file=%s\tnext_read=%s.md' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$_m1_sid" "$_m1_px" "${_m1_cur:-<none>}" "$_m1_x")"
+            if ! echo "$_m1_line" >> "${STATE_DIR}/.step-entry-mismatch.log" 2>/dev/null; then :; fi
+          fi
+        fi
+      fi
+      if grep -qF "set current_step_file ${_m1_x}.md" "$FPATH" 2>/dev/null; then
+        if ! echo "${_m1_x}$(printf '\t')${_m1_sid}" > "$_m1_pf" 2>/dev/null; then :; fi
+      fi
+    fi
     ;;
 esac
 

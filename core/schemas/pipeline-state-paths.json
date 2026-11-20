@@ -193,6 +193,20 @@
       "reason": "The sibling temp a credit record is written to before its rename; a leftover is from a hook killed between the write and the rename, and ai-dlc-recover.sh removes it."
     },
     {
+      "name": ".recover-snapshot-slice.md",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-recover.sh",
+      "ignore": "_bmad-output/.recover-snapshot-slice.md*",
+      "reason": "The pipeline snapshot without its Recent Activity section, written by ai-dlc-recover.sh (the SLICE assignment) when a recovery arms over a snapshot larger than one Read chunk; ai-dlc-recover-gate.sh reads it. The recovery gate credits one whole Read of it toward snapshot coverage only while .recover-snapshot-slice.id still matches; ai-dlc-recover.sh rewrites or removes it when a new recovery starts, and the trailing * ignores the sibling temp of a killed write."
+    },
+    {
+      "name": ".recover-snapshot-slice.id",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-recover.sh",
+      "ignore": "_bmad-output/.recover-snapshot-slice.id*",
+      "reason": "The identity record of .recover-snapshot-slice.md: the snapshot's size-mtime and the slice's size, written by ai-dlc-recover.sh (the SLICE_ID assignment) beside the slice and read by ai-dlc-recover-gate.sh; a mismatch means a stale slice that credits nothing. Rewritten or removed when a new recovery starts; the trailing * ignores the sibling temp of a killed write."
+    },
+    {
       "name": ".recover-gate-progress",
       "transient": true,
       "producer": "core/hooks/ai-dlc-recover-gate.sh",
@@ -263,6 +277,20 @@
       "reason": "Handoff entry marker, written by the PostToolUse Read hook when the lead opens steps/handoff.md and removed by that file at step 5. Means the lead is INSIDE the handoff procedure, which is what ai-dlc-recover.sh routes a post-compact Read on. A tracked copy makes every checkout look mid-handoff."
     },
     {
+      "name": ".step-entry-pending",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-handoff-entry.sh",
+      "ignore": "_bmad-output/.step-entry-pending",
+      "reason": "One-shot record of a lead's whole Read of a step file that declares a step-entry snapshot-update --set current_step_file, written and removed by the PostToolUse Read hook; the next whole step Read compares the snapshot's current_step_file against it."
+    },
+    {
+      "name": ".step-entry-mismatch.log",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-handoff-entry.sh",
+      "ignore": "_bmad-output/.step-entry-mismatch.log",
+      "reason": "Append-only log of a step entered without its current_step_file record: one line per mismatch, written by the PostToolUse Read hook, never read by a gate."
+    },
+    {
       "name": ".handoff-complete",
       "transient": true,
       "producer": "core/hooks/ai-dlc-continue.sh",
@@ -309,8 +337,27 @@
           "name": ".verdict-writes.jsonl",
           "producer": "core/hooks/ai-dlc-gate-remediation-guard.sh",
           "reason": "One row per dispatched agent's verdict write (arm 7a). Read by that hook and by validate-gate-adjudication.sh. Not rotated: rotate-gate-adjudication.sh moves verdicts and their sidecars and leaves this file in place."
+        },
+        {
+          "name": "<nonce>.worklist",
+          "producer": "core/scripts/gate_run.py",
+          "reason": "The gate's judgment checks, one `<check-id> TAB <anchor span> TAB <evidence files>` row each, written by `gate-run.sh arms` for the gate-adjudicator brief and read back by `gate-run.sh close`. Rotates with the verdict it belongs to."
         }
       ]
+    },
+    {
+      "name": "gate-run",
+      "transient": true,
+      "producer": "core/scripts/gate_run.py",
+      "ignore": "_bmad-output/gate-run/",
+      "reason": "Per-run staging for `gate-run.sh arms`: `<run-id>/<check-id>.out` (each script arm's captured output, cited by the GATE-RESULT evidence) and `<nonce>.json` (the arms record `close` reads). TRANSIENT: the gate log is the durable record."
+    },
+    {
+      "name": "retro-artifacts",
+      "transient": true,
+      "producer": "core/scripts/retro-close.sh",
+      "ignore": "_bmad-output/retro-artifacts/",
+      "reason": "The retro step's dispatch inputs: the analyst draft, its gaps carrier and the close-out tables. Scratch, not a log: every conclusion is committed in docs/retro/s<N>/retro.md, so a tracked copy would carry a sprint's raw inputs forever. retro-close.sh finish removes the directory after its last reader."
     },
     {
       "name": ".gate-checkpoint",

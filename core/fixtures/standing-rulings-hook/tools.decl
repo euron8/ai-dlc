@@ -1,0 +1,19 @@
+# Tools run.sh, the hook and the reader invoke.
+awk
+bash
+cat
+cmp
+cp
+cut
+dirname
+env
+grep
+head
+jq
+mkdir
+mktemp
+mv
+rm
+sed
+shasum
+tr

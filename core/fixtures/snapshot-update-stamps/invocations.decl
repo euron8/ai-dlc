@@ -18,15 +18,15 @@
 # Re-measured for BL-963 (IFADDREFUSE, IFADDWRITE, IFADDDUPHDR and the mutant m-noifadd scored on IFADDREFUSE and
 # IFADDWRITE), armed the same way, two counted runs, identical counts: * 409->424, snapshot-update.sh 67->72,
 # validate-artifact-budget.sh 36->38.
-11 *
+12 *
 4 core/scripts/snapshot-update.sh
-4 core/scripts/validate-artifact-budget.sh
+5 core/scripts/validate-artifact-budget.sh
 1 core/hooks/ai-dlc-continue.sh
 0 core/hooks/ai-dlc-recover.sh
 0 core/hooks/ai-dlc-dispatch-guard.sh
 1 core/scripts/validate-mandatory-rules.sh
-77 inproc:core/scripts/snapshot-update.sh
+81 inproc:core/scripts/snapshot-update.sh
 6 inproc:core/hooks/ai-dlc-continue.sh
 4 inproc:core/hooks/ai-dlc-recover.sh
-5 inproc:core/scripts/validate-artifact-budget.sh
+6 inproc:core/scripts/validate-artifact-budget.sh
 4 inproc:core/scripts/validate-mandatory-rules.sh

@@ -164,7 +164,7 @@
 #   carries no parseable line falls through to sprint-status rather than refusing. A value from
 #   the first two is cross-checked against sprint-status when that file carries one. A variant
 #   whose route.md sequence runs no architecture step owes nothing (NOT-OWED, exit 0), the set
-#   read from route.md's variant table (default `.claude/skills/ai-dlc/steps/route.md`), never
+#   read from route.md's variant table (default `.claude/skills/ai-dlc/steps/route-fresh-start.md`), never
 #   listed here. None of the three: the fold is OWED.
 #   EXIT 0 PASS, NOT-OWED, or SKIP-PRE-ADOPTION (the sprint carries no `tool_use_id`, or the
 #          one-shot's id joins no row of a PARTIALLY adopted sprint) -- each prints its own line
@@ -680,7 +680,7 @@ if [ "$MODE" = "fold" ]; then
   fa_resolve_variant "$FA_VARIANT" "$snap" "$sst" || exit 2
   FA_VARIANT="$FA_RV"; FA_VSRC="$FA_RVSRC"
   if [ -n "$FA_VARIANT" ]; then
-    [ -n "$FA_ROUTE" ] || FA_ROUTE=".claude/skills/ai-dlc/steps/route.md"
+    [ -n "$FA_ROUTE" ] || FA_ROUTE=".claude/skills/ai-dlc/steps/route-fresh-start.md"
     [ -r "$FA_ROUTE" ] || { echo "FAIL: the variant needs a readable --route <route.md> (tried ${FA_ROUTE}), the file whose variant table decides whether an architecture step runs." >&2; exit 2; }
     case "$(fa_variant_arch "$FA_ROUTE" "$FA_VARIANT")" in
       no)  echo "NOT-OWED: variant '${FA_VARIANT}' runs no architecture step (route.md variant table, variant from ${FA_VSRC}), so no fold architect is owed."; exit 0 ;;

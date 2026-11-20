@@ -1675,6 +1675,20 @@ BCX="$(adj "$W1" gate-adjudicator-implementation-20261010T230257Z)"; expect_deny
   "15k'''' the 15a world, an implementation nonce glued to a hyphenated prefix (judged)"
 expect_deny "$(adj "$W1" IMPLEMENTATION-20261010T230257Z)" "15k''''' the 15a world, an upper-case implementation nonce (judged)"
 
+# THE NONCE READ SEES THE BRIEF FILE: a gate nonce only inside the `Brief:` file judges the dispatch like a literal one.
+mkdir -p "$W1/_bmad-output/planning-artifacts"
+printf 'gate_nonce: implementation-20261010T230257Z\n' > "$W1/_bmad-output/planning-artifacts/b-nonce-impl.md"
+printf 'gate_nonce: sprint-review-20261011T101010Z\n' > "$W1/_bmad-output/planning-artifacts/b-nonce-sr.md"
+expect_deny "$(raw "$W1" "$(mkjson Agent gate-adjudicator opus | jq -c '.tool_input.prompt += "\nBrief: _bmad-output/planning-artifacts/b-nonce-impl.md"')")" \
+  "15k6 the 15a world, an implementation nonce only inside the Brief: file (judged)"
+expect_quiet "$(raw "$W1" "$(mkjson Agent gate-adjudicator opus | jq -c '.tool_input.prompt += "\nBrief: _bmad-output/planning-artifacts/b-nonce-sr.md"')")" \
+  "15k7 the 15a world, a sprint-review nonce only inside the Brief: file (not judged)"
+printf 'Deliverable: x/y.md\nSee `.claude/team-roles/qa.md` for the reviewer appendix.\n' > "$W1/_bmad-output/planning-artifacts/b-role2.md"
+raw "$W1" "$(mkjson Agent dev sonnet | jq -c '.tool_input.prompt += "\nBrief: _bmad-output/planning-artifacts/b-role2.md"')" >/dev/null
+[ "$(tail -1 "$W1/_bmad-output/spawn-ledger.jsonl" | jq -r '.role' 2>/dev/null)" = dev ] \
+  && ok "15k8 a Brief: file citing a SECOND role file leaves the spawn's own literal role (dev) on its ledger row" \
+  || bad "15k8 the ledger row's role is '$(tail -1 "$W1/_bmad-output/spawn-ledger.jsonl" | jq -r '.role' 2>/dev/null)', expected dev: the role read is not the literal prompt's"
+
 # A REFUSED DISPATCH WRITES NO LEDGER ROW; an allowed one in the same world writes exactly one.
 L0="$(wc -l < "$W1/_bmad-output/spawn-ledger.jsonl" | tr -d ' ')"
 adj "$W1" >/dev/null
@@ -2230,6 +2244,8 @@ dl_same() { # dl_same <text a> <text b> -> SAME | DIFFER, compared byte for byte
   if cmp -s <(printf '%s\n' "$1") <(printf '%s\n' "$2"); then echo SAME; else echo DIFFER; fi
 }
 DL_IFR="$(dirname "$HOOK")/ai-dlc-inflight-row.sh"
+DL_RB=""; for _c in "$REM_ROOT/core/scripts/render-brief.sh" "$REM_ROOT/scripts/ai-dlc/render-brief.sh" "$REM_ROOT/.claude/scripts/ai-dlc/render-brief.sh"; do
+  [ -f "$_c" ] && { DL_RB="$_c"; break; }; done
 DL_FN_G="$(dl_fn "$HOOK")"; DL_FN_I="$(dl_fn "$DL_IFR")"
 # the probe: two copies one byte apart (the sides are asserted to differ first), and a doubled/absent definition
 DL_FN_P="${DL_FN_I/LC_ALL=C awk/LC_ALL=C awx}"
@@ -2241,6 +2257,22 @@ else bad "DELIVERABLE-LINE bind probe FAILED: the byte comparison or the definit
 [ "$(dl_ndef < "$HOOK")" = 1 ] && [ "$(dl_ndef < "$DL_IFR")" = 1 ] \
   && ok "DELIVERABLE-LINE bind: exactly one deliverable_of definition in the guard and one in ai-dlc-inflight-row.sh" \
   || bad "DELIVERABLE-LINE bind: the guard has $(dl_ndef < "$HOOK") deliverable_of definitions and ai-dlc-inflight-row.sh has $(dl_ndef < "$DL_IFR"), expected 1 and 1"
+if [ -n "$DL_RB" ]; then
+  # three copies: the guard, the row writer and render-brief.sh; a fourth anywhere in the hook or script directories fails
+  DL_NDEF_ALL="$(grep -rlE '^deliverable_of\(\) \{' "$(dirname "$HOOK")" "$(dirname "$DL_RB")" 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$(dl_ndef < "$DL_RB")" = 1 ] && [ "$DL_NDEF_ALL" = 3 ] \
+    && ok "DELIVERABLE-LINE bind: render-brief.sh holds one deliverable_of definition and the hook and script directories hold exactly 3 files defining it" \
+    || bad "DELIVERABLE-LINE bind: render-brief.sh has $(dl_ndef < "$DL_RB") definitions and $DL_NDEF_ALL files define deliverable_of, expected 1 and 3"
+  [ -n "$DL_FN_G" ] && [ "$(dl_same "$DL_FN_G" "$(dl_fn "$DL_RB")")" = SAME ] \
+    && ok "DELIVERABLE-LINE bind: render-brief.sh's deliverable_of is byte-identical to the guard's" \
+    || bad "DELIVERABLE-LINE bind: render-brief.sh's deliverable_of DIFFERS from the guard's, so it renders a line the guard reads differently"
+else printf '  SKIP  DELIVERABLE-LINE bind: render-brief.sh is not installed beside the hooks (the subject ships ahead of a consumer pull)\n'; fi
+be_fn() { awk '/^brief_expand\(\) \{/ { f = 1 } f { print } f && /^\}$/ { exit }' "$1"; }
+DL_BE_G="$(be_fn "$HOOK")"; DL_BE_I="$(be_fn "$DL_IFR")"
+[ -n "$DL_BE_G" ] && [ "$(printf '%s\n' "$DL_BE_G" | tail -1)" = "}" ] && [ "$(dl_same "$DL_BE_G" "$DL_BE_I")" = SAME ] \
+  && [ "$(dl_same "$DL_BE_G" "${DL_BE_G/pwd -P/pwd}")" = DIFFER ] && [ "$(grep -c '^brief_expand() {' "$HOOK")" = 1 ] && [ "$(grep -c '^brief_expand() {' "$DL_IFR")" = 1 ] \
+  && ok "BRIEF-EXPAND bind: one brief_expand in the guard and one in ai-dlc-inflight-row.sh, byte-identical, non-empty and closed" \
+  || bad "BRIEF-EXPAND bind: the guard's and the row writer's brief_expand are missing, doubled or DIFFER"
 [ -n "$DL_FN_G" ] && [ -n "$DL_FN_I" ] && [ "$(printf '%s\n' "$DL_FN_G" | tail -1)" = "}" ] && [ "$(printf '%s\n' "$DL_FN_I" | tail -1)" = "}" ] \
   && ok "DELIVERABLE-LINE bind: both extractions are non-empty and end at the closing brace" \
   || bad "DELIVERABLE-LINE bind: an extraction is empty or does not close (guard $(printf '%s' "$DL_FN_G" | wc -c | tr -d ' ') bytes, inflight-row $(printf '%s' "$DL_FN_I" | wc -c | tr -d ' ') bytes)"
@@ -2281,6 +2313,11 @@ printf '%s\n' "$DL_REC_SKILL" > "$WORK/dl-tr-updskill.jsonl"
 printf '%s\n%s\n' "$DL_REC_UPD" "$DL_REC_LEAD" > "$WORK/dl-tr-updlead.jsonl"
 printf '%s\n' "$DL_REC_LEAD" > "$WORK/dl-tr-lead.jsonl"
 DL_MARK='Run `scripts/ai-dlc/wait-for-deliverable.sh --mark _bmad-output/party-mode/s320/dev-1.md implementation dev 1/1 findings=0` when done.'
+DLA_PA="$DLA/_bmad-output/planning-artifacts"; mkdir -p "$DLA_PA"
+printf '# Brief\nDeliverable: x/y.md\n' > "$DLA_PA/b-ok.md"
+printf '# Brief\nno deliverable line here\n' > "$DLA_PA/b-nodl.md"
+printf '# Brief\nDeliverable: x/y.md\nYour operating contract is `.claude/team-roles/dev.md`.\n' > "$DLA_PA/b-role.md"
+printf '# Brief\nDeliverable: x/y.md\n' > "$DLA/_bmad-output/escape.md"
 DL_MARKBAD='Run `scripts/ai-dlc/wait-for-deliverable.sh --mark _bmad-output/party-mode/s320/dev-1.md implementation dev 1/1` when done.'
 dl_base() { mkjson Agent dev sonnet | jq -c '.tool_use_id = "toolu_dl" | .transcript_path = "/nonexistent" | .tool_input.run_in_background = true'; }
 dl_add() { jq -c --arg s "$2" '.tool_input.prompt += $s' <<<"$1"; } # dl_add <json> <text appended to the prompt>
@@ -2316,6 +2353,12 @@ dl_cell() { # dl_cell <guard> <cell> -> "<kind>:<ledger rows after one call on a
     role)     j="$(mkjson Agent ghostrole sonnet | jq -c '.tool_use_id = "toolu_dl" | .transcript_path = "/nonexistent" | .tool_input.run_in_background = true')" ;;
     mark)     j="$(dl_add "$j" $'\n'"$DL_MARK")" ;;
     markbad)  j="$(dl_add "$j" $'\n'"$DL_MARKBAD")" ;;
+    brief)    j="$(dl_add "$j" $'\nBrief: _bmad-output/planning-artifacts/b-ok.md')" ;;
+    briefnodl) j="$(dl_add "$j" $'\nBrief: _bmad-output/planning-artifacts/b-nodl.md')" ;;
+    briefmiss) j="$(dl_add "$j" $'\nBrief: _bmad-output/planning-artifacts/b-absent.md')" ;;
+    briefesc) j="$(dl_add "$j" $'\nBrief: _bmad-output/planning-artifacts/../escape.md')" ;;
+    briefrole) j="$(mkjson Agent - sonnet | jq -c '.tool_use_id = "toolu_dl" | .transcript_path = "/nonexistent" | .tool_input.run_in_background = true')"
+               j="$(dl_add "$j" $'\nBrief: _bmad-output/planning-artifacts/b-role.md')" ;;
   esac
   rm -f "$w/_bmad-output/spawn-ledger.jsonl"
   if [ "$c" = seq ]; then
@@ -2327,8 +2370,8 @@ dl_cell() { # dl_cell <guard> <cell> -> "<kind>:<ledger rows after one call on a
   o="$(dl_run "$g" "$w" "$j")"
   printf '%s:%s' "$(dl_kind "$o")" "$(dl_rows "$w")"
 }
-ALL_DL=nodl,dl,dlmid,indent,bold,nopath,bgabsent,agent,fg,nosnap,noera,updcmd,updskill,updlead,leadtr,role,mark,markbad,seq
-DL_WANT='nodl=dl:0;dl=pass:1;dlmid=pass:1;indent=dl:0;bold=dl:0;nopath=dl:0;bgabsent=dl:0;agent=pass:1;fg=pass:1;nosnap=pass:1;noera=pass:1;updcmd=pass:1;updskill=pass:1;updlead=dl:0;leadtr=dl:0;role=pass:1;mark=pass:1;markbad=dl:0;seq=1-1-2'
+ALL_DL=nodl,dl,dlmid,indent,bold,nopath,bgabsent,agent,fg,nosnap,noera,updcmd,updskill,updlead,leadtr,role,mark,markbad,seq,brief,briefnodl,briefmiss,briefesc,briefrole
+DL_WANT='nodl=dl:0;dl=pass:1;dlmid=pass:1;indent=dl:0;bold=dl:0;nopath=dl:0;bgabsent=dl:0;agent=pass:1;fg=pass:1;nosnap=pass:1;noera=pass:1;updcmd=pass:1;updskill=pass:1;updlead=dl:0;leadtr=dl:0;role=pass:1;mark=pass:1;markbad=dl:0;seq=1-1-2;brief=pass:1;briefnodl=dl:0;briefmiss=dl:0;briefesc=dl:0;briefrole=pass:0'
 DL_LAB() { # DL_LAB <cell> -> what the cell establishes
   case "$1" in
     nodl) echo "a lead dispatch with no Deliverable line is refused by this deny and leaves no ledger row" ;;
@@ -2349,6 +2392,11 @@ DL_LAB() { # DL_LAB <cell> -> what the cell establishes
     role) echo "a role with no readable team-role file: not judged" ;;
     mark) echo "a brief whose one well-formed wait-for-deliverable.sh --mark line yields a mark_file: not this deny" ;;
     markbad) echo "the same mark line without its findings=<n> field yields no mark_file and is refused" ;;
+    brief) echo "a prompt whose only Deliverable line is in the Brief: file under planning-artifacts is not refused and is recorded" ;;
+    briefnodl) echo "a Brief: file with no Deliverable line is still refused" ;;
+    briefmiss) echo "a Brief: path that does not exist is still refused" ;;
+    briefesc) echo "a Brief: path that climbs out of planning-artifacts with .. (the target carries a Deliverable line) is still refused" ;;
+    briefrole) echo "a team-roles line present only in the Brief: file derives NO role: the role-less lead dispatch stays unrecorded (no ledger row)" ;;
     seq) echo "the ledger row count is 1 after an allowed call, still 1 after a refused one, and 2 after the next allowed one" ;;
   esac
 }

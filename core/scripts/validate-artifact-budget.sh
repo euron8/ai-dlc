@@ -164,6 +164,7 @@ GATE_LOG=""
 FAIL_ON=""
 STAMPS_ONLY=""
 PAYLOAD_FILE=""
+MEASURE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -195,6 +196,10 @@ while [ $# -gt 0 ]; do
     # the lines this write carried; see "THE WRITE-TIME MODE" below.
     --stamps-only)    STAMPS_ONLY="${2:-}"; shift 2 ;;
     --payload)        PAYLOAD_FILE="${2:-}"; shift 2 ;;
+    # --measure <file>: print this validator's own token figure for <file> and the snapshot
+    # budget and ceiling, as one line `tokens=N budget=B ceiling=C`; snapshot-update.sh
+    # enforces the ceiling at write from it. Exit 0, or 2 on an unreadable file.
+    --measure)        MEASURE="${2:-}"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -1413,6 +1418,16 @@ env_override() {
   key="AI_DLC_BUDGET_$(printf '%s' "$1" | tr '[:lower:].-' '[:upper:]__')"
   eval "printf '%s' \"\${$key:-}\""
 }
+
+# --measure <file>: the token figure by this validator's tokenizer (bytes / BPT, as the sweep
+# below computes it), with the snapshot budget and ceiling the sweep and Check 15 judge against.
+if [ -n "$MEASURE" ]; then
+  [ -f "$MEASURE" ] && [ -r "$MEASURE" ] || { echo "FAIL: --measure: '$MEASURE' is not a readable file" >&2; exit 2; }
+  _mb="$(printf '%s\n' "$BUDGETS" | grep '^pipeline-snapshot.md|' | cut -d'|' -f2)"
+  _mo="$(env_override pipeline-snapshot.md)"; [ -z "$_mo" ] || _mb="$_mo"
+  printf 'tokens=%s budget=%s ceiling=%s\n' "$(( $(wc -c < "$MEASURE" | tr -d ' ') / BPT ))" "$_mb" "$(( _mb + (_mb * GRACE_PCT / 100) ))"
+  exit 0
+fi
 
 # -----------------------------------------------------------------------------
 # THE EVIDENCE CELL (--check-evidence). gate-validation.md Check 15 runs this.

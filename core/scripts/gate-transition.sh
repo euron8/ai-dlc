@@ -567,13 +567,13 @@ $(tail_of)" "take Check 16 through Gate Failure; then re-run gate-transition.sh 
   for os in "$ROOT/$SLOT"/bug-fix-oneshot-*.md; do
     [ -f "$os" ] || continue
     slug="${os##*/bug-fix-oneshot-}"; slug="${slug%.md}"
-    arm 17 validate-spawn-ledger.sh --fold-architect "$SLOT/fold-architecture-${slug}.md" "$SLOT/bug-fix-oneshot-${slug}.md" --ledger _bmad-output/spawn-ledger.jsonl --route .claude/skills/ai-dlc/steps/route.md
+    arm 17 validate-spawn-ledger.sh --fold-architect "$SLOT/fold-architecture-${slug}.md" "$SLOT/bug-fix-oneshot-${slug}.md" --ledger _bmad-output/spawn-ledger.jsonl --route .claude/skills/ai-dlc/steps/route-fresh-start.md
     if grep -qE "^[[:space:]]*artifact:[[:space:]]*['\"]?([^[:space:]'\"]*/)?${STORY##*/}['\"]?[[:space:]]*$" "$os"; then
       arm 17 validate-provenance-block.sh "$STORY" --require-skill bmad-review
     fi
   done
   if [ -f "$ROOT/$SLOT/bug-fix-oneshot.md" ]; then
-    arm 17 validate-spawn-ledger.sh --fold-architect "$SLOT/fold-architecture.md" "$SLOT/bug-fix-oneshot.md" --ledger _bmad-output/spawn-ledger.jsonl --route .claude/skills/ai-dlc/steps/route.md
+    arm 17 validate-spawn-ledger.sh --fold-architect "$SLOT/fold-architecture.md" "$SLOT/bug-fix-oneshot.md" --ledger _bmad-output/spawn-ledger.jsonl --route .claude/skills/ai-dlc/steps/route-fresh-start.md
   fi
   # Check 22 exit codes (validate-spawn-ledger.sh header "3  NOTHING WAS COMPARED"; gate-validation.md "Exit 3, PRE-LEDGER"):
   # 3 is NOT a FAIL -- nothing was compared, and the lead falls back to the gate log's spawn table. Two causes, each

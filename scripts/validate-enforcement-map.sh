@@ -6072,7 +6072,7 @@ fi
 # fixed point problem. A separate data file under scripts/ would be a second file to package,
 # classify and keep in step with this arm; inline, a re-stamp is one reviewed line in the
 # file that reads it. Format, one line per carried rule: `<rule> <body-sha256> <carrier-sha256>`.
-I79_CARRIER_STAMPS='23 055c550adaf45f3ded98f1e3413363b57e286335d3e3a4610b56b3297bf14d09 f852b40c4286a946021eb21ab46faa24a8781ed71c08a448be306df6b3208e8b'
+I79_CARRIER_STAMPS='23 313859a41d54220b0e22a544454bad75124e60956e87ce05a452be01d5c08e32 f852b40c4286a946021eb21ab46faa24a8781ed71c08a448be306df6b3208e8b'
 
 # The rule-body extractor, as DATA, so the self-probe and the corpus run the same program.
 # A FENCED `## ` LINE IS A CODE SAMPLE, NOT A SECTION TERMINATOR, and reading it as one
@@ -6197,7 +6197,14 @@ else
                 case "$i79_dist" in
                   core/rules/*.md)
                     i79_carried="$i79_carried $i79_n"; i79_carried_n=$(( i79_carried_n + 1 ))
-                    i79_strip_carrier "$i79_body"
+                    # A rule whose body moved to rule-bodies/ is hashed with that file, so an edit
+                    # to the body still drifts the pair.
+                    i79_hashed="$i79_body"
+                    if [ -f "$REPO_ROOT/core/skills/ai-dlc/rule-bodies/rule-${i79_n}.md" ]; then
+                      i79_hashed="$i79_body
+$(cat "$REPO_ROOT/core/skills/ai-dlc/rule-bodies/rule-${i79_n}.md")"
+                    fi
+                    i79_strip_carrier "$i79_hashed"
                     if ! i79_pair "$I79_NC" "$REPO_ROOT/$i79_dist"; then
                       err "I79 Rule $i79_n: could not hash the rule body and '$i79_dist' (no shasum -a 256 or sha256sum), so the carrier binding was not checked."
                     else
@@ -7839,7 +7846,7 @@ fi
 # vocabulary-invariant: I80
 # vocabulary-owner: core/skills/ai-dlc/SKILL.md
 # vocabulary-extract: intensity-table
-# vocabulary-readers: core/skills/ai-dlc/steps/route.md, core/skills/ai-dlc/steps/gate-validation.md
+# vocabulary-readers: core/skills/ai-dlc/steps/route-fresh-start.md, core/skills/ai-dlc/steps/gate-validation.md
 # I19 binds the intensity table's MINIMUMS column: it forbids a second copy of what an
 # intensity requires. It does not bind the SET. So the same row kept dropping out of the
 # other half — route.md, the file that ASSIGNS validation_intensity, listed three of four
@@ -11152,7 +11159,7 @@ fi
 # vocabulary-invariant: I110
 # vocabulary-owner: core/scripts/validate-artifact-budget.sh
 # vocabulary-extract: inflight-statuses
-# vocabulary-readers: core/skills/ai-dlc/steps/route.md, core/skills/ai-dlc/steps/gate-validation.md, core/skills/ai-dlc/steps/_gate-procedures.md, core/skills/ai-dlc/steps/implementation.md, core/skills/ai-dlc/steps/handoff.md, core/skills/ai-dlc/SKILL.md, core/hooks/ai-dlc-continue.sh, core/hooks/ai-dlc-recover.sh, core/scripts/snapshot-update.sh
+# vocabulary-readers: core/skills/ai-dlc/steps/route.md, core/skills/ai-dlc/steps/route-fresh-start.md, core/skills/ai-dlc/steps/gate-validation.md, core/skills/ai-dlc/steps/_gate-procedures.md, core/skills/ai-dlc/steps/implementation.md, core/skills/ai-dlc/steps/handoff.md, core/skills/ai-dlc/SKILL.md, core/hooks/ai-dlc-continue.sh, core/hooks/ai-dlc-recover.sh, core/scripts/snapshot-update.sh
 #
 # WHAT IT BINDS. The `status` column of the snapshot's `## In-Flight Teammates` section is a
 # closed set of three, and `check_inflight_status` in validate-artifact-budget.sh is the only
@@ -11234,7 +11241,7 @@ fi
 # The reduction was taken before the arm shipped, which is the order the fork budget above
 # exists to force.
 i110_owner="$REPO_ROOT/core/scripts/validate-artifact-budget.sh"
-i110_route="$REPO_ROOT/core/skills/ai-dlc/steps/route.md"
+i110_route="$REPO_ROOT/core/skills/ai-dlc/steps/route-fresh-start.md"
 
 # ONE token grammar, called by the probe and by the corpus. A second copy here would be this
 # arm disagreeing with itself about what a taught token looks like, which is the defect one
@@ -13349,6 +13356,25 @@ i129_check() { # i129_check {<label> <renderer> <merge> <owner> <partition> <qa.
 $i129_out
 code-reviewer.md's template \`Class:\` line declares it and qa.md's \`## Finding Class\` section carries the same line; merge-review-shards.sh lifts it from the gate's role file for BOTH gates (one unconditional CLASS_SET line, no gate condition on the lift or on class_gate) with a CLASS_SET_AWK line byte-identical to scripts/render-vocabulary-index.sh's; partition-review-diff.sh's ROUTE_CLASSES must name only declared members. Change the owner, then make qa.md's set equal, the two CLASS_SET_AWK lines equal and ROUTE_CLASSES a subset."
   fi
+
+# --- I130: every core/skills/ai-dlc/rule-bodies/rule-N.md is named by exactly one READ AND FOLLOW pointer sentence in SKILL.md ---
+# The other direction (a pointer names an existing file) is core/scripts/audit-rule-files.sh's tier-1
+# relocation-pointer resolution, run at pre-push with --fail-on=deterministic; not restated here.
+# Keyed on the pointer sentence (`READ AND FOLLOW` + backticked rule-bodies path), not a bare filename.
+# Control: the pointer count must be non-zero, or the scan saw nothing.
+i130_skill="$REPO_ROOT/core/skills/ai-dlc/SKILL.md"
+i130_dir="$REPO_ROOT/core/skills/ai-dlc/rule-bodies"
+i130_ptrs="$(grep -o 'READ AND FOLLOW `rule-bodies/rule-[0-9][0-9]*\.md`' "$i130_skill" | sed 's/^.*`rule-bodies\///; s/`$//')"
+if [ -z "$i130_ptrs" ]; then
+  err "I130 found no 'READ AND FOLLOW \`rule-bodies/rule-N.md\`' pointer sentence in SKILL.md; the scan saw nothing, so a zero here proves nothing."
+else
+  for i130_f in "$i130_dir"/rule-*.md; do
+    [ -f "$i130_f" ] || { err "I130 rule-bodies/ holds no rule-*.md file; the glob matched nothing."; break; }
+    i130_b="${i130_f##*/}"
+    i130_n="$(printf '%s\n' "$i130_ptrs" | grep -cx "$i130_b")" || i130_n=0
+    [ "$i130_n" -eq 1 ] || err "I130 rule-bodies/$i130_b is named by $i130_n READ AND FOLLOW pointer sentence(s) in SKILL.md, not exactly one: an orphan body is unread, a doubled one is two stubs for one rule."
+  done
+fi
 
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then

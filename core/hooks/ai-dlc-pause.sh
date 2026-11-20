@@ -249,11 +249,37 @@ treats it as an archive (Rule 25(a)): growth is free, and nothing may trim it.
 EOF
     fi
     REQ_SHA=$(printf '%s' "$REQ_BODY" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)
+    # PENDING DECISION (route A). Exactly one open DECIDED_AUTONOMOUSLY recommendation entry in
+    # docs/escalations/pending.md names a DP token: the reply is the answer to it, and the entry
+    # below records which one. None or several records nothing. The pause flag is untouched.
+    REQ_DP=""
+    if [ -r "${PROJECT_DIR}/docs/escalations/pending.md" ]; then
+      _dp_ws=$' \t\r'; _dp_re='^DP-[0-9]+-[0-9]+$'; _dp_win=$'**Veto window:** open \342\200\224 '
+      _dp_tok=""; _dp_st=0; _dp_src=0; _dp_n=0; _dp_last=""; _dp_end=0
+      while :; do
+        IFS= read -r _dp_l || { [ -n "$_dp_l" ] || _dp_end=1; }
+        if [ "$_dp_end" = 1 ] || [[ $_dp_l == '## '* ]]; then
+          if [ -n "$_dp_tok" ] && [ "$_dp_st" = 1 ] && [ "$_dp_src" = 1 ]; then _dp_n=$((_dp_n + 1)); _dp_last="$_dp_tok"; fi
+          _dp_tok=""; _dp_st=0; _dp_src=0
+          [ "$_dp_end" = 1 ] && break
+          continue
+        fi
+        _dp_v="${_dp_l%"${_dp_l##*[!$_dp_ws]}"}"
+        [ "$_dp_v" = '**Status:** DECIDED_AUTONOMOUSLY' ] && _dp_st=1
+        [[ $_dp_v == '**Decision/Question:** source: recommendation'* ]] && _dp_src=1
+        if [[ $_dp_v == "${_dp_win}DP-"* ]]; then
+          _dp_t="${_dp_v:${#_dp_win}}"
+          [[ $_dp_t =~ $_dp_re ]] && _dp_tok="$_dp_t"
+        fi
+      done < "${PROJECT_DIR}/docs/escalations/pending.md" 2>/dev/null
+      [ "$_dp_n" = 1 ] && REQ_DP="$_dp_last"
+    fi
     {
       echo "## ${TIMESTAMP} -- ${REQ_COMMAND}"
       echo "- Session: ${SESSION_ID}"
       echo "- Bytes: $(printf '%s' "$REQ_BODY" | wc -c | tr -d '[:space:]')"
       echo "- SHA256: ${REQ_SHA}"
+      if [ -n "$REQ_DP" ]; then echo "- Pending decision: ${REQ_DP}"; fi
       echo ""
       echo '```text'
       printf '%s\n' "$REQ_BODY"

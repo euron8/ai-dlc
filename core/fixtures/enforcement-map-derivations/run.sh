@@ -728,13 +728,13 @@ A14_i79_gap_count_is_reported() {
 # emitting fails them rather than satisfying them.
 #
 # ONE LINE IN EACH SUBJECT, AND THE ANCHOR IS A LINE ONLY THAT SUBJECT CARRIES. Rule 23(b)'s
-# heading line and Rule 24's first paragraph line each occur once in SKILL.md; `edit` refuses
+# heading line occurs once in rule-bodies/rule-23.md (the body moved out of SKILL.md) and Rule 24's first paragraph line once in SKILL.md; `edit` refuses
 # a program that matched nothing, so an anchor that drifts is FIXTURE BROKEN, not a pass.
 
 # (a) Rule 23's body moves under an unchanged carrier -> exactly one finding, naming the body.
 A43_i79_rule_body_drift_is_reported() {
   fresh_t
-  if edit "$t/$SKILL_REL" \
+  if edit "$t/core/skills/ai-dlc/rule-bodies/rule-23.md" \
         '/^\*\*\(b\) Sliced re-read of large step files\.\*\* / && !d { print $0 " A clause the carrier does not carry."; d=1; next } { print }'; then
     assert_fires_n "I79: an edit to Rule 23's body under an unchanged carrier is REPORTED as the rule body moving" \
                    "the rule body moved" 1

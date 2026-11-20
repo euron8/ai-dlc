@@ -145,3 +145,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I126 | the ai-dlc session-marker scan is ONE line, in every hook that asks the question |
 | I128 | Check B's pause-write allow list, updater-marker ERE and Explore role ERE are the pause hook's, byte for byte |
 | I129 | the finding-class set is ONE set across code-reviewer.md, qa.md, the merge's grammar (both gates) and the record-only route |
+| I130 | every core/skills/ai-dlc/rule-bodies/rule-N.md is named by exactly one READ AND FOLLOW pointer sentence in SKILL.md |

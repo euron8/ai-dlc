@@ -1,0 +1,29 @@
+# gate_type: retro
+# <check-id> TAB <kind> TAB <arm> TAB <count> [TAB skip=<tok>[,<tok>]]. One row per enforcement-map id
+# rendered for this gate type (universal expanded); validate-gate-manifest.sh binds this file to that set.
+# arm `@close` = run by `gate-run.sh close`; lead = recorded by the lead or by close; judgment = adjudicator.
+1	judgment	-	-
+2	judgment	-	-
+2a	script	validate-escalation-resolution.sh --escalations docs/escalations/pending.md --sprint {SPRINT} --transcript-dir {TRANSCRIPT_DIR}	legacy	skip=empty
+3	judgment	-	-
+4	judgment	-	-
+7	judgment	-	-
+12	lead	-	-
+13	lead	-	-
+14	lead	-	-
+15	lead	-	-
+16	judgment	-	-
+25	script	validate-steering-budget.sh --transcript {TRANSCRIPT} --count	legacy	skip=rc1
+26	script	@close	-
+H1	lead	-	-
+H2	script	validate-h2-attestation.sh --verify --sprint {SPRINT}	legacy
+failure	lead	-	-
+8	judgment	-	-
+9	judgment	-	-
+17	script	validate-retro-evidence.sh ai-dlc/retro/sprint-{SPRINT} {SPRINT}	legacy
+core-layer-immutability	judgment	-	-
+retro-2	script	retro-gate.sh --sprint {SPRINT}	native	skip=validator-absent,examined-nothing
+retro-3	multi	@retro-2	-	skip=validator-absent,examined-nothing
+retro-4	multi	@retro-2	-	skip=validator-absent,examined-nothing
+retro-5	multi	@retro-2	-	skip=validator-absent,examined-nothing
+retro-artifact-paths	multi	@retro-2	-	skip=validator-absent,examined-nothing

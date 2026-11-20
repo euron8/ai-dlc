@@ -114,8 +114,10 @@
 # as before. While that file exists and the read marker does not, an `Agent`, `Task`,
 # `TaskCreate`, `Write`, `Edit`, `MultiEdit` or `NotebookEdit` call FROM THE LEAD is judged on the lead's
 # transcript: if a Read of `skills/ai-dlc/postcompact-digest.md` follows the last
-# `compact_boundary` and no advisor attempt follows that Read, it is DENIED. Every other tool
-# is untouched -- the wait-beat a teammate row requires is a Bash call, and R puts it BEFORE the
+# `compact_boundary` and no advisor attempt follows that Read, it is DENIED. A `Bash` call is held
+# only when one of its segments runs `gate-run.sh` with an `arms` or `close` word, or any
+# `snapshot-update.sh` op (`-h`/`--help` excepted); every other tool and every other Bash call is
+# untouched -- the wait-beat a teammate row requires is a Bash call, and R puts it BEFORE the
 # advisor call. An advisor attempt after the digest Read clears the stage and deletes the file.
 #
 # THE DETECTION IS THE ADVISOR GATE'S, loaded from the sibling library both gates source,
@@ -254,10 +256,42 @@ owed_get() { sed -n "s/^$1=//p" "$OWED" 2>/dev/null | head -1; }
 if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
   command -v jq >/dev/null 2>&1 || exit 0
   R_IN="$(cat 2>/dev/null || true)"
-  R_TOOL=""; R_AID=""; R_SID=""; R_TP=""; R_TUID=""
-  R_P="$(printf '%s' "$R_IN" | jq -r '@sh "R_TOOL=\((.tool_name // "") | tostring) R_AID=\((.agent_id // "") | tostring) R_SID=\((.session_id // "") | tostring) R_TP=\((.transcript_path // "") | tostring) R_TUID=\((.tool_use_id // "") | tostring)"' 2>/dev/null)" || exit 0
+  R_TOOL=""; R_AID=""; R_SID=""; R_TP=""; R_TUID=""; R_CMD=""
+  R_P="$(printf '%s' "$R_IN" | jq -r '@sh "R_TOOL=\((.tool_name // "") | tostring) R_AID=\((.agent_id // "") | tostring) R_SID=\((.session_id // "") | tostring) R_TP=\((.transcript_path // "") | tostring) R_TUID=\((.tool_use_id // "") | tostring) R_CMD=\((.tool_input.command // "") | tostring)"' 2>/dev/null)" || exit 0
   eval "$R_P"
-  case "$R_TOOL" in Agent|Task|TaskCreate|Write|Edit|MultiEdit|NotebookEdit) : ;; *) exit 0 ;; esac
+  # A BASH CALL IS HELD ONLY WHEN A SEGMENT RUNS `gate-run.sh arms|close` OR A `snapshot-update.sh` OP
+  # (every op writes the snapshot; only -h/--help does not). The segment's PROGRAM is its first word
+  # after VAR=value prefixes and a shell/env wrapper, so `echo "gate-run.sh close"` and a grep for the
+  # name are not held, and neither is the wait-beat. Quotes are blanked from the command first so
+  # `bash -c 'gate-run.sh close'` is judged by what it runs.
+  r_bash_held_scan() {
+    local _c _s _w _first _prog _rest _x
+    _c="$(printf '%s' "$R_CMD" | tr -d "'\"" | tr ';&|' '\n\n\n')"
+    while IFS= read -r _s; do
+      _first=1; _prog=""; _rest=""
+      for _w in $_s; do
+        if [ -z "$_prog" ]; then
+          case "$_w" in
+            [A-Za-z_]*=*|bash|sh|env|exec|command|-*) continue ;;
+          esac
+          _prog="${_w##*/}"
+        else
+          _rest="$_rest $_w"
+        fi
+      done
+      case "$_prog" in
+        gate-run.sh) for _x in $_rest; do case "$_x" in arms|close) return 0 ;; esac; done ;;
+        snapshot-update.sh) case "$_rest" in " -h"|" --help"|" -h "*|" --help "*) : ;; *) return 0 ;; esac ;;
+      esac
+    done <<< "$_c"
+    return 1
+  }
+  r_bash_held() { local _rc; set -f; r_bash_held_scan; _rc=$?; set +f; return "$_rc"; }
+  case "$R_TOOL" in
+    Agent|Task|TaskCreate|Write|Edit|MultiEdit|NotebookEdit) : ;;
+    Bash) r_bash_held || exit 0 ;;
+    *) exit 0 ;;
+  esac
   [ -z "$R_AID" ] || exit 0
   R_OSID="$(sed -n 's/^session_id=//p' "$OWED" 2>/dev/null | head -1)"
   if [ -n "$R_OSID" ] && [ -n "$R_SID" ] && [ "$R_OSID" != "$R_SID" ]; then
@@ -589,6 +623,27 @@ SNAP_ID="$(fid "$SNAP_ABS")" || exit 0
 STEP_ID="$(fid "$STEP_ABS")" || exit 0
 SNAP_N="$(nlines "$SNAP_ABS")"; STEP_N="$(nlines "$STEP_ABS")"
 
+# THE SNAPSHOT SLICE (written by ai-dlc-recover.sh): a Read of `.recover-snapshot-slice.md`, the
+# snapshot without `## Recent Activity`, whole and in one call, is credited as snapshot COVERAGE
+# when the id file still names this snapshot's size-mtime and the slice's own size. A missing,
+# oversized or stale slice credits nothing and the full-read mandate stands. It feeds SNAP_COV only:
+# satisfaction exits through the SATISFIED block below and needs a Read of the step file.
+SLICE_ABS="$(norm "${STATE_DIR}/.recover-snapshot-slice.md")"
+ON_SLICE=0; SLICE_OK=0
+if [ "$IS_READ" = 1 ] && [ "$FABS" = "$SLICE_ABS" ]; then
+  ON_SLICE=1
+  read -r _sl_id _sl_sz < "${STATE_DIR}/.recover-snapshot-slice.id" 2>/dev/null || { _sl_id=""; _sl_sz=""; }
+  _sl_now="$(wc -c < "$SLICE_ABS" 2>/dev/null)" || _sl_now=""; _sl_now="${_sl_now//[[:space:]]/}"
+  if [ -n "$_sl_id" ] && [ "$_sl_id" = "$SNAP_ID" ] && [ -n "$_sl_now" ] && [ "$_sl_now" = "$_sl_sz" ] \
+     && [ "$_sl_now" -le "$CHUNK_CAP" ] 2>/dev/null; then
+    _sl_n="$(nlines "$SLICE_ABS")"
+    _sl_whole=1
+    if [ "$HAS_OFF" = 1 ]; then isint "$OFFSET" && [ "$((10#$OFFSET))" -eq 1 ] || _sl_whole=0; fi
+    if [ "$HAS_LIM" = 1 ]; then isint "$LIMIT" && [ "$((10#$LIMIT))" -ge "$_sl_n" ] || _sl_whole=0; fi
+    [ "$_sl_whole" = 1 ] && SLICE_OK=1
+  fi
+fi
+
 # AN UNBOUNDED READ OF A MANDATED FILE IS REFUSED AT ANY SIZE, because the context-mode plugin
 # replaces a large unbounded Read result with a search pointer, so such a Read can load nothing. The
 # snapshot, the step file and the digest are all refused unbounded, with no size test, so the rule
@@ -638,6 +693,8 @@ if [ "$IS_READ" = 1 ] && [ "$OVER" = 0 ] && [ $((ON_SNAP + ON_STEP)) -gt 0 ]; th
     if [ "$_ok" = 1 ] && [ "$_e" -ge "$_a" ]; then credit "$_role" "$_id" "$_a" "$_e"; fi
   done
 fi
+# A VALID WHOLE SLICE READ credits the snapshot's whole line range (ON_SLICE and SLICE_OK above).
+if [ "$SLICE_OK" = 1 ]; then credit snap "$SNAP_ID" 1 "$SNAP_N"; fi
 
 # STAGE AND SATISFACTION ARE RE-DERIVED FROM COVERAGE ON EVERY CALL. The snapshot covered means stage
 # `step`, whichever call this is; the step file covered at stage `step` is satisfaction, taken only
@@ -699,13 +756,17 @@ case "$STAGE" in
     # THE DIGEST READ IS ALLOWED WITHOUT CREDIT AND WITHOUT ADVANCING (BL-658): the injected block
     # asks for it, and a lead that issues the Reads in parallel can have this call's hook run first.
     [ "$ON_DIG" = 1 ] && exit 0
+    # THE SLICE READ IS ALLOWED, credited only when valid (SLICE_OK above), never satisfying.
+    [ "$ON_SLICE" = 1 ] && exit 0
     # A STEP READ AT STAGE `snapshot` IS ALLOWED AND CREDITED, NEVER SATISFYING (BL-687): a lead that
     # issues the snapshot and step Reads in parallel can have this call's hook run before the
     # snapshot is covered. EXCEPT handoff.md, which stays denied, chunks included:
     # `ai-dlc-handoff-entry.sh` arms `.handoff-in-progress` on a Read of it that no breadcrumb marks
     # as compelled, and a call at this stage writes none.
     if [ "$ON_STEP" = 1 ] && [ "$IS_HO" = 0 ]; then exit 0; fi
-    deny "AI/DLC post-compact recovery: your FIRST tool call must be \`Read ${SNAP_REL}\` in full. This conversation was compacted and the summary is not the authoritative pipeline state. Next chunk: \`$(read_cmd "$SNAP_REL" "$SNAP_ABS" "$SNAP_NX")\`." \
+    _slh=""
+    [ -f "$SLICE_ABS" ] && [ -f "${STATE_DIR}/.recover-snapshot-slice.id" ] && _slh=" The snapshot without its Recent Activity section is written to \`${SLICE_ABS#"${PROJECT_DIR}"/}\`; one Read of the whole file covers the snapshot instead (a stale copy credits nothing)."
+    deny "AI/DLC post-compact recovery: your FIRST tool call must be \`Read ${SNAP_REL}\` in full. This conversation was compacted and the summary is not the authoritative pipeline state. Next chunk: \`$(read_cmd "$SNAP_REL" "$SNAP_ABS" "$SNAP_NX")\`.${_slh}" \
 "The snapshot is a verbatim-load file and the Read is the attention interrupt that
 defeats reconstructing state from the summary. Read it with the native Read tool,
 in consecutive offset/limit chunks of at most ${CHUNK_CAP} bytes covering line 1 to
@@ -763,6 +824,7 @@ to weigh."
     [ "$ON_SNAP" = 1 ] && exit 0
     # The digest Read: allowed without credit, as in the snapshot arm (BL-658).
     [ "$ON_DIG" = 1 ] && exit 0
+    [ "$ON_SLICE" = 1 ] && exit 0   # the slice Read that covered the snapshot, or a re-read of it
     # A COVERED STEP FILE IS NEVER NAMED PAST ITS END: the deny names the last chunk, and the Read
     # of it satisfies.
     if [ "$STEP_COV" = 1 ]; then _sn=0; else _sn="$STEP_NX"; fi

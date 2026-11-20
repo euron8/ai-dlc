@@ -14,6 +14,8 @@ Each remedial dispatch is one repair between two smoke or validation runs: Rule 
 
 ## EXECUTION SEQUENCE
 
+**Step entry.** The first action of this step, before any other write, is `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file deploy-validate.md 'Pipeline Position'` (the same write `bash scripts/ai-dlc/deploy-validate-run.sh enter` makes). The `scripts/ai-dlc/deploy-validate-run.sh` subcommands named below carry the mechanical parts of this step; the lead's own work is four judgments: red-smoke triage and fix dispatch, the post-activation reads after any live mutation, §4b predicate discharge or re-deferral, and the checkpoint's `### What Was Built` and `### Decisions for You`.
+
 ### 1. Pre-Deployment Check
 
 Verify all sprint stories have passed all three gates (code review, QA,
@@ -33,15 +35,15 @@ Check 5 of `gate-validation.md` does; neither is a pass. The flag keys on
 REPORT, and writing that field remains the closing writer's duty.
 
 **Sprint-overall PR pre-staging verification.** Per `sprint-review.md`
-"Sprint-Overall PR Incremental Pre-Staging" mandate, verify that the
-sprint-overall PR was assembled incrementally throughout the sprint,
-not post-hoc at sprint-close. Audit: carry-over candidates and
-partial-close accounting MUST appear in
-`_bmad-output/implementation-artifacts/s<N>/*.md` files
-committed during the sprint, not added in the final sprint-overall
-commit. Final sprint-overall PR assembly MUST be merge + diff check
-only, not composition. This rule applies UNIVERSALLY to all
-sprint-overall PRs, not gated on anchor count or story count.
+"Sprint-Overall PR Incremental Pre-Staging" mandate, the sprint-overall PR is
+assembled incrementally throughout the sprint, not post-hoc at sprint-close:
+carry-over candidates and partial-close accounting MUST appear in
+`_bmad-output/implementation-artifacts/s<N>/*.md` files committed during the
+sprint, not added in the final sprint-overall commit, and final assembly is a
+merge and diff check only. `bash scripts/ai-dlc/deploy-validate-run.sh precheck <N>`
+runs the `check-stories` call above and this audit, and prints `PASS prestaging` or
+`FAIL prestaging` with the commit counts; a `FAIL` is a finding for the gate log. This
+rule applies UNIVERSALLY to all sprint-overall PRs.
 
 ### 2. Deploy
 
@@ -78,24 +80,7 @@ the trunk, each sha in full:
 
 ```bash
 # deploy-validate Step 2: record the sprint-PR merge
-REC="${AI_DLC_STATE_DIR:-_bmad-output}/implementation-artifacts/s<N>/sprint-pr-merge.txt"
-ROW='<pr-number> <pr-head> <squash>'
-cd "$(git rev-parse --show-toplevel)" && git fetch -q origin main
-read -r R_N R_H R_M <<<"$ROW"
-if ! grep -qxE '[0-9]+ [0-9a-f]{40} [0-9a-f]{40}' <<<"$ROW"; then
-  echo "RECORD: HARD_BLOCK malformed — want one line: PR number, 40-hex PR head, 40-hex squash commit"
-elif ! git merge-base --is-ancestor "$R_M" origin/main 2>/dev/null; then
-  echo "RECORD: HARD_BLOCK squash — $R_M is not on origin/main"
-elif ! git cat-file -e "${R_H}^{commit}" 2>/dev/null; then
-  echo "RECORD: HARD_BLOCK head — PR head $R_H is not a local commit"
-elif [ "$(git show "HEAD:$REC" 2>/dev/null)" = "$ROW" ]; then
-  echo "RECORD: PR #$R_N head $R_H squash $R_M already committed at $REC"
-elif mkdir -p "$(dirname "$REC")" && printf '%s\n' "$ROW" > "$REC" && git add -f -- "$REC" \
-    && git commit -q -m "deploy-validate: sprint-merge record, PR #$R_N squash $R_M" -- "$REC"; then
-  echo "RECORD: PR #$R_N head $R_H squash $R_M committed at $REC"
-else
-  echo "RECORD: HARD_BLOCK write — $REC was not committed"
-fi
+bash scripts/ai-dlc/deploy-validate-run.sh record-merge <N> <pr-number> <pr-head> <squash>
 ```
 
 A `RECORD: HARD_BLOCK` line STOPs deploy-validate: correct the values and re-run the
@@ -173,6 +158,8 @@ just-built artifact is the one actually running before smoke tests run.
 does not vacuously pass: assert freshness on the rollout/publish
 timestamp instead — it MUST be newer than the sprint merge — and record
 in the gate log that no digest was available.
+
+For each changed unit run `bash scripts/ai-dlc/deploy-validate-run.sh freshness <unit> <built-digest> <running-digest> <rollout-epoch> <merge-epoch>` with the digest read by `{running_digest_command}`; it prints `PASS freshness` only when the digests are equal and the rollout is after the merge, and its `FAIL freshness` line is the gate's FAIL.
 
 **Freshness MUST be asserted on the running-artifact CONTENT DIGEST (or,
 in the fallback, the rollout timestamp), never on a re-pointable
@@ -268,6 +255,8 @@ one gate log entry per smoke run, one smoke run per live mutation, and
 a harness that prints no per-test ids forces the lead to capture them. Removal condition: retire once the smoke harness emits the
 first-run / retry split as structured output that a script reads into
 the gate log.
+
+**The four fields are written from the run's junit XML.** `bash scripts/ai-dlc/deploy-validate-run.sh smoke <N> <first-run-junit.xml> [<retry-junit.xml>] [--no-action] [--attribution <text>]` writes `smoke_run_evidence`'s `first_run_failures`, `transient_failures_cleared_on_retry`, `persistent_failures` and `per_action_attribution` to `_bmad-output/implementation-artifacts/s<N>/smoke-record.txt` and prints them. A first-run failure is transient only when the retry junit shows it passing and `--no-action` is passed, which asserts that the lead acted in no way between the runs; every other failure is written as persistent. It exits 1 while any persistent failure remains, which is the red verdict that enters the loop below. Copy the printed fields into the gate-log entry.
 
 **Smoke tests MUST pass.** If any smoke test fails:
 1. Do NOT proceed to the Production Validation Checkpoint.
@@ -386,8 +375,10 @@ function.
 - Attempts present with zero successes, or expected activity
   absent → FAIL. HARD_BLOCK: do NOT present the PVC; root-cause
   first.
-- Zero expected activity in the window (quiet ≠ broken) → PASS;
-  record the reasoning.
+- Zero expected activity in the window → NOT_EVALUATED, never PASS.
+  Inject or trigger a controlled event on the changed path and read its
+  record; PASS needs that event. `bash scripts/ai-dlc/deploy-validate-run.sh quiet <attempts> <event-id|none>`
+  prints the verdict and exits 1 on `none`.
 
 **Config-gated feature activation check.** For every requirement
 whose behavior depends on a configuration or feature-flag value, the
@@ -423,6 +414,8 @@ Capture probe output verbatim in the gate log under
 without it FAILS the gate.
 
 ### 4. Visual Verification (UI Sprints — Evidence Required)
+
+Visual confirmation runs inside the §3 browser smoke: the `playwright` run with `--trace on` covers every new or modified UI surface, and its `.zip` trace path is the evidence this section's last item names. The operator is asked to confirm visually only when the sprint has no automated browser surface, and that confirmation is recorded as `USER-CONFIRMED`.
 
 If `is_ui_epic == true`:
 - Fetch deployed application endpoints
@@ -502,6 +495,8 @@ Check each literal the predicate names against the DEPLOYED sha; a pinned fence 
 A literal the deployed sha does not carry: correct the predicate against it
 and record the correction under `deferred_ac_discharge` as `old -> new`, or
 re-defer the AC by item 2 above. Never a silent substitution.
+
+`bash scripts/ai-dlc/deploy-validate-run.sh literals <deployed_sha> <literal>...` prints `PASS literal` or `FAIL literal` per literal, `git grep -F` at the deployed sha, and exits 1 on any `FAIL`. The predicate runs and the discharge or re-deferral stay the lead's.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: an AC deferred to
 "verify after deploy" that no step ever re-checks, so the sprint closes
@@ -586,6 +581,8 @@ before proceeding to Sprint 2."]
 [If single sprint: "Sprint complete. Retro will run next."]
 ```
 
+**The checkpoint is rendered from records.** `bash scripts/ai-dlc/deploy-validate-run.sh pvc <N>` prints the checkpoint skeleton: the smoke fields from `smoke-record.txt`, the fix-forward enumeration and count after the sprint-PR squash, the escalation counts, and one Locked-Requirement Coverage line per LOCKED_REQUIREMENTS bullet. The lead writes `### What Was Built` and `### Decisions for You`, marks each coverage line by the rules below, records the cluster exclusions, and presents the result.
+
 **Plain language in the checkpoint.** `SKILL.md` Rule 11(a)'s
 plain-language duty binds every line of this checkpoint: every id and
 check number carries a plain-language clause saying what it is, and a
@@ -614,6 +611,14 @@ deployment; and operator-directed reverts of a DECLINED deliverable,
 where the whole revert-plus-cleanup event counts as zero. A revert of a
 deliverable that passed every gate and then regressed in production is a
 cluster member regardless of who approved the revert.
+
+**A fix-forward PR's push and merge are not operator asks.** It is pushed
+from a clean worktree at its own tip,
+merged when its checks are green, and reported under `### For Your
+Information` in this section. An approval the operator already gave for a
+fix is not asked again. This does not touch the sprint PR's merge approval
+or the destructive-operation authorization, and a consumer rule that names
+a fix PR's merge as an approval seam still binds.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a cascade of
 fix-forward PRs after deploy, each individually small and green, which
@@ -717,6 +722,8 @@ pause (b)) and are not each put by `AskUserQuestion`. An item the
 operator answers by reporting an act follows Rule 11(a)'s attested-act
 paragraph.
 
+**Decisions that sprint review deferred.** Every operator decision `sprint-review.md` defers to this step, except a scope decision, is an item under `### Decisions for You`, in the shape above. The source is the open `OPERATOR_DECISION` entries (`**Status:** OPERATOR_DECISION`) in `docs/escalations/pending.md`, which `sprint-review.md` writes; each open entry becomes one item.
+
 **Minimum mechanism (Rule 26(c)).** Failure caught: a checkpoint section
 listing open items in place of decisions, so the operator has to ask what
 each one wants of them and the validation costs a round trip.
@@ -751,13 +758,11 @@ After human validates:
   checkpoint re-presentation stay on the lead.
 
 - If **multi-sprint and more sprints remain:** Update sprint-status.yaml,
-  then route the next sprint's stories through validation before
-  implementation. The stories were created during initial planning but
-  MUST be validated before each sprint begins — context from the
-  previous sprint's implementation may surface issues that affect
-  upcoming stories.
-
-  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review-next.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
+  then run `bash scripts/ai-dlc/deploy-validate-run.sh route next`, which writes
+  `snapshot-update.sh --set current_step_file implementation.md 'Pipeline Position'`
+  and `--set last_completed_step_file deploy-validate.md 'Pipeline Position'`
+  (the same two writes as the retro route below, with `implementation.md` as the
+  next step), and then **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)
 
 - If **single sprint or final sprint:** Proceed to retro, once every
   locked requirement that needs a disposition under §5's

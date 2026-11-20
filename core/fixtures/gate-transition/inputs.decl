@@ -109,8 +109,8 @@ core/scripts/validate-cycle-commits.sh
 core/scripts/validate-draft-stamps.sh
 core/scripts/validate-escalation-status-vocabulary.sh
 core/scripts/validate-fixture-drivability.sh
-core/scripts/validate-gate-adjudication.sh
-core/scripts/validate-gate-manifest.sh
+!core/scripts/validate-gate-adjudication.sh
+!core/scripts/validate-gate-manifest.sh
 core/scripts/validate-held-stories.sh
 core/scripts/validate-hook-registration.sh
 core/scripts/validate-layer-entries.sh
@@ -129,3 +129,12 @@ core/scripts/validate-write-format-steering.sh
 core/scripts/wait-for-deliverable.sh
 core/scripts/wfd-start-of.sh
 core/scripts/era-token.sh
+# GATE-RUN arms: the toy world copies the scripts directory and the skill tree and schemas it reads.
+!core/scripts/gate-run.sh
+core/scripts/gate_run.py
+core/skills/ai-dlc/enforcement-map.yaml
+core/skills/ai-dlc/gates/planning.arms
+core/skills/ai-dlc/gates/story.arms
+core/skills/ai-dlc/gates/sprint-review.arms
+core/skills/ai-dlc/gates/retro.arms
+core/schemas/gate-adjudication-verdict.json

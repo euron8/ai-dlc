@@ -232,10 +232,13 @@ fi
 # they should: a block that claims nothing has nothing to substantiate. What was wrong
 # is that they also shared one REPORT LINE. The assertion is on the STRING, and the string
 # is the token declared at enforcement-map.yaml `empty_subject_verdict:`, bound by I93.
-NV_OUT="$("$VALIDATOR" "$DIR/nothing-verified-story.md" 2>&1)"
+NV_OUT="$("$VALIDATOR" "$DIR/nothing-verified-story.md" 2>&1)"; NV_RC=$?
 GD_OUT="$("$VALIDATOR" "$DIR/good-story.md" 2>&1)"
 case "$NV_OUT" in
-  *"EXAMINED NOTHING"*) echo "ok: a zero-verification story reports PASS — EXAMINED NOTHING" ;;
+  *PASS*) echo "FAIL: a zero-verification story's line contains PASS: $NV_OUT" >&2; rc=1 ;;
+  *"EXAMINED NOTHING"*)
+    if [ "$NV_RC" -eq 0 ]; then echo "ok: a zero-verification story reports EXAMINED NOTHING, no PASS word, exit 0 (contract unchanged)"
+    else echo "FAIL: a zero-verification story exited $NV_RC, wanted 0 (the validator's recorded contract)" >&2; rc=1; fi ;;
   *) echo "FAIL: a zero-verification story reports the same line as a verified one: $NV_OUT" >&2; rc=1 ;;
 esac
 case "$GD_OUT" in

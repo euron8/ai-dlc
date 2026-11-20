@@ -12,6 +12,8 @@ missing BMAD artifacts so planning can proceed from a verified foundation.
 
 ## EXECUTION SEQUENCE
 
+**Step entry.** Before anything else in this step, run `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file doc-repair-backfill.md 'Pipeline Position'`, so a resume or a compaction names this step.
+
 ### 1. Repair Existing Docs
 
 Read `_bmad-output/planning-artifacts/doc-reconciliation.md` (the finding

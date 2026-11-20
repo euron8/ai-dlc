@@ -362,6 +362,28 @@ ROLES_DIR="$PROJECT_DIR/.claude/team-roles"
 
 PROMPT="$(printf '%s' "$INPUT" | jq -r '.tool_input.prompt // empty' 2>/dev/null)"
 
+# BRIEF EXPANSION: a prompt line `Brief: <path>` names a brief file the lead rendered with render-brief.sh. The FIRST such line
+# only; the path is canonicalized (dir by `pwd -P`) BEFORE it must sit under <root>/_bmad-output/planning-artifacts/, a
+# symlink or a file over 16384 bytes is not read. Prints the prompt, then the file. Its text feeds ONLY the Deliverable, shard,
+# remediates and --mark readers, never the role, contract or model scans (the teammate never receives the file's bytes).
+# THIS FUNCTION IS BYTE-IDENTICAL in ai-dlc-dispatch-guard.sh and ai-dlc-inflight-row.sh (dispatch-model-guard fixture binds them).
+brief_expand() { # brief_expand <project root>; the prompt on stdin
+  local p l f d b r
+  p="$(cat)"; printf '%s\n' "$p"
+  l="$(printf '%s\n' "$p" | grep -m1 '^Brief:')" || return 0
+  f="${l#Brief:}"; f="$(printf '%s' "$f" | tr -d '`' | sed -E 's/^[[:blank:]]+//; s/[[:blank:]]+$//')"
+  [ -n "$f" ] || return 0
+  case "$f" in /*) ;; *) f="$1/$f" ;; esac
+  d="$(cd "$(dirname "$f")" 2>/dev/null && pwd -P)" || return 0
+  r="$(cd "$1" 2>/dev/null && pwd -P)" || return 0
+  b="$d/$(basename "$f")"
+  case "$b" in "$r/_bmad-output/planning-artifacts/"*) ;; *) return 0 ;; esac
+  [ -f "$b" ] && [ ! -L "$b" ] && [ -r "$b" ] || return 0
+  [ "$(wc -c < "$b" | tr -d ' ')" -le 16384 ] || return 0
+  cat "$b"
+}
+PROMPT_X="$(printf '%s\n' "$PROMPT" | brief_expand "$PROJECT_DIR" 2>/dev/null)" || PROMPT_X="$PROMPT"
+
 # Derive the role from the Rule 19 binding the prompt carries. Every one of the
 # 42 S291 dispatches named `team-roles/<role>.md` in its prompt, so this is a
 # complete derivation surface, not a heuristic. Deliberately NOT the dispatch
@@ -843,7 +865,7 @@ SPAWN_TUI="$(printf '%s' "$INPUT" | jq -r '.tool_use_id // empty' 2>/dev/null ||
 # whose key is `story:` and whose value is non-empty sets DG_STORY: the awk prints a bare RS
 # (octal 036) as the very first output line, ahead of the gate-plan line, and the shell strips it
 # by parameter expansion, so a dispatch that carries no story line pays nothing for it.
-SPAWN_SHARD_OUT="$(printf '%s\n' "$PROMPT" | LC_ALL=C awk '
+SPAWN_SHARD_OUT="$(printf '%s\n' "$PROMPT_X" | LC_ALL=C awk '
   function fold(s) { return tolower(s) }
   /^[ \t]*(```|~~~)/ { fence = !fence; next }
   fence { next }
@@ -936,7 +958,7 @@ SPAWN_SHARD_RAW=""
 # This is a record of INTENT written from the brief: validate-spawn-ledger.sh decides whether the
 # row is a remedy (it must have RUN, have the named row's role, and be clean on its class).
 # Two lines out: `ok <key>`, `multiple`, or nothing. Any failure here is nothing, never a deny.
-SPAWN_REM_OUT="$(printf '%s\n' "$PROMPT" | LC_ALL=C awk '
+SPAWN_REM_OUT="$(printf '%s\n' "$PROMPT_X" | LC_ALL=C awk '
   /^[ \t]*(```|~~~)/ { fence = !fence; next }
   fence { next }
   {
@@ -1163,7 +1185,7 @@ dg_shardable_set() {
   done
 }
 DG_IMPL_GATE=false
-_dg_lp="$(printf '%s\n' "$PROMPT" | tr 'A-Z' 'a-z')"
+_dg_lp="$(printf '%s\n' "$PROMPT_X" | tr 'A-Z' 'a-z')"
 _dg_nre='(planning|story|implementation|sprint-review|retro)-[0-9]{8}t[0-9]{6}z'
 _dg_nl="$(sed -n 's/^.*gate_nonce//p' <<<"$_dg_lp" 2>/dev/null | grep -oE "$_dg_nre" 2>/dev/null | head -1 || true)"
 [ -n "$_dg_nl" ] || _dg_nl="$(grep -oE "$_dg_nre" <<<"$_dg_lp" 2>/dev/null | head -1 || true)"
@@ -1409,9 +1431,9 @@ fi
 # so the merge is never asked about the `shards/` parent itself. A dir glued to a character the
 # class admits (a unicode ellipsis, `-P1`, `-p1.md`) reads SKIP and is allowed; a brief QUOTING a
 # refused dir as a counter-example is denied, which is the any-mention selector's stated cost.
-case "$ROLE:$PROMPT" in
+case "$ROLE:$PROMPT_X" in
   adversary:*planning-artifacts/s[0-9]*/shards/*)
-    _dg_sd="$(printf '%s\n' "$PROMPT" | LC_ALL=C grep -oE "planning-artifacts/s[0-9]+/shards/[^][/[:space:]\`\"'()<>{},;:*?|]+" 2>/dev/null \
+    _dg_sd="$(printf '%s\n' "$PROMPT_X" | LC_ALL=C grep -oE "planning-artifacts/s[0-9]+/shards/[^][/[:space:]\`\"'()<>{},;:*?|]+" 2>/dev/null \
       | sed 's/\.*$//' | LC_ALL=C grep -v '/shards/$' | LC_ALL=C sort -u)" || _dg_sd=""
     if [ -n "$_dg_sd" ]; then
       _dg_mrg=""
@@ -1806,7 +1828,7 @@ dg_mark_scan() {
 # tail alone. Taken by parameter expansion and one awk match loop, so the field costs no fork.
 SPAWN_MARK=""
 SPAWN_MARK_FILE=""
-DG_MARK_OUT="$(printf '%s\n' "$PROMPT" | dg_mark_scan 2>/dev/null || true)"
+DG_MARK_OUT="$(printf '%s\n' "$PROMPT_X" | dg_mark_scan 2>/dev/null || true)"
 case "$(printf '%s\n' "$DG_MARK_OUT" | sed -n 1p)" in
   deny)
     dg_deny "AI/DLC dispatch guard: refused a dispatch whose brief tells the teammate to run a \`--mark\` that wait-for-deliverable.sh will refuse after the work is done: the last field must be findings=<n> (got '$(printf '%s\n' "$DG_MARK_OUT" | sed -n 2p)'). The line: $(printf '%s\n' "$DG_MARK_OUT" | sed -n 4p) -- Re-dispatch with the line rendered as: $(printf '%s\n' "$DG_MARK_OUT" | sed -n 3p) -- the grammar is <lead engine>/wait-for-deliverable.sh --mark <file> <step> <role> <shard> findings=<n>, with <n> the number of findings in the file (0 when it carries none). Any other count goes in the deliverable, not on the marker line." ;;
@@ -1861,7 +1883,7 @@ esac
 if [ -z "$DG_AGENT_ID" ] && [ "$ROLE_FILE_READABLE" = true ] && [ -z "$SPAWN_MARK_FILE" ] && [ -f "$DG_DL_SNAP" ] \
    && [ "$(printf '%s' "$INPUT" | jq -r '.tool_input.run_in_background | tostring' 2>/dev/null)" != false ] \
    && grep -qF -- "$DG_DL_ERA" "$PROJECT_DIR/.claude/skills/ai-dlc/steps/_gate-procedures.md" 2>/dev/null \
-   && [ -z "$(printf '%s\n' "$PROMPT" | deliverable_of 2>/dev/null)" ]; then
+   && [ -z "$(printf '%s\n' "$PROMPT_X" | deliverable_of 2>/dev/null)" ]; then
   LAST_SKILL=""
   TRANSCRIPT="$DG_TRANSCRIPT"
   if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then

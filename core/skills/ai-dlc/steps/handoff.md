@@ -64,6 +64,11 @@ Execute this 5-step procedure in order:
    live `.beat-inflight` lease, so the turn ends on the beat; once the
    lease has expired it blocks the stop while any row still reads
    `in-flight`.
+
+   **The handoff dispatches nothing new, and after the push only steps 4 and 5 run.** No Agent
+   call, teammate or gate run starts from this step to the end of the handoff: a row still absent
+   after the beat gets `TaskStop`, never a replacement dispatch. A push moved to the background is
+   waited on by ending the turn, and nothing is dispatched while it runs.
 2. Commit any in-flight work (`git add` + `git commit`), including
    work teammates left in the working tree.
 3. Finalize the pipeline snapshot — one last update capturing

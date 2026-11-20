@@ -264,6 +264,62 @@ PUSH_BG_CEIL=3004
 PUSH_BG_ID=""; PUSH_BG_AGE=""
 
 # -----------------------------------------------------------------------------
+# agent_bg_read: the newest background Agent|Task launch of this session that is still OPEN.
+# OPEN = the launch acknowledgement is in the transcript (a tool_result whose toolUseResult is
+# `isAsync` / `async_launched`; the harness writes it at once, so "no tool_result" would never
+# hold) AND no other tool_result for that id AND no task-notification for that id (a
+# queue-operation enqueue carrying `<tool-use-id>ID</tool-use-id>`). Sets AGENT_BG_ID and
+# AGENT_BG_AGE (seconds since the launch record); both empty when none is open. Sidechain
+# records are not the lead's. Fails open to "none open": no jq, no transcript, no timestamp.
+# -----------------------------------------------------------------------------
+AGENT_BG_ID=""; AGENT_BG_AGE=""
+agent_bg_read() {
+  AGENT_BG_ID=""; AGENT_BG_AGE=""
+  [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  local _o
+  _o="$(jq -Rrn --argjson now "$NOW" '
+    reduce (inputs | fromjson? | select(type == "object" and .isSidechain != true)) as $r
+      ({l: {}, ack: {}, fin: {}, enq: {}};
+       ($r.message | if type == "object" then .content else null end) as $c
+       | if ($c | type) == "array" then
+           reduce $c[] as $b (.;
+             if ($b | type) != "object" then .
+             elif $b.type == "tool_use" and ($b.name == "Agent" or $b.name == "Task")
+                  and ($b.input.run_in_background == true) and (($b.id // "") | type == "string") and ($b.id // "") != ""
+               then .l[$b.id] = ($r.timestamp // "")
+             elif $b.type == "tool_result" and (($b.tool_use_id // "") | type == "string") and ($b.tool_use_id // "") != "" then
+               if ($r.toolUseResult | type) == "object" and ($r.toolUseResult.isAsync == true) and ($r.toolUseResult.status == "async_launched")
+                 then .ack[$b.tool_use_id] = true
+                 else .fin[$b.tool_use_id] = true end
+             else . end)
+         else . end
+       | if $r.type == "queue-operation" and $r.operation? == "enqueue" then
+           reduce ($r.content? | select(type == "string") | scan("<tool-use-id>([^<]+)</tool-use-id>") | .[0]) as $k
+             (.; .enq[$k] = true)
+         else . end)
+    | . as $s
+    | [ $s.l | to_entries[]
+        | select(($s.ack[.key] // false) and (($s.fin[.key] // false) | not) and (($s.enq[.key] // false) | not))
+        | (.value | tostring | try (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) catch null) as $e
+        | select($e != null and $now >= $e)
+        | {id: .key, age: ($now - $e | floor)} ]
+    | sort_by(.age) | first // empty
+    | "\(.id) \(.age)"
+  ' < "$TRANSCRIPT" 2>/dev/null)" || _o=""
+  case "$_o" in
+    *" "*) AGENT_BG_ID="${_o%% *}"; AGENT_BG_AGE="${_o##* }" ;;
+  esac
+  case "$AGENT_BG_AGE" in ''|*[!0-9]*) AGENT_BG_ID=""; AGENT_BG_AGE="" ;; esac
+  return 0
+}
+# THE CEILING: over every background Agent launch in the reference consumer's 177 session
+# transcripts, 5106 launch-to-notification pairs: median 247 s, p95 1479 s, max 17399 s. 3600 s
+# allows the p95 with margin; past it the Stop falls through to BLOCK (too long costs one
+# forced continue, too short is the stall Check 2c exists to avoid).
+AGENT_BG_CEIL=3600
+
+# -----------------------------------------------------------------------------
 # Seed log header if needed
 # -----------------------------------------------------------------------------
 mkdir -p "$LOG_DIR"
@@ -1703,7 +1759,7 @@ fi
 # user record sitting between the tool_use and the final text (does not fire); a non-firing
 # flag-down seed whose block reason must stay byte-identical to the pre-arm hook's; and an
 # absent transcript.
-PQ_PROG='
+PQ_PRE='
 def txt: if (.message.content|type)=="string" then (.message.content // "")
          else ((.message.content // []) | map(select(.type=="text") | (.text // "")) | join("")) end;
 def blank: (test("\\S") | not);
@@ -1718,8 +1774,39 @@ def auq: if (.message.content|type)=="array"
 | ([ $a[] | txt ] | map(select(blank|not)) | last // "") as $last
 | (($a | map(auq) | add) // 0) as $n
 | (($last | split("\n") | map(select(blank|not)) | last) // "") as $final_line
-| if (($final_line | index("?")) != null) and $n == 0 then "1" else "0" end
 '
+PQ_PROG="${PQ_PRE}"'| if (($final_line | index("?")) != null) and $n == 0 then "1" else "0" end
+'
+# DECISION PENDING JOIN (route A). A turn that ends on the block `DECISION PENDING -- DP-<s>-<n> --
+# proceeding on (Recommended) unless you veto` followed ONLY by option lines is not a stalled question
+# when `docs/escalations/pending.md` holds exactly one entry whose Veto window line names that token
+# `open`, with `**Status:** DECIDED_AUTONOMOUSLY` and a Decision/Question line opening `source:
+# recommendation`. pq_fire then returns 1 (silent); no stop-allow branch is added, Check 1, 2b, 3 and the
+# default block are untouched. Every other case -- no entry, two entries, a closed window, a trailing
+# question after the block, an unreadable file -- leaves pq_fire at its verdict above.
+PQ_DP_PROG="${PQ_PRE}"'| ($last | split("\n")) as $L
+| ([ range(0; ($L|length)) | select($L[.] | test("^\\s*DECISION PENDING \u2014 DP-[0-9]+-[0-9]+ \u2014 proceeding on \\(Recommended\\) unless you veto\\s*$")) ] | last) as $h
+| if $h == null then ""
+  else (([ $L[($h+1):][] | select(blank|not) ] | map(test("^\\s*([-*\u2022]|[0-9]+[.)]|[A-Za-z][.)])\\s+\\S")) | all) as $ok
+        | if $ok then ($L[$h] | capture("(?<t>DP-[0-9]+-[0-9]+)").t) else "" end)
+  end
+'
+pq_dp_open() { # $1 = token -> 0 when exactly one entry names it open under the recommendation shape
+  [ -f "${PROJECT_DIR}/docs/escalations/pending.md" ] || return 1
+  awk -v t="$1" '
+    function flush() { if (hit) { n++; if (st && src && op) ok++ } hit = 0; st = 0; src = 0; op = 0 }
+    /^## / { flush(); next }
+    { v = $0; sub(/[ \t\r]+$/, "", v) }
+    index(v, "**Veto window:**") == 1 {
+      i = index(v, t)
+      if (i > 0 && substr(v, i + length(t), 1) !~ /[0-9]/) hit = 1
+      if (v == "**Veto window:** open \342\200\224 " t) op = 1
+    }
+    v == "**Status:** DECIDED_AUTONOMOUSLY" { st = 1 }
+    index(v, "**Decision/Question:** source: recommendation") == 1 { src = 1 }
+    END { flush(); exit !(n == 1 && ok == 1) }
+  ' "${PROJECT_DIR}/docs/escalations/pending.md" 2>/dev/null
+}
 # LAZY, AND MEMOISED. The predicate is a `jq -s` over the WHOLE transcript, and the transcript
 # is the largest thing this hook can touch -- measured on the reference consumer's biggest
 # session file (28.3 MB, 9938 records), one evaluation is roughly a third of the base hook's
@@ -1757,6 +1844,10 @@ pq_fire() { # -> 0 when the pause-question predicate holds, 1 otherwise
       _pq_w="$(tail -n 200 "$TRANSCRIPT" 2>/dev/null | jq -rs "$PQ_PROG" 2>/dev/null)" || _pq_w=0
       if [ "$_pq_w" = "1" ]; then
         PQ_FIRE="$(jq -rs "$PQ_PROG" "$TRANSCRIPT" 2>/dev/null)" || PQ_FIRE=0
+        if [ "$PQ_FIRE" = "1" ]; then
+          _pq_t="$(jq -rs "$PQ_DP_PROG" "$TRANSCRIPT" 2>/dev/null)" || _pq_t=""
+          if [ -n "$_pq_t" ] && pq_dp_open "$_pq_t"; then PQ_FIRE=0; fi
+        fi
       fi
       [ "$PQ_FIRE" = "1" ] || PQ_FIRE=0
     fi
@@ -1912,6 +2003,26 @@ if beat_lease_live; then
     # the counter; only a BLOCK does, twenty lines below. The v0.81.0 comment's
     # stated fear was of a state this code cannot reach.
     exit 0
+fi
+
+# -----------------------------------------------------------------------------
+# Check 2c: a background Agent of this session is still running
+# -----------------------------------------------------------------------------
+# A background Agent|Task launch with its acknowledgement and no completion record: its
+# task-notification arrives as a NEW TURN and re-invokes the lead, exactly as a live beat's exit
+# does. Keyed on the session's own transcript (see agent_bg_read), never on snapshot In-Flight
+# rows or the `<summary>Agent "` name join. Older than AGENT_BG_CEIL falls through to the
+# block below. The block state is not touched, as in Check 2b. The log token is
+# `ALLOWED_BY_LIVE_AGENT`; it is not in the seeded legend, which the five hooks carry
+# byte-identically (pause-hook-origin assertion 8), exactly as `ALLOWED_BY_LIVE_BEAT` is not.
+if agent_bg_read && [ -n "$AGENT_BG_ID" ] && [ "${AGENT_BG_AGE:-0}" -le "$AGENT_BG_CEIL" ]; then
+  {
+    echo "## ${TIMESTAMP} -- ALLOWED_BY_LIVE_AGENT"
+    echo "- Session: ${SESSION_ID}"
+    echo "- Background agent ${AGENT_BG_ID} launched ${AGENT_BG_AGE}s ago has no completion record (ceiling ${AGENT_BG_CEIL}s); its notification re-invokes the lead; yield allowed"
+    echo ""
+  } >> "$LOG_FILE"
+  exit 0
 fi
 
 # -----------------------------------------------------------------------------

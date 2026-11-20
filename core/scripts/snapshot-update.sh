@@ -97,6 +97,12 @@
 #   --row-set <agent> <col> <value>  set the cell named <col> (a header name; not `agent`) of that
 #                                row; a status value takes the same membership test as --row-status
 #   --row-delete <agent>         delete the ONE row whose agent cell's first word is <agent>
+#   --gate-passed <gate-label> <nonce> <utc> <step-basename>   the gate runner's op: --set
+#                                current_step_file to <step-basename> (the step that invoked the
+#                                gate), last_gate_passed to `<gate-label> (<utc>)` and branch to the
+#                                current git branch, all in Pipeline Position, plus one Recent
+#                                Activity entry naming the nonce; every value comes from the
+#                                arguments. <utc> is YYYY-MM-DDTHH:MM:SSZ, <nonce> is [A-Za-z0-9_-]
 #   --init <step-file> <sprint-id>  render the seven-section skeleton into an EMPTY (or absent)
 #                                snapshot; <step-file> must be non-empty, <sprint-id> digits
 # --snapshot defaults to <root>/${AI_DLC_STATE_DIR:-_bmad-output}/pipeline-snapshot.md, the root
@@ -130,7 +136,8 @@
 #   0  every op applied, the stamp check passed, the snapshot was written (with --activity, whatever
 #      the held-stories run above printed)
 #   1  the stamp check refused the candidate (its FUTURE/MALFORMED/BACKDATED/LATE lines are printed);
-#      the snapshot is unchanged
+#      the snapshot is unchanged; also the budget at write: the candidate is over the snapshot
+#      ceiling and larger than the old file
 #   2  a refusal: bad usage, an op matching zero or several targets, a block scalar, a refused
 #      create/delete/shape, a non-member status, a non-empty --init target, no validator, the
 #      snapshot moved under all 3 attempts; the snapshot is unchanged
@@ -306,6 +313,16 @@ while [ $# -gt 0 ]; do
                     case "$3" in *[!0-9]*) refuse "--init: the sprint id '$3' is not digits" ;; esac
                     [ "$nops" -eq 0 ] || refuse "--init must be the first op"
                     rec init "$2" "$3"; shift 3 ;;
+    --gate-passed)  need 5 "$@"; nonempty "$2" "$3" "$4" "$5"; nl "$2" "$3" "$4" "$5"; nohash "$2"; nohash "$5"
+                    case "$5" in *[[:space:]]*) refuse "--gate-passed: the step file '$5' carries whitespace" ;; esac
+                    rec set-in 'Pipeline Position' current_step_file "$5"
+                    case "$3" in *[!A-Za-z0-9_-]*) refuse "--gate-passed: the nonce '$3' is not [A-Za-z0-9_-]" ;; esac
+                    case "$4" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+                      *) refuse "--gate-passed: '$4' is not a UTC stamp YYYY-MM-DDTHH:MM:SSZ" ;; esac
+                    rec set-in 'Pipeline Position' last_gate_passed "$2 ($4)"
+                    GP_BR="$(git -C "$SU_ROOT" branch --show-current 2>/dev/null || true)"
+                    if [ -n "$GP_BR" ]; then nl "$GP_BR"; rec set-in 'Pipeline Position' branch "$GP_BR"; fi
+                    rec activity "${4%:??Z}Z gate $2 passed (nonce $3)"; NEEDSKEL=1; shift 5 ;;
     -h|--help)      sed -n '/^set -u$/q;2,$p' "${BASH_SOURCE[0]}"; exit 0 ;;
     # The op names come from this header's usage lines, so a lead that guessed a name (s322:
     # `--activity-add`) is shown every real one and does not spend a further call on --help.
@@ -822,6 +839,26 @@ fi
 # Under the lock a change means an unlocked Edit or Write landed: rebuild from the new file.
 [ "$tries" -lt 3 ] || refuse "$SNAP changed under every one of 3 attempts (an unlocked writer is active); re-run it"
 done
+
+# THE BUDGET AT WRITE (header: exit 1). A candidate over the snapshot ceiling (budget plus grace,
+# the validator's own figures from --measure) AND larger than the file it replaces is refused before
+# anything is written, history included; a write that keeps or shrinks the size always goes through,
+# so an over-ceiling snapshot can still be trimmed.
+# The measure is bytes / BPT, monotone in bytes: a candidate that is not larger than the file it
+# replaces can never be refused, so the byte compare runs first and the measure only when it grows.
+BM_NEW="$(wc -c < "$CAND" | tr -d ' ')"; BM_OLD="$(wc -c < "$OLD" | tr -d ' ')"
+BM_TOK=0; BM_CEIL=1
+if [ "$BM_NEW" -gt "$BM_OLD" ]; then
+  BM="$(AI_DLC_PROJECT_ROOT="$SU_ROOT" bash "$VALIDATOR" --measure "$CAND" 2>&1)" || refuse "the budget measure could not run: $BM"
+  BM_TOK="${BM#tokens=}"; BM_TOK="${BM_TOK%% *}"; BM_CEIL="${BM##*ceiling=}"
+  case "$BM_TOK$BM_CEIL" in ''|*[!0-9]*) refuse "the budget measure printed an unreadable figure: $BM" ;; esac
+fi
+if [ "$BM_TOK" -gt "$BM_CEIL" ] && [ "$BM_NEW" -gt "$BM_OLD" ]; then
+  printf 'snapshot-update: REFUSED by the budget: the candidate is %s tok, past the %s tok ceiling, and %s bytes against %s. %s is unchanged.\n' \
+    "$BM_TOK" "$BM_CEIL" "$BM_NEW" "$BM_OLD" "$SNAP" >&2
+  printf 'snapshot-update: move superseded entries out with --move-to-history in this call (a call that does not grow the file is allowed), then re-run.\n' >&2
+  exit 1
+fi
 
 # History FIRST (a crash between the two leaves a duplicate, never a loss), then the snapshot.
 if [ -s "$HISTP" ]; then

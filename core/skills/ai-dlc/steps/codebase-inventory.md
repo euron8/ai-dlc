@@ -12,6 +12,8 @@ planning artifacts are missing. Inventory what exists before backfilling.
 
 ## EXECUTION SEQUENCE
 
+**Step entry.** Before anything else in this step, run `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file codebase-inventory.md 'Pipeline Position'`, so a resume or a compaction names this step.
+
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–3 inline.

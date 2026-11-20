@@ -1131,8 +1131,8 @@ acall() {
   _id="tin-$RANDOM$RANDOM"
   printf '{"type":"assistant","message":{"id":"m-%s","content":[{"type":"tool_use","id":"%s","name":"%s","input":{}}]}}\n' "$_id" "$_id" "$3" >> "$4"
   _aa=""; [ -n "${5:-}" ] && _aa=",\"agent_id\":\"$5\""
-  _ao="$(printf '{"tool_name":"%s","session_id":"%s","transcript_path":"%s","tool_use_id":"%s","tool_input":{"file_path":"x.md","command":"ls"}%s}' \
-      "$3" "${6:-sess-A}" "$4" "$_id" "$_aa" | hook_run "$1" "$2" 2>/dev/null)"
+  _ao="$(printf '{"tool_name":"%s","session_id":"%s","transcript_path":"%s","tool_use_id":"%s","tool_input":{"file_path":"x.md","command":"%s"}%s}' \
+      "$3" "${6:-sess-A}" "$4" "$_id" "${7:-ls}" "$_aa" | hook_run "$1" "$2" 2>/dev/null)"
   dec_of "$_ao"
 }
 # ONE SEEDED WORLD PER GATE PER PASS, COPIED PER PREDICATE. Seeding a world costs a producer run
@@ -1170,6 +1170,64 @@ a_deny() {
     allowed "$d" && { printf 'FAIL:%s was allowed with touchpoint R owed\n' "$_t"; return; }
     grep -q 'touchpoint R' <<<"${d#*|}" || { printf 'FAIL:%s was denied for some reason other than R\n' "$_t"; return; }
   done
+  printf 'PASS\n'
+}
+# A1b. A Bash call that runs `gate-run.sh arms|close` or a `snapshot-update.sh` op is held with R owed;
+#      its twins are allowed: the wait-beat, `gate-run.sh --help`, `snapshot-update.sh --help`, and a segment
+#      that only NAMES the program (echo). The same commands are allowed once the advisor has been called.
+a_bashhold() {
+  _p="$(a_world "$1" grant boundary digest)"
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the lead Reads did not arm the advisor stage\n'; return; }
+  for _c in "scripts/ai-dlc/wait-for-deliverable.sh /tmp/x.md" "scripts/ai-dlc/gate-run.sh --help" "scripts/ai-dlc/snapshot-update.sh --help" "echo gate-run.sh close" "grep -n snapshot-update.sh --set notes.md"; do
+    d="$(acall "$1" "$_p" Bash "$_p/t.jsonl" "" "" "$_c")"
+    allowed "$d" || { printf 'FAIL:the Bash call [%s] was refused though it runs neither gate-run arms/close nor a snapshot op\n' "$_c"; return; }
+  done
+  for _c in "scripts/ai-dlc/gate-run.sh --sprint 9 implementation-g3 arms" "bash scripts/ai-dlc/gate-run.sh close --nonce x" "ls; scripts/ai-dlc/snapshot-update.sh --activity hello" "bash -c scripts/ai-dlc/gate-run.sh arms x" "FOO=1 ./scripts/ai-dlc/snapshot-update.sh --set current_step_file x.md"; do
+    _p="$(a_world "$1" grant boundary digest)"
+    d="$(acall "$1" "$_p" Bash "$_p/t.jsonl" "" "" "$_c")"
+    allowed "$d" && { printf 'FAIL:the Bash call [%s] was allowed with touchpoint R owed\n' "$_c"; return; }
+    grep -q 'touchpoint R' <<<"${d#*|}" || { printf 'FAIL:the Bash call [%s] was denied for some reason other than R\n' "$_c"; return; }
+  done
+  _p="$(a_world "$1" grant boundary digest adv advok)"
+  d="$(acall "$1" "$_p" Bash "$_p/t.jsonl" "" "" "scripts/ai-dlc/gate-run.sh x arms")"
+  allowed "$d" || { printf 'FAIL:gate-run.sh arms was refused after the advisor was called\n'; return; }
+  printf 'PASS\n'
+}
+# A1c. THE SNAPSHOT SLICE credits snapshot COVERAGE only (R-2). A snapshot over one chunk gets a slice without
+#      Recent Activity beside the marker. Read whole, it covers the snapshot; the step Read then satisfies through
+#      the SATISFIED block, and an Agent call is still DENIED until the advisor is called. Near-miss, one property
+#      apart: the snapshot moved after the slice was written, so the slice Read credits nothing and the step Read
+#      does not satisfy (marker kept, R not armed): the full-read mandate stands.
+a_slice_world() { # a_slice_world -> project, armed by the real producer over a snapshot of 2 chunks
+  _sp="$(newproj architecture.md consumer)"; proj_extra "$_sp" digest
+  { printf '## Recent Activity\n'; awk 'BEGIN { for (i = 1; i <= 300; i++) printf "activity line %d padding padding padding padding padding padding\n", i }'
+    printf '## Open Items\n- item one\n'; } >> "$_sp/_bmad-output/pipeline-snapshot.md"
+  arm_marker "$HOOK" "$_sp"
+  printf '%s\n' "$_sp"
+}
+a_slice() {
+  _p="$(a_slice_world)"; _sl="$_p/_bmad-output/.recover-snapshot-slice.md"
+  [ -s "$_sl" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the producer wrote no slice for a snapshot over one chunk\n'; return; }
+  [ "$(wc -c < "$_p/_bmad-output/pipeline-snapshot.md")" -gt 16384 ] && [ "$(wc -c < "$_sl")" -le 16384 ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: snapshot not over one chunk or slice not within one\n'; return; }
+  grep -q 'activity line' "$_sl" && { printf 'FAIL:the slice carries Recent Activity\n'; return; }
+  grep -q 'item one' "$_sl" || { printf 'FAIL:the slice dropped a section it should keep\n'; return; }
+  _sf="$(marker_step "$_p")"
+  _o="$(printf '{"tool_name":"Read","session_id":"sess-A","tool_input":{"file_path":"%s"}}' "$_sl" | hook_run "$1" "$_p" 2>/dev/null)"
+  allowed "$(dec_of "$_o")" || { printf 'FAIL:the slice Read was denied\n'; return; }
+  printf '%s' "$(jfull "$_p/$_sf")" | hook_run "$1" "$_p" >/dev/null 2>&1
+  [ -e "$_p/$mk" ] && { printf 'FAIL:slice plus step Read left the recovery unsatisfied (marker kept)\n'; return; }
+  [ -e "$_p/$OW" ] || { printf 'FAIL:a slice-covered recovery did not arm the advisor stage\n'; return; }
+  : > "$_p/t.jsonl"; for _k in grant boundary digest; do tline "$_k" "$_p" >> "$_p/t.jsonl"; done
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:an Agent call was allowed after a slice-satisfied recovery with R owed\n'; return; }
+  grep -q 'touchpoint R' <<<"${d#*|}" || { printf 'FAIL:the Agent call was denied for some reason other than R\n'; return; }
+  # near-miss: stale slice
+  _p="$(a_slice_world)"; _sl="$_p/_bmad-output/.recover-snapshot-slice.md"; _sf="$(marker_step "$_p")"
+  printf 'moved after the slice was written\n' >> "$_p/_bmad-output/pipeline-snapshot.md"
+  printf '{"tool_name":"Read","session_id":"sess-A","tool_input":{"file_path":"%s"}}' "$_sl" | hook_run "$1" "$_p" >/dev/null 2>&1
+  printf '%s' "$(jfull "$_p/$_sf")" | hook_run "$1" "$_p" >/dev/null 2>&1
+  [ -e "$_p/$mk" ] || { printf 'FAIL:a STALE slice satisfied the recovery\n'; return; }
+  [ -e "$_p/$OW" ] && { printf 'FAIL:a stale slice armed the advisor stage\n'; return; }
   printf 'PASS\n'
 }
 # A2. An advisor attempt AFTER the digest Read clears the stage and removes its file.
@@ -1346,13 +1404,15 @@ r_re="$(a_reclear "$HOOK")"
 if [ "$r_re" = PASS ]; then ok "R: a new recovery clears the advisor window the previous one left"
 else bad "R: a new recovery clears the advisor window the previous one left — ${r_re#FAIL:}"; fi
 
-APREDS="deny after before unavail nogrant mate nodigest bound session holder grantcons blob nolib"
+APREDS="deny bashhold slice after before unavail nogrant mate nodigest bound session holder grantcons blob nolib"
 
 a_tpl "$GATE"
 for _n in $APREDS; do
   r="$("a_$_n" "$GATE")"
   case "$_n" in
     deny)     label="R: after the digest Read with no advisor attempt, Agent and Write are refused naming R, Bash is allowed" ;;
+    bashhold) label="R: with R owed, Bash running gate-run.sh arms|close or a snapshot-update.sh op is refused; the wait-beat, --help and a naming-only segment are allowed" ;;
+    slice)    label="R: a snapshot-slice-covered recovery still arms R (Agent denied); a stale slice falls back to the full-read mandate" ;;
     after)    label="R: an advisor attempt after the digest Read clears the stage" ;;
     before)   label="R: an advisor attempt BEFORE the digest Read does not satisfy it" ;;
     unavail)  label="R: an 'unavailable' advisor result stands the stage down" ;;

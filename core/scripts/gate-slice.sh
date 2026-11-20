@@ -314,7 +314,7 @@ this_file = "steps/" + os.path.basename(path)
 ovr_dir = os.path.join(skill_dir, "overrides")
 ext_dir = os.path.join(skill_dir, "extensions")
 
-bearing, ext_gt, ext_anchor_ids = [], {}, {}
+bearing, ext_gt, ext_anchor_ids, ext_per = [], {}, {}, {}
 
 if os.path.isdir(ext_dir):
     for f in layer_entries(ext_dir):
@@ -322,10 +322,27 @@ if os.path.isdir(ext_dir):
         if target_file(frontmatter(body, "hooks")) != this_file:
             continue
         gts = gate_types_of(body)
-        ids = set(re.findall(r"^<!-- CHECK_LOADED: (\S+) -->[ \t]*$", body, re.M))
-        if gts and ids:
-            ext_gt[f] = gts
+        # A per-check `<!-- GATE_TYPES: a, b -->` line directly after the anchor (blank lines
+        # allowed) selects that check alone; an anchor without one takes the entry's gate_types.
+        per = {}
+        blines = body.split("\n")
+        for bi, bl in enumerate(blines):
+            am = ANCHOR_LINE.match(bl)
+            if not am:
+                continue
+            per[am.group(1)] = gts
+            for nl in blines[bi + 1:]:
+                if not nl.strip():
+                    continue
+                mm = re.match(r"^<!-- GATE_TYPES:([^>]*)-->[ \t]*$", nl)
+                if mm:
+                    per[am.group(1)] = [t.strip() for t in mm.group(1).split(",") if t.strip()]
+                break
+        ids = set(per)
+        if ids and any(per.values()):
+            ext_gt[f] = sorted({t for v in per.values() for t in v})
             ext_anchor_ids[f] = ids
+            ext_per[f] = per
 
 if os.path.isdir(ovr_dir):
     for f in layer_entries(ovr_dir):
@@ -375,9 +392,12 @@ required = list(dict.fromkeys(table["universal"] + table[gtype]))
 # this file cannot address another file, and emitting one would be a citation that
 # resolves nowhere.
 ext_loads = []
+ext_checks = []
 for f, gts in sorted(ext_gt.items()):
-    if gtype in gts or "universal" in gts:
-        ext_loads.append((os.path.relpath(f, skill_dir), sorted(ext_anchor_ids[f])))
+    sel = sorted(c for c, v in ext_per[f].items() if gtype in v or "universal" in v)
+    if sel:
+        ext_loads.append((os.path.relpath(f, skill_dir), sel))
+        ext_checks.extend({"id": c, "entry": os.path.relpath(f, skill_dir)} for c in sel)
 
 done = [d.strip() for d in done_raw.split(",") if d.strip()]
 unknown_done = [d for d in done if d not in required]
@@ -425,6 +445,7 @@ if fmt == "json":
         "file_bytes": total,
         "planned_bytes": planned,
         "extension_loads": [{"entry": e, "checks": ids} for e, ids in ext_loads],
+        "extension_checks": ext_checks,
     }
     print(json.dumps(out, indent=2))
 else:

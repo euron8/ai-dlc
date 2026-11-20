@@ -55,7 +55,7 @@ snapshot is the contract transferred to a new conversation.
 
 **Path:** `_bmad-output/pipeline-snapshot.md`
 
-**Created** at pipeline instantiation (see `route.md` Step 6).
+**Created** at pipeline instantiation (see `route-fresh-start.md` Step 6).
 **Updated** at every gate passage (full refresh, see
 `gate-validation.md` Check 14) and at sub-step boundaries within
 validation cycles and during implementation (lightweight refresh).

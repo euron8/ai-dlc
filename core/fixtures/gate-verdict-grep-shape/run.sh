@@ -35,6 +35,13 @@ find_one() { # find_one <core-relative-path>
 }
 
 GATE="$(find_one skills/ai-dlc/steps/gate-validation.md)"
+# The verdict-line grammar is owned by the script Check 1 cites (core/scripts in the distribution,
+# scripts/ai-dlc in an installed tree).
+VSCRIPT=""
+for c in "$ROOT/core/scripts/check-sprint-review-verdicts.sh" "$ROOT/scripts/ai-dlc/check-sprint-review-verdicts.sh"; do
+  [ -f "$c" ] && { VSCRIPT="$c"; break; }
+done
+QAROLE="$(find_one team-roles/qa.md)"
 ROLE="$(find_one team-roles/code-reviewer.md)"
 [ -n "$GATE" ] || { echo "FIXTURE ERROR: gate-validation.md not found in either layout" >&2; exit 2; }
 [ -n "$ROLE" ] || { echo "FIXTURE ERROR: code-reviewer.md not found in either layout" >&2; exit 2; }
@@ -45,9 +52,10 @@ ROLE="$(find_one team-roles/code-reviewer.md)"
 # The pattern is read out of the rule file's own `grep -inE '<pattern>'` directive. A
 # hardcoded copy here would be a second definition, and the two would drift exactly as the
 # grep and the template did.
-PAT="$(sed -n "s/.*grep -inE '\(.*\)' <review-file>.*/\1/p" "$GATE" | head -1)"
+[ -n "$VSCRIPT" ] || { echo "FIXTURE ERROR: check-sprint-review-verdicts.sh not found in either layout" >&2; exit 2; }
+PAT="$(sed -n "s/^VERDICT_PAT='\(.*\)'\$/\1/p" "$VSCRIPT" | head -1)"
 [ -n "$PAT" ] || {
-  echo "FIXTURE STALE: no \`grep -inE '<pattern>' <review-file>\` directive in gate-validation.md" >&2
+  echo "FIXTURE STALE: no VERDICT_PAT='<pattern>' line in check-sprint-review-verdicts.sh" >&2
   exit 2
 }
 
@@ -144,6 +152,36 @@ if grep -qiE 'zero matches? +fails? this check' "$GATE"; then
   ok "a zero-match is declared a FAIL, not a fallback"
 else
   bad "gate-validation.md no longer declares zero matches a FAIL — a review file the pattern misses silently returns to the lead's recollection, which is the defect the check exists to prevent"
+fi
+
+# --- Assertion 5b: Check 1 cites the program that owns the grammar, and the program reads the template ---
+if grep -qF 'scripts/ai-dlc/check-sprint-review-verdicts.sh' "$GATE"; then
+  ok "gate-validation.md Check 1 cites scripts/ai-dlc/check-sprint-review-verdicts.sh"
+else
+  bad "gate-validation.md no longer cites scripts/ai-dlc/check-sprint-review-verdicts.sh, so the grammar has no stated owner"
+fi
+# The pattern gate-validation.md spells (the line merge-review-shards.sh derives its own from, by this same sed)
+# equals the program's VERDICT_PAT, so the two spellings cannot diverge.
+DIRPAT="$(sed -n "s/.*grep -inE '\(.*\)' <review-file>.*/\1/p" "$GATE")"
+if [ -n "$DIRPAT" ] && [ "$DIRPAT" = "$PAT" ]; then
+  ok "gate-validation.md's grep -inE directive pattern equals the program's VERDICT_PAT"
+else
+  bad "gate-validation.md's grep -inE directive pattern ($DIRPAT) differs from check-sprint-review-verdicts.sh's VERDICT_PAT ($PAT)"
+fi
+# The pass values the program reads are derived from the program and joined to the two role files, so a role
+# file that changes its set fails here and not on a consumer's gate. Both are static reads: this fixture runs
+# no second program.
+CODE_PASS="$(sed -n 's/^CODE_PASS="\(.*\)"$/\1/p' "$VSCRIPT" | head -1)"
+QA_PASS="$(sed -n 's/^QA_PASS="\(.*\)"$/\1/p' "$VSCRIPT" | head -1)"
+if [ -n "$CODE_PASS" ] && grep -qE "^${CODE_PASS} \\| NEEDS_REWORK \\| BLOCKED" "$ROLE"; then
+  ok "code-reviewer.md declares the set the program passes on ($CODE_PASS)"
+else
+  bad "code-reviewer.md's verdict set no longer opens with the program's pass value '$CODE_PASS'"
+fi
+if [ -n "$QA_PASS" ] && [ -n "$QAROLE" ] && grep -qE "^${QA_PASS} \\| NEEDS_REWORK" "$QAROLE"; then
+  ok "qa.md declares the set the program passes on ($QA_PASS)"
+else
+  bad "qa.md's verdict set no longer opens with the program's pass value '$QA_PASS'"
 fi
 
 # --- Assertion 6: the producer-side severity rule states its evidence --------

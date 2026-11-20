@@ -12,8 +12,17 @@ deployment. Adversarial review + party mode on the complete sprint.
 
 ## EXECUTION SEQUENCE
 
+FIRST ACTION, before anything else in this step: run
+`bash scripts/ai-dlc/snapshot-update.sh --set current_step_file sprint-review.md 'Pipeline Position'`.
+It overwrites the existing `current_step_file` bullet in
+`_bmad-output/pipeline-snapshot.md` rather than adding a second live one; leave
+`last_gate_passed` and `last_completed_step_file` as they stand.
+
 Execute all sub-skills back-to-back without pausing for human input
-between them:
+between them. An operator decision this step raises, scope excepted, is filed as
+an open `OPERATOR_DECISION` entry (`**Status:** OPERATOR_DECISION`) in `docs/escalations/pending.md` for
+`deploy-validate.md` §5's `### Decisions for You` and the step continues; this
+step issues no `AskUserQuestion` except for a scope decision:
 
 ### Sprint-Overall PR Incremental Pre-Staging
 
@@ -51,6 +60,10 @@ steady state; cost is one `git fetch` per review. Removal condition:
 retire only if read-time freshness becomes structurally guaranteed
 (reviews always run on a freshly-checked-out `origin/main`-current tree).
 
+Then re-run `scripts/ai-dlc/sprint-integration-check.sh` with the same arguments `implementation.md` §7 gives it, including `--onto <sprint branch>` and
+`--suite-summary _bmad-output/implementation-artifacts/s<N>/integration-suite-summary.txt` (commit the refreshed summary). A
+`RESULT FAIL` goes to dev teammates, and Step 1 starts only on a `RESULT PASS` tree.
+
 ### 1. Sprint-Level Adversarial Review
 
 **Join every spawn on its DELIVERABLE** — one
@@ -84,6 +97,10 @@ is for CONVERGENCE cycles only. Review:
 \"Auto-handoff evaluation\") at `Seam D` with the label
 `sprint-review adversarial pass <N>`. If evaluation returns FIRE,
 the session ends; otherwise continue.
+
+One adversary pass runs per composed tree. A repair of its findings is verified by re-running
+`scripts/ai-dlc/sprint-integration-check.sh`, whose verdict replaces a second adversary pass, and by Step 3's re-review; a further adversary pass runs
+only when a fix batch added story code to the sprint tree.
 
 ### 2. Sprint-Level Party Mode
 
@@ -121,6 +138,14 @@ False-positive cost: one agent per (seat, story) plus one cross agent per seat. 
 condition: measured sprints in which this round carries no unique MAJOR or CRITICAL catch that
 reaches the merged code.
 
+**Seat dispatch.** After each wave's join beat, run `scripts/ai-dlc/sprint-review-seats.sh <seat-dir> <each expected seat file>`.
+It prints `REDISPATCH <seat>` for every expected seat whose file does not end in a `seat-complete:` line,
+a seat whose spawn errored (rate limit, capacity, API failure) included, and exits 1 while any remain. The
+lead re-dispatches each `REDISPATCH` seat with the same brief and deliverable path and runs the script
+again; the join is that script's exit 0, and an errored spawn is never counted as joined. A seat that
+appended its `seat-complete:` line before its spawn errored is `JOINED` and is not redone. Exit 2 is a
+refusal (seat dir missing, no seat listed), never a join.
+
 ### 3. Fix and Re-Validate
 
 If the sprint review surfaced findings that required code changes:
@@ -128,6 +153,9 @@ If the sprint review surfaced findings that required code changes:
 - Code reviewer re-reviews affected files
 - QA re-validates affected stories
 - Repeat until clean
+
+Dispatch QA re-validation on the tip the code reviewer approved, after that approval, never in
+parallel with a tree that can still change.
 
 **Core-path seam non-deferral.** When any reviewer flags an untested
 integration seam (a wiring point where one component's output must reach
@@ -179,7 +207,9 @@ the gate log.
 Run auto-handoff evaluation at `Seam B` with the label
 `sprint-review end-of-step pre-gate` (see `_gate-procedures.md`
 \"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
-gate validation [sprint-review] (`gate-validation.md`). Check 20 loads at this
+`bash scripts/ai-dlc/gate-run.sh arms --gate sprint-review --sprint <N> --step sprint-review.md --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`
+(add `--series <path-prefix of the sprint adversarial pass series>` for Check 24), dispatch the adjudicator it names
+(`gate-validation.md`), then run `bash scripts/ai-dlc/gate-run.sh close --gate sprint-review --nonce <gate_nonce> --sprint <N> --step sprint-review.md --transcript <this session's transcript_path>`. Check 20 loads at this
 gate and reads the minimum from Steps 1 and 2 above, so the gate log entry records
 `validation_intensity:` and `minimum_met:` here as it does at every planning gate.
 Then:

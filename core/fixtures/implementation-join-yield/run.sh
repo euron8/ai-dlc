@@ -141,6 +141,45 @@ for c in expired-marker expired-marker-pid garbage-marker empty-marker marker-is
 done
 
 # =============================================================================
+# 3b. CHECK 2c -- a background Agent whose launch acknowledgement is in the transcript and whose
+#     completion is not yet recorded ALLOWS the stop (ALLOWED_BY_LIVE_AGENT); a completed one
+#     (task-notification or a non-launch result) and one past the age ceiling BLOCK.
+# =============================================================================
+ag_tr() { # ag_tr <out> <age-seconds> <variant: open|notified|resulted>
+  _ts="$(jq -nr --argjson e "$("$REAL_DATE" -u +%s)" --argjson a "$2" '$e - $a | strftime("%Y-%m-%dT%H:%M:%S.000Z")')"
+  {
+    printf '{"type":"assistant","timestamp":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_SK","name":"Skill","input":{"skill":"ai-dlc"}}]}}\n' "$_ts"
+    printf '{"type":"assistant","timestamp":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_AG1","name":"Agent","input":{"run_in_background":true,"prompt":"x"}}]}}\n' "$_ts"
+    printf '{"type":"user","timestamp":"%s","toolUseResult":{"isAsync":true,"status":"async_launched","agentId":"a1"},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_AG1","content":"launched"}]}}\n' "$_ts"
+    case "$3" in
+      notified) printf '{"type":"queue-operation","operation":"enqueue","timestamp":"%s","content":"<task-notification>\\n<task-id>a1</task-id>\\n<tool-use-id>toolu_AG1</tool-use-id>\\n<status>completed</status>\\n</task-notification>"}\n' "$_ts" ;;
+      resulted) printf '{"type":"user","timestamp":"%s","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_AG1","is_error":true,"content":"stopped"}]}}\n' "$_ts" ;;
+    esac
+  } > "$1"
+}
+ag_drive() { # ag_drive <age> <variant> -> sets AG_OUT, AG_W (caller removes)
+  AG_W="$(bash "$HERE/seed.sh" no-marker)"; ag_tr "$AG_W/tr.jsonl" "$1" "$2"
+  AG_OUT="$(printf '{"session_id":"t","transcript_path":"%s"}' "$AG_W/tr.jsonl" | CLAUDE_PROJECT_DIR="$AG_W" inproc_run "${STOP_HOOK%/*}/ai-dlc-continue.sh" hkcont_main 2>/dev/null)"
+}
+ag_fired() { grep -q '^## .* -- ALLOWED_BY_LIVE_AGENT' "$AG_W/$LOG" 2>/dev/null; }
+ag_drive 60 open
+if ! blocked "$AG_OUT" && ag_fired; then ok "open background agent (launch ack, no notification): the stop is ALLOWED via Check 2c (ALLOWED_BY_LIVE_AGENT logged)"
+else bad "open background agent: not allowed by Check 2c -- the lead is forced to burn turns while its agent runs"; fi
+rm -rf "$AG_W"
+ag_drive 60 notified
+if blocked "$AG_OUT" && ! ag_fired; then ok "background agent with a task-notification: BLOCKED (completed work is not a live agent)"
+else bad "background agent with a task-notification: allowed -- the notification cross-check is gone"; fi
+rm -rf "$AG_W"
+ag_drive 60 resulted
+if blocked "$AG_OUT" && ! ag_fired; then ok "background agent with a final tool_result: BLOCKED"
+else bad "background agent with a final tool_result: allowed"; fi
+rm -rf "$AG_W"
+ag_drive 4000 open
+if blocked "$AG_OUT" && ! ag_fired; then ok "open background agent past the 3600 s ceiling: falls through to BLOCK"
+else bad "open background agent past the ceiling: allowed -- an agent that never reports silences the guard for good"; fi
+rm -rf "$AG_W"
+
+# =============================================================================
 # 4. PRECEDENCE — the operator pause (Check 1) still wins, even with a live beat.
 # =============================================================================
 W="$(bash "$HERE/seed.sh" paused)"; OUT="$(drive_stop "$W")"

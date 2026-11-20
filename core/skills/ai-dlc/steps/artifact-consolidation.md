@@ -41,7 +41,7 @@ the sequence below never repeats a bare area-root path.
 
 **RESOLVING `<N>` IS DIFFERENT FOR THIS STEP THAN FOR EVERY OTHER ONE, AND THAT IS
 WHY IT IS SPELT OUT.** Sibling steps run inside a sprint and take `sprint_id` from the
-pipeline snapshot's Sprint Context, resolved at `route.md` Step 6. This step is
+pipeline snapshot's Sprint Context, resolved at `route-fresh-start.md` Step 6. This step is
 operator-invoked at a QUIESCENT point — between sprints — so the snapshot may hold a
 sprint that has closed, or one that has not started. **Use the `sprint_id` the snapshot
 holds when the pass runs.** A consolidation pass is bookkeeping for the sprint that
@@ -62,6 +62,8 @@ omitted its sprint** — only the step that writes the file can, which is why th
 declaration is here.
 
 ## EXECUTION SEQUENCE
+
+**Step entry.** Before anything else in this step, run `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file artifact-consolidation.md 'Pipeline Position'`, so a resume or a compaction names this step.
 
 ### 1. Baseline manifest
 

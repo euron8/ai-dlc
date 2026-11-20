@@ -1,0 +1,2 @@
+# resume-preflight drives core/scripts/resume-preflight.sh in process: run.sh sources it once and calls rpf_main in a
+# subshell. No cli cell: the program's own CLI wrapper is the two lines `rpf_main "$@"` and `exit $?`.

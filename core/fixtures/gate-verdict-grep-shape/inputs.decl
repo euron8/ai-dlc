@@ -1,3 +1,5 @@
 core/skills/ai-dlc/steps/gate-validation.md
 core/team-roles/code-reviewer.md
 core/fixtures/lib/report.sh
+core/scripts/check-sprint-review-verdicts.sh
+core/team-roles/qa.md

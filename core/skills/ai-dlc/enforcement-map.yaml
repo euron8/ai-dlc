@@ -70,6 +70,7 @@ empty_subject_verdict:
   token: EXAMINED NOTHING
   emitters:
     - core/scripts/validate-stub-audit.sh
+    - core/scripts/sprint-integration-check.sh
     - core/scripts/validate-locked-anchor.sh
     - core/scripts/validate-ci-gates.sh
     - core/scripts/validate-artifact-paths.sh
@@ -77,6 +78,7 @@ empty_subject_verdict:
     - core/scripts/validate-escalation-status-vocabulary.sh
     - core/scripts/validate-suppression-lifetime.sh
     - core/scripts/gate_adjudication.py
+    - core/scripts/gate_run.py
     - core/scripts/validate-request-coverage.sh
     - core/scripts/audit-upstream-routing.sh
     - core/scripts/audit-layer-debt.sh
@@ -219,8 +221,8 @@ checks:
       - core/scripts/validate-locked-anchor.sh
     call_sites:
       - site: gate-validation.md Check 3b
-        posture: FAILS the gate (exit 0 required; exit 0 with `PASS — EXAMINED NOTHING` is
-          not a pass, nothing was verified — the story carried no resolvable citation)
+        posture: "FAILS the gate (exit 0 required; exit 0 with `VALIDATE-LOCKED-ANCHOR: EXAMINED NOTHING` is
+          not a pass, nothing was verified — the story carried no resolvable citation)"
         why: a LOCKED requirement that does not byte-anchor to the source of record
           is a requirement the sprint invented
       - site: stories-test-strategy.md (story authoring)
@@ -817,7 +819,7 @@ checks:
         posture: FAILS the gate (exit 0 required; exit 2 on an absent snapshot is also
           a FAIL, exit 3 is PENDING and reported)
         why: >-
-          Rule 3(d) makes the sprint-scope pause point at route.md Step 6 mandatory,
+          Rule 3(d) makes the sprint-scope pause point at route-fresh-start.md Step 6 mandatory,
           and a mandate with no enforcer is a suggestion. Every other Rule 3 pause point
           is downstream of implementation, so a sprint that never reaches implementation
           had structurally nowhere to ask: one ran seven days, wrote zero lines of
@@ -1036,6 +1038,73 @@ non_catalog_units:
           the only place the claim can be checked against the artifact
     ci_workflow: core/ci-templates/validate-retro-compliance.yml
 
+  # The retro gate's scripted arms. Their ids are retro.md Step 5c's own item numbers, NOT the catalog's
+  # Checks 2-5: retro-gate.sh records each under `retro-<n>` and never under a bare catalog id.
+  - id: retro-2
+    title: Retro gate arm — provenance block verification (retro.md Step 5c item 2)
+    gate_types: [retro]
+    adjudication: script
+    enforcer:
+      - core/scripts/retro-gate.sh
+      - core/scripts/validate-provenance-block.sh
+    call_sites:
+      - site: retro.md Step 5c (retro-gate.sh, item 2)
+        posture: BLOCKS the retro commit
+        why: the arm exits 1 on a FAIL line; the Step 6 commit does not run past it
+    ci_workflow: ~
+
+  - id: retro-3
+    title: Retro gate arm — mandatory rules validation (retro.md Step 5c item 3)
+    gate_types: [retro]
+    adjudication: script
+    enforcer:
+      - core/scripts/retro-gate.sh
+      - core/scripts/validate-mandatory-rules.sh
+    call_sites:
+      - site: retro.md Step 5c (retro-gate.sh, item 3)
+        posture: BLOCKS the retro commit
+        why: the arm exits 1 on a FAIL line; the Step 6 commit does not run past it
+    ci_workflow: ~
+
+  - id: retro-4
+    title: Retro gate arm — audit-anchor schema validation (retro.md Step 5c item 4)
+    gate_types: [retro]
+    adjudication: script
+    enforcer:
+      - core/scripts/retro-gate.sh
+      - core/scripts/validate-audit-anchors.sh
+    call_sites:
+      - site: retro.md Step 5c (retro-gate.sh, item 4)
+        posture: BLOCKS the retro commit
+        why: the arm exits 1 on a FAIL line; the Step 6 commit does not run past it
+    ci_workflow: ~
+
+  - id: retro-5
+    title: Retro gate arm — whole-read pool recorded (retro.md Step 5c item 5)
+    gate_types: [retro]
+    adjudication: script
+    enforcer:
+      - core/scripts/retro-gate.sh
+      - core/scripts/validate-artifact-budget.sh
+    call_sites:
+      - site: retro.md Step 5c (retro-gate.sh, item 5)
+        posture: BLOCKS the retro commit
+        why: the arm exits 1 on a FAIL line; the Step 6 commit does not run past it
+    ci_workflow: ~
+
+  - id: retro-artifact-paths
+    title: Retro gate arm — tracked filenames hold the artifact path grammar
+    gate_types: [retro]
+    adjudication: script
+    enforcer:
+      - core/scripts/retro-gate.sh
+      - core/scripts/validate-artifact-paths.sh
+    call_sites:
+      - site: retro.md Step 5c (retro-gate.sh, artifact-paths arm)
+        posture: BLOCKS the retro commit
+        why: the arm exits 1 on a FAIL line; the Step 6 commit does not run past it
+    ci_workflow: ~
+
   - id: sprint-status-lifecycle
     title: Sprint-status envelope — mechanical sprint_id + atomic freeze/roll-forward
     adjudication: script
@@ -1044,7 +1113,7 @@ non_catalog_units:
     reads:
       - core/schemas/sprint-status.json
     call_sites:
-      - site: route.md Step 6 (sprint-id)
+      - site: route-fresh-start.md Step 6 (sprint-id)
         posture: BLOCKS on exit 3 (the two canonical copies disagree on `sprint:`)
         why: pipeline start is the only place the sprint number is derived, and every
           downstream consumer reads it from the snapshot rather than re-deriving it.
@@ -1052,7 +1121,7 @@ non_catalog_units:
           canonical that exists but carries no `sprint:` key — the state a
           rotate-at-close leaves behind. Read as greenfield, that restamps a live
           project from sprint 1 and destroys the prior sprint's drafts.
-      - site: route.md Step 6 (roll)
+      - site: route-fresh-start.md Step 6 (roll)
         posture: BLOCKS on exit 3 (prior sprint not closed, or a frozen archive differs)
         why: >-
           the pipeline's ONLY rotation point. Rotation belongs at START, not at
@@ -1262,7 +1331,7 @@ non_catalog_units:
     enforcer:
       - core/scripts/validate-artifact-budget.sh
     call_sites:
-      - site: route.md Step 1a (sprint start)
+      - site: route-fresh-start.md Step 1a (sprint start)
         posture: HARD_BLOCK
         why: the last moment an oversized artifact is cheap to fix — the sprint has
           not read it yet, and carry-over-evaluation whole-reads brief/prd/

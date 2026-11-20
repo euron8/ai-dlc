@@ -220,21 +220,39 @@ MD
 # The first two hold no non-whitespace byte and are the ABSENT state. The other two are
 # POPULATED files that parse to zero records, and must never be reported as empty. The last
 # is the reference consumer's own shape (live DA- entries written as bullets, no
-# `**Status:**` field anywhere): a grammar failure, not an absence.
+# `**Status:**` field anywhere): dated, so FAIL-CLOSED (exit 1, one STATUSLESS line each). SECTIONS holds
+# only undated `## ` headers (exempt) and parses to zero records; MIXED holds a dated entry with a status,
+# a section, a dated statusless entry and a dated entry whose status sits under a `###` block.
 : > "$WORK/pending-empty.md"
 printf '\n \n' > "$WORK/pending-blank.md"
 printf '# Pending Escalations\nNo escalation has been filed this sprint.\n' > "$WORK/pending-heading.md"
 cat > "$WORK/pending-unparsed.md" <<'MD'
 # Pending Escalations
 
-## DA-283 — deferral of the ingest retry story
+## DA-283 — deferral of the ingest retry story - 2026-07-21
 - Status: awaiting operator
 - Raised by: lead, 2026-07-21
 - Decision needed: defer to the next sprint or split the story
 
-## DA-284 — scope of the audit backfill
+## DA-284 — scope of the audit backfill - 2026-07-21
 - Status: awaiting operator
 - Decision needed: backfill all sprints or only the current one
+MD
+printf '# Pending Escalations\n\n## Open escalations\n\nNothing filed.\n\n## Deferred escalations\n' > "$WORK/pending-sections.md"
+cat > "$WORK/pending-mixed.md" <<'MD'
+# Pending Escalations
+
+## Open escalations
+
+## [S1 gate] [lead] - 2026-08-01T00:00:00Z
+**Status:** HARD_BLOCK
+
+## [S2 gate] [lead] - 2026-08-02T00:00:00Z — no field here
+Prose only.
+
+## [S3 gate] [lead] - 2026-08-03T00:00:00Z
+### Resolution
+**Status:** HARD_BLOCK
 MD
 
 cat > "$WORK/env.sh" <<ENV
@@ -256,6 +274,8 @@ EMPTY="$WORK/pending-empty.md"
 BLANK="$WORK/pending-blank.md"
 HEADING="$WORK/pending-heading.md"
 UNPARSED="$WORK/pending-unparsed.md"
+SECTIONS="$WORK/pending-sections.md"
+MIXED="$WORK/pending-mixed.md"
 ENV
 
 printf '%s\n' "$WORK"

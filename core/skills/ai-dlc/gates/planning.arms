@@ -1,0 +1,34 @@
+# gate_type: planning
+# <check-id> TAB <kind> TAB <arm> TAB <count> [TAB skip=<tok>[,<tok>]]. One row per enforcement-map id
+# rendered for this gate type (universal expanded); validate-gate-manifest.sh binds this file to that set.
+# arm `@close` = run by `gate-run.sh close`; lead = recorded by the lead or by close; judgment = adjudicator.
+1	judgment	-	-
+2	judgment	-	-
+2a	script	validate-escalation-resolution.sh --escalations docs/escalations/pending.md --sprint {SPRINT} --transcript-dir {TRANSCRIPT_DIR}	legacy	skip=empty
+3	judgment	-	-
+4	judgment	-	-
+7	judgment	-	-
+12	lead	-	-
+13	lead	-	-
+14	lead	-	-
+15	lead	-	-
+16	judgment	-	-
+25	script	validate-steering-budget.sh --transcript {TRANSCRIPT} --count	legacy	skip=rc1
+26	script	@close	-
+H1	lead	-	-
+H2	script	validate-h2-attestation.sh --verify --sprint {SPRINT}	legacy
+failure	lead	-	-
+1c	judgment	-	-
+17	script	validate-provenance-block.sh --strays	legacy
+20	judgment	-	-
+23	script	validate-draft-stamps.sh	legacy
+24	script	validate-adversarial-convergence.sh --series {SERIES} --transcript {TRANSCRIPT} --transcript-dir {TRANSCRIPT_DIR}	legacy
+27	judgment	-	-
+28	script	validate-spec-adoption.sh --verdict {SPRINT}	legacy	skip=pre-adoption
+29	judgment	-	-
+32	script	validate-bmad-invocations.sh	legacy
+33	script	validate-request-coverage.sh --requests _bmad-output/operator-requests-history.md --brief _bmad-output/planning-artifacts/s{SPRINT}/locked-requirements.md --sprint {SPRINT}	legacy	skip=empty
+34	script	validate-scope-confirmation.sh --snapshot _bmad-output/pipeline-snapshot.md --answers _bmad-output/operator-answers-history.md --backlog _bmad-output/planning-artifacts/carry-over-backlog.md	legacy
+35	script	validate-snapshot-conservation.sh	legacy	skip=empty
+36	script	validate-trunk-audit-gate.sh --sprint {SPRINT}	legacy	skip=empty
+37	script	check-owed-derivations.sh	legacy

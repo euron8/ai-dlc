@@ -170,8 +170,10 @@ core_manifest:
   - core/fixtures/trunk-push-bound/**
   - core/fixtures/file-mtime/**
   - core/fixtures/resolve-cited-paths/**
+  - core/fixtures/resume-preflight/**
   - core/fixtures/pause-hook-origin/**
   - core/fixtures/pause-question-in-prose/**
+  - core/fixtures/standing-rulings-hook/**
   - core/fixtures/postcompact-rulebook-recovery/**
   - core/fixtures/gate-resume/**
   - core/fixtures/gate-transition/**

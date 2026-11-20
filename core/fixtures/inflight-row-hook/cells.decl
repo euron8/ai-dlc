@@ -17,3 +17,7 @@ e2e core/scripts/wait-for-deliverable.sh ship.wstatus why=--status on an armed t
 e2e core/scripts/wait-for-deliverable.sh ship.wdts why=--dispatch-ts prints the ledger ts and writes nothing
 e2e core/scripts/wait-for-deliverable.sh ship.wbeat why=an armed beat that delivers flips the row
 e2e core/scripts/wait-for-deliverable.sh ship.wbeatold why=the same beat in the old era leaves the hand-written row alone
+e2e core/hooks/ai-dlc-inflight-row.sh ship.briefok why=a Deliverable line only in the Brief: file writes the row
+e2e core/hooks/ai-dlc-inflight-row.sh ship.briefnodl why=a brief file without one: exit 2
+e2e core/hooks/ai-dlc-inflight-row.sh ship.briefmiss why=an absent brief file: exit 2
+e2e core/hooks/ai-dlc-inflight-row.sh ship.briefesc why=a .. escape out of planning-artifacts: exit 2

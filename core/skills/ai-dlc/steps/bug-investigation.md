@@ -12,6 +12,8 @@ fix story, then route to implementation.
 
 ## EXECUTION SEQUENCE
 
+**Step entry.** Before anything else in this step, run `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file bug-investigation.md 'Pipeline Position'`, so a resume or a compaction names this step.
+
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–2 inline.
@@ -185,7 +187,7 @@ endpoint or admin action that turns the fix into an operator action — goes to 
 operator through section 2b's question WHEN IT IS FOUND, not after the disposition.
 
 **Fold architecture dispatch.** When the fix story is FOLDED into a sprint (by
-`stories-test-strategy.md` §3a or `route.md` Step 4) and that sprint's
+`stories-test-strategy.md` §3a or `route-fresh-start.md` Step 4) and that sprint's
 `pipeline_variant` runs an architecture step in `route.md`'s variant table, the
 sprint's architecture assessment predates the fold and says nothing about it.
 After the remediation above lands (serial exception 3: it reads the repaired story), dispatch ONE `architect` (Agent tool, bound to
@@ -239,7 +241,7 @@ bug story by construction. You author nothing; the gate's `--check` re-derives
 the same block and fails on any drift.
 
 **Direct fold: run the gate arms now, before any dev dispatch.** When this
-section runs for `route.md` Step 4's direct fold, sections 5 and 6 are skipped,
+section runs for `route-fresh-start.md` Step 4's direct fold, sections 5 and 6 are skipped,
 so no gate follows before the dev writes into the story. Right after the stamp
 above, run Check 17's "Bug-fix story readiness gate (bug-investigation)" bullet
 on the story, both halves including the CROSS-CHECK, and Check 17's "Fold

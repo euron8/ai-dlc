@@ -24,7 +24,7 @@ scoped to those reading sections — it loads the backlog/brief/PRD and
 audit anchor, evaluates each item, and writes a draft evaluation to
 `_bmad-output/planning-artifacts/s<N>/carry-over-evaluation.md` (Rule 24
 sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
-Context, resolved at `route.md` Step 6 — never the unstamped path, which
+Context, resolved at `route-fresh-start.md` Step 6 — never the unstamped path, which
 would destroy the prior sprint's evaluation), returning
 only `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section 3.
 **Join the analyst on its COMPLETION, and section 3's party seats on their DELIVERABLES** — the analyst's artifact
@@ -235,7 +235,7 @@ this sprint, not closed):
 - The human will review deferrals at the production validation checkpoint
 
 **An item in the confirmed scope is never deferred by the lead.** When the item is one
-the operator confirmed at `route.md` Step 6 — named in the scope that `scope_confirmed`
+the operator confirmed at `route-fresh-start.md` Step 6 — named in the scope that `scope_confirmed`
 and `scope_confirmed_cite` record, and not listed in `scope_deferred_items` — the deferral
 is a Rule 12 HARD_BLOCK, not a `DEFERRAL_REQUEST`. File it with `**Status:** HARD_BLOCK`,
 put it to the operator with `AskUserQuestion` before this step proceeds, and record the

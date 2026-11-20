@@ -1,5 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's J3 output, armed as .githooks/pre-push fxcount_arm arms it) after the BL-918 score-and-cut, then verified by a second armed run.
-495 *
+507 *
 0 core/git-hooks/pre-push
 3 core/hooks/ai-dlc-answer-capture.sh
 18 core/skills/ai-dlc-update/reconcile/apply.sh

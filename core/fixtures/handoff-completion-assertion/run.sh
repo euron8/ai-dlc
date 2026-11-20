@@ -782,6 +782,14 @@ else
   ok "(pb1) background push, no exit record -> ALLOW, a $PB_DEF row naming the task, then ALLOWED_BY_PAUSE (the fall-through reaches Check 1)"
   B_pb1=1
 fi
+# (pb1b) THE PIPED FORM A REAL LEAD WROTE (graph 6249c621, bun00ozwh): `git push -u origin HEAD 2>&1 | tail -15`.
+T_PB_PIPE="$ROOT/pb-pipe.jsonl"; pb_tx "$T_PB_PIPE" run "$_pb_now" "git push -u origin HEAD 2>&1 | tail -15"
+o="$(pb_drive "$T_PB_PIPE")"
+if [ "$(verdict "$o")" = allow ] && grep -qF -- "-- $PB_DEF" "$(pb_log)"; then
+  ok "(pb1b) the piped background push, no exit record -> ALLOW with a $PB_DEF row"
+else
+  bad "(pb1b) the piped background push (git push ... | tail) was not deferred -- push_bg_read misses a form the reference consumer's lead used"
+fi
 o="$(pb_drive "$T_PB_ENQ")"
 if ! has "$(reason "$o")" "$PUSH_MARK"; then
   bad "(pb2) the SAME transcript with the push's exit record (enqueue) was not answered with the PUSH text — the deferral outlives the push. It reads: $(reason "$o" | head -c 120)"

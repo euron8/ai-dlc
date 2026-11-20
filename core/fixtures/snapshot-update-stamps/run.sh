@@ -92,6 +92,7 @@
 #   IFADDWRITE   the twin: a member-status row and a --- rule are written by --line-add there; a header
 #              into a header-less section is HDRREMEDY's applied half
 #   IFADDDUPHDR  a second header line-added beside the present one: exit 2, unchanged
+#   BUDGET       BL-819 item 5: over the ceiling and growing is exit 1, file identical; a net shrink and a grow inside the grace band are written; --gate-passed
 # CLOCK AND BACKGROUND, per arm: only LOCKWAIT runs a background process, and it blocks on the
 # writer's own file and on `wait`, never on a sleep's length; its poll loop is bounded by the writer
 # being alive. LOCKSTALE's dead pid is a subshell reaped before the lock is seeded. No arm reads the
@@ -259,6 +260,12 @@ GSKEL="$HERE/graph-skeleton.md"; SWALLOW="$HERE/swallowed-row.md"
 [ -s "$GSKEL" ] && [ -s "$SWALLOW" ] || { echo "FIXTURE ERROR: graph-skeleton.md or swallowed-row.md is missing beside run.sh" >&2; exit 2; }
 XSEC="Deploy Baseline,Operator Identity"
 
+# padsnap <snapshot> <bytes> -> append a Locked Decisions section of numbered 100-byte lines up to <bytes>
+padsnap() {
+  local sz; sz="$(wc -c < "$1" | tr -d ' ')"
+  awk -v n="$(( ($2 - sz) / 100 ))" 'BEGIN { print "\n## Locked Decisions"
+    for (i = 0; i < n; i++) printf "- locked %03d %s\n", i, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }' >> "$1"
+}
 RC=""; OUT=""
 # drive <program> <snapshot> <ops...>
 drive() { local pr="$1" s="$2"; shift 2
@@ -754,6 +761,27 @@ cell() {
       { [ "$RC" = 2 ] && grep -qF "the status cell 'status' is not in-flight" <<<"$OUT" && [ "$(cksum < "$s")" = "$cs" ]; } || miss="$miss rc=$RC $OUT"
       [ -z "$miss" ] && return 0
       CELL_MSG="$miss"; return 1 ;;
+    BUDGET)
+      # BL-819 item 5. The budget is enforced at write: a candidate past budget + grace (6000 + 10% tokens)
+      # AND larger than the file it replaces is exit 1 with the file byte-identical; the same call that
+      # also moves a line to history (net shrink) is written; a candidate that grows inside the grace band
+      # is written; --gate-passed writes the gate facts from its arguments and never current_step_file.
+      local w="$WORK/$t-budget" miss="" n pad
+      s="$(seed "$w-over" 0)"; padsnap "$s" 28000; cs="$(cksum < "$s")"
+      drive "$pr" "$s" --activity "$T_OK grow"
+      { [ "$RC" = 1 ] && grep -qF 'REFUSED by the budget' <<<"$OUT" && [ "$(cksum < "$s")" = "$cs" ]; } || miss="$miss over-grow rc=$RC $OUT"
+      drive "$pr" "$s" --activity "$T_OK trim" --move-to-history 'Locked Decisions' 'locked 001 '
+      { [ "$RC" = 0 ] && grep -qF -- "$T_OK trim" "$s" && ! grep -qF 'locked 001 ' "$s"; } || miss="$miss over-shrink rc=$RC $OUT"
+      s="$(seed "$w-grace" 0)"; padsnap "$s" 25200
+      drive "$pr" "$s" --activity "$T_OK grow"
+      { [ "$RC" = 0 ] && grep -qF -- "$T_OK grow" "$s"; } || miss="$miss grace-grow rc=$RC $OUT"
+      s="$(seed "$w-gate" 0)"; sed -i '' "s/^- current_step: implementation/- current_step_file: old.md/" "$s"
+      drive "$pr" "$s" --gate-passed "retro gate" n123 2026-10-25T21:30:00Z implementation.md
+      { [ "$RC" = 0 ] && grep -qx -- '- last_gate_passed: retro gate (2026-10-25T21:30:00Z)' "$s" \
+        && grep -qF -- '2026-10-25T21:30Z gate retro gate passed (nonce n123)' "$s" \
+        && grep -qx -- '- current_step_file: implementation.md' "$s"; } || miss="$miss gate-passed rc=$RC $OUT"
+      [ -z "$miss" ] && return 0
+      CELL_MSG="$miss"; return 1 ;;
     *) echo "FIXTURE BROKEN unknown cell $c" >&2; exit 2 ;;
   esac
 }
@@ -798,6 +826,7 @@ if cell IFLINEWRITE "$PROG" ship; then ok "IFLINEWRITE: --line-replace writes a 
 if cell IFADDREFUSE "$PROG" ship; then ok "IFADDREFUSE: --line-add into In-Flight Teammates refuses a free-text and a done status cell, names the value, file unchanged"; else bad "IFADDREFUSE: $CELL_MSG"; fi
 if cell IFADDWRITE "$PROG" ship; then ok "IFADDWRITE: --line-add into In-Flight Teammates writes a member status row and a --- rule"; else bad "IFADDWRITE: $CELL_MSG"; fi
 if cell IFADDDUPHDR "$PROG" ship; then ok "IFADDDUPHDR: --line-add of a second header beside the present one is refused, file unchanged"; else bad "IFADDDUPHDR: $CELL_MSG"; fi
+if cell BUDGET "$PROG" ship; then ok "BUDGET: over the ceiling and growing is exit 1 with the file byte-identical; a net shrink and a grow inside the grace band are written; --gate-passed writes the gate facts and current_step_file from its argument"; else bad "BUDGET: $CELL_MSG"; fi
 
 # --- EQUIVALENCE: one command-line start per distinct CLI outcome (cells.decl), each held byte for byte (stdout, stderr, exit and
 # the written snapshot) to the in-process answer on the same input. The world is seeded once at one path and copied back for the
