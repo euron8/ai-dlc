@@ -88,13 +88,20 @@ source; do not infer either value from anywhere else.
 Before reviewing any task, read:
 
 1. `docs/coding-conventions.md` (project coding standards)
-2. The architecture document — **slice-read only (SKILL.md Rule 25(b)): the
+2. The architecture document, `docs/architecture.md` or
+   `_bmad-output/planning-artifacts/architecture.md` (the two paths
+   `steps/route.md` checks) — **slice-read only (SKILL.md Rule 25(b)): the
    section(s) named in the story's `architecture_refs`, not the whole file.** If
-   absent, use `docs/architecture-index.md` (or `grep '^## '`) to locate the
-   section(s), then slice. Whole-reading it is a Rule 25 violation.
+   the story has no `architecture_refs`, use `docs/architecture-index.md` (or
+   `grep '^## '`) to locate the section(s), then slice. Whole-reading it is a
+   Rule 25 violation.
 3. The story file referenced in the task
 4. The full diff of changed files
 5. Any related existing code (understand the context around the changes)
+
+**Two project `CLAUDE.md` rules bind you; that file does not load for you.** All work follows the minimum-mechanism principle (KISS): the smallest design that meets the requirement, no speculative machinery, simplification valued equally with addition. Gate evidence stays command-reproducible: the durable artifact is the raw output on disk plus the command that produced it (`… | tee test-results/<name>.txt`), never a model summary; the reviewer re-runs and byte-matches.
+
+**Before any command against a deployed environment, read the project's operations protocol.** Read `docs/operator-runbooks/deploy-protocol.md` when it exists, otherwise the `## Project Operations Protocol` section of the project's `CLAUDE.md`, with native Read. Its production target, prohibited paths and approval-required operations bind every such command.
 
 ## Review Document Template
 
@@ -277,95 +284,15 @@ commit, and you do NOT make any closing write either.
 
 ## As the Closing Writer
 
-**As the closing writer** — the lead dispatches you after gate 3 passes, for
-every story, serial or sharded, briefed `shard: 1/1 <story-index>` and naming
-you the closing writer. You review nothing. Read the story's gate-1 review file
-(the merged file for a sharded review, the serial file otherwise) and QA's
-verdict (the merged QA file for a sharded validation, the serial file
-otherwise). Then the closing writer makes exactly these writes and nothing else:
-the `done` transition in the story file `Status:` header and
-`sprint-status.yaml`, `deferred_acs` in both canonical views taken from the
-merged QA file's `## Deferred ACs`, or the deferred record in the serial file,
-the story file's `## Deferred ACs` section, each owed id with the predicate
-taken from that same QA verdict (placement and form under Ownership above),
-the upstream close-out `implementation.md` section 5 requires (the
-story's carry-over-backlog item set to `CLOSED - delivered in sprint <N> via
-<story-id>`, and a `RESOLVED` line appended to its `docs/escalations/pending.md`
-entry, each only where the story traces to one), and the closing commit
-carrying all of them. The lead cannot make these writes for you: while any
-gate verdict records a FAIL, the gate-remediation guard denies a lead edit to
-the story file and to `carry-over-backlog.md`.
+Read `.claude/team-roles/appendix/code-reviewer-closing-writer.md` when your brief names you the closing writer, after gate 3 passes.
 
 ## Field Verification (API-Consuming Stories)
 
-When reviewing a story that consumes API data for display, perform a field
-verification step:
+Read `.claude/team-roles/appendix/code-reviewer-api-fields.md` when the story consumes API data for display, or the diff adds a field to a query or request, or adds, removes, renames or retypes a field in what a handler, endpoint or producer returns. It holds the field-verification procedure and the Unverifiable API Field Names classification.
 
-1. Grep the code for all response field access patterns (`.field_name`,
-   `["field_name"]`, destructuring assignments from API response data).
-2. Read the diff for query shape — the fields the change SENDS, not only
-   the ones it reads: selection sets, projection and `select` lists,
-   request-body and query-parameter keys, filter and sort keys. List every
-   field the diff ADDS to a query.
-3. For each field, verify it exists in the target API response. Check via:
-   - The architecture addendum response schema (if documented), OR
-   - The actual API endpoint (curl or reference the API code)
-   A field added to a query is verified against the DEPLOYED schema, not
-   against a schema copy held in the repo.
-4. Cross-check test fixtures: do the mocked response shapes match the real
-   API response shapes?
-5. **Baseline-fixture sweep when a diff changes a handler's result shape.**
-   When the diff adds, removes, renames or retypes a field in what a
-   handler, endpoint or producer returns, grep the project's test-fixture
-   directories for that handler's name, route and changed field names
-   (`git grep -l <name> -- <fixture dirs>`), with a control: one token the
-   same command must find. List every fixture hit and the test that loads
-   it, and confirm each test passes in the dev's full-collection run. A
-   fixture hit whose test was not in that run, or an absent sweep, is
-   **Important**: the baseline tests those fixtures feed break in a later
-   gate and not in this review.
-6. Any unverifiable field name is **Important** severity, not Suggestion.
-   Synchronized fixture/schema bugs bypass all automated testing.
+Read `.claude/team-roles/appendix/code-reviewer-bug-class.md` when a finding locates the source of a production error for a fix-forward dispatch, when a finding is a bug class (a pattern-based defect, not a one-off), or when the story declares it fixes a class of bug. It holds Bug-Site Anchoring, the Bug-class Audit and the Missing Bug-Class Audit classification.
 
-## Bug-Site Anchoring
-
-Bug-site findings (locating the source of a production error for a
-fix-forward dispatch) MUST anchor on one of:
-
-(a) **Stack-trace line** citing the exact `file:line` from production
-logs (preferred);
-(b) **Explicit call-chain trace** from the observed error surface to the
-proposed fix site, with intermediate frames named;
-(c) **Explicit uncertainty flag** scoped to "needs stack trace before
-scoping dev work" — NO fix-site enumeration is permitted under (c).
-
-Pattern-match bug sites (variable-name proximity, symbol-similarity grep,
-"looks like the same pattern") MUST NOT be emitted as fix-site findings. A
-reviewer who issues a pattern-match site without trace evidence under (a)
-or (b) owns the blast radius of any resulting wrong-file fix-forward.
-
-## Bug-class Audit
-
-When a finding is a bug class (a pattern-based defect, not a one-off), the
-PR fixing it MUST record in its description:
-
-(a) The anchoring site (stack trace from production logs, or the traced
-call-chain per Bug-Site Anchoring);
-(b) A repo-wide grep for the same-shape call sites, with hit count;
-(c) A per-hit disposition: fix-in-this-PR / safe-because-X /
-deferred-with-rationale.
-
-Hits exceeding the fixes-in-this-PR without a per-hit disposition are an
-unclosed audit — the reviewer MUST NOT approve until each hit is
-dispositioned.
-
-## Async Error-Handler Coverage
-
-A PR that adds or modifies an async `try`/`except` (`try`/`catch`) block
-MUST include a test asserting that a `None`/error return from an awaited
-callee does NOT propagate as an unhandled TypeError-class failure in the
-handler chain. Coverage of the None/error-emission branch is a hard review
-checkpoint; absent = **Critical**.
+Read `.claude/team-roles/appendix/code-reviewer-error-handling.md` when the diff adds or modifies a `try`/`except` or `try`/`catch` block, modifies a function that already had error-handling (a `finally`, a null/undefined guard, an `allSettled`/`Promise.all` rejection path), or adds a validity guard (suppress, clamp, default-fill, null/sentinel emit, exception-swallow) on a value another module or consumer reads. It holds Async Error-Handler Coverage and the Silent Validity-Guard and Diff Removes Existing Error-Handling classifications.
 
 ## Mandatory Severity Classifications
 
@@ -418,61 +345,7 @@ to an existing record, append, and never `Write` over it. If an `advisor` tool i
 you, also call it before the first chunk and before the final rewrite, in addition to the calls
 the paragraph above names.
 
-### Return Type or Context-Shape Changes = Critical
-
-Any finding involving a function return type change (e.g., returning
-a different type than before) MUST be classified as **Critical**. Never
-downgrade to Important or Suggestion. The review MUST include a Consumer
-Audit: grep every caller of the changed function, verify each handles
-the new type correctly, especially at serialization boundaries.
-**Evidence required:** Log the grep command and caller list in the review doc.
-
-**A change to the KEY SET or value types of a context-build path carries the
-same severity and the same audit.** A context builder — a dispatch-context
-factory, a request/safeguard context assembler, any function whose product is a
-dict consumers read by key — has a return *shape* rather than a return *type*,
-so a renamed or retyped key slips past a type-focused reading while breaking
-every reader exactly as a changed return type would. Two extra obligations
-follow from the shape being built in more than one place: audit the **readers**
-of the changed shape, not only the callers of the builder, and audit **sibling
-call sites that build the same context type from a different trigger path** —
-those are the ones a caller-grep on one builder never reaches.
-
-### Unit Conversion Changes = Important (minimum)
-
-Any finding involving conversion between unit systems MUST be classified
-as **Important** at minimum. If the reviewer cannot definitively prove the
-conversion is correct by tracing the full unit chain from source to
-display, classify as **Critical**. **Evidence required:** Include a unit
-chain trace in the review doc.
-
-### A Rebind Without Priced Literals = Important (minimum)
-
-**A re-target prices every literal keyed on it, under both bindings.** When the diff makes an
-existing name, role or unit resolve to a different value, party or unit while its text stays
-the same, where a literal or threshold downstream is computed from or compared against it, the
-review enumerates every literal and threshold the re-bound value flows into, prices each one
-under the old binding and under the new one, in the unit it is compared against, and records
-`old -> new` for each. A literal the diff does not touch is in scope for exactly that reason:
-its value moved and its text did not. A mutation that proves the rebind line is exercised does
-not price what the rebind fed. `stories-test-strategy.md` `## Rename Verification` owns finding
-a rename's references, and this classification owns pricing a re-target.
-
-An unpriced keyed literal is **Important** at minimum. When the price under the new binding
-sends a case a locked requirement or an AC covers down a different branch than the old binding
-did, it is **Critical**. **Evidence required:** a `derived` fence in the review doc that
-derives each input the price depends on, meaning the literal's own line and the decimals or
-units entry under each binding, using commands that name the source file as an operand. A
-computation with no file operand, such as an `awk` program that runs only a `BEGIN` block, is
-not a derivation. The sentence beside the fence states the arithmetic and `old -> new`.
-
-### Unverifiable API Field Names = Important
-
-Any field name in consumer code that cannot be verified against the actual
-API response MUST be classified as **Important**. Synchronized fixture/schema
-bugs bypass all automated testing. **Evidence required:** Include a Field
-Verification section with the grep command, field list, and verification
-source in the review doc.
+Read `.claude/team-roles/appendix/code-reviewer-value-shapes.md` when the diff changes a function's return type, changes the key set or value types of a context-build path, converts between unit systems, or makes an existing name, role or unit resolve to a different value, party or unit while its text stays the same. It holds those three severity classifications.
 
 ### Missing Pre-Deploy Field Verification = Important
 
@@ -482,23 +355,6 @@ verification against the deployed schema MUST be classified as
 failing in production, escalate to **Critical** in retro.
 **Evidence required:** Include the query diff, the added field names, and
 the deployed-schema source consulted, in the review doc.
-
-### Silent Validity-Guard on a Consumer-Facing Data Surface = Critical
-
-A PR that adds a validity guard — suppress, clamp, default-fill,
-null/sentinel emit, or exception-swallow — on a data surface a downstream
-consumer reads (an API field, a persisted record, an exported metric, a
-returned value another module trusts) MUST ship observability for every
-firing of that guard: a log line, a metric/counter, or a smoke-probe
-assertion that makes the guard's activation visible. A guard that
-silently substitutes a `None`, a sentinel, a zero, or a clamped value —
-with no signal that the real value was unavailable or out of range — is
-**Critical**: the consumer cannot distinguish a genuine value from a
-masked failure, so the fault propagates undetected. **Evidence
-required:** cite the guard site `file:line` and the co-located
-log/metric/probe; if none exists, the finding stands. Exempt: a guard on
-a purely internal value never read across a module or consumer boundary
-(name the boundary that contains it).
 
 ### Dead Code in Modified Files = Important
 
@@ -592,41 +448,7 @@ detect. PRDs and stories pin `ai-dlc-adversary-review`; a retro
 party-mode artifact pins `bmad-party-mode` and exits 1 against the former,
 so a blanket pin rejects correct work instead of catching forged work.
 
-### Missing Bug-Class Audit for Class-of-Bug Fix = Critical
-
-When a story declares it is fixing a class-of-bug (semantic error,
-double-counting, off-by-one, type confusion, scope mismatch), the
-story MUST include a grep-derived enumeration of every call-site
-exhibiting the same code shape. Reviewer MUST verify the enumeration
-is in the story scope or carry-overs are filed with explicit AC.
-Absence is a **Critical** finding; non-deferrable.
-
-### UNIVERSAL AC Missing Discriminating-Failure Fixture = Important
-
-Any AC tagged UNIVERSAL that lacks a discriminating-failure fixture
-(a test that FAILS when the universal property is violated for a
-single instance) MUST be classified as **Important**. The fixture
-proves the test is load-bearing, not tautological.
-
-### LOCKED_REQUIREMENT With No Discriminating AC = Critical
-
-A `LOCKED_REQUIREMENT` whose mapped acceptance criteria are ALL
-satisfied by a null or degenerate-but-type-valid implementation (an
-implementation that violates the requirement while passing every
-safety invariant) MUST be classified as **Critical**, non-deferrable.
-The reviewer MUST name the degenerate implementation and confirm ≥1
-mapped AC reds against it; if none does, the requirement is
-unimplemented-but-green. Reviewer's only valid responses: (a) APPROVED
-if a mapped AC reds under the named degenerate impl; (b) NEEDS_REWORK
-naming the missing discriminating AC.
-
-### Bound/Limit AC Asserting Wrong Direction = Critical
-
-For any AC guarding a bound, limit, or ceiling, the reviewer MUST
-verify the AC asserts the bound in the protective direction (the side
-that constrains the risk for the operation's direction), not merely
-the absence of the known failure mode. An AC that stays green under a
-wrong-side bound MUST be classified **Critical**, non-deferrable.
+Read `.claude/team-roles/appendix/code-reviewer-ac-discrimination.md` when the story carries an AC tagged UNIVERSAL, a `LOCKED_REQUIREMENT`, or an AC guarding a bound, limit or ceiling. It holds those three severity classifications.
 
 ### Naming-Implies-Behavior Without Asserting Test = Critical
 
@@ -719,97 +541,9 @@ and answers for that write.
 A verdict reported without a resolvable review-file path is
 incomplete; treat it as gate-1 not yet APPROVED.
 
-### Diff Removes Existing Error-Handling = Important
-
-For every diff hunk that MODIFIES a function which already had
-error-handling (`try`/`except`/`finally`, `try`/`catch`/`finally`, a
-null/undefined guard, an `allSettled`/`Promise.all` rejection path),
-verify the modified version preserves the original guarantee (e.g., a
-`finally` that always clears a loading/pending state). Removing or
-narrowing existing error-handling in a same-file edit MUST be
-classified **Important**, even when the diff's stated purpose is
-unrelated to error-handling.
-
 ## Self-Discrimination Map
 
-Reviewer applies this map at Gate 2 for any PR carrying
-discrimination-evidence acceptance criteria. Reviewer-PASS verdicts
-on discrimination-evidence ACs MUST cite self-discrimination map
-application by-name. Enforced by `gate-validation.md` Check 19.
-
-**Enforce-flip PR Gate 2 discrimination.** PRs that flip a CI gate
-from advisory mode to enforce-fail-on-detect MUST exercise the gate
-against the PR's own content under the real `pull_request` trigger.
-The PR's own FAIL→PASS commit sequence (initial enforce flip catches
-own-PR violations; fix-forward refines detector scope without
-weakening enforcement intent) constitutes primary discrimination
-evidence. Run IDs MUST be cited in the discrimination review doc
-verbatim.
-
-**Self-discrimination map mandate.** Enforce-flip PR body MUST
-include a "Self-Discrimination Map" section listing each detector
-branch and which own-PR content triggers it. If the PR's organic
-content does not exercise all detector branches, author MUST add
-scaffolding commits or a companion same-sprint PR that does, and
-document branch-to-commit mapping. Without this, the pattern
-collapses to "lucky discrimination" and is fabrication-permissive.
-
-Ephemeral-matrix dispatch (separate injection branches) is
-permitted as supplementary evidence ONLY, never as primary AC
-discrimination. Real `pull_request` event evidence is required for
-AC closure.
-
-### Self-reflexive Gate 2 failure patterns
-
-Reviewer MUST scan its own draft Gate 2 verdict against each pattern
-below before posting. A draft verdict matching any pattern is
-NEEDS_REWORK against the reviewer itself; the reviewer revises
-before issuing.
-
-**Pattern 1 — Reviewer asserts PASS without re-running the test.**
-
-- *Detection signal:* Verdict cites an "all assertions pass" or
-  "test green" outcome with no `$ <command>` REPL line and no run
-  ID, OR cites a stale run ID copied from the dev's DAR rather than
-  the reviewer's own re-execution.
-- *Reviewer remediation:* Re-run the test locally or re-trigger the
-  CI workflow under the reviewer's own session; capture the verbatim
-  `$ <command>` invocation and its complete output (PASS/FAIL counts
-  and run ID) in the review doc; replace the assertion with the
-  REPL trace.
-- *Gate-validation enforcement reference:* `gate-validation.md`
-  Check 19 (this map) + Check 17 (skill-invocation provenance).
-
-**Pattern 2 — Reviewer fabricates ancestor-check output.**
-
-- *Detection signal:* Verdict cites `git merge-base --is-ancestor`
-  output (e.g., `OK` / `FAIL`) without the `$ git merge-base ...`
-  prompt line preceding it inside a fenced code block, OR the
-  ancestor SHAs cited do not match the actual PR HEAD and base
-  refs verifiable via `git log`.
-- *Reviewer remediation:* Run the ancestor check directly against
-  the live PR refs; paste the verbatim `$ ` prompt line followed by
-  the command output; if the ancestor relation does not hold,
-  surface the failure to the lead — do not invent passing output.
-- *Gate-validation enforcement reference:* `gate-validation.md`
-  Check 19 (this map) + Rule 13c strict-ancestor squash-merge
-  survivability sub-clause (SKILL.md).
-
-**Pattern 3 — Reviewer rubber-stamps discrimination evidence
-without verbatim REPL trace.**
-
-- *Detection signal:* Verdict APPROVES a discrimination-evidence AC
-  while citing only the dev's claim that the detector fired/silent,
-  without the reviewer's own corpus run output, fixture content, or
-  CI run ID demonstrating the FAIL→PASS sequence.
-- *Reviewer remediation:* Execute the corpus harness against each
-  named detector branch; capture verbatim `assert_detector_fires` /
-  `assert_detector_silent` output (with case label and PASS/FAIL
-  count); cross-reference each branch in the Self-Discrimination
-  Map to the specific commit SHA or fixture file that exercises it;
-  reject the PR if any branch lacks own-PR exercise.
-- *Gate-validation enforcement reference:* `gate-validation.md`
-  Check 19 (this map).
+Read `.claude/team-roles/appendix/code-reviewer-gate2-discrimination.md` when you review at Gate 2 a PR carrying discrimination-evidence acceptance criteria, or a PR that flips a CI gate from advisory mode to enforce-fail-on-detect. It holds the map, its mandates and the self-reflexive Gate 2 failure patterns `gate-validation.md` Check 19 enforces.
 
 ## Communication
 

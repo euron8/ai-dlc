@@ -140,7 +140,7 @@ for v in $SUBJ; do
 done
 
 SUBJP="schemas/sprint-status.json scripts/validate-handoff-evidence.sh scripts/sprint-status.sh"
-gsel prose && SUBJP="skills/ai-dlc/steps/stories-test-strategy.md skills/ai-dlc/steps/gate-validation.md team-roles/dev.md team-roles/qa.md team-roles/code-reviewer.md skills/ai-dlc/steps/implementation.md skills/ai-dlc/steps/sprint-review.md $SUBJP"
+gsel prose && SUBJP="skills/ai-dlc/steps/stories-test-strategy.md skills/ai-dlc/steps/gate-validation.md team-roles/dev.md team-roles/qa.md team-roles/code-reviewer.md team-roles/appendix/code-reviewer-api-fields.md skills/ai-dlc/steps/implementation.md skills/ai-dlc/steps/sprint-review.md $SUBJP"
 for p in $SUBJP; do
   echo "HERMETIC-CONSUMED core/$p"
 done
@@ -403,7 +403,9 @@ check() {
     || echo "QA: after the consumer's Validation Checklist shadow, qa.md carries no handoff-evidence precondition"
   has "$fl" "$SETUP_QA" \
     || echo "QA: setup -- after the consumer's Validation Checklist shadow, qa.md does not REJECT a handoff missing the dev's dependency setup"
-  b="$(h2 "$cr" '## Field Verification (API-Consuming Stories)')"
+  # The section points at appendix/code-reviewer-api-fields.md, which holds the sweep paragraph whole: read both.
+  b="$(h2 "$cr" '## Field Verification (API-Consuming Stories)'
+       [ ! -f "$(dirname "$cr")/appendix/code-reviewer-api-fields.md" ] || cat "$(dirname "$cr")/appendix/code-reviewer-api-fields.md")"
   fl="$(flat <<<"$b")"
   has "$fl" "Baseline-fixture sweep when a diff changes a handler's result shape" \
     || echo "CR: code-reviewer Field Verification has no baseline-fixture sweep"

@@ -205,6 +205,7 @@ archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-update/fixture-manifest.m
 archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile" "*"
 archive_tree_glob "$PROJECT_ROOT/docs/ai-dlc-patterns" "*.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/team-roles" "*.md"
+archive_tree_glob "$PROJECT_ROOT/.claude/team-roles/appendix" "*.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/hooks" "ai-dlc-*.sh"
 archive_tree_glob "$PROJECT_ROOT/.claude/rules" "ai-dlc-*.md"
 archive_tree_file "$PROJECT_ROOT/.claude/settings.json"
@@ -423,6 +424,15 @@ for role_file in "$SCRIPT_DIR/../core/team-roles/"*.md; do
   cp "$role_file" "$PROJECT_ROOT/.claude/team-roles/"
   echo "  ${role_file##*/} installed"
 done
+# Role appendices: situational rule text a role file points at by path and a teammate reads on
+# demand. They are not roles, so they live one level down where every flat `team-roles/*.md`
+# reader (the role set, aiDlcRoles, the dispatch guard) never sees them.
+for appendix_file in "$SCRIPT_DIR/../core/team-roles/appendix/"*.md; do
+  [ -f "$appendix_file" ] || continue
+  mkdir -p "$PROJECT_ROOT/.claude/team-roles/appendix"
+  cp "$appendix_file" "$PROJECT_ROOT/.claude/team-roles/appendix/"
+  echo "  appendix/${appendix_file##*/} installed"
+done
 
 # Install templates (always overwrite with AI/DLC versions)
 echo "Installing templates..."
@@ -433,6 +443,17 @@ done
 
 cp "$SCRIPT_DIR/../templates/coding-conventions.md.template" "$PROJECT_ROOT/docs/coding-conventions.md"
 echo "  coding-conventions.md installed"
+
+# The on-demand operations protocol. SCAFFOLDED ONCE, NEVER OVERWRITTEN: the consumer fills
+# and owns it, and a consumer may already keep its own file at this path.
+DEPLOY_PROTOCOL_REL="docs/operator-runbooks/deploy-protocol.md"
+mkdir -p "$PROJECT_ROOT/docs/operator-runbooks"
+if [ ! -f "$PROJECT_ROOT/$DEPLOY_PROTOCOL_REL" ]; then
+  cp "$SCRIPT_DIR/../templates/deploy-protocol.md.template" "$PROJECT_ROOT/$DEPLOY_PROTOCOL_REL"
+  echo "  $DEPLOY_PROTOCOL_REL scaffolded"
+else
+  echo "  $DEPLOY_PROTOCOL_REL preserved (consumer-owned)"
+fi
 
 # Copy pattern files for setup reference (always overwrite with AI/DLC versions)
 echo "Installing patterns reference..."

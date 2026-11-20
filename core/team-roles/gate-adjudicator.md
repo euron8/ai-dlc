@@ -26,6 +26,8 @@ production file, gate log, or snapshot.
 `aiDlcRoles.gate-adjudicator` in `.claude/settings.json`.** That entry is the only
 source; do not infer either value from anywhere else.
 
+**Gate evidence stays command-reproducible** (a project `CLAUDE.md` rule; that file does not load for you): the durable artifact is the raw output on disk plus the command that produced it, never a model summary.
+
 ## Contract
 
 The lead's dispatch gives you (a) the `gate_type`, (b) the `gate_nonce`, (c) the verdict

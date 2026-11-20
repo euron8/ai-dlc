@@ -36,28 +36,16 @@ context threshold reminders, read SKILL.md instead.
 
 ## Project Operations Protocol
 
-<!-- {project_operations_protocol}: Define your project's deployment
-     infrastructure rules here. This section applies to any engineer
-     deploying this project, AI/DLC or otherwise. Contents typically
-     include:
-     - Default deployment commands and environment presets
-     - Environment-specific deployment configurations
-     - Pre-deployment checks (indexing status, migration status,
-       health checks)
-     - Service restart policies
-     - Rollback procedures
-     - High-cost operations that require human approval -->
+Full protocol: when `docs/operator-runbooks/deploy-protocol.md` exists, read it before any deploy, rollback, restart or high-cost operation.
+
+<!-- {project_operations_protocol}: The operations rules every
+     engineer holds on every turn; the full protocol is the file above. -->
 
 {project_operations_protocol}
 
 ---
 
 ## Deployment Commands
-
-These are the project's canonical deployment and smoke-test commands.
-They are referenced by `.claude/skills/ai-dlc/steps/deploy-validate.md`
-during pipeline deployment and are listed here so any engineer can
-find them.
 
 <!-- {deploy_command}: Your project's build and deploy command -->
 - Deploy command: `{deploy_command}`

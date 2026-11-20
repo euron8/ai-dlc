@@ -19,6 +19,11 @@ release assumes is not a development defect. A development seat handed one eithe
 at infrastructure it does not own or edits application source until the symptom moves.
 Both leave the real fault in place, and the second one adds a code change nobody needed.
 
+**Read the project's operations protocol before you act.** You are not given `CLAUDE.md`
+automatically. Read `docs/operator-runbooks/deploy-protocol.md` when it exists; otherwise
+Read `CLAUDE.md` and use its `## Project Operations Protocol` and `## Deployment Commands`
+sections. Its deploy, rollback, restart and approval rules bind every action you take.
+
 ## The discriminator — where the defect LIVES, not who could type the fix
 
 The triage question is not "which seat is free" and not "which fix is smaller". It is

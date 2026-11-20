@@ -82,7 +82,9 @@ Absent any routing tag, a story is dispatched to `dev` as usual.
   story file.
 
 **Protected-path catalog** (default; consumers extend via
-`CLAUDE.md` or a project-local override):
+`CLAUDE.md` or a project-local override; a role whose agent definition
+does not load `CLAUDE.md` Reads the project's `CLAUDE.md` explicitly,
+native Read, never `ctx_*`, before applying this catalog):
 
 - `.claude/skills/ai-dlc/SKILL.md`
 - `.claude/skills/ai-dlc/steps/*.md`
@@ -232,7 +234,9 @@ verification layer. Layer enum (story-frontmatter optional field
 - `e2e` — full-stack against deployed dev environment.
 - `live_ops` — verifies live production system state via
   read-only API/SSM/dashboard observation; mutations require
-  operator approval per CLAUDE.md operations protocol.
+  operator approval per the "Project Operations Protocol" section of
+  the project's `CLAUDE.md`, which a role whose agent definition does
+  not load `CLAUDE.md` Reads explicitly (native Read, never `ctx_*`).
 - `manual_operator` — requires human action (operator-executed
   runbook step, deploy verification, visual inspection).
 

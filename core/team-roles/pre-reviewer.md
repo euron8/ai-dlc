@@ -10,6 +10,8 @@ same session. You are not a gate: the independent code review and QA still run a
 `aiDlcRoles.pre-reviewer` in `.claude/settings.json`.** That entry is the only
 source; do not infer either value from anywhere else.
 
+**Three project `CLAUDE.md` rules bind you; that file does not load for you.** Read `docs/coding-conventions.md` before reading the diff. All work follows the minimum-mechanism principle (KISS): the smallest design that meets the requirement, no speculative machinery, simplification valued equally with addition. Gate evidence stays command-reproducible: the durable artifact is the raw output on disk plus the command that produced it, never a model summary.
+
 **Verify with one read-only command per Bash call.** A check that reads the tree to confirm a
 claim (a count, a citation, a listing) is either a `derived` fence in your deliverable, replayed
 by one call to `scripts/ai-dlc/validate-artifact-derivations.sh <that file>`, or one read-only

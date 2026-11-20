@@ -592,7 +592,7 @@ else:
 # population is EMPTY, so a hit is a violation on sight (BL-831).
 #
 # POPULATION, DECLARED RATHER THAN EXEMPTED. `core/team-roles/*.md`,
-# `core/skills/ai-dlc/**/*.md` and `core/skills/ai-dlc-update/SKILL.md`. The setup
+# `core/team-roles/appendix/*.md`, `core/skills/ai-dlc/**/*.md` and `core/skills/ai-dlc-update/SKILL.md`. The setup
 # skill is OUT of population, not exempted by a list: it documents the
 # `aiDlcModels` keys and the `model` enum, which is the config surface itself and
 # names models correctly. `reconcile/` and `.claude/rules/` are out for the same
@@ -671,6 +671,7 @@ MODEL_RX = re.compile(
 
 def model_population(base):
     out = sorted(glob.glob(os.path.join(base, "core/team-roles/*.md")))
+    out += sorted(glob.glob(os.path.join(base, "core/team-roles/appendix/*.md")))
     out += tree(os.path.join(base, "core/skills/ai-dlc"))
     fp = os.path.join(base, "core/skills/ai-dlc-update/SKILL.md")
     if os.path.isfile(fp):

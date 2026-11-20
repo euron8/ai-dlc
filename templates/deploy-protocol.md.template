@@ -1,0 +1,38 @@
+# Deploy and Operations Protocol
+
+The project's full operations protocol and deployment commands, read on
+demand: before any deploy, rollback, revert, service restart or high-cost
+operation. The ops role and `.claude/skills/ai-dlc/steps/deploy-validate.md`
+read this file. `CLAUDE.md` keeps only the rules every engineer holds on
+every turn and the two canonical commands.
+
+---
+
+## Project Operations Protocol
+
+<!-- {operations_protocol_full}: Define your project's deployment
+     infrastructure rules here. This section applies to any engineer
+     deploying this project, AI/DLC or otherwise. Contents typically
+     include:
+     - Default deployment commands and environment presets
+     - Environment-specific deployment configurations
+     - Pre-deployment checks (indexing status, migration status,
+       health checks)
+     - Service restart policies
+     - Rollback procedures
+     - High-cost operations that require human approval -->
+
+{operations_protocol_full}
+
+---
+
+## Deployment Commands
+
+These are the project's canonical deployment and smoke-test commands,
+the same two `CLAUDE.md` lists under "## Deployment Commands".
+
+<!-- {deploy_command}: Your project's build and deploy command -->
+- Deploy command: `{deploy_command}`
+
+<!-- {smoke_test_command}: Your project's live smoke test command -->
+- Smoke test command: `{smoke_test_command}`

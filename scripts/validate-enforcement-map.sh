@@ -5262,6 +5262,7 @@ else
                     core/skills/ai-dlc/rule-bodies/*.md \
                     core/skills/ai-dlc/templates/*.md core/skills/ai-dlc/extensions/*.md \
                     core/skills/ai-dlc/overrides/*.md core/team-roles/*.md \
+                    core/team-roles/appendix/*.md \
                     core/skills/ai-dlc-setup/SKILL.md core/skills/ai-dlc-update/SKILL.md \
                     core/skills/ai-dlc-update/reconcile/*.md patterns/*.md 2>/dev/null | sort -u)"
     # install.sh and the corpus list are read ONCE and matched in the shell. `grep -qF`
@@ -8289,10 +8290,11 @@ else
   }
 
   # THE CORPUS IS DERIVED, never listed: every step file, every skill-root rule file except the
-  # grammar itself, and every role file. A hand list here would be a second declaration of what
-  # core's rulebook is, and the one thing added to it would be the one thing not scanned.
+  # grammar itself, and every role file and role appendix. A hand list here would be a second
+  # declaration of what core's rulebook is, and the one thing added to it would be the one thing
+  # not scanned.
   i82_corpus=()
-  for f in "$REPO_ROOT"/core/skills/ai-dlc/steps/*.md "$REPO_ROOT"/core/skills/ai-dlc/*.md "$REPO_ROOT"/core/team-roles/*.md; do
+  for f in "$REPO_ROOT"/core/skills/ai-dlc/steps/*.md "$REPO_ROOT"/core/skills/ai-dlc/*.md "$REPO_ROOT"/core/team-roles/*.md "$REPO_ROOT"/core/team-roles/appendix/*.md; do
     [ -f "$f" ] || continue
     [ "$f" = "$I82_GRAMMAR" ] && continue
     i82_corpus+=("$f")
@@ -12430,6 +12432,7 @@ EOF
 i119_files=(); i119_k=0; i119_nhook=0; i119_ntmpl=0
 for i119_f in "$REPO_ROOT"/core/skills/*/*.md "$REPO_ROOT"/core/skills/*/*/*.md \
               "$REPO_ROOT"/core/skills/*/*/*/*.md "$REPO_ROOT"/core/team-roles/*.md \
+              "$REPO_ROOT"/core/team-roles/appendix/*.md \
               "$REPO_ROOT"/core/rules/*.md "$REPO_ROOT"/core/hooks/*.sh \
               "$REPO_ROOT"/templates/CLAUDE.md.template; do
   # No size test here (BL-917): a `-s` that gates the read leaves an empty file with no read

@@ -47,6 +47,12 @@ sprint-overall PRs, not gated on anchor count or story count.
 
 SKILL.md Rule 32 touchpoint I applies before the deploy.
 
+**Read the project's operations protocol before deploying.** Read
+`docs/operator-runbooks/deploy-protocol.md` when it exists; otherwise read the
+`## Project Operations Protocol` and `## Deployment Commands` sections of `CLAUDE.md`. Its
+pre-deployment checks, rollback procedure and approval-required operations bind this step
+and every ops dispatch it makes.
+
 <!-- {deploy_command}: Your project's deployment command.
      Examples:
      - docker compose build <service> && docker compose up -d <service>
@@ -311,7 +317,11 @@ the gate log.
    fix inline, which Rule 28 makes a lead-conduct finding.
 4. If deployment issue: dispatch the `ops` teammate to fix the
    deployment (READ AND FOLLOW `_gate-procedures.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`), "Bounded-join beat"
-   for its brief and join), re-deploy, and re-run smoke tests.
+   for its brief and join), re-deploy, and re-run smoke tests. The `ops`
+   brief tells it to Read `docs/operator-runbooks/deploy-protocol.md` first
+   when it exists, otherwise the project's `CLAUDE.md` "Project Operations
+   Protocol" and "Deployment Commands" sections (native Read, never
+   `ctx_*`): its agent definition does not load `CLAUDE.md`.
 5. Repeat until all smoke tests pass.
 6. When the loop is exhausted — every diagnosis run, both routes taken,
    the test still red — the smoke verdict stays FAILED and the loop stops

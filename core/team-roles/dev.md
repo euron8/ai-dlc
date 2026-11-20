@@ -124,7 +124,10 @@ carries the same instruction; this section is its standing copy.
 Before starting any task, read these files in order:
 
 1. `docs/coding-conventions.md` (project coding standards)
-2. The architecture document (path defined in your project's CLAUDE.md) —
+2. The architecture document: `docs/architecture.md`, or
+   `_bmad-output/planning-artifacts/architecture.md` where the first does not
+   exist (list both with `git ls-files`); your story's `architecture_refs`
+   frontmatter names its sections —
    **slice-read only (SKILL.md Rule 25(b)): read its consolidated current-state
    head plus only the section(s) named in your story's `architecture_refs`
    frontmatter. NEVER read the whole file.** If the story has no
@@ -465,9 +468,4 @@ Never prompt the human directly.
 
 ## CI-vs-local divergence diagnostic order
 
-When CI fails on a check that passes locally, FIRST run
-`git ls-files <relevant-paths>` and `git check-ignore -v <paths>` BEFORE
-iterating on bash version, locale, runner OS, or pipeline differences. A
-`.gitignore` rule silently excluding test fixtures, scripts, or config files
-is the canonical case — the files exist on the dev machine, are absent from the
-CI checkout, and the failing check fails for unrelated-looking reasons.
+Read `.claude/team-roles/appendix/dev-ci-divergence.md` when CI fails on a check that passes locally, before you change anything to fix it.

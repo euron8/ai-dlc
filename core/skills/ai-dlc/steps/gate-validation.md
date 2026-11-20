@@ -530,7 +530,10 @@ sprint-level gates, deployment gates).
 
 **Check.** For each story being validated, identify its origin:
 
-1. A specific requirement in CLAUDE.md or `docs/coding-conventions.md`.
+1. A specific requirement in the project's `CLAUDE.md` or
+   `docs/coding-conventions.md`. A role whose agent definition does not
+   load `CLAUDE.md` (`gate-adjudicator` among them) Reads it explicitly
+   for this check (native Read, never `ctx_*`).
 2. User feedback captured in an escalation or planning artifact.
 3. A carry-over item from a previous sprint
    (`_bmad-output/planning-artifacts/carry-over-backlog.md`).

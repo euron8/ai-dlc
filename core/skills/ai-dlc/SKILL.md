@@ -102,8 +102,10 @@ These rules apply to ALL agents across ALL phases.
 
 ### Rule 1 -- Retired
 
-No instruction. CLAUDE.md loads on its own; coding conventions are
-`docs/coding-conventions.md`.
+No instruction. CLAUDE.md loads on its own for the lead and for every
+role whose agent definition does not set `omitClaudeMd`; a role that
+sets it Reads `CLAUDE.md` when its brief or step says to. Coding
+conventions are `docs/coding-conventions.md`.
 
 ### Rule 2 -- Single conversation is the default
 

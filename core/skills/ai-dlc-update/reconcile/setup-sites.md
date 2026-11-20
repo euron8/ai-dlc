@@ -75,6 +75,7 @@ core_manifest:
   - core/skills/ai-dlc/templates/*.md
   - core/skills/ai-dlc/templates/smoke-surface.txt
   - core/team-roles/*.md
+  - core/team-roles/appendix/*.md
   - core/hooks/ai-dlc-*.sh
   - core/session-driver/*.sh
   - core/schemas/*.json
@@ -107,6 +108,7 @@ rulebook:
   - core/skills/ai-dlc/rule-authoring.md
   - core/skills/ai-dlc/artifact-path-grammar.md
   - core/team-roles/*.md
+  - core/team-roles/appendix/*.md
 
 consumer_machinery_home: scripts/ai-dlc-local/
 consumer_machinery_subdirs: lib/ hooks/ fixtures/ config/ tests/

@@ -14,19 +14,25 @@
     "analyst": {
       "model": "sonnet",
       "effort": "medium",
-      "omitClaudeMd": true
+      "omitClaudeMd": true,
+      "disallowedTools": "Agent"
     },
     "architect": {
       "model": "opus",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true
     },
     "code-reviewer": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true,
+      "disallowedTools": "Skill, Agent"
     },
     "code-reviewer-escalated": {
       "model": "opus",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true,
+      "disallowedTools": "Skill, Agent"
     },
     "dev": {
       "model": "sonnet",
@@ -39,52 +45,72 @@
     "gate-adjudicator": {
       "model": "sonnet",
       "effort": "medium",
-      "omitClaudeMd": true
+      "omitClaudeMd": true,
+      "disallowedTools": "Skill, Agent"
     },
     "ops": {
       "model": "opus",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true,
+      "disallowedTools": "Skill, Agent"
     },
     "pm": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true,
+      "disallowedTools": "Agent"
     },
     "pm-escalated": {
       "model": "opus",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true
     },
     "pre-reviewer": {
       "model": "sonnet",
       "effort": "low",
-      "omitClaudeMd": true
+      "omitClaudeMd": true,
+      "disallowedTools": "Skill, Agent"
     },
     "protected-path-editor": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "medium",
+      "disallowedTools": "Skill, Agent"
     },
     "qa": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true,
+      "disallowedTools": "Skill, Agent"
     },
     "remediator": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true,
+      "disallowedTools": "Agent"
     },
     "cis": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true,
+      "disallowedTools": "Skill, Agent"
     },
     "sm": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true,
+      "disallowedTools": "Skill, Agent"
     },
     "tea": {
       "model": "opus",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true,
+      "disallowedTools": "Agent"
     },
     "ux": {
       "model": "sonnet",
-      "effort": "medium"
+      "effort": "medium",
+      "omitClaudeMd": true,
+      "disallowedTools": "Skill, Agent"
     }
   },
   "bashOutputMaxChars": 8000,

@@ -72,6 +72,12 @@ if [ -d "$PROJECT_ROOT/.claude/team-roles" ]; then
     FILES_TO_REMOVE+=(".claude/team-roles/$(basename "$role_file")")
   done
 fi
+if [ -d "$PROJECT_ROOT/.claude/team-roles/appendix" ]; then
+  for appendix_file in "$PROJECT_ROOT/.claude/team-roles/appendix/"*.md; do
+    [ -f "$appendix_file" ] || continue
+    FILES_TO_REMOVE+=(".claude/team-roles/appendix/$(basename "$appendix_file")")
+  done
+fi
 
 # -- Hooks (the `ai-dlc-` prefix is the boundary) --
 # `.claude/hooks/` is shared: a consumer may keep its own hooks beside ours, and
@@ -170,6 +176,15 @@ if [ -f "$PROJECT_ROOT/docs/coding-conventions.md" ]; then
 fi
 if [ -f "$PROJECT_ROOT/docs/ai-dlc-feedback.md" ]; then
   FILES_TO_REMOVE+=("docs/ai-dlc-feedback.md")
+fi
+# The on-demand operations protocol is consumer-owned: removed only while it is byte-identical
+# to the unfilled template install.sh scaffolds; a filled or pre-existing file is kept.
+if [ -f "$PROJECT_ROOT/docs/operator-runbooks/deploy-protocol.md" ]; then
+  if cmp -s "$AI_DLC_ROOT/templates/deploy-protocol.md.template" "$PROJECT_ROOT/docs/operator-runbooks/deploy-protocol.md"; then
+    FILES_TO_REMOVE+=("docs/operator-runbooks/deploy-protocol.md")
+  else
+    KEPT_EDITED="$KEPT_EDITED docs/operator-runbooks/deploy-protocol.md"
+  fi
 fi
 if [ -d "$PROJECT_ROOT/docs/ai-dlc-patterns" ]; then
   DIRS_TO_REMOVE+=("docs/ai-dlc-patterns/")
@@ -451,7 +466,7 @@ fi
 
 # Clean up empty directories (don't remove if they still have content)
 # Children before parents: `.claude` can only go once every subdirectory above it has.
-for dir in .claude/skills .claude/team-roles .claude/hooks .claude/rules .claude/schemas .claude/session-driver .claude/agents .claude docs/escalations docs; do
+for dir in .claude/skills .claude/team-roles/appendix .claude/team-roles .claude/hooks .claude/rules .claude/schemas .claude/session-driver .claude/agents .claude docs/escalations docs; do
   if [ -d "$PROJECT_ROOT/$dir" ] && [ -z "$(ls -A "$PROJECT_ROOT/$dir")" ]; then
     rmdir "$PROJECT_ROOT/$dir"
     echo "  Removed empty directory $dir/"
