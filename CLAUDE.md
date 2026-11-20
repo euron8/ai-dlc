@@ -176,7 +176,7 @@ Lead:
 6. Verify once: `origin/main`'s tree equals the pushed tree, with the previous main tree as a DIFF control.
 7. Detach the main checkout at the new `origin/main`.
 
-While builder sessions are active, the lead runs the roll call in `docs/roll-call.md` every 45 minutes, as written.
+While builder sessions are active, the lead runs the roll call in `docs/roll-call.md`, as written.
 
 ## Releases
 
