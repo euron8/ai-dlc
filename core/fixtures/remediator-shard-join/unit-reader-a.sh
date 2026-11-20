@@ -168,7 +168,7 @@ r5_world() { ua_tpl r5 _ua_orig_r5_world; }
 nl_world() { ua_tpl "nl-$1" _ua_orig_nl_world "$1"; }
 doc_world() { ua_tpl doc _ua_orig_doc_world; }
 # subj_world reads SJRD SJPA SPECREL SJSD and AI_DLC_STATE_DIR, which p_sjgate and p_sjnest override: all in the key.
-subj_world() { ua_tpl "sj-$(printf '%s|' "$SJRD" "$SJPA" "$SPECREL" "$SJSD" "${AI_DLC_STATE_DIR-}" | cksum | cut -d' ' -f1)" _ua_orig_subj_world; }
+subj_world() { ua_tpl "sj${1:+-$1}-$(printf '%s|' "$SJRD" "$SJPA" "$SPECREL" "$SJSD" "${AI_DLC_STATE_DIR-}" | cksum | cut -d' ' -f1)" _ua_orig_subj_world "$@"; }
 # three_writers: the template's three hook rows appended with root rewritten for the world they land in.
 UA_TW="$(new_world)" && _ua_orig_three_writers "$UA_TW" || { echo "FIXTURE BROKEN: the template three-writer world did not build" >&2; exit 2; }
 UA_TL="$UA_TW/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
@@ -244,6 +244,8 @@ three_writers() { if [ -n "${UA_CLI:-}" ]; then _ua_orig_three_writers "$1"; els
 if ua_on SJ; then
 p_sjoin "$JOIN" && ok "SJ1: --subject, one writer per part -> JOINED; prd assembled, SPEC edited in place, the unchanged brief untouched; per-stem <stem>@<sha> before/after lists, artifact: the manifest" \
   || bad "SJ1: the subject join (rc=$RC): $(cat "$JO")"
+p_sjpre "$JOIN" && ok "SJ1p: a PRE-ERA four-file series (brief, SPEC, prd, architecture-impact in its manifest) is served as recorded -> JOINED, the four-stem <stem>@<sha> before/after lists" \
+  || bad "SJ1p: the pre-era subject join (rc=$RC): $(cat "$JO")"
 # SJ1o: the join asks the SIBLING merge's --pair-sep and writes `@` only on exit 0 with exactly `@`.
 # A copy of the join's scripts dir with an OLD merge beside it must write `=`. The old merge is a
 # stub this fixture writes, never a vendored copy of core's own script: it does what a merge before
@@ -281,7 +283,7 @@ else
 fi
 p_sjspec2 "$JOIN" && ok "SJ2: the whole-file SPEC part written by two agents -> REFUSED 'more than one agent', no record" || bad "SJ2: (rc=$RC) $(cat "$JO")"
 p_sjoos "$JOIN" && ok "SJ3: prd.md written IN PLACE while its sections were out (out-of-scope text) -> REFUSED naming the file, no record" || bad "SJ3: (rc=$RC) $(cat "$JO")"
-p_sjnopart "$JOIN" && ok "SJ4: the unchanged brief (no part) written in the window -> REFUSED, no record" || bad "SJ4: (rc=$RC) $(cat "$JO")"
+p_sjnopart "$JOIN" && ok "SJ4: the unchanged SPEC (no part) written in the window -> REFUSED, no record" || bad "SJ4: (rc=$RC) $(cat "$JO")"
 p_sjnames "$JOIN" && ok "SJ5: --pass party reads shards/requirements-party-repair/ and writes requirements-party-repair.md, never a *-repair-p<M>.md" || bad "SJ5: (rc=$RC) $(cat "$JO")"
 p_sjbase "$JOIN" && ok "SJ6: --base other than the manifest's -> REFUSED, no record" || bad "SJ6: (rc=$RC) $(cat "$JO")"
 p_sjgate "$JOIN" && ok "SJ7: --subject --artifact gate-planning --pass 1 -> JOINED as gate-planning-repair-p1.md from shards/gate-planning-repair-p1/, and no requirements-repair-p1.md" || bad "SJ7: $(cat "$JO")"
@@ -383,12 +385,12 @@ p_lanefiles "$JOIN" && ok "LN1: files mode, three disjoint parts -> 3 lanes, eac
   || bad "LN1: files-mode lanes answered wrongly (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
 p_lanedoc "$JOIN" && ok "LN2: document mode, three section parts of one document -> ONE lane (a shared file), the worklist ran, FANIN-COUNT: 0" \
   || bad "LN2: section parts of one document were not one lane (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
-if p_lanesubj "$JOIN"; then ok "LN3: subject mode, prd's three sections one lane and a MOVED-CITE joining architecture-impact to it -> 2 lanes, the cite that lane's item"
+if p_lanesubj "$JOIN"; then ok "LN3: subject mode, prd's three sections one lane and a MOVED-CITE from the SPEC joining it -> 1 lane, the cite that lane's item"
 else bad "LN3: the shared-file or MOVED-CITE edge did not join lanes (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"; fi
-p_lanesubjnear "$JOIN" && ok "LN4: LN3 one property apart, no cite -> 3 lanes" \
+p_lanesubjnear "$JOIN" && ok "LN4: LN3 one property apart, no cite -> 2 lanes" \
   || bad "LN4: lanes joined with no edge (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
-p_lanehit "$JOIN" && ok "LN5: a replaced line still standing in two other lanes' files -> 3 lanes, ONE FANIN HIT item (a HIT never joins lanes)" \
-  || bad "LN5: a cross-lane HIT joined lanes or was not one fan-in item (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
+p_lanehit "$JOIN" && ok "LN5: a replaced line still standing in the SPEC's file -> 2 lanes, the HIT is the SPEC lane's item (a HIT never joins lanes)" \
+  || bad "LN5: a HIT joined lanes or was not the SPEC lane's item (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
 p_laneround "$JOIN" && ok "LN7: the lane round's own join (--artifact stories-serial) JOINS its lane parts and prints no LANE or FANIN line" \
   || bad "LN7: the lane round's join did not join or printed lanes (rc=$RC): $(cat "$JO")"
 # ---- BL-716 second build: the ADJUDICATION PARTITION (LN10-LN12), an escalation's own unedited file (LN13, LN14), and the lane

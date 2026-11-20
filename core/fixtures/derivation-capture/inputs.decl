@@ -8,3 +8,4 @@ core/scripts/validate-artifact-derivations.sh
 # The shared helper the fixture sources (fx_inproc).
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh
+core/scripts/era-token.sh

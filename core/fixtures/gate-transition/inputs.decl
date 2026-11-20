@@ -128,3 +128,4 @@ core/scripts/validate-trunk-audit-gate.sh
 core/scripts/validate-write-format-steering.sh
 core/scripts/wait-for-deliverable.sh
 core/scripts/wfd-start-of.sh
+core/scripts/era-token.sh

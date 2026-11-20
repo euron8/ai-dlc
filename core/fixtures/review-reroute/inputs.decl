@@ -16,3 +16,4 @@ core/scripts/content-seal.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/world.sh
 core/fixtures/lib/layout.sh
+core/scripts/era-token.sh

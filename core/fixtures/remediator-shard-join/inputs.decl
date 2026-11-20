@@ -30,3 +30,4 @@ core/team-roles/pm-escalated.md
 core/skills/ai-dlc/steps/_gate-procedures.md
 # The shard driver: the parent's coverage join reads it. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.
 core/fixtures/remediator-shard-join-b/run.sh
+core/scripts/era-token.sh

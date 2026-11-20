@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # subject-partition/run.sh -- partition-subject.sh, the ONE speller of the requirements step's
-# SUBJECT partition: brief, the one SPEC, prd.md and s<N>/architecture-impact.md, each mapped over
+# SUBJECT partition: the one SPEC and prd.md, each mapped over
 # what changed since ONE base recorded in s<N>/requirements-subject.md.
 #
 # WHY A FIXTURE OF ITS OWN. document-partition owns the section grammar and the scope; this owns
@@ -14,10 +14,10 @@
 # sprint section's diff starts at its own heading.
 #
 # THE DISCRIMINATING INPUTS:
-#   S1  the map names the brief, the SPEC and architecture-impact, and >= 3 PRD parts, one of them
-#       holding a line edited in an EARLIER section -- the cumulative-PRD case a `## Sprint <N>`
-#       heading scope misses.
-#   S2  an UNCHANGED brief has no part (presence-shaped: the other three files must be there).
+#   S1  the map names the SPEC and >= 3 PRD parts, one of them holding a line edited in an EARLIER
+#       section -- the cumulative-PRD case a `## Sprint <N>` heading scope misses -- and names neither
+#       the brief nor architecture-impact, both CHANGED on disk.
+#   S2  the subject manifest lists exactly the SPEC and the prd, in that order (presence-shaped).
 #   S3  two SPEC.md under specs/s<N>/ refuse, and the refusal names the count -- the SECOND match
 #       sorts first, so a build that takes the first match maps the WRONG one silently.
 #   S4  no SPEC refuses.
@@ -185,16 +185,15 @@ p_s1() {
   run "$1" "$w" --map 9; CAP_W="$w"; CAP_S="$1"; CAP_RC="$RC"; cp "$OUT" "$WORK/cap1"
   [ "$RC" -eq 0 ] || return 1
   e="$(grep -n '^current line 7 EDITED' "$w/$PAR/prd.md" | cut -d: -f1)"
-  [ "$(nfile "$PAR/product-brief.md")" -eq 1 ] && [ "$(nfile _bmad-output/specs/s9/kernel/SPEC.md)" -eq 1 ] \
-    && [ "$(nfile "$PAR/s9/architecture-impact.md")" -eq 1 ] && [ "$(nfile "$PAR/prd.md")" -ge 3 ] \
+  [ "$(nfile "$PAR/product-brief.md")" -eq 0 ] && [ "$(nfile _bmad-output/specs/s9/kernel/SPEC.md)" -eq 1 ] \
+    && [ "$(nfile "$PAR/s9/architecture-impact.md")" -eq 0 ] && [ "$(nfile "$PAR/prd.md")" -ge 3 ] \
     && awk -F'\t' -v e="$e" '$2 ~ /prd\.md$/ && $3 <= e && e <= $4 { h = 1 } END { exit !h }' "$OUT" \
     && [ -f "$w/$PAR/s9/requirements-subject.md" ]
 }
 p_s2() {
-  local w; w="$(world 0)" || return 1
+  local w; w="$(world)" || return 1
   run "$1" "$w" --map 9; [ "$RC" -eq 0 ] || return 1
-  [ "$(nfile "$PAR/product-brief.md")" -eq 0 ] && [ "$(nfile _bmad-output/specs/s9/kernel/SPEC.md)" -eq 1 ] \
-    && [ "$(nfile "$PAR/s9/architecture-impact.md")" -eq 1 ] && [ "$(nfile "$PAR/prd.md")" -ge 3 ]
+  [ "$(awk '/^file: / { printf "%s ", $2 }' "$w/$PAR/s9/requirements-subject.md")" = "SPEC prd " ]
 }
 p_s3() {
   local w; w="$(world)" || return 1
@@ -237,6 +236,23 @@ p_s7() {
   run "$1" "$w" --map 9 --read-only
   [ "$RC" -eq 2 ] && grep -q 'no subject manifest' "$OUT" && [ ! -e "$w/$PAR/s9/requirements-subject.md" ]
 }
+p_s10() { # a manifest written under the old four-file engine is served as recorded (forward-only); a reordered one refuses
+  local w mf; w="$(world)" || return 1; mf="$w/$PAR/s9/requirements-subject.md"
+  run "$1" "$w" --map 9; [ "$RC" -eq 0 ] && [ -f "$mf" ] || return 1
+  awk '/^file: / { if (!d) { d = 1
+         print "file: product-brief _bmad-output/planning-artifacts/product-brief.md"
+         print "file: SPEC _bmad-output/specs/s9/kernel/SPEC.md"
+         print "file: prd _bmad-output/planning-artifacts/prd.md"
+         print "file: architecture-impact _bmad-output/planning-artifacts/s9/architecture-impact.md" } next } { print }' "$mf" > "$mf.n" \
+    && mv "$mf.n" "$mf" || return 1
+  run "$1" "$w" --map 9
+  [ "$RC" -eq 0 ] && grep -q '^SUBJECT: SKIP pre-era ' "$OUT" && [ "$(nfile "$PAR/product-brief.md")" -eq 1 ] \
+    && [ "$(nfile _bmad-output/specs/s9/kernel/SPEC.md)" -eq 1 ] && [ "$(nfile "$PAR/s9/architecture-impact.md")" -eq 1 ] \
+    && [ "$(nfile "$PAR/prd.md")" -ge 3 ] || return 1
+  awk '/^file: SPEC / { spec = $0; next } /^file: prd / { print; print spec; next } { print }' "$mf" > "$mf.n" && mv "$mf.n" "$mf" || return 1
+  run "$1" "$w" --map 9
+  [ "$RC" -eq 2 ] && grep -q 'records a subject other than the one this tree derives' "$OUT" && ! grep -q 'SKIP pre-era' "$OUT"
+}
 p_s8() {
   local w d n; w="$(world)" || return 1
   d="$w/$PAR/s9/shards/requirements-repair-p1"
@@ -247,16 +263,14 @@ p_s8() {
   printf 'Repaired in the section copy.\n' >> "$d/prd/sections/1.md"
   run "$1" "$w" --assemble "$d"; [ "$RC" -eq 0 ] && grep -q '^Repaired in the section copy.$' "$w/$PAR/prd.md"
 }
-# --expect-sha. shas_of prints `<stem>=<sha>` for the four subject files of a world, as the lead writes
+# --expect-sha. shas_of prints `<stem>=<sha>` for the two subject files of a world, as the lead writes
 # them. Every arm splits a FRESH world, so "nothing left behind" is asserted on the world it refused in.
 shas_of() { # <world> [state dir]
   local w="$1" sd="${2:-_bmad-output}" st f
-  for st in product-brief SPEC prd architecture-impact; do
+  for st in SPEC prd; do
     case "$st" in
-      product-brief) f="$w/$sd/planning-artifacts/product-brief.md" ;;
       SPEC) f="$w/$sd/specs/s9/kernel/SPEC.md" ;;
       prd) f="$w/$sd/planning-artifacts/prd.md" ;;
-      architecture-impact) f="$w/$sd/planning-artifacts/s9/architecture-impact.md" ;;
     esac
     printf '%s=%s ' "$st" "$(shasum -a 256 "$f" | cut -d' ' -f1)"
   done
@@ -282,21 +296,21 @@ p_x3() { # the @file form: a correct file splits; a file carrying one wrong sha 
   run "$1" "$w" --split 9 "$d" --expect-sha "@$f"
   { [ "$RC" -eq 0 ] && [ -f "$d/.subject" ]; } || return 1
   w="$(world)" || return 1; d="$w/$PAR/s9/shards/requirements-repair-p1"
-  shas_of "$w" | sed "s/product-brief=[0-9a-f]*/product-brief=$ZERO64/" | tr ' ' '\n' > "$WORK/expect.bad"
+  shas_of "$w" | sed "s/SPEC=[0-9a-f]*/SPEC=$ZERO64/" | tr ' ' '\n' > "$WORK/expect.bad"
   run "$1" "$w" --split 9 "$d" --expect-sha "@$WORK/expect.bad"
-  { [ "$RC" -eq 2 ] && grep -q 'product-brief is not the reviewed bytes' "$OUT" && nothing_left "$d"; } || return 1
+  { [ "$RC" -eq 2 ] && grep -q 'SPEC is not the reviewed bytes' "$OUT" && nothing_left "$d"; } || return 1
   run "$1" "$w" --split 9 "$d" --expect-sha "@$WORK/no-such-file"
   [ "$RC" -eq 2 ] && grep -q 'does not exist' "$OUT" && nothing_left "$d"
 }
 p_x4() { # a duplicated stem -> REFUSED naming the stem and the count
   local w d; w="$(world)" || return 1; d="$w/$PAR/s9/shards/requirements-repair-p1"
   run "$1" "$w" --split 9 "$d" --expect-sha "$(shas_of "$w") $(shas_of "$w" | cut -d' ' -f1)"
-  [ "$RC" -eq 2 ] && grep -q 'names stem product-brief 2 time' "$OUT" && nothing_left "$d"
+  [ "$RC" -eq 2 ] && grep -q 'names stem SPEC 2 time' "$OUT" && nothing_left "$d"
 }
 p_x5() { # a missing stem -> REFUSED naming the stem and 0
   local w d; w="$(world)" || return 1; d="$w/$PAR/s9/shards/requirements-repair-p1"
-  run "$1" "$w" --split 9 "$d" --expect-sha "$(shas_of "$w" | cut -d' ' -f1-3)"
-  [ "$RC" -eq 2 ] && grep -q 'names stem architecture-impact 0 time' "$OUT" && nothing_left "$d"
+  run "$1" "$w" --split 9 "$d" --expect-sha "$(shas_of "$w" | cut -d' ' -f1)"
+  [ "$RC" -eq 2 ] && grep -q 'names stem prd 0 time' "$OUT" && nothing_left "$d"
 }
 p_x6() { # a token with no `=`, and a token naming no subject stem -> each REFUSED
   local w d r1; w="$(world)" || return 1; d="$w/$PAR/s9/shards/requirements-repair-p1"
@@ -332,15 +346,16 @@ p_x9() { # the `@` separator: an all-`@` list splits, and a list mixing `@` and 
   [ "$RC" -eq 0 ] && [ -f "$d/.subject" ]
 }
 
-p_s1 "$PS" && ok "S1: brief, SPEC, architecture-impact each one part; >= 3 PRD parts, one holding the line edited in an EARLIER section; manifest written" \
+p_s1 "$PS" && ok "S1: the SPEC is one part, >= 3 PRD parts, one holding the line edited in an EARLIER section; the changed brief and architecture-impact have none; manifest written" \
   || bad "S1: the subject map is incomplete: $(head -12 "$OUT")"
-p_s2 "$PS" && ok "S2: an unchanged brief has no part, and the other three files still do" || bad "S2: $(head -12 "$OUT")"
+p_s2 "$PS" && ok "S2: the subject manifest lists exactly the SPEC and the prd" || bad "S2: $(head -12 "$OUT")"
 p_s3 "$PS" && ok "S3: two SPEC.md under specs/s9/ -> REFUSED 'matches 2 file(s)', no manifest" || bad "S3: $(head -3 "$OUT")"
 p_s4 "$PS" && ok "S4: no SPEC.md -> REFUSED 'matches 0 file(s)'" || bad "S4: $(head -3 "$OUT")"
 p_s5 "$PS" && ok "S5: trunk moved (merge-base moved) -> the map is byte-identical, read from the manifest; --base <new merge-base> REFUSED" \
   || bad "S5: the base was not read from the manifest: $(head -3 "$OUT")"
 p_s6 "$PS" && ok "S6: every subject file unchanged since the base -> REFUSED 'nothing to review', no SERIAL line, no manifest" || bad "S6: $(head -3 "$OUT")"
 p_s7 "$PS" && ok "S7: --read-only with no manifest -> REFUSED and writes none" || bad "S7: $(head -3 "$OUT")"
+p_s10 "$PS" && ok "S10: an old four-stem manifest (brief, SPEC, prd, architecture-impact) is served as recorded with one SUBJECT: SKIP pre-era line, four files mapped, rc 0; the same stems reordered REFUSE" || bad "S10: (rc=$RC) $(head -4 "$OUT")"
 p_s8 "$PS" && ok "S8: --split sections prd only (SPEC a whole-file part with no copy); --assemble writes the edited copy into prd.md" \
   || bad "S8: $(head -5 "$OUT")"
 p_x1 "$PS" && ok "X1: --expect-sha with one wrong stem sha -> REFUSED naming prd, no section or .subject left" || bad "X1: $(head -3 "$OUT")"

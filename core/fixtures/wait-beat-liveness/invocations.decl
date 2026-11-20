@@ -9,11 +9,11 @@
 # and the S9 dashed case run the subject in process.
 # BL-975 delta fold: 374 -> 375, two agreeing counted runs on a clean detached worktree. The new mutant
 # failed-per-agent-key (M73) costs mutant()'s one `bash -n` (+1); the new seed S17 (S29q) runs the subject in process.
-185 *
+193 *
 2 core/scripts/merge-adversarial-shards.sh
 0 core/scripts/validate-adversarial-convergence.sh
 5 core/scripts/wait-for-deliverable.sh
 0 core/scripts/wfd-start-of.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
-326 inproc:core/scripts/wait-for-deliverable.sh
+334 inproc:core/scripts/wait-for-deliverable.sh
 35 inproc:core/scripts/merge-adversarial-shards.sh

@@ -697,6 +697,8 @@ record the pass produced. **Existing entries already inside a durable artifact a
 the slot of the sprint they describe, never removed** — the same disposition item 23b took for
 the 33 byproduct files.
 
+**For architecture, run `scripts/ai-dlc/architecture-close.sh`.** It writes the changelog's record-inventory section, regenerates the index and commits by explicit path; write the lead's prose beside the inventory.
+
 ## Adversarial review dispatch (referenced by step files)
 
 When a step file says "run an adversarial review pass", execute this. It is the REVIEW half of
@@ -759,6 +761,10 @@ with Write or Edit, never Bash; a Bash-written shard has no harness record and t
 Filename numbering is load-bearing: Check 24 orders the series by the `p<M>` token.
 
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete <findings_path>`, which takes a file as delivered only once it ends in its `seat-complete:` line and that line's `sha=` matches.
+
+**Stop a hung review seat the beat names.** Under `--complete`, every beat prints one `REVIEW SHARD` line per undelivered shard with its agent's silence age; the agent is the transcript whose brief names the shard's path. A `REVIEW SEAT HUNG` line names an agent whose newest record is a tool_use with no result older than 1200 s (`AI_DLC_HUNG_TOOL_SECS`); stop that agent with TaskStop and re-dispatch that shard. Use `--shard-header` for adversarial review shards only: a target under a `*-repair` or `*-repair-*` shard directory is refused at arming (exit 64); join repair parts without the flag.
+
+**Check a single adversary's pass for finding keys before you stamp it.** Before the lead stamps a pass that one adversary wrote itself (an unsharded pass, or a SERIAL document's single review), run `scripts/ai-dlc/merge-adversarial-shards.sh --check-keys <pass file>`; stamp it on `KEYS-OK` or `KEYS-SKIP`, and on `REFUSED`, have the adversary apply the remedy the refusal prints and run the check again.
 
 **A re-dispatched shard is merged with `--rerun`.** Write-ledger rows never expire, so after a stalled adversary is re-dispatched the merge refuses its shard as written by two adversary dispatches. When it does, run the same merge with `--rerun <shard>.md@<the re-dispatch's dispatched-at>` (repeatable, one per re-dispatched shard). The re-dispatch is a NEW dispatch, and a refusal naming a writer of another shard is a finding, never a timestamp to move. A `REFUSED: DOUBLE-WRITE <shard>.md:` refusal means no start exists, because a writer kept writing after another writer's first row: follow its remedy, and never search for a start.
 
@@ -1079,6 +1085,8 @@ pass, and `gate-validation.md` "Gate Failure" after a check fails. **The lead do
 artifact itself** — it is the most context-saturated agent in the pipeline and repairs from a
 compacted summary, not the document. (Rationale + the measurement: notes R35.)
 
+**Generate the member briefs of a round.** Run `scripts/ai-dlc/gen-round-briefs.sh` for the member briefs of every round and for the beat-join command with the `--shard-header` flag its kind owns (convergence for a review round, elicitation for an elicitation round, none for a repair round); never hand-write them. A repair round's cross shard brief is the one brief you write.
+
 **Dispatch** ONE `remediator` per pass, or one shard per disjoint FILE set when the artifact is
 two or more files ("Shard by file" below), or one shard per SECTION when the artifact is one
 document that `partition-document.sh --map` partitions ("Shard by section" below), or one shard
@@ -1191,6 +1199,14 @@ the lead's to adjudicate, as an open escalation is, and is never a refusal. The 
 fix aside as outside the shard or not required without naming a hand-off, and, in every parts
 mode, a `repaired` entry with an edit whose `siblings:` field is absent or in none of its four
 forms, and a siblings fence whose control text is not in the file it names.
+
+**Commit each round before the next opens.** One commit per round holds the round's joined record and the artifact it repaired, made after the serial tail's last write to that artifact (`requirements-bookkeeping.sh`, a render, a seal) and before the next round's partition. `partition-document.sh --shard-dir` for round M and the join of round M refuse while round M-1's record is uncommitted; commit it and rerun. A series whose pass-1 shard directory carries no `.era` token prints `ROUND-COMMIT: SKIP pre-era <name>` and is not judged; leave that series' commits as they are.
+
+**Section lanes for a single-document round.** Join with `--keep-sections`: the plan's lanes are section copies (the `LANE-SECTIONS:` line names them); each lane edits only its `sections/<n>.md`, with section-local lines; after the last lane run `partition-document.sh --reassemble <repair-dir>` once.
+
+**Render SPEC once, after the serial tail.** A subject-mode join prints `SPEC-RENDER: DEFERRED` for a stale memlog and writes its record; render `SPEC.md` once after the serial tail. `--sources` and `--escalations` over the finished records refuse until it is rendered.
+
+**Close the serial tail with the requirements bookkeeping script.** The lead runs `scripts/ai-dlc/requirements-bookkeeping.sh --precheck <N>` there, then `--rederive`, `--mirror-lr` and `--seal` for the findings it names.
 
 **Adjudicators decide, one writer writes.** After `FANIN-COUNT:` the round-one join prints one
 `ADJUDICATE: <n | fanin> <b>/<k> <item>` line per item of every lane (`<n>`) and of the fan-in that

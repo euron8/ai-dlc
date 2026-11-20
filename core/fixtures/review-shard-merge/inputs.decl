@@ -25,3 +25,4 @@ core/fixtures/review-shard-merge-b/run.sh
 core/fixtures/review-shard-merge-c/run.sh
 core/fixtures/review-shard-merge-d/run.sh
 # The dist-only shards (e, f, g) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.
+core/scripts/era-token.sh

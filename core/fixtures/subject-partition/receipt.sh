@@ -17,7 +17,7 @@
 #          section -- is edited; `## Sprint 9` is appended with three `###` subsections of 40
 #          lines each (~260 lines, about 76% of the PRD's in-scope bytes, so its `##` atom splits at
 #          its `###` headings: >= 3 PRD parts); a SPEC and s9/architecture-impact.md are new.
-# (a) partition-subject.sh --map 9 lists the brief, the SPEC and architecture-impact, >= 3 PRD
+# (a) partition-subject.sh --map 9 lists the SPEC, >= 3 PRD (and neither the brief nor architecture-impact)
 #     parts, one of them holding the edited earlier line, and NO part inside an unchanged `##`
 #     atom (`## Sprint 6..8`).
 # (b) merge-adversarial-shards.sh --subject 9 over seeded shards writes requirements-adversarial-p1
@@ -115,9 +115,9 @@ mv "$PA/s9/prd-adversarial-p3.md" "$W/parked-p3.md" && mv "$DD" "$W/parked-prd-p
 MAP="$(bash "$S/partition-subject.sh" --map 9 2>&1)"; rc=$?
 [ "$rc" -eq 0 ] || miss "(a) partition-subject.sh --map 9 exited $rc: $(printf '%s' "$MAP" | head -1)"
 has_file() { printf '%s\n' "$MAP" | awk -F'\t' -v f="$1" '$2 == f { n++ } END { exit !(n > 0) }'; }
-has_file _bmad-output/planning-artifacts/product-brief.md || miss "(a) the changed brief has no part"
+has_file _bmad-output/planning-artifacts/product-brief.md && miss "(a) the changed brief has a part"
 has_file _bmad-output/specs/s9/kernel/SPEC.md || miss "(a) the SPEC has no part"
-has_file _bmad-output/planning-artifacts/s9/architecture-impact.md || miss "(a) architecture-impact.md has no part"
+has_file _bmad-output/planning-artifacts/s9/architecture-impact.md && miss "(a) architecture-impact.md has a part"
 NPRD="$(printf '%s\n' "$MAP" | awk -F'\t' '$2 == "_bmad-output/planning-artifacts/prd.md"' | grep -c .)" || NPRD=0
 [ "$NPRD" -ge 3 ] || miss "(a) prd.md has $NPRD part(s), want >= 3"
 printf '%s\n' "$MAP" | awk -F'\t' -v e="$EDITED" '$2 ~ /prd\.md$/ && $3 <= e && e <= $4 { h = 1 } END { exit !h }' \
@@ -129,7 +129,7 @@ for s in 6 7 8; do
 done
 
 # ---- (b) the subject merge ----------------------------------------------------------------
-SL="product-brief=$(sha "$PA/product-brief.md") SPEC=$(sha "$P/_bmad-output/specs/s9/kernel/SPEC.md") prd=$(sha "$PA/prd.md") architecture-impact=$(sha "$PA/s9/architecture-impact.md")"
+SL="SPEC=$(sha "$P/_bmad-output/specs/s9/kernel/SPEC.md") prd=$(sha "$PA/prd.md")"
 ORDS="$(printf '%s\n' "$MAP" | cut -f1)"
 shard() { # <dir> <key> <n-major> <cite> <minute>
   local i=0

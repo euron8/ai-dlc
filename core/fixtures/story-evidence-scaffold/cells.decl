@@ -1,0 +1,8 @@
+# The ERA arm starts the two guarded planning scripts as processes, one start per cell: the CLI is the subject (the producer whose
+# token line the judge reads, and the handoff verdict on what it wrote). strategy-self-check.sh starts unguarded child validators, which
+# he-inproc.sh would hand to a real bash (an INPROC finding), so neither script is asked in process.
+e2e core/scripts/strategy-rows.sh cli-era-bind why=the CLI --bind is the producer whose token line the judge reads
+e2e core/scripts/strategy-self-check.sh cli-era-unit why=the CLI --handoff verdict on a stamped table with Kind unit
+e2e core/scripts/strategy-self-check.sh cli-era-test why=the CLI --handoff verdict on the same stamped table with Kind test, its allow twin
+e2e core/scripts/strategy-self-check.sh cli-era-own why=the CLI --handoff --story verdict, scoped to one story beside an empty-cell sibling
+e2e core/scripts/strategy-self-check.sh cli-era-dir why=the CLI dir-wide --handoff verdict, the control that the sibling is refused

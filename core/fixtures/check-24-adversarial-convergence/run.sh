@@ -1828,7 +1828,23 @@ k3_shard() { # <dir> <key> <cite> <minute> <artifact> <artifact_sha> [n-major]
 }
 # k3_copy <src world name> <dst world name> -> the dst path: a byte copy of a world built once, taken BEFORE its divergent step.
 k3_copy() { rm -rf "${K3W:?}/$2" && cp -R "$K3W/$1" "$K3W/$2" && printf '%s' "$K3W/$2"; }
+# k3_pmap <world> <scripts dir> -> the subject map. Unless K3_ERA=new, the manifest is written HERE as the FOUR-file
+# subject (brief, SPEC, prd, architecture-impact) a series opened before the subject became two files carries, in
+# the form partition-subject.sh writes it (base = the merge-base with main), and partition-subject.sh serves it as
+# recorded (`SUBJECT: SKIP pre-era` on stderr): one map per world, the in-flight series the forward-only rule keeps
+# whole. K3_ERA=new leaves the first map to write the two-file manifest.
+k3_pmap() {
+  local w="$1" mf="$1/$K3PA/s9/requirements-subject.md" base
+  if [ "${K3_ERA:-pre}" != new ] && [ ! -f "$mf" ]; then
+    base="$(k3g "$w" merge-base main HEAD 2>/dev/null)" && [ -n "$base" ] || return 1
+    { printf '# Requirements subject -- sprint 9\n\n<!-- REQUIREMENTS_SUBJECT v1\nsprint: 9\ntrunk: main\nbase: %s\n' "$base"
+      printf 'file: product-brief %s/product-brief.md\nfile: SPEC _bmad-output/specs/s9/kernel/SPEC.md\nfile: prd %s/prd.md\n' "$K3PA" "$K3PA"
+      printf 'file: architecture-impact %s/s9/architecture-impact.md\nREQUIREMENTS_SUBJECT_END -->\n' "$K3PA"; } > "$mf" || return 1
+  fi
+  AI_DLC_PROJECT_ROOT="$w" bash "$2/partition-subject.sh" --map 9 2>/dev/null
+}
 k3_stems() { local w="$1"
+  if [ "${K3_ERA:-pre}" = new ]; then printf 'SPEC=%s prd=%s' "$(k3sha "$w/_bmad-output/specs/s9/kernel/SPEC.md")" "$(k3sha "$w/$K3PA/prd.md")"; return; fi
   printf 'product-brief=%s SPEC=%s prd=%s architecture-impact=%s' "$(k3sha "$w/$K3PA/product-brief.md")" \
     "$(k3sha "$w/_bmad-output/specs/s9/kernel/SPEC.md")" "$(k3sha "$w/$K3PA/prd.md")" "$(k3sha "$w/$K3PA/s9/architecture-impact.md")"; }
 k3_xkeys() { # <scripts dir> <K> -> the cross shard keys the partitioner names for K (`cross` at G=1)
@@ -1839,7 +1855,7 @@ k3_xkeys() { # <scripts dir> <K> -> the cross shard keys the partitioner names f
 k3_subject_pass() { # <world> <scripts dir> [at|lone] -> s9/requirements-adversarial-p1.md by merge --subject
   # lone: ONE cross.md in place of the groups (BL-811's dispatched shape), merged by the REAL merge.
   local w="$1" d="$1/$K3PA/s9/shards/requirements-p1" m=0 o sl x
-  AI_DLC_PROJECT_ROOT="$w" bash "$2/partition-subject.sh" --map 9 > "$w/subject.map" 2>&1 || return 1
+  k3_pmap "$w" "$2" > "$w/subject.map" || return 1
   mkdir -p "$d"; sl="$(k3_stems "$w")"
   [ "${3:-}" = at ] && sl="$(printf '%s' "$sl" | sed 's/=/@/g')"
   for o in $(cut -f1 "$w/subject.map"); do m=$((m + 1)); k3_shard "$d" "$o" "$o" "$m" "$K3PA/s9/requirements-subject.md" "$sl"; done
@@ -1872,7 +1888,7 @@ k3_document_pass() { # <world> <scripts dir> [keep|nomanifest] -> the consumer's
     *) mv "$w/$K3PA/s9/prd-adversarial-p1.md" "$w/$K3PA/s9/requirements-adversarial-p1.md" || return 1 ;;
   esac
   [ "${3:-}" = nomanifest ] && return 0
-  AI_DLC_PROJECT_ROOT="$w" bash "$2/partition-subject.sh" --map 9 >/dev/null 2>&1   # the manifest exists, as in a real sprint
+  k3_pmap "$w" "$2" >/dev/null 2>&1   # the manifest exists, as in a real sprint
   [ -f "$w/$K3PA/s9/requirements-subject.md" ]
 }
 # <world> <scripts dir> -> s9/test-strategy-adversarial-p1.md, a --document merge of a sprint file the
@@ -1880,7 +1896,7 @@ k3_document_pass() { # <world> <scripts dir> [keep|nomanifest] -> the consumer's
 # reaches it and must drop it at the artifact test.
 k3_other_pass() {
   local w="$1" d="$1/$K3PA/s9/shards/test-strategy-p1" m=0 o sl
-  AI_DLC_PROJECT_ROOT="$w" bash "$2/partition-subject.sh" --map 9 >/dev/null 2>&1
+  k3_pmap "$w" "$2" >/dev/null 2>&1
   [ -f "$w/$K3PA/s9/requirements-subject.md" ] || return 1
   { printf '# Test strategy\n\n## Scope\n\n'; k3lorem scope 20; printf '\n## Levels\n\n'; k3lorem levels 20
     printf '\n## Risks\n\n'; k3lorem risks 20; } > "$w/$K3PA/s9/test-strategy.md"
@@ -1962,6 +1978,10 @@ for v in pin:"$K3_STUB" pinctl:"$K3_REAL"; do
     && awk '/^shard_tool_use_ids:/ { sub(/ 1=/, " 99=") } { print }' "$w/$K3PA/s9/requirements-adversarial-p1.md" > "$w/p1.n" \
     && mv "$w/p1.n" "$w/$K3PA/s9/requirements-adversarial-p1.md" || K3_BUILT=0
 done
+# k3-subject2: the SHIPPING path -- a TWO-file (post-era) subject, one sharded MET pass notarizing SPEC and prd (K3_ERA=new);
+# every other K3 world above models the pre-era four-file series partition-subject.sh serves as recorded.
+w="$(k3_world k3-subject2 "$K3_POST")" && K3_ERA=new k3_subject_pass "$w" "$K3S" \
+  && [ "$(grep -c '^file: ' "$w/$K3PA/s9/requirements-subject.md")" -eq 2 ] || K3_BUILT=0
 # k3-armh: pass 1 has 2 MAJOR, pass 2 has 0, and only a PARTY record sits beside them.
 w="$(k3_copy k3-subject k3-armh)" && [ "$K3_SUBJ_OK" -eq 1 ] || K3_BUILT=0
 if [ "$K3_BUILT" -eq 1 ]; then
@@ -1983,6 +2003,7 @@ if [ "$K3_BUILT" -ne 1 ]; then
 else
   K3_DOC_FAIL="FAIL (K3 -- SUBJECT): requirements-adversarial-p1.md: it reviews"
   k3_cell k3-subject  "$VALIDATOR" "$K3W/k3-subject"  0 - "K3 -- SUBJECT"
+  k3_cell k3-subject2 "$VALIDATOR" "$K3W/k3-subject2" 0 - "K3 -- SUBJECT"
   k3_cell k3-atform   "$VALIDATOR" "$K3W/k3-atform"   0 - "K3 -- SUBJECT"
   k3_cell k3-document "$VALIDATOR" "$K3W/k3-document" 1 "$K3_DOC_FAIL" -
   k3_cell k3-wrongset "$VALIDATOR" "$K3W/k3-wrongset" 1 "is not the subject map's ordinals plus cross" -
@@ -2014,7 +2035,7 @@ k3w_bad() { K3W_BUILT=0; K3W_BAD="$K3W_BAD $1"; }
 # k3w_single <world> <stem> <file rel> -- one adversary's pass written directly, as a one-part
 # reviewer writes it (no merge: these files read SERIAL), the manifest written by the real first map.
 k3w_single() {
-  AI_DLC_PROJECT_ROOT="$1" bash "$K3S/partition-subject.sh" --map 9 >/dev/null 2>&1
+  k3_pmap "$1" "$K3S" >/dev/null 2>&1
   [ -f "$1/$K3PA/s9/requirements-subject.md" ] || return 1
   k3_shard "$1/$K3PA/s9" "$2-adversarial-p1" x 0 "$3" "$(k3sha "$1/$3")" \
     && sed -i.b "s/^tool_use_id: .*/tool_use_id: toolu_k3$2/" "$1/$K3PA/s9/$2-adversarial-p1.md" && rm -f "$1/$K3PA/s9/"*.b
@@ -2137,6 +2158,9 @@ j2s_sub() { # <list> <stem> <sha> -> the list with that stem's sha replaced, in 
 J2S_FAKE="$(printf '%064d' 7)"
 j2s_build j2s-base "$K3_POST" >/dev/null && J2S_BASE_OK=1 || j2s_bad j2s-base
 w="$(j2s_world j2s-nochain "$K3_POST")" && printf 'cap-2: THE system SHALL y.\n' >> "$w/$J2S_SPEC" || j2s_bad j2s-nochain
+# j2s2-nochain: the same SPEC drift over a TWO-file (post-era) subject, the shipping path (K3_ERA=new).
+w="$(K3_ERA=new j2s_build j2s2-nochain "$K3_POST")" && printf 'cap-2: THE system SHALL y.\n' >> "$w/$J2S_SPEC" \
+  && [ "$(grep -c '^file: ' "$w/$K3PA/s9/requirements-subject.md")" -eq 2 ] || j2s_bad j2s2-nochain
 w="$(j2s_world j2s-chain "$K3_POST")" || j2s_bad j2s-chain
 if [ "$J2S_BUILT" -eq 1 ]; then
   j2s_n="$(k3sha "$w/$J2S_SPEC")"; printf 'cap-2: THE system SHALL y.\n' >> "$w/$J2S_SPEC"
@@ -2166,6 +2190,8 @@ else
   # The FAIL is J2's own, not K3's: K3 reads only PENDING (its byte gate) in every J2S world.
   k3w_cell j2s-nochain  "$VALIDATOR" "$K3W/j2s-nochain"  requirements 1 "SPEC (_bmad-output/specs/s9/kernel/SPEC.md): notarized" "FAIL (K3"
   k3w_cell j2s-nochain-j2 "$VALIDATOR" "$K3W/j2s-nochain" requirements 1 "FAIL (J2 -- DRIFT)" "architecture-impact (_bmad-output"
+  k3w_cell j2s2-nochain "$VALIDATOR" "$K3W/j2s2-nochain" requirements 1 "SPEC (_bmad-output/specs/s9/kernel/SPEC.md): notarized" "FAIL (K3"
+  k3w_cell j2s2-nochain-j2 "$VALIDATOR" "$K3W/j2s2-nochain" requirements 1 "FAIL (J2 -- DRIFT)" "architecture-impact (_bmad-output"
   k3w_cell j2s-chain    "$VALIDATOR" "$K3W/j2s-chain"    requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
   k3w_cell j2s-subjlink "$VALIDATOR" "$K3W/j2s-subjlink" requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"
   k3w_cell j2s-prd      "$VALIDATOR" "$K3W/j2s-prd"      requirements 0 "PENDING (K3 -- SUBJECT)" "J2 -- DRIFT"

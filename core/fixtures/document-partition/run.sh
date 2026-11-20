@@ -595,6 +595,25 @@ p_sd_name() { # each table row and the plain stem derive their name; a series na
   done
   [ "$(sd_count "$pa/s5/shards")" = "$ents" ]
 }
+p_sd_era() { # the era token: pass 1 writes it (PRODUCER arm); a token-carrying series refuses round 2 over an uncommitted round-1 record and
+  # opens it once committed; a series opened without the token (old engine) reads SKIP pre-era even when it finishes under this engine
+  local w pa art gc="git -c user.email=a@b -c user.name=n" tok='ai-dlc-era: e4-forward-1'
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"; art="$pa/s7/prd.md"
+  mkdir -p "$pa/s7" && printf '# D\n' > "$art" || return 1
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 $gc -C "$w" add -A >/dev/null 2>&1 && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 $gc -C "$w" commit -q -m base || return 1
+  sd "$1" "$w" "$art" 1
+  [ "$SD_RC" -eq 0 ] && grep -qxF -- "$tok" "$SD_OUT/.era" || return 1
+  printf '# repair p1\n' > "$pa/s7/prd-repair-p1.md"
+  sd "$1" "$w" "$art" 2
+  [ "$SD_RC" -eq 2 ] && case "$SD_ERR" in *"accepted repair is uncommitted"*) : ;; *) return 1 ;; esac || return 1
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 $gc -C "$w" add -A >/dev/null 2>&1 && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 $gc -C "$w" commit -q -m round1 || return 1
+  sd "$1" "$w" "$art" 2
+  [ "$SD_RC" -eq 0 ] && [ ! -e "$SD_OUT/.era" ] || return 1
+  # the old-engine series: its pass-1 dir exists with no token
+  mkdir -p "$pa/s7/shards/old-p1" && printf '# D\n' > "$pa/s7/old.md" && printf '# r\n' > "$pa/s7/old-repair-p1.md" || return 1
+  sd "$1" "$w" "$pa/s7/old.md" 2
+  [ "$SD_RC" -eq 0 ] && case "$SD_ERR" in *"SKIP pre-era old"*) : ;; *) return 1 ;; esac
+}
 p_sd_merge() { # the printed path is accepted by the SHIPPING merge's phases, and REC_PREFIX is the prefix the ledger refusal keys on
   local w pa mg r art fl nm rp want
   mg="$(dirname "$PD")/merge-adversarial-shards.sh"
@@ -796,5 +815,6 @@ if p_sd_wt_state "$PD"; then ok "A45: an s<K>/ path under a linked worktree's ow
 if p_sd_wt_cmp "$PD"; then ok "A46: an artifact differing in the linked worktree is REFUSED; an identical copy, and the main checkout's absolute path while the worktree differs, print the main checkout's shard dir"; else bad "A46: an artifact differing in the linked worktree is REFUSED; an identical copy, and the main checkout's absolute path while the worktree differs, print the main checkout's shard dir"; fi
 if p_sd_nogit "$PD"; then ok "A47: with no git repo an s<K>/ path is accepted as written and any other path is REFUSED"; else bad "A47: with no git repo an s<K>/ path is accepted as written and any other path is REFUSED"; fi
 
+if p_sd_era "$PD"; then ok "A48: --shard-dir pass 1 writes the era token; a token-carrying series refuses round 2 over an uncommitted record and opens it once committed; a series opened without the token reads SKIP pre-era"; else bad "A48: --shard-dir pass 1 writes the era token; a token-carrying series refuses round 2 over an uncommitted record and opens it once committed; a series opened without the token reads SKIP pre-era"; fi
 echo
 report_end document-partition

@@ -768,6 +768,41 @@ while IFS="$US" read -r op a b c; do
   esac
 done < "$OPS"
 
+# THE CONSERVATION REFUSAL (Check 35 before the write). A call whose candidate lacks no substantive
+# line of the old file (the common call) runs nothing. Otherwise validate-snapshot-conservation.sh
+# --candidate applies its survival test to the candidate: a write that takes the lines removed since the
+# last gate, found in no tracked markdown file, to the floor is refused and the snapshot stays
+# byte-identical. Exit 2 (no git, no gate yet) never refuses.
+CSV="$SU_SELF_DIR/validate-snapshot-conservation.sh"
+if [ -f "$CSV" ] && [ -s "$SNAP" ]; then
+  case "$SNAP" in
+    "$SU_ROOT"/*)
+      CSLOST="$(LC_ALL=C awk -v cand="$CAND" '{ t = $0; gsub(/^[ \t]+|[ \t]+$/, "", t) }
+        FILENAME == cand { k[t] = 1; next } length(t) >= 20 && !(t in k) { n++ } END { print n + 0 }' "$CAND" "$SNAP")"
+      if [ "${CSLOST:-0}" -gt 0 ]; then
+        # The old line a scalar --set replaces is rewritten, never destroyed: it counts as surviving, so the
+        # mandatory `--set current_step_file` is never refused. Line deletes and row deletes stay judged.
+        CSEX="$SDIR/.pipeline-snapshot.md.exempt.$$"
+        { [ ! -s "$HISTP" ] || cat "$HISTP"
+          LC_ALL=C awk -F"$US" -v ops="$OPS" -v cand="$CAND" '
+            function trim(x) { gsub(/^[ \t]+|[ \t]+$/, "", x); return x }
+            FILENAME == ops { if ($1 == "set") k[$2] = 1; else if ($1 == "set-in") k[$3] = 1; next }
+            FILENAME == cand { c[trim($0)] = 1; next }
+            { t = trim($0); if (t in c) next; u = t; sub(/^[-*+][ \t]*/, "", u); sub(/^\*+/, "", u)
+              for (key in k) if (substr(u, 1, length(key)) == key && substr(u, length(key) + 1) ~ /^\**:/) { print t; break } }
+          ' "$OPS" "$CAND" "$SNAP"; } > "$CSEX"
+        CSOUT="$(AI_DLC_PROJECT_ROOT="$SU_ROOT" bash "$CSV" --root "$SU_ROOT" --snapshot "${SNAP#"$SU_ROOT"/}" \
+          --candidate "$CAND" --extra "$CSEX" --quiet 2>&1)"
+        CSRC=$?; rm -f "$CSEX"
+        if [ "$CSRC" -eq 1 ]; then
+          printf '%s\n' "$CSOUT" >&2
+          printf 'snapshot-update: REFUSED by the conservation check; %s is unchanged. Re-run the removals as --move-to-history.\n' "$SNAP" >&2
+          exit 1
+        fi
+      fi ;;
+  esac
+fi
+
 # The payload is what the candidate ADDED, each line counted against its occurrences in the old
 # file, exactly as the derivation-capture hook subtracts an Edit's old_string from its new_string.
 # The old file is told apart by NAME, never by FNR == NR: an empty old file would make NR == FNR hold

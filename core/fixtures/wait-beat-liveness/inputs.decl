@@ -15,3 +15,4 @@ core/fixtures/lib/mutant.sh
 core/fixtures/lib/layout.sh
 # inproc_run (hdr_msg's in-process merge pass; inproc.sh sources nothing else).
 core/fixtures/lib/inproc.sh
+core/scripts/era-token.sh

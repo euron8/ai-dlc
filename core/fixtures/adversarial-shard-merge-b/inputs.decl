@@ -42,3 +42,4 @@ core/fixtures/adversarial-shard-merge-b/run.sh
 core/fixtures/adversarial-shard-merge-c/run.sh
 core/fixtures/adversarial-shard-merge-d/run.sh
 core/fixtures/lib/world.sh
+core/scripts/era-token.sh

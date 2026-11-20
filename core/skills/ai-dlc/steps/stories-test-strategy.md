@@ -13,6 +13,8 @@ and test strategy with full validation cycle.
 
 ## EXECUTION SEQUENCE
 
+**First action of this step, before section 1:** `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file stories-test-strategy.md 'Pipeline Position'`
+
 ### 1. Implementation Readiness
 
 Invoke `/bmad-sprint-planning intent=readiness` and do not create or modify sprint-status.yaml.
@@ -315,7 +317,8 @@ the dev fills it:
   | Strategy id | Case | Kind | Resolves to |
   |---|---|---|---|
 
-  `Kind` is exactly one of `test`, `predicate`, `deploy-time`. A `test`
+  `Kind` is exactly one of `test`, `predicate`, `deploy-time`;
+  `bash scripts/ai-dlc/strategy-self-check.sh --handoff --story <that story file>` refuses any other value in that story alone. A `test`
   row's `Resolves to` is the collectable test node id
   (`<path>::<test name>`); a `predicate` row's is the shell predicate that
   discharges it; a `deploy-time` row's is the deploy-validate step and the
@@ -684,6 +687,11 @@ strategy.
 1. `/bmad-testarch-test-design` then select test strategy — risk-based test
    strategy for the sprint.
 
+   **The strategy's ids and its mapping table are script output.** Produce the section 1 id grammar's ids and the
+   `| Strategy id | Case | Story id |` rows with
+   `bash scripts/ai-dlc/strategy-rows.sh --sprint <N> --stories-dir _bmad-output/planning-artifacts/s<N>/stories --rows`
+   and paste them verbatim; never type an id or a case letter.
+
    **The last leg of the chain, `AC → test`, is carried by the strategy and by
    Check 21, not by a requirements-to-tests trace.** No story is implemented at
    planning and no test exists, so this step takes no trace. At planning the leg
@@ -750,18 +758,22 @@ strategy.
    `artifact:`, `artifact_sha_before:` and `artifact_sha_after:` triple, or Check 24 arm J2
    fails.
 
-   **Bind every strategy case to a story row.** For each test id the
-   repaired strategy assigns to a story, write its rows into that story's
-   `## Strategy Test IDs` table (Pre-Flight Checklist item (c)): the id, and
-   one row per lettered case the strategy row lists, `Kind` and
-   `Resolves to` left for the dev, who fills them before QA handoff; an
+   **Bind every strategy case to a story row.** Run
+   `bash scripts/ai-dlc/strategy-rows.sh --sprint <N> --stories-dir _bmad-output/planning-artifacts/s<N>/stories --bind`,
+   adding `--letters <story id>:AC<n>=<k>` for an acceptance criterion whose text names a case it does not letter. It writes each story's
+   `## Strategy Test IDs` table (Pre-Flight Checklist item (c)) from the acceptance criteria: the id, and
+   one row per lettered case, `Kind` and `Resolves to` left empty for the dev, who fills them before QA handoff; an
    empty cell or a `test` node that does not resolve is refused by
    `scripts/ai-dlc/validate-handoff-evidence.sh --strategy` before gate 1
-   and again before the sprint-review gate. A lettered case exists only in the
-   strategy's prose until this row names it, and nothing later can ask for
-   a test the story file never listed. Count the case letters in the
-   strategy and the rows across the story files; the two counts are equal
-   before this step ends.
+   and again before the sprint-review gate. The script refuses (exit 3) a table whose `Kind` or `Resolves to` is filled.
+   Then run the same command with `--check-strategy _bmad-output/planning-artifacts/s<N>/test-strategy.md` in place of `--bind`;
+   exit 0 is the case-count match, and a difference is repaired in `test-strategy.md`.
+
+   **Authoring self-check.** Run
+   `bash scripts/ai-dlc/strategy-self-check.sh --sprint <N> --stories-dir _bmad-output/planning-artifacts/s<N>/stories --spec <spec folder> --prd <prd path> --series _bmad-output/planning-artifacts/s<N>/stories-adversarial-p --transcript-dir <the directory this session's transcript sits in>`
+   (add `--spine`, `--spine-lint` and `--locked-requirements` as Check 30 takes them) and repair every `FAILED` line before this step ends.
+   Its last line is `STRATEGY-SELF-CHECK: PASS`, `FAIL` or `INCOMPLETE`; the step ends on PASS.
+
    **When done, immediately proceed to Commit Planning Artifacts:**
 
 ### 6. Commit Planning Artifacts

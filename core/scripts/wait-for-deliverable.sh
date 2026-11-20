@@ -1192,6 +1192,25 @@ if [ -n "$SHARD_AXIS" ] && [ "$SEAT_FLAG" -ne 1 ]; then
   exit 64
 fi
 
+# --shard-header checks the header of an ADVERSARIAL review shard. A target inside a `*-repair` or
+# `*-repair-*` shard directory is a remediator's part, which carries no provenance block, so every
+# one would stay UNFINISHED for the whole beat budget. Refused at arming, naming flag and target.
+if [ -n "$SHARD_AXIS" ]; then
+  OLDIFS_SH_="$IFS"; IFS='|'
+  for sh_t_ in $TARGETS; do
+    sh_d_="$(basename "$(dirname "$sh_t_")")"
+    case "$sh_d_" in
+      *-repair|*-repair-*)
+        IFS="$OLDIFS_SH_"
+        echo "FAIL: --shard-header $SHARD_AXIS was given target '$sh_t_', which sits in the repair shard directory '$sh_d_'." >&2
+        echo "  A repair part carries no adversarial header, so the flag would leave it UNFINISHED for the whole" >&2
+        echo "  beat budget. Re-arm without --shard-header. NO beat ran and the join is NOT armed." >&2
+        exit 64 ;;
+    esac
+  done
+  IFS="$OLDIFS_SH_"
+fi
+
 if [ "$STATUS" -eq 1 ] && [ "$RESET" -eq 1 ]; then
   echo "FAIL: --status and --reset cannot be combined. --status writes nothing; a reset is a write." >&2
   exit 64
@@ -2420,6 +2439,84 @@ say_dispatch_failed() {
   return 0
 }
 
+# ---------------------------------------------------------------------------
+# REVIEW SEATS: SILENCE AGE PER UNDELIVERED SHARD, AND THE HUNG SEAT. Under --complete only (never
+# --complete-repair, never a plain dev or suite beat). The shard-to-agent mapping SOURCE is the
+# first record of each `agent-*.jsonl` in TEAMMATE_DIR -- the dispatch brief -- which names the
+# deliverable path it must write; no ledger or --dispatch id maps a shard (several targets, one
+# beat), so the transcript whose brief names the shard (the most recently written when a re-dispatch
+# left two) is its agent. No transcript names it: the line says so.
+# EVERY beat prints one `REVIEW SHARD` line per undelivered shard with its agent's silence age.
+# HUNG, a word STALLED does not use: the agent's newest assistant/user record is a tool_use with no
+# tool_result and is older than HUNG_TOOL_SECS. The bound is MEASURED, not picked: over 121,592
+# completed tool calls of 2,949 shard-brief agents (sprints 317-323) in the reference consumer's transcripts (every
+# transcript naming a `shards/` deliverable; adversary, remediator, qa, code-reviewer, dev seats)
+# the only call at or past 1200s was the 2,947s one (none else above 770s) that held
+# s323's stories p2 shard 06 for 49 minutes until the lead stopped it. 1200s clears the longest
+# completed call by 430s and is the bound OPEN_REQUEST_SECS already uses for the same property.
+# It supersedes BL-975 item 1's "re-dispatch after two silent beats". Report only: no exit code,
+# beat count or grant changes.
+# ---------------------------------------------------------------------------
+HUNG_TOOL_SECS="${AI_DLC_HUNG_TOOL_SECS:-1200}"
+case "$HUNG_TOOL_SECS" in ''|*[!0-9]*) HUNG_TOOL_SECS=1200 ;; esac
+rs_state_() {  # $1 = transcript -> "<newest turn ts|-> <1 when it is an unanswered tool_use> <tool name>"
+  LC_ALL=C awk '
+    index($0, "{\"type\":\"api-request\"") == 1 { next }
+    index($0, "\"type\":\"assistant\"") || index($0, "\"type\":\"user\"") {
+      ts = ""
+      if (match($0, /"timestamp":"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]/)) ts = substr($0, RSTART + 13, 19)
+      if (ts == "") next
+      last = ts; open = 0; nm = ""
+      p = index($0, "\"type\":\"tool_use\"")
+      if (index($0, "\"type\":\"assistant\"") && p) {
+        rest = substr($0, p)
+        if (match(rest, /"name":"[^"]*"/)) nm = substr(rest, RSTART + 8, RLENGTH - 9)
+        open = 1
+      }
+    }
+    END { print (last == "" ? "-" : last), open + 0, (nm == "" ? "tool" : nm) }' "$1" 2>/dev/null
+}
+say_review_seats() {  # $1 = |-separated targets NOT delivered
+  [ "$SEAT_FLAG" -eq 1 ] && [ -n "${1:-}" ] || return 0
+  if [ -z "$TEAMMATE_DIR" ] || [ ! -d "$TEAMMATE_DIR" ]; then
+    echo "REVIEW SHARDS  silence ages unavailable (no teammate transcripts for this session)"
+    return 0
+  fi
+  rs_now_="$(date +%s)"
+  rs_ifs_="$IFS"; IFS="|"
+  for rs_t_ in $1; do
+    IFS="$rs_ifs_"
+    [ -n "$rs_t_" ] || continue
+    case "$rs_t_" in /*) rs_abs_="$rs_t_"; rs_rel_="${rs_t_#"${WD_ROOT}"/}" ;; *) rs_rel_="${rs_t_#./}"; rs_abs_="${WD_ROOT}/${rs_rel_}" ;; esac
+    rs_best_=""; rs_bm_=-1; rs_n_=0
+    for rs_f_ in "$TEAMMATE_DIR"/agent-*.jsonl; do
+      [ -f "$rs_f_" ] || continue
+      rs_l_=""; IFS= read -r rs_l_ < "$rs_f_" || true
+      case "$rs_l_" in *"$rs_rel_"*|*"$rs_abs_"*) ;; *) continue ;; esac
+      rs_n_=$(( rs_n_ + 1 ))
+      rs_m_="$(mtime_of "$rs_f_")"
+      if [ "$rs_m_" -gt "$rs_bm_" ]; then rs_bm_="$rs_m_"; rs_best_="$rs_f_"; fi
+    done
+    if [ -z "$rs_best_" ]; then
+      echo "REVIEW SHARD $rs_t_ -- not delivered; no agent transcript's brief names this path, so its silence cannot be read"
+      continue
+    fi
+    rs_id_="${rs_best_##*/agent-}"; rs_id_="${rs_id_%.jsonl}"
+    rs_r_="$(rs_state_ "$rs_best_")"
+    rs_ts_="${rs_r_%% *}"; rs_o_="${rs_r_#* }"; rs_nm_="${rs_o_#* }"; rs_o_="${rs_o_%% *}"
+    rs_e_=""; [ "$rs_ts_" = "-" ] || rs_e_="$(to_epoch "${rs_ts_}Z")" || rs_e_=""
+    [ -n "$rs_e_" ] || rs_e_="$rs_bm_"
+    rs_a_=$(( rs_now_ - rs_e_ )); [ "$rs_a_" -lt 0 ] && rs_a_=0
+    echo "REVIEW SHARD $rs_t_ -- not delivered; agent-${rs_id_} silent $(human_age "$rs_a_")$([ "$rs_n_" -le 1 ] || printf " (%s transcripts name it)" "$rs_n_")"
+    if [ "$rs_o_" = 1 ] && [ "$rs_a_" -ge "$HUNG_TOOL_SECS" ]; then
+      echo "REVIEW SEAT HUNG agent-${rs_id_} ($rs_t_) -- its transcript ends in a ${rs_nm_} tool_use with no result for $(human_age "$rs_a_") (bound ${HUNG_TOOL_SECS}s)"
+      echo "  Stop that agent (TaskStop agent-${rs_id_}), then re-dispatch that shard. Do not keep beating on it."
+    fi
+  done
+  IFS="$rs_ifs_"
+  return 0
+}
+
 # ONE function, called from all THREE places a beat can end -- the exhaustion path,
 # the chained-sibling path and the post-sleep report. A lead that reads only one of
 # them has to get the same three-way answer, and three copies of this ladder would
@@ -2531,6 +2628,7 @@ if [ "$STATUS" -eq 1 ]; then
   done
   IFS="$OLDIFS"
   say_dispatch_failed "$S_NOT" 1
+  say_review_seats "$S_NOT"
   echo "STATUS -- ${S_DONE} delivered, ${S_OUT} not. Nothing slept, nothing was written, no beat was charged."
   exit 0
 fi
@@ -2932,6 +3030,7 @@ if [ -n "$EXHAUSTED" ]; then
   say_liveness
   # Every resolved agent, fan-out included: the not-delivered set is everything the sweep left out.
   say_dispatch_failed "${PENDING}${PENDING:+${EXHAUSTED:+|}}${EXHAUSTED}"
+  say_review_seats "${PENDING}${PENDING:+${EXHAUSTED:+|}}${EXHAUSTED}"
   exit 1
 fi
 
@@ -2972,6 +3071,7 @@ if [ "$MAY_SLEEP" -eq 0 ]; then
   IFS="$OLDIFS"
   say_liveness
   say_dispatch_failed "$PENDING"
+  say_review_seats "$PENDING"
   echo "  NOTE: a sibling beat already ran in this same Bash call, so this one did"
   echo "  NOT sleep and did NOT consume a beat -- two beats in one call serialize"
   echo "  into 2 x ${BUDGET}s for a wave that ONE call polls concurrently. Do not loop"
@@ -3117,6 +3217,7 @@ else
   # and printing one there would train the lead to skip the line.
   say_liveness
   say_dispatch_failed "$PL_OUT"
+  say_review_seats "$PL_OUT"
   say "BEAT COMPLETE -- ${N_DELIVERED} delivered, ${N_WAITING} still out. Consume only the DELIVERED paths, then beat again."
 fi
 

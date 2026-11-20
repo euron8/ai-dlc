@@ -145,7 +145,7 @@ while [ $# -gt 0 ]; do
       case ",${AC_ARMS}," in ,,) echo "--arms needs a list of K,K2,K3,L,H,J2,J3" >&2; exit 1 ;; esac
       case "$AC_ARMS" in *[!A-Z0-9,]*|,*|*,|*,,*) echo "--arms: '$AC_ARMS' is not a comma list of K,K2,K3,L,H,J2,J3" >&2; exit 1 ;; esac
       for _ac_a in ${AC_ARMS//,/ }; do
-        case "$_ac_a" in K|K2|K3|L|H|J2|J3) ;; *) echo "--arms: unknown arm '$_ac_a' (known: K,K2,K3,L,H,J2,J3)" >&2; exit 1 ;; esac
+        case "$_ac_a" in K|K2|K3|L|H|J2|J3|P1J) ;; *) echo "--arms: unknown arm '$_ac_a' (known: K,K2,K3,L,H,J2,J3)" >&2; exit 1 ;; esac
       done
       shift 2 ;;
     -h|--help) sed -n '2,80p' "${BASH_SOURCE[0]}"; exit 0 ;;
@@ -2745,8 +2745,8 @@ if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ]; then
         [ -f "$k3_root/$k3_rel" ] && [ -n "$k3_n" ] && [ "$(k2_sha "$k3_root/$k3_rel")" = "$k3_n" ] || k3_moved="$k3_moved $k3_st"
       done < "$k3_mf"
     fi
-    if [ -z "$k3_root" ] || [ "$k3_nstem" -ne 4 ]; then
-      k3_pending="the subject manifest ${k3_mf} does not name four files under one root"
+    if [ -z "$k3_root" ] || { [ "$k3_nstem" -ne 2 ] && [ "$k3_nstem" -ne 4 ]; }; then
+      k3_pending="the subject manifest ${k3_mf} does not name two or four files under one root"
     elif [ -n "$k3_moved" ]; then
       k3_pending="the disk bytes of${k3_moved} are not the bytes it notarized -- judged only on reviewed bytes"
     else
@@ -4424,8 +4424,9 @@ $J3_SUCCESSORS
 J3EOF
 }
 # $1 pass file -> one `<shard-file>#<id>` per MAJOR finding heading. No apostrophe in the awk text.
+# $2 = 1 also keys CRITICAL headings (arm P1J); default MAJOR only.
 j3_keys() {
-  awk -v base="${1##*/}" '
+  awk -v base="${1##*/}" -v crit="${2:-0}" '
     function sev(h,   best, bp, i, w, p) {
       best = ""; bp = 0
       split("CRITICAL MAJOR MINOR NIT", w, " ")
@@ -4449,7 +4450,7 @@ j3_keys() {
       next }
     !shd && /^## Findings/ { fnd = 1; next }
     /^## / { fnd = ($0 ~ /^## Findings[ \t]*$/); next }
-    /^### / && fnd && sev($0) == "MAJOR" {
+    /^### / && fnd && (sev($0) == "MAJOR" || (crit == 1 && sev($0) == "CRITICAL")) {
       s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s); sub(/^[ \t]+/, "", s)
       sub(/^[Ff]inding[ \t]+/, "", s)
       if (match(s, /^[A-Za-z0-9][A-Za-z0-9.-]*/)) {
@@ -4606,6 +4607,89 @@ ${j3_bad}
         ${j3_defer}
         REOPEN   or dispatch another pass in this series."
     fi
+  fi
+fi
+
+# =============================================================================
+# P1J. PASS-1 JOIN -- every CRITICAL/MAJOR of the carry-over series' first pass is on a repair record (BL-1175).
+# =============================================================================
+# GATE ONLY, like J3. The carry-over evaluation's second adversarial pass is ONE final pass scoped by the
+# document's diff from the draft (carry-over-evaluation.md), so nothing re-reads what the pass-1 repair did with
+# each finding: this arm joins them mechanically.
+#   subject    the series stem `coe` (or `carry-over-evaluation`) once a pass after the first exists; the key
+#              set is pass 1's `<shard-file>#<id>` CRITICAL and MAJOR headings, derived by j3_keys (J3's key
+#              grammar, CRITICAL added) and compared against pass 1's own records only: `coe-p1/cross.md#F-2`
+#              and `coe-p2/cross.md#F-2` are two keys.
+#   closed     a `source:` token of a `disposition: repaired` entry of `<stem>-repair-p1.md` or
+#              `<stem>-serial-repair-p1.md` under a triple linked from pass 1's notarized sha (J3's link), or of
+#              a `disposition: escalated` entry in either record (the operator owns it).
+#   FAIL       a key closed by neither, or fewer CRITICAL/MAJOR headings than the header's counts.
+#   SKIP       printed, never counted: the series opened under the old engine, whatever engine finishes it.
+#              The era key is shards/<stem>-p1/.era (partition-document.sh --shard-dir writes the token there; the
+#              merge copies it into a merged pass 1 only when .era carries it), or, for a series with no pass-1
+#              shard dir (one adversary wrote pass 1), the token line in the pass-1 file. No version or git
+#              history is read.
+# The E4 era token: one definition, era-token.sh beside this script.
+AI_DLC_ERA_TOKEN=""; . "$(dirname "${BASH_SOURCE[0]}")/era-token.sh" 2>/dev/null || AI_DLC_ERA_TOKEN=""   # absent copy: no token written, no era judged
+j3p1_escalated() {  # $1 repair record -> one `source:` token per `disposition: escalated` entry
+  awk "$J3_LAB"'
+    /^### / || /^<!-- shard:/ { src = ""; next }
+    lab("source") { src = v; next }
+    lab("disposition") { split(v, d, /[[:space:]]+/)
+      if (tolower(d[1]) == "escalated" && src != "") { n = split(src, t, /[[:space:],;]+/); for (i = 1; i <= n; i++) if (t[i] != "") print t[i] }
+      src = ""; next }' "$1"
+}
+P1J_ARM=0
+case "$j3_stem" in coe|carry-over-evaluation)
+  case "$j3_m" in ""|*[!0-9]*) ;; *) [ "$N" -ge 2 ] && P1J_ARM=1 ;; esac ;;
+esac
+[ "$P1J_ARM" -eq 1 ] && { ac_on P1J || P1J_ARM=0; }
+if [ "$P1J_ARM" -eq 1 ] && [ "${P_FILE[0]##*/}" = "${j3_stem}-adversarial-p1.md" ]; then
+  p1j_f="${P_FILE[0]}"; p1j_pd="${j3_stem}-p1"
+  p1j_era=""
+  if [ -n "$AI_DLC_ERA_TOKEN" ]; then
+    if [ -d "$j3_dir/shards/$p1j_pd" ]; then grep -qxF -- "$AI_DLC_ERA_TOKEN" "$j3_dir/shards/$p1j_pd/.era" 2>/dev/null && p1j_era=1
+    else grep -qxF -- "$AI_DLC_ERA_TOKEN" "$p1j_f" && p1j_era=1; fi
+  fi
+  j3_keys "$p1j_f" 1 > "$AC_T/p1j-keys"
+  p1j_nk=0; while IFS= read -r p1j_l; do [ -n "$p1j_l" ] && p1j_nk=$((p1j_nk + 1)); done < "$AC_T/p1j-keys"
+  p1j_c="$(block_field "$p1j_f" 'findings_critical')"; p1j_m="$(block_field "$p1j_f" 'findings_major')"
+  case "$p1j_c" in ""|*[!0-9]*) p1j_c=0 ;; esac
+  case "$p1j_m" in ""|*[!0-9]*) p1j_m=0 ;; esac
+  p1j_unkeyed=$((p1j_c + p1j_m - p1j_nk))
+  for p1j_t in $(block_field "$p1j_f" 'artifact_sha'); do printf '%s\n' "${p1j_t#*[=@]}"; done | tr 'A-F' 'a-f' > "$AC_T/p1j-nsha"
+  : > "$AC_T/p1j-tok"
+  for p1j_rec in "$j3_dir/${j3_stem}-repair-p1.md" "$j3_dir/${j3_stem}-serial-repair-p1.md"; do
+    [ -f "$p1j_rec" ] || continue
+    j3p1_escalated "$p1j_rec" >> "$AC_T/p1j-tok"
+    j3_sources "$p1j_rec" | awk -F'\t' 'FILENAME == ARGV[1] { if ($0 != "") n[$0] = 1; next }
+      $1 == "T" && $3 != $4 { m = split($3, t, /[[:space:]]+/)
+        for (i = 1; i <= m; i++) { s = t[i]; sub(/^[^=@]*[=@]/, "", s); if (s in n) lk[$2] = 1 } }
+      $1 == "S" { st[++ns] = $2; sk[ns] = $3 }
+      END { for (i = 1; i <= ns; i++) if (st[i] in lk) print sk[i] }' "$AC_T/p1j-nsha" - >> "$AC_T/p1j-tok"
+  done
+  p1j_bad="$(awk -v pd="$p1j_pd" '
+    function norm(t,   p) { if (index(t, pd "/") == 1) t = substr(t, length(pd) + 2)
+      else { p = index(t, "/" pd "/"); if (p) t = substr(t, p + length(pd) + 2) }
+      if (match(t, /^[0-9]+\.md#/)) t = (substr(t, 1, RLENGTH - 4) + 0) substr(t, RLENGTH - 3)
+      else if (match(t, /^cross-[0-9]+\.md#/)) t = "cross-" (substr(t, 7, RLENGTH - 10) + 0) substr(t, RLENGTH - 3)
+      return t }
+    FILENAME == ARGV[1] { if ($0 != "") k[++nk] = $0; next }
+    { r[norm($1)] = 1 }
+    END { for (i = 1; i <= nk; i++) if (!(k[i] in r)) print "        " k[i] ": on no linked pass-1 repair entry" }' \
+    "$AC_T/p1j-keys" "$AC_T/p1j-tok")"
+  if [ "$p1j_unkeyed" -gt 0 ]; then
+    p1j_bad="${p1j_bad:+$p1j_bad
+}        ${p1j_unkeyed} of findings_critical ${p1j_c} + findings_major ${p1j_m} carry no keyed \`### \` heading under \`## Findings\`."
+  fi
+  if [ -z "$p1j_era" ]; then
+    echo "SKIP (P1J -- PASS-1 JOIN): ${p1j_f##*/} carries no '${AI_DLC_ERA_TOKEN}' line: a series the old engine opened, pre-era."
+  elif [ -n "$p1j_bad" ]; then
+    err "P1J -- PASS-1 JOIN" "${p1j_f##*/} files CRITICAL/MAJOR findings the pass-1 repair never answered:
+${p1j_bad}
+      Close each key in ${j3_stem}-repair-p1.md (or -serial-repair-p1.md): an entry whose 'source:' names
+      <shard-file>#<id>, 'disposition: repaired' under a triple whose 'artifact_sha_before:' is a sha pass 1
+      notarized, or 'disposition: escalated'."
   fi
 fi
 

@@ -3,6 +3,6 @@
 2 core/scripts/serial-remediation-worklist.sh
 0 core/scripts/partition-document.sh
 0 core/scripts/partition-subject.sh
-7 inproc:core/scripts/partition-document.sh
+5 inproc:core/scripts/partition-document.sh
 11 inproc:core/scripts/serial-remediation-worklist.sh
 2 inproc:core/scripts/partition-subject.sh

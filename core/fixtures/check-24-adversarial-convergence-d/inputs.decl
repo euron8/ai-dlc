@@ -35,3 +35,4 @@ core/hooks/ai-dlc-gate-remediation-guard.sh
 # The coverage join reads each DIST_SHARDS shard's .dist-only marker (present, non-empty) in the distribution.
 core/fixtures/check-24-adversarial-convergence-e/.dist-only
 core/fixtures/check-24-adversarial-convergence-f/.dist-only
+core/scripts/era-token.sh

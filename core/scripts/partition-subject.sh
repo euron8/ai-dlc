@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# partition-subject.sh -- the ONE speller of the requirements step's SUBJECT partition: four files
+# partition-subject.sh -- the ONE speller of the requirements step's SUBJECT partition: two files
 # reviewed as one, each mapped over what changed since one recorded base.
 #
 # USAGE
 #   partition-subject.sh --map <N> [--base <sha>] [--read-only | --manifest <path>]
 #       stdout: one line per part, `<ordinal>\t<file>\t<first-line>\t<last-line>\t<heading>`,
 #       exit 0. Ordinals run 1..K across the whole subject, zero-padded to the width of K, in
-#       subject order (brief, SPEC, PRD, architecture-impact) and in line order within a file.
+#       subject order (SPEC, PRD) and in line order within a file.
 #       <file> is project-relative, in the planning-artifact write ledger's own spelling.
 #       A subject that maps to ONE part prints one `SERIAL: <reason>` line and exits 3: the
 #       caller dispatches one agent with `shard: none (serial-document)` (Rule 28 exception 4).
@@ -23,23 +23,21 @@
 #   Every refusal is exit 2 with ONE stderr line `partition-subject: REFUSED — <reason>`. A refused
 #   map writes no manifest; a refused split leaves no section behind.
 #
-# THE SUBJECT (four files, stems in brackets)
-#   [product-brief]        <state>/planning-artifacts/product-brief.md
+# THE SUBJECT (two files, stems in brackets)
 #   [SPEC]                 <state>/specs/s<N>/*/SPEC.md -- EXACTLY one match, else refused
 #   [prd]                  <state>/planning-artifacts/prd.md
-#   [architecture-impact]  <state>/planning-artifacts/s<N>/architecture-impact.md
 #   <state> is `${AI_DLC_STATE_DIR:-_bmad-output}`. Every file must exist.
 #
 # THE BASE, AND THE MANIFEST THAT HOLDS IT
 #   The base is `git merge-base <trunk> HEAD`, trunk `${AI_DLC_TRUNK:-main}` (as
 #   validate-cycle-commits.sh resolves it). It is derived ONCE, by the first `--map` of the
-#   sprint, and recorded with the four paths in the SUBJECT MANIFEST,
+#   sprint, and recorded with the two paths in the SUBJECT MANIFEST,
 #   `<state>/planning-artifacts/s<N>/requirements-subject.md`. Every later invocation -- this
 #   script's, the merge's, the join's, Check 24 arm K3's -- READS the base there and never
 #   re-derives it: a trunk that moved mid-cycle would otherwise change the part set under a
 #   running series. `--base <sha>` is an ASSERTION, never an input: it must equal the manifest's
 #   base (or, at the first map, the derived merge-base), or the run refuses. A manifest whose
-#   four paths are not the four the tree now derives (a SPEC re-slugged, a second SPEC) refuses.
+#   paths are not the two the tree now derives (a SPEC re-slugged, a second SPEC) refuses.
 #   `--read-only` refuses rather than write a missing manifest; `--manifest <path>` maps from the
 #   manifest alone -- no root block, no derivation, the root found by walking up from the
 #   manifest to the first directory under which every listed file exists. Callers that must not
@@ -68,7 +66,13 @@ sha_of() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
   else sha256sum "$1" | cut -d' ' -f1; fi
 }
-STEMS="product-brief SPEC prd architecture-impact"
+STEMS="SPEC prd"
+# A series opened before the subject became two files records four stems in its manifest. It keeps that
+# subject for its whole life (forward-only): the recorded parts are served and the line below is printed.
+OLD_STEMS="product-brief SPEC prd architecture-impact"
+old_era() { # <file list of `<stem> <rel>` lines> -> 0 when it records the four-file subject
+  [ "$(awk '{ print $1 }' "$1" | tr '\n' ' ')" = "$OLD_STEMS " ]
+}
 # The `<stem><sep><sha>` separator class --expect-sha reads; merge-adversarial-shards.sh --pair-sep
 # keys on this exact line before it emits `@`.
 PAIR_SEP='[=@]'
@@ -132,8 +136,11 @@ if [ -n "$MANIFEST_ARG" ]; then
   [ -f "$MANIFEST_ARG" ] || refuse "no subject manifest at $MANIFEST_ARG"
   MANIFEST="$(cd "$(dirname "$MANIFEST_ARG")" && pwd -P)/$(basename "$MANIFEST_ARG")"
   manifest_files "$MANIFEST" > "$T/files"
-  [ "$(awk '{ print $1 }' "$T/files" | tr '\n' ' ')" = "$STEMS " ] \
-    || refuse "$MANIFEST does not list the four subject stems ($STEMS) in order"
+  if old_era "$T/files"; then STEMS="$OLD_STEMS"; echo "SUBJECT: SKIP pre-era $MANIFEST" >&2
+  else
+    [ "$(awk '{ print $1 }' "$T/files" | tr '\n' ' ')" = "$STEMS " ] \
+      || refuse "$MANIFEST does not list the subject stems ($STEMS) in order"
+  fi
   first_rel="$(awk 'NR == 1 { print $2 }' "$T/files")"
   ROOT=""; d="$(dirname "$MANIFEST")"
   while [ -n "$d" ] && [ "$d" != "/" ]; do
@@ -183,14 +190,16 @@ PS_ROOT="${AI_DLC_PROJECT_ROOT:-}"
   for f in "$ROOT/$SREL/specs/s$SPRINT"/*/SPEC.md; do [ -f "$f" ] && printf '%s\n' "${f#"$ROOT"/}" >> "$T/specs"; done
   nspec="$(grep -c . "$T/specs")" || nspec=0
   [ "$nspec" -eq 1 ] || refuse "$SREL/specs/s$SPRINT/*/SPEC.md matches $nspec file(s) under $ROOT; the subject takes exactly one spec kernel"
-  { printf 'product-brief %s\n' "$PA/product-brief.md"
-    printf 'SPEC %s\n' "$(cat "$T/specs")"
-    printf 'prd %s\n' "$PA/prd.md"
-    printf 'architecture-impact %s\n' "$PA/s$SPRINT/architecture-impact.md"; } > "$T/files"
+  { printf 'SPEC %s\n' "$(cat "$T/specs")"
+    printf 'prd %s\n' "$PA/prd.md"; } > "$T/files"
   while read -r st rel; do [ -f "$ROOT/$rel" ] || refuse "the subject file $rel ($st) does not exist"; done < "$T/files"
   MANIFEST="$ROOT/$PA/s$SPRINT/requirements-subject.md"
   if [ -f "$MANIFEST" ]; then
     manifest_files "$MANIFEST" > "$T/mfiles"
+    if old_era "$T/mfiles"; then
+      while read -r st rel; do [ -f "$ROOT/$rel" ] || refuse "$MANIFEST names $rel, which is not a file under $ROOT"; done < "$T/mfiles"
+      STEMS="$OLD_STEMS"; cp "$T/mfiles" "$T/files"; echo "SUBJECT: SKIP pre-era $MANIFEST" >&2
+    fi
     cmp -s "$T/files" "$T/mfiles" \
       || refuse "$MANIFEST records a subject other than the one this tree derives ($(tr '\n' ' ' < "$T/mfiles")vs $(tr '\n' ' ' < "$T/files")); the subject moved under a running cycle"
     BASE="$(manifest_val "$MANIFEST" base)"

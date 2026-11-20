@@ -14,6 +14,8 @@ items get the same planning rigor as new features.
 
 ## EXECUTION SEQUENCE
 
+Before anything else in this step, run `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file carry-over-evaluation.md 'Pipeline Position'`.
+
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–2 (and 1a)
@@ -25,12 +27,16 @@ sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
 Context, resolved at `route.md` Step 6 — never the unstamped path, which
 would destroy the prior sprint's evaluation), returning
 only `{artifact_path, summary, gaps}` (gaps travel in the `## Gaps` section of the artifact; the return may still carry them). Then resume at section 3.
-**Join it, and section 3's party seats, on their DELIVERABLES** — the analyst's artifact
-with one `scripts/ai-dlc/wait-for-deliverable.sh <path>` call, and each wave of seat files
+**Join the analyst on its COMPLETION, and section 3's party seats on their DELIVERABLES** — the analyst's artifact
+with one `scripts/ai-dlc/wait-for-deliverable.sh <path>` call, which reports only that the file exists, so no seat is dispatched
+until the analyst's Agent completion notification has also arrived (the artifact carries no `seat-complete:` line, and its first write is a half-written draft); each wave of seat files
 with one `scripts/ai-dlc/wait-for-deliverable.sh --complete <path> [<path> ...]` call, because a
-seat writes early and is finished only at its `seat-complete:` line (appended by `--mark`) while the analyst's artifact
-carries none, all `run_in_background: true` (`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled
+seat writes early and is finished only at its `seat-complete:` line (appended by `--mark`), all `run_in_background: true` (`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled
 `until`/`sleep` wait is a Rule 29 Check A violation; gate Check 25 counts it.
+The analyst evaluates ONLY the items in the operator-confirmed scope (`scope_confirmed` and
+`scope_confirmed_cite` in the snapshot). Every other OPEN item stays in `carry-over-backlog.md` untouched; the
+evaluation states their count in one line and carries no per-item text for them.
+
 **Sections 3 onward stay inline in the lead** — section 3 is party mode
 (Rule 20, never offloaded) and sections 4–6 mutate escalations and the
 backlog. If `planning_offload: off`, run all sections inline. Per
@@ -79,7 +85,7 @@ prioritize triage as a sprint deliverable.
 
 ### 2. Item Evaluation
 
-For each OPEN item in the backlog, evaluate:
+For each OPEN item in the operator-confirmed scope, evaluate:
 1. **Still valid?** Has it been superseded? Has affected code changed?
 2. **Effort and complexity?** Single story or multiple?
 3. **Dependencies?** On other backlog items?
@@ -140,6 +146,9 @@ with the seats bound via the **Rule 20 role-manifest preamble** to their `.claud
 - Surface any items that have become higher/lower priority
 - Surface any that are clearly no longer worth doing
 
+Dispatch the live reads the evaluation names (the `ops` and `web-fetch` spawns that settle a mechanism or a
+blocking Day-0 gate) in the same message as the party round's seats, never after the party repair.
+
 ### 3a. Validation cycle (Rule 8)
 
 **This step produces a planning artifact, so Rule 8 binds it like any other.** Run the
@@ -193,6 +202,28 @@ False-positive cost: one agent per (seat, part), one cross agent per seat in the
 elicitation or adversarial pass, and each round's repair. Removal condition: measured sprints in which a round carries no unique MAJOR or
 CRITICAL catch that survives to the shipped evaluation; the loop's terminal pass goes only when
 Rule 8 stops binding this step.
+
+**Order within the cycle.** Do sections 4, 5 and 6 (the deferral, closure and backlog edits to `docs/escalations/pending.md`
+and `carry-over-backlog.md`) as soon as the party repair's escalations are adjudicated, BEFORE the elicitation round or any
+repair records a derivation fence, so no fence is recorded over a file the lead then edits. An operator-stood decision
+(one the operator answered at an `AskUserQuestion`) is never re-decided by a repair or an adjudication: every adjudication
+and repair brief states this, and a repair that would change one files an escalation instead.
+
+**Pass 2 is ONE final adversary pass, no shards.** Pass 1 is the sharded pass of `_gate-procedures.md`, "Adversarial review
+dispatch". Commit the analyst draft the moment its join completes and keep that sha as `<draft_sha>`. After pass 1's repair
+is written and Check 24's `P1J` arm (`validate-adversarial-convergence.sh`) holds, dispatch one adversary, with no shard
+split and no cross agent, that writes `s<N>/coe-adversarial-p2.md` itself. Its reading list is
+`scripts/ai-dlc/partition-document.sh --map --scope-ref <draft_sha> _bmad-output/planning-artifacts/s<N>/carry-over-evaluation.md`:
+the parts holding lines the document changed since the draft, which the adversary reads first and in full; it may read
+anything else it needs. A pass 2 that is not `EXIT_CONDITION_MET` is repaired by the remediator and judged by the same
+series rule as any pass (pass 3 is capped, arm M). Every pass-1 CRITICAL and MAJOR must be named by a `source:` token of
+pass 1's repair record (`coe-repair-p1.md`); arm `P1J` refuses an unnamed one.
+
+Before you stamp a SERIAL pass 1, one an adversary wrote itself with no merge, add the line `ai-dlc-era: e4-forward-1` (the value of `AI_DLC_ERA_TOKEN` in `scripts/ai-dlc/era-token.sh`) on a line of its own above its provenance block.
+
+Before you stamp pass 2, or any pass one adversary wrote itself because the map reports the document SERIAL, run
+`scripts/ai-dlc/merge-adversarial-shards.sh --check-keys <pass file>`: stamp it on `KEYS-OK` or `KEYS-SKIP`; on `REFUSED`, have the
+adversary apply the remedy the refusal prints and run the check again.
 
 ### 4. Deferral Handling
 

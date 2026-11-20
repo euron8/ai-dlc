@@ -55,3 +55,4 @@ core/fixtures/remediator-shard-join/unit-reader-a.sh
 core/fixtures/remediator-shard-join/unit-reader-b.sh
 core/fixtures/remediator-shard-join/unit-reader.sh
 core/fixtures/remediator-shard-join/unit-record.sh
+core/scripts/era-token.sh

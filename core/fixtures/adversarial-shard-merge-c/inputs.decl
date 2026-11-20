@@ -42,3 +42,4 @@ core/fixtures/adversarial-shard-merge-c/run.sh
 core/fixtures/adversarial-shard-merge-d/run.sh
 # The dist-only shards (b) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.
 core/fixtures/lib/world.sh
+core/scripts/era-token.sh

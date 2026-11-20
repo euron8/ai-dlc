@@ -47,3 +47,4 @@ core/fixtures/lib/layout.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/world.sh
+core/scripts/era-token.sh

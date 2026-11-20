@@ -9,3 +9,4 @@
 # the whole hooks directory too, or the sandbox holds no hook and the hooks floor refuses.
 !core/hooks/
 core/fixtures/lib/report.sh
+core/scripts/era-token.sh
