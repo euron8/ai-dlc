@@ -1,0 +1,94 @@
+BL-972 item 1, hand reading (work item 5): every Tier 2 DECIDED_AUTONOMOUSLY entry dated within s323.
+Source: graph docs/escalations/pending.md and pending-archive.md at 16fd227d9 ("finalize snapshot -- sprint 323 closed"), read with git show,
+read in full by one reader in one pass (line numbers below are pending.md at that sha). Window = s323's EXTRACT edges, 2026-11-13T08:00Z to 2026-11-20T04:20Z.
+Counts and the control: out/m2_escalations_s323.txt (scripts/m2_escalations.py).
+
+COUNT. 25 entries, all in pending.md (pending-archive.md holds 0 DECIDED_AUTONOMOUSLY entries dated in s323; its s323 entries are RESOLVED x3 and
+DEFERRAL_REQUEST x1). 0 of the 25 open their Decision/Question line with `source: recommendation`; the token occurs 0 times in either file (control, same
+invocation: 32 pending.md headings carry DECIDED_AUTONOMOUSLY). Why zero: graph's installed SKILL.md first carries `source: recommendation` in eabdc576e
+(2026-11-19 15:46 -0500, the s323 merge), after the last of the 25 entries (2026-11-19T04:00Z). The tagging rule (item (ii) of the sort) was not live while any
+entry was written, so the zero is structural and is not a clean reading. Per work item 5, all 25 are read below.
+
+RULES THE ENTRIES ARE JUDGED AGAINST (ai-dlc core/skills/ai-dlc/SKILL.md at the C5 branch tip; graph's copy of the sort has the same item (i) and the Outside list
+from s321, item (ii) from the s323 merge):
+- Rule 11(a) reserved list: operator relief for a live defect always asked (:328-332); UNBADGED values the operator alone owns -- a config leaf, a threshold or
+  literal on a money path, a byte-pin, an LR-/LRC- id, a D-<n> decision (:343-348); prior answer applied, not asked (:358-361).
+- Rule 12 Tier 1 (:418-422): contradicts an operator-approved decision; requirement divergence; carry-over deferral. Tier 2 (:426-438), which yields to the sort.
+- The sort (:460-517): (i) a source settles it (:462-477), (ii) no source, decided only if every listed condition holds (:478-503), (iii) values (:503-510),
+  Outside list (:510-517): sprint-scope confirmation, operator relief, a locked requirement's boundary (Rule 13), Tier 1, gate STOP adjudication, "any other decision
+  a step reserves to the operator".
+Method note: these entries predate item (ii), so a decision is first judged against the rules live when it was made (Rule 11(a), Tier 1, item (i), Outside list) and then
+against item (ii)'s conditions where it names a limit, authority, behaviour of the deployed system or requirement text.
+
+VERDICT. No entry decides a Rule 11(a) UNBADGED value (config leaf, money threshold or literal, byte-pin, LR-/D- id) that no operator word fixes, and none decides
+operator relief, a sprint-scope confirmation, a gate STOP or a Tier 1 matter. The 2026-11-17 AskUserQuestion answered "All 19 Tier-2 veto lines STAND" (quoted at
+pending.md:5692), which covers D-10..D-26, and the 2026-11-17 requirements-round answers (pending.md:5618-5622, :5638-5641, :5689) fix the operator-owned scope
+boundaries those entries carry. Six BORDERLINE items (below) are decisions the CURRENT sort (item (ii)) would send to the operator or that sit on a reserved edge;
+each names the line to read. By this reading none is a reserved decision of the Rule 11(a) list decided instead of asked; items 2, 3, 4 and 5 would be asked under
+item (ii)'s conditions (a limit, authority, deployed behaviour or requirement text), and none could have been tagged because the tag did not exist yet. Whether
+borderline item 1 is a Tier 1 carry-over deferral is the one reading that could turn this into a block; it is the operator's or the closer's to rule.
+
+ENTRIES (line, id, what was decided, judgement)
+ 5491 CARRYOVER-EVAL-LEAD-ADJUDICATIONS-D10-D26: 17 decisions D-10..D-26, each with a source. Sourced to the evaluation document, operator scope words and day-0 reads.
+      OK; ratified ("All 19 STAND"). D-15 (what counts as an organic close event) and D-19 (closer of an xfail id) carry a stated limit / were later put to the operator.
+ 5519 CARRYOVER-EVAL-TWO-LEAD-DECISIONS-RETURNED: (1) ceiling edits not gated to Base-only, so Matic's standalone collect and offramp legs abort above the ceiling;
+      (2) interim native-input refusal ships. (1) sourced to the operator's scope line and both answers, value unchanged: OK under item (i). (2) a deployed-behaviour
+      change with a document source; ratified by the 2026-11-17 answer "Wall 3(a) closes it" (pending.md:5561-5570). BORDERLINE-2 below.
+ 5541 COE-ELICITATION-LEAD-DECISIONS: D-22 fold stands; Item 7 mTLS wiring Reading B (the S319 Playwright mTLS row is not absorbed and is deferred to requirements);
+      5.1 AC3 stays owed; D-19 closer resolved by the operator. OK except Decision 2, which defers a carry-over row: BORDERLINE-1.
+ 5577 COE-REPAIR-P2-RECORD-RENAME: rename a record so the join derives its name. Tier 3 in substance. OK.
+ 5591 REQUIREMENTS-LEAD-DECISIONS: G-1..G-9. Includes "twelve baseline failures taken as an id-cited known-red baseline for the sprint's gate-2 runs; no hygiene story
+      added" (:5602), source "S322 precedent". Everything else sourced to operator answers or the evaluation. BORDERLINE-3.
+ 5613 REQUIREMENTS-PARTY-SERIAL-P2-LEAD-DECISIONS: four operator rulings recorded (asked); lead decisions are requirement-text and record dispositions (wall 2 split in two,
+      Permit2 pre-check kept outside Item 1, skip-count clause). No operator-owned value moved. OK; the Permit2 exclusion (:5628) is a scope edge, NOTE.
+ 5633 REQUIREMENTS-PARTY-SERIAL-P3-LEAD-DECISIONS: three operator rulings recorded; smoke placement before the APP_ENV=prod fire derived from LR-S323-23; PRD mirror edits. OK.
+ 5653 REQUIREMENTS-PARTY-SERIAL-P4-LEAD-DECISIONS: closes 8 escalations, re-derives two stale fences, declines one relocation. OK.
+ 5677 REQUIREMENTS-ELICITATION-SERIAL-LEAD-DECISIONS: twelve-failure baseline carried into FR-S323-1; Permit2 renew residual left as-is (pinned span stays). OK; the
+      baseline carry is the same shape as BORDERLINE-3.
+ 5686 REQUIREMENTS-ELICITATION-FANIN-DECISIONS: E-0 option (C) (the "twelve" becomes a sprint-base capture); E-2 option (b) (FR-S323-9 HARD_BLOCK fallback moves the
+      FR-S323-14..-18 live-smoke ACs to a node:tls local-serve pattern); E-1 and 14-F2 are operator answers. E-0 BORDERLINE-3; E-2 BORDERLINE-4.
+ 5697 REQUIREMENTS-ELICITATION-PRD-LOCKED-PROPAGATE: copies the five operator answers into the PRD's LOCKED_REQUIREMENTS block copy. Sourced (operator's own words;
+      requirements.md section 4(c)); moves no boundary. OK.
+ 5704 REPAIR-P1-SPEC-F7-SUPERSEDE: CAP-9's 401 check reads both instances through their own tunnels, read-only; the proxy read is not evidence. WHERE/HOW, tree-sourced,
+      no write to live data. OK.
+ 5711 REPAIR-P1-FANIN-DECISIONS: (1) fix the lead's own misattribution in LR-S323-14/-31 slot lines to the operator's recorded answers; (2) where the bundle grep reports.
+      (1) restores operator verbatim, so it is sourced; it edits LOCKED_REQUIREMENTS lines, which is why it is listed as a NOTE (no boundary moved). (2) test shape. OK.
+ 5722 REPAIR-P1-LOCKROW-SCOPE: compensating lock-row read on both instances for every rebalancer/** deploy until the busy marker ships. Read-only, adds no operator
+      step; adjudicator ruled option A. OK (operator-run Rule (d) check untouched).
+ 5730 REPAIR-P1-1INCH-CLAUSE: deletes a Matic-only fail-close clause and its test sentence from FR-S323-2 (no decision, ADR or operator answer covered it; derivation shows
+      the escape already fails closed). Requirement text deleted by the lead; not a locked bullet. BORDERLINE-5.
+ 5738 REPAIR-P1-PIN-SPAN-CONFIRM: one authorized re-baseline of the LAYER pin carries both edits in the span. Sourced to the operator's "Authorize one re-baseline". OK.
+ 5746 REPAIR-P1-PIN-SPAN-CORRECTION: corrects the CONFIRM entry (retry rule reaches the three reads) by the operator's own answer "Wide: retry rule everywhere". OK.
+ 5754 ARCH-AUTONOMOUS-PICKS: architect's picks adopted (abort-reason carrier, reason literals, helper names, LEG2_GAS_PRICE_RETRIES = 3, FR-S323-5 validation option) and rulings
+      R-2 (probes bind the fire, not the dev dispatch) and R-5 (ADR-S322-13 wording scoped). The retry count is a "value" under item (ii), but the operator ruled "Architecture
+      step sets it" (pending.md:5639), so a source delegates it: OK. R-2 is sourced to LR-S323-31/-33. OK.
+ 5773 ARCH-PARTY-REPAIR-RULINGS: 14 rulings. Ruling 1 (Leg-2 budget covers both reads), 2 (gate replaces the site estimate block, 500k fallback removed), 5 (Leg-1 refusal
+      writes an execution_log row), 8 (NO new EIP-1559 fee ceiling), 10 (hunk-guard test allowances edited), 11 (stranded-marker discriminator), 12 (budget scope, AMENDED
+      on the advisor's finding because the first text narrowed locked LR-S323-27). BORDERLINE-6 (rulings 8 and 10); ruling 12's original narrowing was corrected before it shipped.
+ 5890 ARCH-P1-LEG2-PREBOUNDARY: the :24861 pre-boundary refusal keeps the stranded marker with FAILED status; the entry says "a capital-path semantics choice, so it is
+      filed, not ruled" and "why it is the operator's to see", with the default in force and the veto owed. BORDERLINE-2 class (deployed behaviour): under item (ii) this is asked.
+ 5923 ARCH-FLAG-PATH-ERROR: flag path keeps HEAD's prose for progress["error"]. Minimal-change reading sourced to Ruling 13. OK.
+ 5948 5-4-DATA-SMOKE-CONFIG-SECTIONS-RED-AT-BASE: no story owns two red data-smoke ids; the deploy roll resolves them; 3.2 records them as known red with this citation.
+      HOW disposition, no check weakened or skipped. NOTE (known-red citation, same shape as BORDERLINE-3 but the red is resolved by the planned deploy).
+ 5954 5.2-DEV-ORDERING: story 5.2 built on a base lacking 1.1-1.4/3.2; AC5/AC9 handled against what exists; follow-up named. Implementation HOW. OK.
+ 5980 5.2-CLAIM-TOAST-WINDOW: QA-prescribed marker status fix inside the story file; residual stated; UI-side fix left to the lead or operator acceptance. OK.
+ 6005 SA3-APP-ENV-PROD-FIRE-UNENFORCED: the lead will not run cdk deploy on the ServicesStack until the operator fires 4.3 AC6. A self-restriction that keeps the fire the
+      operator's. OK; the opposite of a reserved decision taken.
+
+BORDERLINE (read these lines; each is one reader's judgement)
+ 1. 5554-5558 (COE-ELICITATION Decision 2): Reading B defers CO-S319-PLAYWRIGHT-MTLS-WIRING-FOR-STORY-3-2-LIVE-SPEC to the requirements step "as D-25 does" and keeps it a
+    separate backlog item. A carry-over row left unabsorbed is close to Rule 12 Tier 1's "carry-over deferral" (no DEFERRAL_REQUEST was filed; the row stays open in the
+    backlog). Whether this is a deferral is a reading of the row's scope, not settled by the entry.
+ 2. 5532-5539 and 5890-5921: a deployed-behaviour choice decided with the default in force and the veto owed (interim native-input refusal ships; :24861 marker). Item (ii)
+    "none of its options changes what the deployed system does" would route both to a question. The first was put to the operator and answered; the second was not.
+ 3. 5602, 5691, 5683: the twelve pre-existing red tests taken as an id-cited known-red baseline, no hygiene story. Item (ii)'s authority list includes "re-baseline a check",
+    and the source is a prior-sprint precedent, not an operator word.
+ 4. 5692: E-2 moves FR-S323-14..-18 live-smoke ACs from the live path to a node:tls local-serve pattern at deploy-validate. `escalations.md` "AC verification-category-change
+    disclosure" calls for operator acknowledgement when a resolution moves an AC between verification categories; the entry cites "All 19 STAND" (D-14) as the source.
+ 5. 5735: a requirement clause deleted from FR-S323-2 with no source either way; not a locked bullet, derivation-backed; a requirement edit under item (ii) is asked.
+ 6. 5819-5823 (Ruling 8: no EIP-1559 fee ceiling; the entry says a ceiling "is a new PRD requirement") and 5829-5837 (Ruling 10: the lead authorizes editing two
+    hunk-diff guard tests, "patch ... a check" in item (ii)'s authority list; confined to the named allowance, same PR as the site edit).
+
+NOT ESTABLISHED. Whether each decided entry's choice was ready to ask earlier is not in the record. Operator ratification of entries other than D-10..D-26, the
+two returned decisions and the quoted 2026-11-17 answers was not looked up in operator-answers-history.md (available, not read). The entries' bodies were read for the
+decision text only; the files they cite (PRD, SPEC, spine) were not opened.

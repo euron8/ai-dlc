@@ -1,0 +1,39 @@
+sprint pass | majors repair-introduced | recorded (BL-508 filing)
+      [b261 cross-reading] findings excluding repair-status headings 9; naming a repair in heading or first 1500 body chars 3; strict POS on those 0
+  s317 stories-adversarial-p1.md          |   9   0 | 0/11
+      [b261 cross-reading] findings excluding repair-status headings 6; naming a repair in heading or first 1500 body chars 6; strict POS on those 2
+  s317 stories-adversarial-p2.md          |   7   2 | 2/9
+      [b261 cross-reading] findings excluding repair-status headings 3; naming a repair in heading or first 1500 body chars 2; strict POS on those 2
+  s317 stories-adversarial-p3.md          |   4   2 | 2/4
+      [b261 cross-reading] findings excluding repair-status headings 27; naming a repair in heading or first 1500 body chars 22; strict POS on those 15
+  s318 stories-adversarial-p1.md          |  29  17 | 16/30
+      [b261 cross-reading] findings excluding repair-status headings 15; naming a repair in heading or first 1500 body chars 15; strict POS on those 9
+  s318 stories-adversarial-p2.md          |  19  11 | 8/19
+      [b261 cross-reading] findings excluding repair-status headings 2; naming a repair in heading or first 1500 body chars 2; strict POS on those 2
+  s318 stories-adversarial-p3.md          |   2   2 | 1/2
+      [b261 cross-reading] findings excluding repair-status headings 13; naming a repair in heading or first 1500 body chars 5; strict POS on those 0
+  s323 coe-adversarial-p1.md              |  13   0 | -
+      [b261 cross-reading] findings excluding repair-status headings 5; naming a repair in heading or first 1500 body chars 5; strict POS on those 3
+  s323 coe-adversarial-p2.md              |   7   3 | -
+      line 147: F-1 — MAJOR — Share (i) bullet says the backlog still words the id's close signal as a refusal; the backlog at HEAD already names wall 3(a)
+      line 242: F-1 — MAJOR — The repair's list of tag-only rows at `:910` names 6, and 14 more tagged rows are cited by no Item section
+      line 273: F-2 — MAJOR — The cross F-5 repair re-anchored "The same applies to" at `:1447`, so two unrelated rows now read as close candidates
+      [b261 cross-reading] findings excluding repair-status headings 1; naming a repair in heading or first 1500 body chars 1; strict POS on those 0
+  s323 coe-adversarial-p3.md              |   1   0 | -
+      [b261 cross-reading] findings excluding repair-status headings 28; naming a repair in heading or first 1500 body chars 16; strict POS on those 0
+  s323 requirements-adversarial-p1.md     |  28   0 | -
+      [b261 cross-reading] findings excluding repair-status headings 3; naming a repair in heading or first 1500 body chars 3; strict POS on those 1
+  s323 requirements-adversarial-p2.md     |   3   1 | -
+      line 254: F-1 — MAJOR — The reading note still says only `_estimate_gas` falls inside the `EXECUTE_LAYER_CHUNKED_SHA256` span, but LR-S323-38 put the Item 1 `:1
+      [b261 cross-reading] findings excluding repair-status headings 9; naming a repair in heading or first 1500 body chars 2; strict POS on those 0
+  s323 ARCHITECTURE-SPINE-adversarial-p1.md |   9   0 | -
+      [b261 cross-reading] findings excluding repair-status headings 1; naming a repair in heading or first 1500 body chars 1; strict POS on those 0
+  s323 ARCHITECTURE-SPINE-adversarial-p2.md |   2   0 | -
+      [b261 cross-reading] findings excluding repair-status headings 25; naming a repair in heading or first 1500 body chars 6; strict POS on those 0
+  s323 stories-adversarial-p1.md          |  25   0 | -
+      [b261 cross-reading] findings excluding repair-status headings 2; naming a repair in heading or first 1500 body chars 2; strict POS on those 0
+  s323 stories-adversarial-p2.md          |   8   0 | -
+      [b261 cross-reading] findings excluding repair-status headings 3; naming a repair in heading or first 1500 body chars 1; strict POS on those 0
+  s323 test-strategy-adversarial-p1.md    |   3   0 | -
+CONTROL impossible token zqxv-repair-introduced-9931: 0 (must be 0); present token 'repair-introduced': 41 (must be > 0)
+SELF-PROBE OK

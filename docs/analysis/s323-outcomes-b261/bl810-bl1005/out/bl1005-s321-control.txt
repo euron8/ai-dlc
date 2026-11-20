@@ -1,0 +1,9 @@
+spawn cost pass 1: 26 shard rows (incl cross) $51.70 6.87 spawn-hours
+spawn cost pass 2: 26 shard rows (incl cross) $16.79 1.33 spawn-hours
+spawn cost pass 3: 26 shard rows (incl cross) $12.80 0.90 spawn-hours
+p1: 25 part shards, 25 with a sha, C/M total 26, spawn rows matched 26
+p2: 25 part shards, 25 with a sha, C/M total 4, spawn rows matched 26
+   p2 shards on the same bytes as p1: 5 of 25: 04.md,07.md,17.md,22.md,25.md | $1.86, 0.10 spawn-hours (sum of spawn minutes) | C/M 0
+p3: 25 part shards, 25 with a sha, C/M total 2, spawn rows matched 26
+   p3 shards on the same bytes as p2: 14 of 25: 01.md,04.md,05.md,07.md,11.md,14.md,15.md,16.md,17.md,18.md,19.md,20.md,22.md,25.md | $5.71, 0.38 spawn-hours (sum of spawn minutes) | C/M 0
+TOTAL p2+p3 unchanged shard reads 19 of 50, $7.57, 0.48 spawn-hours, C/M 0

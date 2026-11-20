@@ -1,0 +1,9 @@
+root /Users/n8/.claude/projects/-Users-n8-git-graph; subagent transcripts read 2372; window end 2026-11-20T04:20:00Z
+s321 gate-rework     37 resumes   13.1 agent-h idle    21 min each | dev 19, dev-escalated 16, qa 1
+s321 join-refusal    13 resumes    4.5 agent-h idle    21 min each | adversary 11, remediator 1, dev 1
+s321 other           27 resumes    4.4 agent-h idle    10 min each | dev 10, ops 5, code-reviewer-escalated 5
+s321 escalation       1 resumes    0.3 agent-h idle    17 min each | remediator 1
+s323 other           36 resumes   11.7 agent-h idle    19 min each | dev 13, dev-escalated 10, general-purpose 6
+s323 gate-rework     18 resumes   10.0 agent-h idle    33 min each | dev 8, dev-escalated 5, qa 3
+s323 escalation       6 resumes    2.6 agent-h idle    26 min each | dev-escalated 3, qa 1, code-reviewer-escalated 1
+s323 join-refusal     4 resumes    0.4 agent-h idle     7 min each | remediator 3, dev 1

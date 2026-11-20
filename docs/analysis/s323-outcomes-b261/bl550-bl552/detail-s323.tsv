@@ -1,0 +1,185 @@
+agent-a1e69d5b6ee05504a	party-unkeyed	-	Bash	False	cat: tests/fixtures/merkl_distributor_addresses.json: No such file or directory
+agent-a1e69d5b6ee05504a	party-unkeyed	-	Bash	False	ls: web/src/hooks: No such file or directory
+agent-a54e5781c2de14ef4	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/hooks/useRewards.js: No such file or directory
+agent-a742ff406bc09b415	party	carry-over-evaluation	Bash	False	ugrep: warning: web/src/hooks/useRewards.js: No such file or directory
+agent-a0d5fd888ab75c2d9	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/SPEC.md: No such file or directory
+agent-a0d5fd888ab75c2d9	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/architecture-impact.md: No such file or directory
+agent-a33b9828890b5a5b3	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/SPEC.md: No such file or directory
+agent-a33b9828890b5a5b3	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/architecture-impact.md: No such file or directory
+agent-a33b9828890b5a5b3	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/scripts/run-exec-health.sh: No such file or directory
+agent-a33b9828890b5a5b3	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/scripts/ai-dlc/run-exec-health.sh: No such file or directory
+agent-a354f6e371d6d3509	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a354f6e371d6d3509	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/architecture-impact.md: No such file or directory
+agent-a362e77ef4780ecc1	party	architecture	Bash	True	ugrep: warning: rebalancer/chain_context.py: No such file or directory
+agent-a3fb5550904081040	adversary	round	Bash	False	shasum: product-brief.md: No such file or directory
+agent-a3fb5550904081040	adversary	round	Bash	False	shasum: SPEC.md: No such file or directory
+agent-a3fb5550904081040	adversary	round	Bash	False	shasum: prd.md: No such file or directory
+agent-a3fb5550904081040	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/web/e2e: No such file or directory
+agent-a6ea345051044637c	adversary	round	Bash	False	shasum: SPEC.md: No such file or directory
+agent-a6ea345051044637c	adversary	round	Bash	False	shasum: architecture-impact.md: No such file or directory
+agent-a9024c16d340d9f54	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/SPEC.md: No such file or directory
+agent-a9024c16d340d9f54	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/architecture-impact.md: No such file or directory
+agent-a96cc8594c06dfd0c	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/SPEC.md: No such file or directory
+agent-a96cc8594c06dfd0c	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/architecture-impact.md: No such file or directory
+agent-ac7c6facc9fbecefc	elicitation	-	Bash	False	ls: _bmad-output/planning-artifacts/s323/shards/ARCHITECTURE-SPINE-elicitation/: No such file or directory
+agent-acb62c20dffb6643d	elicitation	-	Bash	False	ls: _bmad-output/planning-artifacts/s323/shards/ARCHITECTURE-SPINE-elicitation/: No such file or directory
+agent-accb47c54b36eec2c	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/SPEC.md: No such file or directory
+agent-accb47c54b36eec2c	adversary	round	Bash	False	shasum: _bmad-output/planning-artifacts/architecture-impact.md: No such file or directory
+agent-accb47c54b36eec2c	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-ad310d30e356602e5	adversary	round	Bash	False	shasum: SPEC.md: No such file or directory
+agent-ad310d30e356602e5	adversary	round	Bash	False	shasum: architecture-impact.md: No such file or directory
+agent-ad32d5d89e12c74a9	elicitation	-	Bash	True	ls: _bmad-output/planning-artifacts/s323/shards/ARCHITECTURE-SPINE-elicitation/: No such file or directory
+agent-ad7471f7279903b65	elicitation	-	Bash	True	@ls: _bmad-output/planning-artifacts/s323/shards/ARCHITECTURE-SPINE-elicitation/: No such file or directory
+agent-add846ed8675a2d67	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/pytest.ini: No such file or directory
+agent-add846ed8675a2d67	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/setup.cfg: No such file or directory
+agent-add846ed8675a2d67	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/pyproject.toml: No such file or directory
+agent-aead4c08fa6d8f933	adversary	round	Bash	False	shasum: SPEC.md: No such file or directory
+agent-aead4c08fa6d8f933	adversary	round	Bash	False	shasum: architecture-impact.md: No such file or directory
+agent-aed09f1ec85353151	adversary	round	Bash	False	shasum: SPEC.md: No such file or directory
+agent-aed09f1ec85353151	adversary	round	Bash	False	shasum: architecture-impact.md: No such file or directory
+agent-aeed151f03681598a	adversary	round	Bash	True	shasum: /Users/n8/git/graph/_bmad-output/planning-artifacts/SPEC.md: No such file or directory
+agent-aeed151f03681598a	adversary	round	Bash	True	shasum: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture-impact.md: No such file or directory
+agent-af7d03280bb20dbbd	adversary	round	Bash	False	shasum: SPEC.md: No such file or directory
+agent-af7d03280bb20dbbd	adversary	round	Bash	False	shasum: architecture-impact.md: No such file or directory
+agent-a02c6793b26d0dd83	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a05ad6f707cd3b8f4	party	stories	Bash	False	ugrep: warning: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a05ad6f707cd3b8f4	party	stories	Bash	False	sed: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a05ad6f707cd3b8f4	party	stories	Bash	False	ugrep: warning: server/requirements*.txt: No such file or directory
+agent-a05ad6f9891be59fd	party	stories	Bash	False	ugrep: warning: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a09405efadb74ba97	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/web/e2e: No such file or directory
+agent-a0e39cb8bc5c1a51b	party	stories	Bash	False	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a104b7e746fb5c3a3	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-1-1-estimate-gas-fallback-fail-closed.md: No such file or directory
+agent-a144f10f8988d494f	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-a1627ed518d460c45	party	stories	Bash	True	sed: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a17e19366ac605e83	party	stories	Bash	True	ls: scripts/tests/conftest.py: No such file or directory
+agent-a17e19366ac605e83	party	stories	Bash	False	ls: pyproject.toml: No such file or directory
+agent-a17e19366ac605e83	party	stories	Bash	False	ls: setup.cfg: No such file or directory
+agent-a1d138014c0cd28ce	adversary	round	Bash	True	ls: /Users/n8/git/graph/.venv/bin/python: No such file or directory
+agent-a1d138014c0cd28ce	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/ARCHITECTURE-SPINE.md: No such file or directory
+agent-a1d5ac5747670c94d	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a1d8b790f51edf555	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/architecture.md: No such file or directory
+agent-a1f0b7250fda36aa0	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-1-1-estimate-gas-fallback-capped.md: No such file or directory
+agent-a1f0b7250fda36aa0	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-1-1-estimate-gas-fallback-capped-with-retry.md: No such file or directory
+agent-a2030c88b240715c1	party	stories	Bash	False	sed: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a25d4481737d61d54	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a2662306000ae4f75	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a27ca52024c661a39	party	stories	Bash	False	sed: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a2ae7b1a2db33e8ca	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-2-2-native-input-refusal.md: No such file or directory
+agent-a2d6f8c6a576b0edc	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a356ea740c9c8a4df	party	stories	Bash	True	ugrep: warning: server/requirements*.txt: No such file or directory
+agent-a372110445916bee9	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a372110445916bee9	party	stories	Bash	False	ugrep: warning: two_hop\|_is_native(\|approve: No such file or directory
+agent-a3b83f83d915e1d64	elicitation	-	Bash	True	ls: /Users/n8/git/graph/.venv: No such file or directory
+agent-a3b83f83d915e1d64	elicitation	-	Bash	True	ls: /Users/n8/git/graph/venv: No such file or directory
+agent-a3b83f83d915e1d64	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-a411b6b0b04f2f569	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-a424ebf3ccb1ad179	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a43a34c6086c70a51	party	stories	Bash	False	ugrep: warning: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a43a34c6086c70a51	party	stories	Bash	False	sed: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a43a34c6086c70a51	party	stories	Bash	False	ls: -d: No such file or directory
+agent-a4430477d21d31461	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a46260cd22d71e91d	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/web/vitest.config.js: No such file or directory
+agent-a48559876e6c011c8	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-3-2-smoke-dotenv-opt-out-and-loaders.md: No such file or directory
+agent-a4b09a991eb888c39	party	stories	Bash	False	ugrep: warning: web/vitest.config.js: No such file or directory
+agent-a4b09a991eb888c39	party	stories	Bash	False	ls: web/vitest.config.*: No such file or directory
+agent-a50bac8d41c071a99	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-2-3-native-leg1-v4-path.md: No such file or directory
+agent-a55935fb0897b0d84	party	stories	Bash	True	sed: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a59b8b4a3d24929ea	elicitation	-	Bash	True	ls: /Users/n8/git/graph/.venv/bin/python: No such file or directory
+agent-a5b79e631ee3184a9	party	stories	Bash	False	ugrep: warning: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a5d3a5911483f9482	party	stories	Bash	False	sed: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a5e94d94965e8f30c	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a5e94d94965e8f30c	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture-index.md: No such file or directory
+agent-a5e94d94965e8f30c	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/epics.md: No such file or directory
+agent-a6061cf11a0d4c1e8	party	stories	Bash	False	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a60d795e364c030f1	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a610db24e2be85d69	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/config: No such file or directory
+agent-a666ed0cfa03fea3a	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a666ed0cfa03fea3a	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/SPEC.md: No such file or directory
+agent-a66c5410f42444224	party	stories	Bash	True	ls: web/vitest.config.js: No such file or directory
+agent-a66c5410f42444224	party	stories	Bash	False	ugrep: warning: server/requirements*.txt: No such file or directory
+agent-a66ee4048dc5713d5	party	stories	Bash	False	ugrep: warning: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a70c47d0815827b17	party	stories	Bash	False	sed: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a71335d2205739457	party	stories	Bash	False	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a71335d2205739457	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a718d02ec2ea4d53c	adversary	round	Bash	True	ls: /Users/n8/git/graph/.venv: No such file or directory
+agent-a718d02ec2ea4d53c	adversary	round	Bash	True	ls: /Users/n8/git/graph/rebalancer/venv: No such file or directory
+agent-a718d02ec2ea4d53c	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/hot_reload.py: No such file or directory
+agent-a7388b321730bdf03	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/db.py: No such file or directory
+agent-a7388b321730bdf03	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-4-3-env-sentinel-prod-flip.md: No such file or directory
+agent-a78e1719a8f9699d7	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a7ef09fcc181e82b4	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a816a001f5d9606e6	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a816a001f5d9606e6	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/.claude/skills/ai-dlc/steps/stories.md: No such file or directory
+agent-a82011a0a570b9c7a	adversary	round	Bash	True	ls: /Users/n8/git/graph/pyproject.toml: No such file or directory
+agent-a82011a0a570b9c7a	adversary	round	Bash	True	ls: /Users/n8/git/graph/setup.cfg: No such file or directory
+agent-a82487e2296937c5f	adversary	round	Bash	False	ls: /Users/n8/git/graph/.venv/bin/python: No such file or directory
+agent-a8c550fea60d7ac36	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a9b7f80dd3b90ee43	party	stories	Bash	False	sed: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a9f7d4572c3dfa406	party	stories	Bash	False	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-aa3c6f6f4057796be	party	stories	Bash	False	ugrep: warning: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-aaade57e7aa9cd08b	party	stories	Bash	False	sed: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-aaef091f70144725f	party	stories	Bash	False	sed: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-ab33f0119fae2d74c	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-ab33f0119fae2d74c	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-abc0a793717c96802	elicitation	-	Bash	True	ls: /Users/n8/git/graph/.venv: No such file or directory
+agent-abc0a793717c96802	elicitation	-	Bash	True	ls: /Users/n8/git/graph/venv: No such file or directory
+agent-abc0a793717c96802	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/infra/lib/parameters.ts: No such file or directory
+agent-abc0a793717c96802	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/infra/lib/config.ts: No such file or directory
+agent-abfbe80e4e9275062	party	stories	Bash	True	sed: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-ac200c3c7ee76af68	party	stories	Bash	False	ugrep: warning: _bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-ac865ef865837a79b	adversary	off-round	Bash	False	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-2-1-hodl-validator-admits-native-token0.md: No such file or directory
+agent-ac865ef865837a79b	adversary	off-round	Bash	False	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-2-2-two-hop-offramp-native-token0.md: No such file or directory
+agent-ac865ef865837a79b	adversary	off-round	Bash	False	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-2-3-two-hop-base-quoter-config-fire.md: No such file or directory
+agent-ac865ef865837a79b	adversary	off-round	Bash	False	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/operator-answers-history.md: No such file or directory
+agent-ac865ef865837a79b	adversary	off-round	Bash	False	ugrep: warning: /Users/n8/git/graph/_bmad-output/pipeline-snapshot-archive.md: No such file or directory
+agent-acc9b44ad606dd14c	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/architecture.md: No such file or directory
+agent-ad3584eb80f450dd6	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-ad3584eb80f450dd6	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/.claude/skills/ai-dlc/steps/stories.md: No such file or directory
+agent-ad51c9d6cca50d312	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-3-2-live-smoke-honest-green.md: No such file or directory
+agent-ae198fcbdebd78f41	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/tests/_s321_fixtures.py: No such file or directory
+agent-aef5004a5178f9c7d	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/stories/story-1-1-gas-price-fail-closed.md: No such file or directory
+agent-af051a7b1e9df11e2	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-af13f91fb3fcca59c	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-af13f91fb3fcca59c	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/architecture.md: No such file or directory
+agent-af54f84c5ef74caa3	elicitation	-	Bash	True	ls: /Users/n8/git/graph/server/pytest.ini: No such file or directory
+agent-af54f84c5ef74caa3	elicitation	-	Bash	True	ls: /Users/n8/git/graph/server/tests/conftest.py: No such file or directory
+agent-af54f84c5ef74caa3	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/ARCHITECTURE-SPINE.md: No such file or directory
+agent-af54f84c5ef74caa3	elicitation	-	Bash	True	sed: /Users/n8/git/graph/.claude/team-roles/qa-domain.md: No such file or directory
+agent-af54f84c5ef74caa3	elicitation	-	Bash	True	sed: /Users/n8/git/graph/.claude/team-roles/team-roles__qa__bug-class-sweep.md: No such file or directory
+agent-afca8fa4f1de382d8	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a06d83b8f89e60a05	party-unkeyed	-	Bash	True	ls: /Users/n8/git/graph/_bmad-output/retro-artifacts/s323/retro-draft-parts: No such file or directory
+agent-a06d83b8f89e60a05	party-unkeyed	-	Read	False	433	with "No such file or directory". A fence can't record a non-zero exit, so this note is the
+agent-a5fcde31680aad14b	party	sprint-review	mcp__plugin_context-mode_context-mode__ctx_execute	True	ls: /Users/n8/git/graph/pyproject.toml: No such file or directory
+agent-a5fcde31680aad14b	party	sprint-review	mcp__plugin_context-mode_context-mode__ctx_execute	True	ls: /Users/n8/git/graph/setup.cfg: No such file or directory
+agent-a6f88565256b27649	party-unkeyed	-	Bash	False	ls: /Users/n8/git/graph/_bmad-output/party-mode-transcripts/s323/.parts/: No such file or directory
+agent-a795866eb853a99a4	party	sprint-review	Bash	False	ugrep: warning: _bmad-output/planning-artifacts/s323/ARCHITECTURE-SPINE.md: No such file or directory
+agent-aa45d32f1760173b0	party	sprint-review	Bash	False	ugrep: warning: prd.md: No such file or directory
+agent-aaa209c045f091fad	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/pyproject.toml: No such file or directory
+agent-aaa209c045f091fad	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/setup.cfg: No such file or directory
+agent-aaa209c045f091fad	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/pytest.ini: No such file or directory
+agent-aaf27c5663f5391f2	party-unkeyed	-	Bash	False	ls: /Users/n8/git/graph/_bmad-output/party-mode-transcripts/s323/: No such file or directory
+agent-aaf27c5663f5391f2	party-unkeyed	-	Bash	False	ls: /Users/n8/git/graph/_bmad-output/party-mode-transcripts/s323/.parts/: No such file or directory
+agent-aaf27c5663f5391f2	party-unkeyed	-	Bash	True	ls: /Users/n8/git/graph/.venv-ci/lib/python*/site-packages/cryptography: No such file or directory
+agent-aaf27c5663f5391f2	party-unkeyed	-	Bash	True	ls: /Users/n8/git/graph/.venv-ci/lib/python3.15/site-packages/cryptography: No such file or directory
+agent-aafe2618013df38eb	party	sprint-review	Bash	True	ls: /Users/n8/git/graph/.venv/bin/python: No such file or directory
+agent-ab16bc2cea8590b71	party	sprint-review	Bash	True	ls: /Users/n8/git/graph/.venv/bin/python: No such file or directory
+agent-ab16bc2cea8590b71	party	sprint-review	Bash	True	ls: /Users/n8/git/graph/server/.venv/bin/python: No such file or directory
+agent-ac490fe51184bf581	party	sprint-review	Bash	True	ls: /Users/n8/git/graph/.venv/bin/python: No such file or directory
+agent-ac5ab28c6f99e2112	party-unkeyed	-	Read	False	433	with "No such file or directory". A fence can't record a non-zero exit, so this note is the
+agent-ada8afe11171adccc	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-adfa8b93efe600814	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/chain.py: No such file or directory
+agent-a19a399ac1eff15cc	elicitation	-	Bash	True	shasum: _bmad-output/planning-artifacts/s323/product-brief.md: No such file or directory
+agent-a19a399ac1eff15cc	elicitation	-	Bash	True	shasum: _bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-a19a399ac1eff15cc	elicitation	-	Bash	True	shasum: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a4d5a63f6e9c1a01b	elicitation	-	Bash	False	ugrep: warning: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a4d5a63f6e9c1a01b	elicitation	-	Bash	False	ugrep: warning: _bmad-output/planning-artifacts/architecture-impact.md: No such file or directory
+agent-a5019fb6831d617e2	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-a7aa4536add05e7ce	elicitation	-	Bash	True	shasum: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/product-brief.md: No such file or directory
+agent-a7aa4536add05e7ce	elicitation	-	Bash	True	shasum: /Users/n8/git/graph/_bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-aab9d6a770f59dcc6	party	requirements	Bash	False	ls: tests/test_check_17_provenance.py: No such file or directory
+agent-aab9d6a770f59dcc6	party	requirements	Bash	False	ugrep: warning: tests/test_check_17_provenance.py: No such file or directory
+agent-ad4f5bdf4b71dadd3	party	requirements	Bash	False	ugrep: warning: scripts/conftest.py: No such file or directory
+agent-ad6b8a7f7c59219e4	elicitation	-	Bash	False	shasum: _bmad-output/planning-artifacts/s323/product-brief.md: No such file or directory
+agent-afd9c0faaa7dedcdd	elicitation	-	Bash	False	shasum: _bmad-output/planning-artifacts/s323/SPEC.md: No such file or directory
+agent-afd9c0faaa7dedcdd	elicitation	-	Bash	False	shasum: _bmad-output/planning-artifacts/s323/prd.md: No such file or directory
+agent-afd9c0faaa7dedcdd	elicitation	-	Bash	False	shasum: _bmad-output/planning-artifacts/s323/product-brief.md: No such file or directory

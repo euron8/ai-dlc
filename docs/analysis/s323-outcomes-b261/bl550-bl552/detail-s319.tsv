@@ -1,0 +1,239 @@
+agent-a1b7f2f8cd4dbe763	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/ARCHITECTURE-SPINE.md: No such file or directory
+agent-a1b7f2f8cd4dbe763	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-1-1-dust-floor-leaf-schema-defaults-parity.md: No such file or directory
+agent-a1b7f2f8cd4dbe763	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/shared: No such file or directory
+agent-a1b7f2f8cd4dbe763	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a217160c83eb158a8	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-3-2-rewards-hook-and-two-cards.md: No such file or directory
+agent-a217160c83eb158a8	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-3-3-dashboard-rewards-cards.md: No such file or directory
+agent-a300629eaddce43d8	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a3924a67641ce5d32	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-3-2-rewards-card-on-the-dashboard-and-rebalancer-pages.md: No such file or directory
+agent-a3924a67641ce5d32	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a4e5223fad56c7937	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a5ecac4ec95c70484	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-3-2-uncollected-rewards-card.md: No such file or directory
+agent-a7f48e8e918d9798e	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config_schema.py: No such file or directory
+agent-a7f48e8e918d9798e	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a9685892decdeee26	elicitation	-	Bash	True	ls: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/shards/stories-elicitation/cross-3.md: No such file or directory
+agent-a9bfde479e98b7ff4	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-4-4-collect-rewards-button-and-hook.md: No such file or directory
+agent-a9bfde479e98b7ff4	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a9bfde479e98b7ff4	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/architecture.md: No such file or directory
+agent-a9bfde479e98b7ff4	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/tests/test_112_4*.py: No such file or directory
+agent-a9bfde479e98b7ff4	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/chain_context.py: No such file or directory
+agent-aad02ceb7f06e12fe	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-5-1-hodl-collect-rewards-press.md: No such file or directory
+agent-ac48bb10e032e9d0f	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-5-1-sweep-hodl-live-discharge-by-passive-observation.md: No such file or directory
+agent-ad227d91016a202ea	elicitation	-	mcp__plugin_context-mode_context-mode__ctx_batch_execute	False	sed: prd.md: No such file or directory
+agent-adde81a0d955bd4cc	elicitation	-	Bash	True	sed: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-adde81a0d955bd4cc	elicitation	-	Bash	True	sed: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/ARCHITECTURE-SPINE.md: No such file or directory
+agent-a0feab004b95d4529	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/db.py: No such file or directory
+agent-a0feab004b95d4529	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/state_store.py: No such file or directory
+agent-a16bd52367b9ecbad	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/tests/test_245_4_no_sweep_guarantee_recovery.py: No such file or directory
+agent-a1d42818b5942fc96	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/services: No such file or directory
+agent-a1d42818b5942fc96	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/aggregator: No such file or directory
+agent-a1d42818b5942fc96	elicitation	-	Bash	False	ugrep: warning: /Users/n8/git/graph/scripts/ai-dlc/merge-elicitation-shards.sh: No such file or directory
+agent-a2fb24b966c466389	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.yaml: No such file or directory
+agent-a325b84b61dd558f0	adversary	round	Bash	False	rebalancer/tests/test_data_provider.py: No such file or directory
+agent-a35ac083428f7339b	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/config.yaml: No such file or directory
+agent-a35ac083428f7339b	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.yaml: No such file or directory
+agent-a3888f74eaced172f	party	requirements	Bash	False	EXISTS-CHECK ls: web/configSchema.js: No such file or directory
+agent-a3b5deb435b8a235c	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/shared/tokens.py: No such file or directory
+agent-a3b5deb435b8a235c	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/logging_config.py: No such file or directory
+agent-a3f8a67c492bc19fa	party	requirements	Bash	False	sed: /Users/n8/git/graph/_bmad-output/planning-artifacts/operator-requests-history.md: No such file or directory
+agent-a3f8a67c492bc19fa	party	requirements	Bash	False	sed: /Users/n8/git/graph/_bmad-output/planning-artifacts/operator-answers-history.md: No such file or directory
+agent-a440353abbdc280b5	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/aggregator: No such file or directory
+agent-a440353abbdc280b5	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/logging_config.py: No such file or directory
+agent-a440353abbdc280b5	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/__main__.py: No such file or directory
+agent-a440353abbdc280b5	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/shared: No such file or directory
+agent-a4d164c6cc9d7aaa4	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/db.py: No such file or directory
+agent-a4d164c6cc9d7aaa4	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/shared/tokens.py: No such file or directory
+agent-a4d164c6cc9d7aaa4	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/shared: No such file or directory
+agent-a4d164c6cc9d7aaa4	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/tokens.py: No such file or directory
+agent-a570904515a4d373f	party-unkeyed	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/wallet.py: No such file or directory
+agent-a6000d6448858a150	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config_schema.py: No such file or directory
+agent-a64b5e47ce19c5429	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/token_registry.py: No such file or directory
+agent-a64b5e47ce19c5429	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/tx_builder.py: No such file or directory
+agent-a64b5e47ce19c5429	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/chain_context.py: No such file or directory
+agent-a64b5e47ce19c5429	party	carry-over-evaluation	Bash	True	ls: /Users/n8/git/graph/venv/bin/python: No such file or directory
+agent-a665faa5c473581d7	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/infra/lib/ecs-stack.ts: No such file or directory
+agent-a665faa5c473581d7	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/tests/test_s318_1_2_hodl_press.py: No such file or directory
+agent-a665faa5c473581d7	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-a665faa5c473581d7	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/infra/lib/rebalancer-stack.ts: No such file or directory
+agent-a665faa5c473581d7	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/__main__.py: No such file or directory
+agent-a67e08852d8a593a1	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/scripts/ai-dlc/party-join.sh: No such file or directory
+agent-a75a436e500aa3fdc	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-a9221c2c021555404	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-a9221c2c021555404	party	carry-over-evaluation	Bash	True	ls: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-a9221c2c021555404	party	carry-over-evaluation	Read	False	92	`ls _bmad-output/planning-artifacts/architecture.md` exits 1 with "No such file or directory" (observed in this session; it is not fenced because the derivation would record stderr).
+agent-a92dcfec4e0c79808	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/chain_context.py: No such file or directory
+agent-a99d9d793baa753c3	party	carry-over-evaluation	Bash	True	ls: /Users/n8/git/graph/web/configSchema.js: No such file or directory
+agent-a9c09cb21b1a1958b	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/test_245_4_no_sweep_guarantee_recovery.py: No such file or directory
+agent-a9c09cb21b1a1958b	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/scripts/ai-dlc/party-join.sh: No such file or directory
+agent-a9f4a752580225510	adversary	round	mcp__plugin_context-mode_context-mode__ctx_batch_execute	False	grep: /Users/n8/git/graph/tests/test_s316_b1_multipool.py: No such file or directory
+agent-aac9d458c1726d68c	party	requirements	Bash	True	ls: web/configSchema.js: No such file or directory
+agent-aaee9e1951eb5f014	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/__main__.py: No such file or directory
+agent-aaee9e1951eb5f014	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/logging_config.py: No such file or directory
+agent-aaee9e1951eb5f014	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/hooks: No such file or directory
+agent-aaee9e1951eb5f014	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/api: No such file or directory
+agent-ab30c5f751f836345	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/audit-anchors.md: No such file or directory
+agent-ab4b61b094543a1eb	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config_schema.py: No such file or directory
+agent-ab4b61b094543a1eb	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.yaml: No such file or directory
+agent-abdb4ca1c90e757e9	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/aggregator: No such file or directory
+agent-ac15ec5143a267298	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/audit-anchors.md: No such file or directory
+agent-ac17c17384f9d5c52	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/telemetry_store.py: No such file or directory
+agent-ac17c17384f9d5c52	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/db.py: No such file or directory
+agent-ac8a5b1c8a64c2226	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/server/main.py: No such file or directory
+agent-acf97e6b98acc26ad	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/dashboard/src/pages/RebalancerPage.jsx: No such file or directory
+agent-ad291ca3735271892	party	carry-over-evaluation	Bash	True	ugrep: warning: /Users/n8/git/graph/tests/test_245_4_no_sweep_guarantee_recovery.py: No such file or directory
+agent-ae86ef76261c88ed1	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.yaml: No such file or directory
+agent-ae86ef76261c88ed1	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/db.py: No such file or directory
+agent-ae86ef76261c88ed1	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/execution_log.py: No such file or directory
+agent-ae9089fa021ed8d1a	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/fold-adjudications.md: No such file or directory
+agent-af442c42f3b0d7702	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/aggregator: No such file or directory
+agent-af6a84c2503138d56	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/infra/lib/service-stack.ts: No such file or directory
+agent-af6a84c2503138d56	party	requirements	Bash	True	ugrep: warning: /Users/n8/git/graph/infra/lib/rebalancer-stack.ts: No such file or directory
+agent-a05bd05d2d766d7fa	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config_schema.py: No such file or directory
+agent-a11bbff5c292decf0	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/shared/tokens.py: No such file or directory
+agent-a11bbff5c292decf0	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/shared: No such file or directory
+agent-a11bbff5c292decf0	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/shared: No such file or directory
+agent-a1b2cd963a3239e11	party	architecture	Bash	False	ugrep: warning: web/src/components/CollectFeesSection.jsx: No such file or directory
+agent-a76270ece1cb13cf3	party	architecture	Bash	True	ugrep: warning: rebalancer/merkl_client.py: No such file or directory
+agent-a9434e92bdd200af6	party	architecture	Bash	True	ls: /Users/n8/git/graph/web/vitest.config.js: No such file or directory
+agent-a9434e92bdd200af6	party	architecture	Bash	True	ls: /Users/n8/git/graph/web/vitest.config.ts: No such file or directory
+agent-a9d6d0e47c3d05c29	adversary	round	Bash	False	timeout: failed to run command ‘python’: No such file or directory
+agent-a9eaf05db2d82dc01	party	architecture	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.yaml: No such file or directory
+agent-aac3e44fced647c6a	adversary	round	Bash	False	ls: -a: No such file or directory
+agent-aac3e44fced647c6a	adversary	round	Bash	True	ls: rebalancer/merkl_client.py: No such file or directory
+agent-ab594be7fb7571bf1	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.yaml: No such file or directory
+agent-ab594be7fb7571bf1	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.example.yaml: No such file or directory
+agent-ac19cc9966098535c	party	architecture	Bash	True	ugrep: warning: /Users/n8/git/graph/scripts/run-exec-health.sh: No such file or directory
+agent-ac19cc9966098535c	party	architecture	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/price_resolver.py: No such file or directory
+agent-ac19cc9966098535c	party	architecture	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/requirements.md: No such file or directory
+agent-ae637408a1e291d95	party	architecture	Bash	False	ugrep: warning: scripts/run-exec-health.sh: No such file or directory
+agent-af7f1ff00e688e4be	party	architecture	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/components/StatusBar.jsx: No such file or directory
+agent-af7f1ff00e688e4be	party	architecture	Bash	False	ls: /Users/n8/git/graph/.github/workflows: No such file or directory
+agent-a249766db225579eb	adversary	off-round	Bash	True	ugrep: warning: /Users/n8/git/graph/config/rebalancer.json: No such file or directory
+agent-a249766db225579eb	adversary	off-round	Bash	True	ugrep: warning: /Users/n8/git/graph/shared: No such file or directory
+agent-a261c9e6f47b98d9e	party-unkeyed	-	Bash	False	wc: templates/retro-finding-class-tracking.md: open: No such file or directory
+agent-a261c9e6f47b98d9e	party-unkeyed	-	Bash	False	ls: _bmad-output/retro-artifacts/s319/: No such file or directory
+agent-a2883c81bab38df9f	party	sprint-review	Read	False	241	**Cross-CI parity.** `ls /Users/n8/git/graph-s319-story-3-2/.github/workflows` returned `No such file or directory` (the control: CI workflows are absent, so no plugin install applies). `web/package.json` and `web/package-lock.json` have zero diff lines against the base (`git diff 42acf9f35 HEAD
+agent-a294f15eb2903900e	party	sprint-review	Read	False	241	**Cross-CI parity.** `ls /Users/n8/git/graph-s319-story-3-2/.github/workflows` returned `No such file or directory` (the control: CI workflows are absent, so no plugin install applies). `web/package.json` and `web/package-lock.json` have zero diff lines against the base (`git diff 42acf9f35 HEAD
+agent-a350917f96e37e5a9	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-a350917f96e37e5a9	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/chain_context.py: No such file or directory
+agent-a350917f96e37e5a9	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/components/CollectFeesSection.jsx: No such file or directory
+agent-a3746fe2727a04462	party	sprint-review	Read	False	241	**Cross-CI parity.** `ls /Users/n8/git/graph-s319-story-3-2/.github/workflows` returned `No such file or directory` (the control: CI workflows are absent, so no plugin install applies). `web/package.json` and `web/package-lock.json` have zero diff lines against the base (`git diff 42acf9f35 HEAD
+agent-a44264aa3af75da6e	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.yaml: No such file or directory
+agent-a4f4d031a3c9e14a3	party	sprint-review	Bash	True	ls: /Users/n8/git/graph-s319-story-5-3: No such file or directory
+agent-a5a9a63857b081bd2	party-unkeyed	-	Read	False	102	  directory, not the script, and died on `No such file or directory` while the
+agent-a5a9a63857b081bd2	party-unkeyed	-	Bash	False	ls: web/package-lock.json: No such file or directory
+agent-a5e91d4a083aa5743	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/api_config.py: No such file or directory
+agent-a8a782dfeaf477308	party	retro	Bash	False	ugrep: warning: docs/reviews/s319/ff-rewards-status-bar-qa.md: No such file or directory
+agent-a8c18921bd1a06786	party	sprint-review	Bash	True	ls: /Users/n8/git/graph-s319-story-5-3: No such file or directory
+agent-a9b73dc123b62ab7d	party	sprint-review	Bash	False	ugrep: warning: /Users/n8/git/graph/web/src/configSchema.js: No such file or directory
+agent-aa00187421bd3619c	party	sprint-review	Read	False	241	**Cross-CI parity.** `ls /Users/n8/git/graph-s319-story-3-2/.github/workflows` returned `No such file or directory` (the control: CI workflows are absent, so no plugin install applies). `web/package.json` and `web/package-lock.json` have zero diff lines against the base (`git diff 42acf9f35 HEAD
+agent-aa13b75aab9f9edb6	party	sprint-review	Read	False	241	**Cross-CI parity.** `ls /Users/n8/git/graph-s319-story-3-2/.github/workflows` returned `No such file or directory` (the control: CI workflows are absent, so no plugin install applies). `web/package.json` and `web/package-lock.json` have zero diff lines against the base (`git diff 42acf9f35 HEAD
+agent-abb0e5c4acfb1395c	party	sprint-review	Read	False	241	**Cross-CI parity.** `ls /Users/n8/git/graph-s319-story-3-2/.github/workflows` returned `No such file or directory` (the control: CI workflows are absent, so no plugin install applies). `web/package.json` and `web/package-lock.json` have zero diff lines against the base (`git diff 42acf9f35 HEAD
+agent-abb0e5c4acfb1395c	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/tests/test_merkl_client.py: No such file or directory
+agent-ac10428f3cc1a6a5c	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/storage_pg.py: No such file or directory
+agent-ac10428f3cc1a6a5c	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-ac3dff9833077ec3e	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config_schema.py: No such file or directory
+agent-ac9d983f75cc4be4e	party	sprint-review	Read	False	241	**Cross-CI parity.** `ls /Users/n8/git/graph-s319-story-3-2/.github/workflows` returned `No such file or directory` (the control: CI workflows are absent, so no plugin install applies). `web/package.json` and `web/package-lock.json` have zero diff lines against the base (`git diff 42acf9f35 HEAD
+agent-ad117cbdb41c6e319	party	sprint-review	Bash	False	ls: /Users/n8/git/graph/.scratch-fees.txt: No such file or directory
+agent-ad117cbdb41c6e319	party	sprint-review	Bash	False	ls: /Users/n8/git/graph/.scratch-rewards.txt: No such file or directory
+agent-ad1705d63c4304a43	party-unkeyed	-	Read	False	102	  directory, not the script, and died on `No such file or directory` while the
+agent-ad66d0f95226da0a7	party	sprint-review	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/sprint-status.yaml: No such file or directory
+agent-ad9fcd98f4c2a37e0	party	sprint-review	Bash	True	ugrep: warning: rebalancer/execution_log.py: No such file or directory
+agent-aef2b82a0c1b494bd	party-unkeyed	-	Read	False	102	  directory, not the script, and died on `No such file or directory` while the
+agent-aef2b82a0c1b494bd	party-unkeyed	-	Bash	False	ls: .env: No such file or directory
+agent-af18f7ba5803d2848	party	sprint-review	Bash	True	ls: _bmad-output/party-mode/s319/sprint-review-dev-20.md: No such file or directory
+agent-af2dc89b31995c85d	party-unkeyed	-	mcp__plugin_context-mode_context-mode__ctx_execute	False	-architect-19 F-2 (minor) | 19 |  The AC4 derivation fence in the story (story lines 101-111) cannot be replayed. Two of its operands are absolute paths under `/Users/n8/git/graph-s319-story-5-3/`, and that worktree no longer exists: `ls -d /Users/n8/git/graph-s319-story-5-3` exits 1 with "No such f
+agent-a2b68edb8c522c279	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/execution_log.py: No such file or directory
+agent-a370ad85ee610c396	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/components/StatCard.jsx: No such file or directory
+agent-a516fce39dafabc62	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/infra/lib/parameters.ts: No such file or directory
+agent-a5771167dcb2245b6	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/pyproject.toml: No such file or directory
+agent-a59b6b8d459f788bc	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/tests/test_92_2_safeguard_context_population.py: No such file or directory
+agent-a5de80d35e7475c38	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.yaml: No such file or directory
+agent-a683abfb0d15faa7d	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/server.py: No such file or directory
+agent-a683abfb0d15faa7d	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/routes.py: No such file or directory
+agent-a6901636ab8f7c20f	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/pyproject.toml: No such file or directory
+agent-a70a500802989e89a	party	stories	mcp__plugin_context-mode_context-mode__ctx_batch_execute	False	grep: /Users/n8/git/graph/rebalancer/config_api.py: No such file or directory
+agent-a714a1a0a0655debd	party	stories	Bash	False	ugrep: warning: 'reason': No such file or directory
+agent-a71a9740d0c5e0859	party	stories	Bash	True	ugrep: warning: infra/lib/parameters.ts: No such file or directory
+agent-a8d8f20d0ddedb7b2	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.yaml: No such file or directory
+agent-a8d8f20d0ddedb7b2	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/infra/lib/parameters.ts: No such file or directory
+agent-a910f7f802864791d	party	stories	Bash	False	ugrep: warning: rebalancer/telemetry*.py: No such file or directory
+agent-ab6c1763050b89efa	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/infra/lib/parameters.ts: No such file or directory
+agent-abf6206fe8893d5a0	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/telemetry.py: No such file or directory
+agent-abf6206fe8893d5a0	party	stories	Bash	True	ls: /Users/n8/git/graph/_bmad-output/implementation-artifacts/s319/net-pnl-diagnosis.md: No such file or directory
+agent-ad0acc7f84e2ef778	party	stories	Bash	False	ls: /Users/n8/git/graph/rebalancer/merkl_client.py: No such file or directory
+agent-ae14cc64f2b182b7f	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.yaml: No such file or directory
+agent-ae234cb364384a5d2	party	stories	Bash	False	ugrep: warning: web/configSchema.js: No such file or directory
+agent-afa3dafe465c28bbc	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/test-strategy.md: No such file or directory
+agent-a08c932ee1075fe9d	adversary	round	Bash	True	ugrep: warning: _bmad-output/planning-artifacts/s319/stories/story-1-5-offramp-pin-recapture-and-live-dust-floor-write.md: No such file or directory
+agent-a0e127eaf64676e99	elicitation	-	Bash	True	sed: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a11d1cb021cfc38e8	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-2-3-net-pnl-triage-and-unavailable-contract.md: No such file or directory
+agent-a14ffabc97c5a7139	adversary	round	Bash	True	ugrep: warning: rebalancer/config_api.py: No such file or directory
+agent-a19638e5853476383	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/architecture.md: No such file or directory
+agent-a33a896ee1b37949f	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-1-2-swap-skipped-details-key.md: No such file or directory
+agent-a33a896ee1b37949f	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-1-3-usd-floor-at-dust-raw.md: No such file or directory
+agent-a3de21cfc1118d52f	party-unkeyed	-	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/tests/fixtures/merkl_rewards_foreign_read.json: No such file or directory
+agent-a3de21cfc1118d52f	party-unkeyed	-	Bash	True	ugrep: warning: /Users/n8/git/graph/shared/tokens.py: No such file or directory
+agent-a40273505de1e26b6	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-5-3-co-s318-carry-over-lifecycle-reconciliation.md: No such file or directory
+agent-a40273505de1e26b6	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-5-4-unresolved-tokenid-hash-recovery-and-read-cadence.md: No such file or directory
+agent-a45c86828360baedc	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-5-1-live-acceptance-ledger.md: No such file or directory
+agent-a4f0a952da14dd0e9	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/.github/workflows: No such file or directory
+agent-a508f8c64c1bc3739	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/shared/aggregator.py: No such file or directory
+agent-a554a8cd21803c686	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/ARCHITECTURE-SPINE.md: No such file or directory
+agent-a554a8cd21803c686	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a6958ffd5c0101784	adversary	round	Bash	True	ugrep: warning: rebalancer/chain_context.py: No such file or directory
+agent-a6958ffd5c0101784	adversary	round	Bash	True	ugrep: warning: async def _log_execution: No such file or directory
+agent-a7d9eda1bf9c615d0	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a83c7748dabc42288	adversary	round	Bash	True	ugrep: warning: _bmad-output/planning-artifacts/s319/stories/story-2-3-net-pnl-conditional-fix-null-unavailable.md: No such file or directory
+agent-a870b28807d75581f	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a887c817044b0e6f3	adversary	round	mcp__plugin_context-mode_context-mode__ctx_batch_execute	False	grep: rebalancer/chain_context.py: No such file or directory
+agent-a8a7ecdc7819854ce	elicitation	-	Bash	True	sed: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a8a7ecdc7819854ce	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-1-2-floor-read-and-skip-path.md: No such file or directory
+agent-a9bdc64bd6b46f666	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-ab06109fb123d992e	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-ab06109fb123d992e	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-4-2-merkl-claim-method.md: No such file or directory
+agent-ab06109fb123d992e	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-3-1-rewards-endpoint.md: No such file or directory
+agent-abe240f10d5097c03	elicitation	-	Bash	True	sed: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-ad23fa96cfe418a82	adversary	round	Bash	True	ugrep: warning: rebalancer/chain_context.py: No such file or directory
+agent-ad70d4610b069f4ea	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/architecture-spine.md: No such file or directory
+agent-ae0edda6d0d4fef9f	elicitation	-	mcp__plugin_context-mode_context-mode__ctx_batch_execute	False	grep: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-ae4e4164fbd10e442	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/stories/story-3-1-rewards-endpoint-merkl-client.md: No such file or directory
+agent-aec598c72f6f116ea	elicitation	-	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-a02dad664e395f6da	party	stories	Bash	True	ugrep: warning: rebalancer/config.yaml: No such file or directory
+agent-a02dad664e395f6da	party	stories	Bash	True	ugrep: warning: shared/tokens.py: No such file or directory
+agent-a02dad664e395f6da	party	stories	Bash	True	ugrep: warning: shared: No such file or directory
+agent-a0856c15c754bc9f6	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/hooks: No such file or directory
+agent-a0930f4ebef12b043	party	stories	Bash	False	ugrep: warning: infra/lib/parameters.ts: No such file or directory
+agent-a2063c61f810d8dfc	party	stories	Bash	False	ugrep: warning: web/src/configSchema.js: No such file or directory
+agent-a388f1f0470bb64fa	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/web/test: No such file or directory
+agent-a3f9dd8af79ef2379	adversary	round	Read	False	729	- `ls rebalancer/merkl_client.py` printed "No such file or directory".
+agent-a6f9a64bef359c2a9	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/infra/lib/ecs-stack.ts: No such file or directory
+agent-a6fe1894700e700f9	adversary	round	Read	False	729	- `ls rebalancer/merkl_client.py` printed "No such file or directory".
+agent-a73061431cd03d612	adversary	round	Read	False	56	- `ls rebalancer/merkl_client.py` printed "No such file or directory".
+agent-a785c4cb38202a916	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/execution_log.py: No such file or directory
+agent-a785c4cb38202a916	party	stories	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/db.py: No such file or directory
+agent-aaedbcfea70c8b52d	adversary	round	Read	False	729	- `ls rebalancer/merkl_client.py` printed "No such file or directory".
+agent-ab649c3fa124b91fc	adversary	round	Read	False	729	- `ls rebalancer/merkl_client.py` printed "No such file or directory".
+agent-ad1563611f0f0fd99	party	stories	Bash	False	ugrep: warning: .claude/skills/ai-dlc/steps/stories.md: No such file or directory
+agent-ade06393d521feb14	adversary	round	Read	False	729	- `ls rebalancer/merkl_client.py` printed "No such file or directory".
+agent-ade06393d521feb14	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/_bmad-output/planning-artifacts/s319/prd.md: No such file or directory
+agent-ade06393d521feb14	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/docs/prd.md: No such file or directory
+agent-ae328e287a73cd6f8	adversary	round	Read	False	729	- `ls rebalancer/merkl_client.py` printed "No such file or directory".
+agent-a58278bc0286caeaa	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/tests/test_s245_subscribe_pin.py: No such file or directory
+agent-a6267266b7df5529e	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/extensions: No such file or directory
+agent-a8c241b637f492b9b	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/dashboard: No such file or directory
+agent-a9967582eae79af7e	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/shared: No such file or directory
+agent-a9967582eae79af7e	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/shared/tokens.py: No such file or directory
+agent-aaa45e6df50c0a952	adversary	round	Bash	True	ls: /Users/n8/git/graph/_bmad-output/planning-artifacts/s306/locked-requirements.md: No such file or directory
+agent-ab1c880f665aa261f	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/aggregator: No such file or directory
+agent-ab1c880f665aa261f	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config.example.json: No such file or directory
+agent-abf431bebfd1573b8	adversary	round	Bash	True	ls: /Users/n8/git/graph/node_modules/markdown-it/package.json: No such file or directory
+agent-abf431bebfd1573b8	adversary	round	Bash	True	ls: /Users/n8/git/graph/web/node_modules/markdown-it/package.json: No such file or directory
+agent-abf431bebfd1573b8	adversary	round	Bash	True	ls: /Users/n8/git/graph/web/node_modules/marked/package.json: No such file or directory
+agent-acf3ac45595a47035	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/tests/test_s318_subscribe_pin.py: No such file or directory
+agent-aedb988f08ae04736	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/rebalancer/config_schema.py: No such file or directory
+agent-aedb988f08ae04736	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/pages/Dashboard.jsx: No such file or directory
+agent-aedb988f08ae04736	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/pages/Dashboard.tsx: No such file or directory
+agent-aedb988f08ae04736	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/components/Dashboard: No such file or directory
+agent-aedb988f08ae04736	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/dashboard/src: No such file or directory
+agent-aedb988f08ae04736	adversary	round	Bash	True	ugrep: warning: /Users/n8/git/graph/web/src/hooks: No such file or directory

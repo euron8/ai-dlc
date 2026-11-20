@@ -1,0 +1,19 @@
+agent_id,lead_session,step,description,tool_calls,executed,fixed_string_sweeps,worklist_runs,usd_api
+a6d92707c1e725cc1,62eadbbe,carry-over-evaluation,Serial cross-section party remediator,197,193,29,0,7.08
+ad260a9c6340c1e1f,62eadbbe,carry-over-evaluation,Serial cross-section elicitation remediator,91,83,12,0,2.46
+a677f50b214da9b7e,62eadbbe,requirements,Party repair serial cross-part,146,143,29,0,7.44
+a4b9c05a506fc183b,62eadbbe,requirements,Elicitation serial cross-part repair,168,166,32,0,5.02
+a7ffc8dcd555207b8,949015a6,requirements,"Serial cross-part repair, pass 1",43,42,5,0,1.75
+a7b0cae0f8ad304a5,cf53b84f,requirements,"Serial cross-part repair, requirements pass 1",148,145,19,0,5.39
+ad9626bb1d9637635,cf53b84f,requirements,Serial fix: stale fences and SPEC contradictions,50,50,7,0,1.19
+a2f6891e226133169,0e9a936b,requirements,Serial 3 stale-fence repair,16,15,0,0,0.51
+aabf5e245b6f63545,74de15ba,architecture,Serial remediator party repair,80,79,4,1,2.44
+a6ba4044c36ad2950,74de15ba,architecture,Serial remediator elicitation repair,102,101,24,1,3.93
+ade544a797f82bb83,74de15ba,architecture,Adversarial serial remediator p1,57,57,9,0,2.28
+acc03a15534dd0113,c61a91eb,architecture,Serial remediator p3,59,56,11,0,1.41
+ae0dfc98b23f8b85d,a367e62c,stories-test-strategy,Serial remediator party repair,124,122,32,0,9.91
+a07be9f42b63bc834,a367e62c,stories-test-strategy,"Serial remediator, elicitation repair",146,144,19,0,10.65
+a924eac6cb77bf5e0,a367e62c,stories-test-strategy,Serial remediator pass 1 repair,75,75,29,0,2.84
+a4653d0f4b912a30f,218aa1b8,stories-test-strategy,TS repair p1 serial remediator,22,22,5,0,1.00
+a9c50c3da747659d1,218aa1b8,stories-test-strategy,TS repair p2 serial remediator,34,33,2,0,0.90
+a78523c4da44f1191,218aa1b8,gate-validation[stories-test-strategy],Serial remediator elicitation p1,130,128,15,0,3.90

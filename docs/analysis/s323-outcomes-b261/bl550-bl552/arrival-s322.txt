@@ -1,0 +1,11 @@
+scan: seats=1868 dispatcher_transcripts=16 lead_transcripts=175 unparseable_lines=0
+notifications lead       all=597
+arrivals lead       elicitation  -                        arrivals=5 status=4 signature=3
+covered  lead       party(planning)+elicitation arrivals=5 status=4 (0.800 per arrival) signature=3 (0.600 per arrival)
+notifications dispatcher all=36
+arrivals dispatcher party        architecture             arrivals=7 status=6 signature=4
+arrivals dispatcher party        carry-over-evaluation    arrivals=10 status=9 signature=0
+arrivals dispatcher party        requirements             arrivals=4 status=3 signature=2
+arrivals dispatcher party        sprint-review            arrivals=3 status=3 signature=0
+arrivals dispatcher party        stories                  arrivals=2 status=0 signature=0
+covered  dispatcher party(planning)+elicitation arrivals=23 status=18 (0.783 per arrival) signature=6 (0.261 per arrival)

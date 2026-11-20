@@ -1,0 +1,6 @@
+s319 four steps as labelled (20 stories): 1.83 h gap-inclusive (gap 1.00 h), token-equivalent $55.4 (API $55.4), 98.9M tokens, per story
+s319 plus four planning-gate rows (20 stories): 1.93 h gap-inclusive (gap 1.02 h), token-equivalent $60.2 (API $60.2), 107.3M tokens, per story
+s319 three steps without carry-over-evaluation (20 stories): 1.69 h gap-inclusive (gap 0.94 h), token-equivalent $50.1 (API $50.1), 89.1M tokens, per story
+s323 four steps as labelled (18 stories): 2.04 h gap-inclusive (gap 1.06 h), token-equivalent $55.6 (API $46.8), 126.8M tokens, per story
+s323 plus four planning-gate rows (18 stories): 2.21 h gap-inclusive (gap 1.07 h), token-equivalent $59.6 (API $48.6), 138.1M tokens, per story
+s323 three steps without carry-over-evaluation (18 stories): 1.40 h gap-inclusive (gap 0.64 h), token-equivalent $44.4 (API $37.3), 99.4M tokens, per story

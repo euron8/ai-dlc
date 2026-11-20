@@ -87,8 +87,11 @@ def readings(set_, o_old, o_cur):
     if set_ == "b255":
         for sp in (321, 319):
             n = STORIES[sp]
-            rec = {321: ("75.18", "49.36", "3.82", "95.5", "94.7", "202.0", "75.1"),
-                   319: ("88.27", "78.05", "4.65", "111.7", "111.7", "255.3", "88.1")}[sp]
+            # Hour readings (machine h, seats h) are pinned on the MONOTONE segs clock (BL-1174, extract.py's default;
+            # build both OUTs with it). Old-clock values: machine h/story s321 3.82, s319 4.65; seats h gap-incl/story
+            # s321 implementation 0.68, gate[implementation] 0.45, stories-test-strategy 0.79; s319 1.24, 0.85, 0.78.
+            rec = {321: ("75.18", "49.36", "3.44", "95.5", "94.7", "202.0", "75.1"),
+                   319: ("88.27", "78.05", "3.85", "111.7", "111.7", "255.3", "88.1")}[sp]
             R.append(("s%d subagent $/story, spawns.jsonl all buckets" % sp, rec[0], lambda o, sp=sp, n=n: f2(agg(spawns(o), sp)[1] / n)))
             R.append(("s%d spawns/story" % sp, rec[1], lambda o, sp=sp, n=n: f2(agg(spawns(o), sp)[0] / n)))
             R.append(("s%d machine h/story (active + agentwait)" % sp, rec[2],
@@ -116,16 +119,16 @@ def readings(set_, o_old, o_cur):
         R.append(("s319 combined row subagent $/story", "30.68", lambda o: f2(agg(spawns(o), 319, IMP)[1] / 20)))
         R.append(("s321 implementation token-eq $/story (seats)", "15.8", lambda o: "%.1f" % seats(o)[(321, "implementation")]["te"]))
         R.append(("s321 gate[implementation] token-eq $/story (seats)", "9.7", lambda o: "%.1f" % seats(o)[(321, "gate[implementation]")]["te"]))
-        R.append(("s321 implementation h gap-incl/story (seats)", "0.68", lambda o: f2(seats(o)[(321, "implementation")]["h"])))
-        R.append(("s321 gate[implementation] h gap-incl/story (seats)", "0.45", lambda o: f2(seats(o)[(321, "gate[implementation]")]["h"])))
-        R.append(("s319 implementation h gap-incl/story (seats)", "1.24", lambda o: f2(seats(o)[(319, "implementation")]["h"])))
-        R.append(("s319 gate[implementation] h gap-incl/story (seats)", "0.85", lambda o: f2(seats(o)[(319, "gate[implementation]")]["h"])))
+        R.append(("s321 implementation h gap-incl/story (seats)", "0.57", lambda o: f2(seats(o)[(321, "implementation")]["h"])))
+        R.append(("s321 gate[implementation] h gap-incl/story (seats)", "0.32", lambda o: f2(seats(o)[(321, "gate[implementation]")]["h"])))
+        R.append(("s319 implementation h gap-incl/story (seats)", "1.05", lambda o: f2(seats(o)[(319, "implementation")]["h"])))
+        R.append(("s319 gate[implementation] h gap-incl/story (seats)", "0.59", lambda o: f2(seats(o)[(319, "gate[implementation]")]["h"])))
         R.append(("s321 combined agent-minutes/story (spawn minutes)", "125.1", lambda o: "%.1f" % (agg(spawns(o), 321, IMP)[2] / 25)))
         R.append(("s319 combined agent-minutes/story (spawn minutes)", "321.6", lambda o: "%.1f" % (agg(spawns(o), 319, IMP)[2] / 20)))
         R.append(("s321 stories-test-strategy token-eq $/story (seats)", "26.9", lambda o: "%.1f" % seats(o)[(321, "stories-test-strategy")]["te"]))
         R.append(("s321 stories-test-strategy API $/story (seats)", "26.1", lambda o: "%.1f" % seats(o)[(321, "stories-test-strategy")]["api"]))
-        R.append(("s321 stories-test-strategy h gap-incl/story (seats)", "0.79", lambda o: f2(seats(o)[(321, "stories-test-strategy")]["h"])))
-        R.append(("s319 stories-test-strategy h gap-incl/story (seats)", "0.78", lambda o: f2(seats(o)[(319, "stories-test-strategy")]["h"])))
+        R.append(("s321 stories-test-strategy h gap-incl/story (seats)", "0.78", lambda o: f2(seats(o)[(321, "stories-test-strategy")]["h"])))
+        R.append(("s319 stories-test-strategy h gap-incl/story (seats)", "0.72", lambda o: f2(seats(o)[(319, "stories-test-strategy")]["h"])))
     elif set_ == "b256":
         SR = {"sprint-review"}; GSR = {"gate-validation[sprint-review]"}; BOTH = SR | GSR
         for sp, rec in ((319, ("73", "148", "98.99", "75", "60.49", "4.95")), (321, ("165", "169", "209.09", "4", "2.78", "8.36"))):

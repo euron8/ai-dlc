@@ -1,0 +1,94 @@
+== sprint totals, pipeline bucket: default segs clock | monotone segs clock; $ and calls must not move (EQUAL)
+s318: elapsed   74.8 h |   59.6 h (-20%)   active  32.2 |  29.5   op-wait  14.3 |  14.0   agent-wait  28.3 |  16.0   token-eq $1721 API $1720 lead calls 4412 compactions 24 per elapsed h 0.40 (default clock 0.32)   $/calls EQUAL
+s319: elapsed  110.0 h |   94.0 h (-15%)   active  54.8 |  48.8   op-wait  17.0 |  17.0   agent-wait  38.2 |  28.2   token-eq $2234 API $2234 lead calls 6374 compactions 44 per elapsed h 0.47 (default clock 0.40)   $/calls EQUAL
+s320: elapsed  117.8 h |   99.2 h (-16%)   active  42.9 |  38.2   op-wait  47.9 |  47.6   agent-wait  27.0 |  13.4   token-eq $1623 API $1623 lead calls 4926 compactions 36 per elapsed h 0.36 (default clock 0.31)   $/calls EQUAL
+s321: elapsed  120.5 h |  111.0 h (-8%)   active  57.0 |  51.3   op-wait  24.9 |  24.9   agent-wait  38.6 |  34.8   token-eq $2388 API $2367 lead calls 7127 compactions 57 per elapsed h 0.51 (default clock 0.47)   $/calls EQUAL
+s322: elapsed   77.1 h |   66.4 h (-14%)   active  38.8 |  36.4   op-wait  10.3 |  10.3   agent-wait  28.0 |  19.7   token-eq $1348 API $989 lead calls 9304 compactions 72 per elapsed h 1.08 (default clock 0.93)   $/calls EQUAL
+s323: elapsed  187.0 h |   75.4 h (-60%)   active  55.6 |  48.6   op-wait  17.9 |  17.9   agent-wait 113.5 |   8.9   token-eq $2074 API $1580 lead calls 11744 compactions 134 per elapsed h 1.78 (default clock 0.72)   $/calls EQUAL
+
+== per step (step plus its own gate), MONOTONE clock: elapsed h = active + op-wait + agent-wait | token-eq $ (API $) | lead calls | spawns   [default clock h]
+carry-over-evaluation
+   s321: -
+   s322:  13.7 h =  3.9 +  5.7 +  4.2 | $  231 ($  191) |  1050 |  112   [default clock  19.5 h]
+   s323:  11.8 h =  4.3 +  6.3 +  1.2 | $  207 ($  173) |   828 |   89   [default clock  25.7 h]
+requirements
+   s321:  11.1 h =  6.2 +  1.9 +  3.1 | $  314 ($  314) |   813 |  168   [default clock  12.5 h]
+   s322:   9.9 h =  5.3 +  1.2 +  3.4 | $  297 ($  250) |  1202 |  128   [default clock  10.7 h]
+   s323:  13.5 h =  5.2 +  6.2 +  2.1 | $  274 ($  224) |  1178 |  179   [default clock  90.0 h]
+architecture
+   s321:  10.0 h =  4.1 +  0.0 +  5.8 | $  306 ($  306) |   560 |  122   [default clock  10.4 h]
+   s322:   5.8 h =  2.9 +  0.0 +  2.9 | $  140 ($  110) |   687 |   68   [default clock   6.0 h]
+   s323:   5.2 h =  3.8 +  0.0 +  1.4 | $  173 ($  130) |  1021 |   67   [default clock   6.0 h]
+stories-test-strategy
+   s321:  19.7 h =  9.2 +  2.1 +  8.3 | $  678 ($  660) |  1356 |  431   [default clock  20.1 h]
+   s322:   7.5 h =  4.3 +  0.0 +  3.3 | $  221 ($  169) |  1348 |  125   [default clock   7.8 h]
+   s323:   9.1 h =  7.2 +  0.0 +  1.9 | $  416 ($  348) |  1596 |  264   [default clock  11.5 h]
+implementation
+   s321:  22.4 h = 17.9 +  2.3 +  2.2 | $  638 ($  638) |  2508 |  280   [default clock  28.2 h]
+   s322:  13.0 h =  9.5 +  2.0 +  1.5 | $  223 ($  137) |  2261 |  107   [default clock  16.1 h]
+   s323:  15.1 h = 14.5 +  0.3 +  0.3 | $  575 ($  413) |  3730 |  307   [default clock  21.1 h]
+sprint-review
+   s321:   2.9 h =  2.9 +  0.0 +  0.0 | $  236 ($  236) |   396 |  169   [default clock   3.5 h]
+   s322:   2.3 h =  1.7 +  0.0 +  0.6 | $  101 ($   82) |   498 |   65   [default clock   2.3 h]
+   s323:  11.1 h =  5.6 +  4.2 +  1.3 | $  280 ($  226) |  1290 |  171   [default clock  22.3 h]
+deploy-validate
+   s321:  29.0 h =  8.2 + 18.2 +  2.6 | $  177 ($  177) |  1021 |   45   [default clock  29.9 h]
+   s322:   3.5 h =  1.8 +  0.8 +  1.0 | $   27 ($    5) |   543 |    3   [default clock   3.6 h]
+   s323:   5.3 h =  4.0 +  0.9 +  0.4 | $   64 ($   20) |  1145 |   14   [default clock   5.7 h]
+retro
+   s321:   3.1 h =  1.0 +  0.0 +  2.1 | $   18 ($   18) |   170 |   14   [default clock   3.1 h]
+   s322:   5.3 h =  3.4 +  0.4 +  1.4 | $   51 ($   18) |   896 |   31   [default clock   5.5 h]
+   s323:   2.7 h =  2.6 +  0.0 +  0.1 | $   49 ($   23) |   602 |   28   [default clock   2.9 h]
+
+== planning (four planning steps and their gates), MONOTONE clock, per PLANNED story {321: 25, 322: 8, 323: 18}
+s321:  40.8 h (default clock  43.0) less op-wait  36.8 h (op-wait  4.0; active 19.5; agent-wait 17.3) token-eq $1298 API $1279 lead calls 2729 spawns 721
+      subagent running (busy, steps without gates) 30.4 h; with gates 30.8 h; lead-only lower bound  6.4 h | per story: 1.63 h, less op-wait 1.47 h, $51.9, API $51.2, 109 lead calls
+      still held (shares of 40.8 h): BL-716 remediator solo 9.8 h (24%, steps+gates, solo-role rows summed); BL-972 operator wait 4.0 h (10%); BL-819 lead calls 2729, lead active 19.5 h (48%)
+s322:  36.9 h (default clock  44.0) less op-wait  30.0 h (op-wait  6.9; active 16.3; agent-wait 13.7) token-eq $889 API $720 lead calls 4287 spawns 433
+      subagent running (busy, steps without gates) 22.1 h; with gates 23.8 h; lead-only lower bound  7.9 h | per story: 4.61 h, less op-wait 3.75 h, $111.1, API $90.0, 536 lead calls
+      still held (shares of 36.9 h): BL-716 remediator solo 8.8 h (24%, steps+gates, solo-role rows summed); BL-972 operator wait 6.9 h (19%); BL-819 lead calls 4287, lead active 16.3 h (44%)
+s323:  39.6 h (default clock 133.1) less op-wait  27.0 h (op-wait 12.5; active 20.4; agent-wait  6.6) token-eq $1071 API $876 lead calls 4623 spawns 599
+      subagent running (busy, steps without gates) 17.7 h; with gates 18.7 h; lead-only lower bound  9.3 h | per story: 2.20 h, less op-wait 1.50 h, $59.5, API $48.6, 257 lead calls
+      still held (shares of 39.6 h): BL-716 remediator solo 9.9 h (25%, steps+gates, solo-role rows summed); BL-972 operator wait 12.5 h (32%); BL-819 lead calls 4623, lead active 20.4 h (52%)
+
+== BL-819 rows: lead call classes inside the four planning steps (classes.jsonl, monotone in both runs): calls / active h
+   other               s321  1237 /  3.2 h | s322  2010 /  5.7 h | s323  1927 /  9.0 h
+   merge               s321   762 /  2.6 h | s322  1031 /  2.0 h | s323  1438 /  3.1 h
+   snapshot            s321   374 /  1.8 h | s322   576 /  1.0 h | s323   395 /  1.1 h
+   step-reread         s321    55 /  0.2 h | s322   220 /  0.4 h | s323   292 /  0.8 h
+   compaction-recovery s321    19 /  0.1 h | s322   179 /  0.4 h | s323   198 /  0.7 h
+   gate-run            s321   146 /  0.7 h | s322    86 /  0.2 h | s323   156 /  0.5 h
+   dispatch            s321    93 /  0.7 h | s322   141 /  0.7 h | s323   128 /  1.1 h
+   repair              s321    43 /  0.3 h | s322    44 /  0.2 h | s323    89 /  0.6 h
+   idle-wait           s321     0 /  9.9 h | s322     0 /  5.7 h | s323     0 /  3.6 h
+   total               s321  2729 / 19.5 h | s322  4287 / 16.3 h | s323  4623 / 20.4 h
+   compactions per elapsed h over the whole pipeline bucket, monotone clock: s321 57 in 111.0 h = 0.51 | s322 72 in 66.4 h = 1.08 | s323 134 in 75.4 h = 1.78
+
+== BL-912 rows: snapshot-class lead calls and active h per step (gate folded into its step) / all lead calls in the step
+carry-over-evaluation
+   s321: snapshot    0 of     0 lead calls (0%), 0.00 active h of 0.0
+   s322: snapshot  145 of  1050 lead calls (14%), 0.30 active h of 3.9
+   s323: snapshot   84 of   828 lead calls (10%), 0.25 active h of 4.3
+requirements
+   s321: snapshot  116 of   813 lead calls (14%), 0.63 active h of 6.2
+   s322: snapshot  143 of  1202 lead calls (12%), 0.24 active h of 5.3
+   s323: snapshot   85 of  1178 lead calls (7%), 0.25 active h of 5.2
+architecture
+   s321: snapshot   85 of   560 lead calls (15%), 0.64 active h of 4.1
+   s322: snapshot   90 of   687 lead calls (13%), 0.17 active h of 2.9
+   s323: snapshot  116 of  1021 lead calls (11%), 0.27 active h of 3.8
+stories-test-strategy
+   s321: snapshot  173 of  1356 lead calls (13%), 0.57 active h of 9.2
+   s322: snapshot  198 of  1348 lead calls (15%), 0.28 active h of 4.3
+   s323: snapshot  110 of  1596 lead calls (7%), 0.29 active h of 7.2
+implementation
+   s321: snapshot  578 of  2508 lead calls (23%), 2.64 active h of 17.9
+   s322: snapshot  322 of  2261 lead calls (14%), 0.72 active h of 9.5
+   s323: snapshot  438 of  3730 lead calls (12%), 1.40 active h of 14.5
+implementation, the implementation label only (gate[implementation] excluded)
+   s321: snapshot  349 of  1562 lead calls (22%), 1.30 active h of 11.3
+   s322: snapshot  213 of  1413 lead calls (15%), 0.42 active h of 5.9
+   s323: snapshot  139 of  1129 lead calls (12%), 0.35 active h of 5.5
+
+== control: s323 lead session spans (first to last record, pipeline sessions that entered a step) against the monotone total
+   5 lead sessions, span sum 75.4 h; monotone s323 total 75.4 h; default-clock s323 total 187.0 h

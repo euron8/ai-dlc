@@ -37,12 +37,12 @@ WIN_START = (sys.argv[2] if len(sys.argv) > 2 else os.environ.get("EXTRACT_WIN_S
 # WIN_END pins a snapshot: argv[3], else $EXTRACT_WIN_END, else unbounded. A record whose timestamp is LATER
 # than it is dropped, compared as an instant (not as a string, so fractional seconds order correctly).
 WIN_END = (sys.argv[3] if len(sys.argv) > 3 else os.environ.get("EXTRACT_WIN_END")) or None
-# EXTRACT_MONOTONE_SEGS=1 measures the segs interval on a MONOTONE clock, as Classer.interval() already does: an
-# out-of-order record charges 0 and does not move the clock back. Unset, segs keeps the clock it always had
-# (prev_t = this record), so every committed output reproduces byte for byte. The switch exists because s323's
+# The segs interval is measured on a MONOTONE clock, as Classer.interval() does: an out-of-order record charges 0
+# and does not move the clock back. This is the DEFAULT. EXTRACT_MONOTONE_SEGS=0 selects the old clock (prev_t =
+# this record) so a committed pre-BL-1174 output can be reproduced byte for byte. The old clock overstates: s323's
 # transcripts replay a burst of `attachment` records stamped BEFORE an operator pause after the record that ends
-# it; the old clock then counts the one pause once per replayed record (lead 68cf8de7: a 4.73 h pause read as 75 h).
-MONOTONE_SEGS = os.environ.get("EXTRACT_MONOTONE_SEGS") == "1"
+# it, and it counts the one pause once per replayed record (lead 68cf8de7: a 4.73 h pause read as 75 h).
+MONOTONE_SEGS = os.environ.get("EXTRACT_MONOTONE_SEGS") != "0"
 os.makedirs(OUT, exist_ok=True)
 
 STEP_RE = re.compile(r"skills/ai-dlc(?:-update)?/steps/([A-Za-z0-9_.-]+)\.md")
@@ -62,11 +62,21 @@ WIN_END_TS = ts(WIN_END) if WIN_END else None
 # transcript carries a record stamped 00:10:03, so the string compare in sprint_of() is exact here.
 EDGES = [("2026-09-28T19:10:00Z",314),("2026-09-30T20:58:00Z",315),("2026-10-05T14:00:00Z",316),
          ("2026-10-12T02:30:00Z",317),("2026-10-14T22:00:00Z",318),("2026-10-23T09:53:00Z",319),
-         ("2026-10-30T00:10:03Z",320),("2026-11-09T00:00:00Z",321),("2026-11-13T08:00:00Z",322),("2099-01-01T00:00:00Z",323)]
+         ("2026-10-30T00:10:03Z",320),("2026-11-09T00:00:00Z",321),("2026-11-13T08:00:00Z",322),("2026-11-20T04:20:00Z",323),
+         ("2099-01-01T00:00:00Z",324)]
 # s321 ends at the lead-session handover: s321's last lead df56108b (retro merge ec443477d at
 # 2026-11-08T20:23Z, then the close sweep) has its last record at 2026-11-08T21:47:01.989Z; the s322 lead
 # 6c14d949 (/ai-dlc "Finish Epic 5") opens at 2026-11-09T00:00:37.657Z. The spawn ledger agrees: last s321
 # row 2026-11-08T20:30:46Z, first s322 row 2026-11-09T00:20:57Z.
+# s323 ends at 2026-11-20T04:20:00Z, after the last s323 record. The s323 close is two commits, not one: 16fd227d9
+# "finalize snapshot - sprint 323 closed" (2026-11-19T23:00:40-05:00 = 04:00:40Z) and a9b015557 "7b next-inputs
+# bundle and 7d handoff snapshot - sprint 323 closed" (23:13:06-05:00 = 04:13:06Z, pushed 04:17:24Z), the last
+# s323 commit on graph's main. Lead 64926214, s323's last lead, runs to 04:17:36.019Z (its final message confirms the
+# a9b015557 push and the pipeline paused); its last subagent record is 04:09:53Z and the spawn ledger's last
+# s323 row is 04:08:52Z. No transcript and no ledger row is stamped after 04:17:36Z, so there is no s324 lead
+# record to bound the edge from above (s324 has not started); 04:20:00Z sits after the last record. An edge at
+# 16fd227d9 plus a few minutes (04:05Z) would put the lead's closing 7b/7d work and three subagents' records
+# (04:05:12Z to 04:09:53Z) into s324.
 def sprint_of(t):
     if t < WIN_START: return None
     for e, n in EDGES:

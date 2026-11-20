@@ -1,0 +1,80 @@
+s319: 18 serial-class remediator spawns, total 477.6 min, mean 26.5 min, median 21.8, longest 73.0 min (3bc834), dollars $70.1, tool calls 890
+s322: 52 serial-class remediator spawns, total 786.7 min, mean 15.1 min, median 2.6, longest 341.6 min (e0e693), dollars $72.1, tool calls 1415
+s323: 75 serial-class remediator spawns, total 393.3 min, mean 5.2 min, median 2.1, longest 40.2 min (ebd014), dollars $120.7, tool calls 2306
+CONTROL a4b9c05a506fc183b minutes: 31.1 (must read 31.1)
+-- s323 rows: start(UTC) step | description | minutes | calls | $ | agent
+11-13T09:18 carry-over | Serial repair after assembly                     |  22.5 | 124 | $8.12 | a37305a67843ee413
+11-13T12:09 carry-over | Adjudication remediator for CoE                  |  14.3 |  84 | $6.82 | a2bef7a446b6dd63e
+11-17T00:08 carry-over | Serial cross-section remediator p1               |  16.8 | 117 | $6.58 | a17291df8cda397a6
+11-17T00:26 carry-over | Serial remediator pass 2 X-F-2                   |   5.0 |  33 | $1.30 | a62fc38282e350551
+11-17T01:04 carry-over | Adjudicator lane-1 batch 3                       |   2.1 |  29 | $0.95 | a54112aee4a933815
+11-17T01:04 carry-over | Adjudicator lane-1 batch 1                       |   5.1 |  39 | $1.75 | a6dee7ea914bc33cf
+11-17T01:04 carry-over | Adjudicator lane-1 batch 4                       |   7.4 |  33 | $1.63 | ae7b901030deb9d27
+11-17T01:04 carry-over | Adjudicator lane-1 batch 2                       |   2.4 |  30 | $1.07 | a75afc4bcfa9b41d3
+11-17T01:12 carry-over | Lane-1 serial remediator                         |   6.9 |  36 | $1.81 | a9f4f1ca24e50f477
+11-17T02:05 carry-over | Serial lane repair p2                            |   8.7 |  35 | $1.59 | a84222f8fe7c532c6
+11-17T02:15 carry-over | Lane record-only rewrite                         |   1.5 |   7 | $0.28 | a58a3bdb77f75c9af
+11-17T12:38 requiremen | Adjudicator lane1 batch1                         |   4.6 |  26 | $1.12 | a93de8c771628374a
+11-17T12:38 requiremen | Adjudicator lane1 batch2                         |   0.6 |   9 | $0.37 | a68c1ba27edd2eb25
+11-17T12:38 requiremen | Adjudicator lane1 batch4                         |   0.6 |   9 | $0.36 | aa9504ec0e6936963
+11-17T12:38 requiremen | Adjudicator lane2 batch1                         |   0.5 |   7 | $0.32 | ac2b4b146af01e014
+11-17T12:38 requiremen | Adjudicator lane2 batch2                         |   0.5 |   9 | $0.35 | ae2b1078011941398
+11-17T12:38 requiremen | Adjudicator lane1 batch3                         |   0.6 |   8 | $0.37 | af870bc5a081bb57a
+11-17T12:39 requiremen | Adjudicator fanin batch1                         |   0.4 |   8 | $0.32 | ae83b38830046801d
+11-17T12:39 requiremen | Adjudicator lane2 batch4                         |   0.5 |   7 | $0.29 | ad2bcbb1c3eeec2de
+11-17T12:39 requiremen | Adjudicator fanin batch4                         |   3.3 |  21 | $0.83 | a0b8f9ae37873a2ef
+11-17T12:39 requiremen | Adjudicator lane2 batch3                         |   0.3 |   6 | $0.26 | abee8f16619138065
+11-17T12:39 requiremen | Adjudicator fanin batch2                         |   0.9 |  10 | $0.44 | a50d3fba34bb259e0
+11-17T12:39 requiremen | Adjudicator fanin batch3                         |   2.9 |  18 | $0.69 | a034a39be72e2b63e
+11-17T12:43 requiremen | Lane 4 remediator SPEC                           |   3.4 |  19 | $0.83 | ac8d974450613804e
+11-17T12:43 requiremen | Lane 2 remediator brief                          |   1.6 |  18 | $0.71 | a7cf83fa2ff6153ec
+11-17T12:43 requiremen | Lane 1 remediator prd                            |   4.8 |  25 | $1.27 | ae6d025f4d4fbb094
+11-17T12:43 requiremen | Lane 3 remediator arch-impact                    |   3.0 |  21 | $0.86 | a61828fd147367109
+11-17T12:49 requiremen | Fan-in serial remediator                         |  13.0 |  80 | $4.05 | a6f2ec0e0b283f88f
+11-17T13:30 requiremen | Serial repair p2 remediator                      |  13.2 |  66 | $4.14 | a300545cdd1be3b40
+11-17T14:03 requiremen | Serial repair p3 remediator                      |  13.7 |  66 | $3.60 | a6737c78a6454feab
+11-17T14:18 requiremen | Serial repair p4 remediator                      |   4.1 |  36 | $1.44 | a77dd6f8716b808c1
+11-17T14:26 requiremen | Serial repair p5 remediator                      |   4.6 |  34 | $1.21 | a14082c7282d3dbff
+11-17T14:34 requiremen | Serial repair p6 remediator                      |   5.6 |  51 | $1.75 | adc79f892b4b305d2
+11-17T16:20 requiremen | Lane 1 serial elicitation remediator             |  13.9 |  50 | $2.48 | a35a7568595df6a1c
+11-17T16:52 requiremen | Fan-in serial elicitation remediator             |   9.5 |  57 | $2.53 | a2410f96b5b6d36af
+11-17T17:32 requiremen | Repair part 11 prd adjudications                 |   0.9 |  15 | $0.52 | a04157532f46fca5c
+11-17T17:45 requiremen | Adjudicate lane-1 batch 4                        |   0.5 |   5 | $0.26 | aba599c7c5b6b2088
+11-17T17:45 requiremen | Adjudicate lane-1 batch 2                        |   2.2 |  19 | $0.78 | a051f77334fb28639
+11-17T17:45 requiremen | Adjudicate lane-1 batch 3                        |   0.7 |   8 | $0.34 | a88d7323f57845f49
+11-17T17:45 requiremen | Adjudicate fanin batch 2                         |   3.4 |  16 | $0.58 | a148253a47ba5bd5e
+11-17T17:45 requiremen | Adjudicate lane-1 batch 1                        |   0.6 |   7 | $0.33 | a91b20b98d1cc35ca
+11-17T17:45 requiremen | Adjudicate fanin batch 1                         |   0.4 |   6 | $0.28 | a65c5ccdd91c017a5
+11-17T17:46 requiremen | Serial lane 2 SPEC remediation                   |   2.8 |  18 | $0.64 | a4a26cc840187476c
+11-17T17:49 requiremen | Serial lane 1 remediation                        |   6.4 |  26 | $1.18 | ab4d942911baf3403
+11-17T18:06 requiremen | Fan-in serial remediation                        |  30.4 | 137 | $8.18 | a0cd4750184a5b7ad
+11-17T21:49 architectu | Adjudicate lane batch 2/2                        |   0.4 |   5 | $0.27 | ae787f451b46cb234
+11-17T21:49 architectu | Adjudicate fanin batch 2/2                       |   0.6 |   5 | $0.29 | a1b62d7df14fe1deb
+11-17T21:49 architectu | Adjudicate lane batch 1/2                        |   1.2 |  12 | $0.47 | aa245c7401841c752
+11-17T21:49 architectu | Adjudicate fanin batch 1/2                       |   0.6 |   6 | $0.33 | a3c577ee2f181ad43
+11-17T21:51 architectu | Lane serial repair spine                         |  30.0 | 129 | $9.29 | a03ebfeceecafd98a
+11-17T22:22 architectu | Fan-in repair docs fold                          |   7.9 |  37 | $1.58 | a350bc7d699dfc107
+11-17T23:03 architectu | Elicitation serial cross repair                  |   9.5 |  58 | $2.75 | af4dc8a02f8dbd8d9
+11-18T00:05 architectu | Serial cross-section repair                      |   6.1 |  27 | $1.39 | a6f2c180746969e50
+11-18T05:05 stories-te | Lane 2 remediator                                |   1.5 |  24 | $0.90 | a88d5ead0dc16cdcf
+11-18T05:05 stories-te | Lane 8 remediator                                |   0.5 |   8 | $0.39 | a5d9c0eacdd652ecf
+11-18T05:05 stories-te | Lane 4 remediator                                |   0.6 |  12 | $0.43 | a92d78df8257ca0bc
+11-18T05:05 stories-te | Lane 1 remediator                                |   1.4 |  19 | $0.76 | a6943e30bc005886f
+11-18T05:05 stories-te | Lane 10 remediator                               |   1.0 |  16 | $0.62 | a2da5758e0137adb3
+11-18T05:05 stories-te | Lane 3 remediator                                |   3.1 |  15 | $0.65 | aebbe4aa8d29d8905
+11-18T05:05 stories-te | Lane 13 remediator                               |   1.0 |  13 | $0.52 | a4b5cfdaf17bf8fed
+11-18T05:05 stories-te | Lane 6 remediator                                |   1.1 |  20 | $0.69 | a98a47275cb3944dd
+11-18T05:05 stories-te | Lane 9 remediator                                |   1.4 |  16 | $0.70 | ab8d3133be5784a87
+11-18T05:05 stories-te | Lane 7 remediator                                |   1.3 |  10 | $0.41 | a270544977d9b6186
+11-18T05:05 stories-te | Lane 15 remediator                               |   2.1 |  14 | $0.54 | af61dfb13efe05857
+11-18T05:05 stories-te | Lane 11 remediator                               |   0.6 |  10 | $0.43 | a0c53b982d9122a98
+11-18T05:05 stories-te | Lane 12 remediator                               |   0.7 |  14 | $0.53 | a9cee3f222b00b80f
+11-18T05:05 stories-te | Lane 18 remediator                               |   0.5 |   7 | $0.31 | a7a7f5453caf7165d
+11-18T05:05 stories-te | Lane 16 remediator                               |   0.4 |   6 | $0.28 | aa7dd57c3531c836f
+11-18T05:05 stories-te | Lane 17 remediator                               |   0.5 |   7 | $0.32 | a8be14922d4f25a31
+11-18T05:05 stories-te | Lane 14 remediator                               |   0.7 |  10 | $0.47 | a6492dd96f044016a
+11-18T05:12 stories-te | Fan-in remediator, stories serial repair         |  40.2 | 171 | $13.52 | adcc4134fe5ebd014
+11-18T07:23 stories-te | Cross seat for elicitation serial round          |   6.4 |  37 | $1.45 | afc1e75f0fb7177ce
+11-18T07:30 stories-te | Fan-in seat for elicitation serial               |  10.8 |  44 | $1.99 | a91f8fa501b2dc475
+11-18T08:22 stories-te | Fan-in for adversarial repair                    |  12.0 |  55 | $2.31 | a5dd7880a041c9010
+11-18T11:13 stories-te | Serial repair lane-1                             |   2.1 |  14 | $0.55 | a7573b6ff8d8d611e

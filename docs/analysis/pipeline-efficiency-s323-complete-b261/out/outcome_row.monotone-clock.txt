@@ -1,0 +1,103 @@
+per story; lead $ and subagent $ token-equivalent with API beside it where it differs; STORIES = {317: 21, 318: 13, 319: 20, 320: 13, 321: 25, 322: 8, 323: 18}
+s323 whole pipeline bucket (18 stories) (lead priced at s321's hosted mix, FALLBACK): lead active 2.70 h, 652.4 calls, 102.3M tokens, lead $27.4 (API $0.0); subagent active 5.37 h, subagent $87.8
+   step                                 lead h   calls  lead M           lead $ |    sub h    sub $ (seats) |  spawns    sub $ |  mach h
+   architecture                          0.161    41.7    6.35  $1.7 (API $0.0) |     0.40             $7.0 |    3.33     6.97 |    0.24
+   carry-over-evaluation                 0.221    39.9    5.65  $1.6 (API $0.0) |     0.50             $9.5 |    4.72     9.52 |    0.29
+   deploy-validate                       0.224    63.6    9.51  $2.4 (API $0.0) |     0.06             $1.1 |    0.78     1.14 |    0.25
+   gate[architecture]                    0.048    15.1    2.47  $0.7 (API $0.0) |     0.02             $0.3 |    0.39     0.26 |    0.05
+   gate[carry-over-evaluation]           0.018     6.1    0.94  $0.3 (API $0.0) |     0.01             $0.1 |    0.22     0.11 |    0.02
+   gate[implementation]                  0.498   144.5   23.58  $6.3 (API $0.0) |     0.96            $10.6 |   10.89    10.64 |    0.51
+   gate[requirements]                    0.023     7.4    1.40  $0.4 (API $0.0) |     0.01             $0.1 |    0.17     0.10 |    0.02
+   gate[retro]                           0.036     6.4    0.91  $0.2 (API $0.0) |     0.01             $0.3 |    0.17     0.28 |    0.04
+   gate[route]                           0.002     0.4    0.06             $0.0 |     0.00             $0.0 |    0.00     0.00 |    0.00
+   gate[sprint-review]                   0.082    25.9    4.00  $1.1 (API $0.0) |     0.05             $0.9 |    0.72     0.92 |    0.10
+   gate[stories-test-strategy]           0.072    19.1    3.30  $0.9 (API $0.0) |     0.08             $1.3 |    1.17     1.33 |    0.08
+   handoff                               0.033     5.8    1.05  $0.2 (API $0.0) |     0.00             $0.0 |    0.00     0.00 |    0.04
+   implementation                        0.307    62.7   10.32  $2.7 (API $0.0) |     0.76            $12.3 |    6.17    12.31 |    0.31
+   pre-step                              0.004     0.9    0.04             $0.0 |     0.00             $0.1 |    0.50     0.17 |    0.00
+   requirements                          0.265    58.1    8.82  $2.4 (API $0.0) |     0.65            $12.3 |    9.78    12.34 |    0.38
+   research-requirements                 0.000     0.0    0.00             $0.0 |     0.00             $0.0 |    0.06     0.04 |    0.00
+   retro                                 0.107    27.0    4.48  $1.2 (API $0.0) |     0.06             $1.0 |    1.39     1.00 |    0.11
+   route                                 0.022     7.8    0.64  $0.2 (API $0.0) |     0.00             $0.0 |    0.00     0.00 |    0.02
+   sprint-review                         0.232    45.7    7.09  $1.9 (API $0.0) |     0.68            $11.6 |    8.78    11.61 |    0.29
+   stories-test-strategy                 0.329    69.6   10.90  $2.9 (API $0.0) |     1.03            $18.0 |   13.50    18.02 |    0.43
+   ui-direction                          0.019     4.8    0.74  $0.2 (API $0.0) |     0.08             $1.1 |    0.44     1.10 |    0.02
+   unjoined                              0.000     0.0    0.00             $0.0 |     0.00             $0.0 |    0.06     0.04 |    0.00
+   C1 additivity: lead h MATCH; lead $ MATCH; lead tokens MATCH; subagent $ MATCH
+   C2 rendering against seats.txt: 22 MATCH, 0 DIFFERS
+   C3 machine h against roll.txt TOTAL: MATCH
+   C4 spawns.jsonl totals: spawns MATCH; subagent $ MATCH
+s322 whole pipeline bucket (8 stories) (lead priced at s321's hosted mix, FALLBACK): lead active 4.56 h, 1163.0 calls, 169.4M tokens, lead $44.9 (API $0.0); subagent active 10.90 h, subagent $123.7
+   step                                 lead h   calls  lead M           lead $ |    sub h    sub $ (seats) |  spawns    sub $ |  mach h
+   architecture                          0.244    60.2    8.99  $2.6 (API $0.0) |     0.99             $8.7 |    4.50     8.70 |    0.56
+   bug-investigation                     0.141    34.5    5.40  $1.3 (API $0.0) |     0.21             $3.1 |    1.88     3.13 |    0.18
+   carry-over-evaluation                 0.441   115.6   16.26  $4.2 (API $0.0) |     2.29            $23.0 |   11.50    23.02 |    0.96
+   deploy-validate                       0.219    67.9   10.51  $2.7 (API $0.0) |     0.03             $0.6 |    0.38     0.65 |    0.34
+   gate[architecture]                    0.119    25.6    4.26  $1.2 (API $0.0) |     0.44             $5.0 |    4.00     5.04 |    0.16
+   gate[bug-investigation]               0.013     1.8    0.36  $0.1 (API $0.0) |     0.03             $0.3 |    0.25     0.33 |    0.01
+   gate[carry-over-evaluation]           0.041    15.6    2.55  $0.7 (API $0.0) |     0.05             $0.9 |    2.50     0.88 |    0.04
+   gate[implementation]                  0.453   106.0   15.58  $4.2 (API $0.0) |     0.60             $8.9 |    4.88     8.90 |    0.56
+   gate[requirements]                    0.051    18.6    2.79  $0.7 (API $0.0) |     0.08             $1.2 |    2.75     1.19 |    0.05
+   gate[retro]                           0.056    16.2    2.66  $0.7 (API $0.0) |     0.03             $0.4 |    1.12     0.44 |    0.06
+   gate[sprint-review]                   0.067    29.8    4.73  $1.2 (API $0.0) |     0.04             $0.6 |    1.00     0.64 |    0.07
+   gate[stories-test-strategy]           0.047    21.0    3.09  $0.8 (API $0.0) |     0.02             $0.4 |    1.00     0.40 |    0.05
+   handoff                               0.198    40.2    5.97  $1.6 (API $0.0) |     0.00             $0.0 |    0.12     0.03 |    0.34
+   implementation                        0.741   176.6   24.94  $6.6 (API $0.0) |     0.60             $8.2 |    8.50     8.18 |    0.81
+   pre-step                              0.016     3.4    0.13  $0.1 (API $0.0) |     0.00             $0.0 |    1.38     0.41 |    0.02
+   requirements                          0.608   131.6   18.96  $5.2 (API $0.0) |     2.98            $30.0 |   13.25    30.00 |    1.04
+   retro                                 0.374    95.8   14.25  $3.5 (API $0.0) |     0.13             $1.8 |    2.75     1.78 |    0.55
+   route                                 0.101    22.5    1.91  $0.7 (API $0.0) |     0.00             $0.0 |    0.00     0.00 |    0.10
+   sprint-review                         0.141    32.5    4.64  $1.2 (API $0.0) |     0.42             $9.6 |    7.12     9.62 |    0.22
+   stories-test-strategy                 0.486   147.5   21.43  $5.6 (API $0.0) |     1.98            $20.8 |   14.62    20.75 |    0.89
+   C1 additivity: lead h MATCH; lead $ MATCH; lead tokens MATCH; subagent $ MATCH
+   C2 rendering against seats.txt: 20 MATCH, 0 DIFFERS
+   C3 machine h against roll.txt TOTAL: MATCH
+   C4 spawns.jsonl totals: spawns MATCH; subagent $ MATCH
+s321 whole pipeline bucket (25 stories): lead active 2.05 h, 285.1 calls, 71.4M tokens, lead $20.4 (API $19.6); subagent active 6.88 h, subagent $75.1
+   step                                 lead h   calls  lead M           lead $ |    sub h    sub $ (seats) |  spawns    sub $ |  mach h
+   architecture                          0.152    20.5    5.39             $1.5 |     1.10            $10.4 |    4.72    10.41 |    0.39
+   deploy-validate                       0.328    40.8   10.90             $3.1 |     0.27             $4.0 |    1.80     4.01 |    0.43
+   gate[architecture]                    0.012     1.9    0.60             $0.2 |     0.01             $0.1 |    0.16     0.10 |    0.01
+   gate[implementation]                  0.264    37.8   10.90             $3.3 |     0.55             $6.4 |    5.04     6.43 |    0.27
+   gate[requirements]                    0.026     4.2    1.30             $0.4 |     0.01             $0.1 |    0.16     0.13 |    0.06
+   gate[sprint-review]                   0.016     2.7    0.65             $0.2 |     0.01             $0.1 |    0.16     0.11 |    0.02
+   gate[stories-test-strategy]           0.010     1.9    0.54             $0.2 |     0.01             $0.1 |    0.12     0.09 |    0.01
+   handoff                               0.056     8.4    1.96  $0.5 (API $0.4) |     0.00             $0.0 |    0.00     0.00 |    0.48
+   implementation                        0.450    62.5   15.39             $4.3 |     0.89            $11.5 |    6.16    11.46 |    0.53
+   pre-step                              0.003     1.3    0.10             $0.2 |     0.00             $0.0 |    0.16     0.07 |    0.00
+   requirements                          0.221    28.3    6.47             $1.8 |     1.10            $10.3 |    6.56    10.29 |    0.31
+   retro                                 0.040     6.8    1.86             $0.5 |     0.01             $0.2 |    0.56     0.22 |    0.12
+   route                                 0.008     2.2    0.24             $0.1 |     0.00             $0.0 |    0.00     0.00 |    0.01
+   sprint-review                         0.101    13.2    3.13             $0.9 |     0.50             $8.3 |    6.60     8.25 |    0.10
+   stories-test-strategy                 0.359    52.4   11.97  $3.3 (API $2.6) |     2.42            $23.6 |   17.12    23.59 |    0.69
+   ui-direction                          0.002     0.2    0.07             $0.0 |     0.00             $0.0 |    0.04     0.03 |    0.00
+   C1 additivity: lead h MATCH; lead $ MATCH; lead tokens MATCH; subagent $ MATCH
+   C2 rendering against seats.txt: 16 MATCH, 0 DIFFERS
+   C3 machine h against roll.txt TOTAL: MATCH
+   C4 spawns.jsonl totals: spawns MATCH; subagent $ MATCH
+s319 whole pipeline bucket (20 stories): lead active 2.44 h, 318.7 calls, 80.7M tokens, lead $23.6; subagent active 8.66 h, subagent $88.1
+   step                                 lead h   calls  lead M           lead $ |    sub h    sub $ (seats) |  spawns    sub $ |  mach h
+   architecture                          0.188    21.1    5.05             $1.5 |     0.94             $9.5 |    6.75     9.48 |    0.32
+   carry-over-evaluation                 0.076    13.2    3.15             $1.0 |     0.33             $4.3 |    4.40     4.33 |    0.13
+   deploy-validate                       0.103    14.8    4.04             $1.1 |     0.09             $0.6 |    0.45     0.56 |    0.15
+   discovery                             0.000     0.0    0.00             $0.0 |     0.00             $0.0 |    0.05     0.02 |    0.00
+   gate[architecture]                    0.018     1.1    0.24             $0.1 |     0.01             $0.0 |    0.05     0.05 |    0.02
+   gate[carry-over-evaluation]           0.012     1.8    0.44             $0.1 |     0.01             $0.1 |    0.10     0.06 |    0.01
+   gate[implementation]                  0.356    41.5   11.41             $3.4 |     0.55             $4.6 |    6.70     4.61 |    0.38
+   gate[requirements]                    0.013     1.5    0.41             $0.1 |     0.01             $0.1 |    0.10     0.09 |    0.01
+   gate[sprint-review]                   0.020     2.8    0.75             $0.2 |     0.30             $3.0 |    3.75     3.02 |    0.04
+   gate[stories-test-strategy]           0.045     8.0    2.22             $0.6 |     0.22             $3.7 |    3.05     3.65 |    0.06
+   handoff                               0.106    12.8    3.38             $0.8 |     0.00             $0.0 |    0.00     0.00 |    0.25
+   implementation                        0.790   103.5   25.62             $7.2 |     2.91            $26.1 |   24.80    26.08 |    0.97
+   pre-step                              0.004     1.1    0.10             $0.3 |     0.00             $0.0 |    0.20     0.20 |    0.08
+   requirements                          0.265    35.7    8.33             $2.4 |     1.13            $11.7 |    7.80    11.70 |    0.41
+   retro                                 0.081     9.4    2.52             $0.8 |     0.03             $0.4 |    0.60     0.40 |    0.41
+   route                                 0.009     2.8    0.29             $0.2 |     0.00             $0.0 |    0.00     0.00 |    0.01
+   sprint-review                         0.043     9.1    2.38             $0.7 |     0.24             $1.9 |    3.65     1.93 |    0.06
+   stories-test-strategy                 0.305    38.1   10.29             $2.9 |     1.90            $22.1 |   15.55    22.06 |    0.54
+   ui-direction                          0.004     0.2    0.04             $0.0 |     0.00             $0.0 |    0.05     0.04 |    0.00
+   C1 additivity: lead h MATCH; lead $ MATCH; lead tokens MATCH; subagent $ MATCH
+   C2 rendering against seats.txt: 19 MATCH, 0 DIFFERS
+   C3 machine h against roll.txt TOTAL: MATCH
+   C4 spawns.jsonl totals: spawns MATCH; subagent $ MATCH
+impossible step: steps.csv rows 0, spawns 0

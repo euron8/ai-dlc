@@ -6,31 +6,31 @@ and [`pipeline-efficiency-s317-s320/`](pipeline-efficiency-s317-s320/README.md) 
 and their raw output are in [`pipeline-efficiency-s317-s322/`](pipeline-efficiency-s317-s322/).
 Nothing was written to graph.
 
-> **Correction, 2026-11-18 (batch 259, C4b).** Every hours figure in this report is overstated. The extractor's
-> segment clock charged an out-of-order record's interval twice. Tokens, dollars and call counts are unchanged,
-> and the sprint ordering does not change. In-session hours for the sprints whose published total the later
-> run reproduces, published against a monotone clock: s318 74.8 and 59.6; s319 110.0 and 94.0; s320 117.8 and
-> 99.2; s321 120.5 and 111.0. Per-step hours move too. Derivation: `extract.py` with `EXTRACT_MONOTONE_SEGS=1`
-> at pin `2026-11-18T17:54:00Z`, whose default-clock totals for those four sprints equal the figures published
-> here. Not re-measured: this report's s317 (112.8 h, a different window from the later 80.8 h) and its s322
-> (56.6 h, a partial sprint, superseded by the batch 259 update, where s322 complete reads 66.4 h against
-> 77.1 h). The figures in this report are not regenerated; that is owed under BL-1174 at the s323-close
-> re-take. Detail: [`pipeline-efficiency-s323-provisional-b259.md`](pipeline-efficiency-s323-provisional-b259.md).
+> **Clock, 2026-11-19 (BL-1174).** Hours in this report are now on the monotone segs clock; the report first
+> measured them on the old clock, which charged an out-of-order record's interval twice. Tokens, dollars and call
+> counts did not move. In-session TOTAL, old clock to monotone, regenerated at the report's own pin
+> (`2026-11-11T10:30:00Z`, old extractor, `out/roll.txt`): s317 80.8 to 72.8 (a pruned-corpus window, see below;
+> the table's 112.8 is the README's full-corpus old-clock figure, not re-taken), s318 74.8 to 59.6,
+> s319 110.0 to 94.0, s320 117.8 to 99.2, s321 120.5 to 111.0, s322 (partial) 56.6 to 48.9; at the s322-complete pin
+> (`2026-11-12T14:41:00Z`, current extractor) s322 reads 77.1 to 66.4. The roll.txt s317 column covers 13 of 19
+> steps on a pruned corpus (early s317 transcripts are gone), so it understates s317 under either clock. Per-step hours
+> move too; every hours figure below is the monotone one, and a figure on a clock that could not be re-taken is
+> marked. Old-clock control: `EXTRACT_MONOTONE_SEGS=0` reproduces the previous `out/roll.txt` byte for byte.
 
 ## Answer
 
-1. **The implementation-step fixes worked.** Implementation plus its gate fell from 2.09 h and $41.3
-   per story (s319) to 1.13 h and $25.5 (s321). Gate-1 review shards per pass fell from 5.5 to 1.4.
+1. **The implementation-step fixes worked.** Implementation plus its gate fell from 1.63 h and $41.3
+   per story (s319) to 0.90 h and $25.5 (s321). Gate-1 review shards per pass fell from 5.5 to 1.4.
    Subagent sleep-polling and cap-rejected spawns are gone.
-2. **Per story, s321 is the cheapest and fastest sprint since s318: 4.8 h and $95.5**, against 5.5 h
+2. **Per story, s321 is the cheapest and fastest sprint since s318: 4.4 h and $95.5**, against 4.7 h
    and $111.7 in s319. Two confounds carry part of that: s321 had 25 stories to spread planning over,
    and it ran no carry-over evaluation.
-3. **In absolute terms nothing got shorter.** s321 took 120.5 in-session hours and $2,388, the
+3. **In absolute terms nothing got shorter.** s321 took 111.0 in-session hours and $2,388, the
    longest and most expensive sprint measured. Planning did not fall.
 4. **One shipped change made sprints slower and dearer.** Moving the adversary seat from opus/medium
    to sonnet/high (BL-832, 0.954.0) raised its time per spawn from 7–8 minutes to 18–22 and its cost
    per spawn from $1.70–1.91 to $2.24–2.90. The adversary is now the seat the lead waits on most.
-5. **Half of a sprint's wall clock is the lead waiting on subagents**, about 60 of s321's 120.5 h.
+5. **Half of a sprint's wall clock is the lead waiting on subagents**, about 57 of s321's 111.0 h.
    Operator answers are another 24.9 h. The lead's own turns are about 35 h. The earlier analyses
    counted 35–41% of the lead's "active" time as lead work when it was idle waiting.
 
@@ -84,7 +84,7 @@ the hosted lead mix it replaced (token-equivalent). s322's lead ran only local m
   separately; the two together are the lead's turn time, and the split between them is not reliable.
 
 **Not measured.** Resident role-file bytes and hook injection were not re-taken. The deploy-validate
-step's 29.9 h in s321 is not decomposed. s322 is partial: implementation is in progress and
+step's 29.0 h in s321 is not decomposed. s322 is partial: implementation is in progress and
 sprint-review, deploy-validate and retro have not run.
 
 ## Sprint totals (pipeline bucket)
@@ -92,11 +92,11 @@ sprint-review, deploy-validate and retro have not run.
 | | s317 | s318 | s319 | s320 | s321 | s322 (partial) |
 |---|--:|--:|--:|--:|--:|--:|
 | Stories | 21 | 13 | 20 | 13 | 25 | 8 planned |
-| In-session hours | 112.8 | 74.8 | 110.0 | 117.8 | 120.5 | 56.6 |
-| of which long waits on agents | — | 28.3 | 38.2 | 27.0 | 38.6 | 21.6 |
-| of which operator wait | — | 14.3 | 17.0 | 47.9 | 24.9 | 8.8 |
+| In-session hours | 112.8 (old clock) | 59.6 | 94.0 | 99.2 | 111.0 | 48.9 |
+| of which long waits on agents | — | 16.0 | 28.2 | 13.4 | 34.8 | 15.3 |
+| of which operator wait | — | 14.0 | 17.0 | 47.6 | 24.9 | 8.8 |
 | Token-equivalent $ | 2,357 | 1,721 | 2,234 | 1,623 | 2,388 | 1,063 |
-| Hours per story | 5.4 | 5.8 | 5.5 | 9.1 | **4.8** | — |
+| Hours per story | 5.4 (old clock) | 4.6 | 4.7 | 7.6 | **4.4** | — |
 | $ per story | 112 | 132.4 | 111.7 | 124.9 | **95.5** | — |
 | Subagent spawns per story | 44.5 | 71.5 | 78.0 | 84.8 | 49.4 | — |
 | $ per spawn | 1.98 | 1.53 | 1.13 | 1.14 | 1.52 | 1.57 |
@@ -111,32 +111,32 @@ because dev and QA moved from haiku to sonnet (BL-838) and the adversary moved t
 
 | Step (with its gate) | s318 | s319 | s320 | s321 | s322 |
 |---|--:|--:|--:|--:|--:|
-| carry-over-evaluation | 2.8 / 132 | 3.2 / 110 | 24.8 / 191 | did not run | 26.5 / 418 |
-| requirements | 6.3 / 335 | 9.1 / 286 | 7.3 / 210 | 12.5 / 314 | 4.4 / 112 |
-| architecture | 4.9 / 191 | 14.9 / 221 | 28.7 / 132 | 10.4 / 305 | 6.0 / 140 |
-| stories-test-strategy | 25.6 / 415 | 16.9 / 586 | 15.1 / 627 | 20.2 / 678 | 7.8 / 221 |
-| implementation | 11.8 / 423 | 41.8 / 825 | 25.2 / 270 | 28.2 / 638 | 8.8 / 123 (in progress) |
-| sprint-review | 6.7 / 148 | 2.7 / 117 | 2.1 / 20 | 3.5 / 236 | not reached |
-| deploy-validate | 5.5 / 25 | 4.9 / 33 | 7.3 / 128 | 29.9 / 177 | not reached |
-| retro | 3.8 / 19 | 8.9 / 25 | 3.4 / 29 | 3.1 / 18 | not reached |
+| carry-over-evaluation | 2.7 / 132 | 3.0 / 110 | 23.8 / 191 | did not run | 20.0 / 418 |
+| requirements | 6.0 / 335 | 8.7 / 286 | 5.7 / 210 | 11.1 / 314 | 4.3 / 112 |
+| architecture | 4.5 / 191 | 11.5 / 221 | 22.8 / 132 | 10.0 / 305 | 5.8 / 140 |
+| stories-test-strategy | 18.8 / 415 | 15.7 / 586 | 13.0 / 627 | 19.7 / 678 | 7.5 / 221 |
+| implementation | 10.1 / 423 | 32.6 / 825 | 19.8 / 270 | 22.4 / 638 | 8.1 / 123 (in progress) |
+| sprint-review | 4.7 / 148 | 2.0 / 117 | 1.7 / 20 | 2.9 / 236 | not reached |
+| deploy-validate | 4.5 / 25 | 4.9 / 33 | 6.2 / 128 | 29.0 / 177 | not reached |
+| retro | 3.2 / 19 | 8.8 / 25 | 2.3 / 29 | 3.1 / 18 | not reached |
 
 Source: `out/roll.txt`. s322 dollars include the FALLBACK-priced local lead.
 
 Planning (the first four rows) cost $1,073 in s318, $1,203 in s319, $1,160 in s320 and $1,297 in
-s321. It has not fallen in any sprint. s322's carry-over evaluation, at $418 and 26.5 h, is the
+s321. It has not fallen in any sprint. s322's carry-over evaluation, at $418 and 20.0 h, is the
 most expensive single step it has run and the most expensive carry-over evaluation measured.
 
-## Where s321's 120.5 hours went
+## Where s321's 111.0 hours went
 
 | Share | Hours | What |
 |---|--:|---|
-| Waiting on subagents | about 60 | 38.6 h in gaps over 5 minutes, plus 21.7 h of idle waits under 5 minutes that were counted as lead-active |
+| Waiting on subagents | about 57 | 34.8 h in gaps over 5 minutes, plus 21.7 h of idle waits under 5 minutes that were counted as lead-active |
 | Lead turn time | about 35 | 8,005 lead API calls at about 16 s each (model plus harness) |
 | Operator answers | 24.9 | 57 `AskUserQuestion` calls; 6 waited over an hour |
 | Lead tool execution | 4.9 | 1.1 h of it is `AskUserQuestion` under 5 minutes |
 
 Source: `out/roll.txt`, `out/lead_time.txt`. `lead_time.py` reads every lead transcript (62.2 h
-"active"); the pipeline bucket's active is 57.0 h, so the rows sum to slightly more than 120.5.
+"active"); the pipeline bucket's active is 51.3 h, so the rows sum to more than 111.0.
 
 **Which seat the lead was waiting on.** `poles.py` measures the wall clock during which every
 running subagent had the same role, so that role alone was holding the step open.
@@ -165,8 +165,8 @@ s317 and s318 ran before them. s321 forked from a base carrying everything throu
 |---|---|---|---|
 | Subagent `sleep` polls denied | BL-514 (0.782.0) | remove 5.4–12.4 h of subagent wall clock | Subagent `sleep`: 3.0 h (s317), 3.9 h (s318), then 0.28 h (s321) and none in s322's top families. `out/bash_by_sprint.txt`. |
 | Cap-rejected spawns held, not re-sent | BL-515 (0.784.0) | stop re-sending rejected spawns | Rejections: 53 (s318), 7 (s319), 0 (s320), 0 (s321), 0 (s322). `out/cap_rejections.txt`. |
-| Delta re-review, capture files out of the gate-1 partition, record-only route | BL-507, BL-808, BL-809 (0.785.0, 0.948.0, 0.952.0, 0.989.0) | BL-808's projection: about 20.2 implementation spawns and $23.4 per story | Gate-1 shards per pass: 3.3 (s318), 5.5 (s319), 1.9 (s320), 1.4 (s321). Implementation subagent spawns per story: 31.5 (s319) → 11.2 (s321). Subagent $ per story: $30.7 → $17.9. Step total per story: 2.09 h and $41.3 (s319) → 1.13 h and $25.5 (s321). Against the s317+s318 baseline of 1.59 h and $35.2 that is −29% hours and −28% dollars. `out/impl_passes.txt`, `out/decompose.txt`. |
-| Party-round waves sized from the cap and refilled on exit | BL-695 (0.857.0) | remove the per-seat barrier pole from the stories party round | Round wall clock, first seat spawned to last seat ended: 196.3 min over two lead sessions (s319, 100 seats, 4 roles one after another) → 27.7 min in one session (s321, 104 seats, all 4 roles dispatched within 20 s). s321 had 4 cross seats against 24, so the cut is not wave sizing alone. Round subagent $ per story: $5.24 → $4.78. stories-test-strategy step alone per story: s319 0.78 h and $25.0, s321 0.79 h and $26.9, so the step cost did not fall. `out/roll.txt`; the round cut is a scratch reader over `spawns.jsonl`. |
+| Delta re-review, capture files out of the gate-1 partition, record-only route | BL-507, BL-808, BL-809 (0.785.0, 0.948.0, 0.952.0, 0.989.0) | BL-808's projection: about 20.2 implementation spawns and $23.4 per story | Gate-1 shards per pass: 3.3 (s318), 5.5 (s319), 1.9 (s320), 1.4 (s321). Implementation subagent spawns per story: 31.5 (s319) → 11.2 (s321). Subagent $ per story: $30.7 → $17.9. Step total per story: 1.63 h and $41.3 (s319) → 0.90 h and $25.5 (s321). Against the s317+s318 baseline of 1.38 h and $35.2 that is −35% hours and −28% dollars. `out/impl_passes.txt`, `out/decompose.txt`. |
+| Party-round waves sized from the cap and refilled on exit | BL-695 (0.857.0) | remove the per-seat barrier pole from the stories party round | Round wall clock, first seat spawned to last seat ended: 196.3 min over two lead sessions (s319, 100 seats, 4 roles one after another) → 27.7 min in one session (s321, 104 seats, all 4 roles dispatched within 20 s). s321 had 4 cross seats against 24, so the cut is not wave sizing alone. Round subagent $ per story: $5.24 → $4.78. stories-test-strategy step alone per story: s319 0.72 h and $25.0, s321 0.78 h and $26.9, so the step cost did not fall. `out/roll.txt`; the round cut is a scratch reader over `spawns.jsonl`. |
 | Scripted gate transition | BL-913 (0.1006.0) | fewer lead hand calls per gate | Lead gate-run time per story: 0.13 h (s321) → 0.06 h (s322). `gate-transition.sh` ran 149 times in s321 and 41 in s322. Partial sprint. |
 
 Re-review **passes** did not fall. Gate-1 passes per reviewed story were 1.67 (s317), 3.16 (s319)
@@ -182,7 +182,7 @@ not rare.
 | Snapshot writes through one program | BL-819 L3, BL-912 (0.952.0, 0.1012.0) | Lead snapshot time per story: 0.25–0.26 h in s317–s319, 0.35 h (s320), 0.26 h (s321), 0.21 h (s322). The program ran 756 times in s321 and 802 times in s322, which is 100 calls per planned story. The hand edits stopped; the call count did not fall. |
 | Repairs carry a `siblings:` field and a serial lane | BL-508, BL-716 | Solo-remediator wall clock is 9.4–11.9 h in every sprint from s319 on. |
 | Idle share of ask-wait minutes (no lane active during an operator ask) | BL-841 (0.968.0) | Ask-wait minutes with no lane active, of ask-wait minutes: 96.9% (s320, 2956.8 of 3051.8) → 93.7% (s321, 1453.6 of 1552.0); the other sprints read 97.2% (s317), 96.4% (s318), 94.3% (s319), 96.3% (s322 partial). The share did not fall by the 5.0-point rule; the drop in raw idle minutes is the asks' own wait shrinking. |
-| Story evidence sections, the dev's full-collection handoff and the QA precondition | BL-397 (0.674.0) | Implementation plus its gate, per story, gap-inclusive h / token-equivalent $: BL-397 step group did not fall across the post-fix sprints. Before (s314+s315, 9 stories, `pipeline-efficiency-s317-s320/b244-snapshot/steps.csv`) 2.00 / $29.0; s317 2.02 / $37.0, s318 0.91 / $32.5, s319 2.09 / $41.3, s320 1.94 / $20.7, s321 1.13 / $25.5 (re-extract whose roll.txt is `out/roll.txt`). The before sits inside the post-fix range. s314 alone is 3.87 / $48.7, s315 alone 0.50 / $13.3. |
+| Story evidence sections, the dev's full-collection handoff and the QA precondition | BL-397 (0.674.0) | Implementation plus its gate, per story, gap-inclusive h / token-equivalent $: BL-397 step group: NOT JUDGEABLE ON ONE CLOCK. Before (s314+s315, 9 stories, `pipeline-efficiency-s317-s320/b244-snapshot/steps.csv`) 2.00 / $29.0; s317 1.76 / $37.0, s318 0.78 / $32.5, s319 1.63 / $41.3, s320 1.52 / $20.7, s321 0.90 / $25.5 (re-extract whose roll.txt is `out/roll.txt`). The before exists only on the old clock (the s314/s315 transcripts are gone, so it cannot be re-taken on monotone); on the old clock the post-fix figures were 2.01 / 0.91 / 2.09 / 1.94 / 1.13 h, and the monotone figures are those printed above, so no before-versus-after verdict is drawn. s314 alone is 3.87 / $48.7, s315 alone 0.50 / $13.3. The before and s314/s315 hours are the committed old-clock snapshot and were not re-taken; the s317-s321 hours are monotone. |
 
 The ask-wait row is `ask_split.py`'s per-sprint `LANE-IDLE` line in `out/ask_split.txt` (BL-841 claim 1): each `AskUserQuestion`
 wait, `tool_use` to `tool_result`, less the time any subagent of the same lead session was active (its records
@@ -194,7 +194,7 @@ counted once, so s321 is 56 asks where `operator_asks.py` gives 57.
 | Fix | Entry | State |
 |---|---|---|
 | Narrow a convergence pass after the first; cap at pass 3 | BL-911 (0.1008.0) | First binds in s322. **Depth fell:** s321 stories ran to pass 6 and architecture to pass 5; s322 architecture and stories stopped at pass 3 and carry-over at pass 3. s322 requirements has spawns labelled pass 4. **Width did not narrow:** s322 requirements ran 10, 10 and 10 adversaries on passes 2–4, and architecture 5, 5 and 5. Closes on the s322 outcome line. |
-| Carry-over cross groups collapsed | BL-810 | s321 ran no carry-over evaluation. s322's ran at $418 and 26.5 h, the highest measured, under the sonnet/high adversary. |
+| Carry-over cross groups collapsed | BL-810 | s321 ran no carry-over evaluation. s322's ran at $418 and 20.0 h, the highest measured, under the sonnet/high adversary. |
 | Dev seat to sonnet | BL-838 (0.968.0) | Gate-1 passes per story 1.80 (s320, haiku) against 2.13 (s321, sonnet). Different stories; no direction supported. |
 
 ### Made it worse
@@ -234,7 +234,7 @@ agent-hours. Each row is sent to the batch lead for a backlog id.
 | # | Opportunity | Hours | $ per sprint | Confidence | Evidence |
 |--:|---|---|---|---|---|
 | 1 | **Rebind the adversary seat.** Return it to opus/medium, or measure sonnet/medium against it on one planning step. | about 9 h of wall clock; about 50 agent-hours | about $120 | MEDIUM | Solo-adversary wall clock 15.7 h against 6.5–6.7 h; 272 spawns × ($2.24 − $1.80) |
-| 2 | **Operator questions hold the sprint.** The prose fix measured null. A mechanism is owed: the lead keeps every lane not named in the question moving, and questions raised in one round go out together. | up to 24.9 h | $0 | MEDIUM | 57 asks, 6 over an hour; s320 was 47.9 h |
+| 2 | **Operator questions hold the sprint.** The prose fix measured null. A mechanism is owed: the lead keeps every lane not named in the question moving, and questions raised in one round go out together. | up to 24.9 h | $0 | MEDIUM | 57 asks, 6 over an hour; s320 was 47.6 h |
 | 3 | **Lead bookkeeping calls.** `wait-for-deliverable.sh` (922), `snapshot-update.sh` (756) and `gate-transition.sh` (149) are 1,827 of the lead's 8,005 calls. Each lead call costs about 16 s and $0.064. Fold the snapshot write into the programs that already know the state change, and block on a round instead of polling it. | up to 8 h | up to $117 | MEDIUM | `out/lead_time.txt`, `out/bash_by_sprint.txt`. Upper bound: assumes one tool call per lead turn |
 | 4 | **Serial repair tails.** One remediator, or one fan-in writer, holds a round open after the parallel work ends. | up to 9.6 h | about $0 | MEDIUM | Solo-remediator 9.6 h (s321), 9.1 h (s322 partial); a 73-minute "Fan-in writer" in s322 |
 | 5 | **A record-format refusal is found at the join, not by the writer.** The agent finishes, the lead joins, the join refuses a provenance or `edit:` line, and the lead resumes the agent to fix one line. Run the join's own check inside the agent before it seals its part. | 29 loops; 15.7 agent-hours idle before the resume (4.5 h in s321, 11.2 h in s322) | about $30 | MEDIUM | `out/resumes.txt` |
@@ -249,8 +249,8 @@ agent-hours. Each row is sent to the batch lead for a backlog id.
 | 9 | `validate-mutation-red.sh` slowed from 4–7 s to 11 s a call in s321 (1,010 calls). | 3.1 agent-hours | not measured | `out/bash_by_sprint.txt` |
 | 10 | `validate-spawn-ledger.sh` takes 42 s a call in subagents and reads a 9,447-row ledger that only grows. | 1.0 agent-hours | not measured | same |
 | 11 | graph's `git push` takes 37–91 s in the lead (39 calls in s321). | 0.4 h | $0 | same; consumer-side gate |
-| 12 | deploy-validate ran 29.9 h elapsed in s321 with 8.7 h active and 3.8 h of solo `ops`. Not decomposed. | not measured | $177 | `out/roll.txt` |
-| 13 | The local-model lead compacts about once an hour: 50 compactions in 56.6 h of s322 against 57 in 120.5 h of s321. Recovery is 0.06 h per story [batch 256: `out/classes_summary.txt` was re-rendered with the idle-wait class. idle-wait never takes compaction-recovery time, so the 0.06 h is unchanged at this window. At the complete-s322 window (2026-11-12T14:41:00Z) it reads 0.09 h per story]. It also made 831 lead calls per planned story against 320 in s321, at 9.4 s a call against 15.9 s. | 0.5 h | $0 | `out/roll.txt`, `out/classes_summary.txt` |
+| 12 | deploy-validate ran 29.0 h elapsed in s321 with 8.2 h active and 3.8 h of solo `ops`. Not decomposed. | not measured | $177 | `out/roll.txt` |
+| 13 | The local-model lead compacts about once an hour: 50 compactions in 48.9 h of s322 against 57 in 111.0 h of s321. Recovery is 0.06 h per story [batch 256: `out/classes_summary.txt` was re-rendered with the idle-wait class. idle-wait never takes compaction-recovery time, so the 0.06 h is unchanged at this window. At the complete-s322 window (2026-11-12T14:41:00Z) it reads 0.09 h per story]. It also made 831 lead calls per planned story against 320 in s321, at 9.4 s a call against 15.9 s. | 0.5 h | $0 | `out/roll.txt`, `out/classes_summary.txt` |
 
 Rows 1 and 4 overlap: a faster adversary shortens the rounds the remediator then repairs. Rows 3
 and 13 overlap: fewer lead calls means fewer compactions.
@@ -258,9 +258,9 @@ and 13 overlap: fewer lead calls means fewer compactions.
 ## What this changes in the earlier analyses
 
 - **BL-819** states the lead's own hours are most of the wall clock. Under the split above the lead's
-  turns are about 29% of s321 and waiting on subagents is about 50%.
-- **BL-812's** per-story baseline of 4.7–4.8 machine hours was flat through s319. s321 reads 4.8 h
-  per story on gap-inclusive hours against 5.5 h for s319 on the same basis.
+  turns are about 32% of s321 and waiting on subagents is about 51%.
+- **BL-812's** per-story baseline of 4.7–4.8 machine hours was flat through s319. s321 reads 4.4 h
+  per story on gap-inclusive hours against 4.7 h for s319 on the same basis (the 4.7–4.8 baseline is BL-812's recorded old-clock figure, not re-taken).
 - **`decompose.py`'s** agent-minutes per spawn include resume idle and should not be read as run time.
 
 ## Reproduce

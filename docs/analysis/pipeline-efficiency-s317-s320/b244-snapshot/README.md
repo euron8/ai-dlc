@@ -13,6 +13,9 @@ graph's transcripts move on or are cleaned up. Nothing was written to graph.
 - **STORIES**, part of the snapshot (`roll.py` `STORIES`, from graph `sprint-status.yaml` at each close):
   s317 21, s318 13, s319 20, s320 13. s320 was still open at WIN_END, and its 13 is the count at that time.
 
+**Clock (BL-1174):** the hours in `steps.csv` and `seats.txt` are on the old segs clock, which charges an out-of-order
+record twice. They cannot be regenerated on the monotone clock: graph's transcripts for s314 to early s317 are no longer on disk (oldest mtime 2026-10-07; 175 leads and 7305 subagents now, against 158 and 5236 at the snapshot; token control 14.86 B against 21.44 B; s317 has 13 steps against 19), so the old-clock run at the pin does not reproduce it and a regeneration on the monotone clock is impossible (BL-1174). These files are the only record of s314 to s317 at this pin.
+
 Files:
 
 - `steps.csv` is the output of analyze.py from the s317–s318 directory, run on this extract.

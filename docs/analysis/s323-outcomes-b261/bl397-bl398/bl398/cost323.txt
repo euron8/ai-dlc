@@ -1,0 +1,43 @@
+# extract.py/roll.py = af44929cc (C5 monotone clock, default; blobs extract.py 67e7a72f7 roll.py a6880f3ac, run in place from a git-archive of af44929cc in scratch, not committed); EXTRACT_WIN_END main 2026-11-20T04:20:00Z, alt 2026-11-19T20:00:00Z; graph ref a9b015557
+# python3 -I bl398/cost.py <c5main> <c5alt> b244-snapshot <graph clone> a9b015557
+== 1. story counts, graph a9b015557 (keys `story-<N>-<M>:`, done = `status: done` under the key; naive = lines naming `story-`)
+   s314: keys 4, done 4, naive 11  (_bmad-output/implementation-artifacts/s314/sprint-status.yaml)
+   s315: keys 5, done 5, naive 10  (_bmad-output/implementation-artifacts/s315/sprint-status.yaml)
+   s321: keys 25, done 24, naive 51  (_bmad-output/implementation-artifacts/s321/sprint-status.yaml)
+   s322: keys 8, done 8, naive 17  (_bmad-output/implementation-artifacts/s322/sprint-status.yaml)
+   s323: keys 18, done 18, naive 37  (_bmad-output/implementation-artifacts/sprint-status.yaml)
+
+== 2. per story, stories-test-strategy (roll.py seat_sum; token-equivalent bracket = every local call at sonnet .. at opus)
+   before s314+s315 pooled (b244 snapshot) (9 stories): 1.28 h gap-inclusive (gap 0.57 h), token-equivalent $20.3 (API $17.5), 34.8M tokens; lead active 0.71 h, lead $5.0 (API $2.2), subagent active 1.35 h, subagent $15.2; lead-seat local share 55% of 740 calls
+      bracket $20.25 .. $21.67; token-equivalent $20.25, API $17.48, 34.8M tokens FALLBACK s314->s315
+   s321 (re-extracted) (25 stories): 0.78 h gap-inclusive (gap 0.42 h), token-equivalent $26.9 (API $26.1), 47.5M tokens; lead active 0.36 h, lead $3.3 (API $2.6), subagent active 2.42 h, subagent $23.6; lead-seat local share 30% of 1309 calls
+      bracket $26.88 .. $27.15; token-equivalent $26.88, API $26.14, 47.5M tokens
+      per DONE story (24): token-equivalent $28.00, 49.5M tokens
+   s322 (8 stories): 0.89 h gap-inclusive (gap 0.41 h), token-equivalent $26.4 (API $20.8), 58.9M tokens; lead active 0.49 h, lead $5.6 (API $0.0), subagent active 1.98 h, subagent $20.8; lead-seat local share 100% of 1180 calls
+      bracket $26.37 .. $27.78; token-equivalent $26.37, API $20.76, 58.9M tokens FALLBACK s322->s321
+   s323 (18 stories): 0.43 h gap-inclusive (gap 0.10 h), token-equivalent $20.9 (API $18.0), 44.8M tokens; lead active 0.33 h, lead $2.9 (API $0.0), subagent active 1.03 h, subagent $18.0; lead-seat local share 100% of 1253 calls
+      bracket $20.90 .. $21.63; token-equivalent $20.90, API $18.03, 44.8M tokens FALLBACK s323->s321
+   b244 s314 pre-step subagent spend (an upper bound on what the pre-BL-927 extractor could have left out of the before): $6.20
+   b244 s315 pre-step subagent spend (an upper bound on what the pre-BL-927 extractor could have left out of the before): $0.00
+   neighbour gate-validation[stories-test-strategy], s321 (re-extracted): 0.01 h gap-inclusive (gap 0.00 h), token-equivalent $0.2 (API $0.2), 0.7M tokens; lead active 0.01 h, lead $0.2, subagent active 0.01 h, subagent $0.1; lead-seat local share 0% of 47 calls
+   neighbour gate-validation[stories-test-strategy], s322: 0.05 h gap-inclusive (gap 0.00 h), token-equivalent $1.2 (API $0.4), 3.8M tokens; lead active 0.05 h, lead $0.8 (API $0.0), subagent active 0.02 h, subagent $0.4; lead-seat local share 100% of 168 calls
+   neighbour gate-validation[stories-test-strategy], s323: 0.08 h gap-inclusive (gap 0.01 h), token-equivalent $2.2 (API $1.3), 5.6M tokens; lead active 0.07 h, lead $0.9 (API $0.0), subagent active 0.08 h, subagent $1.3; lead-seat local share 100% of 343 calls
+   control: s321 line found verbatim in roll.py --seats output: True
+   control: s322 line found verbatim in roll.py --seats output: True
+   control: s323 line found verbatim in roll.py --seats output: True
+   control: 6 s321/s322 rows of the step and its gate at OUT, 6 at OUT_ALT, identical: True
+   control: an absent step reads 0.0M tokens
+   s321 lead segment with records after 2026-11-06T03:23:00Z (the b251 window end): 0ec8b044 2026-11-06T00:25:30Z .. 2026-11-06T13:10:02Z
+   s323 lead segment 53b4296a stories-test-strategy: 2026-11-18T03:36:51Z .. 2026-11-18T12:40:35Z
+   s323 lead segment 53b4296a gate-validation[stories-test-strategy]: 2026-11-18T10:42:04Z .. 2026-11-18T12:40:02Z
+   s323 sensitivity, divided by the 18 stories the rounds reviewed (shard ordinal map) instead of 18 keys: token-equivalent $20.90, 44.8M tokens
+
+== 3. rule (fixed before reading): FELL iff s323 per story < before AND < s321 on token-equivalent AND tokens
+   token-equivalent: s323 $20.90 vs before $20.25, s321 $26.88 -> below both: False
+   bracket check: s323 $20.90..$21.63 vs before $20.25..$21.67, s321 $26.88..$27.15
+   tokens: s323 44.8M vs before 34.8M, s321 47.5M -> below both: False
+   READING: DID NOT FALL
+   s322 for reference: token-equivalent $26.37 (bracket $26.37..$27.78), 58.9M tokens; s323 below s322 on te: True, on tokens: True
+   control before reproduces 1.28 h / $20.3 (API $17.5) / 34.8M: 20.3 17.5 34.8 ok
+   control s321 re-extract b256 row $26.88/$26.1 API/47.5M: 26.88 26.1 47.5 ok
+exit 0

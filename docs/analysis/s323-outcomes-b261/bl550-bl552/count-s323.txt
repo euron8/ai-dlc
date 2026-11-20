@@ -1,0 +1,100 @@
+scan: meta=7305 no_jsonl=0 window_members=1153 max_first_ts=2026-11-20T04:08:53.088Z unparseable_lines=0
+row party(planning)        transcripts=154 lines=70
+row party(sprint-review)   transcripts=110 lines=13
+row party(other-step)      transcripts=0 lines=0
+row elicitation            transcripts=45 lines=35
+row adversary(round)       transcripts=101 lines=52
+row adversary(off-round)   transcripts=3 lines=5
+row party-unkeyed          transcripts=10 lines=10
+step party architecture             transcripts=20 lines=1
+step party carry-over-evaluation    transcripts=28 lines=2
+step party requirements             transcripts=30 lines=4
+step party sprint-review            transcripts=110 lines=13
+step party stories                  transcripts=76 lines=63
+family adversary     adversarial pN cross                               transcripts=1 lines=0
+family adversary     adversarial pN cross retry                         transcripts=1 lines=0
+family adversary     adversarial pN cross shard                         transcripts=3 lines=0
+family adversary     adversarial pN part N                              transcripts=4 lines=0
+family adversary     adversarial pN shard N                             transcripts=14 lines=3
+family adversary     adversary cross shard                              transcripts=2 lines=0
+family adversary     adversary cross shard pN                           transcripts=1 lines=0
+family adversary     adversary part N pN                                transcripts=14 lines=31
+family adversary     adversary shard N                                  transcripts=44 lines=18
+family adversary     adversary shard cross                              transcripts=1 lines=0
+family adversary     pN adversary shard N re-run                        transcripts=1 lines=0
+family adversary     pN verifier shard N                                transcripts=14 lines=0
+family adversary     pN verifier shard cross                            transcripts=1 lines=0
+family adversary     sprint N adversarial review                        transcripts=1 lines=0
+family adversary     sprint adversarial pass N                          transcripts=1 lines=5
+family adversary     sprint-level adversarial pass                      transcripts=1 lines=0
+family elicitation   elicitation adversary N                            transcripts=14 lines=8
+family elicitation   elicitation adversary N rerun                      transcripts=1 lines=3
+family elicitation   elicitation cross shard                            transcripts=2 lines=1
+family elicitation   elicitation cross shard N parts                    transcripts=1 lines=0
+family elicitation   elicitation shard N                                transcripts=22 lines=23
+family elicitation   elicitation shard N part N                         transcripts=4 lines=0
+family elicitation   elicitation shard cross                            transcripts=1 lines=0
+family party         architect N                                        transcripts=24 lines=5
+family party         architect N seat                                   transcripts=8 lines=1
+family party         architect cross                                    transcripts=2 lines=0
+family party         architect cross seat                               transcripts=2 lines=0
+family party         architect part N                                   transcripts=18 lines=17
+family party         dev N                                              transcripts=24 lines=0
+family party         dev N seat                                         transcripts=7 lines=0
+family party         dev cross                                          transcripts=2 lines=0
+family party         dev cross seat                                     transcripts=2 lines=1
+family party         dev fixes a rebalancer                             transcripts=1 lines=0
+family party         dev fixes b live-smoke                             transcripts=1 lines=0
+family party         dev part N                                         transcripts=18 lines=13
+family party         party seat architect cross                         transcripts=1 lines=0
+family party         party seat architect part N                        transcripts=14 lines=1
+family party         party seat architect-N                             transcripts=4 lines=0
+family party         party seat architect-cross                         transcripts=1 lines=0
+family party         party seat dev cross                               transcripts=1 lines=0
+family party         party seat dev part N                              transcripts=14 lines=3
+family party         party seat dev-N                                   transcripts=4 lines=0
+family party         party seat dev-cross                               transcripts=1 lines=0
+family party         party seat pm-N                                    transcripts=4 lines=0
+family party         party seat pm-cross                                transcripts=1 lines=0
+family party         party seat tea-N                                   transcripts=4 lines=1
+family party         party seat tea-cross                               transcripts=1 lines=0
+family party         pm N                                               transcripts=24 lines=2
+family party         pm cross                                           transcripts=2 lines=0
+family party         pm cross seat                                      transcripts=1 lines=0
+family party         sm cross seat                                      transcripts=1 lines=0
+family party         sm part N                                          transcripts=18 lines=12
+family party         tea N                                              transcripts=20 lines=0
+family party         tea N seat                                         transcripts=18 lines=5
+family party         tea cross                                          transcripts=1 lines=0
+family party         tea cross seat                                     transcripts=2 lines=2
+family party         tea part N                                         transcripts=18 lines=20
+family party-unkeyed classify party findings                            transcripts=1 lines=1
+family party-unkeyed dev c small follow-ups                             transcripts=1 lines=0
+family party-unkeyed f-N/f-N/f-N code fixes                             transcripts=1 lines=0
+family party-unkeyed party: architect winston                           transcripts=1 lines=1
+family party-unkeyed party: dev amelia                                  transcripts=1 lines=0
+family party-unkeyed party: pm john                                     transcripts=1 lines=0
+family party-unkeyed party: sm bob                                      transcripts=1 lines=0
+family party-unkeyed party: tea quinn                                   transcripts=1 lines=4
+family party-unkeyed retro draft surface: transcript                    transcripts=1 lines=2
+family party-unkeyed sprint N carry-over evaluation draft               transcripts=1 lines=2
+tool adversary     Bash       is_error=False lines=31
+tool adversary     Bash       is_error=True lines=26
+tool elicitation   Bash       is_error=False lines=8
+tool elicitation   Bash       is_error=True lines=27
+tool party         Bash       is_error=False lines=34
+tool party         Bash       is_error=True lines=47
+tool party         mcp__plugin_context-mode_context-mode__ctx_execute is_error=True lines=2
+tool party-unkeyed Bash       is_error=False lines=5
+tool party-unkeyed Bash       is_error=True lines=3
+tool party-unkeyed Read       is_error=False lines=2
+unkeyed agent-a1e69d5b6ee05504a analyst Sprint 323 carry-over evaluation draft lines=2
+unkeyed agent-a06d83b8f89e60a05 analyst Retro draft surface: transcript lines=2
+unkeyed agent-a1c176c62a1141bd7 pm Party: PM John lines=0
+unkeyed agent-a29b6c933cf4499da dev F-2/F-3/F-4 code fixes lines=0
+unkeyed agent-a6f88565256b27649 architect Party: Architect Winston lines=1
+unkeyed agent-aa8d52b7c3333d8b0 dev Party: Dev Amelia lines=0
+unkeyed agent-aaf27c5663f5391f2 tea Party: TEA Quinn lines=4
+unkeyed agent-ab71b59fb92a7fd89 sm Party: SM Bob lines=0
+unkeyed agent-ac5ab28c6f99e2112 analyst Classify party findings lines=1
+unkeyed agent-aebc1ea2c0fdb2834 dev dev C small follow-ups lines=0

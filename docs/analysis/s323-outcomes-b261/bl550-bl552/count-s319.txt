@@ -1,0 +1,114 @@
+scan: meta=7305 no_jsonl=0 window_members=1561 max_first_ts=2026-10-23T02:55:36.705Z unparseable_lines=0
+row party(planning)        transcripts=232 lines=87
+row party(sprint-review)   transcripts=104 lines=24
+row party(other-step)      transcripts=6 lines=1
+row elicitation            transcripts=93 lines=62
+row adversary(round)       transcripts=199 lines=52
+row adversary(off-round)   transcripts=2 lines=2
+row party-unkeyed          transcripts=9 lines=11
+step party architecture             transcripts=48 lines=11
+step party carry-over-evaluation    transcripts=48 lines=17
+step party ff-rewards-status-bar    transcripts=1 lines=0
+step party requirements             transcripts=36 lines=26
+step party retro                    transcripts=5 lines=1
+step party sprint-review            transcripts=104 lines=24
+step party stories                  transcripts=100 lines=33
+family adversary     add verdict to cross-N                             transcripts=5 lines=0
+family adversary     add verdict to shard N                             transcripts=8 lines=0
+family adversary     adversarial pN cross gN                            transcripts=18 lines=5
+family adversary     adversarial pN part N                              transcripts=23 lines=16
+family adversary     adversarial pass N cross gN                        transcripts=6 lines=0
+family adversary     adversarial pass N part N                          transcripts=6 lines=4
+family adversary     adversary pN cross N                               transcripts=6 lines=4
+family adversary     adversary pN cross gN                              transcripts=12 lines=4
+family adversary     adversary pN part N                                transcripts=10 lines=5
+family adversary     adversary pN shard N                               transcripts=19 lines=10
+family adversary     demote probes heading in shard N                   transcripts=1 lines=0
+family adversary     one-shot adversarial review of test strategy       transcripts=1 lines=0
+family adversary     pN adversary cross gN                              transcripts=6 lines=0
+family adversary     pN adversary part N                                transcripts=13 lines=0
+family adversary     pass N adversary shard N                           transcripts=19 lines=1
+family adversary     pass N cross shard N                               transcripts=6 lines=1
+family adversary     sprint-review one-shot adversarial                 transcripts=1 lines=2
+family adversary     ts pN adversary cross-N                            transcripts=18 lines=1
+family adversary     ts pN adversary part N                             transcripts=23 lines=1
+family elicitation   elicitation cross gN                               transcripts=18 lines=7
+family elicitation   elicitation cross group N                          transcripts=12 lines=0
+family elicitation   elicitation part N                                 transcripts=43 lines=38
+family elicitation   elicitation part N spec                            transcripts=1 lines=1
+family elicitation   elicitation shard N                                transcripts=19 lines=16
+family party         architect cross gN                                 transcripts=6 lines=4
+family party         architect cross gN review                          transcripts=6 lines=1
+family party         architect part N findings                          transcripts=6 lines=10
+family party         architect part N review                            transcripts=6 lines=3
+family party         architect seat cross group N                       transcripts=6 lines=3
+family party         architect seat story N                             transcripts=19 lines=7
+family party         dev cross gN                                       transcripts=6 lines=1
+family party         dev cross gN review                                transcripts=6 lines=1
+family party         dev part N findings                                transcripts=6 lines=0
+family party         dev part N review                                  transcripts=6 lines=5
+family party         dev seat cross group N                             transcripts=6 lines=1
+family party         dev seat story N                                   transcripts=19 lines=6
+family party         move rewards into rebalancer status bar            transcripts=1 lines=0
+family party         party architect cross gN                           transcripts=6 lines=14
+family party         party architect part N                             transcripts=12 lines=8
+family party         party dev cross gN                                 transcripts=6 lines=0
+family party         party dev part N                                   transcripts=12 lines=4
+family party         pm cross gN                                        transcripts=6 lines=0
+family party         pm cross gN review                                 transcripts=6 lines=0
+family party         pm part N findings                                 transcripts=6 lines=1
+family party         pm part N review                                   transcripts=6 lines=0
+family party         retro party seat architect                         transcripts=1 lines=0
+family party         retro party seat dev                               transcripts=1 lines=1
+family party         retro party seat pm                                transcripts=1 lines=0
+family party         retro party seat sm                                transcripts=1 lines=0
+family party         retro party seat tea                               transcripts=1 lines=0
+family party         sm seat cross gN                                   transcripts=6 lines=2
+family party         sm seat story N                                    transcripts=19 lines=9
+family party         sr party architect cross gN                        transcripts=6 lines=1
+family party         sr party architect story N                         transcripts=20 lines=12
+family party         sr party dev cross gN                              transcripts=6 lines=4
+family party         sr party dev story N                               transcripts=20 lines=3
+family party         sr party pm cross gN                               transcripts=6 lines=0
+family party         sr party pm story N                                transcripts=20 lines=2
+family party         sr party tea cross gN                              transcripts=6 lines=0
+family party         sr party tea story N                               transcripts=20 lines=2
+family party         tea cross gN                                       transcripts=6 lines=0
+family party         tea cross gN review                                transcripts=6 lines=0
+family party         tea part N findings                                transcripts=6 lines=1
+family party         tea part N review                                  transcripts=6 lines=1
+family party         tea seat cross group N                             transcripts=6 lines=3
+family party         tea seat story N                                   transcripts=19 lines=2
+family party-unkeyed architect: merkl reward usd price source           transcripts=1 lines=2
+family party-unkeyed consolidate party round findings                   transcripts=1 lines=1
+family party-unkeyed fix c -rs drops failed lines                       transcripts=1 lines=1
+family party-unkeyed fold d-answers into requirements subject           transcripts=1 lines=1
+family party-unkeyed re-read step extensions b                          transcripts=1 lines=0
+family party-unkeyed retro draft analyst                                transcripts=1 lines=2
+family party-unkeyed step N fix bundle a api.py                         transcripts=1 lines=0
+family party-unkeyed step N fix bundle b web                            transcripts=1 lines=2
+family party-unkeyed step N fix bundle c smoke runner                   transcripts=1 lines=2
+tool adversary     Bash       is_error=False lines=3
+tool adversary     Bash       is_error=True lines=42
+tool adversary     Read       is_error=False lines=7
+tool adversary     mcp__plugin_context-mode_context-mode__ctx_batch_execute is_error=False lines=2
+tool elicitation   Bash       is_error=False lines=1
+tool elicitation   Bash       is_error=True lines=59
+tool elicitation   mcp__plugin_context-mode_context-mode__ctx_batch_execute is_error=False lines=2
+tool party         Bash       is_error=False lines=17
+tool party         Bash       is_error=True lines=86
+tool party         Read       is_error=False lines=8
+tool party         mcp__plugin_context-mode_context-mode__ctx_batch_execute is_error=False lines=1
+tool party-unkeyed Bash       is_error=False lines=4
+tool party-unkeyed Bash       is_error=True lines=3
+tool party-unkeyed Read       is_error=False lines=3
+tool party-unkeyed mcp__plugin_context-mode_context-mode__ctx_execute is_error=False lines=1
+unkeyed agent-a570904515a4d373f pm-escalated Fold D-answers into requirements subject lines=1
+unkeyed agent-acfb3d436d447ae51 analyst Re-read step extensions B lines=0
+unkeyed agent-a261c9e6f47b98d9e analyst Retro draft analyst lines=2
+unkeyed agent-a5a9a63857b081bd2 dev Step 3 fix bundle B web lines=2
+unkeyed agent-ad1705d63c4304a43 dev Fix C -rs drops FAILED lines lines=1
+unkeyed agent-ae562ec0f5db0f4b9 dev-escalated Step 3 fix bundle A api.py lines=0
+unkeyed agent-aef2b82a0c1b494bd dev Step 3 fix bundle C smoke runner lines=2
+unkeyed agent-af2dc89b31995c85d analyst Consolidate party round findings lines=1
+unkeyed agent-a3de21cfc1118d52f architect Architect: Merkl reward USD price source lines=2

@@ -1,0 +1,47 @@
+leads 175 subs 7305
+sub 0
+sub 200
+sub 400
+sub 600
+sub 800
+sub 1000
+sub 1200
+sub 1400
+sub 1600
+sub 1800
+sub 2000
+sub 2200
+sub 2400
+sub 2600
+sub 2800
+sub 3000
+sub 3200
+sub 3400
+sub 3600
+sub 3800
+sub 4000
+sub 4200
+sub 4400
+sub 4600
+sub 4800
+sub 5000
+sub 5200
+sub 5400
+sub 5600
+sub 5800
+sub 6000
+sub 6200
+sub 6400
+sub 6600
+sub 6800
+sub 7000
+sub 7200
+gate-terminator sprint=317 opens=27 closed=18 unclosed=9 left=1
+gate-terminator sprint=318 opens=16 closed=10 unclosed=6 left=2
+gate-terminator sprint=319 opens=23 closed=13 unclosed=10 left=0
+gate-terminator sprint=320 opens=18 closed=15 unclosed=3 left=0
+gate-terminator sprint=321 opens=40 closed=27 unclosed=13 left=1
+gate-terminator sprint=322 opens=33 closed=20 unclosed=13 left=3
+gate-terminator sprint=323 opens=52 closed=24 unclosed=28 left=4
+done
+extract rc=0
