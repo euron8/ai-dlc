@@ -144,9 +144,9 @@ reports **12 `HARD-*` blocking-layer rows**, where the previous pull had none, a
    touch the live carry-over ledger. In step 8:
 
    - **The governing disposition is the `NAMED-UPSTREAM` bullet**
-     (`core/skills/ai-dlc-update/SKILL.md:2588`), which allows a hand annotation on absorption. The
+     (`core/skills/ai-dlc-update/SKILL.md:1356`), which allows a hand annotation on absorption. The
      "close ONLY `CLOSE-CANDIDATE` rows" sentence above it
-     (`core/skills/ai-dlc-update/SKILL.md:2575`) does not forbid this. Neither entry carries a
+     (`core/skills/ai-dlc-update/SKILL.md:1343`) does not forbid this. Neither entry carries a
      `verify:` receipt, so `NAMED-UPSTREAM` is the only mechanical signal either will ever get.
    - **The two ids, closed by these exact ids:**
      - `PC-S318-VALIDATE-MUTATION-RED-PRINTS-BASELINE-GREEN-FOR-AN-ALL-SKIPPED-RUN-AND-SCORES-IT-UNPROVEN-NOT-UNEVALUABLE`
@@ -166,12 +166,12 @@ reports **12 `HARD-*` blocking-layer rows**, where the previous pull had none, a
    - **Take step 8's "before" row set AFTER the annotations.** Taken before them, the two
      `NAMED-UPSTREAM` rows vanish and read as a mismatch.
    - **Run `ledger-rotate.sh` the way step 8 prescribes
-     (`core/skills/ai-dlc-update/SKILL.md:2629`, usage at
+     (`core/skills/ai-dlc-update/SKILL.md:1397`, usage at
      `core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:94`), and expect exactly two entries to
-     move.** Then step 8's acceptance test (`core/skills/ai-dlc-update/SKILL.md:2640`): the
+     move.** Then step 8's acceptance test (`core/skills/ai-dlc-update/SKILL.md:1408`): the
      re-verifier's `cut -f1,2 | sort` row set is identical before and after `--apply`.
    - **The PR merge needs the operator's explicit approval**
-     (`core/skills/ai-dlc-update/SKILL.md:2664`), separate from the `apply` argument.
+     (`core/skills/ai-dlc-update/SKILL.md:1444`), separate from the `apply` argument.
 
 7. **A `CLOSE-CANDIDATE` row is a hypothesis, not a verdict.** For any other id, run that entry's
    receipt directly, read the raw exit code, and ask what ELSE satisfies it before rotating

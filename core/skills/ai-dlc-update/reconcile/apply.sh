@@ -108,11 +108,13 @@ set -uo pipefail
 # to the copy that run recorded in the marker. See finish_classify_unmerged().
 CARRIED_MACHINERY=0
 FINISH=0
+CLASSIFY_CHECK=0
 _pos_n=0
 for _a in "$@"; do
   case "$_a" in
     --carried-machinery-slice) CARRIED_MACHINERY=1 ;;
     --finish) FINISH=1 ;;
+    --classify-check) CLASSIFY_CHECK=1 ;;
     --*)
       echo "apply: unknown option: $_a" >&2
       echo "usage: apply.sh [--finish] [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
@@ -132,6 +134,12 @@ DIST="${_p1:?usage: apply.sh [--carried-machinery-slice] <dist> <base> <consumer
 BASE="${_p2:?}"
 CONSUMER="${_p3:?}"
 THEIRS="${_p4:?}"
+# `--classify-check` is the pull driver's (reconcile/pull.sh, BL-1190 D-5) and nobody else's: it
+# needs AI_DLC_PULL_RUN and is never combined with --finish. See CLASSIFY CHECK below.
+if [ "$CLASSIFY_CHECK" = 1 ] && { [ -z "${AI_DLC_PULL_RUN:-}" ] || [ "$FINISH" = 1 ]; }; then
+  echo "apply: --classify-check is the pull driver's option: it needs AI_DLC_PULL_RUN and is never combined with --finish" >&2
+  exit 2
+fi
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
 SCAFFOLD_IGNORE_LIB="$SELF/scaffold-ignore.sh"; scaffold_ignore_loaded=0; . "$SCAFFOLD_IGNORE_LIB" 2>/dev/null && declare -F scaffold_ignore_state >/dev/null && declare -F scaffold_ignore_remedy >/dev/null && scaffold_ignore_loaded=1 # loaded BEFORE phase 1 writes anything; see scaffold_ignore_check()
@@ -235,7 +243,9 @@ reapply_remedy="re-render the report with \`emit-report.sh ${DIST} ${BASE} ${CON
 # line carrying the full digest, and the first line of that record's fenced answer body beginning
 # with the label. A file-wide test of each conjunct separately is NOT this check: it passes a
 # digest quoted in one record beside a label answered in another. A digest that is not 64 hex
-# characters (UNAVAILABLE) never matches.
+# characters (UNAVAILABLE) never matches. The label `*` is the pull driver's ROW form (BL-1190 D-2):
+# the record's Question line quotes one ask row's digest and its answer body's first line is any
+# non-empty answer. No existing label is `*`, so the union gate's call reads as it always did.
 ra_recorded() {
   [ "${#2}" -eq 64 ] || return 1
   case "$2" in *[!0-9a-f]*) return 1 ;; esac
@@ -257,7 +267,7 @@ ra_recorded() {
     /^## / { inrec = ($0 ~ /^## [^ ]+ -- AskUserQuestion$/); q = 0; fence = 0; next }
     inrec && index($0, "- Question") == 1 { if (alone($0, dg)) q = 1; next }
     inrec && q && fence == 0 && $0 == "```text" { fence = 1; next }
-    inrec && q && fence == 1 { if ($0 == lb) found = 1; fence = 2; next }
+    inrec && q && fence == 1 { if ($0 == lb || (lb == "*" && $0 != "")) found = 1; fence = 2; next }
     END { exit !found }' "$1"
 }
 
@@ -290,7 +300,150 @@ ra_recorded() {
 # NOT UNDER `--finish`, for the same reason: that mode writes no core file, so there is no write
 # for this condition to authorize, and a finisher that refuses cannot be cleared.
 UNION_REPORT="$CONSUMER/_bmad-output/ai-dlc-update/reconcile-report.md"
-if [ "$FINISH" = 0 ]; then
+# --- THE PULL DRIVER'S RUN (reconcile/pull.sh, BL-1190), ALL OF IT OPT-IN ON AI_DLC_PULL_RUN -----
+# Unset, nothing below this block's helpers runs and this file behaves as it always has. Set to the
+# driver's run directory, it carries `raw/` (emit-report.sh --keep-raw's store), `region` (the
+# render the driver wrote into the report) and `decisions.tsv` (MODEL and SCRIPT decision rows).
+# PR_REUSE_OK is decided ONCE, here, before the union gate and before any write: the store's F must
+# equal F now. Every reuse site below reads it; a mismatch runs every detector fresh.
+PR_RUN="${AI_DLC_PULL_RUN:-}"
+PR_REUSE_OK=0
+PR_ASKS="$SELF/ask-families.tsv"
+if [ -n "$PR_RUN" ]; then
+  . "$SELF/pull-key.sh" || err "AI_DLC_PULL_RUN is set and reconcile/pull-key.sh beside this apply.sh could not be loaded. NOTHING HAS BEEN WRITTEN."
+  if [ "$FINISH" = 0 ] && pk_reuse_ok "$PR_RUN/raw" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"; then PR_REUSE_OK=1; fi
+fi
+# pr_decide <kind> <path> <digest> <decider> <verdict> <evidence> -- one decisions row for the run.
+pr_decide() {
+  [ -n "$PR_RUN" ] || return 0
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" >> "$PR_RUN/decisions.tsv" 2>/dev/null \
+    || echo "apply: NOTE -- a decisions row ($1 $2) could not be written to $PR_RUN/decisions.tsv; the PR body will lack it" >&2
+}
+# pr_pristine_delete <core-path> <consumer-rel> <bucket> -- BL-1190 D-4, driver runs only. A pristine
+# delete is a SCRIPT action: `git rm` (never `-f`) of the consumer copy, and only when the WORKING-TREE
+# file's blob, re-read immediately before the rm, equals the base blob (UPSTREAM-DELETED) or a blob
+# apply writes, base or theirs (ORPHANED-RELOCATED, preclassify's own proof). Any other state returns
+# 1 and the caller emits today's gated `deletion` row, which the driver hands back as an ASK.
+pr_pristine_delete() {
+  local _p="$1" _c="$2" _b="$3" _h _bb _tb
+  [ -n "$_c" ] && [ -f "$CONSUMER/$_c" ] && [ ! -L "$CONSUMER/$_c" ] || return 1
+  _bb="$(git -C "$DIST" rev-parse -q --verify "${BASE}:${_p}" 2>/dev/null)" || _bb=""
+  _tb="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}:${_p}" 2>/dev/null)" || _tb=""
+  _h="$(git hash-object --no-filters -- "$CONSUMER/$_c" 2>/dev/null)" || return 1
+  [ -n "$_h" ] || return 1
+  case "$_b" in
+    UPSTREAM-DELETED) [ -n "$_bb" ] && [ "$_h" = "$_bb" ] || return 1 ;;
+    ORPHANED-RELOCATED|"ORPHANED-RELOCATED -> "*) { [ -n "$_bb" ] && [ "$_h" = "$_bb" ]; } || { [ -n "$_tb" ] && [ "$_h" = "$_tb" ]; } || return 1 ;;
+    *) return 1 ;;
+  esac
+  git -C "$CONSUMER" rm -q -- "$_c" >/dev/null 2>&1 || return 1
+  pr_decide pristine-delete "$_c" "$_h" script deleted "${_b%% *}: working-tree blob equals the blob this pull proves it wrote"
+  return 0
+}
+# pr_ask_patterns -- the bucket-row patterns of the ASK families (ask-families.tsv, source `bucket`).
+pr_ask_patterns() { awk -F'\t' '!/^#/ && NF >= 4 && $2 == "bucket" {print $1 "\t" $3}' "$PR_ASKS" 2>/dev/null; }
+# pr_ask_family <normalised row> -- prints the ASK family a region row belongs to; 1 when none.
+pr_ask_family() {
+  pr_ask_patterns | awk -F'\t' -v row="$1" '{ if (row ~ $2) { print $1; f = 1; exit } } END { exit !f }'
+}
+# pr_unseen_ask_count <verify-stderr> -- how many `unseen:` rows belong to an ASK family. Prints
+# `UNDECIDED` when the family list cannot be read, which never equals 0.
+pr_unseen_ask_count() {
+  local _r _n=0 _f
+  [ -r "$PR_ASKS" ] || { echo UNDECIDED; return 0; }
+  # A staged file with its write status read, never a here-string: a failed staging must not read
+  # as "no unseen row", which would proceed with no question.
+  _f="$(mktemp "${TMPDIR:-/tmp}/apply-pr-unseen.XXXXXX" 2>/dev/null)" || { echo UNDECIDED; return 0; }
+  printf '%s\n' "$1" | sed -n 's/^[[:space:]]*unseen: //p' > "$_f" || { rm -f "$_f"; echo UNDECIDED; return 0; }
+  while IFS= read -r _r; do
+    [ -n "$_r" ] || continue
+    pr_ask_family "$_r" >/dev/null && _n=$((_n + 1))
+  done < "$_f"
+  rm -f "$_f"
+  echo "$_n"
+}
+# pr_conflict_guard -- BL-1190 D-2's CONFLICT GUARD; driver runs only, before any write. Every ASK
+# row this pull has raised must still be pending or carry a hook-written answer quoting its digest
+# (ra_recorded, row form). Two sources:
+#   (1) every ASK-family row in the FIRST-WINS approved-region record: pending while the driver's
+#       current render (`$PR_RUN/region`) still carries it;
+#   (2) every row of the pull's ask ledger, `<git-dir>/ai-dlc-pull/asks.tsv`, which pull.sh appends
+#       (conflict hunks, classify blocks tagged conflict or blend): `family path digest state`.
+#       A conflict hunk is pending while its file still carries a `<<<<<<<` marker; a classify block
+#       while its consumer file's blob still equals the recorded state.
+# Anything else -- a conflict resolved by hand, a modified file deleted or taken as theirs -- with no
+# answer refuses: one `ASK-UNANSWERED` line per row on stderr, nothing written. A source that cannot
+# be read refuses too: an unreadable record is never read as "nothing was asked".
+# pr_ledger_open <git-dir> -- source (2) above, on its own: one `ASK-UNANSWERED<TAB>family<TAB>path<TAB>digest`
+# line per ask-ledger row not answered by a hook-written record quoting its digest. No ledger file (a pull that predates the driver) prints nothing. The guard below and the
+# `--finish` check after it both read the ledger through this one function.
+pr_ledger_open() {
+  local _gd="$1" _hist="$CONSUMER/_bmad-output/operator-answers-history.md" _f _p _d _s _tab
+  _tab="$(printf '\t')"
+  [ -f "$_gd/ai-dlc-pull/asks.tsv" ] || return 0
+  # NO ROW IS PENDING: every ledger row was put to the operator when it was written, and one with no
+  # hook-written answer is open whatever its file now holds (a merged block or a hunk still marked alike).
+  while IFS="$_tab" read -r _f _p _d _s; do
+    [ -n "$_d" ] || continue
+    ra_recorded "$_hist" "$_d" "*" && { pr_decide "$_f" "$_p" "$_d" operator answered "hook-written answer quotes the digest"; continue; }
+    printf 'ASK-UNANSWERED\t%s\t%s\t%s\n' "$_f" "$_p" "$_d"
+  done < "$_gd/ai-dlc-pull/asks.tsv"
+}
+pr_conflict_guard() {
+  local _gd _rec _hist _out="" _f _p _d _s _row _cur _tab _stg _ok
+  _tab="$(printf '\t')"
+  _hist="$CONSUMER/_bmad-output/operator-answers-history.md"
+  _gd="$(git -C "$CONSUMER" rev-parse --absolute-git-dir 2>/dev/null)" || _gd=""
+  [ -n "$_gd" ] || err "ASK-UNANSWERED cannot be decided: the consumer's git-dir did not resolve, so the pull's ask ledger and approved-region record cannot be read. NOTHING HAS BEEN WRITTEN."
+  _stg="$(mktemp -d "${TMPDIR:-/tmp}/apply-pr-guard.XXXXXX" 2>/dev/null)" || err "ASK-UNANSWERED cannot be decided: no staging directory. NOTHING HAS BEEN WRITTEN."
+  _rec="$_gd/ai-dlc-approved-region"
+  if [ -f "$_rec" ] && [ "$(sed -n 1p "$_rec" 2>/dev/null)" = "ai-dlc-approved-region 1" ]; then
+    _ok=1
+    sed -n '3,$p' "$_rec" > "$_stg/rec" 2>/dev/null || _ok=0
+    [ "$_ok" = 1 ] && pk_region_asks "$_stg/rec" "$PR_ASKS" "$DIST" "$THEIRS" "$CONSUMER" > "$_stg/rec-asks" || _ok=0
+    [ "$_ok" = 1 ] && pk_region_asks "$PR_RUN/region" "$PR_ASKS" "$DIST" "$THEIRS" "$CONSUMER" > "$_stg/cur-asks" || _ok=0
+    [ "$_ok" = 1 ] || { rm -rf "$_stg"; err "ASK-UNANSWERED cannot be decided: the approved-region record, the driver's region or reconcile/ask-families.tsv could not be read. NOTHING HAS BEEN WRITTEN."; }
+    while IFS="$_tab" read -r _f _p _d _row; do
+      [ -n "$_d" ] || continue
+      _cur=0
+      while IFS="$_tab" read -r _ _ _s _; do [ "$_s" = "$_d" ] && _cur=1; done < "$_stg/cur-asks"
+      [ "$_cur" = 1 ] && continue
+      ra_recorded "$_hist" "$_d" "*" && { pr_decide "$_f" "$_p" "$_d" operator answered "hook-written answer quotes the digest"; continue; }
+      _out="${_out}ASK-UNANSWERED${_tab}${_f}${_tab}${_p}${_tab}${_d}${NL_CH:-
+}"
+    done < "$_stg/rec-asks"
+  fi
+  _row="$(pr_ledger_open "$_gd")"
+  [ -z "$_row" ] || _out="${_out}${_row}${NL_CH:-
+}"
+  rm -rf "$_stg"
+  [ -n "$_out" ] || return 0
+  printf '%s' "$_out" >&2
+  err "ASK-UNANSWERED: an ASK-family decision this pull raised (a conflict, a blend, a delete of a consumer-modified file or an ORPHANED-UNKNOWN file) no longer renders and no hook-written AskUserQuestion record quotes its digest, so it was decided without the operator. Ask each row above with AskUserQuestion, quoting its digest, then re-run. NOTHING HAS BEEN WRITTEN."
+}
+# THE `--finish` LEDGER CHECK, BEFORE ANYTHING ELSE `--finish` DOES, HOWEVER IT WAS INVOKED: a stamp
+# advanced over a conflict resolved by hand with no operator answer is the decision the ask ledger
+# exists to stop. Exit 3, one ASK-UNANSWERED row per open ask on stderr, nothing written. No ledger,
+# or no git-dir to hold one, passes silently. The ORDINARY mode runs the same check, with or without
+# AI_DLC_PULL_RUN: a plain apply.sh never writes over an open ask either.
+# The git-dir is read off `<consumer>/.git` with builtins only (a directory, or a worktree's
+# `gitdir:` file), so a run with no ledger starts no child process for this check.
+if [ "$CLASSIFY_CHECK" = 0 ]; then
+  _fl_gd=""
+  if [ -d "$CONSUMER/.git" ]; then _fl_gd="$CONSUMER/.git"
+  elif [ -f "$CONSUMER/.git" ] && IFS= read -r _fl_l < "$CONSUMER/.git"; then
+    _fl_gd="${_fl_l#gitdir: }"; case "$_fl_gd" in /*) ;; *) _fl_gd="$CONSUMER/$_fl_gd" ;; esac
+  fi
+  if [ -n "$_fl_gd" ] && [ -f "$_fl_gd/ai-dlc-pull/asks.tsv" ]; then
+    _fl_rows="$(pr_ledger_open "$_fl_gd")"
+    if [ -n "$_fl_rows" ]; then
+      printf '%s\n' "$_fl_rows" >&2
+      echo "apply: ASK-UNANSWERED: a decision this pull asked the operator (the rows above, from ${_fl_gd}/ai-dlc-pull/asks.tsv) was settled with no hook-written AskUserQuestion record quoting its digest. Ask each row with AskUserQuestion, quoting its digest, then re-run \`pull.sh $([ "$FINISH" = 1 ] && echo finish || echo apply)\`. NOTHING HAS BEEN WRITTEN." >&2
+      exit 3
+    fi
+  fi
+fi
+if [ "$FINISH" = 0 ] && [ "$CLASSIFY_CHECK" = 0 ]; then
   if [ -f "$UNION_REPORT" ]; then
     # STDERR IS KEPT, NOT DISCARDED: --verify decides the cause of a mismatch on its own exit code
     # (3 = the approved region lists HARD-* rows that no longer render, refs unchanged, nothing
@@ -301,8 +454,13 @@ if [ "$FINISH" = 0 ]; then
     # the consumer's git-dir (step 5's), not whatever region the report file holds now, so a region
     # spliced into the report after that verify is compared, not trusted. emit-report.sh's header owns
     # the record's contract; this gate reads one line of it, `approved-region: first=<digest|NONE>`.
+    if [ "$PR_REUSE_OK" = 1 ]; then
+      _ug_verr="$(bash "$SELF/emit-report.sh" --for-apply --verify --reuse "$PR_RUN/raw" "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1 >/dev/null)"
+      _ug_rc=$?
+    else
     _ug_verr="$(bash "$SELF/emit-report.sh" --for-apply --verify "$UNION_REPORT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1 >/dev/null)"
     _ug_rc=$?
+    fi
     # THE `approved-region:` LINE IS PARSED ANCHORED AND MUST APPEAR EXACTLY ONCE. Absent, doubled or
     # malformed refuses before anything else is decided: it is never read as NONE, because NONE means
     # "the binding was not evaluated" and a parse fault must not choose that on the operator's behalf.
@@ -463,6 +621,16 @@ if [ "$FINISH" = 0 ]; then
           say NOTE blockers-resolved "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1), decided on --verify exit 3: ${_ug_cause} No finding renders that the approval did not show (unseen=0), so the approval covers this region and no re-approval is asked.${_ar_note}"
         elif ra_recorded "$_ra_hist" "$_ra_dg" "$_ra_lb"; then
           say NOTE blockers-resolved "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1), decided on --verify exit 3: ${_ug_cause} The ${_ra_un} unseen row(s) were re-approved: ${_ra_hist#"${CONSUMER}"/} holds an AskUserQuestion record quoting digest ${_ra_dg} answered '${_ra_lb}'.${_ar_note}"
+        elif [ -n "$PR_RUN" ] && [ "$(pr_unseen_ask_count "$_ug_verr")" = 0 ]; then
+          # THE NARROWED RE-APPROVAL (BL-1190 D-2), driver runs only: no unseen row belongs to an ASK
+          # family, so nothing here is the operator's to answer. A NOTE, and one decisions row per
+          # unseen row for the PR body; the operator's merge of that PR is the approval.
+          say NOTE reapproval-narrowed "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1), decided on --verify exit 3: ${_ug_cause} The ${_ra_un} unseen row(s) belong to no ASK family (reconcile/ask-families.tsv), so no re-approval is asked; each is recorded in the pull's decisions for the PR body.${_ar_note}"
+          printf '%s\n' "$_ug_verr" | sed -n 's/^[[:space:]]*unseen: //p' > "$PR_RUN/unseen-rows" \
+            || err "the unseen rows could not be staged under $PR_RUN; re-run pull.sh apply. NOTHING HAS BEEN WRITTEN."
+          while IFS= read -r _pr_row; do
+            pr_decide unseen-row "${_pr_row##* }" "$_ra_dg" script proceed "rendered after the first-verified region; no ASK family"
+          done < "$PR_RUN/unseen-rows"
         else
           {
             echo "apply: RE-APPROVAL OWED. Ask the operator with AskUserQuestion, exactly:"
@@ -482,6 +650,8 @@ if [ "$FINISH" = 0 ]; then
   else
     say NOTE report-unverified "" "union-gate condition (1) was NOT evaluated: no report at ${UNION_REPORT#"${CONSUMER}"/}. This does not block — the driver has never required one — but nothing here has confirmed an operator approved a region matching theirs ($THEIRS)."
   fi
+  # THE CONFLICT GUARD (BL-1190 D-2), driver runs only, after the gate and before any write.
+  [ -z "$PR_RUN" ] || pr_conflict_guard
 fi
 
 # --- IN-FLIGHT MARKER: this tree is mid-pull and its self-tests do not hold ----
@@ -677,6 +847,19 @@ detector_run() {
   [ -n "$DT_DIR" ] || return 126
   bash "$SELF/$_s" "$@" > "$DT_DIR/$_k.out" 2> "$DT_DIR/$_k.err"
 }
+# detector_reuse <key> <script> <args…> -- detector_run, except that under a pull driver run whose
+# store matched F at the gate (PR_REUSE_OK) a call whose EXACT argv the render recorded is answered
+# from the record (stdout, stderr and exit, raw) and starts nothing. Any other argv runs the
+# detector. Unset AI_DLC_PULL_RUN leaves PR_REUSE_OK at 0, and this is detector_run.
+# detector_recorded <key> <script> <args…> -- that lookup on its own: 0 with PK_RC set and the
+# record in place when it answered, 1 when the caller must run the detector.
+detector_recorded() {
+  [ "$PR_REUSE_OK" = 1 ] && [ -n "$DT_DIR" ] && pk_fetch "$PR_RUN/raw" "$DT_DIR/$1.out" "$DT_DIR/$1.err" "$SELF/$2" "${@:3}"
+}
+detector_reuse() {
+  if detector_recorded "$@"; then return "$PK_RC"; fi
+  detector_run "$@"
+}
 detector_refused() {
   local _first="(not captured: no staging directory)"
   if [ -n "$DT_DIR" ]; then
@@ -765,8 +948,16 @@ ap_stage() {
 # ssm_ok -- the last setup-site-drift.sh run printed an OK verdict row. Read beside its exit 0, so
 # an exit 0 with no verdict row (a run that compared nothing) is not a pass.
 ssm_ok() { awk -F'\t' '$1 == "SETUP-SITE-OK" {f=1} END {exit f ? 0 : 1}' "$DT_DIR/ssm.out" 2>/dev/null; }
-setup_site_merge() { # <core-path> <core-stripped rel> <consumer-rel column> -> 0 resolved, 1 fall back
-  local _p="$1" _r="$2" _c="$3" _cons _d _tmp _rc _stb _stt
+# setup_site_check <core-path> <core-stripped rel> <consumer-rel column> -> 0 every acceptance
+# condition below holds, 1 otherwise. CHECK ONLY: it writes nothing in the consumer. It sets
+# SSC_ACTION to `none` (one of the two already-merged acceptances: the caller only syncs the mode)
+# or `write` (the first-run merge, staged at SSC_D/merged), and SSC_CONS to the consumer file.
+# setup_site_merge is this check plus its write; the pull driver's classify check (BL-1190 D-5,
+# `--classify-check`) is this check alone, so there is ONE statement of the conditions.
+SSC_ACTION=""; SSC_CONS=""; SSC_D=""
+setup_site_check() {
+  local _p="$1" _r="$2" _c="$3" _cons _d _rc _stb _stt
+  SSC_ACTION=""; SSC_CONS=""; SSC_D=""
   [ -n "$DT_DIR" ] || return 1
   command -v setup_sited_paths >/dev/null 2>&1 \
     || eval "$(awk '/^setup_sited_paths\(\) \{/,/^\}/' "$SELF/preclassify.sh" 2>/dev/null)" 2>/dev/null
@@ -784,7 +975,7 @@ setup_site_merge() { # <core-path> <core-stripped rel> <consumer-rel column> -> 
   if git merge-file -p "$_cons" "$_d/b0" "$_d/t0" > "$_d/m0" 2>/dev/null && cmp -s "$_d/m0" "$_cons" \
      && detector_run ssm setup-site-drift.sh --file "$_p" "$DIST" "$CONSUMER" "$THEIRS" \
      && ssm_ok; then
-    sync_mode_from_theirs "$_r" "$_cons"
+    SSC_ACTION=none; SSC_CONS="$_cons"; SSC_D="$_d"
     return 0
   fi
   # The second acceptance, for a tree this already merged where a re-merge is AMBIGUOUS: theirs added
@@ -799,7 +990,7 @@ setup_site_merge() { # <core-path> <core-stripped rel> <consumer-rel column> -> 
      && detector_run ssm setup-site-drift.sh --file "$_p" --span-text "$DIST" "$CONSUMER" "$THEIRS" \
      && _stt="$(awk -F'\t' '$1 == "SETUP-SITE-SPANTEXT" {print $3}' "$DT_DIR/ssm.out")" && [ -n "$_stt" ] \
      && [ "$_stb" = "$_stt" ]; then
-    sync_mode_from_theirs "$_r" "$_cons"
+    SSC_ACTION=none; SSC_CONS="$_cons"; SSC_D="$_d"
     return 0
   fi
   # (a)
@@ -837,6 +1028,17 @@ setup_site_merge() { # <core-path> <core-stripped rel> <consumer-rel column> -> 
   # (c)
   detector_run ssm setup-site-drift.sh --file "$_p" --ours "$_d/merged" "$DIST" "$CONSUMER" "$THEIRS" || return 1
   ssm_ok || return 1
+  SSC_ACTION=write; SSC_CONS="$_cons"; SSC_D="$_d"
+  return 0
+}
+setup_site_merge() { # <core-path> <core-stripped rel> <consumer-rel column> -> 0 resolved, 1 fall back
+  local _r="$2" _cons _d _tmp
+  setup_site_check "$@" || return 1
+  _cons="$SSC_CONS"; _d="$SSC_D"
+  if [ "$SSC_ACTION" = none ]; then
+    sync_mode_from_theirs "$_r" "$_cons"
+    return 0
+  fi
   _tmp="$_cons.incoming.$$"
   cp -p "$_cons" "$_tmp" 2>/dev/null && cat "$_d/merged" > "$_tmp" 2>/dev/null \
     || { rm -f "$_tmp"; return 1; }
@@ -1148,7 +1350,7 @@ tp_json_test() {
 template_scan() {
   local _rc=0 _t _tm _c _b _tab
   _tab="$(printf '\t')"
-  detector_run tpl preclassify.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER" --templates || _rc=$?
+  detector_reuse tpl preclassify.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER" --templates || _rc=$?
   if [ "$_rc" -ne 0 ]; then
     detector_refused template-prose "preclassify.sh --templates" "-" "$_rc" tpl
     return 0
@@ -1414,11 +1616,18 @@ ap_ks_added() {
 # from `$PC`, `--finish` from finish_verify_tree's staged rows); empty `UD_FLAG` derives them.
 ud_capture() {
   if [ -n "$UD_FLAG" ]; then
-    detector_run ud unregistered-drift.sh "$UD_FLAG" "$UD_PC" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"
+    if detector_recorded ud unregistered-drift.sh "$UD_FLAG" "$UD_PC" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"; then UD_RC="$PK_RC"
+    else
+      detector_run ud unregistered-drift.sh "$UD_FLAG" "$UD_PC" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"
+      UD_RC=$?
+    fi
   else
-    detector_run ud unregistered-drift.sh "$DIST" "$BASE" "$CONSUMER" "$THEIRS"
+    if detector_recorded ud unregistered-drift.sh "$DIST" "$BASE" "$CONSUMER" "$THEIRS"; then UD_RC="$PK_RC"
+    else
+      detector_run ud unregistered-drift.sh "$DIST" "$BASE" "$CONSUMER" "$THEIRS"
+      UD_RC=$?
+    fi
   fi
-  UD_RC=$?
   UD=""; UD_NA=""
   [ "$UD_RC" = 0 ] || return 0
   UD="$(awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}' "$DT_DIR/ud.out")"
@@ -1479,8 +1688,13 @@ if [ "$FINISH" = 0 ]; then
 # The in-flight marker is written only AFTER these two refusals, so a stop here leaves the tree
 # exactly as it was -- no marker for the next push to block on over a tree nothing touched. A
 # marker a PREVIOUS aborted run left is not this run's to remove, and is left alone.
+if [ "$PR_REUSE_OK" = 1 ] && [ -n "$DT_DIR" ] && pk_fetch "$PR_RUN/raw" "$DT_DIR/pc.out" "$DT_DIR/pc.err" "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER"; then
+  PC_RC="$PK_RC"
+  PC="$(cat "$DT_DIR/pc.out")" || PC_RC=125
+else
 PC="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
 PC_RC=$?
+fi
 if [ "$PC_RC" -ne 0 ]; then
   err "preclassify.sh exited ${PC_RC} without classifying, so which files this pull writes, merges or deletes is UNKNOWN. NOTHING HAS BEEN WRITTEN to core. Run reconcile/preclassify.sh $DIST $BASE $THEIRS $CONSUMER directly, fix what it reports, then re-run apply with the same four arguments."
 fi
@@ -1498,6 +1712,37 @@ fi
 # template_scan runs INSIDE ap_write_marker, after its sited-set load (see there). The one refusal
 # that returns before the scan is a failed sited load, itself a DECISION that withholds; its
 # template rows appear on the re-run that refusal prescribes.
+# --- CLASSIFY CHECK (BL-1190 D-5): `--classify-check`, the pull driver's pre-write question ----------
+# Which CLASSIFY files need no classify agent? Exactly those whose bucket is `BOTH-CHANGED->CLASSIFY`,
+# whose retired-token check ran and found nothing, and which setup_site_check accepts (base, theirs
+# and the consumer copy present; the 3-way merge clean; consumer equals base and the merge equals
+# theirs outside the declared spans; no undeclared `{token}`). One row per such bucket:
+#   CLASSIFY-CHECK<TAB><rel><TAB>PASS|FAIL<TAB><consumer-rel>
+# It writes nothing: no marker, no file; the write on `apply` is setup_site_merge's, unchanged.
+if [ "$CLASSIFY_CHECK" = 1 ]; then
+  _cc_tab="$(printf '\t')"
+  _cc_rt=""
+  ap_stage cc-bucket-rows "$PC" && _cc_rt="$AP_TMP/cc-bucket-rows"
+  ap_stage cc-buckets "$PC" || err "the preclassify rows could not be staged for --classify-check. NOTHING HAS BEEN WRITTEN."
+  while IFS="$_cc_tab" read -r kind path cons bucket; do
+    [ "${bucket:-}" = "BOTH-CHANGED->CLASSIFY" ] || continue
+    rel="${path#core/}"
+    if [ -n "$_cc_rt" ]; then
+      detector_run rt retired-tokens.sh --bucket-rows "$_cc_rt" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path"
+    else
+      detector_run rt retired-tokens.sh "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path"
+    fi
+    _cc_rc=$?
+    if [ "$_cc_rc" -eq 0 ] && [ -z "$(awk -F'\t' '{print $3}' "$DT_DIR/rt.out")" ] \
+       && setup_site_check "$path" "$rel" "$cons"; then
+      printf 'CLASSIFY-CHECK\t%s\tPASS\t%s\n' "$rel" "$cons"
+    else
+      printf 'CLASSIFY-CHECK\t%s\tFAIL\t%s\n' "$rel" "$cons"
+    fi
+  done < "$AP_TMP/cc-buckets"
+  exit 0
+fi
+
 ap_write_marker
 # THE BUCKETS ARE HANDED DOWN, NOT RE-DERIVED. `unregistered-drift.sh`'s CORE-MACHINERY-CARRIED
 # arm needs exactly the rows already in `$PC` -- same four arguments, same program -- and running
@@ -1656,6 +1901,10 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
         say WORKLIST semantic-merge "$rel"
       fi ;;
     UPSTREAM-DELETED|ORPHANED-RELOCATED*)
+      if [ -n "$PR_RUN" ] && pr_pristine_delete "$path" "$cons" "$bucket"; then
+        say RESOLVED pristine-delete "$rel"
+        continue
+      fi
       say DECISION deletion "$rel" "apply would remove a consumer file — gated" ;;
     RELOCATE-MOVE*)
       # Report-only. The level-triggered manifest_dests loop (section below) owns the
@@ -3426,7 +3675,7 @@ if [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; then
   if [ "$reapply_owed" -gt 0 ]; then
   say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed, ${reapply_owed} of them a step only a fresh ordinary run performs — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Follow those rows' own remedy (re-render the report, re-approve it, re-run apply with the same four arguments); that run re-stamps when nothing is left. The finish mode is NOT the next step here: it re-checks the rows only a fresh ordinary run clears and withholds while they are undone. It does not re-check a \`scaffold-ignored\` row; take that row's own exit, or the next pull raises it again.${withheld_extra}"
   else
-  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Do the rows above, then advance the stamp with: apply.sh --finish${finish_flag} <dist> ${BASE} <consumer> ${THEIRS}${withheld_extra}"
+  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Do the rows above, then advance the stamp with: pull.sh finish${finish_flag} <dist> ${BASE} <consumer> ${THEIRS} (it runs apply.sh --finish)${withheld_extra}"
   fi
 elif [ -f "$STAMP" ]; then
   # RESOLVE THEIRS BEFORE WRITING ANYTHING, AND REFUSE IF IT DOES NOT RESOLVE.
@@ -4008,7 +4257,7 @@ taught_schema_row() {
 local _script="$CONSUMER/scripts/ai-dlc/sync-taught-schema.sh" _out _rc _stale="" _merge="" _region="" _p _unk _halt
 local _then="then re-run post-write-gates; this apply already stamped, so no re-stamp is owed"
 if [ "$FINISH" = 1 ] || [ -f "$APPLYING" ]; then
-  _then="then re-run post-write-gates, then re-run \`apply.sh --finish\`"
+  _then="then re-run post-write-gates, then re-run \`pull.sh finish\` (it runs \`apply.sh --finish\`)"
 fi
 if [ ! -f "$_script" ]; then
   [ -f "$CONSUMER/.claude/schemas/provenance-block.json" ] || return 0

@@ -1,0 +1,13 @@
+# ask-families.tsv — the ONE list of pull decisions that ask the operator (BL-1190 D-3).
+# Read by reconcile/pull.sh and reconcile/apply.sh (through pull-key.sh's pk_region_asks), rendered into
+# SKILL.md. Every decision not named here is a MODEL or SCRIPT decision, recorded in
+# _bmad-output/ai-dlc-update/pull-decisions.tsv and rendered into the update PR body.
+# Columns, tab-separated: family, source, match, question.
+#   source `bucket`         match is an ERE over a whitespace-normalised region row (`BUCKET path`)
+#   source `readopt-merge`  match is the `readopt-override.sh --merge` outcome word
+#   source `classify-block` match is `<field>: <value>` in a classify block (reconcile/classify-block.md)
+conflict-hunk	readopt-merge	CONFLICT	readopt-override.sh --merge left a conflict hunk in this override: how should the hunk be resolved?
+classify-conflict	classify-block	bucket: conflict	Upstream and this consumer changed the same rule incompatibly: which side, or what combination, should the file carry?
+blend	classify-block	confirmation_kind: blend	This block needs a 3-way blend (part theirs, part ours): confirm the blend?
+delete-consumer-modified	bucket	^(UPSTREAM-DELETED|ORPHANED-RELOCATED)[+]consumer-modified	Upstream removed or relocated this file and the consumer modified it: delete it, or keep it (default keep-ours, optionally as an extension)?
+orphaned-unknown	bucket	^ORPHANED-UNKNOWN	This file sits at a relocated path and upstream never shipped it: keep it (default) or delete it?

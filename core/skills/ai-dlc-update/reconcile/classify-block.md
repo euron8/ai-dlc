@@ -85,11 +85,24 @@ regardless of bucket. This is NOT a substitute for the `conflict` bucket
 narrower and more specific case) — it is a second, independent signal: "this
 block's mechanical action is not simply correct as-is." A block can be
 `bucket: domain-local` AND `needs_operator_confirmation: true` at once.
-Downstream, every `true` here is gated exactly like a conflict — the calling
-skill (`ai-dlc-update` step 7/7u) stops and gets an explicit operator answer
-before acting on this specific block, even mid-apply. Do not leave this false
+Downstream, `confirmation_kind` below decides how a `true` is handled: a
+`blend` is gated exactly like a conflict — the calling skill (`ai-dlc-update`
+step 7/7u) gets an explicit operator answer before acting on this specific
+block, even mid-apply — and a `judgment` is a model decision the pull records
+in `_bmad-output/ai-dlc-update/pull-decisions.tsv` and the update PR body. Do not leave this false
 by default to avoid a longer report — an unset flag on a real judgment call
 is a silent auto-decision the operator never got to make.
+
+## `confirmation_kind` — set on every block whose `needs_operator_confirmation` is `true`
+
+- `blend` — a genuine 3-way blend within the block (part take-theirs, part
+  keep-ours). An ASK family (`reconcile/ask-families.tsv`): the pull asks the
+  operator.
+- `judgment` — every other confirmation (a naming or categorization call, a
+  note that needs reading). A MODEL decision: you decide it, and the pull
+  records it in the update PR body, where the operator's merge approves it.
+
+Omit the field when `needs_operator_confirmation` is `false`.
 
 ## Return (structured — this is your entire output)
 
@@ -100,6 +113,7 @@ BLOCKS:
     bucket: <rewording|domain-local|un-pushed-innovation|conflict|upstream-only-in-block|consumer-only-in-block>
     action: <take-theirs|keep-ours|keep+layer|keep+flag-push|apply-theirs|adjudicate>
     needs_operator_confirmation: <true|false>
+    confirmation_kind: <blend|judgment>   (only when needs_operator_confirmation is true)
     note: <one terse line; for conflict, both sides; for push-flag, why generalizable; for needs_operator_confirmation, the specific question>
 TALLY: rewording=<n> domain-local=<n> innovation=<n> conflict=<n> upstream-only=<n> consumer-only=<n> needs-confirmation=<n>
 FILE_ACTION: <mostly-take-theirs | mixed-layer | keep-with-flags | needs-adjudication>

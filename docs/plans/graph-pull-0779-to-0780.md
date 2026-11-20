@@ -79,7 +79,7 @@ one live candidate this unblocks is `PC-S317-3.2-DERIVATION-HOOK-CWD`, whose fix
    If the gate instead returns `SELF-UPDATE-DEFER` (for example on a red self-update fixture run),
    the slice folds into the gated apply and the OLD engine writes the report, so the
    `NAMED-UPSTREAM` row is absent from it. It then appears inside this same pull at step 8, whose
-   mandatory re-run of the re-verifier (`core/skills/ai-dlc-update/SKILL.md:2551`) runs the engine
+   mandatory re-run of the re-verifier (`core/skills/ai-dlc-update/SKILL.md:1319`) runs the engine
    step 7 just wrote. Either outcome is correct; report which one ran.
 
    **If the re-invoked run stops with the branch BEHIND or DIVERGED from its upstream**
@@ -100,8 +100,8 @@ one live candidate this unblocks is `PC-S317-3.2-DERIVATION-HOOK-CWD`, whose fix
    live carry-over ledger. In step 8:
 
    - **The governing disposition is the `NAMED-UPSTREAM` bullet**
-     (`core/skills/ai-dlc-update/SKILL.md:2588`), which allows a hand annotation on absorption. The
-     "close ONLY `CLOSE-CANDIDATE` rows" sentence above it (`core/skills/ai-dlc-update/SKILL.md:2575`)
+     (`core/skills/ai-dlc-update/SKILL.md:1356`), which allows a hand annotation on absorption. The
+     "close ONLY `CLOSE-CANDIDATE` rows" sentence above it (`core/skills/ai-dlc-update/SKILL.md:1343`)
      does not forbid this; the named commit absorbed the entry.
    - **Annotate the entry with exactly this line, under its heading:**
 
@@ -128,7 +128,7 @@ one live candidate this unblocks is `PC-S317-3.2-DERIVATION-HOOK-CWD`, whose fix
      (`NAMED-UPSTREAM`, `STILL-LIVE`) vanish and read as a mismatch; taken after it, the diff is
      empty.
    - **The PR merge needs the operator's explicit approval**
-     (`core/skills/ai-dlc-update/SKILL.md:2664`), separate from the `apply` argument.
+     (`core/skills/ai-dlc-update/SKILL.md:1444`), separate from the `apply` argument.
 
 7. **A `CLOSE-CANDIDATE` row is a hypothesis, not a verdict.** For any other id, run that entry's
    receipt directly, read the raw exit code, and ask what ELSE satisfies it before rotating

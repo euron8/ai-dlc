@@ -112,6 +112,32 @@ set -uo pipefail
 # read consumer (or caller) paths no detector asked for. consumer-read.sh carries the reasoning.
 set -f
 
+# THE PULL DRIVER'S OPTIONS (reconcile/pull.sh, BL-1190 D-2 and D-7), stripped from wherever they
+# stand before anything else parses argv. With none of them present argv is not touched, so every
+# other caller runs exactly what it ran before they existed.
+#   --keep-raw <dir>   print mode only: record every detector call's raw stdout, stderr and exit
+#                      (pull-key.sh's store), moved into place as <dir> only when the fingerprint F
+#                      before the render equals F after it and the region carries no DETECTOR-REFUSED.
+#   --reuse <dir>      a detector call whose exact argv <dir> recorded is answered from the record,
+#                      and only while <dir>/F equals F now; every other call runs.
+#   --pull-record      plain --verify only: an exit-0 verify REPLACES a record written by a bare
+#                      run or carrying an old or unreadable format, and marks the one it writes as
+#                      the driver's; a record the driver already wrote for this key stays first-wins.
+ER_KEEP=""; ER_REUSE=""; ER_PULLREC=0
+case " $* " in
+  *" --keep-raw "*|*" --reuse "*|*" --pull-record "*)
+    _er_argv=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --keep-raw) ER_KEEP="${2:?usage: emit-report.sh --keep-raw <dir> <dist> <base> <consumer> <theirs>}"; shift 2 ;;
+        --reuse) ER_REUSE="${2:?usage: emit-report.sh [--for-apply] --verify --reuse <dir> <report.md> <dist> <base> <consumer> <theirs>}"; shift 2 ;;
+        --pull-record) ER_PULLREC=1; shift ;;
+        *) _er_argv[${#_er_argv[@]}]="$1"; shift ;;
+      esac
+    done
+    if [ "${#_er_argv[@]}" -gt 0 ]; then set -- "${_er_argv[@]}"; fi ;;
+esac
+
 MODE=print
 REPORT=""
 # `--for-apply` is apply.sh's option and nobody else's: it must come first and be followed by
@@ -146,6 +172,15 @@ case "${BASH_SOURCE[0]}" in */*) SELF="${BASH_SOURCE[0]%/*}"; SELF="${SELF:-/}" 
 SELF="$(cd "$SELF" && pwd)"
 # Every consumer path this file reads goes through consumer-read.sh's door.
 . "$SELF/consumer-read.sh" || { echo "emit-report: cannot source $SELF/consumer-read.sh" >&2; exit 2; }
+# The pull driver's store and fingerprint, loaded only when one of its options was given.
+ER_REUSE_OK=0
+if [ -n "$ER_KEEP$ER_REUSE" ] || [ "$ER_PULLREC" = 1 ]; then
+  [ -z "$ER_KEEP" ] || [ "$MODE" = print ] || { echo "emit-report: --keep-raw is a print-mode option" >&2; exit 2; }
+  [ "$ER_PULLREC" = 0 ] || { [ "$MODE" = verify ] && [ "$AR_APPLY" = 0 ] && [ -z "$REGION_FROM" ]; } \
+    || { echo "emit-report: --pull-record is a plain --verify option" >&2; exit 2; }
+  . "$SELF/pull-key.sh" || { echo "emit-report: cannot source $SELF/pull-key.sh" >&2; exit 2; }
+  if [ -n "$ER_REUSE" ] && pk_reuse_ok "$ER_REUSE" "$DIST" "$BASE" "$CONSUMER" "$THEIRS"; then ER_REUSE_OK=1; fi
+fi
 # The shared library is deliberately NOT dot-sourced here: this file calls none of its
 # functions directly, only sets up the shared cache directory below and hands it to the
 # sub-detector PROCESSES it execs, several of which load that library themselves. Loading
@@ -258,6 +293,28 @@ er_pdiff() {
 er_stage() {
   [ -n "$_er_tmp" ] || return 125
   printf '%s\n' "$2" | cat > "$_er_tmp/$1"
+}
+
+# er_bash <script> <args...> -- every detector this render starts goes through here. With neither
+# --keep-raw nor --reuse it is `bash "$@"` and nothing else. Under either, the call's RAW stdout,
+# stderr and exit are taken first (before the site's own `2>/dev/null` or projection), replayed to
+# the site unchanged, and recorded for --keep-raw; under a valid --reuse a call whose exact argv is
+# recorded is answered from the record and starts nothing.
+ER_KEEP_STAGE=""
+er_bash() {
+  [ -n "$ER_KEEP$ER_REUSE" ] || { bash "$@"; return; }
+  local _o _e _rc=0
+  _o="$(mktemp "${TMPDIR:-/tmp}/er-raw-out.XXXXXX")" || { bash "$@"; return; }
+  _e="$(mktemp "${TMPDIR:-/tmp}/er-raw-err.XXXXXX")" || { rm -f "$_o"; bash "$@"; return; }
+  if [ "$ER_REUSE_OK" = 1 ] && pk_fetch "$ER_REUSE" "$_o" "$_e" "$@"; then
+    _rc="$PK_RC"
+  else
+    bash "$@" > "$_o" 2> "$_e" || _rc=$?
+  fi
+  [ -z "$ER_KEEP_STAGE" ] || pk_store "$ER_KEEP_STAGE" "$_o" "$_e" "$_rc" "$@" || : > "$ER_KEEP_STAGE/store-failed"
+  cat "$_o"; cat "$_e" >&2
+  rm -f "$_o" "$_e"
+  return "$_rc"
 }
 
 sub() { printf '\n**%s**\n' "$1"; }
@@ -379,7 +436,7 @@ render() {
   # A range that cannot be read is not evidence of an empty one, so it refuses too. On either,
   # `pc` is emptied -- a failed run may have printed a partial row set before it stopped, and no
   # reader below may consume it -- and every `pc`-derived section renders the refusal line.
-  pc="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+  pc="$(er_bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
   pc_rc=$?
   if [ "$pc_rc" -ne 0 ]; then
     pc_refused="exited ${pc_rc} without classifying"
@@ -606,11 +663,16 @@ render() {
           # not the projection's. Its refusal is no longer exit-0-with-stderr: a run that scanned
           # nothing (no CLASSIFY rows, a ref that did not resolve) now exits 2, so it reaches the
           # DETECTOR-REFUSED line below like any other non-zero status.
-          if [ -n "$rt_pc" ]; then
+          # With neither --keep-raw nor --reuse, er_bash is plain `bash`; the hand-off is then spelled
+          # at the executing line itself, where BL-275's binding reads it.
+          if [ -n "$rt_pc" ] && [ -z "$ER_KEEP$ER_REUSE" ]; then
             rt="$(bash "$SELF/retired-tokens.sh" --bucket-rows "$rt_pc" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null)"
             rt_rc=$?
+          elif [ -n "$rt_pc" ]; then
+            rt="$(er_bash "$SELF/retired-tokens.sh" --bucket-rows "$rt_pc" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null)"
+            rt_rc=$?
           else
-            rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null)"
+            rt="$(er_bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null)"
             rt_rc=$?
           fi
           # The projection reads a STAGED copy of the rows (BL-360, `er_stage`); a failed write is
@@ -673,7 +735,7 @@ render() {
   # file's `set -o pipefail`, exactly as at the `retired-layer-token.sh` site.
   sub "Template pre-classification (generated files outside core/ — step 3b; BUCKET  consumer-path  <- template):"
   local tpl tpl_rc
-  tpl="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" --templates 2>/dev/null | awk -F'\t' 'NF>=4 && $1=="T" {print $4"  "$3"  <- "$2}' | sort -u)"
+  tpl="$(er_bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" --templates 2>/dev/null | awk -F'\t' 'NF>=4 && $1=="T" {print $4"  "$3"  <- "$2}' | sort -u)"
   tpl_rc=$?
   if [ "$tpl_rc" -eq 0 ]; then none_or "$tpl"; else
     echo "DETECTOR-REFUSED  preclassify.sh --templates exited ${tpl_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly: reconcile/preclassify.sh <dist> <base> <theirs> <consumer> --templates"
@@ -788,7 +850,7 @@ render() {
   # flag at all, which is the pre-existing path and re-derives correctly.
   local ud_rc ld_rc ud_raw ld_raw ud_pc
   er_tmpf ld_raw ld.raw; er_tmpf ud_raw ud.raw
-  bash "$SELF/layer-drift.sh"        "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$ld_raw" 2>/dev/null
+  er_bash "$SELF/layer-drift.sh"        "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$ld_raw" 2>/dev/null
   ld_rc=$?
   er_tmpf ud_pc ud.pc 2>/dev/null || ud_pc=""
   # The write's status is READ (BL-360): a partial bucket file handed down as the flag would be
@@ -796,13 +858,19 @@ render() {
   if [ -n "$ud_pc" ] && ! printf '%s\n' "$pc" | cat > "$ud_pc" 2>/dev/null; then
     er_tmprm "$ud_pc"; ud_pc=""
   fi
-  if [ -n "$ud_pc" ]; then
+  # The plain-mode branch spells the hand-off at the executing line, as the retired-tokens site does.
+  if [ -n "$ud_pc" ] && [ -z "$ER_KEEP$ER_REUSE" ]; then
     bash "$SELF/unregistered-drift.sh" --bucket-rows "$ud_pc" \
          "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
     ud_rc=$?
     er_tmprm "$ud_pc"
+  elif [ -n "$ud_pc" ]; then
+    er_bash "$SELF/unregistered-drift.sh" --bucket-rows "$ud_pc" \
+         "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
+    ud_rc=$?
+    er_tmprm "$ud_pc"
   else
-    bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
+    er_bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$ud_raw" 2>/dev/null
     ud_rc=$?
   fi
 
@@ -812,7 +880,7 @@ render() {
   # list from one must not read as `0 HARD blockers.` — the one line the whole HARD- contract
   # keys on.
   local hb hb_rc
-  hb="$(bash "$SELF/hard-blockers.sh" \
+  hb="$(er_bash "$SELF/hard-blockers.sh" \
       --ld-rows "$ld_raw" --ld-rc "$ld_rc" \
       --ud-rows "$ud_raw" --ud-rc "$ud_rc" \
       "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
@@ -849,7 +917,7 @@ render() {
   # a file for the reason the `ld`/`ud` runs above are: `$?` after a pipeline is the pipeline's.
   local rl rl_rc rl_raw
   er_tmpf rl_raw rl.raw
-  bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --dist "$DIST" --theirs "$THEIRS" >"$rl_raw" 2>/dev/null
+  er_bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --dist "$DIST" --theirs "$THEIRS" >"$rl_raw" 2>/dev/null
   rl_rc=$?
   # The FILTER is one awk, not grep|sed with `|| true`, for the orientation block's reason: awk
   # exits 0 on no match, so its non-zero status is a failure and is folded into the refusal.
@@ -885,7 +953,7 @@ render() {
   # are not decided here.
   local lr lr_rc lr_raw
   er_tmpf lr_raw lr.raw
-  bash "$SELF/ledger-reverify.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$lr_raw" 2>/dev/null
+  er_bash "$SELF/ledger-reverify.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >"$lr_raw" 2>/dev/null
   lr_rc=$?
   lr="$(awk -F'\t' '$1!="STILL-LIVE"{ d = ($1=="HAND-REVIEW") ? "" : "  "$3; print $1"  "$2 d }' "$lr_raw" | sort -u)"
   er_tmprm "$lr_raw"
@@ -911,7 +979,7 @@ render() {
   # the status of `local`, not of the command, so the refusal would read as success.
   sub "Shadowed local validators (a local fork whose divergence upstream has ADOPTED — the operator confirms and retires, never auto-retired):"
   local sv sv_rc
-  sv="$(bash "$SELF/warn-shadowed-local-validators.sh" --root "$CONSUMER" 2>/dev/null)"
+  sv="$(er_bash "$SELF/warn-shadowed-local-validators.sh" --root "$CONSUMER" 2>/dev/null)"
   sv_rc=$?
   if [ "$sv_rc" -eq 0 ]; then
     none_or "$(printf '%s' "$sv" | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
@@ -949,7 +1017,7 @@ render() {
   local a0_raw a0_rc
   sub "Predicate reclassification (the incoming release moves an adjudication predicate over artifacts already stored):"
   er_tmpf a0_raw a0.pd
-  bash "$SELF/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
+  er_bash "$SELF/predicate-differential.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
   a0_rc=$?
   # A STABLE row is not dropped: its population definition is what lets a second party re-derive
   # the null, and a bare `none` carries none. ONLY THE STATIC DEFINITION is rendered, never the
@@ -959,13 +1027,13 @@ render() {
 
   sub "Retired core fixtures the consumer still carries (core stopped shipping them; the operator retires the orphan):"
   er_tmpf a0_raw a0.rf
-  bash "$SELF/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
+  er_bash "$SELF/retired-fixtures.sh" "$DIST" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
   a0_rc=$?
   a0_render "$a0_rc" "$a0_raw" 'NF{print $1"  "$2"  "$3}' "retired-fixtures.sh <dist> <theirs> <consumer>"
 
   sub "Retired contract shapes in consumer layer files:"
   er_tmpf a0_raw a0.rlc
-  bash "$SELF/retired-layer-contract.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
+  er_bash "$SELF/retired-layer-contract.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
   a0_rc=$?
   a0_render "$a0_rc" "$a0_raw" 'NF{print $1"  "$2"  "$3}' "retired-layer-contract.sh <dist> <base> <theirs> <consumer>"
 
@@ -979,7 +1047,7 @@ render() {
   # is a cost paid by consumers for a sentence that belongs to the reader of this file.
   sub "Retired core passages still carried by a consumer layer file:"
   er_tmpf a0_raw a0.rlp
-  bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
+  er_bash "$SELF/retired-layer-passage.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" >"$a0_raw" 2>/dev/null
   a0_rc=$?
   a0_render "$a0_rc" "$a0_raw" 'NF{print $1"  "$2"  "$3}' "retired-layer-passage.sh <dist> <base> <theirs> <consumer>"
 
@@ -990,7 +1058,7 @@ render() {
   # the four refusal sites above; without it the awk's 0 would render the refusal as `none`.
   sub "Retired status tokens reused in a consumer layer file's own prose:"
   local rlt rlt_rc
-  rlt="$(bash "$SELF/retired-layer-token.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
+  rlt="$(er_bash "$SELF/retired-layer-token.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' 'NF{print $1"  "$2"  "$3}' | sort -u)"
   rlt_rc=$?
   if [ "$rlt_rc" -eq 0 ]; then none_or "$rlt"; else
     echo "DETECTOR-REFUSED  retired-layer-token.sh exited ${rlt_rc} without scanning, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/retired-layer-token.sh <dist> <base> <theirs> <consumer>"
@@ -1000,6 +1068,38 @@ render() {
   echo "<!-- END GENERATED: reconcile-mechanical -->"
 }
 
+if [ "$MODE" = "print" ] && [ -n "$ER_KEEP" ]; then
+  # --keep-raw: the store is built in a staging directory beside <dir> and moved into place only
+  # when F did not move across the render and nothing refused. Its one stderr line says which.
+  # stdout is the region, byte-for-byte what plain print mode prints.
+  _er_f0="$(pk_fingerprint "$DIST" "$BASE" "$CONSUMER" "$THEIRS")"
+  ER_KEEP_STAGE="$(mktemp -d "${ER_KEEP%/}.stage.XXXXXX" 2>/dev/null)" || ER_KEEP_STAGE=""
+  _er_region="$(render)"
+  printf '%s\n' "$_er_region"
+  _er_f1="$(pk_fingerprint "$DIST" "$BASE" "$CONSUMER" "$THEIRS")"
+  _er_why=""
+  if [ -z "$ER_KEEP_STAGE" ]; then _er_why="no staging directory"
+  elif [ -f "$ER_KEEP_STAGE/store-failed" ]; then _er_why="a detector call could not be recorded"
+  elif [ "${_er_f0#pull-key 1 }" = "$_er_f0" ]; then _er_why="fingerprint ${_er_f0#pull-key }"
+  elif [ "$_er_f0" != "$_er_f1" ]; then _er_why="the fingerprint moved during the render"
+  elif ! printf '%s\n' "$_er_region" > "$ER_KEEP_STAGE/region"; then _er_why="the region could not be recorded"
+  else
+    grep -q '^DETECTOR-REFUSED' "$ER_KEEP_STAGE/region"; _er_g=$?
+    if [ "$_er_g" -eq 0 ]; then _er_why="the render carries DETECTOR-REFUSED"
+    elif [ "$_er_g" -ne 1 ]; then _er_why="the region could not be read for DETECTOR-REFUSED"
+    elif [ -e "$ER_KEEP" ]; then _er_why="$ER_KEEP already exists"
+    fi
+  fi
+  if [ -z "$_er_why" ] && printf '%s\n' "$_er_f0" > "$ER_KEEP_STAGE/F" \
+     && mv "$ER_KEEP_STAGE" "$ER_KEEP" 2>/dev/null; then
+    echo "emit-report: keep-raw: kept $ER_KEEP" >&2
+  else
+    [ -n "$_er_why" ] || _er_why="the store could not be moved into place"
+    [ -z "$ER_KEEP_STAGE" ] || rm -rf "$ER_KEEP_STAGE"
+    echo "emit-report: keep-raw: not kept ($_er_why)" >&2
+  fi
+  exit 0
+fi
 if [ "$MODE" = "print" ]; then
   render
   exit 0
@@ -1091,7 +1191,17 @@ ar_record() {
   # Never on the `--region-from` seam: the region there is a caller's file, not a render, and this
   # record is what apply mode trusts as the approved side. The seam is read-only.
   [ "$AR_APPLY" = 0 ] && [ -z "$REGION_FROM" ] && [ -n "$_ar_key" ] && [ -n "$got" ] || return 0
-  ar_read && return 0
+  if [ "$ER_PULLREC" = 1 ]; then
+    # THE DRIVER'S FIRST APPLY RENDER (BL-1190 D-2). The record stays first-wins only when the
+    # driver wrote it for this key: the sidecar names the key and the record's blob. A record a
+    # bare run wrote, or one in an old or unreadable format, is replaced here, before the union
+    # gate reads it, so a pre-driver record can neither approve this pull nor wedge it.
+    if ar_read && [ "$(cat "$_ar_rec.pull" 2>/dev/null)" = "apply $_ar_key $(git hash-object --no-filters -- "$_ar_rec" 2>/dev/null)" ]; then
+      return 0
+    fi
+  else
+    ar_read && return 0
+  fi
   # A region whose digest FAILED (a sha256 tool exists and broke) is not recorded: apply mode would
   # then only be able to refuse on it. No tool at all (UNAVAILABLE) still records -- the region is
   # what the comparison uses, and the digest is only how a re-approval names it.
@@ -1101,6 +1211,9 @@ ar_record() {
   # nothing on this process's stdout, and the temp file is removed rather than moved into place.
   if printf 'ai-dlc-approved-region 1\nkey %s\n%s\n' "$_ar_key" "$got" | cat > "$t" 2>/dev/null; then
     mv -f "$t" "$_ar_rec" 2>/dev/null || rm -f "$t"
+    if [ "$ER_PULLREC" = 1 ]; then
+      printf 'apply %s %s\n' "$_ar_key" "$(git hash-object --no-filters -- "$_ar_rec" 2>/dev/null)" > "$_ar_rec.pull" 2>/dev/null || rm -f "$_ar_rec.pull"
+    fi
   else
     rm -f "$t"
   fi

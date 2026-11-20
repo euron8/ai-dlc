@@ -33,6 +33,11 @@
 #                      is exactly that contract, and it is why `core/team-roles`
 #                      needs no setup-substitution sites at all: there is no
 #                      consumer-specific string left in a core file to mask.
+#                      Roles merge whole-role, consumer wins, except that each
+#                      template-owned key in SM_ROLE_FILL_KEYS is filled into a
+#                      role both sides declare when the consumer entry lacks it;
+#                      one `settings-merge: filled <keys> into aiDlcRoles.<role>`
+#                      line per filled role goes to stdout (also under --check).
 #   2c. bashOutputMaxChars
 #                    — template supplies, consumer wins. The harness cap on
 #                      inline Bash output: past it, a result becomes a path plus
@@ -175,13 +180,44 @@ if printf '%s' "$BASE_JSON" | jq -e --slurpfile tmpl "$TEMPLATE" '
    ' >/dev/null 2>&1; then
   RETIRE_CM=true
 fi
-RETIRE_FLAG=false
-if printf '%s' "$BASE_JSON" | jq -e --slurpfile tmpl "$TEMPLATE" '
-     ($tmpl[0].hooks // {}) | type == "object" and length > 0' >/dev/null 2>&1; then
-  RETIRE_FLAG=true
-fi
+# Template-owned role keys: filled into a consumer role entry that exists on BOTH sides and LACKS
+# the key. Presence is the opt-out: a consumer that declares the key keeps its value, whatever it
+# is. A role absent from the consumer is not created here (the role-level merge below adds it).
+SM_ROLE_FILL_KEYS='["omitClaudeMd","disallowedTools"]'
+# One jq answers both the hook-retirement flag and the role fills, so the fill adds no exec.
+# Line 1 is `<retire flag><TAB><fills JSON>`; every further line is one report row.
+SM_NL='
+'
+SM_TAB=$'\t'
+SM_FR="$(printf '%s' "$BASE_JSON" | jq -r --argjson keys "$SM_ROLE_FILL_KEYS" --slurpfile tmpl "$TEMPLATE" '
+    (try (($tmpl[0].hooks // {}) | type == "object" and length > 0) catch false) as $flag
+    | ($tmpl[0].aiDlcRoles // {}) as $tr | (.aiDlcRoles // {}) as $ur
+    | (if ($tr | type) == "object" and ($ur | type) == "object" then
+        [ $ur | keys[] as $r
+          | select(($tr[$r] | type) == "object" and ($ur[$r] | type) == "object")
+          | { role: $r,
+              keys: [ $keys[] as $k | select(($tr[$r] | has($k)) and (($ur[$r] | has($k)) | not)) | $k ] }
+          | select(.keys | length > 0) ]
+      else [] end) as $fills
+    | "\($flag)\t\($fills | tojson)",
+      ($fills[] | "settings-merge: filled \(.keys | join(",")) into aiDlcRoles.\(.role)")
+  ' 2>/dev/null)" || {
+  echo "FAIL: the role-key fill could not be evaluated; consumer left untouched" >&2; exit 1; }
+SM_FR_HEAD="${SM_FR%%"$SM_NL"*}"
+case "$SM_FR" in *"$SM_NL"*) ROLE_FILL_ROWS="${SM_FR#*"$SM_NL"}" ;; *) ROLE_FILL_ROWS="" ;; esac
+RETIRE_FLAG="${SM_FR_HEAD%%"$SM_TAB"*}"
+ROLE_FILLS="${SM_FR_HEAD#*"$SM_TAB"}"
+case "$RETIRE_FLAG" in
+  true|false) ;;
+  *) echo "FAIL: the role-key fill produced no verdict; consumer left untouched" >&2; exit 1 ;;
+esac
+sm_report_fills() {
+  [ -n "$ROLE_FILL_ROWS" ] && printf '%s\n' "$ROLE_FILL_ROWS"
+  return 0
+}
 
 if [ "$CHECK" -eq 1 ]; then
+  sm_report_fills
   if [ "$RETIRE_CM" = true ]; then
     echo "enabledPlugins: this project's context-mode enable is retired (context-mode is installed once at user scope); every user of this project needs it: claude plugin install context-mode@context-mode --scope user"
   fi
@@ -228,7 +264,7 @@ else
 fi
 
 if ! printf '%s' "$BASE_JSON" | jq \
-      --argjson retire "$RETIRE_FLAG" --slurpfile tmpl "$TEMPLATE" '
+      --argjson retire "$RETIRE_FLAG" --argjson fills "$ROLE_FILLS" --slurpfile tmpl "$TEMPLATE" '
     . as $u |
     ($tmpl[0]) as $t |
 
@@ -261,9 +297,11 @@ if ! printf '%s' "$BASE_JSON" | jq \
     # aiDlcRoles merges at the ROLE level, not per field: a consumer entry replaces
     # the shipped one whole. Merging per field would let an upstream default for
     # `effort` reappear inside an entry the consumer had deliberately rewritten, and
-    # the model and effort of a role are one decision.
+    # the model and effort of a role are one decision. The one exception is $fills:
+    # the template-owned keys (SM_ROLE_FILL_KEYS) a consumer entry lacks.
     | ((($t.aiDlcModels // {}) + ($u.aiDlcModels // {}))) as $models
-    | ((($t.aiDlcRoles  // {}) + ($u.aiDlcRoles  // {}))) as $roles
+    | ((($t.aiDlcRoles  // {}) + ($u.aiDlcRoles  // {}))
+       | reduce $fills[] as $f (.; reduce $f.keys[] as $k (.; .[$f.role][$k] = $t.aiDlcRoles[$f.role][$k]))) as $roles
     | if ($models | length) > 0 then .aiDlcModels = $models else . end
     | if ($roles  | length) > 0 then .aiDlcRoles  = $roles  else . end
     # bashOutputMaxChars is a scalar, so "additive, user wins" is `//`. Guarded the
@@ -288,6 +326,7 @@ mv "$OUT" "$CONSUMER" || { echo "FAIL: could not move the merged settings into p
 trap - EXIT
 
 echo "settings.json reconciled (ai-dlc hooks upserted; user config preserved)"
+sm_report_fills
 if [ -n "$DECLARED_FAMILIES" ]; then
   echo "  env model windows declared for: ${DECLARED_FAMILIES} (consumer-owned, untouched)"
 elif [ "$MODEL_WINDOW_NEEDED" = yes ]; then

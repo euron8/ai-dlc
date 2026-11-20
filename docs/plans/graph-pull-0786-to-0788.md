@@ -141,9 +141,9 @@ this pull; the other four sprint-318 entries were closed by graph's 0.786.0 pull
    branch. In step 8:
 
    - **The governing disposition is the `NAMED-UPSTREAM` bullet**
-     (`core/skills/ai-dlc-update/SKILL.md:2588`), which allows a hand annotation on absorption. The
+     (`core/skills/ai-dlc-update/SKILL.md:1356`), which allows a hand annotation on absorption. The
      "close ONLY `CLOSE-CANDIDATE` rows" sentence above it
-     (`core/skills/ai-dlc-update/SKILL.md:2575`) does not forbid this. The entry carries no
+     (`core/skills/ai-dlc-update/SKILL.md:1343`) does not forbid this. The entry carries no
      `verify:` receipt, so `NAMED-UPSTREAM` is the only mechanical signal it will ever get.
    - **The five sprint-318 ids, by id:**
 
@@ -168,14 +168,14 @@ this pull; the other four sprint-318 entries were closed by graph's 0.786.0 pull
    - **Take step 8's "before" row set AFTER the annotation.** Taken before it, the
      `NAMED-UPSTREAM` row vanishes and reads as a mismatch.
    - **Run `ledger-rotate.sh` the way step 8 prescribes
-     (`core/skills/ai-dlc-update/SKILL.md:2629`, usage at
+     (`core/skills/ai-dlc-update/SKILL.md:1397`, usage at
      `core/skills/ai-dlc-update/reconcile/ledger-rotate.sh:94`), and expect exactly one entry to
-     move.** Then step 8's acceptance test (`core/skills/ai-dlc-update/SKILL.md:2640`): the
+     move.** Then step 8's acceptance test (`core/skills/ai-dlc-update/SKILL.md:1408`): the
      re-verifier's `cut -f1,2 | sort` row set is identical before and after `--apply`.
    - **The `HAND-REVIEW` row for the sprint-319 implementation-push entry is not this pull's
      close.** Leave it; it is `verify: manual` and is adjudicated on its own.
    - **The PR merge needs the operator's explicit approval**
-     (`core/skills/ai-dlc-update/SKILL.md:2664`), separate from the `apply` argument.
+     (`core/skills/ai-dlc-update/SKILL.md:1444`), separate from the `apply` argument.
 
 7. **THE CHECK 22 WAIVER IS ALREADY LIVE IN GRAPH, NOT A CONSEQUENCE OF THIS PULL.** The dispatch
    guard that reads Check 22 waivers shipped at 0.784.0 and graph installed it with its 0.785.0
