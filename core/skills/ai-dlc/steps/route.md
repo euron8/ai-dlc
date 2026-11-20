@@ -635,6 +635,38 @@ Compose the question from what you resolved, not from memory:
 - The resolved `pipeline_variant` and `sprint_id`.
 - Anything in the ask you are deliberately NOT taking this sprint, named.
 
+**A tagged carve-out is the prior close-out's proposal, not the operator's ask.**
+A captured-ask line that opens with `[S<N> close-out proposes]` was written
+by sprint `<N>`'s close-out, not by the operator. The unit to keep or strike
+is that tagged line only; the rest of its parent item stands as asked. Treat
+an untagged line the same way, and name it as possibly inherited from the
+prior close-out, when the captured entry's header reads `-- /ai-dlc`, its
+body has the close-out's shape (it leads with a theme, names the epic, then
+numbers the in-scope items), and the line or clause defers or excludes work
+or leaves an item with the operator; an item marked "stretch" is not a
+carve-out. The capture hook moves the command token into the
+header, so never key on the body opening with `/ai-dlc`. Put each carve-out
+in the same `AskUserQuestion` as the scope, as its own keep/strike question
+that quotes the line and names the sprint whose close-out wrote it, or says
+"possibly inherited"; when they outnumber the questions the call holds
+beside the scope question, ask one question listing them all with keep-all
+and strike-all options, and Other names the ones to strike. Never ask in a
+second call: `scope_confirmed_cite` cites one answer. Never present a
+carve-out as part of what the operator asked for. A tagged or
+possibly-inherited line is never a prior answer for Rule 11(a)'s search;
+the keep/strike answer is the citation.
+
+- Struck: the item is in scope. Record `scope_confirmed: corrected` and fold
+  the item into the scope carried forward; the tagged bytes stay in
+  `user_request_verbatim`.
+- Kept, and it defers work: file it under "File every deferred part of the
+  ask BEFORE leaving Step 6" below. When it names a filed `CO-` id that is
+  not CLOSED, list that id in `scope_deferred_items` and do not file it
+  again.
+- Kept, and it leaves an item with the operator: name the item
+  operator-owned in the confirmed scope. Do not file it or list it in
+  `scope_deferred_items`.
+
 **Option labels carry no recommendation.** Do not append `(Recommended)`, or
 any equivalent, to an option. The skill asks for that token in three other
 places — a Rule 11(a) question whose options leave no operator-owned value in
@@ -742,9 +774,10 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
       lead chose is the self-declaration hole this field exists to close.
     - `scope_deferred_items` — `none` when the confirmed scope takes the whole
       ask; otherwise ONE line holding a bracketed list of the carry-over ids you
-      filed at the pause point above, e.g.
+      filed at the pause point above, and any filed, not-CLOSED `CO-` id a kept
+      carve-out names, e.g.
       `scope_deferred_items: [CO-S315-PHASE-2-BACKFILL, CO-S315-PHASE-3-CUTOVER]`.
-      Never a multi-line list and never an id you did not file: Check 34
+      Never a multi-line list and never an id that is not filed: Check 34
       resolves every id to a `### <id>` heading in the live carry-over backlog
       or `carry-over-backlog-archive.md`, and fails one that is missing, malformed
       or CLOSED)

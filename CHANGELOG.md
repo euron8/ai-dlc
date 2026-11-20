@@ -19,6 +19,26 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1183.0] - 2026-11-19
+
+### PC-S323-PLAIN-GLOSS-DUTY-SCOPED-TO-QUESTION-TEXT-ONLY-LEAVES-OPERATOR-PROSE-AND-COINED-TERMS-UNBOUNDED (BL-1181 closed): everything the lead shows the operator explains its ids in plain words and uses no label the lead made up
+
+- For the operator: before this release, the duty to explain an id in plain words covered only the text of a question put to the operator. The Production Validation Checkpoint, status reports, answers to the operator's own questions and the next-sprint prompt could cite raw ids, and nothing stopped the lead from using a name it had invented for part of the operator's request (graph's sprint 323 reached the operator with "venue wall 2").
+- `SKILL.md` Rule 11(a) now extends that duty to every piece of lead prose the operator reads: checkpoints and pauses, status reports, answers, and the handoff, resume and next-sprint prompts. A label the lead coined is replaced by the plain phrase it stands for; defining it beside the label is not enough. Every requirement, check, record, story or decision id carries a short plain-language clause saying what it is. Where a slot must quote an id or text verbatim, the quote stays as it is and the clause goes beside it.
+- The deploy-validate checkpoint and the retro's paste-ready next-sprint prompt each carry a paragraph applying the duty, and the checkpoint template's escalation-entry-id and HARD_BLOCK-id slots ask for the clause.
+
+### PC-S323-DEPLOY-VALIDATE-STEP-2-BARE-ADD-UNEXECUTABLE-UNDER-CONSUMER-BLANKET-TXT-IGNORE (BL-1182 closed): the sprint-merge record commits on a consumer that ignores `*.txt`
+
+- For the consumer lead: deploy-validate step 2's sprint-merge record block now commits `sprint-pr-merge.txt` with `git add -f`. Before this release a consumer whose `.gitignore` ignores `*.txt` got `RECORD: HARD_BLOCK write`, whose "correct the values and re-run" remedy could not fix it, and had to commit the record by hand. No other line of the block changes. A consumer that added a `.gitignore` negation for the record as a workaround can keep it or drop it.
+- Consumer note: both changes are step and skill prose; they take effect on a consumer once the delivering pull's reconcile PR merges.
+
+### PC-S323-7D-AND-ROUTE-STEP6-RENDER-PRIOR-CLOSEOUT-EXCLUSION-LINE-AS-OPERATOR-INTENT-UNTAGGED (BL-1183 closed): a carve-out the sprint close-out proposes is no longer confirmed back to the operator as their own ask
+
+- Before this release, the retro's next-sprint prompt was written entirely in the operator's voice, so a line the close-out proposed to leave out ("X stays with me", "operator-owned, not dev work: X") was pasted, captured as the operator's own words, and offered back at Step 6's scope confirmation as part of what they asked for.
+- `steps/retro.md` §7d now writes each such carve-out on its own third-person line opening with `[S<N> close-out proposes]`, and the scope outline gains a `Pipeline carve-outs` line listing them. Marking an item "stretch" is not a carve-out.
+- `steps/route.md` Step 6 asks keep or strike for each carve-out inside the one scope `AskUserQuestion`, quoting the line and naming the sprint whose close-out wrote it; when they outnumber the slots beside the scope question, one combined question lists them all. A struck carve-out puts the item back in scope (`scope_confirmed: corrected`). A kept deferral is filed like any deferred part of the ask, or its existing open `CO-` id is listed in `scope_deferred_items`, whose field text now admits such an id. A kept operator-owned item is named as such in the confirmed scope and not filed. A carve-out line is never a prior answer for Rule 11(a)'s search; the keep/strike answer is the citation.
+- Consumer note: this is rulebook prose, live from the reconcile PR merge. The first next-sprint prompt after that comes from a close-out that wrote no tag; Step 6 catches it through the untagged branch: a captured entry that leads with a theme, names the epic and numbers its in-scope items, whose line defers, excludes or leaves work with the operator, is asked about as "possibly inherited".
+
 ## [0.1182.0] - 2026-11-19
 
 ### Five fixtures stop copying the hermetic runner into their worlds, and five operator rulings are recorded (BL-1155 advances, stays PARTIAL; BL-1133 and BL-1148 closed)
