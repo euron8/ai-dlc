@@ -137,6 +137,7 @@ an open question. Report on any question, on any decision, and on completion inc
 
 Reports say in plain words what each release delivers and for whom; versions, cluster labels and BL ids only
 trail. Name a session by its name (ai-dlc-xx) plus the subject.
+A clock time in any message or log entry is read from `date` in that same turn, never estimated.
 
 ## Tier findings on consequence
 

@@ -25,11 +25,10 @@ Incident stories, measurements, figures, dates, batch or version numbers used as
 quotations used as justification, and "why" paragraphs live in the operator's memory directory
 (`~/.claude/projects/-Users-n8-git-ai-dlc/memory/`), `docs/context-hardening-notes.md` or the CHANGELOG, never
 in this channel. State the rule, the concrete detail needed to follow it (paths, commands, flags, env vars,
-invariant ids, arm names) and the hazard's shape. `core/scripts/audit-rule-files.sh` blocks origin tags and
-dates. Delete a passage only if it is vestigial: its enforcing mechanism can be NAMED and its behavioural
-instruction lives authoritatively elsewhere; grep for inbound references before every cut. The same applies to
-`SKILL.md`, `steps/*.md` and role files: no rationale, narrative, version tag or date;
-`core/scripts/audit-rule-files.sh` blocks origin tags and dates there.
+invariant ids, arm names) and the hazard's shape. Delete a passage only if it is vestigial: its enforcing
+mechanism can be NAMED and its behavioural instruction lives authoritatively elsewhere; grep for inbound
+references before every cut. The same applies to `SKILL.md`, `steps/*.md` and role files: no rationale,
+narrative, version tag or date; `core/scripts/audit-rule-files.sh` blocks origin tags and dates in both.
 
 ## A rule survives a compaction only if something other than memory CARRIES it
 

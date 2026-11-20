@@ -4394,6 +4394,7 @@ Work list, each reach an upper bound on s323:
 4. Spawns of one role re-write the same role contract to the cache: sibling shards cache-write 18 to 37K tokens each. Spawns diverge at their first tool call (each tool_use id is unique), so only the tools and the agent-definition body form a prefix later spawns can read from cache; a role file reached by a Read is written again by every spawn. Mechanism: the role file's text goes into the rendered definition body (`core/scripts/render-agent-definitions.sh`, between ROLE-CONTRACT markers), and the dispatch guard credits that body as the role-contract carrier only through the SessionStart snapshot of the definitions the session loaded, otherwise citing the role file in the prompt. Reach: about 5K cache-write tokens per later spawn of a role within the cache lifetime (measured once, analyst on sonnet); not priced on s323. The earlier $118 was sized on in-wave sibling shards, which this mechanism does not reach.
 5. `templates/CLAUDE.md.template` puts "## Project Operations Protocol" (line 37) and "## Deployment Commands" (line 55) in the consumer's always-loaded `CLAUDE.md`. On graph those two sections are 11,776 B and 2,681 B of a 21,850 B file, loaded into every agent that has not opted out and into the lead after every compaction (134 in s323). Give them a home the ops seat and deploy-validate read on demand. Evidence that nothing in the engine depends on their being in `CLAUDE.md`: `core/skills/ai-dlc/steps/deploy-validate.md` and `core/team-roles/ops.md` each contain 0 references to `CLAUDE.md` (control: `deploy-validate.md` mentions "ops" 5 times, case-insensitive); the role files that name `CLAUDE.md` are `core/team-roles/dev.md:127` and `core/team-roles/protected-path-editor.md:7`. Consumer-side progress, 2026-11-20, done by graph under the operator's approval and never from here: graph PR #1341 (885f53e83) moved its deploy and ops protocol to `docs/operator-runbooks/deploy-protocol.md`, and graph's `CLAUDE.md` went from 21,850 B to 10,249 B (`git cat-file -s`; control: the parent commit reads 21,850). The engine item, the template's two sections, still stands so a future install does not put them back. Reach: not sized; the part reaching opted-in roles falls inside item 1.
 6. Every `settings-merge.sh` fill reaches a consumer whose `.claude/settings.json` lacks it, on any pull. Items 1 and 2 reach an installed role only through the merge, and `apply.sh` asked for the merge only when `templates/settings.json.template` changed in the pulled range, so a fill that shipped without a template change (the role-key fill, 0.1191.0) reaches no consumer until the template next moves.
+7. Outcome reading owed for item 6: graph's `.claude/settings.json` carries the role keys (`omitClaudeMd`, `disallowedTools`) after the first pull that delivers 0.1195.0 (rulings log :542).
 
 Items 1 and 2 cut the same first-request tokens and are bounded together by about $300.
 
@@ -4509,6 +4510,8 @@ Expected movement: the fix removes the lead hours and calls a pull spends chaini
 
 Owed: the outcome reading, on the next complete graph sprint that runs this release, against the baseline above. This release dispatches no pull; when a pull runs is the operator's to schedule.
 
+Observation, unbuilt (NOTE): `pull.sh gate` prints `GATE DEFER` but passes through only the SAFE-STOP, CARRY and UNDECIDED rows (`core/skills/ai-dlc-update/reconcile/pull.sh:108`), so the `SELF-UPDATE-DEFER` row naming the arm that decided is hidden (rulings log :462, :467; ruled a pre-existing NOTE at :515).
+
 Cross-goal items carried by this release, recorded here as cross-references only:
 
 - BL-1187: the settings merge fills absent template-owned role keys (`omitClaudeMd`, `disallowedTools`) into an existing consumer role, keeps the per-key opt-out (`omitClaudeMd: false`, `disallowedTools: ""`), and adds a report row naming the roles changed.
@@ -4572,6 +4575,10 @@ Work list:
 2. Make the `range` row move when the derived range moves: include the resolved base and theirs shas in the row's value, so a range that changes with no declared-path change re-dispatches the declarer. Measure the false-positive set over the real history (how many pushes would re-dispatch) before shipping.
 3. Bind the measured set both ways: every fixture whose run reads the real repository's history (derived by the grep above, not hand-listed) carries a `git.decl` `range` or `pin` line or is dispatched always, and a `range` line names a fixture that reads history. Prove the check fires on a seeded fixture that reads `git log` with no declaration.
 4. A fixture that derives a range from history in its own seed outside the hook (`range.sh` run by `seed.sh`) keeps ONE derivation, and its recorded pass is keyed on the derived range.
+5. E12's tip-review NOTEs (rulings log :529):
+   - a failing key run of `scripts/suite-content-key.sh` leaves its `sck-ranges.*` directories under `TMPDIR` (seven removed by hand at E12's cleanup, rulings log :535);
+   - no fixture's own seeded world carries a `git.decl` `range` line (`self-update-join-gate`'s real `git.decl` is the only one), so no fixture exercises the `### ranges` component;
+   - the whole-suite skip's comment at `.githooks/pre-push:4300-4304` lists what the key hashes and omits the ranges component.
 
 Decision rule: "a check that cannot fire reads exactly like one that passed" (`CLAUDE.md`) and "Never ship a check that wedges live work" (`.claude/rules/mechanism-design.md`). Related: BL-868.
 
@@ -4589,7 +4596,7 @@ verify: manual
 
 **DEFECT.** Filed 2026-11-20 (batch 261, E10). Owner: `CLAUDE.md` "Build process" builder step 4; `scripts/seed-verdict-store.sh` (the armed runner, unchanged); `scripts/seed-triage.sh` (new, E11).
 
-Goal: a release's reds surface at the owner, not at the lead. One done condition: items 1 and 2 are on `origin/main`.
+Goal: a release's reds surface at the owner, not at the lead. One done condition: items 3, 4 and 5 are on `origin/main` (items 1 and 2 landed in batch 261, E10 and E11).
 
 Record, from the lead's batch-261 rulings log (lines 456 to 505, read by the lead, not re-derived here): bundle B ran about four combine, counted-run, route and fix passes at 30 to 45 minutes each, and five owner reds first showed in the lead's counted runs: E3's undeclared `awk`, E1's untagged `continue.sh` starts (C1), E1's gate-transition C2, C3 and J4 on 15 cells, E5's removed Check-1 directive, and E5's fix prose tripping the enforcement map. Each owner had run its edited fixtures plainly, per builder step 4.
 
@@ -4597,12 +4604,48 @@ Work list:
 
 1. Builder step 4's fixture run is armed: each edited fixture runs once through `scripts/seed-verdict-store.sh`, which runs it through `core/scripts/hermetic-run.sh` with the hook's own `fxcount_arm`, exactly as the push judges it. It replaces the plain run and adds none.
 2. The lead's triage script, `scripts/seed-triage.sh`, reads the lead's single counted run on a bundle and routes each red to its owner. Owner: E11 (ai-dlc-6d).
+3. `scripts/seed-triage.sh`'s two DEFECTs left unfolded at E11's tip review (rulings log :513): it reads a keep file that may be stale against the unit's rc line in the seed log, and one J3 line shape is classified oddly. Each is fixed with a probe that fails without the fix.
+4. `scripts/pregate-self-check.sh` section f runs only when the diff touches `core/scripts/*.sh` or `scripts/*.sh` (`scripts/pregate-self-check.sh:550`), so a release editing a shell file under `core/skills/**` (E13's `core/skills/ai-dlc-update/reconcile/apply.sh`, rulings log :533) gets no section-f run of the fixtures that reach it. Section f's trigger covers every tracked `*.sh` a fixture can reach.
+5. The lead's counted seed passes `scripts/predict-push-set.sh`'s run names as printed, `@consumer` units included: E13's counted seed ran 78 of 126 predicted units with the `@consumer` units stripped, and the push ran the other 48 (rulings log :539). Carrier: `scripts/seed-triage.sh --tree` compares the seed log's unit set with `predict-push-set.sh`'s RUN set for that tree and reports every RUN unit the seed did not run, `@consumer` included.
 
 Not built, by operator ruling: a seed of a scratch combine of all bundle members before READY. "No seeds" stands (`.claude/rules/operator-rulings.md`, "The burden of verifying a change is proportional to the change"); combine reds stay with the lead's counted run, read by item 2.
 
 **PARTIAL (batch 261, E10; no LANDED line).** Item 1 is built: `CLAUDE.md` builder step 4 runs each edited fixture through `scripts/seed-verdict-store.sh` in place of the plain run, and plainly only for a fixture marked `.undeclarable` (today `hook-registration-join` and `retro-compliance-workflow`), which the runner refuses and the push also runs plainly. No script changed; the runner already extracts the hook's own `fxcount_arm`. Probe, run once by hand on `advisor-gate-deny` copies at e85281761. World A adds one untagged `bash "$HOOK"` start. A plain `run.sh` reads rc 0 PASS, and so does an unarmed `core/scripts/hermetic-run.sh` (the mutant). The armed runner reads rc 1, `FAIL (C1): core/hooks/ai-dlc-advisor-gate.sh started as a separate program with no FXCELL tag` and J3 `21 *` measured 22. World B adds an undeclared `uname`. A plain run reads rc 0 PASS; the armed runner reads rc 1 `FAIL undeclared tool(s) called: uname`. The judge runs only after a green fixture (`core/scripts/hermetic-run.sh:709`), so an undeclared-tool FAIL hides any C1 behind it until it is fixed. Owed: item 2 (E11).
 
 **PARTIAL (batch 261, E11; no LANDED line).** Item 2 is built: `scripts/seed-triage.sh [--tree <dir>] [--apply <tree>] <seed-log> <keep-dir>` (distribution-only, ships nothing). For every unit whose rc line is not 0, it prints each failing line from that unit's `<keep>/<fx>.out`, or from its `--- <fx>@consumer` section of `consumer.out`, plus every log line the seeder printed under the unit that the kept output lacks. A failing line is one with FAIL, BROKEN, REFUSED, undeclared, ERROR or `REQUIRED input` anywhere in it; only the pass shapes are excluded. A unit is J3-ONLY only at rc 1 with at least one J3/J6 line and no other failing line. It is UNDECLARABLE only at rc 2 with hermetic-run's `carries no inputs.decl` refusal and `.undeclarable` in the tree. Every other non-zero unit is RED and also prints every line that is not a pass shape. The unit count is taken by two grammars, which must agree and be non-zero; every plain unit needs its keep file; and any line the seeder prints of its own, other than its gate-wait notices, is a refusal. `--apply` rewrites J3 rows and appends J6 rows for J3-ONLY units only, checking every row before it writes any. On the lead's bB4 seed it reads 3 RED: gate-transition (J3 1, J4 3, C2 15, C3 15), implementation-join-yield (J3 2, C1 4) and self-update-join-gate. It reads 17 J3-ONLY and 2 UNDECLARABLE. `--apply` on bB4's tree (6bf1ecb29) reproduces the lead's hand-set files at 70e43feff: 16 byte-equal, and retro-branch-behind-main equal except that its two J6 rows are in the other order. On bB5 it reads self-update-join-gate RED, with its unanchored `FAIL undeclared tool(s)` line classified.
+
+Step: n/a
+
+verify: manual
+
+## BL-1194 — a fresh owner session starts without the plan's owner-rules block: the lead's shared brief never named it, and all five fresh owners in batch 261 missed a rule it carries
+
+**DEFECT.** Filed 2026-11-20 (batch 261, close). Owner: `docs/plans/graph-ledger-full-drain.md` action 0 (`:781`, the owner-rules block at `:869-873`); the lead's per-owner brief.
+
+Goal: every owner the lead starts reads the owner-rules block before its first edit. One done condition: items 1 and 2 are on `origin/main`, and item 2's binding reports a seeded copy of the plan whose action 0 lacks item 1's instruction and stays quiet on the real plan.
+
+Record, from the lead's batch-261 rulings log (line 517, read by the lead, not re-derived here): the shared brief `brief-common.txt` never named the plan's owner-rules block, and all five fresh owners (ai-dlc-86, ai-dlc-a0, ai-dlc-6d, and two ai-dlc-67 sessions) missed hands, the `ACCEPTED` reply, or the adversary timing it states. 6d recorded the same DEFECT as its own (rulings log :509: no hand, detached HEAD, owner block read late).
+
+Work list:
+
+1. The tracked text the lead builds owner briefs from, action 0 of `docs/plans/graph-ledger-full-drain.md` (the bullet at `:869`, "Send it verbatim"), says the per-owner brief names the owner-rules block by path and line (the block opening `**Release owner rules`) and tells the owner to read it before its first edit.
+2. A binding on that tracked text: a validator arm fails when action 0 lacks item 1's instruction, proved once by hand in both directions.
+
+Step: n/a
+
+verify: manual
+
+## BL-1195 — the self-update gate reads the consumer hook's `hermetic-run.sh` mention at `core/git-hooks/pre-push:3807` as UNDECIDED
+
+**DEFECT.** Filed 2026-11-20 (batch 261, close). Owner: `core/skills/ai-dlc-update/reconcile/self-update-gate.sh` (`gate_argv_scan`, `:557-659`).
+
+Goal: every `scripts/ai-dlc/hermetic-run.sh` mention in the consumer hook is classified, so a pull whose range changes `hermetic-run.sh` is not left UNDECIDED by the hook's own text. One done condition: `gate_argv_scan core/git-hooks/pre-push hermetic-run.sh` on `origin/main` prints no `U` row, and a near-miss probe line still prints `U`.
+
+Record: the rulings log (line 497) records that fix C (mention kind `eq`, 0.1193.0) took `hermetic-run.sh`'s `:3143` from U to M while its `:2758` and `:3807` stayed U. Measured on 966a7cc92 by running `gate_argv_scan` (extracted from `self-update-gate.sh:557-659`) over `core/git-hooks/pre-push` for `hermetic-run.sh`: 9 rows, one `U`, at `:3807` (`set -- bash "$ct/scripts/ai-dlc/hermetic-run.sh" --root "$ct" "$cf"`: the path follows a variable prefix inside a quoted word, which no kind spells). `:2758` (`if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh")`, inside an awk program) now reads `M eq`, so it is no longer UNDECIDED on this tree. Control: the same scan for `core-paths.sh` prints 3 rows, all `M`. The distribution hook `.githooks/pre-push` carries the same shape at `:4020`; it is not the gate's subject.
+
+Work list:
+
+1. Classify the `:3807` shape (a run whose path follows a `"$var/` prefix) as a run or a mention the gate can decide, and keep `:2758`'s awk string-equality shape classified; add a near-miss line that stays `U` and prove the rule fires on the hook line and not on the near-miss, once by hand.
 
 Step: n/a
 
