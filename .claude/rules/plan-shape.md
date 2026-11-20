@@ -96,7 +96,7 @@ it was handed off:
 - **A numbered action that DESIGNATES THE LEAD before anything is dispatched.** Operator
   instruction at batch 236: "if multiple fresh ai-dlc sessions exist that we designate a lead
   session for orchestration", and "I want this to be a standard plan shape going forward." The
-  session that accepts the one-liner is the lead; it runs `ListAgents`, roll-calls every other
+  session that accepts the one-liner is the lead; it runs `ListAgents`, surveys every other
   `ai-dlc-*` session for its state, and assigns each available one a cluster as one release after
   scoping. The lead ORCHESTRATES and NEVER BUILDS ("this is the lead session and should be
   orchestrating, not building"), and it alone allocates VERSIONs and backlog ids — measured at

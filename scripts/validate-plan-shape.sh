@@ -564,7 +564,7 @@ for f in "${FILES[@]}"; do
   # THE OPERATOR WANTS THE MULTI-SESSION RELEASE TRAIN AS A STANDARD PLAN SHAPE. A lead that also
   # builds starves orchestration (scoping, allocation, slots and landing verification all wait on
   # it), and owners that build alone serialize the work that hands exist to parallelize. A plan
-  # that never says who leads, that the lead roll-calls the other sessions, that the lead never
+  # that never says who leads, that the lead surveys the other sessions, that the lead never
   # builds and that owners build through hands leaves each fresh session to improvise the shape.
   #
   # WHAT IT BINDS: a col-0 numbered action in the Next actions section carries the marker
@@ -575,9 +575,9 @@ for f in "${FILES[@]}"; do
   # accepted prefixes because the designation precedes the dispatch action and must not force
   # the renumbering that RESUME blocks and P-arm history cite.
   #
-  # THIS ARM CANNOT VERIFY THE ROLL CALL HAPPENED, for the reason P11, P12 and P13 give: an act
+  # THIS ARM CANNOT VERIFY THE OPENING SURVEY HAPPENED, for the reason P11, P12 and P13 give: an act
   # at a point in time is not a property of the text. It binds that every live plan TELLS its
-  # executor to designate, roll-call, orchestrate and build through hands.
+  # executor to designate, survey, orchestrate and build through hands.
   #
   # FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING: over docs/plans/*.md -- 50 plans, 4 live and 46
   # spent by the P9 discharge test -- the set is EXACTLY THE FOUR LIVE PLANS, none of which
@@ -631,11 +631,11 @@ for f in "${FILES[@]}"; do
       if [ -z "$p14_m" ]; then p14_ok=1; elif [ -z "$p14_missing" ]; then p14_missing="$p14_m"; fi
     done <<<"$p14_wins"
     if [ "$p14_seen" -eq 0 ]; then
-      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD: no column-0 numbered action in the Next actions section carries the phrase 'DESIGNATE THE LEAD' on its own line. The operator wants the multi-session release train as a standard plan shape -- a lead that also builds starves orchestration, and owners that build alone serialize the work. Add a numbered action (0. is accepted, before the dispatch action) headed 'DESIGNATE THE LEAD' whose body roll-calls via ListAgents, states the lead never builds and that owners build through hands."
+      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD: no column-0 numbered action in the Next actions section carries the phrase 'DESIGNATE THE LEAD' on its own line. The operator wants the multi-session release train as a standard plan shape -- a lead that also builds starves orchestration, and owners that build alone serialize the work. Add a numbered action (0. is accepted, before the dispatch action) headed 'DESIGNATE THE LEAD' whose body runs the opening survey via ListAgents, states the lead never builds and that owners build through hands."
     elif [ "$p14_pos" -gt 0 ]; then
       err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD before the first dispatch: the marker sits on action number ${p14_pos} (counting from 0), after ${p14_pos} earlier action(s). The lead is designated BEFORE any dispatch, so the marker action must be the FIRST numbered action of the Next actions section (0. or 0a. is accepted). Move it to the front."
     elif [ "$p14_ok" -eq 0 ]; then
-      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD completely: the marker action lacks${p14_missing} within its own window (the action line through the blank line before the next column-0 prose, the next action or the next heading, wrapped lines joined). A pointer to another plan is not a designation. The operator wants the multi-session release train as a standard plan shape -- a lead that also builds starves orchestration, and owners that build alone serialize the work. State in the action itself: ListAgents roll call, the lead never builds, owners build through hands, owners make no edits (every edit goes to a hand), the time sentence, and the six train rules by label: RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, NO TIMING RUNS, RELEASE TEXT IS PREPARED IN ADVANCE, BUNDLE ONLY TO CUT WALL CLOCK."
+      err "$rel" "is a LIVE plan whose numbered actions never DESIGNATE THE LEAD completely: the marker action lacks${p14_missing} within its own window (the action line through the blank line before the next column-0 prose, the next action or the next heading, wrapped lines joined). A pointer to another plan is not a designation. The operator wants the multi-session release train as a standard plan shape -- a lead that also builds starves orchestration, and owners that build alone serialize the work. State in the action itself: ListAgents opening survey, the lead never builds, owners build through hands, owners make no edits (every edit goes to a hand), the time sentence, and the six train rules by label: RELEASES BEFORE MEASUREMENTS, SHORTEST GATE FIRST, NO IDLE SESSIONS, NO TIMING RUNS, RELEASE TEXT IS PREPARED IN ADVANCE, BUNDLE ONLY TO CUT WALL CLOCK."
     fi
   fi
 
@@ -682,6 +682,7 @@ if [ "$#" -eq 0 ]; then
     p15_n=$((p15_n+1)); p15_scan "$f"
   done < <(find .claude/rules -name '*.md' 2>/dev/null | sort)
   [ "$p15_n" -gt 0 ] || err ".claude/rules" "P15 examined no .claude/rules/*.md file, so its rulebook pass checked nothing. A glob that matches nothing must not report success."
+  p14b_scan CLAUDE.md
 fi
 
 echo "validate-plan-shape: ${#FILES[@]} plan(s) checked, $errs error(s), $warns warning(s)."
@@ -725,6 +726,72 @@ p15_scan() { # p15_scan <file> -- one ERROR per offending line, through vps_main
     [ -n "$hit" ] || continue
     err "$1" "line ${hit%%:*} instructs a cloud spawn ('${hit#*:}'). Hands run on this machine as background agents: a writing hand passes isolation \"worktree\", a read-only hand passes none, and the cloud isolation value is never used."
   done < <(grep -niE "$re" "$1" | cut -c1-200)
+  p14b_scan "$1"
+}
+
+# ===================================================================================
+# P14b -- THE ROLL CALL HAS ONE DEFINITION, docs/roll-call.md, AND NOTHING ELSE RESTATES IT.
+#
+# WHAT IT BINDS. In every file P15 scans (each docs/plans/*.md outside docs/plans/archive/, live
+# AND spent, and on the no-argument run each .claude/rules/*.md) plus, on the no-argument run,
+# CLAUDE.md: no SENTENCE that mentions the roll call carries (a) an interval -- `every <digit>`
+# or a digit followed by min/hour, hyphenated or not -- or (b) procedure text: re-read, in chunks,
+# offset and limit, arms the next, cron, one-shot, exempt, PAUSED, CLOSABLE. A bare citation of
+# `docs/roll-call.md` is legal; a citation does NOT excuse (a) or (b). Separately (N1), the
+# CURRENT interval, derived at run time from the first "<N> min" figure in docs/roll-call.md,
+# is refused in any scanned file with or without roll-call words; a missing or interval-less
+# docs/roll-call.md is an ERROR, never a silent pass. docs/roll-call.md itself is never in the
+# population and the function errs if handed it.
+#
+# THE WINDOW is one sentence: wrapped lines joined, closed by a period followed by whitespace or
+# end of line (`.**` and `.)` included), a blank line, a heading, or the start of a list or
+# numbered item. A period inside `docs/roll-call.md` or `operator-rulings.md` does not close it.
+#
+# FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING over docs/plans/*.md (spent and live),
+# .claude/rules/*.md and CLAUDE.md at the tip: EMPTY (re-run in the commit message). The first
+# draft keyed a whole numbered action, and the graph watch's "every 10 minutes" six lines below
+# a roll-call mention fired; the sentence window is the narrowing. A per-line citation exemption
+# would have fired on operator-rulings.md's wrapped citation and is not used. Near-misses held
+# quiet by the digit-only interval class and the sentence window: "every other", "NO IDLE
+# SESSIONS. At roll call, ...", "Re-run it at every roll call." At the parent of the commit that
+# centralised the roll call, every file that restated the interval fires. ERROR tier.
+# ===================================================================================
+p14b_scan() { # p14b_scan <file> -- one ERROR per offending sentence, through vps_main's err()
+  local hit
+  case "$1" in docs/roll-call.md) err "$1" "P14b was handed the roll-call definition itself; it is never in the population."; return 0 ;; esac
+  [ -f "$1" ] || return 0
+  if [ ! -f docs/roll-call.md ]; then
+    err "docs/roll-call.md" "P14b cannot read the roll-call definition (missing), so it cannot derive the current interval."; return 0
+  fi
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    case "$hit" in
+      0:NOINT:*) err "docs/roll-call.md" "carries no '<N> minutes' interval, so P14b cannot derive the current interval. The definition states it in its header." ;;
+      *) err "$1" "line ${hit%%:*} restates the roll call outside docs/roll-call.md ('${hit#*:}'). The roll call has ONE definition, docs/roll-call.md, and its interval and procedure live only there; cite it with no interval and no procedure beside it." ;;
+    esac
+  done < <(awk '
+    function check(w, ln,   l) {
+      l = tolower(w)
+      if (l !~ /roll[ -]?call/) return
+      if (l ~ /every[[:space:]]+[0-9]/ || l ~ /[0-9][ -]?(min|hour)/) print ln ": interval: " substr(w, 1, 110)
+      else if (l ~ /re-?read|in chunks|offset and limit|arms? the next|cron|one-shot|exempt|paused|closable/) print ln ": procedure: " substr(w, 1, 110)
+    }
+    function flush() { if (buf != "") check(buf, start); buf = "" }
+    FILENAME == ARGV[1] { if (N == "" && match(tolower($0), /[0-9]+[ -]?min/)) { N = substr(tolower($0), RSTART, RLENGTH); gsub(/[^0-9]/, "", N) } ; next }
+    FNR == 1 && N == "" { print "0:NOINT:" }
+    {
+      if ($0 ~ /^[[:space:]]*$/ || $0 ~ /^#/ || $0 ~ /^[[:space:]]*([-*]|[0-9]+[a-z]?[.)])[[:space:]]/) flush()
+      if (N != "" && $0 ~ ("(^|[^0-9])" N "[ -]?min")) print FNR ": current interval: " substr($0, 1, 110)
+      if (buf == "") start = FNR
+      buf = (buf == "" ? "" : buf " ") $0
+      while (match(buf, /[.][*)`]*([ \t]|$)/)) {
+        check(substr(buf, 1, RSTART), start)
+        buf = substr(buf, RSTART + RLENGTH)
+        if (buf ~ /^[[:space:]]*$/) buf = ""
+        start = FNR
+      }
+    }
+    END { flush() }' docs/roll-call.md "$1" | cut -c1-260)
 }
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0
 vps_main "$@"

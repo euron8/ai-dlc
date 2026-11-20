@@ -75,7 +75,7 @@ content-seal hand's abandoned forks.
 ### Next actions
 
 0. DESIGNATE THE LEAD
-   Run the `ListAgents` roll call first. The session that receives this plan is the lead.
+   Run the `ListAgents` opening survey first. The session that receives this plan is the lead.
    - The lead never builds: it scopes, merges by content, cuts the release and pings.
    - Owners build through hands (Agent subagents), each on its own branch. Owners make no edits
      themselves: every edit goes to a hand.
