@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1186.0] - 2026-11-20
+
+### The roll call has one enforced definition (BL-1185)
+
+- `scripts/validate-plan-shape.sh` gains arm P14b. The roll call has one definition, `docs/roll-call.md`. A sentence that mentions the roll call and restates its interval (`every <n>`, `<n> min/hour`) or its procedure (re-read, in chunks, offset and limit, arms the next, cron, one-shot, exempt, PAUSED, CLOSABLE) fails the push. So does the current interval, derived from the definition, appearing anywhere in a live or spent plan, a rule file or `CLAUDE.md`. The opening availability survey is now called the "opening survey" in the validator text, `plan-shape.md` and one handoff plan. Distribution-only; no consumer change.
+
+### BL-514 closes on the sprint-318 baseline
+
+- For the operator: subagents no longer burn wait time on bare foreground polls, and BL-514 closes on the sprint-318 baseline. Its close waited one release for the Step line, as the backlog validator requires.
+
 ## [0.1185.0] - 2026-11-20
 
 ### Sprint 323 efficiency readings on a corrected clock (BL-1174, BL-1175, BL-972, BL-911, BL-912, BL-812, BL-819 advance)
