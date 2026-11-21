@@ -47492,3 +47492,22 @@ Verdict: requirements fell
 verify: manual
 
 
+## BL-1203 — the retired-layer-passage fence exclusion still leaked a fence opened after a list or blockquote marker, and dropped a prose line that opens with an inline code span
+
+**DEFECT.** Filed 2026-11-21 (batch 263, A). Residue of BL-1198's close. Owner: `core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh`, `core/fixtures/retired-layer-passage/`.
+
+Goal: a deleted fence opened after a blockquote or list marker is excluded from the retired set, and a deleted prose line that opens with an inline triple-backtick span is still matched. One done condition: with core deleting fences after `- `, `1. `, `* ` and `> ` markers, a layer file carrying the same fence markers yields no row for them, and a reproduced prose line opening with inline code yields its row.
+
+Record: BL-1198 tested the raw deleted line for a leading fence, but `norm_lines` strips one list marker and every backtick, so (1) a deleted ```` - ```bash ````, ```` 1. ```bash ```` or ```` > ```bash ```` line was not seen as a fence on the raw line, normalised to the bare word `bash`, and matched a layer file's plain fence as a reproduced passage; (2) a prose line opening with an inline triple-backtick span was excluded as a fence, so a reproduced directive of that shape produced no row.
+
+Work list:
+
+1. The one `awk` pass repeat-peels leading `>`, bullet (`-`, `*`, `+`) and numbered (`N.`, `N)`) markers until none remains, in any order and nesting, and treats a line as a fence only when it opens with three or more tildes, or with a run of three or more backticks whose remainder holds no backtick. Fixture arm: `extensions/fenced.md` yields exactly three rows (a plain prose line, a bullet directive, and one line opening with inline code); sixteen fence shapes, including nested, `+`, `N)`, double-blockquote and tab-after-marker, yield none.
+
+**LANDED (v0.1202.0).** Batch 263, A. Item 1 built; the fixture's `fenced.md` arm fails on the previous script and on the first shipped fix, and passes on this one.
+
+Provenance: batch 263, A; id allocated by the lead.
+
+BL-868: no test depends on load.
+
+verify: sh S=core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh; grep -q 'rlp_main' core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh || exit 9; W=$(mktemp -d) || exit 9; D=$W/d; C=$W/c; mkdir -p $D/core/skills/ai-dlc/steps $C/.claude/skills/ai-dlc/overrides && ( cd $D && git init -q . && git config user.email f@f && git config user.name f && printf '# S\n\n- ```bash\n- > ```bash\n```x``` is a directive\n' > core/skills/ai-dlc/steps/demo.md && git add -A && git commit -qm b && git rev-parse HEAD > ../base && printf '# S\n' > core/skills/ai-dlc/steps/demo.md && git commit -qam t && git rev-parse HEAD > ../theirs ) && printf '# O\n\n```bash\nx\n```\n\n```x``` is a directive\n' > $C/.claude/skills/ai-dlc/overrides/o.md && out=$(bash $S $D $(cat $W/base) $(cat $W/theirs) $C 2>/dev/null); [ -d "$W" ] && rm -rf "$W"; [ "$(printf '%s\n' "$out" | grep -c 'o.md:')" = 1 ] && printf '%s\n' "$out" | grep -q 'o.md:7'

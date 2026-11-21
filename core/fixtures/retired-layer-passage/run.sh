@@ -126,15 +126,25 @@ grep -q 'overrides/inert.md' <<<"$OUT" \
   || ok "a layer file reproducing no deleted core line is not flagged"
 
 # --- Assertion 4b: a deleted code FENCE is structure, whatever its shape -------------
-# Core deleted whole blocks fenced four ways (backtick with a tag, indented backtick with a tag, tilde with
-# a tag, bare tilde); fenced.md carries the same markers around DIFFERENT interiors and, after them, one
-# deleted-core prose line. That prose line is its only legitimate row.
+# Core deleted whole blocks fenced sixteen ways: backtick with a tag, indented backtick with a tag, tilde with
+# a tag, bare tilde, bare backtick; after a bullet, after a number, a tilde fence after a bullet, after
+# blockquote markers, a four-backtick fence with a tag; then the nested and marker-variant orders
+# (bullet then blockquote, number then bullet, a plus bullet, an N) number, two blockquote markers, a tab
+# after a bullet); fenced.md carries the same markers around DIFFERENT interiors and, after them, three
+# reproduced deleted lines: a plain prose line, a bullet directive whose marker norm_lines strips (marker
+# peeling must not exclude prose), and a prose line OPENING with an inline triple-backtick span (not a
+# fence). Those three are its only legitimate rows.
 FZ_FILE="$CONSUMER/.claude/skills/ai-dlc/extensions/fenced.md"
 FZ_LINE="$(grep -n '^Close every deferred item' "$FZ_FILE" | cut -d: -f1)"
+FZ_B="$(grep -n '^Never push from the main checkout' "$FZ_FILE" | cut -d: -f1)"
+FZ_C="$(grep -n '^```git push``` is never run' "$FZ_FILE" | cut -d: -f1)"
 fz_n="$(grep -cF 'extensions/fenced.md:' <<<"$OUT")" || fz_n=0
-if [ -n "$FZ_LINE" ] && [ "$fz_n" -eq 1 ] && grep -qF "extensions/fenced.md:$FZ_LINE"$'\t' <<<"$OUT"; then
-  ok "a layer file carrying core's deleted fence markers yields exactly one row, at its prose line ($FZ_LINE)"
-else bad "fenced.md rows=$fz_n (want 1, at line ${FZ_LINE:-unresolved}): a deleted fence marker reached the retired set"; fi
+if [ -n "$FZ_LINE" ] && [ -n "$FZ_B" ] && [ -n "$FZ_C" ] && [ "$fz_n" -eq 3 ] \
+   && grep -qF "extensions/fenced.md:$FZ_LINE"$'\t' <<<"$OUT" \
+   && grep -qF "extensions/fenced.md:$FZ_B"$'\t' <<<"$OUT" \
+   && grep -qF "extensions/fenced.md:$FZ_C"$'\t' <<<"$OUT"; then
+  ok "a layer file carrying core's deleted fence markers (bare, tagged, after a list or blockquote marker) yields exactly its three prose rows ($FZ_LINE, $FZ_B, $FZ_C)"
+else bad "fenced.md rows=$fz_n (want 3, at lines ${FZ_LINE:-?},${FZ_B:-?},${FZ_C:-?}): a deleted fence marker reached the retired set, or a prose line was excluded as one"; fi
 
 # --- Assertion 5: nothing deleted -> no rows, and NEVER a silent zero -----------
 # BOTH REFS ARE `BASE`, deliberately. This is the branch that produced the sibling's
