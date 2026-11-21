@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1213.0] - 2026-11-21
+
+### The self-update gate holds a pull that changes a script the pre-push hook runs in a shape it cannot follow, or syntax-checks through a glob (BL-1195)
+
+- For every consumer pulling an update. The gate decides whether a pull changes a script the consumer's pre-push hook runs. It used to pass some of those scripts as "not gating" because the hook ran them in a shape the gate could not follow, and the consumer's own hook then failed on the pulled script.
+- The gate now reads as a run it cannot follow: a path printed by `printf` or `echo` inside a function, a `$( )` capture or a pipe; a variable compared to a path and then run; a path in an array of arguments; a path in a heredoc body; and a path in a `for` list that follows an `echo`.
+- The gate also judges a changed script that the hook syntax-checks through a `for`-list glob (`bash -n` over `scripts/*.sh` and the like). A pulled script that fails the syntax check, where today's does not, now holds the pull (SELF-UPDATE-DEFER) instead of reading SELF-UPDATE-OK. A pull that changes `core-paths.sh` is held through the same rule, and the hook's own scripts and the reconcile scripts are included. A glob loop body that pipes or captures the printed path (`echo "$f" | bash`) reads as a run the gate cannot follow.
+- Such a pull is held (UNDECIDED or DEFER) for the operator instead of passing as not gating.
+- Live verdicts on the shipped hook only gain syntax-check rows; its run rows are unchanged (50 before, 50 after).
+- Fixture `self-update-gate` gains arms `sh-hidden-runs` (each shape with its twin), unit `gl` (gl-main, gl-hk, gl-body, gl-noglob, gl-own, gl-drop, gl-pre-span, gl-pipe), `sh-core-paths-hold` and `sh-core-paths-twin`, and a stricter `del-held`.
+
 ## [0.1212.0] - 2026-11-21
 
 ### The pre-push hook does less work per push, records which fixtures it skipped, and a detached trace can no longer overwrite a second holder's lock (BL-1124 advances, BL-1192, BL-1178 advances, BL-878 advances, BL-1155 advances)

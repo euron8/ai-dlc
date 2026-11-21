@@ -528,9 +528,12 @@ gate_refline() {
 #                            mode, and the `[ -d … ] \` / `&& printf` after it reads the TEST's
 #                            status, not the capture's, because only a next line's FIRST token
 #                            counts and that line opens with `[`.
-#   M<TAB><line><TAB><kind>  MENTIONED, never run: a comment, an existence test, printf text, a
-#                            string comparison (`== "<path>"` or `!= "<path>"`), or a path that runs
-#                            on into another name (`x.sh=y.sh` executes a different file)
+#   M<TAB><line><TAB><kind>  MENTIONED, never run: a comment, an existence test, printf text (the
+#                            printf/echo in the path's OWN simple command, no unquoted `;`, `|`,
+#                            `&` between them, at top level, uncaptured and unpiped), a string
+#                            comparison (`== "<path>"` or `!= "<path>"`) whose compared operand is
+#                            no `$V`/`${V}` the hook uses elsewhere, or a path that runs on into
+#                            another name (`x.sh=y.sh` executes a different file)
 #   X<TAB><line><TAB><argv>  run with its status read, but the argv span holds an expansion or
 #                            quoting this gate cannot resolve without executing the hook. AN
 #                            ASSIGNMENT IS X, NEVER M: the script's path assigned to `V`, then
@@ -541,7 +544,17 @@ gate_refline() {
 #                            which a later `"$@"` runs); the path under an expansion at command
 #                            position (`[bash|sh] "$V/<path>"`); and the path as an item of a
 #                            `for VAR in …` list, whatever VAR later reaches. A `"$V/<path>"` that
-#                            is neither at command position nor after `set --` stays U.
+#                            is neither at command position nor after `set --` stays U. Also X:
+#                            any occurrence on a heredoc BODY line (`<<WORD`, `<<-WORD`, a quoted
+#                            WORD, to its terminator; `<<<` and arithmetic `((…<<…))` open none);
+#                            an array element (`NAME=(`/`NAME+=(`, any `local`/`declare -a`
+#                            prefix, one line or several to the closing `)`); printf/echo output
+#                            inside a function body (a `NAME()`/`function NAME` line or the
+#                            braces it opens), a `$( )` or backtick capture, or a simple command
+#                            that continues into an unquoted `|`; and a string comparison whose
+#                            `$V` the hook uses anywhere outside a `[`/`[[`/`test` expression or
+#                            a printf/echo argument. The for-list item rule is read before the
+#                            printf rule.
 #   U<TAB><line><TAB>        an occurrence of no shape above (`exec`, `env`, `timeout`, a command
 #                            word that is a variable). Unknown is never read as a mention.
 # EVERY occurrence the name list was derived from yields a row, comments included, so a name with
@@ -575,7 +588,142 @@ gate_argv_scan() {
             GT = "\\[[[:space:]]+-[fxe][[:space:]]+[\"]?(\\./)?" pe "[\"]?[[:space:]]+\\]"
             NIF = 0 }
     { L[NR] = $0 }
-    END { NL = NR; for (r = 1; r <= NL; r++) { ifpre(r); scanline(r); ifpost(r) } }
+    END { NL = NR; prescan(); for (r = 1; r <= NL; r++) { ifpre(r); scanline(r); ifpost(r) } }
+    # ONE PASS BEFORE THE SCAN marks, per line: HD[r] a heredoc BODY line, AO[r]/AD0[r] an array
+    # assignment still open at the line start (and its paren depth), FN[r] a line that defines a
+    # function or lies inside a function body (braces counted from the definition to its close).
+    function prescan(  r, t, hq, hc, fd, fp, n, i, c, o, w) {
+      hq = 0; hc = 0; fd = 0; fp = 0; ARI = 0; ARD = 0
+      for (r = 1; r <= NL; r++) {
+        t = L[r]
+        if (hc > 0 && hc <= hq) {
+          HD[r] = 1; w = t; if (HT[hc]) sub(/^\t+/, "", w)
+          if (w == HW[hc]) { hc++; if (hc > hq) { hq = 0; hc = 0 } }
+          continue
+        }
+        AO[r] = ARI; AD0[r] = ARD
+        if (t ~ /^[[:space:]]*#/) continue
+        if (ARI || index(t, "=(") > 0) arrscan(t, length(t) + 1)
+        if (index(t, "<<") > 0) { hq = hdopen(t, hq); if (hq > 0 && hc == 0) hc = 1 }
+        if (fd == 0 && !fp && t !~ /(^|[;&|[:space:]{(])(function[[:space:]]+[A-Za-z_][A-Za-z0-9_:.-]*|[A-Za-z_][A-Za-z0-9_:.-]*[[:space:]]*\([[:space:]]*\))/) continue
+        if (fd == 0 && !fp) { FN[r] = 1; fp = 1 }
+        else if (fd == 0 && fp) { if (t !~ /^[[:space:]]*\{/) { fp = 0; continue } }
+        FN[r] = 1; o = 0; n = (t ~ /[{}]/) ? length(t) : 0
+        for (i = 1; i <= n; i++) { c = substr(t, i, 1); if (c == "{") { fd++; o = 1 } else if (c == "}" && fd > 0) fd-- }
+        if (o || fd > 0) fp = 0
+      }
+    }
+    # Heredoc openers on line t, queued after the hq already pending: `<<WORD`, `<<-WORD`, `<<"WORD"`,
+    # a single-quoted WORD, outside quotes and outside `((`/`$((` arithmetic; `<<<` is no heredoc,
+    # because the third `<` parses as no WORD.
+    function hdopen(t, hq,  i, n, c, q, ar, rest, dash, w) {
+      n = length(t); q = ""; ar = 0
+      for (i = 1; i <= n; i++) {
+        c = substr(t, i, 1)
+        if (q == "\047") { if (c == "\047") q = ""; continue }
+        if (c == "\\") { i++; continue }
+        if (q == "\"") { if (c == "\"") q = ""; continue }
+        if (c == "\047" || c == "\"") { q = c; continue }
+        if (c == "#" && (i == 1 || substr(t, i - 1, 1) ~ /[[:space:]]/)) break
+        if (substr(t, i, 2) == "((") { ar++; i++; continue }
+        if (substr(t, i, 2) == "))" && ar > 0) { ar--; i++; continue }
+        if (substr(t, i, 2) != "<<" || ar > 0) continue
+        rest = substr(t, i + 2); dash = (substr(rest, 1, 1) == "-"); if (dash) rest = substr(rest, 2)
+        sub(/^[[:space:]]+/, "", rest); w = ""
+        if (match(rest, /^\047[^\047]+\047/) || match(rest, /^"[^"]+"/)) w = substr(rest, 2, RLENGTH - 2)
+        else if (match(rest, /^\\?[A-Za-z0-9_]+/)) { w = substr(rest, 1, RLENGTH); sub(/^\\/, "", w) }
+        if (w != "") { hq++; HW[hq] = w; HT[hq] = dash }
+        i++
+      }
+      return hq
+    }
+    # Array-assignment state over t up to column u-1, from ARI/ARD: `NAME=(` and `NAME+=(` open
+    # (any `local`/`declare -a`/... prefix leaves `NAME=(` in place), parens nest, the closing `)`
+    # ends it, quotes are skipped and an unquoted ` #` ends the line.
+    function arrscan(t, u,  i, c, q) {
+      q = ""
+      for (i = 1; i < u; i++) {
+        c = substr(t, i, 1)
+        if (q == "\047") { if (c == "\047") q = ""; continue }
+        if (c == "\\") { i++; continue }
+        if (q == "\"") { if (c == "\"") q = ""; continue }
+        if (c == "\047" || c == "\"") { q = c; continue }
+        if (c == "#" && (i == 1 || substr(t, i - 1, 1) ~ /[[:space:]]/)) break
+        if (c == "(") {
+          if (ARI) ARD++
+          else if (substr(t, 1, i - 1) ~ /(^|[[:space:];&|({])[A-Za-z_][A-Za-z0-9_]*\+?=$/) { ARI = 1; ARD = 0 }
+        } else if (c == ")" && ARI) { if (ARD > 0) ARD--; else ARI = 0 }
+      }
+    }
+    # The simple command s ENDS in: the text after its last unquoted `;`, `|`, `&`, `(`, `)` or `{`.
+    # Sets SEGCAP (the end of s lies inside an open `$( )` or backtick capture) and SEGQ (the quote
+    # open at the end of s).
+    function lastseg(s,  i, n, c, q, st, d) {
+      q = ""; st = 1; d = 0; FP[0] = 0; n = length(s)
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (q == "\047") { if (c == "\047") q = ""; continue }
+        if (c == "\\") { i++; continue }
+        if ((c == "$" && substr(s, i + 1, 2) ~ /^\(([^(]|$)/) || (c == "`" && !(d > 0 && FK[d] == "`"))) {
+          d++; FQ[d] = q; FST[d] = st; FK[d] = c; FP[d] = 0
+          if (c == "$") i++
+          q = ""; st = i + 1; continue
+        }
+        if (c == "`") { q = FQ[d]; st = FST[d]; d--; continue }
+        if (q == "\"") { if (c == "\"") q = ""; continue }
+        if (c == "\047" || c == "\"") { q = c; continue }
+        if (c == "(") { FP[d]++; st = i + 1; continue }
+        if (c == ")") {
+          if (FP[d] > 0) { FP[d]--; st = i + 1 }
+          else if (d > 0 && FK[d] == "$") { q = FQ[d]; st = FST[d]; d-- }
+          continue
+        }
+        if (c ~ /[;|{]/ || (c == "&" && substr(s, i - 1, 1) !~ /[<>]/ && substr(s, i + 1, 1) != ">")) st = i + 1
+      }
+      SEGCAP = (d > 0); SEGQ = q
+      return substr(s, st)
+    }
+    # 1 when the simple command whose remaining text is s (quote q open at its start) continues into
+    # an unquoted `|` that is not `||`.
+    function pipes(s, q,  i, n, c, d) {
+      n = length(s); d = 0
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1)
+        if (q == "\047") { if (c == "\047") q = ""; continue }
+        if (c == "\\") { i++; continue }
+        if (q == "\"") { if (c == "\"") q = ""; else if (c == "$" && substr(s, i + 1, 1) == "(") { d++; i++ } ; continue }
+        if (c == "\047" || c == "\"") { q = c; continue }
+        if (c == "$" && substr(s, i + 1, 1) == "(") { d++; i++; continue }
+        if (c == ")" && d > 0) { d--; continue }
+        if (d > 0) continue
+        if (c == "#" && i > 1 && substr(s, i - 1, 1) ~ /[[:space:]]/) return 0
+        if (c == "|") return (substr(s, i + 1, 1) != "|")
+        if (c ~ /[;)]/ || (c == "&" && substr(s, i - 1, 1) !~ /[<>]/ && substr(s, i + 1, 1) != ">")) return 0
+      }
+      return 0
+    }
+    # 1 when the hook uses $v or ${v} anywhere other than inside a `[`/`[[`/`test` expression or as a
+    # printf/echo argument: a run, an argument, an assignment, a redirect, all count.
+    function varrun(v,  t, line, re, o, pre, seg, cp, o1, c1, o2, c2) {
+      if (v in VR) return VR[v]
+      re = "[$][{]?" v "([^A-Za-z0-9_]|$)"
+      for (t = 1; t <= NL; t++) {
+        line = L[t]; if (line ~ /^[[:space:]]*#/ && !HD[t]) continue
+        o = 0
+        while (match(substr(line, o + 1), re)) {
+          pre = substr(line, 1, o + RSTART - 1); o += RSTART
+          cp = pre
+          o2 = gsub(/(^|[[:space:];&|(!{])\[\[[[:space:]]/, "&", cp); c2 = gsub(/[[:space:]]\]\]/, "&", cp)
+          o1 = gsub(/(^|[[:space:];&|(!{])\[[[:space:]]/, "&", cp); c1 = gsub(/[[:space:]]\]([[:space:];&|)]|$)/, "&", cp)
+          if (o2 > c2 || o1 > c1) continue
+          seg = lastseg(pre)
+          if (seg ~ /^[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*test[[:space:]]/) continue
+          if (seg ~ /(^|[^A-Za-z0-9_])(printf|echo)[[:space:]]/) continue
+          VR[v] = 1; return 1
+        }
+      }
+      VR[v] = 0; return 0
+    }
     function ifpre(r,  t) { # an else/elif line opens a branch the test does not guard
       t = L[r]; if (t ~ /^[[:space:]]*#/) return
       if (NIF > 0 && t ~ /^[[:space:]]*(else|elif)([;[:space:]]|$)/) IF[NIF] = 0
@@ -603,8 +751,13 @@ gate_argv_scan() {
       }
       return 0
     }
-    function scanline(r,  line, off, i, s, e, nc, pre, after, q, span, k, j, c, tail, capture, bg, nx, stepped, readnext, ct, lastinfn, tt, truetail) {
+    function scanline(r,  line, off, i, s, e, nc, pre, after, q, span, k, j, c, tail, capture, bg, nx, stepped, readnext, ct, lastinfn, tt, truetail, seg, ev) {
       line = L[r]
+      if (HD[r]) {
+        off = 0
+        while ((i = index(substr(line, off + 1), p)) > 0) { off += i; printf "X\t%d\tthe path is on a heredoc body line, fed to a command this gate does not follow\n", r }
+        return
+      }
       if (line ~ /^[[:space:]]*#/) { if (index(line, p) > 0) printf "M\t%d\tcomment\n", r; return }
       off = 0
       while ((i = index(substr(line, off + 1), p)) > 0) {
@@ -612,6 +765,8 @@ gate_argv_scan() {
         nc = substr(line, e, 1)
         pre = substr(line, 1, s - 1); after = substr(line, e)
         if (nc != "" && nc !~ /[[:space:];|&)<>"\047]/) { printf "M\t%d\tjoined\n", r; continue }
+        ARI = AO[r]; ARD = AD0[r]; if (ARI || index(pre, "=(") > 0) arrscan(line, s)
+        if (ARI) { printf "X\t%d\tthe path is an array element, and what the hook runs through the array is not derived\n", r; continue }
         if (pre ~ /(^|[[:space:];])[A-Za-z_][A-Za-z0-9_]*=["\047]?(\.\/)?$/) { printf "X\t%d\tthe path is assigned to a variable, and what the hook later runs through it is not derived\n", r; continue }
         stepped = (pre ~ /(^|[;|&({]|\$\()[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*step[[:space:]]+("[^"]*"|\047[^\047]*\047)[[:space:]]+((bash|sh)[[:space:]]+)?["\047]?(\.\/)?$/)
         if (stepped || pre ~ /(^|[;|&({]|\$\()[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*((bash|sh)[[:space:]]+)?["\047]?(\.\/)?$/) {
@@ -651,14 +806,22 @@ gate_argv_scan() {
           printf "X\t%d\tthe path follows set --, and a later run of the positional parameters is not derived\n", r
         } else if (pre ~ /(^|[;|&({]|\$\()[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*((bash|sh)[[:space:]]+)?["\047]?[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?\/$/) {
           printf "X\t%d\tthe path sits under an expansion at command position, which this gate cannot resolve\n", r
-        } else if (pre ~ /(^|[^A-Za-z0-9_])(printf|echo)[[:space:]]/) {
-          printf "M\t%d\ttext\n", r
+        } else if ((seg = lastseg(pre)) ~ /^[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]/) {
+          printf "X\t%d\tthe path is a for-loop item, and what the hook runs through the loop variable is not derived\n", r
+        } else if (seg ~ /(^|[^A-Za-z0-9_])(printf|echo)[[:space:]]/) {
+          if (FN[r] || SEGCAP || pipes(after, SEGQ)) printf "X\t%d\tthe path is printf/echo output inside a function body, a capture or a pipe, which may run it\n", r
+          else printf "M\t%d\ttext\n", r
         } else if (pre ~ /(^|[[:space:]])-[A-Za-z][[:space:]]+(\.\/)?$/) {
           printf "M\t%d\ttest\n", r
         } else if (pre ~ /(^|[;[:space:]])for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]/) {
           printf "X\t%d\tthe path is a for-loop item, and what the hook runs through the loop variable is not derived\n", r
         } else if (pre ~ /[=!]=[[:space:]]*["\047]$/) {
-          printf "M\t%d\teq\n", r
+          ev = ""
+          if (match(pre, /[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?["\047]?[[:space:]]*[=!]=[[:space:]]*["\047]$/)) {
+            ev = substr(pre, RSTART + 1); sub(/^[{]/, "", ev); match(ev, /^[A-Za-z_][A-Za-z0-9_]*/); ev = substr(ev, 1, RLENGTH)
+          }
+          if (ev != "" && varrun(ev)) printf "X\t%d\tthe path is compared to a variable the hook also runs or passes on, which this gate does not follow\n", r
+          else printf "M\t%d\teq\n", r
         } else {
           printf "U\t%d\t\n", r
         }
@@ -1512,9 +1675,299 @@ if [ -n "$changed_why" ]; then
 fi
 CHANGED="$(sed 's|.*/||' "$TMP/changed-raw" | sort -u)"
 
-if [ -z "$CHANGED" ] && [ "$HOOK" = "$HOOK_CUR" ]; then
-  emit SELF-UPDATE-OK "-" "this pull changes no core/scripts/ path, so nothing the pre-push invokes can be replaced by the self-update."
+# ---- THE GLOB ROUTE: A SCRIPT THE HOOK SYNTAX-CHECKS THROUGH A for-LIST GLOB (BL-1195 (v)) --------
+# The literal-name path above sees only `scripts/ai-dlc/<name>.sh` spelled out in the hook. The hook
+# ALSO runs `bash -n` over every file a `for VAR in <glob>...` list expands to (`syntax_all`), so a
+# changed script whose incoming copy fails `bash -n` refuses the push without the hook naming it.
+# This block is its own route, independent of the literal one: it never feeds GATING, and its rows
+# are keyed on the CONSUMER path (the `scripts/ai-dlc/` directory plus the file name), never the basename the literal rows carry,
+# so a script both routes reach gets two rows and the record's DEFER > UNDECIDED > OK aggregate is
+# the worse of the two.
+#   ROUTE   `gate_sg_routes`: a `for VAR in` list (followed across `\`) with a literal glob item.
+#           The body, to its matching `done`, is SYNTAX when every use of `$VAR` is `bash -n "$VAR"`,
+#           `[ -f|-e|-x "$VAR" ]`, or a printf/echo argument after the format; any other use is X.
+#   MATCH   pathname semantics, one `/`-separated component at a time (`gate_sg_glob`).
+#   SET     every core/ path base..theirs changes, through `map_consumer`, that a route glob matches;
+#           when theirs' hook replaces the current one with a different route, also every consumer
+#           file the new route matches (its incoming copy is the consumer's own).
+#   VERDICT X -> UNDECIDED. SYNTAX -> `bash -n` on current and incoming: incoming fails where current
+#           passes, is absent, or today's hook does not ask -> DEFER; both fail equally -> OK (predates
+#           the pull); unequal failures -> UNDECIDED. A path the slice does not write (deleted, carried,
+#           not machinery) keeps the consumer's copy, so both sides are one file -> OK unasked.
+# A hook with no route costs one awk and adds no row. Every failure to compute is UNDECIDED.
+# ROUTE-SCAN FALSE-POSITIVE SET, measured on both real hooks: the consumer hook yields exactly one
+# route, `syntax_all`, SYNTAX; the distribution hook adds one X route over `core/fixtures/*/`, which
+# matches no consumer path. NARROWING: items carrying `$`, a quote, a backtick, a brace or a backslash
+# are not literal and are dropped; `do`/`done` inside double quotes and comments are not loop words.
+# Control: a body running `bash "$f" --check`, or using `${f:?}`, reads X.
+gate_sg_routes() { # gate_sg_routes <hook> -> <SYNTAX|X>\t<line>\t<glob items> per for-list route
+  awk -v Q="'" '
+    function sq(s,   o, i, c, inq, dq) {
+      o = ""; inq = 0; dq = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (inq) { if (c == Q) { inq = 0; o = o c }; continue }
+        if (c == "\\") { o = o substr(s, i, 2); i++; continue }
+        if (c == "\"") { dq = !dq; o = o c; continue }
+        if (c == Q && !dq) { inq = 1; o = o c; continue }
+        if (c == "#" && !dq && (i == 1 || substr(s, i - 1, 1) ~ /[ \t;&|(]/)) break
+        o = o c
+      }
+      return o
+    }
+    function dqmask(s,   o, i, c, t, dq) {
+      o = ""; dq = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == "\\") { t = substr(s, i, 2); o = o (dq ? substr("xx", 1, length(t)) : t); i++; continue }
+        if (c == "\"") { dq = !dq; o = o c; continue }
+        o = o (dq ? "x" : c)
+      }
+      return o
+    }
+    function walk(s,   m, out, k, tok, w) {
+      out = ""; m = dqmask(s)
+      while (match(m, /(^|[;&|(){} \t])(do|done)([;&|(){} \t]|$)/)) {
+        tok = substr(m, RSTART, RLENGTH); k = RSTART + RLENGTH
+        if (tok ~ /[;&|(){} \t]$/) k--
+        w = tok; gsub(/[;&|(){} \t]/, "", w)
+        if (!STARTED) { if (w == "do") { STARTED = 1; D = 1 }; s = substr(s, k); m = substr(m, k); continue }
+        if (w == "do") D++; else D--
+        if (D == 0) { FIN = 1; return out substr(s, 1, RSTART - 1) }
+        out = out substr(s, 1, k - 1); s = substr(s, k); m = substr(m, k)
+      }
+      return (STARTED ? out s : "")
+    }
+    function capt(s,   i, c, inq, dp, bt) {
+      inq = 0; dp = 0; bt = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (inq) { if (c == Q) inq = 0; continue }
+        if (c == "\\") { i++; continue }
+        if (c == Q) { inq = 1; continue }
+        if (c == "`") bt = !bt
+        else if (c == "$" && substr(s, i + 1, 1) == "(") { dp++; i++ }
+        else if (c == ")" && dp > 0) dp--
+      }
+      return (dp > 0 || bt)
+    }
+    function piped(s,   i, c, inq, dq) {
+      inq = 0; dq = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (inq) { if (c == Q) inq = 0; continue }
+        if (c == "\\") { i++; continue }
+        if (c == "\"") { dq = !dq; continue }
+        if (dq) continue
+        if (c == Q) { inq = 1; continue }
+        if (c == "|") return (substr(s, i + 1, 1) != "|")
+        if (c == ";" || c == "&") return 0
+      }
+      return 0
+    }
+    function classify(b, v,   n, k, s, re, pre, occ, suf, seg, ok, BL) {
+      re = "[$]([{][#!]?)?" v "([^A-Za-z0-9_]|$)"
+      n = split(b, BL, "\n")
+      for (k = 1; k <= n; k++) {
+        s = BL[k]
+        while (match(s, re)) {
+          pre = substr(s, 1, RSTART - 1); occ = substr(s, RSTART, RLENGTH)
+          suf = substr(s, RSTART + RLENGTH)
+          if (substr(occ, 2, 1) == "{") { if (occ != "${" v "}") return "X" }
+          else if (occ ~ /[^A-Za-z0-9_]$/) suf = substr(occ, length(occ)) suf
+          sub(/"$/, "", pre); sub(/^"/, "", suf)
+          ok = 0
+          if (pre ~ /(^|[;&|({ \t])bash[ \t]+-n[ \t]+$/) ok = 1
+          else if (pre ~ /(^|[;&|({ \t])\[[ \t]+-[fex][ \t]+$/ && suf ~ /^[ \t]+\]/) ok = 1
+          else {
+            seg = pre; sub(/.*[;&|{(]/, "", seg); sub(/^[ \t]*((then|do|else|!)[ \t]+)*/, "", seg)
+            if (seg ~ ("^printf[ \t]+(" Q "[^" Q "]*" Q "|\"[^\"$`]*\")[ \t]+") || seg ~ /^echo[ \t]/) ok = !(capt(pre) || piped(suf))
+          }
+          if (!ok) return "X"
+          s = suf
+        }
+      }
+      return "SYNTAX"
+    }
+    { L[NR] = $0 }
+    END {
+      i = 1
+      while (i <= NR) {
+        s = L[i]; st = i
+        while (s ~ /\\$/ && i < NR) { s = substr(s, 1, length(s) - 1) " " L[++i] }
+        i++
+        t = sq(s)
+        if (!match(t, /(^|[;&|({ \t])for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in[ \t]/)) continue
+        hd = substr(t, RSTART, RLENGTH); rest = substr(t, RSTART + RLENGTH)
+        sub(/^[;&|({ \t]*for[ \t]+/, "", hd); v = hd; sub(/[ \t].*/, "", v)
+        it = rest; body = ""
+        if (match(it, /;/)) { body = substr(it, RSTART); it = substr(it, 1, RSTART - 1) }
+        n = split(it, W, /[ \t]+/); g = ""
+        for (k = 1; k <= n; k++) if (W[k] ~ /[*?[]/ && W[k] !~ /[$"`{}\\]/ && index(W[k], Q) == 0) g = g (g == "" ? "" : " ") W[k]
+        if (g == "") continue
+        STARTED = 0; D = 0; FIN = 0; B = walk(body); j = i
+        while (!FIN && j <= NR) { B = B "\n" walk(sq(L[j])); j++ }
+        printf "%s\t%d\t%s\n", (FIN ? classify(B, v) : "X"), st, g
+      }
+    }' "$1"
+}
+gate_sg_glob() { # gate_sg_glob <glob> <path> -> 0 when <path> matches <glob>; no `*`, `?` or `[..]` crosses a `/`
+  local _g="$1" _p="$2" _gh _ph
+  while :; do
+    _gh="${_g%%/*}"; _ph="${_p%%/*}"
+    # shellcheck disable=SC2254 -- the component IS the pattern
+    case "$_ph" in $_gh) ;; *) return 1 ;; esac
+    if [ "$_g" = "$_gh" ] || [ "$_p" = "$_ph" ]; then
+      [ "$_g" = "$_gh" ] && [ "$_p" = "$_ph" ]; return
+    fi
+    _g="${_g#*/}"; _p="${_p#*/}"
+  done
+}
+gate_sg_cover() { # gate_sg_cover <routes-file> <path> -> SG_COV = SYNTAX, X or none (any matching X route wins), SG_LINE, SG_GLOB
+  local _c _l _it _g
+  SG_COV=none; SG_LINE=""; SG_GLOB=""
+  while IFS=$'\t' read -r _c _l _it; do
+    [ -n "$_it" ] || continue
+    set -f
+    for _g in $_it; do
+      if gate_sg_glob "$_g" "$2"; then
+        if [ "$_c" = X ]; then SG_COV=X; elif [ "$SG_COV" = none ]; then SG_COV=SYNTAX; fi
+        SG_LINE="$_l"; SG_GLOB="$_g"
+      fi
+    done
+    set +f
+  done < "$1"
+}
+gate_sg_bashn() { bash -n "$1" < /dev/null > /dev/null 2>&1; }
+SG_DEFERRED=0
+sg_why=""
+SG_R_NEW="$(gate_sg_routes "$HOOK")" || sg_why="the route scan of the hook the push will run failed (awk)"
+SG_R_CUR="$SG_R_NEW"
+if [ -z "$sg_why" ] && [ "$HOOK" != "$HOOK_CUR" ]; then
+  SG_R_CUR=""
+  if [ -f "$HOOK_CUR" ]; then
+    SG_R_CUR="$(gate_sg_routes "$HOOK_CUR")" || sg_why="the route scan of the consumer's current hook failed (awk)"
+  fi
+fi
+if [ -z "$sg_why" ] && { [ -n "$SG_R_NEW" ] || [ -n "$SG_R_CUR" ]; }; then
+  if ! command -v map_consumer >/dev/null 2>&1; then
+    gate_load_preclassify "$(dirname "$SELF_SRC")/preclassify.sh"
+  fi
+  if ! command -v map_consumer >/dev/null 2>&1; then
+    sg_why="map_consumer() could not be loaded out of $(dirname "$SELF_SRC")/preclassify.sh"
+  elif ! mkdir -p "$TMP/sg" 2>/dev/null || ! printf '%s\n' "$SG_R_NEW" > "$TMP/sg/r-new" \
+       || ! printf '%s\n' "$SG_R_CUR" > "$TMP/sg/r-cur"; then
+    sg_why="the route sets could not be staged"
+  elif ! git -C "$DIST" -c core.quotePath=false diff --no-renames --name-status "${BASE}..${THEIRS}" -- core/ > "$TMP/sg/diff" 2>/dev/null; then
+    sg_why="git diff --name-status ${BASE}..${THEIRS} -- core/ failed"
+  elif ! while IFS=$'\t' read -r sg_s sg_p; do
+         [ -n "$sg_p" ] || continue
+         printf '%s\t%s\t' "$sg_s" "$sg_p"; map_consumer "$sg_p"
+       done < "$TMP/sg/diff" > "$TMP/sg/mapped"; then
+    sg_why="the changed paths could not be mapped to consumer paths"
+  fi
+fi
+if [ -n "$sg_why" ]; then
+  emit SELF-UPDATE-UNDECIDED "syntax-route" "the hook's for-list glob route (the shell-syntax step) could not be judged (${sg_why}), so whether a changed script it syntax-checks fails the push is unknown; treat as DEFER and re-run."
   exit 0
+fi
+if [ -n "$SG_R_NEW" ] || [ -n "$SG_R_CUR" ]; then
+  # sg_judge <core path|-> <consumer path> <written 0|1> -> one row for the path, from the hook the push runs
+  sg_judge() {
+    local _core="$1" _cons="$2" _w="$3" _cv _asked=1 _rc_cur=0 _rc_new=0 _src _in _why
+    gate_sg_cover "$TMP/sg/r-new" "$_cons"; _cv="$SG_COV"
+    [ "$_cv" != none ] || return 0
+    _why="hook line ${SG_LINE}: for-list glob ${SG_GLOB}"
+    if [ "$HOOK" != "$HOOK_CUR" ]; then
+      gate_sg_cover "$TMP/sg/r-cur" "$_cons"; [ "$SG_COV" = SYNTAX ] || _asked=0
+    fi
+    # D3's own files: a file today's hook already checks the same way is asked nothing new.
+    [ "${4:-}" = own ] && [ "$_asked" -eq 1 ] && [ "$_cv" = SYNTAX ] && return 0
+    gate_input "$_cons" "$_core"
+    if [ "$_cv" = X ]; then
+      SG_DEFERRED=1
+      emit SELF-UPDATE-UNDECIDED "$_cons" "syntax route (${_why}): the loop body uses the path in a way other than bash -n, an existence test or a printf/echo argument, so how the push runs ${_cons} is unknown; treat as defer."
+      return 0
+    fi
+    if [ "$_w" -eq 1 ]; then
+      _in="$TMP/sg/new-$SG_N"; SG_N=$((SG_N + 1))
+      if ! git -C "$DIST" show "${THEIRS}:${_core}" > "$_in" 2>/dev/null; then
+        SG_DEFERRED=1
+        emit SELF-UPDATE-UNDECIDED "$_cons" "syntax route (${_why}): ${_core} at ${THEIRS} could not be read, so the incoming side has nothing to check; treat as defer."
+        return 0
+      fi
+      _src=incoming
+    else
+      _in="$CONSUMER/$_cons"
+      _src="after-write (the consumer's own copy; this pull does not write it)"
+      if [ "$_asked" -eq 1 ] || [ ! -f "$_in" ]; then
+        emit SELF-UPDATE-OK "$_cons" "syntax route (${_why}): this pull does not write ${_cons}, so the push syntax-checks the copy today's push already checks (or none); nothing changes."
+        return 0
+      fi
+    fi
+    gate_sg_bashn "$_in" || _rc_new=$?
+    if [ "$_asked" -eq 1 ] && [ -f "$CONSUMER/$_cons" ]; then gate_sg_bashn "$CONSUMER/$_cons" || _rc_cur=$?; fi
+    _why="${_why}; bash -n current ${_rc_cur} ${_src} ${_rc_new}"
+    if [ "$_rc_new" -eq 0 ] || [ "$_rc_new" -eq "$_rc_cur" ]; then
+      emit SELF-UPDATE-OK "$_cons" "syntax route (${_why}): the incoming copy fails no syntax check the current one passes. An equal non-zero predates this pull and is the push wrapper's to report."
+    elif [ "$_rc_cur" -eq 0 ]; then
+      SG_DEFERRED=1
+      emit SELF-UPDATE-DEFER "$_cons" "syntax route (${_why}): the hook's shell-syntax step would check the INCOMING copy and it fails bash -n where the current one passes (or is absent, or is not checked today), so the self-update would install a script that fails its own push. Do NOT cut the self-update branch: fold the machinery slice into the gated apply."
+    else
+      SG_DEFERRED=1
+      emit SELF-UPDATE-UNDECIDED "$_cons" "syntax route (${_why}): both copies fail bash -n with DIFFERENT codes, so the change is real and not attributable to this pull; treat as defer."
+    fi
+    return 0
+  }
+  SG_N=0; SG_SEEN=""
+  while IFS=$'\t' read -r sg_s sg_p sg_c; do
+    [ -n "$sg_c" ] || continue
+    SG_SEEN="${SG_SEEN}${sg_c}
+"
+    sg_w=1
+    [ "$sg_s" = D ] && sg_w=0
+    gate_has_line "${GATE_CARRIED:-}" "$sg_p" && sg_w=0
+    if [ -n "${C_PATHS:-}" ] && ! gate_has_line "$C_PATHS" "$sg_p"; then sg_w=0; fi
+    sg_judge "$sg_p" "$sg_c" "$sg_w"
+  done < "$TMP/sg/mapped"
+  # THEIRS' HOOK BRINGS A DIFFERENT ROUTE: it asks the consumer's own unchanged files a question too.
+  if [ "$HOOK" != "$HOOK_CUR" ] && [ "$(cut -f1,3 "$TMP/sg/r-new")" != "$(cut -f1,3 "$TMP/sg/r-cur")" ]; then
+    if ! awk -F'\t' '{n = split($3, a, " "); for (i = 1; i <= n; i++) print a[i]}' "$TMP/sg/r-new" > "$TMP/sg/items" 2>/dev/null \
+       || ! ( cd "$CONSUMER" || exit 1
+              set +f
+              while IFS= read -r sg_g; do
+                for sg_f in $sg_g; do [ -f "$sg_f" ] || continue; printf '%s\n' "$sg_f"; done
+              done < "$TMP/sg/items" ) > "$TMP/sg/own" 2>/dev/null; then
+      emit SELF-UPDATE-UNDECIDED "syntax-route" "theirs' hook brings a different for-list glob route, but the consumer files it matches could not be listed; treat as DEFER and re-run."
+      exit 0
+    fi
+    while IFS= read -r sg_c; do
+      [ -n "$sg_c" ] || continue
+      gate_has_line "$SG_SEEN" "$sg_c" && continue
+      SG_SEEN="${SG_SEEN}${sg_c}
+"
+      case "$sg_c" in
+        scripts/ai-dlc/*) sg_p="core/scripts/${sg_c#scripts/ai-dlc/}" ;;
+        .githooks/*) sg_p="core/git-hooks/${sg_c#.githooks/}" ;;
+        .claude/*) sg_p="core/${sg_c#.claude/}" ;;
+        *) sg_p="-" ;;
+      esac
+      sg_judge "$sg_p" "$sg_c" 0 own
+    done < "$TMP/sg/own"
+  fi
+fi
+# A TERMINAL THAT WOULD READ OK DEFERS INSTEAD WHEN THE GLOB ROUTE DEFERRED.
+gate_sg_exit() {
+  if [ "$SG_DEFERRED" -ne 0 ]; then
+    emit SELF-UPDATE-DEFER "-" "at least one script the hook's shell-syntax step checks defers; step 2 must not push. Fold the machinery slice into the gated apply."
+    advise_safe_stop
+  fi
+  exit 0
+}
+
+if [ -z "$CHANGED" ] && [ "$HOOK" = "$HOOK_CUR" ]; then
+  [ "$SG_DEFERRED" -ne 0 ] || emit SELF-UPDATE-OK "-" "this pull changes no core/scripts/ path, so nothing the pre-push invokes can be replaced by the self-update."
+  gate_sg_exit
 fi
 
 # THE PATTERN FILE IS STAGED AND grep's STATUS IS READ, NOT SWALLOWED. This was
@@ -1566,8 +2019,8 @@ if [ -n "$gating_why" ]; then
 fi
 
 if [ -z "$GATING" ]; then
-  emit SELF-UPDATE-OK "-" "the slice changes $(printf '%s\n' "$CHANGED" | grep -c .) core script(s), none of which the consumer's pre-push invokes, so the self-update cannot install something that blocks its own push."
-  exit 0
+  [ "$SG_DEFERRED" -ne 0 ] || emit SELF-UPDATE-OK "-" "the slice changes $(printf '%s\n' "$CHANGED" | grep -c .) core script(s), none of which the consumer's pre-push invokes, so the self-update cannot install something that blocks its own push."
+  gate_sg_exit
 fi
 
 # `$TMP` was created near the top, before the record opens. NO `trap … EXIT` HERE. A second EXIT trap REPLACES the first
@@ -1887,8 +2340,9 @@ done < "$TMP/gating"
 if [ "$deferred" -ne 0 ]; then
   emit SELF-UPDATE-DEFER "-" "at least one gating script defers; step 2 must not push. Fold the machinery slice into the gated apply."
   advise_safe_stop
+  exit 0
 fi
-exit 0
+gate_sg_exit
 }
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0
 sug_main "$@"
