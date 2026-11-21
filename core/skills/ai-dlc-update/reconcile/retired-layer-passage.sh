@@ -35,7 +35,7 @@
 # 2 hits as no floor at all, across all 20 pairs. The filter buys nothing measurable, so it
 # is not shipped: a knob with no measured benefit is mechanism the finding did not ask for,
 # and a floor high enough to matter would have dropped one of the two true findings, which
-# is 9 words long. What does the work is exactness plus the three structural exclusions.
+# is 9 words long. What does the work is exactness plus the structural exclusions (heading, table row, blank, code fence).
 #
 # WHAT IT DOES NOT CATCH, STATED PLAINLY
 # A layer file that PARAPHRASES a retired passage rather than reproducing it — reword any
@@ -149,18 +149,27 @@ removed_raw() {
   return "$rc"
 }
 _rlp_rc=0
-removed_raw > "$RLP_T/removed-raw" || _rlp_rc=$?
+removed_raw > "$RLP_T/deleted-raw" || _rlp_rc=$?
 [ "$_rlp_rc" -eq 0 ] || rlp_refuse "extracting the deleted rulebook lines" "$_rlp_rc"
 # norm_lines' status is its FIRST failed stage's (lib.sh), not its last stage's.
-norm_lines < "$RLP_T/removed-raw" > "$RLP_T/removed-norm" || _rlp_rc=$?
+norm_lines < "$RLP_T/deleted-raw" > "$RLP_T/deleted-folded" || _rlp_rc=$?
 [ "$_rlp_rc" -eq 0 ] || rlp_refuse "normalising the deleted rulebook lines" "$_rlp_rc"
-# Structural lines are excluded: a heading, a table row, and a fence carry no directive and
-# collide across unrelated files. These three exclusions are load-bearing to the measured
-# empty false-positive set; the word-count floor is not, and is deliberately absent. Blank
-# lines go with them. grep's 1 is a deleted set that was all structure, which is healthy.
-LC_ALL=C grep -vE '^(#|\||```|$)' "$RLP_T/removed-norm" > "$RLP_T/removed-kept" || _rlp_rc=$?
-case "$_rlp_rc" in 0|1) _rlp_rc=0 ;; *) rlp_refuse "filtering the deleted rulebook lines" "$_rlp_rc" ;; esac
-sort -u "$RLP_T/removed-kept" > "$RLP_T/removed" || rlp_refuse "sorting the deleted rulebook lines" "$?"
+# Structural lines are excluded: a heading, a table row, a blank line and a code fence carry no
+# directive and collide across unrelated files. norm_lines strips backticks, so a fence is
+# recognised on the RAW line (left-trimmed, backtick or tilde, with or without a language tag),
+# paired line for line with its normalised twin (norm_lines is line-preserving); a heading, a
+# table row or a blank is recognised on the NORMALISED line. The word-count floor is not
+# load-bearing to the measured empty false-positive set and is deliberately absent. awk has no
+# healthy non-zero exit, so any non-zero status refuses.
+LC_ALL=C awk '
+  FILENAME == ARGV[1] { raw[FNR] = $0; next }
+  {
+    t = raw[FNR]; sub(/^[ \t]+/, "", t)
+    if (t ~ /^(```|~~~)/) next
+    if ($0 ~ /^(#|\||$)/) next
+    print
+  }' "$RLP_T/deleted-raw" "$RLP_T/deleted-folded" > "$RLP_T/deleted-kept" || rlp_refuse "filtering the deleted rulebook lines" "$?"
+sort -u "$RLP_T/deleted-kept" > "$RLP_T/removed" || rlp_refuse "sorting the deleted rulebook lines" "$?"
 REMOVED="$(cat "$RLP_T/removed")" || rlp_refuse "reading the deleted rulebook lines" "$?"
 
 # A ZERO THAT NEVER OPENED A FILE MUST NOT READ LIKE A ZERO THAT SCANNED EVERYTHING.
@@ -186,7 +195,9 @@ rows=""
 # against the retired set. `norm` is line-preserving, so grep's line numbers are the
 # file's own. Structural lines are filtered out of the RETIRED set only -- a layer heading
 # cannot match a set that contains no headings, so filtering the layer side too would cost
-# a process and buy nothing.
+# a process per file. The residual: a layer-side fence still normalises to a bare word
+# (a backtick fence with a tag becomes `bash`), so it could match a deleted core line that is
+# itself that lone word. The layer side is deliberately not filtered.
 #
 # EVERY LOOP FEED IS STAGED TO A FILE AND ITS PRODUCER'S STATUS IS READ. The two loops below
 # used to read `done < <(…)`, which discards the status: a layer walk that failed read as an

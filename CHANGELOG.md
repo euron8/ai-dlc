@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1196.0] - 2026-11-20
+
+### Fenced code in a retired rulebook block no longer reads as a reproduced passage (PC-S324-RETIRED-LAYER-PASSAGE-FENCE-EXCLUSION-DEFEATED-BY-STAR-STRIP, BL-1198)
+
+- For every consumer whose layer files hold code fences. When a release deleted a fenced block from a rulebook file, the detector `reconcile/retired-layer-passage.sh` reported each layer file's own fence marker as a reproduced core line (12 false rows of 15 on graph). It stripped backticks before it filtered structure, so a deleted fence became the bare word `bash` and matched every layer fence; tilde fences were never filtered at all.
+- The detector now recognises a fence on the raw deleted line (backtick or tilde, tagged or bare, indented or not) and excludes it; headings, table rows and blank lines are excluded as before. A layer file's own fence markers produce no row.
+- Not covered: a layer-side fence still normalises to a bare word, so it can match a deleted core line that is itself that lone word; the layer side is deliberately not filtered.
+- Fixture `retired-layer-passage` gains a layer file whose fence markers match deleted core fences of four shapes and must yield exactly one row, for the prose line after them.
+
 ## [0.1195.0] - 2026-11-20
 
 ### Every settings fill reaches a consumer's settings.json on any pull, not only when the settings template changed (BL-1187)

@@ -47293,3 +47293,20 @@ Provenance: operator ruling 2026-11-20; id allocated by the lead.
 
 verify: manual
 
+## BL-1198 — the retired-layer-passage detector's structural exclusion now catches code fences, which were stripped before the filter ran
+
+**DEFECT.** Filed 2026-11-20 (batch 262, C). Owner: `core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh`, `core/fixtures/retired-layer-passage/`.
+
+Goal: a code fence in a deleted rulebook block is excluded from the retired set, so a layer file's own fences are not reported as reproductions of core. One done condition: with core deleting whole fenced blocks of each shape, a layer file carrying the same fence markers around different interiors yields exactly the one row for the deleted prose line after them.
+
+Record: the filter ran `grep -vE '^(#|\||```|$)'` on `norm_lines` output, and `norm_lines` strips backticks (`s/[`*_]//g`, `reconcile/lib.sh:193`), so a deleted ```` ```bash ```` line reached the filter as the bare word `bash`, survived, and matched every layer file's ```` ```bash ```` fence (consumer measure: 12 false rows of 15). Tilde fences (`~~~sh`, bare `~~~`) are not stripped by `norm_lines` and were never in the filter's regex, so they leaked too.
+
+Work list:
+
+1. Recognise a fence on the raw deleted line, left-trimmed, backtick or tilde, with or without a language tag, in one `awk` pass over the raw and normalised staged files; headings, table rows and blanks stay recognised on the normalised line. Fixture arm: `extensions/fenced.md` yields one row.
+
+**LANDED (v0.1196.0).** Batch 262, C. Item 1 built; the fixture's `fenced.md` arm fails on the previous script (7 rows) and passes on this one.
+
+Provenance: consumer candidate PC-S324-RETIRED-LAYER-PASSAGE-FENCE-EXCLUSION-DEFEATED-BY-STAR-STRIP; id allocated by the lead.
+
+verify: manual

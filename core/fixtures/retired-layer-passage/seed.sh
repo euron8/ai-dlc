@@ -37,6 +37,38 @@ cat > core/skills/ai-dlc/steps/demo.md <<'EOF'
 3. If deployment issue: fix the deployment and re-run smoke tests.
 4. Record the outcome in the gate log.
 
+5. Run the checks.
+
+   ```bash
+   alpha-interior --check
+   ```
+
+Between one.
+
+```bash
+beta-interior --check
+```
+
+Between two.
+
+~~~sh
+gamma-interior --check
+~~~
+
+Between three.
+
+~~~
+delta-interior --check
+~~~
+
+Between four.
+
+```
+epsilon-interior --check
+```
+
+Close every deferred item before the story is closed.
+
 | col | col |
 |---|---|
 EOF
@@ -53,6 +85,16 @@ cat > core/skills/ai-dlc/steps/demo.md <<'EOF'
 2. Dispatch a remediator; the lead owns the disposition, not the edit.
 3. If deployment issue: dispatch the ops teammate to fix the deployment.
 4. Record the outcome in the gate log.
+
+5. Run the checks.
+
+Between one.
+
+Between two.
+
+Between three.
+
+Between four.
 
 | col | col |
 |---|---|
@@ -79,6 +121,35 @@ cat > "$CONS/.claude/skills/ai-dlc/overrides/paraphrase.md" <<'EOF'
 # Override
 
 If the deployment is at fault, repair it and run the smoke tests again.
+EOF
+
+# A layer file carrying the same FENCE MARKERS as the core blocks core deleted, with interiors that
+# differ, then ONE deleted-core prose line. The prose line is the only row it may produce: a fence
+# marker is structure, and a marker that reached the retired set would flag every layer fence.
+cat > "$CONS/.claude/skills/ai-dlc/extensions/fenced.md" <<'EOF'
+# Fenced layer
+
+   ```bash
+   other-alpha
+   ```
+
+```bash
+other-beta
+```
+
+~~~sh
+other-gamma
+~~~
+
+~~~
+other-delta
+~~~
+
+```
+other-epsilon
+```
+
+Close every deferred item before the story is closed.
 EOF
 
 # A layer file that reproduces NOTHING core deleted.

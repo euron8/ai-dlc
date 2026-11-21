@@ -125,6 +125,17 @@ grep -q 'overrides/inert.md' <<<"$OUT" \
   && bad "a layer file reproducing nothing was flagged" \
   || ok "a layer file reproducing no deleted core line is not flagged"
 
+# --- Assertion 4b: a deleted code FENCE is structure, whatever its shape -------------
+# Core deleted whole blocks fenced four ways (backtick with a tag, indented backtick with a tag, tilde with
+# a tag, bare tilde); fenced.md carries the same markers around DIFFERENT interiors and, after them, one
+# deleted-core prose line. That prose line is its only legitimate row.
+FZ_FILE="$CONSUMER/.claude/skills/ai-dlc/extensions/fenced.md"
+FZ_LINE="$(grep -n '^Close every deferred item' "$FZ_FILE" | cut -d: -f1)"
+fz_n="$(grep -cF 'extensions/fenced.md:' <<<"$OUT")" || fz_n=0
+if [ -n "$FZ_LINE" ] && [ "$fz_n" -eq 1 ] && grep -qF "extensions/fenced.md:$FZ_LINE"$'\t' <<<"$OUT"; then
+  ok "a layer file carrying core's deleted fence markers yields exactly one row, at its prose line ($FZ_LINE)"
+else bad "fenced.md rows=$fz_n (want 1, at line ${FZ_LINE:-unresolved}): a deleted fence marker reached the retired set"; fi
+
 # --- Assertion 5: nothing deleted -> no rows, and NEVER a silent zero -----------
 # BOTH REFS ARE `BASE`, deliberately. This is the branch that produced the sibling's
 # false clean: it exits before opening any layer file, so its output must say so or it
