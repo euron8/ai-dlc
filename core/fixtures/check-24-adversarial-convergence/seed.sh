@@ -1305,6 +1305,52 @@ k2_world "$TARGET/k2-sha-moved" shardable
 k2_pass "$TARGET/k2-sha-moved" 2026-09-29T11:00:00Z "$(k2_sha "$TARGET/k2-sha-moved/prd.md")" ""
 printf '\n## Five\n\necho echo\n' >> "$TARGET/k2-sha-moved/prd.md"
 
+# BL-1208: the carry-over evaluation's pass 2 and later are ONE final adversary (steps/carry-over-evaluation.md), so K2
+# owes them no shard ids; its pass 1 and every other series stay owed. One builder, the stem, the document and the
+# pass count the only differences: <stem>-adversarial-p1 sharded (one MAJOR, NOT_MET, a repair record) then a single
+# whole-document p2 (MET); npass 1 is a single whole-document MET p1.
+k2c_pass() {  # $1 dir $2 stem $3 n $4 invoked_at $5 doc $6 ids ("" = whole-document) $7 maj $8 verdict
+  {
+    printf '# %s -- adversarial pass %s\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\n' "$2" "$3"
+    printf 'invoked_at: %s\ntool_use_id: toolu_fixture_k2c_p%s\n' "$4" "$3"
+    [ -n "$6" ] && printf 'shard_tool_use_ids:%s\n' "$6"
+    printf 'mode: subagent\nlead_role: pm\nartifact: %s\nartifact_sha: %s\n' "$5" "$(k2_sha "$1/$5")"
+    printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: %s\nfindings_major_underived: 0\nfindings_minor: 0\n' "$7"
+    printf 'verdict: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$8"
+  } > "$1/$2-adversarial-p$3.md"
+}
+k2c_case() {  # $1 case $2 stem $3 doc $4 npass $5 pass-1 shape: sharded (default) | single | serial-then-grown
+  local d="$TARGET/$1" ids="$K2_IDS"
+  k2_world "$d" shardable
+  [ "$3" = prd.md ] || cp "$d/prd.md" "$d/$3"
+  if [ "$4" -eq 1 ]; then
+    k2c_pass "$d" "$2" 1 2026-09-29T11:00:00Z "$3" "" 0 EXIT_CONDITION_MET
+    return 0
+  fi
+  [ "${5:-sharded}" = sharded ] || ids=""
+  if [ "${5:-}" = serial-then-grown ]; then  # pass 1 reviewed a one-section document (the map says SERIAL), committed; then it grew
+    cp "$TARGET/k2-serial/prd.md" "$d/$3"
+  fi
+  k2c_pass "$d" "$2" 1 2026-09-29T11:00:00Z "$3" "$ids" 1 EXIT_CONDITION_NOT_MET
+  printf '# Repair record\n\n### F1 -- MAJOR\n- disposition: repaired\n- edit: %s:5\n- derivation:\n    $ grep -c "alpha" %s\n    1\n- claim now asserted: one site\n' "$3" "$3" > "$d/$2-repair-p1.md"
+  if [ "${5:-}" = serial-then-grown ]; then
+    ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+      cd "$d" || exit 1
+      git add -A . >/dev/null || exit 1
+      GIT_COMMITTER_DATE=2026-09-29T11:30:00Z GIT_AUTHOR_DATE=2026-09-29T11:30:00Z \
+        git -c user.email=fixture@example.invalid -c user.name=fixture -c commit.gpgsign=false \
+            -c core.hooksPath=/dev/null commit -q -m "pass 1 over the one-section document" >/dev/null
+    ) || { echo "seed.sh: k2c_case could not commit the pass-1 bytes at $d" >&2; exit 1; }
+    cp "$TARGET/k2-sharded/prd.md" "$d/$3"
+  fi
+  k2c_pass "$d" "$2" 2 2026-09-29T12:00:00Z "$3" "" 0 EXIT_CONDITION_MET
+}
+k2c_case k2-coe-p2 coe carry-over-evaluation.md 2
+k2c_case k2-coe-p1u coe carry-over-evaluation.md 2 single
+k2c_case k2-coe-p1s coe carry-over-evaluation.md 2 serial-then-grown
+k2c_case k2-coe-p1 coe carry-over-evaluation.md 1
+k2c_case k2-noncoe-p2 prd prd.md 2
+
 # --- ARM J2: TERMINAL DRIFT -- a notarized sprint artifact moved after MET ------------------
 # Each case is its OWN git repository with TWO stamp commits: 0.663.0 at 09:00 (at or above
 # arm K's release, below J2's) and 0.669.0 at 10:00 (J2's). A series opened at 11:00 is owed;

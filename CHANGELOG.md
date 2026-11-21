@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1216.0] - 2026-11-21
+
+### Planning review series are judged more completely: a carry-over pass 2 written as one final adversary is accepted, edited passes keep their attested counts, split strategy tables and serial restarts are read, and repair-round cross findings always have one owner (BL-1175, BL-1208)
+
+- For every project that runs the planning steps. The convergence validator's arm K2 no longer refuses a carry-over evaluation pass 2 or later written as the single final adversary the step prescribes, when the document was split into parts and the series' pass 1 was sectioned (or was single over a document that mapped SERIAL on its own bytes); it prints one NOTE. A single-adversary pass 1, terminal or followed by later passes, and every other series are still refused (BL-1208).
+- A merged pass whose bytes moved after its merge row was written no longer has its attested counts read as 0: the validator recovers the committed version whose hash the merge row records and reads the counts from it.
+- The validator's arms N and R re-derive through the merge in one start per series (`merge-adversarial-shards.sh --batch`).
+- The test-strategy story-split check reads a strategy table that has no story column from its governing `Story` heading, so graph-style `S1.1-AC1` tables are judged.
+- A SERIAL series' era token has one producer, `partition-document.sh --shard-dir`; `--map` no longer writes it. A story renamed and rewritten between two passes meets the 25% ceiling when it shares at least 20% of its bytes with the dropped story.
+- The serial carry-over pass 1 join resolves its sources and closes every CRITICAL and MAJOR instead of printing SKIP.
+- A repair round's cross findings are dealt by the join to one lane or the fan-in and never dispatched as a cross shard in the lane join, so a cross finding and a lane item on one story no longer refuse the lane join; `gen-round-briefs.sh` writes a note for each brief that carries a cross item.
+- `requirements-bookkeeping.sh --precheck` reports an operator quote in the locked-requirements slot that has no history cite and is in neither answers nor requests history (class ATTRIB). Unquoted attributions are not checked.
+- Fixtures: `adversarial-shard-merge-c` holds the first-pass guard (RI9) and the rename pairing (RI10, RI10n); `document-partition` A49; `remediator-shard-join` CS1 to CS4; `story-evidence-scaffold` RBRIEFS cells; `check-24-adversarial-convergence` worlds for K2 (sectioned, single and SERIAL-then-grown pass 1) and the recovered counts.
+
 ## [0.1215.0] - 2026-11-21
 
 ### Thirteen update-engine fixtures leave the in-process allowlist, and an uppercase short digest cite now gets its re-ask diagnostic (BL-878 advances, BL-1206)

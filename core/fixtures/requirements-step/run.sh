@@ -1067,7 +1067,7 @@ else
     echo "FIXTURE BROKEN: (p) the hook-written history lacks an answer line the worlds cite (18=$P18 next=$P18N 21=$P21 22=$P22)" >&2; exit 2
   fi
   P18E=$((P18N - 1)); P_CITE='_bmad-output/operator-answers-history.md'
-  p_world() { # <dir> <LR-S42-18 cite line>
+  p_world() { # <dir> <LR-S42-18 cite line> [<extra slot bullet>]
     mkdir -p "$1/_bmad-output/planning-artifacts/s42" || { echo "FIXTURE ERROR: cannot create $1" >&2; exit 2; }
     cp "$O_H" "$1/$P_CITE"
     printf '%s\n' '# PRD' '' 'Sprint 42 carries no locked bullet here.' > "$1/_bmad-output/planning-artifacts/prd.md"
@@ -1076,12 +1076,21 @@ else
       "- LR-S42-21 (lead interpretation): both chains run. Operator answer, \`$P_CITE:$P21\` — \"Confirm LR-S42-21 … but only on Matic\"." \
       "- LR-S42-22 (lead interpretation): the pool is capped. Operator answered \"Reword LR-S42-22\" (\`$P_CITE:$P22\`)." \
       '<!-- END LOCKED_REQUIREMENTS -->' > "$1/_bmad-output/planning-artifacts/s42/locked-requirements.md"
+    # ATTRIB (uncited attributions): the requests record is seeded by hand here -- the match is by content, so only the
+    # words matter -- holding one phrase that is in NEITHER the answers history nor the slot's cites.
+    printf '%s\n' '## 2026-01-01T00:00:00Z' '' 'please keep the retry budget at three attempts' > "$1/_bmad-output/operator-requests-history.md"
+    if [ -n "${3:-}" ]; then printf '%s\n' "$3" >> "$1/_bmad-output/planning-artifacts/s42/locked-requirements.md"
+    else
+      printf '%s\n' '- LR-S42-26 (lead interpretation): retries. Operator typed "keep the retry budget at three attempts".' \
+        '- LR-S42-27 (lead interpretation): reserve. Operator answer: "Confirm LR-S42-23".' \
+        '- LR-S42-28 (lead interpretation): note. A lead remark "zz unrecorded aside" with no attribution.' >> "$1/_bmad-output/planning-artifacts/s42/locked-requirements.md"
+    fi
   }
   p_world "$PROBE/p-near" "$P18E"
-  p_world "$PROBE/p-off" "$P18N"
+  p_world "$PROBE/p-off" "$P18N" '- LR-S42-29 (lead interpretation): cap. Operator answer: "zz never recorded phrase".'
   p_out="$(AI_DLC_PROJECT_ROOT="$PROBE/p-near" FXCELL=p-quote-near bash "$P_RB" --precheck 42 2>&1)"; p_rc=$?
-  if [ "$p_rc" -eq 0 ] && grep -qxF 'PRECHECK clean' <<<"$p_out" && ! grep -q '^PRECHECK QUOTE' <<<"$p_out"; then
-    ok "(p) QUOTE near-miss: an entry-end cite, a split quote and a quote-before-cite, each on its own entry, read PRECHECK clean"
+  if [ "$p_rc" -eq 0 ] && grep -qxF 'PRECHECK clean' <<<"$p_out" && ! grep -q '^PRECHECK QUOTE\|^PRECHECK ATTRIB' <<<"$p_out"; then
+    ok "(p) QUOTE near-miss: an entry-end cite, a split quote and a quote-before-cite, each on its own entry, read PRECHECK clean; ATTRIB near-misses (requests-history-only quote, answers-history quote, unattributed quote) too"
   else bad "(p) QUOTE near-miss: want rc 0 and PRECHECK clean with no QUOTE line; got rc $p_rc: $(tr '\n' ' ' <<<"$p_out")"; fi
   p_out="$(AI_DLC_PROJECT_ROOT="$PROBE/p-off" FXCELL=p-quote-off bash "$P_RB" --precheck 42 2>&1)"; p_rc=$?
   p_want="PRECHECK QUOTE _bmad-output/planning-artifacts/s42/locked-requirements.md:2 \"Confirm LR-S42-18 (Recommended)\" is not in the operator-answers-history.md entry holding :$P18N"
@@ -1089,6 +1098,11 @@ else
   if [ "$p_rc" -eq 1 ] && grep -qxF -- "$p_want" <<<"$p_out" && [ "$p_nq" -eq 1 ]; then
     ok "(p) QUOTE offender: the cite moved onto the next entry's heading is reported, and only it"
   else bad "(p) QUOTE offender: want rc 1 and exactly '$p_want'; got rc $p_rc, $p_nq QUOTE line(s): $(tr '\n' ' ' <<<"$p_out")"; fi
+  p_wa="PRECHECK ATTRIB _bmad-output/planning-artifacts/s42/locked-requirements.md:6 \"zz never recorded phrase\" is attributed to the operator and is in neither operator-answers-history.md nor operator-requests-history.md"
+  p_na="$(grep -c '^PRECHECK ATTRIB' <<<"$p_out")" || p_na=0
+  if grep -qxF -- "$p_wa" <<<"$p_out" && [ "$p_na" -eq 1 ]; then
+    ok "(p) ATTRIB offender: an uncited operator-answer quote in neither record is reported, and only it"
+  else bad "(p) ATTRIB offender: want exactly '$p_wa'; got $p_na ATTRIB line(s): $(tr '\n' ' ' <<<"$p_out")"; fi
 fi
 
 

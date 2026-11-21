@@ -810,7 +810,7 @@ serial (exception 2).
 **Shard a single document (Rule 28, "Split dispatch": sections axis).** When the artifact under
 review is one file, run `scripts/ai-dlc/partition-document.sh --map <artifact path>`. Exit 3 with a
 `SERIAL:` line means the document does not partition: dispatch ONE adversary whose brief carries
-`shard: none (serial-document)` (Rule 28 exception 4). Otherwise the map prints
+`shard: none (serial-document)` (Rule 28 exception 4), after `scripts/ai-dlc/partition-document.sh --shard-dir <artifact path> <M> [--sprint <N>]` (`--sprint` whenever the document is outside `s<N>/`) has opened pass M: the printed directory carries only the era token, and the adversary writes the pass at the usual `s<N>/<artifact>-adversarial-p<M>.md`, never into that directory. Otherwise the map prints
 `<ordinal>\t<first-line>\t<last-line>\t<heading>` per part (a pass after the series' first dispatches only the
 rows `scripts/ai-dlc/merge-adversarial-shards.sh --document <artifact path> --derived-map <that dir>` prints, plus the cross shard; document mode narrows by part content: the merge notarizes each part's `part_sha:` digest and the cut-table runs in `part_run:` (`-` when none), and a pass owes the parts whose digest is not uniquely unchanged since its predecessor, the parts its CRITICAL and MAJOR findings cite, and a cut table's whole run, with the full map and a `full width:` reason where a list is missing or unjoinable); run
 `scripts/ai-dlc/partition-document.sh --shard-dir <artifact path> <M> [--sprint <N>]` (creating form for the
@@ -1075,8 +1075,8 @@ and the merge stamps `shard_set_derived_from:`.
    remedy. Conflating the two parked a live pipeline for a day.)
 
    **`RESTART_CYCLE` must MOVE the abandoned passes**, not leave them. A restart takes fresh pass
-   numbers from `partition-document.sh --shard-dir`, never p1, p2, p3 over the dead cycle's files, since write-ledger rows never expire and a
-   dir that holds them is refused — and if the dead cycle ran to p17, then p4…p17 are still on disk,
+   numbers, never p1, p2, p3 over the dead cycle's files: `partition-document.sh --shard-dir` refuses a sharded series' spent number, since write-ledger rows never expire and a
+   dir that holds them is refused, and a SERIAL series writes no such rows, so its restart counts past the dead cycle's last pass itself — and if the dead cycle ran to p17, then p4…p17 are still on disk,
    the glob chains them onto the new series, and the gate adjudicates the corpse. `git mv` them to
    `planning-artifacts/archive/<series>-cycle-<n>/`. Do not delete them; retro reads them.
 
@@ -1097,7 +1097,7 @@ pass, and `gate-validation.md` "Gate Failure" after a check fails. **The lead do
 artifact itself** — it is the most context-saturated agent in the pipeline and repairs from a
 compacted summary, not the document. (Rationale + the measurement: notes R35.)
 
-**Generate the member briefs of a round.** Run `scripts/ai-dlc/gen-round-briefs.sh` for the member briefs of every round and for the beat-join command with the `--shard-header` flag its kind owns (convergence for a review round, elicitation for an elicitation round, none for a repair round); never hand-write them. A repair round's cross shard never joins the parallel round: put its finding tokens in `<findings dir>/cross.txt`, and after the parallel join prints `PLAN-FILE:`, run `gen-round-briefs.sh` again with the same arguments plus `--plan-file <that path>`. It writes `cross.brief` for the serial lane round the plan's `LANE-ARTIFACT:` line names (deliverable `shards/<lane artifact>-repair-p<M>/cross.md`) and `lane.cmd`, the cross deliverable's own `--complete` command; beat-join it with any lane parts and run the lane join with the `--artifact`, `--pass` and `--artifact-path` it prints.
+**Generate the member briefs of a round.** Run `scripts/ai-dlc/gen-round-briefs.sh` for the member briefs of every round and for the beat-join command with the `--shard-header` flag its kind owns (convergence for a review round, elicitation for an elicitation round, none for a repair round); never hand-write them. A repair round's cross shard never joins the parallel round: put its finding tokens in `<findings dir>/cross.txt`, and after the parallel join prints `PLAN-FILE:`, run `gen-round-briefs.sh` again with the same arguments plus `--plan-file <that path>`. The FIRST run adds each cross.txt token to `<shard dir>/.findings-partition` as a `serial` row with files `-` unless the lead's own route file already names it, so the join deals every cross finding to exactly one `CROSS:` plan item (a `LANE-ITEM` or a `FANIN` line) and CROSS-OPEN sees it; no cross.md is dispatched, so the lane join never sees a cross shard's edit. The SECOND run refuses a cross.txt token with no or two such items and writes `cross.brief`, a note to append to the brief of each lane and the fan-in remediator carrying a `CROSS:` item; run the lane join over the lane parts with the `--artifact`, `--pass` and `--artifact-path` it prints.
 
 **Dispatch** ONE `remediator` per pass, or one shard per disjoint FILE set when the artifact is
 two or more files ("Shard by file" below), or one shard per SECTION when the artifact is one
@@ -1178,7 +1178,7 @@ state dir, `<state basename>/...` when inside it), the state basename after a su
 LANE-ARTIFACT-PATH, never infer it from the slot, the state dir or the document's location. Below,
 `<lane artifact>`, `<M>` and `<path>` are those lines' values.
 Dispatch ONE serial remediator per lane, in parallel, each brief carrying its `LANE:` line, its
-`LANE-ITEM:` lines and every `ESCALATED:` line verbatim, and the line `shard: none (authoring-chain)`
+`LANE-ITEM:` lines and every `ESCALATED:` line verbatim, the text of `cross.brief` when a `LANE-ITEM:` is a `CROSS:` item, and the line `shard: none (authoring-chain)`
 (Rule 28 exception 3: it reads the joined record the shards produced; commentary goes after the
 closing parenthesis), as a second PARTS-MODE round: lane `<n>`
 writes its part `s<N>/shards/<lane artifact>-repair-p<M>/lane-<n>.md` and edits only its lane's
@@ -1189,9 +1189,9 @@ join and the fan-in. Beat-join the lanes with `--complete`
 and run the same join over them, files mode, `--artifact <lane artifact> --pass <M>
 --artifact-path <path>` (`<path>` copied from `LANE-ARTIFACT-PATH:`), so a file two lanes wrote, or one no lane cites, refuses exactly as in round
 one; it writes `s<N>/<lane artifact>-repair-p<M>.md` and prints no `LANE:` line. Then dispatch
-ONE fan-in serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` line of ROUND ONE's `.join-plan` and every `ESCALATED:` line the
-lane join printed, which appends to that record as above. A round whose join prints `LANE-COUNT: 1` and `FANIN-COUNT: 0`
-is one lane with no fan-in. A round whose join prints `LANE-COUNT: 0` and a `FANIN-COUNT` above 0 has no lane round, no lane remediator and no adjudicator: ONE serial remediator, briefed with the same `shard: none (authoring-chain)` line and every `FANIN:` and `ESCALATED:` line of round one's `.join-plan`, appends to round one's record. In `--sources` mode the
+ONE fan-in serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` line of ROUND ONE's `.join-plan`, every `ESCALATED:` line the
+lane join printed and the text of `cross.brief`, which appends to that record as above. A round whose join prints `LANE-COUNT: 1` and `FANIN-COUNT: 0`
+is one lane with no fan-in. A round whose join prints `LANE-COUNT: 0` and a `FANIN-COUNT` above 0 has no lane round, no lane remediator and no adjudicator: ONE serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` and `ESCALATED:` line of round one's `.join-plan` and the text of `cross.brief`, appends to round one's record. In `--sources` mode the
 `ESCALATED:` lines are the lead's to adjudicate, never a re-dispatch of the serial remediator:
 that record may be the serial remediator's own, so no SERIAL-REQUIRED line is printed there, and
 no `LANE:` or `FANIN:` line. An
@@ -1212,7 +1212,7 @@ fix aside as outside the shard or not required without naming a hand-off, and, i
 mode, a `repaired` entry with an edit whose `siblings:` field is absent or in none of its four
 forms, and a siblings fence whose control text is not in the file it names.
 
-**Commit each round before the next opens.** One commit per round holds the round's joined record and the artifact it repaired, made after the serial tail's last write to that artifact (`requirements-bookkeeping.sh`, a render, a seal) and before the next round's partition. `partition-document.sh --shard-dir` for round M and the join of round M refuse while round M-1's record is uncommitted; commit it and rerun. A series whose pass-1 shard directory carries no `.era` token prints `ROUND-COMMIT: SKIP pre-era <name>` and is not judged; leave that series' commits as they are.
+**Commit each round before the next opens.** One commit per round holds the round's repair record and the artifact it repaired, made after the serial tail's last write to that artifact (`requirements-bookkeeping.sh`, a render, a seal) and before the next round's partition. `partition-document.sh --shard-dir` for round M and the join of round M refuse while round M-1's record is uncommitted; commit it and rerun. A series whose pass-1 shard directory carries no `.era` token prints `ROUND-COMMIT: SKIP pre-era <name>` and is not judged; leave that series' commits as they are.
 
 **Section lanes for a single-document round.** Join with `--keep-sections`: the plan's lanes are section copies (the `LANE-SECTIONS:` line names them); each lane edits only its `sections/<n>.md`, with section-local lines; after the last lane run `partition-document.sh --reassemble <repair-dir>` once.
 

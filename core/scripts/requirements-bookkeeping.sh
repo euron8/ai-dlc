@@ -10,6 +10,9 @@
 #          LOCATOR  a `<existing .md file>:<line>` cite in the PRD whose line number exceeds the file's length
 #          QUOTE    a quote attached to an `operator-answers-history.md:<line>` cite in the PRD, SPEC or slot
 #                   that the history entry holding that line does not carry (grammar at the QUOTE block)
+#          ATTRIB   a quote after `operator answer(s)` or `operator typed/wrote/said/ruled` in the sprint's slot
+#                   (never the cumulative PRD) with no cite, whose pieces are in neither hook-written record
+#                   (operator-answers-history.md, operator-requests-history.md); a quote a cite is attached to is QUOTE's
 #        A cite to a file that does not exist is not reported (it may name a tree this checkout lacks).
 #        The script closes FENCE (--rederive) and MIRROR (--mirror-lr); steps/requirements.md routes the rest.
 #   requirements-bookkeeping.sh --rederive <file>...  rewrite each stale `derived` fence's recorded output with its
@@ -135,7 +138,7 @@ EOF
   # or above its first heading is not read here.
   hist="$ROOT/$STATE/operator-answers-history.md"
   if [ -f "$hist" ]; then
-    awk -v hist="$hist" -v root="$ROOT/" -v sep=$'\001' '
+    awk -v hist="$hist" -v reqh="$ROOT/$STATE/operator-requests-history.md" -v slot="$SLOT" -v root="$ROOT/" -v sep=$'\001' '
       function flat(s) { gsub(/[ \t\r]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
       function inentry(q, L, M,    s, e, i, t, k, np, pc) {
         s = L; while (s > 0 && H[s] !~ /^## /) s--
@@ -147,7 +150,17 @@ EOF
         for (k = 1; k <= np; k++) { pc[k] = flat(pc[k]); if (pc[k] != "" && index(t, pc[k]) == 0) return 0 }
         return 1
       }
+      function inrecords(q,    k, np, pc) {
+        gsub(/\.\.\./, sep, q); gsub(/…/, sep, q)
+        np = split(q, pc, sep)
+        for (k = 1; k <= np; k++) { pc[k] = flat(pc[k]); if (pc[k] != "" && index(TA, pc[k]) == 0 && index(TR, pc[k]) == 0) return 0 }
+        return 1
+      }
       BEGIN { hn = 0; while ((getline l < hist) > 0) H[++hn] = l
+              for (i = 1; i <= hn; i++) TA = TA " " H[i]
+              TA = flat(TA)
+              while ((getline l < reqh) > 0) TR = TR " " l
+              TR = flat(TR)
               if (hn == 0) { printf "requirements-bookkeeping: %s read as empty\n", hist > "/dev/stderr"; exit 2 } }
       {
         nq = 0; rest = $0; off = 0
@@ -160,6 +173,7 @@ EOF
           off += o + ol + c - 2 + length(cl); rest = substr($0, off + 1)
         }
         if (nq == 0) next
+        for (k = 1; k <= nq; k++) AT[k] = 0
         rest = $0; off = 0
         while (match(rest, /operator-answers-history\.md:[0-9]+(-[0-9]+)?/)) {
           cs = off + RSTART; ce = cs + RLENGTH; cite = substr(rest, RSTART, RLENGTH)
@@ -170,10 +184,22 @@ EOF
             if (QS[k] >= ce) { g = substr($0, ce, QS[k] - ce); if (g !~ /^`?[ ]+(—|–|-)[ ]+$/) continue }
             else if (QE[k] < cs) { g = substr($0, QE[k] + 1, cs - QE[k] - 1); if (g !~ /^[ ]*[(,][ ]*`?[A-Za-z0-9_.\/-]*$/) continue }
             else continue
+            AT[k] = 1
             if (!inentry(QT[k], L, M)) {
               f = FILENAME; if (index(f, root) == 1) f = substr(f, length(root) + 1)
               printf "PRECHECK QUOTE %s:%d \"%s\" is not in the operator-answers-history.md entry holding :%d\n", f, FNR, QT[k], L
             }
+          }
+        }
+        # ATTRIB reads the slot only (the PRD is cumulative). FP set measured on graph s321/s322/s323 slots: 0/0/10,
+        # all ten lead expansions of option labels or lead text, so true positives; no narrowing was needed.
+        if (FILENAME == slot) for (k = 1; k <= nq; k++) {
+          if (AT[k]) continue
+          pre = substr($0, (k > 1 ? QE[k - 1] : 0) + 1, QS[k] - (k > 1 ? QE[k - 1] : 0) - 1)
+          if (!(pre ~ /[Oo]perator answers?( +[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]| +`?AskUserQuestion`?)?( *(:|—|–))? *$/ || pre ~ /[Oo]perator (typed|wrote|said|ruled)/)) continue
+          if (!inrecords(QT[k])) {
+            f = FILENAME; if (index(f, root) == 1) f = substr(f, length(root) + 1)
+            printf "PRECHECK ATTRIB %s:%d \"%s\" is attributed to the operator and is in neither operator-answers-history.md nor operator-requests-history.md\n", f, FNR, QT[k]
           }
         }
       }' "$PRD" ${SPEC:+"$SPEC"} "$SLOT" > "${TMPDIR:-/tmp}/rb.quote.$$"

@@ -1197,6 +1197,19 @@ expect k2-sharded 0 "the offender with the merge's shard_tool_use_ids: line -- s
 expect k2-sha-moved 0 "the document moved after the pass notarized it: PENDING, never judged on unreviewed bytes" prd-adversarial-p
 expect_says k2-sha-moved prd-adversarial-p "K2-sha-moved-pending" \
   "PENDING (K2 -- SECTIONS)" "is not the bytes it notarized"
+# BL-1208: a carry-over-evaluation pass 2 or later is ONE final adversary and owes K2 no shard ids; its pass 1 and any
+# other series' pass 2 still do. The FAIL cells are the near-misses that keep the exemption off K2's own subject.
+expect k2-coe-p2 0 "coe pass 2 written as the single final adversary over a 4-part document: exempt" coe-adversarial-p
+expect_says k2-coe-p2 coe-adversarial-p "K2-coe-exempt" \
+  "NOTE (K2 -- SECTIONS): coe-adversarial-p2.md is a carry-over-evaluation pass 2 or later, written as the single final adversary the step prescribes; it owes no shard_tool_use_ids:."
+expect k2-coe-p1u 1 "coe pass 2 single over a series whose unsharded pass 1 reviewed a 4-part document: FAIL (K2), the exemption needs a sectioned pass 1" coe-adversarial-p
+expect_says k2-coe-p1u coe-adversarial-p "K2-coe-p1u-refused" "FAIL (K2 -- SECTIONS): coe-adversarial-p2.md is a carry-over-evaluation pass 2" "pass 1"
+expect k2-coe-p1s 0 "coe pass 2 single after a single pass 1 over a document that was SERIAL at pass 1 and grew: exempt (Rule 28 exception 4)" coe-adversarial-p
+expect_says k2-coe-p1s coe-adversarial-p "K2-coe-p1s-exempt" "NOTE (K2 -- SECTIONS): coe-adversarial-p2.md is a carry-over-evaluation pass 2 or later"
+expect k2-coe-p1 1 "coe pass 1 written as a single adversary over a 4-part document: still FAIL (K2)" coe-adversarial-p
+expect_says k2-coe-p1 coe-adversarial-p "K2-coe-p1-refused" "FAIL (K2 -- SECTIONS): coe-adversarial-p1.md reviews" "splits into"
+expect k2-noncoe-p2 1 "a non-coe pass 2 written as a single adversary over a 4-part document: still FAIL (K2)" prd-adversarial-p
+expect_says k2-noncoe-p2 prd-adversarial-p "K2-noncoe-p2-refused" "FAIL (K2 -- SECTIONS): prd-adversarial-p2.md reviews" "splits into"
 
 # THE SILENT CELLS, each against the offender as the control that K2 fires at all.
 k2_silent() {  # $1 case  $2 why
@@ -1597,6 +1610,11 @@ echo "--- arm J2 story-id set (BL-736): receipt-bl736.sh against the validator"
 R736="$DIR/receipt-bl736.sh"
 [ -f "$R736" ] || broken "receipt-bl736.sh is not beside run.sh"
 rcpt_cell "J2T shipped validator"     "$R736" "$VALIDATOR" 0
+# --- BL-1175 item 13: a pass whose bytes moved reads the counts of the bytes its merge row records, recovered from git.
+echo "--- arm ATTESTATION recovery (BL-1175c): receipt-bl1175c.sh against the validator"
+R1175C="$DIR/receipt-bl1175c.sh"
+[ -f "$R1175C" ] || broken "receipt-bl1175c.sh is not beside run.sh"
+rcpt_cell "ATT recover shipped validator" "$R1175C" "$VALIDATOR" 0
 echo
 # --- ARM H: the record is named by its SERIES, behind a stamp -------------------------------
 # Every arm-H case above sits in no stamped repo and names its records `s1-brief-repair-p<M>`

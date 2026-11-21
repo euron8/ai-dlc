@@ -614,6 +614,28 @@ p_sd_era() { # the era token: pass 1 writes it (PRODUCER arm); a token-carrying 
   sd "$1" "$w" "$pa/s7/old.md" 2
   [ "$SD_RC" -eq 0 ] && case "$SD_ERR" in *"SKIP pre-era old"*) : ;; *) return 1 ;; esac
 }
+p_sd_serial() { # a SERIAL document: --map writes nothing (the one era producer is --shard-dir); --shard-dir stamps pass 1, a RESTARTED
+  # cycle's first pass (dead cycle archived, its pass-1 dir left, no live pass or repair), a document outside s<N>/, a nested one; a live repair record
+  # keeps the restart unstamped (near-miss)
+  local w pa tok='ai-dlc-era: e4-forward-1' a b
+  w="$(sdw)" || return 1; pa="$w/_bmad-output/planning-artifacts"
+  mkdir -p "$pa/s7/sub" "$pa/s7/shards/x-p1" "$pa/archive/x-cycle-1" "$w/docs" || return 1
+  for a in "$pa/s7/x.md" "$pa/s7/sub/y.md" "$pa/s7/z.md" "$w/docs/d.md"; do printf '# D\n' > "$a" || return 1; done
+  ( cd "$w" && bash "$1" --map "$pa/s7/z.md" > "$w/map.out" 2>&1; echo "$?" > "$w/map.rc" )
+  [ "$(cat "$w/map.rc")" = 3 ] && grep -q '^SERIAL:' "$w/map.out" || return 1
+  [ ! -e "$pa/s7/shards/z-p1" ] || return 1
+  printf '# a1\n' > "$pa/archive/x-cycle-1/x-adversarial-p1.md"
+  sd "$1" "$w" "$pa/s7/x.md" 2
+  [ "$SD_RC" -eq 0 ] && grep -qxF -- "$tok" "$SD_OUT/.era" || return 1
+  . "$(dirname "$1")/era-token.sh" && ai_dlc_era_open "$pa/s7" x 2 || return 1
+  sd "$1" "$w" "$pa/s7/sub/y.md" 1
+  [ "$SD_RC" -eq 0 ] && grep -qxF -- "$tok" "$SD_OUT/.era" || return 1
+  sd "$1" "$w" "$w/docs/d.md" 1 --sprint 7
+  [ "$SD_RC" -eq 0 ] && grep -qxF -- "$tok" "$SD_OUT/.era" || return 1
+  mkdir -p "$pa/s7/shards/n-p1" && printf '# n\n' > "$pa/s7/n.md" && printf '# r\n' > "$pa/s7/n-repair-p1.md" || return 1
+  sd "$1" "$w" "$pa/s7/n.md" 2
+  [ "$SD_RC" -eq 0 ] && [ ! -e "$SD_OUT/.era" ]
+}
 p_sd_merge() { # the printed path is accepted by the SHIPPING merge's phases, and REC_PREFIX is the prefix the ledger refusal keys on
   local w pa mg r art fl nm rp want
   mg="$(dirname "$PD")/merge-adversarial-shards.sh"
@@ -816,5 +838,7 @@ if p_sd_wt_cmp "$PD"; then ok "A46: an artifact differing in the linked worktree
 if p_sd_nogit "$PD"; then ok "A47: with no git repo an s<K>/ path is accepted as written and any other path is REFUSED"; else bad "A47: with no git repo an s<K>/ path is accepted as written and any other path is REFUSED"; fi
 
 if p_sd_era "$PD"; then ok "A48: --shard-dir pass 1 writes the era token; a token-carrying series refuses round 2 over an uncommitted record and opens it once committed; a series opened without the token reads SKIP pre-era"; else bad "A48: --shard-dir pass 1 writes the era token; a token-carrying series refuses round 2 over an uncommitted record and opens it once committed; a series opened without the token reads SKIP pre-era"; fi
+if p_sd_serial "$PD"; then ok "A49: a SERIAL document's --map writes no era token; --shard-dir stamps pass 1, a restarted cycle's first pass over a left-behind pass-1 dir, a nested document and one outside s<N>/ (--sprint), and not a restart with a live repair record"; else bad "A49: SERIAL era producer (map rc $(cat "${w:-/nonexistent}/map.rc" 2>/dev/null), shard-dir rc ${SD_RC:-?}: ${SD_ERR:-})"; fi
+
 echo
 report_end document-partition

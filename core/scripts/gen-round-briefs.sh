@@ -28,18 +28,22 @@
 #   --step-label S   `lead_role:` value and the `--mark` step word's owner (default stories-test-strategy.md).
 #   --prior P        pass 2+ review: a prior pass's findings or a repair record the member must read (repeatable).
 #   --plan-file P    repair, SECOND run: the `PLAN-FILE:` path the parallel join printed (`<shard dir>/.join-plan`). This run
-#                    briefs ONLY the cross shard, from `--findings-dir`/cross.txt, for the SEPARATE serial lane round the plan's
-#                    `LANE-ARTIFACT: <lane artifact> --pass <M>` line names. The cross shard never joins the parallel round: a
-#                    file it and a part both wrote is refused there ("written by more than one agent").
+#                    checks that every `--findings-dir`/cross.txt token is the key of EXACTLY ONE `CROSS:` item of the plan (a
+#                    LANE-ITEM or a FANIN line, which is how the join already deals a routed finding) and writes `cross.brief`, a
+#                    note for the lane and fan-in briefs that carry such an item; it exits 3 on a token with no or two owners. The
+#                    FIRST run (no --plan-file) adds a `serial<TAB><token><TAB>-` row to `<shard dir>/.findings-partition` for each
+#                    cross.txt token the lead's own route file does not already name, so a cross finding is owned in every shape
+#                    and the join's CROSS-OPEN report sees it. No cross.md is dispatched: a file a cross shard and a lane part both
+#                    wrote is refused ("written by more than one agent").
 #
 # OUTPUT (--out-dir): one `<ordinal>.brief` per shard, `cross.brief` for a review or elicitation round, `join.cmd` holding the
 # beat-join command with every deliverable path and the flag the round kind owns; the join command is also printed. A repair
-# run without --plan-file never briefs cross; with a non-empty cross.txt it prints `cross: ...` naming the second run. The
-# --plan-file run writes `cross.brief` (deliverable `<shards dir>/<lane artifact>-repair-p<M>/cross.md`) and `lane.cmd`, the
-# cross deliverable's own `--complete` command, and prints the lane join's `--artifact`, `--pass` and `--artifact-path`.
+# run without --plan-file never briefs cross; with a non-empty cross.txt it routes it and prints `cross: ...` naming the second run.
+# The --plan-file run writes `cross.brief` (the CROSS NOTE; no deliverable, no `lane.cmd`) and prints the lane join's `--artifact`,
+# `--pass` and `--artifact-path`.
 # Loadable: the body is grb_main, behind a column-0 BASH_SOURCE guard, so sourcing defines functions and runs nothing.
 # Exit: 0 written, 2 usage or an unreadable input, 3 a refusal (empty map, ordinal gap, provenance region absent; with
-# --plan-file: no LANE-ARTIFACT line in the plan, or no cross.txt findings).
+# --plan-file: no LANE-ARTIFACT line in the plan, no cross.txt findings, or a cross.txt token with no or two CROSS items in the plan).
 grb_main() {
 set -u
 LC_ALL=C; export LC_ALL
@@ -148,7 +152,7 @@ grb_write_adv() { # $1 ordinal-or-cross, $2 shard value, $3 subject text
 }
 
 if [ -n "$PLANF" ]; then
-  # The serial lane round's cross brief: its name, pass and path copied from the parallel join's plan, never inferred.
+  # The CROSS NOTE for the lane and fan-in briefs: name, pass and path copied from the parallel join's plan, never inferred.
   [ -f "$PLANF" ] || grb_die "--plan-file '$PLANF' is not a file"
   LA="$(awk '$1 == "LANE-ARTIFACT:" && $3 == "--pass" && NF == 4 { print $2 " " $4; exit }' "$PLANF")"
   [ -n "$LA" ] || grb_die "--plan-file $PLANF has no 'LANE-ARTIFACT: <name> --pass <M>' line (a lane round's own join or a record-mode join opens no lane round)" 3
@@ -156,25 +160,31 @@ if [ -n "$PLANF" ]; then
   case "$LPASS" in ''|*[!0-9]*) grb_die "--plan-file $PLANF: LANE-ARTIFACT pass '$LPASS' is not numeric" 3 ;; esac
   LPATH="$(awk '$1 == "LANE-ARTIFACT-PATH:" { print $2; exit }' "$PLANF")"
   [ -s "$FIND/cross.txt" ] || grb_die "no cross shard findings: $FIND/cross.txt is absent or empty" 3
-  LDIR="$(dirname "$(dirname "$PLANF")")/${LNAME}-repair-p${LPASS}"
-  if [ "$AXIS" = files ]; then sub="Subject: EVERY story file under $SUBJ (the files the parallel repair left)."; else sub="Subject: the whole ASSEMBLED document $DOC."; fi
+  # EXACTLY ONE OWNER: every cross.txt token must be the key of exactly one CROSS item of the plan (a LANE-ITEM or a FANIN line),
+  # compared by `<file>.md#<id>` so a bare route key and a path-qualified token are one finding.
+  OWN="$(awk '$1 == "LANE-ITEM:" && $3 == "CROSS:" { print $4 } $1 == "FANIN:" && $2 == "CROSS:" { print $3 }' "$PLANF" | sed 's@.*/@@')"
+  BADOWN=""
+  while IFS= read -r ln; do
+    tok="${ln%% *}"; [ -n "$tok" ] || continue
+    tb="${tok##*/}"
+    c="$(printf '%s\n' "$OWN" | grep -cxF -- "$tb")" || c=0
+    [ "$c" -eq 1 ] || BADOWN="${BADOWN}${BADOWN:+; }$tok has $c owner line(s)"
+  done < "$FIND/cross.txt"
+  [ -z "$BADOWN" ] || grb_die "--plan-file $PLANF: a cross finding needs exactly one CROSS item in the plan (a LANE-ITEM or FANIN line): $BADOWN; the route file the first run wrote was overwritten or deleted before the join: re-run the FIRST gen-round-briefs run (without --plan-file) and the join, or brief each cross finding by hand as _gate-procedures.md 'Adversarial repair dispatch' says for a lead-written route file" 3
+  LCNT="$(awk '$1 == "LANE-COUNT:" { print $2; exit }' "$PLANF")"; case "$LCNT" in ''|*[!0-9]*) LCNT=0 ;; esac
+  if [ "$LCNT" -gt 0 ]; then STALE_WHO="the bytes from BEFORE the parallel part repairs, and the lane remediators' edits come after those: they are two rounds of edits stale"
+  else STALE_WHO="the bytes from BEFORE the parallel part repairs: they are one round of edits stale (this round has no lane remediators)"; fi
   {
-    echo "You are the cross shard of the AI/DLC $ART repair (sprint $SPRINT, $AXIS axis), dispatched in the SERIAL lane round $LNAME --pass $LPASS after the parallel join. FIRST action: Read $ROLE (whole file) and follow it exactly."
+    echo "CROSS NOTE of the AI/DLC $ART repair (sprint $SPRINT, $AXIS axis, pass $LPASS): append this text to the brief of every lane remediator and of the fan-in remediator whose plan lines carry a \`CROSS:\` item. The plan line owns each cross finding; no cross.md repair deliverable exists and no separate agent writes one (each token's source is the adversary pass's cross shard record, \`shards/<stem>-p<M>/cross.md\`, the token's directory)."
     echo
-    echo "Deliverable: $LDIR/cross.md"
-    echo "shard: none (authoring-chain)"
-    echo
-    echo "$sub Apply ALL of these cross findings; read each finding's full text in its source file (the token is \`<file>#<id>\`):"
+    echo "Each \`CROSS:\` item's key is a finding token \`<file>#<id>\`; read its full text in its source file. These cross findings are listed in $FIND/cross.txt:"
     cat "$FIND/cross.txt"
     echo
-    echo "The cross findings were written against the bytes from BEFORE the part repairs. Before applying any of them, run \`scripts/ai-dlc/validate-artifact-derivations.sh\` on each source file from the project root and re-derive every finding it reports STALE; re-read every finding's cited text in the current files before editing on it."
-    echo "Open the record with one \`- artifact:\` / \`- artifact_sha_before:\` / \`- artifact_sha_after:\` triple per file you edit, each before equal to the bytes the parallel join left. Edit the subject with Write or Edit, never Bash. Write your repair record to the deliverable path."
+    echo "The cross findings were written against $STALE_WHO. Before applying a CROSS item, run \`scripts/ai-dlc/validate-artifact-derivations.sh\` on each source file from the project root and re-derive every finding it reports STALE; re-read every finding's cited text in the current files before editing on it."
+    echo "Each entry you write for a CROSS item carries a \`source:\` line naming that finding's token, so the join's CROSS-OPEN report closes it."
   } > "$OUTD/cross.brief"
-  LJOIN="scripts/ai-dlc/wait-for-deliverable.sh --complete $LDIR/cross.md"
-  printf '%s\n' "$LJOIN" > "$OUTD/lane.cmd"
-  echo "gen-round-briefs: wrote cross.brief for the lane round $LNAME --pass $LPASS under $OUTD"
-  echo "join: $LJOIN"
-  echo "lane join: scripts/ai-dlc/join-remediator-shards.sh --sprint $SPRINT --artifact $LNAME --pass $LPASS --artifact-path ${LPATH:-<LANE-ARTIFACT-PATH>} --since <ISO> --until <ISO>"
+  echo "gen-round-briefs: wrote cross.brief (the CROSS NOTE for the lane and fan-in briefs of the round $LNAME --pass $LPASS) under $OUTD"
+  [ "$LCNT" -gt 0 ] && echo "lane join: scripts/ai-dlc/join-remediator-shards.sh --sprint $SPRINT --artifact $LNAME --pass $LPASS --artifact-path ${LPATH:-<LANE-ARTIFACT-PATH>} --since <ISO> --until <ISO>"
   exit 0
 fi
 
@@ -215,7 +225,22 @@ else
   done < "$MAP"
   [ "$n" -gt 0 ] || grb_die "no shard has a findings file under $FIND" 3
   FLAG=""
-  [ ! -s "$FIND/cross.txt" ] || echo "cross: $FIND/cross.txt is the serial lane round's, not this join's; after this join prints PLAN-FILE, run again with --plan-file $SDIR/.join-plan"
+  if [ -s "$FIND/cross.txt" ]; then
+    # The cross findings are never a part of this join: each becomes a `serial` row of the route file (join header 4d) with files `-`
+    # unless the lead's own row already names the finding, so the join deals it to exactly one lane or to the fan-in.
+    RF="$SDIR/.findings-partition"; RADD=0
+    mkdir -p "$SDIR" || grb_die "cannot create $SDIR" 2
+    if [ -f "$RF" ]; then [ "$(sed -n 1p "$RF")" = "# findings-partition v1" ] || grb_die "$RF exists and is not a findings-partition v1 file" 3
+    else printf '# findings-partition v1\n' > "$RF" || grb_die "cannot write $RF" 2; fi
+    while IFS= read -r ln; do
+      tok="${ln%% *}"; [ -n "$tok" ] || continue
+      tb="${tok##*/}"
+      c="$(awk -F'\t' '$1 == "serial" { print $2 }' "$RF" | sed 's@.*/@@' | grep -cxF -- "$tb")" || c=0
+      [ "$c" -eq 0 ] || continue
+      printf 'serial\t%s\t-\n' "$tok" >> "$RF"; RADD=$((RADD + 1))
+    done < "$FIND/cross.txt"
+    echo "cross: $FIND/cross.txt is routed through $RF ($RADD row(s) added, files -); after this join prints PLAN-FILE, run again with --plan-file $SDIR/.join-plan"
+  fi
 fi
 
 JOIN="scripts/ai-dlc/wait-for-deliverable.sh --complete${FLAG:+ $FLAG}$PATHS"

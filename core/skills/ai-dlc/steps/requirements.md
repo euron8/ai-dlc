@@ -343,13 +343,13 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
   `scripts/ai-dlc/requirements-bookkeeping.sh --precheck <N>`: it lists stale `derived` fences,
   slot bullets missing or different in the PRD's `LOCKED_REQUIREMENTS` block, FRs with no or an
   unknown `(CAP-m)`, cites past a file's end, and quotes attached to an
-  `operator-answers-history.md:<line>` cite that the entry holding that line does not carry. The
+  `operator-answers-history.md:<line>` cite that the entry holding that line does not carry, and quotes the slot attributes to an operator answer that neither hook-written history carries. The
   script closes two classes: `--rederive <file>...` rewrites stale fence outputs (`PRECHECK FENCE`)
   and `--mirror-lr <N>` copies the slot's bullets into the PRD block (`PRECHECK MIRROR`), then
   `--seal <file>...` runs on every file the script rewrote and `--precheck` re-runs until it
   prints no `PRECHECK FENCE` or `PRECHECK MIRROR` line. A `PRECHECK QUOTE` line on the slot, or
   on an `- LR-S<N>-` bullet of the PRD's block, is the lead's: the lead corrects the slot bullet
-  and runs `--mirror-lr <N>`. Every other `PRECHECK CAP`, `PRECHECK LOCATOR` and `PRECHECK QUOTE`
+  and runs `--mirror-lr <N>`. Every other `PRECHECK CAP`, `PRECHECK LOCATOR`, `PRECHECK QUOTE` and `PRECHECK ATTRIB`
   line goes to one `remediator`; a SPEC line is fixed through its `.memlog.md` and the one render.
   `--precheck` runs again after that, and the loop ends at `PRECHECK clean`. The adversary reviews
   substance, not these.

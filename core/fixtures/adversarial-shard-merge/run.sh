@@ -1196,6 +1196,12 @@ p_ri2 "$MERGE" && ok "RI2: p2's snapshots deleted, p1's kept: r 0, unjoined 8, n
   || bad "RI2: stage ${RI_STAGE:-?}: rc=${RC:-?} [$RI_GOT] $(grep -m2 '(R -- ' "$CO")"
 p_ri4 "$MERGE" && ok "RI4: the second repair rewrote over 25% of story 2: r 0, unjoined 8, NOT_MET, the merge names the stem" \
   || bad "RI4: stage ${RI_STAGE:-?}: rc=${RC:-?} [$RI_GOT] $(head -3 "$MO")"
+p_ri9 && ok "RI9: pass 1 carrying 4 unquoted MAJOR prints no 'carry no quote: line' NOTE (the first-pass guard), while pass 2 of the same shards prints it" \
+  || bad "RI9: stage ${RI_STAGE:-?}: $(grep -m1 'carry no quote' "${RI_S:-/nonexistent}/../ri_pass.1.out" 2>/dev/null)"
+p_ri10 "$MERGE" rename && ok "RI10: a story renamed AND rewritten (story-2-k -> story-3-k, six of its lines replaced): the new stem is paired with the dropped one, the 25% ceiling applies, r 0, unjoined 8, the merge names story-3-k" \
+  || bad "RI10: stage ${RI_STAGE:-?}: rc=${RC:-?} [$RI_GOT] $(head -3 "$MO")"
+p_ri10 "$MERGE" add && ok "RI10n: the same story-3-k as a pure ADD (story-2-k stays): no dropped stem to pair with, no ceiling note, its quotes read NEW (r 3, unjoined 1)" \
+  || bad "RI10n: stage ${RI_STAGE:-?}: rc=${RC:-?} [$RI_GOT] $(head -3 "$MO")"
 fi # sg ri
 
 echo

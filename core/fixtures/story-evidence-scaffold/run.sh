@@ -1169,7 +1169,7 @@ fi
 
 # --- BL-1175 repair-round cross shard: briefed for the SERIAL lane round, never the parallel join --------------------
 # gen-round-briefs.sh --round repair writes the part briefs and the parallel join.cmd; the cross shard's findings wait for
-# the parallel join's PLAN-FILE, and the --plan-file run briefs cross with deliverable <lane artifact>-repair-p<M>/cross.md
+# the parallel join's PLAN-FILE, and the --plan-file run briefs cross as text for the lane round's fan-in remediator (no cross.md deliverable, no lane.cmd)
 # (graph s323 stories-serial-repair-p1/p2). The plan is graph's real round-one shape at pass 2, so a hard-coded -p1 fails.
 # The ALLOW twin is a lane round's own plan (no LANE-ARTIFACT line), which refuses with exit 3 and writes no brief.
 if gsel rbriefs; then
@@ -1194,21 +1194,31 @@ if gsel rbriefs; then
     rb_out="$(FXCELL="cli-rbriefs-par" bash "$RB_D/gen-round-briefs.sh" $(rb_args) --shard-dir "$RB_S" --out-dir "$RB_W/par" 2>&1)"; rb_rc=$?
     rb_join="$(cat "$RB_W/par/join.cmd" 2>/dev/null)"
     if [ "$rb_rc" -eq 0 ] && [ "$rb_join" = "scripts/ai-dlc/wait-for-deliverable.sh --complete $RB_S/1.md $RB_S/3.md" ] && [ ! -e "$RB_W/par/cross.brief" ] \
-       && grep -qF "cross: $RB_W/find/cross.txt is the serial lane round's, not this join's; after this join prints PLAN-FILE, run again with --plan-file $RB_S/.join-plan" <<< "$rb_out"; then
-      ok "RBRIEFS: the parallel repair join.cmd names parts 1 and 3 and no cross deliverable; cross.txt is pointed at the --plan-file run"
+       && grep -qF "cross: $RB_W/find/cross.txt is routed through $RB_S/.findings-partition (1 row(s) added, files -); after this join prints PLAN-FILE, run again with --plan-file $RB_S/.join-plan" <<< "$rb_out" \
+       && [ "$(cat "$RB_S/.findings-partition")" = "$(printf '# findings-partition v1\nserial\tstories-p2/cross.md#F-1\t-')" ]; then
+      ok "RBRIEFS: the parallel repair join.cmd names parts 1 and 3 and no cross deliverable; cross.txt becomes one serial route row (files -), the --plan-file run is named"
     else
       bad "RBRIEFS: parallel rc=$rb_rc join=[$rb_join] cross.brief=$([ -e "$RB_W/par/cross.brief" ] && echo present || echo absent) out=[$rb_out]"
     fi
-    printf 'JOINED: %s (2 parts, 2 writers)\nESCALATED-COUNT: 0\nSERIAL-REQUIRED: 3\nLANE-ARTIFACT: stories-serial --pass 2\nLANE-ARTIFACT-PATH: _bmad-output/planning-artifacts/s9\nLANE-EDGES: files, by edit set\nLANE: 1 files: a.md parts: 1.md\nLANE-COUNT: 1\nFANIN-COUNT: 0\nADJUDICATOR-COUNT: 0\n' "$RB_W/stories-repair-p2.md" > "$RB_S/.join-plan"
+    printf 'JOINED: %s (2 parts, 2 writers)\nESCALATED-COUNT: 0\nSERIAL-REQUIRED: 3\nLANE-ARTIFACT: stories-serial --pass 2\nLANE-ARTIFACT-PATH: _bmad-output/planning-artifacts/s9\nLANE-EDGES: files, by edit set\nLANE: 1 files: a.md parts: 1.md\nLANE-COUNT: 1\nFANIN-COUNT: 1\nFANIN: CROSS: stories-p2/cross.md#F-1 files: - (lanes out)\nADJUDICATOR-COUNT: 0\n' "$RB_W/stories-repair-p2.md" > "$RB_S/.join-plan"
     rb_lout="$(FXCELL="cli-rbriefs-lane" bash "$RB_D/gen-round-briefs.sh" $(rb_args) --shard-dir "$RB_S" --out-dir "$RB_W/lane-out" --plan-file "$RB_S/.join-plan" 2>&1)"; rb_lrc=$?
-    rb_ld="$RB_W/shards/stories-serial-repair-p2"
-    if [ "$rb_lrc" -eq 0 ] && grep -qxF "Deliverable: $rb_ld/cross.md" "$RB_W/lane-out/cross.brief" && grep -qxF 'shard: none (authoring-chain)' "$RB_W/lane-out/cross.brief" \
-       && grep -qxF 'stories-p2/cross.md#F-1 (MAJOR)' "$RB_W/lane-out/cross.brief" \
-       && [ "$(cat "$RB_W/lane-out/lane.cmd")" = "scripts/ai-dlc/wait-for-deliverable.sh --complete $rb_ld/cross.md" ] \
+    if [ "$rb_lrc" -eq 0 ] && grep -qxF 'stories-p2/cross.md#F-1 (MAJOR)' "$RB_W/lane-out/cross.brief" \
+       && grep -qF 'two rounds of edits stale' "$RB_W/lane-out/cross.brief" \
+       && ! grep -qE '^(Deliverable|shard):' "$RB_W/lane-out/cross.brief" && [ ! -e "$RB_W/lane-out/lane.cmd" ] \
        && grep -qF -- '--artifact stories-serial --pass 2 --artifact-path _bmad-output/planning-artifacts/s9 ' <<< "$rb_lout"; then
-      ok "RBRIEFS: --plan-file briefs cross for the lane round stories-serial --pass 2, deliverable stories-serial-repair-p2/cross.md, with its own --complete"
+      ok "RBRIEFS: --plan-file briefs cross as fan-in text for the lane round stories-serial --pass 2: the token line, the stale-derivation note, no deliverable, no lane.cmd, the lane join still printed"
     else
-      bad "RBRIEFS: lane rc=$rb_lrc brief=[$(grep -E '^(Deliverable|shard):' "$RB_W/lane-out/cross.brief" 2>/dev/null | tr '\n' ' ')] cmd=[$(cat "$RB_W/lane-out/lane.cmd" 2>/dev/null)] out=[$rb_lout]"
+      bad "RBRIEFS: lane rc=$rb_lrc brief=[$(head -n 3 "$RB_W/lane-out/cross.brief" 2>/dev/null | cut -c1-120 | tr '\n' ' ')] lane.cmd=$([ -e "$RB_W/lane-out/lane.cmd" ] && echo present || echo absent) out=[$rb_lout]"
+    fi
+    sed '/^FANIN: CROSS: /d' "$RB_S/.join-plan" > "$RB_W/plan-zero"
+    { cat "$RB_S/.join-plan"; printf 'LANE-ITEM: 1 CROSS: cross.md#F-1 files: a.md\n'; } > "$RB_W/plan-two"
+    rb_z="$(FXCELL="cli-rbriefs-zero" bash "$RB_D/gen-round-briefs.sh" $(rb_args) --shard-dir "$RB_S" --out-dir "$RB_W/zero-out" --plan-file "$RB_W/plan-zero" 2>&1)"; rb_zrc=$?
+    rb_t="$(FXCELL="cli-rbriefs-two" bash "$RB_D/gen-round-briefs.sh" $(rb_args) --shard-dir "$RB_S" --out-dir "$RB_W/two-out" --plan-file "$RB_W/plan-two" 2>&1)"; rb_trc=$?
+    if [ "$rb_zrc" -eq 3 ] && grep -qF 'stories-p2/cross.md#F-1 has 0 owner line(s)' <<< "$rb_z" && [ ! -e "$RB_W/zero-out/cross.brief" ] \
+       && [ "$rb_trc" -eq 3 ] && grep -qF 'stories-p2/cross.md#F-1 has 2 owner line(s)' <<< "$rb_t" && [ ! -e "$RB_W/two-out/cross.brief" ]; then
+      ok "RBRIEFS: a cross token with no CROSS item in the plan (the one-lane, no-fan-in shape) and one with two items (a route file plus a derived row) each refuse with exit 3 and write no note"
+    else
+      bad "RBRIEFS: owner check zero rc=$rb_zrc [$rb_z] two rc=$rb_trc [$rb_t]"
     fi
     printf 'JOINED: %s (1 parts, 1 writers)\nESCALATED-COUNT: 0\nSERIAL-REQUIRED: 3\n' "$RB_W/stories-serial-repair-p2.md" > "$RB_W/lane/shards/stories-serial-repair-p2/.join-plan"
     rb_rout="$(FXCELL="cli-rbriefs-lanejoin" bash "$RB_D/gen-round-briefs.sh" $(rb_args) --shard-dir "$RB_S" --out-dir "$RB_W/ref-out" --plan-file "$RB_W/lane/shards/stories-serial-repair-p2/.join-plan" 2>&1)"; rb_rrc=$?

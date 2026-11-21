@@ -3648,13 +3648,14 @@ fi
 # applied or escalated as `source: <review-shard-file>#<finding-id>`, resolved on the pair against shards/coe-p1/, by the
 # party round's own resolver. A series whose shards/coe-p1/.era lacks the era token (era-token.sh) reads SKIP, never a refusal.
 COE_DIR="${PA}/s${SPRINT}/shards/coe-p1"
-_coe_owed=0
+_coe_owed=0; _coe_serial=0
 if [ "$PARTY" = 0 ] && [ "$SUBJMODE" = 0 ] && [ "$DOCMODE" = 0 ] && [ "$ARTIFACT" = coe ] && [ "$PASS" = 1 ]; then
   # A SERIAL pass 1 (partition-document.sh --map wrote shards/coe-p1/.era and one adversary wrote the pass) has no review
-  # shard to resolve a source against: SKIP, never a refusal.
+  # shard: its sources resolve against the pass file itself, and every CRITICAL/MAJOR heading of it must be closed by a
+  # repaired or escalated entry (validate-adversarial-convergence.sh arm P1J reads the same keys).
   _coe_sh=0; for _f in "${COE_DIR}"/*.md; do [ -f "$_f" ] && { _coe_sh=1; break; }; done
   if ai_dlc_era_open "${PA}/s${SPRINT}" coe 1 && [ -f "${COE_DIR}/.era" ]; then
-    if [ "$_coe_sh" = 1 ]; then _coe_owed=1; else echo "COE-SOURCES: SKIP serial coe (pass 1 has no review shard)" >&2; fi
+    if [ "$_coe_sh" = 1 ]; then _coe_owed=1; else _coe_serial=1; fi
   else echo "COE-SOURCES: SKIP pre-era coe" >&2; fi
 fi
 if [ "$_coe_owed" = 1 ]; then
@@ -3667,6 +3668,48 @@ COEPEOF
     src_refusals "$(src_check "$COE_DIR" "$@")"
   else
     refuse "no pass-1 review shards at ${COE_DIR}; a coe pass-1 repair's sources resolve there"
+  fi
+fi
+if [ "$_coe_serial" = 1 ]; then
+  _cs_pf="${PA}/s${SPRINT}/coe-adversarial-p1.md"
+  if [ -f "$_cs_pf" ]; then
+    _cs_d="$(mktemp -d "${TMPDIR:-/tmp}/join-coeserial.XXXXXX")" || hdie "mktemp failed; the serial coe sources cannot be resolved"
+    cp "$_cs_pf" "${_cs_d}/coe-adversarial-p1.md"
+    set --
+    while IFS= read -r p; do [ -n "$p" ] && set -- "$@" "$p"; done <<COESPEOF
+$PARTS
+COESPEOF
+    src_refusals "$(src_check "$_cs_d" "$@")"
+    # The finding -> entry join: a key is closed by a `source:` token of a repaired or escalated entry.
+    _cs_keys="$(awk '
+      /SKILL_INVOCATION_PROVENANCE v1/ { skip = 1; next }
+      /SKILL_INVOCATION_PROVENANCE_END/ { skip = 0; next }
+      skip { next }
+      fence && $0 ~ /^[ \t]*(```+|~~~+)[ \t]*$/ { frr = $0; gsub(/[ \t]/, "", frr); if (substr(frr, 1, 1) == fc && length(frr) >= fln) { fence = 0; next } }
+      !fence && /^[ \t]*(```+[^`]*|~~~+.*)$/ { fence = 1; fc = ($0 ~ /^[ \t]*~/) ? "~" : "`"; frr = $0; sub(/^[ \t]*/, "", frr); match(frr, /^(```+|~~~+)/); fln = RLENGTH; next }
+      fence { next }
+      /^## / { fnd = ($0 ~ /^## Findings[ \t]*$/); next }
+      /^### / && fnd && ($0 ~ /CRITICAL/ || $0 ~ /MAJOR/) {
+        s = $0; sub(/^#+[ \t]+/, "", s); gsub(/[*`_]/, "", s); gsub(/[][]/, "", s); sub(/^[ \t]+/, "", s); sub(/^[Ff]inding[ \t]+/, "", s)
+        if (match(s, /^[A-Za-z0-9][A-Za-z0-9.-]*/)) { t = substr(s, 1, RLENGTH); sub(/[.-]+$/, "", t); if (t ~ /[0-9]/ && !seen[t]++) print t }
+      }' "$_cs_pf")"
+    _cs_closed="$(awk '
+      /^### / || /^<!-- shard:/ { src = ""; next }
+      /^[[:space:]-]*[*_`]*source[*_`]*:/ { src = $0; sub(/^[^:]*:/, "", src); next }
+      /^[[:space:]-]*[*_`]*disposition[*_`]*:/ { v = tolower($0); sub(/^[^:]*:/, "", v); gsub(/[*_`]/, "", v); sub(/^[ \t]+/, "", v); sub(/[^a-z-].*$/, "", v)
+        if ((v == "repaired" || v == "escalated") && src != "") { n = split(src, tk, /[[:space:],;]+/); for (i = 1; i <= n; i++) if (tk[i] != "") { b = tk[i]; sub(/^.*\//, "", b); print b } }
+        src = ""; next }' "$@")"
+    while IFS= read -r _cs_k; do
+      [ -n "$_cs_k" ] || continue
+      grep -qxF "coe-adversarial-p1.md#${_cs_k}" <<CSEOF || refuse "coe-adversarial-p1.md#${_cs_k} is a CRITICAL/MAJOR finding of the serial pass 1 that no repaired or escalated entry names as its source: (the pass-1 join, arm P1J, fails it)"
+$_cs_closed
+CSEOF
+    done <<CSKEOF
+$_cs_keys
+CSKEOF
+    rm -f "${_cs_d}/coe-adversarial-p1.md"; rmdir "${_cs_d}"
+  else
+    refuse "no serial pass-1 record at ${_cs_pf}; a serial coe pass-1 repair's sources resolve there"
   fi
 fi
 
