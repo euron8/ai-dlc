@@ -155,17 +155,23 @@ removed_raw > "$RLP_T/deleted-raw" || _rlp_rc=$?
 norm_lines < "$RLP_T/deleted-raw" > "$RLP_T/deleted-folded" || _rlp_rc=$?
 [ "$_rlp_rc" -eq 0 ] || rlp_refuse "normalising the deleted rulebook lines" "$_rlp_rc"
 # Structural lines are excluded: a heading, a table row, a blank line and a code fence carry no
-# directive and collide across unrelated files. norm_lines strips backticks, so a fence is
-# recognised on the RAW line (left-trimmed, backtick or tilde, with or without a language tag),
-# paired line for line with its normalised twin (norm_lines is line-preserving); a heading, a
-# table row or a blank is recognised on the NORMALISED line. The word-count floor is not
-# load-bearing to the measured empty false-positive set and is deliberately absent. awk has no
-# healthy non-zero exit, so any non-zero status refuses.
+# directive and collide across unrelated files. A heading, table row or blank is recognised on the
+# NORMALISED line. A fence is recognised on the RAW line, paired line for line with its normalised twin
+# (norm_lines is line-preserving), because norm_lines strips backticks and one list marker: the raw line
+# is left-trimmed, then leading markers are peeled repeatedly until none remains, in any order and
+# nesting (blockquote `>`, bullet `-`, `*` or `+` plus blanks, numbered `N.` or `N)` plus blanks), and
+# what remains is a fence when it opens
+# with three or more tildes, or with a run of three or more backticks whose remainder holds no backtick
+# (an inline triple-backtick span is prose, not a fence). The word-count floor is not load-bearing to the
+# measured empty false-positive set and is deliberately absent. awk has no healthy non-zero exit, so any
+# non-zero status refuses.
 LC_ALL=C awk '
   FILENAME == ARGV[1] { raw[FNR] = $0; next }
   {
     t = raw[FNR]; sub(/^[ \t]+/, "", t)
-    if (t ~ /^(```|~~~)/) next
+    do { p = t; sub(/^>[ \t]*/, "", t); sub(/^[-*+][ \t]+/, "", t); sub(/^[0-9]+[.)][ \t]+/, "", t) } while (t != p)
+    if (t ~ /^~~~/) next
+    if (t ~ /^```/) { r = t; sub(/^`+/, "", r); if (index(r, "`") == 0) next }
     if ($0 ~ /^(#|\||$)/) next
     print
   }' "$RLP_T/deleted-raw" "$RLP_T/deleted-folded" > "$RLP_T/deleted-kept" || rlp_refuse "filtering the deleted rulebook lines" "$?"

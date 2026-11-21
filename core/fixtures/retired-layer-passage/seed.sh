@@ -69,6 +69,56 @@ epsilon-interior --check
 
 Close every deferred item before the story is closed.
 
+Between five.
+
+- ```bash
+  zeta-interior --check
+  ```
+
+1. ```bash
+eta-interior --check
+1. ```
+
+* ~~~
+theta-interior --check
+* ~~~
+
+> ```bash
+> iota-interior --check
+> ```
+
+````bash
+kappa-interior --check
+````
+
+- > ```bash
+- > lambda-interior --check
+- > ```
+
+1. - ```bash
+mu-interior --check
+1. - ```
+
++ ```bash
+nu-interior --check
++ ```
+
+10) ```bash
+xi-interior --check
+10) ```
+
+> > ```bash
+> > omicron-interior --check
+> > ```
+
+-	```bash
+pi-interior --check
+-	```
+
+- Never push from the main checkout
+
+```git push``` is never run by a hand.
+
 | col | col |
 |---|---|
 EOF
@@ -95,6 +145,8 @@ Between two.
 Between three.
 
 Between four.
+
+Between five.
 
 | col | col |
 |---|---|
@@ -150,6 +202,54 @@ other-epsilon
 ```
 
 Close every deferred item before the story is closed.
+
+```bash
+other-zeta
+```
+
+```bash
+other-eta
+```
+
+~~~
+other-theta
+~~~
+
+> ```bash
+> other-iota
+> ```
+
+````bash
+other-kappa
+````
+
+```bash
+other-lambda
+```
+
+```bash
+other-mu
+```
+
+```bash
+other-nu
+```
+
+```bash
+other-xi
+```
+
+> > ```bash
+> > other-omicron
+> > ```
+
+```bash
+other-pi
+```
+
+Never push from the main checkout
+
+```git push``` is never run by a hand.
 EOF
 
 # A layer file that reproduces NOTHING core deleted.

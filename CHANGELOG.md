@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1202.0] - 2026-11-21
+
+### A fence opened after a list or blockquote marker no longer reads as a reproduced passage, and a reproduced line that opens with inline code is no longer hidden (PC-S324-RETIRED-LAYER-PASSAGE-FENCE-EXCLUSION-DEFEATED-BY-STAR-STRIP, BL-1203)
+
+- For every consumer whose layer files hold code fences. When a release deleted a fence that sat after a bullet, a numbered item or a blockquote marker (`- ` then three backticks and `bash`, `1. ` then the same, `> ` then the same), the detector `reconcile/retired-layer-passage.sh` still reported each layer file's own fence marker as a reproduced core line, because normalising stripped the marker and the backticks and left the bare word `bash`.
+- The detector now repeat-peels blockquote, bullet (`-`, `*`, `+`) and numbered (`N.`, `N)`) markers until none remains, in any order and nesting, before deciding a line is a fence: three or more tildes, or a run of three or more backticks with no backtick in the rest of the line.
+- A deleted prose line that opens with an inline triple-backtick span was excluded as if it were a fence, so a layer file that reproduced it produced no row. It now does.
+- Fixture `retired-layer-passage` gains sixteen fence shapes (after list and blockquote markers, nested, `+`, `N)`, double blockquote, tab after a marker) and prose lines opening with inline code; `fenced.md` must yield exactly the prose rows.
+
 ## [0.1201.0] - 2026-11-20
 
 ### A pull that changes `core-paths.sh` or `derive-fixture-readsets.sh` now holds the self-update instead of being passed as not gating (BL-1195)
