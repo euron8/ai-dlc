@@ -21,3 +21,4 @@ core/fixtures/lib/layout.sh
 !core/scripts/strategy-rows.sh
 !core/scripts/strategy-self-check.sh
 core/scripts/era-token.sh
+!core/scripts/gen-round-briefs.sh

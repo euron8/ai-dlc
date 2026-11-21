@@ -62,3 +62,4 @@ e2e core/scripts/validate-gate-adjudication.sh ge-retro why=GRW derivation for r
 e2e core/scripts/gate-run.sh grc3 why=close retried after the snapshot op succeeded, GRC3
 e2e core/scripts/validate-gate-adjudication.sh gr-all why=GRO ledger derivation, the expected arm set for planning
 nested core/scripts/gate-run.sh core/scripts/validate-gate-adjudication.sh why=gate-run.sh starts the adjudication validator as a child on each close, once per cell that reaches the ledger
+nested core/scripts/gate-transition.sh core/scripts/gate-run.sh why=gate-transition.sh 3 makes its arms, nonce and open one gate-run.sh arms call, once per gate-3 cell that reaches it

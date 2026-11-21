@@ -21,6 +21,7 @@ core/scripts/validate-provenance-block.sh
 core/scripts/validate-spawn-ledger.sh
 core/scripts/validate-steering-budget.sh
 core/scripts/validate-stub-audit.sh
+core/scripts/validate-gate3-tables.sh
 core/scripts/verdict.sh
 # story-evidence-scaffold and lib rows derived from the reads: run.sh:107 world.sh (which sources he-inproc.sh, world.sh:15) and run.sh:2,122,123 preamble.sh.
 core/fixtures/story-evidence-scaffold/world.sh
@@ -133,6 +134,7 @@ core/scripts/era-token.sh
 !core/scripts/gate-run.sh
 core/scripts/gate_run.py
 core/skills/ai-dlc/enforcement-map.yaml
+core/skills/ai-dlc/gates/implementation-g3.arms
 core/skills/ai-dlc/gates/planning.arms
 core/skills/ai-dlc/gates/story.arms
 core/skills/ai-dlc/gates/sprint-review.arms

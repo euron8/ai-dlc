@@ -12,6 +12,20 @@ deployment, and present the Production Validation Checkpoint to the human.
 Each remedial dispatch is one repair between two smoke or validation runs: Rule 28
 "Split dispatch" serial exception 2.
 
+## Resume
+
+After a compaction the snapshot's Pipeline Position carries `sub_step`, the section of this file the lead was inside. Enter each section below by adding `--set sub_step deploy-validate.md#<value> 'Pipeline Position'` to the `bash scripts/ai-dlc/snapshot-update.sh` call that section already makes (a standalone call only where none runs). Use the value only when the text before `#` equals `current_step_file`; any other value is stale from another step, so delete it and read this file from its top. Otherwise read the named section of this file, the snapshot's Open Items and teammate rows, and take the next action; never re-dispatch a teammate that the snapshot's teammate rows already lists.
+
+| sub_step | Section | Next action |
+|---|---|---|
+| `2` | 2. Deploy | check the deploy state with the section's own evidence command before deploying again |
+| `3` | 3. Smoke Tests | re-run the smoke tests |
+| `4` | 4. Visual Verification | read the evidence directory and capture only the missing screens |
+| `4b` | 4b. Deferred-AC discharge verification | read the discharge rows written so far and verify the rest |
+| `5` | 5. Production Validation Checkpoint | read the checkpoint document written so far and finish it |
+| `6` | 6. Wait for Human | re-read the checkpoint's Decisions for You block and wait; do not route |
+| `7` | 7. Post-Validation Routing | route from the operator's recorded decision |
+
 ## EXECUTION SEQUENCE
 
 **Step entry.** The first action of this step, before any other write, is `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file deploy-validate.md 'Pipeline Position'` (the same write `bash scripts/ai-dlc/deploy-validate-run.sh enter` makes). The `scripts/ai-dlc/deploy-validate-run.sh` subcommands named below carry the mechanical parts of this step; the lead's own work is four judgments: red-smoke triage and fix dispatch, the post-activation reads after any live mutation, §4b predicate discharge or re-deferral, and the checkpoint's `### What Was Built` and `### Decisions for You`.

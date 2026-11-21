@@ -668,6 +668,7 @@ sts-part-complete|S|steps/stories-test-strategy.md|### 2. Epics and Stories|### 
 route-say-why|S|steps/route-fresh-start.md|### Step 6:|## FAILURE MODES|**Option labels carry no recommendation.**|para|Say in the question that its options carry no recommendation, and why.
 route-carveout-confirm|S|steps/route-fresh-start.md|### Step 6:|## FAILURE MODES|**A tagged carve-out is the prior close-out's proposal, not the operator's ask.**|prefix
 retro-7d-carveout-tag|S|steps/retro.md|**7d. Emit the handoff block.**|**STOP.**|**A carve-out is the close-out's proposal, never the operator's words.**|prefix
+retro-7d-item-id|S|steps/retro.md|**7d. Emit the handoff block.**|**STOP.**|**Each enumerated item in the prompt body carries its id.**|para|with the plain-language gloss beside the id and never in its place.
 gp-2c-locked-effects|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|State each option's effect on that entry instead, including the value it leaves in force
 gp-2c-locked-nobadge|S|steps/_gate-procedures.md|## Divergence resolution dispatch|## Adversarial repair dispatch|a. **One sentence naming the decision.**|para|**mark NO option `(Recommended)`.**
 retro-lr-partial|S|steps/retro.md|### 4a. Close-Out Sweep|### 4b. Operator-steerability audit|The undelivered clauses of a bullet the checkpoint marked `partial` are read here as deferred bullets are, each owing its own recorded disposition.|prefix|

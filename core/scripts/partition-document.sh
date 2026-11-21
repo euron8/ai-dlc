@@ -5,7 +5,9 @@
 #   partition-document.sh --map <doc> [--scope-ref <sha>]
 #       stdout: one line per part, `<ordinal>\t<first-line>\t<last-line>\t<heading>`, exit 0.
 #       A document that does not partition prints ONE line `SERIAL: <reason>` on STDOUT and
-#       exits 3. SERIAL is an answer, not an error: the caller dispatches one agent.
+#       exits 3. SERIAL is an answer, not an error: the caller dispatches one agent. An unscoped SERIAL
+#       answer on a document directly in planning-artifacts/s<N>/ whose series has no pass yet writes the
+#       era token to shards/<stem>-p1/.era (serial_era), the one producer of a SERIAL series' token.
 #   partition-document.sh --split <doc> <dir> [--expect-sha <sha256>] [--scope-ref <sha>]
 #       writes `<dir>/sections/<ordinal>.md` (byte slices of <doc>) and, LAST,
 #       `<dir>/sections/.manifest`. Exit 0; exit 3 with the SERIAL line and nothing created
@@ -147,7 +149,7 @@
 #   piece longer than a PART_CAP-th of the document bytes that holds out-of-scope lines splits at blank lines, pieces
 #   with no in-scope byte drop, and a part may not span more than SC bytes of the document (SC starts at a PART_CAP-th
 #   and grows by a quarter until the parts fit PART_CAP). Unscoped maps are unchanged.
-# THE PER-ROUND COMMIT (`--shard-dir`, pass M >= 2, series whose pass-1 shard dir carries the era token, which `--shard-dir` writes as `.era` when it opens pass 1): refuses (exit 2) while `s<N>/<name>-repair-p<M-1>.md`
+# THE PER-ROUND COMMIT (`--shard-dir`, pass M >= 2, series whose opening pass carries the era token, era-token.sh's ai_dlc_era_open; `--shard-dir` writes `.era` when it opens pass 1 or a restarted cycle's first pass): refuses (exit 2) while `s<N>/<name>-repair-p<M-1>.md`
 #   or the artifact has uncommitted changes in its repository. No such record, no repository, or an ignored path
 #   is not judged.
 #
@@ -461,13 +463,31 @@ cross_k() { # <K> -> refuses (64) unless an integer >= 2
   [ "${#1}" -le 6 ] && [ "$1" -ge 2 ] || usage64 "K must be an integer >= 2 and at most 6 digits (got '$1')"
 }
 
+serial_era() { # <doc>: THE SERIAL SERIES' ERA TOKEN. A SERIAL document's pass 1 is written by one adversary with no shard
+  # dir and no merge, so the program that answers SERIAL opens its series: when <doc> sits directly in
+  # planning-artifacts/s<N>/ and no pass of its series exists yet (no `<stem>-adversarial-p*.md` beside it and no
+  # `shards/<stem>-p*` dir), it writes the era token to shards/<stem>-p1/.era, the file ai_dlc_era_open reads. The stem
+  # is --shard-dir's (requirements-subject -> requirements, carry-over-evaluation -> coe). Prints nothing; a failed
+  # write leaves the series pre-era (SKIP), never a refusal.
+  local d="${1%/*}" s e
+  [ -n "$AI_DLC_ERA_TOKEN" ] && [ "$d" != "$1" ] || return 0
+  case "${d##*/}" in s[1-9]*) case "${d##*/}" in s*[!0-9]*) return 0 ;; esac ;; *) return 0 ;; esac
+  case "${d%/*}" in planning-artifacts|*/planning-artifacts) ;; *) return 0 ;; esac
+  s="${1##*/}"; s="${s%.md}"
+  case "$s" in requirements-subject) s=requirements ;; carry-over-evaluation) s=coe ;; esac
+  case "$s" in ''|.|..|*-adversarial*|*-repair*|*-elicitation*|*-party*) return 0 ;; esac
+  for e in "$d/$s-adversarial-p"[0-9]*.md "$d/shards/$s-p"[0-9]*; do [ -e "$e" ] && return 0; done
+  mkdir -p "$d/shards/$s-p1" 2>/dev/null && printf '%s\n' "$AI_DLC_ERA_TOKEN" > "$d/shards/$s-p1/.era" 2>/dev/null
+  return 0
+}
+
 pdoc_main() {
 export LC_ALL=C
 PART_CAP=8
 MAX_SHARE_PCT=50
 [ -f "${BASH_SOURCE[0]%/*}/era-token.sh" ] && . "${BASH_SOURCE[0]%/*}/era-token.sh"
 AI_DLC_ERA_TOKEN="${AI_DLC_ERA_TOKEN:-}"
-
+declare -F ai_dlc_era_open >/dev/null || ai_dlc_era_open() { AI_DLC_ERA_OPEN=""; return 1; }   # absent copy: no era judged
 
 
 
@@ -625,9 +645,9 @@ case "${1:-}" in
       if [ "$PASS" -gt 1 ]; then
         SD_PREV="$SD_PLAN/s$SN/$NAME-repair-p$((PASS - 1)).md"
         if [ -f "$SD_PREV" ]; then
-          # FORWARD-ONLY: only a series whose pass-1 shard dir carries the era token (written below when pass 1 opens) is judged.
+          # FORWARD-ONLY: only a series whose opening pass carries the era token (era-token.sh's ai_dlc_era_open) is judged.
           SD_ERA=SKIP
-          [ -n "$AI_DLC_ERA_TOKEN" ] && grep -qxF -- "$AI_DLC_ERA_TOKEN" "$SD_PLAN/s$SN/shards/$NAME-p1/.era" 2>/dev/null && SD_ERA=OWED
+          ai_dlc_era_open "$SD_PLAN/s$SN" "$NAME" "$((PASS - 1))" && SD_ERA=OWED
           [ "$SD_ERA" = OWED ] || echo "partition-document: ROUND-COMMIT: SKIP pre-era $NAME" >&2
           SD_DIRTY=""
           [ "$SD_ERA" != OWED ] || SD_DIRTY="$( unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C "${SD_PREV%/*}" status --porcelain --untracked-files=all -- "$SD_PREV" "$A" 2>/dev/null )"
@@ -635,8 +655,22 @@ case "${1:-}" in
         fi
       fi
       mkdir -p "$SD_DIR" || refuse "cannot create $SD_DIR"
-      # THE ERA TOKEN: the unit this opens is a series when it is pass 1; the producer stamps it (era-token.sh).
-      [ "$PASS" -ne 1 ] || [ -z "$AI_DLC_ERA_TOKEN" ] || printf '%s\n' "$AI_DLC_ERA_TOKEN" > "$SD_DIR/.era" || refuse "cannot write the era token into $SD_DIR"
+      # THE ERA TOKEN: the unit this opens is a series when it is pass 1, or a RESTARTED cycle's first pass: pass M >= 2
+      # opened while no merged record and no repair record of a pass below M stands in the sprint dir (RESTART_CYCLE
+      # moved the dead cycle's passes to the archive; a continuing series holds its predecessor's merged or repair
+      # record). Keyed on records only: write-ledger rows never expire, so they mark no cycle boundary. A dead cycle
+      # whose repair records stayed behind reads as a continuation and stays pre-era (SKIP). The producer stamps it.
+      SD_OPEN=1
+      if [ "$PASS" -gt 1 ]; then
+        SD_K=1
+        while [ "$SD_K" -lt "$PASS" ]; do
+          for SD_R in "$NAME-adversarial-p$SD_K.md" "$NAME-repair-p$SD_K.md" "$NAME-serial-repair-p$SD_K.md"; do
+            [ -e "$SD_PLAN/s$SN/$SD_R" ] && { SD_OPEN=0; break 2; }
+          done
+          SD_K=$((SD_K + 1))
+        done
+      fi
+      [ "$SD_OPEN" -eq 0 ] || [ -z "$AI_DLC_ERA_TOKEN" ] || printf '%s\n' "$AI_DLC_ERA_TOKEN" > "$SD_DIR/.era" || refuse "cannot write the era token into $SD_DIR"
     fi
     cd "$SD_DIR" 2>/dev/null || refuse "cannot resolve $SD_DIR"
     pwd -P
@@ -655,7 +689,11 @@ case "${1:-}" in
     [ -n "$DOC" ] || refuse "usage: --map <doc> [--scope-ref <sha>]"
     [ -f "$DOC" ] || refuse "no document at $DOC"
     [ -r "$DOC" ] || refuse "cannot read $DOC"
-    if [ -z "$REF" ]; then map_of "$DOC"; exit $?; fi
+    if [ -z "$REF" ]; then
+      MRC=0; map_of "$DOC" || MRC=$?
+      [ "$MRC" -ne 3 ] || serial_era "$DOC"
+      exit "$MRC"
+    fi
     scoped_map "$DOC" "$REF"
     [ -n "$M" ] && printf '%s\n' "$M"
     exit "$MRC" ;;

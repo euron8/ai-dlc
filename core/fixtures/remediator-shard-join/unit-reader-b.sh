@@ -426,6 +426,8 @@ if cp_party_build "$JOIN" && p_cpparty "$JOIN"; then ok "CP3: --check-part on a 
 else bad "CP3: --check-part did not resolve a party part's sources as the join does (rc=$RC, join line '${CP3_JL:-}'): $(cat "$JO")"; fi
 if cp_ledger_build "$JOIN" && p_cpledger "$JOIN"; then ok "CP4: --check-part on an edit: line whose note carries the bare token CLAUDE.md (the join refuses it UNWRITTEN) -> rc 2 naming CLAUDE.md and no other token; the same note naming no file -> rc 0, CHECK-PART:"
 else bad "CP4: --check-part did not refuse an edit: token no ledger row names (rc=$RC): $(cat "$JO")"; fi
+if p_cpfields "$JOIN"; then ok "CP5: --check-part on a part with no derivation: field, one with no advisor: line, and one deferring derivations in a files-mode dir -> rc 2 with each of the join's own lines byte-for-byte; the deferring part in a dir carrying .subject -> rc 0, CHECK-PART:"
+else bad "CP5: --check-part did not judge the part fields as the join does (rc=$RC): $(cat "$JO")"; fi
 # MKP: END TO END. CP3's and CP4's offenders, marked through the REAL wait-for-deliverable.sh --mark, whose sibling
 # is the REAL join (header terms 5 and 8), never a stand-in: exit 64, the part byte-unchanged (cmp), the join's own
 # refusal line relayed with the mark's remedy; each corrected near-miss MARKED. <wfd> is the mark to drive.

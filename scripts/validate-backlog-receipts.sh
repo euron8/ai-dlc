@@ -438,7 +438,11 @@ if [ "${1:-}" = "--score-one" ] || [ "${1:-}" = "--closed-one" ] || [ "${1:-}" =
     done < "$BR_TREELIST"
     : > "$BR_TREELIST"
   }
-  trap cleanup_trees EXIT INT TERM
+  # A handler that returns resumes the worker (it would go on to register trees after its list was emptied), so INT and
+  # TERM `exit` and the EXIT trap removes the trees once.
+  trap cleanup_trees EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
 
   # `git worktree add` TAKES A LOCK ON THE PARENT REPOSITORY, so under the pool it can lose a
   # race and exit non-zero with nothing wrong. A single attempt turns that into a BROKEN
@@ -930,7 +934,12 @@ r9_reap() {
   [ "${1:-}" = kill ] && kill -TERM -- "-$R9_PID" 2>/dev/null
   wait "$R9_PID" 2>/dev/null; R9_PID=""
 }
-trap parent_cleanup EXIT INT TERM
+# A SIGNAL HANDLER THAT RETURNS RESUMES THE RUN. INT and TERM therefore `exit`, and the EXIT trap does the cleanup once;
+# `trap parent_cleanup EXIT INT TERM` cleaned up, deleted $WORK, and then carried on scoring against a missing work dir
+# while its workers registered new trees nothing would remove.
+trap parent_cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 # A RESTRICTED RUN IS NEVER A GATE PASS (lead ruling, batch 256). Given --r13-drive or BR_R13_PROBE_DIR
 # (which moves the instrument probe off the checkouts' filesystem), the run is restricted, so every exit
 # after this line leaves through this trap: a verdict of 0 or 1 leaves as 3, a refusal stays 2, and the verdict it
@@ -2037,7 +2046,8 @@ r9_start() {
     AI_DLC_BACKLOG_MAX_ENTRIES=100000 bash "$R9_SIZE" "$LEDGER" > "$WORK/r9.size" 2>&1; } </dev/null &
   R9_PID=$!
   set +m
-  trap 'r9_reap kill; parent_cleanup' INT TERM
+  trap 'r9_reap kill; exit 130' INT   # exit, so the EXIT trap (parent_cleanup) runs ONCE and the run STOPS; a handler that returns resumes the run
+  trap 'r9_reap kill; exit 143' TERM
   R9_STATE=started
 }
 # r9_run -> prints the R9 line on stdout; returns 0 held or not run, 1 a join failed, 2 a refusal

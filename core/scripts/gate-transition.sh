@@ -42,13 +42,13 @@
 #            VERIFIED and never performed; handoff --gate2; --smoke; pass M >= 2: --route;
 #            --map; merge-review-shards.sh --record-partition, AFTER --map and only when --map
 #            wrote a manifest; pass M >= 2: the carried-findings list.
-#   gate 3   the script arms of gate-validation.md "Script arms before the adjudicator": Check 2
-#            (vocabulary, suppression lifetimes), 2a, 5 (check-stories, derive-stories --check),
-#            16, 17's implementation fold arm, 22, 25 (--count, recorded for the lead, who compares
-#            it) and H2 --verify; then the nonce is minted and gate-checkpoint.sh open runs. `open`
-#            runs at gate 3 ONLY: it writes the one global OPEN marker, and a gate 1 or 2 that
-#            opened would overwrite a live gate 3. Check 26 needs the adjudicator's verdict and
-#            is not run here.
+#   gate 3   the script arms that no row of gates/implementation-g3.arms carries: Check 2's suppression lifetimes, 5
+#            (check-stories, derive-stories --check), 17's implementation fold arm and 22; then `gate-run.sh arms
+#            --gate implementation-g3` runs the arms file's script rows (2a, 2c, 4, 16, 25, H2), mints the
+#            nonce, runs gate-checkpoint.sh open and writes the adjudicator worklist, whose path the plan carries on
+#            a `worklist:` line. `open` runs at gate 3 ONLY: it writes the one global OPEN marker, and a gate 1 or 2
+#            that opened would overwrite a live gate 3. Check 26 needs the adjudicator's verdict and is not run
+#            here; `gate-run.sh close` runs it.
 #   close    verifies that the story's last gate-3 ledger carries a `26 PASS` row, read through
 #            gate-checkpoint.sh list, and writes a close plan. It never calls open. The nonce is the
 #            newest g3 plan's, else the newest gate-adjudication verdict whose gate_series_id
@@ -137,7 +137,7 @@ WT_ARG="$WT"
 WT="$(cd "$WT" 2> /dev/null && pwd)" || die "worktree $WT_ARG is not a directory; no plan stands at $PLAN"
 SHA="$(git -C "$WT" rev-parse -q --verify 'HEAD^{commit}' 2> /dev/null)" || die "git names no HEAD commit in $WT; no plan stands at $PLAN"
 [ "$GATE" != 3 ] || [ -n "$TDIR" ] || die "gate 3 needs --transcript-dir: Check 2a verifies operator citations against that corpus; no plan stands at $PLAN. $USAGE"
-for s in validate-handoff-evidence.sh partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh gate-checkpoint.sh verdict.sh validate-escalation-resolution.sh sprint-status.sh validate-stub-audit.sh validate-spawn-ledger.sh validate-provenance-block.sh validate-steering-budget.sh validate-h2-attestation.sh; do
+for s in validate-handoff-evidence.sh partition-review-diff.sh merge-review-shards.sh validate-carried-findings.sh gate-checkpoint.sh verdict.sh validate-escalation-resolution.sh sprint-status.sh validate-stub-audit.sh validate-spawn-ledger.sh validate-provenance-block.sh validate-steering-budget.sh validate-h2-attestation.sh gate-run.sh gate_run.py gate-slice.sh validate-gate-adjudication.sh validate-gate3-tables.sh; do
   [ -f "$SELF/$s" ] || die "$s is not beside this script at $SELF; reinstall the engine (no plan stands at $PLAN)"
 done
 
@@ -551,18 +551,11 @@ case "$GATE" in
     [ "$RC" = 0 ] || refuse "check-$id" "$s $* exited $RC:
 $(tail_of)" "take Check $id through gate-validation.md Gate Failure now, while no adjudicator runs; then re-run gate-transition.sh $IDX 3"
   }
-  arm 2 verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md
+  # The rows of gates/implementation-g3.arms (2a, 2c, 4, 16, 25, H2) run in gate-run.sh below; this block
+  # holds only what no one row carries: the second script of 2c, the script halves of 5 and 22, and 17.
   arm 2 verdict.sh validate-suppression-lifetime --escalations docs/escalations/pending.md
-  arm 2a validate-escalation-resolution.sh --escalations docs/escalations/pending.md --sprint "$SPRINT" --transcript-dir "$TDIR"
   arm 5 sprint-status.sh check-stories
   arm 5 sprint-status.sh derive-stories --check
-  ( bash "$SELF/validate-stub-audit.sh" --root "$WT" --changed-from "$BASE" "$SHA" ) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
-  case "$RC" in
-    0) ;;
-    4) input gate-log "Check 16 audited nothing (exit 4): no in-scope hot-path file in ${BASE}..${SHA12}" ;;
-    *) refuse check-16 "validate-stub-audit.sh --changed-from $BASE $SHA exited $RC:
-$(tail_of)" "take Check 16 through Gate Failure; then re-run gate-transition.sh $IDX 3" ;;
-  esac
   SLOT="_bmad-output/planning-artifacts/s${SPRINT}"
   for os in "$ROOT/$SLOT"/bug-fix-oneshot-*.md; do
     [ -f "$os" ] || continue
@@ -588,18 +581,29 @@ $(tail_of)" "take Check 16 through Gate Failure; then re-run gate-transition.sh 
     *) refuse check-22 "validate-spawn-ledger.sh --sprint $SPRINT exited $RC:
 $(tail_of)" "take Check 22 through gate-validation.md Gate Failure now, while no adjudicator runs; then re-run gate-transition.sh $IDX 3" ;;
   esac
-  ( cd "$ROOT" && bash "$SELF/validate-steering-budget.sh" --count ) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
-  if [ "$RC" = 0 ]; then input steering-count "$(first_line "$W.out")"; else input gate-log "Check 25 SKIP: no transcript ($(first_line "$W.err"))"; fi
-  ( cd "$ROOT" && bash "$SELF/validate-h2-attestation.sh" --verify --sprint "$SPRINT" ) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
-  if [ "$RC" = 0 ]; then
-    input h2 "$(grep -m1 'H2_ATTESTED' "$W.out" "$W.err" 2> /dev/null | sed 's/^[^:]*://')"
-  else
-    refuse check-H2 "validate-h2-attestation.sh --verify --sprint $SPRINT exited $RC" "drive H2 in full (gate-validation.md H2), run validate-h2-attestation.sh --attest --sprint $SPRINT, append its line to the gate log, then re-run gate-transition.sh $IDX 3"
-  fi
   stop_if_refused
-  NONCE="implementation-$(date -u +%Y%m%dT%H%M%SZ)"
-  ( bash "$SELF/gate-checkpoint.sh" --nonce "$NONCE" open ) > "$W.out" 2> "$W.err" < /dev/null \
-    || { refuse open "gate-checkpoint.sh --nonce $NONCE open failed: $(first_line "$W.err")" "re-run gate-transition.sh $IDX 3"; stop_if_refused; }
+  # gate-run.sh arms runs the arms file's script rows, mints the nonce, runs `open`, records the ledger rows and
+  # writes the adjudicator worklist; it is the only place gate 3 mints a nonce.
+  ( cd "$ROOT" && bash "$SELF/gate-run.sh" arms --gate implementation-g3 --sprint "$SPRINT" --step implementation.md --story "$STORY" --base "$BASE" --sha "$SHA" --worktree "$WT" --transcript-dir "$TDIR" --root "$ROOT" ) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
+  case "$RC" in
+    0) ;;
+    1) while IFS= read -r l; do case "$l" in "REMEDY "*) l="${l#REMEDY }"; refuse "check-${l%% *}" "gate-run.sh arms: $(grep -m1 "^GATE-RESULT ${l%% *} " "$W.out")" "${l#* }; then re-run gate-transition.sh $IDX 3" ;; esac; done < "$W.out"
+       [ "$NREF" -gt 0 ] || refuse gate-run "gate-run.sh arms exited 1: $(tail_of)" "re-run gate-transition.sh $IDX 3"
+       stop_if_refused ;;
+    *) refuse gate-run "gate-run.sh arms exited $RC: $(tail_of)" "repair the named input, then re-run gate-transition.sh $IDX 3"; stop_if_refused ;;
+  esac
+  NONCE="$(sed -n 's/^GATE-RUN implementation-g3 arms [A-Z]* nonce=\([^ ]*\) .*/\1/p' "$W.out")"
+  [ -n "$NONCE" ] || { refuse gate-run "gate-run.sh arms exited 0 and printed no nonce" "re-run gate-transition.sh $IDX 3"; stop_if_refused; }
+  while IFS= read -r l; do
+    case "$l" in
+      "ADJUDICATE "*) input worklist "$(printf '%s' "$l" | sed 's/^ADJUDICATE \([^ ]*\) .*/\1/')" ;;
+      "GATE-RESULT 25 PASS "*) input steering-count "$(printf '%s' "$l" | sed 's/^GATE-RESULT 25 PASS examined=[^ ]* evidence=[^ ]* //')" ;;
+      "GATE-RESULT 25 SKIP "*) input gate-log "Check 25 SKIP: no transcript" ;;
+      "GATE-RESULT 16 SKIP "*) input gate-log "Check 16 audited nothing (exit 4): no in-scope hot-path file in ${BASE}..${SHA12}" ;;
+      "GATE-RESULT 8 SKIP "*|"GATE-RESULT 10 SKIP "*) input gate-log "$(printf '%s' "$l" | sed 's/^GATE-RESULT \([0-9]*\) SKIP examined=[^ ]* evidence=[^ ]* /Check \1 SKIP: /')" ;;
+      "GATE-RESULT H2 PASS "*) input h2 "$(printf '%s' "$l" | sed 's/^GATE-RESULT H2 PASS examined=[^ ]* evidence=[^ ]* //')" ;;
+    esac
+  done < "$W.out"
   MANIFEST=none; ROUTE="gate3 adjudicator"
   write_plan 3
   ;;

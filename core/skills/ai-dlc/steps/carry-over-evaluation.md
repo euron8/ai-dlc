@@ -134,6 +134,13 @@ with no distinct fail condition MUST be reclassified as monitoring
 notes embedded in the sprint retro rather than carried as standalone
 exercise stories.
 
+**Operator source of a held, deferred or operator-labelled item.** For every item taken into the confirmed scope,
+whatever sprint wrote its label, run `scripts/ai-dlc/label-source-check.sh --items <the in-scope item ids, comma-separated> --sprint <N>`.
+It exits 0 whatever it finds and nothing waits on it. When it prints a `DECISION to surface` block, put the listed items as ONE
+pending decision with the recommendation "keep it as labelled" (SKILL.md Rule 11(a)), proceed on that recommendation, and when
+the operator answers write the `operator source:` record the block names onto each listed item. Touch no item the sprint did
+not take into scope.
+
 ### 3. Party Mode Evaluation
 
 PM, Architect, Dev, TEA evaluate every item. The evaluation is one document, so the
@@ -218,8 +225,6 @@ the parts holding lines the document changed since the draft, which the adversar
 anything else it needs. A pass 2 that is not `EXIT_CONDITION_MET` is repaired by the remediator and judged by the same
 series rule as any pass (pass 3 is capped, arm M). Every pass-1 CRITICAL and MAJOR must be named by a `source:` token of
 pass 1's repair record (`coe-repair-p1.md`); arm `P1J` refuses an unnamed one.
-
-Before you stamp a SERIAL pass 1, one an adversary wrote itself with no merge, add the line `ai-dlc-era: e4-forward-1` (the value of `AI_DLC_ERA_TOKEN` in `scripts/ai-dlc/era-token.sh`) on a line of its own above its provenance block.
 
 Before you stamp pass 2, or any pass one adversary wrote itself because the map reports the document SERIAL, run
 `scripts/ai-dlc/merge-adversarial-shards.sh --check-keys <pass file>`: stamp it on `KEYS-OK` or `KEYS-SKIP`; on `REFUSED`, have the

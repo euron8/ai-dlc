@@ -131,7 +131,7 @@ def slice_plan(root, gtype):
 # ------------------------------------------------------------------ placeholders
 PH_GRAMMAR = {
     "SPRINT": r"[0-9]+", "SHA": r"[0-9a-f]{7,64}", "BASE": r"[0-9a-fA-F]{7,64}|[A-Za-z0-9_./~^-]+",
-    "NONCE": r"[a-z-]+-[0-9]{8}T[0-9]{6}Z",
+    "NONCE": r"[a-z-]+-[0-9]{8}T[0-9]{6}Z", "WORKTREE": r"/[A-Za-z0-9_./+@:~-]+",
 }
 
 
@@ -368,7 +368,7 @@ def ext_checks(plan):
 
 
 def cmd_arms(argv, root):
-    o = arg_parse(argv, ["gate", "sprint", "step", "story", "base", "sha", "transcript", "transcript-dir", "series", "root"])
+    o = arg_parse(argv, ["gate", "sprint", "step", "story", "base", "sha", "transcript", "transcript-dir", "series", "root", "worktree"])
     if o["root"]:
         root = os.path.abspath(o["root"])
     if not (o["sprint"] and re.fullmatch(r"[0-9]+", o["sprint"])):
@@ -385,7 +385,7 @@ def cmd_arms(argv, root):
     os.makedirs(stage, exist_ok=True)
     ctx = {"STORIES": None, "ROOT": root, "SPRINT": o["sprint"], "BASE": o["base"], "SHA": o["sha"],
            "TRANSCRIPT": o["transcript"], "TRANSCRIPT_DIR": o["transcript-dir"],
-           "SERIES": o["series"], "STATE": st}
+           "SERIES": o["series"], "STATE": st, "WORKTREE": o["worktree"]}
     stories = stories_for(root, o["sprint"], o["story"])
     ctx["STORIES"] = [os.path.relpath(x, root) for x in stories]
     rows = arms["rows"]

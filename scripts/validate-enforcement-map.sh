@@ -5192,6 +5192,15 @@ $k
         *) err "I22 aiDlcRoles.$r declares effort '$e', which is not one of low/medium/high/xhigh/max. ai-dlc-dispatch-guard.sh drops an unrecognised level rather than injecting a directive for a command that does not exist, so that role would silently run at the session default." ;;
       esac
     done
+    # pre-reviewer is read-only: its disallowedTools must name every direct write tool.
+    # Bash stays open (the role runs git diff), so the property is "no direct write tool".
+    pr_dt="$(jq -r '.aiDlcRoles["pre-reviewer"].disallowedTools // ""' "$SETTINGS_TMPL" 2>/dev/null)"
+    for _t in Write Edit NotebookEdit; do
+      case ", $pr_dt, " in
+        *", $_t, "*) ;;
+        *) err "I22 aiDlcRoles.pre-reviewer.disallowedTools ('$pr_dt') does not include $_t. The read-only pre-reviewer would carry a direct write tool; restore it in templates/settings.json.template." ;;
+      esac
+    done
   fi
 fi
 
@@ -6011,6 +6020,64 @@ if [ -d "$REPO_ROOT/core/fixtures" ]; then
   i74e_bad="${i74e_out%SCANNED *}"
   [ "${i74e_n:-0}" -gt 0 ] 2>/dev/null || err "I74(e) scanned ZERO run.sh directories under core/fixtures, so it could only report clean. An empty subject set has no offenders by construction; this is an instrument failure, not a pass."
   [ -n "${i74e_bad//[[:space:]]/}" ] && err "I74(e) fixture director(ies) with a run.sh that are not exactly one of DECLARED (inputs.decl) or UNDECLARABLE (a .undeclarable whose first line is the reason): $(echo $i74e_bad). Declare the inputs and prove them with core/scripts/hermetic-run.sh, or, where no one declaration holds in both layouts, write .undeclarable with the reason on line 1."
+fi
+
+# I74(f) -- an `.undeclarable` fixture never reads the REAL repository's history (BL-1192 item 3). It must be declared
+# and hermetic (inputs.decl, no `.undeclarable`) or read a world it builds; a git.decl does NOT acquit it: the range/pin
+# rows are keyed only for a fixture with an inputs.decl (.githooks/pre-push:2551-2555 readset_decl_rangeprep) and a pin
+# acts only inside the hermetic sandbox, which an `.undeclarable` fixture never enters. Such a fixture IS skippable: the
+# traced-map read-set skip skips a mapped fixture whose keys did not move (.githooks/pre-push:3159,3164; both existing
+# ones are mapped, .ai-dlc-fixture-readsets.tsv), and the whole-suite key folds history only for a git.decl `range` line.
+# Population: <fixture>/*.sh of every `.undeclarable` fixture (comment lines dropped; a `*.py` is not read, and
+# retro-compliance-workflow/extract.py carries no git call). A HIT line is `git` in command position (optional
+# -c/-C/--no-pager/-P/--git-dir= run) then log, rev-list, merge-base, describe, for-each-ref, `show <rev>` or
+# `rev-parse <..>HEAD~|HEAD^`. Each call is classified by ITSELF: own world when it carries `-C <arg>` other than
+# "$ROOT|REPO|REPO_ROOT|PROJECT_ROOT|AI_DLC_PROJECT_ROOT" or `--git-dir=`, else by the cwd the file last `cd`-ed to (a
+# statement-start `cd`, `( cd` included; a `$(cd` classifies its own line only; start = the repo root; a target naming a root variable or `../..` =
+# the repo root, any other target = own world). A bare call at the repo root FIRES; a world built elsewhere in the file
+# acquits nothing. BLIND: a root variable named otherwise (R, TOP, ROOT_DIR), a `cd` scope that ended (a subshell) keeps the file in its last world; a verb outside the
+# grammar (diff, rev-parse HEAD). FP SET, measured with this function over a copy of EVERY fixture dir marked
+# `.undeclarable`: 8 of 298 (the 2 real `.undeclarable` fixtures: 0), 2 true real-repository reads
+# (artifact-section-heading-level, self-update-join-gate range.sh) and 6 mention lines in heredoc, prose or seeded-data
+# bodies the grammar cannot tell from code (no heredoc mask here); a `$(cd "$W" && git log)` read as a hit before the
+# `$(cd` rule and no longer does.
+# STANDS DOWN on a scratch tree with no `.undeclarable` fixture (SCANNED 0), which many fixtures copy this validator into.
+# COST: one awk per `.undeclarable` fixture.
+i74f_scan() { # <fixtures root> -> `SCANNED <n>`, then `<fixture> <file>:<line>` per offender
+  local d n c=0 r
+  for d in "$1"/*/; do
+    [ -f "${d}.undeclarable" ] || continue
+    c=$((c + 1)); n="${d%/}"; n="${n##*/}"
+    r="$(awk -v fx="$n" '
+      BEGIN { cur = "real" }
+      FNR == 1 { fl = FILENAME; sub(/.*\//, "", fl); cur = "real" }
+      /^[[:space:]]*#/ { next }
+      {
+        lcur = cur
+        if ($0 ~ "[$][(] *cd +") {
+          t = $0; sub(/.*[$][(] *cd +/, "", t); lcur = (t ~ "^[\"]?[$][{]?(ROOT|REPO|REPO_ROOT|PROJECT_ROOT|AI_DLC_PROJECT_ROOT)" || t ~ "[.][.]/[.][.]") ? "real" : "own"
+        } else if ($0 ~ "(^|[;&{]|[(] )[[:space:]]*cd +") {
+          t = $0; sub(/.*cd +/, "", t)
+          cur = (t ~ "^[\"]?[$][{]?(ROOT|REPO|REPO_ROOT|PROJECT_ROOT|AI_DLC_PROJECT_ROOT)" || t ~ "[.][.]/[.][.]") ? "real" : "own"
+          lcur = cur
+        }
+      }
+      $0 ~ "(^|[;&|({!`]|[$][(]|then|do|else|if|while)[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^ ]* +)*git( +(-[cC] +[^ ]+|--no-pager|-P|--git-dir=[^ ]+))* +(log|rev-list|merge-base|describe|for-each-ref|show +[^- ][^ ]*|rev-parse +[^ ]*(HEAD~|HEAD\\^))" {
+        real = 0
+        if ($0 ~ "git( +-c +[^ ]+)* +-C +[\"]?[$][{]?(ROOT|REPO|REPO_ROOT|PROJECT_ROOT|AI_DLC_PROJECT_ROOT)[}]?[\"]?( |$)") real = 1
+        else if ($0 ~ "git( +-c +[^ ]+)* +-C +" || $0 ~ "--git-dir=") real = 0
+        else if (lcur == "real") real = 1
+        if (real && first == "") first = fl ":" FNR
+      }
+      END { if (first != "") print fx " " first }' "${d}"*.sh 2>/dev/null)"
+    [ -z "$r" ] || printf '%s\n' "$r"
+  done
+  printf 'SCANNED %s\n' "$c"
+}
+if [ -d "$REPO_ROOT/core/fixtures" ]; then
+  i74f_out="$(i74f_scan "$REPO_ROOT/core/fixtures")"
+  i74f_bad="${i74f_out%SCANNED *}"
+  [ -n "${i74f_bad//[[:space:]]/}" ] && err "I74(f) .undeclarable fixture(s) reading the real repository's history: $(echo $i74f_bad). Neither skip re-dispatches it when that history moves, and a git.decl does not reach it. Declare it hermetic (inputs.decl, drop .undeclarable) or read a world the fixture builds."
 fi
 
 # --- I79: every rule below the re-attach cut declares what CARRIES it -------------

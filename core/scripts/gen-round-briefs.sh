@@ -27,15 +27,25 @@
 #                    `provenance-block/adversary-pass` region out of the adversary role file, never a retyped field list.
 #   --step-label S   `lead_role:` value and the `--mark` step word's owner (default stories-test-strategy.md).
 #   --prior P        pass 2+ review: a prior pass's findings or a repair record the member must read (repeatable).
+#   --plan-file P    repair, SECOND run: the `PLAN-FILE:` path the parallel join printed (`<shard dir>/.join-plan`). This run
+#                    briefs ONLY the cross shard, from `--findings-dir`/cross.txt, for the SEPARATE serial lane round the plan's
+#                    `LANE-ARTIFACT: <lane artifact> --pass <M>` line names. The cross shard never joins the parallel round: a
+#                    file it and a part both wrote is refused there ("written by more than one agent").
 #
 # OUTPUT (--out-dir): one `<ordinal>.brief` per shard, `cross.brief` for a review or elicitation round, `join.cmd` holding the
-# beat-join command with every deliverable path and the flag the round kind owns; the join command is also printed.
-# Exit: 0 written, 2 usage or an unreadable input, 3 a refusal (empty map, ordinal gap, provenance region absent).
+# beat-join command with every deliverable path and the flag the round kind owns; the join command is also printed. A repair
+# run without --plan-file never briefs cross; with a non-empty cross.txt it prints `cross: ...` naming the second run. The
+# --plan-file run writes `cross.brief` (deliverable `<shards dir>/<lane artifact>-repair-p<M>/cross.md`) and `lane.cmd`, the
+# cross deliverable's own `--complete` command, and prints the lane join's `--artifact`, `--pass` and `--artifact-path`.
+# Loadable: the body is grb_main, behind a column-0 BASH_SOURCE guard, so sourcing defines functions and runs nothing.
+# Exit: 0 written, 2 usage or an unreadable input, 3 a refusal (empty map, ordinal gap, provenance region absent; with
+# --plan-file: no LANE-ARTIFACT line in the plan, or no cross.txt findings).
+grb_main() {
 set -u
 LC_ALL=C; export LC_ALL
 
 ROUND=""; AXIS=""; SPRINT=""; ART=""; PASS=""; SDIR=""; MAP=""; OUTD=""; ROLE=""; FOCUS=""; GATED=""; SUBJ=""; DOC=""; FIND=""
-STEP="stories-test-strategy.md"; PRIOR=""
+STEP="stories-test-strategy.md"; PRIOR=""; PLANF=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --round) ROUND="${2:-}"; shift 2 ;;
@@ -53,40 +63,42 @@ while [ $# -gt 0 ]; do
     --doc) DOC="${2:-}"; shift 2 ;;
     --findings-dir) FIND="${2:-}"; shift 2 ;;
     --step-label) STEP="${2:-}"; shift 2 ;;
+    --plan-file) PLANF="${2:-}"; shift 2 ;;
     --prior) PRIOR="$PRIOR
 ${2:-}"; shift 2 ;;
     *) echo "gen-round-briefs: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
-die() { echo "gen-round-briefs: $1" >&2; exit "${2:-2}"; }
-case "$ROUND" in review|elicitation) KIND=adv ;; repair) KIND=rep ;; *) die "--round must be review, elicitation or repair" ;; esac
-case "$AXIS" in files|sections) ;; *) die "--axis must be files or sections" ;; esac
-case "$SPRINT" in ''|*[!0-9]*) die "--sprint <N> is required and numeric" ;; esac
-case "$PASS" in ''|*[!0-9]*) die "--pass <M> is required and numeric" ;; esac
-[ -n "$ART" ] && [ -n "$SDIR" ] && [ -n "$OUTD" ] || die "--artifact, --shard-dir and --out-dir are required"
-[ -f "$MAP" ] || die "--map '$MAP' is not a file"
+grb_die() { echo "gen-round-briefs: $1" >&2; exit "${2:-2}"; }
+case "$ROUND" in review|elicitation) KIND=adv ;; repair) KIND=rep ;; *) grb_die "--round must be review, elicitation or repair" ;; esac
+case "$AXIS" in files|sections) ;; *) grb_die "--axis must be files or sections" ;; esac
+case "$SPRINT" in ''|*[!0-9]*) grb_die "--sprint <N> is required and numeric" ;; esac
+case "$PASS" in ''|*[!0-9]*) grb_die "--pass <M> is required and numeric" ;; esac
+[ -n "$ART" ] && [ -n "$SDIR" ] && [ -n "$OUTD" ] || grb_die "--artifact, --shard-dir and --out-dir are required"
+[ -f "$MAP" ] || grb_die "--map '$MAP' is not a file"
 [ -n "$ROLE" ] || { [ "$KIND" = adv ] && ROLE=".claude/team-roles/adversary.md" || ROLE=".claude/team-roles/remediator.md"; }
 if [ "$KIND" = adv ]; then
-  [ -f "$FOCUS" ] || die "--focus FILE is required for a $ROUND round"
-  [ -f "$ROLE" ] || die "--role-file '$ROLE' is not a file"
+  [ -f "$FOCUS" ] || grb_die "--focus FILE is required for a $ROUND round"
+  [ -f "$ROLE" ] || grb_die "--role-file '$ROLE' is not a file"
 else
-  [ -d "$FIND" ] || die "--findings-dir DIR is required for a repair round"
+  [ -d "$FIND" ] || grb_die "--findings-dir DIR is required for a repair round"
 fi
-if [ "$AXIS" = files ]; then [ -d "$SUBJ" ] || die "--subject-dir DIR is required on the files axis"; else [ -f "$DOC" ] || die "--doc FILE is required on the sections axis"; fi
-mkdir -p "$OUTD" || die "cannot create $OUTD"
+[ -z "$PLANF" ] || [ "$KIND" = rep ] || grb_die "--plan-file belongs to a repair round"
+if [ "$AXIS" = files ]; then [ -d "$SUBJ" ] || grb_die "--subject-dir DIR is required on the files axis"; else [ -f "$DOC" ] || grb_die "--doc FILE is required on the sections axis"; fi
+mkdir -p "$OUTD" || grb_die "cannot create $OUTD"
 
 # The map: ordinals in file order, K = their count; ordinals must be unique.
 ORD="$(awk -F'\t' 'NF >= 2 && $1 != "" { print $1 }' "$MAP")"
 K="$(printf '%s\n' "$ORD" | grep -c .)" || K=0
-[ "$K" -gt 0 ] || die "--map $MAP has no row" 3
+[ "$K" -gt 0 ] || grb_die "--map $MAP has no row" 3
 dup="$(printf '%s\n' "$ORD" | sort | uniq -d | head -1)"
-[ -z "$dup" ] || die "--map $MAP repeats ordinal $dup" 3
+[ -z "$dup" ] || grb_die "--map $MAP repeats ordinal $dup" 3
 ALLORD="$(printf '%s\n' "$ORD" | paste -sd, - | sed 's/,/, /g')"
 
 PROV=""
 if [ "$KIND" = adv ]; then
   PROV="$(awk '/<!-- BEGIN GENERATED: provenance-block\/adversary-pass/ { on = 1 } on { print } /<!-- END GENERATED: provenance-block/ { if (on) exit }' "$ROLE")"
-  case "$PROV" in *"SKILL_INVOCATION_PROVENANCE v1"*"<!-- END GENERATED"*) ;; *) die "no generated provenance-block/adversary-pass region in $ROLE" 3 ;; esac
+  case "$PROV" in *"SKILL_INVOCATION_PROVENANCE v1"*"<!-- END GENERATED"*) ;; *) grb_die "no generated provenance-block/adversary-pass region in $ROLE" 3 ;; esac
   if [ "$AXIS" = files ]; then CITE_ARGS=""; while IFS="$(printf '\t')" read -r _ b _; do CITE_ARGS="$CITE_ARGS $SUBJ/$b"; done < "$MAP"
   else CITE_ARGS="$DOC"; fi
   CITED=""
@@ -104,7 +116,7 @@ SUBJ_LABEL="$ART"; STEPWORD="$HDR"
 PRIORBLK=""; [ -z "$PRIOR" ] || PRIORBLK="Pass $PASS reviews the REPAIR, not the document again. Read these prior records first:$PRIOR
 "
 
-adv_tail() { # $1 deliverable path, $2 shard value
+grb_adv_tail() { # $1 deliverable path, $2 shard value
   cat <<EOF
 
 Record shape: the merge's grammar is the contract (\`merge-adversarial-shards.sh\` header: FINDING GRAMMAR and THE FINDING ID). Write the header EARLY: the title line, the \`shard:\` line, then the provenance block. Each finding is a \`### \` heading inside \`## Findings\` with an UPPERCASE severity word; on the convergence axis each CRITICAL or MAJOR finding carries its id. You are a SHARD: write the literal \`NOT_ACCESSIBLE\` for tool_use_id, \`mode: subagent\`, \`lead_role: $STEP\`; delete each line's trailing \` #\` comment because the merge reads every value literally. Fill \`invoked_at\` with the real UTC time and the counts truthfully.
@@ -118,7 +130,7 @@ Write the deliverable with Write or Edit, never Bash. Once you have finished, an
 EOF
 }
 
-write_adv() { # $1 ordinal-or-cross, $2 shard value, $3 subject text
+grb_write_adv() { # $1 ordinal-or-cross, $2 shard value, $3 subject text
   f="$OUTD/$1.brief"
   {
     echo "You are an AI/DLC ADVERSARIAL $ROUND shard for sprint $SPRINT's $SUBJ_LABEL ($AXIS axis, pass $PASS). FIRST read your full role contract: $ROLE (whole file, consecutive chunks of at most 16 KB) and follow it."
@@ -131,24 +143,55 @@ write_adv() { # $1 ordinal-or-cross, $2 shard value, $3 subject text
     echo "Review focus: $FOCUS_TXT"
     [ -z "$PRIORBLK" ] || { echo; printf '%s' "$PRIORBLK"; }
     [ -z "$GATED_TXT" ] || { echo; printf '%s\n' "$GATED_TXT"; }
-    adv_tail "$SDIR/$1.md" "$2"
+    grb_adv_tail "$SDIR/$1.md" "$2"
   } > "$f"
 }
+
+if [ -n "$PLANF" ]; then
+  # The serial lane round's cross brief: its name, pass and path copied from the parallel join's plan, never inferred.
+  [ -f "$PLANF" ] || grb_die "--plan-file '$PLANF' is not a file"
+  LA="$(awk '$1 == "LANE-ARTIFACT:" && $3 == "--pass" && NF == 4 { print $2 " " $4; exit }' "$PLANF")"
+  [ -n "$LA" ] || grb_die "--plan-file $PLANF has no 'LANE-ARTIFACT: <name> --pass <M>' line (a lane round's own join or a record-mode join opens no lane round)" 3
+  LNAME="${LA% *}"; LPASS="${LA#* }"
+  case "$LPASS" in ''|*[!0-9]*) grb_die "--plan-file $PLANF: LANE-ARTIFACT pass '$LPASS' is not numeric" 3 ;; esac
+  LPATH="$(awk '$1 == "LANE-ARTIFACT-PATH:" { print $2; exit }' "$PLANF")"
+  [ -s "$FIND/cross.txt" ] || grb_die "no cross shard findings: $FIND/cross.txt is absent or empty" 3
+  LDIR="$(dirname "$(dirname "$PLANF")")/${LNAME}-repair-p${LPASS}"
+  if [ "$AXIS" = files ]; then sub="Subject: EVERY story file under $SUBJ (the files the parallel repair left)."; else sub="Subject: the whole ASSEMBLED document $DOC."; fi
+  {
+    echo "You are the cross shard of the AI/DLC $ART repair (sprint $SPRINT, $AXIS axis), dispatched in the SERIAL lane round $LNAME --pass $LPASS after the parallel join. FIRST action: Read $ROLE (whole file) and follow it exactly."
+    echo
+    echo "Deliverable: $LDIR/cross.md"
+    echo "shard: none (authoring-chain)"
+    echo
+    echo "$sub Apply ALL of these cross findings; read each finding's full text in its source file (the token is \`<file>#<id>\`):"
+    cat "$FIND/cross.txt"
+    echo
+    echo "The cross findings were written against the bytes from BEFORE the part repairs. Before applying any of them, run \`scripts/ai-dlc/validate-artifact-derivations.sh\` on each source file from the project root and re-derive every finding it reports STALE; re-read every finding's cited text in the current files before editing on it."
+    echo "Open the record with one \`- artifact:\` / \`- artifact_sha_before:\` / \`- artifact_sha_after:\` triple per file you edit, each before equal to the bytes the parallel join left. Edit the subject with Write or Edit, never Bash. Write your repair record to the deliverable path."
+  } > "$OUTD/cross.brief"
+  LJOIN="scripts/ai-dlc/wait-for-deliverable.sh --complete $LDIR/cross.md"
+  printf '%s\n' "$LJOIN" > "$OUTD/lane.cmd"
+  echo "gen-round-briefs: wrote cross.brief for the lane round $LNAME --pass $LPASS under $OUTD"
+  echo "join: $LJOIN"
+  echo "lane join: scripts/ai-dlc/join-remediator-shards.sh --sprint $SPRINT --artifact $LNAME --pass $LPASS --artifact-path ${LPATH:-<LANE-ARTIFACT-PATH>} --since <ISO> --until <ISO>"
+  exit 0
+fi
 
 PATHS=""
 if [ "$KIND" = adv ]; then
   while IFS="$(printf '\t')" read -r o a b c; do
     [ -n "$o" ] || continue
     if [ "$AXIS" = files ]; then
-      write_adv "$o" "$o/$K $a" "Subject: ONE story file, $SUBJ/$a. Read it fully, plus the locked-requirements block and the sources it cites. Cite ONLY your own ordinal in \`stories:\` lines; cross-story defects are the cross shard's job."
+      grb_write_adv "$o" "$o/$K $a" "Subject: ONE story file, $SUBJ/$a. Read it fully, plus the locked-requirements block and the sources it cites. Cite ONLY your own ordinal in \`stories:\` lines; cross-story defects are the cross shard's job."
     else
-      write_adv "$o" "$o/$K $c" "Your span: lines $a-$b of the REAL document $DOC (read that range of the real file, read-only, never a copy; you may read the whole document for context, but raise findings only on your span). Every finding carries exactly one \`sections:\` line citing ONLY your own ordinal ($o)."
+      grb_write_adv "$o" "$o/$K $c" "Your span: lines $a-$b of the REAL document $DOC (read that range of the real file, read-only, never a copy; you may read the whole document for context, but raise findings only on your span). Every finding carries exactly one \`sections:\` line citing ONLY your own ordinal ($o)."
     fi
     PATHS="$PATHS $SDIR/$o.md"
   done < "$MAP"
   if [ "$AXIS" = files ]; then CS="Subject: EVERY story file under $SUBJ (the whole map). Read them all. Raise cross-story defects only; every finding carries one \`stories:\` line citing two or more ordinals."
   else CS="Subject: the whole document $DOC. Raise cross-section defects only; every finding carries one \`sections:\` line citing two or more ordinals."; fi
-  write_adv cross "cross/$K g1/1 $ALLORD" "$CS"
+  grb_write_adv cross "cross/$K g1/1 $ALLORD" "$CS"
   PATHS="$PATHS $SDIR/cross.md"
   FLAG="--shard-header $HDR"
 else
@@ -170,11 +213,15 @@ else
     } > "$OUTD/$o.brief"
     PATHS="$PATHS $SDIR/$o.md"; n=$((n + 1))
   done < "$MAP"
-  [ "$n" -gt 0 ] || die "no shard has a findings file under $FIND" 3
+  [ "$n" -gt 0 ] || grb_die "no shard has a findings file under $FIND" 3
   FLAG=""
+  [ ! -s "$FIND/cross.txt" ] || echo "cross: $FIND/cross.txt is the serial lane round's, not this join's; after this join prints PLAN-FILE, run again with --plan-file $SDIR/.join-plan"
 fi
 
 JOIN="scripts/ai-dlc/wait-for-deliverable.sh --complete${FLAG:+ $FLAG}$PATHS"
 printf '%s\n' "$JOIN" > "$OUTD/join.cmd"
 echo "gen-round-briefs: wrote $(ls "$OUTD"/*.brief | wc -l | tr -d ' ') brief(s) under $OUTD"
 echo "join: $JOIN"
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+grb_main "$@"

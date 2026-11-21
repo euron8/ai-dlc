@@ -501,7 +501,7 @@ fi
 # --- (f) every fixture the push would run that reaches a changed script (BL-1122, BL-1129) ----------------------
 # A change to a script's child starts moves the `<n> *` J3 row of EVERY fixture that runs the script, whether its
 # invocations.decl rows the child or not, and whether it names the script or sweeps its whole directory. So when the
-# diff from the merge-base with <base> to the work tree touches a `core/scripts/*.sh` or `scripts/*.sh` path (added,
+# diff from the merge-base with <base> to the work tree touches a `*.sh` path under core/scripts, scripts, core/hooks, core/skills (nested included: a git pathspec `*` matches `/`), core/session-driver (added,
 # modified or deleted), every fixture of predict-push-set's RUN set that reaches one runs here, through this tree's
 # seed-verdict-store.sh at AI_DLC_FIXTURE_JOBS, and any red is a finding. Every pass lands in the counted store, so the
 # push reuses it. The member set (a `<fx>@consumer` unit by its fixture's routes) is the RUN fixtures with any route:
@@ -512,7 +512,7 @@ fi
 #             name (a `/` before it is a directory prefix).
 # Units section e already ran are not run again. Its self-probe runs first, both directions. With no prediction, or a
 # non-empty RUN set and no parse, the section cannot know what the push measures: a refusal.
-printf '== f. fixtures that reach a changed script (when the diff touches core/scripts/*.sh or scripts/*.sh)\n'
+printf '== f. fixtures that reach a changed script (when the diff touches a *.sh under core/scripts, scripts, core/hooks, core/skills, core/session-driver)\n'
 F_AWK='FILENAME == ARGV[1] { C[++nc] = $0; B[nc] = $0; sub(/.*\//, "", B[nc]); next }
 FILENAME == ARGV[2] { u = $0; b = u; sub(/@consumer$/, "", b); if (!(u in U)) { U[u] = 1; O[++no] = u; OB[no] = b; R[b] = 1 }; next }
 FILENAME == ARGV[3] { n = split($0, f, "\t"); if (n < 3 || !(f[1] in R)) next
@@ -547,11 +547,11 @@ if [ "$f_probe" != "fdir ffile fname fname@consumer " ]; then
   printf '   cannot run: the route matcher read "%s" on its seeded probe, expected "fdir ffile fname fname@consumer " -- it cannot be trusted on the RUN set\n' "$f_probe" >&2
   exit 2
 fi
-git diff --name-only --no-renames "$E_MB" -- 'core/scripts/*.sh' 'scripts/*.sh' > "$W/f/changed" 2> "$W/f/err" \
+git diff --name-only --no-renames "$E_MB" -- 'core/scripts/*.sh' 'scripts/*.sh' 'core/hooks/*.sh' 'core/skills/*.sh' 'core/session-driver/*.sh' > "$W/f/changed" 2> "$W/f/err" \
   || { printf 'pregate-self-check: git diff against %s failed: %s\n' "$E_MB" "$(head -1 "$W/f/err")" >&2; exit 2; }
 f_nc="$(awk 'END { print NR }' "$W/f/changed")"
 if [ "$f_nc" -eq 0 ]; then
-  printf '   SKIPPED: the diff from %s touches no core/scripts/*.sh or scripts/*.sh path\n' "$(git rev-parse --short "$E_MB")"
+  printf '   SKIPPED: the diff from %s touches no shell path a fixture can reach (core/scripts, scripts, core/hooks, core/skills, core/session-driver: *.sh)\n' "$(git rev-parse --short "$E_MB")"
 else
   printf '   %s changed script(s): %s\n' "$f_nc" "$(tr '\n' ' ' < "$W/f/changed")"
   pred_once

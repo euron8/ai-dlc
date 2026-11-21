@@ -324,6 +324,10 @@ argv_for() {
     deploy-validate-run.sh)         printf '%s' "cluster 1" ;;
     retro-gate.sh)                  printf '%s' "--nonce vpr-1 --sprint 1" ;;
     retro-close.sh)                 printf '%s' "commit 1" ;;
+    # A bare run stops at its usage line from every root. `--all` reaches the backlog lookup; with no
+    # backlog or snapshot under the resolved root its SKIPPED line names both paths, so the roots answer
+    # differently. Same floor as the entries above: the root is CONSULTED.
+    label-source-check.sh)          printf '%s' "--all" ;;
     gate-transition.sh)             printf '%s' "vpr-1 1 -C $WORK/vpr-no-worktree --base vpr-base --sprint 1 --story-file docs/stories/story-1.md" ;;
     *)                              printf '%s' "" ;;
   esac

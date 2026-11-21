@@ -351,7 +351,7 @@ htreem=no; grep -qF 'before READY run this script with --member' "$W/Htree.out" 
 # Ts triggers on the named script and runs green; Tn's unnamed script skips.
 eskip=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches neither pre-push hook' "$W/A.out" && eskip=yes
 # Section f (BL-1122, BL-1129): A's diff touches no script, so f skips.
-fskip=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches no core/scripts/\*\.sh or scripts/\*\.sh path$' "$W/A.out" && fskip=yes
+fskip=no; grep -qE '^   SKIPPED: the diff from [0-9a-f]+ touches no shell path a fixture can reach \(core/scripts, scripts, core/hooks, core/skills, core/session-driver: \*\.sh\)$' "$W/A.out" && fskip=yes
 mte=no; grep -qF '   triggered by: .githooks/pre-push ' "$W/Mt.out" && grep -qF '   4 fixture(s): 3 naming a hook or named by the ruling, 1 wrapper(s) in 2 round(s); ' "$W/Mt.out" \
   && grep -qF '   predict-push-set.sh: 4 of 4 hold a counted pass on their current key rows (reused); 0 to run' "$W/Mt.out" \
   && grep -qxF '   ok: all 4 selected unit(s) hold a counted pass on their current key rows (reused); 0 to run' "$W/Mt.out" && mte=yes

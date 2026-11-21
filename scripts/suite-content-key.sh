@@ -45,7 +45,9 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 1
 cd "$REPO_ROOT" || exit 1
 
-die() { printf 'suite-content-key: %s\n' "$*" >&2; exit 1; }
+# SCK_RW is the ranges scratch directory while one exists: a refusal removes it (no trap, so a caller that sources this keeps its own).
+SCK_RW=""
+die() { printf 'suite-content-key: %s\n' "$*" >&2; [ -z "$SCK_RW" ] || rm -rf "$SCK_RW"; exit 1; }
 
 # ---------------------------------------------------------------------------
 # THE EXCLUSION SET, and the evidence for each line.
@@ -342,6 +344,7 @@ emit_components() {
   fi
   if [ -n "$rf" ]; then
     rw="$(mktemp -d "${TMPDIR:-/tmp}/sck-ranges.XXXXXX")" || die "could not make a scratch directory for the range rows. Fails closed."
+    SCK_RW="$rw"
     sed -n '/^# READSET_KEYROWS_BEGIN$/,/^# READSET_KEYROWS_END$/p' .githooks/pre-push > "$rw/keyrows.sh" 2>/dev/null
     grep -q '^readset_decl_ranges() ' "$rw/keyrows.sh" || die "could not find readset_decl_ranges in .githooks/pre-push's READSET_KEYROWS span. Fails closed."
     . "$rw/keyrows.sh" || die "could not load the READSET_KEYROWS span of .githooks/pre-push. Fails closed."
@@ -352,7 +355,8 @@ emit_components() {
       [ -n "$rrows" ] || die "readset_decl_ranges returned no row for $rfx, which carries a range line. Fails closed."
       printf '%s\n' "$rrows" | cut -f1,3,4
     done <<< "$rf"
-    rm -f "$rw/keyrows.sh" "$rw"/w.* ; rmdir "$rw" 2>/dev/null
+    rm -rf "$rw"
+    SCK_RW=""
   fi
 
   # 9. THE TOOLS. Identity, hash and version -- see TOOLS above for why all three.

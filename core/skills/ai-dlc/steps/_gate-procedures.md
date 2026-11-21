@@ -1097,7 +1097,7 @@ pass, and `gate-validation.md` "Gate Failure" after a check fails. **The lead do
 artifact itself** — it is the most context-saturated agent in the pipeline and repairs from a
 compacted summary, not the document. (Rationale + the measurement: notes R35.)
 
-**Generate the member briefs of a round.** Run `scripts/ai-dlc/gen-round-briefs.sh` for the member briefs of every round and for the beat-join command with the `--shard-header` flag its kind owns (convergence for a review round, elicitation for an elicitation round, none for a repair round); never hand-write them. A repair round's cross shard brief is the one brief you write.
+**Generate the member briefs of a round.** Run `scripts/ai-dlc/gen-round-briefs.sh` for the member briefs of every round and for the beat-join command with the `--shard-header` flag its kind owns (convergence for a review round, elicitation for an elicitation round, none for a repair round); never hand-write them. A repair round's cross shard never joins the parallel round: put its finding tokens in `<findings dir>/cross.txt`, and after the parallel join prints `PLAN-FILE:`, run `gen-round-briefs.sh` again with the same arguments plus `--plan-file <that path>`. It writes `cross.brief` for the serial lane round the plan's `LANE-ARTIFACT:` line names (deliverable `shards/<lane artifact>-repair-p<M>/cross.md`) and `lane.cmd`, the cross deliverable's own `--complete` command; beat-join it with any lane parts and run the lane join with the `--artifact`, `--pass` and `--artifact-path` it prints.
 
 **Dispatch** ONE `remediator` per pass, or one shard per disjoint FILE set when the artifact is
 two or more files ("Shard by file" below), or one shard per SECTION when the artifact is one
@@ -1218,7 +1218,7 @@ forms, and a siblings fence whose control text is not in the file it names.
 
 **Render SPEC once, after the serial tail.** A subject-mode join prints `SPEC-RENDER: DEFERRED` for a stale memlog and writes its record; render `SPEC.md` once after the serial tail. `--sources` and `--escalations` over the finished records refuse until it is rendered.
 
-**Close the serial tail with the requirements bookkeeping script.** The lead runs `scripts/ai-dlc/requirements-bookkeeping.sh --precheck <N>` there, then `--rederive`, `--mirror-lr` and `--seal` for the findings it names.
+**Close the serial tail with the requirements bookkeeping script.** The lead runs `scripts/ai-dlc/requirements-bookkeeping.sh --precheck <N>` there, then `--rederive`, `--mirror-lr` and `--seal` for the `PRECHECK FENCE` and `PRECHECK MIRROR` lines it names, until none is left. The other lines go where `requirements.md` ("Bookkeeping is a script") routes them: a `PRECHECK QUOTE` line on the slot or its PRD mirror to the lead, every other line to one remediator; `--precheck` runs again after that remediator and the SPEC render until it prints `PRECHECK clean`.
 
 **Adjudicators decide, one writer writes.** After `FANIN-COUNT:` the round-one join prints one
 `ADJUDICATE: <n | fanin> <b>/<k> <item>` line per item of every lane (`<n>`) and of the fan-in that

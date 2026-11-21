@@ -47330,6 +47330,24 @@ BL-868: no test depends on load.
 Provenance: batch 262, B; id allocated by the lead.
 
 verify: sh grep -qF 'carried_in_shadow "$2" "$3" "$line" "$4" && continue' core/skills/ai-dlc-update/reconcile/readopt-override.sh && grep -qF 'carried_in_context "$1" "$id" "$3"' core/skills/ai-dlc-update/reconcile/readopt-override.sh && ! grep -qF 'carries "$to_flat" "$line" && carried_in_context' core/skills/ai-dlc-update/reconcile/readopt-override.sh
+## BL-1194 — a fresh owner session starts without the plan's owner-rules block: the lead's shared brief never named it, and all five fresh owners in batch 261 missed a rule it carries
+
+**DEFECT.** Filed 2026-11-20 (batch 261, close). Owner: `docs/plans/graph-ledger-full-drain.md` action 0 (`:781`, the owner-rules block at `:869-873`); the lead's per-owner brief.
+
+Goal: every owner the lead starts reads the owner-rules block before its first edit. One done condition: items 1 and 2 are on `origin/main`, and item 2's binding reports a seeded copy of the plan whose action 0 lacks item 1's instruction and stays quiet on the real plan.
+
+Record, from the lead's batch-261 rulings log (line 517, read by the lead, not re-derived here): the shared brief `brief-common.txt` never named the plan's owner-rules block, and all five fresh owners (ai-dlc-86, ai-dlc-a0, ai-dlc-6d, and two ai-dlc-67 sessions) missed hands, the `ACCEPTED` reply, or the adversary timing it states. 6d recorded the same DEFECT as its own (rulings log :509: no hand, detached HEAD, owner block read late).
+
+Work list:
+
+1. The tracked text the lead builds owner briefs from, action 0 of `docs/plans/graph-ledger-full-drain.md` (the bullet at `:869`, "Send it verbatim"), says the per-owner brief names the owner-rules block by path and line (the block opening `**Release owner rules`) and tells the owner to read it before its first edit.
+2. A binding on that tracked text: a validator arm fails when action 0 lacks item 1's instruction, proved once by hand in both directions.
+
+**LANDED (v0.1199.0).** Batch 262, J. Item 1 is built: the owner-rules bullet of `docs/plans/graph-ledger-full-drain.md` action 0 now has each owner's brief name the block by path and heading and tell the owner to read it with the Read tool before its first edit. Item 2 is built: arm P16 of `scripts/validate-plan-shape.sh` fails a plan whose action-0 owner-rules bullet lacks that instruction; by hand it fires on a copy without it and on a copy with it moved out of action 0, is quiet on the real plan, and a mutant deleting its emission is killed.
+
+Step: n/a
+
+verify: manual
 
 ## BL-1196 — the update pull's deliver commits the operator's own dirty files, refuses an already-staged deletion, builds a PR body GitHub refuses, and re-asks a short-digest answer with no reason
 
@@ -47349,5 +47367,48 @@ Work list:
 Provenance: batch 262 cluster A; id allocated by the lead.
 
 Step: n/a
+
+verify: manual
+## BL-1199 — the next-sprint handoff prompt does not require each listed item to carry its id, so a plain gloss can replace the id instead of sitting beside it
+
+**DEFECT.** Filed 2026-11-20 (batch 262). Consumer filing: `PC-S323-7D-HANDOFF-PROMPT-OMITS-CARRYOVER-IDS-NO-CLAUSE-REQUIRES-IDS-IN-PROMPT-BODY-AND-PLAIN-GLOSS-READS-AS-DELETE-IDS`. Owner: `core/skills/ai-dlc/steps/retro.md` step 7d (the handoff placeholder, `:1360-1367`).
+
+Goal: every item the next-sprint prompt body enumerates names its story, `CO-` or escalation id, with the plain-language gloss beside it. One done condition: item 1 is on `origin/main` and item 2's pin reports green on the real tree and red on a copy whose id clause is dropped.
+
+Claims, with scope evidence re-derived on 91090ef5d:
+
+- Claim 1, the 7d prompt body requires no per-item id: LIVE. The placeholder at `retro.md:1360-1367` says nothing about ids; the only id lists are the scope-outline lines at `:1348-1349`, which `:1346` marks "not part of the prompt". Not BL-1183, which tags carve-outs and requires no ids.
+- Claim 2, nothing says a gloss never licenses deleting an id: PARTLY. `SKILL.md:389-393` keeps an id unchanged with the clause beside it where a template slot or another rule requires the id; `retro.md:1375-1379` says every id listed carries a clause. Neither says the id must be listed, so keeping it stays conditional on a slot 7d lacks, while `SKILL.md:381`, "a label the lead coined itself ... is replaced", reads as "delete the id". Item 1 creates the slot; `SKILL.md` (bootstrapping) is not edited.
+
+Work list:
+
+1. `retro.md` 7d: the placeholder has each enumerated item open with its story, `CO-` or escalation id then its gloss, and a new whole paragraph states that the gloss sits beside the id and never in its place.
+2. A pin row `retro-7d-item-id` in `core/fixtures/process-rule-pins/run.sh` beside `retro-7d-carveout-tag`, keyed on that paragraph, proved once by hand in both directions.
+
+**LANDED (v0.1199.0).** batch 262, D. `retro.md` step 7d now has each enumerated item open with its story, `CO-` or escalation id and then its plain gloss, plus a paragraph saying the gloss sits beside the id and never replaces it; pin row `retro-7d-item-id` in `core/fixtures/process-rule-pins/run.sh` holds it.
+
+NOTE: the placeholder sentence in `retro.md`'s 7d placeholder (about `:1366`, the one requiring each enumerated item to open with its id) is not pinned by process-rule-pins; only the following paragraph is (row `retro-7d-item-id`).
+
+Step: retro
+
+verify: manual
+
+
+## BL-1200 — the consumer asked for a story-status consistency check after every gate 1; core already runs one at gate 3, so the request is closed with no code
+
+**DEFECT.** Filed 2026-11-20 (batch 262), records only. Consumer filing: `PC-S324-IMPLEMENTATION-PUSH-STORY-STATUS-CONSISTENCY-CHECK-AFTER-EVERY-GATE-1-NOT-IN-CORE`. Owner: `core/skills/ai-dlc/steps/gate-validation.md` Check 5 and `core/scripts/gate-transition.sh`.
+
+Claims, re-derived on the 262-D tree:
+
+- Claim 1, upstream does not carry the check: FALSE. Check 5 (`core/skills/ai-dlc/steps/gate-validation.md:626-634`) runs `scripts/ai-dlc/sprint-status.sh check-stories`, which compares each story file's status with its entry in each canonical `sprint-status.yaml`. `core/scripts/gate-transition.sh:557` runs it as `arm 5 sprint-status.sh check-stories`, inside the gate-3 branch (`3)` at :546).
+- Claim 2, it must run after every gate 1 and before the story merges: no gain. The closing writer is dispatched only once gate 3 passes (`core/skills/ai-dlc/steps/implementation.md:160-161`), and it makes the `done` transition, so Check 5 already runs before it. No catch is on record for running it earlier: the consumer's own motivating case, S177 F-QA-1, was caught by the existing QA checklist.
+
+Derivation: `grep -n check-stories core/scripts/gate-transition.sh` lists :46 (the header comment) and :557; the gate-1 branch (`1)` at :395) and the gate-2 branch (`2)` at :444) carry none. Control: the gate-3 line :557 is the positive hit, and `grep -c check-stories-ZZZ` on the same file reads 0.
+
+Nothing is built. One done condition: this entry names the consumer filing in the release that carries it.
+
+**LANDED (v0.1199.0).** batch 262, D. Records only, no code: Check 5 already runs `sprint-status.sh check-stories` at gate 3, before the closing writer, and no earlier catch is on record.
+
+Step: implementation
 
 verify: manual

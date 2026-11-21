@@ -81,47 +81,6 @@ the go-signal is the required validation target; a verdict produced on any other
 produced before the go-signal, is VOID rather than merely early — it attests to a tree
 nobody asked about. Violation is logged as a process deviation in the gate log.
 
-## Handoff Evidence Precondition
-
-Before any item of the Validation Checklist, confirm the story file carries
-the dev's QA Handoff Evidence (`dev.md`, section of that name). This holds on
-top of whatever the Validation Checklist section says, and a project that
-replaces that section does not replace this one. REJECT without validating
-further when any of these is absent:
-
-- the dev's full-collection run: exact invocation, working directory, and
-  collected / passed / failed / deselected / skipped / xfailed counts (the
-  line the story's capture-heads block renders for the cited capture is those
-  counts), or
-  `Full-collection run: none, <reason>` ONLY when the story's diff is
-  record-only (every changed path is the story file, a sprint-status yaml, or
-  under `docs/reviews/`, `test-results/` or `docs/escalations/`), or
-  `Full-collection run: none, <AC-id> waives it` ONLY when the story file at
-  the base carries that AC's `## Canonical-run waivers` entry, written at
-  planning; a `pytest --collect-only` or `pytest --co` invocation runs no
-  test and is a no-run claim, never the run;
-- the dev's dependency setup for that run, recorded beside it: the canonical
-  dependency setup that makes it reproducible from a fresh detached worktree,
-  as the exact invocation and its working directory, or `none` with the reason;
-- the four evidence sections, each filled: `## Production Integrity Tests`,
-  `## Smoke Test Updates`, `## Rename Verification` (or `not a rename`), and
-  `## Strategy Test IDs`;
-- a `Kind` and a `Resolves to` on every `## Strategy Test IDs` row. For
-  each `test` row, confirm the node id collects at the go-signal SHA.
-- a recorded full-collection invocation that `record-only-diff.sh run-filter`
-  does not refuse against the project's `docs/coding-conventions.md`. A refused
-  one, which is a `-k` or `--deselect` in any spelling, a file or node-id
-  argument, or a `-m` marker, path argument or wrapper option the conventions do
-  not declare canonical, is a partial run and not the full collection. It is
-  the rule your own `Canonical run:` is held to, and
-  `validate-handoff-evidence.sh` refuses it as `full-collection-filtered`.
-- a recorded working directory for that run that is the repository root or a
-  path `docs/coding-conventions.md` declares canonical. A run made from a
-  narrower relative directory (`` `pytest -q`, working directory `server/` ``)
-  collects only that subtree and is a partial run: it is read as
-  `record-only-diff.sh run-filter` reads `cd <dir> && <invocation>`, and
-  `validate-handoff-evidence.sh` refuses it as `full-collection-filtered`.
-
 Do not compare Dev Agent Record prose to capture headers — the capture-heads
 block is rendered and validator-checked; a capture header that is wrong about
 its own tree is still a finding.

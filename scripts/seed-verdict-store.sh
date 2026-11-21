@@ -71,7 +71,31 @@ HOOK="$PWD/.githooks/pre-push"
 st="$(git status --porcelain)" || { echo "seed-verdict-store: git status failed" >&2; exit 2; }
 [ -z "$st" ] || [ "$dirty_ok" = 1 ] || { echo "seed-verdict-store: worktree is dirty; seed from a clean worktree detached at the pushed sha" >&2; exit 2; }
 work="$(mktemp -d "${TMPDIR:-/tmp}/seedvs.XXXXXX")" || exit 2
-trap 'rm -rf "$work"' EXIT
+# THE SEEDER LEAVES ITS OWN RECORD IN A FILE, whatever launched it: ${TMPDIR:-/tmp}/seedvs.exits, appended, outside $work
+# and never on stdout or stderr (scripts/seed-triage.sh refuses any line the seeder prints of its own). Two lines per run:
+#   START pid=<pid> cwd=<cwd> units=<names>
+#   END pid=<pid> rc=<n> signal=<TERM|INT|HUP|none> done=<units with an rc file>/<plain units>
+# A pid with START and no END died untrappably (SIGKILL, the one limit); an END with signal=TERM|INT|HUP says a launcher
+# stopped it. A signal sent to the seeder ALONE is handled when its foreground xargs returns (bash defers a trap past a
+# foreground command); a launcher that signals the whole group stops xargs too. Builtins only, no exec. The EXIT trap is
+# the one that removes $work.
+svs_sig=none; svs_units="$*"; svs_rec="${TMPDIR:-/tmp}/seedvs.exits"
+printf 'START pid=%s cwd=%s units=%s\n' "$$" "$PWD" "$svs_units" 2>/dev/null >> "$svs_rec" || true
+svs_exit() {
+  svs_rc=$?
+  svs_done=0; svs_all=0
+  for svs_u in $svs_units; do
+    case "$svs_u" in --*|*@consumer) continue ;; esac
+    [ -d "$work" ] || break
+    svs_all=$((svs_all + 1)); [ -f "$work/$svs_u.rc" ] && svs_done=$((svs_done + 1))
+  done
+  printf 'END pid=%s rc=%s signal=%s done=%s/%s\n' "$$" "$svs_rc" "$svs_sig" "$svs_done" "$svs_all" 2>/dev/null >> "$svs_rec" || true
+  rm -rf "$work"
+}
+trap svs_exit EXIT
+trap 'svs_sig=TERM; exit 143' TERM
+trap 'svs_sig=INT; exit 130' INT
+trap 'svs_sig=HUP; exit 129' HUP
 awk '/^fxcount_arm\(\) \{/ { on = 1 } on { print } on && /^}/ { exit }' "$HOOK" > "$work/arm.sh"
 if [ ! -s "$work/arm.sh" ] || ! grep -q '^fxcount_arm() {' "$work/arm.sh" || ! grep -q 'vk=' "$work/arm.sh"; then
   echo "seed-verdict-store: could not extract fxcount_arm from $HOOK" >&2; exit 2

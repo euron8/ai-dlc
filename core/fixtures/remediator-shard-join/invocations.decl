@@ -13,11 +13,11 @@
 6 core/scripts/content-seal.sh
 2 core/scripts/validate-adversarial-convergence.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
-277 inproc:core/scripts/join-remediator-shards.sh
-258 inproc:core/hooks/ai-dlc-gate-remediation-guard.sh
+284 inproc:core/scripts/join-remediator-shards.sh
+260 inproc:core/hooks/ai-dlc-gate-remediation-guard.sh
 5 inproc:core/hooks/ai-dlc-derivation-capture.sh
 28 inproc:core/scripts/wait-for-deliverable.sh
 28 inproc:core/scripts/validate-artifact-derivations.sh
-100 inproc:core/scripts/content-seal.sh
+103 inproc:core/scripts/content-seal.sh
 2 inproc:core/scripts/validate-adversarial-convergence.sh
 7 inproc:core/scripts/serial-remediation-worklist.sh

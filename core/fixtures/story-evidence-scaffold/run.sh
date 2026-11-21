@@ -11,8 +11,8 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 #   - dev.md `## QA Handoff Evidence`: the full-collection run WITH its counts before the
 #     handoff message, the dependency setup that makes that run reproducible from a fresh
 #     detached worktree recorded beside it, the four sections filled, every table row resolved.
-#   - qa.md `## Handoff Evidence Precondition`: QA rejects before validating when that
-#     evidence, the dependency setup included, is absent.
+#   - validate-handoff-evidence.sh handoff mode at gate 1 is the one enforcer of that evidence;
+#     qa.md carries no precondition of its own.
 #   - code-reviewer.md Field Verification: the baseline-fixture sweep when a diff changes a
 #     handler's result shape.
 #   - implementation.md's pre-gate commit-presence paragraph and sprint-review.md §4: both
@@ -68,6 +68,7 @@ prose a
 inplace a
 listcaps a
 era a
+rbriefs a
 b3 a
 gjoin-probe a
 handoff b
@@ -314,12 +315,11 @@ flat() { tr '\n' ' ' | sed -e 's/\*\*//g' -e 's/[[:space:]][[:space:]]*/ /g'; }
 has() { case "$1" in *"$2"*) return 0 ;; esac; return 1; }
 
 COUNTS='collected / passed / failed / deselected / skipped / xfailed counts'
-# The dependency-setup row: the dev records it, the QA precondition REJECTs without it. A part
+# The dependency-setup row: the dev records it, and the gate-1 handoff validator refuses its absence. A part
 # QA's own worktree runs "the setup the dev's QA Handoff Evidence records" (qa.md `## As a
 # Shard`, implementation.md Gate-2 dispatch), so a dev list without this row leaves that reader
 # with nothing to run. Each phrase is the row's own wording in its own section.
 SETUP_DEV='the canonical dependency setup that makes that run reproducible from a fresh detached worktree: the exact invocation and its working directory, or `none` with the reason'
-SETUP_QA='the canonical dependency setup that makes it reproducible from a fresh detached worktree, as the exact invocation and its working directory, or `none` with the reason'
 
 REBIND='re-binds every `## Strategy Test IDs` cell naming the old node, across all story files'
 EVS="$(sed -n "s/^EV_SENTINEL='\(.*\)'\$/\1/p" "$HE")"
@@ -397,13 +397,6 @@ check() {
   fl="$(flat <<<"$b")"
   has "$fl" 'validate-handoff-evidence.sh --strategy HEAD <every story file of this sprint>' \
     || echo "WIRE-SR: sprint-review §4 does not run validate-handoff-evidence.sh --strategy before the gate"
-  shadow "$qa" '## Validation Checklist' > "$WORK/.qa.shadowed"
-  b="$(h2 "$WORK/.qa.shadowed" '## Handoff Evidence Precondition')"
-  fl="$(flat <<<"$b")"
-  { has "$fl" "$COUNTS" && has "$fl" 'REJECT without validating further'; } \
-    || echo "QA: after the consumer's Validation Checklist shadow, qa.md carries no handoff-evidence precondition"
-  has "$fl" "$SETUP_QA" \
-    || echo "QA: setup -- after the consumer's Validation Checklist shadow, qa.md does not REJECT a handoff missing the dev's dependency setup"
   # The section points at appendix/code-reviewer-api-fields.md, which holds the sweep paragraph whole: read both.
   b="$(h2 "$cr" '## Field Verification (API-Consuming Stories)'
        [ ! -f "$(dirname "$cr")/appendix/code-reviewer-api-fields.md" ] || cat "$(dirname "$cr")/appendix/code-reviewer-api-fields.md")"
@@ -416,7 +409,7 @@ if gsel prose; then
 # --- the subject -------------------------------------------------------------
 out="$(check "$STS" "$GV" "$DEV" "$QA" "$CR" "$IMP" "$SR")"
 if [ -z "$out" ]; then
-  ok "scaffold, table vocabulary, Step 5 binding, Check 21 citation set / letter / SKIP, dev and qa handoff evidence past the consumer shadows, code-reviewer sweep, rename re-bind, capture header, pre-gate and sprint-review wiring"
+  ok "scaffold, table vocabulary, Step 5 binding, Check 21 citation set / letter / SKIP, dev handoff evidence past the consumer shadows, code-reviewer sweep, rename re-bind, capture header, pre-gate and sprint-review wiring"
 else
   while IFS= read -r l; do bad "$l"; done <<<"$out"
 fi
@@ -1170,6 +1163,59 @@ if gsel era; then
       ok "ERA: the same stamped table with Kind test is judged and passes the Kind arm"
     else
       bad "ERA: Kind test in a stamped table: $(grep kind-vocabulary "$ER_W/test.out" | head -1)"
+    fi
+  fi
+fi
+
+# --- BL-1175 repair-round cross shard: briefed for the SERIAL lane round, never the parallel join --------------------
+# gen-round-briefs.sh --round repair writes the part briefs and the parallel join.cmd; the cross shard's findings wait for
+# the parallel join's PLAN-FILE, and the --plan-file run briefs cross with deliverable <lane artifact>-repair-p<M>/cross.md
+# (graph s323 stories-serial-repair-p1/p2). The plan is graph's real round-one shape at pass 2, so a hard-coded -p1 fails.
+# The ALLOW twin is a lane round's own plan (no LANE-ARTIFACT line), which refuses with exit 3 and writes no brief.
+if gsel rbriefs; then
+  RB_D=""
+  for cand in "$SE_WDIR/../../scripts" "$SE_WDIR/../../../scripts/ai-dlc"; do
+    if [ -f "$cand/gen-round-briefs.sh" ]; then RB_D="$cand"; break; fi
+  done
+  if [ -z "$RB_D" ]; then
+    case "$HE" in
+      */core/scripts/*) bad "RBRIEFS: FIXTURE BROKEN -- gen-round-briefs.sh is absent in the distribution" ;;
+      *) echo "SKIP RBRIEFS: gen-round-briefs.sh is not installed in this consumer yet; nothing was checked" ;;
+    esac
+  else
+    echo "HERMETIC-CONSUMED core/scripts/gen-round-briefs.sh"
+    RB_W="$WORK/world-rbriefs"; RB_S="$RB_W/shards/stories-repair-p2"
+    mkdir -p "$RB_W/stories" "$RB_W/find" "$RB_S" "$RB_W/lane/shards/stories-serial-repair-p2" || bad "RBRIEFS: FIXTURE BROKEN -- cannot make the world"
+    printf '1\tstory-1-1.md\n2\tstory-1-2.md\n3\tstory-2-1.md\n' > "$RB_W/map"
+    printf 'stories-p2/1.md#F-1 (MAJOR)\n' > "$RB_W/find/1.txt"
+    printf 'stories-p2/3.md#F-2 (MINOR)\n' > "$RB_W/find/3.txt"
+    printf 'stories-p2/cross.md#F-1 (MAJOR)\n' > "$RB_W/find/cross.txt"
+    rb_args() { printf '%s\n' --round repair --axis files --sprint 9 --artifact stories --pass 2 --map "$RB_W/map" --subject-dir "$RB_W/stories" --findings-dir "$RB_W/find"; }
+    rb_out="$(FXCELL="cli-rbriefs-par" bash "$RB_D/gen-round-briefs.sh" $(rb_args) --shard-dir "$RB_S" --out-dir "$RB_W/par" 2>&1)"; rb_rc=$?
+    rb_join="$(cat "$RB_W/par/join.cmd" 2>/dev/null)"
+    if [ "$rb_rc" -eq 0 ] && [ "$rb_join" = "scripts/ai-dlc/wait-for-deliverable.sh --complete $RB_S/1.md $RB_S/3.md" ] && [ ! -e "$RB_W/par/cross.brief" ] \
+       && grep -qF "cross: $RB_W/find/cross.txt is the serial lane round's, not this join's; after this join prints PLAN-FILE, run again with --plan-file $RB_S/.join-plan" <<< "$rb_out"; then
+      ok "RBRIEFS: the parallel repair join.cmd names parts 1 and 3 and no cross deliverable; cross.txt is pointed at the --plan-file run"
+    else
+      bad "RBRIEFS: parallel rc=$rb_rc join=[$rb_join] cross.brief=$([ -e "$RB_W/par/cross.brief" ] && echo present || echo absent) out=[$rb_out]"
+    fi
+    printf 'JOINED: %s (2 parts, 2 writers)\nESCALATED-COUNT: 0\nSERIAL-REQUIRED: 3\nLANE-ARTIFACT: stories-serial --pass 2\nLANE-ARTIFACT-PATH: _bmad-output/planning-artifacts/s9\nLANE-EDGES: files, by edit set\nLANE: 1 files: a.md parts: 1.md\nLANE-COUNT: 1\nFANIN-COUNT: 0\nADJUDICATOR-COUNT: 0\n' "$RB_W/stories-repair-p2.md" > "$RB_S/.join-plan"
+    rb_lout="$(FXCELL="cli-rbriefs-lane" bash "$RB_D/gen-round-briefs.sh" $(rb_args) --shard-dir "$RB_S" --out-dir "$RB_W/lane-out" --plan-file "$RB_S/.join-plan" 2>&1)"; rb_lrc=$?
+    rb_ld="$RB_W/shards/stories-serial-repair-p2"
+    if [ "$rb_lrc" -eq 0 ] && grep -qxF "Deliverable: $rb_ld/cross.md" "$RB_W/lane-out/cross.brief" && grep -qxF 'shard: none (authoring-chain)' "$RB_W/lane-out/cross.brief" \
+       && grep -qxF 'stories-p2/cross.md#F-1 (MAJOR)' "$RB_W/lane-out/cross.brief" \
+       && [ "$(cat "$RB_W/lane-out/lane.cmd")" = "scripts/ai-dlc/wait-for-deliverable.sh --complete $rb_ld/cross.md" ] \
+       && grep -qF -- '--artifact stories-serial --pass 2 --artifact-path _bmad-output/planning-artifacts/s9 ' <<< "$rb_lout"; then
+      ok "RBRIEFS: --plan-file briefs cross for the lane round stories-serial --pass 2, deliverable stories-serial-repair-p2/cross.md, with its own --complete"
+    else
+      bad "RBRIEFS: lane rc=$rb_lrc brief=[$(grep -E '^(Deliverable|shard):' "$RB_W/lane-out/cross.brief" 2>/dev/null | tr '\n' ' ')] cmd=[$(cat "$RB_W/lane-out/lane.cmd" 2>/dev/null)] out=[$rb_lout]"
+    fi
+    printf 'JOINED: %s (1 parts, 1 writers)\nESCALATED-COUNT: 0\nSERIAL-REQUIRED: 3\n' "$RB_W/stories-serial-repair-p2.md" > "$RB_W/lane/shards/stories-serial-repair-p2/.join-plan"
+    rb_rout="$(FXCELL="cli-rbriefs-lanejoin" bash "$RB_D/gen-round-briefs.sh" $(rb_args) --shard-dir "$RB_S" --out-dir "$RB_W/ref-out" --plan-file "$RB_W/lane/shards/stories-serial-repair-p2/.join-plan" 2>&1)"; rb_rrc=$?
+    if [ "$rb_rrc" -eq 3 ] && [ ! -e "$RB_W/ref-out/cross.brief" ] && grep -qF "has no 'LANE-ARTIFACT: <name> --pass <M>' line" <<< "$rb_rout"; then
+      ok "RBRIEFS: a lane round's own plan (no LANE-ARTIFACT line) refuses with exit 3 and writes no cross brief"
+    else
+      bad "RBRIEFS: lane-join plan rc=$rb_rrc cross.brief=$([ -e "$RB_W/ref-out/cross.brief" ] && echo present || echo absent) out=[$rb_rout]"
     fi
   fi
 fi

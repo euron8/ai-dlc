@@ -1463,7 +1463,7 @@ derived_set_main() {
 #              backticks, at least 20 bytes. A C/M finding with no quote line is never refused (the
 #              rulebook arrives after the engine): it is UNJOINABLE.
 #   NEW        a span is NEW iff it occurs exactly once in pass M's snapshot of its stem and 0 times in the
-#              predecessor's snapshot of that stem (a stem absent from the predecessor holds it 0 times).
+#              predecessor's snapshot of that stem (a stem absent from the predecessor: 0 times in every predecessor stem).
 #              More than once in M, absent from M, an unknown stem or a span under 20 bytes: UNJOINABLE.
 #   ALL RULE   a MAJOR is repair-introduced iff it carries a key (`<shard file>#<id>`, J3's key) and EVERY
 #              quote is NEW. One old quote: not repair-introduced. One unjoinable quote, or none, or no
@@ -1473,7 +1473,10 @@ derived_set_main() {
 #              MAJOR is UNJOINABLE and the share below is not computed (never an absent file read as empty).
 #   CEILING    per stem, the changed-byte share = bytes of M lines not in the predecessor (line multiset,
 #              each line counted with its newline) / bytes of M. Any stem above 25%: EVERY MAJOR of pass M
-#              counts unjoined, and the merge says why.
+#              counts unjoined, and the merge says why. A stem absent from the predecessor (a story added
+#              between the passes) rewrote nothing: its H row reads 100% and it is never held to the ceiling;
+#              a quote in such a stem is NEW only when it occurs 0 times in EVERY predecessor stem, so text a
+#              rename or a move carried over reads OLD.
 #   FORMULA    blocking = blocking_major, declared ONCE in validate-adversarial-convergence.sh beside
 #              MAJOR_EXIT_CEILING and loaded here (ri_formula_load, as d_era_load loads era_resolve). A
 #              failed load is r=0 -- today's rule, never an open exit -- and a NOTE says why.
@@ -1548,7 +1551,7 @@ ri_derive() {
       while ((gs = (getline l < a[3])) > 0) { n++; if (a[1] == "N") NL[st, n] = l; else { OL[st, n] = l; OC[st, l]++ } }
       if (gs < 0) { bad = bad " " a[3] " unreadable;" }
       close(a[3])
-      if (a[1] == "N") { NN[st] = n; ns[++nst] = st } else { ON[st] = n; OS[st] = 1 }
+      if (a[1] == "N") { NN[st] = n; ns[++nst] = st } else { ON[st] = n; if (!(st in OS)) osl[++nos] = st; OS[st] = 1 }
       next
     }
     $1 == "X" { fl[++nf] = $2; fsev[$2] = $3; next }
@@ -1566,7 +1569,7 @@ ri_derive() {
             if ((st in OS) && OC[st, l] > 0) OC[st, l]--; else ch += length(l) + 1
           }
           print "H\t" st "\t" (tot > 0 ? int(ch * 1000 / tot) / 10 : 0) "%\t" ch "\t" tot
-          if (tot > 0 && ch * 4 > tot) ceil = ceil " " st "=" int(ch * 1000 / tot) / 10 "%"
+          if ((st in OS) && tot > 0 && ch * 4 > tot) ceil = ceil " " st "=" int(ch * 1000 / tot) / 10 "%"
         }
       }
       if (ceil != "") print "C\t" substr(ceil, 2)
@@ -1595,6 +1598,8 @@ ri_derive() {
           c = occ(st, sp, "N", 2)
           if (c != 1) { cls = "UNJ"; why = "quote " q " occurs " (c > 1 ? "more than once" : "0 times") " in this pass"; break }
           if ((st in OS) && occ(st, sp, "O", 1) > 0) { cls = "OLD"; why = why " quote " q " predates the repair;" }
+          else if (!(st in OS)) { for (j = 1; j <= nos; j++) if (occ(osl[j], sp, "O", 1) > 0) break
+            if (j <= nos) { cls = "OLD"; why = why " quote " q " predates the repair (in " osl[j] ");" } }
         }
         if (cls == "NEW") why = "every quote written by the repair"
         print "F\t" key "\t" s "\t" cls "\t" why
@@ -1906,19 +1911,18 @@ case "${1:-}" in
     # design: the merge ran check_keys on each shard, so the pass is skipped here (printed, never read as a pass of this
     # check). Check 24 arms K and N re-derive that field through the merge, so a hand-typed one fails there.
     if grep -qE '^shard_tool_use_ids:[[:space:]]+.*[A-Za-z0-9-]+=[A-Za-z0-9_]+' "$2"; then rm -f "$CK_P"; printf 'KEYS-SKIP: %s is a merged pass (the merge checked each shard)\n' "$2"; exit 0; fi
-    # Forward-only: a series is judged only when it opened under the new engine. A series whose pass-1 shards were
-    # dispatched through partition-document.sh --shard-dir carries the era token in shards/<stem>-p1/.era (the one key
-    # the merge reads too); a series with no such shard dir (one adversary wrote pass 1 itself) carries it as a line
-    # of its pass-1 file. Anything else reads KEYS-SKIP pre-era, never a refusal.
-    ck_dir="$(dirname "$2")"; ck_b="${2##*/}"; ck_p1="$2"; ck_stem=""
-    case "$ck_b" in *-adversarial-p[0-9]*.md) ck_stem="${ck_b%-adversarial-p*}"; ck_p1="$ck_dir/${ck_stem}-adversarial-p1.md" ;; esac
-    [ -f "$ck_p1" ] || ck_p1="$2"
+    # Forward-only: a series is judged only when it opened under the new engine, by era-token.sh's ai_dlc_era_open
+    # (the one era resolve: the opening pass's shards/<stem>-p<k>/.era, written by partition-document.sh --shard-dir or,
+    # for a SERIAL document, --map; else the token line of the pass-1 file). A file named no `<stem>-adversarial-p<M>.md`,
+    # or one whose series has neither a pass-1 shard dir nor a pass-1 file, is read for the line itself. Anything else
+    # reads KEYS-SKIP pre-era, never a refusal.
+    ck_dir="$(dirname "$2")"; ck_b="${2##*/}"; ck_stem=""; ck_m=""
+    case "$ck_b" in *-adversarial-p[0-9]*.md) ck_stem="${ck_b%-adversarial-p*}"; ck_m="${ck_b##*-adversarial-p}"; ck_m="${ck_m%.md}" ;; esac
     ck_era=""
     if [ -n "$AI_DLC_ERA_TOKEN" ]; then
-      if [ -n "$ck_stem" ] && [ -d "$ck_dir/shards/${ck_stem}-p1" ]; then
-        grep -qxF -- "$AI_DLC_ERA_TOKEN" "$ck_dir/shards/${ck_stem}-p1/.era" 2>/dev/null && ck_era=1
-      else
-        grep -qxF -- "$AI_DLC_ERA_TOKEN" "$ck_p1" && ck_era=1
+      if [ -n "$ck_stem" ] && ai_dlc_era_open "$ck_dir" "$ck_stem" "$ck_m"; then ck_era=1
+      elif [ -z "$ck_stem" ] || { [ ! -d "$ck_dir/shards/${ck_stem}-p1" ] && [ ! -f "$ck_dir/${ck_stem}-adversarial-p1.md" ]; }; then
+        grep -qxF -- "$AI_DLC_ERA_TOKEN" "$2" && ck_era=1
       fi
     fi
     if [ -z "$ck_era" ]; then

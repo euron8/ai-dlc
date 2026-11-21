@@ -25,5 +25,9 @@ core/schemas/harness-origin.json
 # its pause-routing declaration beside itself.
 !core/hooks/ai-dlc-answer-capture.sh
 core/schemas/pause-routing.json
+# Arm (p) runs requirements-bookkeeping.sh --precheck over that history; its FENCE pass runs the derivation validator
+# beside it on the PRD and the slot.
+!core/scripts/requirements-bookkeeping.sh
+core/scripts/validate-artifact-derivations.sh
 core/fixtures/lib/report.sh
 core/scripts/era-token.sh

@@ -51,6 +51,8 @@
 #       near-miss (label after the id) and an offender (label before it, or stripped).
 #   (o) BL-936: requirements.md §3's derivation program (UNANSWERED / CONFIRMED / DESCOPE / UNDECIDED), read from its
 #       fence and run over a history the shipped capture hook wrote.
+#   (p) requirements-bookkeeping.sh --precheck class QUOTE over that same hook-written history: an attached quote
+#       whose cite lands on the next entry is reported; the cite on its own entry (split, quote-before-cite) is clean.
 #
 # Usage: run.sh
 # Exit:  0 = every assertion holds (or subject not installed), 1 = a regression,
@@ -390,7 +392,7 @@ dprobe "offender: a carrier without the filing mandate" fire "$PROBE/h-off-manda
 # --- arm (i): the subject axis in section 5, and the `###` mandate in 4(c) ---
 # Each predicate reads ONE region of requirements.md, never the whole file: section 5 is
 # from its `### 5.` heading to the next `### `, 4(c) from its `**(c) Update the PRD.**`
-# opener to `**PRD validation.**`. The mandate key is its sentence, not the bare `###`
+# opener to `**Write `architecture-impact.md`**`. The mandate key is its sentence, not the bare `###`
 # token, which every step file carries as headings.
 SUBJ_TOOL='partition-subject.sh'
 OLD_SENT='has no axis for a multi-artifact subject'
@@ -402,7 +404,7 @@ region() { # <file> <start-literal> <stop-literal> -> the joined text between th
     on { print }' "$1" | tr '\n' ' ' | tr -s ' '
 }
 sec5() { region "$1" '### 5. ' '### 6. '; }
-sec4c() { region "$1" '**(c) Update the PRD.**' '**PRD validation.**'; }
+sec4c() { region "$1" '**(c) Update the PRD.**' '**Write `architecture-impact.md`**'; }
 I_WHY=""
 subject_axis_ok() { # <requirements.md> -> 0 when section 5 names the tool and lacks the old sentence
   local s; s="$(sec5 "$1")"; I_WHY=""
@@ -423,7 +425,7 @@ iprobe() { # <label> <expect: ok|fire> <predicate> <file>
   else probe_bad "(i) $1" "expected $2, got $got${I_WHY:+ ($I_WHY)}"; fi
 }
 mk_req() { # <file> <section-5 body> <4(c) body>
-  printf '### 4. Authoring\n**(c) Update the PRD.** Integrate.\n%s\n**PRD validation.** Run it.\n### 5. Validation Cycle\n%s\n### 6. Gate\nThe tail names %s and says it %s, outside section 5.\n' \
+  printf '### 4. Authoring\n**(c) Update the PRD.** Integrate.\n%s\n**Write `architecture-impact.md`** Run it.\n### 5. Validation Cycle\n%s\n### 6. Gate\nThe tail names %s and says it %s, outside section 5.\n' \
     "$3" "$2" "$SUBJ_TOOL" "$OLD_SENT" > "$1"
 }
 GOOD5="Map with \`scripts/ai-dlc/$SUBJ_TOOL --map <N>\`."
@@ -1037,6 +1039,56 @@ else
     o_check o-self-repeat 24
     o_check o-unlabelled 25
   fi
+fi
+
+# --- (p) requirements-bookkeeping.sh --precheck class QUOTE, over the history arm (o)'s capture hook wrote ---
+# Two worlds, one --precheck run each, sharing that history and differing in ONE slot cite. The quotes are attached in
+# graph s323's two shipped forms: `- LR-...: ... `_bmad-output/operator-answers-history.md:<L>` — "q"` and
+# `"q" (`_bmad-output/operator-answers-history.md:<L>`)`. Line numbers are derived from the hook-written file.
+# Near-miss world: LR-S42-18's answer cited at the LAST line of its entry (the line before the next `## `), LR-S42-21's
+# two-line answer quoted split by `…`, LR-S42-22's answer quoted before its cite; want rc 0 and `PRECHECK clean`.
+# Offender world: LR-S42-18's cite moved one line down, onto the next entry's heading, whose entry does not hold the
+# quote (the file still does); want rc 1 and exactly ONE QUOTE line, naming that cite, so the split and the
+# quote-before-cite cites were judged in a run where the block demonstrably fired and stayed quiet.
+P_RB=""
+for cand in "$ROOT/core/scripts" "$ROOT/scripts/ai-dlc"; do
+  [ -f "$cand/requirements-bookkeeping.sh" ] && [ -f "$cand/validate-artifact-derivations.sh" ] && { P_RB="$cand/requirements-bookkeeping.sh"; break; }
+done
+if [ -z "$P_RB" ]; then
+  bad "(p) requirements-bookkeeping.sh is not installed under $ROOT -- the arm has no subject"
+elif [ "${o_rec:-0}" -ne 16 ]; then
+  bad "(p) arm (o)'s hook-written history is absent -- the arm has no producer-seeded history"
+else
+  echo "HERMETIC-CONSUMED core/scripts/requirements-bookkeeping.sh"
+  p_ln() { grep -nxF -- "$1" "$O_H" | head -1 | cut -d: -f1; }
+  P18="$(p_ln 'Confirm LR-S42-18 (Recommended)')"; P21="$(p_ln 'Confirm LR-S42-21')"; P22="$(p_ln 'Reword LR-S42-22')"
+  P18N="$(awk -v a="${P18:-0}" 'NR > a && /^## / {print NR; exit}' "$O_H")"
+  if [ -z "$P18" ] || [ -z "$P21" ] || [ -z "$P22" ] || [ -z "$P18N" ] || ! grep -qxF 'but only on Matic' "$O_H"; then
+    echo "FIXTURE BROKEN: (p) the hook-written history lacks an answer line the worlds cite (18=$P18 next=$P18N 21=$P21 22=$P22)" >&2; exit 2
+  fi
+  P18E=$((P18N - 1)); P_CITE='_bmad-output/operator-answers-history.md'
+  p_world() { # <dir> <LR-S42-18 cite line>
+    mkdir -p "$1/_bmad-output/planning-artifacts/s42" || { echo "FIXTURE ERROR: cannot create $1" >&2; exit 2; }
+    cp "$O_H" "$1/$P_CITE"
+    printf '%s\n' '# PRD' '' 'Sprint 42 carries no locked bullet here.' > "$1/_bmad-output/planning-artifacts/prd.md"
+    printf '%s\n' '<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->' \
+      "- LR-S42-18 (lead interpretation): the cache is per tenant. Operator answer, \`$P_CITE:$2\` — \"Confirm LR-S42-18 (Recommended)\"." \
+      "- LR-S42-21 (lead interpretation): both chains run. Operator answer, \`$P_CITE:$P21\` — \"Confirm LR-S42-21 … but only on Matic\"." \
+      "- LR-S42-22 (lead interpretation): the pool is capped. Operator answered \"Reword LR-S42-22\" (\`$P_CITE:$P22\`)." \
+      '<!-- END LOCKED_REQUIREMENTS -->' > "$1/_bmad-output/planning-artifacts/s42/locked-requirements.md"
+  }
+  p_world "$PROBE/p-near" "$P18E"
+  p_world "$PROBE/p-off" "$P18N"
+  p_out="$(AI_DLC_PROJECT_ROOT="$PROBE/p-near" FXCELL=p-quote-near bash "$P_RB" --precheck 42 2>&1)"; p_rc=$?
+  if [ "$p_rc" -eq 0 ] && grep -qxF 'PRECHECK clean' <<<"$p_out" && ! grep -q '^PRECHECK QUOTE' <<<"$p_out"; then
+    ok "(p) QUOTE near-miss: an entry-end cite, a split quote and a quote-before-cite, each on its own entry, read PRECHECK clean"
+  else bad "(p) QUOTE near-miss: want rc 0 and PRECHECK clean with no QUOTE line; got rc $p_rc: $(tr '\n' ' ' <<<"$p_out")"; fi
+  p_out="$(AI_DLC_PROJECT_ROOT="$PROBE/p-off" FXCELL=p-quote-off bash "$P_RB" --precheck 42 2>&1)"; p_rc=$?
+  p_want="PRECHECK QUOTE _bmad-output/planning-artifacts/s42/locked-requirements.md:2 \"Confirm LR-S42-18 (Recommended)\" is not in the operator-answers-history.md entry holding :$P18N"
+  p_nq="$(grep -c '^PRECHECK QUOTE' <<<"$p_out")" || p_nq=0
+  if [ "$p_rc" -eq 1 ] && grep -qxF -- "$p_want" <<<"$p_out" && [ "$p_nq" -eq 1 ]; then
+    ok "(p) QUOTE offender: the cite moved onto the next entry's heading is reported, and only it"
+  else bad "(p) QUOTE offender: want rc 1 and exactly '$p_want'; got rc $p_rc, $p_nq QUOTE line(s): $(tr '\n' ' ' <<<"$p_out")"; fi
 fi
 
 

@@ -712,8 +712,13 @@ STALL_PEAK_AT=""
 #              finding headings (`merge-adversarial-shards.sh --body-counts`, one start for the series), so lowering
 #              a header count alone buys no exit. A finding deleted from the body together with its count is not seen.
 #   none       no row (a pass merged before the merge wrote rows, or no ledger): counts believed as recorded; a merged
-#              pass 2 or later that subtracts an underived or repair-introduced count prints one PENDING line.
+#              pass 2 or later that subtracts an underived or repair-introduced count prints one PENDING line. In a
+#              series opened under the era token (era-token.sh's ai_dlc_era_open), where the merge writes a row for
+#              every pass it writes, that pass's underived and repair-introduced counts are NOT believed and read 0,
+#              with a NOTE instead: a lost row, an unreadable or malformed ledger, or no ledger at all. Pre-era: PENDING.
 # `repair_introduced_keys:` is never disbelieved (keys only make J3 stricter). An unreadable ledger attests nothing.
+[ -f "$(dirname "${BASH_SOURCE[0]}")/era-token.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/era-token.sh"
+declare -F ai_dlc_era_open >/dev/null || ai_dlc_era_open() { AI_DLC_ERA_OPEN=""; return 1; }
 P_ATT=()
 P_BC=()
 att_st=""
@@ -780,7 +785,13 @@ for f in "${SORTED[@]}"; do
   { [ "$ri" = "-" ] || [ "${4:-0}" != 1 ]; } && ri=0
   att="${P_ATT[$att_i]:-none}"; att_pn="${SORTED_KEY[$att_i]:-0}"; att_i=$((att_i + 1))
   if [ "$att" = none ] && [ "${4:-0}" = 1 ] && [ "$((10#$att_pn))" -ge 2 ] && { [ "$underived" != 0 ] || [ "$ri" != 0 ]; }; then
-    att_msg="PENDING (ATTESTATION): $f has no program:merge-adversarial-shards row in the write ledger (merged before the merge wrote one, or no ledger), so its findings_major_underived=$underived and findings_major_repair_introduced=$ri are believed as recorded."
+    att_sb="${f##*/}"; att_fd="${f%/*}"; [ "$att_fd" != "$f" ] || att_fd=.
+    if [ -n "$att_st" ] && ai_dlc_era_open "$att_fd" "${att_sb%-adversarial-p*}" "$((10#$att_pn))"; then
+      att_msg="NOTE (ATTESTATION): $f has no program:merge-adversarial-shards row in a readable write ledger, and its series opened under the era token, where the merge writes one for every pass it writes; its findings_major_underived=$underived and findings_major_repair_introduced=$ri are not believed and read 0: every MAJOR blocks. Re-merge the pass from its shards (move the file aside first)."
+      underived=0; ri=0
+    else
+      att_msg="PENDING (ATTESTATION): $f has no program:merge-adversarial-shards row in the write ledger (merged before the merge wrote one, or no ledger), so its findings_major_underived=$underived and findings_major_repair_introduced=$ri are believed as recorded."
+    fi
     if [ "$CYCLE_STATE" -eq 1 ]; then printf '%s\n' "$att_msg" >&2; else printf '%s\n' "$att_msg"; fi
   fi
   if [ "$att" = differs ]; then
@@ -3942,7 +3953,7 @@ J2S_RELEASE="0.738.0"
 # to; intermediate links are never committed, so only the endpoints are read. A different set is a
 # scope change, which item 1's repair path does not carry: it needs ONE REOPEN_AFTER_MET record and
 # ONE verify pass, whose terminal sha is the disk sha (and then this arm never runs).
-#   THE SET is the STORY COLUMN of each mapping row, `| ST<N>-<...> | <id> |`, id DOTTED
+#   THE SET is the STORY COLUMN of each mapping row (found by header name, at j2t_ids), id DOTTED
 #   (`2.3`, `2.3a`) -- never a whole-file scan: the row ids keep `ST319-2.3-01` after a split, so a
 #   whole-file set reads a merge back to 2.3 as unchanged. Measured on the reference consumer's s319
 #   strategy: 19 ids at fb1161c0e, 21 at 765de28f0 (+2.3a +2.3b).
@@ -3955,9 +3966,24 @@ J2S_RELEASE="0.738.0"
 #   SCOPE: test-strategy.md only -- that is the ruling's subject; no other artifact is judged here.
 J2T_RELEASE="0.913.0"
 # $1 file -> the sorted story-id set of its mapping rows' story column, one per line.
+#   THE STORY COLUMN is found BY HEADER NAME (BL-1175 item 21): the header row above a table's
+#   separator names a cell `story` or `story id` (any case), and each `| ST<N>-... |` row of that
+#   table yields that cell. A table with no such header cell yields nothing. The id is the dotted
+#   form, a sprint prefix `S<N>-` stripped (`S323-1.1` reads `1.1`), so the strategy-rows.sh table
+#   `| Strategy id | Case | Story id |`, the two-column `| Strategy id | Story id |` and the older
+#   `| id | story | ... |` read alike.
 j2t_ids() {
-  awk '/^\|[ \t]*ST[0-9]+-[^|]*\|[ \t]*[0-9]+\.[0-9]+[a-z]?[ \t]*\|/ {
-         v = $0; sub(/^\|[^|]*\|[ \t]*/, "", v); sub(/[ \t]*\|.*$/, "", v); print v }' "$1" | sort -u
+  awk 'function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+       !/^\|/ { col = 0; prev = ""; next }
+       /^\|[ \t:|-]*-[ \t:|-]*$/ {
+         col = 0; n = split(prev, h, "|")
+         for (i = 2; i < n; i++) { t = tolower(trim(h[i])); if (t == "story" || t == "story id") { col = i; break } }
+         prev = ""; next }
+       { prev = $0 }
+       col > 0 && /^\|[ \t]*ST[0-9]+-/ {
+         n = split($0, c, "|"); if (col >= n) next
+         v = trim(c[col]); sub(/^S[0-9]+-/, "", v)
+         if (v ~ /^[0-9]+\.[0-9]+[a-z]?$/) print v }' "$1" | sort -u
 }
 # $1 the strategy file, $2 the notarized sha256 -> J2T_BEFORE (a file holding those bytes) or empty.
 j2t_recover() {
@@ -4090,7 +4116,7 @@ if ac_on J2 && [ "$N" -gt 0 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; the
         else
           j2t_b="$(j2t_ids "$J2T_BEFORE" | tr '\n' ' ')"; j2t_a="$(j2t_ids "$j2_file" | tr '\n' ' ')"
           if [ -z "$j2t_b" ] || [ -z "$j2t_a" ]; then
-            j2t_why="the notarized or the disk strategy maps no '| ST<N>-... | <story id> |' row, so the story-id set is unjudged"
+            j2t_why="the notarized or the disk strategy maps no '| ST<N>-... |' row under a header naming a 'Story id' column, so the story-id set is unjudged"
           elif [ "$j2t_b" != "$j2t_a" ]; then
             j2t_diff="$(printf '%s\n' $j2t_b | sort > "$AC_T/j2t-b"; printf '%s\n' $j2t_a | sort > "$AC_T/j2t-a"
                         comm -23 "$AC_T/j2t-b" "$AC_T/j2t-a" | sed 's/^/-/' | tr '\n' ' '
@@ -4625,12 +4651,13 @@ fi
 #              a `disposition: escalated` entry in either record (the operator owns it).
 #   FAIL       a key closed by neither, or fewer CRITICAL/MAJOR headings than the header's counts.
 #   SKIP       printed, never counted: the series opened under the old engine, whatever engine finishes it.
-#              The era key is shards/<stem>-p1/.era (partition-document.sh --shard-dir writes the token there; the
+#              The era key is era-token.sh's ai_dlc_era_open asked for pass 1: shards/<stem>-p1/.era
+#              (partition-document.sh --shard-dir, or --map for a SERIAL document, writes the token there; the
 #              merge copies it into a merged pass 1 only when .era carries it), or, for a series with no pass-1
-#              shard dir (one adversary wrote pass 1), the token line in the pass-1 file. No version or git
-#              history is read.
+#              shard dir, the token line in the pass-1 file. No version or git history is read.
 # The E4 era token: one definition, era-token.sh beside this script.
 AI_DLC_ERA_TOKEN=""; . "$(dirname "${BASH_SOURCE[0]}")/era-token.sh" 2>/dev/null || AI_DLC_ERA_TOKEN=""   # absent copy: no token written, no era judged
+declare -F ai_dlc_era_open >/dev/null || ai_dlc_era_open() { AI_DLC_ERA_OPEN=""; return 1; }
 j3p1_escalated() {  # $1 repair record -> one `source:` token per `disposition: escalated` entry
   awk "$J3_LAB"'
     /^### / || /^<!-- shard:/ { src = ""; next }
@@ -4647,10 +4674,7 @@ esac
 if [ "$P1J_ARM" -eq 1 ] && [ "${P_FILE[0]##*/}" = "${j3_stem}-adversarial-p1.md" ]; then
   p1j_f="${P_FILE[0]}"; p1j_pd="${j3_stem}-p1"
   p1j_era=""
-  if [ -n "$AI_DLC_ERA_TOKEN" ]; then
-    if [ -d "$j3_dir/shards/$p1j_pd" ]; then grep -qxF -- "$AI_DLC_ERA_TOKEN" "$j3_dir/shards/$p1j_pd/.era" 2>/dev/null && p1j_era=1
-    else grep -qxF -- "$AI_DLC_ERA_TOKEN" "$p1j_f" && p1j_era=1; fi
-  fi
+  ai_dlc_era_open "$j3_dir" "$j3_stem" 1 && p1j_era=1
   j3_keys "$p1j_f" 1 > "$AC_T/p1j-keys"
   p1j_nk=0; while IFS= read -r p1j_l; do [ -n "$p1j_l" ] && p1j_nk=$((p1j_nk + 1)); done < "$AC_T/p1j-keys"
   p1j_c="$(block_field "$p1j_f" 'findings_critical')"; p1j_m="$(block_field "$p1j_f" 'findings_major')"

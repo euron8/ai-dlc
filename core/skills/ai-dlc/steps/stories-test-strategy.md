@@ -11,6 +11,19 @@ nextStepFile_no_ui: ./implementation.md
 **Purpose:** Implementation readiness, story creation, sprint planning,
 and test strategy with full validation cycle.
 
+## Resume
+
+After a compaction the snapshot's Pipeline Position carries `sub_step`, the section of this file the lead was inside. Enter each section below by adding `--set sub_step stories-test-strategy.md#<value> 'Pipeline Position'` to the `bash scripts/ai-dlc/snapshot-update.sh` call that section already makes (a standalone call only where none runs). Use the value only when the text before `#` equals `current_step_file`; any other value is stale from another step, so delete it and read this file from its top. Otherwise read the named section of this file, the snapshot's Open Items and teammate rows, and take the next action; never re-dispatch a teammate that the snapshot's teammate rows already lists.
+
+| sub_step | Section | Next action |
+|---|---|---|
+| `2` | 2. Epics and Stories | list the story files written so far and author only the missing ones |
+| `2a` | 2a. Propagate Locked Requirements to Stories | re-run the propagation over every story file and keep the stories already carrying their anchors |
+| `4` | 4. Story Validation Cycle | read the newest pass file of the cycle's series and continue at the next pass |
+| `5` | 5. Test Strategy | join the test-strategy deliverable named in the snapshot's teammate rows before authoring any |
+| `6` | 6. Commit Planning Artifacts | check `git status` for the planning files, then commit what is staged or unstaged |
+| `7` | 7. UI Detection and Routing | read `is_ui_epic` in Sprint Context, then route |
+
 ## EXECUTION SEQUENCE
 
 **First action of this step, before section 1:** `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file stories-test-strategy.md 'Pipeline Position'`

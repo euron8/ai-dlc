@@ -1,18 +1,18 @@
 # gate_type: implementation
 # check-id	kind	arm	count	skip
 # The implementation gate-3 rows: the manifest's `universal` row plus its `implementation` row, nothing else (g1 and g2 own the complement).
-# Not wired into any runner; the generic gate program reads this file once it lands.
+# Run by `gate-run.sh arms --gate implementation-g3` (gate-transition.sh <story> 3 makes that call), `{WORKTREE}` is its --worktree: the frozen dev worktree.
 # kind `judgment` rows go to the one adjudicator seat (shard 1/1). Class per row = adjudication_by_gate[implementation], else adjudication.
-# Rows for 17 (one arm per bug-fix-oneshot slug) is absent: it does not fit one argv row. 2c, 5 and 17 each run a second script today
-# (suppression-lifetime; derive-stories --check; provenance): one row holds one arm.
+# Rows for 17 (one arm per bug-fix-oneshot slug) is absent: it does not fit one argv row. 2c, 5, 17 and 22 each run a second script or a script half in gate-transition.sh
+# (suppression-lifetime; check-stories and derive-stories --check; provenance; validate-spawn-ledger.sh): one row holds one arm, and gate-transition.sh runs those and no row's arm.
 # Checks 3, 7 and 19 stay judgment: their table proofs failed against the s322/s323 adjudicator verdicts.
-# Checks 4, 8 and 10 stay judgment (map class llm) until the wiring flips them; validate-gate3-tables.sh ships unwired.
+# Check 4 is a script row over validate-gate3-tables.sh (map class script at implementation). Rows 8 and 10 stay judgment: the flip is held for an operator decision (check 8's table cannot see a materially wrong deployment record; its proof and 10's cover the SKIP branch only).
 1	judgment	-	-
 2	judgment	-	-
-2a	script	validate-escalation-resolution.sh --escalations docs/escalations/pending.md --sprint {SPRINT} --transcript-dir {TRANSCRIPT_DIR}	legacy
-2c	script	verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md	legacy
+2a	script	validate-escalation-resolution.sh --escalations docs/escalations/pending.md --sprint {SPRINT} --transcript-dir {TRANSCRIPT_DIR}	legacy	skip=empty
+2c	script	verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md	legacy	skip=empty
 3	judgment	-	-
-4	judgment	-	-
+4	script	validate-gate3-tables.sh 4 {STORIES:--story-file} --base {BASE} --sha {SHA} --root {WORKTREE}	native
 5	judgment	-	-
 6	judgment	-	-
 7	judgment	-	-
@@ -21,14 +21,14 @@
 10	judgment	-	-
 11	judgment	-	-
 11a	judgment	-	-
-12	lead	@close	-
+12	lead	-	-
 13	lead	-	-
-14	lead	@close	-
-15	lead	@close	-
-16	script	validate-stub-audit.sh --root {ROOT} --changed-from {BASE} {SHA}	legacy
+14	lead	-	-
+15	lead	-	-
+16	script	validate-stub-audit.sh --root {WORKTREE} --changed-from {BASE} {SHA}	legacy	skip=rc4
 19	judgment	-	-
 22	judgment	-	-
-25	script	validate-steering-budget.sh --count	legacy
+25	script	validate-steering-budget.sh --count	legacy	skip=rc1
 26	script	@close	-
 H1	lead	-	-
 H2	script	validate-h2-attestation.sh --verify --sprint {SPRINT}	legacy
