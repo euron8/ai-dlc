@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1200.0] - 2026-11-20
+
+### A compacted lead keeps every rule's operative text, and the skill file is a third smaller (BL-819 advances)
+
+- For every consumer's lead. After a compaction the lead used to keep Rules 2 to 11 of the ai-dlc skill whole and lose the rest. It now keeps Rules 2 to 18 as stubs that carry each rule's operative sentences, so more of the rulebook survives a compaction.
+- The skill file is smaller: Rules 2 to 12 and 21 move their bodies to `core/skills/ai-dlc/rule-bodies/`, each leaving a stub in `SKILL.md`. `SKILL.md` goes from 61,895 to 39,073 bytes, and the post-compaction digest from 28,705 to 22,531 bytes.
+- Who: a consumer with an override whose `shadows:` names `SKILL.md#Rule 8` (graph has one: `.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md`). When: at the pull that delivers this release, when `HARD-OVERRIDE-DRIFT-SECTION ... SKILL__Rule-8.md SKILL.md ... #Rule 8` appears, and after the new core files are delivered. Steps, in order:
+  1. In the override, change only the frontmatter line to `shadows: rule-bodies/rule-8.md#Rule 8`. Do not edit the body.
+  2. Check the move is text-only:
+     `diff <(git -C <dist> show <old-base-sha>:core/skills/ai-dlc/SKILL.md | awk '/^### Rule 8 /{p=1;print;next} p&&/^#{2,3} /{exit} p') <(git -C <dist> show <theirs>:core/skills/ai-dlc/rule-bodies/rule-8.md | awk '/^### Rule 8 /{p=1;print;next} p&&/^#{2,3} /{exit} p')`
+     The only expected difference is the added preamble line ("This file is the full text of Rule 8 of `SKILL.md`; ...") plus blank-line differences.
+  3. Run `bash .claude/skills/ai-dlc-update/reconcile/readopt-override.sh <dist> <theirs> <consumer> <consumer>/.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md --stamp reaffirm --note "Rule 8 body relocated to rule-bodies/rule-8.md upstream; text unchanged; shadows re-pointed"`. Expect `STAMPED  SKILL__Rule-8.md: base_sha <old> -> <theirs> (reaffirm)`.
+  4. Append a decisions row to `_bmad-output/ai-dlc-update/pull-decisions.tsv` (columns `kind path digest decider verdict evidence`, decider `model`). The evidence column carries the step 3 command and its `STAMPED` line.
+  5. Re-run `bash .claude/skills/ai-dlc-update/reconcile/layer-drift.sh <dist> <base> <theirs> <consumer>` and require `OVERRIDE-OK ... SKILL__Rule-8.md rule-bodies/rule-8.md` with no HARD row for Rule 8. After delivery, run `bash scripts/ai-dlc/validate-layer-entries.sh` and require no E3 on that entry; before delivery it reports a false E3, because `rule-8.md` is not yet there.
+- Never run on this entry: `pull.sh merge`, `readopt-override.sh --merge`, `--stamp readopt` or `--stamp retire`. A merge silently drops the override's own changes, and readopt refuses. The pull's `WORKLIST override-readopt` row for `SKILL__Rule-8.md` is superseded by these steps. Reaffirming without step 1 leaves later Rule 8 edits undetected.
+- Also expected at that pull: `retired-layer-passage.sh` prints 46 `RETIRED-LAYER-PASSAGE` rows on `SKILL__Rule-8.md`; they come from the move and need no edit. This release edits `SKILL.md`, so every extension that hooks `SKILL.md` with no `extends:` anchor raises `EXTENSION-HOOK-DRIFT` and `HARD-LAYER-ADJUDICATION-MISSING` (clause LC-E4). On graph that is `extensions/steps-domain/party-mode-inline-relay.md`, `SKILL-domain.md` and `SKILL-push.md`; each needs one line in `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`, as the row's own text instructs.
+- Rehearsed: steps 1 to 5 on a scratch copy of graph. Not rehearsed: the full apply-to-finish and the LC-E4 register lines.
+- BL-819 stays open (PARTIAL): item 22 is delivered and item 19 is PARTIAL. What is left of item 19 is about 31.1 KB over the "about 8 KB" target for `SKILL.md`, held by the 30 stubs of Rules 2 to 31, Rule 32 whole, and the POST-COMPACT RECOVERY PROTOCOL, INITIALIZATION and PREREQUISITES sections.
+
 ## [0.1199.0] - 2026-11-21
 
 ### The retro handoff prompt keeps each item's id beside its plain gloss; the requirements step and QA drop checks that caught nothing (BL-1199, BL-1200, BL-1141, BL-1166, BL-397; PC-S323-7D-HANDOFF-PROMPT-OMITS-CARRYOVER-IDS-NO-CLAUSE-REQUIRES-IDS-IN-PROMPT-BODY-AND-PLAIN-GLOSS-READS-AS-DELETE-IDS, PC-S324-IMPLEMENTATION-PUSH-STORY-STATUS-CONSISTENCY-CHECK-AFTER-EVERY-GATE-1-NOT-IN-CORE)

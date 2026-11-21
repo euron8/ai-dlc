@@ -297,7 +297,7 @@ and says why in the comment itself.
 1. **RC-1 — unblock the consumer's push.** **Declare `_bmad-output/party-mode` in core's
    own `areas:` block FIRST** (`core/skills/ai-dlc/artifact-path-grammar.md`) — see the
    ordering constraint in RC-1's remedy; then prescribe the findings home at
-   `_bmad-output/party-mode/s<N>/`; fix `core/skills/ai-dlc/SKILL.md:721`; close the I82
+   `_bmad-output/party-mode/s<N>/`; fix `core/skills/ai-dlc/rule-bodies/rule-21.md:50`; close the I82
    prescription blindness with a derived join; ship `derive-fixture-readsets.sh` into
    `core/scripts/`, `install.sh`, `uninstall.sh` and both manifest copies, and make
    `core/git-hooks/pre-push` generate the map rather than fall back to all-155.
@@ -509,7 +509,7 @@ there is a sprint token outside the reserved slot. Sprints 297, 298 and 303 used
 `_bmad-output/party-mode/s<N>/`. s305 is the first to use the illegal path
 (`git log --diff-filter=A`, first add `af862b61d`). The only string in all of `core/`
 resembling a party-mode findings directory is the parenthetical at
-`core/skills/ai-dlc/SKILL.md:721` — 1 occurrence, against a control of 7 for
+`core/skills/ai-dlc/rule-bodies/rule-21.md:50` — 1 occurrence, against a control of 7 for
 `party-mode-transcripts/s<N>`.
 
 **I82 is blind to it by construction.** `--token-re-prescribed` is applied per path
@@ -533,7 +533,7 @@ never the producer, so **every consumer runs all 155 fixtures on every push, per
 
 1. **Give party-mode findings a prescribed home in core** (operator-selected),
    `_bmad-output/party-mode/s<N>/` — the path three prior sprints already used. Fix
-   `SKILL.md:721` to name it. Single declaration, cited not restated. Graph's 24 s305 files
+   `rule-bodies/rule-21.md:50` to name it. Single declaration, cited not restated. Graph's 24 s305 files
    migrate to it. **Closed sprints stay put**: s297/s298/s303 already conform.
 
    **ORDERING CONSTRAINT, and without it this phase fails its own gate.** The area is
