@@ -231,6 +231,22 @@
 #      The narrowing that got it there: a subject merely naming a bundle (3ac0b54d2,
 #      `spec the export bundle format`) is out by the leading version.
 #
+# A SIXTH BOUND, ON THE SUBJECT ITSELF.
+#
+#   H. A commit subject is at most SUBJECT_MAX_LEN (800) long. Arms A and B parse the subject
+#      and bound nothing about its length, so a paragraph spliced into the subject line passes
+#      both while the tag, the squash title and the log read as one wall of text. Length is the
+#      discriminating property: the spliced subject's line 2 was blank.
+#      Keyed on the `subject=` assignments in arm_ab, which every checked commit passes through.
+#      `${#subject}` counts characters under a UTF-8 locale and bytes under C; the ceiling clears
+#      the byte maximum, so both read alike.
+#      MEASURED at 03ad3135d: 2184 first-parent subjects on origin/main, byte maximum 625,
+#      character maximum 623 (1056 subjects carry a multibyte character, em-dashes); top five
+#      bytes 625, 491, 475, 457, 452; none above 700. The offender is 7f17b6dee, 1052.
+#      FALSE-POSITIVE SET: 0 over that population. The narrowing that got it there: the
+#      ceiling sits above the byte maximum so a locale switch cannot move a historical subject
+#      across it, and below the offender so one splice cannot hide under it.
+#
 # USAGE
 #   scripts/validate-release-version.sh [--range A..B] [--commit SHA]
 #                                       [--push-remote NAME --push-refs LINES]
@@ -271,9 +287,12 @@
 #      carries conflict markers, and no not-discharged citation is misspelled
 #   1  a disagreement, a multi-release range, a removed heading, an unpushed-main inheritance, a
 #      committed conflict, a misspelled citation, a bundle whose ledger sections are not its
-#      members' and its base's, or a commit that could not be read
+#      members' and its base's, a commit subject over SUBJECT_MAX_LEN, or a commit that could not
+#      be read
 
 set -uo pipefail
+
+SUBJECT_MAX_LEN=800  # arm H; derivation in the header
 
 # THE REPOSITORY ENVIRONMENT IS SCRUBBED BEFORE ANY GIT CALL. Git exports GIT_DIR
 # absolute into a hook run from a linked worktree, and this program is both
@@ -350,6 +369,7 @@ form_fail=0
 arm_f_ran=0
 # Arm G's likewise: the fixture's sourced drive skips arm_g.
 ledger_fail=0
+subject_fail=0
 arm_g_ran=0
 arm_g_why=""
 arm_g_stat=""
@@ -1037,6 +1057,13 @@ for c in $COMMITS; do
     bad=1
   fi
 
+  # H. A subject stays under the ceiling.
+  if [ "${#subject}" -gt "$SUBJECT_MAX_LEN" ]; then
+    echo "FAIL  $short  subject is ${#subject} long, over the ceiling of $SUBJECT_MAX_LEN (arm H)" >&2
+    subject_fail=1
+    bad=1
+  fi
+
   [ "$bad" -eq 0 ] || fails=$((fails+1))
 done
 }
@@ -1055,6 +1082,18 @@ if [ "$fails" -ne 0 ]; then
       made, `git commit --amend` it; the three are one claim, not three.
 EOF
   echo "FAIL: ${fails} of ${checked} commit(s) disagree." >&2
+fi
+
+if [ "$subject_fail" -ne 0 ]; then
+  cat >&2 <<'EOF'
+
+      A commit subject is one line naming the release. A subject past the ceiling has
+      a paragraph spliced into it, and the log, the squash title and the tag then
+      carry that paragraph.
+
+      Remedy: cut the subject to one short line, put the detail in the body after a
+      blank line, and amend the commit.
+EOF
 fi
 
 if [ "$range_removed" -ne 0 ]; then
@@ -1146,7 +1185,8 @@ EOF
 fi
 
 if [ "$fails" -ne 0 ] || [ "$range_fail" -ne 0 ] || [ "$base_fail" -ne 0 ] \
-  || [ "$conflict_fail" -ne 0 ] || [ "$form_fail" -ne 0 ] || [ "$ledger_fail" -ne 0 ]; then
+  || [ "$conflict_fail" -ne 0 ] || [ "$form_fail" -ne 0 ] || [ "$ledger_fail" -ne 0 ] \
+  || [ "$subject_fail" -ne 0 ]; then
   exit 1
 fi
 

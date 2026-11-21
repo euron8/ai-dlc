@@ -19,6 +19,13 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1211.0] - 2026-11-21
+
+### A release commit subject longer than 800 characters is refused at pre-push (BL-1210)
+
+- For whoever pushes a release. A paragraph spliced into a commit subject used to pass, because the release check read the subject only for a version number; one such commit carried a 1052-character subject. The check now fails any commit whose subject is longer than 800 characters, naming the commit, its length and the ceiling, and tells you to shorten the subject and amend.
+- The ceiling sits above the longest subject on main's first-parent history (625 bytes over 2184 commits), so no existing release reads as a finding.
+
 ## [0.1205.0] - 2026-11-21
 
 ### After a compaction the lead re-reads only the part of a step file it needs (BL-819 advances)
