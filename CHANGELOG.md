@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1217.0] - 2026-11-21
+
+### An update PR no longer carries the operator's own uncommitted edits to a file the pull also writes, nor hook-written pipeline state (BL-1202 narrowed, BL-1204)
+
+- For every consumer pulling a release. Deliver used to commit every path the pull wrote whole, so an operator's uncommitted edit to the same file (a key in `.claude/settings.json`, say) rode into the update PR. For a tracked file already dirty at the first apply that the pull also changed, deliver now commits only the pull's change and leaves the operator's edit as an unstaged diff. BL-1202 is narrowed, not closed: where the operator's edit overlaps the pull's change (adjacent hunks), or the pre-pull content is missing or the snapshot is old, the file is still committed whole, now with `NOTE deliver-dirty-whole <path>` in the PR body.
+- Pipeline-state files (`spawn-ledger.jsonl`, `subagent-context.jsonl`, `arm-log.jsonl`, `operator-requests-history.md`, `pipeline-continuation-log.md`), which a hook appends to during the pull session, are left out of the update commit when they were clean at the first apply and no record of the pull names them. The list comes from `.claude/schemas/pipeline-state-paths.json`; a missing schema prints `NOTE deliver-state-unfiltered`. `operator-answers-history.md` and `push-candidate-ledger.archive.md` are always committed.
+- The update skill's step 8 states this, and its `enabledPlugins:` and `settings-merge: replaced` relay lines become decisions rows (kind `settings-relay`), since deliver writes the PR body itself.
+- A pull that changes the consumer's BMAD install now stops at delivery if an invoked skill is gone (BL-1173 closed; part 1 closed at 0.1169.0). `pull.sh deliver` records the digest of `_bmad/_config/manifest.yaml` in `_bmad-output/ai-dlc-update/bmad-manifest-digest` and, where the manifest differs from it, runs the installed `validate-bmad-invocations.sh`: exit 1 (an invoked `/bmad-*` skill is missing) refuses delivery with `deliver-bmad-invocations`, prints each FAIL line, the BMAD floor and the remedy, and commits nothing; exit 2, a missing validator and other statuses are a SKIP and write no record; a pull with no record prints the FAIL lines to stderr, never blocks and writes the record; an unchanged manifest does not run the validator in `deliver` (step 7z still reports it).
+
+Not-discharged: PC-S324-PULL-DELIVER-STAGES-ALL-CHANGED-PATHS-SWEEPING-OPERATOR-STATE-INTO-UPDATE-PR
+
 ## [0.1216.0] - 2026-11-21
 
 ### Planning review series are judged more completely: a carry-over pass 2 written as one final adversary is accepted, edited passes keep their attested counts, split strategy tables and serial restarts are read, and repair-round cross findings always have one owner (BL-1175, BL-1208)

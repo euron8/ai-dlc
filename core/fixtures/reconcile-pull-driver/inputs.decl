@@ -53,3 +53,4 @@ core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
 core/fixtures/lib/world.sh
 core/fixtures/lib/layout.sh
+core/schemas/pipeline-state-paths.json

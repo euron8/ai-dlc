@@ -1027,10 +1027,10 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    its `ask:` lines, so the PR body carries them to the operator (the reconcile never writes
    `env`). A `suite_admission_probe=none` line is likewise a MODEL decision: record it as a
    decisions row quoting its `optional:` lines verbatim, an optional setting the operator may add
-   themselves (never required, never written by the reconcile). Relay any `enabledPlugins:` line
-   it prints verbatim in the PR body: the project's
-   context-mode enable will be retired and every user needs the user-level install. Relay every
-   `settings-merge: replaced` line verbatim in the PR body too: a role value equal to the
+   themselves (never required, never written by the reconcile). Record each `enabledPlugins:` line
+   it prints as a decisions row (kind `settings-relay`, evidence the line), as for `model_window_needed`:
+   the project's context-mode enable will be retired and every user needs the user-level install.
+   Record every `settings-merge: replaced` line the same way: a role value equal to the
    prior template's value will be overwritten with the new template's.
 
 6. **Isolate — branch before ANY write (apply only, MANDATORY).** The reconcile
@@ -1198,7 +1198,9 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      changes means the merge is owed, a copy that does not means it is done and no row is
      printed. The same test runs on every pull, whether or not the range changed the
      template, so any fill the merge owes reaches the file; the row then quotes the
-     `enabledPlugins:`, `settings-merge: filled` and `settings-merge: replaced` lines the merge prints. A file that is
+     `enabledPlugins:`, `settings-merge: filled` and `settings-merge: replaced` lines the merge prints, and
+     each `enabledPlugins:` and `settings-merge: replaced` line is recorded as a decisions row (kind
+     `settings-relay`, evidence the line). A file that is
      owed is recorded on a `template:` line, and `--finish` re-checks it by running
      `settings-merge.sh` on a copy again, which must change nothing, or it prints
      `WORKLIST finish-template-json-unmerged` and withholds. The deliberate-no-op exit is
@@ -1279,14 +1281,20 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
 
 Lives in `reconcile/mask-reinject.md`. Read it when `apply` hands back a `semantic-merge` row for a file `reconcile/setup-sites.md` lists: read it in consecutive bounded native Read chunks (offset+limit) of at most 16 KB, never `ctx_*`, and re-read it on need after a compaction.
 
-**Probe the installed BMAD before Deliver (step 7z).** After step 7's apply and before
-step 8, run `scripts/ai-dlc/validate-bmad-invocations.sh` from the consumer root. It is
-the installed engine's copy, so it resolves every `/bmad-*` call site in the rulebook just
-applied against the BMAD skills this consumer has installed. Exit 0: proceed. Exit 1:
-report each `FAIL:` line in the apply summary as a delivery finding, naming the BMAD floor
-the line prints and the remedy `npx bmad-method install`. Exit 2 (DISARMED or usage):
-report it in the apply summary as SKIP, with the line it printed. This never blocks the
-delivery.
+**Probe the installed BMAD before Deliver (step 7z).** `reconcile/pull.sh deliver` runs
+`scripts/ai-dlc/validate-bmad-invocations.sh` itself when the consumer's
+`_bmad/_config/manifest.yaml` differs from the digest recorded at the last validated pull
+(`_bmad-output/ai-dlc-update/bmad-manifest-digest`). Exit 1 refuses with
+`deliver-bmad-invocations` and nothing is committed or pushed: read the `FAIL:` lines on
+stderr, take the remedy `npx bmad-method install` (or revert the BMAD change), commit the
+resulting `_bmad/` rewrites with the pull, and re-run deliver. No recorded digest: the FAIL
+lines and remedy print to stderr as a report, never a block. Any exit other than 0 or 1
+(DISARMED, usage, validator missing): a SKIP NOTE, never a block, and no record is written.
+
+When `deliver` prints `NOTE bmad-probe unchanged`, still run
+`scripts/ai-dlc/validate-bmad-invocations.sh` from the consumer root: the rulebook just applied
+may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as delivery findings
+(the floor, remedy `npx bmad-method install`) and exit 2 as SKIP; this run never blocks.
 
    **Deliver through the driver.** Step 8's commit, push and PR are one
    `reconcile/pull.sh deliver <dist> <base> <consumer> <theirs>`, run after `finish` exits 0 and
@@ -1444,11 +1452,15 @@ delivery.
      prefix therefore cannot occur, and one that appears reads exactly like a sweep.
    - **Commit** the pull's own writes and nothing else, on the step-6 reconcile branch: the
      step-7 writes and the step-8 ledger writes above (the ledger and
-     `push-candidate-ledger.archive.md`), the paths that were clean when the first apply ran, the
+     `push-candidate-ledger.archive.md`, `operator-answers-history.md`), the paths that were clean when
+     the first apply ran except the pipeline's own state files
+     (`.claude/schemas/pipeline-state-paths.json`) that no record of this pull names, and, for a file
+     already dirty then that the pull also changed, only the pull's change to it; the
      pull's artifacts (the report, the reconcile log, the decisions file, the gate and push
      records), the paths this pull's own records name, and any path staged explicitly. The
      operator's pre-existing dirty, untracked and staged state stays out of the commit and is left
-     untouched, staged or not. Never `git add -A` or `git add .`, and never `git commit -- <paths>`.
+     untouched, staged or not. A dirty file whose edit overlaps the pull's change is committed whole,
+     with a `NOTE deliver-dirty-whole` in the PR body. Never `git add -A` or `git add .`, and never `git commit -- <paths>`.
      The PR body is bounded in bytes and checked before the push. The commit has a subject
      like `chore(ai-dlc-update): reconcile distribution <base-ver> → <theirs-ver>`
      and a body summarizing buckets applied + conflicts adjudicated + the log path + every

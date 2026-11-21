@@ -55,6 +55,7 @@ TAB="$(printf '\t')"
 REPORT_REL="_bmad-output/ai-dlc-update/reconcile-report.md"
 DECISIONS_REL="_bmad-output/ai-dlc-update/pull-decisions.tsv"
 HIST_REL="_bmad-output/operator-answers-history.md"
+BMAD_DIGEST_REL="_bmad-output/ai-dlc-update/bmad-manifest-digest"
 
 usage() { sed -n '/^# Usage:/,/^# STDOUT/p' "$R/pull.sh" | sed '$d' >&2; exit 2; }
 refuse() { echo "REFUSED $1 rc=$2"; exit 2; }
@@ -271,7 +272,8 @@ pl_decisions_epoch() {
 
 # --- the dirty snapshot (what deliver may commit) -------------------------------------------------
 # pl_status_rows <out-prefix> <hash-worktree 0|1> -- `<out-prefix>.rows`, one row per status entry:
-# `<XY>\t<index blob or ->\t<worktree blob or ->\t<path>\t<pair>`. <pair> is `-`, or for a rename or
+# `<XY>\t<index blob or ->\t<worktree blob or ->\t<path>\t<pair>`; with 1, each non-untracked regular
+# file's worktree blob is WRITTEN to the object store (deliver's dirty merge reads it back). <pair> is `-`, or for a rename or
 # copy record `<n>` on the new path and `<n>o` on the original path (its own -z field, which follows).
 pl_status_rows() {
   local o="$1" xy pth pair
@@ -286,10 +288,11 @@ pl_status_rows() {
   if [ "$2" = 1 ]; then
     : > "$o.wtp"
     while IFS="$TAB" read -r xy pth pair; do
+      [ "$xy" = "??" ] && continue
       [ -f "$CONSUMER/$pth" ] && [ ! -L "$CONSUMER/$pth" ] && printf '%s\n' "$pth" >> "$o.wtp"
     done < "$o.st"
     if [ -s "$o.wtp" ]; then
-      ( cd "$CONSUMER" && git hash-object --no-filters --stdin-paths < "$o.wtp" ) > "$o.wth" || return 1
+      ( cd "$CONSUMER" && git hash-object -w --no-filters --stdin-paths < "$o.wtp" ) > "$o.wth" || return 1
       paste "$o.wtp" "$o.wth" > "$o.wt" || return 1
     fi
   fi
@@ -301,14 +304,14 @@ pl_status_rows() {
 # pl_theirs_sha -- theirs as the commit the decisions epoch keys on.
 pl_theirs_sha() { git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null || printf '%s\n' "$THEIRS"; }
 # pl_dirty_snapshot -- `<git-dir>/ai-dlc-pull/dirty-snapshot`: the consumer's dirty set before the
-# pull's first apply write, header `ai-dlc-dirty-snapshot 1 <theirs> <run>`, then pl_status_rows'
-# rows. `<rec>.branch` (`<theirs> <branch>`) records the `ai-dlc-update/*` branch pl_apply cut over
-# this snapshot; writing a snapshot removes it. The rules, per call:
+# pull's first apply write, header `ai-dlc-dirty-snapshot 2 <theirs> <run>` (1: no worktree blobs
+# written), then pl_status_rows' rows. `<rec>.branch` (`<theirs> <branch>`) records the
+# `ai-dlc-update/*` branch pl_apply cut over this snapshot. The rules, per call:
 #   on an `ai-dlc-update/*` branch: keep whatever is recorded; with no snapshot for this theirs, write
 #     none (deliver then prints `NOTE deliver-no-snapshot`).
 #   off such a branch, a different theirs or no snapshot: write one.
-#   off such a branch, same theirs, a cut branch on record: replace it (an abandoned pull retried).
-#   off such a branch, same theirs, no cut branch on record: keep it (an ASK or HARD resolution round).
+#   off such a branch, same theirs: keep it, a cut branch on record or not (the first attempt's writes
+#     can still be in the worktree, so a rewrite would call them the operator's own clean state).
 # The snapshot itself is never deleted.
 pl_dirty_snapshot() {
   local rec="$GD/ai-dlc-pull/dirty-snapshot" th cur
@@ -317,9 +320,9 @@ pl_dirty_snapshot() {
   case "$cur" in
     ai-dlc-update/*) return 0 ;;
   esac
-  [ -f "$rec" ] && [ ! -f "$rec.branch" ] && [ "$(sed -n 1p "$rec" | awk '{print $3}')" = "$th" ] && return 0
+  [ -f "$rec" ] && [ "$(sed -n 1p "$rec" | awk '{print $3}')" = "$th" ] && return 0
   pl_status_rows "$RUN/snapshot" 1 || return 1
-  { printf 'ai-dlc-dirty-snapshot 1 %s %s\n' "$th" "${RUN##*/}"; cat "$RUN/snapshot.rows"; } > "$rec.$$" || return 1
+  { printf 'ai-dlc-dirty-snapshot 2 %s %s\n' "$th" "${RUN##*/}"; cat "$RUN/snapshot.rows"; } > "$rec.$$" || return 1
   mv -f "$rec.$$" "$rec" || return 1
   rm -f "$rec.branch"
 }
@@ -510,47 +513,85 @@ pl_cut_from() { # <consumer> <branch> -> the branch it was cut from, by HEAD's r
     | tail -1 | awk -v s=" to $2" '{ x = substr($0, length("checkout: moving from ") + 1); print substr(x, 1, length(x) - length(s)) }'
 }
 # pl_deliver_select -- `$RUN/deliver.sel`, the status rows deliver commits. A changed path is taken
-# when it was clean at the dirty snapshot, or is in the always-stage set (the report, the decisions
-# file, the push-candidate ledger, the stamp, the pull-artifacts record's paths, this pull's
-# reconcile log), or this pull's own record names it (RESOLVED/DECISION/WORKLIST rows of its runs'
-# apply.out and finish.out, column 2 of the decisions file and of the ask ledger), or its index blob
-# moved since the snapshot. Anything else is the operator's: a hook appending to a file that was
-# already dirty, an untracked file, a staged entry. A rename pair is taken or left whole. No snapshot
-# for this theirs (a pull begun under an older engine): every changed path, and one NOTE line.
+# when it is in the always-stage set (the report, the decisions file, the answers history, the
+# push-candidate ledger and its archive, the stamp, the pull-artifacts record's paths, this pull's
+# reconcile log), or this pull's own record names it, exactly (RESOLVED/DECISION/WORKLIST rows of its
+# runs' apply.out and finish.out, column 2 of the decisions file and of the ask ledger), or it was
+# dirty at the snapshot and its index blob moved since, or it was clean at the snapshot and is not
+# under the pipeline-state tree (a schema name under the schema's root, less PL_STATE_EXEMPT). A
+# state-tree path clean at the snapshot is a hook's write, not the pull's. Anything else is the
+# operator's: a hook appending to a file that was already dirty, an untracked file, a staged entry. A
+# rename pair is taken or left whole. No snapshot for this theirs (a pull begun under an older
+# engine): every changed path, and one NOTE line. Without the schema or jq: the state filter is off,
+# and one NOTE line.
+# pl_deliver_merge commits a keep-selected path dirty at the snapshot as the pull's change only (base
+# the snapshot's worktree blob, ours HEAD, theirs the worktree); the operator's own edit comes back
+# as an unstaged diff, a staged one unstaged with its content kept. Always-stage and pull-artifacts
+# paths are committed whole. A settings-merge key the operator also set, where user wins, leaves the
+# template's key out of the commit.
+PL_STATE_EXEMPT="ai-dlc-update implementation-artifacts planning-artifacts"
+# pl_dnote <line> -- a deliver NOTE: printed, and kept in $RUN/deliver.notes for the commit message and the PR body.
+pl_dnote() { echo "$1"; echo "$1" >> "$RUN/deliver.notes"; }
 pl_deliver_select() {
-  local snap="$GD/ai-dlc-pull/dirty-snapshot" pa="$GD/ai-dlc-pull/pull-artifacts" th srun d k t
+  : > "$RUN/deliver.notes"
+  local snap="$GD/ai-dlc-pull/dirty-snapshot" pa="$GD/ai-dlc-pull/pull-artifacts" th srun d k t h1 h2 h3 h4 sch why=""
   pl_status_rows "$RUN/deliver" 0 || return 1
   th="$(pl_theirs_sha)"
-  if [ ! -f "$snap" ] || [ "$(sed -n 1p "$snap" | awk '{print $1 " " $2 " " $3}')" != "ai-dlc-dirty-snapshot 1 $th" ]; then
+  h1=""; h2=""; h3=""; h4=""
+  [ ! -f "$snap" ] || read -r h1 h2 h3 h4 < "$snap"
+  case "$h1 $h2 $h3" in
+    "ai-dlc-dirty-snapshot 1 $th"|"ai-dlc-dirty-snapshot 2 $th") ;;
+    *)
     echo "NOTE deliver-no-snapshot no dirty snapshot is recorded for this theirs (an apply begun under an earlier engine); every changed path is committed"
     cp "$RUN/deliver.rows" "$RUN/deliver.sel"
-    return
+    rm -f "$RUN/deliver.strong"
+    return ;;
+  esac
+  srun="$h4"
+  : > "$RUN/deliver.state"
+  sch="$CONSUMER/.claude/schemas/pipeline-state-paths.json"
+  if [ ! -f "$sch" ]; then why="no $sch"
+  elif ! command -v jq >/dev/null 2>&1; then why="no jq"
+  else
+    jq -er --arg ex "$PL_STATE_EXEMPT" '($ex | split(" ")) as $e | .root as $r | select($r | type == "string")
+      | .paths[].name | select(. as $n | ($e | map(. == $n) | any) | not) | $r + "/" + .' "$sch" > "$RUN/deliver.state" 2>>"$RUN/deliver.err" \
+      && [ -s "$RUN/deliver.state" ] || { why="jq could not read the state names from $sch"; : > "$RUN/deliver.state"; }
   fi
-  srun="$(sed -n 1p "$snap" | awk '{print $4}')"
+  [ -z "$why" ] || pl_dnote "NOTE deliver-state-unfiltered $why -- pipeline state files changed since the first apply may be in this commit"
+  : > "$RUN/deliver.strong.raw"; : > "$RUN/deliver.weak.raw"
   {
-    printf '%s\n' "$REPORT_REL" "$DECISIONS_REL" "_bmad-output/ai-dlc-update/push-candidate-ledger.md" ".claude/.ai-dlc-version"
+    printf '%s\n' "$REPORT_REL" "$DECISIONS_REL" "_bmad-output/ai-dlc-update/push-candidate-ledger.md" ".claude/.ai-dlc-version" \
+      "$HIST_REL" "_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" "$BMAD_DIGEST_REL"
     [ -f "$pa" ] && [ "$(sed -n 1p "$pa")" = "ai-dlc-pull-artifacts 1 $th" ] && sed -n '2,$p' "$pa"
-    for d in "$GD"/ai-dlc-pull/run-*; do
-      [ -d "$d" ] || continue
-      t="${d##*/}"; [ -z "$srun" ] || [[ ! "${t%-*}" < "${srun%-*}" ]] || continue
-      cat "$d/apply.out" "$d/finish.out" 2>/dev/null \
-        | awk -F'\t' '$1 == "RESOLVED" || $1 == "DECISION" || $1 == "WORKLIST" || ($1 == "NOTE" && $2 == "reconcile-log-name") {print $3}'
-    done
-    awk -F'\t' 'NR > 1 {print $2}' "$CONSUMER/$DECISIONS_REL" 2>/dev/null
-    awk -F'\t' '{print $2}' "$LEDGER" 2>/dev/null
-  } > "$RUN/deliver.keep.raw"
+  } >> "$RUN/deliver.strong.raw"
+  for d in "$GD"/ai-dlc-pull/run-*; do
+    [ -d "$d" ] || continue
+    t="${d##*/}"; [ -z "$srun" ] || [[ ! "${t%-*}" < "${srun%-*}" ]] || continue
+    cat "$d/apply.out" "$d/finish.out" 2>/dev/null \
+      | awk -F'\t' -v sf="$RUN/deliver.strong.raw" -v wf="$RUN/deliver.weak.raw" '
+          $1 == "NOTE" && $2 == "reconcile-log-name" { print $3 >> sf }
+          $1 == "RESOLVED" || $1 == "DECISION" || $1 == "WORKLIST" { print $3 >> wf }'
+  done
+  { awk -F'\t' 'NR > 1 {print $2}' "$CONSUMER/$DECISIONS_REL" 2>/dev/null
+    awk -F'\t' '{print $2}' "$LEDGER" 2>/dev/null; } >> "$RUN/deliver.weak.raw"
   # A row may name a core-relative path; its consumer path is taken too.
-  : > "$RUN/deliver.keep"
+  : > "$RUN/deliver.keep"; : > "$RUN/deliver.strong"
+  while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    { printf '%s\n' "$k"; map_consumer "core/$k"; } | tee -a "$RUN/deliver.strong" >> "$RUN/deliver.keep"
+  done < "$RUN/deliver.strong.raw"
   while IFS= read -r k; do
     [ -n "$k" ] || continue
     { printf '%s\n' "$k"; map_consumer "core/$k"; } >> "$RUN/deliver.keep"
-  done < "$RUN/deliver.keep.raw"
-  awk -F'\t' -v fs="$snap" -v fk="$RUN/deliver.keep" '
+  done < "$RUN/deliver.weak.raw"
+  awk -F'\t' -v fs="$snap" -v fk="$RUN/deliver.keep" -v fst="$RUN/deliver.state" '
+    function isstate(p,   i) { for (i = 0; i < ns; i++) if (p == st[i] || index(p, st[i] "/") == 1) return 1; return 0 }
     FILENAME == fs { if (FNR > 1) { insnap[$4] = 1; sidx[$4] = $2; sp = $5; sub(/o$/, "", sp); spair[$4] = sp } next }
     FILENAME == fk { keep[$0] = 1; next }
+    FILENAME == fst { st[ns++] = $0; next }
     FNR == 1 { pass++ }
     pass == 1 {
-      if (!($4 in insnap) || ($4 in keep) || $2 != sidx[$4]) {
+      if (($4 in keep) || (($4 in insnap) && $2 != sidx[$4]) || (!($4 in insnap) && !isstate($4))) {
         sel[$4] = 1
         cp = $5; sub(/o$/, "", cp); if (cp != "-") gc[cp] = 1
         if (($4 in spair) && spair[$4] != "-") gs[spair[$4]] = 1
@@ -559,7 +600,42 @@ pl_deliver_select() {
     }
     { cp = $5; sub(/o$/, "", cp)
       if (($4 in sel) || (cp != "-" && (cp in gc)) || (($4 in spair) && spair[$4] != "-" && (spair[$4] in gs))) print }' \
-    "$snap" "$RUN/deliver.keep" "$RUN/deliver.rows" "$RUN/deliver.rows" > "$RUN/deliver.sel"
+    "$snap" "$RUN/deliver.keep" "$RUN/deliver.state" "$RUN/deliver.rows" "$RUN/deliver.rows" > "$RUN/deliver.sel"
+}
+# pl_deliver_merge -- `$RUN/deliver.dm`: the selected paths staged by merge rather than whole (the
+# keep-selected paths dirty at the snapshot, tracked in HEAD, not always-stage); `$RUN/deliver.merged`:
+# their `<HEAD mode> <merged blob>\t<path>` lines for pl_deliver_commit's temporary index. Writes
+# objects and files under $RUN only; an overlap (merge-file non-zero) stages the file whole, with a NOTE.
+pl_deliver_merge() {
+  local snap="$GD/ai-dlc-pull/dirty-snapshot" v p w0 mode b
+  : > "$RUN/deliver.dm"; : > "$RUN/deliver.merged"
+  [ -f "$RUN/deliver.strong" ] || return 0
+  v="$(sed -n 1p "$snap" | awk '{print $2}')"
+  awk -F'\t' -v T="$TAB" -v fs="$snap" -v fk="$RUN/deliver.keep" -v fst="$RUN/deliver.strong" '
+    FILENAME == fs { if (FNR > 1) w0[$4] = $3; next }
+    FILENAME == fk { keep[$0] = 1; next }
+    FILENAME == fst { strong[$0] = 1; next }
+    ($4 in w0) && ($4 in keep) && !($4 in strong) && $5 == "-" && $1 !~ /[?D]/ { print $4 T w0[$4] }' \
+    "$snap" "$RUN/deliver.keep" "$RUN/deliver.strong" "$RUN/deliver.sel" > "$RUN/deliver.dmc"
+  while IFS="$TAB" read -r p w0; do
+    [ -n "$p" ] || continue
+    [ -f "$CONSUMER/$p" ] && [ ! -L "$CONSUMER/$p" ] || continue
+    git -C "$CONSUMER" cat-file blob "HEAD:$p" > "$RUN/dm.ours" 2>/dev/null || continue
+    if [ "$v" != 2 ] || [ "$w0" = "-" ] || ! git -C "$CONSUMER" cat-file blob "$w0" > "$RUN/dm.base" 2>/dev/null; then
+      pl_dnote "NOTE deliver-dirty-whole $p the pre-pull content of this file was not recorded; your own uncommitted edits in it are in this commit"
+      continue
+    fi
+    cp "$CONSUMER/$p" "$RUN/dm.theirs" || refuse "deliver-dirty-merge" 2
+    if ! git merge-file -p "$RUN/dm.ours" "$RUN/dm.base" "$RUN/dm.theirs" > "$RUN/dm.out" 2>>"$RUN/deliver.err"; then
+      pl_dnote "NOTE deliver-dirty-whole $p your uncommitted edits in this file overlap the pull's change and are in this commit"
+      continue
+    fi
+    b="$(git -C "$CONSUMER" hash-object -w --no-filters "$RUN/dm.out")" || refuse "deliver-dirty-merge" 2
+    mode="$(GIT_LITERAL_PATHSPECS=1 git -C "$CONSUMER" ls-tree HEAD -- "$p" | awk '{print $1; exit}')"
+    [ -n "$mode" ] && [ -n "$b" ] || refuse "deliver-dirty-merge" 2
+    printf '%s %s\t%s\n' "$mode" "$b" "$p" >> "$RUN/deliver.merged"
+    printf '%s\n' "$p" >> "$RUN/deliver.dm"
+  done < "$RUN/deliver.dmc"
 }
 # pl_deliver_commit -- the commit is built on a TEMPORARY index (HEAD plus each selected path's
 # real-index entry, or its removal), so an entry the operator staged before the pull is not swept in;
@@ -584,18 +660,54 @@ pl_deliver_commit() {
   if [ -s "$RUN/deliver.rm" ]; then
     tr '\n' '\0' < "$RUN/deliver.rm" | GIT_INDEX_FILE="$ti" git -C "$CONSUMER" update-index -z --force-remove --stdin 2>>"$RUN/deliver.err" || refuse "deliver-index" 2
   fi
+  if [ -s "$RUN/deliver.merged" ]; then
+    tr '\n' '\0' < "$RUN/deliver.merged" | GIT_INDEX_FILE="$ti" git -C "$CONSUMER" update-index -z --index-info 2>>"$RUN/deliver.err" || refuse "deliver-index" 2
+  fi
   GIT_INDEX_FILE="$ti" git -C "$CONSUMER" diff --cached --quiet && return 0
   GIT_INDEX_FILE="$ti" git -C "$CONSUMER" commit -q -F "$RUN/commit.msg" 2>>"$RUN/deliver.err" || refuse "deliver-commit" 2
   tr '\n' '\0' < "$RUN/deliver.selp" > "$RUN/deliver.selz"
   GIT_LITERAL_PATHSPECS=1 git -C "$CONSUMER" reset -q HEAD --pathspec-from-file="$RUN/deliver.selz" --pathspec-file-nul 2>>"$RUN/deliver.err" \
     || refuse "deliver-index-reset" 2
 }
+# pl_bmad_probe -- the upgrade-time BMAD probe. Runs the installed validator only when the manifest's blob
+# differs from the one recorded at the last validated pull; exit 1 refuses, any other non-0 exit is a SKIP,
+# a missing record degrades to a report. The record is written only on exit 0 or 1 of a run that did not refuse.
+pl_bmad_probe() {
+  local mf="_bmad/_config/manifest.yaml" cur rec rc
+  [ -f "$CONSUMER/$mf" ] || { echo "NOTE bmad-probe no-manifest"; return 0; }
+  cur="$(git -C "$CONSUMER" hash-object --no-filters -- "$mf" 2>/dev/null)" || cur=""
+  [ -n "$cur" ] || { echo "NOTE bmad-probe SKIP rc=hash"; return 0; }
+  rec="$(awk 'NR == 1 && $1 == "ai-dlc-bmad-manifest" && $2 == "1" {print $3}' "$CONSUMER/$BMAD_DIGEST_REL" 2>/dev/null)"
+  if [ "$rec" = "$cur" ]; then echo "NOTE bmad-probe unchanged"; return 0; fi
+  AI_DLC_PROJECT_ROOT="$CONSUMER" bash "$CONSUMER/scripts/ai-dlc/validate-bmad-invocations.sh" > "$RUN/bmad-probe.out" 2> "$RUN/bmad-probe.err"
+  rc=$?
+  case "$rc" in
+    0|1) ;;
+    *) echo "NOTE bmad-probe SKIP rc=$rc $(cat "$RUN/bmad-probe.out" "$RUN/bmad-probe.err" 2>/dev/null | head -n 1 | tr '\t' ' ')"; return 0 ;;
+  esac
+  if [ -z "$rec" ]; then
+    echo "NOTE bmad-probe no-baseline rc=$rc"
+    if [ "$rc" -eq 1 ]; then
+      { cat "$RUN/bmad-probe.out" "$RUN/bmad-probe.err"
+        echo "pull: the BMAD manifest changed and an invocation the rulebook makes no longer resolves (see FAIL lines and the BMAD floor above). Run npx bmad-method install, or revert the BMAD change, then re-run deliver."; } >&2
+    fi
+  elif [ "$rc" -eq 1 ]; then
+    { cat "$RUN/bmad-probe.out" "$RUN/bmad-probe.err"
+      echo "pull: the BMAD manifest changed and an invocation the rulebook makes no longer resolves (see FAIL lines and the BMAD floor above). Run npx bmad-method install, or revert the BMAD change, then re-run deliver."; } >&2
+    refuse "deliver-bmad-invocations" 2
+  else
+    echo "NOTE bmad-probe pass"
+  fi
+  mkdir -p "$CONSUMER/${BMAD_DIGEST_REL%/*}" && printf 'ai-dlc-bmad-manifest 1 %s\n' "$cur" > "$CONSUMER/$BMAD_DIGEST_REL"
+}
 pl_deliver() {
-  local br cut bv tv subj body p n_notes rc url xy ix wt pair n
+  local br cut bv tv subj body p n_notes rc url xy ix wt pair n dm nl
+  nl="$(printf '\n_')"; nl="${nl%_}"
   pl_setup "$@"
   br="$(git -C "$CONSUMER" symbolic-ref -q --short HEAD 2>/dev/null)" || br=""
   case "$br" in ai-dlc-update/*) ;; *) refuse "deliver-not-on-update-branch" 2 ;; esac
   [ ! -e "$CONSUMER/.claude/.ai-dlc-applying" ] || refuse "deliver-pull-unfinished" 2
+  pl_bmad_probe
   # Step 8's drain reader: its rows are DECIDE rows for the model, which drains PUSH-CANDIDATE rows.
   bash "$R/push-drain.sh" "$DIST" "$THEIRS" "$CONSUMER" > "$RUN/push-drain.out" 2> "$RUN/push-drain.err"
   rc=$?
@@ -607,8 +719,11 @@ pl_deliver() {
     [ -n "$p" ] || continue
     case "$xy" in UU|AA|DD|AU|UD|UA|DU) refuse "deliver-unmerged $p" 2 ;; esac
   done < "$RUN/deliver.sel"
+  pl_deliver_merge
+  dm="$nl$(cat "$RUN/deliver.dm")$nl"
   while IFS="$TAB" read -r xy ix wt p pair; do
     [ -n "$p" ] || continue
+    case "$dm" in *"$nl$p$nl"*) continue ;; esac
     # Index-current (worktree column blank, or a rename's original path): already staged as it must be.
     case "$pair" in *o) continue ;; esac
     case "$xy" in ?" ") continue ;; esac
@@ -618,6 +733,7 @@ pl_deliver() {
   tv="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null | tr -d '[:space:]')"
   subj="chore(ai-dlc-update): reconcile distribution ${bv:-$BASE} → ${tv:-$THEIRS}"
   n_notes="$(cat "$GD"/ai-dlc-pull/run-*/apply.out 2>/dev/null | awk -F'\t' '$1 == "NOTE"' | sort -u)"
+  [ ! -s "$RUN/deliver.notes" ] || n_notes="$(printf '%s\n%s\n' "$n_notes" "$(cat "$RUN/deliver.notes")" | sed '/^$/d')"
   { printf '%s\n\n' "$subj"
     printf 'Buckets applied: %s. Conflicts adjudicated (hook-recorded answers): %s.\n' \
       "$(cat "$GD"/ai-dlc-pull/run-*/apply.out 2>/dev/null | awk -F'\t' '$1 == "RESOLVED"' | sort -u | wc -l | tr -d ' ')" \
@@ -684,6 +800,12 @@ pl_pr_body() {
       echo "| kind | path | decider | verdict | evidence |"
       echo "|---|---|---|---|---|"
       cat "$tp-d.$$"
+    fi
+    if [ -s "${RUN:-/nonexistent}/deliver.notes" ]; then
+      echo
+      echo "### Deliver notes"
+      echo
+      sed 's/^/- /' "$RUN/deliver.notes"
     fi
   } > "$tp-h.$$"
   rm -f "$tp-d.$$"
