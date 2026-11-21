@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1214.0] - 2026-11-21
+
+### The pre-push check that guards the pool now catches more override forms, a bytecode file no longer counts as pipeline state, and the gate close records its metric rows correctly (BL-1161, BL-1162, BL-1008, BL-910)
+
+- For ai-dlc maintainers. BL-1161 (PARTIAL): the check that stops a pre-push hook from overriding a name its fixture pool uses now catches `for NAME;`, `select NAME`, `getopts SPEC NAME`, `trap '...NAME=...'`, `readonly NAME` and a nameref assigned after its declaration, and flags a column-0 assignment after the pool block to a name the pool only reads. It reports no rows on the two real hooks. The entry stays open for an override on an indented line inside a function defined after the pool, and for arithmetic after the first `))` of a nested group.
+- For ai-dlc maintainers. BL-1162 (PARTIAL): the fixture-hygiene check sees more ways a fixture can hand-build a git world, and four fixtures that did so now use the shared world builder. The entry stays open for the forms a text scan cannot decide.
+- For ai-dlc maintainers. BL-1008 and BL-910 (PARTIAL): the `enforcement-map-sites` fixture's load-dependent read is narrowed further; both entries stay open.
+- The invariant that classifies every pipeline state path no longer reads Python bytecode in `core/scripts/__pycache__` (such as the `gate_adjudication` .pyc that the content-seal fixture's `gate-unit.py` leaves behind) as unclassified state, and a stale .pyc can no longer satisfy a declared path; a push no longer needs that directory deleted first.
+- The gate close now records Check 26 in gate-metrics.jsonl as PASS once its verdict is validated, instead of DEFERRED, and records the lead's H1 verdict from the ledger instead of dropping the row.
+
 ## [0.1213.0] - 2026-11-21
 
 ### The self-update gate holds a pull that changes a script the pre-push hook runs in a shape it cannot follow, or syntax-checks through a glob (BL-1195)

@@ -352,7 +352,7 @@ rc_is "A7a an empty-directory --base-root -> exit 2" 2 "$RC7"
 ck "A7b and the refusal says it is not a work tree" "is not a git work tree with a HEAD" "$OUT7"
 # near-miss for both: a REAL checkout of the pre-apply commit, passed the same way
 CLONE="$WORK/base-clone"
-g "$WORK" clone -q "$W1" "$CLONE" 2>/dev/null
+world_git -C "$WORK" clone -q "$W1" "$CLONE" 2>/dev/null
 dd "$W1" --base-root "$CLONE"; OUT6N="$OUT"; RC6N="$RC"
 rc_is "A6n near-miss: a real pre-apply checkout as --base-root -> exit 1" 1 "$RC6N"
 ck "A6o and that root is the one used" "base root (--base-root $CLONE)" "$OUT6N"
@@ -607,8 +607,8 @@ ck "A13o and the refusal is the walk's, not a verdict" "$(printf 'REFUSED\tbase-
 # A checkout of the self-update commit -- HEAD at hand-back, the obvious thing to pass -- carries
 # `commit: <base>` and theirs' machinery. It must be refused. The near-miss is a checkout of the
 # commit below it, passed the same way, which reaches the break.
-SUROOT="$WORK/su-headroot"; g "$WORK" clone -q "$WSU" "$SUROOT" 2>/dev/null
-PREROOT="$WORK/su-preroot"; g "$WORK" clone -q "$WSU" "$PREROOT" 2>/dev/null
+SUROOT="$WORK/su-headroot"; world_git -C "$WORK" clone -q "$WSU" "$SUROOT" 2>/dev/null
+PREROOT="$WORK/su-preroot"; world_git -C "$WORK" clone -q "$WSU" "$PREROOT" 2>/dev/null
 g "$PREROOT" checkout -q --detach "$PRE_SU" 2>/dev/null
 if [ "$(g "$SUROOT" rev-parse HEAD)" = "$SU_SU" ] && [ "$(g "$PREROOT" rev-parse HEAD)" = "$PRE_SU" ]; then
   ok "A14 seed: one checkout sits at the self-update commit, the other at the pre-pull commit"
@@ -1191,7 +1191,7 @@ pw() {
            set -- --record-owed "$d//_bmad-output/ai-dlc-update/owed-derivations.tsv" ;;
     i) rec="$d/_bmad-output/ai-dlc-update/owed-derivations.tsv"; set -- --record-owed "$rec" ;;
     ii) rec="$d/_bmad-output/ai-dlc-update/owed-derivations.tsv"; set -- --record-owed "$rec" ;;
-    viii) brd="$WORK/run-$tag-viii-root"; g "$WORK" clone -q "$d" "$brd" 2>/dev/null; ptree "$brd" > "$o.t0"; set -- --base-root "$brd" ;;
+    viii) brd="$WORK/run-$tag-viii-root"; world_git -C "$WORK" clone -q "$d" "$brd" 2>/dev/null; ptree "$brd" > "$o.t0"; set -- --base-root "$brd" ;;
     vii|viic) cap="$P_CAP" ;;
     capabc) cap=abc ;;
     capzero) cap=0 ;;
@@ -1384,7 +1384,7 @@ PX_HIT="$(pkey x 'grep -c qqgamma')"; PX_EMPTY="$(pkey x 'grep qqnothing')"; PX_
 PX_STALE_KEY="$PX_STALE"; PX_REFUSED="$(pkey x 'perl -ne print')"
 
 # the comparator Pviii_tree reads must SEE a difference: a seeded file in a scratch clone changes its snapshot
-PTC="$WORK/ptree-control"; g "$WORK" clone -q "$WORK/tpl-i" "$PTC" 2>/dev/null
+PTC="$WORK/ptree-control"; world_git -C "$WORK" clone -q "$WORK/tpl-i" "$PTC" 2>/dev/null
 ptree "$PTC" > "$WORK/ptc.0"; : > "$PTC/rebal/tests/seeded.pyc"; ptree "$PTC" > "$WORK/ptc.1"
 if [ -s "$WORK/ptc.0" ] && ! cmp -s "$WORK/ptc.0" "$WORK/ptc.1"; then
   ok "P0 control: the tree snapshot Pviii_tree compares changes when one ignored file is added"
@@ -1519,7 +1519,7 @@ else bad "cli cells do not discriminate: two of cli-broke, cli-clear and cli-ref
 # CONTROL FIRST: the counter must see a worktree when one exists, or a 1 below is a counter that
 # cannot count.
 CTL="$WORK/wt-control"
-g "$WORK" clone -q "$W1" "$CTL" 2>/dev/null
+world_git -C "$WORK" clone -q "$W1" "$CTL" 2>/dev/null
 g "$CTL" worktree add -q --detach "$WORK/wt-control-extra" HEAD 2>/dev/null
 c_ctl="$(wtcount "$CTL")"
 if [ "$c_ctl" = 2 ]; then

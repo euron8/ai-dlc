@@ -932,7 +932,7 @@ if [ "$GRC" = 1 ] && grep -q '^GATE-RESULT 25 FAIL examined=0 .* examined-nothin
 else bad "GRN rc=$GRC: $(grep -E '^GATE-RESULT 25' "$GRW/grn.out")"; fi
 
 # close: seed the verdict (Check 26's dispatch binding reads the guard's .verdict-writes.jsonl) and no snapshot yet
-gr_arms stub-ok.sh $'25\tscript\tstub-n4.sh\tnative'; rm -rf "$GRR/_bmad-output/.gate-checkpoint" "$GRR/_bmad-output/gate-adjudication"
+gr_arms stub-ok.sh $'25\tscript\tstub-n4.sh\tnative\n26\tscript\t@close\t-\nH1\tlead\t-\t-'; rm -rf "$GRR/_bmad-output/.gate-checkpoint" "$GRR/_bmad-output/gate-adjudication"
 gr_run gra arms "${GRX[@]}"
 GRN="$(grep -o 'nonce=[^ ]*' "$GRW/gra.out" | tail -1 | cut -d= -f2)"
 GRALL="$(AI_DLC_PROJECT_ROOT="$GRR" FXCELL="gr-all" bash "$GRW/core/scripts/validate-gate-adjudication.sh" --expected planning 2> /dev/null | tr '\n' ' ')"
@@ -947,6 +947,7 @@ d = r + "/_bmad-output/gate-adjudication/"
 json.dump(doc, open(d + n + ".verdict.json", "w"))
 open(d + ".verdict-writes.jsonl", "w").write(json.dumps({"v": 1, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "stem": n, "agent_id": "probe", "session": "t", "tool": "Write"}) + "\n")
 PYE
+bash "$GRW/core/scripts/gate-checkpoint.sh" --root "$GRR" --nonce "$GRN" record H1 PASS > /dev/null 2>&1
 GRG="$GRR/_bmad-output/implementation-artifacts/gate-log.md"
 gr_entries() { [ -f "$GRG" ] && grep -c '^## Gate Log:' "$GRG" || echo 0; }
 gr_run grc1 close --gate toy --nonce "$GRN" --sprint 7 --step requirements.md
@@ -959,6 +960,10 @@ if [ "$GRC" = 0 ] && [ "$(gr_entries)" = 1 ] && [ ! -e "$GRR/_bmad-output/.gate-
   ok "GRC2 the retry once the snapshot exists: exit 0, exactly one gate-log entry, OPEN cleared, current_step_file=requirements.md (D4)"
 else bad "GRC2 rc=$GRC entries=$(gr_entries): $(grep -E '^(GATE-RUN|REMEDY)' "$GRW/grc2.out" | head -2 | tr '\n' ' ')"; fi
 
+GRM="$GRR/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
+if [ -s "$GRM" ] && grep -q '"check":"26".*"verdict":"PASS"' "$GRM" && grep -q '"check":"H1".*"verdict":"PASS"' "$GRM" && ! grep -q 'DEFERRED' "$GRM"; then
+  ok "GRM the close's metrics carry Check 26 as PASS (a verdict was validated) and the ledger's H1 as PASS, and no row reads DEFERRED"
+else bad "GRM gate-metrics rows for 26/H1: $(grep -E '"check":"(26|H1)"' "$GRM" 2> /dev/null | cut -c1-200 | tr '\n' ' ')"; fi
 GRSN="$GRR/_bmad-output/pipeline-snapshot.md"
 gr_act() { grep -cF "(nonce $GRN)" "$GRSN"; }
 [ "$(gr_act)" = 1 ] || bad "GRC2 the op wrote $(gr_act) activity line(s) naming the nonce, not one"

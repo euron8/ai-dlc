@@ -384,6 +384,19 @@
 #     world-adoption-allowlist.txt (repo root) -> FAIL, naming its first line as `<file>:<line>: <text>`. The list's
 #     own findings are H14STALE (a listed fixture with no such line, or no tracked run.sh), H14DUP and H14NOREASON, and
 #     a row not on the list at origin/main FAILs H14-M4 (the shared m4). `--derive-h14` prints the rows.
+#     BL-1162 ROUTES READ BY THE CLAUSES BELOW (one set per arm, all feeding the H14 row): `git clone` (gi14/vg14/wr14
+#     read `(init|clone)`); a heredoc body line, read raw on a command-position git init/clone (`hd14`, a `#` line
+#     skipped); the quoted body of a `bash|sh|zsh|dash|ksh -c '...'` (`sc14`); a recursive `cp` whose first source word is
+#     a `.git` directory (`cp14`); a wrapper body that is a `( )` subshell, or reaches git after `if`/`elif`/`while`/
+#     `until`/`time`, or reaches it through another wrapper that it forwards `$@`/`$*` to (WE rows, closed in the judge;
+#     only a callee defined earlier in the fixture is read). FP SET, how it reached 0: measured with the shipping scan
+#     at 24b80ee13, 53 new lines, 4 unlisted fixtures (retired-fixture-orphan, carried-findings, derivation-differential,
+#     review-shard-merge), all migrated to world_git in the same commit; heredoc 14 lines, all listed, all read; the
+#     `-c` clause 0 lines; cp14 0 lines. NARROWED OUT: a printf-written script string (review-shard-merge
+#     receipt-bl980.sh:114 is scan-root test data that is never run, so it would be a false positive) and a general
+#     `cp -R` (345 lines in 94 fixtures; the 7 `.git`-touching ones copy a world built through world_git and edit the
+#     copy). STILL BLIND: variable-held git in a wrapper body, an alias, `eval`, a longer option run, a callee defined
+#     after its caller.
 #     THE REMAINDER the grammar does not read, each re-derived at 619bfde94 by an uncommitted instrumented copy of this
 #     scan (its controls: hits on the known `gitq -C … init` and `G init` lines): wrapper-function inits, a command-
 #     position word other than git/world_git followed by `init`, 129 code lines in 29 fixtures, 19 of them with no
@@ -908,7 +921,7 @@ function ps13(i,   o, s, st, p, k, t) {
 function vg14(i,   s, o, off, p, w, re, ore) {
   s = "; " M[i]; o = "; " O[i]
   re = "(;|&|[|]|[(]|[{]|!|[[:space:]]then|[[:space:]]do|[[:space:]]else)[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*(((command|exec|env)|-u[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*"
-  ore = "^([[:space:]]+(-[cC][[:space:]]+[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare))*[[:space:]]+init([[:space:]]|$)"
+  ore = "^([[:space:]]+(-[cC][[:space:]]+[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare))*[[:space:]]+(init|clone)([[:space:]]|$)"
   off = 0
   while (match(substr(s, off + 1), re)) {
     p = off + RSTART + RLENGTH; off += RSTART
@@ -918,10 +931,52 @@ function vg14(i,   s, o, off, p, w, re, ore) {
   }
   return 0
 }
+# cg14 <text>: 1 when TEXT, read as shell, has a command-position `git` (the gi14 option run) then `init` or `clone`.
+function cg14(x) {
+  return ("; " x) ~ /(;|&|[|]|[(]|[{]|!|[[:space:]]then|[[:space:]]do|[[:space:]]else)[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*(((command|exec|env)|-u[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*git([[:space:]]+(-[cC][[:space:]]*[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare))*[[:space:]]+(init|clone)([[:space:]]|$)/
+}
+# hd14 <line>: a heredoc body line (read raw, a `#` line excepted) and sc14 <line>: the quoted body of a `bash|sh -c '...'`
+# on a code line (the masker Xes it) that runs a command-position git init/clone. Both feed the same GI row.
+function hd14(i,   t) {
+  if (O[i] ~ /^[[:space:]]*#/ || !cg14(O[i])) return
+  t = trim(O[i]); gsub(/\t/, " ", t); print "GI\t" FX "\t" REL ":" i ": " substr(t, 1, 160)
+}
+function sc14(i,   o, off, q, b, e, t) {
+  o = O[i]
+  if (!(index(o, "init") || index(o, "clone")) || o !~ /(^|[^[:alnum:]_-])(ba|z|da|k)?sh[[:space:]]+-[A-Za-z]*c[[:space:]]+["\047]/) return
+  off = 0
+  while (match(substr(o, off + 1), /(^|[^[:alnum:]_-])(ba|z|da|k)?sh[[:space:]]+-[A-Za-z]*c[[:space:]]+["\047]/)) {
+    off += RSTART + RLENGTH - 1; q = substr(o, off, 1); b = substr(o, off + 1)
+    e = index(b, q); if (e) b = substr(b, 1, e - 1)
+    if (cg14(b)) { t = trim(o); gsub(/\t/, " ", t); print "GI\t" FX "\t" REL ":" i ": " substr(t, 1, 160); return }
+  }
+}
+# cp14 <line>: a command-position `cp` with a recursive flag (-R, -r, -a, alone or in a run) whose first source word is a
+# `.git` directory (`.git`, `<x>/.git`, `<x>/.git/`, `<x>/.git/.`): a world copied by its git dir. The word is read in O
+# at the mask's offset (the masker Xes a quoted word), as vg14 does.
+function cp14(i,   s, o, re, off, p, w, rec, n, t) {
+  s = "; " M[i]; o = "; " O[i]
+  if (!index(s, "cp")) return
+  re = "(;|&|[|]|[(]|[{]|!|[[:space:]]then|[[:space:]]do|[[:space:]]else)[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*(((command|exec|env)|-u[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*cp[[:space:]]+"
+  off = 0
+  while (match(substr(s, off + 1), re)) {
+    p = off + RSTART + RLENGTH; off += RSTART; rec = 0
+    for (n = 0; n < 8; n++) {
+      while (substr(o, p, 1) ~ /[[:space:]]/) p++
+      w = wordat(o, p); p = WEND
+      if (w == "") break
+      if (w ~ /^-[A-Za-z]*[Rra]/) { rec = 1; continue }
+      if (w ~ /^-/) continue
+      gsub(/["\047]/, "", w)
+      if (rec && w ~ /(^|\/)[.]git(\/[.]?)?$/) { t = trim(O[i]); gsub(/\t/, " ", t); print "GI\t" FX "\t" REL ":" i ": " substr(t, 1, 160); return }
+      break
+    }
+  }
+}
 function gi14(i,   s, t) {
   s = M[i]
-  if (!index(s, "init")) return
-  if (!(index(s, "git") && s ~ /(^|[^[:alnum:]_-])git([[:space:]]+(-[cC][[:space:]]*[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare))*[[:space:]]+init([[:space:]]|$)/) && !vg14(i)) return
+  if (!index(s, "init") && !index(s, "clone")) return
+  if (!(index(s, "git") && s ~ /(^|[^[:alnum:]_-])git([[:space:]]+(-[cC][[:space:]]*[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare))*[[:space:]]+(init|clone)([[:space:]]|$)/) && !vg14(i)) return
   t = trim(O[i]); gsub(/\t/, " ", t)
   print "GI\t" FX "\t" REL ":" i ": " substr(t, 1, 160)
 }
@@ -938,24 +993,42 @@ function brc(t,   n, off, o, c) {
   while (match(substr(t, off + 1), /(^|[[:space:];&|)])\}([[:space:];&|)]|$)/)) { c++; off += RSTART + RLENGTH - 1 }
   W14O = o; W14C = c
 }
-function wr14(i,   s, t, nm, off, m, w, gre, ure, k, isdef) {
+function pcn(t,   n, k, c) {
+  n = 0; k = length(t)
+  while (k > 0) { c = substr(t, k, 1); if (c == "(") n++; else if (c == ")") n--; k-- }
+  return n
+}
+function wr14(i,   s, t, nm, off, m, w, gre, ure, cre, k, isdef, pc, cw) {
   s = M[i]; t = s; isdef = 0
-  gre = "(^|[;&|({!]|[[:space:]]then|[[:space:]]do|[[:space:]]else)[[:space:]]*(((command|exec|env)|-u[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*git([[:space:]]|$)"
+  gre = "(^|[;&|({!]|[[:space:]]then|[[:space:]]do|[[:space:]]else)[[:space:]]*((if|elif|while|until|time|then|do|else|!)[[:space:]]+)*(((command|exec|env)|-u[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*git([[:space:]]|$)"
+  cre = "(^|[;&|({!]|[[:space:]]then|[[:space:]]do|[[:space:]]else)[[:space:]]*((if|elif|while|until|time|then|do|else|!)[[:space:]]+)*[A-Za-z_][A-Za-z0-9_.:-]*"
   if (s ~ /^[[:space:]]*function[[:space:]]+[A-Za-z_][A-Za-z0-9_.:-]*/ || s ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_.:-]*[[:space:]]*\(\)/) {
     t = s; sub(/^[[:space:]]*function[[:space:]]+/, "", t); sub(/^[[:space:]]+/, "", t)
     nm = t; sub(/[^A-Za-z0-9_.:-].*$/, "", nm)
     sub(/^[A-Za-z_][A-Za-z0-9_.:-]*[[:space:]]*(\(\))?/, "", t)
-    ND++; DNM[ND] = nm; DST[ND] = BD; DGT[ND] = 0; DOP[ND] = 0; DLN[ND] = 0; isdef = 1
+    FDEF[FX, nm] = 1; ND++; DNM[ND] = nm; DST[ND] = BD; DGT[ND] = 0; DOP[ND] = 0; DLN[ND] = 0; DPR[ND] = (t ~ /^[[:space:]]*\(/); DPD[ND] = 0; isdef = 1
   }
   if (t ~ gre) for (k = 1; k <= ND; k++) DGT[k] = 1
-  brc(t); BD += W14O - W14C
-  for (k = 1; k <= ND; k++) { DLN[k]++; if (BD > DST[k] || (isdef && k == ND && W14O > 0)) DOP[k] = 1 }
-  while (ND > 0 && ((DOP[ND] && BD <= DST[ND]) || (!DOP[ND] && DLN[ND] > 1))) {
-    if (DOP[ND] && DGT[ND]) print "WD\t" FX "\t" DNM[ND]
+  if (ND > 0) {
+    off = 0
+    while (match(substr(t, off + 1), cre)) {
+      m = substr(t, off + RSTART, RLENGTH); off += RSTART + RLENGTH - 1
+      sub(/^[;&|({!]*[[:space:]]*/, "", m); while (sub(/^(if|elif|while|until|time|then|do|else|!)[[:space:]]+/, "", m)) ;
+      sub(/^[[:space:]]*/, "", m); sub(/^(then|do|else)[[:space:]]*/, "", m)
+      cw = m
+      if (cw == "" || cw == "git" || cw == "world_git" || !((FX SUBSEP cw) in FDEF)) continue
+      if (O[i] !~ /[$][@*]|[$][{][@*]/) continue
+      for (k = 1; k <= ND; k++) if (!((FX SUBSEP DNM[k] SUBSEP cw) in WES) && DNM[k] != cw) { WES[FX, DNM[k], cw] = 1; print "WE\t" FX "\t" DNM[k] "\t" cw }
+    }
+  }
+  brc(t); BD += W14O - W14C; pc = pcn(t)
+  for (k = 1; k <= ND; k++) { DLN[k]++; if (DPR[k]) DPD[k] += pc; if (BD > DST[k] || (isdef && k == ND && W14O > 0)) DOP[k] = 1 }
+  while (ND > 0 && (DPR[ND] ? DPD[ND] <= 0 : ((DOP[ND] && BD <= DST[ND]) || (!DOP[ND] && DLN[ND] > 1)))) {
+    if ((DOP[ND] || DPR[ND]) && DGT[ND]) print "WD\t" FX "\t" DNM[ND]
     ND--
   }
-  if (!index(s, "init")) return
-  ure = "(^|[;&|({])[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*[A-Za-z_][A-Za-z0-9_.:-]*([[:space:]]+(-[cC][[:space:]]+[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare|-q))*([[:space:]]+[^-[:space:];&|()<>][^[:space:];&|()<>]*)?([[:space:]]+[^-[:space:];&|()<>][^[:space:];&|()<>]*)?[[:space:]]+init([[:space:]]|$)"
+  if (!index(s, "init") && !index(s, "clone")) return
+  ure = "(^|[;&|({])[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*[A-Za-z_][A-Za-z0-9_.:-]*([[:space:]]+(-[cC][[:space:]]+[^[:space:]]+|--git-dir=[^[:space:]]*|--work-tree=[^[:space:]]*|--no-pager|-P|--bare|-q))*([[:space:]]+[^-[:space:];&|()<>][^[:space:];&|()<>]*)?([[:space:]]+[^-[:space:];&|()<>][^[:space:];&|()<>]*)?[[:space:]]+(init|clone)([[:space:]]|$)"
   off = 0
   while (match(substr(s, off + 1), ure)) {
     m = substr(s, off + RSTART, RLENGTH); off += RSTART + RLENGTH - 2
@@ -1030,7 +1103,8 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
       if (t8 ~ /hooks\/ai-dlc|\$HOOK/) { HK8[FX] = 1; print "HK8\t" FX "\t" REL ":" i }
     }
     if (ISF12) ps13(i)
-    if (ISF12 && !HDL[i]) { gi14(i); wr14(i) }
+    if (ISF12 && !HDL[i]) { gi14(i); wr14(i); sc14(i); cp14(i) }
+    if (ISF12 && HDL[i]) hd14(i)
     if (!HDL[i]) { h6(i); if (ISRUN || ISL12 || ISF12) h12(i) }
     # H10/H11 facts (the fixture contract's skeleton): a run.sh code line DEFINING ok or bad, and a run.sh code line
     # whose command-position `bash` runs a pre-push hook. Both read the masked line, so a comment, a string (a
@@ -1185,8 +1259,10 @@ FILENAME == ARGV[1] {
 $1 == "F" { n = split($2, a, "/"); if (n == 4 && a[4] == "run.sh" && a[3] != "lib") FXS[a[3]] = 1; next }
 $1 == "GI" { N14++; if (!(($2) in HIT)) HIT[$2] = $3; next }
 $1 == "WD" { DEF[$2, $3] = 1; next }
+$1 == "WE" { EN++; EFX[EN] = $2; ECL[EN] = $3; ECE[EN] = $4; next }
 $1 == "WU" { WN++; WFX[WN] = $2; WNM[WN] = $3; WWH[WN] = $4; next }
 END {
+  do { CH = 0; for (k = 1; k <= EN; k++) if ((EFX[k], ECE[k]) in DEF && !((EFX[k], ECL[k]) in DEF)) { DEF[EFX[k], ECL[k]] = 1; CH = 1 } } while (CH)
   for (k = 1; k <= WN; k++) if ((WFX[k], WNM[k]) in DEF && !(WWH[k] in WSEEN)) { WSEEN[WWH[k]] = 1; N14++; if (!(WFX[k] in HIT)) HIT[WFX[k]] = WWH[k] }
   for (f in HIT) print ((f in LISTED) ? "H14LISTED\t" f : "H14\t" f "\t" HIT[f])
   for (x in LISTED) {

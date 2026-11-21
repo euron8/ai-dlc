@@ -379,8 +379,8 @@ G -C "$RI" add -A && G -C "$RI" commit -qm reviews || exit 2
 VI="$RI/scripts/ai-dlc/validate-carried-findings.sh"
 G -C "$RI" check-ignore -q scripts/ai-dlc/validate-carried-findings.sh || { echo "FIXTURE BROKEN: the ignore rule does not cover the program path" >&2; exit 2; }
 # H: a shallow clone of the span world (the bound S1 pair); a full clone is its near-miss.
-G clone -q --depth 1 --branch span "file://$R" "$WORK/shallow" || exit 2
-G clone -q --branch span "file://$R" "$WORK/full" || exit 2
+world_git clone -q --depth 1 --branch span "file://$R" "$WORK/shallow" || exit 2
+world_git clone -q --branch span "file://$R" "$WORK/full" || exit 2
 [ "$(G -C "$WORK/shallow" rev-parse --is-shallow-repository)" = "true" ] || { echo "FIXTURE BROKEN: the depth-1 clone is not shallow" >&2; exit 2; }
 VH="$WORK/shallow/scripts/ai-dlc/validate-carried-findings.sh"; VF="$WORK/full/scripts/ai-dlc/validate-carried-findings.sh"
 # Q: gate 2. A consumer that committed the program and qa.md (QA) WITHOUT `## Carried Findings`,

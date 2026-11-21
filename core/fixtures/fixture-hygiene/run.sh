@@ -21,7 +21,7 @@
 #          poll quantum of an unbounded `until` wait, the same hand init in fa as a row of the world's own
 #          world-adoption-allowlist.txt (the listed cell), and in the unlisted fb `world_git init`, `git commit -m init`,
 #          a wrapper `git -c init.defaultBranch=main "$@"`, `git log --grep=init`, and the hand init spelled in a
-#          comment, an echo string and a heredoc body.
+#          comment, an echo string and a heredoc body of prose (a heredoc body that runs a repository init is an H14 hit).
 #          (No line above the preamble spells the hand init itself: scripts/validate-fixture-git-env.sh reads raw lines.)
 # THE ARMS, each one read of a validator run:
 #   D1 D2 D3 D6 D12 DE1 DW D14  the dirty run (rc 1) names exactly its arm's seeded line under `FAIL H<n>:` /
@@ -138,7 +138,7 @@ git log --grep=init
 # git init
 echo "git init"
 cat > "$W/body" <<'BODY'
-git init
+run git init to start a repository
 BODY
 EOF
     # fa's hand git init is the LISTED cell: a row of the clean world's own H14 list (no origin/main, so H14-M4 SKIPs)

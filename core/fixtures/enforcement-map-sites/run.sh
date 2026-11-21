@@ -133,7 +133,7 @@ VRUN_RCF=""
 # seed_tree. The cwd-invariance cells call it from other directories; their two command-line
 # cells (a relative self path, an inherited VEM_SELF) start the program themselves (cwd_cli).
 vrun() {
-  local frame seg id vout rc
+  local frame seg id vout rc vcap
   id=""
   for frame in "${FUNCNAME[@]}"; do
     case "$frame" in
@@ -149,7 +149,11 @@ vrun() {
     [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: vrun found no A<nn>_i<id>_ frame to derive an --arms selector from (frames: %s). The naming grammar the selector is derived from has moved, and there is no full-run fallback on purpose.\n' "${FUNCNAME[*]}" >> "$VRUN_BROKEN"
     return 2
   fi
-  vout="$(fx_inproc "$V"; vem_entry --arms "$id" 2>&1)"; rc=$?
+  # The validator's err() writes stderr; a pipe capture can lose a line to EINTR (a child exits while the
+  # write blocks on a full pipe), so the output goes to a regular file and is read back.
+  vcap="${VRUN_BROKEN:?vrun: VRUN_BROKEN names no work file}.cap"
+  (fx_inproc "$V"; vem_entry --arms "$id") > "$vcap" 2>&1; rc=$?
+  vout="$(<"$vcap")"; rm -f "$vcap"
   [ -n "$VRUN_RCF" ] && printf '%s\n' "$rc" > "$VRUN_RCF"
   if [ "$rc" = "2" ]; then
     [ -n "$VRUN_BROKEN" ] && printf 'FIXTURE BROKEN: validate-enforcement-map.sh --arms %s exited 2. That is a SELECTION failure -- an unknown id, a malformed flag, or a generated subprogram that never reached the verdict -- not an invariant finding: %s\n' "$id" "$vout" >> "$VRUN_BROKEN"
@@ -170,9 +174,11 @@ vrun() {
 # writes) is captured and printed under the broken verdict, indented off `^  FAIL`, so the next
 # occurrence names its arm.
 A00_sanity() {
-local a00_err a00_rc
+local a00_err a00_rc a00_cap
+a00_cap="${VRUN_BROKEN:?A00: VRUN_BROKEN names no work file}.cap"
 fx_inproc "$V"
-a00_err="$(vem_entry 2>&1 >/dev/null)"; a00_rc=$?
+vem_entry 2> "$a00_cap" >/dev/null; a00_rc=$?
+a00_err="$(<"$a00_cap")"; rm -f "$a00_cap"
 if [ "$a00_rc" -eq 0 ]; then
   ok "pristine distribution tree passes (the assertions below read a validator that is not simply broken)"
 else
