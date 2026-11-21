@@ -113,12 +113,14 @@ it is the contract, and prose that an agent retypes as jq drifts:
 .claude/skills/ai-dlc-update/reconcile/settings-merge.sh \
   --consumer .claude/settings.json \
   --template <theirs>/templates/settings.json.template \
+  --prior-template <base>/templates/settings.json.template \
   --check
 
 # step 7 (apply): the same call without --check
 .claude/skills/ai-dlc-update/reconcile/settings-merge.sh \
   --consumer .claude/settings.json \
-  --template <theirs>/templates/settings.json.template
+  --template <theirs>/templates/settings.json.template \
+  --prior-template <base>/templates/settings.json.template
 ```
 
 `--check` prints `model_window_needed=yes|no` plus the exact `ask:` lines to put

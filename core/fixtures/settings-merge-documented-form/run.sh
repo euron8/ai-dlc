@@ -249,6 +249,51 @@ if [ -n "$TMPL" ]; then
     && ok "7 a pre-install true survives the uninstall call (empty template)" || bad "7 the empty-template merge retired the enable"
 fi
 
+# --- Assertion 8: --prior-template replaces a role key the consumer never customized -------------------------
+# The usage line shows the flag as OPTIONAL; a consumer value equal to the prior template's is replaced by the
+# template's and reported on a `replaced` row (merge and --check); a customized value is kept with no row; with no
+# flag nothing is replaced; a prior that is not a JSON object exits 1. Both templates are synthesised here.
+grep -qF -- '[--prior-template <path>]' <<<"$USAGE" \
+  && ok "8 the usage line shows --prior-template as optional" \
+  || bad "8 the usage line does not show [--prior-template <path>] as an optional flag: $USAGE"
+P_OLD="$WORK/p-old.json"; P_NEW="$WORK/p-new.json"
+printf '{"aiDlcRoles":{"rv":{"model":"sonnet","omitClaudeMd":true,"disallowedTools":"Skill, Agent"}}}\n' > "$P_OLD"
+printf '{"aiDlcRoles":{"rv":{"model":"sonnet","omitClaudeMd":true,"disallowedTools":"Skill, Agent, Write"}}}\n' > "$P_NEW"
+SEED_SAME='{"aiDlcRoles":{"rv":{"model":"haiku","omitClaudeMd":true,"disallowedTools":"Skill, Agent"}}}'
+SEED_CUST='{"aiDlcRoles":{"rv":{"model":"haiku","omitClaudeMd":true,"disallowedTools":"Skill"}}}'
+ROW8='settings-merge: replaced disallowedTools in aiDlcRoles.rv (the file held the prior template value)'
+sm8() { # <id> <seed-json> [extra args...]; leaves $WORK/$id.json, $WORK/$id.out, $WORK/$id.err and $WORK/$id.rc
+  local id="$1" seed="$2"; shift 2
+  printf '%s\n' "$seed" > "$WORK/$id.json"
+  sm_run --consumer "$WORK/$id.json" --template "$P_NEW" "$@" > "$WORK/$id.out" 2> "$WORK/$id.err"; echo "$?" > "$WORK/$id.rc"; }
+sm8 repl "$SEED_SAME" --prior-template "$P_OLD"
+sm8 replchk "$SEED_SAME" --prior-template "$P_OLD" --check
+sm8 cust "$SEED_CUST" --prior-template "$P_OLD"
+sm8 custchk "$SEED_CUST" --prior-template "$P_OLD" --check
+sm8 nofl "$SEED_SAME"
+sm8 badp "$SEED_SAME" --prior-template "$WORK/no-such-prior.json"
+printf '[1]\n' > "$WORK/p-array.json"; sm8 arrp "$SEED_SAME" --prior-template "$WORK/p-array.json"
+[ "$(jq -r '.aiDlcRoles.rv.disallowedTools' "$WORK/repl.json")" = "Skill, Agent, Write" ] \
+  && [ "$(jq -r '.aiDlcRoles.rv.model' "$WORK/repl.json")" = haiku ] \
+  && grep -qxF -- "$ROW8" "$WORK/repl.out" \
+  && ok "8 a value equal to the prior template's is replaced by the template's, the consumer's model survives, and the replaced row is printed" \
+  || bad "8 replace world read $(jq -c '.aiDlcRoles.rv' "$WORK/repl.json") / out [$(head -c 300 "$WORK/repl.out")]"
+grep -qxF -- "$ROW8" "$WORK/replchk.out" && [ "$(jq -r '.aiDlcRoles.rv.disallowedTools' "$WORK/replchk.json")" = "Skill, Agent" ] \
+  && ok "8 --check prints the replaced row and writes nothing" \
+  || bad "8 --check replace world: out [$(head -c 300 "$WORK/replchk.out")] file $(jq -c '.aiDlcRoles.rv' "$WORK/replchk.json")"
+[ "$(jq -r '.aiDlcRoles.rv.disallowedTools' "$WORK/cust.json")" = "Skill" ] && ! grep -q 'settings-merge: replaced' "$WORK/cust.out" "$WORK/custchk.out" \
+  && grep -q '^settings.json reconciled' "$WORK/cust.out" \
+  && ok "8 a customized value is kept and no replaced row is printed (merge and --check)" \
+  || bad "8 customized world read $(jq -c '.aiDlcRoles.rv' "$WORK/cust.json") / out [$(head -c 300 "$WORK/cust.out")]"
+[ "$(jq -r '.aiDlcRoles.rv.disallowedTools' "$WORK/nofl.json")" = "Skill, Agent" ] && ! grep -q 'settings-merge: replaced' "$WORK/nofl.out" \
+  && grep -q '^settings.json reconciled' "$WORK/nofl.out" \
+  && ok "8 without --prior-template nothing is replaced (the same seed as the replace world)" \
+  || bad "8 no-flag world read $(jq -c '.aiDlcRoles.rv' "$WORK/nofl.json")"
+[ "$(cat "$WORK/badp.rc")" = 1 ] && [ "$(cat "$WORK/arrp.rc")" = 1 ] && grep -q 'prior template' "$WORK/badp.err" "$WORK/arrp.err" \
+  && [ "$(jq -r '.aiDlcRoles.rv.disallowedTools' "$WORK/badp.json")" = "Skill, Agent" ] \
+  && ok "8 an unreadable or non-object prior exits 1 naming the prior template, and the consumer is untouched" \
+  || bad "8 bad-prior worlds: rc $(cat "$WORK/badp.rc")/$(cat "$WORK/arrp.rc") err [$(head -c 200 "$WORK/badp.err")]"
+
 # --- the cli cells (cells.decl): the subject run as a PROGRAM once per distinct CLI outcome this fixture drives -----
 # The outcomes: exit 0 with the --check report on stdout, exit 1 with the usage line on stderr, and exit 0 with the
 # merge written and its confirmation on stdout. One `FXCELL=<id> bash "$MERGE"` start per outcome, each compared with

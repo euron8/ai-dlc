@@ -47331,3 +47331,23 @@ Provenance: batch 262, B; id allocated by the lead.
 
 verify: sh grep -qF 'carried_in_shadow "$2" "$3" "$line" "$4" && continue' core/skills/ai-dlc-update/reconcile/readopt-override.sh && grep -qF 'carried_in_context "$1" "$id" "$3"' core/skills/ai-dlc-update/reconcile/readopt-override.sh && ! grep -qF 'carries "$to_flat" "$line" && carried_in_context' core/skills/ai-dlc-update/reconcile/readopt-override.sh
 
+## BL-1196 — the update pull's deliver commits the operator's own dirty files, refuses an already-staged deletion, builds a PR body GitHub refuses, and re-asks a short-digest answer with no reason
+
+**DEFECT.** Filed 2026-11-20 (batch 262, A). Owner: `core/skills/ai-dlc-update/reconcile/pull.sh`, `core/skills/ai-dlc-update/reconcile/apply.sh`, `core/skills/ai-dlc-update/reconcile/self-update-push.sh` and `core/skills/ai-dlc-update/SKILL.md`. Cross-reference: BL-1190, whose driver this repairs. Consumer reports: PC-S324-PULL-DELIVER-STAGES-ALL-CHANGED-PATHS-SWEEPING-OPERATOR-STATE-INTO-UPDATE-PR, PC-S324-DELIVER-STAGE-REFUSES-ALREADY-DELETED-PATHS-SINCE-PRISTINE-DELETE-STAGES-ONE, PC-S324-DELIVER-PR-BODY-UNBOUNDED-EXCEEDS-GITHUB-64K-ON-LARGE-REGIONS, PC-S324-ASK-REISSUES-ON-TRUNCATED-DIGEST-CITE-NO-DIAGNOSTIC-WHEN-ANSWER-RECORD-EXISTS.
+
+Goal: `pull.sh deliver` commits exactly the pull's own writes and finishes on a large pull, and an answer the pull cannot accept says why. One done condition: the fixture `reconcile-pull-driver` carries an arm per item below that fires on the base commit and passes on the fix.
+
+Work list:
+
+1. `pull.sh deliver` stages only the pull's own writes: paths clean when the first apply ran, the pull's artifacts, paths its records name, and paths staged explicitly. The operator's pre-existing dirty, untracked and staged state stays out of the commit and untouched, built on a temporary index, with no snapshot falling back to the old behaviour with a `NOTE deliver-no-snapshot` line.
+2. The staging loop never re-adds an index-current path (an apply-staged deletion or rename) and parses `-z` rename and copy records.
+3. The PR body is bounded in bytes and rendered before the push; a body still over the bound refuses `deliver-pr-body-oversize` before the push.
+4. An answer record citing a short digest of an ASK row's digest prints `NOTE ask-short-cite` (`ASK-SHORT-CITE` on `apply.sh`'s stderr) beside the re-issued ASK, and `SKILL.md` says the question quotes the full 64-hex digest; `ra_recorded` is unchanged.
+
+**LANDED (v0.1198.0).** Batch 262, A. Items 1 to 4 are built in `core/skills/ai-dlc-update/reconcile/` with fixture arms in `reconcile-pull-driver`. Machinery-only: the pull that delivers this release is classified by the fixed detector, and this release dispatches no pull.
+
+Provenance: batch 262 cluster A; id allocated by the lead.
+
+Step: n/a
+
+verify: manual

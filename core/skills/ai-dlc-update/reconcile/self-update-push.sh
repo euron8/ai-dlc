@@ -144,6 +144,24 @@ fi
 
 ZERO=0000000000000000000000000000000000000000
 
+# su_record_artifact -- after <out> is written, its consumer-relative path joins the pull's artifacts
+# record `<git-dir>/ai-dlc-pull/pull-artifacts` (keyed on theirs: a record for another theirs is
+# replaced), which `pull.sh deliver` stages whatever the dirty snapshot holds. Best effort: a record
+# that cannot be written costs only that staging, never this script's exit.
+su_record_artifact() {
+  local gd th rel f
+  gd="$(git -C "$ROOT" rev-parse --absolute-git-dir 2>/dev/null)" && [ -n "$gd" ] || return 0
+  th="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null)" || th="$THEIRS"
+  rel="${OUT_ABS#"$ROOT"/}"
+  f="$gd/ai-dlc-pull/pull-artifacts"
+  mkdir -p "$gd/ai-dlc-pull" 2>/dev/null || return 0
+  if [ ! -f "$f" ] || [ "$(sed -n 1p "$f")" != "ai-dlc-pull-artifacts 1 $th" ]; then
+    printf 'ai-dlc-pull-artifacts 1 %s\n' "$th" > "$f" 2>/dev/null || return 0
+  fi
+  grep -qxF -- "$rel" "$f" 2>/dev/null || printf '%s\n' "$rel" >> "$f" 2>/dev/null
+  return 0
+}
+
 # THE GATE-RECORD CHECK, before the hook is even resolved, so the no-hook path cannot skip it. Its
 # stdout carries the `GATE-RECORD:` lines and its stderr the remedy; it writes nothing into the
 # consumer, so nothing is on disk here that the hook's read-set skip could trip on.
@@ -166,6 +184,7 @@ if [ "$SU_CK_RC" -ne 0 ]; then
       printf '%s\n' "$SU_CK_OUT" | tail -n 60 | tr '\t' ' ' | sed 's/^/# probe: /'
     } > "$OUT_ABS" 2>/dev/null || su_w=1
   fi
+  [ "$su_w" -ne 0 ] || su_record_artifact
   [ "$su_w" -eq 0 ] || printf 'self-update-push: the record %s could not be written; the checker output follows.\n' "$OUT" >&2
   printf '%s\n' "$SU_CK_OUT" >&2
   printf 'GATE-RECORD-REFUSED %s\n' "$su_ck_first"
@@ -256,6 +275,7 @@ if [ "$HOOK_RC" -ne 0 ]; then
       tail -n 60 "$TMP/hook.out" | tr '\t' ' ' | sed 's/^/# probe: /'
     } > "$OUT_ABS" 2>/dev/null || su_w=1
   fi
+  [ "$su_w" -ne 0 ] || su_record_artifact
   [ "$su_w" -eq 0 ] || printf 'self-update-push: the record %s could not be written; the hook output is above.\n' "$OUT" >&2
   printf 'HOOK-REFUSED %s %s\n' "$HOOK_RC" "${su_why:-<no output>}"
   exit 3

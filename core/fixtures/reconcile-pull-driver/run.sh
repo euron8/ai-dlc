@@ -39,6 +39,19 @@
 #   l    theirs moved: the earlier theirs' answer does not silence the row.
 #   q    the PR body renders this pull's decision rows (a model's six-column row included), each once, and never
 #        a row an earlier pull left in the file.
+#   pull.sh deliver on world a after finish, against a bare file:// origin, a stub gh and consumer hooks:
+#   i    operator state from before apply (modified, untracked, staged, staged rename) stays out of the commit
+#        and keeps its state.   i-b  a dirty file appended to after apply stays out.   i-c  the pre-commit hook
+#        sees only the selected paths; nothing of the pull's is left staged after.   ii  the report, dirty at the
+#        snapshot, is committed (always-stage).   ii-b  the gate record pull-artifacts names is committed, an
+#        older one is not.   iii  a staged deletion and a staged rename commit whole.
+#   v    (world v, no apply) no snapshot: NOTE deliver-no-snapshot and every changed path committed.
+#   iv   (world v) an oversized region: the body gh receives is under 60000 bytes with a pointer line, and was on
+#        disk at pre-push.
+#   vi   an answer citing the 8-hex digest prefix: pull.sh finish and pull.sh apply print NOTE ask-short-cite
+#        beside the re-asked ledger row; a USER_PAUSE-shaped record citing it: no NOTE.
+#   vii  (world s, after c2) two off-branch ASK rounds keep round 1's dirty snapshot; deliver commits the answer
+#        history the hook appended between rounds.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -117,6 +130,22 @@ run_dir() { sed -n 's/^PULL run=\([^ ]*\) .*/\1/p' "$1" | tail -1; }
 # ================================ a, h, p: pull.sh apply on the pull world ================================
 copy_world seed-main a
 A="$WORK/a"; AB="$(cat "$A/.B")"; AT="$(cat "$A/.T")"
+# The deliver arms' operator state, in place before the pull's first apply (arm dl reads it after finish):
+# a modified tracked file, an untracked file, a staged edit, a staged rename, and a dirty file a hook appends
+# to later; an earlier pull's report and gate record (untracked); and this pull's gate record (pull.sh gate).
+mkdir -p "$A/c/notes" "$A/c/_bmad-output/ai-dlc-update"
+for _f in op-mod op-staged op-ren-old op-append; do printf 'line of %s\n' "$_f" > "$A/c/notes/$_f.txt"; done
+world_commit "$A/c" "operator notes" >/dev/null || { echo "FIXTURE BROKEN: cannot commit the operator notes" >&2; exit 2; }
+printf 'operator edit\n' >> "$A/c/notes/op-mod.txt"
+printf 'operator untracked\n' > "$A/c/notes/op-untracked.txt"
+printf 'operator staged\n' >> "$A/c/notes/op-staged.txt"
+world_git -C "$A/c" add notes/op-staged.txt && world_git -C "$A/c" mv notes/op-ren-old.txt notes/op-ren-new.txt \
+  || { echo "FIXTURE BROKEN: cannot stage the operator entries" >&2; exit 2; }
+printf 'operator before the pull\n' >> "$A/c/notes/op-append.txt"
+printf '# reconcile report\n\nan earlier pull left this\n' > "$A/c/_bmad-output/ai-dlc-update/reconcile-report.md"
+GATE_OLD=_bmad-output/ai-dlc-update/self-update-gate-20200101T000000Z.md
+printf '# an earlier pull'"'"'s gate record\n' > "$A/c/$GATE_OLD"
+bash "$REC/pull.sh" gate "$A/dist" "$AB" "$A/c" "$AT" > "$WORK/gate.out" 2> "$WORK/gate.err" < /dev/null; gate_rc=$?
 count_on a "$WORK/log-a"
 bash "$REC/pull.sh" apply "$A/dist" "$AB" "$A/c" "$AT" > "$WORK/a.out" 2> "$WORK/a.err" < /dev/null; a_rc=$?
 count_off
@@ -212,6 +241,118 @@ if [ "$j2_rc" = 0 ] && ! grep -q '^ASK' "$WORK/j2.out" && ! grep -q '^ASK-UNANSW
   ok "j: the answered blend and a judgment-only block: finish exits 0, asks nothing, and the judgment row never enters the ledger"
 else
   bad "j: answered finish rc=$j2_rc out: $(tr '\n' '|' < "$WORK/j2.out" | cut -c1-300) err: $(grep -m2 'ASK-UNANSWERED\|REFUSED\|apply:' "$WORK/j2.err" | tr '\n' '|')"
+fi
+
+# ================================ dl: pull.sh deliver against a bare file:// remote ==========================
+# deliver_env <world>: a bare origin, a consumer pre-commit hook recording the index it is shown, a pre-push
+# hook recording which run directories hold a pr-body.md at push time, and a stub gh recording --body-file's size.
+mkdir -p "$WORK/bin" || { echo "FIXTURE BROKEN: mkdir bin" >&2; exit 2; }
+printf '%s\n' '#!/usr/bin/env bash' \
+  'while [ $# -gt 0 ]; do case "$1" in --body-file) wc -c < "$2" | tr -d " " > "$GH_LOG"; shift ;; esac; shift; done' \
+  'echo https://example.invalid/pr/1' > "$WORK/bin/gh" && chmod +x "$WORK/bin/gh" || { echo "FIXTURE BROKEN: cannot write the gh stub" >&2; exit 2; }
+deliver_env() {
+  world_git init -q --bare "$WORK/$1-origin.git" && world_git -C "$WORK/$1/c" remote add origin "file://$WORK/$1-origin.git" || return 1
+  printf '%s\n' '#!/usr/bin/env bash' 'git diff --cached --name-only > "$PRECOMMIT_LOG"' > "$WORK/$1/c/.git/hooks/pre-commit" || return 1
+  printf '%s\n' '#!/usr/bin/env bash' 'ls "$(git rev-parse --absolute-git-dir)"/ai-dlc-pull/run-*/pr-body.md > "$PREPUSH_LOG" 2>/dev/null; exit 0' > "$WORK/$1/c/.git/hooks/pre-push" || return 1
+  chmod +x "$WORK/$1/c/.git/hooks/pre-commit" "$WORK/$1/c/.git/hooks/pre-push"
+}
+# deliver_run <world> <dist> <base> <consumer> <theirs>
+deliver_run() {
+  PATH="$WORK/bin:$PATH" GH_LOG="$WORK/$1-gh" PRECOMMIT_LOG="$WORK/$1-precommit" PREPUSH_LOG="$WORK/$1-prepush" \
+  GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@invalid GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@invalid \
+    bash "$REC/pull.sh" deliver "$2" "$3" "$4" "$5" > "$WORK/$1-deliver.out" 2> "$WORK/$1-deliver.err" < /dev/null
+}
+GATE_NEW="$(sed -n '2p' "$A/c/.git/ai-dlc-pull/pull-artifacts" 2>/dev/null)"
+if [ "$gate_rc" = 0 ] && [ "$(sed -n 1p "$A/c/.git/ai-dlc-pull/pull-artifacts" 2>/dev/null)" = "ai-dlc-pull-artifacts 1 $AT" ] \
+   && [ -n "$GATE_NEW" ] && [ "$GATE_NEW" != "$GATE_OLD" ] && [ -f "$A/c/$GATE_NEW" ] && [ "${GATE_NEW#_bmad-output/ai-dlc-update/self-update-gate-}" != "$GATE_NEW" ] \
+   && grep -q "	.*	.*	$GATE_NEW	" "$A/c/.git/ai-dlc-pull/dirty-snapshot" && grep -q "	.*	.*	$GATE_OLD	" "$A/c/.git/ai-dlc-pull/dirty-snapshot" \
+   && grep -q "	.*	.*	_bmad-output/ai-dlc-update/reconcile-report.md	" "$A/c/.git/ai-dlc-pull/dirty-snapshot"; then
+  ok "ii-b: pull.sh gate records only the gate record it wrote in pull-artifacts, and the snapshot holds it, the older record and the earlier report"
+else
+  bad "ii-b: gate rc=$gate_rc artifacts: $(tr '\n' '|' < "$A/c/.git/ai-dlc-pull/pull-artifacts" 2>/dev/null) snapshot: $(cut -f1,4 "$A/c/.git/ai-dlc-pull/dirty-snapshot" 2>/dev/null | tr '\n\t' '| ' | cut -c1-400)"
+fi
+deliver_env a || { echo "FIXTURE BROKEN: deliver_env a" >&2; exit 2; }
+# Between finish and deliver: a hook appends to the already-dirty file (i-b), and the resolution stages a rename (iii).
+printf 'appended after apply\n' >> "$A/c/notes/op-append.txt"
+world_git -C "$A/c" mv tests/fixtures/synthetic-fx/run.sh tests/fixtures/synthetic-fx/run-renamed.sh || { echo "FIXTURE BROKEN: cannot stage the rename" >&2; exit 2; }
+dl_br="$(world_git -C "$A/c" symbolic-ref -q --short HEAD)"
+deliver_run a "$A/dist" "$AB" "$A/c" "$AT"; dl_rc=$?
+dl_ns="$(world_git -C "$A/c" show --name-status -M --format= HEAD)"
+dl_cached="$(world_git -C "$A/c" diff --cached --name-only)"
+dl_st() { world_git -C "$A/c" status --porcelain=v1 -- "$1"; }
+if [ "$dl_rc" = 0 ] && grep -qx 'DECIDE pr https://example.invalid/pr/1 opened' "$WORK/a-deliver.out" \
+   && [ "$(world_git --git-dir="$WORK/a-origin.git" rev-parse -q --verify "refs/heads/$dl_br")" = "$(world_git -C "$A/c" rev-parse HEAD)" ] \
+   && grep -q "	$SENT_REL\$" <<<"$dl_ns" && ! grep -q 'notes/' <<<"$dl_ns"; then
+  ok "i: deliver pushes a commit carrying the pull's writes and none of the operator's modified, untracked, staged or renamed paths"
+else
+  bad "i: deliver rc=$dl_rc out: $(tr '\n' '|' < "$WORK/a-deliver.out" | cut -c1-300) err: $(head -c 300 "$WORK/a-deliver.err") commit: $(tr '\n\t' '| ' <<<"$dl_ns" | cut -c1-400)"
+fi
+if [ "$(dl_st notes/op-mod.txt)" = " M notes/op-mod.txt" ] && [ "$(dl_st notes/op-untracked.txt)" = "?? notes/op-untracked.txt" ] \
+   && [ "$(dl_st notes/op-staged.txt)" = "M  notes/op-staged.txt" ] && [ "$(dl_st notes/op-ren-new.txt)" = "A  notes/op-ren-new.txt" ] \
+   && [ "$(world_git -C "$A/c" status --porcelain=v1 | grep -c '^R  notes/op-ren-old.txt -> notes/op-ren-new.txt$')" = 1 ]; then
+  ok "i: after deliver the operator's edit stays unstaged, the untracked file untracked, the staged edit and staged rename staged"
+else
+  bad "i: operator state after deliver: $(world_git -C "$A/c" status --porcelain=v1 -- notes | tr '\n' '|')"
+fi
+if [ "$(dl_st notes/op-append.txt)" = " M notes/op-append.txt" ] && ! grep -q 'op-append' <<<"$dl_ns" \
+   && grep -q 'appended after apply' "$A/c/notes/op-append.txt"; then
+  ok "i-b: a file dirty before apply and appended to before deliver stays out of the commit and stays dirty"
+else
+  bad "i-b: op-append status '$(dl_st notes/op-append.txt)' commit: $(tr '\n\t' '| ' <<<"$dl_ns" | cut -c1-300)"
+fi
+if grep -qx "$SENT_REL" "$WORK/a-precommit" 2>/dev/null && ! grep -q 'notes/' "$WORK/a-precommit" \
+   && [ -n "$dl_cached" ] && [ -z "$(grep -v '^notes/' <<<"$dl_cached")" ]; then
+  ok "i-c: the consumer's pre-commit hook was shown only the selected paths, and after deliver only the operator's entries are staged ($(wc -l < "$WORK/a-precommit" | tr -d ' ') paths at the hook)"
+else
+  bad "i-c: pre-commit saw: $(tr '\n' '|' < "$WORK/a-precommit" 2>/dev/null | cut -c1-300) staged after: $(tr '\n' '|' <<<"$dl_cached")"
+fi
+if grep -q "	_bmad-output/ai-dlc-update/reconcile-report.md\$" <<<"$dl_ns" && [ "$(dl_st _bmad-output/ai-dlc-update/reconcile-report.md)" = "" ]; then
+  ok "ii: the report, dirty at the snapshot and in the always-stage set, is in the commit"
+else
+  bad "ii: report not committed: $(tr '\n\t' '| ' <<<"$dl_ns" | cut -c1-300)"
+fi
+if [ -n "$GATE_NEW" ] && grep -q "	$GATE_NEW\$" <<<"$dl_ns" && ! grep -q 'self-update-gate-20200101T000000Z' <<<"$dl_ns" \
+   && [ "$(dl_st "$GATE_OLD")" = "?? $GATE_OLD" ]; then
+  ok "ii-b: the gate record pull-artifacts names is in the commit; the older gate record is not, and stays untracked"
+else
+  bad "ii-b: gate records in the commit: $(grep 'self-update-gate' <<<"$dl_ns" | tr '\n\t' '| ') old: '$(dl_st "$GATE_OLD")'"
+fi
+if grep -qx 'D	scripts/ai-dlc/validate-gone.sh' <<<"$dl_ns" \
+   && grep -qx 'R100	tests/fixtures/synthetic-fx/run.sh	tests/fixtures/synthetic-fx/run-renamed.sh' <<<"$dl_ns"; then
+  ok "iii: a staged deletion and a staged rename are committed whole"
+else
+  bad "iii: deletion/rename not in the commit: $(tr '\n\t' '| ' <<<"$dl_ns" | cut -c1-400) err: $(head -c 300 "$WORK/a-deliver.err")"
+fi
+
+# ================================ iv, v: no snapshot, an oversized region ===================================
+copy_world seed-main v
+V="$WORK/v"; VB="$(cat "$V/.B")"; VT="$(cat "$V/.T")"
+world_git -C "$V/c" checkout -q -b ai-dlc-update/2.0.0-reconcile-20260101T000000Z || { echo "FIXTURE BROKEN: cannot cut the v branch" >&2; exit 2; }
+mkdir -p "$V/c/_bmad-output/ai-dlc-update" "$V/c/notes" || { echo "FIXTURE BROKEN: mkdir v" >&2; exit 2; }
+{ printf '# reconcile report\n\n<!-- BEGIN GENERATED: reconcile-mechanical -->\n'
+  awk 'BEGIN { for (i = 0; i < 1500; i++) printf "UPSTREAM-ADD  core/some/long/path/number-%05d.md  a row of the region long enough to count\n", i }'
+  printf '<!-- END GENERATED: reconcile-mechanical -->\n'; } > "$V/c/_bmad-output/ai-dlc-update/reconcile-report.md"
+v_reg="$(wc -c < "$V/c/_bmad-output/ai-dlc-update/reconcile-report.md" | tr -d ' ')"
+printf 'operator untracked, no snapshot\n' > "$V/c/notes/v-untracked.txt"
+printf '# edited, no snapshot\n' >> "$V/c/scripts/ai-dlc/validate-synthetic.sh"
+deliver_env v || { echo "FIXTURE BROKEN: deliver_env v" >&2; exit 2; }
+deliver_run v "$V/dist" "$VB" "$V/c" "$VT"; v_rc=$?
+v_ns="$(world_git -C "$V/c" show --name-status -M --format= HEAD)"
+if [ "$v_rc" = 0 ] && grep -q '^NOTE deliver-no-snapshot ' "$WORK/v-deliver.out" \
+   && grep -qx 'A	notes/v-untracked.txt' <<<"$v_ns" && grep -qx 'M	scripts/ai-dlc/validate-synthetic.sh' <<<"$v_ns" \
+   && grep -qx 'A	_bmad-output/ai-dlc-update/reconcile-report.md' <<<"$v_ns" && [ -z "$(world_git -C "$V/c" status --porcelain=v1)" ]; then
+  ok "v: no dirty snapshot for this theirs: one NOTE deliver-no-snapshot line, and every changed path is committed"
+else
+  bad "v: deliver rc=$v_rc out: $(tr '\n' '|' < "$WORK/v-deliver.out" | cut -c1-300) err: $(head -c 300 "$WORK/v-deliver.err") commit: $(tr '\n\t' '| ' <<<"$v_ns")"
+fi
+v_body="$(cat "$WORK/v-prepush" 2>/dev/null)"
+v_gh="$(cat "$WORK/v-gh" 2>/dev/null)"
+if [ "$v_reg" -gt 60000 ] && [ -n "$v_gh" ] && [ "$v_gh" -gt 0 ] && [ "$v_gh" -lt 60000 ] && [ -n "$v_body" ] && [ -f "$v_body" ] \
+   && grep -q '^omitted ([0-9]* bytes): see `_bmad-output/ai-dlc-update/reconcile-report.md` in this PR' "$v_body" \
+   && [ "$(wc -c < "$v_body" | tr -d ' ')" = "$v_gh" ]; then
+  ok "iv: a $v_reg-byte region: the PR body gh receives is $v_gh bytes with the pointer line, and it was on disk when the pre-push hook ran"
+else
+  bad "iv: region=$v_reg gh body=${v_gh:-none} pre-push saw: '${v_body:-nothing}'"
 fi
 
 # ================================ h twin: a consumer-MODIFIED delete asks =================================
@@ -364,6 +505,7 @@ Sw="$WORK/s"; SB="$(cat "$Sw/.B")"; ST="$(cat "$Sw/.T")"
 bash "$REC/pull.sh" apply "$Sw/dist" "$SB" "$Sw/c" "$ST" > "$WORK/s1.out" 2> "$WORK/s1.err" < /dev/null; s1_rc=$?
 s_dg="$(awk '$1 == "ASK" && $2 == "orphaned-unknown" {print $4; exit}' "$WORK/s1.out")"
 s1_n="$(grep -c '^ASK ' "$WORK/s1.out")" || s1_n=0
+S1_HDR="$(sed -n 1p "$Sw/c/.git/ai-dlc-pull/dirty-snapshot" 2>/dev/null)"
 if [ "$s1_rc" = 3 ] && [ "$s1_n" = 1 ] && [ "${#s_dg}" = 64 ] && grep -qF '# driver v1' "$Sw/c/$SENT_REL"; then
   ok "c2: round 1 asks once (orphaned-unknown) and exits 3 with nothing written"
 else
@@ -392,6 +534,21 @@ if grep -q '^SKIP pre-gate-repair .*STATUSLESS-ENTRY' "$WORK/s3.out" && ! grep -
   ok "p: a validator without the STATUSLESS-ENTRY signature prints SKIP pre-gate-repair and no row"
 else
   bad "p: the old validator: $(grep 'pre-gate-repair' "$WORK/s3.out" | tr '\n' '|')"
+fi
+# vii: two resolution rounds off the update branch (s1 and s2 exit 3 on the ASK before any branch is cut), the
+# answer hook appends the history file, round 3 applies: the snapshot round 1 took survives, so the history
+# file (absent then) is the pull's write and deliver commits it.
+s_snap_hdr() { sed -n 1p "$Sw/c/.git/ai-dlc-pull/dirty-snapshot" 2>/dev/null; }
+s_hdr3="$(s_snap_hdr)"
+deliver_env s || { echo "FIXTURE BROKEN: deliver_env s" >&2; exit 2; }
+deliver_run s "$Sw/dist" "$SB" "$Sw/c" "$ST"; s_drc=$?
+s_ns="$(world_git -C "$Sw/c" show --name-status -M --format= HEAD)"
+if [ -n "$S1_HDR" ] && [ "$S1_HDR" = "$s_hdr3" ] && [ "$S1_HDR" = "$(s_snap_hdr)" ] && [ "$s_drc" = 0 ] \
+   && grep -qx 'DECIDE pr https://example.invalid/pr/1 opened' "$WORK/s-deliver.out" \
+   && grep -qx 'A	_bmad-output/operator-answers-history.md' <<<"$s_ns" && grep -q "	$SENT_REL\$" <<<"$s_ns"; then
+  ok "vii: two off-branch ask rounds keep round 1's snapshot ($(printf '%s' "$S1_HDR" | awk '{print $4}')), and deliver commits the answer history appended between them"
+else
+  bad "vii: snapshot header round 1 '$S1_HDR' after round 3 '$s_hdr3' now '$(s_snap_hdr)'; deliver rc=$s_drc out: $(tr '\n' '|' < "$WORK/s-deliver.out" | cut -c1-200) commit: $(tr '\n\t' '| ' <<<"$s_ns" | cut -c1-300)"
 fi
 # l: an answer given for one theirs never answers the same row once theirs moves.
 copy_world seed-stray s4
@@ -473,7 +630,16 @@ else
   bad "c2b: markers present, finish rc=$ob_mkrc err: $(grep -m2 'ASK-UNANSWERED\|apply:' "$WORK/ob-mk.err" | tr '\n' '|' | cut -c1-300)"
 fi
 printf -- '---\nshadows: SKILL.md#Rule 8\nbase_sha: %s\nreason: fixture\n---\n\n## Rule 8 -- Depth\n\nLine A THEIRS, hand-resolved.\n' "$OB" > "$Ob/c/$OV/SKILL__Rule-8.md"
+# vi control: a USER_PAUSE-shaped record (the answer record's shape, another header) citing the 8-hex prefix.
+mkdir -p "$Ob/c/_bmad-output"
+printf '## 2026-11-20T00:00:00Z -- USER_PAUSE\n- Question (lead-authored, NOT covered by the hash): How should the Rule 8 hunk be resolved? digest %s\n\n```text\ntake theirs\n```\n\n' \
+  "$(printf '%s' "$ob_dg" | cut -c1-8)" >> "$Ob/c/_bmad-output/operator-answers-history.md"
 bash "$REC/pull.sh" finish "$Ob/dist" "$OB" "$Ob/c" "$OT" > "$WORK/ob-f.out" 2> "$WORK/ob-f.err" < /dev/null; ob_frc=$?
+if [ "$ob_frc" = 3 ] && grep -q "^ASK conflict-hunk $OV/SKILL__Rule-8.md ${ob_dg:-none} " "$WORK/ob-f.out" && ! grep -q '^NOTE ask-short-cite' "$WORK/ob-f.out"; then
+  ok "vi: a USER_PAUSE-shaped record citing the 8-hex prefix: finish re-asks the row with no NOTE ask-short-cite"
+else
+  bad "vi: USER_PAUSE control finish rc=$ob_frc out: $(tr '\n' '|' < "$WORK/ob-f.out" | cut -c1-300)"
+fi
 if [ "$ob_mrc" = 1 ] && [ "${#ob_dg}" = 64 ] && [ "$ob_frc" = 3 ] \
    && grep -q "^ASK-UNANSWERED	conflict-hunk	$OV/SKILL__Rule-8.md	${ob_dg}\$" "$WORK/ob-f.err" \
    && grep -q "^ASK conflict-hunk $OV/SKILL__Rule-8.md ${ob_dg} " "$WORK/ob-f.out"; then
@@ -500,6 +666,21 @@ if [ "$ob_plrc" = 3 ] && grep -q "^ASK-UNANSWERED	conflict-hunk	$OV/SKILL__Rule-
 else
   bad "c2b: plain apply.sh rc=$ob_plrc err: $(grep -m2 'ASK-UNANSWERED\|apply:' "$WORK/ob-pl.err" | tr '\n' '|' | cut -c1-300)"
 fi
+# vi: an answer through the hook whose question cites the 8-hex prefix does not count; finish and an apply
+# re-run each re-ask the ledger row and say why.
+ob_short="$(printf '%s' "$ob_dg" | cut -c1-8)"
+answer "$Ob/c" "Resolve the Rule 8 hunk? digest $ob_short" "take theirs" || bad "vi: the answer hook wrote no record"
+bash "$REC/pull.sh" finish "$Ob/dist" "$OB" "$Ob/c" "$OT" > "$WORK/vi-f.out" 2> "$WORK/vi-f.err" < /dev/null; vi_frc=$?
+bash "$REC/pull.sh" apply "$Ob/dist" "$OB" "$Ob/c" "$OT" > "$WORK/vi-a.out" 2> "$WORK/vi-a.err" < /dev/null; vi_arc=$?
+for _vi in f a; do
+  _rc="$([ "$_vi" = f ] && echo "$vi_frc" || echo "$vi_arc")"
+  if [ "${#ob_short}" = 8 ] && [ "$_rc" = 3 ] && grep -q "^ASK conflict-hunk $OV/SKILL__Rule-8.md ${ob_dg} " "$WORK/vi-$_vi.out" \
+     && grep -q "^NOTE ask-short-cite $OV/SKILL__Rule-8.md .* ${ob_dg}\$" "$WORK/vi-$_vi.out"; then
+    ok "vi: an answer citing the 8-hex prefix: pull.sh $([ "$_vi" = f ] && echo finish || echo apply) re-asks the ledger row and prints NOTE ask-short-cite"
+  else
+    bad "vi: short cite, pull.sh $_vi rc=$_rc out: $(tr '\n' '|' < "$WORK/vi-$_vi.out" | cut -c1-300) err: $(head -c 200 "$WORK/vi-$_vi.err")"
+  fi
+done
 answer "$Ob/c" "How should the Rule 8 hunk be resolved? digest $ob_dg" "take theirs" || bad "c2b: the answer hook wrote no record"
 bash "$REC/pull.sh" finish "$Ob/dist" "$OB" "$Ob/c" "$OT" > "$WORK/ob-f2.out" 2> "$WORK/ob-f2.err" < /dev/null; ob_f2rc=$?
 if [ "$ob_f2rc" != 3 ] && ! grep -q '^ASK-UNANSWERED' "$WORK/ob-f2.err" && ! grep -q '^ASK ' "$WORK/ob-f2.out"; then
@@ -508,4 +689,22 @@ else
   bad "c2b: answered, finish rc=$ob_f2rc still asks: $(grep '^ASK' "$WORK/ob-f2.out" | tr '\n' '|')"
 fi
 
-report_end reconcile-pull-driver 35
+# ===== BL-1190 note: pull.sh gate prints the SELF-UPDATE-DEFER row (batch 262 A) =====
+copy_world seed-main gt
+GT="$WORK/gt"; GTB="$(cat "$GT/.B")"; GTT="$(cat "$GT/.T")"
+cp -R "$REC" "$WORK/recgt" || { echo "FIXTURE BROKEN: cannot copy reconcile/ for the gate arm" >&2; exit 2; }
+printf '%s\n' '#!/usr/bin/env bash' \
+  'printf "SELF-UPDATE-DEFER\tcarry-arm\tgate-stub-defer-reason\n"' \
+  'printf "SELF-UPDATE-OK\tgate-stub-control-row\n"' \
+  'printf "SELF-UPDATE-SAFE-STOP\tgate-stub-safe-stop\n"' > "$WORK/recgt/self-update-gate.sh"
+bash "$WORK/recgt/pull.sh" gate "$GT/dist" "$GTB" "$GT/c" "$GTT" > "$WORK/gt.out" 2> "$WORK/gt.err" < /dev/null; gt_rc=$?
+if [ "$gt_rc" = 0 ] && [ "$(sed -n 1p "$WORK/gt.out")" = "GATE DEFER" ] \
+   && grep -qxF "$(printf 'SELF-UPDATE-DEFER\tcarry-arm\tgate-stub-defer-reason')" "$WORK/gt.out" \
+   && grep -q '^SELF-UPDATE-SAFE-STOP	' "$WORK/gt.out" && ! grep -q 'SELF-UPDATE-OK' "$WORK/gt.out"; then
+  ok "gate: pull.sh gate prints the SELF-UPDATE-DEFER row verbatim beside SAFE-STOP and filters the OK control row"
+else
+  bad "gate: rc=$gt_rc out: $(tr '\n\t' '|/' < "$WORK/gt.out" | cut -c1-300) err: $(head -c 200 "$WORK/gt.err")"
+fi
+# ===== end BL-1190 note arm =====
+
+report_end reconcile-pull-driver 50
