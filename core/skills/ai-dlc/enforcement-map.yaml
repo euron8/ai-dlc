@@ -235,7 +235,9 @@ checks:
     title: Template placeholder detection?
     gate_types: [universal]
     adjudication: llm
-    enforcer: []
+    adjudication_by_gate: {implementation: script}
+    enforcer:
+      - core/scripts/validate-gate3-tables.sh
     ci_workflow: ~
 
   - id: "5"

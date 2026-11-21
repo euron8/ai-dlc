@@ -866,8 +866,10 @@ candidate's surviving half is upstream's to file and build, never a question for
      owner runs `bash scripts/pregate-self-check.sh` (the hook's pre-suite prefix alone) and it rides
      the next bundle. `scripts/seed-verdict-store.sh` stays available as an optional tool; seeding
      is not a step of the flow.
-   - **The owner-rules block.** Send it verbatim. It cites the rulebooks and actions it depends on
-     and restates none of them.
+   - **The owner-rules block.** Each owner's brief sends it verbatim, names it by path and heading
+     (`docs/plans/graph-ledger-full-drain.md`, the block opening `**Release owner rules`) and tells
+     the owner to read it with the Read tool before its first edit. It cites the rulebooks and
+     actions it depends on and restates none of them.
 
    ```
    **Release owner rules — batch <batch>, lead <lead>, cluster <cluster>**

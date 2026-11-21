@@ -128,6 +128,9 @@ case "$SCR" in
   */core/scripts) HOOK="$_d/core/hooks/ai-dlc-dispatch-guard.sh"; STEPF="$_d/core/skills/ai-dlc/steps/implementation.md" ;;
   *) HOOK="$_d/.claude/hooks/ai-dlc-dispatch-guard.sh"; STEPF="$_d/.claude/skills/ai-dlc/steps/implementation.md" ;;
 esac
+SKD="$(dirname "$(dirname "$STEPF")")"
+GRSCH=""; for _c in "$_d/core/schemas" "$_d/.claude/schemas"; do [ -d "$_c" ] && { GRSCH="$_c"; break; }; done
+[ -n "$GRSCH" ] || { echo "FIXTURE BROKEN: no schemas directory in $_d" >&2; exit 2; }
 [ -f "$HOOK" ] && [ -f "$STEPF" ] || { echo "FIXTURE BROKEN: the dispatch guard $HOOK or the step file $STEPF is absent" >&2; exit 2; }
 grep -q 'dg_gp_check' "$HOOK" || { echo "FIXTURE BROKEN: $HOOK carries no dg_gp_check; JOIN has no subject" >&2; exit 2; }
 GH="$HOOK"   # the guard JOIN starts; the plain run repoints it at a core/hooks copy beside $GTR
@@ -152,7 +155,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 # eight check siblings are stubs. Prints nothing; 1 when a copy failed. Both copies carry every entry of the
 # scripts directory except hermetic-run.sh, which no script in either tree reads: copying it would make the
 # fixture read an input its inputs.decl cannot declare.
-STUBS="verdict.sh validate-escalation-resolution.sh sprint-status.sh validate-stub-audit.sh validate-spawn-ledger.sh validate-provenance-block.sh validate-steering-budget.sh validate-h2-attestation.sh"
+STUBS="verdict.sh validate-escalation-resolution.sh sprint-status.sh validate-stub-audit.sh validate-spawn-ledger.sh validate-provenance-block.sh validate-steering-budget.sh validate-h2-attestation.sh validate-gate3-tables.sh"
 mk_tree() {
   local d="$1" s
   mkdir -p "$d/core/scripts" "$d/stub/core/scripts" || return 1
@@ -163,8 +166,8 @@ mk_tree() {
   cp -R "$@" "$d/core/scripts/" && cp -R "$@" "$d/stub/core/scripts/" || return 1
   for s in $STUBS; do
     [ -f "$d/stub/core/scripts/$s" ] || return 1
-    printf '#!/usr/bin/env bash\n# gate-transition fixture stub for %s: PASS unless GT_FX_REFUSE names it.\n[ %s != validate-spawn-ledger.sh ] || [ -z "${GT_FX_RC22:-}" ] || { [ "$GT_FX_RC22" != 3 ] || { if [ "${GT_FX_MSG22:-}" = norole ]; then echo "NO ROLE-BOUND ROWS: EXAMINED NOTHING -- 2 S1 row(s) exist and NONE of them was judged"; else echo "PRE-LEDGER: 4 row(s) in ledger.jsonl, NONE of them S1."; fi; echo "COUNTS: examined 0 S1 spawn row(s) of 4 in ledger.jsonl;"; }; exit "$GT_FX_RC22"; }\n[ "${GT_FX_REFUSE:-}" != %s ] || { echo "stub %s: REFUSED by the fixture" >&2; exit 1; }\n[ %s != validate-h2-attestation.sh ] || echo "H2_ATTESTED v1 sprint=1 stub"\n[ %s != validate-steering-budget.sh ] || echo "steering-count 0"\nexit 0\n' \
-      "$s" "$s" "$s" "$s" "$s" "$s" > "$d/stub/core/scripts/$s" || return 1
+    printf '#!/usr/bin/env bash\n# gate-transition fixture stub for %s: PASS unless GT_FX_REFUSE names it.\n[ %s != validate-spawn-ledger.sh ] || [ -z "${GT_FX_RC22:-}" ] || { [ "$GT_FX_RC22" != 3 ] || { if [ "${GT_FX_MSG22:-}" = norole ]; then echo "NO ROLE-BOUND ROWS: EXAMINED NOTHING -- 2 S1 row(s) exist and NONE of them was judged"; else echo "PRE-LEDGER: 4 row(s) in ledger.jsonl, NONE of them S1."; fi; echo "COUNTS: examined 0 S1 spawn row(s) of 4 in ledger.jsonl;"; }; exit "$GT_FX_RC22"; }\n[ "${GT_FX_REFUSE:-}" != %s ] || { echo "stub %s: REFUSED by the fixture" >&2; exit 1; }\n[ %s != validate-h2-attestation.sh ] || echo "H2_ATTESTED v1 sprint=1 stub"\n[ %s != validate-steering-budget.sh ] || echo "steering-count 0"\n[ %s != validate-gate3-tables.sh ] || echo "GATE-ARM 4 PASS examined=1 ok stub"\nexit 0\n' \
+      "$s" "$s" "$s" "$s" "$s" "$s" "$s" > "$d/stub/core/scripts/$s" || return 1
   done
 }
 
@@ -200,7 +203,10 @@ new_world() {
   printf 'version: 0.70.0\ncommit: fixture\n' > "$L/.claude/.ai-dlc-version" && printf '{}\n' > "$L/.claude/settings.json" || return 1
   cp "$STEPF" "$L/.claude/skills/ai-dlc/steps/implementation.md" || return 1
   printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step_file: steps/implementation.md\n- sprint_id: 1\n\n## Recent Activity\n- none\n' \
-    > "$L/_bmad-output/pipeline-snapshot.md"
+    > "$L/_bmad-output/pipeline-snapshot.md" || return 1
+  # gate-run.sh reads the gate's arms file, the map and the manifest from the lead's skill tree; copied AFTER the
+  # commit above, so the partition under test still sees only src/.
+  cp -R "$SKD"/. "$L/.claude/skills/ai-dlc/" && cp -R "$GRSCH" "$L/.claude/schemas"
 }
 shards() { grep -E '^[0-9]+	' "$1" 2> /dev/null; }
 nshards() { local n; n="$(shards "$1" | grep -c .)" || n=0; printf '%s' "$n"; }
@@ -635,7 +641,9 @@ st_g3n() { # gate 3, the Check 22 arm exiting 3 from the NO ROLE-BOUND ROWS bran
 st_g3() { # gate 3, every arm passing: G3, and OPEN12's control
   gtrun "$1" "$2" g3 2 - 1-1 3 --transcript-dir "$WD/td"
   V_G3=0; X="$(sed -n 's/^nonce: //p' "$P/1-1-g3-p1.plan" 2> /dev/null)"
-  [ "$RC" = 0 ] && [ -n "$X" ] && [ "$(head -1 "$OPEN")" = "$X" ] && [ "$X" != "$(head -1 "$WD/open.pre")" ] && V_G3=1
+  [ "$RC" = 0 ] && [ -n "$X" ] && [ "$(head -1 "$OPEN")" = "$X" ] && [ "$X" != "$(head -1 "$WD/open.pre")" ] \
+    && WLP="$(sed -n 's/^worklist: //p' "$P/1-1-g3-p1.plan")" && [ "$(cut -f1 "$WLP" 2> /dev/null | tr '\n' ' ')" = "1 2 3 5 6 7 8 9 10 11 11a 19 22 " ] \
+    && grep -q '^steering-count: ' "$P/1-1-g3-p1.plan" && V_G3=1
   V_OPENC=0; [ "$OPEN_SAME" = 0 ] && V_OPENC=1
 }
 st_cx() { # close over a 26 FAIL ledger: CLOSEX

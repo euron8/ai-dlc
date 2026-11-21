@@ -27,3 +27,4 @@ readlink
 wc
 chmod
 uniq
+paste

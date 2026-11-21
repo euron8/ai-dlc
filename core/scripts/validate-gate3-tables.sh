@@ -2,7 +2,7 @@
 # validate-gate3-tables.sh -- rule-table checkers for implementation gate 3, checks 4, 8, 10.
 #
 # Usage: validate-gate3-tables.sh <check> (--plan <g3 plan> | --story-file <p> --base <sha> --sha <sha>) [--root <repo>] [--sprint-status <path>]
-#   <check>  one of 3 4 7 8 10 19
+#   <check>  one of 4 8 10
 #   --plan   the gate-3 plan (reads `sha:`, `base:`, `story-file:`); sha is the frozen head
 #   --root   the repo whose objects are read (default: the cwd's git toplevel). Only git object reads: nothing is
 #            written and no worktree is needed, so a past gate can be re-judged from its plan.
@@ -15,7 +15,8 @@
 #
 # Each arm is the mechanical half of the check text in gate-validation.md; a check whose table cannot decide
 # the whole text stays with the adjudicator (the map row says which: adjudication_by_gate).
-# Not wired anywhere: the generic gate program (E1) calls this by name later.
+# Wired: gates/implementation-g3.arms row 4 calls this through gate-run.sh (gate-transition.sh <story> 3). Checks 8 and 10 are proven here but
+# held with the adjudicator pending an operator decision; checks 3, 7 and 19 stay with the adjudicator.
 set -u
 
 check="${1:-}"; shift || true

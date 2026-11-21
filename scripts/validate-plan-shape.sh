@@ -639,6 +639,37 @@ for f in "${FILES[@]}"; do
     fi
   fi
 
+  # --- P16: a plan carrying a `**Release owner rules` block tells each owner to READ it before its first edit ----
+  # BL-1194. A fresh owner starts from the lead's per-owner brief; when that brief never names the block, the
+  # owner works without the rules it carries (hands, the ACCEPTED reply, adversary timing).
+  # WHAT IT BINDS: for every plan with a line opening `**Release owner rules`, the action-0 window (the
+  # `DESIGNATE THE LEAD` action, from plan_action_windows) carries the bullet `**The owner-rules block.**`, and the
+  # text of that bullet alone -- from its marker to the first fence, so the fenced block itself, which also sits in
+  # the window, cannot satisfy it -- carries all of: this plan's own path, `**Release owner rules`, `Read tool` and
+  # `before its first edit`. It binds presence, never wording, and cannot verify the lead sent it.
+  # FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING over docs/plans/*.md: the population (plans with a line opening
+  # `**Release owner rules`) is exactly one plan, the plan carrying the block; it is quiet with the instruction
+  # and fires without it. NARROWING THAT GOT IT THERE: the first draft tested the whole window, which includes the
+  # fenced block that itself opens with `**Release owner rules`, so a plan with no instruction passed; the bullet
+  # is cut out first.
+  if grep -qE '^[[:space:]]*\*\*Release owner rules' "$f"; then
+    p16_ok=0
+    p16_wins="$(plan_action_windows "$f")"
+    while IFS= read -r p16_rec; do
+      [ -n "$p16_rec" ] || continue
+      grep -qF 'DESIGNATE THE LEAD' <<<"${p16_rec%%$'\037'*}" || continue
+      p16_win="${p16_rec#*$'\037'}"
+      case "$p16_win" in *'**The owner-rules block.**'*) ;; *) continue ;; esac
+      p16_seg="${p16_win#*'**The owner-rules block.**'}"
+      p16_seg="${p16_seg%%'```'*}"
+      if grep -qF "$rel" <<<"$p16_seg" && grep -qF '**Release owner rules' <<<"$p16_seg" \
+         && grep -qF 'Read tool' <<<"$p16_seg" && grep -qF 'before its first edit' <<<"$p16_seg"; then p16_ok=1; fi
+    done <<<"$p16_wins"
+    if [ "$p16_ok" -eq 0 ]; then
+      err "$rel" "carries a '**Release owner rules' block but its DESIGNATE THE LEAD action never tells each owner to read it first (BL-1194, P16). In that action's '**The owner-rules block.**' bullet, say the per-owner brief names the block by path ('$rel') and heading ('**Release owner rules') and tells the owner to read it with the Read tool before its first edit."
+    fi
+  fi
+
   # --- P7: an instruction that ships its own opt-out --------------------------------
   # THE DEFECT, measured on this repo's own runbook before it was handed over. A section
   # told a graph session to run a consolidation pass. Beside it sat a fenced decision

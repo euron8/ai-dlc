@@ -61,7 +61,7 @@ those from it.
 
 **As the cross shard** you own every Validation Checklist item that is not on
 the part-local list above, including every item an override or extension of
-this file adds. You also own the Handoff Evidence Precondition, the one
+this file adds. You also own the one
 honest-green canonical full-collection run (in the frozen worktree, which nothing
 else mutates), the permitted-pre-existing-failures check, live-run evidence,
 smoke-test updates, provenance, the `Status:` match with sprint-status, Dev
@@ -69,7 +69,7 @@ Agent Record completeness, the RED replays for any AC whose anchor lies in no
 part's files or that a part shard handed over, and the interactions between
 parts. You are dispatched in the same wave as the part shards, so the part
 files may not exist yet. Do every duty that reads no part file first: the
-precondition, the canonical run and every item above except the handed-over
+canonical run and every item above except the handed-over
 replays and the per-AC table. Then join the part shard files your brief names
 with `AI_DLC_WAIT_BEAT_SECS=540 AI_DLC_STATE_DIR=<the beat state directory your brief names>
 scripts/ai-dlc/wait-for-deliverable.sh --complete --since <the round epoch your brief names> <part paths>`,

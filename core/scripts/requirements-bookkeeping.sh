@@ -8,7 +8,10 @@
 #          MIRROR   a slot bullet `- LR-S<N>-<m> ...` absent from, or different in, the PRD's LOCKED_REQUIREMENTS block
 #          CAP      a PRD functional requirement with no `(CAP-m)` citation, or one citing a CAP the SPEC does not carry
 #          LOCATOR  a `<existing .md file>:<line>` cite in the PRD whose line number exceeds the file's length
+#          QUOTE    a quote attached to an `operator-answers-history.md:<line>` cite in the PRD, SPEC or slot
+#                   that the history entry holding that line does not carry (grammar at the QUOTE block)
 #        A cite to a file that does not exist is not reported (it may name a tree this checkout lacks).
+#        The script closes FENCE (--rederive) and MIRROR (--mirror-lr); steps/requirements.md routes the rest.
 #   requirements-bookkeeping.sh --rederive <file>...  rewrite each stale `derived` fence's recorded output with its
 #        command's current output, then re-validate the file. The command is run only when the validator's own
 #        `--explain-cmd` allowlist answers OK, from the project root, COLUMNS=80. Prints `REDERIVED <file>:<line>`
@@ -123,6 +126,60 @@ $cites
 EOF
   [ -s "${TMPDIR:-/tmp}/rb.loc.$$" ] && { cat "${TMPDIR:-/tmp}/rb.loc.$$"; found=1; }
   rm -f "${TMPDIR:-/tmp}/rb.loc.$$"
+  # QUOTE: a quote ATTACHED to an `operator-answers-history.md:<L>[-<M>]` cite must be in the
+  # history entry holding that line. Attached is exactly two forms: cite then `` ` — "q" `` (a
+  # dash between), or `"q" (`cite` / `"q", `cite`. A cite with no attached quote is not read.
+  # The entry runs from the `## ` heading at or above <L> to the line before the next heading;
+  # lines are counted on LF alone, as grep -n and sed count them. A quote is split at `…` and
+  # `...` and each piece must be in the entry, whitespace collapsed. A cite past the file's end
+  # or above its first heading is not read here.
+  hist="$ROOT/$STATE/operator-answers-history.md"
+  if [ -f "$hist" ]; then
+    awk -v hist="$hist" -v root="$ROOT/" -v sep=$'\001' '
+      function flat(s) { gsub(/[ \t\r]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
+      function inentry(q, L, M,    s, e, i, t, k, np, pc) {
+        s = L; while (s > 0 && H[s] !~ /^## /) s--
+        if (s == 0) return 1
+        e = M; while (e < hn && H[e + 1] !~ /^## /) e++
+        t = ""; for (i = s; i <= e; i++) t = t " " H[i]
+        t = flat(t); gsub(/\.\.\./, sep, q); gsub(/…/, sep, q)
+        np = split(q, pc, sep)
+        for (k = 1; k <= np; k++) { pc[k] = flat(pc[k]); if (pc[k] != "" && index(t, pc[k]) == 0) return 0 }
+        return 1
+      }
+      BEGIN { hn = 0; while ((getline l < hist) > 0) H[++hn] = l
+              if (hn == 0) { printf "requirements-bookkeeping: %s read as empty\n", hist > "/dev/stderr"; exit 2 } }
+      {
+        nq = 0; rest = $0; off = 0
+        while (1) {
+          a = index(rest, "\""); b = index(rest, "“")
+          if (a == 0 && b == 0) break
+          if (a > 0 && (b == 0 || a < b)) { o = a; ol = 1; cl = "\"" } else { o = b; ol = length("“"); cl = "”" }
+          c = index(substr(rest, o + ol), cl); if (c == 0) break
+          nq++; QS[nq] = off + o; QE[nq] = off + o + ol + c - 2 + length(cl); QT[nq] = substr(rest, o + ol, c - 1)
+          off += o + ol + c - 2 + length(cl); rest = substr($0, off + 1)
+        }
+        if (nq == 0) next
+        rest = $0; off = 0
+        while (match(rest, /operator-answers-history\.md:[0-9]+(-[0-9]+)?/)) {
+          cs = off + RSTART; ce = cs + RLENGTH; cite = substr(rest, RSTART, RLENGTH)
+          off += RSTART + RLENGTH - 1; rest = substr($0, off + 1)
+          r = cite; sub(/^[^:]*:/, "", r); L = r + 0; M = L; if (r ~ /-/) { sub(/^[0-9]+-/, "", r); M = r + 0 }
+          if (L < 1 || L > hn || M < L) continue
+          for (k = 1; k <= nq; k++) {
+            if (QS[k] >= ce) { g = substr($0, ce, QS[k] - ce); if (g !~ /^`?[ ]+(—|–|-)[ ]+$/) continue }
+            else if (QE[k] < cs) { g = substr($0, QE[k] + 1, cs - QE[k] - 1); if (g !~ /^[ ]*[(,][ ]*`?[A-Za-z0-9_.\/-]*$/) continue }
+            else continue
+            if (!inentry(QT[k], L, M)) {
+              f = FILENAME; if (index(f, root) == 1) f = substr(f, length(root) + 1)
+              printf "PRECHECK QUOTE %s:%d \"%s\" is not in the operator-answers-history.md entry holding :%d\n", f, FNR, QT[k], L
+            }
+          }
+        }
+      }' "$PRD" ${SPEC:+"$SPEC"} "$SLOT" > "${TMPDIR:-/tmp}/rb.quote.$$"
+    [ -s "${TMPDIR:-/tmp}/rb.quote.$$" ] && { cat "${TMPDIR:-/tmp}/rb.quote.$$"; found=1; }
+    rm -f "${TMPDIR:-/tmp}/rb.quote.$$"
+  fi
   [ "$found" -eq 0 ] && echo "PRECHECK clean"
   exit "$found"
 }

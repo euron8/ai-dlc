@@ -19,6 +19,67 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1199.0] - 2026-11-21
+
+### The retro handoff prompt keeps each item's id beside its plain gloss; the requirements step and QA drop checks that caught nothing (BL-1199, BL-1200, BL-1141, BL-1166, BL-397; PC-S323-7D-HANDOFF-PROMPT-OMITS-CARRYOVER-IDS-NO-CLAUSE-REQUIRES-IDS-IN-PROMPT-BODY-AND-PLAIN-GLOSS-READS-AS-DELETE-IDS, PC-S324-IMPLEMENTATION-PUSH-STORY-STATUS-CONSISTENCY-CHECK-AFTER-EVERY-GATE-1-NOT-IN-CORE)
+
+- For every consumer's lead: the next-sprint handoff prompt (`steps/retro.md` step 7d) now opens each carried item with its story, `CO-` or escalation id and then its plain gloss, and a new paragraph says the gloss sits beside the id and never replaces it. Pin row `retro-7d-item-id` in `process-rule-pins` holds the paragraph.
+- For every consumer: the requirements step no longer runs a PRD validate pass that no sprint used, and gate Check 17 drops its sentence about it. The research-requirements validate call is unchanged. The retro adjudicators were weighed on consequence and stay.
+- For fresh installs: the `pre-reviewer` role can no longer use the Write, Edit or NotebookEdit tools, and invariant I22 fails the build if the template loses them. An installed consumer that never customized the value receives it through the settings-merge carrier in this batch (cluster H).
+- For every consumer: QA no longer re-rejects a story's handoff evidence record that gate 1 already refused. `validate-handoff-evidence.sh`, run by `gate-transition.sh` at gate 1, is the single enforcer.
+- For the consumer that asked for a story-status consistency check after every gate 1: no code changes. Check 5 already runs `sprint-status.sh check-stories` at gate 3, before the closing writer marks a story done, and no earlier catch is on record.
+- Partial: BL-1141 (owed only the `Outcome measured:` close line), BL-1166 (outcome line owed) and BL-397 (step-value reading stays open) remain open; BL-1199 and BL-1200 close.
+
+### Planning rounds catch more of their own errors earlier, and the lead writes one fewer brief by hand (BL-974, BL-1175, BL-1189)
+
+- For every consumer running the planning steps. A shard or repair part missing its `advisor:` or `derivations:` line, or with a malformed `disposition:`, `edit:` or `derivation:` field, is now refused when its writer marks it done, with the same text the lead's join would print, instead of surfacing at the join. The seal runs only on newly marked parts, so earlier artifacts are not judged.
+- The requirements pre-check (`requirements-bookkeeping.sh --precheck`) now reports an operator quote whose `operator-answers-history.md` line points at an entry that does not hold that quote. A misplaced quote on the locked slot or its PRD copy goes to the lead; every other one goes to one remediator, and the pre-check runs again after the repair and after the SPEC render.
+- The test-strategy story-split check now finds the story column by its header name and accepts sprint-prefixed story ids (`S<N>-1.1`), so it judges the strategy tables graph actually writes instead of printing "unjudged". A strategy table with no story column at all is still unjudged.
+- The repair round's cross shard brief is generated: after the parallel repair join prints its plan file, `gen-round-briefs.sh --plan-file <plan>` writes the cross brief for its own serial lane round, with its completion command and the lane join's arguments. The lead no longer writes it by hand.
+- Every review series opened under this engine is now judged by the adversarial checks, including a document run SERIAL and a review cycle restarted at a higher pass number, except a SERIAL restart whose old pass directories still exist and a document not directly in `s<N>/`, which still get no era token; the lead no longer adds the era token by hand. A story added between two review passes no longer forces every MAJOR finding to block under the 25% rewrite ceiling. Series from earlier engines still read as pre-era.
+- Records only: BL-1189's 914/915/929 counts are ruled the consumer's own extension checks, with their definitions recorded.
+
+### Gate 3 of implementation runs through the gate runner, and check 4 is decided by a script (BL-1186)
+
+- For the lead running an implementation gate. `gate-transition.sh <story> 3` now runs the script arms no row carries and then `gate-run.sh arms --gate implementation-g3`: one nonce and one arms file, `implementation-g3.arms`, are the row source for script rows, ledger rows and the adjudicator's worklist. `gate-run.sh` takes `--worktree` (the arms file's `{WORKTREE}`), and `gate-run.sh close` closes a one-story gate 3.
+- Check 4 moves from the adjudicator to a script row over `validate-gate3-tables.sh`, so the adjudicator's worklist is 13 checks (1 2 3 5 6 7 8 9 10 11 11a 19 22), not 14. Checks 8 and 10 stay with the adjudicator by operator ruling: check 8's only FAIL in graph's 187 verdicts (a materially wrong deployment record) is invisible to the rule table, and 8 and 10 were proven on their SKIP branch only. The 29 minutes of step wall BL-1186 quotes for gate 3 were measured against the 14-check worklist, so they are an upper bound here.
+
+### A held or operator-labelled backlog item is checked for an operator source at intake and at implementation exit (BL-1186)
+
+- For a lead that carries a labelled item into a sprint. `core/scripts/label-source-check.sh` classifies each held, deferred or operator-labelled item as backed, stale or unbacked, and prints each unbacked one as a single operator decision with the recommendation "keep it as labelled", plus the record that closes it: a backlog item takes `operator source:` on its Status line, and a pipeline-snapshot row (a Recent Activity log line with no Status line) takes ONE `snapshot-update.sh --activity 'operator source: for "<text of the row>" <history>:<line> "<quote>"'` call, after which it reads backed and is not asked again. It never blocks (exit 0) and surfaces through the Rule 11(a) pending-decision path; a recorded decision-window close counts as a source. It is wired into `carry-over-evaluation.md` and `implementation.md`, the latter with the pipeline-snapshot in scope.
+- Graph's s323 snapshot (`711b2aa34`) reads labelled=1 unbacked=1 (`pipeline-snapshot:45`, "2.1-2.3 operator-held"), the case that cost 3.4 h of lead time; graph's current tree reads checked=239 labelled=8 backed=0 stale=0 unbacked=8. Labels outside Status lines and the snapshot are not covered, and the standing-rulings lookup is not consulted.
+
+### The snapshot records which part of a step the lead is in, and five step files say how to resume it (BL-819)
+
+- For a lead recovering after a compaction. `snapshot-update.sh --set sub_step <step-file>.md#<anchor> 'Pipeline Position'` records the part of the current step in Pipeline Position, and moving `current_step_file` through `--set` or `--gate-passed` drops it. A reader uses the value only when the text before `#` matches `current_step_file`, so a hand edit of the snapshot that moves `current_step_file` leaves a value every reader ignores. Implementation, requirements, stories-test-strategy, retro and deploy-validate each gain a Resume section.
+- On graph's live snapshot the key costs 14 bytes (3461 to 3475 B, 865 to 868 tokens, ceiling 6600). It saves no read by itself: it makes the recovery hook's step-file injection buildable, which is still owed (134 compactions in s323, one read each).
+
+### The idle-wake figures of the BL-819 entry are restated on the monotone clock
+
+- Recorded in `docs/backlog.md`, no behaviour change. Idle wake for s317 to s322 reads 14.22, 14.46, 26.32, 19.82, 21.74 and 8.42 h on the monotone clock, the same as the old clock; only the active-hour denominators fall (56.2 to 51.3 h for s317, 27.6 to 26.0 h for s322), so the idle share reads 28 to 45%, not 25 to 41%.
+
+### The lead can tell a stale seed from a fresh one, and the pre-push self-check reaches every shell script a fixture can run (BL-1193, BL-1178)
+
+- For the lead reading a counted seed. `scripts/seed-triage.sh --tree <dir>` now runs `scripts/predict-push-set.sh` on the tree, cross-checks it against the seed log, and reports every unit the push would run that the seed never ran (exit 1). A seed log from another verdict store, or a prediction that fails or cannot be parsed, is exit 2. A kept output that is older than the seed log is exit 2 instead of being read as current: a log line the keep file lacks, or a keep trailer `hermetic-run: <fx>: rc=<n> sandbox_files=<n> required_missing=<n>` whose implied exit (0 when rc and required_missing are both 0, else 2 when rc is 2, else 1, as hermetic-run exits) differs from the log's rc.
+- For anyone editing a shell script. Section f of `scripts/pregate-self-check.sh` now triggers on a changed `*.sh` anywhere under `core/scripts`, `scripts`, `core/hooks`, `core/skills` (nested) and `core/session-driver`, where it used to miss the nested ones.
+- Not covered: the second BL-1193 item-3 defect (one J3 line shape classified oddly) is still owed.
+
+### A seeder or receipt validator that is interrupted stops, and says how it ended (BL-1178)
+
+- For the lead running a batch. `scripts/validate-backlog-receipts.sh` no longer carries on scoring after INT or TERM: its parent, worker and R9 handlers now exit (130/143) and the exit trap cleans up once, so the parent no longer deletes its work directory while workers keep registering trees.
+- `scripts/seed-verdict-store.sh` appends a START line and an END line (exit code, signal, units done of total) to `${TMPDIR:-/tmp}/seedvs.exits`, never to its output. A START with no END means the seeder was killed with SIGKILL.
+- Not covered: the window where a worktree is added but not yet listed, and SIGKILL itself.
+
+### An undeclarable fixture can no longer read the real repository's history, and a failing key run cleans up (BL-1192)
+
+- For anyone adding a fixture the read-set trace cannot map. New arm I74(f) in `scripts/validate-enforcement-map.sh` fails an `.undeclarable` fixture whose script runs a git history verb at the real repository; a call is judged by its own `-C` or last `cd`, so building a world elsewhere in the file does not excuse a bare call. Zero false positives on the two existing `.undeclarable` fixtures.
+- `scripts/suite-content-key.sh` now removes its `sck-ranges.*` scratch directory when it fails, as it already did on success.
+- Not covered: the pre-push whole-suite comment still omits the ranges component.
+
+### The owner-rules block is read before an owner's first edit (BL-1194)
+
+- For the lead briefing owners in the graph ledger drain. Action 0 of `docs/plans/graph-ledger-full-drain.md` now has each owner's brief name the owner-rules block by path and heading and tell the owner to read it with the Read tool before the first edit. New arm P16 in `scripts/validate-plan-shape.sh` fails a plan whose action-0 bullet lacks that instruction.
+
 ## [0.1198.0] - 2026-11-20
 
 ### An update pull commits only its own writes, finishes on a large pull, and says why it re-asked (BL-1196)

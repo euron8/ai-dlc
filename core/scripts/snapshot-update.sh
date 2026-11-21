@@ -82,6 +82,10 @@
 #   --row-replace <agent> <c1 | c2 | ...>   rewrite the ONE row --row-delete would find, whole;
 #                                the cell count, status membership and stamp check of --row-add apply,
 #                                and the new agent cell may carry no id another row carries
+#   --set sub_step <step-file>.md#<anchor> "Pipeline Position"   the sub-step of the step in
+#                                `current_step_file`, the key the `## Resume` section of that step file is read by
+#                                (SUB-STEP below); a reader ignores a value whose step-file differs from
+#                                `current_step_file`. Clear it with --key-delete "Pipeline Position" sub_step
 #   --key-delete <section> <key> delete the key line AND its continuation lines; refuses
 #                                current_step_file and sprint_id
 #   --set-block <section> <key> <file>   replace the key line and every continuation line with
@@ -115,6 +119,14 @@
 # THE CREATE ALLOWLIST is every key render_skeleton writes under Pipeline Position and Sprint
 # Context, plus SU_SETCREATE_EXTRA below: the keys a step file or a consumer's reset skeleton tells
 # the lead to record there that the skeleton does not carry. --set and --set-block read it.
+#
+# SUB-STEP. `- sub_step: <value>` under Pipeline Position names the sub-step of the step file in
+# `current_step_file` that the lead is inside, written `<step-file>.md#<anchor>` so it validates itself: a producer
+# that moves `current_step_file` without this script (deploy-validate-run.sh, retro-close.sh, the handoff-entry
+# hook, a step's First action) leaves a value whose step-file no longer matches, and every reader ignores it; the step file's `## Resume` section lists the values it
+# understands and what to re-read for each. It is absent when no sub-step is open (the skeleton does not
+# carry it, so it costs no bytes then). The key name contains none of the position readers' key words
+# (`current_step_file`, `current step`, `current phase`), so no reader takes it for the position.
 #
 # THE POSITION AND SPRINT READERS. ai-dlc-continue.sh, ai-dlc-recover.sh and
 # validate-mandatory-rules.sh resolve the step file from the `## Pipeline Position` bullets (their
@@ -242,7 +254,7 @@ SKELETON
 #     FILL); its other FILL keys are render_skeleton keys: variant is pipeline_variant, current step
 #     file current_step_file, last completed step last_completed_step_file, last gate passed
 #     last_gate_passed, git branch branch, name sprint_name, operator committed scope scope.
-SU_SETCREATE_EXTRA='is_ui_epic stories_completed_this_sprint stories_in_progress stories_not_started resume_instruction inputs stories'
+SU_SETCREATE_EXTRA='is_ui_epic stories_completed_this_sprint stories_in_progress stories_not_started resume_instruction inputs stories sub_step'
 SU_SKEL=""; NEEDSKEL=0
 
 SNAP=""
@@ -294,6 +306,7 @@ while [ $# -gt 0 ]; do
                     fi
                     rec row-set "$2" "$3" "$4"; shift 4 ;;
     --set)          need 3 "$@"; nonempty "$2" "$3"; nl "$2" "$3"
+                    case "$2" in sub_step) [[ "$3" =~ ^[A-Za-z0-9._-]+\.md#[A-Za-z0-9._-]+$ ]] || refuse "--set sub_step: '$3' is not <step-file>.md#<anchor>" ;; esac
                     case "${4:-}" in ""|--*) rec set "$2" "$3"; shift 3 ;;
                       *) nl "$4"; rec set-in "$4" "$2" "$3"; NEEDSKEL=1; shift 4 ;; esac ;;
     --key-delete)   need 3 "$@"; nonempty "$2" "$3"; nl "$2" "$3"; rec key-delete "$2" "$3"; shift 3 ;;
@@ -650,8 +663,10 @@ while IFS="$US" read -r op a b c; do
         } else {
           keyhit(L[HIT], B)
           if (isblk(HIT)) die(7, "refused: " B " is a block scalar; --set-in would orphan its continuation lines. Use --set-block.")
-          secflags(HIT); ind = substr(L[HIT], 1, KIND)
+          secflags(HIT); ind = substr(L[HIT], 1, KIND); was = L[HIT]
           L[HIT] = ind "- " B ": " C; guard(L[HIT], OKP, OKS)
+          # A moved position drops the sub-step key: its value belongs to the step file it was set in.
+          if (OKP && hasbullet(L[HIT]) && L[HIT] != was && keyfind("sub_step", HS + 1, HE) == 1) D[HIT] = 1
         }
       } else if (op == "key-delete") {
         if (B == "current_step_file" || B == "sprint_id" || hasbullet("- " B ":") || hassp("- " B ":")) die(7, "refused: " B " is read by the continue, recover and dispatch-guard hooks and is never deleted")

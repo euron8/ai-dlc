@@ -22,7 +22,10 @@
 # file is written; a J3 row matching 0 or 2+ lines, a corpus (`<c>+<k>x<glob>`) row, a J6 target already rowed, or a
 # missing invocations.decl is a refusal and nothing is written. A RED unit's J3/J6 lines print `not applied (unit has
 # other reds)`.
-# --tree <dir>: where .undeclarable is looked up (default: the --apply tree, else this script's own root).
+# --tree <dir>: where .undeclarable is looked up (default: the --apply tree, else this script's own root), and the tree whose
+# `scripts/predict-push-set.sh` RUN set (`@consumer` units included) is compared with the log's units: each RUN unit the log
+# lacks is printed UNSEEDED and the run exits 1. A prediction that fails or cannot be parsed, or a log whose `counted store:`
+# line is not the prediction's `store:` line, is a refusal (exit 2).
 #
 # REFUSALS (exit 2): bad arguments; a log with no rc line; the rc lines counted by two grammars disagree; a unit named
 # twice; any line the seeder printed of its own other than its gate-wait notices (an abort such as `left no rc` or
@@ -73,11 +76,11 @@ t !~ /FAIL|BROKEN|REFUSED|[Uu]ndeclared|ERROR|REQUIRED input/ { if (t ~ /[^[:bla
 
 st_main() {
 set -u
-local apply="" tree="" log keep n_awk n_grep fx rc src kinds nj no verdict line
+local hr_rc hr_miss hr_exit apply="" tree="" tree_given="" log keep n_awk n_grep fx rc src kinds nj no verdict line
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --apply) apply="${2:-}"; [ -n "$apply" ] && [ -d "$apply/core/fixtures" ] || st_die "--apply needs a tree carrying core/fixtures"; shift 2 ;;
-    --tree) tree="${2:-}"; [ -n "$tree" ] && [ -d "$tree/core/fixtures" ] || st_die "--tree needs a tree carrying core/fixtures"; shift 2 ;;
+    --tree) tree="${2:-}"; tree_given=1; [ -n "$tree" ] && [ -d "$tree/core/fixtures" ] || st_die "--tree needs a tree carrying core/fixtures"; shift 2 ;;
     -*) st_die "unknown option $1" ;;
     *) break ;;
   esac
@@ -132,7 +135,22 @@ while IFS="$(printf '\t')" read -r fx rc; do
         on { print }' "$keep/consumer.out" > "$src"
       [ -s "$src" ] || st_die "$fx is red but $keep/consumer.out carries no \`--- $fx\` section"
       note=" (census keeps only this section's last lines; the unit's whole output is not on disk)" ;;
-    *) cp "$keep/$fx.out" "$src" ;;
+    *)
+      cp "$keep/$fx.out" "$src"
+      # The seeder prints a red plain unit's lines FROM the output it keeps, so every log line attributed to the unit
+      # is a line of <keep>/<fx>.out; one that is not means the keep file is from another seed run.
+      line="$(awk -F'\t' -v fx="$fx" 'FILENAME == ARGV[1] { sub(/\r$/, ""); have[$0] = 1; next }
+        $1 == fx { t = $0; sub(/^[^\t]*\t[^\t]*\t/, "", t); if (t != "" && !(t in have)) { print t; exit } }' "$src" "$w/loglines")"
+      [ -z "$line" ] || st_die "$keep/$fx.out is stale: the seed log prints a line of $fx that the kept output lacks: $line"
+      # hermetic-run's trailer (core/scripts/hermetic-run.sh HR_STORE: `rc=<n> sandbox_files=<n> required_missing=<n>`) implies
+      # the exit it ended with (hermetic-run.sh, after HR_STORE_END): 0 when rc and required_missing are both 0, else 2
+      # when rc is 2, else 1. The log's rc line must be that exit.
+      line="$(sed -n "s/^hermetic-run: $fx: rc=\\([0-9][0-9]*\\) sandbox_files=[0-9][0-9]* required_missing=\\([0-9][0-9]*\\)\$/\\1 \\2/p" "$src" | tail -n 1)"
+      if [ -n "$line" ]; then
+        hr_rc="${line% *}"; hr_miss="${line#* }"
+        if [ "$hr_rc" = 0 ] && [ "$hr_miss" = 0 ]; then hr_exit=0; elif [ "$hr_rc" = 2 ]; then hr_exit=2; else hr_exit=1; fi
+        [ "$hr_exit" = "$rc" ] || st_die "$keep/$fx.out is stale: its hermetic-run trailer (rc=$hr_rc required_missing=$hr_miss) implies exit $hr_exit but the seed log reads rc=$rc"
+      fi ;;
   esac
   # Kept lines first, then the log's lines for this unit that the kept output does not carry.
   awk '{ print "keep:" NR "\t" $0 }' "$src" > "$w/tagged"
@@ -191,6 +209,31 @@ printf 'seed-triage: scanned %s unit(s) (%s rc lines by both grammars): %s green
 [ -z "$redlist" ] || printf '  RED:%s\n' "$redlist"
 [ -z "$j3list" ] || printf '  J3-ONLY:%s\n' "$j3list"
 [ -z "$undlist" ] || printf '  UNDECLARABLE:%s\n' "$undlist"
+if [ -n "$tree_given" ]; then
+  # THE PREDICTION, taken now against the tree's own counted store: a unit the seed ran and recorded is reused and not
+  # in it; every unit still in the RUN set (an @consumer unit included) was not seeded, or is red. Parse as
+  # scripts/pregate-self-check.sh pred_once does: the `RUN <n>` line gates, `run <unit>` lines are the set.
+  if bash "$tree/scripts/predict-push-set.sh" "$tree" "$w/pred" > "$w/pred.out" 2> "$w/pred.err" < /dev/null \
+     && grep -q '^RUN [0-9][0-9]*$' "$w/pred.out" && grep -q '^CONSUMER [0-9][0-9]*$' "$w/pred.out"; then
+    sed -n 's/^run //p' "$w/pred.out" | LC_ALL=C sort -u > "$w/predrun"
+    p_run="$(sed -n 's/^RUN //p' "$w/pred.out")"; p_con="$(sed -n 's/^CONSUMER //p' "$w/pred.out")"
+    p_nrun="$(grep -vc '@consumer$' "$w/predrun")" || p_nrun=0; p_ncon="$(grep -c '@consumer$' "$w/predrun")" || p_ncon=0
+    [ "$p_nrun" = "$p_run" ] && [ "$p_ncon" = "$p_con" ] \
+      || st_die "predict-push-set.sh printed RUN $p_run / CONSUMER $p_con but $p_nrun / $p_ncon run lines; its output is not read"
+    # The seed's tree is bound by its counted store: the log's `counted store:` line must be the prediction's `store:` line.
+    p_store="$(sed -n 's/^store: //p' "$w/pred.out" | head -n 1)"; l_store="$(sed -n 's/^counted store: //p' "$log" | head -n 1)"
+    [ -n "$l_store" ] || st_die "$log carries no \`counted store:\` line, so its tree is unknown and is not compared with $tree"
+    { [ "$l_store" = "$p_store" ] || [ "$l_store" = "$HOME/$p_store" ]; } \
+      || st_die "the seed ran against $l_store but $tree predicts $p_store: another tree's seed; not compared"
+    cut -f1 "$w/units" | LC_ALL=C sort -u > "$w/seeded"
+    awk 'FILENAME == ARGV[1] { S[$0] = 1; next } !($0 in S)' "$w/seeded" "$w/predrun" > "$w/unseeded"
+    printf 'seed-triage: prediction for %s at %s (%s): RUN %s, CONSUMER %s; %s predicted unit(s) not in the seed log\n' \
+      "$tree" "$(git -C "$tree" rev-parse --short HEAD 2>/dev/null || echo '?')" "$(sed -n 's/^store: //p' "$w/pred.out" | head -n 1)" "$p_run" "$p_con" "$(awk 'END { print NR }' "$w/unseeded")"
+    [ ! -s "$w/unseeded" ] || { printf '  UNSEEDED (RUN units the seed did not run):\n'; sed 's/^/    /' "$w/unseeded"; }
+  else
+    st_die "no prediction of the RUN set for $tree ($(head -n 1 "$w/pred.err" 2>/dev/null)); the unit set is not compared"
+  fi
+fi
 [ ! -s "$w/seedlines" ] || st_die "the seeder printed $(awk 'END { print NR }' "$w/seedlines") line(s) of its own (SEED-LEVEL above), so the seed did not finish and units may have no rc line; re-seed"
 line="$(awk -F'\t' '$1 == "BAD" { sub(/^BAD\t/, ""); print; exit }' "$w/rows")"
 [ -z "$line" ] || st_die "a J3/J6 line does not parse: $line"
@@ -227,8 +270,10 @@ if [ -n "$apply" ] && [ -s "$w/rows" ]; then
   printf 'seed-triage: applied %s row(s) (%s J3, %s J6) in %s\n' "$napplied" \
     "$(awk -F'\t' '$2 == "J3"' "$w/plan" | awk 'END { print NR }')" "$(awk -F'\t' '$2 == "J6"' "$w/plan" | awk 'END { print NR }')" "$apply"
   [ "$nred" = 0 ] || return 1
+  [ ! -s "$w/unseeded" ] || return 1
   return 0
 fi
+[ ! -s "$w/unseeded" ] || return 1
 [ "$nred" = 0 ] && [ "$nj3" = 0 ] || return 1
 return 0
 }

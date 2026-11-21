@@ -10,6 +10,17 @@ nextStepFile: ./sprint-review.md
 **Purpose:** Transition from planning to Agent Teams lead. Spawn
 teammates, create tasks, orchestrate the build/review/QA cycle.
 
+## Resume
+
+After a compaction the snapshot's Pipeline Position carries `sub_step`, the section of this file the lead was inside. Enter each section below by adding `--set sub_step implementation.md#<value> 'Pipeline Position'` to the `bash scripts/ai-dlc/snapshot-update.sh` call that section already makes (a standalone call only where none runs). Use the value only when the text before `#` equals `current_step_file`; any other value is stale from another step, so delete it and read this file from its top. Otherwise read the named section of this file, the snapshot's Open Items and teammate rows, and take the next action; never re-dispatch a teammate that the snapshot's teammate rows already lists.
+
+| sub_step | Section | Next action |
+|---|---|---|
+| `2` | 2. Create Agent Team | spawn only the teammates the snapshot's teammate rows does not list, then set `5` |
+| `5` | 5. Begin Implementation | message each teammate whose row shows no acknowledged instruction, then set `6` |
+| `6` | 6. Orchestrate | read `sprint-status.yaml` and the newest gate-log entry; join each pending deliverable, then dispatch the next unblocked story |
+| `7` | 7. All Gates Passed | re-check every story is `done` in both sprint-status views, then run this step's closing gate |
+
 ## EXECUTION SEQUENCE
 
 **First action:** `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file implementation.md 'Pipeline Position'`
@@ -300,15 +311,19 @@ relative to the worktree top, and `--transcript-dir` is required at gate 3 only:
 directory the lead's own session transcript (`transcript_path`) sits in. Every later
 `gate-transition.sh <story> …` in this file means that call with the same flags
 (`<flags>`). The plan's `<gate>` segment is `gclose` for `close`; at gate 3 the program
-mints the nonce and runs `gate-checkpoint.sh open`, but records no verdict at it — the
-lead's `gate-checkpoint.sh --nonce <n> record` calls stay the lead's. Check 25 is written
+calls `gate-run.sh arms --gate implementation-g3`, which mints the nonce, runs `gate-checkpoint.sh open`, records the
+script rows of `gates/implementation-g3.arms` and the judgment rows as `PENDING`, and writes the adjudicator worklist; the
+lead's `gate-checkpoint.sh --nonce <n> record` calls for rows 13 and H1 stay the lead's. At a one-story gate 3, after the
+adjudicator's verdict, the lead runs `gate-run.sh close --gate implementation-g3 --nonce <n> --sprint <N> --step
+implementation.md --transcript <this session's transcript_path> --transcript-dir <the directory it sits in>`, which adopts
+the verdict through Check 26 and writes the snapshot rows, the gate-log entry and the checkpoint close. Check 25 is written
 into the plan as a `steering-count:` input for the lead to judge. The program runs, in order, every
 validator and partition call that gate needs: the commit-presence check, the
 handoff-evidence arms, the capture list, the route, narrow and map calls with the
 captures excluded where they apply, the carried-findings list, at gate 2 the
 `GATE1-RERUN` test, the DAR-fold verification, the smoke arm and the partition
-record, and at gate 3 every `adjudication: script` arm of `gate-validation.md`
-followed by `gate-checkpoint.sh open`. It writes
+record, and at gate 3 the script arms of `gate-validation.md` that no
+`implementation-g3.arms` row carries, then `gate-run.sh arms`. It writes
 `_bmad-output/implementation-artifacts/s<N>/gate-transition/<idx>-g<gate>-p<M>.plan` only after every
 sub-check has exited 0. The plan lists the shards, the route and the brief inputs
 (the frozen sha, the worktree, the manifest, the `--map` lines, the carried-findings
@@ -630,7 +645,7 @@ completes, the first cross QA reads every part shard file for `handover:` lines,
 handed-over replay and records it as a `handover-run:` line; the merge refuses a hand-over with no
 matching run, a replay in any other cross shard, and a replay that is not `RED` forces
 `NEEDS_REWORK`. The first cross QA owns every other
-checklist item, the Handoff Evidence Precondition, the one honest-green
+checklist item, the one honest-green
 canonical run in the frozen worktree and the RED replays a part QA handed
 over, and writes the per-AC table and the
 `## Deferred ACs` section (`qa.md` "As a Shard"). Join with the LEAD checkout's
@@ -728,5 +743,7 @@ itself.
 Run `scripts/ai-dlc/validate-held-stories.sh`; a STALE-HOLD blocks the exit.
 
 Run `scripts/ai-dlc/sprint-integration-check.sh --onto <sprint branch> --base <sprint base> --append-only <each append-only log> --story-file <each story file> --registry <the test registry, ci-local> --suite <the sprint's suite command> --suite-summary _bmad-output/implementation-artifacts/s<N>/integration-suite-summary.txt <every story branch>` in the sprint tree: it refuses (exit 2) unless the tree is `--onto`, merges each story branch not yet an ancestor of the sprint branch, aborts and reports a conflicting one, and reports a lost append-only log line, a story file without exactly one `## Dev Agent Record`, a new test file the registry does not name, and a failing suite. It writes the suite's pass and fail counts and failing lines, never its log, to the summary file; commit that file. A `RESULT FAIL` blocks the exit: send each finding to a dev teammate, then re-run until `RESULT PASS`.
+
+**Operator source of a label written during the sprint.** For every backlog item this sprint labelled held, deferred or operator-labelled, run `scripts/ai-dlc/label-source-check.sh --items <those item ids, comma-separated>,pipeline-snapshot --sprint <N>`; the `pipeline-snapshot` token also checks every operator-held, operator-deferred or operator directive line of the pipeline snapshot. It exits 0 whatever it finds and does not block the exit. When it prints a `DECISION to surface` block, put the listed items as ONE pending decision with the recommendation "keep it as labelled" (SKILL.md Rule 11(a)) and proceed on that recommendation. When the operator answers, write the record the block names: onto a backlog item's Status line, or, for a `pipeline-snapshot:<line>` row, one `scripts/ai-dlc/snapshot-update.sh --activity 'operator source: for "<verbatim text of the row>" <history file>:<line> "<verbatim quote>"'` call.
 
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

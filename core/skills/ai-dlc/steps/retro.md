@@ -14,6 +14,20 @@ a chance to comment or ask questions before it closes.
 **Step entry.** The first action of this step, before any other read or command, is:
 `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file retro.md 'Pipeline Position'`.
 
+## Resume
+
+After a compaction the snapshot's Pipeline Position carries `sub_step`, the section of this file the lead was inside. Enter each section below by adding `--set sub_step retro.md#<value> 'Pipeline Position'` to the `bash scripts/ai-dlc/snapshot-update.sh` call that section already makes (a standalone call only where none runs). Use the value only when the text before `#` equals `current_step_file`; any other value is stale from another step, so delete it and read this file from its top. Otherwise read the named section of this file, the snapshot's Open Items and teammate rows, and take the next action; never re-dispatch a teammate that the snapshot's teammate rows already lists.
+
+| sub_step | Section | Next action |
+|---|---|---|
+| `2` | 2. Party Mode Retro | join the party-mode deliverable named in the snapshot's teammate rows |
+| `3` | 3. Write Retro Document | open the retro document written so far and finish its missing sections |
+| `4` | 4. Apply Process Improvements | read Open Items for the improvements applied so far and apply the rest |
+| `4a` | 4a. Close-Out Sweep | read the sweep rows written so far and continue at the first unswept item |
+| `5c` | 5c. Pre-Commit Validation Gate | re-run the pre-commit validators named in that section before any commit |
+| `6` | 6. Commit, Push, and PR | check `git status` and `git log` for the commit and push, then resume at the first part not done |
+| `7` | 7. Merge and Next-Sprint Handoff | check the PR state with `gh pr view` before merging |
+
 ## EXECUTION SEQUENCE
 
 ### 1. Context Loading
@@ -1363,8 +1377,9 @@ Copy the prompt below to start the next sprint.
  the goal is to continue it or close it out. Then enumerate the
  in-scope items from 7b in priority order: epic-remaining stories
  first, then carry-over, then retro follow-ups and gate exercises,
- then related-epic stretch scope last (marked "stretch"). Keep it
- under ~15 lines. Do not restate already-done work.]
+ then related-epic stretch scope last (marked "stretch"). Each item
+ opens with its story, `CO-`, or escalation id, then its plain-language
+ gloss. Keep it under ~15 lines. Do not restate already-done work.]
 ----
 ```
 
@@ -1377,6 +1392,10 @@ plain-language duty binds the whole block, the prompt body included: a
 label the lead coined is replaced by the plain phrase it stands for,
 and every id listed -- a story, escalation, gate or
 requirement id -- carries a plain-language clause saying what it is.
+
+**Each enumerated item in the prompt body carries its id.** Every story,
+`CO-` carry-over and escalation item the body enumerates names its id,
+with the plain-language gloss beside the id and never in its place.
 
 **A carve-out is the close-out's proposal, never the operator's words.**
 A prompt-body item that defers or excludes work from the next sprint, or

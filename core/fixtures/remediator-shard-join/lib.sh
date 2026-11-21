@@ -1013,6 +1013,38 @@ p_cpledger() { # <join> -> the offender: rc 2 naming CLAUDE.md and the join's UN
   AI_DLC_PROJECT_ROOT="$CP4_W" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$JO" "CHECK-PART: $p" && ! has "$JO" "REFUSED:"
 }
+# CP5: the part fields (part_fields, BL-974): arm H's `derivation:` field and the check fields, one offender per
+# class, each joined ONCE by the live run (its refusal line is the reference) and then asked of --check-part, which
+# must print that line byte-for-byte: A no `derivation:` field; B no `advisor:` line; C `derivations: deferred to the
+# join` in a files-mode dir. The near-miss N is C's bytes in a dir carrying `.subject`: rc 0, CHECK-PART:.
+CP5_DER='- derivation: n/a (no factual claim)
+'
+cp5_write() { # <part> <derivation line or ''> <check lines>
+  printf '### F-4 — MAJOR\n- disposition: repaired\n%s\n%s\n%s- claim now asserted: the title reads loads on demand.\n\n%s\n' \
+    "$SIBW_EDIT" "$SIB_INS" "$2" "$3" > "$1"
+}
+p_cpfields() { # <join>
+  local j="$1" w p jl c
+  w="$(new_world)" || return 1
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  p="$w/$SLOT/shards/stories-repair-p1/01.md"
+  for c in A B C; do
+    case "$c" in
+      A) cp5_write "$p" '' "$CHK_LINES"; jl="01.md has no 'derivation:' field as arm H reads it" ;;
+      B) cp5_write "$p" "$CP5_DER" '- derivations: replayed 1'; jl="01.md: no advisor: line;" ;;
+      C) cp5_write "$p" "$CP5_DER" "$(printf -- '- advisor: called\n- derivations: deferred to the join (section shard)')"
+         jl="01.md: a value outside the grammar: derivations: deferred in a files-mode part;" ;;
+    esac
+    run_join "$j" "$w"
+    [ "$RC" -eq 2 ] || { echo "CP5 $c: the join did not refuse (rc=$RC)" >> "$JO"; return 1; }
+    jl="$(grep -F "REFUSED: $jl" "$JO")" || { echo "CP5 $c: the join printed no '$jl' line" >> "$JO"; return 1; }
+    AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
+    [ "$RC" -eq 2 ] && [ "$(grep -F "$jl" "$JO")" = "$jl" ] || { echo "CP5 $c: --check-part did not print the join's line: $jl" >> "$JO"; return 1; }
+  done
+  : > "$w/$SLOT/shards/stories-repair-p1/.subject"
+  AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
+  [ "$RC" -eq 0 ] && has "$JO" "CHECK-PART: $p" && ! has "$JO" "REFUSED:"
+}
 SB_RN="\$ grep -rn -F 'loads eagerly' $REL/$S21"
 SB_CTL="\$ grep -c -F 'loads on demand' $REL/$S21"
 p_sibforms() { # five wrong spellings of the field -> each REFUSED as none of the four forms, nothing written
@@ -1324,7 +1356,8 @@ p_markderive() { # <wfd>
   sd="$w/_bmad-output/planning-artifacts/s9/shards"
   mkdir -p "$sd/coe-repair-p1" "$sd/requirements-party-repair" "$sd/coe-party-serial-repair-p1" "$sd/plain" || return 1
   for f in coe-repair-p1/2 coe-repair-p1/7 requirements-party-repair/05 requirements-party-repair/03 coe-party-serial-repair-p1/lane-1 coe-repair-p1/3 plain/4; do
-    printf '# part\n\nbody\n' > "$sd/$f.md" || return 1
+    # one escalated entry carrying arm H's three fields: --mark runs the join's --check-part, which judges them
+    printf '# part\n\nbody\n\n### F-1 — MINOR\n- disposition: escalated\n- edit: n/a\n- derivation: n/a (no factual claim)\n' > "$sd/$f.md" || return 1
   done
   mk_last() { last="$(tail -n 1 "$1")"; }
   wfd_run "$1" --mark "$sd/coe-repair-p1/2.md" carry-over-evaluation remediator 2 findings=1 > /dev/null 2>&1 || return 1
@@ -1362,9 +1395,10 @@ p_markderive() { # <wfd>
 # `<!-- shard: 01 -->` body untouched, the serial block's own line `replayed 3` (the whole file's
 # count, over two triples), sealed. R804 names the case that failed. Takes the wfd to drive.
 # The entry's `siblings:` line follows its fence, so every fence line keeps the number the cases assert: --mark
-# runs the join's --check-part on a part (term 8), which refuses a repaired edit with no siblings: field (BADSIB).
+# runs the join's --check-part on a part (term 8), which refuses a repaired edit with no siblings: field (BADSIB),
+# and a part with no derivation: field (arm H), so that line follows the siblings line.
 r804_part() { # <file> <derivations value> <tok count recorded> [disposition]
-  printf -- '- artifact: _bmad-output/planning-artifacts/s9/data.txt\n- artifact_sha_before: x\n- artifact_sha_after: y\n- advisor: called\n- **derivations:** %s\n\n### F-1 — MAJOR\n- disposition: %s\n- edit: _bmad-output/planning-artifacts/s9/data.txt:1\n\n```derived\n$ grep -c tok _bmad-output/planning-artifacts/s9/data.txt\n%s\n$ grep -c zed _bmad-output/planning-artifacts/s9/data.txt\n1\n```\n%s\n' "$2" "${4:-repaired}" "$3" "$SIB_INS" > "$1"
+  printf -- '- artifact: _bmad-output/planning-artifacts/s9/data.txt\n- artifact_sha_before: x\n- artifact_sha_after: y\n- advisor: called\n- **derivations:** %s\n\n### F-1 — MAJOR\n- disposition: %s\n- edit: _bmad-output/planning-artifacts/s9/data.txt:1\n\n```derived\n$ grep -c tok _bmad-output/planning-artifacts/s9/data.txt\n%s\n$ grep -c zed _bmad-output/planning-artifacts/s9/data.txt\n1\n```\n%s\n- derivation: n/a (no factual claim)\n' "$2" "${4:-repaired}" "$3" "$SIB_INS" > "$1"
 }
 r804_sealed() { # <file> -> 0 when the marker's sha= is the digest of the body above it
   local want have
@@ -1401,8 +1435,9 @@ p_replay() { # <wfd>
   f="$sd/prd-repair-p1/01.md"; r804_part "$f" 'not replayed' 3; cp "$f" "$w/b2.before"
   R804=b2; wfd_run "$1" --mark "$f" prd remediator 01 findings=1 > "$w/b2.out" 2>&1; rc=$?
   [ "$rc" = 64 ] && cmp -s "$f" "$w/b2.before" && has "$w/b2.out" "write 'derivations: deferred to the join" || return 1
-  f="$sd/stories-repair-p1/03.md"; r804_part "$f" 'deferred to the join (section shard)' 3
-  R804=c; wfd_run "$1" --mark "$f" stories remediator 03 findings=1 > "$w/c.out" 2>&1 || return 1
+  # (c) sits in the section-split dir: --check-part refuses `deferred to the join` in a files-mode dir, as the join does.
+  f="$sd/prd-repair-p1/03.md"; r804_part "$f" 'deferred to the join (section shard)' 3
+  R804=c; wfd_run "$1" --mark "$f" prd remediator 03 findings=1 > "$w/c.out" 2>&1 || return 1
   [ "$(grep -c '^- \*\*derivations:\*\* deferred to the join (section shard)$' "$f")" = 1 ] || return 1
   f="$sd/plain/04.md"; r804_part "$f" 'not replayed' 3
   R804=d; wfd_run "$1" --mark "$f" review seat 04 findings=1 > "$w/d.out" 2>&1 || return 1

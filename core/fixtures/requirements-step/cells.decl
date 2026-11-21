@@ -14,3 +14,6 @@ nested core/scripts/validate-spec-join.sh core/scripts/validate-locked-anchor.sh
 # Arm (o) (BL-936) runs the shipped capture hook twice to write the operator-answers history the §3 derivation reads.
 e2e core/hooks/ai-dlc-answer-capture.sh o-hook-1 why=arm (o) the first AskUserQuestion payload, fifteen question/answer pairs
 e2e core/hooks/ai-dlc-answer-capture.sh o-hook-2 why=arm (o) the newer payload that strikes LR-S42-17
+# Arm (p) runs --precheck once per world over arm (o)'s history.
+e2e core/scripts/requirements-bookkeeping.sh p-quote-near why=arm (p) QUOTE near-miss world, each quote cited on its own entry (PRECHECK clean)
+e2e core/scripts/requirements-bookkeeping.sh p-quote-off why=arm (p) QUOTE offender world, one cite moved onto the next entry (one QUOTE line)

@@ -69,7 +69,7 @@
       "model": "sonnet",
       "effort": "low",
       "omitClaudeMd": true,
-      "disallowedTools": "Skill, Agent"
+      "disallowedTools": "Skill, Agent, Write, Edit, NotebookEdit"
     },
     "protected-path-editor": {
       "model": "sonnet",

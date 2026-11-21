@@ -48,8 +48,16 @@
 #       join will apply. Each finding is the join's own REFUSED line (a BADSIB is byte-identical);
 #       the missing-field remedy names the field and this re-check, never a re-dispatch. Exit 0
 #       with one `CHECK-PART:` line when every arm holds, 2 with `REFUSED:` lines otherwise, 4 on a
-#       HARNESS fault that is no verdict on the part (a self-probe that failed, a mktemp that failed:
-#       hdie), which wait-for-deliverable.sh --mark reads as one WARN and marks. Two
+#       HARNESS fault that is no verdict on the part (a self-probe that failed, a mktemp that failed,
+#       arm H's sibling missing: hdie), which wait-for-deliverable.sh --mark reads as one WARN and marks.
+#       PART FIELDS -- part_fields, the join's own per-part judgement and text: arm H's `disposition:`,
+#         `edit:` and `derivation:` fields (repair_field), and the check fields `advisor:` and
+#         `derivations:` (checks_field 0). The join's CF_DEFER comes from --document/--subject, which
+#         a part cannot pass, so it is derived from the part's dir: `sections/.manifest` (the join
+#         refuses that dir without --document) or `.subject` (the join refuses --subject without it)
+#         reads deferral-legal; neither, inside the layout, reads files mode; outside the layout it
+#         reads deferral-legal. Residual, fail-open: a dir carrying `.subject` that the lead joins in
+#         files mode accepts `deferred to the join` here and is refused at the join. Two
 #       more arms read the part's own tree, located from the PART PATH the way the join locates
 #       it (`<state>/planning-artifacts/s<N>/shards/<dir>/<part>.md`):
 #       PARTY SOURCES -- when <dir> names a party round by the join's own PARTY derivation (an
@@ -253,8 +261,8 @@
 #   lane over the document, as before.
 # THE PER-ROUND COMMIT. A join of round M >= 2 refuses while round M-1's joined record is uncommitted
 #   (`git status` on the record); `partition-document.sh --shard-dir` refuses the same for that record and the
-#   artifact. FORWARD-ONLY: only a series whose pass-1 shard dir carries the era token (era-token.sh; partition-document.sh
-#   --shard-dir writes it when it opens pass 1) is judged; any other series prints `ROUND-COMMIT: SKIP pre-era <name>` and
+#   artifact. FORWARD-ONLY: only a series whose opening pass carries the era token (era-token.sh's ai_dlc_era_open, the one
+#   era resolve) is judged; any other series prints `ROUND-COMMIT: SKIP pre-era <name>` and
 #   passes. A record or path the repository does not track or ignore reads clean there.
 # THE SPEC RENDER is owed once, after the serial tail: a subject-mode join prints `SPEC-RENDER: DEFERRED` for a stale
 #   memlog and writes its record; `--sources` and `--escalations` over the finished records refuse it.
@@ -381,9 +389,10 @@ export LC_ALL=C
 refuse_n=0
 GAP_LINES=""; GAP_N=0
 # THE ERA TOKEN (era-token.sh, sourced below): the per-round commit refusal and the coe pass-1 keyed-source rule judge only a
-# series whose pass-1 review shard dir `shards/<name>-p1/.era` carries it; partition-document.sh --shard-dir writes it there.
+# series whose opening pass carries it, as ai_dlc_era_open (era-token.sh, the one era resolve) answers.
 [ -f "$(dirname "${BASH_SOURCE[0]}")/era-token.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/era-token.sh"
 AI_DLC_ERA_TOKEN="${AI_DLC_ERA_TOKEN:-}"
+declare -F ai_dlc_era_open >/dev/null || ai_dlc_era_open() { AI_DLC_ERA_OPEN=""; return 1; }   # absent copy: no era judged
 # Every variable record_tail prints has a global default: contract_refusals assigns them, and a run
 # that never reaches it must print empty under `set -u`, never die naming an unbound variable.
 CHAIN_LINES=""; ESC_SUP=""; ESC_LINES=""; ESC_CLOSED=""; ESC_N=0; ESC_X=0
@@ -1829,6 +1838,25 @@ checks_refusals() {  # <checks_field output>
 $1
 CKEOF
 }
+# rf_load: arm H's own predicate, repair_field, from the sibling. Same dir in both layouts (core/scripts/ and
+# scripts/ai-dlc/ each hold both files), so no walk from one core file to another. A missing or ambiguous
+# sibling is a harness fault (hdie: the join exits 2, --check-part 4), never a verdict on a part.
+rf_load() {
+  local s_="${JR_SCRIPT_DIR}/validate-adversarial-convergence.sh" n_
+  [ -f "$s_" ] || hdie "arm H's validator is not beside this script (${s_}); reinstall ai-dlc"
+  n_="$(grep -c '^repair_field() {' "$s_")" || n_=0
+  [ "$n_" = "1" ] || hdie "found ${n_} 'repair_field() {' definitions in ${s_} (want exactly 1)"
+  eval "$(grep -m1 '^repair_field() {' "$s_")"
+}
+# part_fields <part>: the join's per-part field judgement, ONE site for the join's parts loop and --check-part:
+# arm H's three fields, then the check fields under the caller's CF_DEFER.
+part_fields() {
+  local f_
+  for f_ in disposition edit derivation; do
+    repair_field "$f_" "$1" || refuse "$(basename "$1") has no '${f_}:' field as arm H reads it; the joined record would read structured on another part's labels"
+  done
+  checks_refusals "$(checks_field 0 "$1")"
+}
 ISO='[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z'
 
 # Sourced (the remediator-shard-join fixture's unit arms), the file stops here: everything above defines
@@ -2342,6 +2370,10 @@ PCEOF
 if [ "$PARTMODE" = 1 ]; then
   contract_probe
   contract_refusals 0 "$(contract_check 0 "$CHKPART")"
+  rf_load
+  CF_DEFER=1
+  [ -n "$CP_STATE" ] && [ ! -f "${_cpd}/sections/.manifest" ] && [ ! -f "${_cpd}/.subject" ] && CF_DEFER=0
+  part_fields "$CHKPART"
 # CHECK-PART-MARK v1
   _cpb="${CP_PATH##*/}"
   if [ "$PARTY" = 1 ]; then
@@ -2396,7 +2428,7 @@ CPUEOF
   fi
   printf '%s' "$GAP_LINES"
   [ "$refuse_n" -eq 0 ] || exit 2
-  echo "CHECK-PART: ${CP_PATH} -- the join's entry contract holds; the check fields (advisor:, derivations:, derivation:) and the disposition/edit repair fields were NOT checked"
+  echo "CHECK-PART: ${CP_PATH} -- the join's entry contract, the disposition/edit/derivation repair fields and the check fields (advisor:, derivations:) hold; the cross-part arms (DOUBLE, coverage, the window) are the join's"
   exit 0
 fi
 if [ "$SRCMODE" != 0 ]; then
@@ -2443,7 +2475,7 @@ case "$PASS" in
       _pr="${OUT%-p${PASS}.md}-p$((PASS - 1)).md"
       if [ "$_pr" != "$OUT" ] && [ -f "$_pr" ]; then
         _ea=SKIP
-        [ -n "$AI_DLC_ERA_TOKEN" ] && grep -qxF -- "$AI_DLC_ERA_TOKEN" "${PA}/s${SPRINT}/shards/${ARTIFACT}-p1/.era" 2>/dev/null && _ea=OWED
+        ai_dlc_era_open "${PA}/s${SPRINT}" "${ARTIFACT}" "$((PASS - 1))" && _ea=OWED
         [ "$_ea" = OWED ] || echo "ROUND-COMMIT: SKIP pre-era ${ARTIFACT}" >&2
         _pd=""
         [ "$_ea" != OWED ] || _pd="$(unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR; git -C "$(dirname "$_pr")" status --porcelain --untracked-files=all -- "$_pr" 2>/dev/null)"
@@ -2540,13 +2572,7 @@ else
   [ -e "$MANIFEST" ] && die "${SHARD_DIR} was split by section (${MANIFEST}); join it with --document, or its document is never assembled"
 fi
 
-# Arm H's own predicate, from the sibling. Same dir in both layouts (core/scripts/ and
-# scripts/ai-dlc/ each hold both files), so no walk from one core file to another.
-SIBLING="${JR_SCRIPT_DIR}/validate-adversarial-convergence.sh"
-[ -f "$SIBLING" ] || die "arm H's validator is not beside this script (${SIBLING}); reinstall ai-dlc"
-n_fn="$(grep -c '^repair_field() {' "$SIBLING")" || n_fn=0
-[ "$n_fn" = "1" ] || die "found ${n_fn} 'repair_field() {' definitions in ${SIBLING} (want exactly 1)"
-eval "$(grep -m1 '^repair_field() {' "$SIBLING")"
+rf_load
 
 # --- the parts. A glob that matches nothing is a refusal, never a join of zero parts.
 PARTS=""
@@ -3377,10 +3403,7 @@ EDITS=""
 CF_DEFER=1; [ "$DOCMODE$SUBJMODE" = 00 ] && CF_DEFER=0
 while IFS= read -r p; do
   [ -n "$p" ] || continue
-  for fld in disposition edit derivation; do
-    repair_field "$fld" "$p" || refuse "$(basename "$p") has no '${fld}:' field as arm H reads it; the joined record would read structured on another part's labels"
-  done
-  checks_refusals "$(checks_field 0 "$p")"
+  part_fields "$p"
   EDITS="${EDITS}$(CF_EDITS=1 checks_field 0 "$p")"
   _pc="$(part_cites "$p")"
   while IFS= read -r _t; do
@@ -3627,7 +3650,11 @@ fi
 COE_DIR="${PA}/s${SPRINT}/shards/coe-p1"
 _coe_owed=0
 if [ "$PARTY" = 0 ] && [ "$SUBJMODE" = 0 ] && [ "$DOCMODE" = 0 ] && [ "$ARTIFACT" = coe ] && [ "$PASS" = 1 ]; then
-  if [ -n "$AI_DLC_ERA_TOKEN" ] && grep -qxF -- "$AI_DLC_ERA_TOKEN" "${COE_DIR}/.era" 2>/dev/null; then _coe_owed=1
+  # A SERIAL pass 1 (partition-document.sh --map wrote shards/coe-p1/.era and one adversary wrote the pass) has no review
+  # shard to resolve a source against: SKIP, never a refusal.
+  _coe_sh=0; for _f in "${COE_DIR}"/*.md; do [ -f "$_f" ] && { _coe_sh=1; break; }; done
+  if ai_dlc_era_open "${PA}/s${SPRINT}" coe 1 && [ -f "${COE_DIR}/.era" ]; then
+    if [ "$_coe_sh" = 1 ]; then _coe_owed=1; else echo "COE-SOURCES: SKIP serial coe (pass 1 has no review shard)" >&2; fi
   else echo "COE-SOURCES: SKIP pre-era coe" >&2; fi
 fi
 if [ "$_coe_owed" = 1 ]; then

@@ -16,6 +16,17 @@ over one decision. Every other variant (`greenfield`, `brownfield-a`, `brownfiel
 `brownfield-c`) keeps the `discovery` → `research-requirements` two-step form unchanged; this
 step is never loaded for them.
 
+## Resume
+
+After a compaction the snapshot's Pipeline Position carries `sub_step`, the section of this file the lead was inside. Enter each section below by adding `--set sub_step requirements.md#<value> 'Pipeline Position'` to the `bash scripts/ai-dlc/snapshot-update.sh` call that section already makes (a standalone call only where none runs). Use the value only when the text before `#` equals `current_step_file`; any other value is stale from another step, so delete it and read this file from its top. Otherwise read the named section of this file, the snapshot's Open Items and teammate rows, and take the next action; never re-dispatch a teammate that the snapshot's teammate rows already lists.
+
+| sub_step | Section | Next action |
+|---|---|---|
+| `3` | 3. Locked Requirements | re-read the locked-requirements block this step has written so far and finish it |
+| `4` | 4. Authoring Dispatch | join the authoring deliverable named in the snapshot's teammate rows; dispatch only an author that has no row |
+| `5` | 5. Validation Cycle | read the newest pass file of the cycle's adversarial series and continue at the next pass |
+| `6` | 6. Gate Validation and Proceed | run this step's closing gate |
+
 ## EXECUTION SEQUENCE
 
 Your first action in this step is `bash scripts/ai-dlc/snapshot-update.sh --set current_step_file requirements.md 'Pipeline Position'`.
@@ -264,15 +275,6 @@ the answered decisions. A value the tree, the config, a chain or an API gives is
 dispatch and written into the PRD with its derivation, and the entry asks the operator to veto
 that derivation rather than to supply the value.
 
-**PRD validation.** Invoke `/bmad-prd` with the **validate** intent — structured completeness
-check against its own rubric. Fix the gaps it reports as part of this same dispatch (rather
-than a separate `pm` dispatch, since the authoring dispatch already holds the pen). It detects
-create / update / validate from the conversation, so say which you want rather than relying on
-inference: this call must not re-author the PRD. Under the headless contract the validate
-intent always writes both `validation-report.html` and `validation-report.md` into the run
-folder regardless of finding count, and returns `"offer_to_update": true` — read the report,
-do not treat the returned offer as an instruction to hand it the update.
-
 **Write `architecture-impact.md`** at `_bmad-output/planning-artifacts/s<N>/architecture-impact.md`
 — one line per FR:
 ```
@@ -337,13 +339,19 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
   `(decision)` entry after the last such Render line is a stale SPEC; the join checks it after the
   serial tail, not mid-round.
 - **Bookkeeping is a script, never a remediator pass.** Before the first adversarial pass, and
-  after each serial tail, run `scripts/ai-dlc/requirements-bookkeeping.sh --precheck <N>`: it
-  lists stale `derived` fences, slot bullets missing or different in the PRD's
-  `LOCKED_REQUIREMENTS` block, FRs with no or an unknown `(CAP-m)`, and cites past a file's end.
-  The script closes its own findings: `--rederive <file>...` rewrites stale fence outputs and
-  `--mirror-lr <N>` copies the slot's bullets into the PRD block, then `--seal <file>...` runs on
-  every file the script rewrote and `--precheck` re-runs until it prints `PRECHECK clean`. A
-  finding the script cannot close is the only one a `remediator` receives. The adversary reviews
+  after each serial tail and its SPEC render, run
+  `scripts/ai-dlc/requirements-bookkeeping.sh --precheck <N>`: it lists stale `derived` fences,
+  slot bullets missing or different in the PRD's `LOCKED_REQUIREMENTS` block, FRs with no or an
+  unknown `(CAP-m)`, cites past a file's end, and quotes attached to an
+  `operator-answers-history.md:<line>` cite that the entry holding that line does not carry. The
+  script closes two classes: `--rederive <file>...` rewrites stale fence outputs (`PRECHECK FENCE`)
+  and `--mirror-lr <N>` copies the slot's bullets into the PRD block (`PRECHECK MIRROR`), then
+  `--seal <file>...` runs on every file the script rewrote and `--precheck` re-runs until it
+  prints no `PRECHECK FENCE` or `PRECHECK MIRROR` line. A `PRECHECK QUOTE` line on the slot, or
+  on an `- LR-S<N>-` bullet of the PRD's block, is the lead's: the lead corrects the slot bullet
+  and runs `--mirror-lr <N>`. Every other `PRECHECK CAP`, `PRECHECK LOCATOR` and `PRECHECK QUOTE`
+  line goes to one `remediator`; a SPEC line is fixed through its `.memlog.md` and the one render.
+  `--precheck` runs again after that, and the loop ends at `PRECHECK clean`. The adversary reviews
   substance, not these.
 - **The adversarial series is named `s<N>/requirements-adversarial-p<M>`.** A sharded pass is
   written by `merge-adversarial-shards.sh --subject`, never by `--document`; a one-part subject's
@@ -372,8 +380,6 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
   `_bmad-output/planning-artifacts/s<N>/changelog-requirements.md` (`_gate-procedures.md` —
   "Where a changelog is written"; NOT the artifacts themselves), then proceed to gate
   validation.
-
-**Provenance check, run once the convergence cycle has ended.** Run `bash scripts/ai-dlc/verdict.sh validate-provenance-block <run-folder>/validation-report.md --require-skill bmad-prd`, where `<run-folder>` is the directory this step's §4 validate call wrote its report pair into; the required result is a `PASS` line and exit 0. `--allow-missing` is never passed: an artifact with no block is the finding, and Check 17's PRD-gate arm at this gate runs the same command.
 
 **Escalation vocabulary check, the step's last action before the gate.** Run `bash scripts/ai-dlc/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md`; the required result is a `PASS` line and exit 0. A `FAIL` names every escalation header whose status is outside the derived vocabulary, and a dated entry with no status line is one of them: repair each named entry (`escalations.md`) and re-run before the gate, because Check 2's script arm refuses the same file and the gate then fails with no adjudicator running.
 

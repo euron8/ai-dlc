@@ -200,7 +200,7 @@
 # CANONICAL RUN (--gate qa only; the merge over CROSS_FIRST's file, the execution owner's, and
 #   --check-serial over its one file). Read only when the verdict (merged after any forced
 #   NEEDS_REWORK, or the serial file's) is PASS: a NEEDS_REWORK with no counts is a legitimate early
-#   REJECT (qa.md Handoff Evidence Precondition). Labels are record-only-diff.sh's LABEL grammar
+#   REJECT (gate 1's validate-handoff-evidence.sh refuses a missing record). Labels are record-only-diff.sh's LABEL grammar
 #   (column 0 or after one `- `/`* ` bullet, outside fences, the first one read):
 #       Canonical run: <invocation and working directory>
 #       Canonical result: <the run's summary line, with counts>
