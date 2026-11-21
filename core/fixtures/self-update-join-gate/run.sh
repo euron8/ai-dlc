@@ -212,7 +212,7 @@ fi
 # UNDECIDED in its range.
 out_mo="$(verdict r_current)"
 if ! have r_current; then dropped r_current
-elif ! grep -q 'whose CHECK_LOADED anchor lives in' <<<"$out_mo" && grep -q 'SELF-UPDATE-OK' <<<"$out_mo"; then
+elif ! grep -q 'whose CHECK_LOADED anchor lives in' <<<"$out_mo" && awk -F'\t' '$1 == "SELF-UPDATE-OK" && $2 !~ /\// {f=1} END {exit !f}' <<<"$out_mo"; then
   ok "a pull that changes no rulebook file emits no CHECK_LOADED defer and still emits a SELF-UPDATE-OK row — the arm is a differential (the pull may still defer for another reason)"
 else
   bad "a pull with NO rulebook change emitted the CHECK_LOADED defer or no SELF-UPDATE-OK row — the arm is static, not differential"

@@ -69,14 +69,14 @@ sg_copy() { # sg_copy <dest dir> <file>... -> copies the named siblings of the g
 #                         arms, arm C's carry refusal, arm C, arm D's preclassify, the push-hook layouts, the staging-write refusal
 #   b  vr pl hu1 sh       the verdict record, the pre-written miniature, the unchanged-script hook
 #                         worlds, the hook shapes the scan must not misread
-#   c  pu hu2             the push wrapper (self-update-push.sh), the second half of the hook-world
-#                         arms and the real-hook depth probe
+#   c  pu hu2 gl          the push wrapper (self-update-push.sh), the second half of the hook-world
+#                         arms and the real-hook depth probe, the hook's for-list glob syntax route
 #   d  qw mp hk av        the quoting cells, the failed-producer worlds, the hook-the-push-runs worlds,
 #                         the hook's own argv and the remedy
 SHARDS="a b c d"
 UNITS_a="base ss sc ac su pp stg"
 UNITS_b="vr pl hu1 sh"
-UNITS_c="pu hu2"
+UNITS_c="pu hu2 gl"
 UNITS_d="qw mp hk av"
 GROUP=""
 while [ "$#" -gt 0 ]; do
@@ -2973,8 +2973,13 @@ dl_scan() {
   t="$(printf '%s\n' "$o" | awk -F'\t' '$1 ~ /^SELF-UPDATE-/ && $2 == "-" {sub(/^SELF-UPDATE-/, "", $1); print $1; exit}')"
   printf 'r3=%s term=%s\n' "${r:-none}" "${t:-none}"
 }
-sd_assert "del-held" "$(dl_scan "$GATE" del held)" "r3=[tests/fixtures/x/b.sh] term=DEFER" \
-  "a pull deleting core/fixtures/x/b.sh, which the consumer holds at tests/fixtures/x/b.sh, DEFERs naming it"
+# dl_msg <gate> <world> <consumer> -> "cannot be green on its own" when the terminal DEFER row carries it, else "none"
+dl_msg() {
+  LC_ALL=en_US.UTF-8 bash "$1" --no-safe-stop-advice "$DL/$2/dist" "$(cat "$DL/$2/B")" "$(cat "$DL/$2/T")" "$DL/$2/$3" 2>/dev/null \
+    | awk -F'\t' '$1 == "SELF-UPDATE-DEFER" && $2 == "-" && $3 ~ /cannot be green on its own/ {print "cannot be green on its own"; f=1; exit} END{if (!f) print "none"}'
+}
+sd_assert "del-held" "$(dl_scan "$GATE" del held) $(dl_msg "$GATE" del held)" "r3=[tests/fixtures/x/b.sh] term=DEFER cannot be green on its own" \
+  "a pull deleting core/fixtures/x/b.sh, which the consumer holds at tests/fixtures/x/b.sh, DEFERs naming it, and the terminal row says the slice cannot be green on its own"
 sd_assert "del-lack" "$(dl_scan "$GATE" del lack)" "r3=none term=OK" \
   "the same pull against a consumer that already lacks every deleted file has no R3 row and stays OK"
 sd_assert "del-claude" "$(dl_scan "$GATE" del claude)" "r3=none term=OK" \
@@ -3603,6 +3608,13 @@ ss_assert "sh-real-229" "${SH_HOOK:+found} $SH_RH" "found D[--root .] R[--check 
 # HIDDEN RUNS: a path reaching a run through `set --` (with or without a variable prefix), a `"$V/<path>"` at
 # command position, or a `for` list item reads X. Twins one property apart: the same `"$V/<path>"` as an
 # argument of `cat` stays U, and a `-f` test inside a `for` body (the path is no list item) stays M test.
+# Also X, each with its twin: printf output in a function body, a capture or a pipe (top-level printf stays
+# M text); a compare whose `$v` the hook runs (one whose variable only tests and printf read stays M eq); an
+# array element, one line or several (a subshell run stays R); a heredoc body line (the run after its
+# terminator stays R); a for-list item after an `echo` on the same line, or listed after an `echo` item (a
+# lone echo stays M text, and a path after `echo hi;` is no printf text and reads U). No heredoc opens on an
+# arithmetic `<<`, a quoted one or a `<<<` here-string (the run on the next line stays R), and printf text
+# before `||` is unpiped.
 SH_HID="$AV/hidden-hook"
 cat > "$SH_HID" <<'HIDEOF'
 if [ -f "$ct/t" ]; then set -- bash "$ct/scripts/ai-dlc/hid-set.sh" --root "$ct"; fi
@@ -3612,10 +3624,42 @@ cat "$ct/scripts/ai-dlc/hid-near.sh"
 for c in scripts/ai-dlc/hid-for.sh core/scripts/hid-for.sh; do hr="$c"; break; done
 if bash "$hr" --root .; then :; fi
 for c in a b; do [ -f scripts/ai-dlc/hid-fornear.sh ] && echo ok; done
+d(){ printf '%s' scripts/ai-dlc/hid-fn.sh; }; if bash "$(d)"; then :; fi
+hf() {
+  printf '%s\n' scripts/ai-dlc/hid-fnb.sh
+}
+x="$(printf '%s' scripts/ai-dlc/hid-cap.sh)"; bash "$x"
+printf '%s\n' scripts/ai-dlc/hid-pipe.sh | xargs bash
+printf '%s\n' "scripts/ai-dlc/hid-text.sh"
+[[ "$v" == "scripts/ai-dlc/hid-eq.sh" ]] && bash "$v"
+[[ "$w" == "scripts/ai-dlc/hid-eqnear.sh" ]] && printf '%s\n' "$w"
+if [ -n "$w" ]; then echo "$w"; fi
+arr=( scripts/ai-dlc/hid-arr.sh --k ); "${arr[@]}"
+local -a marr=(
+  bash
+  scripts/ai-dlc/hid-arrml.sh --k
+)
+"${marr[@]}"
+( bash scripts/ai-dlc/hid-sub.sh --k )
+bash <<EOF
+scripts/ai-dlc/hid-here.sh --k
+EOF
+bash scripts/ai-dlc/hid-after.sh --k
+echo hi; for c in scripts/ai-dlc/hid-forx.sh core/x.sh; do bash "$c"; done
+echo "scripts/ai-dlc/hid-echo.sh"
+echo hi; cat scripts/ai-dlc/hid-semi.sh
+for c in echo scripts/ai-dlc/hid-forecho.sh; do bash "$c"; done
+n=$((1<<2))
+bash scripts/ai-dlc/hid-arith.sh
+echo "a<<b"
+bash scripts/ai-dlc/hid-qlt.sh
+printf '%s\n' scripts/ai-dlc/hid-ortext.sh || exit 1
+cat <<<hs
+bash scripts/ai-dlc/hid-hs.sh
 HIDEOF
-SH_HIDK="$( (eval "$(awk '/^gate_argv_scan\(\) \{/,/^\}/' "$GATE")"; for n in hid-set hid-lit hid-cmd hid-near hid-for hid-fornear; do printf '%s.sh=' "$n"; gate_argv_scan "$SH_HID" "$n.sh" | awk -F'\t' '{printf "%s%s", (k++ ? "," : ""), $1 ($1 == "M" ? ":" $3 : "")}'; printf ' '; done) 2>/dev/null)"
-ss_assert "sh-hidden-runs" "$SH_HIDK" "hid-set.sh=X hid-lit.sh=X hid-cmd.sh=X hid-near.sh=U hid-for.sh=X hid-fornear.sh=M:test " \
-  "set --, a command-position expansion and a for-list item read X; the same expansion as a cat argument stays U and an existence test inside a for body stays M test"
+SH_HIDK="$( (eval "$(awk '/^gate_argv_scan\(\) \{/,/^\}/' "$GATE")"; for n in hid-set hid-lit hid-cmd hid-near hid-for hid-fornear hid-fn hid-fnb hid-cap hid-pipe hid-text hid-eq hid-eqnear hid-arr hid-arrml hid-sub hid-here hid-after hid-forx hid-echo hid-semi hid-forecho hid-arith hid-qlt hid-ortext hid-hs; do printf '%s.sh=' "$n"; gate_argv_scan "$SH_HID" "$n.sh" | awk -F'\t' '{printf "%s%s", (k++ ? "," : ""), $1 ($1 == "M" ? ":" $3 : "")}'; printf ' '; done) 2>/dev/null)"
+ss_assert "sh-hidden-runs" "$SH_HIDK" "hid-set.sh=X hid-lit.sh=X hid-cmd.sh=X hid-near.sh=U hid-for.sh=X hid-fornear.sh=M:test hid-fn.sh=X hid-fnb.sh=X hid-cap.sh=X hid-pipe.sh=X hid-text.sh=M:text hid-eq.sh=X hid-eqnear.sh=M:eq hid-arr.sh=X hid-arrml.sh=X hid-sub.sh=R hid-here.sh=X hid-after.sh=R hid-forx.sh=X hid-echo.sh=M:text hid-semi.sh=U hid-forecho.sh=X hid-arith.sh=R hid-qlt.sh=R hid-ortext.sh=M:text hid-hs.sh=R " \
+  "set --, a command-position expansion, a for-list item (also after an echo on the same line), printf output in a function body, capture or pipe, a compare whose variable the hook runs, an array element and a heredoc body line read X; the same expansion as a cat argument stays U, an existence test inside a for body stays M test, top-level printf/echo text stays M text, a compare whose variable only tests and printf read stays M eq, a subshell run and a run after the heredoc terminator stay R"
 SH_229='      out="$(bash scripts/ai-dlc/render-agent-definitions.sh --root . 2>&1)"'
 SH_W="$(grep -n -A2 -F -- "$SH_229" "$SH_HOOK" 2>/dev/null | sed 's/^[0-9]*[:-]//' | sed 's/render-agent-definitions/sa-w229/')"
 SH_S3="$(grep -n -A2 -F -- 'sa-w229.sh --root' "$AV/s/cons/.githooks/pre-push" | sed 's/^[0-9]*[:-]//')"
@@ -3639,6 +3683,180 @@ ss_assert "sh-true-tail" "$(av_st "$SH_S" sa-true.sh) $(av_has "$SH_S" sa-true.s
   "a trailing || true discards the status; || exit 1, one word apart, reads it"
 ss_assert "sh-step" "$(av_st "$SH_S" sa-step.sh) $(av_st "$SH_S" sa-steptrue.sh)" "SELF-UPDATE-DEFER SELF-UPDATE-DEFER" \
   "a single-line step \"x\" bash … is a run step reads, with or without a trailing || true"
+# THE REAL HOOK, TWO MACHINERY-ONLY PULLS (shard b): one changing only core-paths.sh, which the hook runs
+# through a path the gate cannot follow, and one changing only validate-compact-window.sh, a plain
+# run-and-read row. The first must name core-paths.sh UNDECIDED and end in the DEFER row; the second must be OK
+# with no DEFER row at all.
+sh_cp_world() { # sh_cp_world <dir> <changed script> -> <dir>/{dist,cons,B,T}
+  local w="$1" f
+  mkdir -p "$w/dist/core/scripts" "$w/cons/.githooks" "$w/cons/scripts/ai-dlc"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"
+  for f in core-paths.sh validate-compact-window.sh; do
+    printf '#!/bin/sh\nexit 0\n' > "$w/dist/core/scripts/$f"
+    cp "$w/dist/core/scripts/$f" "$w/cons/scripts/ai-dlc/$f"
+  done
+  cp "$SH_HOOK" "$w/cons/.githooks/pre-push"; chmod +x "$w/cons/.githooks/pre-push"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  printf '#!/bin/sh\n# reworded\nexit 0\n' > "$w/dist/core/scripts/$2"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+sh_cp_world "$AV/cp1" core-paths.sh
+sh_cp_world "$AV/cp2" validate-compact-window.sh
+SH_CP1="$(av_run "$GATE" "$AV/cp1")"
+SH_CP2="$(av_run "$GATE" "$AV/cp2")"
+ss_assert "sh-core-paths-hold" "$(av_st "$SH_CP1" core-paths.sh) $(av_st "$SH_CP1" -)" "SELF-UPDATE-UNDECIDED SELF-UPDATE-DEFER" \
+  "a pull changing only core-paths.sh, run by the real hook through a path the gate cannot follow, reads UNDECIDED for it and ends in the DEFER row"
+ss_assert "sh-core-paths-twin" "$(av_st "$SH_CP2" validate-compact-window.sh) $(av_ref "$SH_CP2") $(av_st "$SH_CP2" -)" "SELF-UPDATE-OK 0 " \
+  "a pull changing only a run-and-read gating script the real hook names reads OK and carries no DEFER or UNDECIDED row, so the core-paths.sh hold is not a blanket one"
+fi
+if sg gl; then
+# --- THE GLOB ROUTE: A CHANGED SCRIPT THE HOOK SYNTAX-CHECKS THROUGH A for-LIST GLOB (BL-1195 (v)) ---
+# The real hook's shell-syntax step runs `bash -n` over every file its for-list globs expand to, and
+# names no script, so a changed script whose incoming copy fails `bash -n` refuses the push while the
+# literal-name route reads "none of which the pre-push invokes". The hook below carries that step's
+# span verbatim (precondition gl-pre-span). One gate run per world:
+#   gl-main    gl-del deleted, gl-good reworded, gl-new added broken, gl-xbad broken -> del OK, good OK,
+#              new DEFER, xbad DEFER, and the `-` row DEFERs instead of the "none of which" OK
+#   gl-hk      only .claude/hooks/ai-dlc-glhk.sh breaks, no core/scripts/ path moves -> DEFER through
+#              the "changes no core/scripts/ path" terminal
+#   gl-body    the same span with `bash "$f" --check` for `bash -n "$f"` -> UNDECIDED
+#   gl-noglob  a for-list naming the path literally, no glob -> the literal row only, as before
+#   gl-own     theirs' hook brings the route; the consumer's own unchanged gl-own.sh fails bash -n,
+#              which today's hook never asks -> DEFER
+#   gl-drop    theirs' hook drops the route -> no syntax row, the `-` row stays OK
+GL="$AV/gl"; mkdir -p "$GL"
+cat > "$GL/span" <<'GLEOF'
+# SYNTAX_GLOB_BEGIN
+syntax_all() {
+  local rc=0 f
+  for f in scripts/*.sh scripts/ai-dlc/*.sh .claude/hooks/*.sh \
+           .claude/skills/ai-dlc-update/reconcile/*.sh .githooks/*; do
+    [ -f "$f" ] || continue
+    bash -n "$f" 2>/dev/null || { printf '   syntax error: %s\n' "$f"; rc=1; }
+  done
+  return $rc
+}
+# SYNTAX_GLOB_END
+GLEOF
+GL_HOOK=""
+for cand in "$DIR/../../git-hooks/pre-push" "$DIR/../../../.githooks/pre-push"; do
+  [ -f "$cand" ] && { GL_HOOK="$cand"; break; }
+done
+[ -n "$GL_HOOK" ] && echo "HERMETIC-CONSUMED $(cd "$(dirname "$GL_HOOK")" && pwd -P)/pre-push"
+ss_assert "gl-pre-span" "$(sed -n '/^# SYNTAX_GLOB_BEGIN$/,/^# SYNTAX_GLOB_END$/p' "${GL_HOOK:-/dev/null}" | cmp -s - "$GL/span" && echo same)" "same" \
+  "the world's syntax step is the real hook's SYNTAX_GLOB span byte for byte"
+# PATHNAME SEMANTICS: the real span lists scripts/*.sh beside scripts/ai-dlc/*.sh, so a matcher whose
+# `*` crosses `/` reads the same on every world above; only the matcher itself separates them.
+ss_assert "gl-glob" "$( (eval "$(awk '/^gate_sg_glob\(\) \{/,/^\}/' "$GATE")"
+  for gp in 'scripts/*.sh|scripts/ai-dlc/x.sh' 'scripts/ai-dlc/*.sh|scripts/ai-dlc/x.sh' '.githooks/*|.githooks/pre-push' '.claude/hooks/*.sh|.claude/hooks/a/b.sh'; do
+    gate_sg_glob "${gp%%|*}" "${gp#*|}" && printf 1 || printf 0; done) 2>/dev/null)" "0110" \
+  "a route glob matches with pathname semantics: no * crosses a /"
+# THE ROUTE SCAN, in process: a `done` inside a quoted string does not close the body, and `bash -n` of
+# an expansion `${g%.sh}.bak` checks another path; one property apart, `bash -n "$h"` stays SYNTAX, and
+# so does the real hook.
+cat > "$GL/scan" <<'GLEOF'
+for f in scripts/ai-dlc/*.sh; do
+  echo "checked, done with $f"
+  bash "$f" --check || rc=1
+done
+for g in .claude/hooks/*.sh; do bash -n "${g%.sh}.bak"; done
+for h in .claude/hooks/*.sh; do bash -n "$h" || printf '%s\n' "$h"; done
+GLEOF
+ss_assert "gl-routes" "$( (eval "$(awk '/^gate_sg_routes\(\) \{/,/^\}/' "$GATE")"
+  gate_sg_routes "$GL/scan" | cut -f1,2 | tr '\t\n' ': '; gate_sg_routes "${GL_HOOK:-/dev/null}" | cut -f1 | tr '\n' ' ') 2>/dev/null)" \
+  "X:1 X:5 SYNTAX:6 SYNTAX " \
+  "a quoted done and bash -n of a reshaped expansion read X; a bash -n body and the real hook read SYNTAX"
+# A printf/echo use of the loop variable is a print only while its own simple command is neither captured
+# nor piped: `echo "$f" | bash`, `printf .. "$f" | xargs bash`, `eval "$(printf .. "$f")"` and a backtick
+# capture run the path (X); an unpiped printf, a `||` continuation and the live syntax_all body stay SYNTAX.
+cat > "$GL/scan-pipe" <<'GLEOF'
+for f in scripts/ai-dlc/*.sh; do echo "$f" | bash; done
+for f in scripts/ai-dlc/*.sh; do printf "%s\n" "$f" | xargs bash; done
+for f in scripts/ai-dlc/*.sh; do eval "$(printf "bash %s" "$f")"; done
+for f in scripts/ai-dlc/*.sh; do x=`printf "%s" "$f"`; done
+for f in scripts/ai-dlc/*.sh; do printf "%s\n" "$f" || true; done
+for f in scripts/ai-dlc/*.sh; do echo "$f" || true; done
+for f in scripts/ai-dlc/*.sh; do bash -n "$f" 2>/dev/null || { printf '   syntax error: %s\n' "$f"; rc=1; }; done
+GLEOF
+ss_assert "gl-pipe" "$( (eval "$(awk '/^gate_sg_routes\(\) \{/,/^\}/' "$GATE")"
+  gate_sg_routes "$GL/scan-pipe" | cut -f1,2 | tr '\t\n' ': ') 2>/dev/null)" \
+  "X:1 X:2 X:3 X:4 SYNTAX:5 SYNTAX:6 SYNTAX:7 " \
+  "a printf/echo of the loop variable that is piped or captured reads X; the unpiped, the || and the live syntax_all body read SYNTAX"
+gl_hook() { # gl_hook <out> <span-file>
+  { printf '#!/usr/bin/env bash\nset -uo pipefail\nstep() { shift; "$@"; }\n'; cat "$2"
+    printf 'step "shell syntax (every shipped script and hook)" syntax_all\n'; } > "$1"
+}
+gl_hook "$GL/hook-real" "$GL/span"
+sed 's|bash -n "\$f" 2>/dev/null|bash "$f" --check 2>/dev/null|' "$GL/span" > "$GL/span-body"
+gl_hook "$GL/hook-body" "$GL/span-body"
+printf '#!/usr/bin/env bash\nfor f in scripts/ai-dlc/gl-xbad.sh; do bash -n "$f" || exit 1; done\n' > "$GL/hook-noglob"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$GL/hook-none"
+gl_ok() { printf '#!/usr/bin/env bash\n# %s\nexit 0\n' "$2" > "$1"; }
+gl_broken() { printf '#!/usr/bin/env bash\nif then\n' > "$1"; }
+gl_world() { # gl_world <name> <base-hook> <theirs-hook> -> $GL/<name>/{dist,cons,B,T}
+  local w="$GL/$1" n
+  mkdir -p "$w/dist/core/rules" "$w/dist/core/scripts" "$w/dist/core/hooks" "$w/dist/core/git-hooks" \
+           "$w/cons/.githooks" "$w/cons/scripts/ai-dlc" "$w/cons/.claude/hooks" "$w/cons/.claude/agents"
+  git -C "$w/dist" init -q
+  printf '1.0.0\n' > "$w/dist/VERSION"; printf 'gl machinery\n' > "$w/dist/core/rules/gl.md"
+  for n in gl-del gl-good gl-xbad; do gl_ok "$w/dist/core/scripts/$n.sh" base; done
+  gl_ok "$w/dist/core/hooks/ai-dlc-glhk.sh" base
+  cp "$2" "$w/dist/core/git-hooks/pre-push"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm base >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/B"
+  cp "$w/dist/core/scripts/"*.sh "$w/cons/scripts/ai-dlc/"
+  cp "$w/dist/core/hooks/ai-dlc-glhk.sh" "$w/cons/.claude/hooks/"
+  cp "$2" "$w/cons/.githooks/pre-push"; chmod +x "$w/cons/.githooks/pre-push"
+  printf 'definitions\n' > "$w/cons/.claude/agents/dev.md"
+  printf '1.1.0\n' > "$w/dist/VERSION"
+  case "$1" in
+    main) gl_ok "$w/dist/core/scripts/gl-good.sh" reworded; gl_broken "$w/dist/core/scripts/gl-xbad.sh"
+          gl_broken "$w/dist/core/scripts/gl-new.sh"; rm -f "$w/dist/core/scripts/gl-del.sh" ;;
+    hk)   gl_broken "$w/dist/core/hooks/ai-dlc-glhk.sh" ;;
+    body) gl_ok "$w/dist/core/scripts/gl-good.sh" reworded ;;
+    noglob) gl_broken "$w/dist/core/scripts/gl-xbad.sh" ;;
+    own)  gl_broken "$w/cons/scripts/ai-dlc/gl-own.sh"
+          mkdir -p "$w/cons/.githooks/zz.d"; printf 'x\n' > "$w/cons/.githooks/zz.d/keep" ;;
+    drop) gl_ok "$w/dist/core/scripts/gl-good.sh" reworded ;;
+  esac
+  cp "$3" "$w/dist/core/git-hooks/pre-push"
+  av_git "$w/dist" add -A >/dev/null 2>&1; av_git "$w/dist" commit -qm theirs >/dev/null 2>&1
+  git -C "$w/dist" rev-parse HEAD > "$w/T"
+  git -C "$w/cons" init -q
+  av_git "$w/cons" add -A >/dev/null 2>&1; av_git "$w/cons" commit -qm consumer >/dev/null 2>&1
+}
+gl_world main "$GL/hook-real" "$GL/hook-real"
+gl_world hk "$GL/hook-real" "$GL/hook-real"
+gl_world body "$GL/hook-body" "$GL/hook-body"
+gl_world noglob "$GL/hook-noglob" "$GL/hook-noglob"
+gl_world own "$GL/hook-none" "$GL/hook-real"
+gl_world drop "$GL/hook-real" "$GL/hook-none"
+gl_st() { printf '%s\n' "$1" | awk -F'\t' -v s="$2" '$2 == s {r = $1; sub(/^SELF-UPDATE-/, "", r); print r; f = 1; exit} END {if (!f) print "none"}'; }
+GL_M="$(av_run "$GATE" "$GL/main")"
+ss_assert "gl-main" "del=$(gl_st "$GL_M" scripts/ai-dlc/gl-del.sh) good=$(gl_st "$GL_M" scripts/ai-dlc/gl-good.sh) new=$(gl_st "$GL_M" scripts/ai-dlc/gl-new.sh) xbad=$(gl_st "$GL_M" scripts/ai-dlc/gl-xbad.sh) all=$(gl_st "$GL_M" -) $(av_has "$GL_M" scripts/ai-dlc/gl-xbad.sh 'bash -n current 0 incoming [1-9]')" \
+  "del=OK good=OK new=DEFER xbad=DEFER all=DEFER yes" \
+  "a changed script the syntax step globs DEFERs when its incoming copy fails bash -n; a deletion and a passing rewrite stay OK, and the run DEFERs instead of reading none-of-which OK"
+GL_H="$(av_run "$GATE" "$GL/hk")"
+ss_assert "gl-hk" "hk=$(gl_st "$GL_H" .claude/hooks/ai-dlc-glhk.sh) all=$(gl_st "$GL_H" -) $(av_has "$GL_H" - 'shell-syntax step')" "hk=DEFER all=DEFER yes" \
+  "a broken hook script with no core/scripts/ change DEFERs through the changes-no-core/scripts terminal"
+GL_B="$(av_run "$GATE" "$GL/body")"
+ss_assert "gl-body" "good=$(gl_st "$GL_B" scripts/ai-dlc/gl-good.sh) all=$(gl_st "$GL_B" syntax-route)" "good=UNDECIDED all=none" \
+  "a loop body that RUNS the path (bash \"\$f\" --check) is not a syntax route: UNDECIDED"
+GL_N="$(av_run "$GATE" "$GL/noglob")"
+ss_assert "gl-noglob" "lit=$(gl_st "$GL_N" gl-xbad.sh) glob=$(gl_st "$GL_N" scripts/ai-dlc/gl-xbad.sh)" "lit=UNDECIDED glob=none" \
+  "a for-list with no glob item is no syntax route: the literal row alone, as before"
+GL_O="$(av_run "$GATE" "$GL/own")"
+ss_assert "gl-own" "own=$(gl_st "$GL_O" scripts/ai-dlc/gl-own.sh) hook=$(gl_st "$GL_O" .githooks/pre-push) all=$(gl_st "$GL_O" -)" "own=DEFER hook=OK all=DEFER" \
+  "theirs' hook brings the route, so the consumer's own unchanged script it now checks DEFERs when it fails bash -n"
+GL_D="$(av_run "$GATE" "$GL/drop")"
+ss_assert "gl-drop" "good=$(gl_st "$GL_D" scripts/ai-dlc/gl-good.sh) route=$(gl_st "$GL_D" syntax-route) all=$(gl_st "$GL_D" -)" "good=none route=none all=OK" \
+  "theirs' hook drops the route: the push asks no syntax question, so nothing defers on it"
 fi
 rm -rf "$AV"
 
