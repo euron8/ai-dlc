@@ -412,6 +412,22 @@ carried_in_context() {
   return 1
 }
 
+# carried_in_shadow <to-sha> <own-anchor> <line> <site> -- is <line>'s carrier in a section at TO that
+# the body carries? Own anchor first, then each anchor changed_lines staged in "$RO_T/<site>-others".
+carried_in_shadow() {
+  local id fl n=0
+  IFS= read -r fl < "$RO_T/$4-flat-own" || :
+  if carries "$fl" "$3"; then carried_in_context "$1" "$2" "$3"; return; fi
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    n=$((n+1))
+    [ -e "$RO_T/$4-flat-$n" ] || printf '%s\n' "$(section_flat "$1" "$id")" > "$RO_T/$4-flat-$n"
+    IFS= read -r fl < "$RO_T/$4-flat-$n" || :
+    if carries "$fl" "$3" && carried_in_context "$1" "$id" "$3"; then return 0; fi
+  done < "$RO_T/$4-others"
+  return 1
+}
+
 # changed_lines <from-sha> <to-sha> <anchor> — the substantive lines of the section at
 # FROM that the section at TO no longer carries as a whole line, EXCEPT those whose words
 # survive at TO inside a longer run of text that the body ALSO carries.
@@ -440,18 +456,25 @@ carried_in_context() {
 # Whole-line presence at TO is checked first, so an UNCHANGED line the body omits is never
 # reported as new in the mirror direction. The 24-character floor on the needle side
 # excludes coincidental short matches as before.
+# A line reflowed ACROSS sections: the own section decides whenever it still contains the line's
+# words (the body must carry its carrier there); the other sections this override shadows are
+# consulted only when the own section at TO no longer contains the words, under the same rule
+# (the section holds the words AND the body carries the carrier).
 # Returns 3 when any section it reads could not be staged. <site> keeps the two directions'
 # files apart.
 changed_lines() { # changed_lines <from-sha> <to-sha> <anchor> <site>
-  local to_lines to_flat line
+  local to_lines line
   to_lines="$(section_lines "$2" "$3" "$4-to")" || return 3
-  to_flat="$(section_flat "$2" "$3")"
+  shadow_ids "$4-anchors" || return 3
+  grep -vxF -- "$3" "$RO_T/$4-anchors" > "$RO_T/$4-others"; [ "$?" -le 1 ] || return 3
+  rm -f "$RO_T/$4-flat-"[0-9]*
+  printf '%s\n' "$(section_flat "$2" "$3")" > "$RO_T/$4-flat-own"
   section_lines "$1" "$3" "$4-from" > "$RO_T/$4-from-lines" || return 3
   rm -f "$RO_T/refused"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     ro_has_line "$to_lines" "$line" && continue
-    carries "$to_flat" "$line" && carried_in_context "$2" "$3" "$line" && continue
+    carried_in_shadow "$2" "$3" "$line" "$4" && continue
     printf '%s\n' "$line"
   done < "$RO_T/$4-from-lines"
   [ ! -e "$RO_T/refused" ] || return 3
