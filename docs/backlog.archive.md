@@ -47985,3 +47985,24 @@ Step: n/a
 verify: manual
 
 
+## BL-1208 — the convergence validator refused a carry-over evaluation pass 2 written as the single final adversary the step prescribes, whenever the document was split into parts
+
+**DEFECT.** Filed 2026-11-21 (batch 263, C). Owner: `core/scripts/validate-adversarial-convergence.sh` (arm K2, SECTIONS), `core/fixtures/check-24-adversarial-convergence/`.
+
+Goal: a carry-over evaluation pass 2 or later, written as the one final adversary that `steps/carry-over-evaluation.md` prescribes after a sectioned pass 1, is not refused by arm K2. One done condition: with `partition-document.sh --map` having split the evaluation, a terminal `coe-adversarial-p<M>.md` with M of 2 or more owes no `shard_tool_use_ids:` when the series' pass 1 carries them (or pass 1 was single over a document that mapped SERIAL on its own bytes) and K2 prints one NOTE; a single-adversary pass 1, whether terminal or followed by later passes, and every other series stay refused.
+
+Record: the step prescribes pass 2 as one final adversary with no shards, while K2 required the shard record of any pass over a document that `--map` split. Found by ai-dlc-bf's probe `k2probe3.sh`: single-adversary passes 2 and 3 after a sectioned pass 1 exited 1 with FAIL K2, and the sharded controls exited 0. The tip adversary then found the first exemption let an unsharded pass 1 through once a single-adversary pass 2 existed, because K2 reads only the terminal pass; the pass-1 condition closes that.
+
+Work list:
+
+1. K2 exempts a terminal carry-over evaluation pass of 2 or later, keyed on the series stem and granted only when the series' pass 1 (`coe-adversarial-p1.md`) carries `shard_tool_use_ids:` or, being single, reviewed a document that `--map` answers SERIAL on pass 1's own bytes (Rule 28 exception 4); a single pass 1 whose own document maps FAILs K2 naming pass 1, and pass 1 bytes that cannot be recovered read PENDING (K2). It prints `NOTE (K2 -- SECTIONS): coe-adversarial-p2.md is a carry-over-evaluation pass 2 or later, written as the single final adversary the step prescribes; it owes no shard_tool_use_ids:.` Fixture arms in `check-24-adversarial-convergence` unit k2: carry-over pass 2 after a sectioned pass 1 passes with the NOTE; a single pass 1 over a SERIAL document, then the document grown and a single pass 2, passes with the NOTE; a single pass 1 over a partitioned document then a single pass 2 FAILs; carry-over pass 1 written single and a non-carry-over pass 2 written single still FAIL.
+
+**LANDED (v0.1216.0).** Batch 263, C. Item 1 built. `k2probe3` before: passes 2 and 3 exit 1; after: all four worlds exit 0. Hand-run mutants (exemption keyed on any stem; limited to pass 2; also covering pass 1; the pass-1 condition dropped; the SERIAL-pass-1 clause dropped) each killed by a probe world.
+
+Provenance: batch 263, C; id allocated by the lead.
+
+BL-868: no test depends on load.
+
+Step: n/a
+
+verify: sh grep -q 'is a carry-over-evaluation pass 2 or later, written as the single final adversary the step prescribes' core/scripts/validate-adversarial-convergence.sh && grep -q 'expect k2-coe-p2 0 ' core/fixtures/check-24-adversarial-convergence/run.sh && grep -q 'k2-noncoe-p2' core/fixtures/check-24-adversarial-convergence/run.sh

@@ -13,6 +13,9 @@
 #                                                   nothing (arm R)
 #   merge-adversarial-shards.sh --body-counts <pass file>...   per file `<file>\t<C>\t<M>`, its body's
 #                                                   CRITICAL and MAJOR finding headings (Check 24)
+#   merge-adversarial-shards.sh --batch (derived-set|repair-introduced):<pass file>...
+#                                                   those two modes over many files in ONE start: per
+#                                                   argument `@@BATCH <n>`, the mode's output, `@@BATCH-END <rc>`
 #   merge-adversarial-shards.sh --map <shard-dir>   print `<ordinal>\t<basename>`, one per story,
 #                                                   for the lead to put in each shard brief
 #   merge-adversarial-shards.sh --document <path> <shard-dir>
@@ -1571,6 +1574,25 @@ ri_derive() {
           print "H\t" st "\t" (tot > 0 ? int(ch * 1000 / tot) / 10 : 0) "%\t" ch "\t" tot
           if ((st in OS) && tot > 0 && ch * 4 > tot) ceil = ceil " " st "=" int(ch * 1000 / tot) / 10 "%"
         }
+        # A RENAMED story: a stem new in this pass is paired with the predecessor stem it shares the most lines with among
+        # those this pass dropped, when it shares at least 20% of its own bytes, and the same 25% ceiling applies to the
+        # pair (the new stem against the dropped stem it came from). An unrelated add plus drop that shares 20% or more of
+        # its bytes by chance (boilerplate) reads as a rename: the false-positive shape.
+        for (j = 1; j <= nst; j++) {
+          st = ns[j]; if (st in OS) continue
+          tot = 0; for (i = 1; i <= NN[st]; i++) tot += length(NL[st, i]) + 1
+          best = ""; bm = 0
+          for (k = 1; k <= nos; k++) {
+            o = osl[k]; if ((o in NN) || (o in used)) continue
+            split("", tc); m = 0
+            for (i = 1; i <= NN[st]; i++) { l = NL[st, i]; tc[l]++; if ((o SUBSEP l) in OC && tc[l] <= OC[o, l]) m += length(l) + 1 }
+            if (m > bm) { bm = m; best = o }
+          }
+          if (best == "" || tot == 0 || bm * 5 < tot) continue
+          used[best] = 1; ch = tot - bm
+          print "H\t" st "\t" int(ch * 1000 / tot) / 10 "%\t" ch "\t" tot
+          if (ch * 4 > tot) ceil = ceil " " st "=" int(ch * 1000 / tot) / 10 "%"
+        }
       }
       if (ceil != "") print "C\t" substr(ceil, 2)
       doc = (nst == 1 && ns[1] == "-")
@@ -1912,8 +1934,7 @@ case "${1:-}" in
     # check). Check 24 arms K and N re-derive that field through the merge, so a hand-typed one fails there.
     if grep -qE '^shard_tool_use_ids:[[:space:]]+.*[A-Za-z0-9-]+=[A-Za-z0-9_]+' "$2"; then rm -f "$CK_P"; printf 'KEYS-SKIP: %s is a merged pass (the merge checked each shard)\n' "$2"; exit 0; fi
     # Forward-only: a series is judged only when it opened under the new engine, by era-token.sh's ai_dlc_era_open
-    # (the one era resolve: the opening pass's shards/<stem>-p<k>/.era, written by partition-document.sh --shard-dir or,
-    # for a SERIAL document, --map; else the token line of the pass-1 file). A file named no `<stem>-adversarial-p<M>.md`,
+    # (the one era resolve: the opening pass's shards/<stem>-p<k>/.era, written by partition-document.sh --shard-dir, a SERIAL pass's included; else the token line of the pass-1 file). A file named no `<stem>-adversarial-p<M>.md`,
     # or one whose series has neither a pass-1 shard dir nor a pass-1 file, is read for the line itself. Anything else
     # reads KEYS-SKIP pre-era, never a refusal.
     ck_dir="$(dirname "$2")"; ck_b="${2##*/}"; ck_stem=""; ck_m=""
@@ -1955,6 +1976,27 @@ case "${1:-}" in
   --repair-introduced)
     [ $# -eq 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --repair-introduced <planning>/s<N>/<artifact>-adversarial-p<M>.md"; exit 2; }
     repair_introduced_main "$2"; exit $? ;;
+  --batch)
+    # ONE start for a series' re-derivations (arms N and R of Check 24): each argument is `derived-set:<pass file>` or
+    # `repair-introduced:<pass file>`, and the answer is, per argument in order, `@@BATCH <n>`, that mode's own output
+    # (derived-set: stdout and stderr, as arm N reads it; repair-introduced: stdout only, as arm R reads it), then
+    # `@@BATCH-END <rc>`, the exit status the single-file mode would have had. Each runs in its own subshell, so one
+    # file's refusal ends only its own row. Exit 0 once every row is written, 2 on a malformed argument.
+    [ $# -ge 2 ] && [ -z "$RERUN" ] && [ "$DRY" -eq 0 ] || { printf '%s\n' "usage: merge-adversarial-shards.sh --batch (derived-set|repair-introduced):<pass file>..."; exit 2; }
+    shift
+    for _ba in "$@"; do
+      case "$_ba" in derived-set:?*|repair-introduced:?*) ;; *) printf 'REFUSED: --batch takes derived-set:<file> or repair-introduced:<file>, not %s\n' "$_ba"; exit 2 ;; esac
+    done
+    _bn=0
+    for _ba in "$@"; do
+      _bn=$((_bn + 1)); printf '@@BATCH %d\n' "$_bn"
+      case "$_ba" in
+        derived-set:*) ( derived_set_main "${_ba#*:}" ) 2>&1; _brc=$? ;;
+        *) ( repair_introduced_main "${_ba#*:}" ) 2>/dev/null; _brc=$? ;;
+      esac
+      printf '@@BATCH-END %d\n' "$_brc"
+    done
+    exit 0 ;;
   --subject)
     [ $# -ge 2 ] || refuse "$USAGE"
     SUBJECT="${2#s}"; shift 2

@@ -210,6 +210,16 @@ p_srcok "$JOIN" && ok "PS7: --sources on a record no join wrote -- colliding F-1
 p_srcunres "$JOIN" && ok "PS8: --sources, one property apart (F-4 under dev-1) -> rc 2, UNRESOLVED, the carrying seat named" \
   || bad "PS8: --sources accepted an id only another seat carries (rc=$RC): $(cat "$JO")"
 
+# ---- a SERIAL coe pass 1 (BL-1175 e): no review shard, sources resolve against the pass file and every CRITICAL/MAJOR is closed.
+p_coeserial "$JOIN" "coe-adversarial-p1.md#F-1" ok && ok "CS1: a serial in-era coe pass 1, the entry's source names the pass file's MAJOR F-1 -> JOINED, no SKIP line" \
+  || bad "CS1: a serial coe pass 1 with a resolving source and its MAJOR closed did not join (rc=$RC): $(cat "$JO")"
+p_coeserial "$JOIN" "coe-adversarial-p1.md#F-9" "coe-adversarial-p1.md carries no finding F-9" && ok "CS2: the same world, source #F-9 -> REFUSED UNRESOLVED, nothing written" \
+  || bad "CS2: a serial coe source naming a finding the pass lacks was not refused (rc=$RC): $(cat "$JO")"
+p_coeserial "$JOIN" "requirements-adversarial-p1.md#F-1" "requirements-adversarial-p1.md#F-1 names no seat file" && ok "CS3: a source naming ANOTHER pass file's F-1 -> REFUSED, though s305 carries that file" \
+  || bad "CS3: a serial coe source resolved against a file other than the coe pass (rc=$RC): $(cat "$JO")"
+p_coeserial "$JOIN" "coe-adversarial-p1.md#F-2" "coe-adversarial-p1.md#F-1 is a CRITICAL/MAJOR finding" && ok "CS4: the entry closes only the MINOR F-2 -> REFUSED naming the unclosed MAJOR F-1" \
+  || bad "CS4: an unclosed MAJOR of a serial coe pass 1 was not refused (rc=$RC): $(cat "$JO")"
+
 # ---- the entry contract (BL-508, BL-519). Each refusal has its ALLOW twin one property apart.
 bash "$HERE/unit-record.sh"; _ur=$?
 case "$_ur" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-record.sh exited $_ur (FIXTURE BROKEN); nothing was asserted" ;; esac

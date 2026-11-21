@@ -2717,7 +2717,7 @@ ri_pass() { # <s1 dir> <n>: shard 1 carrying 4 unquoted MAJOR, shards 2 and cros
   local d="$1/shards/stories-p$2"
   mkdir -p "$d" || return 1
   shard "$d" 1 4 EXIT_CONDITION_NOT_MET 1; shard "$d" 2 0 EXIT_CONDITION_NOT_MET 2; shard "$d" cross 0 EXIT_CONDITION_NOT_MET "1, 2"
-  $ASM_RUN "$MERGE" "$d" < /dev/null > /dev/null 2>&1 && [ -f "$1/stories-adversarial-p$2.md" ]
+  $ASM_RUN "$MERGE" "$d" < /dev/null > "$1/../ri_pass.$2.out" 2>&1 && [ -f "$1/stories-adversarial-p$2.md" ]
 }
 ri_world_build() { # -> the s1 dir
   local w s k i
@@ -2737,14 +2737,14 @@ ri_world() { wc_get ri ri_world_build; }
 ri_quote() { # <shard file> <finding n> <quote value>: a `quote:` line after that finding's `stories:` line
   awk -v h="### M$2 — " -v q="quote: $3" 'index($0, h) == 1 { on = 1 } { print } on && index($0, "stories:") == 1 { print q; on = 0 }' "$1" > "$1.q" && mv "$1.q" "$1"
 }
-ri_p3() { # <merge> <s1 dir> -> RC, $MO: p3's quoted shards merged by <merge>
-  local m="$1" s="$2" d="$2/shards/stories-p3"
+ri_p3() { # <merge> <s1 dir> [<stem of story 2> [<any: a third, clean shard>]] -> RC, $MO: p3's quoted shards merged by <merge>
+  local m="$1" s="$2" d="$2/shards/stories-p3" t2="${3:-story-2-k}"
   mkdir -p "$d" || return 1
-  shard "$d" 1 5 EXIT_CONDITION_NOT_MET 1; shard "$d" 2 3 EXIT_CONDITION_NOT_MET 2; shard "$d" cross 0 EXIT_CONDITION_NOT_MET "1, 2"
+  shard "$d" 1 5 EXIT_CONDITION_NOT_MET 1; shard "$d" 2 3 EXIT_CONDITION_NOT_MET 2; [ -z "${4:-}" ] || shard "$d" 3 0 EXIT_CONDITION_NOT_MET 3; shard "$d" cross 0 EXIT_CONDITION_NOT_MET "1, 2"
   sed 's/^findings_major_underived: 0$/findings_major_underived: 2/' "$d/1.md" > "$d/1.q" && mv "$d/1.q" "$d/1.md" || return 1
   ri_quote "$d/1.md" 1 "story-1-k: $RI_N1"; ri_quote "$d/1.md" 2 "story-1-k: $RI_N2"; ri_quote "$d/1.md" 3 "story-1-k: $(ri_early 1)"
   ri_quote "$d/1.md" 4 "story-1-k: $RI_N3"; ri_quote "$d/1.md" 4 "story-1-k: $(ri_base 1 5)"
-  ri_quote "$d/2.md" 1 "story-2-k: $RI_N4"; ri_quote "$d/2.md" 2 "story-2-k: $(ri_early 2)"; ri_quote "$d/2.md" 3 "story-2-k: $(ri_base 2 7)"
+  ri_quote "$d/2.md" 1 "$t2: $RI_N4"; ri_quote "$d/2.md" 2 "$t2: $(ri_early 2)"; ri_quote "$d/2.md" 3 "$t2: $(ri_base 2 7)"
   [ "$(grep -c '^quote: ' "$d/1.md")" = 5 ] && [ "$(grep -c '^quote: ' "$d/2.md")" = 3 ] || { RI_STAGE=seed; return 1; }
   $ASM_RUN "$m" "$d" < /dev/null > "$MO" 2>&1; RC=$?
 }
@@ -2763,6 +2763,17 @@ p_ri1() {
   sed 's/^findings_major_repair_introduced: 3$/findings_major_repair_introduced: 2/' "$WORK/ri1.p3" > "$s/stories-adversarial-p3.md" || return 1
   dv_gate "$m" "$s"; cp "$WORK/ri1.p3" "$s/stories-adversarial-p3.md" || return 1
   has "$CO" "FAIL (R -- REPAIR-INTRODUCED)" && has "$CO" "derives 3 with keys {$RI_KEYS_WANT}"
+}
+# RI9 (BL-1175 item 14, THE FIRST-PASS GUARD): ri_pass's p1 and p2 merges both carry 4 unquoted MAJOR in shard 1. The
+# pass-2 merge prints the "carry no quote: line" NOTE (the positive control: the capture channel works and the line
+# fires for an unquoted pass) and the pass-1 merge, which has no predecessor, prints none.
+p_ri9() {
+  local s o1 o2; RI_STAGE=build; s="$(ri_world)" || return 1; RI_S="$s"
+  o1="$s/../ri_pass.1.out"; o2="$s/../ri_pass.2.out"
+  RI_STAGE=seed; [ -s "$o1" ] && [ -s "$o2" ] && [ "$(grep -c '^quote: ' "$s/shards/stories-p1/1.md")" = 0 ] \
+    && [ "$(grep -c '^### M' "$s/shards/stories-p1/1.md")" -ge 4 ] || return 1
+  RI_STAGE=control; has "$o2" "4 CRITICAL/MAJOR finding(s) carry no quote: line" || return 1
+  RI_STAGE=first-pass; ! has "$o1" "carry no quote: line"
 }
 # RI5: after RI1's merges the snapshot dir holds p1's, p2's and p3's two snapshots each and `git status` lists none of
 # them, while it lists the pass file the same merge wrote beside them.
@@ -2823,6 +2834,22 @@ p_ri2() {
   RI_GOT="r=$(ri_hdr "$s" findings_major_repair_introduced) u=$(ri_hdr "$s" findings_major_unjoined) keys=$(ri_hdr "$s" repair_introduced_keys) $(ri_hdr "$s" verdict)"
   RI_STAGE=header; [ "$RI_GOT" = "r=0 u=8 keys= EXIT_CONDITION_NOT_MET" ] && has "$MO" "every MAJOR of this pass is unjoinable" || return 1
   RI_STAGE=gate; dv_gate "$m" "$s"; has "$CO" "PENDING (R -- REPAIR-INTRODUCED): stories-adversarial-p3.md" && ! has "$CO" "FAIL (R -- REPAIR-INTRODUCED)"
+}
+# RI10 (BL-1175 item 8 + the renamed-and-rewritten stem): story 2 becomes story-3-k with its first six base lines replaced
+# (over 25% of its bytes). rename: story-2-k is gone, so the new stem is paired with the dropped one and the ceiling
+# applies: r 0, unjoined 8, the NOTE names story-3-k (the pairing threshold is 20% of the new stem's bytes shared; an
+# unrelated add plus drop sharing that much reads as a rename). add: story-2-k STAYS and story-3-k is a pure add, so no
+# dropped stem exists to pair with, no ceiling note, and the quotes of story-3-k read NEW (r 3, unjoined 1).
+p_ri10() { # <merge> <rename|add>
+  local m="$1" s i; RI_STAGE=build; s="$(ri_world)" || return 1
+  { sed -n '1,2p' "$s/stories/story-2-k.md"; for i in 1 2 3 4 5 6; do printf 'Story 3 rewritten line %02d: a wide repair replaced the il-accuracy contract text.\n' "$i"; done
+    sed -n '9,$p' "$s/stories/story-2-k.md"; } > "$s/stories/story-3-k.md" || return 1
+  [ "$2" != rename ] || rm -f "$s/stories/story-2-k.md" || return 1
+  RI_STAGE=merge; ri_p3 "$m" "$s" story-3-k "$([ "$2" = rename ] || echo 3)" || return 1; [ "$RC" -eq 0 ] || return 1
+  RI_GOT="r=$(ri_hdr "$s" findings_major_repair_introduced) u=$(ri_hdr "$s" findings_major_unjoined) $(ri_hdr "$s" verdict)"
+  RI_STAGE=header
+  if [ "$2" = rename ]; then [ "$RI_GOT" = "r=0 u=8 EXIT_CONDITION_NOT_MET" ] && has "$MO" "the repair rewrote more than 25% of story-3-k="
+  else [ "$RI_GOT" = "r=3 u=1 EXIT_CONDITION_NOT_MET" ] && ! has "$MO" "the repair rewrote more than 25%"; fi
 }
 # RI4: the second repair also appends eight lines to story 2 (over 25% of its bytes): r = 0, every MAJOR unjoined.
 p_ri4() {

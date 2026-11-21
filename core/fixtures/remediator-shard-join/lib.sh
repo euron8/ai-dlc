@@ -723,6 +723,35 @@ p_partyunres() { # p_party's world, ONE property apart: F-4 cited under dev-1, w
   refused "$w" "03.md: source architecture-dev-1.md#F-4 is UNRESOLVED -- architecture-dev-1.md carries no finding F-4" \
     && has "$JO" "(F-4 is in: architecture-tea-1.md)" && [ ! -e "$(pout "$w")" ]
 }
+# A SERIAL coe pass 1 (BL-1175 e): shards/coe-p1/ holds the era token and no review shard, the pass is s305/coe-adversarial-p1.md
+# (F-1 MAJOR, F-2 MINOR), and s305 also carries a requirements pass-1 file with its own F-1 (the glob-all-files mutant's food).
+CS_TOK="$(sed -n 's/^AI_DLC_ERA_TOKEN="\(.*\)"$/\1/p' "$SRCDIR/era-token.sh" | head -n 1)"
+coes_world() { # <source token> -> the world var on stdout; one writer, one part (the N9 block) carrying that source
+  local w d; w="$(new_world)" || return 1
+  d="$w/$SLOT"; mkdir -p "$d/shards/coe-p1" "$d/shards/coe-repair-p1" || return 1
+  [ -n "$CS_TOK" ] || return 1
+  printf '%s\n' "$CS_TOK" > "$d/shards/coe-p1/.era"
+  printf '# coe adversarial p1\n\n## Findings\n\n### F-1 — MAJOR\n\nbody\n\n### F-2 — MINOR\n\nbody\n' > "$d/coe-adversarial-p1.md"
+  printf '# req adversarial p1\n\n## Findings\n\n### F-1 — MAJOR\n\nbody\n' > "$d/requirements-adversarial-p1.md"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  sibinject "$HERE/seed.block-2.1.md" | awk -v s="$1" 'NR == 1 { print; print "- **source:** " s; next } { print }' > "$d/shards/coe-repair-p1/01.md"
+  printf '%s' "$w"
+}
+coes_join() { # <join> <world> -> RC, $JO
+  stamp "$2"
+  AI_DLC_PROJECT_ROOT="$2" bash "$1" --sprint 305 --artifact coe --pass 1 --artifact-path "$SLOT" \
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1
+  RC=$?
+}
+p_coeserial() { # <join> <source token> <expect: ok | the refusal token> -> rc 0 and JOINED, or rc 2 and the token, no record
+  local w; w="$(coes_world "$2")" || return 1
+  coes_join "$1" "$w"
+  if [ "$3" = ok ]; then
+    [ "$RC" -eq 0 ] && has "$JO" "JOINED:" && ! has "$JO" "SKIP serial coe" && [ -f "$w/$SLOT/coe-repair-p1.md" ]
+  else
+    [ "$RC" -eq 2 ] && has "$JO" "REFUSED:" && has "$JO" "$3" && [ ! -e "$w/$SLOT/coe-repair-p1.md" ]
+  fi
+}
 p_partynosrc() { # an entry with a disposition and no source line -> REFUSED by name, nothing written
   local w; w="$(party_world)" || return 1
   ppart "$w" 01 2.1 "architecture-dev-1.md#F-1"

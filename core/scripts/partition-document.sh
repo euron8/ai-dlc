@@ -5,9 +5,8 @@
 #   partition-document.sh --map <doc> [--scope-ref <sha>]
 #       stdout: one line per part, `<ordinal>\t<first-line>\t<last-line>\t<heading>`, exit 0.
 #       A document that does not partition prints ONE line `SERIAL: <reason>` on STDOUT and
-#       exits 3. SERIAL is an answer, not an error: the caller dispatches one agent. An unscoped SERIAL
-#       answer on a document directly in planning-artifacts/s<N>/ whose series has no pass yet writes the
-#       era token to shards/<stem>-p1/.era (serial_era), the one producer of a SERIAL series' token.
+#       exits 3. SERIAL is an answer, not an error: the caller dispatches one agent. --map writes nothing;
+#       a SERIAL pass's era token comes from `--shard-dir <doc> <M>` (the one producer of every series' token).
 #   partition-document.sh --split <doc> <dir> [--expect-sha <sha256>] [--scope-ref <sha>]
 #       writes `<dir>/sections/<ordinal>.md` (byte slices of <doc>) and, LAST,
 #       `<dir>/sections/.manifest`. Exit 0; exit 3 with the SERIAL line and nothing created
@@ -463,24 +462,6 @@ cross_k() { # <K> -> refuses (64) unless an integer >= 2
   [ "${#1}" -le 6 ] && [ "$1" -ge 2 ] || usage64 "K must be an integer >= 2 and at most 6 digits (got '$1')"
 }
 
-serial_era() { # <doc>: THE SERIAL SERIES' ERA TOKEN. A SERIAL document's pass 1 is written by one adversary with no shard
-  # dir and no merge, so the program that answers SERIAL opens its series: when <doc> sits directly in
-  # planning-artifacts/s<N>/ and no pass of its series exists yet (no `<stem>-adversarial-p*.md` beside it and no
-  # `shards/<stem>-p*` dir), it writes the era token to shards/<stem>-p1/.era, the file ai_dlc_era_open reads. The stem
-  # is --shard-dir's (requirements-subject -> requirements, carry-over-evaluation -> coe). Prints nothing; a failed
-  # write leaves the series pre-era (SKIP), never a refusal.
-  local d="${1%/*}" s e
-  [ -n "$AI_DLC_ERA_TOKEN" ] && [ "$d" != "$1" ] || return 0
-  case "${d##*/}" in s[1-9]*) case "${d##*/}" in s*[!0-9]*) return 0 ;; esac ;; *) return 0 ;; esac
-  case "${d%/*}" in planning-artifacts|*/planning-artifacts) ;; *) return 0 ;; esac
-  s="${1##*/}"; s="${s%.md}"
-  case "$s" in requirements-subject) s=requirements ;; carry-over-evaluation) s=coe ;; esac
-  case "$s" in ''|.|..|*-adversarial*|*-repair*|*-elicitation*|*-party*) return 0 ;; esac
-  for e in "$d/$s-adversarial-p"[0-9]*.md "$d/shards/$s-p"[0-9]*; do [ -e "$e" ] && return 0; done
-  mkdir -p "$d/shards/$s-p1" 2>/dev/null && printf '%s\n' "$AI_DLC_ERA_TOKEN" > "$d/shards/$s-p1/.era" 2>/dev/null
-  return 0
-}
-
 pdoc_main() {
 export LC_ALL=C
 PART_CAP=8
@@ -691,7 +672,6 @@ case "${1:-}" in
     [ -r "$DOC" ] || refuse "cannot read $DOC"
     if [ -z "$REF" ]; then
       MRC=0; map_of "$DOC" || MRC=$?
-      [ "$MRC" -ne 3 ] || serial_era "$DOC"
       exit "$MRC"
     fi
     scoped_map "$DOC" "$REF"

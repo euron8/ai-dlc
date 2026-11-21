@@ -100,7 +100,7 @@ bind_check() {
 
 # THE FENCE COPIES: every core script line carrying the fence closer `length(frr) >= fln`, counted per file against
 # this enumeration -- a NEW copy anywhere (or one dropped) fails, so a fourth hand-copied grammar cannot appear
-# unseen. merge-adversarial-shards.sh 2 (parse_shard, same_set), join-remediator-shards.sh 6 (src_ids and five
+# unseen. merge-adversarial-shards.sh 2 (parse_shard, same_set), join-remediator-shards.sh 7 (src_ids, the serial-coe key reader and five
 # readers), merge-review-shards.sh 7, validate-adversarial-convergence.sh 2 (:3113 and j3_keys). LIMIT: it keys on that
 # text, so a copy whose variables are renamed escapes it.
 # THE FLOOR. The census is only as wide as the directory it is handed, and under hermetic-run.sh that directory holds
@@ -110,7 +110,7 @@ bind_check() {
 # BELOW that so deleting a script never reds this fixture, and well ABOVE any file-by-file declaration (the largest in
 # this tree names about a dozen scripts), so a narrowed sandbox cannot reach it.
 # fence_census <dir> <floor> -> FC_MSG, rc 0 iff every count matches, the scanned set holds the merge and at least <floor> files.
-FC_WANT="join-remediator-shards.sh=6 merge-adversarial-shards.sh=2 merge-review-shards.sh=7 validate-adversarial-convergence.sh=2"
+FC_WANT="join-remediator-shards.sh=7 merge-adversarial-shards.sh=2 merge-review-shards.sh=7 validate-adversarial-convergence.sh=2"
 FC_FLOOR=40
 fence_census() {
   FC_MSG="$(awk -v want="$FC_WANT" -v floor="$2" '

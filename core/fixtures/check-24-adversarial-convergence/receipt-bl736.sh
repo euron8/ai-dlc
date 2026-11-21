@@ -15,6 +15,8 @@
 #   split    v1 (2.3) -> 2.3a + 2.3b, one repair link                          FAIL (J2), exit 1
 #   gsplit   split, in graph s323's `| Strategy id | Case | Story id |` table (story third, `S1-2.3`)
 #                                                                              FAIL (J2), exit 1
+#   hsplit   split, in a table with NO story column: the story is the governing `### Story <dotted>` heading,
+#            the rows keep `S2.3-AC*` (graph s320/s322)                         FAIL (J2), exit 1
 #   merge    2.3a/2.3b -> 2.3 while the ROW ids keep `2.3a`/`2.3b` and the prose names all three;
 #            a whole-file id scan reads both sides equal                        FAIL (J2), exit 1
 #   reopen   split's bytes, no link, a REOPEN_AFTER_MET record + ONE verify pass   J2 silent, exit 0
@@ -66,6 +68,13 @@ strat() {
     printf '# Sprint 1 test strategy\n\nThe mapping moved to an appendix; Story 1.1, 2.3a and 2.3b are named here only.\n'; return 0
   fi
   case "$1" in
+    h*) # no story column: `### Story <dotted>` headings govern the `S2.3-AC*` rows beneath them.
+      printf '# Sprint 1 test strategy\n\n### Story 1.1\n\n| id | type |\n|---|---|\n| S1.1-AC1 | unit |\n\n'
+      case "$1" in
+        hv1)    printf '### Story 2.3\n\n| id | type |\n|---|---|\n| S2.3-AC1 | unit |\n| S2.3-AC2 | unit |\n' ;;
+        hsplit) printf '### Story 2.3a\n\n| id | type |\n|---|---|\n| S2.3-AC1 | unit |\n\n### Story 2.3b\n\n| id | type |\n|---|---|\n| S2.3-AC2 | unit |\n' ;;
+      esac
+      return 0 ;;
     g*) # strategy-rows.sh's table as graph s323 carries it: the story is the THIRD column, `S<N>-` prefixed.
       printf '# Sprint 1 test strategy\n\n| Strategy id | Case | Story id |\n|---|---|---|\n| ST1-1 | - | S1-1.1 |\n'
       case "$1" in
@@ -124,7 +133,8 @@ if [ ! -f "$B/.built" ]; then
 { world reword v1 reword yes && world split v1 split yes && world merge lsplit merge yes \
     && world reopen v1 split yes && world unreach v1 split no && world norows v1 norows yes \
     && world legacy v1 split yes 2026-09-29T09:45:00Z && world nostamp v1 split yes 2026-09-29T11:00:00Z nostamp \
-    && world pred v1 split yes 2026-09-29T11:00:00Z "$PRED" && world gsplit gv1 gsplit yes; } || { echo "receipt: a world could not be built under $B" >&2; exit 9; }
+    && world pred v1 split yes 2026-09-29T11:00:00Z "$PRED" && world gsplit gv1 gsplit yes \
+    && world hsplit hv1 hsplit yes; } || { echo "receipt: a world could not be built under $B" >&2; exit 9; }
 # reopen: the link replaced by the re-open record and ONE verify pass notarizing the disk bytes.
 read -r rb ra < "$B/reopen/.shas"
 rm -f "$B/reopen/$D/test-strategy-repair-p1.md"
@@ -153,6 +163,7 @@ bad=""
 run reword;  [ "$RC" -eq 0 ] && [[ "$OUT" != *"J2 -- DRIFT"* ]] || bad="$bad reword(rc=$RC)"
 run split;   [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"-2.3 +2.3a +2.3b"* ]] || bad="$bad split(rc=$RC)"
 run gsplit;  [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"-2.3 +2.3a +2.3b"* ]] || bad="$bad gsplit(rc=$RC)"
+run hsplit;  [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"-2.3 +2.3a +2.3b"* ]] || bad="$bad hsplit(rc=$RC)"
 run merge;   [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"-2.3a -2.3b +2.3"* ]] || bad="$bad merge(rc=$RC)"
 run reopen;  [ "$RC" -eq 0 ] && [[ "$OUT" != *"J2 -- DRIFT"* ]] || bad="$bad reopen(rc=$RC)"
 run unreach; [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"no committed version"* ]] && [[ "$OUT" != *"FAIL (J2"* ]] || bad="$bad unreach(rc=$RC)"
@@ -161,5 +172,5 @@ run legacy;  [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ 
 run nostamp; [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"not owed yet"* ]] && [[ "$OUT" != *"FAIL (J2"* ]] || bad="$bad nostamp(rc=$RC)"
 run pred;    [ "$RC" -eq 0 ] && [[ "$OUT" == *"PENDING (J2 -- DRIFT)"* ]] && [[ "$OUT" == *"not owed yet"* ]] && [[ "$OUT" != *"FAIL (J2"* ]] || bad="$bad pred(rc=$RC)"
 if [ -n "$bad" ]; then echo "receipt BL-736: NOT FIXED --$bad"; exit 1; fi
-echo "receipt BL-736: fixed (reword silent, split, gsplit and merge FAIL by story column, reopen silent, unreachable PENDING, legacy, unstamped and predecessor-stamped PENDING by era)"
+echo "receipt BL-736: fixed (reword silent, split, gsplit, hsplit and merge FAIL by story column, reopen silent, unreachable PENDING, legacy, unstamped and predecessor-stamped PENDING by era)"
 exit 0

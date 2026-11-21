@@ -702,6 +702,55 @@ STALL_PEAK=0
 STALL_PEAK_FROM=""
 STALL_PEAK_AT=""
 
+k2_sha() {  # $1 file -> sha256 hex on stdout; the merge's own spelling
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else sha256sum "$1" | cut -d' ' -f1; fi
+}
+# THE RECOVERY OF NOTARIZED BYTES (arm J2's story-id set, and the ATTESTATION's `differs` pass). The notarized
+# sha is a sha256 and the repository may be sha1, so `--find-object` cannot resolve it; every committed version of
+# the path (`git log --all`) is hashed until one matches. ONE history walker serves both readers.
+# $1 the file, $2 the sha256 wanted, $3 the file to write -> J2T_BEFORE ($3, holding those bytes) or empty.
+j2t_recover() {
+  local d b c
+  J2T_BEFORE=""
+  command -v git >/dev/null 2>&1 || return 0
+  d="$(dirname "$1")"; b="${1##*/}"
+  for c in $( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+                git -C "$d" log --all --format=%H -- "./$b" ) 2>/dev/null); do
+    ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+      git -C "$d" show "${c}:./$b" ) > "$3" 2>/dev/null || continue
+    if [ "$(k2_sha "$3")" = "$2" ]; then J2T_BEFORE="$3"; return 0; fi
+  done
+}
+# $1 pass file -> `<underived> <repair_introduced> <has_ri> <merged>`: the header lines the main loop reads
+# (`-` for an absent count; has_ri 1 only when the line is present; merged 1 only when the block carries
+# `shard_tool_use_ids:`, a line only the merge writes).
+ac_hdr_counts() {
+  awk '/SKILL_INVOCATION_PROVENANCE v1/ { inblk = 1; next } /SKILL_INVOCATION_PROVENANCE_END/ { inblk = 0 }
+    inblk && !("u" in g) && /^findings_major_underived:/ { g["u"] = 1; v = $0; sub(/^findings_major_underived:/, "", v); gsub(/[^0-9]/, "", v); u = v }
+    inblk && !("r" in g) && /^findings_major_repair_introduced:/ { g["r"] = 1; v = $0; sub(/^findings_major_repair_introduced:/, "", v); gsub(/[^0-9]/, "", v); r = v }
+    inblk && /^shard_tool_use_ids:/ { s = 1 }
+    END { print (u == "" ? "-" : u), (r == "" ? "-" : r), ("r" in g) ? 1 : 0, s + 0 }' "$1"
+}
+
+# ONE START FOR A SERIES' RE-DERIVATIONS (BL-1175 item 15). Arms N and R each re-derive per pass through the merge, which cost
+# one merge start per candidate pass; `merge-adversarial-shards.sh --batch` answers every one in a single start, each pass's
+# own output and its own exit status. $1 the merge, then `derived-set:<pass>` / `repair-introduced:<pass>` arguments ->
+# $AC_T/batch.<n>.out and batch.<n>.rc for the n-th argument. A row the merge never wrote (it died mid-batch) has no .rc.
+ac_batch() {
+  local m="$1"
+  shift
+  rm -f "$AC_T"/batch.*.out "$AC_T"/batch.*.rc
+  bash "$m" --batch "$@" 2>/dev/null | awk -v d="$AC_T/batch" '
+    /^@@BATCH-END [0-9]+$/ { f = d "." k ".rc"; print $2 > f; close(f); close(d "." k ".out"); k = 0; next }
+    /^@@BATCH [0-9]+$/ { k = $2; f = d "." k ".out"; printf "" > f; next }
+    k > 0 { print > (d "." k ".out") }'
+}
+ac_batch_get() { # $1 argument number -> B_OUT, B_RC (exit 2 when the merge wrote no row)
+  B_OUT=""; B_RC=2
+  [ -f "$AC_T/batch.$1.rc" ] || return 0
+  B_RC="$(<"$AC_T/batch.$1.rc")"; B_OUT="$(<"$AC_T/batch.$1.out")"
+}
 # THE ATTESTATION (BL-1175 items 11 and 13). The merge appends a `program:merge-adversarial-shards` row for
 # every pass file it writes to the tracked write ledger; `content-seal.sh --program-row` answers, in one ledger
 # read for the whole series, whether the newest such row records the bytes on disk (at any clone root).
@@ -711,6 +760,9 @@ STALL_PEAK_AT=""
 #              E), and `findings_critical:` / `findings_major:` read as the larger of the header and the body's own
 #              finding headings (`merge-adversarial-shards.sh --body-counts`, one start for the series), so lowering
 #              a header count alone buys no exit. A finding deleted from the body together with its count is not seen.
+#              Where git history holds a version of the pass whose sha256 is the row's, those bytes are recovered
+#              (j2t_recover) and ALL their header counts are believed instead, CRITICAL and MAJOR as the larger of
+#              the recovered and the body's; shallow or absent history, or no match, is the disbelief above.
 #   none       no row (a pass merged before the merge wrote rows, or no ledger): counts believed as recorded; a merged
 #              pass 2 or later that subtracts an underived or repair-introduced count prints one PENDING line. In a
 #              series opened under the era token (era-token.sh's ai_dlc_era_open), where the merge writes a row for
@@ -721,6 +773,7 @@ STALL_PEAK_AT=""
 declare -F ai_dlc_era_open >/dev/null || ai_dlc_era_open() { AI_DLC_ERA_OPEN=""; return 1; }
 P_ATT=()
 P_BC=()
+P_REC=()
 att_st=""
 case "${SORTED[0]}" in */planning-artifacts/*) att_st="${SORTED[0]%%/planning-artifacts/*}" ;; esac
 if [ -n "$att_st" ] && [ -f "$att_st/planning-artifacts/.artifact-writes.jsonl" ]; then
@@ -738,6 +791,31 @@ if [ -n "$att_st" ] && [ -f "$att_st/planning-artifacts/.artifact-writes.jsonl" 
   if [ "${#att_c[@]}" -gt 0 ]; then
     att_merge="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-adversarial-shards.sh"
     att_bc="$(bash "$att_merge" --body-counts "${att_c[@]}" 2>/dev/null)" || att_bc=""
+    # THE ROW'S BYTES (BL-1175 item 13): the ledger row holds only a sha256, so the bytes the merge wrote are
+    # recovered from git history by content (j2t_recover) and their header counts are the ones believed. Shallow or
+    # absent history, or no version hashing to the row: no recovery, the disbelief below. One jq for the series, the
+    # row per path the way content-seal.sh --program-row keys it (newest row wins).
+    att_sp="$(cd "$att_st" 2>/dev/null && pwd -P)" || att_sp=""
+    att_sn="${att_st%/}"; att_sn="${att_sn##*/}"
+    att_tab="$(jq -rn '
+      reduce (inputs | select(type == "object") | select(.kind == "content-seal") | select(.actor == "program:merge-adversarial-shards")
+              | select((.path | type) == "string")) as $x ({}; .[$x.path] = ($x.sha256 // ""))
+      | to_entries[] | .key + "\t" + (.value | tostring)' "$att_st/planning-artifacts/.artifact-writes.jsonl" 2>/dev/null)" || att_tab=""
+    att_k=0
+    for att_f in "${att_c[@]}"; do
+      att_idx="${att_ci[$att_k]}"; att_k=$((att_k + 1))
+      att_fd="${att_f%/*}"; [ "$att_fd" != "$att_f" ] || att_fd=.
+      att_lp="$(cd "$att_fd" 2>/dev/null && pwd -P)" || continue
+      [ -n "$att_sp" ] || continue
+      att_key="${att_sn}/${att_lp#"$att_sp"/}/${att_f##*/}"
+      att_dig="$(printf '%s\n' "$att_tab" | awk -F '\t' -v k="$att_key" '$1 == k { d = $2 } END { print d }')"
+      [ -n "$att_dig" ] || continue
+      j2t_recover "$att_f" "$att_dig" "$AC_T/att-rec-$att_idx"
+      [ -n "$J2T_BEFORE" ] || continue
+      att_rc_h="$(ac_hdr_counts "$J2T_BEFORE")"
+      att_rc_c="$(severity_count "$J2T_BEFORE" CRITICAL)"; att_rc_m="$(severity_count "$J2T_BEFORE" MAJOR)"
+      P_REC[$att_idx]="${att_rc_c:--} ${att_rc_m:--} $att_rc_h"
+    done
     att_i=0
     while IFS="$(printf '\t')" read -r _ att_bcc att_bcm; do
       [ -n "$att_bcm" ] || continue
@@ -773,11 +851,7 @@ for f in "${SORTED[@]}"; do
   # writes): a pass an adversary wrote itself never classes its own findings. Arm R re-derives it at the gate.
   # One read for the three lines: each value is block_field's (the first line of that key in a block),
   # with every non-digit dropped.
-  set -- $(awk '/SKILL_INVOCATION_PROVENANCE v1/ { inblk = 1; next } /SKILL_INVOCATION_PROVENANCE_END/ { inblk = 0 }
-    inblk && !("u" in g) && /^findings_major_underived:/ { g["u"] = 1; v = $0; sub(/^findings_major_underived:/, "", v); gsub(/[^0-9]/, "", v); u = v }
-    inblk && !("r" in g) && /^findings_major_repair_introduced:/ { g["r"] = 1; v = $0; sub(/^findings_major_repair_introduced:/, "", v); gsub(/[^0-9]/, "", v); r = v }
-    inblk && /^shard_tool_use_ids:/ { s = 1 }
-    END { print (u == "" ? "-" : u), (r == "" ? "-" : r), ("r" in g) ? 1 : 0, s + 0 }' "$f")
+  set -- $(ac_hdr_counts "$f")
   underived="${1:--}"; ri="${2:--}"; ri_has="${3:-0}"
   [ "$underived" = "-" ] && underived=0
   [ "${4:-0}" = 1 ] || ri_has=0
@@ -795,12 +869,24 @@ for f in "${SORTED[@]}"; do
     if [ "$CYCLE_STATE" -eq 1 ]; then printf '%s\n' "$att_msg" >&2; else printf '%s\n' "$att_msg"; fi
   fi
   if [ "$att" = differs ]; then
-    if [ "$underived" != 0 ] || [ "$ri" != 0 ]; then
+    att_rec="${P_REC[$((att_i - 1))]:-}"
+    if [ -n "$att_rec" ]; then
+      # `<crit> <major> <underived> <ri> <has_ri> <merged>` of the bytes the merge row records, recovered from git.
+      set -- $att_rec
+      att_msg="NOTE (ATTESTATION): $f is not attested (its newest program:merge-adversarial-shards row records other bytes); those bytes were recovered from git history and their header counts are read: findings_critical=$1 findings_major=$2 findings_major_underived=${3} findings_major_repair_introduced=${4}."
+      if [ "$CYCLE_STATE" -eq 1 ]; then printf '%s\n' "$att_msg" >&2; else printf '%s\n' "$att_msg"; fi
+      crit="$1"; major="$2"; underived="$3"; ri="$4"
+      [ "$crit" != "-" ] || crit=""
+      [ "$major" != "-" ] || major=""
+      [ "$underived" != "-" ] || underived=0
+      [ "$ri" != "-" ] || ri=0
+      [ "${6:-0}" = 1 ] || { underived=0; ri=0; }
+    elif [ "$underived" != 0 ] || [ "$ri" != 0 ]; then
       att_why="its newest program:merge-adversarial-shards row in the write ledger records other bytes"
       att_msg="NOTE (ATTESTATION): $f is not attested ($att_why), so its findings_major_underived=$underived and findings_major_repair_introduced=$ri are not believed and read 0: every MAJOR blocks. Re-merge the pass from its shards (move the file aside first), or restore the bytes the merge wrote."
       if [ "$CYCLE_STATE" -eq 1 ]; then printf '%s\n' "$att_msg" >&2; else printf '%s\n' "$att_msg"; fi
     fi
-    underived=0; ri=0
+    [ -n "$att_rec" ] || { underived=0; ri=0; }
     att_bcc="${P_BC[$((att_i - 1))]:-}"; att_bcm="${att_bcc#* }"; att_bcc="${att_bcc% *}"
     if [ -n "$att_bcm" ] && { { [ -n "$crit" ] && [ "$att_bcc" -gt "$crit" ]; } || { [ -n "$major" ] && [ "$att_bcm" -gt "$major" ]; }; }; then
       att_msg="NOTE (ATTESTATION): $f is not attested and its body heads $att_bcc CRITICAL / $att_bcm MAJOR findings, more than its header's findings_critical=$crit / findings_major=$major; the larger counts are read."
@@ -2421,9 +2507,53 @@ k2_resolve_file() {  # $1 pass file, $2 artifact token -> K2_FILE (empty when no
   done
   return 0
 }
-k2_sha() {  # $1 file -> sha256 hex on stdout; the merge's own spelling
-  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
-  else sha256sum "$1" | cut -d' ' -f1; fi
+
+# THE EXEMPTION'S PASS 1 (BL-1208). A coe pass 2 or later written as the single final adversary is accepted only when the
+# series' pass 1 was sectioned (`shard_tool_use_ids:` present) or was SERIAL on its own bytes (Rule 28 exception 4: the map
+# run on pass 1's notarized document answers 3). K2 reads only the terminal pass, so nothing else judges pass 1.
+# $1 the pass-1 file -> K2_P1_STATE ok | unsharded | pending, K2_P1_WHY (the pending reason). No verdict on bytes that
+# cannot be recovered: pending, never fail.
+k2_p1_check() {
+  local row a h s doc sv bytes w
+  K2_P1_STATE=pending; K2_P1_WHY=""
+  if [ ! -f "$1" ]; then K2_P1_WHY="its pass 1 (${1##*/}) is not on disk"; return 0; fi
+  row="$(awk '
+    /SKILL_INVOCATION_PROVENANCE v1/ { inb = 1; next }
+    /SKILL_INVOCATION_PROVENANCE_END/ { inb = 0; next }
+    inb && !ha && /^artifact:/ { ha = 1; a = $0; sub(/^artifact:[ \t]*/, "", a); sub(/[ \t].*$/, "", a) }
+    inb && !hs && /^artifact_sha:/ { hs = 1; h = $0; sub(/^artifact_sha:[ \t]*/, "", h); sub(/[ \t].*$/, "", h) }
+    inb && !hi && /^shard_tool_use_ids:/ { hi = 1; s = $0; sub(/^shard_tool_use_ids:/, "", s) }
+    END { print a "\t" h "\t" s }' "$1")" || { K2_P1_WHY="its pass 1 could not be read"; return 0; }
+  IFS="$(printf '\t')" read -r a h s <<EOF
+$row
+EOF
+  if k_has_ids "$s"; then K2_P1_STATE=ok; return 0; fi
+  sv="$K2_FILE"; k2_resolve_file "$1" "$a"; doc="$K2_FILE"; K2_FILE="$sv"
+  if [ -z "$doc" ]; then K2_P1_WHY="its pass 1 artifact ('${a}') does not resolve to a file"; return 0; fi
+  h="$(printf '%s' "$h" | tr 'A-F' 'a-f')"
+  case "$h" in *[!0-9a-f]*) h="" ;; esac
+  if [ "${#h}" -ne 64 ]; then K2_P1_WHY="its pass 1 artifact_sha is not one sha256"; return 0; fi
+  bytes="$doc"
+  if [ "$(k2_sha "$doc")" != "$h" ]; then
+    j2t_recover "$doc" "$h" "$AC_T/k2-p1-bytes.md"
+    if [ -z "$J2T_BEFORE" ]; then K2_P1_WHY="the bytes pass 1 reviewed (${h}) are not on disk and not in history"; return 0; fi
+    bytes="$J2T_BEFORE"
+  fi
+  w="$(dirname "${P_FILE[0]}")"; w="$(cd "$w" 2>/dev/null && pwd)"
+  K2_P1_ROOT=""
+  while [ -n "$w" ]; do
+    if [ -f "$w/.claude/.ai-dlc-version" ]; then K2_P1_ROOT="$w"; break; fi
+    w="${w%/*}"
+  done
+  k2_pd_in_force "$K2_P1_ROOT" "${P_AT[$((N - 1))]:-}" "$LAST_FILE"
+  if [ ! -f "$K2_PD" ] || [ -n "$K2_PD_AMBIG" ]; then K2_P1_WHY="the partitioner in force cannot be asked about pass 1's bytes"; return 0; fi
+  bash "$K2_RUN" --map "$bytes" >/dev/null 2>&1; w=$?
+  case "$w" in
+    3) K2_P1_STATE=ok ;;
+    0) K2_P1_STATE=unsharded ;;
+    *) K2_P1_WHY="${K2_PD_FROM} --map on pass 1's bytes exited ${w}, neither a map (0) nor SERIAL (3)" ;;
+  esac
+  return 0
 }
 
 K2_CAND=""
@@ -2449,7 +2579,28 @@ EOF
   # A pass naming the requirements SUBJECT MANIFEST reviews four files, not one document: it is
   # arm K3's subject, and a one-part subject's single adversary is K3's exception 4, not K2's.
   [ "${K2_FILE##*/}" = "requirements-subject.md" ] && K2_FILE=""
-  if [ -n "$K2_FILE" ] && ! k_has_ids "$k2s"; then
+  # THE CARRY-OVER EVALUATION'S PASS 2 AND LATER ARE ONE FINAL ADVERSARY (BL-1208; steps/carry-over-evaluation.md,
+  # "Pass 2 is ONE final adversary pass, no shards"), so a terminal `coe-adversarial-p<M>.md` with M >= 2 owes no
+  # shard ids. Pass 1 stays sectioned; any other series stays K2's.
+  k2_coe=0
+  case "$k2_term" in
+    coe-adversarial-p[0-9]*.md)
+      k2_pn="${k2_term#coe-adversarial-p}"; k2_pn="${k2_pn%.md}"
+      case "$k2_pn" in *[!0-9]*) ;; *) [ "$((10#$k2_pn))" -ge 2 ] && k2_coe=1 ;; esac ;;
+  esac
+  K2_P1_STATE=""
+  [ "$k2_coe" -eq 1 ] && ! k_has_ids "$k2s" && k2_p1_check "${LAST_FILE%/*}/coe-adversarial-p1.md"
+  if [ "$K2_P1_STATE" = ok ]; then
+    echo "NOTE (K2 -- SECTIONS): ${k2_term} is a carry-over-evaluation pass 2 or later, written as the single final adversary the step prescribes; it owes no shard_tool_use_ids:."
+  elif [ "$K2_P1_STATE" = pending ]; then
+    echo "PENDING (K2 -- SECTIONS): ${k2_term} is a carry-over-evaluation pass 2 or later written as the single final adversary, and whether the series' pass 1"
+    echo "      was sectioned cannot be told: ${K2_P1_WHY} -- not judged."
+  elif [ "$K2_P1_STATE" = unsharded ]; then
+    err "K2 -- SECTIONS" "${k2_term} is a carry-over-evaluation pass 2 or later written as the single final adversary, but the series' pass 1
+      (coe-adversarial-p1.md) carries no 'shard_tool_use_ids:' and the document it reviewed partitions under partition-document.sh --map.
+      The single-adversary exemption holds only when pass 1 was sectioned or its own document mapped SERIAL (Rule 28 exception 4).
+      Re-run pass 1 sectioned (scripts/ai-dlc/merge-adversarial-shards.sh --document) and write the next pass number."
+  elif [ -n "$K2_FILE" ] && ! k_has_ids "$k2s"; then
     if [ ! -f "$K2_PD" ]; then
       echo "PENDING (K2 -- SECTIONS): the terminal pass ${k2_term} reviews one document and carries no shard_tool_use_ids:,"
       echo "      and ${K2_PD} is not installed beside this validator -- whether it partitions cannot be asked."
@@ -2893,14 +3044,32 @@ n_cand=""
 for ((i = 1; i < N; i++)); do
   k_has_ids "$(block_field "${P_FILE[$i]}" 'shard_tool_use_ids')" && n_cand="$n_cand $i"
 done
+r_cand=""
+for ((i = 1; i < N; i++)); do
+  [ "${P_RI_HAS[$i]:-0}" = 1 ] && r_cand="$r_cand $i"
+done
+AC_BA=(); AC_BN=(); AC_BR=(); ac_bn=0; ac_bm=""
 if [ -n "$n_cand" ]; then
   era_resolve "${P_FILE[0]}" "${P_AT[0]:-}"
+  if [ "$ERA_STATE" = bound ]; then
+    N_MERGE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-adversarial-shards.sh"
+    [ -f "$N_MERGE" ] || { echo "validate-adversarial-convergence.sh: arm N cannot re-derive: $N_MERGE is absent; no verdict" >&2; exit 2; }
+    ac_bm="$N_MERGE"
+    for i in $n_cand; do ac_bn=$((ac_bn + 1)); AC_BA+=("derived-set:${P_FILE[$i]}"); AC_BN[$i]="$ac_bn"; done
+  fi
+fi
+if [ -n "$r_cand" ]; then
+  R_MERGE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-adversarial-shards.sh"
+  [ -f "$R_MERGE" ] || { echo "validate-adversarial-convergence.sh: arm R cannot re-derive: $R_MERGE is absent; no verdict" >&2; exit 2; }
+  ac_bm="$R_MERGE"
+  for i in $r_cand; do ac_bn=$((ac_bn + 1)); AC_BA+=("repair-introduced:${P_FILE[$i]}"); AC_BR[$i]="$ac_bn"; done
+fi
+[ "$ac_bn" -eq 0 ] || ac_batch "$ac_bm" "${AC_BA[@]}"
+if [ -n "$n_cand" ]; then
   if [ "$ERA_STATE" = legacy ]; then
     echo "PENDING (N -- WIDTH): the series opened (${P_AT[0]:-<none>}) before the installed rulebook's derived-width"
     echo "      sentence was committed (${ERA_STAMP}). Legacy series: its later passes owe the full map."
   elif [ "$ERA_STATE" = bound ]; then
-    N_MERGE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-adversarial-shards.sh"
-    [ -f "$N_MERGE" ] || { echo "validate-adversarial-convergence.sh: arm N cannot re-derive: $N_MERGE is absent; no verdict" >&2; exit 2; }
     for i in $n_cand; do
       n_f="${P_FILE[$i]}"; n_b="$(basename "$n_f")"; n_pred="$(basename "${P_FILE[$((i - 1))]}")"
       n_from="$(block_field "$n_f" 'shard_set_derived_from')"; n_from="${n_from%%[[:space:]]*}"
@@ -2915,7 +3084,7 @@ if [ -n "$n_cand" ]; then
         err "N -- WIDTH" "$n_b derives its shard set from '$n_from', but its predecessor in this series is $n_pred."
         continue
       fi
-      n_out="$(bash "$N_MERGE" --derived-set "$n_f" 2>&1)"; n_rc=$?
+      ac_batch_get "${AC_BN[$i]}"; n_out="$B_OUT"; n_rc="$B_RC"
       case "$n_rc" in
         0)
           n_owe="$(printf '%s\n' "$n_out" | awk -F'\t' 'NF == 1 && /^[0-9]+$/' | LC_ALL=C sort -n -u | tr '\n' ' ')"
@@ -2951,16 +3120,10 @@ fi
 #   s323 coe p1->p2                 16.5%   (53883 of 325556)
 #   s322 ARCHITECTURE-SPINE p1->p2  49.7%   (16998 of 34180)
 # so the ceiling passes the three ordinary repairs and trips on the spine rewrite.
-r_cand=""
-for ((i = 1; i < N; i++)); do
-  [ "${P_RI_HAS[$i]:-0}" = 1 ] && r_cand="$r_cand $i"
-done
 if [ -n "$r_cand" ]; then
-  R_MERGE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/merge-adversarial-shards.sh"
-  [ -f "$R_MERGE" ] || { echo "validate-adversarial-convergence.sh: arm R cannot re-derive: $R_MERGE is absent; no verdict" >&2; exit 2; }
   for i in $r_cand; do
     r_f="${P_FILE[$i]}"; r_b="$(basename "$r_f")"
-    r_out="$(bash "$R_MERGE" --repair-introduced "$r_f" 2>/dev/null)"; r_rc=$?
+    ac_batch_get "${AC_BR[$i]}"; r_out="$B_OUT"; r_rc="$B_RC"
     case "$r_rc" in
       0)
         r_got="$(printf '%s\n' "$r_out" | awk -F'\t' '$1 == "REPAIR-INTRODUCED" { print $2 "|" $4; exit }')"
@@ -3972,33 +4135,28 @@ J2T_RELEASE="0.913.0"
 #   form, a sprint prefix `S<N>-` stripped (`S323-1.1` reads `1.1`), so the strategy-rows.sh table
 #   `| Strategy id | Case | Story id |`, the two-column `| Strategy id | Story id |` and the older
 #   `| id | story | ... |` read alike.
+#   A TABLE WITH NO STORY COLUMN takes its story from the governing `#+ Story <dotted>` heading (the first
+#   dotted id on the heading; any other heading resets it), and its rows are `S<N>-<d>.<d>-..` /
+#   `S<d>.<d>-..` / `ST<N>-..` ids (s320 `S1.1-AC1`, s322 `S322-1.1-AC1`).
 j2t_ids() {
   awk 'function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
-       !/^\|/ { col = 0; prev = ""; next }
+       !/^\|/ {
+         col = 0; prev = ""
+         if (/^#+[ \t]/) {
+           hs = ""
+           if (match($0, /[Ss]tory[ \t]+[0-9]+\.[0-9]+[a-z]?/)) { hs = substr($0, RSTART, RLENGTH); sub(/^[Ss]tory[ \t]+/, "", hs) } }
+         next }
        /^\|[ \t:|-]*-[ \t:|-]*$/ {
          col = 0; n = split(prev, h, "|")
          for (i = 2; i < n; i++) { t = tolower(trim(h[i])); if (t == "story" || t == "story id") { col = i; break } }
          prev = ""; next }
        { prev = $0 }
-       col > 0 && /^\|[ \t]*ST[0-9]+-/ {
+       /^\|[ \t]*`?S(T?[0-9]+-)?[0-9]/ {
+         if (col == 0) { if (hs != "") print hs; next }
          n = split($0, c, "|"); if (col >= n) next
          v = trim(c[col]); sub(/^S[0-9]+-/, "", v)
          if (v ~ /^[0-9]+\.[0-9]+[a-z]?$/) print v }' "$1" | sort -u
 }
-# $1 the strategy file, $2 the notarized sha256 -> J2T_BEFORE (a file holding those bytes) or empty.
-j2t_recover() {
-  local d b c
-  J2T_BEFORE=""
-  command -v git >/dev/null 2>&1 || return 0
-  d="$(dirname "$1")"; b="${1##*/}"
-  for c in $( ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
-                git -C "$d" log --all --format=%H -- "./$b" ) 2>/dev/null); do
-    ( unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
-      git -C "$d" show "${c}:./$b" ) > "$AC_T/j2t-before" 2>/dev/null || continue
-    if [ "$(k2_sha "$AC_T/j2t-before")" = "$2" ]; then J2T_BEFORE="$AC_T/j2t-before"; return 0; fi
-  done
-}
-
 j2_in_subject() {  # $1 resolved file -> 0 when it is a sprint-scoped single artifact
   case "$1" in
     */SPEC.md|SPEC.md) return 0 ;;
@@ -4109,7 +4267,7 @@ if ac_on J2 && [ "$N" -gt 0 ] && [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; the
         # THE STORY-ID SET (BL-736, header at J2T_RELEASE): the row id keeps `2.3` while the story column
         # says `2.3a`, so only the column reader gets `2.3a`.
         j2t_term="${LAST_FILE##*/}"
-        j2t_recover "$j2_file" "$j2_sha"
+        j2t_recover "$j2_file" "$j2_sha" "$AC_T/j2t-before"
         j2t_why=""; j2t_diff=""
         if [ -z "$J2T_BEFORE" ]; then
           j2t_why="no committed version of ${j2_file##*/} hashes to the notarized ${j2_sha}, so its story-id set cannot be read"
@@ -4652,7 +4810,7 @@ fi
 #   FAIL       a key closed by neither, or fewer CRITICAL/MAJOR headings than the header's counts.
 #   SKIP       printed, never counted: the series opened under the old engine, whatever engine finishes it.
 #              The era key is era-token.sh's ai_dlc_era_open asked for pass 1: shards/<stem>-p1/.era
-#              (partition-document.sh --shard-dir, or --map for a SERIAL document, writes the token there; the
+#              (partition-document.sh --shard-dir writes the token there at each pass, SERIAL passes included; the
 #              merge copies it into a merged pass 1 only when .era carries it), or, for a series with no pass-1
 #              shard dir, the token line in the pass-1 file. No version or git history is read.
 # The E4 era token: one definition, era-token.sh beside this script.
