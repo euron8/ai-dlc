@@ -256,6 +256,8 @@ if [ -z "$DL" ]; then
   case "$DL" in \"*\"|\'*\') DL="${DL#?}"; DL="${DL%?}" ;; esac
   case "$DL" in *'|'*) DL="" ;; esac
 fi
+# An unfilled template placeholder (the whole value is `<...>`) is no deliverable: treat it as absent.
+case "$DL" in '<'*'>') DLI="${DL#<}"; DLI="${DLI%>}"; case "$DLI" in *'<'*|*'>'*) ;; *) DL="" ;; esac ;; esac
 
 TS=""
 [ -n "$WFD" ] && TS="$(bash "$WFD" --dispatch-ts "$TUI" 2> /dev/null)" || TS=""

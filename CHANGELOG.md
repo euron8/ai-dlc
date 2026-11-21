@@ -19,6 +19,42 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1205.0] - 2026-11-21
+
+### After a compaction the lead re-reads only the part of a step file it needs (BL-819 advances)
+
+- For every consumer's lead. When the snapshot's `sub_step` names a row of the current step file's `## Resume` table, the recovery hook now requires the step file's opening through its Resume table plus the one anchored section, instead of the whole step file. The recovery gate credits those two ranges. Any other state (no `sub_step`, a `sub_step` for another file, a value that is not a Resume row) keeps the whole-file requirement, so nothing gets weaker.
+- What it saves, per Resume row, in reads against the whole file: `implementation.md` row 2, 2 against 4; `retro.md` row 4a, 3 against 6; `deploy-validate.md` row 5, 2 against 4. `implementation.md` row 6 is 4 reads against 4, so it saves no reads and about 17 KB of context.
+- `snapshot-update.sh --set current_step_file` now also drops a stale `sub_step`, so a position left over from another step file is never read as current.
+
+### The efficiency scripts price each cache write at its recorded tier (BL-1174)
+
+- For whoever reads a sprint's dollar figures. Subagents write five-minute cache and the lead writes one-hour cache; the scripts priced every write as one-hour. Subagent dollars per sprint now fall by $110 to $288 (s323 $1,580.2 to $1,331.8); the lead's figures move by under $0.6.
+- Found, not fixed: the s321 operator-wait gap is the pause detector opening a span on a heredoc that merely mentions the pause flag.
+
+### A plain gloss sits beside an item's id and never replaces it (BL-1205)
+
+- For every consumer's lead. Rule 11 now says so in its Item (3) paragraph, and a pin in `process-rule-pins` holds the sentence. Consumer finding `PC-S323-7D-HANDOFF-PROMPT-OMITS-CARRYOVER-IDS-NO-CLAUSE-REQUIRES-IDS-IN-PROMPT-BODY-AND-PLAIN-GLOSS-READS-AS-DELETE-IDS`: the retro step 7d half was already resolved; this closes the half that applied to every other handoff, resume or next-sprint prompt.
+
+### The lead's in-flight table stops listing an unfilled placeholder as what a seat is producing
+
+- For every consumer's lead. An In-Flight row in the pipeline snapshot, and the dispatch guard's spawn ledger, used to take a template placeholder such as `<record>` as the seat's deliverable or as a rendered `--mark`; graph had 7 In-Flight rows reading a literal `<record>`. `core/hooks/ai-dlc-inflight-row.sh` now treats a `<...>` value as absent, and `core/hooks/ai-dlc-dispatch-guard.sh` keeps `"mark":"rendered"` for a wholly `<...>` file argument and drops its `mark_file`, so the placeholder is never read as a rendered file.
+- A brief with no `Deliverable:` line and an unfilled mark still dispatches; the in-flight row hook then takes its existing exit-2 "add the row by hand" path instead of writing a bogus row.
+
+### Records
+
+- BL-1141 closes (its parts a and b landed in 0.1199.0; the close is recorded with a projected saving of $1.28 to $2.53 per sprint that no sprint has yet run, and the pipeline did not fall on it).
+- BL-1187: graph carries the role keys since its 0.1194.0 pull; the $450 first-request figure restates to $370.8 at the five-minute tier; the owed list gains the six role files over 16,384 B.
+- BL-716: `core/team-roles/remediator.md` no longer carries a "Measured:" narrative line (31,715 to 31,695 B).
+
+### Backlog readings from the record: three entries close and three advance, with no shipped code change
+
+- Records and readings only; no shipped code changes. For the operator and the leads who plan the next batches from the backlog.
+- The report that `readopt-override --merge` lost consumer lines is closed as a false premise. Re-running `--merge` on a scratch copy of graph's tree showed nothing of the consumer's was lost: the 54 lines the merge dropped were 8 blanks and 46 lines of upstream Rule 8 text the consumer never changed, and all 10 consumer-only lines survived (BL-1201).
+- Rework caused by record-metadata-only gate rejections fell from graph's s320 run to s323: 0.54 to 0.11 caused gate-2 passes per story and 0.683 h to 0.048 h per story, so that entry closes. The verdict is that the implementation step itself did not fall (its own cost rose from $14.7 to $15.0 per story). The full-collection-uncaptured check gets no arm: it fired on 0 of s323's 61 gate states, with 1 catch in 4 sprints (BL-843).
+- The four planning steps per story did not fall against s319 on the monotone clock (1.83 h to 2.03 h). The entry closes on its measured per-width readings, with each carry-over round's "Failure caught" line as the value citation (BL-810).
+- Still open, with new readings. Of the 225 fixture families outside the judged set, 6 are kept on a recorded catch, 3 on one shared catch, 46 on a named consequence, and 170 (18377 s of push time) have no catch on record; deleting those 170 is owed and not done here (BL-583). Item 4 owes core changes for five parts: the requirements gate, the sprint-review gate, the carry-over routing rows, the pass-3 cross width, and the validate call in research-requirements section 3, which s323 did not measure. The s323 PRD walk was a requirements-step call already removed by 0.1199.0, and the carry-over pass-2 cross is discharged by 0.1192.0 (BL-812). The In-Flight row hook is assessed read-only: it removed the row-permutation class, but this is not a measured catch, and the draft "Failure caught" text is held for an operator ruling (BL-912).
+
 ## [0.1202.0] - 2026-11-21
 
 ### A fence opened after a list or blockquote marker no longer reads as a reproduced passage, and a reproduced line that opens with inline code is no longer hidden (PC-S324-RETIRED-LAYER-PASSAGE-FENCE-EXCLUSION-DEFEATED-BY-STAR-STRIP, BL-1203)

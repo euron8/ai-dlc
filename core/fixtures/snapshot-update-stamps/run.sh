@@ -444,6 +444,19 @@ cell() {
       if [ "$RC" = 0 ] && grep -qF 'Current step: route.md.' <<<"$cont" && grep -qx -- '- current_step_file: route.md' "$s" \
          && [ "$(grep -c 'current_step_file' "$s")" = 1 ]; then return 0; fi
       CELL_MSG="rc=$RC continue=[$(grep -o 'Current step: [^ ]*' <<<"$cont")] bullets=$(grep -c 'current_step_file' "$s")"; return 1 ;;
+    SUBDROP)
+      # A bare `--set current_step_file` that MOVES the position drops `- sub_step:` (its value belongs to the step file it was
+      # set in), as --set-in does; the near-miss, a bare --set of an unrelated key, keeps it.
+      local w="$WORK/$t-subdrop" mv keep
+      mkdir -p "$w/_bmad-output"; s="$w/_bmad-output/pipeline-snapshot.md"
+      printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step_file: a.md\n- sub_step: a.md#x\n- last_gate_passed: none\n\n## Sprint Context\n- sprint_id: 7\n' > "$s"
+      mkdir -p "$w/keep/_bmad-output"; cp "$s" "$w/keep/_bmad-output/pipeline-snapshot.md"
+      drive "$pr" "$s" --set current_step_file b.md; mv="$RC"
+      { [ "$mv" = 0 ] && grep -qx -- '- current_step_file: b.md' "$s" && ! grep -q 'sub_step' "$s"; } || { CELL_MSG="move rc=$mv sub_step still present=[$(grep sub_step "$s")]"; return 1; }
+      s="$w/keep/_bmad-output/pipeline-snapshot.md"
+      drive "$pr" "$s" --set last_gate_passed gate-1; keep="$RC"
+      if [ "$keep" = 0 ] && grep -qx -- '- last_gate_passed: gate-1' "$s" && grep -qx -- '- sub_step: a.md#x' "$s"; then return 0; fi
+      CELL_MSG="near-miss rc=$keep sub_step=[$(grep sub_step "$s")]"; return 1 ;;
     LIVE)
       # Every NONE class of the s319-s321 walk, as ops, on a scrubbed copy of graph's live snapshot:
       # unpiped rows, prose paragraphs above the In-Flight header, agent cells with trailing words, and
@@ -809,6 +822,7 @@ if cell BLOCKCONTENT "$PROG" ship; then ok "BLOCKCONTENT: --set-block content ca
 if cell STATUSVOC "$PROG" ship; then ok "STATUSVOC: --row-set status 'in-flight (join: x)' and --row-status delivered are exit 2, file unchanged"; else bad "STATUSVOC: $CELL_MSG"; fi
 if cell READERS "$PROG" ship; then ok "READERS: an op-only snapshot (--init, --set, --set-block) resolves route.md in the continue and recover hooks and sprint 42 in the guard's sed"; else bad "READERS: $CELL_MSG"; fi
 if cell SETBOLD "$PROG" ship; then ok "SETBOLD: --set on a bold current_step_file rewrites it canonical in place, and the continue hook reads it"; else bad "SETBOLD: $CELL_MSG"; fi
+if cell SUBDROP "$PROG" ship; then ok "SUBDROP: a bare --set current_step_file that moves the position drops sub_step; a bare --set of another key keeps it"; else bad "SUBDROP: $CELL_MSG"; fi
 if cell LIVE "$PROG" ship; then ok "LIVE: every NONE class of the walk is expressed as ops on the scrubbed live snapshot, its shape kept"; else bad "LIVE: $CELL_MSG"; fi
 if cell SECADD "$PROG" ship; then ok "SECADD: --section-add writes In-Flight with its header and a declared extra before Context Reminders, Sprint Context in canonical order, and refuses the suffixed extra twice and an undeclared name"; else bad "SECADD: $CELL_MSG"; fi
 if cell SECMOVE "$PROG" ship; then ok "SECMOVE: --section-move-to-history moves an invented section whole to history and refuses one of the seven"; else bad "SECMOVE: $CELL_MSG"; fi

@@ -1,0 +1,33 @@
+== (a) implementation + gate-validation[implementation], per story
+  s319: token-equivalent $41.3 (API $41.3); spawns 31.50 (630); subagent $30.68
+  s322: token-equivalent $27.9 (API $17.1); spawns 13.38 (107); subagent $17.08
+  s323: token-equivalent $32.0 (API $22.9); spawns 17.06 (307); subagent $22.95
+  projected (BL-808 row): $23.4 token-eq (API same), 20.2 spawns; combined row: at least $15.8 fall to <= $25.5, at least 6.8 spawns fall
+== (b) carry-over-evaluation alone, per story (subagent, spawns.jsonl)
+  s319: 4.40 spawns (88), subagent $4.33 ($86.66)
+  s320: 10.15 spawns (132), subagent $12.20 ($158.55)
+  s322: 11.50 spawns (92), subagent $23.02 ($184.13)
+  s323: 4.72 spawns (85), subagent $9.52 ($171.41)
+  projected: s319 basis 2.90 spawns, $2.98; s320 basis 7.30 spawns, $8.20
+== (b') four planning steps, per story (roll.py --seats)
+  s319: token-equivalent $55.4 (API $55.4)
+  s322: token-equivalent $100.2 (API $82.5)
+  s323: token-equivalent $55.6 (API $46.8)
+  projected: s319 basis $55.05, s320 basis $74.9 (API same)
+== (c) stories-test-strategy, BL-811 row, per story
+  s319: token-equivalent $25.0 (API $25.0); elicitation ('licit' in description) step only 45 spawns $95.27 ($4.76 per story); step plus gate 92 spawns $162.23 (4.60 spawns, $8.11 per story)
+  s323: token-equivalent $20.9 (API $18.0); elicitation ('licit' in description) step only 24 spawns $52.17 ($2.90 per story); step plus gate 24 spawns $52.17 (1.33 spawns, $2.90 per story)
+  projected: $24.0 token-eq (API same); elicitation, step plus gate, 4.10 spawns and $6.11 per story
+== (d) lead calls, whole pipeline bucket, per story, by class (roll.py --classes)
+  s319: 318.8 lead calls per story; other 146.9, merge 76.9, snapshot 48.0, gate-run 21.0, dispatch 14.8, step-reread 6.5, repair 2.5, compaction-recovery 2.2
+  s323: 652.6 lead calls per story; other 251.2, merge 194.6, snapshot 69.5, step-reread 38.1, gate-run 36.9, compaction-recovery 31.2, dispatch 21.8, repair 9.3
+  projected: s319 basis 310.9 lead calls per story (318.3 - 7.35, BL-819 L3)
+== controls
+C1 s319 implementation pair token-eq $41.3 (recorded $41.3): MATCH; spawns 31.50 (recorded 31.50): MATCH
+C1 s319 carry-over 88 spawns $86.66 (recorded 88, $86.66): MATCH
+C1 s319 stories-test-strategy token-eq $25.0 (recorded $25.0): MATCH
+C1 s319 elicitation step plus gate 92 spawns $162 (recorded 92, $162): MATCH
+C2 s319 lead calls by class 318.8 (134 rounded cells, tolerance 6.70) against outcome_row's whole bucket 318.7: MATCH
+C2 s323 lead calls by class 652.6 (153 rounded cells, tolerance 7.65) against outcome_row's whole bucket 652.4: MATCH
+note: (b') is a sum of four rounded seat figures; the unrounded group is group_four_steps.py's ($55.47 s323, $55.38 s319)
+C3 impossible description token: 0 spawns; present token 'licit' s323: 75

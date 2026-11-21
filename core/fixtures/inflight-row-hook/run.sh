@@ -89,6 +89,8 @@ for f in $SIBS; do cp "$SDIR/$f" "$TPL/scripts/ai-dlc/$f" || exit 2; done
   printf '{"v":1,"ts":"2026-11-01T09:00:00Z","name":"epoch","role":"pm","tool_use_id":"toolu_01epoch"}\n'
   printf '{"v":1,"ts":"%s","name":"dev-1","role":"dev","tool_use_id":"toolu_01abc","mark":"--mark","mark_file":"m/k.md"}\n' "$LEDGER_TS"
   printf '{"v":1,"ts":"2026-11-01T10:05:00Z","name":"dev-2","role":"dev","tool_use_id":"toolu_01nomk"}\n'
+  printf '{"v":1,"ts":"2026-11-01T10:06:00Z","name":"dev-3","role":"dev","tool_use_id":"toolu_01ph","mark":"rendered","mark_file":"<record>"}\n'
+  printf '{"v":1,"ts":"2026-11-01T10:07:00Z","name":"dev-4","role":"dev","tool_use_id":"toolu_01phn","mark":"rendered","mark_file":"m/<k>.md"}\n'
 } > "$TPL/_bmad-output/spawn-ledger.jsonl"
 printf '{"agentType":"dev","toolUseId":"toolu_01abc"}\n' > "$TPL/td/agent-$AGENT.meta.json"
 printf '# Pipeline Snapshot\n\n## Pipeline Position\n- current_step_file: implementation.md\n\n## Sprint Context\n- sprint_id: 5\n\n## In-Flight Teammates\nagent | role | deliverable | dispatched-at | status\n' \
@@ -192,6 +194,19 @@ cell() {
       [ "$RC" = 2 ] && grep -qF -- "--row-add '$AGENT toolu_01nomk | dev | <deliverable path> |" <<<"$ERR" \
         && [ "$(cksum < "$(snap "$w")")" = "$cs" ] && return 0
       CELL_MSG="rc=$RC err=$(printf '%s' "$ERR" | head -3 | tr '\n' ' ')"; return 1 ;;
+    DLPH|DLPHNEAR)
+      # A ledger mark_file that is wholly an unfilled `<...>` placeholder is no deliverable (NODL's outcome);
+      # its near-miss, a real path merely containing `<`, is still taken.
+      local tu=toolu_01ph; [ "$c" = DLPHNEAR ] && tu=toolu_01phn
+      w="$(mkworld "$t-$c")"; cs="$(cksum < "$(snap "$w")")"
+      hook "$hp" "$w" "$t.$(printf '%s' "$c" | tr 'A-Z' 'a-z')" "$(post async_launched "$tu" "$BRIEF_NONE")"
+      if [ "$c" = DLPH ]; then
+        [ "$RC" = 2 ] && grep -qF -- "--row-add '$AGENT $tu | dev | <deliverable path> |" <<<"$ERR" \
+          && [ "$(cksum < "$(snap "$w")")" = "$cs" ] && return 0
+        CELL_MSG="rc=$RC row=$(grep "$tu" "$(snap "$w")" | tr '\n' ' ') err=$(printf '%s' "$ERR" | head -3 | tr '\n' ' ')"; return 1
+      fi
+      [ "$RC" = 0 ] && [ "$(grep -cxF -- "$AGENT $tu | dev | m/<k>.md | 2026-11-01T10:07:00Z | in-flight" "$(snap "$w")")" = 1 ] && return 0
+      CELL_MSG="rc=$RC row=$(grep "$tu" "$(snap "$w")" | tr '\n' ' ')"; return 1 ;;
     ROWDIFF)
       w="$(mkworld "$t-rowdiff" "toolu_01abc | dev | other.md | $LEDGER_TS | in-flight")"; cs="$(cksum < "$(snap "$w")")"
       hook "$hp" "$w" "$t.rowdiff" "$(post async_launched toolu_01abc "$BRIEF_DEV")"
@@ -268,6 +283,8 @@ say_cell NOLEDGER "a dispatch with no spawn-ledger row writes nothing and exits 
 say_cell DLPARSE "a Deliverable line naming two .md paths yields its FIRST path, x/y.md"
 say_cell DLFALL "a brief with no Deliverable line falls back to the ledger's mark_file, m/k.md"
 say_cell NODL "no Deliverable line and no mark_file: no row, exit 2, stderr names the exact --row-add call"
+say_cell DLPH "a ledger mark_file that is an unfilled <record> placeholder is no deliverable: no row, exit 2, stderr names the --row-add call"
+say_cell DLPHNEAR "a ledger mark_file merely containing < (m/<k>.md) is still taken as the deliverable"
 say_cell ROWDIFF "an existing row with the same toolu_ id and different cells: no write, exit 2, the remedy names --row-replace and not --row-add"
 say_cell SUBSTOP "SubagentStop with the deliverable on disk prints nothing and sets the row delivered-reachable"
 say_cell SUBSTOPABS "SubagentStop with the deliverable absent prints nothing, exits 0 and writes nothing"

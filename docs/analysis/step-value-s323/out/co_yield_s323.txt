@@ -1,0 +1,327 @@
+== CONTROLS (cost): impossible description token reads 0 spawns; real token 'Adversarial p1 shard' reads 3 (s323)
+
+== COST s323 carry-over-evaluation (18 stories)
+  analyst draft                                    1 spawns  $   6.00     19.0 agent-min
+  party dispatcher                                 1 spawns  $   1.59     15.9 agent-min
+  party cross (4 seats)                            4 spawns  $   7.37     21.3 agent-min
+  party part (4 seats x 6)                        24 spawns  $  26.60     69.0 agent-min
+  party repair, section shards                     5 spawns  $  14.75     52.0 agent-min
+  party repair, serial after assembly              1 spawns  $   8.12     22.5 agent-min
+  route: live reads and read-only checks           4 spawns  $   6.35     31.1 agent-min
+  route: adjudication and closure remediators      2 spawns  $   9.75     24.6 agent-min
+  elicitation part (4 shards)                      4 spawns  $  10.26     36.0 agent-min
+  elicitation cross (1 agent)                      1 spawns  $   3.00      4.4 agent-min
+  elicitation repair, section shards               4 spawns  $   4.87     20.7 agent-min
+  elicitation repair, serial                       2 spawns  $   7.88     21.8 agent-min
+  adv p1 part (3 shards)                           3 spawns  $  10.89     30.3 agent-min
+  adv p1 cross                                     1 spawns  $   6.90     17.0 agent-min
+  adv p1 repair, section shards                    3 spawns  $   4.49     19.0 agent-min
+  adv p1 repair, adjudicator lanes + serial        5 spawns  $   7.21     23.9 agent-min
+  operator-decision closer correction              1 spawns  $   0.65      3.0 agent-min
+  adv p2 part (4 shards)                           4 spawns  $  10.09     31.1 agent-min
+  adv p2 cross                                     1 spawns  $   4.33     12.5 agent-min
+  adv p2 repair, section shards                    4 spawns  $   2.19      7.1 agent-min
+  adv p2 repair, serial lane + record fixes        3 spawns  $   2.21     11.2 agent-min
+  adv p3 part (3 shards)                           3 spawns  $   4.23     13.2 agent-min
+  adv p3 cross                                     1 spawns  $   3.13     11.1 agent-min
+  adv p3 repair + step 4a record                   2 spawns  $   1.28      6.8 agent-min
+  route: fold answered OQs into requirements       1 spawns  $   7.27     25.1 agent-min
+  PARTITION SUM                                   85 spawns  $ 171.41    549.6 agent-min  ($9.52 per story)
+  label total (bl812_rederive.agg)                85 spawns  $ 171.41    549.6 agent-min
+  control partition sums to label totals, UNMATCHED bucket 0 rows, rows matching 2+ rules 0: MATCH
+
+== COST s322 carry-over-evaluation (8 stories)
+  analyst draft                                    1 spawns  $   5.70     27.1 agent-min
+  party dispatcher                                 1 spawns  $   2.35     21.7 agent-min
+  party cross (4 seats)                            4 spawns  $   4.42     18.3 agent-min
+  party part (4 seats x 7)                        28 spawns  $  28.08    122.4 agent-min
+  party repair, section shards + reruns           12 spawns  $  14.63     76.9 agent-min
+  party repair, serial lane + fan-in               2 spawns  $   6.78     36.8 agent-min
+  adv p1 part (7 shards)                           7 spawns  $  37.01    293.7 agent-min
+  adv p1 cross                                     1 spawns  $   5.36     44.2 agent-min
+  S7-cap edit                                      1 spawns  $   0.27      0.5 agent-min
+  adv p1 repair, section shards + rerun            8 spawns  $   7.13     28.1 agent-min
+  adv p1 repair, serial lane + fan-in              2 spawns  $   2.11     10.2 agent-min
+  adv p2 part (6 shards)                           6 spawns  $  21.00    140.1 agent-min
+  adv p2 cross (3 runs)                            3 spawns  $  22.20    147.1 agent-min
+  adv p2 repair, section shards                    6 spawns  $   3.25     10.8 agent-min
+  adv p2 repair, serial lane                       1 spawns  $   2.24    341.6 agent-min
+  adv p3 part (6 shards)                           6 spawns  $  10.26     62.8 agent-min
+  adv p3 cross                                     1 spawns  $   2.84     15.4 agent-min
+  adv p3 deferral record                           1 spawns  $   0.29      0.3 agent-min
+  route: s321 minors triage rows                   1 spawns  $   8.21     59.2 agent-min
+  PARTITION SUM                                   92 spawns  $ 184.13   1457.2 agent-min  ($23.02 per story)
+  label total (bl812_rederive.agg)                92 spawns  $ 184.13   1457.2 agent-min
+  control partition sums to label totals, UNMATCHED bucket 0 rows, rows matching 2+ rules 0: MATCH
+
+== COST s319 carry-over-evaluation (20 stories)
+  analyst draft                                    1 spawns  $   2.05     11.2 agent-min
+  party part                                      24 spawns  $  18.81     81.4 agent-min
+  party cross                                     24 spawns  $  16.47     70.1 agent-min
+  party repair (serial party remediator)           1 spawns  $   7.08     41.5 agent-min
+  elicitation part                                 6 spawns  $   9.46     44.9 agent-min
+  elicitation cross                                6 spawns  $   9.54     43.7 agent-min
+  elicitation repair (sections + serial)           7 spawns  $   5.26     46.3 agent-min
+  adv p1 part                                      6 spawns  $   4.71     11.6 agent-min
+  adv p1 cross                                     6 spawns  $   7.61     28.1 agent-min
+  adv p1 repair (sections + re-run)                7 spawns  $   5.68     31.7 agent-min
+  PARTITION SUM                                   88 spawns  $  86.66    410.5 agent-min  ($4.33 per story)
+  label total (bl812_rederive.agg)                88 spawns  $  86.66    410.5 agent-min
+  control partition sums to label totals, UNMATCHED bucket 0 rows, rows matching 2+ rules 0: MATCH
+
+== FINDINGS s323 at eabdc576e: C/M by round x width (heading parse | independent grep -c | provenance findings_critical+major | HP3 'MAJOR n' headings)
+  party part  files  24  C/M  77 (CRITICAL 3)  grep -c  77  provenance n/a  HP3 0   control two counts agree: MATCH
+  party cross files   4  C/M  23 (CRITICAL 1)  grep -c  23  provenance n/a  HP3 0   control two counts agree: MATCH
+  elic  part  files   4  C/M  18 (CRITICAL 0)  grep -c  18  provenance n/a  HP3 0   control two counts agree: MATCH
+  elic  cross files   1  C/M   6 (CRITICAL 0)  grep -c   6  provenance n/a  HP3 0   control two counts agree: MATCH
+  p1    part  files   3  C/M   9 (CRITICAL 0)  grep -c   9  provenance 9  HP3 0   control two counts agree: MATCH
+  p1    cross files   1  C/M   4 (CRITICAL 0)  grep -c   4  provenance 4  HP3 0   control two counts agree: MATCH
+  p2    part  files   4  C/M   4 (CRITICAL 0)  grep -c   4  provenance 4  HP3 0   control two counts agree: MATCH
+  p2    cross files   1  C/M   3 (CRITICAL 0)  grep -c   3  provenance 3  HP3 0   control two counts agree: MATCH
+  p3    part  files   3  C/M   1 (CRITICAL 0)  grep -c   1  provenance 1  HP3 0   control two counts agree: MATCH
+  p3    cross files   1  C/M   0 (CRITICAL 0)  grep -c   0  provenance 0  HP3 0   control two counts agree: MATCH
+  control impossible finding F-9999 found in 0 findings (must be 0); real F-1 in 41
+  total C/M 145, CRITICAL 4
+
+== CONTROL against width.py's committed output (width-319-320-323.txt): per round x width n, crit, refound_by_part, refound_other_round, unique_in_cross, unique_in_part
+  party cross mine [23, 1, 18, 11, 3, 0] | width.py [23, 1, 18, 11, 3, 0] : MATCH
+  party part  mine [77, 3, 47, 21, 0, 44] | width.py [77, 3, 47, 21, 0, 44] : MATCH
+  elic  cross mine [6, 0, 0, 2, 4, 0] | width.py [6, 0, 0, 2, 4, 0] : MATCH
+  elic  part  mine [18, 0, 4, 9, 0, 9] | width.py [18, 0, 4, 9, 0, 9] : MATCH
+  p1    cross mine [4, 0, 1, 3, 1, 0] | width.py [4, 0, 1, 3, 1, 0] : MATCH
+  p1    part  mine [9, 0, 2, 5, 0, 4] | width.py [9, 0, 2, 5, 0, 4] : MATCH
+  p2    cross mine [3, 0, 2, 1, 1, 0] | width.py [3, 0, 2, 1, 1, 0] : MATCH
+  p2    part  mine [4, 0, 2, 3, 0, 0] | width.py [4, 0, 2, 3, 0, 0] : MATCH
+  p3    part  mine [1, 0, 0, 0, 0, 1] | width.py [1, 0, 0, 0, 0, 1] : MATCH
+  control (rows read from width.py output: 9; impossible round key present: False): ALL MATCH
+
+== REPAIR RECORDS (s323) at eabdc576e: blocks, severity, disposition, blocks with no joinable finding key
+  carry-over-evaluation-party-repair-p1.md       blocks 171  C/M  96  disp {'escalated': 50, 'not-reproduced': 3, 'repaired': 118}  no finding key 0
+      control C/M ### headings by independent regex 96 vs parse 96: MATCH
+  coe-elicitation-repair-p1.md                   blocks  54  C/M  34  disp {'escalated': 7, 'repaired': 47}  no finding key 0
+      control C/M ### headings by independent regex 34 vs parse 34: MATCH
+  coe-repair-p1.md                               blocks  24  C/M  18  disp {'escalated': 11, 'repaired': 13}  no finding key 0
+      control C/M ### headings by independent regex 18 vs parse 18: MATCH
+  coe-serial-repair-p1.md                        blocks  11  C/M   6  disp {'?': 2, 'repaired': 8, 'skipped': 1}  no finding key 4
+      control C/M ### headings by independent regex 6 vs parse 6: MATCH
+  coe-serial-repair-p1-correction.md             blocks   1  C/M   1  disp {'repaired': 1}  no finding key 1
+      control C/M ### headings by independent regex 1 vs parse 1: MATCH
+  coe-repair-p2.md                               blocks   9  C/M   4  disp {'repaired': 8, 'skipped': 1}  no finding key 1
+      control C/M ### headings by independent regex 4 vs parse 4: MATCH
+  coe-serial-repair-p2.md                        blocks  13  C/M   7  disp {'repaired': 13}  no finding key 0
+      control C/M ### headings by independent regex 7 vs parse 7: MATCH
+  coe-repair-p3.md                               blocks   1  C/M   1  disp {'repaired': 1}  no finding key 0
+      control C/M ### headings by independent regex 1 vs parse 1: MATCH
+  coe-repair-p3-second.md                        blocks   1  C/M   1  disp {'repaired': 1}  no finding key 1
+      control C/M ### headings by independent regex 1 vs parse 1: MATCH
+  control impossible key cited by 0 blocks (must be 0); real key ('carry-over-evaluation-pm-1','F-1') cited by 1
+
+== s323 C/M findings joined to repair blocks (REPAIRED = a citing block has disposition repaired)
+  party part  C/M  77: REPAIRED  77  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  party cross C/M  23: REPAIRED  23  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  elic  part  C/M  18: REPAIRED  18  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  elic  cross C/M   6: REPAIRED   6  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  p1    part  C/M   9: REPAIRED   9  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  p1    cross C/M   4: REPAIRED   4  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  p2    part  C/M   4: REPAIRED   4  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  p2    cross C/M   3: REPAIRED   3  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  p3    part  C/M   1: REPAIRED   1  ESCALATED-ONLY  0  NO-BLOCK  0   control sum MATCH
+  not REPAIRED (round key F-id status): 
+
+== s323 per-width marginal catch over DEFECTS (union-find: C/M findings of one round that share a repair block are one defect; a ceiling on the defect count)
+  round party C/M findings 100 -> defects  42 (control findings in components 100 MATCH=True); only cross 4, only part files 34, both 4
+    raised by exactly one review file: 21 of 42; by 2+ files: 21
+    distinct seats per defect: {1: 22, 2: 8, 3: 6, 4: 6}
+    seat pm        is the ONLY seat on  3 defects; findings 23 (part 17, cross 6)
+    seat architect is the ONLY seat on  8 defects; findings 28 (part 21, cross 7)
+    seat dev       is the ONLY seat on  1 defects; findings 16 (part 11, cross 5)
+    seat tea       is the ONLY seat on 10 defects; findings 33 (part 28, cross 5)
+    section 1:  5 defects touch it,  3 are raised by that section's part files alone
+    section 2:  5 defects touch it,  5 are raised by that section's part files alone
+    section 3:  7 defects touch it,  6 are raised by that section's part files alone
+    section 4:  5 defects touch it,  5 are raised by that section's part files alone
+    section 5: 12 defects touch it, 10 are raised by that section's part files alone
+    section 6:  5 defects touch it,  5 are raised by that section's part files alone
+    cross-only defects, per seat cross file: {'architect-cross': 5, 'dev-cross': 1, 'pm-cross': 2, 'tea-cross': 2}
+  round elic  C/M findings  24 -> defects  24 (control findings in components 24 MATCH=True); only cross 6, only part files 18, both 0
+    raised by exactly one review file: 24 of 24; by 2+ files: 0
+    defects with ONE shard as sole raiser, per shard: {'1': 3, '2': 9, '3': 4, '4': 2, 'cross': 6}; raised by 2+ shards: 0
+  round p1    C/M findings  13 -> defects  13 (control findings in components 13 MATCH=True); only cross 4, only part files 9, both 0
+    raised by exactly one review file: 13 of 13; by 2+ files: 0
+    defects with ONE shard as sole raiser, per shard: {'1': 1, '2': 4, '3': 4, 'cross': 4}; raised by 2+ shards: 0
+  round p2    C/M findings   7 -> defects   7 (control findings in components 7 MATCH=True); only cross 3, only part files 4, both 0
+    raised by exactly one review file: 7 of 7; by 2+ files: 0
+    defects with ONE shard as sole raiser, per shard: {'2': 1, '3': 3, 'cross': 3}; raised by 2+ shards: 0
+  round p3    C/M findings   1 -> defects   1 (control findings in components 1 MATCH=True); only cross 0, only part files 1, both 0
+    raised by exactly one review file: 1 of 1; by 2+ files: 0
+    defects with ONE shard as sole raiser, per shard: {'4': 1}; raised by 2+ shards: 0
+  CRITICAL party part architect-2 F-1: defect of 5 finding(s), files ['architect-2#F-1', 'dev-2#F-1', 'pm-2#F-2', 'tea-2#F-1', 'tea-2#F-4'], repaired by ['carry-over-evaluation-party-repair-p1.md']
+  CRITICAL party cross pm-cross F-1: defect of 11 finding(s), files ['architect-1#F-5', 'architect-cross#F-4', 'dev-1#F-2', 'dev-5#F-2', 'dev-cross#F-1', 'dev-cross#F-5', 'pm-1#F-2', 'pm-cross#F-1', 'tea-1#F-4', 'tea-cross#F-6', 'tea-cross#F-7'], repaired by ['carry-over-evaluation-party-repair-p1.md']
+  CRITICAL party part tea-2 F-1: defect of 5 finding(s), files ['architect-2#F-1', 'dev-2#F-1', 'pm-2#F-2', 'tea-2#F-1', 'tea-2#F-4'], repaired by ['carry-over-evaluation-party-repair-p1.md']
+  CRITICAL party part tea-6 F-3: defect of 5 finding(s), files ['architect-6#F-2', 'architect-6#F-3', 'dev-6#F-1', 'pm-6#F-1', 'tea-6#F-3'], repaired by ['carry-over-evaluation-party-repair-p1.md']
+  control: per-seat C/M counts sum to the party total: MATCH
+
+== TEXTS the rounds read, from the planning-branch commits (each verified against the round's own artifact_sha)
+  elic read       a95acd791 288985 B sha256 9440942a... expected 9440942a: MATCH
+  p1 read         ede525729 313284 B sha256 ef0df5fb... expected ef0df5fb: MATCH
+  p1 repaired     c2cbf4105 324886 B sha256 77fc057a... expected 77fc057a: MATCH
+  p2 read         8347e51b0 325483 B sha256 f70f0bd2... expected f70f0bd2: MATCH
+  p3 read         360fc1c2a 326050 B sha256 374d866b... expected 374d866b: MATCH
+  p3 repaired     91b74ac19 325951 B sha256 083f6544... expected 083f6544: MATCH
+  p3 second link  e41959d61 328698 B sha256 11d48234... expected 11d48234: MATCH
+  ship            eabdc576e 329336 B sha256 52130ff6... expected 52130ff6: MATCH
+  artifact_sha read by each round's shard files: {'elic:9440942a': 5, 'p1:ef0df5fb': 4, 'p2:f70f0bd2': 5, 'p3:374d866b': 4}
+  control impossible span in ship text: False (must be False); real span '## Gaps' in ship text: True
+
+== s323 CLASSIFICATION of C/M findings, per round x width (population = C/M in that cell)
+   columns: C/M | REPAIRED | fix SHIPPED (claim span at ship) | NO-SPAN | GONE | REFOUND by a later round | REFOUND by an earlier round | REFOUND by other width, same round | text class: REPAIR-INTRODUCED / MIXED / MISSED-BY-PRIOR / NO-TOKEN | UNIQUE-SURVIVED
+  party part   77 |  77 |  51 | 25 |  1 | later  21 | earlier   0 | other-width  27 | RI  0 MIXED  0 MBP  0 NOTOK  0 NOTMEAS 77 | UNIQUE-SURVIVED  35
+  party cross  23 |  23 |  18 |  5 |  0 | later  11 | earlier   0 | other-width  18 | RI  0 MIXED  0 MBP  0 NOTOK  0 NOTMEAS 23 | UNIQUE-SURVIVED   9
+  elic  part   18 |  18 |  14 |  3 |  1 | later   4 | earlier   8 | other-width   0 | RI  0 MIXED  0 MBP  0 NOTOK  0 NOTMEAS 18 | UNIQUE-SURVIVED  12
+  elic  cross   6 |   6 |   4 |  2 |  0 | later   0 | earlier   2 | other-width   0 | RI  0 MIXED  0 MBP  0 NOTOK  0 NOTMEAS  6 | UNIQUE-SURVIVED   4
+  p1    part    9 |   9 |   9 |  0 |  0 | later   1 | earlier   5 | other-width   2 | RI  0 MIXED  1 MBP  7 NOTOK  1 NOTMEAS  0 | UNIQUE-SURVIVED   8
+  p1    cross   4 |   4 |   4 |  0 |  0 | later   1 | earlier   3 | other-width   1 | RI  0 MIXED  0 MBP  4 NOTOK  0 NOTMEAS  0 | UNIQUE-SURVIVED   3
+  p2    part    4 |   4 |   4 |  0 |  0 | later   0 | earlier   3 | other-width   3 | RI  0 MIXED  0 MBP  3 NOTOK  1 NOTMEAS  0 | UNIQUE-SURVIVED   1
+  p2    cross   3 |   3 |   2 |  0 |  1 | later   0 | earlier   1 | other-width   2 | RI  0 MIXED  0 MBP  3 NOTOK  0 NOTMEAS  0 | UNIQUE-SURVIVED   0
+  p3    part    1 |   1 |   1 |  0 |  0 | later   0 | earlier   0 | other-width   0 | RI  0 MIXED  0 MBP  1 NOTOK  0 NOTMEAS  0 | UNIQUE-SURVIVED   0
+  control: zero-token findings (width.py rule) 4 of 145; zero text-token findings 4 (neither can be REFOUND / classified by tokens)
+  p1: findings whose in-text tokens were all already in the ELICITATION-read text (existed when elicitation ran): 11 of 13
+  p2: findings whose in-text tokens were all already in the ELICITATION-read text (existed when elicitation ran): 4 of 7
+  p3: findings whose in-text tokens were all already in the ELICITATION-read text (existed when elicitation ran): 1 of 1
+  must-differ control for the text classes: of the p2-read text vs the p1-read text, lines changed = 162 (must be > 0 or REPAIR-INTRODUCED cannot occur)
+
+== s323 findings by (round, width), each with its class, fix at ship, and the repair block (head) that carries it: CRITICAL, REPAIR-INTRODUCED, MIXED, NO-BLOCK and GONE rows
+  party cross pm-cross                           F-1   CRITICAL NOT-MEASURABLE     status REPAIRED       fix SHIPPED  later elic,p1 | ## F-1 (critical) sections: 1, 6
+  party part  architect-2                        F-1   CRITICAL NOT-MEASURABLE     status REPAIRED       fix SHIPPED  later - | ## F-1 (critical) sections: 2
+  party part  tea-2                              F-1   CRITICAL NOT-MEASURABLE     status REPAIRED       fix SHIPPED  later p1 | ## F-1 (critical) sections: 2
+  party part  tea-6                              F-3   CRITICAL NOT-MEASURABLE     status REPAIRED       fix GONE     later - | ## F-3 (critical) sections: 6
+  elic  part  coe-elicitation/4                  F-2   MAJOR    NOT-MEASURABLE     status REPAIRED       fix GONE     later - | ### F-2 — MAJOR — "finds 2 headings without it" is an underived count
+  p1    part  coe-p1/3                           F-5   MAJOR    MIXED              status REPAIRED       fix SHIPPED  later p2 | ### F-5 — MAJOR — The "no live body" and "body in archive" labels are false for 20 cluster rows, and the SRMIN
+  p2    cross coe-p2/cross                       F-2   MAJOR    MISSED-BY-PRIOR    status REPAIRED       fix GONE     later - | ### F-2 — MAJOR — Parts 2 and 3 say backlog line 1120 still words the close signal as a refusal; the same comm
+
+== SURVIVAL FLOOR per repair record (C/M blocks, disposition repaired): claim spans at the text after the round's repair / at p3-second-link / at ship
+   a span absent at the previous round's read text and present at ship is text the repair wrote that shipped; before-text of the party repair is not in git
+  carry-over-evaluation-party-repair-p1.md       C/M repaired blocks 59: SHIPPED 38 GONE  2 NO-SPAN 19; a span present at 'elic read' text: 38
+  coe-elicitation-repair-p1.md                   C/M repaired blocks 29: SHIPPED 22 GONE  2 NO-SPAN  5; a span present at 'p1 read' text: 22; absent at 'elic read' and at ship: 13
+  coe-repair-p1.md                               C/M repaired blocks  9: SHIPPED  9 GONE  0 NO-SPAN  0; a span present at 'p1 repaired' text: 9; absent at 'p1 read' and at ship: 3
+  coe-serial-repair-p1.md                        C/M repaired blocks  6: SHIPPED  5 GONE  1 NO-SPAN  0; a span present at 'p1 repaired' text: 5; absent at 'p1 read' and at ship: 2
+  coe-serial-repair-p1-correction.md             C/M repaired blocks  1: SHIPPED  0 GONE  0 NO-SPAN  1; a span present at 'p2 read' text: 0; absent at 'p1 repaired' and at ship: 0
+  coe-repair-p2.md                               C/M repaired blocks  4: SHIPPED  3 GONE  0 NO-SPAN  1; a span present at 'p3 read' text: 3; absent at 'p2 read' and at ship: 3
+  coe-serial-repair-p2.md                        C/M repaired blocks  7: SHIPPED  5 GONE  1 NO-SPAN  1; a span present at 'p3 read' text: 5; absent at 'p2 read' and at ship: 1
+  coe-repair-p3.md                               C/M repaired blocks  1: SHIPPED  1 GONE  0 NO-SPAN  0; a span present at 'p3 repaired' text: 1; absent at 'p3 read' and at ship: 1
+  coe-repair-p3-second.md                        C/M repaired blocks  1: SHIPPED  1 GONE  0 NO-SPAN  0; a span present at 'p3 second link' text: 1; absent at 'p3 repaired' and at ship: 1
+
+== REPAIR-INTRODUCED, record proxy (a finding token absent from the previous round's read text and present in the previous repair records), beside the text proxy above
+  p1  C/M 13: record-proxy REPAIR-INTRODUCED  0; text-proxy REPAIR-INTRODUCED  0, MIXED  1
+  p2  C/M  7: record-proxy REPAIR-INTRODUCED  1; text-proxy REPAIR-INTRODUCED  0, MIXED  0
+  p3  C/M  1: record-proxy REPAIR-INTRODUCED  1; text-proxy REPAIR-INTRODUCED  0, MIXED  0
+
+== p1/p2/p3 C/M findings read one by one: text class, whether the finding's own title names a repair (REPAIR-NAMED), status, fix at ship, later-round overlap
+  p1  cross cross        F-1  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later -    | An OPEN id that part 3 renews has no section, so the "261 other OPEN/PARTIAL/no-token ids" universal is false
+  p1  cross cross        F-2  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later p2   | Part 3's stale-closure exclusion is released by "the ids it cites" in Items 1-11, but tagged and BLOCKS-ON rows 
+  p1  cross cross        F-3  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later -    | Item 5's "the five commits since" `e0ebaf019` contradicts part 1's own eleven-commit audit, which already holds 
+  p1  cross cross        F-4  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later -    | Part 2 marks the S322 smoke rows adjacent to the 3a-2+3b story, and part 3 says the evaluation does not mark the
+  p1  part  1            F-1  text NO-TOKEN          named False REPAIRED  fix SHIPPED later -    | Line 3 attributes the 11-item list and its numbering to an operator message with no quote and no locator
+  p1  part  2            F-1  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later -    | Wall 3(a) is named as the closer of the approve-to-zero id "on that id's own signal", but that signal is the ref
+  p1  part  2            F-2  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later -    | "the five commits since": there are 30 commits since `e0ebaf019`
+  p1  part  2            F-3  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later -    | Underived counts and negatives in Items 1 and 2 (all true where checked)
+  p1  part  2            F-5  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later -    | Operator attributions in part 2 lack a locator, and two have no verbatim quote
+  p1  part  3            F-1  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later -    | Two "operator-accepted" attributions in part 3 carry no verbatim quote, and the one locator points at the lead's
+  p1  part  3            F-5  text MIXED             named False REPAIRED  fix SHIPPED later p2   | The "no live body" and "body in archive" labels are false for 20 cluster rows, and the SRMIN disposition rests o
+  p1  part  3            F-6  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later -    | Counts at `:1644` are asserted without a derivation (counted as underived; replayed true)
+  p1  part  3            F-7  text MISSED-BY-PRIOR   named False REPAIRED  fix SHIPPED later -    | Load-bearing counts and negatives at `:1748`, `:2072` and `:2076` carry no derivation (replayed true; blocking u
+  p2  cross cross        F-1  text MISSED-BY-PRIOR   named True  REPAIRED  fix SHIPPED later -    | The repaired release rule enumerates six tag-only rows as its set; 14 more tagged rows have no Item-section cita
+  p2  cross cross        F-2  text MISSED-BY-PRIOR   named False REPAIRED  fix GONE    later -    | Parts 2 and 3 say backlog line 1120 still words the close signal as a refusal; the same commit re-worded it to n
+  p2  cross cross        F-3  text MISSED-BY-PRIOR   named True  REPAIRED  fix SHIPPED later -    | The repaired Gaps figure "the 262 ids that have a `### CO-` section" is a count over part 3 with no derivation (
+  p2  part  2            F-1  text NO-TOKEN          named False REPAIRED  fix SHIPPED later -    | Share (i) bullet says the backlog still words the id's close signal as a refusal; the backlog at HEAD already na
+  p2  part  3            F-1  text MISSED-BY-PRIOR   named True  REPAIRED  fix SHIPPED later -    | The repair's list of tag-only rows at `:910` names 6, and 14 more tagged rows are cited by no Item section
+  p2  part  3            F-2  text MISSED-BY-PRIOR   named True  REPAIRED  fix SHIPPED later -    | The cross F-5 repair re-anchored "The same applies to" at `:1447`, so two unrelated rows now read as close candi
+  p2  part  3            F-3  text MISSED-BY-PRIOR   named True  REPAIRED  fix SHIPPED later -    | The rewritten exception at `:2014` covers only Item 3a Dependencies, but an S321 smoke row tagged `3` at `:1963`
+  p3  part  4            F-1  text MISSED-BY-PRIOR   named True  REPAIRED  fix SHIPPED later -    | Repair 2's new negative "the Status-token hygiene id is named only in the Heading-ids note and the Backlog-hygie
+  p1: C/M 13, REPAIR-NAMED 0 (control: a title naming a repair in p1 means the p1-read text already held an earlier repair; the elicitation repair is the only one before it)
+  p2: C/M 7, REPAIR-NAMED 5 (control: a title naming a repair in p1 means the p1-read text already held an earlier repair; the elicitation repair is the only one before it)
+  p3: C/M 1, REPAIR-NAMED 1 (control: a title naming a repair in p1 means the p1-read text already held an earlier repair; the elicitation repair is the only one before it)
+
+== repair claims whose spans are NOT at ship (fix GONE): state where each span is present, in order elic read, p1 read, p1 repaired, p2 read, p3 read, p3 repaired, p3 second link, ship
+  party part tea-6 F-3: ## F-3 (critical) sections: 6
+     block carry-over-evaluation-party-repair-p1.md tea-6 F-3 — CRITICAL (repaired)
+       span 'Live-environment verification not run'                                in states 00000000
+  elic part coe-elicitation/4 F-2: ### F-2 — MAJOR — "finds 2 headings without it" is an underived count
+     block coe-elicitation-repair-p1.md F-2 — MAJOR (repaired)
+       span 'finds 2 headings without it'                                          in states 10000000
+  p2 cross coe-p2/cross F-2: ### F-2 — MAJOR — Parts 2 and 3 say backlog line 1120 still words the close signal as a refusal; the
+     block coe-serial-repair-p2.md cross F-2 — MAJOR (repaired)
+       span 'Close when wall 3(a) ships'                                           in states 00000000
+
+== YIELD PER DOLLAR, s323 (spawn dollars of the part and cross rows of each round from the partition above; C/M from the heading parse)
+  party part  24 spawns $ 26.60   69.0 agent-min   C/M  77  $0.35 per C/M
+  party cross  4 spawns $  7.37   21.3 agent-min   C/M  23  $0.32 per C/M
+  elic  part   4 spawns $ 10.26   36.0 agent-min   C/M  18  $0.57 per C/M
+  elic  cross  1 spawns $  3.00    4.4 agent-min   C/M   6  $0.50 per C/M
+  p1    part   3 spawns $ 10.89   30.3 agent-min   C/M   9  $1.21 per C/M
+  p1    cross  1 spawns $  6.90   17.0 agent-min   C/M   4  $1.72 per C/M
+  p2    part   4 spawns $ 10.09   31.1 agent-min   C/M   4  $2.52 per C/M
+  p2    cross  1 spawns $  4.33   12.5 agent-min   C/M   3  $1.44 per C/M
+  p3    part   3 spawns $  4.23   13.2 agent-min   C/M   1  $4.23 per C/M
+  p3    cross  1 spawns $  3.13   11.1 agent-min   C/M   0  $n/a (0 C/M) per C/M
+  party repair  6 spawns $ 22.88   74.5 agent-min   repairs the round's 100 C/M findings
+  elic  repair  6 spawns $ 12.75   42.5 agent-min   repairs the round's  24 C/M findings
+  p1    repair  9 spawns $ 12.35   45.9 agent-min   repairs the round's  13 C/M findings
+  p2    repair  7 spawns $  4.41   18.3 agent-min   repairs the round's   7 C/M findings
+  p3    repair  2 spawns $  1.28    6.8 agent-min   repairs the round's   1 C/M findings
+  routing, dispatcher, draft and adjudication/closure rows: 9 spawns $30.96 115.7 agent-min
+
+== GATE LABEL gate-validation[carry-over-evaluation]
+  s323: 4 spawns $1.96 8.5 agent-min ($0.11 per story)
+      Gate adjudication shard N/N         3 spawns $1.55
+      Gate repair: escalation status tokens  1 spawns $0.41
+  s322: 20 spawns $7.06 22.0 agent-min ($0.88 per story)
+      Gate adjudicator shard N/N         10 spawns $3.35
+      Re-adjudicate shard N/N            10 spawns $3.70
+  s319: 2 spawns $1.16 7.2 agent-min ($0.06 per story)
+      Gate adjudicator shard N/N          2 spawns $1.16
+  s323 spawn windows: 2026-11-17T02:50:58 Gate repair: escalation status tokens; 2026-11-17T02:55:09 Gate adjudication shard 1/3; 2026-11-17T02:55:09 Gate adjudication shard 3/3; 2026-11-17T02:55:09 Gate adjudication shard 2/3
+  s323 final_text 'judged FAIL' reads: {'no FAIL': 4} (control: 'judged' absent token reads 0)
+  verdict files at 16fd227d9: 34; the label's own gate is the one whose generated_at lies within an hour after its last spawn start
+    implementation-20261118T133343Z.verdict.json               implementation generated 2026-11-18T13:48:13Z checks 15 {'PASS': 15} 
+    implementation-20261118T140535Z.verdict.json               implementation generated 2026-11-18T14:09:38Z checks 15 {'FAIL': 1, 'PASS': 14} 
+    implementation-20261118T141133Z.verdict.json               implementation generated 2026-11-18T14:20:06Z checks 15 {'PASS': 15} 
+    implementation-20261118T143433Z.verdict.json               implementation generated 2026-11-18T14:44:52Z checks 15 {'FAIL': 2, 'PASS': 13} 
+    implementation-20261118T144911Z.verdict.json               implementation generated 2026-11-18T14:56:10Z checks 15 {'PASS': 15} 
+    implementation-20261118T152410Z.verdict.json               implementation generated 2026-11-18T15:40:01Z checks 15 {'FAIL': 2, 'PASS': 13} 
+    implementation-20261118T154911Z.verdict.json               implementation generated 2026-11-18T16:09:56Z checks 15 {'PASS': 15} 
+    implementation-20261118T162622Z.verdict.json               implementation generated 2026-11-18T16:30:52Z checks 15 {'PASS': 15} 
+    implementation-20261118T164341Z.verdict.json               implementation generated 2026-11-18T16:51:21Z checks 15 {'PASS': 15} 
+    implementation-20261118T172256Z.verdict.json               implementation generated 2026-11-18T17:37:17Z checks 15 {'FAIL': 1, 'PASS': 14} 
+    implementation-20261118T173215Z.verdict.json               implementation generated 2026-11-18T17:43:28Z checks 15 {'PASS': 15} 
+    implementation-20261118T193605Z.verdict.json               implementation generated 2026-11-18T19:50:43Z checks 15 {'PASS': 15} 
+    implementation-20261118T203247Z.verdict.json               implementation generated 2026-11-18T20:47:41Z checks 15 {'PASS': 15} 
+    implementation-20261118T213543Z.verdict.json               implementation generated 2026-11-18T21:46:08Z checks 15 {'FAIL': 2, 'PASS': 13} 
+    implementation-20261118T220335Z.verdict.json               implementation generated 2026-11-18T22:13:49Z checks 15 {'PASS': 15} 
+    implementation-20261118T230456Z.verdict.json               implementation generated 2026-11-18T23:16:18Z checks 15 {'PASS': 15} 
+    implementation-20261118T231803Z.verdict.json               implementation generated 2026-11-18T23:40:00Z checks 15 {'PASS': 15} 
+    implementation-20261118T234217Z.verdict.json               implementation generated 2026-11-18T23:52:00Z checks 15 {'PASS': 15} 
+    implementation-20261119T002345Z.verdict.json               implementation generated 2026-11-19T00:40:00Z checks 15 {'FAIL': 1, 'PASS': 14} 
+    implementation-20261119T004349Z.verdict.json               implementation generated 2026-11-19T00:52:00Z checks 15 {'PASS': 15} 
+    implementation-20261119T015536Z.verdict.json               implementation generated 2026-11-19T02:08:45Z checks 15 {'FAIL': 1, 'PASS': 14} 
+    implementation-20261119T021925Z.verdict.json               implementation generated 2026-11-19T02:32:00Z checks 15 {'PASS': 15} 
+    implementation-20261119T131752Z.verdict.json               implementation generated 2026-11-19T13:40:00Z checks 15 {'PASS': 15} 
+    implementation-20261119T140821Z.verdict.json               implementation generated 2026-11-19T14:17:00Z checks 15 {'PASS': 15} 
+    implementation-20261119T145953Z.verdict.json               implementation generated 2026-11-19T15:19:30Z checks 15 {'PASS': 15} 
+    implementation-20261119T152458Z.verdict.json               implementation generated 2026-11-19T15:50:00Z checks 15 {'PASS': 15} 
+    planning-20261117T025438Z.verdict.json                     planning     generated 2026-11-17T02:57:58Z checks 10 {'PASS': 10} <- this label
+    planning-20261117T203009Z.verdict.json                     planning     generated 2026-11-17T20:35:16Z checks 10 {'PASS': 10} 
+    planning-20261118T025210Z.verdict.json                     planning     generated 2026-11-18T03:01:01Z checks 10 {'FAIL': 1, 'PASS': 9} 
+    planning-20261118T031522Z.verdict.json                     planning     generated 2026-11-18T03:21:54Z checks 10 {'PASS': 10} 
+    retro-20261120T025001Z.verdict.json                        retro        generated 2026-11-20T03:01:00Z checks 9 {'PASS': 9} 
+    sprint-review-20261119T193613Z.verdict.json                sprint-review generated 2026-11-19T19:49:21Z checks 8 {'FAIL': 1, 'PASS': 7} 
+    sprint-review-20261119T195256Z.verdict.json                sprint-review generated 2026-11-19T19:57:51Z checks 8 {'PASS': 8} 
+    story-20261118T122144Z.verdict.json                        story        generated 2026-11-18T12:24:36Z checks 8 {'PASS': 8} 
+  control: impossible verdict file in listing: False (must be False); files for this label 1 (must be 1)
+  planning-20261117T025438Z.verdict.json: 10 checks, non-PASS 0; adjudicators a7a7640853efa0c7d, a7df69899af737927, a02cac0946fd1c782; check ids 1,1c,2,3,4,7,16,20,27,29
+  FAIL record gate-planning-repair-p1.md: found True; heading '### Check 2 — script arm': True; disposition repaired: True; seal repair-complete line: True
+  what failed: validate-escalation-status-vocabulary.sh: `FAIL: out-of-vocabulary status 'CLOSED'` / `FAIL: out-of-vocabulary status 'DISPOSITIONED'` / `FAIL: 2 of 217 escalation entries carry a status outside the closed set.`
+  pending.md at ship: line 1051 reads '**Status:** RESOLVED — RATIFIED 2026-11-13 (was '; line 5490 reads '**Status:** RESOLVED 2026-11-13 (all per-item an'; no 'Status:** CLOSED — RATIFIED' / 'Status:** DISPOSITIONED 2026-11-13' anywhere: True (control: present token 'Status:** RESOLVED' count 4; impossible token count 0)
+  gate-log-archive planning entry for the label's gate: found True; hard_block_fail false: True; rows PASSED 28, NA 2, SKIPPED 15 (rows read within the entry up to the next 'Gate Log' heading)
+  s323 gate-log-archive entries (heading, gate, nonce): [('Planning gate (carry-over-evaluation)', 'planning', 'planning-20261117T025438Z'), ('Planning gate (requirements)', 'planning', 'planning-20261117T203009Z'), ('Planning gate (architecture)', 'planning', 'planning-20261118T031522Z'), ('Story gate (stories-test-strategy)', 'story', 'story-20261118T122144Z')]; the label's nonce appears in 1 entry heading(s) (must be 1)
+  disclosure in the entry (a post-p3 edit no adversary read): True

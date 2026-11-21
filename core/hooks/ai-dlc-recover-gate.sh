@@ -47,7 +47,11 @@
 # plugin and gate left no admissible Read. Now every Read of the snapshot or the step file that
 # carries `offset` or `limit` is CREDITED with the lines it loads (`offset` to `offset+limit-1`, an
 # absent offset 1, an absent limit 2000 lines), and a file is satisfied when the credited ranges are contiguous from line 1 to
-# its last line at judge time, a last line with no newline counting. The skip the old test caught,
+# its last line at judge time, a last line with no newline counting. WHEN THE MARKER CARRIES
+# `step_ranges` (the snapshot's sub_step named a Resume section of the step file) and `step_ranges_id` still
+# equals the file's size-mtime, with every range 1 <= a <= b <= last line, the step file is owed those ranges
+# only: each must be covered, the deny names the first uncovered line of the first uncovered range, and no
+# named chunk runs past its range. A missing, stale or invalid pair owes the whole file. The skip the old test caught,
 # stopping partway, is caught instead by the marker staying armed until coverage completes: every
 # other call is denied until then, and the deny names the next uncovered range.
 #
@@ -577,24 +581,27 @@ fid() { # fid <file> -> "<bytes>-<mtime>"; fails when either is unreadable
 nlines() { awk 'END { print NR + 0 }' "$1" 2>/dev/null; }
 # range_bytes <file> <first> <last> -> the bytes of those lines, newline counted per line
 range_bytes() { LC_ALL=C awk -v a="$2" -v b="$3" 'NR >= a && NR <= b { s += length($0) + 1 } NR > b { exit } END { print s + 0 }' "$1" 2>/dev/null; }
-# chunk_of <file> <next-uncovered-line | 0> -> "<offset> <limit>": the chunk starting at that line,
-# or (0) the file's LAST chunk. At most CHUNK_CAP bytes and READ_DEFAULT lines, never fewer than 1 line.
+# chunk_of <file> <next-uncovered-line | 0> [<range end> [<range start>]] -> "<offset> <limit>": the chunk
+# starting at that line, or (0) the LAST chunk of the range (default: the whole file). At most CHUNK_CAP bytes
+# and READ_DEFAULT lines, never fewer than 1 line, and never past the range end or (last chunk) before its start.
 chunk_of() {
-  LC_ALL=C awk -v nx="$2" -v cap="$CHUNK_CAP" -v mx="$READ_DEFAULT" '
+  LC_ALL=C awk -v nx="$2" -v cap="$CHUNK_CAP" -v mx="$READ_DEFAULT" -v en="${3:-0}" -v lo="${4:-1}" '
     { L[NR] = length($0) + 1 }
     END {
       n = NR; if (n == 0) { print "1 1"; exit }
+      if (en > 0 && en < n) n = en
+      if (lo < 1 || lo > n) lo = 1
       b = 0; c = 0
       if (nx > 0) { s = (nx > n) ? n : nx; for (i = s; i <= n; i++) { if (c > 0 && (b + L[i] > cap || c >= mx)) break; b += L[i]; c++ } print s, c }
-      else { for (i = n; i >= 1; i--) { if (c > 0 && (b + L[i] > cap || c >= mx)) break; b += L[i]; c++ } print n - c + 1, c }
+      else { for (i = n; i >= lo; i--) { if (c > 0 && (b + L[i] > cap || c >= mx)) break; b += L[i]; c++ } print n - c + 1, c }
     }' "$1" 2>/dev/null
 }
-# cov_next <role> <id> <lines> -> the first line the valid records of that role leave uncovered
-# (lines+1 when 1..lines is covered). A record carrying another identity is ignored.
+# cov_next <role> <id> <lines> [<start>] -> the first line at or after <start> (default 1) the valid records of
+# that role leave uncovered (lines+1 when start..lines is covered). A record carrying another identity is ignored.
 cov_next() {
-  cat "${STATE_DIR}"/.recover-credit."$1".* 2>/dev/null | awk -v id="$2" -v n="$3" '
+  cat "${STATE_DIR}"/.recover-credit."$1".* 2>/dev/null | awk -v id="$2" -v n="$3" -v st="${4:-1}" '
     $3 == id && $1 + 0 >= 1 && $2 + 0 >= $1 + 0 { k++; s[k] = $1 + 0; e[k] = $2 + 0 }
-    END { nx = 1; do { ch = 0; for (i = 1; i <= k; i++) if (s[i] <= nx && e[i] >= nx) { nx = e[i] + 1; ch = 1 } } while (ch && nx <= n); print nx }'
+    END { nx = st + 0; do { ch = 0; for (i = 1; i <= k; i++) if (s[i] <= nx && e[i] >= nx) { nx = e[i] + 1; ch = 1 } } while (ch && nx <= n); print nx }'
 }
 rm_credits() { rm -f "${STATE_DIR}"/.recover-credit* 2>/dev/null || true; }
 # credit <role> <id> <first> <last>: ONE new record, written whole then renamed into place. A failed
@@ -622,6 +629,47 @@ fi
 SNAP_ID="$(fid "$SNAP_ABS")" || exit 0
 STEP_ID="$(fid "$STEP_ABS")" || exit 0
 SNAP_N="$(nlines "$SNAP_ABS")"; STEP_N="$(nlines "$STEP_ABS")"
+
+# THE STEP FILE'S OWED RANGES. `ai-dlc-recover.sh` writes `step_ranges=<a>-<b> <a>-<b>` with
+# `step_ranges_id` (this file's size-mtime) when the snapshot's sub_step named a Resume section. They are
+# used only when the id still matches and every range is 1 <= a <= b <= STEP_N; anything else owes the
+# whole file, 1..STEP_N, as before. The gate never stands down or refuses over them.
+STEP_RGS=""; _rg_ok=0
+if [ -n "$(mval step_ranges)" ] && [ "$(mval step_ranges_id)" = "$STEP_ID" ]; then
+  _rg_ok=1
+  for _rg in $(mval step_ranges); do
+    _ra="${_rg%-*}"; _rb="${_rg#*-}"
+    if isint "$_ra" && isint "$_rb" && [ "$((10#$_ra))" -le "$((10#$_rb))" ] && [ "$((10#$_rb))" -le "$STEP_N" ]; then
+      STEP_RGS="$STEP_RGS $((10#$_ra)) $((10#$_rb))"
+    else _rg_ok=0; break; fi
+  done
+fi
+[ "$_rg_ok" = 1 ] && [ -n "$STEP_RGS" ] || { _rg_ok=0; STEP_RGS="1 $STEP_N"; }
+# step_next -> the first uncovered line of the first uncovered range (STEP_N+1 when every range is covered)
+step_next() {
+  local _a _b _x; set -- $STEP_RGS
+  while [ "$#" -ge 2 ]; do
+    _a="$1"; _b="$2"; shift 2
+    _x="$(cov_next step "$STEP_ID" "$_b" "$_a")"
+    if [ "${_x:-$_a}" -le "$_b" ] 2>/dev/null; then printf '%s' "$_x"; return; fi
+  done
+  printf '%s' "$((STEP_N + 1))"
+}
+# step_rng <next-uncovered-line | 0> -> "<start> <end>" of the range holding that line (0: the last range)
+step_rng() {
+  local _a _b _la=1 _lb="$STEP_N" _nx="$1"; set -- $STEP_RGS
+  while [ "$#" -ge 2 ]; do
+    _a="$1"; _b="$2"; shift 2; _la="$_a"; _lb="$_b"
+    [ "$_nx" -ge "$_a" ] && [ "$_nx" -le "$_b" ] && break
+  done
+  printf '%s %s' "$_la" "$_lb"
+}
+# the deny texts' coverage wording: unchanged unless ranges are in force
+_rg_in_full=" in full"; _rg_cover="covering line 1 to the end"
+if [ "$_rg_ok" = 1 ]; then
+  _rg_list="$(printf '%s' "${STEP_RGS# }" | awk '{ for (i = 1; i < NF; i += 2) printf "%s%s-%s", (i > 1 ? " and " : ""), $i, $(i + 1) }')"
+  _rg_in_full=" (lines ${_rg_list} only)"; _rg_cover="covering lines ${_rg_list}"
+fi
 
 # THE SNAPSHOT SLICE (written by ai-dlc-recover.sh): a Read of `.recover-snapshot-slice.md`, the
 # snapshot without `## Recent Activity`, whole and in one call, is credited as snapshot COVERAGE
@@ -700,7 +748,7 @@ if [ "$SLICE_OK" = 1 ]; then credit snap "$SNAP_ID" 1 "$SNAP_N"; fi
 # `step`, whichever call this is; the step file covered at stage `step` is satisfaction, taken only
 # by a Read of the step file. `$PROGRESS` is kept as the record of the advance and decides nothing.
 SNAP_NX="$(cov_next snap "$SNAP_ID" "$SNAP_N")"
-STEP_NX="$(cov_next step "$STEP_ID" "$STEP_N")"
+STEP_NX="$(step_next)"
 SNAP_COV=0; [ "${SNAP_NX:-1}" -gt "$SNAP_N" ] 2>/dev/null && SNAP_COV=1
 STEP_COV=0; [ "${STEP_NX:-1}" -gt "$STEP_N" ] 2>/dev/null && STEP_COV=1
 # THE MARKER IS RE-TESTED AFTER THE CREDITS ARE READ (BL-658): the satisfying call removes the marker
@@ -736,7 +784,10 @@ deny() {
   exit 0
 }
 # read_cmd <rel> <file> <next-uncovered-line | 0> -> the exact Read call the deny names
-read_cmd() { local _o _l; read -r _o _l <<<"$(chunk_of "$2" "$3")"; printf 'Read %s offset=%s limit=%s' "$1" "$_o" "$_l"; }
+read_cmd() {
+  local _o _l _ra="" _rs=""
+  if [ "$2" = "$STEP_ABS" ]; then read -r _rs _ra <<<"$(step_rng "$3")"; fi
+  read -r _o _l <<<"$(chunk_of "$2" "$3" "$_ra" "$_rs")"; printf 'Read %s offset=%s limit=%s' "$1" "$_o" "$_l"; }
 
 if [ "$OVER" = 1 ]; then
   _on=1
@@ -770,7 +821,7 @@ case "$STAGE" in
 "The snapshot is a verbatim-load file and the Read is the attention interrupt that
 defeats reconstructing state from the summary. Read it with the native Read tool,
 in consecutive offset/limit chunks of at most ${CHUNK_CAP} bytes covering line 1 to
-the end -- never a \`ctx_*\` tool. Then \`Read ${STEP_REL}\` the same way. Both files
+the end -- never a \`ctx_*\` tool. Then \`Read ${STEP_REL}\`${_rg_in_full} the same way. Both files
 were confirmed present before this gate armed, and the chunk above is always
 allowed, so complying is available to you on the next call; there is nothing here
 to weigh."
@@ -828,11 +879,11 @@ to weigh."
     # A COVERED STEP FILE IS NEVER NAMED PAST ITS END: the deny names the last chunk, and the Read
     # of it satisfies.
     if [ "$STEP_COV" = 1 ]; then _sn=0; else _sn="$STEP_NX"; fi
-    deny "AI/DLC post-compact recovery: your SECOND tool call must be \`Read ${STEP_REL}\` in full. Compaction cleared the harness's record of every file previously read, so the step file is not loaded no matter how recently you read it. Next chunk: \`$(read_cmd "$STEP_REL" "$STEP_ABS" "$_sn")\`." \
+    deny "AI/DLC post-compact recovery: your SECOND tool call must be \`Read ${STEP_REL}\`${_rg_in_full}. Compaction cleared the harness's record of every file previously read, so the step file is not loaded no matter how recently you read it. Next chunk: \`$(read_cmd "$STEP_REL" "$STEP_ABS" "$_sn")\`." \
 "Measured across 265 real compactions, this Read lands 41% of the time against the
 snapshot Read's 66% -- it is the one most often skipped and the one this gate
 exists for. Read it with the native Read tool in consecutive offset/limit chunks of
-at most ${CHUNK_CAP} bytes covering line 1 to the end: stopping partway because the
+at most ${CHUNK_CAP} bytes ${_rg_cover}: stopping partway because the
 remainder looks duplicative is a judgment made from inside the state the Read
 exists to replace, and the marker stays armed until every line is covered. The
 chunk above is always allowed. The file was confirmed present before this gate

@@ -60,14 +60,14 @@ for s in segs:
             lead_tool_kb=s["tool_bytes"] / 1024, segments=1)
         for m, d in (s.get("tok") or {}).items():
             f = fam(m)
-            add(key, **{f"lead_{f}_in": d[0], f"lead_{f}_cw": d[1], f"lead_{f}_cr": d[2], f"lead_{f}_out": d[3], f"lead_{f}_calls": d[4]})
+            add(key, **{f"lead_{f}_in": d[0], f"lead_{f}_cw": d[1], f"lead_{f}_cr": d[2], f"lead_{f}_out": d[3], f"lead_{f}_calls": d[4], f"lead_{f}_cw5m": d[5] if len(d) > 5 else 0, f"lead_{f}_cw1h": d[6] if len(d) > 6 else 0})
     else:
         key = (sp, bucket.get(s["sess"], "?"), sub_step.get(s["unit"], "unjoined"))
         add(key, sub_active_h=s["active"] / 3600, sub_tool_kb=s["tool_bytes"] / 1024, sub_hook_kb=s["hook_bytes"] / 1024,
             sub_compactions=s["compactions"])
         for m, d in (s.get("tok") or {}).items():
             f = fam(m)
-            add(key, **{f"sub_{f}_in": d[0], f"sub_{f}_cw": d[1], f"sub_{f}_cr": d[2], f"sub_{f}_out": d[3], f"sub_{f}_calls": d[4]})
+            add(key, **{f"sub_{f}_in": d[0], f"sub_{f}_cw": d[1], f"sub_{f}_cr": d[2], f"sub_{f}_out": d[3], f"sub_{f}_calls": d[4], f"sub_{f}_cw5m": d[5] if len(d) > 5 else 0, f"sub_{f}_cw1h": d[6] if len(d) > 6 else 0})
 
 # Per-role subagent rollup, keyed by sprint/step/role/model.
 role = collections.defaultdict(lambda: collections.defaultdict(float))

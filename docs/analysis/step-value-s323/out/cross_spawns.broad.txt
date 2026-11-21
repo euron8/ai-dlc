@@ -1,0 +1,14 @@
+s317: spawns 673 cross 135 per-story 6.43 usd 451.1 usd/story 21.48 share 37% stories 21 (broad)
+   by step: {'stories-test-strategy': 24, 'implementation': 80, 'sprint-review': 31}
+s318: spawns 929 cross 268 per-story 20.62 usd 655.1 usd/story 50.39 share 46% stories 13 (broad)
+   by step: {'architecture': 36, 'stories-test-strategy': 49, 'requirements': 38, 'gate-validation[architecture]': 6, 'implementation': 73, 'sprint-review': 30, 'carry-over-evaluation': 36}
+s319: spawns 1561 cross 498 per-story 24.90 usd 735.7 usd/story 36.79 share 42% stories 20 (broad)
+   by step: {'implementation': 243, 'requirements': 39, 'gate-validation[implementation]': 30, 'stories-test-strategy': 60, 'gate-validation[stories-test-strategy]': 6, 'carry-over-evaluation': 36, 'architecture': 54, 'gate-validation[sprint-review]': 30}
+s320: spawns 1102 cross 202 per-story 15.54 usd 416.3 usd/story 32.02 share 33% stories 13 (broad)
+   by step: {'stories-test-strategy': 65, 'implementation': 17, 'carry-over-evaluation': 45, 'gate-validation[implementation]': 4, 'requirements': 30, 'architecture': 36, 'deploy-validate': 5}
+s321: spawns 1234 cross 45 per-story 1.80 usd 153.0 usd/story 6.12 share 8% stories 25 (broad)
+   by step: {'implementation': 9, 'stories-test-strategy': 15, 'architecture': 10, 'requirements': 6, 'sprint-review': 5}
+s322: spawns 668 cross 35 per-story 4.38 usd 112.3 usd/story 14.03 share 11% stories 8 (broad)
+   by step: {'implementation': 5, 'carry-over-evaluation': 9, 'requirements': 4, 'gate-validation[architecture]': 5, 'architecture': 4, 'stories-test-strategy': 7, 'gate-validation[implementation]': 1}
+s323: spawns 1138 cross 46 per-story 2.56 usd 124.0 usd/story 6.89 share 8% stories 18 (broad)
+   by step: {'carry-over-evaluation': 9, 'requirements': 5, 'architecture': 8, 'gate-validation[implementation]': 8, 'implementation': 9, 'stories-test-strategy': 3, 'gate-validation[stories-test-strategy]': 1, 'sprint-review': 3}

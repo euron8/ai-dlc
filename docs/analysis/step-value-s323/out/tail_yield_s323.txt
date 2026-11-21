@@ -1,0 +1,276 @@
+== 0. repo and refs (repo given: /Users/n8/git/graph)
+  SHIP             eabdc576e  11-19 15:46 -0500      PRESENT
+  FF1_PR           6fcfd81a7  11-19 19:32 -0500      PRESENT
+  RETRO_PR         6d606eaab  11-19 22:54 -0500      PRESENT
+  CLOSE            16fd227d9  11-19 23:00 -0500      PRESENT
+  PARTY_TIP        42f97d575  11-19 12:14 -0500      PRESENT
+  PARTY_DONE       9f7a5256e  11-19 13:04 -0500      PRESENT
+  S322_CLOSE       f7e60625b  11-12 07:32 -0500      PRESENT
+  fix a2e89caca    a2e89caca  11-18 22:37 -0500      PRESENT
+  fix a11ffe82c    a11ffe82c  11-18 22:48 -0500      PRESENT
+  fix 6dab86c84    6dab86c84  11-18 23:33 -0500      PRESENT
+  fix 208112c14    208112c14  11-19 08:25 -0500      PRESENT
+  fix ff164e5e5    ff164e5e5  11-19 11:15 -0500      PRESENT
+  fix ca8c5f03f    ca8c5f03f  11-19 11:15 -0500      PRESENT
+  fix 65ece9ec7    65ece9ec7  11-19 11:18 -0500      PRESENT
+  fix ce1305dd3    ce1305dd3  11-19 11:34 -0500      PRESENT
+  fix 08403fc4e    08403fc4e  11-19 11:57 -0500      PRESENT
+  fix 491420c4f    491420c4f  11-19 13:11 -0500      PRESENT
+  fix 486b178e6    486b178e6  11-19 13:13 -0500      PRESENT
+  fix c6d3dbb4b    c6d3dbb4b  11-19 13:13 -0500      PRESENT
+  fix 9700c48e9    9700c48e9  11-19 13:13 -0500      PRESENT
+  fix 5c5d58ab4    5c5d58ab4  11-19 13:15 -0500      PRESENT
+  fix da79a7828    da79a7828  11-19 14:13 -0500      PRESENT
+  fix e2454d806    e2454d806  11-19 13:13 -0500      PRESENT
+  fix a60719349    a60719349  11-19 13:07 -0500      PRESENT
+  fix ab599a998    ab599a998  11-19 12:49 -0500      PRESENT
+  impossible ref control: absent (as it must be)
+  s323 ship ref used: eabdc576e (sprint squash #1337 on main, 11-19 15:46 -0500); retro PR 6d606eaab; close 16fd227d9; the sprint-review gate entry sits at gate-log :1664
+  seat files at 16fd227d9: 95 (need 95 = 18 stories x 5 roles + 5 cross); .brief files under rounds/sprint-review-party: 95; impossible role seat count 0
+  first-parent order: eabdc576e (sprint) -> 6fcfd81a7 (ff1) -> 6d606eaab (retro) -> ... -> 16fd227d9 (close): parent of retro PR is ff1 PR: MATCH
+
+== 1. cost per label, s323 against s319 and s322 (spawns.jsonl, every bucket; STORIES: s323 18, s322 8, s319 20)
+s323 sprint-review                   spawns 158  $ 209.05   970.7 agent-min  per story 8.78 spawns, $11.61   | lead 11.61 MATCH
+s323 gate-validation[sprint-review]  spawns  13  $  16.49    75.1 agent-min  per story 0.72 spawns, $0.92   | lead 0.92 MATCH
+s323 deploy-validate                 spawns  14  $  20.43    77.3 agent-min  per story 0.78 spawns, $1.14   | lead 1.14 MATCH
+s323 retro                           spawns  25  $  18.00    65.0 agent-min  per story 1.39 spawns, $1.00   | lead 1.00 MATCH
+s323 gate-validation[retro]          spawns   3  $   5.13    16.1 agent-min  per story 0.17 spawns, $0.28   | lead 0.28 MATCH
+s323 handoff                         spawns   0  $   0.00     0.0 agent-min  per story 0.00 spawns, $0.00
+s323 QZXV-NO-SUCH-STEP-5512          spawns   0  $   0.00     0.0 agent-min  per story 0.00 spawns, $0.00   | impossible step, must be 0
+s323 like-for-like sprint-review + gate-validation[sprint-review] (the s321 document's population): 171 spawns $225.54 1045.8 min  per story $12.53
+s323 the six labels together: 213 spawns $269.10 1204.2 min (B.agg) vs summed above: MATCH
+s322 sprint-review                   spawns  57  $  76.95   222.7 agent-min  per story 7.12 spawns, $9.62   | lead 9.62 MATCH
+s322 gate-validation[sprint-review]  spawns   8  $   5.13    19.4 agent-min  per story 1.00 spawns, $0.64
+s322 deploy-validate                 spawns   3  $   5.16    15.3 agent-min  per story 0.38 spawns, $0.65   | lead 0.65 MATCH
+s322 retro                           spawns  22  $  14.22    67.2 agent-min  per story 2.75 spawns, $1.78   | lead 1.78 MATCH
+s322 gate-validation[retro]          spawns   9  $   3.49    12.8 agent-min  per story 1.12 spawns, $0.44   | lead 0.44 MATCH
+s322 handoff                         spawns   1  $   0.26     0.4 agent-min  per story 0.12 spawns, $0.03
+s322 QZXV-NO-SUCH-STEP-5512          spawns   0  $   0.00     0.0 agent-min  per story 0.00 spawns, $0.00   | impossible step, must be 0
+s322 like-for-like sprint-review + gate-validation[sprint-review] (the s321 document's population): 65 spawns $82.08 242.1 min  per story $10.26
+s322 the six labels together: 100 spawns $105.21 337.8 min (B.agg) vs summed above: MATCH
+s319 sprint-review                   spawns  73  $  38.50   372.6 agent-min  per story 3.65 spawns, $1.93   | lead 1.93 MATCH
+s319 gate-validation[sprint-review]  spawns  75  $  60.49   359.6 agent-min  per story 3.75 spawns, $3.02   | lead 3.02 MATCH
+s319 deploy-validate                 spawns   9  $  11.11   120.8 agent-min  per story 0.45 spawns, $0.56   | lead 0.56 MATCH
+s319 retro                           spawns  12  $   8.06    36.3 agent-min  per story 0.60 spawns, $0.40   | lead 0.40 MATCH
+s319 gate-validation[retro]          spawns   0  $   0.00     0.0 agent-min  per story 0.00 spawns, $0.00   | lead 0.00 MATCH
+s319 handoff                         spawns   0  $   0.00     0.0 agent-min  per story 0.00 spawns, $0.00
+s319 QZXV-NO-SUCH-STEP-5512          spawns   0  $   0.00     0.0 agent-min  per story 0.00 spawns, $0.00   | impossible step, must be 0
+s319 like-for-like sprint-review + gate-validation[sprint-review] (the s321 document's population): 148 spawns $98.99 732.2 min  per story $4.95
+s319 the six labels together: 169 spawns $118.17 889.3 min (B.agg) vs summed above: MATCH
+duplicate units across lead transcripts in these labels: 0 (control: 482 units counted)
+s319 gate-adjudicator rows by label: {'gate-validation[architecture]': 1, 'gate-validation[carry-over-evaluation]': 2, 'gate-validation[implementation]': 54, 'gate-validation[requirements]': 2, 'gate-validation[sprint-review]': 4, 'gate-validation[stories-test-strategy]': 5}
+s322 gate-adjudicator rows by label: {'gate-validation[architecture]': 10, 'gate-validation[bug-investigation]': 1, 'gate-validation[carry-over-evaluation]': 20, 'gate-validation[implementation]': 13, 'gate-validation[requirements]': 20, 'gate-validation[retro]': 9, 'gate-validation[sprint-review]': 8, 'gate-validation[stories-test-strategy]': 8}
+s323 gate-adjudicator rows by label: {'gate-validation[architecture]': 6, 'gate-validation[carry-over-evaluation]': 3, 'gate-validation[implementation]': 133, 'gate-validation[requirements]': 3, 'gate-validation[retro]': 3, 'gate-validation[sprint-review]': 11, 'gate-validation[stories-test-strategy]': 8, 'implementation': 1}
+
+== 2. partitions by description (each must SUM to the label total, 0 unmatched, 0 double-matched; no catch-all rule exists)
+-- sprint-review, s323 (label sprint-review)
+  adversary one-shot passes (A 02:53Z, B 04:00Z, C 15:57Z)     3  $  18.06    44.8 min
+  pass A/B repair: merges, re-review, suites, fixes            7  $  13.62    53.9 min
+  late story 2.1/2.3 build, review, QA (label by clock)        5  $  12.59   107.9 min
+  pass C repair: F-1 wording, F-2/3/4 fixes, re-review, QA     4  $   9.58   122.9 min
+  party dispatchers (p1, p2)                                   2  $   1.74    16.7 min
+  party seat rows named '<role> <n|cross>' (first dispatch)   71  $  51.33   254.9 min
+  party seat rows named '<role> <n|cross> seat' (second dispatch)  59  $  88.50   230.8 min
+  party fixes: devA devB devC, remediator p2                   4  $   5.54    13.1 min
+  step-3 review loop: code re-review, QA, fix                  3  $   8.11   125.7 min
+  PARTITION SUM                                              158  $ 209.05   970.7 min
+  label total s323 sprint-review                             158  $ 209.05   970.7 min   sum control: MATCH   unmatched (catch-all) 0  double-matched 0 (both must be 0)
+-- gate-validation[sprint-review], s323
+  story 2.2/2.3 gate-3 adjudication and addendum (label by clock)   4  $  10.87    51.5 min
+  sprint-review gate adjudicators (pass 1 and pass 2, 4 shards each)   8  $   5.18    22.8 min
+  gate-failure remediator (pass-1 Check 1 FAIL)                1  $   0.44     0.8 min
+  PARTITION SUM                                               13  $  16.49    75.1 min
+  label total s323 gate-validation[sprint-review]             13  $  16.49    75.1 min   sum control: MATCH   unmatched (catch-all) 0  double-matched 0 (both must be 0)
+-- sprint-review + gate, s319 (both labels)
+  party seats, per-story                                     100  $  51.57   344.3 min
+  party seats, cross                                          30  $  35.08   200.6 min
+  party consolidation                                          1  $   0.71     3.3 min
+  adversary one-shot                                           1  $   4.67    22.3 min
+  fixes, with their review and QA                             12  $   5.14   151.1 min
+  gate adjudicators (4 shards)                                 4  $   1.83    10.6 min
+  PARTITION SUM                                              148  $  98.99   732.2 min
+  label total s319 sprint-review + gate                      148  $  98.99   732.2 min   sum control: MATCH   unmatched (catch-all) 0  double-matched 0 (both must be 0)
+  seat rows by role (rows, $, $0-rows): architect 28 $53.76 0, dev 27 $17.64 0, pm 20 $12.11 0, qa 22 $17.36 0, tea 33 $38.95 14
+  distinct (role, ordinal) tokens with >= 1 row: 95 of 95 deliverables (must be 95: MATCH/DIFFERS MATCH); tokens with 2 rows 35, with 3 rows 0 ; extra rows beyond one per seat: 35, $0.00
+  second-or-later rows of a seat token (re-runs): 35  $61.16  166.7 min ; of the 95 seats, first rows that recorded $0 (model synthetic): 14
+-- deploy-validate, s323 / s319
+  ops reads for the S323 roll (10: pre, post, AC reads)       10  $  11.82    41.1 min
+  ff1 fix-forward: dev fix and its review                      2  $   6.84    32.1 min
+  ff1 ops reads (pre-roll, Base cert audit)                    2  $   1.77     4.1 min
+  PARTITION SUM                                               14  $  20.43    77.3 min
+  label total s323 deploy-validate                            14  $  20.43    77.3 min   sum control: MATCH   unmatched (catch-all) 0  double-matched 0 (both must be 0)
+  ops reads (Aurora, config, P&L, smoke cases)                 3  $   7.37    47.5 min
+  deferred-AC predicate extraction                             1  $   0.11    13.6 min
+  diagnosis (smoke red, stale rewards)                         2  $   2.30    22.8 min
+  fix-forward dev, code review and QA                          3  $   1.33    36.9 min
+  PARTITION SUM                                                9  $  11.11   120.8 min
+  label total s319 deploy-validate                             9  $  11.11   120.8 min   sum control: MATCH   unmatched (catch-all) 0  double-matched 0 (both must be 0)
+-- retro, s323 / s319
+  party persona rounds (6)                                     6  $   3.82    13.1 min
+  analyst: classify findings (1)                               1  $   0.37     1.0 min
+  analyst draft surfaces (7)                                   7  $   7.25    25.7 min
+  analyst close-out (3)                                        3  $   2.88    16.1 min
+  dev fixes the retro applied (ecs-deploy poll, bright-line)   2  $   0.72     1.3 min
+  7b next-sprint inputs (6)                                    6  $   2.96     7.8 min
+  PARTITION SUM                                               25  $  18.00    65.0 min
+  label total s323 retro                                      25  $  18.00    65.0 min   sum control: MATCH   unmatched (catch-all) 0  double-matched 0 (both must be 0)
+  party persona seats (6)                                      6  $   2.44    11.9 min
+  analyst gather, draft, close-out (5)                         5  $   3.17    11.3 min
+  ops discharge reads (1)                                      1  $   2.46    13.1 min
+  PARTITION SUM                                               12  $   8.06    36.3 min
+  label total s319 retro                                      12  $   8.06    36.3 min   sum control: MATCH   unmatched (catch-all) 0  double-matched 0 (both must be 0)
+-- gate-validation[retro], s323 (s319: 0 rows)
+  retro gate shards (3)                                        3  $   5.13    16.1 min
+  PARTITION SUM                                                3  $   5.13    16.1 min
+  label total s323 gate-validation[retro]                      3  $   5.13    16.1 min   sum control: MATCH   unmatched (catch-all) 0  double-matched 0 (both must be 0)
+  handoff rows s323: 0 (control: retro rows 25)
+
+== 3. sprint-review party seats at 16fd227d9 (95 seat files), fix records, and the hand cluster table
+  seat files 95; finding headings (## F-n (sev)) 165 ; severity words {'important': 5, 'info': 1, 'low': 33, 'major': 26, 'medium': 5, 'minor': 95}
+  second count: all '## F-n ' lines 165 ; commit 9f7a5256e message 'chore(s323): party round complete - 95/95 seats, 165 findings' says 165 : MATCH
+  impossible seat token 'ZQX-NEVER-TOKEN-77' in the headings 0 (must be 0); real heading ('architect-10','F-1') present: 1 (must be 1)
+  C/M-class (critical 0, major 26, important 5) = 31 ; 'medium' kept apart: 5 ; CRITICAL headings 0
+  C/M-class by role: {'architect': 7, 'dev': 3, 'pm': 3, 'qa': 5, 'tea': 13} ; medium by role: {'architect': 1, 'dev': 2, 'qa': 2} ; all findings by role: {'architect': 33, 'dev': 26, 'pm': 22, 'qa': 39, 'tea': 45}
+  C/M-class by role and kind: {('architect', 'cross'): 2, ('architect', 'story'): 5, ('dev', 'story'): 3, ('pm', 'story'): 3, ('qa', 'story'): 5, ('tea', 'story'): 13}
+  fix records read (bytes): {'sprint-review-fixes-devA': 1572, 'sprint-review-fixes-devB': 2523, 'sprint-review-fixes-devC': 587, 'sprint-review-fixes-devD': 1333, 'sprint-review-repair-p2': 4894} ; impossible token in them 0 (must be 0) ; seat-cite pattern hits 14 (must be > 0)
+  seat findings cited in a fix record: 15 ; cited but not a heading in any seat file (hand reading: record says 'does not exist'): [('qa-13', 'F-3', 'sprint-review-repair-p2')]
+  cluster table covers C/M-class + medium ids exactly once: ids 36, cluster members 36, missing [], extra [], duplicates 0 : MATCH
+  clusters (hand reading): n  seats  roles  class  disposition  fix-record cites (derived)  survival of the named fix commits at ship
+   4.1 gate-log entry dropped by merge b3a7de522                      seats 5 roles 5 important,major MISSED-BY-PRIOR   FIXED      join evidence 1     a60719349 fix lines 28 at ship 28 (100.0%)
+   4.2 AC1/AC2 marker proofs already satisfied (vacuous)              seats 4 roles 4 important,major MISSED-BY-PRIOR   FIXED      join evidence 1     e2454d806 fix lines 33 at ship 33 (100.0%)
+   APP_ENV=prod fire merges armed (pass A SA-3, re-raised)            seats 5 roles 4 major,medium    REFOUND           DOC-ONLY   join cite           e2454d806 fix lines 33 at ship 33 (100.0%)
+   5.1 AC8 / 5.3 AC4 live-smoke assertions unwritten after 3.2 merged seats 6 roles 4 important,major MISSED-BY-PRIOR   FIXED      join evidence 1     486b178e6,da79a7828 fix lines 407 at ship 399 ( 98.0%)
+   5.1 e2e capture cited but never committed                          seats 1 roles 1 major           MISSED-BY-PRIOR   FIXED      join evidence 1     e2454d806 fix lines 33 at ship 33 (100.0%)
+   layer byte pin re-baselined again by ce1305dd3, no sign-off        seats 2 roles 2 major           REPAIR-INTRODUCED NOT-FIXED  join NO-JOIN        - fix lines 0 at ship 0 (  n/a )
+   batch fee-collect abort lost the sequential fallback (1.3)         seats 2 roles 2 major,medium    MISSED-BY-PRIOR   NOT-FIXED  join NO-JOIN        - fix lines 0 at ship 0 (  n/a )
+   4.4 header-forwarding tests in no ci-local lane                    seats 1 roles 1 major           MISSED-BY-PRIOR   FIXED      join evidence 1     c6d3dbb4b,5c5d58ab4 fix lines 34 at ship 34 (100.0%)
+   5.4/5.5 deferred-AC junit ids drifted                              seats 1 roles 1 major           MISSED-BY-PRIOR   FIXED      join evidence 1     e2454d806 fix lines 33 at ship 33 (100.0%)
+   1.4 unstubbed every-read-above arm missing                         seats 1 roles 1 major           MISSED-BY-PRIOR   FIXED      join cite           491420c4f fix lines 48 at ship 48 (100.0%)
+   1.4 ceiling refusal consumes the subscribe retry budget            seats 1 roles 1 important       MISSED-BY-PRIOR   FIXED      join evidence 1     da79a7828 fix lines 78 at ship 78 (100.0%)
+   2.2 refusal execution_log row carries no reason                    seats 1 roles 1 major           MISSED-BY-PRIOR   FIXED      join cite           491420c4f fix lines 48 at ship 48 (100.0%)
+   2.3 by-value Leg 1 proven only on the default router kind          seats 1 roles 1 major           MISSED-BY-PRIOR   FIXED      join cite           491420c4f fix lines 48 at ship 48 (100.0%)
+   3.1 _load_env ImportError tolerance untested                       seats 1 roles 1 important       MISSED-BY-PRIOR   FIXED      join cite           491420c4f fix lines 48 at ship 48 (100.0%)
+   4.3 header-less caller list incomplete (s317 runbook)              seats 1 roles 1 major           MISSED-BY-PRIOR   FIXED      join evidence 1     e2454d806 fix lines 33 at ship 33 (100.0%)
+   1.2 EIP-1559 branch uncapped (story states unchanged)              seats 1 roles 1 medium          MISSED-BY-PRIOR   NOT-FIXED  join NO-JOIN        - fix lines 0 at ship 0 (  n/a )
+   5.5 collect-label test lacks the 3.2 route guards                  seats 1 roles 1 medium          MISSED-BY-PRIOR   FIXED      join evidence 1     486b178e6 fix lines 329 at ship 321 ( 97.6%)
+   2.1 wallet-checksum deploy precondition has no durable carrier     seats 1 roles 1 medium          MISSED-BY-PRIOR   NOT-FIXED  join NO-JOIN        - fix lines 0 at ship 0 (  n/a )
+  clusters 18 ; with a C/M-class member 15 ; by (class, disposition, C/M-class): {"('MISSED-BY-PRIOR', 'FIXED', False)": 1, "('MISSED-BY-PRIOR', 'FIXED', True)": 12, "('MISSED-BY-PRIOR', 'NOT-FIXED', False)": 2, "('MISSED-BY-PRIOR', 'NOT-FIXED', True)": 1, "('REFOUND', 'DOC-ONLY', True)": 1, "('REPAIR-INTRODUCED', 'NOT-FIXED', True)": 1}
+  FIXED C/M-class clusters raised by ONE role only (sole-source fixed majors): 9 ['5.1 e2e capture cited but never committed', '4.4 header-forwarding tests in no ci-local lane', '5.4/5.5 deferred-AC junit ids drifted', '1.4 unstubbed every-read-above arm missing', '1.4 ceiling refusal consumes the subscribe retry budget', '2.2 refusal execution_log row carries no reason', '2.3 by-value Leg 1 proven only on the default router kind', '3.1 _load_env ImportError tolerance untested', '4.3 header-less caller list incomplete (s317 runbook)']
+  FIXED C/M-class clusters 12 of 15 C/M-class clusters; multi-seat clusters 6 (5 seats: 2)
+  per role: seat rows, $, C/M-class findings, $ per C/M-class finding, fixed C/M-class clusters the role raised, of which sole-source
+   architect rows  28  $  53.76  C/M-class  7  $/CM   7.68  fixed clusters raised  3  sole-source 0
+   dev       rows  27  $  17.64  C/M-class  3  $/CM   5.88  fixed clusters raised  1  sole-source 0
+   pm        rows  20  $  12.11  C/M-class  3  $/CM   4.04  fixed clusters raised  3  sole-source 0
+   qa        rows  22  $  17.36  C/M-class  5  $/CM   3.47  fixed clusters raised  5  sole-source 2
+   tea       rows  33  $  38.95  C/M-class 13  $/CM   3.00  fixed clusters raised 10  sole-source 7
+  second dispatch (round p2) members in its brief: 56 (brief says 'Members (56)': 1) ; its own words: 'first round 42-wide wave hit the proxy account quota' present 1 ; first-dispatch valid seats 39 of 95 (commit cont147 '39 valid/56 missing')
+  seats that ran twice: 35 ; their FIRST rows (the 429-storm attempts): $22.59, of which $0 rows 14 ; their second rows: $61.16
+  triage artifact: files under s323 with 'triage' in the path at 16fd227d9: 0 (UNAVAILABLE: the s323 round had no triage analyst row; dispositions are in gate-log :1668 and the fix records) ; control, s322 at f7e60625b: 1
+  gate-log :1668 'Step 3 dispositions (3 repair seats, 14 filed carry-overs, restored 4.1 record)': 1 ; impossible 0
+   record sprint-review-fixes-devA     lines 16  seat-complete markers 1
+   record sprint-review-fixes-devB     lines 16  seat-complete markers 1
+   record sprint-review-fixes-devC     lines 5  seat-complete markers 1
+   record sprint-review-fixes-devD     lines 12  seat-complete markers 1
+   record sprint-review-repair-p2      lines 46  seat-complete markers 1
+
+== 4. fix survival (added lines >= 12 chars; base = the commit's parent; ship = eabdc576e)
+   a2e89caca 11-18 22:37 lines   67 at parent    0 at ship   67 (100.0%)  fix(s323): SA-4 root scratch cleanup - per-story names for evi
+   a11ffe82c 11-18 22:48 lines 1636 at parent    2 at ship 1636 (100.0%)  fix(s323): post-merge AC3c bootstrap fail-closed + SA-5 ceilin
+   6dab86c84 11-18 23:33 lines  883 at parent    2 at ship  883 (100.0%)  fix(s323): guard the SA-2 skip routing of the three S323 UI sm
+   208112c14 11-19 08:25 lines   67 at parent    0 at ship   67 (100.0%)  fix(s323): expand VAR refs in server .env loader (F-6 root)
+  adversary pass A+B fixes (SA-4, SA-5/SA-2/AC3c, p2 F-2/F-6): commits 4, added lines 2653, at ship 2653 (100.0%)
+   ff164e5e5 11-19 11:15 lines  493 at parent    0 at ship  493 (100.0%)  fix(s323-ff1): sprint-review F-2 - remove committed worktree s
+   ca8c5f03f 11-19 11:15 lines   31 at parent    0 at ship   31 (100.0%)  fix(s323-ff1): sprint-review F-1 - keep the durable lock-row r
+   65ece9ec7 11-19 11:18 lines    4 at parent    0 at ship    3 ( 75.0%)  fix(s323-ff1): sprint-review F-1 - test-strategy lock-row scop
+   ce1305dd3 11-19 11:34 lines   45 at parent    0 at ship   32 ( 71.1%)  fix(s323-ff1): sprint-review F-4 - estimate-gate cause vocabul
+   08403fc4e 11-19 11:57 lines   21 at parent    0 at ship   21 (100.0%)  fix(s323-ff1): sprint-review re-review - gas_ceiling_unset cau
+  adversary pass C fixes (F-2, F-1, F-4, re-review): commits 5, added lines 594, at ship 580 ( 97.6%)
+   491420c4f 11-19 13:11 lines   48 at parent   10 at ship   48 (100.0%)  fix(s323-sr): native-Leg-2 refusal row carries its reason; rou
+   486b178e6 11-19 13:13 lines  329 at parent   46 at ship  321 ( 97.6%)  fix(s323-sr): write 5.1 AC7/AC8 and 5.3 AC4 live-smoke instrum
+   c6d3dbb4b 11-19 13:13 lines   28 at parent    6 at ship   28 (100.0%)  fix(s323-sr): register story-4.4 header-forwarding tests in ci
+   9700c48e9 11-19 13:13 lines    6 at parent    0 at ship    6 (100.0%)  fix(s323-sr): pin Base task-def env keys in the 4.3 jest case
+   5c5d58ab4 11-19 13:15 lines    6 at parent    1 at ship    6 (100.0%)  fix(s323-sr): ci-local sentinel lane covers ci-local.sh; corre
+   da79a7828 11-19 14:13 lines   78 at parent    6 at ship   78 (100.0%)  fix(s323-sr): route-landing for '/', DID-NOT-RUN exit, node-te
+   e2454d806 11-19 13:13 lines   33 at parent    1 at ship   33 (100.0%)  fix(s323-sr): sprint-review step-3 artifact repairs (stories, 
+   a60719349 11-19 13:07 lines   28 at parent    0 at ship   28 (100.0%)  fix(s323): restore story-4.1 Item-4 adjudication entry dropped
+   ab599a998 11-19 12:49 lines   15 at parent    0 at ship   15 (100.0%)  fix(s323): step-4 rebind story-1-3 ST323-27..35 and story-2-2 
+  party-round fixes (devA, devB, devC, devD, remediator p2, restore, rebind): commits 9, added lines 571, at ship 563 ( 98.6%)
+  all 18 fix commits: added lines 3818, at ship 3796 ( 99.4%)
+  must-differ control: post-ship commit 6fcfd81a7 (ff1 PR #1338, base eabdc576e): added lines 159, at ship 35 ( 22.0%) <- must read far below the fix commits
+  second control: eabdc576e..16fd227d9 (everything after ship): added lines 18943, at ship 141 (  0.7%)
+  REPAIR-INTRODUCED catch: step-3 code re-review (20520 bytes) names the devB repair's defect: 'can never pass' present 3 ; '### Critical' present 1 ; 'APPROVED' present 4 ; impossible 0
+  fix da79a7828 (urlparse route landing) present at ship: 'urlparse(page.url).path.rstrip' count 1 (must be >= 1); 'DID-NOT-RUN' in rewards-cards-live-verify.js at ship 5 (>= 1)
+  fixer spawns of the party round (devA devB devC remediator p2):   4  $   5.54    13.1 min ; step-3 review loop:   3  $   8.11   125.7 min
+
+== 5. adversary one-shot passes and the sprint-review gate
+  11-19T02:53 Z $ 4.74  11.5 min opus Sprint 323 adversarial review
+  11-19T04:00 Z $ 8.06  18.4 min opus Sprint adversarial pass 2
+  11-19T15:57 Z $ 5.25  14.9 min opus Sprint-level adversarial pass
+  pass A record (sprint-adversarial-p1.md at 0c9dcdd31, overwritten later): '#### SA-n' headings 5 ; result line (Critical, Important, Minor, Suggestion) ('1', '1', '1', '2') ; SA-1 'never merged' present 1 ; impossible 0
+  pass B record (sprint-adversarial-p2.md at eabdc576e): '## F-n' headings 6 ; MAJOR 1, MINOR 5 ; its Disposition says the F-1 premise was superseded by the pair merge: 3
+  pass C record (sprint-adversarial-p1.md at eabdc576e): '### F-n' headings 4 ; MAJOR 1, MINOR 3 ; result line 0 CRITICAL, 1 MAJOR, 3 MINOR present 1 ; impossible 0
+  merge b3a7de522 (4.1 into the sprint branch, which dropped the gate-log entry): 11-18 11:44 -0500 ; party-round finders' defect existed when pass A (spawn 02:53Z = 11-18 21:53 -0500) ran: merge predates it
+  pass A critical SA-1 repair: pair merges 619a6f056..59c9bcd81 (11-18 22:14 -0500 .. 11-18 22:35 -0500), spawns 'Dev-escalated 1.3/5.2 merge resolution' 03:19-03:20Z
+  merge-introduced defects later found by the party round: 4.1 entry (merge b3a7de522) ; SA-4 root scratch fixed at a2e89caca (11-18 22:37 -0500) and re-raised by pass C F-2 (ff164e5e5, '37 scratch files'): hand reading REFOUND; regex hits for 'scratch' in the pass A record 3, pass C record 2
+  gate pass 20261119T193613Z: 8 checks, {'FAIL': 1, 'PASS': 7} ; non-PASS: [('1', 'FAIL')]
+  gate pass 20261119T195256Z: 8 checks, {'PASS': 8} ; non-PASS: []
+  gate-log :1664-1672 (3404 bytes): pass-1 Check 1 FAIL 'vocabulary restatement only' 1 ; 'both verdicts were already pass-equivalent' 1 ; 'superseded' p2 MAJOR disposition 1 ; 'Verdict: 8/8 PASS' 1 ; impossible 0
+  gate rows that are the sprint-review gate itself:   9  $   5.62    23.6 min ; rows that are story 2.2/2.3 gate work (label by clock):   4  $  10.87    51.5 min
+
+== 6. deploy-validate
+  s323 ops            opus   $ 3.19  14.3 min 11-19T20:49  Pre-roll reads for S323 deploy
+  s323 ops            opus   $ 0.87   2.6 min 11-19T21:06  Fresh active-lock reads pre-roll
+  s323 ops            opus   $ 1.63   4.8 min 11-19T21:16  Post-roll ops reads batch
+  s323 ops            opus   $ 0.85   2.8 min 11-19T21:28  Aggregator post-roll ops reads
+  s323 ops            opus   $ 0.88   4.3 min 11-19T21:33  Ui post-roll ops reads
+  s323 ops            opus   $ 0.83   2.0 min 11-19T21:39  Pre-fire allowlist GET read
+  s323 ops            opus   $ 0.93   2.2 min 11-19T22:06  AC7 after-read OPS seat
+  s323 ops            opus   $ 1.33   4.4 min 11-19T22:17  Post-smoke 4b window re-read
+  s323 ops            opus   $ 0.77   2.4 min 11-19T22:42  OPS: 5.3 AC3 ground-truth read
+  s323 ops            opus   $ 0.54   1.3 min 11-19T22:47  OPS: 5.1 values capture read
+  s323 dev-escalated  opus   $ 4.12  22.6 min 11-19T23:58  Fix mTLS gate verify-mode header
+  s323 code-reviewer-escalated opus   $ 2.73   9.5 min 11-20T00:06  Review ff1 fix diff
+  s323 ops            opus   $ 1.25   3.3 min 11-20T00:32  OPS pre-roll reads for ff1 roll
+  s323 ops            opus   $ 0.52   0.8 min 11-20T01:06  OPS Base cert-audit read
+   ops-preroll-reads           36543 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 3
+   ops-preroll-lockrows-2       8312 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 0
+   ops-postroll-reads          35506 bytes  'contradict an expectation: N' lines ['0'] ; 'deviation' lines 3
+   ops-postroll-aggregator      4554 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 0
+   ops-postroll-ui              5517 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 0
+   ops-prefire-allowlist        6165 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 0
+   ops-ac7-afterread            5640 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 0
+   ops-4b-reread               22377 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 0
+   ops-ac3-groundtruth          1097 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 0
+   ops-51-values-read           1433 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 0
+   ff1-ops-preroll-reads        6399 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 0
+   ff1-base-cert-audit-read     1930 bytes  'contradict an expectation: N' lines [] ; 'deviation' lines 0
+   ops-preroll-reads '## Flags and deviations' section present 0, bullet lines 0 (control: impossible heading 0)
+   ops-postroll-reads '## Flags and deviations' section present 1, bullet lines 7 (control: impossible heading 0)
+  ops reports present 12 of 12 ; impossible token in them 0 (must be 0)
+  ff1 fix-forward chain (found by smoke #1 at deploy-validate: the ALB VERIFY mode injects no X-Amzn-Mtls-Clientcert; operator's Collect Rewards blocked until PR #1338):
+   8d6104bd6 11-19 19:03 lines  137 at parent   35 at ff1 merge  133 ( 97.1%) at close  133 ( 97.1%)  fix(s323-ff1): mTLS gate reads the VERIFY-mode headers the A
+   7c36f155f 11-19 19:15 lines    9 at parent    1 at ff1 merge    9 (100.0%) at close    9 (100.0%)  fix(s323-ff1): correct the trust-boundary docstring to the r
+   970238c2b 11-19 19:22 lines    1 at parent    0 at ff1 merge    1 (100.0%) at close    1 (100.0%)  docs(s323-ff1): correct the forwarder sentence this fix obso
+   d472856e0 11-19 19:20 lines   17 at parent    0 at ff1 merge   17 (100.0%) at close   15 ( 88.2%)  docs(s323-ff1): architecture + ADR + S321 escalation reflect
+  retro names the ff1 gap as F-PARTY-1 critical gate-escape: 1 ; 'built on bare client-cert header while listener is VERIFY' present 1 ; impossible 0
+  party-round seats for stories 4.3/4.4 (the mTLS gate and forwarder) naming 'VERIFY' as a finding: seat files 4.3/4.4 (architect-12,13 dev-12,13 pm-12,13 qa-12,13 tea-12,13, cross) containing 'VERIFY' 0 of 11 ; 'clientcert' (case-insensitive) in 5 of 11 ; control 'APP_ENV' 9
+
+== 7. retro (6 party persona seats + analysts + fixes + 7b inputs) and gate-validation[retro]
+  retro file 147529 bytes ; findings table rows 34 ; by severity {'critical': 4, 'major': 19, 'minor': 11} ; provenance (critical, major, minor) ('4', '19', '11') : MATCH
+  second count: 'F-PARTY-n' distinct ids 34 (table rows 34) : MATCH ; impossible id 0
+  C/M-class rows (critical + major) 23
+  finding classes: {'deploy-safety': 2, 'gate-escape': 3, 'process-gap': 10, 'process-tracking': 7, 'spec-ambiguity': 8, 'test-coverage': 4}
+  'Specific, Actionable Improvements' section 5147 bytes ; numbered items 5 : [('1', '`scripts/ecs-deploy.sh`'), ('2', '`.gitignore`'), ('3', '`docs/coding-conventions.md`'), ('4', 'Push candidates filed upstream'), ('5', 'Lead self-report (conduct findings, recorded not')]
+  push candidates named in the section: 4 ['PC-S323-7D-AND-ROUTE-STEP6-RENDER-PRIOR-CLOSEOUT-EXCLUSION-LINE-AS-OPERATOR-INTENT-UNTAGGED', 'PC-S323-CONTEXT-MODE-ONE-READ-CAP-DENIES-VERBATIM-LOAD-READS-OVER-16KIB-NO-ALLOWLIST-KNOB', 'PC-S323-DEPLOY-VALIDATE-STEP-2-BARE-ADD-UNEXECUTABLE-UNDER-CONSUMER-BLANKET-TXT-IGNORE', 'PC-S323-PLAIN-GLOSS']
+   PC-S323-7D-AND-ROUTE-STEP6-RENDER-PRIOR-CLOSEOUT-EXCLUSION-LINE-AS-OPERATOR-INTENT-UNTAGGED ledger at 6fcfd81a7: 0 ; at close 16fd227d9: 2
+   PC-S323-CONTEXT-MODE-ONE-READ-CAP-DENIES-VERBATIM-LOAD-READS-OVER-16KIB-NO-ALLOWLIST-KNOB ledger at 6fcfd81a7: 0 ; at close 16fd227d9: 2
+   PC-S323-DEPLOY-VALIDATE-STEP-2-BARE-ADD-UNEXECUTABLE-UNDER-CONSUMER-BLANKET-TXT-IGNORE ledger at 6fcfd81a7: 0 ; at close 16fd227d9: 2
+   PC-S323-PLAIN-GLOSS                                  ledger at 6fcfd81a7: 0 ; at close 16fd227d9: 3
+   control: ledger bytes at 16fd227d9 68157 (> 0) ; impossible PC id 0
+  applied improvements in the retro PR (ecs-deploy.sh, .gitignore, coding-conventions.md): files ['.gitignore', 'docs/coding-conventions.md', 'scripts/ecs-deploy.sh'] ; added lines 23, at 6fcfd81a7 7, at close 23 (100.0%)
+   1 ecs-deploy poll: token 'rolloutState' in scripts/ecs-deploy.sh at 6fcfd81a7 3, at close 5
+   3 coding-conventions: token 'mock' in docs/coding-conventions.md at 6fcfd81a7 7, at close 8
+  dev commit 73c537e3f (ecs-deploy poll): added lines 12, at parent 7, at close 12
+  must-differ control: the retro PR's added lines against its own base 6fcfd81a7 over ALL files: 14622 lines, at base 133 (must be far below)
+  retro gate verdict: 9 checks {'PASS': 9} ; non-PASS 0 (gate-validation[retro]: 3 shards, 0 repairs; cost only, readings in BL-1141 / batch-262 D)
+  7b next-input files at a9b015557 (the 7b/7d handoff commit; the retro PR deletes the previous sprint's): 7 ; control, s322 files at 6fcfd81a7: 7 ; impossible dir 0

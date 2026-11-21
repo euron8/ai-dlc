@@ -2577,6 +2577,169 @@ else
 fi
 
 # =============================================================================
+# THE SUB_STEP RANGE MANDATE (BL-819 item 16) -- a step file with a `## Resume` table, the snapshot's `- sub_step:`
+#
+# When the snapshot's Pipeline Position holds exactly ONE `- sub_step: <file>.md#<v>` whose file is the resolved step file's
+# basename and <v> is a row of that file's unfenced Resume table, the recovery hook mandates two ranges (R1 = line 1 to the
+# line before the next `## `, R2 = the `### <v>.` section) and records them as `step_ranges` + `step_ranges_id`; the gate owes
+# exactly those. Every other state keeps today's whole-file mandate and whole-file coverage.
+#
+# ONE WORLD SHAPE, MOVED ONE INPUT AT A TIME. Arm (a) is the positive; each near-miss below differs from it in one input, so
+# a hook that narrowed always, or never, fails (a) or the near-miss it differs from. The step file is authored here, so its
+# ranges are known: Resume ends at line 10 (R1 = 1-10), `### alpha.` runs 13-15 (R2), and `### 5.` (line 18) is a heading
+# that is NOT a Resume row. THE GATE IS DRIVEN, never the marker written by hand: the marker is the real producer's.
+# =============================================================================
+if [ -z "${GATE:-}" ] || ! command -v jq >/dev/null 2>&1; then
+  skip "sub_step range arms" "the gate is in neither layout or jq is absent; this fixture ships one pull ahead of its subject"
+else
+rg_body() { # rg_body <full|noresume> <outfile>
+  if [ "$1" = full ]; then
+    printf '# Retro\n\nIntro.\n## Resume\n\n| Value | Meaning |\n|---|---|\n| `alpha` | first |\n| `beta` | second |\n\n## Sections\n\n### alpha. Alpha\nalpha line one\nalpha line two\n### beta. Beta\nbeta line one\n### 5. Extra\nextra line\n## Tail\ntail\n' > "$2"
+  else
+    printf '# Retro\n\nIntro.\nNo resume table here.\n\n| Value | Meaning |\n|---|---|\n| `alpha` | first |\n| `beta` | second |\n\n## Sections\n\n### alpha. Alpha\nalpha line one\nalpha line two\n### beta. Beta\nbeta line one\n### 5. Extra\nextra line\n## Tail\ntail\n' > "$2"
+  fi
+}
+rgworld() { # rgworld <tag> <full|noresume|nostep> <position-lines (newline separated)> -> project dir
+  _rw="$(mktemp -d "$WORK/rg-$1.XXXXXX")" || return 1
+  mkdir -p "$_rw/_bmad-output" "$_rw/${STEPS_REL}"
+  [ "$2" = nostep ] || rg_body "$2" "$_rw/${STEPS_REL}/retro.md"
+  printf 'steady step body\n' > "$_rw/${STEPS_REL}/live.md"
+  {
+    printf '# Pipeline Snapshot\n\n## Pipeline Position\n- pipeline_variant: sprint\n'
+    printf '%s\n' "$3"
+    printf -- '- last_gate_passed: planning-gate-2 @ 2026-08-04T10:00:00Z\n\n## Sprint Context\n- sprint_id: 300\n'
+  } > "$_rw/_bmad-output/pipeline-snapshot.md"
+  printf 'in-flight edit work\n' > "$_rw/decoy.md"
+  printf '%s\n' "$_rw"
+}
+rg_mk() { sed -n "s/^$2=//p" "$1/$mk" 2>/dev/null | head -1; }  # rg_mk <project> <key>
+rg_read() { # rg_read <project> <snap|step> <offset> <limit> -> decision (empty = allowed)
+  case "$2" in snap) _rf="$1/_bmad-output/pipeline-snapshot.md" ;; *) _rf="$1/${STEPS_REL}/retro.md" ;; esac
+  d="$(gate_call "$GATE" "$1" "$(jbounded "$_rf" "$4" "$3")")"
+  allowed "$d" && printf 'allowed' || printf 'DENIED'
+}
+rg_next() { # rg_next <project> -> "<offset> <limit>" the deny of a non-Read call names, or ALLOWED
+  d="$(gate_call "$GATE" "$1" "$(jcall Edit "$1/decoy.md")")"
+  allowed "$d" && { printf 'ALLOWED'; return; }
+  sed -n 's/.*Next chunk: `Read [^ ]* offset=\([0-9]*\) limit=\([0-9]*\)`.*/\1 \2/p' <<<"$d" | head -1
+}
+RG_POS='- **Current step file:** retro.md'
+RG_SS_A='- sub_step: retro.md#alpha'
+
+# --- (a) the matching sub_step renders the range mandate; R1 plus R2 clears the marker ----------------------------------
+RG_A="$(rgworld a full "$RG_POS
+$RG_SS_A")"
+RG_CTX="$(fire_at "$HOOK" "$RG_A")"
+rg_miss=""
+[ "$(rg_mk "$RG_A" step_ranges)" = "1-10 13-15" ] || rg_miss="$rg_miss marker-step_ranges=[$(rg_mk "$RG_A" step_ranges)]"
+grep -Eq '^[0-9]+-[0-9]+$' <<<"$(rg_mk "$RG_A" step_ranges_id)" || rg_miss="$rg_miss marker-step_ranges_id=[$(rg_mk "$RG_A" step_ranges_id)]"
+grep -qF 'MUST be `Read .claude/skills/ai-dlc/steps/retro.md offset=1 limit=10`, then lines 13-15 (section `alpha`)' <<<"$RG_CTX" || rg_miss="$rg_miss mandate-not-the-two-ranges"
+grep -qF 'in full, with native Read' <<<"$RG_CTX" && rg_miss="$rg_miss mandate-still-says-in-full"
+[ "$(rg_read "$RG_A" snap 1 2000)" = allowed ] || rg_miss="$rg_miss snapshot-read-denied"
+[ "$(rg_read "$RG_A" step 1 10)" = allowed ] || rg_miss="$rg_miss R1-denied"
+[ -f "$RG_A/$mk" ] || rg_miss="$rg_miss cleared-by-R1-alone"
+[ "$(rg_read "$RG_A" step 13 3)" = allowed ] || rg_miss="$rg_miss R2-denied"
+[ -f "$RG_A/$mk" ] && rg_miss="$rg_miss R1-plus-R2-left-the-marker-armed"
+if [ -z "$rg_miss" ]; then
+  ok "sub_step (a): a matching sub_step on a step file with a Resume table renders the two-range mandate, records step_ranges=1-10 13-15 with its id, and a Read of R1 plus R2 clears the marker"
+else
+  bad "sub_step (a): the range mandate is not as specified:$rg_miss"
+fi
+
+# --- (b) a limit=1 Read, or R1 alone, does not clear it; the deny names the next chunk and never goes past b2 ----------
+RG_B="$(rgworld b full "$RG_POS
+$RG_SS_A")"
+fire_at "$HOOK" "$RG_B" >/dev/null
+rg_miss=""
+rg_read "$RG_B" snap 1 2000 >/dev/null
+rg_read "$RG_B" step 1 1 >/dev/null
+[ -f "$RG_B/$mk" ] || rg_miss="$rg_miss limit=1-Read-cleared-the-marker"
+read -r _bo _bl <<<"$(rg_next "$RG_B")"
+{ [ "${_bo:-}" = 2 ] && [ "${_bl:-0}" -ge 1 ] && [ $((_bo + _bl - 1)) -le 10 ]; } 2>/dev/null || rg_miss="$rg_miss after-limit=1-the-deny-named-[${_bo:-} ${_bl:-}]-not-line-2-inside-R1"
+rg_read "$RG_B" step 2 9 >/dev/null
+[ -f "$RG_B/$mk" ] || rg_miss="$rg_miss R1-alone-cleared-the-marker"
+read -r _bo _bl <<<"$(rg_next "$RG_B")"
+{ [ "${_bo:-}" = 13 ] && [ "${_bl:-0}" -ge 1 ] && [ $((_bo + _bl - 1)) -le 15 ]; } 2>/dev/null || rg_miss="$rg_miss after-R1-the-deny-named-[${_bo:-} ${_bl:-}]-not-the-R2-chunk-13..15"
+rg_read "$RG_B" step 13 1 >/dev/null
+[ -f "$RG_B/$mk" ] || rg_miss="$rg_miss one-line-of-R2-cleared-the-marker"
+read -r _bo _bl <<<"$(rg_next "$RG_B")"
+{ [ "${_bo:-}" = 14 ] && [ "${_bl:-0}" -ge 1 ] && [ $((_bo + _bl - 1)) -le 15 ]; } 2>/dev/null || rg_miss="$rg_miss after-one-R2-line-the-deny-named-[${_bo:-} ${_bl:-}]-not-14..15"
+rg_read "$RG_B" step 14 2 >/dev/null
+[ -f "$RG_B/$mk" ] && rg_miss="$rg_miss the-last-R2-lines-did-not-clear-it"
+if [ -z "$rg_miss" ]; then
+  ok "sub_step (b): a limit=1 Read and R1 alone leave the marker armed, each deny names the next uncovered chunk (line 2, then 13, then 14) and never past line 15, and the last R2 lines clear it"
+else
+  bad "sub_step (b): partial coverage of the ranges is not held:$rg_miss"
+fi
+
+# --- (c)-(h) near-misses: today's whole-file mandate and whole-file coverage --------------------------------------------
+# rg_whole <label> <project> <gated: yes|no>: the mandate reads `in full`, the marker carries no step_ranges, and (gated) R1
+# plus R2 alone leave the gate armed until the whole file is read.
+rg_whole() {
+  _rl="$1"; _rp="$2"; _rm=""
+  _rc="$(fire_at "$HOOK" "$_rp")"
+  [ -n "$_rc" ] || { bad "sub_step ($_rl): the recovery hook emitted nothing, so the near-miss measures nothing"; return; }
+  [ -z "$(rg_mk "$_rp" step_ranges)" ] || _rm="$_rm marker-step_ranges=[$(rg_mk "$_rp" step_ranges)]"
+  [ -z "$(rg_mk "$_rp" step_ranges_id)" ] || _rm="$_rm marker-step_ranges_id-present"
+  if [ "$3" = no ] && [ "$(rg_mk "$_rp" step_file_resolved)" != 0 ]; then _rm="$_rm step_file_resolved=[$(rg_mk "$_rp" step_file_resolved)]-not-0"; fi
+  grep -qF 'then lines ' <<<"$_rc" && _rm="$_rm mandate-names-ranges"
+  if [ "$3" = yes ]; then
+    grep -qF 'in full, with native Read in consecutive' <<<"$_rc" || _rm="$_rm mandate-not-in-full"
+    rg_read "$_rp" snap 1 2000 >/dev/null
+    rg_read "$_rp" step 1 10 >/dev/null; rg_read "$_rp" step 13 3 >/dev/null
+    [ -f "$_rp/$mk" ] || _rm="$_rm R1-plus-R2-cleared-a-whole-file-mandate"
+    rg_read "$_rp" step 1 21 >/dev/null
+    [ -f "$_rp/$mk" ] && _rm="$_rm the-whole-file-left-it-armed"
+  fi
+  if [ -z "$_rm" ]; then ok "sub_step ($_rl): $4"; else bad "sub_step ($_rl): expected today's whole-file mandate and coverage:$_rm"; fi
+}
+rg_whole c "$(rgworld c full "$RG_POS
+- sub_step: other.md#alpha")" yes "a sub_step naming a DIFFERENT file keeps the whole-file mandate, and R1 plus R2 do not clear it"
+rg_whole d "$(rgworld d full "$RG_POS
+- sub_step: retro.md#5")" yes "a sub_step anchoring a heading that exists (### 5.) but is not a Resume row keeps the whole-file mandate"
+rg_whole e "$(rgworld e noresume "$RG_POS
+$RG_SS_A")" yes "a step file with no Resume section keeps the whole-file mandate"
+rg_whole f "$(rgworld f full "$RG_POS
+$RG_SS_A
+- sub_step: retro.md#beta")" yes "two sub_step lines keep the whole-file mandate"
+rg_whole g "$(rgworld g full "$RG_POS
+- sub_step: retro.md#al pha")" yes "a malformed sub_step value keeps the whole-file mandate"
+# (h) the two states that resolve no step file (each also asserted to record step_file_resolved=0): two different files in the position (ambiguous), and the named file absent
+rg_whole h-ambiguous "$(rgworld h1 full "- **Current step file:** live.md
+$RG_POS
+$RG_SS_A")" no "an ambiguous Pipeline Position (REFUSE) gets no range mandate and no step_ranges"
+rg_whole h-unresolved "$(rgworld h2 nostep "$RG_POS
+$RG_SS_A")" no "a step file that does not resolve (step_file_resolved=0) gets no range mandate and no step_ranges"
+
+# --- (i), (j) the gate's fallback to 1..N: an invalid range and a stale id owe the whole file -------------------------
+# Each reads R2 ALONE (lines 13-15) and must stay armed; the world is (a)'s, the marker altered after the REAL producer wrote it.
+RG_I="$(rgworld i full "$RG_POS
+$RG_SS_A")"; fire_at "$HOOK" "$RG_I" >/dev/null
+awk '/^step_ranges=/ { print "step_ranges=5-3 13-15"; next } { print }' "$RG_I/$mk" > "$RG_I/$mk.new" && mv -f "$RG_I/$mk.new" "$RG_I/$mk"
+rg_miss=""
+[ "$(rg_mk "$RG_I" step_ranges)" = "5-3 13-15" ] || rg_miss="$rg_miss seed-not-written"
+rg_read "$RG_I" snap 1 2000 >/dev/null; rg_read "$RG_I" step 13 3 >/dev/null
+[ -f "$RG_I/$mk" ] || rg_miss="$rg_miss a-range-with-b-below-a-cleared-the-marker-on-R2-alone"
+rg_read "$RG_I" step 1 10 >/dev/null
+[ -f "$RG_I/$mk" ] || rg_miss="$rg_miss R1-plus-R2-cleared-it"
+rg_read "$RG_I" step 1 21 >/dev/null
+[ -f "$RG_I/$mk" ] && rg_miss="$rg_miss the-whole-file-left-it-armed"
+if [ -z "$rg_miss" ]; then ok "sub_step (i): a marker range with b < a (5-3) falls back to 1..N: R2 alone and R1 plus R2 leave it armed and only the whole file clears it"
+else bad "sub_step (i): a b<a range was not discarded:$rg_miss"; fi
+RG_J="$(rgworld j full "$RG_POS
+$RG_SS_A")"; fire_at "$HOOK" "$RG_J" >/dev/null
+rg_miss=""
+[ "$(rg_mk "$RG_J" step_ranges)" = "1-10 13-15" ] || rg_miss="$rg_miss seed-not-ranges"
+printf 'a line added after the recovery armed\n' >> "$RG_J/${STEPS_REL}/retro.md"
+rg_read "$RG_J" snap 1 2000 >/dev/null; rg_read "$RG_J" step 1 10 >/dev/null; rg_read "$RG_J" step 13 3 >/dev/null
+[ -f "$RG_J/$mk" ] || rg_miss="$rg_miss a-stale-step_ranges_id-cleared-the-marker-on-R1-plus-R2"
+rg_read "$RG_J" step 1 22 >/dev/null
+[ -f "$RG_J/$mk" ] && rg_miss="$rg_miss the-whole-file-left-it-armed"
+if [ -z "$rg_miss" ]; then ok "sub_step (j): a step_ranges_id that no longer matches the file (it grew a line) falls back to 1..N: R1 plus R2 leave it armed and only the whole file clears it"
+else bad "sub_step (j): a stale step_ranges_id was honoured:$rg_miss"; fi
+fi
+
+# =============================================================================
 # THE THREE-HOOK SEQUENCE -- the arm that could only be written after the field
 #
 # Every gate arm above seeds the marker with the real producer and then drives the gate. That
