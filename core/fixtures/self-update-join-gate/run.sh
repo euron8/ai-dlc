@@ -206,15 +206,16 @@ else
   bad "the defer does not name the unanchored checks — the operator must re-derive them by hand"
 fi
 
-# --- Assertion 3: A MACHINERY-ONLY PULL STILL PROCEEDS -------------------------
-# The false positive that would make this release worse than the defect. If the rulebook
-# is not changing, no fixture can break on it, and step 2 must stay autonomous.
+# --- Assertion 3: THE RULEBOOK-JOIN ARM IS A DIFFERENTIAL ---------------------
+# On a pull that changes no rulebook file the CHECK_LOADED defer does not fire and a SELF-UPDATE-OK
+# row is still emitted. The pull may still defer for an unrelated reason, such as a gating script
+# UNDECIDED in its range.
 out_mo="$(verdict r_current)"
 if ! have r_current; then dropped r_current
-elif ! grep -q 'SELF-UPDATE-DEFER' <<<"$out_mo"; then
-  ok "a pull that changes no rulebook file does NOT defer — the arm is a differential"
+elif ! grep -q 'whose CHECK_LOADED anchor lives in' <<<"$out_mo" && grep -q 'SELF-UPDATE-OK' <<<"$out_mo"; then
+  ok "a pull that changes no rulebook file emits no CHECK_LOADED defer and still emits a SELF-UPDATE-OK row — the arm is a differential (the pull may still defer for another reason)"
 else
-  bad "a pull with NO rulebook change DEFERRED — the arm is static, not differential, and it strands the machinery slice on every pull"
+  bad "a pull with NO rulebook change emitted the CHECK_LOADED defer or no SELF-UPDATE-OK row — the arm is static, not differential"
   printf '%s\n' "$out_mo" | sed 's/^/        /' | head -3
 fi
 

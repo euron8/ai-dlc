@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1201.0] - 2026-11-20
+
+### A pull that changes `core-paths.sh` or `derive-fixture-readsets.sh` now holds the self-update instead of being passed as not gating (BL-1195)
+
+- For every consumer pulling a release that changes `core-paths.sh` or `derive-fixture-readsets.sh`. The gate classifies how the pre-push hook uses each script a pull changes, and it passed these two as "not gating" because it read the hook's lines as mentions. The hook really runs both and reads their status, through a loop variable set from a `for` list. Such a pull now gets SELF-UPDATE-UNDECIDED for that script, and the pull as a whole defers to the operator.
+- `hermetic-run.sh` stays held, now because the gate classifies its hidden runs (a `for` list item and a `set --` line) instead of leaving one line unclassifiable.
+- The scan reads a path after `set --`, a `"$var/<path>"` at command position and any `for` list item as a run it cannot follow. A `"$var/<path>"` used as an argument stays unknown, as before.
+- Fixture `self-update-gate` gains arm `sh-hidden-runs`, which holds each shape with its twin on seeded hook lines.
+
 ## [0.1200.0] - 2026-11-20
 
 ### A compacted lead keeps every rule's operative text, and the skill file is a third smaller (BL-819 advances)
