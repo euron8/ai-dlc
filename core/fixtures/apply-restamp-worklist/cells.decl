@@ -1,0 +1,8 @@
+# apply-restamp-worklist's starts of apply.sh and the answer-capture hook (BL-879 grammar). Every other drive is in process (apl -> apl_main, aac -> aac_main).
+# Unit cf's EQ section starts each as a program for one distinct CLI outcome and compares it byte for byte with the in-process answer on the same tree:
+# apply.sh exit 0 (a green consumer, the manifest on stdout) and exit 2 (an unknown option, usage on stderr); the hook, which always exits 0, on the input that
+# writes a record (an AskUserQuestion payload) and on the one that writes none (a Bash payload), compared with the record as well.
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-apl-pass
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-apl-refuse
+cli core/hooks/ai-dlc-answer-capture.sh cli-aac-record
+cli core/hooks/ai-dlc-answer-capture.sh cli-aac-quiet

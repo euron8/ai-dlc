@@ -1,0 +1,9 @@
+# apply-restamp-theirs: every run of apply.sh is in process (ap_eng) except three command-line cells, each byte-compared
+# (stdout, stderr, exit) with the in-process answer on the same input from the same path, and required pairwise distinct:
+# a completed apply (rc 0), an unknown-option refusal (rc 2) and a missing argument (rc 1). The push hook stays a program.
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-pass
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-refuse
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-error
+# The two starts of the pre-push hook, in the mid-pull marker arms (7/8). The hook is the program the pusher starts: it ends the shell with a top-level `exit`, keeps its gate-holder file under an EXIT trap and makes `set -m` pool groups, none of which can exist in a subshell of the caller without signalling or ending it.
+e2e core/git-hooks/pre-push e2e-marker-refuses why=the hook refuses the suite on the in-flight marker and ends with a top-level exit, under its EXIT trap and set -m pool setup, which would end the caller if run in it
+e2e core/git-hooks/pre-push e2e-marker-absent why=the same hook run end to end with no marker (the control): same top-level exit, EXIT trap and set -m pool, which exist only in the started process

@@ -218,14 +218,35 @@ mkdir -p "$R/rec-smfail" && cp "$REC"/* "$R/rec-smfail/" 2>/dev/null \
   && printf '#!/usr/bin/env bash\necho "FAIL: stub" >&2\nexit 2\n' > "$R/rec-smfail/settings-merge.sh" \
   || { echo "REFUSED: could not build the reconcile copy with a failing settings-merge.sh" >&2; exit 9; }
 
+# THE ENGINE IS ASKED IN PROCESS: `eng <args>` answers what `bash "$ENG_S" <args>` prints and exits with, ENG_S being the
+# apply.sh to run (set by the caller just before). The fixture's run.sh gates a pre-wrap apply.sh before it starts this
+# receipt, so an apply.sh without the wrap (an `apl_main` entry behind a column-0 source guard) is refused here, never run
+# as a process: sourcing it would run its whole body.
+RC_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)" || RC_LIB=""
+[ -n "$RC_LIB" ] || { echo "REFUSED: core/fixtures/lib is not beside this receipt's fixture directory" >&2; exit 9; }
+grep -qxF 'apl_main() { set -uo pipefail' "$REC/apply.sh" && grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$REC/apply.sh" \
+  || { echo "REFUSED: $REC/apply.sh carries no in-process wrap (apl_main entry and column-0 source guard)" >&2; exit 9; }
+# shellcheck source=/dev/null
+. "$RC_LIB/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$REC/apply.sh" && declare -F apl_main >/dev/null || { echo "REFUSED: sourcing $REC/apply.sh defined no apl_main" >&2; exit 9; }
+eng() { inproc_run "$ENG_S" apl_main "$@"; }
+
 stampv() { sed -n 's/^version: //p' "$1/.claude/.ai-dlc-version"; }
 rows() { awk -F'\t' -v k="$2" -v n="$3" -v p="$4" '$1==k && $2==n && $3==p {c++} END {print c+0}' "$1"; }
 mline() { grep -c "^template: .*	$2\$" "$1/.claude/.ai-dlc-applying" 2>/dev/null || true; }
 dropline() { # <world dir> <path>: delete that file's own template: line, keep the rest
   [ -f "$1/.claude/.ai-dlc-applying" ] || return 0
   grep -v "^template: .*	$2\$" "$1/.claude/.ai-dlc-applying" > "$R/m.tmp"; cat "$R/m.tmp" > "$1/.claude/.ai-dlc-applying"; }
-ord() { bash "${3:-$REC}/apply.sh" "$R/dist" "$B" "$1" "$T" > "$2" 2>/dev/null; }
-fin() { bash "${3:-$REC}/apply.sh" --finish "$R/dist" "$B" "$1" "$T" > "$2" 2>/dev/null; }
+# ord/fin <world> <out> [<engine copy>]: the copy is NAMED (rec-notpl, rec-nosm), so each call site names its engine path.
+ord() { case "${3:-}" in
+  rec-notpl) ENG_S="$R/rec-notpl/apply.sh"; eng "$R/dist" "$B" "$1" "$T" ;;
+  rec-nosm) ENG_S="$R/rec-nosm/apply.sh"; eng "$R/dist" "$B" "$1" "$T" ;;
+  *) ENG_S="$REC/apply.sh"; eng "$R/dist" "$B" "$1" "$T" ;;
+esac > "$2" 2>/dev/null; }
+fin() { case "${3:-}" in
+  rec-nosm) ENG_S="$R/rec-nosm/apply.sh"; eng --finish "$R/dist" "$B" "$1" "$T" ;;
+  *) ENG_S="$REC/apply.sh"; eng --finish "$R/dist" "$B" "$1" "$T" ;;
+esac > "$2" 2>/dev/null; }
 cp_from() { rm -rf "$R/x-$2"; cp -R "$1" "$R/x-$2" && printf '%s' "$R/x-$2"; }
 fails=0
 check() { # <cell> <want> <got>
@@ -269,19 +290,19 @@ if want pa || want pb || want pc || want pd || want pf || want pg || want pu || 
     want pv && check pv '1.0.0|1' "$(stampv "$x")|$(rows "$R/pu.out" WORKLIST finish-classify-unverified .claude/.ai-dlc-applying)"
   fi
 fi
-if want pe; then x="$(cp_from "$R/w-P0" pe)"; [ ! -e "$x/.claude/.ai-dlc-applying" ] || { echo "REFUSED: the pe world is not pristine" >&2; exit 9; }; ord "$x" "$R/pe.out" "$R/rec-notpl"
+if want pe; then x="$(cp_from "$R/w-P0" pe)"; [ ! -e "$x/.claude/.ai-dlc-applying" ] || { echo "REFUSED: the pe world is not pristine" >&2; exit 9; }; ord "$x" "$R/pe.out" rec-notpl
   hs=0; grep -qx 'template-hashes: refused' "$x/.claude/.ai-dlc-applying" 2>/dev/null && hs=1
   check pe '1.0.0|1|1' "$(stampv "$x")|$(rows "$R/pe.out" DECISION template-prose-refused -)|$hs"; fi
-if want pe2; then x="$(cp_from "$R/w-P0" pe2)"; ord "$x" "$R/pe2a.out" "$R/rec-notpl"; ord "$x" "$R/pe2b.out"
+if want pe2; then x="$(cp_from "$R/w-P0" pe2)"; ord "$x" "$R/pe2a.out" rec-notpl; ord "$x" "$R/pe2b.out"
   ln=0; grep -qxF "template: $(git hash-object "$x/$QS") 644	$QS" "$x/.claude/.ai-dlc-applying" 2>/dev/null && ln=1
   fin "$x" "$R/pe2.out"
   check pe2 '1.0.0|1' "$(stampv "$x")|$ln"; fi
-if want pe3; then x="$(cp_from "$R/w-P0" pe3)"; ord "$x" "$R/pe3a.out" "$R/rec-notpl"; fin "$x" "$R/pe3.out"
+if want pe3; then x="$(cp_from "$R/w-P0" pe3)"; ord "$x" "$R/pe3a.out" rec-notpl; fin "$x" "$R/pe3.out"
   # The withheld row must route to a fresh ordinary run, never to --finish: the restamp-withheld
   # wording taken when a row carries the fresh-run remedy (counted in apply.sh's `say`).
   rt=0; awk -F'\t' '$1=="DECISION" && $2=="restamp-withheld" && index($4, "a step only a fresh ordinary run performs") {f=1} END {exit !f}' "$R/pe3.out" && rt=1
   check pe3 '1.0.0|1|1' "$(stampv "$x")|$(rows "$R/pe3.out" WORKLIST finish-template-unscanned .claude/.ai-dlc-applying)|$rt"; fi
-if want pe4; then x="$(cp_from "$R/w-P0" pe4)"; ord "$x" "$R/pe4a.out" "$R/rec-notpl"; ord "$x" "$R/pe4b.out" "$R/rec-notpl"; fin "$x" "$R/pe4.out"
+if want pe4; then x="$(cp_from "$R/w-P0" pe4)"; ord "$x" "$R/pe4a.out" rec-notpl; ord "$x" "$R/pe4b.out" rec-notpl; fin "$x" "$R/pe4.out"
   check pe4 '1.0.0|1' "$(stampv "$x")|$(rows "$R/pe4.out" WORKLIST finish-template-unscanned .claude/.ai-dlc-applying)"; fi
 # --- the json world ------------------------------------------------------------------------------
 if want ja || want jb || want jb2 || want jc || want jd; then
@@ -315,7 +336,7 @@ if want ra || want rb || want rc; then
 fi
 # --- C3: one row per remedy ------------------------------------------------------------------------
 # c3d first: it needs the C world before c3a's ordinary run writes into it.
-if want c3d; then x="$(cp_from "$R/w-C" c3d)"; ord "$x" "$R/c3d.out" "$R/rec-nosm"
+if want c3d; then x="$(cp_from "$R/w-C" c3d)"; ord "$x" "$R/c3d.out" rec-nosm
   check c3d '1|0|1.0.0' "$(rows "$R/c3d.out" DECISION template-json-refused "$SJ")|$(rows "$R/c3d.out" WORKLIST settings-merge "$SJ")|$(stampv "$x")"; fi
 if want c3a || want c3b || want c3c || want c3e; then
   C="$R/w-C"; ord "$C" "$R/c3a.out"
@@ -324,12 +345,12 @@ if want c3a || want c3b || want c3c || want c3e; then
     check c3b '1|0|1.0.0' "$(rows "$R/c3b.out" WORKLIST finish-template-json-unmerged "$SJ")|$(rows "$R/c3b.out" WORKLIST settings-merge "$SJ")|$(stampv "$x")"; fi
   if want c3c; then x="$(cp_from "$C" c3c)"; dropline "$x" "$SJ"; fin "$x" "$R/c3c.out"
     check c3c '1|1.0.0' "$(rows "$R/c3c.out" WORKLIST settings-merge "$SJ")|$(stampv "$x")"; fi
-  if want c3e; then x="$(cp_from "$C" c3e)"; fin "$x" "$R/c3e.out" "$R/rec-nosm"
+  if want c3e; then x="$(cp_from "$C" c3e)"; fin "$x" "$R/c3e.out" rec-nosm
     check c3e '1|0|1.0.0' "$(rows "$R/c3e.out" WORKLIST finish-template-json-unmerged "$SJ")|$(rows "$R/c3e.out" WORKLIST settings-merge "$SJ")|$(stampv "$x")"; fi
 fi
 # --- the context-mode retirement on a range that leaves the template alone -------------------------
-ord2() { bash "$REC/apply.sh" "$R/dist" "$T" "$1" "$T2" > "$2" 2>/dev/null; }
-fin2() { bash "$REC/apply.sh" --finish "$R/dist" "$T" "$1" "$T2" > "$2" 2>/dev/null; }
+ord2() { ENG_S="$REC/apply.sh"; eng "$R/dist" "$T" "$1" "$T2" > "$2" 2>/dev/null; }
+fin2() { ENG_S="$REC/apply.sh"; eng --finish "$R/dist" "$T" "$1" "$T2" > "$2" 2>/dev/null; }
 if want ea || want eb; then E="$R/w-E"; ord2 "$E" "$R/ea.out"
   want ea && check ea '2.0.0|1|1' "$(stampv "$E")|$(rows "$R/ea.out" WORKLIST template-json-merge "$SJ")|$(mline "$E" "$SJ")"
   if want eb; then x="$(cp_from "$E" eb)"; merge_live "$x" || { echo "REFUSED: settings-merge.sh failed on the eb world" >&2; exit 9; }
@@ -338,9 +359,9 @@ if want ea || want eb; then E="$R/w-E"; ord2 "$E" "$R/ea.out"
     check eb '3.0.0|0|0' "$(stampv "$x")|$(rows "$R/eb.out" WORKLIST finish-template-json-unmerged "$SJ")|$en_left"; fi
 fi
 # ez and ex first: they need the G world before er's ordinary run writes into it.
-if want ex; then x="$(cp_from "$R/w-G" ex)"; bash "$R/rec-smfail/apply.sh" "$R/dist" "$T" "$x" "$T2" > "$R/ex.out" 2>/dev/null
+if want ex; then x="$(cp_from "$R/w-G" ex)"; ENG_S="$R/rec-smfail/apply.sh"; eng "$R/dist" "$T" "$x" "$T2" > "$R/ex.out" 2>/dev/null
   check ex '1|2.0.0' "$(rows "$R/ex.out" DECISION template-json-refused "$SJ")|$(stampv "$x")"; fi
-if want ez; then x="$(cp_from "$R/w-G" ez)"; bash "$R/rec-nosm/apply.sh" "$R/dist" "$T" "$x" "$T2" > "$R/ez.out" 2>/dev/null
+if want ez; then x="$(cp_from "$R/w-G" ez)"; ENG_S="$R/rec-nosm/apply.sh"; eng "$R/dist" "$T" "$x" "$T2" > "$R/ez.out" 2>/dev/null
   check ez '1|2.0.0' "$(rows "$R/ez.out" DECISION template-json-refused "$SJ")|$(stampv "$x")"; fi
 if want er; then G="$R/w-G"; ord2 "$G" "$R/er.out"
   fl=0; awk -F'\t' -v p="$SJ" '$1=="WORKLIST" && $2=="template-json-merge" && $3==p && index($4, "settings-merge: filled omitClaudeMd into aiDlcRoles.r") {f=1} END {exit !f}' "$R/er.out" && fl=1

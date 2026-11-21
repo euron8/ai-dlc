@@ -2,6 +2,9 @@
 # apply-restamp-worklist sources the shared preamble, drives apply.sh and its reconcile siblings from copies of that directory, reads the real pre-push for the C6 premise, copies the transient-ignore renderer and its schema into seeded consumers, and runs the real hook-registration validator.
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 core/skills/ai-dlc-update/reconcile/derivation-differential.sh
 core/skills/ai-dlc-update/reconcile/emit-report.sh
@@ -46,3 +49,6 @@ core/fixtures/apply-restamp-worklist/run.sh
 core/fixtures/apply-restamp-worklist-b/run.sh
 core/fixtures/apply-restamp-worklist-c/run.sh
 # The dist-only shards (d) are declared, and their drivers and markers checked, only by those shards: a consumer carries none of them, so this shipped shard declares none.
+# Read from the copies of the reconcile directory (run.sh:99 REC): apply.sh:145 sources scaffold-ignore.sh; the answer-capture hook reads pause-routing.json (hook:118-119). ask-families.tsv and pull-key.sh load only under AI_DLC_PULL_RUN (apply.sh:334-336), which run.sh never sets; the rest of the copied reconcile files are named by neither apply.sh nor run.sh, so they are undeclared.
+core/schemas/pause-routing.json
+core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh

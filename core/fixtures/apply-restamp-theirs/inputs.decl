@@ -1,6 +1,9 @@
-# apply-restamp-theirs sources the shared preamble, drives apply.sh from copies of the reconcile directory (apply.sh reads many siblings of it), and runs the real pre-push hook in a seeded tree.
+# apply-restamp-theirs sources the shared preamble, the in-process lib (inproc.sh, and mutant.sh for its fx_inproc counter, layout.sh), drives apply.sh from copies of the reconcile directory (apply.sh reads many siblings of it), and runs the real pre-push hook in a seeded tree.
 core/fixtures/lib/preamble.sh
 core/skills/ai-dlc-update/reconcile/
 !core/skills/ai-dlc-update/reconcile/apply.sh
 !core/git-hooks/pre-push
 core/fixtures/lib/report.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

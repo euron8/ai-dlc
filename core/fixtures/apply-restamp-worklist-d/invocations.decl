@@ -1,5 +1,7 @@
 # Measured by one counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge armed as .githooks/pre-push fxcount_arm arms it), for BL-1099.
-121 *
+109 *
 0 core/scripts/check-owed-derivations.sh
 0 core/scripts/sprint-status.sh
-12 core/skills/ai-dlc-update/reconcile/apply.sh
+0 core/skills/ai-dlc-update/reconcile/apply.sh
+# BL-878 (batch 263 cluster G): every apply.sh and answer-capture hook start is an in-process pass (apl, aac); the rows below are DERIVED, not yet counted: each inproc row is the fx_inproc count of a plain run with FXCOUNT_LOG set, and each program row is the cli cells of cells.decl. The * row is the previous * row less the bash starts of apply.sh and the hook that moved in process (its old starts, which the inproc row counts apart from the two equivalence halves) plus the cli starts. The lead's one counted seed re-measures them.
+12 inproc:core/skills/ai-dlc-update/reconcile/apply.sh

@@ -1,0 +1,8 @@
+# ledger-reverify-b: the four distinct command-line outcomes of the closer, one cli cell each, started from the sibling
+# run.sh's inproc-seam unit (--group b). Each is byte-compared (stdout, stderr, exit) with the in-process answer lr_eng
+# gives on the same input, and the four outcomes must be pairwise distinct: the seeded ledger (rc 0, rows), swapped
+# arguments (INPUT-UNRESOLVED), an absent ledger (silent) and a refusal (rc 2).
+cli core/skills/ai-dlc-update/reconcile/ledger-reverify.sh cli-seeded
+cli core/skills/ai-dlc-update/reconcile/ledger-reverify.sh cli-swapped
+cli core/skills/ai-dlc-update/reconcile/ledger-reverify.sh cli-noledger
+cli core/skills/ai-dlc-update/reconcile/ledger-reverify.sh cli-refusal

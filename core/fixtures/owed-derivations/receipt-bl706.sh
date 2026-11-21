@@ -32,13 +32,21 @@ pick() { for c in "$@"; do [ -n "$c" ] && [ -e "$c" ] && { printf '%s' "$c"; ret
 RECON="$(pick "${1:-}" "$H/../../skills/ai-dlc-update/reconcile" "$H/../../../.claude/skills/ai-dlc-update/reconcile")"
 RD="$(pick "${2:-}" "$H/../../scripts/check-owed-derivations.sh" "$H/../../../scripts/ai-dlc/check-owed-derivations.sh")"
 VAL="$(pick "$H/../../scripts/validate-artifact-derivations.sh" "$H/../../../scripts/ai-dlc/validate-artifact-derivations.sh")"
-GROUPS_RUN="${3:-a bd c e f g h i j k}"
+GROUPS_RUN="${3:-a bd c e f g h i j k eq}"
 [ -n "$RECON" ] && [ -f "$RECON/apply.sh" ] && [ -f "$RECON/derivation-differential.sh" ] && [ -n "$RD" ] && [ -n "$VAL" ] || exit 9
 RECON="$(cd "$RECON" && pwd)"; RD="$(cd "$(dirname "$RD")" && pwd)/$(basename "$RD")"; VAL="$(cd "$(dirname "$VAL")" && pwd)/$(basename "$VAL")"
 D="$(mktemp -d "${TMPDIR:-/tmp}/bl706rcpt.XXXXXX")" || exit 9
 [ -d "$D" ] || exit 9
 [ -f "$H/../lib/world.sh" ] || exit 9
 . "$H/../lib/world.sh" || exit 9
+# apply.sh is loaded ONCE and every apply drive is its inproc_run (one pass each, the inproc: row). The helper is driven the
+# same way with INPROC_LOADED empty for that call, so inproc_run sources it in the subshell and logs the pass under ITS path;
+# the two never share a namespace. What stays a program: the helper apply.sh starts (nested row) and the validator the
+# installed wrapper runs, which carries no source guard.
+[ -f "$H/../lib/inproc.sh" ] || exit 9
+. "$H/../lib/inproc.sh" || exit 9
+APPLY="$RECON/apply.sh"; DDS="$RECON/derivation-differential.sh"
+inproc_load "$APPLY" || exit 9
 g() { local d="$1"; shift; git -C "$d" -c user.name=r -c user.email=r@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
 stub() { printf '#!/usr/bin/env bash\n[ "${1:-}" = sprint-id ] || exit 2\nshift; r=""; [ "${1:-}" = --root ] && r="${2:-}"\n[ -f "$r/.sprint-id" ] || exit 1\ncat "$r/.sprint-id"\n' > "$1/sprint-status.sh"; }
 REC=_bmad-output/ai-dlc-update/owed-derivations.tsv
@@ -80,7 +88,8 @@ mkc() {
   cp "$RD" "$c/scripts/ai-dlc/check-owed-derivations.sh" && stub "$c/scripts/ai-dlc" || return 1
   printf '#!/usr/bin/env bash\nexit 0\n' > "$c/scripts/ai-dlc/validate-hook-registration.sh"; chmod +x "$c/scripts/ai-dlc/validate-hook-registration.sh"
   # the installed validator is a wrapper that logs each start beside the world, then runs the real one
-  printf '#!/usr/bin/env bash\necho run >> "%s/validator.ran"\nexec bash "%s" "$@"\n' "$(dirname "$c")" "$VAL" > "$c/scripts/ai-dlc/validate-artifact-derivations.sh"
+  printf '#!/usr/bin/env bash\necho run >> "%s/validator.ran"\nexec bash "%s/vad-copy.sh" "$@"\n' "$(dirname "$c")" "$c/scripts/ai-dlc" > "$c/scripts/ai-dlc/validate-artifact-derivations.sh"
+  cp "$VAL" "$c/scripts/ai-dlc/vad-copy.sh" || return 1
   printf '1\n' > "$c/.sprint-id"
   printf 'qqalpha\n' > "$c/scripts/ai-dlc/toy.sh"; printf 'qqx\n' > "$c/scripts/ai-dlc/stable.sh"
   printf '#!/usr/bin/env bash\necho v\n' > "$c/scripts/ai-dlc/validate-synthetic.sh"
@@ -99,14 +108,17 @@ mkc() {
   esac
   g "$c" add -A; g "$c" commit -qm "pull"
 }
-apply() { APPLY_OUT="$(cd / && TMPDIR="$D" bash "$RECON/apply.sh" "$DIST" "$BASE" "$1" "$THEIRS" 2>/dev/null)"; APPLY_RC=$?; }
+# Every pull that reaches the differential is one e2e cell (e2e-apply-<n>, numbered in the order the cells run): apply.sh starts the
+# helper as a child, and the helper's start is covered only when its logged parent is a start of apply.sh.
+APN=0
+apply() { APN=$((APN + 1)); APPLY_OUT="$(cd / && TMPDIR="$D" FXCELL="e2e-apply-$APN" bash "$APPLY" "$DIST" "$BASE" "$1" "$THEIRS" 2>/dev/null)"; APPLY_RC=$?; }
 rd() { ( cd / && AI_DLC_PROJECT_ROOT="$1" bash "$1/scripts/ai-dlc/check-owed-derivations.sh" 2>&1 ); }
 owed_rows() { awk -F'\t' '$1 == "OWED" { n++ } END { print n + 0 }' "$1/$REC" 2>/dev/null || echo 0; }
 sent() { awk 'END { print NR + 0 }' "$1/validator.ran" 2>/dev/null || echo 0; }
-apply2() { APPLY_OUT="$(cd / && TMPDIR="$D" bash "$RECON/apply.sh" "$DIST2" "$BASE2" "$1" "$THEIRS2" 2>/dev/null)"; APPLY_RC=$?; }
-dd2() { ( cd / && TMPDIR="$D" bash "$RECON/derivation-differential.sh" "$DIST2" "$BASE2" "$@" 2>&1 ); }
+apply2() { APN=$((APN + 1)); APPLY_OUT="$(cd / && TMPDIR="$D" FXCELL="e2e-apply-$APN" bash "$APPLY" "$DIST2" "$BASE2" "$1" "$THEIRS2" 2>/dev/null)"; APPLY_RC=$?; }
+dd2() { ( cd / && export TMPDIR="$D" && INPROC_LOADED="" && inproc_run "$DDS" dd_main "$DIST2" "$BASE2" "$@" 2>&1 ); }
 okeys() { awk -F'\t' '$1 == "OWED" { print $2 }' "$1" 2>/dev/null | sort | paste -sd, - ; }
-dd_direct() { ( cd / && TMPDIR="$D" bash "$RECON/derivation-differential.sh" "$DIST" "$BASE" "$@" 2>&1 ); }
+dd_direct() { ( cd / && export TMPDIR="$D" && INPROC_LOADED="" && inproc_run "$DDS" dd_main "$DIST" "$BASE" "$@" 2>&1 ); }
 
 # dd_rows <cell prefix> <apply output>: the differential's INFO stamps row and its NOTE row for the seeded untracked file
 # each reach the manifest as a 4-field NOTE row (cells <p>4 and <p>5), whatever the helper's exit
@@ -194,7 +206,7 @@ cell_g() {
 cell_h() {
   local w="$D/wh" wl dd
   mkdir -p "$w"; mkc "$w/c" clean || exit 9
-  APPLY_OUT="$(cd / && VD_ALL=1 TMPDIR="$D" bash "$RECON/apply.sh" "$DIST" "$BASE" "$w/c" "$THEIRS" 2>/dev/null)"
+  APN=$((APN + 1)); APPLY_OUT="$(cd / && VD_ALL=1 TMPDIR="$D" FXCELL="e2e-apply-$APN" bash "$APPLY" "$DIST" "$BASE" "$w/c" "$THEIRS" 2>/dev/null)"
   wl="$(rows "$APPLY_OUT" WORKLIST artifact-derivations)"
   mkdir -p "$D/wh2"; mkc "$D/wh2/c" clean || exit 9
   dd="$(VD_ALL=1 dd_direct "$D/wh2/c" "$THEIRS")"
@@ -246,10 +258,32 @@ cell_k() {
   un="$(rows "$APPLY_OUT" DECISION artifact-derivations-unscoped)"; df="$(rows "$APPLY_OUT" DECISION artifact-derivations-differential)"
   cell k "$([ "$un" = 1 ] && [ "$df" = 0 ] && [ ! -e "$w/c/$REC" ] && echo 0 || echo 1)" "a scope-classifier failure draws $un artifact-derivations-unscoped DECISION row (want 1) and $df -differential refusal row(s) (want 0); the record stays $([ -e "$w/c/$REC" ] && echo present || echo absent) (want absent)"
 }
+# eq: the CLI half of apply.sh's two distinct outcomes -- a refusal (unknown option, exit 2) and a passing pull -- each started ONCE as
+# a program (FXCELL=cli-refuse / cli-pass) and compared byte for byte (stdout, stderr, exit) with the in-process answer on the same
+# input. The pass world is built once and copied, so both runs start from the same bytes at the same path. With no artifact
+# directory the pass reaches no differential and writes no reconcile log name, so its output carries no clock stamp.
+cell_eq() {
+  local w="$D/weq" ipo r ok=0
+  mkdir -p "$w/snap"
+  # the pass world carries no artifact directory, so apply.sh makes no differential start (that child has no tagged parent here)
+  mkc "$w/c" clean || exit 9; rm -rf "$w/c/_bmad-output" || exit 9; g "$w/c" add -A; g "$w/c" commit -qm noart; cp -R "$w/c" "$w/snap/c" || exit 9
+  (cd / && export TMPDIR="$D" && inproc_run "$APPLY" apl_main "$DIST" "$BASE" "$w/c" "$THEIRS") > "$w/ip-pass.out" 2> "$w/ip-pass.err"; echo "$?" > "$w/ip-pass.rc"
+  mv "$w/c" "$w/ip-c" && cp -R "$w/snap/c" "$w/c" || exit 9
+  (cd / && export TMPDIR="$D" && FXCELL=cli-pass bash "$APPLY" "$DIST" "$BASE" "$w/c" "$THEIRS") > "$w/cl-pass.out" 2> "$w/cl-pass.err"; echo "$?" > "$w/cl-pass.rc"
+  (cd / && inproc_run "$APPLY" apl_main --bogus) > "$w/ip-ref.out" 2> "$w/ip-ref.err"; echo "$?" > "$w/ip-ref.rc"
+  (cd / && FXCELL=cli-refuse bash "$APPLY" --bogus) > "$w/cl-ref.out" 2> "$w/cl-ref.err"; echo "$?" > "$w/cl-ref.rc"
+  for r in pass ref; do
+    for ipo in out err rc; do cmp -s "$w/ip-$r.$ipo" "$w/cl-$r.$ipo" || ok=1; done
+  done
+  # the two outcomes differ, and each is the outcome it names (a refusal exits 2 naming the option; a pass exits 0 with rows)
+  [ "$(cat "$w/ip-pass.rc")" = 0 ] && [ "$(cat "$w/ip-ref.rc")" = 2 ] && [ -s "$w/ip-pass.out" ] && ! cmp -s "$w/ip-pass.out" "$w/ip-ref.out" \
+    && grep -q 'unknown option: --bogus' "$w/ip-ref.err" || ok=1
+  cell eq "$([ "$ok" = 0 ] && echo 0 || echo 1)" "apply.sh as a program answers byte for byte as in process on a passing pull (exit $(cat "$w/cl-pass.rc"), $(wc -c < "$w/cl-pass.out" | tr -d ' ') B stdout) and on a refusal (exit $(cat "$w/cl-ref.rc")), and the two outcomes differ"
+}
 
 for grp in $GROUPS_RUN; do
   case "$grp" in
-    a) cell_a ;; bd) cell_bd ;; c) cell_c ;; e) cell_e ;; f) cell_f ;; g) cell_g ;; h) cell_h ;; i) cell_i ;; j) cell_j ;; k) cell_k ;;
+    a) cell_a ;; bd) cell_bd ;; c) cell_c ;; e) cell_e ;; f) cell_f ;; g) cell_g ;; h) cell_h ;; i) cell_i ;; j) cell_j ;; k) cell_k ;; eq) cell_eq ;;
     *) printf 'receipt-bl706: unknown cell group %s\n' "$grp" >&2; exit 9 ;;
   esac
 done

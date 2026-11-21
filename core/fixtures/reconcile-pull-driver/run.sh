@@ -681,6 +681,24 @@ for _vi in f a; do
     bad "vi: short cite, pull.sh $_vi rc=$_rc out: $(tr '\n' '|' < "$WORK/vi-$_vi.out" | cut -c1-300) err: $(head -c 200 "$WORK/vi-$_vi.err")"
   fi
 done
+# vi (BL-1206): an UPPERCASE 8-hex cite is the same short cite. The history is cleared first so the lowercase record
+# above cannot supply the NOTE; the only record is the uppercase one.
+rm -f "$Ob/c/_bmad-output/operator-answers-history.md"
+# The cite is the shortest digest prefix of 8 or more characters that carries a letter, so upper and lower case differ
+# whatever digest this world derived (an all-digit 8-prefix would make the two spellings identical).
+ob_shortU=""
+for _n in 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32; do
+  _c="$(printf '%s' "$ob_dg" | cut -c1-"$_n")"
+  case "$_c" in *[a-f]*) ob_shortU="$(printf '%s' "$_c" | tr 'a-f' 'A-F')"; break ;; esac
+done
+answer "$Ob/c" "Resolve the Rule 8 hunk? digest $ob_shortU" "take theirs" || bad "vi: the answer hook wrote no uppercase record"
+bash "$REC/pull.sh" finish "$Ob/dist" "$OB" "$Ob/c" "$OT" > "$WORK/vi-u.out" 2> "$WORK/vi-u.err" < /dev/null; vi_urc=$?
+if [ "$ob_shortU" != "$ob_short" ] && [ "$vi_urc" = 3 ] && grep -q "^ASK conflict-hunk $OV/SKILL__Rule-8.md ${ob_dg} " "$WORK/vi-u.out" \
+   && grep -q "^NOTE ask-short-cite $OV/SKILL__Rule-8.md .* ${ob_dg}\$" "$WORK/vi-u.out"; then
+  ok "vi: an answer citing the UPPERCASE 8-hex prefix: pull.sh finish re-asks the ledger row and prints NOTE ask-short-cite"
+else
+  bad "vi: uppercase short cite (cite=$ob_shortU) rc=$vi_urc out: $(tr '\n' '|' < "$WORK/vi-u.out" | cut -c1-300)"
+fi
 answer "$Ob/c" "How should the Rule 8 hunk be resolved? digest $ob_dg" "take theirs" || bad "c2b: the answer hook wrote no record"
 bash "$REC/pull.sh" finish "$Ob/dist" "$OB" "$Ob/c" "$OT" > "$WORK/ob-f2.out" 2> "$WORK/ob-f2.err" < /dev/null; ob_f2rc=$?
 if [ "$ob_f2rc" != 3 ] && ! grep -q '^ASK-UNANSWERED' "$WORK/ob-f2.err" && ! grep -q '^ASK ' "$WORK/ob-f2.out"; then
@@ -707,4 +725,4 @@ else
 fi
 # ===== end BL-1190 note arm =====
 
-report_end reconcile-pull-driver 50
+report_end reconcile-pull-driver 51

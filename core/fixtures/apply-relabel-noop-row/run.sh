@@ -57,6 +57,31 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-relabel-noop.XXXXXX")" || { echo "FIXTU
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+
+# IN PROCESS (BL-878). Every apply of the three consumers below is asked through apl(), which hands the subject to
+# lib/inproc.sh's inproc_run (a pass of $APPLY, one `inproc:` row). Two program starts remain, cells.decl's cli-usage and
+# cli-pass, each compared byte for byte with the in-process answer by eqv() on a refusing and a passing input.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present apply.sh with neither the `apl_main() {` line nor the column-0
+# source guard predates the wrap, and loading it would run its whole body: SKIP and exit 0 on a consumer (FIXTURE BROKEN
+# in the distribution). Exactly one half FAILS. An unreadable subject is FIXTURE ERROR.
+_ra_d=0; _ra_g=0
+grep -qF 'apl_main() {' "$APPLY"; _ra_x=$?
+[ "$_ra_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $APPLY (grep exit $_ra_x)" >&2; exit 2; }
+[ "$_ra_x" -ne 0 ] || _ra_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$APPLY"; _ra_x=$?
+[ "$_ra_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $APPLY (grep exit $_ra_x)" >&2; exit 2; }
+[ "$_ra_x" -ne 0 ] || _ra_g=1
+case "$_ra_d$_ra_g" in
+  11) : ;;
+  00) echo "SKIP: apply-relabel-noop-row: $APPLY predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) echo "FIXTURE ERROR: $APPLY carries one half of the in-process wrap (apl_main line, column-0 source guard: $_ra_d$_ra_g)" >&2; exit 2 ;;
+esac
+inproc_load "$APPLY" || { echo "FIXTURE BROKEN: cannot load $APPLY in process" >&2; exit 2; }
+apl() { inproc_run "$APPLY" apl_main "$@"; } # apl <args...> -> apl_main's stdout, stderr and exit
 
 DIST="$WORK/dist"
 GV="skills/ai-dlc/steps/gate-validation.md"
@@ -149,7 +174,7 @@ echo "apply-relabel-noop-row:"
 # is indistinguishable from an absence over a program that worked. Establish that this synthetic
 # tree produces a manifest before reading a missing row as evidence.
 C_CLEAN="$WORK/c-clean"; mkconsumer "$C_CLEAN" clean || { echo "FIXTURE ERROR: mkconsumer failed" >&2; exit 2; }
-OUT_CLEAN="$(bash "$APPLY" "$DIST" "$BASE" "$C_CLEAN" "$THEIRS" 2>&1)"
+OUT_CLEAN="$(apl "$DIST" "$BASE" "$C_CLEAN" "$THEIRS" 2>&1)"
 n_resolved="$(awk -F'\t' '$1=="RESOLVED"' <<<"$OUT_CLEAN" | grep -c . || true)"
 if [ "$n_resolved" -gt 0 ]; then
   ok "CONTROL: the apply produced $n_resolved RESOLVED row(s) on the clean tree — a missing relabel row below is an absence, not a dead program"
@@ -174,7 +199,10 @@ fi
 # own summary, so this path never even counts. The consumer's filed entry did not name it; a
 # guard keyed on the count covers it for the same reason it covers the clean tree.
 C_NOEXT="$WORK/c-noext"; mkconsumer "$C_NOEXT" noext || { echo "FIXTURE ERROR: mkconsumer failed" >&2; exit 2; }
-OUT_NOEXT="$(bash "$APPLY" "$DIST" "$BASE" "$C_NOEXT" "$THEIRS" 2>&1)"
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+cp -R "$C_NOEXT" "$WORK/c-noext.pristine" || { echo "FIXTURE ERROR: cp pristine failed" >&2; exit 2; }
+apl "$DIST" "$BASE" "$C_NOEXT" "$THEIRS" > "$EQ/cli-pass.ip.out" 2> "$EQ/cli-pass.ip.err"; echo "$?" > "$EQ/cli-pass.ip.rc"
+OUT_NOEXT="$(cat "$EQ/cli-pass.ip.out" "$EQ/cli-pass.ip.err")"
 if [ -z "$(relabel_row "$OUT_NOEXT")" ]; then
   ok "a consumer with no extensions/ directory gets no \`RESOLVED relabel\` row either"
 else
@@ -187,7 +215,7 @@ fi
 # The other half. A guard tightened until it never fires is not a fix, it is the same defect
 # pointing the other way, and it would leave the operator re-doing work the tool already did.
 C_HIT="$WORK/c-collide"; mkconsumer "$C_HIT" collide || { echo "FIXTURE ERROR: mkconsumer failed" >&2; exit 2; }
-OUT_HIT="$(bash "$APPLY" "$DIST" "$BASE" "$C_HIT" "$THEIRS" 2>&1)"
+OUT_HIT="$(apl "$DIST" "$BASE" "$C_HIT" "$THEIRS" 2>&1)"
 ROW_HIT="$(relabel_row "$OUT_HIT")"
 if [ -n "$ROW_HIT" ]; then
   ok "a consumer with a real unlabelled collision DOES get a \`RESOLVED relabel\` row"
@@ -209,6 +237,38 @@ if grep -qE '^### 26\. \[ext:mydomain\] ' "$C_HIT/.claude/skills/ai-dlc/extensio
 else
   bad "the row claims a relabel but the extension heading is unchanged — the count is as false as the old bare row"
 fi
+
+# =============================================================================
+# 4. THE CLI HALVES — `bash apply.sh` answers as the in-process pass does.
+# =============================================================================
+# One program start per distinct CLI outcome (cells.decl): a usage refusal (exit 1) and a passing apply over the
+# consumer with no extensions/ (exit 0, the cheapest passing run), each compared byte for byte (stdout, stderr, exit) with the in-process answer. The
+# passing apply writes its consumer, so the pristine copy is restored between the two sides; cli-pass's in-process side is
+# section 2's own pass.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+cli_side() { # cli_side <id> <args...> -> the CLI answer in $EQ/<id>.cl.{out,err,rc}, tagged FXCELL=<id>
+  local id="$1"; shift
+  FXCELL="$id" command bash "$APPLY" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+}
+same3() { # same3 <id> -> 0 when the in-process and CLI answers agree on stdout, stderr and exit
+  cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.err" "$EQ/$1.cl.err" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc"
+}
+apl > "$EQ/cli-usage.ip.out" 2> "$EQ/cli-usage.ip.err"; echo "$?" > "$EQ/cli-usage.ip.rc"
+cli_side cli-usage; same3 cli-usage; eq_u=$?
+# cli-pass: the in-process side is section 2's own pass over C_NOEXT; the consumer is put back to its pristine state first.
+mv "$C_NOEXT" "$WORK/c-noext.ip" && cp -R "$WORK/c-noext.pristine" "$C_NOEXT" || { echo "FIXTURE ERROR: restoring c-noext failed" >&2; exit 2; }
+cli_side cli-pass "$DIST" "$BASE" "$C_NOEXT" "$THEIRS"; same3 cli-pass; eq_p=$?
+rc_u="$(cat "$EQ/cli-usage.cl.rc" 2>/dev/null)"; rc_p="$(cat "$EQ/cli-pass.cl.rc" 2>/dev/null)"
+if [ "$rc_u" = 1 ] && [ "$rc_p" = 0 ] && ! cmp -s "$EQ/cli-usage.cl.out" "$EQ/cli-pass.cl.out" \
+   && [ -s "$EQ/cli-pass.cl.out" ] && grep -q 'RESOLVED' "$EQ/cli-pass.cl.out"; then
+  ok "the two CLI cells differ: usage refusal exit $rc_u with no manifest, passing apply exit $rc_p carrying RESOLVED rows"
+else
+  bad "the CLI cells do not differ as designed (usage rc='$rc_u', pass rc='$rc_p') -- an equivalence over two identical answers proves nothing"
+fi
+[ "$eq_u" -eq 0 ] && ok "cli-usage: stdout, stderr and exit of \`bash apply.sh\` equal the in-process answer" \
+  || bad "cli-usage: the CLI run and the in-process pass disagree (see $EQ/cli-usage.*)"
+[ "$eq_p" -eq 0 ] && ok "cli-pass: stdout, stderr and exit of \`bash apply.sh\` equal the in-process answer" \
+  || bad "cli-pass: the CLI run and the in-process pass disagree (see $EQ/cli-pass.*)"
 
 echo
 report_end apply-relabel-noop-row

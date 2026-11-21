@@ -61,7 +61,7 @@
 #         apply.sh --finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>
 # Exit:   0 = mechanical resolution completed (a residual WORKLIST/DECISION is normal, not failure)
 #         1 = an error while resolving; 2 = usage.
-set -uo pipefail
+apl_main() { set -uo pipefail
 
 # --- ARGUMENTS: four positionals, and ONE flag that changes what the re-stamp CLAIMS ---------
 #
@@ -141,7 +141,7 @@ if [ "$CLASSIFY_CHECK" = 1 ] && { [ -z "${AI_DLC_PULL_RUN:-}" ] || [ "$FINISH" =
   exit 2
 fi
 
-SELF="$(cd "$(dirname "$0")" && pwd)"
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SCAFFOLD_IGNORE_LIB="$SELF/scaffold-ignore.sh"; scaffold_ignore_loaded=0; . "$SCAFFOLD_IGNORE_LIB" 2>/dev/null && declare -F scaffold_ignore_state >/dev/null && declare -F scaffold_ignore_remedy >/dev/null && scaffold_ignore_loaded=1 # loaded BEFORE phase 1 writes anything; see scaffold_ignore_check()
 # The running script AS A FILE, not as the directory above. Used only to notice that this
 # driver is among the files it is about to replace -- see overwrite_from_theirs().
@@ -152,7 +152,7 @@ SCAFFOLD_IGNORE_LIB="$SELF/scaffold-ignore.sh"; scaffold_ignore_loaded=0; . "$SC
 # and symlinks possible in either). A string compare here would silently never match, which is
 # the shape of check this repo keeps shipping: it would read exactly like "the driver was not
 # in the set."
-SELF_FILE="$SELF/$(basename "$0")"
+SELF_FILE="$SELF/$(basename "${BASH_SOURCE[0]:-$0}")"
 self_replaced=0
 # say — ONE ROW OF THE MANIFEST, AND IT CARRIES ITS DETAIL.
 #
@@ -282,7 +282,7 @@ ra_short_cited() {
     function short(s,   r) {
       while (match(s, /[0-9a-fA-F]+/)) {
         r = substr(s, RSTART, RLENGTH)
-        if (RLENGTH >= 8 && RLENGTH < 64 && index(dg, r) == 1) return 1
+        if (RLENGTH >= 8 && RLENGTH < 64 && index(dg, tolower(r)) == 1) return 1
         s = substr(s, RSTART + RLENGTH)
       }
       return 0
@@ -4464,3 +4464,6 @@ else
 fi
 
 exit 0
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+apl_main "$@"
