@@ -348,5 +348,8 @@ that lost lines Check 35 will count; repair each before the gate.
 Run auto-handoff evaluation at `Seam B` with the label
 `architecture end-of-step pre-gate` (see `_gate-procedures.md`
 \"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
-gate validation [planning] (`gate-validation.md`), then:
+gate validation [planning] (`gate-validation.md`). On `carry-over` this gate also validates the
+requirements step, which runs no gate of its own (`requirements.md` §6): pass `gate-run.sh arms`
+`--series _bmad-output/planning-artifacts/s<N>/requirements-adversarial-p` every time, and the
+architecture series' `--series` beside it when §4's cycle ran. Then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/stories-test-strategy.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

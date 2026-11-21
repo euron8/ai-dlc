@@ -368,7 +368,8 @@ def ext_checks(plan):
 
 
 def cmd_arms(argv, root):
-    o = arg_parse(argv, ["gate", "sprint", "step", "story", "base", "sha", "transcript", "transcript-dir", "series", "root", "worktree"])
+    o = arg_parse(argv, ["gate", "sprint", "step", "story", "base", "sha", "transcript", "transcript-dir", "series", "root", "worktree"],
+                  multi=("story", "series"))
     if o["root"]:
         root = os.path.abspath(o["root"])
     if not (o["sprint"] and re.fullmatch(r"[0-9]+", o["sprint"])):
@@ -385,7 +386,7 @@ def cmd_arms(argv, root):
     os.makedirs(stage, exist_ok=True)
     ctx = {"STORIES": None, "ROOT": root, "SPRINT": o["sprint"], "BASE": o["base"], "SHA": o["sha"],
            "TRANSCRIPT": o["transcript"], "TRANSCRIPT_DIR": o["transcript-dir"],
-           "SERIES": o["series"], "STATE": st, "WORKTREE": o["worktree"]}
+           "SERIES": (o["series"] or [None])[0], "STATE": st, "WORKTREE": o["worktree"]}
     stories = stories_for(root, o["sprint"], o["story"])
     ctx["STORIES"] = [os.path.relpath(x, root) for x in stories]
     rows = arms["rows"]
@@ -408,6 +409,8 @@ def cmd_arms(argv, root):
                 plans[r["id"]] = None
             elif uses_story(r):
                 plans[r["id"]] = [build_argv(r, ctx, s) for s in stories]
+            elif "{SERIES}" in r["arm"] and len(o["series"]) > 1:
+                plans[r["id"]] = [build_argv(r, dict(ctx, SERIES=x)) for x in o["series"]]
             elif uses_stories(r) and not stories:
                 plans[r["id"]] = []
             else:

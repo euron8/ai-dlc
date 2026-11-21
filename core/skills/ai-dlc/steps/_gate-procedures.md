@@ -1104,7 +1104,7 @@ two or more files ("Shard by file" below), or one shard per SECTION when the art
 document that `partition-document.sh --map` partitions ("Shard by section" below), or one shard
 per subject part when the artifact is the requirements subject ("Shard the requirements
 subject's repair" below), and never one per finding. The gate-failure caller at the
-requirements gate repairs a FAILED check on a subject file the same way, as a subject repair,
+requirements gate, and on `carry-over` at the architecture gate, repairs a FAILED check on a subject file the same way, as a subject repair,
 under the gate record name (`join-remediator-shards.sh --subject <N> --artifact gate-<type> --pass <M>`,
 "Shard the requirements subject's repair" below).
 Agent tool, bound to
@@ -1389,8 +1389,10 @@ names "Validation cycle" items 1 and 2 give them. For the requirements subject t
 `--pass party` and `--pass elicitation`. On the files and sections axes they take
 `--artifact <artifact>-party --pass 1` and `--artifact <artifact>-elicitation --pass 1`: outside
 the subject the join reads `--pass` only as a pass number, and refuses `--pass elicitation`
-there. The requirements gate's FAILURE repair runs it with `--artifact gate-<type> --pass <M>`
-(`<type>` the gate type, `<M>` numeric), splitting into
+there. The requirements gate's FAILURE repair, and on `carry-over` the architecture gate's repair of a
+requirements subject file, runs it with `--artifact gate-<type> --pass <M>`
+(`<type>` the gate type, `<M>` numeric, one `gate-planning-repair-p<M>` numbering across the sprint's
+planning gates, never renamed by hand), splitting into
 `s<N>/shards/gate-<type>-repair-p<M>/` and joining into `s<N>/gate-<type>-repair-p<M>.md`, the
 name the non-subject gate caller writes; `--pass party`, `--pass elicitation` and `--artifact`
 are never combined. The subject's `requirements-party-repair.md` and

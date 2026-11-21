@@ -6,7 +6,7 @@
 # usage:
 #   gate-run.sh arms  --gate <gate-id> --sprint N --step <step.md> [--story FILE]...
 #                     [--base SHA] [--sha SHA] [--transcript FILE] [--transcript-dir D]
-#                     [--series PREFIX] [--worktree ABS-DIR] [--root P]
+#                     [--series PREFIX]... [--worktree ABS-DIR] [--root P]
 #   gate-run.sh close --gate <gate-id> --nonce <n> --sprint N --step <step.md>
 #                     [--transcript FILE] [--transcript-dir D] [--verdict PATH] [--root P]
 #   gate-run.sh --help | --self-probe

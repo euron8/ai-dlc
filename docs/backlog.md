@@ -976,6 +976,20 @@ Owed, added in batch 263 (the lead's ruling, the core half of item 1's step-valu
    - A builder narrows the members that are not the draft, and keeps the draft as the step's authoring.
    - Done: each part is removed or narrowed in core step text, or kept with a named failure case it prevents.
 
+**Progress (batch 263, cluster K; item 4, the entry stays PARTIAL, `verify: manual` unchanged).** Item 4 per part:
+- `gate-validation[requirements]`: the requirements planning gate is removed on `carry-over` only (`requirements.md` §6); `feature` keeps it. Its readers move to the carry-over architecture planning gate (`architecture.md` §5, which passes the requirements series to `gate-run.sh arms` every time): Checks 1, 1c, 3, 20 and 24 carry the carry-over sentence, and an unanswered lead-interpretation `HARD_BLOCK` is stopped there by Check 2. Removed figures: 3 adjudicator shards, $1.80, 0.14 agent-h per carry-over sprint.
+- research-requirements §3 PRD validate walk: removed, with Check 17's validate-only arm. No catch on record; BL-1141's keep-reason named none. No measured figure: graph's carry-over sprints never run §3.
+- `gate-validation[sprint-review]`: STAYS. Its catches are named in `sprint-review.md` §4 (*Catches:*): a story's locked-requirement anchor check that passed vacuously at the story gate (Check 3); a strategy-named Test ID no Dev Agent Record cites (Check 21); an earlier sprint's suppression still in force (Check 2).
+- Carry-over routing members:
+  - party round-dispatcher ($1.59): removed; the lead spawns the seats itself (`carry-over-evaluation.md` §3).
+  - live reads: STAY; a Day-0 live read set a story's acceptance criteria.
+  - the fold of answered OQs into requirements: kept as the step's own authoring, the same standing as the evaluation draft; no failure case owed.
+  - adjudication remediators: kept. Owed: measure the ADJUDICATE batch's surviving decisions across rounds before keep or go. Population mismatch: the $9.75 is one sprint's coe pass, and the ADJUDICATE batch runs in every repair round (`_gate-procedures.md`, the ADJUDICATE paragraph), so no-value is unestablished for what a cut removes.
+  - closure-writer: no step text dispatches one (sections 3 onward stay inline in the lead); a lead departure from text, no edit.
+- Carry-over adversarial p3 cross: pass 3 runs as one adversary with no shard split and no cross agent, reading `partition-document.sh --map --scope-ref <p2_sha>` (`carry-over-evaluation.md` §3a). Removed: up to $3.13 and 0.18 agent-h when a pass 3 runs (the cross figure; the part-shard cost is unmeasured).
+
+**PARTIAL (v0.1218.0).** batch 263, K. Delivered: item 4's step-text changes above, and a gate given several `--series` checks every one (BL-1209). Owed: the ADJUDICATE batch measurement above; items 1 and 2 as stated.
+
 Step: pipeline
 
 verify: manual
