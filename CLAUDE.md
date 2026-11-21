@@ -97,8 +97,7 @@ never both (arm A3b). Arm A6 holds the whole durable channel to a byte ceiling.
 return a wrong answer rather than an error), [`consumer-boundary.md`](.claude/rules/consumer-boundary.md)
 (what a session may write), [`mechanism-design.md`](.claude/rules/mechanism-design.md) (how to build an
 enforcer), [`resident-context.md`](.claude/rules/resident-context.md) (what may occupy this channel), and
-[`operator-rulings.md`](.claude/rules/operator-rulings.md) (standing decisions, including that merges are
-preapproved and that every claim is ground-truth sourced).
+[`operator-rulings.md`](.claude/rules/operator-rulings.md) (standing decisions).
 
 **The scoped rules**: [`fixture-contract.md`](.claude/rules/fixture-contract.md),
 [`fixture-mutants.md`](.claude/rules/fixture-mutants.md),
