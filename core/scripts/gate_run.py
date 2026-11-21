@@ -690,7 +690,7 @@ def cmd_close(argv, root):
             print("REMEDY 15 the Check 14 row must carry the budget verdict line; re-run gate-run.sh close")
             print("GATE-RUN %s close FAIL nonce=%s pass=0 fail=1 skip=0 pending=0" % (o["gate"], nonce))
             return 1
-        write_metrics(root, meta, results, order, kinds, gm, arms)
+        write_metrics(root, meta, results, order, kinds, gm, arms, ledger, bool(judg))
         open(gl, "w").write(cand)
     for c in ("12", "14", "15", "26"):
         if c in kinds or c in ("12", "14", "15"):
@@ -791,7 +791,7 @@ def mkrow(label, res, ev):
     return "| %s | %s | %s |" % (label, word.get(res, res) + tag, ev.replace("|", "/"))
 
 
-def write_metrics(root, meta, results, order, kinds, gm, arms):
+def write_metrics(root, meta, results, order, kinds, gm, arms, ledger, validated):
     existing = open(gm).read() if os.path.isfile(gm) else ""
     for l in existing.split("\n"):
         if '"ts":"%s"' % meta["ts"] in l and '"gate":"%s"' % meta["gate_type"] in l and '"sprint":%s,' % meta["sprint"] in l:
@@ -813,9 +813,13 @@ def write_metrics(root, meta, results, order, kinds, gm, arms):
         if c in ("12", "13", "14", "15"):
             continue
         res = results[c][0]
-        v = {"PASS": "PASS", "FAIL": "FAIL", "SKIP": "NA"}.get(res, "DEFERRED")
-        if c in ("H1", "failure") and res == "PENDING":
+        if c == "26" and res == "PENDING":
+            res = "PASS" if validated else "SKIP"
+        elif c == "H1" and res == "PENDING":
+            res = ledger["H1"]
+        elif c == "failure" and res == "PENDING":
             continue
+        v = {"PASS": "PASS", "FAIL": "FAIL", "SKIP": "NA"}.get(res, "DEFERRED")
         if c in ext:
             cat, tok = "extension:%s" % os.path.basename(ext[c]).rsplit(".", 1)[0], 1
             try:

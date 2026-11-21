@@ -5533,11 +5533,33 @@ RT_EOF
   # detected on BLK (a `let` inside a string never matches) and its arguments are read off RAW, as eval does. One
   # row per line and name: a form an earlier branch printed is not printed twice. The nameref ban was NOT put in
   # validate-shell-portability.sh S3: its corpus is `git ls-files '*.sh'`, which holds neither pre-push hook.
-  # Measured at the tip over both hooks: zero hits for every form. NOT covered, by measurement: a name the pool only
-  # READS. Its candidate set (`$NAME` read in the pool, assigned nowhere at column 0) was 77 hits over the two hooks,
-  # all legitimate top-level locals and configuration (`n`, `out`, `rc`, `q`, `sp`, `FXCOUNT_*`, `AI_DLC_*` ...);
-  # it is not an override set. Also not covered: a nameref declared without a target (`declare -n r` then
-  # `r=NAME`), and arithmetic after the first `))` of a nested group.
+  # Measured at the tip over both hooks: zero hits for every form. Also read: `for NAME;`, `select NAME in|;`,
+  # `getopts SPEC NAME`, `trap '...NAME=...'` (read off RAW, a trap body is a string), `readonly NAME`, and a nameref
+  # declared WITHOUT a target (`declare -n r`, any later `r=NAME` over a pool name, form `[nameref]`).
+  # READ-ONLY NAMES (a name the pool reads and never defines): the candidate set is every `$NAME`/`${NAME` in the
+  # pool block that is not a column-0 name (304 over each hook, 277 not already a pool global or function; the old
+  # unnarrowed count was 77 over both hooks by a coarser census). Narrowing, in order: (1) drop a name the pool
+  # DEFINES: an `ident=`/`ident+=`/`ident[i]=` or a name after `local|declare|typeset|read|readonly|for|select`
+  # anywhere in the pool block (a bare `unset NAME` or a mention does NOT define it, so `FXCOUNT_LEGACY_OK`, unset at
+  # pool line 3306 of the distribution hook, stays a candidate; a first narrowing on any bare word acquitted it and
+  # was dropped); 17 names remain per hook, all supplied from outside the pool; (2) read them only AFTER the pool
+  # block (a top-level assignment before it is configuration the pool consumes); (3) only at COLUMN 0 (the distribution
+  # hook's own post-pool functions set `AI_DLC_FX_CL_TREE`, `FXCOUNT_JUDGE`, `FXCOUNT_KEYROWS`, `FXCOUNT_LEGACY_STORE`,
+  # `FXCOUNT_LEGACY_OK` on indented lines, and `( unset FXCOUNT_JUDGE; ... )`: 7 rows before this step, none at column
+  # 0); (4) five exact names are exempt in the pool pre-pass, an exact-name list and never a prefix or pattern:
+  # `PREPUSH_CL_ENTRY` (set by the distribution hook's main body at column 0) and the four BL-878 skip-set record
+  # names `SKIPS_LOG`, `SKIPS_SHAS`, `SKIPS_TREE`, `SKIPS_KEY`. The distribution hook's real-push entry sets them at
+  # column 0 (`.githooks/pre-push:4603` `SKIPS_LOG=""; ... SKIPS_SHAS=""; SKIPS_TREE=""; SKIPS_KEY="-"`, and :4606
+  # `SKIPS_LOG="$GITDIR/ai-dlc-fixture-skips.log"`) to arm that record, and the pool reads them only to decide whether
+  # and what to write to it, never to move a verdict, a dispatch, an exit code or a count. Read sites, audited:
+  # `SKIPS_LOG` at :3785, :3789, :3817 (`skips_header` argument) and :3808, :4132 (`readset_pending_recorded`
+  # argument); `SKIPS_SHAS`, `SKIPS_TREE`, `SKIPS_KEY` at :3472 (`skips_header` printf) and :3490
+  # (`readset_pending_recorded` awk -v). Real-corpus false-positive set after all four steps: ZERO rows over both
+  # hooks; before the four skip-set exemptions the distribution hook printed four rows, all on :4603.
+  # The measured escape `FXCOUNT_LEGACY_OK=1` appended at the end of EACH hook prints a row on both. Hits print
+  # `(read-only)` after the form. Real-corpus candidate matches of the new `select` and `for NAME;` regexes, all quiet
+  # because the name is not a pool name, are enumerated in the BL-1161 LANDED paragraph. Not covered: an indented
+  # override inside a post-pool function, and arithmetic after the first `))` of a nested group.
   # The quote state is a STACK carried across lines (cut() blanks a multi-line string as a whole, so the line that
   # closes an awk string is not read as an opening quote) and resets only at the start of each hook. `s` is a
   # single-quoted span, `d` a double-quoted one; inside a double-quoted span a dollar-paren pushes `c`, a command
@@ -5581,11 +5603,13 @@ RT_EOF
         RAW = RAW c; BLK = BLK c; DQ = DQ c
       }
     }
+    function roskip(i) { return i <= pe || L[i] ~ /^[ \t]/ }
     function hit(i, nm, how,   k) {
       if (nm in G) k = "global"; else if (nm in F) k = "function"; else return
+      if ((nm in RO) && roskip(i)) return
       if ((i SUBSEP nm) in SEEN) return
       SEEN[i SUBSEP nm] = 1
-      print nf "\t" i "\t" k "\t" nm (how == "" ? "" : " [" how "]")
+      print nf "\t" i "\t" k "\t" nm (how == "" ? "" : " [" how "]") (nm in RO ? " (read-only)" : "")
     }
     function idents(i, str, how,   t) {
       gsub(/\$\{?[A-Za-z_][A-Za-z0-9_]*/, " ", str)
@@ -5621,7 +5645,7 @@ RT_EOF
         str = substr(rest, j)
       }
     }
-    function scan(   i, s, t, rest, pre, nm, kind, n, inblk, dep, u, here, op, r, b, x, was, aa) {
+    function scan(   i, s, t, rest, pre, nm, kind, n, inblk, dep, u, here, op, r, b, x, was, aa, v, w) {
       if (nf == "") return
       n = 0; pb = 0; pe = 0; ub = 0; ue = 0; QS = ""; inblk = 0; split("", SEEN)
       for (i = 1; i <= nl; i++) {
@@ -5638,6 +5662,21 @@ RT_EOF
         else if (match(s, /^rec_home[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) { t = substr(s, 1, RLENGTH); sub(/^rec_home[ \t]+/, "", t); G[t] = 1; n++ }
       }
       if (n == 0) { print nf "\t0\tZERO\t-"; return }
+      split("", RO); split("", RD); split("", BARE); split("", NRF); QS = ""
+      for (i = pb + 1; i < pe; i++) {
+        cut(L[i]); t = RAW; u = ""
+        while (match(t, /\$\{?[A-Za-z_][A-Za-z0-9_]*/)) { x = substr(t, RSTART, RLENGTH); sub(/^\$\{?/, "", x); RD[x] = 1; u = u substr(t, 1, RSTART - 1) " "; t = substr(t, RSTART + RLENGTH) }
+        u = u t
+        v = u
+        while (match(v, /(^|[^A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?\+?=/)) { w = substr(v, RSTART, RLENGTH); v = substr(v, RSTART + RLENGTH); sub(/^[^A-Za-z_]/, "", w); sub(/[^A-Za-z0-9_].*$/, "", w); BARE[w] = 1 }
+        v = u
+        while (match(v, /(^|[;&|({ \t])(local|declare|typeset|read|readonly|for|select)[ \t]+/)) {
+          v = substr(v, RSTART + RLENGTH); w = v; sub(/[;&|)<>].*$/, "", w); gsub(/(^|[ \t])-[A-Za-z]+/, " ", w)
+          while (match(w, /[A-Za-z_][A-Za-z0-9_]*/)) { BARE[substr(w, RSTART, RLENGTH)] = 1; w = substr(w, RSTART + RLENGTH) }
+        }
+      }
+      QS = ""
+      for (x in RD) if (x != "PREPUSH_CL_ENTRY" && x != "SKIPS_LOG" && x != "SKIPS_SHAS" && x != "SKIPS_TREE" && x != "SKIPS_KEY" && !(x in G) && !(x in F) && !(x in BARE)) { G[x] = 1; RO[x] = 1 }
       for (i = 1; i <= nl; i++) {
         if (nf == cons && index(L[i], "# pool-shadow:") && !(ub && ue > ub && i > ub && i < ue)) print nf "\t" i "\tMARKER\t-"
         s = L[i]
@@ -5654,6 +5693,17 @@ RT_EOF
           t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
           sub(/^.*=["\047]?/, "", t); hit(i, t, "nameref")
         }
+        rest = r
+        while (match(rest, /(^|[;&|({ \t])(declare|typeset|local)[ \t]+(-[A-Za-z]+[ \t]+)*-[A-Za-z]*n[A-Za-z]*[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
+          t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
+          if (substr(rest, 1, 1) != "=") { sub(/^.*[ \t]/, "", t); NRF[t] = 1 }
+        }
+        rest = " " r
+        while (match(rest, /[;&|({ \t][A-Za-z_][A-Za-z0-9_]*=["\047]?[A-Za-z_][A-Za-z0-9_]*/)) {
+          t = substr(rest, RSTART + 1, RLENGTH - 1); rest = substr(rest, RSTART + RLENGTH)
+          v = t; sub(/^[^=]*=["\047]?/, "", v); sub(/=.*$/, "", t)
+          if (t in NRF) hit(i, v, "nameref")
+        }
         gsub(/(^|[;&|({ \t])local[ \t][^;]*/, " ", r)
         gsub(/(^|[;&|({ \t])local[ \t][^;]*/, " ", b)
         rest = " " r
@@ -5664,23 +5714,38 @@ RT_EOF
           if (pre == "$") continue
           if (t ~ /=$/) { nm = t; sub(/(\[[^]]*\])?\+?=$/, "", nm); kind = "global"; if (!(nm in G)) continue }
           else { nm = t; sub(/[ \t]*\(\)$/, "", nm); kind = "function"; if (!(nm in F)) continue }
+          if ((nm in RO) && roskip(i)) continue
           if ((i SUBSEP nm) in SEEN) continue
           SEEN[i SUBSEP nm] = 1
-          print nf "\t" i "\t" kind "\t" nm
+          print nf "\t" i "\t" kind "\t" nm (nm in RO ? " (read-only)" : "")
         }
         if (match(r, /(^|[;&|({ \t])rec_home[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
           t = substr(r, RSTART, RLENGTH); sub(/.*rec_home[ \t]+/, "", t)
-          if (t in G) print nf "\t" i "\tglobal\t" t
+          if ((t in G) && !((t in RO) && roskip(i))) print nf "\t" i "\tglobal\t" t (t in RO ? " (read-only)" : "")
         }
         rest = b
-        while (match(rest, /(^|[;&|({ \t])for[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+in([ \t]|$)/)) {
+        while (match(rest, /(^|[;&|({ \t])(for|select)[ \t]+[A-Za-z_][A-Za-z0-9_]*([ \t]+in([ \t]|$)|[ \t]*(;|$))/)) {
           t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
-          sub(/^[^a-z]*for[ \t]+/, "", t); sub(/[ \t]+in[ \t]*$/, "", t); hit(i, t, "for")
+          v = (t ~ /(^|[^A-Za-z0-9_])select[ \t]/) ? "select" : "for"
+          sub(/^[^a-z]*(for|select)[ \t]+/, "", t); match(t, /^[A-Za-z_][A-Za-z0-9_]*/); hit(i, substr(t, 1, RLENGTH), v)
         }
         rest = b
-        while (match(rest, /(^|[;&|({ \t])(read|unset)[ \t]/)) {
+        while (match(rest, /(^|[;&|({ \t])getopts[ \t]+[^ \t]+[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
+          t = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH); sub(/^.*[ \t]/, "", t); hit(i, t, "getopts")
+        }
+        rest = r
+        while (match(rest, /(^|[;&|({ \t])trap[ \t]+["\047]/)) {
+          rest = substr(rest, RSTART + RLENGTH - 1)
+          while (match(rest, /[;&|({ \t"\047][A-Za-z_][A-Za-z0-9_]*\+?=/)) {
+            t = substr(rest, RSTART + 1, RLENGTH - 1); rest = substr(rest, RSTART + RLENGTH)
+            if (substr(rest, 1, 1) == "=") continue
+            sub(/\+?=$/, "", t); hit(i, t, "trap")
+          }
+        }
+        rest = b
+        while (match(rest, /(^|[;&|({ \t])(read|unset|readonly)[ \t]/)) {
           x = substr(rest, RSTART, RLENGTH); rest = substr(rest, RSTART + RLENGTH)
-          idents(i, rest, x ~ /read/ ? "read" : "unset")
+          idents(i, rest, x ~ /readonly/ ? "readonly" : x ~ /read/ ? "read" : "unset")
         }
         if (match(b, /(^|[;&|({ \t])printf[ \t]+-v[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
           t = substr(b, RSTART, RLENGTH); sub(/.*-v[ \t]+/, "", t); hit(i, t, "printf -v")
@@ -7686,6 +7751,7 @@ def population(root):
         if not os.path.isdir(ad):
             continue
         for dirpath, _dirs, filenames in os.walk(ad):
+            _dirs[:] = [d for d in _dirs if d != '__pycache__']
             for fn in sorted(filenames):
                 fp = os.path.join(dirpath, fn)
                 try:

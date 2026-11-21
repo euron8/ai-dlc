@@ -2493,7 +2493,7 @@ fl_del() {
   local sd="$1" r w d s m b
   r="$WORK/repo-fldel"
   if [ ! -d "$r/.git" ]; then
-    G clone -q "$REPO_B" "$r" 2>/dev/null && G -C "$r" checkout -q --detach "$B_SHA" \
+    world_git clone -q "$REPO_B" "$r" 2>/dev/null && G -C "$r" checkout -q --detach "$B_SHA" \
       && G -C "$r" rm -q alpha/a1.txt && printf 'beta edited\n' >> "$r/beta/b1.txt" \
       && G -C "$r" add -A && G -C "$r" commit -q -m fl-del || { WHY="$WHY fl-del{the deleting commit was not minted}"; return; }
   fi
@@ -4330,7 +4330,7 @@ lr_lead() { [ "$SRC" -eq 2 ] && [ "$(nref "$CO")" = 1 ] && has "$CO" "$LR_LEADCO
 lr_wt() { # LR_WT (a dev worktree added from REPO_LR at LR_F) and LR_CLONE (a --shared clone of REPO_LR), built once
   [ -z "${LR_WT:-}" ] || return 0
   LR_WT="$WORK/lr-wt"; LR_CLONE="$WORK/lr-clone"
-  G -C "$REPO_LR" worktree add -q --detach "$LR_WT" "$LR_F" 2> /dev/null && G clone -q --shared "$REPO_LR" "$LR_CLONE" 2> /dev/null \
+  G -C "$REPO_LR" worktree add -q --detach "$LR_WT" "$LR_F" 2> /dev/null && world_git clone -q --shared "$REPO_LR" "$LR_CLONE" 2> /dev/null \
     && [ -f "$LR_WT/.git" ] || { WHY="$WHY FIXTURE ERROR: the a1 dev worktree or the seat's clone was not built"; LR_WT=""; return 1; }
 }
 p_lead() {
@@ -4497,7 +4497,7 @@ lr_sw() { # LR_S (a lead checkout), LR_SW (a dev worktree added from it) and LR_
   [ -z "${LR_SW:-}" ] || return 0
   LR_S="$WORK/lr-s"; LR_SW="$WORK/lr-sw"; LR_SCLONE="$WORK/lr-sclone"
   world_git init -q "$LR_S" && printf 's\n' > "$LR_S/README" && G -C "$LR_S" add README && G -C "$LR_S" commit -q -m s \
-    && G -C "$LR_S" worktree add -q --detach "$LR_SW" HEAD 2> /dev/null && G clone -q --shared "$LR_S" "$LR_SCLONE" 2> /dev/null \
+    && G -C "$LR_S" worktree add -q --detach "$LR_SW" HEAD 2> /dev/null && world_git clone -q --shared "$LR_S" "$LR_SCLONE" 2> /dev/null \
     && [ -f "$LR_SW/.git" ] || { WHY="$WHY FIXTURE ERROR: the a2 lead checkout, its dev worktree or the seat's clone was not built"; LR_SW=""; return 1; }
 }
 p_lead_rec() {

@@ -198,7 +198,7 @@ fi
 # not answer zero. Built by re-cloning to depth 1 rather than by deleting refs, so the
 # repo is a shape git itself produces.
 SHALLOW="$WORK/shallow"
-if git clone -q --depth 1 "file://$DIST" "$SHALLOW" 2>/dev/null && [ -d "$SHALLOW/.git" ]; then
+if world_git clone -q --depth 1 "file://$DIST" "$SHALLOW" 2>/dev/null && [ -d "$SHALLOW/.git" ]; then
   s_out="$(rf_run "$UNDER_TEST" "$SHALLOW" HEAD "$CONS" 2>/dev/null)"
 
   # FIRST, PROVE THE STATE UNDER TEST WAS ACTUALLY BUILT, and prove it with the question
