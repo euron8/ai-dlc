@@ -270,6 +270,29 @@ ra_recorded() {
     inrec && q && fence == 1 { if ($0 == lb || (lb == "*" && $0 != "")) found = 1; fence = 2; next }
     END { exit !found }' "$1"
 }
+# ra_short_cited <answers-history> <digest> -> 0 when ONE record of ra_recorded's row shape (a header
+# ending `-- AskUserQuestion`, a non-empty first answer-body line) has a `- Question` line citing a
+# PREFIX of the digest 8 to 63 hex characters long, standing alone (a maximal hex run). A diagnostic
+# only: it accepts nothing, and every caller still re-asks; it says why the answer did not count.
+ra_short_cited() {
+  [ "${#2}" -eq 64 ] || return 1
+  case "$2" in *[!0-9a-f]*) return 1 ;; esac
+  [ -f "$1" ] || return 1
+  awk -v dg="$2" '
+    function short(s,   r) {
+      while (match(s, /[0-9a-fA-F]+/)) {
+        r = substr(s, RSTART, RLENGTH)
+        if (RLENGTH >= 8 && RLENGTH < 64 && index(dg, r) == 1) return 1
+        s = substr(s, RSTART + RLENGTH)
+      }
+      return 0
+    }
+    /^## / { inrec = ($0 ~ /^## [^ ]+ -- AskUserQuestion$/); q = 0; fence = 0; next }
+    inrec && index($0, "- Question") == 1 { if (short($0)) q = 1; next }
+    inrec && q && fence == 0 && $0 == "```text" { fence = 1; next }
+    inrec && q && fence == 1 { if ($0 != "") found = 1; fence = 2; next }
+    END { exit !found }' "$1"
+}
 
 # --- MECHANICAL UNION GATE, CONDITION (1), DRIVEN HERE RATHER THAN NARRATED ----
 # SKILL.md step 7 lets `apply` write only after
@@ -386,6 +409,7 @@ pr_ledger_open() {
   while IFS="$_tab" read -r _f _p _d _s; do
     [ -n "$_d" ] || continue
     ra_recorded "$_hist" "$_d" "*" && { pr_decide "$_f" "$_p" "$_d" operator answered "hook-written answer quotes the digest"; continue; }
+    ra_short_cited "$_hist" "$_d" && printf 'ASK-SHORT-CITE\t%s\t%s\t%s\n' "$_f" "$_p" "$_d" >&2
     printf 'ASK-UNANSWERED\t%s\t%s\t%s\n' "$_f" "$_p" "$_d"
   done < "$_gd/ai-dlc-pull/asks.tsv"
 }
@@ -409,6 +433,7 @@ pr_conflict_guard() {
       while IFS="$_tab" read -r _ _ _s _; do [ "$_s" = "$_d" ] && _cur=1; done < "$_stg/cur-asks"
       [ "$_cur" = 1 ] && continue
       ra_recorded "$_hist" "$_d" "*" && { pr_decide "$_f" "$_p" "$_d" operator answered "hook-written answer quotes the digest"; continue; }
+      ra_short_cited "$_hist" "$_d" && printf 'ASK-SHORT-CITE\t%s\t%s\t%s\n' "$_f" "$_p" "$_d" >&2
       _out="${_out}ASK-UNANSWERED${_tab}${_f}${_tab}${_p}${_tab}${_d}${NL_CH:-
 }"
     done < "$_stg/rec-asks"
@@ -438,7 +463,7 @@ if [ "$CLASSIFY_CHECK" = 0 ]; then
     _fl_rows="$(pr_ledger_open "$_fl_gd")"
     if [ -n "$_fl_rows" ]; then
       printf '%s\n' "$_fl_rows" >&2
-      echo "apply: ASK-UNANSWERED: a decision this pull asked the operator (the rows above, from ${_fl_gd}/ai-dlc-pull/asks.tsv) was settled with no hook-written AskUserQuestion record quoting its digest. Ask each row with AskUserQuestion, quoting its digest, then re-run \`pull.sh $([ "$FINISH" = 1 ] && echo finish || echo apply)\`. NOTHING HAS BEEN WRITTEN." >&2
+      echo "apply: ASK-UNANSWERED: a decision this pull asked the operator (the rows above, from ${_fl_gd}/ai-dlc-pull/asks.tsv) was settled with no hook-written AskUserQuestion record quoting its digest. Ask each row with AskUserQuestion, quoting the full 64-hex digest, then re-run \`pull.sh $([ "$FINISH" = 1 ] && echo finish || echo apply)\`. NOTHING HAS BEEN WRITTEN." >&2
       exit 3
     fi
   fi
@@ -1314,7 +1339,7 @@ TP_LINES=""
 TP_JSON_OWED=0
 TP_F_STATE=""
 TP_F_ROWS=""
-tp_remedy_json="Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show \"\${theirs}:templates/settings.json.template\" > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+tp_remedy_json="Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); p=\$(mktemp); git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$t\"; git -C <dist> show \"${BASE}:templates/settings.json.template\" > \"\$p\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" --prior-template \"\$p\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
 # tp_rec_line <consumer-rel> -> the `template: ` line for the file as it stands now ("-" unreadable).
 tp_rec_line() {
   local _h _m=644
@@ -1322,23 +1347,36 @@ tp_rec_line() {
   [ -x "$CONSUMER/$1" ] && _m=755
   printf 'template: %s %s\t%s' "${_h:--}" "$_m" "$1"
 }
-# tp_json_test <template-path at theirs> <consumer-rel> -> sets TP_JT to equal, differs, or
-# refused (TP_JW carries why). Merges theirs' template into a staged COPY of the consumer file with
+# tp_json_test <template-path at theirs> <consumer-rel> [noprior] -> sets TP_JT to equal, differs, or
+# refused (TP_JW carries why) and TP_JR to the merge's `filled`/`replaced` report lines. The template at
+# BASE is passed as --prior-template (a role key holding the base value is replaced); `noprior` (the
+# no-template-delta scan, where prior == theirs) passes none. Merges theirs' template into a staged COPY of the consumer file with
 # this release's settings-merge.sh and compares the copy against the live file.
 tp_json_test() {
-  local _d _rc=0
-  TP_JT=refused; TP_JW=""
+  local _d _rc=0 _pa="" _l
+  TP_JT=refused; TP_JW=""; TP_JR=""
   [ -f "$SELF/settings-merge.sh" ] || { TP_JW="reconcile/settings-merge.sh is not beside this apply.sh (version skew or a partial copy of reconcile/)"; return 0; }
   [ -n "$AP_TMP" ] && _d="$AP_TMP/tpj" && mkdir -p "$_d" 2>/dev/null || { TP_JW="no staging directory"; return 0; }
   git -C "$DIST" show "${THEIRS}:$1" > "$_d/template" 2>/dev/null || { TP_JW="\`${THEIRS}:$1\` could not be read"; return 0; }
+  if [ "${3:-}" != noprior ]; then
+    if git -C "$DIST" show "${BASE}:$1" > "$_d/prior" 2>/dev/null; then
+      _pa="$_d/prior"
+    else
+      # No prior is right only when the path is absent at a base that resolves.
+      git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" > /dev/null 2>&1 || { TP_JW="the base \`${BASE}\` does not resolve in the distribution, so \`${BASE}:$1\` could not be read"; return 0; }
+    fi
+  fi
   rm -f "$_d/settings.json" 2>/dev/null
   cp -p "$CONSUMER/$2" "$_d/settings.json" 2>/dev/null || { TP_JW="the consumer's $2 could not be copied"; return 0; }
   # stdin closed: template_scan calls this inside a `read` loop over the staged rows.
-  bash "$SELF/settings-merge.sh" --consumer "$_d/settings.json" --template "$_d/template" < /dev/null > /dev/null 2> "$_d/err" || _rc=$?
+  bash "$SELF/settings-merge.sh" --consumer "$_d/settings.json" --template "$_d/template" ${_pa:+--prior-template "$_pa"} < /dev/null > "$_d/out" 2> "$_d/err" || _rc=$?
   if [ "$_rc" -ne 0 ]; then
     TP_JW="settings-merge.sh exited ${_rc}: $(sed -n '1p' "$_d/err" 2>/dev/null | tr '\t' ' ')"
     return 0
   fi
+  while IFS= read -r _l; do
+    case "$_l" in "settings-merge: filled "*|"settings-merge: replaced "*) TP_JR="${TP_JR:+${TP_JR} }[${_l}]" ;; esac
+  done < "$_d/out"
   if cmp -s "$_d/settings.json" "$CONSUMER/$2"; then TP_JT=equal; else TP_JT=differs; fi
   return 0
 }
@@ -1370,7 +1408,7 @@ template_scan() {
           equal) : ;;
           differs)
             TP_JSON_OWED=1
-            say WORKLIST template-json-merge "$_c" "upstream changed \`${_tm}\` between \`${BASE}\` and \`${THEIRS}\`, and merging it into a copy of this file changes the copy, so the merge is owed. ${tp_remedy_json} Then run --finish, which re-runs this same test."
+            say WORKLIST template-json-merge "$_c" "upstream changed \`${_tm}\` between \`${BASE}\` and \`${THEIRS}\`, and merging it into a copy of this file changes the copy, so the merge is owed.${TP_JR:+ ${TP_JR}} ${tp_remedy_json} Then run --finish, which re-runs this same test."
             TP_LINES="${TP_LINES}$(tp_rec_line "$_c")${NL_CH}" ;;
           *)
             TP_JSON_OWED=1
@@ -1396,7 +1434,7 @@ template_scan() {
 tp_settings_scan() {
   local _c=.claude/settings.json _tm=templates/settings.json.template _o _l _what=""
   [ -f "$CONSUMER/$_c" ] || return 0
-  tp_json_test "$_tm" "$_c"
+  tp_json_test "$_tm" "$_c" noprior
   case "$TP_JT" in
     equal) return 0 ;;
     differs)
@@ -1537,7 +1575,7 @@ finish_template_unmerged() {
     case "$_k" in
       json-equal) continue ;;
       json-*)
-        say WORKLIST finish-template-json-unmerged "$_c" "$([ "$_k" = json-differs ] && printf 'merging theirs'"'"' \`%s\` into a copy of this file still changes the copy, so the settings merge this pull handed back was not done' "$_tm" || printf 'whether the settings merge this pull handed back was done could not be tested (%s)' "$TP_JW"), and the stamp would claim \`${THEIRS}\` over it. ${tp_remedy_json} Then re-run --finish. IF NOT MERGING IS THE DISPOSITION, delete this file's own line from .claude/.ai-dlc-applying (the \`template: … ${_c}\` line) and re-run --finish: every other check still runs, and the marker stays until the stamp clears it."
+        say WORKLIST finish-template-json-unmerged "$_c" "$([ "$_k" = json-differs ] && printf 'merging theirs'"'"' \`%s\` into a copy of this file still changes the copy, so the settings merge this pull handed back was not done%s' "$_tm" "${TP_JR:+ ${TP_JR}}" || printf 'whether the settings merge this pull handed back was done could not be tested (%s)' "$TP_JW"), and the stamp would claim \`${THEIRS}\` over it. ${tp_remedy_json} Then re-run --finish. IF NOT MERGING IS THE DISPOSITION, delete this file's own line from .claude/.ai-dlc-applying (the \`template: … ${_c}\` line) and re-run --finish: every other check still runs, and the marker stays until the stamp clears it."
         continue ;;
     esac
     [ -e "$CONSUMER/$_c" ] || continue
@@ -4056,7 +4094,7 @@ for c in cmds:
     # caller that never ran the template scan (the fixture seam) keeps today's row.
     if [ -n "$hr_what" ] && [ "${TP_JSON_OWED:-0}" != 1 ]; then
       say WORKLIST settings-merge ".claude/settings.json" \
-        "${hr_what}Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); git -C <dist> show \"\${theirs}:templates/settings.json.template\" > \"\$t\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+        "${hr_what}Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); p=\$(mktemp); git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$t\"; git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$p\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" --prior-template \"\$p\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
     fi
     if [ -n "$hr_dangle_local" ]; then
       say WORKLIST settings-local-dangling ".claude/settings.local.json" \

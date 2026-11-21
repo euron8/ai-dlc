@@ -19,6 +19,30 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1198.0] - 2026-11-20
+
+### An update pull commits only its own writes, finishes on a large pull, and says why it re-asked (BL-1196)
+
+- For every consumer that runs `/ai-dlc-update`. `pull.sh deliver` used to commit every path `git status` listed, so the operator's own uncommitted files, untracked files and session logs rode the update PR. It now commits the paths that were clean when the first apply ran, the pull's own artifacts (report, reconcile log, decisions file, gate and push records), the paths the pull's records name, and any path the operator staged on purpose. The operator's other dirty, untracked and staged entries stay out of the commit and are left exactly as they were, staged or not. A pull begun under the older engine has no record of the starting state, so it commits everything as before and prints `NOTE deliver-no-snapshot`.
+- A deletion or rename that `apply.sh` already staged no longer stops deliver with `REFUSED deliver-stage`: a path the index already holds is not added again, and a rename record is read as one pair.
+- The PR body is built before the push and bounded at 60000 bytes: long table cells are cut, the decisions table stops at 30000 bytes with an omitted-rows line, and the reconcile and dry-run regions give way to a pointer at the report in the PR's diff. A body that is still too large refuses `deliver-pr-body-oversize` before the push, so no branch is left on the remote without its PR.
+- An answer whose question cited a short form of the digest is not accepted, as before, but the re-issued ASK now carries `NOTE ask-short-cite <path> ...` (`ASK-SHORT-CITE` on `apply.sh`'s stderr) saying the answer is recorded and the question must quote the full 64-hex digest. `SKILL.md` says the same.
+
+### A pull now replaces a role setting the consumer never changed, so a tightened role reaches it (BL-1166)
+
+- For every consumer's update engine. When a release changes a template-owned role setting (`omitClaudeMd` or `disallowedTools` under `aiDlcRoles.<role>`), `settings-merge.sh` now replaces the consumer's value if it still equals the template's value at the pull's base (`--prior-template`, which `apply.sh` materializes from the pull's BASE). Before, a setting already present in the consumer was never replaced, so a role tightened in the template kept the old value.
+- Operators see one row per role, `settings-merge: replaced <keys> in aiDlcRoles.<role> (the file held the prior template value)`, in the merge and `--check` output. Step 5 relays the row into the PR body, and the `template-json-merge` and `finish-template-json-unmerged` rows quote it.
+- A value the consumer customized is left alone and prints no row. Without `--prior-template` behaviour is unchanged; an unreadable or non-object prior exits 1 naming the prior template, and an unresolvable base is a `template-json-refused` row.
+- Effect: the `pre-reviewer` role's tightened `disallowedTools` (Write, Edit and NotebookEdit added) reaches a consumer that never customized the old `Skill, Agent`.
+- Not covered: the BL-1166 outcome line (gate-1 passes per story on a complete sprint) is still owed; the entry stays PARTIAL.
+
+### Consumer reports answered
+
+- PC-S324-PULL-DELIVER-STAGES-ALL-CHANGED-PATHS-SWEEPING-OPERATOR-STATE-INTO-UPDATE-PR
+- PC-S324-DELIVER-STAGE-REFUSES-ALREADY-DELETED-PATHS-SINCE-PRISTINE-DELETE-STAGES-ONE
+- PC-S324-DELIVER-PR-BODY-UNBOUNDED-EXCEEDS-GITHUB-64K-ON-LARGE-REGIONS
+- PC-S324-ASK-REISSUES-ON-TRUNCATED-DIGEST-CITE-NO-DIAGNOSTIC-WHEN-ANSWER-RECORD-EXISTS
+
 ## [0.1197.0] - 2026-11-20
 
 ### A faithful rebase of a layered override stamps `readopt` even when the new core moved a line into a different section (BL-1197, PC-S324-READOPT-REBASE-REFUSED-ON-CROSS-SECTION-REFLOW-REMAINDER)

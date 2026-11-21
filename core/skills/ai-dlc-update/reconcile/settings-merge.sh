@@ -38,6 +38,11 @@
 #                      role both sides declare when the consumer entry lacks it;
 #                      one `settings-merge: filled <keys> into aiDlcRoles.<role>`
 #                      line per filled role goes to stdout (also under --check).
+#                      With `--prior-template` (the template at the pull's base), a
+#                      key the consumer holds at EXACTLY the prior template's value
+#                      (never customized) is replaced by the new template's value,
+#                      one `settings-merge: replaced <keys> in aiDlcRoles.<role>` line
+#                      per role; any other consumer value is kept.
 #   2c. bashOutputMaxChars
 #                    — template supplies, consumer wins. The harness cap on
 #                      inline Bash output: past it, a result becomes a path plus
@@ -66,8 +71,13 @@
 # family, and `env` is consumer-owned, so this script reports and never writes.
 #
 # USAGE
-#   settings-merge.sh --consumer <path> --template <path>
-#   settings-merge.sh --consumer <path> --template <path> --check
+#   settings-merge.sh --consumer <path> --template <path> [--prior-template <path>]
+#   settings-merge.sh --consumer <path> --template <path> [--prior-template <path>] --check
+#
+#   --prior-template  The template as it stood at the pull's base. A template-owned role
+#             key whose consumer value equals the prior's value (and differs from the
+#             template's) is replaced; without the flag no value is ever replaced.
+#             An unreadable or non-object prior exits 1.
 #
 #   --check   Report what would change and exit 0 WITHOUT writing. Prints one
 #             `enabledPlugins:` line when the context-mode retirement will fire. Prints
@@ -84,23 +94,33 @@ set -u
 
 CONSUMER=""
 TEMPLATE=""
+PRIOR=""
 CHECK=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --consumer)  CONSUMER="$2"; shift 2 ;;
     --template)  TEMPLATE="$2"; shift 2 ;;
+    --prior-template) PRIOR="$2"; shift 2 ;;
     --check)     CHECK=1; shift ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 
 [ -n "$CONSUMER" ] && [ -n "$TEMPLATE" ] || {
-  echo "usage: settings-merge.sh --consumer <path> --template <path> [--check]" >&2
+  echo "usage: settings-merge.sh --consumer <path> --template <path> [--prior-template <path>] [--check]" >&2
   exit 1
 }
 command -v jq >/dev/null 2>&1 || { echo "FAIL: jq is required" >&2; exit 1; }
 [ -r "$TEMPLATE" ] || { echo "FAIL: cannot read template: $TEMPLATE" >&2; exit 1; }
+# The prior template is validated like the template: an error is never read as "no prior".
+if [ -n "$PRIOR" ]; then
+  [ -r "$PRIOR" ] && jq -e 'type == "object"' "$PRIOR" >/dev/null 2>&1 || {
+    echo "FAIL: the prior template is unreadable or not a JSON object: $PRIOR" >&2; exit 1; }
+  PRIOR_ARGS=(--slurpfile pri "$PRIOR")
+else
+  PRIOR_ARGS=(--argjson pri '[{}]')
+fi
 
 # A consumer with no settings.json is a fresh target: the template IS the base,
 # exactly as `install.sh` does with `cp`. Starting from `{}` instead would drop
@@ -181,15 +201,15 @@ if printf '%s' "$BASE_JSON" | jq -e --slurpfile tmpl "$TEMPLATE" '
   RETIRE_CM=true
 fi
 # Template-owned role keys: filled into a consumer role entry that exists on BOTH sides and LACKS
-# the key. Presence is the opt-out: a consumer that declares the key keeps its value, whatever it
-# is. A role absent from the consumer is not created here (the role-level merge below adds it).
+# the key. A consumer that declares the key keeps its value, unless it equals the prior template's
+# value (--prior-template): that value was never customized and is replaced by the template's. A role absent from the consumer is not created here (the role-level merge below adds it).
 SM_ROLE_FILL_KEYS='["omitClaudeMd","disallowedTools"]'
 # One jq answers both the hook-retirement flag and the role fills, so the fill adds no exec.
 # Line 1 is `<retire flag><TAB><fills JSON>`; every further line is one report row.
 SM_NL='
 '
 SM_TAB=$'\t'
-SM_FR="$(printf '%s' "$BASE_JSON" | jq -r --argjson keys "$SM_ROLE_FILL_KEYS" --slurpfile tmpl "$TEMPLATE" '
+SM_FR="$(printf '%s' "$BASE_JSON" | jq -r --argjson keys "$SM_ROLE_FILL_KEYS" "${PRIOR_ARGS[@]}" --slurpfile tmpl "$TEMPLATE" '
     (try (($tmpl[0].hooks // {}) | type == "object" and length > 0) catch false) as $flag
     | ($tmpl[0].aiDlcRoles // {}) as $tr | (.aiDlcRoles // {}) as $ur
     | (if ($tr | type) == "object" and ($ur | type) == "object" then
@@ -199,8 +219,19 @@ SM_FR="$(printf '%s' "$BASE_JSON" | jq -r --argjson keys "$SM_ROLE_FILL_KEYS" --
               keys: [ $keys[] as $k | select(($tr[$r] | has($k)) and (($ur[$r] | has($k)) | not)) | $k ] }
           | select(.keys | length > 0) ]
       else [] end) as $fills
-    | "\($flag)\t\($fills | tojson)",
-      ($fills[] | "settings-merge: filled \(.keys | join(",")) into aiDlcRoles.\(.role)")
+    | ($pri[0].aiDlcRoles // {}) as $pr
+    | (if ($tr | type) == "object" and ($ur | type) == "object" and ($pr | type) == "object" then
+        [ $ur | keys[] as $r
+          | select(($tr[$r] | type) == "object" and ($ur[$r] | type) == "object" and ($pr[$r] | type) == "object")
+          | { role: $r,
+              keys: [ $keys[] as $k
+                      | select(($pr[$r] | has($k)) and ($tr[$r] | has($k)) and ($ur[$r] | has($k))
+                               and $ur[$r][$k] == $pr[$r][$k] and $tr[$r][$k] != $pr[$r][$k]) | $k ] }
+          | select(.keys | length > 0) ]
+      else [] end) as $reps
+    | "\($flag)\t\($fills + $reps | tojson)",
+      ($fills[] | "settings-merge: filled \(.keys | join(",")) into aiDlcRoles.\(.role)"),
+      ($reps[] | "settings-merge: replaced \(.keys | join(",")) in aiDlcRoles.\(.role) (the file held the prior template value)")
   ' 2>/dev/null)" || {
   echo "FAIL: the role-key fill could not be evaluated; consumer left untouched" >&2; exit 1; }
 SM_FR_HEAD="${SM_FR%%"$SM_NL"*}"
@@ -298,7 +329,8 @@ if ! printf '%s' "$BASE_JSON" | jq \
     # the shipped one whole. Merging per field would let an upstream default for
     # `effort` reappear inside an entry the consumer had deliberately rewritten, and
     # the model and effort of a role are one decision. The one exception is $fills:
-    # the template-owned keys (SM_ROLE_FILL_KEYS) a consumer entry lacks.
+    # the template-owned keys (SM_ROLE_FILL_KEYS) a consumer entry lacks, or holds at the prior
+    # template value (both arrive in $fills).
     | ((($t.aiDlcModels // {}) + ($u.aiDlcModels // {}))) as $models
     | ((($t.aiDlcRoles  // {}) + ($u.aiDlcRoles  // {}))
        | reduce $fills[] as $f (.; reduce $f.keys[] as $k (.; .[$f.role][$k] = $t.aiDlcRoles[$f.role][$k]))) as $roles

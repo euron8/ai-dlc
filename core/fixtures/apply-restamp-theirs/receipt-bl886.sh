@@ -47,6 +47,10 @@
 #   jc  ja, settings-merge.sh applied to the live file, --finish                                          2.0.0|0
 #   jd  ja, its template: line deleted, --finish                                                          2.0.0|0
 #   jn  N ordinary                       -> stamp|template-json-merge rows|json lines|prose lines           1.0.0|0|0|1
+#   R  settings.json whose role `r` holds the base template's omitClaudeMd (the template changes it)
+#   ra  R ordinary                       -> stamp|template-json-merge rows|json template: lines|row quotes `replaced`  1.0.0|1|1|1
+#   rb  ra, merge WITH the prior, --finish   -> stamp|finish-template-json-unmerged rows|omitClaudeMd     2.0.0|0|true
+#   rc  ra, merge WITHOUT the prior, --finish -> stamp|finish-template-json-unmerged rows|omitClaudeMd    1.0.0|1|false
 #   c3a C ordinary                       -> template-json-merge rows|settings-merge rows                    1|0
 #   c3b c3a, --finish                    -> finish-template-json-unmerged rows|settings-merge rows|stamp     1|0|1.0.0
 #   c3c c3a, json template: line deleted, --finish -> settings-merge rows|stamp                           1|1.0.0
@@ -107,9 +111,10 @@ QNEW='# Quickstart
 Project: acme
 
 NEW-BOILERPLATE line'
+merge_prior() { bash "$REC/settings-merge.sh" --consumer "$1/.claude/settings.json" --template "$R/t.json" --prior-template "$R/b.json" >/dev/null 2>&1; }
 merge_live() { bash "$REC/settings-merge.sh" --consumer "$1/.claude/settings.json" --template "$R/t.json" >/dev/null 2>&1; }
 # The world set: what the cells read from $R, and nothing a cell writes. B and T travel with it.
-WSET="dist t.json w-P w-J w-N w-C w-P0 w-E w-F w-G w-M w-K"
+WSET="dist t.json b.json w-P w-J w-N w-C w-P0 w-E w-F w-G w-M w-K w-R"
 if [ -n "$WCACHE" ] && [ -e "$WCACHE" ]; then
   [ -f "$WCACHE/.complete" ] || { echo "REFUSED: world cache $WCACHE exists without its completion sentinel" >&2; exit 9; }
   _sm="$(git hash-object "$REC/settings-merge.sh" 2>/dev/null)" && [ -n "$_sm" ] && [ "$_sm" = "$(cat "$WCACHE/SM" 2>/dev/null)" ] \
@@ -123,7 +128,7 @@ mkdir -p "$R/dist/core/scripts" "$R/dist/templates" && gd init -q || exit 9
 printf '1.0.0\n' > "$R/dist/VERSION"
 printf '#!/usr/bin/env bash\necho v1\n' > "$R/dist/core/scripts/validate-synthetic.sh"
 printf '# Quickstart\n\nProject: {project_name}\n\nOLD-BOILERPLATE line\n' > "$R/dist/templates/QUICKSTART.md.template"
-printf '{"hooks":{}}\n' > "$R/dist/templates/settings.json.template"
+printf '{"hooks":{},"aiDlcRoles":{"r":{"omitClaudeMd":false}}}\n' > "$R/dist/templates/settings.json.template"
 gd add -A && gd commit -qm base || exit 9
 B="$(gd rev-parse HEAD)" || exit 9
 printf '2.0.0\n' > "$R/dist/VERSION"
@@ -133,6 +138,7 @@ printf '%s\n' "$TJSON" > "$R/dist/templates/settings.json.template"
 gd add -A && gd commit -qm theirs || exit 9
 T="$(gd rev-parse HEAD)" || exit 9
 gd show "${T}:templates/settings.json.template" > "$R/t.json" || exit 9
+gd show "${B}:templates/settings.json.template" > "$R/b.json" || exit 9
 printf '3.0.0\n' > "$R/dist/VERSION"
 printf '#!/usr/bin/env bash\necho v3\n' > "$R/dist/core/scripts/validate-synthetic.sh"
 gd add -A && gd commit -qm theirs2 || exit 9
@@ -150,6 +156,8 @@ mk() {
   [ "$2" = old ] && printf '%s\n' "$QOLD" > "$c/QUICKSTART.md"
   case "$3" in
     unmerged) printf '{"hooks":{}}\n' > "$c/.claude/settings.json" ;;
+    # held: the role key holds the value the BASE template shipped (never customized)
+    held) printf '{"hooks":{},"aiDlcRoles":{"r":{"omitClaudeMd":false}}}\n' > "$c/.claude/settings.json" ;;
     # merged: the merge must have MOVED the file, or the N world could not tell "already merged"
     # from "nothing to merge".
     merged) printf '{"hooks":{}}\n' > "$c/.claude/settings.json" && merge_live "$c" || return 1
@@ -178,7 +186,7 @@ mk_t() {
     && merge_live "$R/t-copy" || return 1
   if cmp -s "$R/t-copy/.claude/settings.json" "$c/.claude/settings.json"; then [ "$3" = equal ]; else [ "$3" = differs ]; fi
 }
-mk P old - ok && mk J - unmerged ok && mk N old merged ok && mk C - unmerged unreg \
+mk P old - ok && mk J - unmerged ok && mk R - held ok && mk N old merged ok && mk C - unmerged unreg \
   && cp -R "$R/w-P" "$R/w-P0" \
   && mk_t E '.enabledPlugins = {"context-mode@context-mode": true}' differs \
   && mk_t G '.aiDlcRoles.r = {"model": "m"}' differs \
@@ -291,6 +299,20 @@ if want ja || want jb || want jb2 || want jc || want jd; then
 fi
 if want jn; then N="$R/w-N"; ord "$N" "$R/jn.out"
   check jn '1.0.0|0|0|1' "$(stampv "$N")|$(rows "$R/jn.out" WORKLIST template-json-merge "$SJ")|$(mline "$N" "$SJ")|$(mline "$N" "$QS")"; fi
+# --- R: a role key holding the BASE template value is replaced (BL-1166 carrier) ----------------------
+# ra's row quotes the replaced line; rb: the merge WITH the prior, --finish stamps; rc: the merge WITHOUT it
+# leaves the base value in place, so --finish still withholds (the re-test passes the prior too).
+if want ra || want rb || want rc; then
+  RW="$R/w-R"; ord "$RW" "$R/ra.out"
+  rp=0; awk -F'\t' -v p="$SJ" '$1=="WORKLIST" && $2=="template-json-merge" && $3==p && index($4, "[settings-merge: replaced omitClaudeMd in aiDlcRoles.r (the file held the prior template value)]") {f=1} END {exit !f}' "$R/ra.out" && rp=1
+  want ra && check ra '1.0.0|1|1|1' "$(stampv "$RW")|$(rows "$R/ra.out" WORKLIST template-json-merge "$SJ")|$(mline "$RW" "$SJ")|$rp"
+  if want rb; then x="$(cp_from "$RW" rb)"; merge_prior "$x" || { echo "REFUSED: settings-merge.sh failed on the rb world" >&2; exit 9; }
+    fin "$x" "$R/rb.out"
+    check rb '2.0.0|0|true' "$(stampv "$x")|$(rows "$R/rb.out" WORKLIST finish-template-json-unmerged "$SJ")|$(jq -r '.aiDlcRoles.r.omitClaudeMd' "$x/$SJ")"; fi
+  if want rc; then x="$(cp_from "$RW" rc)"; merge_live "$x" || { echo "REFUSED: settings-merge.sh failed on the rc world" >&2; exit 9; }
+    fin "$x" "$R/rc.out"
+    check rc '1.0.0|1|false' "$(stampv "$x")|$(rows "$R/rc.out" WORKLIST finish-template-json-unmerged "$SJ")|$(jq -r '.aiDlcRoles.r.omitClaudeMd' "$x/$SJ")"; fi
+fi
 # --- C3: one row per remedy ------------------------------------------------------------------------
 # c3d first: it needs the C world before c3a's ordinary run writes into it.
 if want c3d; then x="$(cp_from "$R/w-C" c3d)"; ord "$x" "$R/c3d.out" "$R/rec-nosm"

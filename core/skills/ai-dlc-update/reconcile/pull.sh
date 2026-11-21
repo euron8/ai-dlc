@@ -18,7 +18,7 @@
 #
 # STDOUT, one item per line (every other line a subcommand prints is listed with it below):
 #   RESOLVE dist=<path> base=<sha> theirs=<sha>        resolve, exit 0
-#   GATE <OK|DEFER|UNDECIDED>                         gate, then its SAFE-STOP, CARRY and UNDECIDED rows verbatim
+#   GATE <OK|DEFER|UNDECIDED>                         gate, then its SAFE-STOP, CARRY, UNDECIDED and DEFER rows verbatim
 #   PULL run=<dir> key=<12> renders=<n>               dry-run and apply, after the render; an empty key
 #                                                     means no store was kept and every detector runs fresh
 #   REFUSED <what> rc=<n>                             a step that refused (exit 2); for a detector named in
@@ -31,7 +31,9 @@
 #   apply also prints `WORKLIST pre-gate-repair <path>:<line> <header>` (report-only) or one
 #   `SKIP pre-gate-repair <reason>` line; finish also writes `ASK-UNANSWERED<TAB>family<TAB>path<TAB>digest` on stderr.
 #   deliver also prints `DECIDE push-red <log>` (exit 3), `ASK base-confirm <branch> - <question>`
-#   (exit 3), one `DECIDE <status> <block> drain` per push-drain.sh row, and `DECIDE pr <url> opened`.
+#   (exit 3), one `DECIDE <status> <block> drain` per push-drain.sh row, and `DECIDE pr <url> opened`;
+#   with no dirty snapshot for this theirs, one `NOTE deliver-no-snapshot ...` line.
+#   Beside an ASK row whose answer cited a short digest: `NOTE ask-short-cite <path> ... <digest>`.
 # Exit: 0 done; 2 refused (usage too); 3 pending: an ASK row awaits an operator answer, or a HARD row
 # must be resolved before anything is written, or (finish) a WORKLIST row withholds the stamp.
 #
@@ -59,9 +61,30 @@ refuse() { echo "REFUSED $1 rc=$2"; exit 2; }
 # ra_recorded, the union gate's answer reader, is apply.sh's; it is loaded from there, never copied.
 eval "$(awk '/^ra_recorded\(\) \{/,/^\}/' "$R/apply.sh" 2>/dev/null)"
 command -v ra_recorded >/dev/null 2>&1 || refuse "ra_recorded-unloadable" 2
+# ra_short_cited, the short-digest diagnostic beside it, is loaded the same way.
+eval "$(awk '/^ra_short_cited\(\) \{/,/^\}/' "$R/apply.sh" 2>/dev/null)"
+command -v ra_short_cited >/dev/null 2>&1 || refuse "ra_short_cited-unloadable" 2
 
 question_of() { awk -F'\t' -v f="$1" '!/^#/ && $1 == f {print $4; exit}' "$ASKS" 2>/dev/null; }
 gitdir_of() { git -C "$1" rev-parse --absolute-git-dir 2>/dev/null; }
+# pl_short_note <path> <digest> -- beside a re-asked ASK row: the answer the history holds cites a
+# short digest, so it did not count (ra_recorded is unchanged).
+pl_short_note() {
+  ra_short_cited "$CONSUMER/$HIST_REL" "$2" || return 0
+  echo "NOTE ask-short-cite $1 the answer is recorded but its question cited a short digest; re-ask quoting the full 64-hex digest $2"
+}
+# pl_artifact_add <git-dir> <theirs sha> <consumer-relative path> -- the pull's artifacts record,
+# `<git-dir>/ai-dlc-pull/pull-artifacts`: a header keyed on theirs (another theirs replaces the
+# record), then one path per line that this pull wrote outside the dirty snapshot's reach. deliver
+# always stages them. reconcile/self-update-push.sh appends its own record the same way.
+pl_artifact_add() {
+  local f="$1/ai-dlc-pull/pull-artifacts"
+  mkdir -p "$1/ai-dlc-pull" || return 1
+  if [ ! -f "$f" ] || [ "$(sed -n 1p "$f")" != "ai-dlc-pull-artifacts 1 $2" ]; then
+    printf 'ai-dlc-pull-artifacts 1 %s\n' "$2" > "$f" || return 1
+  fi
+  grep -qxF -- "$3" "$f" || printf '%s\n' "$3" >> "$f"
+}
 
 # --- resolve ------------------------------------------------------------------------------------
 pl_resolve() {
@@ -99,13 +122,24 @@ pl_resolve() {
 # self-update-gate.sh takes <dist> <base> <theirs> <consumer> and exits 0 always; the verdict is its
 # rows': any DEFER wins, else any UNDECIDED, else OK.
 pl_gate() {
-  local out v=OK
+  local out v=OK gd th f before=" " rd="_bmad-output/ai-dlc-update"
+  for f in "$3/$rd"/self-update-gate-*.md; do [ -e "$f" ] && before="$before${f##*/} "; done
   out="$(bash "$R/self-update-gate.sh" "$1" "$2" "$4" "$3")" || refuse "self-update-gate" "$?"
+  # The gate record this run wrote joins the pull's artifacts record; an older one does not.
+  gd="$(gitdir_of "$3")" || gd=""
+  th="$(git -C "$1" rev-parse -q --verify "${4}^{commit}" 2>/dev/null)" || th="$4"
+  if [ -n "$gd" ]; then
+    for f in "$3/$rd"/self-update-gate-*.md; do
+      [ -e "$f" ] || continue
+      case "$before" in *" ${f##*/} "*) continue ;; esac
+      pl_artifact_add "$gd" "$th" "$rd/${f##*/}" || echo "pull: the gate record $rd/${f##*/} could not join the pull's artifacts record; deliver stages it only if it was absent when apply began" >&2
+    done
+  fi
   case "$out" in *"SELF-UPDATE-UNDECIDED"*) v=UNDECIDED ;; esac
   case "$out" in *"SELF-UPDATE-DEFER"*) v=DEFER ;; esac
   case "$out" in *"SELF-UPDATE-OK"*|*"SELF-UPDATE-DEFER"*|*"SELF-UPDATE-UNDECIDED"*) ;; *) v=UNDECIDED ;; esac
   echo "GATE $v"
-  printf '%s\n' "$out" | awk -F'\t' '$1 == "SELF-UPDATE-SAFE-STOP" || $1 == "SELF-UPDATE-CARRY" || $1 == "SELF-UPDATE-UNDECIDED"'
+  printf '%s\n' "$out" | awk -F'\t' '$1 == "SELF-UPDATE-SAFE-STOP" || $1 == "SELF-UPDATE-CARRY" || $1 == "SELF-UPDATE-UNDECIDED" || $1 == "SELF-UPDATE-DEFER"'
   exit 0
 }
 
@@ -189,12 +223,14 @@ pl_print_asks() {
     [ -n "$d" ] || continue
     ra_recorded "$hist" "$d" "*" && continue
     echo "ASK $f $p $d $(question_of "$f")"; ASK_N=$((ASK_N + 1))
+    pl_short_note "$p" "$d"
   done < "$stg"
   [ -f "$LEDGER" ] || return 0
   while IFS="$TAB" read -r f p d st; do
     [ -n "$d" ] || continue
     ra_recorded "$hist" "$d" "*" && continue
     echo "ASK $f $p $d $(question_of "$f")"; ASK_N=$((ASK_N + 1))
+    pl_short_note "$p" "$d"
   done < "$LEDGER"
 }
 
@@ -233,6 +269,61 @@ pl_decisions_epoch() {
   printf '%s\n' "$th" > "$rec"
 }
 
+# --- the dirty snapshot (what deliver may commit) -------------------------------------------------
+# pl_status_rows <out-prefix> <hash-worktree 0|1> -- `<out-prefix>.rows`, one row per status entry:
+# `<XY>\t<index blob or ->\t<worktree blob or ->\t<path>\t<pair>`. <pair> is `-`, or for a rename or
+# copy record `<n>` on the new path and `<n>o` on the original path (its own -z field, which follows).
+pl_status_rows() {
+  local o="$1" xy pth pair
+  git -C "$CONSUMER" -c core.quotePath=false status --porcelain=v1 -z --untracked-files=all > "$o.z" 2>/dev/null || return 1
+  tr '\0' '\n' < "$o.z" | awk -v T="$TAB" '
+    want { print xy T $0 T n "o"; want = 0; next }
+    length($0) > 3 { xy = substr($0, 1, 2); p = substr($0, 4)
+      if (xy ~ /^[RC]/ || xy ~ /^.[RC]/) { n++; print xy T p T n; want = 1 } else print xy T p T "-" }' > "$o.st" || return 1
+  git -C "$CONSUMER" ls-files -s -z 2>/dev/null | tr '\0' '\n' \
+    | awk -v T="$TAB" '{ t = index($0, T); split(substr($0, 1, t - 1), m, " "); if (m[3] == "0") print substr($0, t + 1) T m[2] }' > "$o.idx" || return 1
+  : > "$o.wt"
+  if [ "$2" = 1 ]; then
+    : > "$o.wtp"
+    while IFS="$TAB" read -r xy pth pair; do
+      [ -f "$CONSUMER/$pth" ] && [ ! -L "$CONSUMER/$pth" ] && printf '%s\n' "$pth" >> "$o.wtp"
+    done < "$o.st"
+    if [ -s "$o.wtp" ]; then
+      ( cd "$CONSUMER" && git hash-object --no-filters --stdin-paths < "$o.wtp" ) > "$o.wth" || return 1
+      paste "$o.wtp" "$o.wth" > "$o.wt" || return 1
+    fi
+  fi
+  awk -F'\t' -v T="$TAB" -v fi="$o.idx" -v fw="$o.wt" '
+    FILENAME == fi { ix[$1] = $2; next }
+    FILENAME == fw { wt[$1] = $2; next }
+    { print $1 T (($2 in ix) ? ix[$2] : "-") T (($2 in wt) ? wt[$2] : "-") T $2 T $3 }' "$o.idx" "$o.wt" "$o.st" > "$o.rows"
+}
+# pl_theirs_sha -- theirs as the commit the decisions epoch keys on.
+pl_theirs_sha() { git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null || printf '%s\n' "$THEIRS"; }
+# pl_dirty_snapshot -- `<git-dir>/ai-dlc-pull/dirty-snapshot`: the consumer's dirty set before the
+# pull's first apply write, header `ai-dlc-dirty-snapshot 1 <theirs> <run>`, then pl_status_rows'
+# rows. `<rec>.branch` (`<theirs> <branch>`) records the `ai-dlc-update/*` branch pl_apply cut over
+# this snapshot; writing a snapshot removes it. The rules, per call:
+#   on an `ai-dlc-update/*` branch: keep whatever is recorded; with no snapshot for this theirs, write
+#     none (deliver then prints `NOTE deliver-no-snapshot`).
+#   off such a branch, a different theirs or no snapshot: write one.
+#   off such a branch, same theirs, a cut branch on record: replace it (an abandoned pull retried).
+#   off such a branch, same theirs, no cut branch on record: keep it (an ASK or HARD resolution round).
+# The snapshot itself is never deleted.
+pl_dirty_snapshot() {
+  local rec="$GD/ai-dlc-pull/dirty-snapshot" th cur
+  th="$(pl_theirs_sha)"
+  cur="$(git -C "$CONSUMER" symbolic-ref -q --short HEAD 2>/dev/null)" || cur=""
+  case "$cur" in
+    ai-dlc-update/*) return 0 ;;
+  esac
+  [ -f "$rec" ] && [ ! -f "$rec.branch" ] && [ "$(sed -n 1p "$rec" | awk '{print $3}')" = "$th" ] && return 0
+  pl_status_rows "$RUN/snapshot" 1 || return 1
+  { printf 'ai-dlc-dirty-snapshot 1 %s %s\n' "$th" "${RUN##*/}"; cat "$RUN/snapshot.rows"; } > "$rec.$$" || return 1
+  mv -f "$rec.$$" "$rec" || return 1
+  rm -f "$rec.branch"
+}
+
 # --- dry-run ------------------------------------------------------------------------------------
 # A bare invocation's terminal dry run. Writes only the report (and the git-dir record a plain verify
 # keeps); asks nothing.
@@ -260,6 +351,8 @@ pl_apply() {
   if [ "${1:-}" = --carried-machinery-slice ]; then flag="$1"; shift; fi
   [ $# -eq 4 ] || usage
   pl_setup "$@"
+  # Before the first write this apply makes (the decisions epoch, the render, the region record).
+  pl_dirty_snapshot || refuse "dirty-snapshot" 2
   pl_decisions_epoch || refuse "decisions-epoch" 2
   pl_render
   # The driver's FIRST render of this apply replaces a bare-run or old-format approved-region record
@@ -280,7 +373,8 @@ pl_apply() {
     ai-dlc-update/*) ;;
     *) ver="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null | tr -d '[:space:]')"
        br="ai-dlc-update/${ver:-$(git -C "$DIST" rev-parse --short "$THEIRS" 2>/dev/null)}-reconcile-$(date -u +%Y%m%dT%H%M%SZ)"
-       git -C "$CONSUMER" checkout -q -b "$br" 2>"$RUN/branch.err" || refuse "branch" "$?" ;;
+       git -C "$CONSUMER" checkout -q -b "$br" 2>"$RUN/branch.err" || refuse "branch" "$?"
+       printf '%s %s\n' "$(pl_theirs_sha)" "$br" > "$GD/ai-dlc-pull/dirty-snapshot.branch" || refuse "dirty-snapshot-branch" 2 ;;
   esac
   AI_DLC_PULL_RUN="$RUN" bash "$R/apply.sh" ${flag:+"$flag"} "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$RUN/apply.out" 2> "$RUN/apply.err"
   arc=$?
@@ -288,6 +382,7 @@ pl_apply() {
     awk -F'\t' '$1 == "ASK-UNANSWERED" {print $2 "\t" $3 "\t" $4}' "$RUN/apply.err" > "$RUN/apply.asks" || refuse "apply-asks" 2
     while IFS="$TAB" read -r f p d; do
       echo "ASK $f $p $d $(question_of "$f")"
+      pl_short_note "$p" "$d"
     done < "$RUN/apply.asks"
     exit 3
   fi
@@ -308,6 +403,7 @@ pl_apply() {
     grep -q "${TAB}${d}${TAB}" "$LEDGER" 2>/dev/null || printf 'delete-consumer-modified\t%s\t%s\t%s\n' "$p" "$d" "$blob" >> "$LEDGER"
     ra_recorded "$CONSUMER/$HIST_REL" "$d" "*" && continue
     echo "ASK delete-consumer-modified $p $d $(question_of delete-consumer-modified)"
+    pl_short_note "$p" "$d"
     del_n=$((del_n + 1))
   done < "$RUN/deletions"
   awk -F'\t' '($1 == "WORKLIST" && $2 != "semantic-merge") || ($1 == "DECISION" && $2 != "deletion") {print "DECIDE " $2 " " ($3 == "" ? "-" : $3) " pending"}' "$RUN/apply.out"
@@ -368,6 +464,7 @@ pl_finish() {
     awk -F'\t' '$1 == "ASK-UNANSWERED" {print $2 "\t" $3 "\t" $4}' "$RUN/finish.err" > "$RUN/finish.asks" || refuse "finish-asks" 2
     while IFS="$TAB" read -r f p d; do
       echo "ASK $f $p $d $(question_of "$f")"
+      pl_short_note "$p" "$d"
     done < "$RUN/finish.asks"
     exit 3
   fi
@@ -412,8 +509,89 @@ pl_cut_from() { # <consumer> <branch> -> the branch it was cut from, by HEAD's r
     | awk -v s=" to $2" 'index($0, "checkout: moving from ") == 1 && length($0) > length(s) && substr($0, length($0) - length(s) + 1) == s' \
     | tail -1 | awk -v s=" to $2" '{ x = substr($0, length("checkout: moving from ") + 1); print substr(x, 1, length(x) - length(s)) }'
 }
+# pl_deliver_select -- `$RUN/deliver.sel`, the status rows deliver commits. A changed path is taken
+# when it was clean at the dirty snapshot, or is in the always-stage set (the report, the decisions
+# file, the push-candidate ledger, the stamp, the pull-artifacts record's paths, this pull's
+# reconcile log), or this pull's own record names it (RESOLVED/DECISION/WORKLIST rows of its runs'
+# apply.out and finish.out, column 2 of the decisions file and of the ask ledger), or its index blob
+# moved since the snapshot. Anything else is the operator's: a hook appending to a file that was
+# already dirty, an untracked file, a staged entry. A rename pair is taken or left whole. No snapshot
+# for this theirs (a pull begun under an older engine): every changed path, and one NOTE line.
+pl_deliver_select() {
+  local snap="$GD/ai-dlc-pull/dirty-snapshot" pa="$GD/ai-dlc-pull/pull-artifacts" th srun d k t
+  pl_status_rows "$RUN/deliver" 0 || return 1
+  th="$(pl_theirs_sha)"
+  if [ ! -f "$snap" ] || [ "$(sed -n 1p "$snap" | awk '{print $1 " " $2 " " $3}')" != "ai-dlc-dirty-snapshot 1 $th" ]; then
+    echo "NOTE deliver-no-snapshot no dirty snapshot is recorded for this theirs (an apply begun under an earlier engine); every changed path is committed"
+    cp "$RUN/deliver.rows" "$RUN/deliver.sel"
+    return
+  fi
+  srun="$(sed -n 1p "$snap" | awk '{print $4}')"
+  {
+    printf '%s\n' "$REPORT_REL" "$DECISIONS_REL" "_bmad-output/ai-dlc-update/push-candidate-ledger.md" ".claude/.ai-dlc-version"
+    [ -f "$pa" ] && [ "$(sed -n 1p "$pa")" = "ai-dlc-pull-artifacts 1 $th" ] && sed -n '2,$p' "$pa"
+    for d in "$GD"/ai-dlc-pull/run-*; do
+      [ -d "$d" ] || continue
+      t="${d##*/}"; [ -z "$srun" ] || [[ ! "${t%-*}" < "${srun%-*}" ]] || continue
+      cat "$d/apply.out" "$d/finish.out" 2>/dev/null \
+        | awk -F'\t' '$1 == "RESOLVED" || $1 == "DECISION" || $1 == "WORKLIST" || ($1 == "NOTE" && $2 == "reconcile-log-name") {print $3}'
+    done
+    awk -F'\t' 'NR > 1 {print $2}' "$CONSUMER/$DECISIONS_REL" 2>/dev/null
+    awk -F'\t' '{print $2}' "$LEDGER" 2>/dev/null
+  } > "$RUN/deliver.keep.raw"
+  # A row may name a core-relative path; its consumer path is taken too.
+  : > "$RUN/deliver.keep"
+  while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    { printf '%s\n' "$k"; map_consumer "core/$k"; } >> "$RUN/deliver.keep"
+  done < "$RUN/deliver.keep.raw"
+  awk -F'\t' -v fs="$snap" -v fk="$RUN/deliver.keep" '
+    FILENAME == fs { if (FNR > 1) { insnap[$4] = 1; sidx[$4] = $2; sp = $5; sub(/o$/, "", sp); spair[$4] = sp } next }
+    FILENAME == fk { keep[$0] = 1; next }
+    FNR == 1 { pass++ }
+    pass == 1 {
+      if (!($4 in insnap) || ($4 in keep) || $2 != sidx[$4]) {
+        sel[$4] = 1
+        cp = $5; sub(/o$/, "", cp); if (cp != "-") gc[cp] = 1
+        if (($4 in spair) && spair[$4] != "-") gs[spair[$4]] = 1
+      }
+      next
+    }
+    { cp = $5; sub(/o$/, "", cp)
+      if (($4 in sel) || (cp != "-" && (cp in gc)) || (($4 in spair) && spair[$4] != "-" && (spair[$4] in gs))) print }' \
+    "$snap" "$RUN/deliver.keep" "$RUN/deliver.rows" "$RUN/deliver.rows" > "$RUN/deliver.sel"
+}
+# pl_deliver_commit -- the commit is built on a TEMPORARY index (HEAD plus each selected path's
+# real-index entry, or its removal), so an entry the operator staged before the pull is not swept in;
+# then the real index's selected paths are reset to the new HEAD, so nothing reads as a staged revert
+# (a consumer pre-commit hook's own `git add` lands only in the temporary index). Never
+# `git commit -- <paths>` / `--only`: that re-adds a `git rm --cached` path still in the worktree.
+pl_deliver_commit() {
+  local ti="$RUN/deliver.index"
+  awk -F'\t' '{print $4}' "$RUN/deliver.sel" > "$RUN/deliver.selp"
+  [ -s "$RUN/deliver.selp" ] || return 0
+  git -C "$CONSUMER" ls-files -s -z 2>/dev/null | tr '\0' '\n' > "$RUN/deliver.lsf" || refuse "deliver-index" 2
+  awk -v T="$TAB" -v fp="$RUN/deliver.selp" -v fr="$RUN/deliver.rm" '
+    FILENAME == fp { want[$0] = 1; next }
+    { p = substr($0, index($0, T) + 1); if (p in want) { print; have[p] = 1 } }
+    END { printf "" > fr; for (p in want) if (!(p in have)) print p > fr }' "$RUN/deliver.selp" "$RUN/deliver.lsf" > "$RUN/deliver.info" \
+    || refuse "deliver-index" 2
+  rm -f "$ti"
+  GIT_INDEX_FILE="$ti" git -C "$CONSUMER" read-tree HEAD 2>>"$RUN/deliver.err" || refuse "deliver-index" 2
+  if [ -s "$RUN/deliver.info" ]; then
+    tr '\n' '\0' < "$RUN/deliver.info" | GIT_INDEX_FILE="$ti" git -C "$CONSUMER" update-index -z --index-info 2>>"$RUN/deliver.err" || refuse "deliver-index" 2
+  fi
+  if [ -s "$RUN/deliver.rm" ]; then
+    tr '\n' '\0' < "$RUN/deliver.rm" | GIT_INDEX_FILE="$ti" git -C "$CONSUMER" update-index -z --force-remove --stdin 2>>"$RUN/deliver.err" || refuse "deliver-index" 2
+  fi
+  GIT_INDEX_FILE="$ti" git -C "$CONSUMER" diff --cached --quiet && return 0
+  GIT_INDEX_FILE="$ti" git -C "$CONSUMER" commit -q -F "$RUN/commit.msg" 2>>"$RUN/deliver.err" || refuse "deliver-commit" 2
+  tr '\n' '\0' < "$RUN/deliver.selp" > "$RUN/deliver.selz"
+  GIT_LITERAL_PATHSPECS=1 git -C "$CONSUMER" reset -q HEAD --pathspec-from-file="$RUN/deliver.selz" --pathspec-file-nul 2>>"$RUN/deliver.err" \
+    || refuse "deliver-index-reset" 2
+}
 pl_deliver() {
-  local br cut bv tv subj body p n_notes rc url
+  local br cut bv tv subj body p n_notes rc url xy ix wt pair n
   pl_setup "$@"
   br="$(git -C "$CONSUMER" symbolic-ref -q --short HEAD 2>/dev/null)" || br=""
   case "$br" in ai-dlc-update/*) ;; *) refuse "deliver-not-on-update-branch" 2 ;; esac
@@ -423,13 +601,19 @@ pl_deliver() {
   rc=$?
   [ "$rc" -eq 0 ] || echo "REFUSED push-drain rc=$rc"
   [ "$rc" -ne 0 ] || awk -F'\t' 'NF >= 2 {print "DECIDE " $1 " " $2 " drain"}' "$RUN/push-drain.out"
-  # Commit: every changed path, each by its own pathspec.
-  git -C "$CONSUMER" -c core.quotePath=false status --porcelain=v1 -z --untracked-files=all 2>/dev/null \
-    | tr '\0' '\n' | awk 'length($0) > 3 {print substr($0, 4)}' > "$RUN/deliver.paths" || refuse "deliver-status" 2
-  while IFS= read -r p; do
+  # Commit: only the pull's own writes (pl_deliver_select), each by its own pathspec.
+  pl_deliver_select || refuse "deliver-status" 2
+  while IFS="$TAB" read -r xy ix wt p pair; do
     [ -n "$p" ] || continue
+    case "$xy" in UU|AA|DD|AU|UD|UA|DU) refuse "deliver-unmerged $p" 2 ;; esac
+  done < "$RUN/deliver.sel"
+  while IFS="$TAB" read -r xy ix wt p pair; do
+    [ -n "$p" ] || continue
+    # Index-current (worktree column blank, or a rename's original path): already staged as it must be.
+    case "$pair" in *o) continue ;; esac
+    case "$xy" in ?" ") continue ;; esac
     git -C "$CONSUMER" add -A -- ":(literal)$p" 2>>"$RUN/deliver.err" || refuse "deliver-stage" 2
-  done < "$RUN/deliver.paths"
+  done < "$RUN/deliver.sel"
   bv="$(git -C "$DIST" show "${BASE}:VERSION" 2>/dev/null | tr -d '[:space:]')"
   tv="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null | tr -d '[:space:]')"
   subj="chore(ai-dlc-update): reconcile distribution ${bv:-$BASE} → ${tv:-$THEIRS}"
@@ -441,8 +625,13 @@ pl_deliver() {
     printf 'Log: %s\n' "$REPORT_REL"
     [ -z "$n_notes" ] || { printf '\nNOTE rows:\n'; printf '%s\n' "$n_notes" | tr '\t' ' '; }
   } > "$RUN/commit.msg"
-  if ! git -C "$CONSUMER" diff --cached --quiet; then
-    git -C "$CONSUMER" commit -q -F "$RUN/commit.msg" 2>>"$RUN/deliver.err" || refuse "deliver-commit" 2
+  pl_deliver_commit
+  # The PR body is rendered and bounded BEFORE the push: an oversize body never leaves a pushed branch with no PR.
+  pl_pr_body "$CONSUMER" > "$RUN/pr-body.md" || refuse "deliver-pr-body" 2
+  n="$(wc -c < "$RUN/pr-body.md" | tr -d ' ')"
+  if [ "$n" -gt 60000 ]; then
+    echo "pull: the PR body is $n bytes after bounding, over 60000; nothing was pushed. The commit is made, and a deliver re-run skips it: shorten the long rows of $DECISIONS_REL (or the report's region) and re-run deliver." >&2
+    refuse "deliver-pr-body-oversize" 2
   fi
   # Push: the consumer's own pre-push runs. A red push is the model's to diagnose.
   git -C "$CONSUMER" remote get-url origin >/dev/null 2>&1 || refuse "deliver-no-remote" 2
@@ -452,53 +641,82 @@ pl_deliver() {
   cut="$(pl_cut_from "$CONSUMER" "$br")"
   [ -n "$cut" ] || { echo "ASK base-confirm $br - No reflog line names the branch this one was cut from: which branch should the PR merge into?"; exit 3; }
   if [[ "$cut" =~ $SKILL_BRANCH_RE ]]; then refuse "deliver-cut-from-skill-branch" 2; fi
-  pl_pr_body "$CONSUMER" > "$RUN/pr-body.md" || refuse "deliver-pr-body" 2
   url="$(gh pr create --base "$cut" --head "$br" --title "$subj" --body-file "$RUN/pr-body.md" 2>"$RUN/pr.err")" || refuse "deliver-gh-pr-create" "$?"
   echo "DECIDE pr $url opened"
   exit 0
 }
 
 # --- pr-body ------------------------------------------------------------------------------------
-# The decisions file holds this pull's rows only (pl_decisions_epoch); each renders once.
+# pl_pr_table <decisions file> -- the decisions table's rows, BYTE-bounded: a cell over 400 bytes is
+# cut (never inside a UTF-8 sequence) and ends `…`; rows stop once they would pass 30000 bytes, and
+# one line counts the rest and points at the decisions file in the PR's diff.
+pl_pr_table() {
+  LC_ALL=C awk -F'\t' -v rel="$DECISIONS_REL" -v q="'" '
+    function cell(s,   c) {
+      if (length(s) <= 400) return s
+      s = substr(s, 1, 400)
+      while (s != "") { c = substr(s, length(s), 1); if (c < "\200" || c > "\277") break; s = substr(s, 1, length(s) - 1) }
+      if (s != "" && substr(s, length(s), 1) >= "\300") s = substr(s, 1, length(s) - 1)
+      return s "…"
+    }
+    NR > 1 && NF && !s[$0]++ {
+      gsub(/\|/, "\\|")
+      r = sprintf("| %s | `%s` | %s | %s | %s |", cell($1), cell($2), cell($4), cell($5), cell($6))
+      if (over || acc + length(r) + 1 > 30000) { over = 1; n++; next }
+      acc += length(r) + 1; print r
+    }
+    END { if (n) printf "… %d more decision rows omitted — see `%s` in this PR%ss diff\n", n, rel, q }' "$1"
+}
+# The decisions file holds this pull's rows only (pl_decisions_epoch); each renders once. The body
+# stays under 60000 bytes where it can: when the whole is larger, each region section is one line
+# pointing at the report in the PR's diff. deliver refuses, before its push, a body still over.
 pl_pr_body() {
-  local c="${1:-}" t
+  local c="${1:-}" t tp="${TMPDIR:-/tmp}/pull-pr" n
   [ -n "$c" ] || usage
   t="$c/$DECISIONS_REL"
-  echo "### Decisions this pull took without asking"
-  echo
-  echo "Each row is a MODEL or SCRIPT decision; merging this PR approves them. Operator answers are recorded in \`${HIST_REL}\`."
-  echo
-  awk -F'\t' 'NR > 1 && NF && !s[$0]++ { gsub(/\|/, "\\|"); printf "| %s | `%s` | %s | %s | %s |\n", $1, $2, $4, $5, $6 }' "$t" > "${TMPDIR:-/tmp}/pull-prd.$$" 2>/dev/null
-  if [ ! -s "${TMPDIR:-/tmp}/pull-prd.$$" ]; then echo "none"; else
-    echo "| kind | path | decider | verdict | evidence |"
-    echo "|---|---|---|---|---|"
-    cat "${TMPDIR:-/tmp}/pull-prd.$$"
-  fi
-  rm -f "${TMPDIR:-/tmp}/pull-prd.$$"
+  {
+    echo "### Decisions this pull took without asking"
+    echo
+    echo "Each row is a MODEL or SCRIPT decision; merging this PR approves them. Operator answers are recorded in \`${HIST_REL}\`."
+    echo
+    pl_pr_table "$t" > "$tp-d.$$" 2>/dev/null
+    if [ ! -s "$tp-d.$$" ]; then echo "none"; else
+      echo "| kind | path | decider | verdict | evidence |"
+      echo "|---|---|---|---|---|"
+      cat "$tp-d.$$"
+    fi
+  } > "$tp-h.$$"
+  rm -f "$tp-d.$$"
   # The report's region as the pull leaves it, and the region the first --verify of this pull
   # recorded (the dry-run view this PR's review replaces), when the two differ.
   local rep="$c/$REPORT_REL" gd rec
-  echo
-  echo "### Reconcile region"
-  echo
-  if [ -f "$rep" ]; then
-    awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} f{print} /END GENERATED: reconcile-mechanical/{f=0}' "$rep" > "${TMPDIR:-/tmp}/pull-prb.$$"
-    if [ -s "${TMPDIR:-/tmp}/pull-prb.$$" ]; then cat "${TMPDIR:-/tmp}/pull-prb.$$"; else echo "none (the report carries no region)"; fi
-  else
-    echo "none (no report at \`$REPORT_REL\`)"
-  fi
+  : > "$tp-b.$$"; : > "$tp-r.$$"
+  [ ! -f "$rep" ] || awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} f{print} /END GENERATED: reconcile-mechanical/{f=0}' "$rep" > "$tp-b.$$"
   gd="$(gitdir_of "$c")" || gd=""
   rec="$gd/ai-dlc-approved-region"
   if [ -n "$gd" ] && [ -f "$rec" ] && [ "$(sed -n 1p "$rec")" = "ai-dlc-approved-region 1" ]; then
-    sed -n '3,$p' "$rec" > "${TMPDIR:-/tmp}/pull-prr.$$"
-    if ! cmp -s "${TMPDIR:-/tmp}/pull-prr.$$" "${TMPDIR:-/tmp}/pull-prb.$$"; then
-      echo
-      echo "### Dry-run region (first verified for this pull)"
-      echo
-      cat "${TMPDIR:-/tmp}/pull-prr.$$"
+    sed -n '3,$p' "$rec" > "$tp-r.$$"
+    ! cmp -s "$tp-r.$$" "$tp-b.$$" || : > "$tp-r.$$"
+  fi
+  n="$(cat "$tp-h.$$" "$tp-b.$$" "$tp-r.$$" | wc -c | tr -d ' ')"
+  cat "$tp-h.$$"
+  echo
+  echo "### Reconcile region"
+  echo
+  if [ ! -f "$rep" ]; then echo "none (no report at \`$REPORT_REL\`)"
+  elif [ ! -s "$tp-b.$$" ]; then echo "none (the report carries no region)"
+  elif [ "$n" -gt 59000 ]; then echo "omitted ($(wc -c < "$tp-b.$$" | tr -d ' ') bytes): see \`$REPORT_REL\` in this PR's diff"
+  else cat "$tp-b.$$"
+  fi
+  if [ -s "$tp-r.$$" ]; then
+    echo
+    echo "### Dry-run region (first verified for this pull)"
+    echo
+    if [ "$n" -gt 59000 ]; then echo "omitted ($(wc -c < "$tp-r.$$" | tr -d ' ') bytes): see \`$REPORT_REL\` in this PR's diff"
+    else cat "$tp-r.$$"
     fi
   fi
-  rm -f "${TMPDIR:-/tmp}/pull-prb.$$" "${TMPDIR:-/tmp}/pull-prr.$$"
+  rm -f "$tp-h.$$" "$tp-b.$$" "$tp-r.$$"
 }
 
 cmd="${1:-}"; [ $# -gt 0 ] && shift

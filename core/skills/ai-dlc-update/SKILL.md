@@ -158,7 +158,7 @@ and work only what it hands back. Its header is the contract; the subcommands ar
 - `pull.sh resolve <consumer> [<ref>]` — step 1's clone and ref checks: `RESOLVE dist=<path>
   base=<sha> theirs=<sha>` (exit 0), `REFUSED resolve <check> rc=2`, or `ASK upstream-url …` (exit 3).
 - `pull.sh gate <dist> <base> <consumer> <theirs>` — step 2's gate: `GATE OK|DEFER|UNDECIDED`, then
-  the gate's `SELF-UPDATE-SAFE-STOP`, `SELF-UPDATE-CARRY` and `SELF-UPDATE-UNDECIDED` rows verbatim.
+  the gate's `SELF-UPDATE-SAFE-STOP`, `SELF-UPDATE-CARRY`, `SELF-UPDATE-UNDECIDED` and `SELF-UPDATE-DEFER` rows verbatim.
 - `pull.sh dry-run <dist> <base> <consumer> <theirs>` — the bare invocation's report; asks nothing.
 - `pull.sh apply [--carried-machinery-slice] <dist> <base> <consumer> <theirs>` — the whole apply (step 7).
 - `pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>` — the stamp.
@@ -176,7 +176,9 @@ report's `reconcile-mechanical` region or the files under `<consumer git-dir>/ai
 **THE PULL ASKS ONLY ON CONFLICT.** The question families that ask the operator are the rows of
 `reconcile/ask-families.tsv`, and only those; read that file for the list, and the driver prints
 each as an `ASK` row. Answer an `ASK` row with AskUserQuestion, one question per row, whose
-question line QUOTES the row's digest; the answer-capture hook records it in
+question line QUOTES the row's FULL 64-hex digest; a short-digest cite is not an answer, and the
+driver prints `NOTE ask-short-cite` beside the re-issued `ASK` row when the record holds one. The
+answer-capture hook records the answer in
 `_bmad-output/operator-answers-history.md`, and that record is the only proof of an answer. Then
 act on the answer and re-run the subcommand that printed the row. A typed operator message is not
 that answer, and neither is a decisions row.
@@ -378,7 +380,7 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
 
    **Run the gate through the driver:** `reconcile/pull.sh gate <dist> <base> <consumer>
    <theirs>` runs the gate below and prints `GATE OK|DEFER|UNDECIDED`, then its
-   `SELF-UPDATE-SAFE-STOP`, `SELF-UPDATE-CARRY` and `SELF-UPDATE-UNDECIDED` rows; the gate writes
+   `SELF-UPDATE-SAFE-STOP`, `SELF-UPDATE-CARRY`, `SELF-UPDATE-UNDECIDED` and `SELF-UPDATE-DEFER` rows; the gate writes
    its record exactly as when run by hand. The cycle after an OK verdict stays yours.
 
    **Detail on demand.** The derivation's full rules (both exclusions and both fixture terms as
@@ -458,8 +460,8 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      runs and the flag is what tells them apart — see step 7's re-stamp bullet.
      **The gate wrote `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md` on this verdict too.**
      Carry that record to the step-7 gated apply and commit it there with the machinery slice.
-     **That is an instruction to the operating agent and not an enforced property**: nothing in
-     `reconcile/` stages or commits anything, so the record reaches that commit only because the
+     `pull.sh gate` records its path in the pull's artifacts, so `pull.sh deliver` commits it with
+     the pull's other writes; on the manual path, the record reaches that commit only because the
      agent put it there.
    - On `SELF-UPDATE-OK`: proceed autonomously as below.
    - `SELF-UPDATE-CARRY` rows are ADVISORY and accompany any verdict, OK included. Each names
@@ -1018,15 +1020,18 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    The settings-provisioning check is part of the apply's decisions, and a dry run may show it
    (no writes; `--template` needs a FILESYSTEM path, and `theirs` is a ref, so materialize it
    first — the bare `--check` form exits 1 with usage):
-   `t=$(mktemp); git -C <dist> show "${theirs}:templates/settings.json.template" > "$t";`
-   `reconcile/settings-merge.sh --consumer .claude/settings.json --template "$t" --check`
+   `t=$(mktemp); p=$(mktemp); git -C <dist> show "${theirs}:templates/settings.json.template" > "$t";`
+   `git -C <dist> show "${base}:templates/settings.json.template" > "$p";`
+   `reconcile/settings-merge.sh --consumer .claude/settings.json --template "$t" --prior-template "$p" --check`
    — a `model_window_needed=yes` line is a MODEL decision: record it as a decisions row quoting
    its `ask:` lines, so the PR body carries them to the operator (the reconcile never writes
    `env`). A `suite_admission_probe=none` line is likewise a MODEL decision: record it as a
    decisions row quoting its `optional:` lines verbatim, an optional setting the operator may add
    themselves (never required, never written by the reconcile). Relay any `enabledPlugins:` line
    it prints verbatim in the PR body: the project's
-   context-mode enable will be retired and every user needs the user-level install.
+   context-mode enable will be retired and every user needs the user-level install. Relay every
+   `settings-merge: replaced` line verbatim in the PR body too: a role value equal to the
+   prior template's value will be overwritten with the new template's.
 
 6. **Isolate — branch before ANY write (apply only, MANDATORY).** The reconcile
    MUST NOT mutate the consumer's live branch in place. Before the first write
@@ -1171,9 +1176,9 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    body, which the script already does; they never block and never withhold the stamp.
 
    - `TEMPLATE-JSON-MERGE` (from the template pre-classification) → run
-     `t=$(mktemp); git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"`
+     `t=$(mktemp); p=$(mktemp); git -C <dist> show "${theirs}:templates/settings.json.template" > "$t"; git -C <dist> show "${base}:templates/settings.json.template" > "$p"`
      then `reconcile/settings-merge.sh --consumer .claude/settings.json --template
-     "$t"`. `--template` is read with `-r` and
+     "$t" --prior-template "$p"`. `--template` is read with `-r` and
      `theirs` is a git ref, so a ref-qualified template path fails the read guard.
      **Do not hand-write the jq** — the script is the contract. It strips stale
      `ai-dlc-*.sh` hook blocks + appends the template's, and preserves user
@@ -1193,13 +1198,16 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      changes means the merge is owed, a copy that does not means it is done and no row is
      printed. The same test runs on every pull, whether or not the range changed the
      template, so any fill the merge owes reaches the file; the row then quotes the
-     `enabledPlugins:` and `settings-merge: filled` lines `--check` prints. A file that is
+     `enabledPlugins:`, `settings-merge: filled` and `settings-merge: replaced` lines the merge prints. A file that is
      owed is recorded on a `template:` line, and `--finish` re-checks it by running
      `settings-merge.sh` on a copy again, which must change nothing, or it prints
      `WORKLIST finish-template-json-unmerged` and withholds. The deliberate-no-op exit is
      deleting that file's own `template:` line; while the copy still changes, the next
      pull asks again. A fill is declined for good in the file itself: a role key by
-     declaring it in the consumer's role, a plugin by setting it `false`,
+     declaring it in the consumer's role (a key held at the prior template's value is
+     replaced by the new template's, so decline that by giving it any other value, or
+     by deleting the file's `template:` line, which clears it for good because the next
+     pull's prior is the new value), a plugin by setting it `false`,
      `bashOutputMaxChars` by declaring a number. These have no such opt-out, because
      the merge always restores them: an edited or reordered ai-dlc hook block, a
      template role or `aiDlcModels` key the consumer deleted, and the file's event-key
@@ -1282,10 +1290,11 @@ delivery.
 
    **Deliver through the driver.** Step 8's commit, push and PR are one
    `reconcile/pull.sh deliver <dist> <base> <consumer> <theirs>`, run after `finish` exits 0 and
-   after the ledger work step 8 gives you. It runs on the `ai-dlc-update/*` branch only, stages by
-   explicit pathspec, pushes so the consumer's pre-push runs, and opens the PR against the branch
-   the reflog says this one was cut from, with a script-rendered body: the decisions record, the
-   reconcile region and, where it differs, the dry-run region. A `DECIDE <status> <block> drain` row
+   after the ledger work step 8 gives you. It runs on the `ai-dlc-update/*` branch only, commits
+   only the pull's own writes (step 8's Commit bullet), pushes so the consumer's pre-push runs, and
+   opens the PR against the branch the reflog says this one was cut from, with a script-rendered
+   body, bounded in bytes and checked before the push: the decisions record, the reconcile region
+   and, where it differs, the dry-run region. A `DECIDE <status> <block> drain` row
    is a push-drain row for step 8's drain. `DECIDE push-red <log>` (exit 3) is yours: diagnose the
    red push from that log, fix the cause on this branch, record the diagnosis as a decisions row,
    and run `deliver` again. `ASK base-confirm` (exit 3) is step 8's no-reflog-line case. The driver
@@ -1433,9 +1442,14 @@ delivery.
      because a bare prefix is never attributed to an entry and the count reads no history.
      A flip of the surviving sibling's row between the two statuses above on a two-member
      prefix therefore cannot occur, and one that appears reads exactly like a sweep.
-   - **Commit** all step-7 writes and the step-8 ledger writes above (the ledger and
-     `push-candidate-ledger.archive.md`), each staged by explicit pathspec and never with
-     `git add -A` or `git add .`, on the step-6 reconcile branch, with a subject
+   - **Commit** the pull's own writes and nothing else, on the step-6 reconcile branch: the
+     step-7 writes and the step-8 ledger writes above (the ledger and
+     `push-candidate-ledger.archive.md`), the paths that were clean when the first apply ran, the
+     pull's artifacts (the report, the reconcile log, the decisions file, the gate and push
+     records), the paths this pull's own records name, and any path staged explicitly. The
+     operator's pre-existing dirty, untracked and staged state stays out of the commit and is left
+     untouched, staged or not. Never `git add -A` or `git add .`, and never `git commit -- <paths>`.
+     The PR body is bounded in bytes and checked before the push. The commit has a subject
      like `chore(ai-dlc-update): reconcile distribution <base-ver> → <theirs-ver>`
      and a body summarizing buckets applied + conflicts adjudicated + the log path + every
      `NOTE` row of this pull's apply runs, as step 7's `NOTE` bullet says.
