@@ -774,9 +774,9 @@ checks:
           — a line in this rulebook's OWN manifest, naming this check's OWN fixture
           — as an invocation of a skill nobody wrote, and shipped that FAIL to every
           consumer for the life of the arm.
-      - site: ai-dlc-update step 7z (upgrade-time BMAD probe)
-        posture: reports, never blocks (exit 1 is a delivery finding, exit 2 a SKIP)
-        why: a pull that raises the BMAD floor is visible at delivery, before the first gate runs
+      - site: reconcile/pull.sh deliver (upgrade-time BMAD probe)
+        posture: blocks delivery when the manifest changed and exit 1; otherwise reported (step 7z report-only run on an unchanged manifest; a first pull with no record reports)
+        why: a pull that raises the BMAD floor is stopped at delivery, before the first gate runs
     ci_workflow: ~
     fixtures: [tests/fixtures/bmad-invocation-resolve]
 

@@ -48006,3 +48006,53 @@ BL-868: no test depends on load.
 Step: n/a
 
 verify: sh grep -q 'is a carry-over-evaluation pass 2 or later, written as the single final adversary the step prescribes' core/scripts/validate-adversarial-convergence.sh && grep -q 'expect k2-coe-p2 0 ' core/fixtures/check-24-adversarial-convergence/run.sh && grep -q 'k2-noncoe-p2' core/fixtures/check-24-adversarial-convergence/run.sh
+## BL-1173 — the stated reason for not looping `bmad-review` contradicts the current BMAD docs, and a BMAD skill the pipeline invokes can vanish at an upgrade and fail only at the next planning gate
+
+**NOTE.** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/_gate-procedures.md:693–698` and the upgrade path that should run `core/scripts/validate-bmad-invocations.sh`.
+
+Two readings from https://docs.bmad-method.org on 2026-11-18 (about 60 pages; the pages carry no version):
+
+1. `_gate-procedures.md:694–696` gives the `bmad-review` contract as "find at least ten issues; re-check rather than stop on zero findings; emit no severity". The current docs say the review never pads and that zero findings is a valid outcome. The installed skill text on the consumer (bmm 6.12.4) is not tracked in its git and was not read.
+2. A keyword scan of the fetched pages returns 0 hits each for `bmad-spec`, `sprint-planning`, `create-epics`, `implementation-readiness` and `bmad-testarch`, with `bmad-agent-po` hitting as the control. The docs describe a later generation built on a ticket tree, `bmad-build` and `bmad-code-review`. `validate-bmad-invocations.sh` already resolves every `/bmad-*` name the rulebook invokes (`:188–200`, failing at `:246`) and adds a capability probe for the readiness gate and the adversarial lens (`:208–227`). It runs as Check 32 at planning gates (`steps/gate-validation.md:3247`); `git grep validate-bmad-invocations -- core ':!core/fixtures'` names no upgrade-time caller.
+
+Fix: (1) read the installed `bmad-review` text and correct the sentence if it is stale; (2) run the existing invocation probe when the consumer's BMAD install changes, so a dropped name fails at the upgrade.
+
+Baseline: one contract sentence unverified against the installed skill; the invocation probe runs at planning gates only.
+
+Expected movement: none on wall clock or dollars; an upgrade to the docs' generation fails at the upgrade and not at a planning gate mid-sprint.
+
+Provenance: batch 259, cluster C4, from the BMAD documentation comparison; id allocated by lead ai-dlc-64.
+
+**PARTIAL (v0.1169.0).** batch 259, C5. Part 1 closed on the reading (installed bmm 6.12.4 lens-adversarial.md:5,8,19 matches `_gate-procedures.md:693-698`). Part 2 shipped in part: `ai-dlc-update` step 7z runs `validate-bmad-invocations.sh` at every ai-dlc pull and reports, never blocks. A BMAD install changed between pulls still surfaces first at Check 32 at the next planning gate, because ai-dlc does not drive `npx bmad-method install`. Owed: a blocking upgrade-time check.
+
+1. Part 1 closed on the reading, with no edit. The consumer's installed bmm 6.12.4 (graph `_bmad/_config/manifest.yaml`) adversarial lens, `.claude/skills/bmad-review/references/lens-adversarial.md:5,8,19`, reads "at least ten", "re-check on zero" and "No severity, priority, or ranking", which is what `_gate-procedures.md:693–698` states for `lenses=adversarial`. The sentence is accurate for the installed version; the docs site describes a later generation. The same claim at `rule-bodies/rule-20.md:81` and `team-roles/adversary.md:29` stands.
+2. Part 2 shipped in this release. `core/skills/ai-dlc-update/SKILL.md` step 7z runs `scripts/ai-dlc/validate-bmad-invocations.sh` after Apply and before step 8 Deliver: exit 1 surfaces each FAIL line as a delivery finding naming the BMAD floor and the remedy `npx bmad-method install`; exit 2 surfaces as SKIP; it never blocks. `enforcement-map.yaml` check 32 gains the call site (`:753–755`). The hand-run probe and its mutant (validator line deleted, read as FAIL) are in this release's commit message.
+
+Movement: none on wall clock or dollars, as expected; a dropped `/bmad-*` name now surfaces at the upgrade that drops it.
+
+**LANDED (v0.1217.0).** Batch 263, cluster F, owner ai-dlc-84. Part 2's blocking check is built in `core/skills/ai-dlc-update/reconcile/pull.sh`. `pull.sh deliver` records the digest of the consumer's `_bmad/_config/manifest.yaml` in `_bmad-output/ai-dlc-update/bmad-manifest-digest`. On a pull where the manifest changed since the recorded digest, it runs the installed `validate-bmad-invocations.sh` and refuses delivery (`deliver-bmad-invocations`) on exit 1, committing and pushing nothing; any other exit is a SKIP that never blocks and writes no record. A first pull with no record prints the FAIL lines and remedy and writes the record; on an unchanged manifest step 7z still runs the validator as a report-only check. Part 1 closed at 0.1169.0 on the reading. Movement: none on wall clock or dollars; a BMAD install change that drops an invoked skill now blocks at the delivering pull, not at the next planning gate.
+
+Step: pipeline
+
+verify: manual
+
+## BL-1204 — an update pull's PR commits pipeline-state files a hook wrote during the pull session
+
+**DEFECT.** Filed 2026-11-21 (batch 263). Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (the deliver keep set).
+
+Goal: an update PR never carries a pipeline-state file the pull did not write. One done condition: with a tracked pipeline-state file clean at the first apply and appended by a hook after it, the update commit leaves that file out, and a fixture arm holds that case and a twin where a record of the pull names the file.
+
+Record: reproduced on a scratch world: `spawn-ledger.jsonl` was clean at the first apply, a hook appended to it after the apply, and the update commit contained it. The same shape applies to `subagent-context.jsonl`, `arm-log.jsonl`, `operator-requests-history.md` and `pipeline-continuation-log.md`. The clean-at-snapshot rule of BL-1196 treats them as the pull's own.
+
+Work list:
+
+1. Leave out the files `.claude/schemas/pipeline-state-paths.json` names under `_bmad-output/` (minus `ai-dlc-update`, `implementation-artifacts`, `planning-artifacts`) that were clean at the first apply and that no record of this pull names; a missing schema prints `NOTE deliver-state-unfiltered`.
+2. Always commit `operator-answers-history.md` and `_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md`.
+3. A fixture arm: a hook-appended `spawn-ledger.jsonl` stays out; a twin whose record names it is committed.
+
+**LANDED (v0.1217.0).** Batch 263, E. Items 1 to 3 built; the reconcile-pull-driver arm for a hook-appended `spawn-ledger.jsonl` fails on the previous pull.sh and passes on this one.
+
+Step: n/a
+
+verify: sh bash core/fixtures/reconcile-pull-driver/run.sh
+

@@ -52,6 +52,15 @@
 #        beside the re-asked ledger row; a USER_PAUSE-shaped record citing it: no NOTE.
 #   vii  (world s, after c2) two off-branch ASK rounds keep round 1's dirty snapshot; deliver commits the answer
 #        history the hook appended between rounds.
+#   BL-1202 / BL-1204 (world a gains a tracked settings.json the operator edited before the pull, the pipeline-state schema and a
+#   tracked state ledger; the pull's settings merge runs between the first apply and the resolution round):
+#   retry   the dirty snapshot (header 2) is kept verbatim over the same-theirs resolution round and holds the pre-merge blob.
+#   dirty-d the file the operator edited and the pull's merge also wrote is committed as the pull's change only (equal to the
+#           merge of the clean file); the operator's key stays an unstaged diff.   dirty-overlap  an edit on the lines the pull
+#           changed: REFUSED deliver-dirty-overlap, rc 2, nothing mutated.   dirty-v1 / dirty-w0  no pre-pull blob recorded:
+#           NOTE deliver-dirty-whole and the whole file.   re-deliver  a second deliver adds no commit.
+#   st      a tracked pipeline-state file a hook appended to after the snapshot stays out; st-ctl the exempt names are committed;
+#           st-exempt the exempt names are still schema names; st-noschema (world s) no schema: the NOTE and the file committed.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -77,12 +86,18 @@ echo "resolved: $REC_SRC"
 # THE SUBJECT, AND ITS OLD-TEXT SIGNATURE (a consumer whose engine predates this driver): SKIP, never ok.
 if [ ! -f "$REC_SRC/pull.sh" ] || [ ! -f "$REC_SRC/pull-key.sh" ] || [ ! -f "$REC_SRC/ask-families.tsv" ] \
    || ! grep -q '^pk_conflict_ledger() {' "$REC_SRC/pull-key.sh" || ! grep -q 'pk_conflict_ledger' "$REC_SRC/readopt-override.sh" \
-   || ! grep -q '^pl_hook_pre_gate_repair() {' "$REC_SRC/pull.sh"; then
+   || ! grep -q '^pl_hook_pre_gate_repair() {' "$REC_SRC/pull.sh" || ! grep -q '^pl_deliver_merge() {' "$REC_SRC/pull.sh"; then
   echo "SKIP reconcile-pull-driver: reconcile/pull.sh (with its conflict ledger and pre-gate repair) is not installed beside apply.sh; it arrives with the pull that carries this fixture"
   fx_skip_exit "$HERE"
 fi
 [ -f "$HOOK_SRC" ] && [ -f "$ESC_SRC" ] && [ -f "$HERE/escalation-validator.seed" ] \
   || { echo "FIXTURE BROKEN: the answer-capture hook, escalations.md or escalation-validator.seed is missing" >&2; exit 2; }
+SCHEMA_SRC=""
+for _s in "$ROOT/core/schemas/pipeline-state-paths.json" "$ROOT/.claude/schemas/pipeline-state-paths.json"; do
+  [ -f "$_s" ] && { SCHEMA_SRC="$_s"; break; }
+done
+[ -n "$SCHEMA_SRC" ] || { echo "FIXTURE BROKEN: pipeline-state-paths.json not found under $ROOT in either layout" >&2; exit 2; }
+echo "resolved: $SCHEMA_SRC"
 for _t in jq git awk; do command -v "$_t" >/dev/null 2>&1 || { echo "FIXTURE BROKEN: $_t is not on PATH" >&2; exit 2; }; done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-pull-driver.XXXXXX")" || { echo "FIXTURE BROKEN: mktemp" >&2; exit 2; }
@@ -130,13 +145,26 @@ run_dir() { sed -n 's/^PULL run=\([^ ]*\) .*/\1/p' "$1" | tail -1; }
 # ================================ a, h, p: pull.sh apply on the pull world ================================
 copy_world seed-main a
 A="$WORK/a"; AB="$(cat "$A/.B")"; AT="$(cat "$A/.T")"
+# BL-1202/1204: theirs carries a settings template (the pull's settings merge has a drift row to answer).
+mkdir -p "$A/dist/templates" && printf '{\n  "bashOutputMaxChars": 30000\n}\n' > "$A/dist/templates/settings.json.template" \
+  && AT="$(prd_dist_commit "$A/dist" "theirs with a settings template")" && printf '%s\n' "$AT" > "$A/.T" \
+  || { echo "FIXTURE BROKEN: cannot add the settings template to world a" >&2; exit 2; }
 # The deliver arms' operator state, in place before the pull's first apply (arm dl reads it after finish):
 # a modified tracked file, an untracked file, a staged edit, a staged rename, and a dirty file a hook appends
 # to later; an earlier pull's report and gate record (untracked); and this pull's gate record (pull.sh gate).
-mkdir -p "$A/c/notes" "$A/c/_bmad-output/ai-dlc-update"
+mkdir -p "$A/c/notes" "$A/c/_bmad-output/ai-dlc-update" "$A/c/.claude/schemas"
 for _f in op-mod op-staged op-ren-old op-append; do printf 'line of %s\n' "$_f" > "$A/c/notes/$_f.txt"; done
+# BL-1202/1204: a tracked settings.json (the operator's edit to line 2 is dirty before the pull; the pull's merge appends past
+# the last key), the pipeline-state schema, and a tracked pipeline-state ledger a hook appends to later.
+cp "$SCHEMA_SRC" "$A/c/.claude/schemas/pipeline-state-paths.json" || { echo "FIXTURE BROKEN: cannot install the schema" >&2; exit 2; }
+printf '{\n  "k1": 1,\n  "k2": 2,\n  "k3": 3,\n  "k4": 4,\n  "k5": 5,\n  "k6": 6,\n  "k7": 7,\n  "k8": 8,\n  "operatorCommitted": true\n}\n' \
+  > "$A/c/.claude/settings.json"
+printf '{"row":1}\n' > "$A/c/_bmad-output/spawn-ledger.jsonl"
+printf '{"rec":1}\n' > "$A/c/_bmad-output/subagent-context.jsonl"
 world_commit "$A/c" "operator notes" >/dev/null || { echo "FIXTURE BROKEN: cannot commit the operator notes" >&2; exit 2; }
 printf 'operator edit\n' >> "$A/c/notes/op-mod.txt"
+sed 's/"k1": 1,/"k1": "operatorDirtyKey",/' "$A/c/.claude/settings.json" > "$A/c/.claude/settings.json.new" \
+  && mv -f "$A/c/.claude/settings.json.new" "$A/c/.claude/settings.json" || { echo "FIXTURE BROKEN: cannot dirty settings.json" >&2; exit 2; }
 printf 'operator untracked\n' > "$A/c/notes/op-untracked.txt"
 printf 'operator staged\n' >> "$A/c/notes/op-staged.txt"
 world_git -C "$A/c" add notes/op-staged.txt && world_git -C "$A/c" mv notes/op-ren-old.txt notes/op-ren-new.txt \
@@ -185,9 +213,23 @@ fi
 world_git -C "$A/dist" show "${AT}:core/session-driver/ai-dlc-both-changed.sh" > "$A/c/.claude/session-driver/ai-dlc-both-changed.sh"
 # The resolution round also meets the validator's newer `FAIL: STATUSLESS` form (arm p2 below).
 cp "$WORK/validator-new.sh" "$A/c/scripts/ai-dlc/validate-escalation-status-vocabulary.sh" || { echo "FIXTURE BROKEN: cannot install the new-form validator" >&2; exit 2; }
+# The same resolution round runs the pull's settings merge (SKILL.md step 5) over the operator's edited settings.json.
+SET_T="$WORK/settings.template"; SET_P="$WORK/settings.prior"; printf '{}\n' > "$SET_P"
+world_git -C "$A/dist" show "${AT}:templates/settings.json.template" > "$SET_T" || { echo "FIXTURE BROKEN: cannot read the settings template" >&2; exit 2; }
+SNAP_A="$A/c/.git/ai-dlc-pull/dirty-snapshot"; snap_a1="$(git hash-object "$SNAP_A")"
+( cd "$A/c" && bash "$REC/settings-merge.sh" --consumer .claude/settings.json --template "$SET_T" --prior-template "$SET_P" ) > "$WORK/a-merge.out" 2>&1; sm_rc=$?
 count_on a "$WORK/log-d"
 bash "$REC/pull.sh" apply "$A/dist" "$AB" "$A/c" "$AT" > "$WORK/d.out" 2> "$WORK/d.err" < /dev/null; d_rc=$?
 count_off
+sw0="$(awk -F'\t' '$4 == ".claude/settings.json" {print $3}' "$SNAP_A")"
+sw0_txt="$(world_git -C "$A/c" cat-file blob "$sw0" 2>/dev/null)"
+if [ "$sm_rc" = 0 ] && grep -q bashOutputMaxChars "$A/c/.claude/settings.json" && [ "$snap_a1" = "$(git hash-object "$SNAP_A")" ] \
+   && [ "$(sed -n 1p "$SNAP_A" | awk '{print $1 " " $2}')" = "ai-dlc-dirty-snapshot 2" ] && [ "${#sw0}" = 40 ] \
+   && grep -q operatorDirtyKey <<<"$sw0_txt" && ! grep -q bashOutputMaxChars <<<"$sw0_txt"; then
+  ok "retry: a same-theirs resolution round after the settings merge keeps the first dirty snapshot byte for byte (header 2), whose settings.json blob is the pre-merge file"
+else
+  bad "retry: merge rc=$sm_rc snapshot moved=$([ "$snap_a1" = "$(git hash-object "$SNAP_A")" ] && echo no || echo yes) header='$(sed -n 1p "$SNAP_A")' settings blob='$sw0' has-op-key=$(grep -c operatorDirtyKey <<<"$sw0_txt") has-merge-key=$(grep -c bashOutputMaxChars <<<"$sw0_txt")"
+fi
 if [ "$d_rc" = 0 ] && [ "$(renders "$WORK/log-d")" = 1 ] && grep -q '^PULL run=.* renders=1$' "$WORK/d.out" \
    && ! grep -q '^WORK classify' "$WORK/d.out" && ! grep -q '^ASK ' "$WORK/d.out"; then
   ok "d: one resolution round (the classify row resolved, apply re-run) renders exactly once more and exits 0"
@@ -271,6 +313,29 @@ if [ "$gate_rc" = 0 ] && [ "$(sed -n 1p "$A/c/.git/ai-dlc-pull/pull-artifacts" 2
 else
   bad "ii-b: gate rc=$gate_rc artifacts: $(tr '\n' '|' < "$A/c/.git/ai-dlc-pull/pull-artifacts" 2>/dev/null) snapshot: $(cut -f1,4 "$A/c/.git/ai-dlc-pull/dirty-snapshot" 2>/dev/null | tr '\n\t' '| ' | cut -c1-400)"
 fi
+# After the snapshot, hooks write pipeline state: the tracked ledger (clean at the snapshot) gains a line, a story file and the
+# push-candidate archive appear. Variants of this world are cut here, before deliver_env gives a its remote.
+printf '{"row":2}\n' >> "$A/c/_bmad-output/spawn-ledger.jsonl"
+# st-rec: a second tracked state file, clean at the snapshot and written after it, that a decisions row of this pull names (column 2).
+printf '{"rec":2}\n' >> "$A/c/_bmad-output/subagent-context.jsonl"
+printf 'refile\t_bmad-output/subagent-context.jsonl\t-\tmodel\tkept\ta hook-written state file this pull'"'"'s record names\n' >> "$ADEC"
+mkdir -p "$A/c/_bmad-output/implementation-artifacts" || { echo "FIXTURE BROKEN: mkdir implementation-artifacts" >&2; exit 2; }
+printf 'a hook wrote this story\n' > "$A/c/_bmad-output/implementation-artifacts/story-1.md"
+printf '# archive\n' > "$A/c/_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md"
+for _v in ov v1 w0; do copy_world a "a-$_v"; done
+# ov: the pull's change also lands on the line the operator edited (HEAD, the snapshot blob and the worktree all differ there).
+sed 's/"k1": "operatorDirtyKey",/"k1": "pullRewroteThis",/' "$WORK/a-ov/c/.claude/settings.json" > "$WORK/a-ov/c/.claude/settings.json.new" \
+  && mv -f "$WORK/a-ov/c/.claude/settings.json.new" "$WORK/a-ov/c/.claude/settings.json" || { echo "FIXTURE BROKEN: cannot build world a-ov" >&2; exit 2; }
+# v1: a header-1 snapshot records no worktree blobs (column 3 is `-`).   w0: header 2, the settings.json blob absent from the store.
+for _v in v1 w0; do
+  _sn="$WORK/a-$_v/c/.git/ai-dlc-pull/dirty-snapshot"
+  awk -F'\t' -v OFS='\t' -v v="$_v" 'NR == 1 && v == "v1" { sub(/^ai-dlc-dirty-snapshot 2 /, "ai-dlc-dirty-snapshot 1 ") }
+    NR > 1 && v == "v1" { $3 = "-" } NR > 1 && v == "w0" && $4 == ".claude/settings.json" { $3 = "0000000000000000000000000000000000000000" } { print }' "$_sn" > "$_sn.new" \
+    && mv -f "$_sn.new" "$_sn" || { echo "FIXTURE BROKEN: cannot rewrite the a-$_v snapshot" >&2; exit 2; }
+done
+[ "$(sed -n 1p "$WORK/a-v1/c/.git/ai-dlc-pull/dirty-snapshot" | awk '{print $2}')" = 1 ] \
+  && [ "$(awk -F'\t' '$4 == ".claude/settings.json" {print $3}' "$WORK/a-w0/c/.git/ai-dlc-pull/dirty-snapshot")" = 0000000000000000000000000000000000000000 ] \
+  || { echo "FIXTURE BROKEN: the a-v1 / a-w0 snapshot rewrite changed nothing" >&2; exit 2; }
 deliver_env a || { echo "FIXTURE BROKEN: deliver_env a" >&2; exit 2; }
 # Between finish and deliver: a hook appends to the already-dirty file (i-b), and the resolution stages a rename (iii).
 printf 'appended after apply\n' >> "$A/c/notes/op-append.txt"
@@ -322,6 +387,94 @@ if grep -qx 'D	scripts/ai-dlc/validate-gone.sh' <<<"$dl_ns" \
   ok "iii: a staged deletion and a staged rename are committed whole"
 else
   bad "iii: deletion/rename not in the commit: $(tr '\n\t' '| ' <<<"$dl_ns" | cut -c1-400) err: $(head -c 300 "$WORK/a-deliver.err")"
+fi
+# dirty-d: settings.json, dirty at the snapshot with the operator's key and also written by the pull's merge, is committed as the
+# merge of the CLEAN file (the twin: the same merge run in scratch over the pre-deliver HEAD blob); the key stays an unstaged diff.
+twin="$WORK/twin-settings.json"; world_git -C "$A/c" show "HEAD^:.claude/settings.json" > "$twin"
+( cd "$WORK" && bash "$REC/settings-merge.sh" --consumer "$twin" --template "$SET_T" --prior-template "$SET_P" ) > /dev/null 2>&1
+world_git -C "$A/c" show "HEAD:.claude/settings.json" > "$WORK/a-head-settings.json"
+dd_diff="$(world_git -C "$A/c" diff HEAD -- .claude/settings.json | grep '^[-+][^-+]')"
+dd_want="$(printf '%s\n%s' '-  "k1": 1,' '+  "k1": "operatorDirtyKey",')"
+if [ "$dl_rc" = 0 ] && grep -qx 'M	.claude/settings.json' <<<"$dl_ns" && grep -q bashOutputMaxChars "$twin" && cmp -s "$twin" "$WORK/a-head-settings.json" \
+   && [ "$dd_diff" = "$dd_want" ] && [ -z "$(world_git -C "$A/c" diff --cached --name-only -- .claude/settings.json)" ] \
+   && [ "$(dl_st .claude/settings.json)" = " M .claude/settings.json" ]; then
+  ok "dirty-d: a file the operator edited and the pull's merge wrote is committed equal to the merge of the clean file; the operator's key is the whole unstaged diff and nothing is staged for it"
+else
+  bad "dirty-d: rc=$dl_rc committed==clean-twin: $(cmp -s "$twin" "$WORK/a-head-settings.json" && echo yes || echo no) diff vs HEAD: $(tr '\n' '|' <<<"$dd_diff" | cut -c1-200) status '$(dl_st .claude/settings.json)' commit: $(tr '\n\t' '| ' <<<"$dl_ns" | cut -c1-300)"
+fi
+# st: a tracked state ledger clean at the snapshot and appended to by a hook stays out of the commit, in the worktree, unstaged.
+if grep -qx 'M	.claude/settings.json' <<<"$dl_ns" && ! grep -q 'spawn-ledger.jsonl' <<<"$dl_ns" && grep -qx '{"row":2}' "$A/c/_bmad-output/spawn-ledger.jsonl" \
+   && [ "$(world_git -C "$A/c" show HEAD:_bmad-output/spawn-ledger.jsonl)" = '{"row":1}' ] \
+   && [ "$(dl_st _bmad-output/spawn-ledger.jsonl)" = " M _bmad-output/spawn-ledger.jsonl" ] && [ -z "$(world_git -C "$A/c" diff --cached --name-only -- _bmad-output/spawn-ledger.jsonl)" ]; then
+  ok "st: a pipeline-state ledger a hook appended to after the snapshot is not in the commit, keeps its line in the worktree and has nothing staged"
+else
+  bad "st: ledger in commit: $(grep -c 'spawn-ledger' <<<"$dl_ns") worktree status '$(dl_st _bmad-output/spawn-ledger.jsonl)' HEAD ledger: $(world_git -C "$A/c" show HEAD:_bmad-output/spawn-ledger.jsonl | tr '\n' '|') out: $(grep '^NOTE' "$WORK/a-deliver.out" | tr '\n' '|' | cut -c1-200)"
+fi
+# st-ctl: the exempt names (and the always-stage archive) are committed, and the schema was read (no NOTE).
+if grep -qx 'A	_bmad-output/implementation-artifacts/story-1.md' <<<"$dl_ns" && grep -qx 'A	_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md' <<<"$dl_ns" \
+   && ! grep -q '^NOTE deliver-state-unfiltered' "$WORK/a-deliver.out"; then
+  ok "st-ctl: a file under implementation-artifacts and the push-candidate archive, both written after the snapshot, are committed, and the state filter was on"
+else
+  bad "st-ctl: not committed: $(tr '\n\t' '| ' <<<"$dl_ns" | cut -c1-400) notes: $(grep '^NOTE' "$WORK/a-deliver.out" | tr '\n' '|' | cut -c1-200)"
+fi
+# st-rec: the twin of st. A state file clean at the snapshot, written after it and named by this pull's decisions row IS committed.
+if grep -qx 'M	_bmad-output/subagent-context.jsonl' <<<"$dl_ns" && [ "$(world_git -C "$A/c" show HEAD:_bmad-output/subagent-context.jsonl)" = "$(printf '{"rec":1}\n{"rec":2}')" ] \
+   && [ "$(awk -F'\t' 'NF != 6' "$ADEC" | wc -l | tr -d ' ')" = 0 ] && ! grep -q 'spawn-ledger.jsonl' <<<"$dl_ns"; then
+  ok "st-rec: a state file written after the snapshot and named by a decisions row of this pull is committed with the written line, while the unnamed ledger stays out"
+else
+  bad "st-rec: not committed: $(tr '\n\t' '| ' <<<"$dl_ns" | cut -c1-300) HEAD file: $(world_git -C "$A/c" show HEAD:_bmad-output/subagent-context.jsonl | tr '\n' '|')"
+fi
+# re-deliver: a second deliver makes no new commit.
+a_head1="$(world_git -C "$A/c" rev-parse HEAD)"
+deliver_run a "$A/dist" "$AB" "$A/c" "$AT"; a_rd_rc=$?
+world_git -C "$A/c" show "HEAD:.claude/settings.json" > "$WORK/a-head2-settings.json"
+if [ "$a_rd_rc" = 0 ] && [ -s "$WORK/a-deliver.out" ] && [ "$a_head1" = "$(world_git -C "$A/c" rev-parse HEAD)" ] && cmp -s "$WORK/a-head2-settings.json" "$WORK/a-head-settings.json"; then
+  ok "re-deliver: a second deliver exits 0 and adds no commit"
+else
+  bad "re-deliver: rc=$a_rd_rc head moved=$([ "$a_head1" = "$(world_git -C "$A/c" rev-parse HEAD)" ] && echo no || echo yes) out: $(tr '\n' '|' < "$WORK/a-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-deliver.err")"
+fi
+# dirty-overlap: the operator's edit lies on the lines the pull changed: the merge cannot split them, so the whole file is
+# committed (the operator's key in it), one NOTE deliver-dirty-whole names it in the output, the PR body and the commit message.
+OV="$WORK/a-ov"
+deliver_env a-ov || { echo "FIXTURE BROKEN: deliver_env a-ov" >&2; exit 2; }
+deliver_run a-ov "$OV/dist" "$AB" "$OV/c" "$AT"; ov_rc=$?
+world_git -C "$OV/c" show HEAD:.claude/settings.json > "$WORK/a-ov-head-settings.json"
+ov_pb="$(cat "$OV"/c/.git/ai-dlc-pull/run-*/pr-body.md 2>/dev/null)"
+ov_cm="$(world_git -C "$OV/c" log -1 --format=%B HEAD)"
+ov_n="$(grep -c "^NOTE deliver-dirty-whole .claude/settings.json your uncommitted edits in this file overlap the pull's change and are in this commit\$" "$WORK/a-ov-deliver.out")" || ov_n=0
+if [ "$ov_rc" = 0 ] && [ "$ov_n" = 1 ] && grep -q pullRewroteThis "$WORK/a-ov-head-settings.json" && cmp -s "$WORK/a-ov-head-settings.json" "$OV/c/.claude/settings.json" \
+   && [ -z "$(world_git -C "$OV/c" status --porcelain=v1 -- .claude/settings.json)" ] \
+   && grep -q '^### Deliver notes' <<<"$ov_pb" && grep -q 'NOTE deliver-dirty-whole .claude/settings.json' <<<"$ov_pb" \
+   && grep -q 'NOTE deliver-dirty-whole .claude/settings.json' <<<"$ov_cm"; then
+  ok "dirty-overlap: an operator edit on the lines the pull changed: exit 0, one NOTE deliver-dirty-whole (output, PR body Deliver notes, commit message), the whole file committed"
+else
+  bad "dirty-overlap: rc=$ov_rc notes=$ov_n out: $(tr '\n' '|' < "$WORK/a-ov-deliver.out" | cut -c1-300) pr-body notes: $(grep -c 'deliver-dirty-whole' <<<"$ov_pb") commit msg notes: $(grep -c 'deliver-dirty-whole' <<<"$ov_cm") err: $(head -c 200 "$WORK/a-ov-deliver.err")"
+fi
+# dirty-v1 / dirty-w0: no pre-pull blob recorded for the path: the whole file, and one NOTE deliver-dirty-whole line.
+for _v in v1 w0; do
+  _w="$WORK/a-$_v"
+  deliver_env "a-$_v" || { echo "FIXTURE BROKEN: deliver_env a-$_v" >&2; exit 2; }
+  deliver_run "a-$_v" "$_w/dist" "$AB" "$_w/c" "$AT"; _rc=$?
+  world_git -C "$_w/c" show HEAD:.claude/settings.json > "$WORK/a-$_v-head-settings.json"
+  _n="$(grep -c '^NOTE deliver-dirty-whole .claude/settings.json ' "$WORK/a-$_v-deliver.out")" || _n=0
+  if [ "$_rc" = 0 ] && [ "$_n" = 1 ] && grep -q operatorDirtyKey "$WORK/a-$_v-head-settings.json" && grep -q bashOutputMaxChars "$WORK/a-$_v-head-settings.json" \
+     && cmp -s "$WORK/a-$_v-head-settings.json" "$_w/c/.claude/settings.json" && [ -z "$(world_git -C "$_w/c" status --porcelain=v1 -- .claude/settings.json)" ]; then
+    ok "dirty-$_v: no recorded pre-pull blob ($([ "$_v" = v1 ] && echo 'header 1' || echo 'blob absent from the store')): one NOTE deliver-dirty-whole, and the whole file is committed (equal to the worktree)"
+  else
+    bad "dirty-$_v: rc=$_rc notes=$_n out: $(tr '\n' '|' < "$WORK/a-$_v-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-$_v-deliver.err")"
+  fi
+done
+# st-exempt: every name pull.sh exempts from the state filter is still a name in the schema (the filter's exemption is a list of schema names).
+st_ex="$(sed -n 's/^PL_STATE_EXEMPT="\(.*\)"$/\1/p' "$REC/pull.sh")"
+st_miss=""; st_n=0
+for _n in $st_ex; do
+  st_n=$((st_n + 1))
+  jq -e --arg n "$_n" '[.paths[].name] | index($n) != null' "$SCHEMA_SRC" > /dev/null 2>&1 || st_miss="$st_miss $_n"
+done
+if [ "$st_n" -ge 1 ] && [ -z "$st_miss" ]; then
+  ok "st-exempt: each of the $st_n names pull.sh exempts from the state filter ($st_ex) is a paths[].name in the schema"
+else
+  bad "st-exempt: exempt names [$st_ex] count=$st_n, not in the schema:[$st_miss]"
 fi
 
 # ================================ iv, v: no snapshot, an oversized region ===================================
@@ -540,6 +693,7 @@ fi
 # file (absent then) is the pull's write and deliver commits it.
 s_snap_hdr() { sed -n 1p "$Sw/c/.git/ai-dlc-pull/dirty-snapshot" 2>/dev/null; }
 s_hdr3="$(s_snap_hdr)"
+printf '{"row":1}\n' > "$Sw/c/_bmad-output/spawn-ledger.jsonl"
 deliver_env s || { echo "FIXTURE BROKEN: deliver_env s" >&2; exit 2; }
 deliver_run s "$Sw/dist" "$SB" "$Sw/c" "$ST"; s_drc=$?
 s_ns="$(world_git -C "$Sw/c" show --name-status -M --format= HEAD)"
@@ -549,6 +703,12 @@ if [ -n "$S1_HDR" ] && [ "$S1_HDR" = "$s_hdr3" ] && [ "$S1_HDR" = "$(s_snap_hdr)
   ok "vii: two off-branch ask rounds keep round 1's snapshot ($(printf '%s' "$S1_HDR" | awk '{print $4}')), and deliver commits the answer history appended between them"
 else
   bad "vii: snapshot header round 1 '$S1_HDR' after round 3 '$s_hdr3' now '$(s_snap_hdr)'; deliver rc=$s_drc out: $(tr '\n' '|' < "$WORK/s-deliver.out" | cut -c1-200) commit: $(tr '\n\t' '| ' <<<"$s_ns" | cut -c1-300)"
+fi
+# st-noschema: this world installs no schema, so the state filter is off: one NOTE, and a state file written after the snapshot is committed as before.
+if [ "$s_drc" = 0 ] && [ "$(grep -c '^NOTE deliver-state-unfiltered ' "$WORK/s-deliver.out")" = 1 ] && grep -qx 'A	_bmad-output/spawn-ledger.jsonl' <<<"$s_ns"; then
+  ok "st-noschema: no schema in the consumer: NOTE deliver-state-unfiltered once, and the pipeline-state file is committed"
+else
+  bad "st-noschema: deliver rc=$s_drc out: $(tr '\n' '|' < "$WORK/s-deliver.out" | cut -c1-300) commit: $(tr '\n\t' '| ' <<<"$s_ns" | cut -c1-300)"
 fi
 # l: an answer given for one theirs never answers the same row once theirs moves.
 copy_world seed-stray s4
@@ -725,4 +885,101 @@ else
 fi
 # ===== end BL-1190 note arm =====
 
-report_end reconcile-pull-driver 51
+# ===== BL-1173: the deliver-time BMAD manifest probe (pl_bmad_probe) =====
+# bm_world <world> <record: old|none|same> <rc>: a delivery world (copy of seed-main, no apply, so no snapshot) on an
+# update branch whose consumer carries _bmad/_config/manifest.yaml (v1), a stub validator that appends to a sentinel
+# and exits with the rc in a file, and the record per <record>; the manifest is then edited to v2 (or kept at v1
+# for `same`). The stub, manifest and record are committed first, so only the v2 edit and a notes file are the pull's.
+BM_REC=_bmad-output/ai-dlc-update/bmad-manifest-digest
+bm_world() {
+  copy_world seed-main "$1" || return 1
+  local c="$WORK/$1/c"
+  world_git -C "$c" checkout -q -b ai-dlc-update/2.0.0-reconcile-20260102T000000Z || return 1
+  mkdir -p "$c/_bmad/_config" "$c/_bmad-output/ai-dlc-update" "$c/notes" || return 1
+  printf 'manifest: v1\n' > "$c/_bmad/_config/manifest.yaml"
+  BM_V1="$(world_git -C "$c" hash-object --no-filters -- _bmad/_config/manifest.yaml)"
+  case "$2" in
+    old|same) printf 'ai-dlc-bmad-manifest 1 %s\n' "$BM_V1" > "$c/$BM_REC" ;;
+    none) : ;;
+  esac
+  printf '%s\n' '#!/usr/bin/env bash' "echo run >> '$WORK/$1.sent'" 'echo "FAIL: stub invocation"' "exit \$(cat '$WORK/$1.rc')" \
+    > "$c/scripts/ai-dlc/validate-bmad-invocations.sh" || return 1
+  printf '%s\n' "$3" > "$WORK/$1.rc"
+  world_commit "$c" "bmad probe world" || return 1
+  [ "$2" = same ] || printf 'manifest: v2\n' > "$c/_bmad/_config/manifest.yaml"
+  printf 'operator untracked\n' > "$c/notes/bm-untracked.txt"
+  BM_V2="$(world_git -C "$c" hash-object --no-filters -- _bmad/_config/manifest.yaml)"
+  deliver_env "$1"
+}
+bm_sent() { if [ -f "$WORK/$1.sent" ]; then wc -l < "$WORK/$1.sent" | tr -d ' '; else echo 0; fi; }
+bm_head_rec() { world_git -C "$WORK/$1/c" show "HEAD:$BM_REC" 2>/dev/null; }
+bm_remote() { world_git --git-dir="$WORK/$1-origin.git" rev-parse -q --verify "refs/heads/$2" 2>/dev/null; }
+# M: manifest changed vs the record, validator exit 1 refuses; the same world with exit 0 delivers.
+bm_world bm old 1 || { echo "FIXTURE BROKEN: bm_world bm" >&2; exit 2; }
+BMB="$(cat "$WORK/bm/.B")"; BMT="$(cat "$WORK/bm/.T")"; BM_BR="$(world_git -C "$WORK/bm/c" symbolic-ref -q --short HEAD)"
+BM_H0="$(world_git -C "$WORK/bm/c" rev-parse HEAD)"; BM_BLOB="$BM_V2"; BM_OLD="$BM_V1"
+deliver_run bm "$WORK/bm/dist" "$BMB" "$WORK/bm/c" "$BMT"; bm1_rc=$?
+if [ "$bm1_rc" = 2 ] && grep -qx 'REFUSED deliver-bmad-invocations rc=2' "$WORK/bm-deliver.out" \
+   && grep -q 'stub invocation' "$WORK/bm-deliver.err" && grep -q 'npx bmad-method install' "$WORK/bm-deliver.err" \
+   && [ "$(bm_sent bm)" = 1 ] && [ "$(world_git -C "$WORK/bm/c" rev-parse HEAD)" = "$BM_H0" ] \
+   && [ -z "$(bm_remote bm "$BM_BR")" ] && ! grep -q '^DECIDE' "$WORK/bm-deliver.out" \
+   && [ "$(bm_head_rec bm)" = "ai-dlc-bmad-manifest 1 $BM_OLD" ] && [ "$BM_BLOB" != "$BM_OLD" ]; then
+  ok "bmad probe: a changed manifest and a failing validator refuse (REFUSED deliver-bmad-invocations), HEAD unchanged, the branch absent on origin, no DECIDE row, the record kept at the old blob"
+else
+  bad "bmad probe rc1: rc=$bm1_rc sent=$(bm_sent bm) out: $(tr '\n' '|' < "$WORK/bm-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/bm-deliver.err")"
+fi
+printf '0\n' > "$WORK/bm.rc"
+deliver_run bm "$WORK/bm/dist" "$BMB" "$WORK/bm/c" "$BMT"; bm2_rc=$?
+if [ "$bm2_rc" = 0 ] && grep -qx 'NOTE bmad-probe pass' "$WORK/bm-deliver.out" && grep -qx 'DECIDE pr https://example.invalid/pr/1 opened' "$WORK/bm-deliver.out" \
+   && [ "$(bm_head_rec bm)" = "ai-dlc-bmad-manifest 1 $BM_BLOB" ] && [ "$(bm_sent bm)" = 2 ] \
+   && [ "$(bm_remote bm "$BM_BR")" = "$(world_git -C "$WORK/bm/c" rev-parse HEAD)" ]; then
+  ok "bmad probe: the same world with validator exit 0 passes, delivers, and the COMMITTED record holds the current manifest blob"
+else
+  bad "bmad probe rc0 rerun: rc=$bm2_rc record='$(bm_head_rec bm)' want $BM_BLOB out: $(tr '\n' '|' < "$WORK/bm-deliver.out" | cut -c1-300)"
+fi
+# U: the record equals the manifest: the validator never runs (bm's sentinel, written by its exit-1 run, is the control).
+bm_world bmu same 1 || { echo "FIXTURE BROKEN: bm_world bmu" >&2; exit 2; }
+deliver_run bmu "$WORK/bmu/dist" "$(cat "$WORK/bmu/.B")" "$WORK/bmu/c" "$(cat "$WORK/bmu/.T")"; bmu_rc=$?
+if [ "$bmu_rc" = 0 ] && grep -qx 'NOTE bmad-probe unchanged' "$WORK/bmu-deliver.out" && [ "$(bm_sent bmu)" = 0 ] && [ "$(bm_sent bm)" -ge 1 ] \
+   && [ "$(bm_head_rec bmu)" = "ai-dlc-bmad-manifest 1 $BM_V1" ]; then
+  ok "bmad probe: record equal to the manifest: NOTE bmad-probe unchanged, the validator never ran (the changed-manifest world's did), delivered"
+else
+  bad "bmad probe unchanged: rc=$bmu_rc sent=$(bm_sent bmu) control sent=$(bm_sent bm) out: $(tr '\n' '|' < "$WORK/bmu-deliver.out" | cut -c1-300)"
+fi
+# N: no record, validator exit 1: a first pull never blocks; the record is written and committed.
+bm_world bmn none 1 || { echo "FIXTURE BROKEN: bm_world bmn" >&2; exit 2; }
+deliver_run bmn "$WORK/bmn/dist" "$(cat "$WORK/bmn/.B")" "$WORK/bmn/c" "$(cat "$WORK/bmn/.T")"; bmn_rc=$?
+if [ "$bmn_rc" = 0 ] && grep -qx 'NOTE bmad-probe no-baseline rc=1' "$WORK/bmn-deliver.out" && [ "$(bm_sent bmn)" = 1 ] \
+   && [ "$(bm_head_rec bmn)" = "ai-dlc-bmad-manifest 1 $BM_V2" ] \
+   && grep -q 'FAIL: stub invocation' "$WORK/bmn-deliver.err" && grep -q 'npx bmad-method install' "$WORK/bmn-deliver.err"; then
+  ok "bmad probe: no record and validator exit 1: NOTE bmad-probe no-baseline rc=1, delivers, the committed record holds the manifest blob"
+else
+  bad "bmad probe no-baseline: rc=$bmn_rc record='$(bm_head_rec bmn)' out: $(tr '\n' '|' < "$WORK/bmn-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/bmn-deliver.err")"
+fi
+# S: changed manifest, validator exit 2: reported SKIP, delivers, the record stays at the old blob.
+bm_world bms old 2 || { echo "FIXTURE BROKEN: bm_world bms" >&2; exit 2; }
+deliver_run bms "$WORK/bms/dist" "$(cat "$WORK/bms/.B")" "$WORK/bms/c" "$(cat "$WORK/bms/.T")"; bms_rc=$?
+if [ "$bms_rc" = 0 ] && grep -q '^NOTE bmad-probe SKIP rc=2' "$WORK/bms-deliver.out" && [ "$(bm_sent bms)" = 1 ] \
+   && [ "$(bm_head_rec bms)" = "ai-dlc-bmad-manifest 1 $BM_V1" ] && [ "$BM_V2" != "$BM_V1" ]; then
+  ok "bmad probe: validator exit 2: NOTE bmad-probe SKIP, delivers, no record written (the committed record is still the old blob)"
+else
+  bad "bmad probe rc2: rc=$bms_rc record='$(bm_head_rec bms)' out: $(tr '\n' '|' < "$WORK/bms-deliver.out" | cut -c1-300)"
+fi
+# bmd: the record is in the always-stage set. A world WITH a snapshot that lists the record as dirty (index blob equal to HEAD's) still
+# commits the record the probe rewrote; without the always-stage row the snapshot's unchanged-index rule leaves it out of the commit.
+bm_world bmd old 0 || { echo "FIXTURE BROKEN: bm_world bmd" >&2; exit 2; }
+bmd_c="$WORK/bmd/c"; bmd_gd="$bmd_c/.git"; bmd_th="$(world_git -C "$WORK/bmd/dist" rev-parse -q --verify "$(cat "$WORK/bmd/.T")^{commit}")"
+bmd_ix="$(world_git -C "$bmd_c" rev-parse "HEAD:$BM_REC")"
+bmd_wt="$(printf 'operator edit\n' | world_git -C "$bmd_c" hash-object -w --stdin)"
+mkdir -p "$bmd_gd/ai-dlc-pull" && printf 'ai-dlc-dirty-snapshot 2 %s run-20260102T000000Z-1\nM \t%s\t%s\t%s\t-\n' "$bmd_th" "$bmd_ix" "$bmd_wt" "$BM_REC" > "$bmd_gd/ai-dlc-pull/dirty-snapshot" \
+  || { echo "FIXTURE BROKEN: cannot write the bmd snapshot" >&2; exit 2; }
+deliver_run bmd "$WORK/bmd/dist" "$(cat "$WORK/bmd/.B")" "$bmd_c" "$(cat "$WORK/bmd/.T")"; bmd_rc=$?
+if [ "$bmd_rc" = 0 ] && grep -qx 'NOTE bmad-probe pass' "$WORK/bmd-deliver.out" && [ -n "$bmd_th" ] && [ "$BM_V2" != "$BM_V1" ] \
+   && [ "$(bm_head_rec bmd)" = "ai-dlc-bmad-manifest 1 $BM_V2" ]; then
+  ok "bmad probe: a record dirty at the snapshot is still committed with the digest the probe wrote (it is an always-stage path)"
+else
+  bad "bmad probe always-stage: rc=$bmd_rc record='$(bm_head_rec bmd)' want $BM_V2 out: $(tr '\n' '|' < "$WORK/bmd-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/bmd-deliver.err")"
+fi
+# ===== end BL-1173 arms =====
+
+report_end reconcile-pull-driver 68

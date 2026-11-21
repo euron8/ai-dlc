@@ -3835,34 +3835,6 @@ Step: pipeline
 
 verify: manual
 
-## BL-1173 — the stated reason for not looping `bmad-review` contradicts the current BMAD docs, and a BMAD skill the pipeline invokes can vanish at an upgrade and fail only at the next planning gate
-
-**NOTE.** OPEN. Filed 2026-11-18. Owner: `core/skills/ai-dlc/steps/_gate-procedures.md:693–698` and the upgrade path that should run `core/scripts/validate-bmad-invocations.sh`.
-
-Two readings from https://docs.bmad-method.org on 2026-11-18 (about 60 pages; the pages carry no version):
-
-1. `_gate-procedures.md:694–696` gives the `bmad-review` contract as "find at least ten issues; re-check rather than stop on zero findings; emit no severity". The current docs say the review never pads and that zero findings is a valid outcome. The installed skill text on the consumer (bmm 6.12.4) is not tracked in its git and was not read.
-2. A keyword scan of the fetched pages returns 0 hits each for `bmad-spec`, `sprint-planning`, `create-epics`, `implementation-readiness` and `bmad-testarch`, with `bmad-agent-po` hitting as the control. The docs describe a later generation built on a ticket tree, `bmad-build` and `bmad-code-review`. `validate-bmad-invocations.sh` already resolves every `/bmad-*` name the rulebook invokes (`:188–200`, failing at `:246`) and adds a capability probe for the readiness gate and the adversarial lens (`:208–227`). It runs as Check 32 at planning gates (`steps/gate-validation.md:3247`); `git grep validate-bmad-invocations -- core ':!core/fixtures'` names no upgrade-time caller.
-
-Fix: (1) read the installed `bmad-review` text and correct the sentence if it is stale; (2) run the existing invocation probe when the consumer's BMAD install changes, so a dropped name fails at the upgrade.
-
-Baseline: one contract sentence unverified against the installed skill; the invocation probe runs at planning gates only.
-
-Expected movement: none on wall clock or dollars; an upgrade to the docs' generation fails at the upgrade and not at a planning gate mid-sprint.
-
-Provenance: batch 259, cluster C4, from the BMAD documentation comparison; id allocated by lead ai-dlc-64.
-
-**PARTIAL (v0.1169.0).** batch 259, C5. Part 1 closed on the reading (installed bmm 6.12.4 lens-adversarial.md:5,8,19 matches `_gate-procedures.md:693-698`). Part 2 shipped in part: `ai-dlc-update` step 7z runs `validate-bmad-invocations.sh` at every ai-dlc pull and reports, never blocks. A BMAD install changed between pulls still surfaces first at Check 32 at the next planning gate, because ai-dlc does not drive `npx bmad-method install`. Owed: a blocking upgrade-time check.
-
-1. Part 1 closed on the reading, with no edit. The consumer's installed bmm 6.12.4 (graph `_bmad/_config/manifest.yaml`) adversarial lens, `.claude/skills/bmad-review/references/lens-adversarial.md:5,8,19`, reads "at least ten", "re-check on zero" and "No severity, priority, or ranking", which is what `_gate-procedures.md:693–698` states for `lenses=adversarial`. The sentence is accurate for the installed version; the docs site describes a later generation. The same claim at `rule-bodies/rule-20.md:81` and `team-roles/adversary.md:29` stands.
-2. Part 2 shipped in this release. `core/skills/ai-dlc-update/SKILL.md` step 7z runs `scripts/ai-dlc/validate-bmad-invocations.sh` after Apply and before step 8 Deliver: exit 1 surfaces each FAIL line as a delivery finding naming the BMAD floor and the remedy `npx bmad-method install`; exit 2 surfaces as SKIP; it never blocks. `enforcement-map.yaml` check 32 gains the call site (`:753–755`). The hand-run probe and its mutant (validator line deleted, read as FAIL) are in this release's commit message.
-
-Movement: none on wall clock or dollars, as expected; a dropped `/bmad-*` name now surfaces at the upgrade that drops it.
-
-Step: pipeline
-
-verify: manual
-
 ## BL-1174 — the efficiency extractor's segment clock charges an out-of-order record twice, so every published sprint-hours figure is overstated
 
 **DEFECT (efficiency).** OPEN. Filed 2026-11-18. Owner: `docs/analysis/pipeline-efficiency-s317-s320/scripts/extract.py` (`scan()`, the `prev_t` assignment) and every committed output and report derived from its `segs.jsonl`.
@@ -4612,13 +4584,20 @@ verify: manual
 
 Goal: an update PR never carries the operator's own uncommitted edits to a file the pull also rewrites. One done condition: with an uncommitted operator key in `.claude/settings.json` and a pull that writes that file, the update PR's diff of `.claude/settings.json` holds only the pull's keys, and a fixture arm holds the dirty case and a clean twin.
 
-Record: from ai-dlc-b3's probe of the combined pull driver (batch 262, cluster H, the operator-dirty case); ai-dlc-cb (cluster A) said it is by design. BL-1196's keep set commits each path the pull wrote, whole. Where settings-merge wrote `.claude/settings.json`, that path is in the keep set, so an unrelated uncommitted key the operator had in the same file is committed with it. Argued from the keep set and observed once on the probe; not re-run since.
+Record: from ai-dlc-b3's probe of the combined pull driver (batch 262, cluster H, the operator-dirty case); ai-dlc-cb (cluster A) said it is by design. BL-1196's keep set commits each path the pull wrote, whole. Where settings-merge wrote `.claude/settings.json`, that path is in the keep set, so an unrelated uncommitted key the operator had in the same file is committed with it. Argued from the keep set and observed once on the probe; not re-run since. Reading for the owed item: graph's installed `.claude/settings.json` (9718 bytes, clean) is byte-identical to `jq .` of itself (control: a compact JSON file differs), and `settings-merge.sh` passes jq no indent or sort flags, so the non-jq-formatted case is unreachable on graph today; the adjacent-hunk case stays reachable.
 
 Work list:
 
 1. Reproduce on a scratch consumer: an uncommitted operator key in `.claude/settings.json`, then a pull whose settings-merge writes the file; record the update PR's diff of that file.
 2. Decide the carrier: commit only the keys the pull wrote (a patch of the pull's own change), or refuse the pull's commit while the file is dirty and name it.
 3. Build it with a fixture arm: the dirty case fails without the change, and a clean file stays byte-identical to today's commit.
+4. Owed: `$rec.branch` in `core/skills/ai-dlc-update/reconcile/pull.sh` is written (~:379) and removed (~:326) but never read, and its writer has a refusal path (`dirty-snapshot-branch`); delete the writer, the rm and the header sentence describing it.
+5. Owed: an abandon followed by a retry still commits operator edits made in between to files that were clean at the first snapshot; it needs a record of the pull's own writes.
+6. Owed: the merged blob is built with `hash-object -w --no-filters` from raw worktree bytes, so eol, clean and LFS attributes on a merged file are bypassed.
+7. Owed: a pull write to a pipeline-state schema path that no record names is now left out of the commit; the search for such writes (`apply.sh`) was not exhaustive, so enumerate them.
+8. Owed: the SKIP clause of `core/fixtures/reconcile-pull-driver/run.sh`, taken when `pull.sh` lacks `pl_deliver_merge()`, skips all 61 assertions and its message does not name the deliver merge.
+
+**PARTIAL (v0.1217.0).** Batch 263, E. Items 1 to 3 built: deliver commits, for a tracked file already dirty at the first apply that the pull also changed, only the pull's change (a 3-way merge; the operator's edit stays an unstaged diff). The entry stays open on one owed item: a dirty file whose 3-way merge with the pull conflicts, from adjacent hunks or a non-jq-formatted copy, is still staged whole, now with a `NOTE deliver-dirty-whole` in the PR body. The reconcile-pull-driver fixture holds the dirty case and its clean twin.
 
 Step: n/a
 
