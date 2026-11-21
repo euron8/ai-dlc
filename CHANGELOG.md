@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1197.0] - 2026-11-20
+
+### A faithful rebase of a layered override stamps `readopt` even when the new core moved a line into a different section (BL-1197, PC-S324-READOPT-REBASE-REFUSED-ON-CROSS-SECTION-REFLOW-REMAINDER)
+
+- For every consumer that carries an override shadowing several sections of one core file. When a new core re-flowed a base line into a longer line of a different shadowed section, `readopt-override.sh --stamp readopt` refused the rebase as still holding superseded core text, though the body carried the new text. The only stamp left was `reaffirm`, which records the rebase under the wrong outcome name. On graph's 0.1193.0 to 0.1194.0 pull the refused line was the retro step's `touch _bmad-output/pipeline-paused.flag` line.
+- `changed_lines` now lets a line's own section decide whenever that section at the new core still contains the line's words, and the body must carry the carrier there. Other sections the override shadows are consulted only when the own section no longer contains the words, and one acquits only when the body carries the carrier in it. A faithful cross-section rebase stamps `readopt`. A line negated in place still refuses with the superseded-line report, whether the negation is in its own section or in another one.
+- Fixture `layer-readopt-gate` gains arm K (shard d): a faithful forward cross-section move, a two-way swap between two sections (which also catches a per-anchor cache leak), and one negated control covering a line negated in another section and a line negated in its own section while another section holds its words.
+- Which pull first runs it: the pull that delivers this release, from step 3, when its step-2 self-update gate passes.
+
 ## [0.1196.0] - 2026-11-20
 
 ### Fenced code in a retired rulebook block no longer reads as a reproduced passage (PC-S324-RETIRED-LAYER-PASSAGE-FENCE-EXCLUSION-DEFEATED-BY-STAR-STRIP, BL-1198)

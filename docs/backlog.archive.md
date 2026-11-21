@@ -47310,3 +47310,24 @@ Work list:
 Provenance: consumer candidate PC-S324-RETIRED-LAYER-PASSAGE-FENCE-EXCLUSION-DEFEATED-BY-STAR-STRIP; id allocated by the lead.
 
 verify: manual
+## BL-1197 — `readopt-override.sh --stamp readopt` refused a faithful rebase when the new core carries a superseded base line in a different shadowed section
+
+**LANDED (v0.1197.0).** **DEFECT.** Filed by the consumer as PC-S324-READOPT-REBASE-REFUSED-ON-CROSS-SECTION-REFLOW-REMAINDER. Owner: `core/skills/ai-dlc-update/reconcile/readopt-override.sh`, `changed_lines`. History: BL-209 fixed the same-section form of this refusal.
+
+`changed_lines` acquitted a base line that the new core re-flowed only when the line survived inside a longer line of the SAME section at theirs. When the reflow moved the text into a longer line of a DIFFERENT section the override shadows, the line read as superseded: `stale_lines` reported it and `--stamp readopt` refused a body that carried the new core's text, leaving `--stamp reaffirm` as the only stamp. On the consumer's pull, theirs `5e9aafeb`, the base's standalone section-5 line `` `touch _bmad-output/pipeline-paused.flag`. `` survived as the tail of section 7's line `` turn): `touch _bmad-output/pipeline-paused.flag`. ``.
+
+Goal: a faithful cross-section rebase stamps `readopt`, and a line negated in place still refuses.
+
+1. `changed_lines` decides a re-flowed line in `carried_in_shadow`: the own section at theirs decides whenever it still contains the line's words (the body must carry the carrier there). The other sections the override shadows are consulted only when the own section no longer contains the words, and a section acquits only when the body carries the carrier there (`carried_in_context`). So a line negated in place still refuses, whether the other section holds its words or not.
+2. The fixture `layer-readopt-gate` arm K (shard d) holds three cases: a faithful forward cross-section move; a two-way swap between two sections, which also catches a per-anchor cache leak; and one negated control covering both shapes, a line negated in another section and a line negated in its own section while another section holds its words.
+
+Probe (hand-run once, in the fix commit message): scratch clone of the consumer at the commit that stamped the override onto `5e9aafeb`, base reset to `e8528176`. Base script: rc 1, `STALE-CORE-TEXT` on the one line. Fixed script: rc 0, and `--stamp readopt` stamps. Mutant with the section-7 carrier edited out of the body: `--stamp readopt` refuses with rc 1.
+
+Done condition: the receipt below exits 0, and arm K of `layer-readopt-gate` (shard d) passes on the push that delivers it.
+
+BL-868: no test depends on load.
+
+Provenance: batch 262, B; id allocated by the lead.
+
+verify: sh grep -qF 'carried_in_shadow "$2" "$3" "$line" "$4" && continue' core/skills/ai-dlc-update/reconcile/readopt-override.sh && grep -qF 'carried_in_context "$1" "$id" "$3"' core/skills/ai-dlc-update/reconcile/readopt-override.sh && ! grep -qF 'carries "$to_flat" "$line" && carried_in_context' core/skills/ai-dlc-update/reconcile/readopt-override.sh
+

@@ -2290,6 +2290,218 @@ fi
 
 rm -f "$JOK" "$JBAD" "$JNEG" "$JNEGOK"
 
+# CROSS-SECTION RE-FLOW (BL-1197). One override shadows two sections, A (Rule 18) and B (Rule 19).
+# Between base and theirs a base line standalone in A is DELETED there and reappears as the tail
+# of a LONGER line in B -- the shape a consumer measured when a rule's closing line moved from one
+# numbered section to a later one. KTH carries the moved line faithfully; NTH carries the same
+# line behind `Never `, so its meaning is inverted. Both are built on JTH, so the arms above are
+# untouched.
+JKL="Unchanged base..theirs, so the entry stays OVERRIDE-OK and the unclaimed row cannot be"
+# NTH also negates a SECOND line, JL2, IN ITS OWN section (rule 18), while rule 19 holds JL2's words
+# inside a longer line the body carries: the other section's carrier must not acquit it.
+JL2="Claimed by ONE entry whose body carries a SECOND same-level section that no anchor names."
+JL2X="Cross-reference, unchanged in force: ${JL2}"
+for JKV in plain never; do
+  python3 - "$DIST/core/skills/ai-dlc/SKILL.md" "$JKV" "$JKL" "$JL2" "$JL2X" <<'JKPY'
+import sys
+p, kind, line, l2, l2x = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+s = open(p).read()
+assert s.count(line + "\n") == 1, "rule 18 seed text moved; re-anchor the cross-section arm"
+s = s.replace(line + "\n", "")
+head = "## Rule 19 -- Sweep\n\n"
+assert head in s, "rule 19 seed text moved; re-anchor the cross-section arm"
+pre = "Close-out rule moved here: " if kind == "plain" else "Never close-out rule moved here: "
+s = s.replace(head, head + pre + line + "\n", 1)
+if kind != "plain":
+    assert s.count(l2 + "\n") == 1, "rule 18 first line moved; re-anchor the own-section negation"
+    s = s.replace(l2 + "\n", "Never " + l2 + "\n")
+    s = s.replace(head, head + l2x + "\n", 1)
+open(p, "w").write(s)
+JKPY
+  git -C "$DIST" add -A >/dev/null 2>&1
+  git -C "$DIST" -c user.email=f@x -c user.name=f commit -qm "move a rule 18 line into rule 19 ($JKV)" >/dev/null 2>&1
+  if [ "$JKV" = plain ]; then
+    JKTH="$(git -C "$DIST" rev-parse --short HEAD)"
+    git -C "$DIST" checkout -q --detach "$JTH" >/dev/null 2>&1
+  else
+    JNTH="$(git -C "$DIST" rev-parse --short HEAD)"
+  fi
+done
+# SEED: at KTH and at NTH the line is absent whole and uncontained in section A, and contained
+# (not whole) in section B. Without this the arms below could pass or fail on an ordinary rewrite.
+jk_ok=1
+for jk_sha in "$JKTH" "$JNTH"; do
+  jk_a="$(git -C "$DIST" show "${jk_sha}:core/skills/ai-dlc/SKILL.md" | awk '/^## Rule 18/{f=1;next} /^## /{f=0} f' | tr '\n' ' ' | tr -s ' ')"
+  jk_b_lines="$(git -C "$DIST" show "${jk_sha}:core/skills/ai-dlc/SKILL.md" | awk '/^## Rule 19/{f=1;next} /^## /{f=0} f')"
+  jk_b="$(printf '%s\n' "$jk_b_lines" | tr '\n' ' ' | tr -s ' ')"
+  jk_pre="$(git -C "$DIST" show "${JPRE}:core/skills/ai-dlc/SKILL.md" | awk '/^## Rule 18/{f=1;next} /^## /{f=0} f' | tr '\n' ' ' | tr -s ' ')"
+  case "$jk_pre" in *"$JKL"*) ;; *) jk_ok=0 ;; esac
+  case "$jk_a" in *"$JKL"*) jk_ok=0 ;; esac
+  grep -qxF -- "$JKL" <<<"$jk_b_lines" && jk_ok=0
+  case "$jk_b" in *"$JKL"*) ;; *) jk_ok=0 ;; esac
+done
+if [ "$jk_ok" -eq 1 ] && [ "$JKTH" != "$JNTH" ] && [ -n "$JKTH" ] && [ -n "$JNTH" ]; then
+  ok "SEED: the rule 18 line is in base section A, absent whole and uncontained in theirs' A, contained (not whole) in theirs' B -- at both the faithful and the negated theirs"
+else
+  bad "SEED: the rule 18 line did not cross sections (ok=$jk_ok kth=$JKTH nth=$JNTH) -- the cross-section arms below cannot discriminate"
+fi
+
+# SWAP. One theirs commit moves a Rule 18 line X into a longer Rule 19 line AND a Rule 19 line Y
+# into a longer Rule 18 line. Each anchor's call then has to look in the OTHER section, and the
+# two calls need different others, so a flat cached by the first anchor's call and reused by the
+# second reads the wrong section and the stamp refuses. A single move cannot show that: only one
+# anchor's call ever fills the cache.
+JRL="The near-miss for the same arm: its override nests a sub-heading INSIDE the claimed section."
+git -C "$DIST" checkout -q --detach "$JTH" >/dev/null 2>&1
+python3 - "$DIST/core/skills/ai-dlc/SKILL.md" "$JRL" "$JKL" <<'JRPY'
+import sys
+p, y, x = sys.argv[1], sys.argv[2], sys.argv[3]
+s = open(p).read()
+assert s.count(y + "\n") == 1, "rule 19 seed text moved; re-anchor the swap cross-section arm"
+assert s.count(x + "\n") == 1, "rule 18 seed text moved; re-anchor the swap cross-section arm"
+s = s.replace(y + "\n", "").replace(x + "\n", "")
+h18 = "## Rule 18 -- Close-Out\n\n"
+h19 = "## Rule 19 -- Sweep\n\n"
+assert h18 in s and h19 in s, "rule 18/19 headings moved; re-anchor the swap cross-section arm"
+s = s.replace(h18, h18 + "Sweep rule moved here: " + y + "\n", 1)
+s = s.replace(h19, h19 + "Close-out rule moved here: " + x + "\n", 1)
+open(p, "w").write(s)
+JRPY
+git -C "$DIST" add -A >/dev/null 2>&1
+git -C "$DIST" -c user.email=f@x -c user.name=f commit -qm "swap a line between rule 18 and rule 19" >/dev/null 2>&1
+JRTH="$(git -C "$DIST" rev-parse --short HEAD)"
+jr_sec() { # <sha> <rule number> -> the section's lines
+  git -C "$DIST" show "${1}:core/skills/ai-dlc/SKILL.md" | awk -v h="## Rule $2 " 'index($0,h)==1{f=1;next} /^## /{f=0} f'
+}
+jr_flat() { tr '\n' ' ' | tr -s ' '; }
+jr_ok=1
+for jr_pair in "$JKL|18|19" "$JRL|19|18"; do
+  jr_l="${jr_pair%%|*}"; jr_rest="${jr_pair#*|}"; jr_from="${jr_rest%%|*}"; jr_to="${jr_rest#*|}"
+  jr_pre_f="$(jr_sec "$JPRE" "$jr_from" | jr_flat)"
+  jr_th_f="$(jr_sec "$JRTH" "$jr_from" | jr_flat)"
+  jr_to_lines="$(jr_sec "$JRTH" "$jr_to")"
+  jr_to_f="$(printf '%s\n' "$jr_to_lines" | jr_flat)"
+  case "$jr_pre_f" in *"$jr_l"*) ;; *) jr_ok=0 ;; esac
+  case "$jr_th_f" in *"$jr_l"*) jr_ok=0 ;; esac
+  grep -qxF -- "$jr_l" <<<"$jr_to_lines" && jr_ok=0
+  case "$jr_to_f" in *"$jr_l"*) ;; *) jr_ok=0 ;; esac
+done
+if [ "$jr_ok" -eq 1 ]; then
+  ok "SEED: a rule 18 line moved INTO rule 19 and a rule 19 line moved INTO rule 18 in one theirs -- each absent and uncontained in the section it left, contained (not whole) in the other"
+else
+  bad "SEED: the swap did not cross sections both ways (ok=$jr_ok) -- the swap arm cannot discriminate"
+fi
+JXREV="$CONS/.claude/skills/ai-dlc/overrides/J__cross-reverse-adopted.md"
+cat > "$JXREV" <<EOF
+---
+shadows: SKILL.md#Rule 18, SKILL.md#Rule 19
+base_sha: ${JPRE}
+reason: consumer close-out; body carries core's text at theirs verbatim, both swapped lines included.
+---
+
+## Rule 18 -- Close-Out
+
+Sweep rule moved here: ${JRL}
+Claimed by ONE entry whose body carries a SECOND same-level section that no anchor names.
+mistaken for a drift row.
+
+## Rule 19 -- Sweep
+
+Close-out rule moved here: ${JKL}
+A heading-set difference would report that child; a span-based claim does not.
+EOF
+
+JXOK="$CONS/.claude/skills/ai-dlc/overrides/J__cross-adopted.md"
+cat > "$JXOK" <<EOF
+---
+shadows: SKILL.md#Rule 18, SKILL.md#Rule 19
+base_sha: ${JPRE}
+reason: consumer close-out; body carries core's text at theirs verbatim, the moved line included.
+---
+
+## Rule 18 -- Close-Out
+
+Claimed by ONE entry whose body carries a SECOND same-level section that no anchor names.
+mistaken for a drift row.
+
+## Rule 19 -- Sweep
+
+Close-out rule moved here: ${JKL}
+The near-miss for the same arm: its override nests a sub-heading INSIDE the claimed section.
+A heading-set difference would report that child; a span-based claim does not.
+EOF
+JXNEG="$CONS/.claude/skills/ai-dlc/overrides/J__cross-negated-kept.md"
+cat > "$JXNEG" <<EOF
+---
+shadows: SKILL.md#Rule 18, SKILL.md#Rule 19
+base_sha: ${JPRE}
+reason: consumer close-out; still carries the old standalone line, not the inverted carrier theirs holds.
+---
+
+## Rule 18 -- Close-Out
+
+Claimed by ONE entry whose body carries a SECOND same-level section that no anchor names.
+${JKL}
+mistaken for a drift row.
+
+## Rule 19 -- Sweep
+
+${JL2X}
+The near-miss for the same arm: its override nests a sub-heading INSIDE the claimed section.
+A heading-set difference would report that child; a span-based claim does not.
+EOF
+# SEED for the second shape: at NTH rule 18 holds JL2 only inside its Never line, the body does not
+# carry that line, and rule 19 holds JL2 inside a longer line the body DOES carry.
+jl_a_lines="$(git -C "$DIST" show "${JNTH}:core/skills/ai-dlc/SKILL.md" | awk '/^## Rule 18/{f=1;next} /^## /{f=0} f')"
+jl_b_lines="$(git -C "$DIST" show "${JNTH}:core/skills/ai-dlc/SKILL.md" | awk '/^## Rule 19/{f=1;next} /^## /{f=0} f')"
+jl_body="$(tr '\n' ' ' < "$JXNEG" | tr -s ' ')"
+jl_ok=1
+grep -qxF -- "Never ${JL2}" <<<"$jl_a_lines" || jl_ok=0
+grep -qxF -- "$JL2" <<<"$jl_a_lines" && jl_ok=0
+grep -qxF -- "$JL2X" <<<"$jl_b_lines" || jl_ok=0
+grep -qxF -- "$JL2" <<<"$jl_b_lines" && jl_ok=0
+case "$jl_body" in *"Never ${JL2}"*) jl_ok=0 ;; esac
+case "$jl_body" in *"$JL2X"*) ;; *) jl_ok=0 ;; esac
+if [ "$jl_ok" -eq 1 ]; then
+  ok "SEED: theirs' rule 18 holds the second line only inside its Never line (the body does not carry it) and rule 19 holds it inside a longer line the body carries"
+else
+  bad "SEED: the own-section negation shape is not seeded (ok=$jl_ok) -- the second half of the NEGATED ELSEWHERE arm cannot discriminate"
+fi
+
+echo "== K. a line RE-FLOWED ACROSS SECTIONS, faithfully adopted, is not superseded text =="
+before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JXOK" | head -1)"
+out="$(bash "$READOPT" "$DIST" "$JKTH" "$CONS" "$JXOK" --stamp readopt 2>&1)"; rc=$?
+after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JXOK" | head -1)"
+if [ "$rc" -eq 0 ] && [ "$after_sha" = "$JKTH" ] && ! grep -q 'STALE-CORE-TEXT' <<<"$out"; then
+  ok "--stamp readopt LANDS when a base line moved from one shadowed section to the tail of a longer line in another ($before_sha -> $after_sha)"
+else
+  bad "--stamp readopt REFUSED a faithful cross-section re-flow (rc=$rc, base_sha $before_sha -> $after_sha)"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+out="$(bash "$READOPT" "$DIST" "$JNTH" "$CONS" "$JXNEG" --check 2>&1)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out" && grep -qF -- "$JKL" <<<"$out"; then
+  ok "NEGATED ELSEWHERE: a body carrying only the old line, while theirs' other section holds it behind Never, is REFUSED naming it"
+else
+  bad "NEGATED ELSEWHERE: a body teaching the rule core INVERTED in another section was not refused, or the line was not named (rc=$rc) -- the cross-section search acquitted it on containment alone"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+if [ "$rc" -eq 1 ] && grep -qF -- "$JL2" <<<"$out"; then
+  ok "NEGATED IN OWN SECTION: the line theirs negated in its own section is REFUSED naming it, though another shadowed section's carrier holds its words"
+else
+  bad "NEGATED IN OWN SECTION: a line theirs negated in its own section was acquitted by another section's carrier (rc=$rc) -- the cross-section search overrode the own section's verdict"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JXREV" | head -1)"
+out="$(bash "$READOPT" "$DIST" "$JRTH" "$CONS" "$JXREV" --stamp readopt 2>&1)"; rc=$?
+after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JXREV" | head -1)"
+if [ "$rc" -eq 0 ] && [ "$after_sha" = "$JRTH" ] && ! grep -q 'STALE-CORE-TEXT' <<<"$out"; then
+  ok "--stamp readopt LANDS when one line moved each way between the two shadowed sections ($before_sha -> $after_sha)"
+else
+  bad "--stamp readopt REFUSED a faithful two-way cross-section swap (rc=$rc, base_sha $before_sha -> $after_sha) -- state from the first anchor's call leaked into the second"
+  printf '%s\n' "$out" | sed 's/^/    /'
+fi
+rm -f "$JXOK" "$JXNEG" "$JXREV"
+
 fi
 rm -rf "$ROOT"
 echo ""
