@@ -104,6 +104,30 @@ STAMP="$CONSUMER/.claude/.ai-dlc-version"
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$STAMP"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# --- THE SUBJECT IS ASKED IN PROCESS ---------------------------------------------------------------
+# apply.sh is loadable: sourcing it defines `apl_main` and returns at its column-0 source guard. It is sourced ONCE
+# here, and `AP_S=<apply.sh> ap_eng <args>` answers what `bash <apply.sh> <args>` prints and exits with, in a subshell
+# made to look like a fresh bash (core/fixtures/lib/inproc.sh). A copy of the reconcile directory is sourced inside
+# that run's own subshell. KEPT END TO END: the two `cli` cells (cli-pass, cli-refuse), each byte-compared with the
+# in-process answer, and the real pre-push hook (EXIT trap, set -m pool, top-level exit), which cells.decl names.
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# PRE-WRAP CONSUMER GATE (BL-878): a consumer one pull behind carries this fixture with an apply.sh that predates the
+# in-process wrap, and loading it would run its whole body. Neither half is SKIP (FIXTURE BROKEN in the distribution,
+# exit 0 on a consumer); exactly one half FAILS; an unreadable subject is FIXTURE ERROR.
+grep -qxF 'apl_main() { set -uo pipefail' "$APPLY"; _wg1=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$APPLY"; _wg2=$?
+[ "$_wg1" -le 1 ] && [ "$_wg2" -le 1 ] || { echo "FIXTURE ERROR: cannot read $APPLY (grep exit $_wg1/$_wg2)" >&2; exit 2; }
+case "$_wg1$_wg2" in
+  00) : ;;
+  11) echo "SKIP: apply-restamp-theirs: $APPLY predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) bad "$APPLY carries one half of the in-process wrap (apl_main line: rc $_wg1, column-0 source guard: rc $_wg2) -- a respelled subject this fixture cannot drive"
+     report_end apply-restamp-theirs ;;
+esac
+inproc_load "$APPLY" || { echo "FIXTURE BROKEN: sourcing $APPLY defined nothing" >&2; exit 2; }
+declare -F apl_main >/dev/null || { echo "FIXTURE BROKEN: $APPLY defined no apl_main when sourced" >&2; exit 2; }
+ap_eng() { inproc_run "$AP_S" apl_main "$@"; } # AP_S=<apply.sh> ap_eng [args...] -> what `bash <apply.sh> [args...]` prints and exits with
 # A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer receives this file on the pull
 # that carries it, and the assertion's subject may land later in the same pull -- or in the
 # gated reconcile after it. "Subject not installed" is NOT "subject regressed", and
@@ -133,8 +157,11 @@ else
   exit 2
 fi
 
+# The pristine consumer, kept so the cli cells below start from the very tree the in-process baseline did.
+cp -R "$CONSUMER" "$WORK/consumer.pristine" || { echo "FIXTURE ERROR: could not copy the pristine consumer" >&2; exit 2; }
+
 # --- Assertion 1: the stamp records THEIRS' version ---------------------------
-out="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
+out="$(AP_S="$APPLY" ap_eng "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
 got_ver="$(sed -n 's/^version: *//p' "$STAMP")"
 if [ "$got_ver" = "$theirs_ver" ]; then
   ok "stamp records theirs' version ($theirs_ver)"
@@ -161,7 +188,7 @@ printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$STAMP"
 # is modified-and-uncommitted, so the dirty 9.9.9 survives the checkout and the "control"
 # would silently still be testing the mismatched case.
 git -C "$DIST" show "$THEIRS:VERSION" > "$DIST/VERSION"
-bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
+AP_S="$APPLY" ap_eng "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
 ctl_ver="$(sed -n 's/^version: *//p' "$STAMP")"
 if [ "$ctl_ver" = "$theirs_ver" ]; then
   ok "control: checkout already on theirs still stamps $theirs_ver"
@@ -243,7 +270,7 @@ APPLY2="$RECON2/apply.sh"
 W2="$WORK/consumer2"
 mkdir -p "$W2/.claude/session-driver" "$W2/tests/fixtures" || exit 2
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$W2/.claude/.ai-dlc-version"
-out6="$(bash "$APPLY2" "$DIST" "$BASE" "$W2" "$THEIRS" 2>&1)"
+out6="$(AP_S="$APPLY2" ap_eng "$DIST" "$BASE" "$W2" "$THEIRS" 2>&1)"
 if grep -q 'restamp-withheld' <<<"$out6"; then
   if [ -f "$W2/.claude/.ai-dlc-applying" ]; then
     ok "a withheld re-stamp LEAVES the marker — the suite stays blocked on a partial tree"
@@ -253,6 +280,46 @@ if grep -q 'restamp-withheld' <<<"$out6"; then
 else
   bad "setup: could not drive a withheld re-stamp, so assertion 6 proves nothing"
   printf '%s\n' "$out6" | sed 's/^/        /' | head -5
+fi
+
+# --- THE COMMAND LINE ANSWERS WHAT THE IN-PROCESS RUN ANSWERS (cli-pass, cli-refuse) ------------------
+# One `cli` cell per distinct command-line outcome of apply.sh, each byte-compared (stdout, stderr, exit) with ap_eng on
+# the same input from the same path: a completed apply (rc 0, the stamp advanced) and a usage refusal (rc 2).
+EQ="$WORK/eq"; EQC="$EQ/consumer"; EQ_FN=ap_eng
+eq_cell() { # eq_cell <id> <arg>... : in-process then cli on a fresh copy of the pristine consumer at the same path; leaves $EQ/<id>.{in,cli}.{out,err,rc}
+  local id="$1"; shift
+  rm -rf "$EQC"; mkdir -p "$EQ" && cp -R "$WORK/consumer.pristine" "$EQC" || return 1
+  AP_S="$APPLY" "$EQ_FN" "$@" > "$EQ/$id.in.out" 2> "$EQ/$id.in.err"; echo $? > "$EQ/$id.in.rc"
+  rm -rf "$EQC"; cp -R "$WORK/consumer.pristine" "$EQC" || return 1
+  FXCELL="$id" bash "$APPLY" "$@" > "$EQ/$id.cli.out" 2> "$EQ/$id.cli.err"; echo $? > "$EQ/$id.cli.rc"
+}
+eq_same() { # eq_same <id> -> 0 when stdout, stderr and exit are byte-identical
+  cmp -s "$EQ/$1.in.out" "$EQ/$1.cli.out" && cmp -s "$EQ/$1.in.err" "$EQ/$1.cli.err" && cmp -s "$EQ/$1.in.rc" "$EQ/$1.cli.rc"
+}
+if eq_cell cli-pass "$DIST" "$BASE" "$EQC" "$THEIRS" && eq_cell cli-refuse --bogus "$DIST" "$BASE" "$EQC" "$THEIRS" && eq_cell cli-error "$DIST" "$BASE" "$EQC"; then
+  if eq_same cli-pass && [ "$(cat "$EQ/cli-pass.cli.rc")" = 0 ] && [ -s "$EQ/cli-pass.cli.out" ]; then
+    ok "cli-pass: the command line gives the in-process answer on a completed apply (rc 0, $(wc -c < "$EQ/cli-pass.cli.out" | tr -d ' ') bytes of report)"
+  else
+    bad "cli-pass: the command line and the in-process run differ on a completed apply (cli rc $(cat "$EQ/cli-pass.cli.rc"), in rc $(cat "$EQ/cli-pass.in.rc"))"
+  fi
+  if eq_same cli-refuse && [ "$(cat "$EQ/cli-refuse.cli.rc")" = 2 ] && [ -s "$EQ/cli-refuse.cli.err" ]; then
+    ok "cli-refuse: the command line gives the in-process answer on a usage refusal (rc 2, $(head -1 "$EQ/cli-refuse.cli.err" | cut -c1-60))"
+  else
+    bad "cli-refuse: the command line and the in-process run differ on a usage refusal (cli rc $(cat "$EQ/cli-refuse.cli.rc"), in rc $(cat "$EQ/cli-refuse.in.rc"))"
+  fi
+  if eq_same cli-error && [ "$(cat "$EQ/cli-error.cli.rc")" = 1 ] && [ -s "$EQ/cli-error.cli.err" ]; then
+    ok "cli-error: the command line gives the in-process answer on a missing argument (rc 1, $(head -1 "$EQ/cli-error.cli.err" | sed 's/^.*: line [0-9]*: //' | cut -c1-40))"
+  else
+    bad "cli-error: the command line and the in-process run differ on a missing argument (cli rc $(cat "$EQ/cli-error.cli.rc"), in rc $(cat "$EQ/cli-error.in.rc")) err: [$(cat "$EQ/cli-error.cli.err")] vs [$(cat "$EQ/cli-error.in.err")]"
+  fi
+  if [ "$(cat "$EQ/cli-pass.cli.rc")$(cat "$EQ/cli-refuse.cli.rc")$(cat "$EQ/cli-error.cli.rc")" = 021 ] \
+     && ! cmp -s "$EQ/cli-pass.cli.out" "$EQ/cli-refuse.cli.err" && ! cmp -s "$EQ/cli-refuse.cli.err" "$EQ/cli-error.cli.err"; then
+    ok "  the three command-line outcomes are distinct (rc 0, 2 and 1, three different outputs)"
+  else
+    bad "  cli-pass, cli-refuse and cli-error are not three distinct outcomes, so the equivalence above compares one outcome with itself"
+  fi
+else
+  bad "setup: could not build the cli cells' consumer copy"
 fi
 
 # --- Assertions 7/8: THE MARKER'S READER ACTUALLY REFUSES ---------------------
@@ -269,14 +336,14 @@ PP="$WORK/pptree"
 mkdir -p "$PP/.claude" "$PP/tests/fixtures/x" || exit 2
 printf '#!/usr/bin/env bash\nexit 0\n' > "$PP/tests/fixtures/x/run.sh"
 : > "$PP/.claude/.ai-dlc-applying"
-pp_out="$(cd "$PP" && AI_DLC_READSET_LIVE_TRACE=0 bash "$PREPUSH" </dev/null 2>&1)"; pp_rc=$?
+pp_out="$(cd "$PP" && FXCELL=e2e-marker-refuses AI_DLC_READSET_LIVE_TRACE=0 bash "$PREPUSH" </dev/null 2>&1)"; pp_rc=$?
 if grep -q 'ai-dlc-applying' <<<"$pp_out" && [ "$pp_rc" -ne 0 ]; then
   ok "pre-push REFUSES the fixture suite while the marker exists, and names the file"
 else
   bad "pre-push ran the suite on a mid-pull tree (rc=$pp_rc) — the marker is written but nothing reads it"
 fi
 rm -f "$PP/.claude/.ai-dlc-applying"
-pp_out2="$(cd "$PP" && AI_DLC_READSET_LIVE_TRACE=0 bash "$PREPUSH" </dev/null 2>&1)"
+pp_out2="$(cd "$PP" && FXCELL=e2e-marker-absent AI_DLC_READSET_LIVE_TRACE=0 bash "$PREPUSH" </dev/null 2>&1)"
 if ! grep -q 'ai-dlc-applying' <<<"$pp_out2"; then
   ok "  control: with no marker the suite runs normally (the guard is not always-on)"
 else
@@ -322,7 +389,7 @@ case "\$*" in *'file:[ \\t]*core'*)
   case "\$pa" in
     *preclassify.sh*--templates*) k=pct ;;
     *preclassify.sh*) k=pc ;;
-    *apply.sh*) k=ap ;;
+    *apply.sh*|*apply-restamp-theirs/run.sh*) k=ap ;;
     *) k='?' ;;
   esac
   printf '%s %s\n' "\$n" "\$k" >> "$SS/sh/LOG"
@@ -332,33 +399,33 @@ exec "$(command -v awk)" "\$@"
 SH
 chmod +x "$SS/sh/awk"
 ss_seq() { awk '{print $2}' "$SS/sh/LOG" | paste -sd, -; }
-ss_apply() { # ss_apply <apply.sh> -> "calls=<n> seq=<classes> unwritten=<n> stamp=<v>" for an ordinary apply, call 2 failed
+ss_apply() { # ss_apply -> "calls=<n> seq=<classes> unwritten=<n> stamp=<v>" for an ordinary apply, call 2 failed
   local c="$SS/c.$RANDOM" o
   cp -R "$SSC" "$c"; : > "$SS/sh/LOG"
-  o="$(PATH="$SS/sh:$PATH" bash "$1" "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
+  o="$(PATH="$SS/sh:$PATH" AP_S="$APPLY" ap_eng "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
   printf 'calls=%s seq=%s unwritten=%s stamp=%s' "$(grep -c . "$SS/sh/LOG")" "$(ss_seq)" \
     "$(printf '%s\n' "$o" | awk -F'\t' '$1=="DECISION" && $2=="applying-marker-unwritten" && index($4,"setup_sited_paths")' | grep -c .)" \
     "$(sed -n 's/^version: //p' "$c/.claude/.ai-dlc-version")"
 }
-ss_finish() { # ss_finish <apply.sh> -> "calls=<n> unverified=<n> stamp=<v>" for --finish over a tree AT theirs
+ss_finish() { # ss_finish -> "calls=<n> unverified=<n> stamp=<v>" for --finish over a tree AT theirs
   local c="$SS/f.$RANDOM" o
   cp -R "$SSC" "$c"; : > "$SS/sh/LOG"
   git -C "$SSD" show "$SS_T:core/session-driver/ai-dlc-session-driver.sh" > "$c/.claude/session-driver/ai-dlc-session-driver.sh"
   printf 'base: %s\ntheirs: %s\n' "$SS_B" "$SS_T" > "$c/.claude/.ai-dlc-applying"
-  o="$(PATH="$SS/sh:$PATH" bash "$1" --finish "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
+  o="$(PATH="$SS/sh:$PATH" AP_S="$APPLY" ap_eng --finish "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
   printf 'calls=%s seq=%s unverified=%s stamp=%s' "$(grep -c . "$SS/sh/LOG")" "$(ss_seq)" \
     "$(printf '%s\n' "$o" | awk -F'\t' '$1=="WORKLIST" && $2=="finish-unverified-tree" && index($4,"setup_sited_paths")' | grep -c .)" \
     "$(sed -n 's/^version: //p' "$c/.claude/.ai-dlc-version")"
 }
 WANT_SS_APPLY="calls=2 seq=pc,ap unwritten=1 stamp=1.0.0"
 WANT_SS_FINISH="calls=2 seq=pc,ap unverified=1 stamp=1.0.0"
-r="$(ss_apply "$APPLY")"
+r="$(ss_apply)"
 if [ "$r" = "$WANT_SS_APPLY" ]; then
   ok "a sited set apply.sh cannot load withholds the in-flight marker and the stamp ($r)"
 else
   bad "a failed sited-set load in the marker was read as an empty set: got [$r], want [$WANT_SS_APPLY]"
 fi
-r="$(ss_finish "$APPLY")"
+r="$(ss_finish)"
 if [ "$r" = "$WANT_SS_FINISH" ]; then
   ok "--finish over a tree at theirs withholds the stamp when its sited set cannot be loaded ($r)"
 else
@@ -407,14 +474,14 @@ if [ "$old_live" -ne 0 ] \
   bad "FIXTURE BROKEN: could not synthesise a pre-R1 preclassify.sh (function or block anchors moved)"
 else
   c="$SS/skew.$RANDOM"; cp -R "$SSC" "$c"
-  o="$(bash "$OLDPD/apply.sh" "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
+  o="$(AP_S="$OLDPD/apply.sh" ap_eng "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
   r="$(printf '%s\n' "$o" | awk -F'\t' '$1=="DECISION" && $2=="applying-marker-unwritten" && index($4,"(exit 127)") && index($4,"predates") && index($4,"version skew") && !index($4,"present and readable")' | grep -c .)"
   [ "$r" = 1 ] && ok "a newer apply.sh beside a pre-R1 preclassify.sh fails closed and names the version skew, not an unreadable file" \
     || bad "a newer apply.sh beside a pre-R1 preclassify.sh did not name the version skew: $(printf '%s\n' "$o" | awk -F'\t' '$2=="applying-marker-unwritten" {print $4}' | cut -c1-200)"
   c="$SS/skewf.$RANDOM"; cp -R "$SSC" "$c"
   git -C "$SSD" show "$SS_T:core/session-driver/ai-dlc-session-driver.sh" > "$c/.claude/session-driver/ai-dlc-session-driver.sh"
   printf 'base: %s\ntheirs: %s\n' "$SS_B" "$SS_T" > "$c/.claude/.ai-dlc-applying"
-  o="$(bash "$OLDPD/apply.sh" --finish "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
+  o="$(AP_S="$OLDPD/apply.sh" ap_eng --finish "$SSD" "$SS_B" "$c" "$SS_T" 2>&1)"
   r="$(printf '%s\n' "$o" | awk -F'\t' '$1=="WORKLIST" && $2=="finish-unverified-tree" && index($4,"(exit 127)") && index($4,"version skew") && !index($4,"present and readable")' | grep -c .)"
   [ "$r" = 1 ] && ok "--finish with a pre-R1 preclassify.sh withholds the stamp and names the version skew" \
     || bad "--finish with a pre-R1 preclassify.sh did not name the version skew: $(printf '%s\n' "$o" | awk -F'\t' '$2=="finish-unverified-tree" {print $4}' | cut -c1-200)"

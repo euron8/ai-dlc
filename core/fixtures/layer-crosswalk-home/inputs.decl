@@ -6,6 +6,10 @@
 !core/skills/ai-dlc-update/reconcile/apply.sh
 core/skills/ai-dlc-update/reconcile/
 core/skills/ai-dlc/
-# lib rows derived from run.sh:2,55 (preamble.sh, report.sh).
+# lib rows derived from run.sh (preamble.sh, report.sh, and inproc.sh, mutant.sh -- the fx_inproc counter inproc.sh sources -- and layout.sh).
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh
+core/scripts/artifact-path-config.sh

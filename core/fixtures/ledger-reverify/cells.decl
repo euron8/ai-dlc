@@ -1,0 +1,6 @@
+# ledger-reverify (shard a): every run of the closer is in process (lr_eng) except three that stay end to end, because the
+# property each asserts is decided at the top of a process. The four CLI outcomes and their equivalence cells are in
+# shard b (ledger-reverify-b/cells.decl).
+e2e core/skills/ai-dlc-update/reconcile/ledger-reverify.sh e2e-memo-standalone why=a run with AI_DLC_RECONCILE_MEMO unset builds its memo at source time and removes it on exit; lib.sh builds it only at BASH_SUBSHELL 0, the top of a process, which no subshell is
+e2e core/skills/ai-dlc-update/reconcile/ledger-reverify.sh e2e-receipt-bl890 why=receipt-bl890.sh is a shipped standalone program that scrubs AI_DLC_* (the memo variable included) and starts the closer itself, so the closer builds its own memo at BASH_SUBSHELL 0
+e2e core/skills/ai-dlc-update/reconcile/ledger-reverify.sh e2e-receipt-bl932 why=receipt-bl932.sh is a shipped standalone program that scrubs AI_DLC_* (the memo variable included) and starts the closer itself, so the closer builds its own memo at BASH_SUBSHELL 0

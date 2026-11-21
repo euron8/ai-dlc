@@ -1,0 +1,10 @@
+# layer-crosswalk-home: every run of validate-layer-entries.sh and of apply.sh is in process (lint_eng, ap_eng) except the
+# command-line cells below, each byte-compared (stdout, stderr, exit) with the in-process answer on the same input from
+# the same path, and required pairwise distinct per subject.
+# The linter: E16 reported (rc 1), a clean consumer (rc 0) and the undeclared-crosswalk-path refusal.
+cli core/scripts/validate-layer-entries.sh cli-lint-findings
+cli core/scripts/validate-layer-entries.sh cli-lint-clean
+cli core/scripts/validate-layer-entries.sh cli-lint-refusal
+# apply.sh: a completed pull (rc 0) and an unknown-option refusal (rc 2).
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-pass
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-refuse

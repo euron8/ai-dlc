@@ -47972,4 +47972,16 @@ Step: n/a
 
 verify: manual
 
+## BL-1206 — a short digest cite typed in UPPERCASE hex is not recognised as a short cite, so the re-ask carries no diagnostic
+
+**LANDED (v0.1215.0).** Filed and fixed 2026-11-21 (batch 263, cluster G). Owner: `core/skills/ai-dlc-update/reconcile/apply.sh` (`ra_short_cited`).
+
+Goal: an answer record whose question cites a prefix of the ask digest (8 to 63 hex characters) is recognised as a short cite whatever the case of its letters. One done condition: a record citing the 8-hex prefix in uppercase makes `pull.sh finish` re-ask the row and print `NOTE ask-short-cite`, as the lowercase cite does.
+
+Record: `ra_short_cited` tested `index(dg, r) == 1` with `dg` the lowercase digest and `r` the matched hex run taken as typed, so an uppercase run never matched and the re-ask carried no diagnostic. The fix lowercases the run before the prefix test. `core/fixtures/reconcile-pull-driver/run.sh` arm vi holds an uppercase cite beside the lowercase one, with the history cleared first so the lowercase record cannot supply the NOTE; the arm fails on the unfixed `apply.sh` and passes on the fixed one (proved once by hand).
+
+Step: n/a
+
+verify: manual
+
 

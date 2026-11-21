@@ -112,6 +112,55 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-restamp-worklist.XXXXXX")" || {
 trap 'rm -rf "$WORK"' EXIT
 
 . "$HERE/../lib/report.sh" || { echo "apply-restamp-worklist: FIXTURE BROKEN — lib/report.sh not found beside $HERE" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: lib/layout.sh not found" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: lib/inproc.sh not found" >&2; exit 2; }
+
+# IN PROCESS (BL-878). Every apply.sh start of this fixture is an apl call (apl_main in a fresh-bash subshell, a pass of apply.sh) and
+# every answer-capture hook start an aac call (aac_main, a pass of the hook); a mutant or hand copy of the reconcile directory is sourced
+# inside the subshell after every function is removed, and counts as a pass of the real file. The program starts left are the cli cells of
+# cells.decl (unit cf, eq_apply and eq_hook), each compared byte for byte with the in-process answer.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT: a present subject with neither the `<p>_main() {` line nor the column-0 source guard predates
+# the wrap, so SKIP and exit 0 on a consumer (FIXTURE BROKEN in the distribution); exactly one half FAILS; an unreadable subject is FIXTURE ERROR.
+ANSWER_HOOK=""
+for cand in "$ROOT/core/hooks/ai-dlc-answer-capture.sh" "$ROOT/.claude/hooks/ai-dlc-answer-capture.sh"; do
+  [ -f "$cand" ] && ANSWER_HOOK="$cand" && break
+done
+ar_halves() { # ar_halves <file> <entry> -> "<def><guard>" (1 present, 0 absent); exit 2 on an unreadable file
+  local d=0 g=0 x
+  grep -qF "$2() {" "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || d=1
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$1"; x=$?
+  [ "$x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $1 (grep exit $x) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
+  [ "$x" -ne 0 ] || g=1
+  printf '%s%s' "$d" "$g"
+}
+_ar_pre=""
+ar_check() { # ar_check <file> <entry>
+  [ -n "$1" ] || return 0
+  _gh="$(ar_halves "$1" "$2")" || exit 2
+  case "$_gh" in
+    11) : ;;
+    00) _ar_pre="$_ar_pre $1" ;;
+    *) bad "$1 carries one half of the in-process wrap ($2 line, column-0 source guard: $_gh) -- a respelled subject this fixture cannot drive"
+       report_end apply-restamp-worklist ;;
+  esac
+}
+ar_check "$APPLY" apl_main
+ar_check "$ANSWER_HOOK" aac_main
+if [ -n "$_ar_pre" ]; then echo "SKIP: apply-restamp-worklist:$_ar_pre predate(s) the in-process wrap"; fx_skip_exit "$HERE"; fi
+apl() { # apl <apply.sh> [args...] -> apl_main's stdout, stderr and exit, logged as a pass of $APPLY (a copy is sourced after every function is removed)
+  local _f="$1"; shift
+  case "$_f" in */apply.sh) ;; *) echo "FIXTURE BROKEN: apl was handed $_f, not an apply.sh" >&2; return 125 ;; esac
+  ( [ "$_f" = "$APPLY" ] || INPROC_LOADED="$APPLY"; inproc_run "${_f%/*}/apply.sh" apl_main "$@" )
+}
+aac() { # aac <hook> [args...] -> aac_main's stdout, stderr and exit (stdin and prefix assignments pass through), logged as a pass of $ANSWER_HOOK
+  local _f="$1"; shift
+  case "$_f" in */ai-dlc-answer-capture.sh) ;; *) echo "FIXTURE BROKEN: aac was handed $_f, not the answer-capture hook" >&2; return 125 ;; esac
+  ( [ "$_f" = "$ANSWER_HOOK" ] || INPROC_LOADED="$ANSWER_HOOK"; inproc_run "${_f%/*}/ai-dlc-answer-capture.sh" aac_main "$@" )
+}
 
 # ---------------------------------------------------------------------------- shards ----
 # THIS FILE IS FOUR SHARDS OF ONE FIXTURE, AND THE SPLIT IS A SCHEDULING BOUNDARY, NOT A SUBJECT
@@ -356,7 +405,15 @@ same_on_range() {
 # `DECISION hook-registration-unchecked` on every run, and under `--finish` that row is emitted
 # BEFORE the stamp. A finisher gating on `handback` therefore withholds on it, and the row's own
 # remedy is the phase `--finish` skips. C4 runs without that row, C8 runs with it.
+# BUILT ONCE PER (mode, hrv) AND COPIED PER ARM: every arm that wants a consumer of a mode gets a cp -Rp of the first build, which carries
+# the same bytes and modes a fresh build writes (the build reads only $DIST, $BASE, $THEIRS and constants, all fixed by now).
 mk_consumer() {
+  local c="$1" mode="$2" k="$WORK/mkc/$2-${3:-plain}"
+  if [ -d "$k" ]; then mkdir -p "$c" && cp -Rp "$k/." "$c/"; return; fi
+  mk_consumer_build "$@" || return 1
+  mkdir -p "$k" && cp -Rp "$c/." "$k/"
+}
+mk_consumer_build() {
   local c="$1" mode="$2"
   mkdir -p "$c/.claude/session-driver" "$c/tests/fixtures/synthetic-fx" "$c/scripts/ai-dlc" || return 1
   if [ "${3:-}" = hrv ]; then
@@ -386,7 +443,7 @@ mk_consumer() {
 
 run_apply() { # run_apply <apply-path> <consumer> [flag...]
   local a="$1" c="$2"; shift 2
-  bash "$a" "$@" "$DIST" "$BASE" "$c" "$THEIRS" 2>/dev/null
+  apl "$a" "$@" "$DIST" "$BASE" "$c" "$THEIRS" 2>/dev/null
 }
 
 # run_finish_as <apply-path> <consumer> <argv-theirs>
@@ -394,7 +451,7 @@ run_apply() { # run_apply <apply-path> <consumer> [flag...]
 # `run_apply` always passes THEIRS, which is precisely the argument F1/F2/F3 must vary: the
 # defect is that the ref the operator RETYPES was never checked against the ref the tree was
 # written from, and those two are the same value in every arm above.
-run_finish_as() { bash "$1" --finish "$DIST" "$BASE" "$2" "$3" 2>/dev/null; }
+run_finish_as() { apl "$1" --finish "$DIST" "$BASE" "$2" "$3" 2>/dev/null; }
 
 stamp_ver()  { sed -n 's/^version:[[:space:]]*//p' "$1/.claude/.ai-dlc-version" 2>/dev/null | head -1; }
 stamp_sha()  { sed -n 's/^commit:[[:space:]]*//p'  "$1/.claude/.ai-dlc-version" 2>/dev/null | head -1; }
@@ -471,7 +528,7 @@ u5_build() { # u5_build <consumer> [unseen] — approve WITH the blocker, then r
   [ "${2:-}" = unseen ] || return 0
   u5_seed_unseen "$1"
 }
-run_apply_err() { bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$3"; }
+run_apply_err() { apl "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$3"; }
 
 # --- THE RECORDED RE-APPROVAL (RA1-RA3, RA8-RA9f, MR1-MR2) -----------------------------------------
 # --verify exit 3 prints `re-approval: digest=<sha256> unseen=<N> label="..."`, and apply.sh decides
@@ -486,10 +543,6 @@ run_apply_err() { bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$3"; }
 # hand, so the record grammar the gate reads is the one the hook writes. `ra_answer` asserts the
 # record LANDED (the AskUserQuestion header count rose): the hook exits 0 silently without jq,
 # and a proceed arm would then go red for the wrong reason.
-ANSWER_HOOK=""
-for cand in "$ROOT/core/hooks/ai-dlc-answer-capture.sh" "$ROOT/.claude/hooks/ai-dlc-answer-capture.sh"; do
-  [ -f "$cand" ] && ANSWER_HOOK="$cand" && break
-done
 # SHIPS AHEAD OF ITS SUBJECT, like the --finish probe below: on a consumer this file can sit beside
 # an apply.sh that predates the gate. In the distribution the subject is always present, so the
 # arms run and go red rather than skipping.
@@ -503,7 +556,7 @@ ra_answer() { # ra_answer <consumer> <question> <answer> -> 0 when one more AskU
   jq -n --arg q "$2" --arg a "$3" \
     '{tool_name:"AskUserQuestion",session_id:"fx-ra",tool_use_id:"fx-ra-tu",tool_response:{answers:{($q):$a}}}' \
     > "$1/ra-payload.json" || return 1
-  CLAUDE_PROJECT_DIR="$1" bash "$ANSWER_HOOK" < "$1/ra-payload.json" >/dev/null 2>&1
+  CLAUDE_PROJECT_DIR="$1" aac "$ANSWER_HOOK" < "$1/ra-payload.json" >/dev/null 2>&1
   # stderr, not stdout: callers capture stdout; hermetic-run merges both into the log it greps.
   [ -f "$ANSWER_HOOK" ] && echo "HERMETIC-CONSUMED core/hooks/ai-dlc-answer-capture.sh" >&2
   n1="$(grep -c '^## .* -- AskUserQuestion$' "$h" 2>/dev/null)" || n1=0
@@ -532,7 +585,7 @@ PYREP
 # WRITTEN is read off a target file's BYTES (the session driver theirs rewrites), not off a row.
 ra_score() {
   local out rc
-  out="$(bash "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$2/ra-stderr.txt")"; rc=$?
+  out="$(apl "$1" "$DIST" "$BASE" "$2" "$THEIRS" 2>"$2/ra-stderr.txt")"; rc=$?
   printf '%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$2")" \
     "$(grep -q 'UPSTREAM' "$2/$DRIVER_REL" && echo WRITTEN || echo UNWRITTEN)" \
     "$(has_row "$out" NOTE blockers-resolved && echo NOTE || echo -)"
@@ -594,7 +647,7 @@ fi
 # --- SUBJECT PROBE: is the change installed at all? -------------------------------------------
 # The guard fix and `--finish` land together, so one probe covers both halves. `--finish` with no
 # positionals reaches the option parser and nothing else, so this costs a fork and writes nothing.
-PROBE="$(bash "$APPLY" --finish 2>&1)"
+PROBE="$(apl "$APPLY" --finish 2>&1)"
 if grep -q -- 'unknown option: --finish' <<< "$PROBE"; then
   if [ "$IS_DIST" = 1 ]; then
     bad "the resolved apply.sh ($APPLY) rejects --finish, so the whole subject of this fixture is absent. HARD in the distribution: the subject must be present here."
@@ -683,6 +736,67 @@ else
 fi
 
 if sg cf; then
+# --- EQ: the CLI cells of cells.decl, each compared byte for byte with the in-process answer ----
+# One program start per distinct CLI outcome: a passing run (exit 0, the manifest on stdout) and a refusing one (exit 2, usage on stderr).
+# The consumer is snapshotted, driven in process, set aside, and the snapshot put back at the SAME path, so both answers see one tree.
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+eq_apply() { # eq_apply <id> <consumer> [flag...] -> $EQ/<id>.{ip,cl}.{out,err,rc}; 0 when all three agree
+  local id="$1" c="$2"; shift 2
+  cp -Rp "$c" "$EQ/$id.snap" || return 2
+  apl "$APPLY" "$@" "$DIST" "$BASE" "$c" "$THEIRS" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  mv "$c" "$EQ/$id.after-ip" && mv "$EQ/$id.snap" "$c" || return 2
+  FXCELL="$id" command bash "$APPLY" "$@" "$DIST" "$BASE" "$c" "$THEIRS" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc"
+}
+EQ_C="$WORK/eq-cons"
+if mk_consumer "$EQ_C" green; then
+  eq_apply cli-apl-refuse "$EQ_C" --no-such-flag; EQ_R=$?
+  eq_apply cli-apl-pass "$EQ_C"; EQ_P=$?
+  if [ "$EQ_R" = 0 ] && [ "$EQ_P" = 0 ]; then
+    ok "EQ apply.sh as a program and in process agree on stdout, stderr and exit: the passing run and the refusing run"
+  else
+    bad "EQ apply.sh as a program and in process disagree (refuse: $EQ_R, pass: $EQ_P; 0 = agree) -- see $EQ/cli-apl-*"
+  fi
+  if [ "$(cat "$EQ/cli-apl-pass.ip.rc")" = 0 ] && [ "$(cat "$EQ/cli-apl-refuse.ip.rc")" = 2 ] \
+     && [ -s "$EQ/cli-apl-pass.ip.out" ] && ! cmp -s "$EQ/cli-apl-pass.ip.out" "$EQ/cli-apl-refuse.ip.out" \
+     && [ -s "$EQ/cli-apl-refuse.ip.err" ]; then
+    ok "EQ the two inputs differ: the pass exits 0 with a manifest on stdout, the refusal exits 2 with usage on stderr"
+  else
+    bad "EQ the pass and refuse inputs do not differ as the cells need (pass rc $(cat "$EQ/cli-apl-pass.ip.rc"), refuse rc $(cat "$EQ/cli-apl-refuse.ip.rc"))"
+  fi
+else
+  bad "EQ could not build the equivalence consumer"
+fi
+if [ -n "$ANSWER_HOOK" ]; then
+eq_hook() { # eq_hook <id> <tool_name> -> 0 when the hook as a program and in process agree on stdout, stderr, exit and the record (timestamp lines aside)
+  local id="$1" w pl r f
+  w="$EQ/$id.w"; pl="$EQ/$id.payload"
+  jq -n --arg t "$2" '{tool_name:$t,session_id:"fx-eq",tool_use_id:"fx-eq-tu",tool_response:{answers:{"q?":"a"}}}' > "$pl" || return 2
+  mkdir -p "$w" || return 2
+  CLAUDE_PROJECT_DIR="$w" aac "$ANSWER_HOOK" < "$pl" > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
+  mv "$w" "$EQ/$id.after-ip" && mkdir -p "$w" || return 2
+  CLAUDE_PROJECT_DIR="$w" FXCELL="$id" command bash "$ANSWER_HOOK" < "$pl" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+  for r in ip cl; do
+    if [ "$r" = ip ]; then f="$EQ/$id.after-ip/_bmad-output/operator-answers-history.md"; else f="$w/_bmad-output/operator-answers-history.md"; fi
+    { grep -v '^## ' "$f" 2>/dev/null || :; } > "$EQ/$id.$r.rec"
+    [ -f "$f" ] && echo present >> "$EQ/$id.$r.rec" || echo absent >> "$EQ/$id.$r.rec"
+  done
+  cmp -s "$EQ/$id.ip.out" "$EQ/$id.cl.out" && cmp -s "$EQ/$id.ip.err" "$EQ/$id.cl.err" && cmp -s "$EQ/$id.ip.rc" "$EQ/$id.cl.rc" \
+    && cmp -s "$EQ/$id.ip.rec" "$EQ/$id.cl.rec"
+}
+eq_hook cli-aac-record AskUserQuestion; EQ_H1=$?
+eq_hook cli-aac-quiet Bash; EQ_H2=$?
+if [ "$EQ_H1" = 0 ] && [ "$EQ_H2" = 0 ]; then
+  ok "EQ the answer-capture hook as a program and in process agree on stdout, stderr, exit and the record: the recording input and the quiet input"
+else
+  bad "EQ the answer-capture hook as a program and in process disagree (record: $EQ_H1, quiet: $EQ_H2; 0 = agree)"
+fi
+if [ "$(tail -1 "$EQ/cli-aac-record.ip.rec")" = present ] && [ "$(tail -1 "$EQ/cli-aac-quiet.ip.rec")" = absent ] && [ "$(cat "$EQ/cli-aac-record.ip.rc")" = 0 ]; then
+  ok "EQ the hook's two inputs differ: the AskUserQuestion payload writes a record, the Bash payload writes none"
+else
+  bad "EQ the hook's record and quiet inputs do not differ as the cells need"
+fi
+fi
 # --- C1: a WORKLIST run leaves the stamp and the marker alone ---------------------------------
 # THE FILE CONTENT, not a row count. A manifest that says `restamp-withheld` while the stamp on
 # disk reads THEIRS is exactly the false claim this fixture exists for, and a row-count assertion
@@ -1076,7 +1190,7 @@ cfu_ra_drive_shim() { # cfu_ra_drive_shim <tag> <grep|sha|none> -> "<ra_score ce
   sp="$s:$PATH"; [ "$2" = none ] && sp="$s"
   l="$(PATH="$sp" bash "$EMIT" --verify "$c/_bmad-output/ai-dlc-update/reconcile-report.md" "$DIST" "$BASE" "$c" "$THEIRS" 2>&1 >/dev/null)"
   l="$(sed -n 's/^[[:space:]]*re-approval: //p' <<< "$l")"
-  out="$(PATH="$sp" bash "$APPLY" "$DIST" "$BASE" "$c" "$THEIRS" 2>"$WORK/ra-$1.stderr")"; rc=$?
+  out="$(PATH="$sp" apl "$APPLY" "$DIST" "$BASE" "$c" "$THEIRS" 2>"$WORK/ra-$1.stderr")"; rc=$?
   printf '%s|%s|%s|%s|%s\n' "$rc" "$(stamp_ver "$c")" \
     "$(grep -q 'UPSTREAM' "$c/$DRIVER_REL" && echo WRITTEN || echo UNWRITTEN)" \
     "$(has_row "$out" NOTE blockers-resolved && echo NOTE || echo -)" "$l"
@@ -1524,7 +1638,7 @@ else
       && tsgit commit -q -m "ts $1" >/dev/null 2>&1 && git -C "$TD" rev-parse HEAD 2>/dev/null
   }
   git clone -q "$DIST" "$TD" >/dev/null 2>&1 && TB="$(ts_ref "$BASE")" && TT="$(ts_ref "$THEIRS")"
-  ts_finish() { bash "$APPLY" --finish "$TD" "$TB" "$1" "$TT" 2>/dev/null; }
+  ts_finish() { apl "$APPLY" --finish "$TD" "$TB" "$1" "$TT" 2>/dev/null; }
   TS_B="$WORK/ts-base"
   if [ -n "$TB" ] && [ -n "$TT" ] && mk_consumer "$TS_B" finished hrv \
      && printf 'version: 1.0.0\ncommit: %s\n' "$TB" > "$TS_B/.claude/.ai-dlc-version" \
@@ -1557,7 +1671,7 @@ else
       fi
       O1="$(ts_finish "$W1")"; O2="$(ts_finish "$W2")"; O3="$(ts_finish "$W3")"; O7="$(ts_finish "$W7")"
       O4="$(ts_finish "$W4")"; O5="$(ts_finish "$W5")"; O8="$(ts_finish "$W8")"
-      OO="$(bash "$APPLY" "$TD" "$TB" "$WO" "$TT" 2>/dev/null)"
+      OO="$(apl "$APPLY" "$TD" "$TB" "$WO" "$TT" 2>/dev/null)"
       if [ "$(ts_any "$O1")" = 0 ] && [ "$(ts_any "$O7")" = 0 ] && [ "$IS_DIST" = 0 ]; then
         printf '  SKIP  %s\n' "TS — the installed apply.sh predates the taught-schema row; it lands with this same pull"
       else
@@ -1793,7 +1907,7 @@ bl_consumer() {
 # BL_DRIVE_THEIRS, when set, replaces the THEIRS ref (BL-6b drives a commit that has lost the classifier).
 bl_drive() { # bl_drive <apply-path> <consumer> [flag...]
   local a="$1" c="$2"; shift 2
-  bash "$a" "$@" "$PD" "$BL_BASE" "$c" "${BL_DRIVE_THEIRS:-$BL_THEIRS}" 2>/dev/null
+  apl "$a" "$@" "$PD" "$BL_BASE" "$c" "${BL_DRIVE_THEIRS:-$BL_THEIRS}" 2>/dev/null
 }
 bl_n() { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {n++} END {print n+0}' <<< "$1"; }
 # The four observables every world below is read through, as one string. WORKLIST-vs-DECISION is
@@ -2344,7 +2458,7 @@ fi
 # the apply.sh it tests; in the DISTRIBUTION the subject is always present, so absence is hard.
 # This full `--finish` is also arm (e)'s run.
 if [ "$HR_PRESENT" = 1 ]; then
-  bash "$HR_SUB/apply.sh" --finish "$DIST" "$BASE" "$HRW_D" "$THEIRS" > "$HR_R/e2e.D" 2>/dev/null
+  apl "$HR_SUB/apply.sh" --finish "$DIST" "$BASE" "$HRW_D" "$THEIRS" > "$HR_R/e2e.D" 2>/dev/null
   if [ "$(bash "$HRW_D/scripts/ai-dlc/validate-hook-registration.sh" --root "$HRW_D" >/dev/null 2>&1; echo $?)" != 1 ]; then
     bad "HR-S0 setup: the real validator does not exit 1 on the dangling-only world, so no arm below is scoring the shape BL-292 is about"; HR_PRESENT=0
   elif [ "$(hk_any "$HR_R/e2e.D")" = 0 ]; then
@@ -2370,7 +2484,7 @@ if [ "$HR_PRESENT" = 1 ]; then
 # (d)'s end-to-end run. It stamps, which moves `.ai-dlc-version` and removes `.ai-dlc-applying` --
 # the only two files it writes, and neither is read by `hook_registration_row` or the validator, so
 # the arms that read this world after it still read the state it was built as.
-bash "$HR_SUB/apply.sh" --finish "$DIST" "$BASE" "$HRW_E" "$THEIRS" > "$HR_R/e2e.E" 2>/dev/null
+apl "$HR_SUB/apply.sh" --finish "$DIST" "$BASE" "$HRW_E" "$THEIRS" > "$HR_R/e2e.E" 2>/dev/null
 
 HR_IDS="$(hk_ids "$HR_SUB/apply.sh")" || exit 2
 if [ "$(hk_any "$HR_R/e2e.D")" -ge 1 ] \
@@ -2527,7 +2641,7 @@ hu_seam() { # <apply.sh> <tag> <world-key> <world> -> 0 when the seam ran; rows 
   hk_seam "$1" "$4" "$HU_D" "$HU_T" > "$HU_R/$2.$3"
   hk_ran "$HU_R/$2.$3"
 }
-hu_fin() { bash "$1" --finish "$HU_D" "$HU_B" "$2" "$HU_T" > "$3" 2>/dev/null; } # <apply.sh> <world> <rows-out>
+hu_fin() { apl "$1" --finish "$HU_D" "$HU_B" "$2" "$HU_T" > "$3" 2>/dev/null; } # <apply.sh> <world> <rows-out>
 hu_arm_a() { # <rows> -- the orphan's own gating row, and the merge row does not claim it
   [ "$(hk_n "$1" WORKLIST hook-unshipped)" = 1 ] \
     && case "$(hk_det "$1" WORKLIST hook-unshipped)" in *": ai-dlc-gone.sh "*) true ;; *) false ;; esac \
@@ -2699,7 +2813,7 @@ VF_C=""
 vf_run() {
   VF_C="$(mktemp -d "$VFROOT/c.XXXXXX")" || return 1
   vf_consumer "$VF_C" "$2" || return 1
-  ( cd "${VF_CWD:-$PWD}" && bash "$1/apply.sh" --finish "$3" "$4" "$VF_C" "$5" ) > "$VF_C/.vf-rows" 2>/dev/null
+  ( cd "${VF_CWD:-$PWD}" && apl "$1/apply.sh" --finish "$3" "$4" "$VF_C" "$5" ) > "$VF_C/.vf-rows" 2>/dev/null
   return 0
 }
 vf_n()    { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {n++} END {print n+0}' "$1/.vf-rows" 2>/dev/null; }
@@ -2769,7 +2883,7 @@ fi
 VF_S2A="$(mktemp -d "$VFROOT/s2a.XXXXXX")"; VF_S2S="$(mktemp -d "$VFROOT/s2s.XXXXXX")"
 if vf_consumer "$VF_S2A" none && vf_consumer "$VF_S2S" full; then
   rm -f "$VF_S2A/.claude/.ai-dlc-applying"
-  bash "$APPLY" "$VD" "$VB" "$VF_S2A" "$VT" >/dev/null 2>&1
+  apl "$APPLY" "$VD" "$VB" "$VF_S2A" "$VT" >/dev/null 2>&1
   if same_on_range "$VD" "$VB" "$VT" "$VF_S2S" "$VF_S2A" && [ ! -e "$VF_S2A/tests/fixtures/dist-fx" ] \
      && grep -q UPSTREAM "$VF_S2A/.claude/session-driver/z-second.sh"; then
     ok "VF-S2 setup: the 'full' seed is byte-identical over the range to the tree apply.sh's ordinary run writes, and neither writes the dist-only fixture"
@@ -2935,7 +3049,7 @@ ar_render() {
 }
 ar_ver() { local t="${3:-$(ar_T "$2")}"; bash "$1/emit-report.sh" --verify "$2/c/$AR_RPT" "$(ar_D "$2")" "$(ar_B "$2")" "$2/c" "$t" >"$2/v.out" 2>"$2/v.err"; }
 ar_fa()  { local t="${3:-$(ar_T "$2")}"; bash "$1/emit-report.sh" --for-apply --verify "$2/c/$AR_RPT" "$(ar_D "$2")" "$(ar_B "$2")" "$2/c" "$t" >/dev/null 2>"$2/fa.err"; sed -n 's/^approved-region: first=//p' "$2/fa.err"; }
-ar_app() { local t="${3:-$(ar_T "$2")}"; bash "$1/apply.sh" "$(ar_D "$2")" "$(ar_B "$2")" "$2/c" "$t" >"$2/a.out" 2>"$2/a.err"; }
+ar_app() { local t="${3:-$(ar_T "$2")}"; apl "$1/apply.sh" "$(ar_D "$2")" "$(ar_B "$2")" "$2/c" "$t" >"$2/a.out" 2>"$2/a.err"; }
 # ar_wrote <world> [theirs] -> 0 when the session driver holds theirs' bytes (the write happened)
 ar_wrote() {
   local t="${2:-$(ar_T "$1")}"

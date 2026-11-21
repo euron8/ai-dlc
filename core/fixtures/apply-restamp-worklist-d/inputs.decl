@@ -2,6 +2,9 @@
 # apply-restamp-worklist sources the shared preamble, drives apply.sh and its reconcile siblings from copies of that directory, reads the real pre-push for the C6 premise, copies the transient-ignore renderer and its schema into seeded consumers, and runs the real hook-registration validator.
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh
+core/fixtures/lib/layout.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 core/skills/ai-dlc-update/reconcile/derivation-differential.sh
 core/skills/ai-dlc-update/reconcile/emit-report.sh
@@ -42,3 +45,4 @@ core/fixtures/apply-restamp-worklist/run.sh
 core/fixtures/apply-restamp-worklist-b/run.sh
 core/fixtures/apply-restamp-worklist-c/run.sh
 core/fixtures/apply-restamp-worklist-d/run.sh
+core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh

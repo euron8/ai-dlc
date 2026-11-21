@@ -1,0 +1,5 @@
+# apply-machinery-stamp's starts of core/skills/ai-dlc-update/reconcile/apply.sh (BL-879 grammar). Every apply runs in process
+# (apl / apl_copy -> apl_main); section 7 keeps one program start per distinct CLI outcome, compared byte for byte with the
+# in-process answer: the misspelled flag (exit 2) and the passing flagged apply (exit 0).
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-refuse
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-pass

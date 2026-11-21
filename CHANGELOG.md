@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1215.0] - 2026-11-21
+
+### Thirteen update-engine fixtures leave the in-process allowlist, and an uppercase short digest cite now gets its re-ask diagnostic (BL-878 advances, BL-1206)
+
+- For every consumer's pull. A short digest cite typed in uppercase hex (for example `CA1EEB7F`) was not recognised as a cite of the ask digest, so the re-ask of that row carried no diagnostic. `apply.sh` now compares the cite in lowercase, so the re-ask prints `NOTE ask-short-cite` as it does for a lowercase cite. The fixture `reconcile-pull-driver` gains an arm that holds an uppercase cite beside the lowercase one. Fixes the report PC-S324-ASK-REISSUES-ON-TRUNCATED-DIGEST-CITE-NO-DIAGNOSTIC-WHEN-ANSWER-RECORD-EXISTS (BL-1206).
+- For whoever pushes ai-dlc. `core/skills/ai-dlc-update/reconcile/apply.sh` can now be sourced and called as `apl_main`; run as a file it behaves as before (7 of 7 base-versus-tip cases byte-identical). Thirteen fixtures (ledger-reverify, `-b`, `-c`; apply-restamp-worklist, `-b`, `-c`, `-d`; apply-drift-after-write; apply-machinery-stamp; apply-relabel-noop-row; apply-restamp-theirs; layer-crosswalk-home; owed-derivations-c) run `apply.sh` in process instead of starting it, and their rows leave the in-process allowlist, 15 to 2. The exception is `owed-derivations-c`: its 10 receipt drives of `apply.sh` still start it as a process (tagged e2e cells) until the invocation judge credits a nested child of an in-process pass, or `apply.sh` sources the differential (owed in BL-878). Process starts across the 13 go from 2638 to 2553 (counted); four fixtures start slightly more (the three cli-cell fixtures, and `owed-derivations-c`, whose 10 receipt drives stay process starts), because each passing cli cell reruns a full apply.
+- The two rows left, `check-24-adversarial-convergence-b` and `-c`, wait on an operator ruling. BL-878 stays PARTIAL.
+
 ## [0.1214.0] - 2026-11-21
 
 ### The pre-push check that guards the pool now catches more override forms, a bytecode file no longer counts as pipeline state, and the gate close records its metric rows correctly (BL-1161, BL-1162, BL-1008, BL-910)

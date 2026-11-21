@@ -55,6 +55,10 @@ fi
 IS_DIST=0; [ -d "$ROOT/core/skills/ai-dlc" ] && IS_DIST=1
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
 skip() { # skip <what> <why>
   if [ "$IS_DIST" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
   else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
@@ -69,6 +73,28 @@ if ! grep -q -- '--carried-machinery-slice)' "$APPLY"; then
   [ "$fails" -eq 0 ] && { echo "SKIP  apply-machinery-stamp: subject not installed yet"; exit 0; }
   echo "apply-machinery-stamp: $fails assertion(s) FAILED"; exit 1
 fi
+
+# IN PROCESS (BL-878). Every apply below is asked through apl() / apl_copy(), which hand the subject (or section 3's copy of
+# it) to lib/inproc.sh's inproc_run, a pass of $APPLY. Two program starts remain, cells.decl's cli-refuse and cli-pass,
+# each compared byte for byte with the in-process answer in section 7.
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present apply.sh with neither the `apl_main() {` line nor the column-0
+# source guard predates the wrap, and loading it would run its whole body: SKIP and exit 0 on a consumer (FIXTURE BROKEN
+# in the distribution). Exactly one half FAILS. An unreadable subject is FIXTURE ERROR.
+_ms_d=0; _ms_g=0
+grep -qF 'apl_main() {' "$APPLY"; _ms_x=$?
+[ "$_ms_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $APPLY (grep exit $_ms_x)" >&2; exit 2; }
+[ "$_ms_x" -ne 0 ] || _ms_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$APPLY"; _ms_x=$?
+[ "$_ms_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $APPLY (grep exit $_ms_x)" >&2; exit 2; }
+[ "$_ms_x" -ne 0 ] || _ms_g=1
+case "$_ms_d$_ms_g" in
+  11) : ;;
+  00) echo "SKIP: apply-machinery-stamp: $APPLY predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) echo "FIXTURE ERROR: $APPLY carries one half of the in-process wrap (apl_main line, column-0 source guard: $_ms_d$_ms_g)" >&2; exit 2 ;;
+esac
+inproc_load "$APPLY" || { echo "FIXTURE BROKEN: cannot load $APPLY in process" >&2; exit 2; }
+apl() { inproc_run "$APPLY" apl_main "$@"; } # apl <args...> -> apl_main's stdout, stderr and exit
+apl_copy() { local _c="$1"; shift; inproc_run "$_c" apl_main "$@"; } # a copy of apply.sh, sourced in the subshell (its siblings are the copy's)
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-mach-stamp.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -128,7 +154,7 @@ fi
 # The ordinary pull, and the reason `preserve` is the default: a rulebook-only apply must not
 # claim a machinery version it did not install.
 C1="$WORK/c1"; mkconsumer "$C1" || exit 2
-OUT1="$(bash "$APPLY" "$DIST" "$BASE" "$C1" "$THEIRS" 2>&1)"
+OUT1="$(apl "$DIST" "$BASE" "$C1" "$THEIRS" 2>&1)"
 if [ "$(field "$C1" version)" = "$THEIRS_VER" ] && [ "$(field "$C1" commit)" = "$THEIRS_SHORT" ]; then
   ok "no flag: the rulebook pair advances to theirs ($THEIRS_VER @ $THEIRS_SHORT)"
 else
@@ -147,7 +173,10 @@ fi
 
 # --- Assertion 2: WITH THE FLAG — all four advance --------------------------------------------
 C2="$WORK/c2"; mkconsumer "$C2" || exit 2
-OUT2="$(bash "$APPLY" --carried-machinery-slice "$DIST" "$BASE" "$C2" "$THEIRS" 2>&1)"
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+cp -R "$C2" "$WORK/c2.pristine" || { echo "FIXTURE ERROR: cp pristine failed" >&2; exit 2; }
+apl --carried-machinery-slice "$DIST" "$BASE" "$C2" "$THEIRS" > "$EQ/cli-pass.ip.out" 2> "$EQ/cli-pass.ip.err"; echo "$?" > "$EQ/cli-pass.ip.rc"
+OUT2="$(cat "$EQ/cli-pass.ip.out" "$EQ/cli-pass.ip.err")"
 if [ "$(field "$C2" skill_version)" = "$THEIRS_VER" ] && [ "$(field "$C2" skill_commit)" = "$THEIRS_SHORT" ]; then
   ok "--carried-machinery-slice: the machinery pair advances to theirs ($THEIRS_VER @ $THEIRS_SHORT)"
 else
@@ -179,7 +208,7 @@ mkdir -p "$RECON" || exit 2
 cp "$(dirname "$APPLY")"/* "$RECON/" 2>/dev/null || { echo "FIXTURE ERROR: could not copy reconcile/" >&2; exit 2; }
 printf '# no core_manifest block here\n' > "$RECON/setup-sites.md"
 C3="$WORK/c3"; mkconsumer "$C3" || exit 2
-OUT3="$(bash "$RECON/apply.sh" --carried-machinery-slice "$DIST" "$BASE" "$C3" "$THEIRS" 2>&1)"
+OUT3="$(apl_copy "$RECON/apply.sh" --carried-machinery-slice "$DIST" "$BASE" "$C3" "$THEIRS" 2>&1)"
 if grep -q 'restamp-withheld' <<<"$OUT3"; then
   if [ "$(field "$C3" skill_version)" = "1.0.0" ] && [ "$(field "$C3" skill_commit)" = "$BASE_SHORT" ] \
      && [ "$(field "$C3" version)" = "1.0.0" ] && [ "$(field "$C3" commit)" = "$BASE_SHORT" ]; then
@@ -203,7 +232,7 @@ fi
 # schema, or one whose stamp lost the pair, is exactly that case.
 C4="$WORK/c4"
 mkconsumer "$C4" "$(printf 'version: 1.0.0\ncommit: %s\ninstalled_at: 2026-01-01T00:00:00Z\nupstream: https://example.invalid/ai-dlc\n' "$BASE_SHORT")" || exit 2
-bash "$APPLY" --carried-machinery-slice "$DIST" "$BASE" "$C4" "$THEIRS" >/dev/null 2>&1
+apl --carried-machinery-slice "$DIST" "$BASE" "$C4" "$THEIRS" >/dev/null 2>&1
 if [ "$(field "$C4" skill_version)" = "$THEIRS_VER" ] && [ "$(field "$C4" skill_commit)" = "$THEIRS_SHORT" ]; then
   ok "a stamp missing the machinery pair has it INSERTED at theirs, not silently skipped"
 else
@@ -219,7 +248,7 @@ fi
 # There is nowhere to insert beside, so the write cannot happen. It must reach the operator as a
 # row. A silent preserve here is the same class of defect as the one this fixture exists for.
 C5="$WORK/c5"; mkconsumer "$C5" "1.0.0 @ $BASE_SHORT"$'\n' || exit 2
-OUT5="$(bash "$APPLY" --carried-machinery-slice "$DIST" "$BASE" "$C5" "$THEIRS" 2>&1)"
+OUT5="$(apl --carried-machinery-slice "$DIST" "$BASE" "$C5" "$THEIRS" 2>&1)"
 if grep -q 'skill-restamp-failed' <<<"$OUT5"; then
   ok "a legacy single-line stamp cannot take the machinery pair and SAYS so (skill-restamp-failed)"
 else
@@ -260,8 +289,8 @@ fi
 
 # --- Assertion 6: the flag is the ONLY new argument, and an unknown one is a usage error ------
 C6="$WORK/c6"; mkconsumer "$C6" || exit 2
-bash "$APPLY" --carried-machinery-slize "$DIST" "$BASE" "$C6" "$THEIRS" >/dev/null 2>&1
-rc6=$?
+apl --carried-machinery-slize "$DIST" "$BASE" "$C6" "$THEIRS" > "$EQ/cli-refuse.ip.out" 2> "$EQ/cli-refuse.ip.err"
+rc6=$?; echo "$rc6" > "$EQ/cli-refuse.ip.rc"
 if [ "$rc6" -eq 2 ]; then
   ok "a misspelled flag is a usage error (exit 2), not a silently ignored argument"
 else
@@ -272,6 +301,33 @@ if [ "$(field "$C6" version)" = "1.0.0" ]; then
 else
   bad "  the refused run still re-stamped — it refused after acting"
 fi
+
+# --- 7. THE CLI HALVES — `bash apply.sh` answers as the in-process pass does -----------------
+# One program start per distinct CLI outcome (cells.decl): the misspelled flag (exit 2) and the passing flagged apply
+# (exit 0), each compared byte for byte (stdout, stderr, exit) with the in-process answer. The passing apply writes its
+# consumer, so C2 is put back to its pristine copy first; cli-pass's in-process side is assertion 2's own pass.
+cli_side() { # cli_side <id> <args...> -> the CLI answer in $EQ/<id>.cl.{out,err,rc}, tagged FXCELL=<id>
+  local id="$1"; shift
+  FXCELL="$id" command bash "$APPLY" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+}
+same3() { # same3 <id> -> 0 when the in-process and CLI answers agree on stdout, stderr and exit
+  cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.err" "$EQ/$1.cl.err" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc"
+}
+C6C="$WORK/c6cli"; mkconsumer "$C6C" || exit 2
+cli_side cli-refuse --carried-machinery-slize "$DIST" "$BASE" "$C6C" "$THEIRS"; same3 cli-refuse; eq_r=$?
+mv "$C2" "$WORK/c2.ip" && cp -R "$WORK/c2.pristine" "$C2" || { echo "FIXTURE ERROR: restoring c2 failed" >&2; exit 2; }
+cli_side cli-pass --carried-machinery-slice "$DIST" "$BASE" "$C2" "$THEIRS"; same3 cli-pass; eq_p=$?
+rc_r="$(cat "$EQ/cli-refuse.cl.rc" 2>/dev/null)"; rc_p="$(cat "$EQ/cli-pass.cl.rc" 2>/dev/null)"
+if [ "$rc_r" = 2 ] && [ "$rc_p" = 0 ] && ! cmp -s "$EQ/cli-refuse.cl.out" "$EQ/cli-pass.cl.out" \
+   && [ -s "$EQ/cli-pass.cl.out" ] && grep -q 'restamp-machinery' "$EQ/cli-pass.cl.out"; then
+  ok "the two CLI cells differ: misspelled flag exit $rc_r, flagged apply exit $rc_p carrying the restamp-machinery row"
+else
+  bad "the CLI cells do not differ as designed (refuse rc='$rc_r', pass rc='$rc_p') -- an equivalence over two identical answers proves nothing"
+fi
+[ "$eq_r" -eq 0 ] && ok "cli-refuse: stdout, stderr and exit of \`bash apply.sh\` equal the in-process answer" \
+  || bad "cli-refuse: the CLI run and the in-process pass disagree (see $EQ/cli-refuse.*)"
+[ "$eq_p" -eq 0 ] && ok "cli-pass: stdout, stderr and exit of \`bash apply.sh\` equal the in-process answer" \
+  || bad "cli-pass: the CLI run and the in-process pass disagree (see $EQ/cli-pass.*)"
 
 echo
 report_end apply-machinery-stamp

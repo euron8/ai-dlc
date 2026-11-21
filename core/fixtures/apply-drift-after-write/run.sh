@@ -31,6 +31,10 @@ trap 'rm -rf "$WORK"' EXIT
 . "$WORK/env.sh"
 
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
 
 echo "apply-drift-after-write:"
 
@@ -74,7 +78,55 @@ UD5="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 
 # --- Run the resolution driver -----------------------------------------------
 echo "HERMETIC-CONSUMED $APPLY"
-MANIFEST="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+# IN PROCESS (BL-878). Every apply below is asked through apl(), which hands the subject to lib/inproc.sh's inproc_run (a
+# pass of $APPLY). Two program starts remain, cells.decl's cli-refuse and cli-pass, each compared byte for byte with the
+# in-process answer right after the first apply (section 1's own pass is the in-process side of cli-pass).
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A present apply.sh with neither the `apl_main() {` line nor the column-0
+# source guard predates the wrap, and loading it would run its whole body: SKIP and exit 0 on a consumer (FIXTURE BROKEN
+# in the distribution). Exactly one half FAILS. An unreadable subject is FIXTURE ERROR.
+_da_d=0; _da_g=0
+grep -qF 'apl_main() {' "$APPLY"; _da_x=$?
+[ "$_da_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $APPLY (grep exit $_da_x)" >&2; exit 2; }
+[ "$_da_x" -ne 0 ] || _da_d=1
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$APPLY"; _da_x=$?
+[ "$_da_x" -le 1 ] || { echo "FIXTURE ERROR: cannot read $APPLY (grep exit $_da_x)" >&2; exit 2; }
+[ "$_da_x" -ne 0 ] || _da_g=1
+case "$_da_d$_da_g" in
+  11) : ;;
+  00) echo "SKIP: apply-drift-after-write: $APPLY predates the in-process wrap"; fx_skip_exit "$HERE" ;;
+  *) echo "FIXTURE ERROR: $APPLY carries one half of the in-process wrap (apl_main line, column-0 source guard: $_da_d$_da_g)" >&2; exit 2 ;;
+esac
+inproc_load "$APPLY" || { echo "FIXTURE BROKEN: cannot load $APPLY in process" >&2; exit 2; }
+apl() { inproc_run "$APPLY" apl_main "$@"; } # apl <args...> -> apl_main's stdout, stderr and exit
+EQ="$WORK/eq"; mkdir -p "$EQ" || { echo "FIXTURE ERROR: mkdir eq" >&2; exit 2; }
+cp -Rp "$CONSUMER" "$WORK/consumer.pristine" || { echo "FIXTURE ERROR: cp pristine failed" >&2; exit 2; }
+apl "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$EQ/cli-pass.ip.out" 2> "$EQ/cli-pass.ip.err"; echo "$?" > "$EQ/cli-pass.ip.rc"
+MANIFEST="$(cat "$EQ/cli-pass.ip.out")"
+# THE CLI HALVES. cli-refuse (no arguments, exit 1) and cli-pass (the apply above, exit 0) answer as the in-process pass
+# does on stdout, stderr and exit. The passing apply writes its consumer, so the pristine copy is put back and the CLI
+# run leaves the same tree for the assertions below to read.
+cli_side() { # cli_side <id> <args...> -> the CLI answer in $EQ/<id>.cl.{out,err,rc}, tagged FXCELL=<id>
+  local id="$1"; shift
+  FXCELL="$id" command bash "$APPLY" "$@" > "$EQ/$id.cl.out" 2> "$EQ/$id.cl.err"; echo "$?" > "$EQ/$id.cl.rc"
+}
+same3() { # same3 <id> -> 0 when the in-process and CLI answers agree on stdout, stderr and exit
+  cmp -s "$EQ/$1.ip.out" "$EQ/$1.cl.out" && cmp -s "$EQ/$1.ip.err" "$EQ/$1.cl.err" && cmp -s "$EQ/$1.ip.rc" "$EQ/$1.cl.rc"
+}
+apl > "$EQ/cli-refuse.ip.out" 2> "$EQ/cli-refuse.ip.err"; echo "$?" > "$EQ/cli-refuse.ip.rc"
+cli_side cli-refuse; same3 cli-refuse; eq_r=$?
+mv "$CONSUMER" "$WORK/consumer.ip" && cp -Rp "$WORK/consumer.pristine" "$CONSUMER" || { echo "FIXTURE ERROR: restoring the consumer failed" >&2; exit 2; }
+cli_side cli-pass "$DIST" "$BASE" "$CONSUMER" "$THEIRS"; same3 cli-pass; eq_p=$?
+rc_r="$(cat "$EQ/cli-refuse.cl.rc" 2>/dev/null)"; rc_p="$(cat "$EQ/cli-pass.cl.rc" 2>/dev/null)"
+if [ "$rc_r" = 1 ] && [ "$rc_p" = 0 ] && ! cmp -s "$EQ/cli-refuse.cl.out" "$EQ/cli-pass.cl.out" && [ -s "$EQ/cli-pass.cl.out" ] \
+   && cmp -s "$EQ/cli-pass.cl.out" "$EQ/cli-pass.ip.out"; then
+  ok "the two CLI cells differ: no arguments exit $rc_r with no manifest, the apply exit $rc_p with one"
+else
+  bad "the CLI cells do not differ as designed (refuse rc='$rc_r', pass rc='$rc_p') -- an equivalence over two identical answers proves nothing"
+fi
+[ "$eq_r" -eq 0 ] && ok "cli-refuse: stdout, stderr and exit of \`bash apply.sh\` equal the in-process answer" \
+  || bad "cli-refuse: the CLI run and the in-process pass disagree (see $EQ/cli-refuse.*)"
+[ "$eq_p" -eq 0 ] && ok "cli-pass: stdout, stderr and exit of \`bash apply.sh\` equal the in-process answer" \
+  || bad "cli-pass: the CLI run and the in-process pass disagree (see $EQ/cli-pass.*)"
 
 # --- Assertion 1: every file the range moves is applied ------------------------
 # THREE, and the third one is gamma, which arrived with `preclassify.sh`'s `skill_commit` arm.
@@ -182,7 +234,7 @@ else
   done <<EOF
 $EXT_DIGS
 EOF
-  MANIFEST_ADJ="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+  MANIFEST_ADJ="$(apl "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
   if grep -q 'NOTE[[:space:]]*extension-adjudicated.*alpha-domain' <<<"$MANIFEST_ADJ"; then
     ok "a recorded verdict turns extension-reread into NOTE extension-adjudicated"
   else
@@ -225,7 +277,7 @@ EOF
       done <<EOF
 $EXT_DIGS
 EOF
-      bash "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null
+      apl "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null # $1 is always $APPLY, the loaded subject
       rm -f "$REG_DIR/layer-adjudication-register.jsonl"
     }
     # v2d_kind <manifest> -> the extension-* NOTE kinds on alpha-domain, space-joined
@@ -411,7 +463,7 @@ fi
 # that was always there remains. zeta is the CONTROL in the same run — it still draws its
 # DECISION row, so the absence above is the status discriminating rather than apply.sh having
 # stopped emitting drift decisions altogether.
-M5="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+M5="$(apl "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 if grep -q 'WORKLIST[[:space:]]*semantic-merge.*ai-dlc-epsilon' <<<"$M5"; then
   ok "apply: the carried path is on the worklist as a semantic merge"
 else

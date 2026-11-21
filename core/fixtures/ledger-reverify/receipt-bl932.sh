@@ -150,7 +150,7 @@ B="$(cat "$R/B")" && T="$(cat "$R/T")" && [ -n "$B" ] && [ -n "$T" ] \
   || { echo "REFUSED: B/T do not resolve in the world's distribution" >&2; exit 9; }
 sha() { sed -n "s/^$1=//p" "$R/SHAS" | cut -c1-7; }
 mkdir -p "$R/tmp" "$R/cwd"
-ROWS="$(cd "$R/cwd" && TMPDIR="$R/tmp" bash "$REC/ledger-reverify.sh" "$R/dist" "$B" "$R/cons" "$T" 2>"$R/err")"; rc=$?
+ROWS="$(cd "$R/cwd" && TMPDIR="$R/tmp" FXCELL="${LR_RCELL:-}" bash "$REC/ledger-reverify.sh" "$R/dist" "$B" "$R/cons" "$T" 2>"$R/err")"; rc=$?
 [ "$rc" -eq 0 ] || { echo "REFUSED: the engine exited $rc: $(head -3 "$R/err" | tr '\n' ' ')" >&2; exit 9; }
 # kind <label> -> "<status> <detail>" of the first NAMED-UPSTREAM-family row for the exact label, or none
 kind() { printf '%s\n' "$ROWS" | LR_L="$1" awk -F'\t' '$2 == ENVIRON["LR_L"] && $1 ~ /^NAMED-UPSTREAM/ { print $1 "\t" $3; f = 1; exit } END { if (!f) print "none" }'; }

@@ -1,0 +1,5 @@
+# apply-relabel-noop-row's starts of core/skills/ai-dlc-update/reconcile/apply.sh (BL-879 grammar). Every apply of the three
+# consumers runs in process (apl -> apl_main); section 4 keeps one program start per distinct CLI outcome, compared byte
+# for byte with the in-process answer by eqv(): the usage refusal (exit 1) and the passing apply over the consumer with no extensions/ (exit 0).
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-usage
+cli core/skills/ai-dlc-update/reconcile/apply.sh cli-pass

@@ -54,12 +54,71 @@ trap 'rm -rf "$WORK"' EXIT
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
+# --- THE SUBJECTS ARE ASKED IN PROCESS --------------------------------------------------------------
+# validate-layer-entries.sh (`vle_main`) and apply.sh (`apl_main`) are loadable: sourcing either defines functions and
+# returns at its column-0 source guard. `lint_eng <linter> <args>` and `ap_eng <apply.sh> <args>` answer what
+# `bash <subject> <args>` prints and exits with, in a subshell made to look like a fresh bash (core/fixtures/lib/inproc.sh).
+# One subject is loaded at a time (`lc_use`, called in the parent shell at the head of each phase: the linter's, then the
+# pull's); a copy of the reconcile directory is sourced inside its own run's subshell. KEPT END TO END: the cli cells of
+# cells.decl, each byte-compared with the in-process answer on the same input from the same path.
+# shellcheck source=/dev/null
+. "$HERE/../lib/inproc.sh" 2>/dev/null || { echo "FIXTURE BROKEN: core/fixtures/lib/inproc.sh absent beside $HERE" >&2; exit 2; }
+. "$HERE/../lib/layout.sh" || { echo "FIXTURE BROKEN: cannot source lib/layout.sh" >&2; exit 2; }
+APPLY="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/apply.sh" \
+              "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/apply.sh")"
+# PRE-WRAP CONSUMER GATE (BL-878): a consumer one pull behind carries this fixture with a subject that predates the
+# in-process wrap, and loading it would run its whole body. Neither half is SKIP (FIXTURE BROKEN in the distribution,
+# exit 0 on a consumer); exactly one half FAILS; an unreadable subject is FIXTURE ERROR.
+_lc_pre=""
+grep -qxF 'vle_main() {' "$LINTER"; _wg1=$?
+grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$LINTER"; _wg2=$?
+[ "$_wg1" -le 1 ] && [ "$_wg2" -le 1 ] || { echo "FIXTURE ERROR: cannot read $LINTER (grep exit $_wg1/$_wg2)" >&2; exit 2; }
+case "$_wg1$_wg2" in
+  00) : ;;
+  11) _lc_pre="$_lc_pre $LINTER" ;;
+  *) bad "$LINTER carries one half of the in-process wrap (vle_main line: rc $_wg1, column-0 source guard: rc $_wg2) -- a respelled subject this fixture cannot drive"
+     report_end layer-crosswalk-home ;;
+esac
+if [ -n "$APPLY" ]; then
+  grep -qxF 'apl_main() { set -uo pipefail' "$APPLY"; _wg1=$?
+  grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$APPLY"; _wg2=$?
+  [ "$_wg1" -le 1 ] && [ "$_wg2" -le 1 ] || { echo "FIXTURE ERROR: cannot read $APPLY (grep exit $_wg1/$_wg2)" >&2; exit 2; }
+  case "$_wg1$_wg2" in
+    00) : ;;
+    11) _lc_pre="$_lc_pre $APPLY" ;;
+    *) bad "$APPLY carries one half of the in-process wrap (apl_main line: rc $_wg1, column-0 source guard: rc $_wg2) -- a respelled subject this fixture cannot drive"
+       report_end layer-crosswalk-home ;;
+  esac
+fi
+if [ -n "$_lc_pre" ]; then echo "SKIP: layer-crosswalk-home:$_lc_pre predate(s) the in-process wrap"; fx_skip_exit "$HERE"; fi
+lc_use() { # lc_use <subject> -> make it the loaded subject (the previous one's functions are dropped first)
+  [ "$INPROC_LOADED" = "$1" ] && return 0
+  # shellcheck disable=SC2086
+  [ -z "$INPROC_LOADED" ] || unset -f $INPROC_FNS
+  inproc_load "$1"
+}
+lint_eng() { inproc_run "$1" vle_main "${@:2}"; } # <linter> [args...]
+ap_eng() { inproc_run "$1" apl_main "${@:2}"; }   # <apply.sh> [args...]
+# lc_eq <id> <in-process fn> <subject> <cell dir> <args...>: the in-process answer, then the command line, to <dir>/<id>.{in,cli}.{out,err,rc}
+lc_eq() {
+  local id="$1" fn="$2" subj="$3" d="$4"; shift 4
+  mkdir -p "$d" || return 1
+  [ -z "${LC_RESET:-}" ] || "$LC_RESET"
+  "$fn" "$subj" "$@" > "$d/$id.in.out" 2> "$d/$id.in.err"; echo $? > "$d/$id.in.rc"
+  [ -z "${LC_RESET:-}" ] || "$LC_RESET"
+  FXCELL="$id" bash "$subj" "$@" > "$d/$id.cli.out" 2> "$d/$id.cli.err"; echo $? > "$d/$id.cli.rc"
+}
+lc_same() { # lc_same <dir> <id> -> 0 when stdout, stderr and exit are byte-identical
+  cmp -s "$1/$2.in.out" "$1/$2.cli.out" && cmp -s "$1/$2.in.err" "$1/$2.cli.err" && cmp -s "$1/$2.in.rc" "$1/$2.cli.rc"
+}
+
 # EXPECTED_ASSERTIONS is not bookkeeping. `set -u` killing a `$( )` subshell that `if m="$( … )"` reads as a false
 # branch makes an arm silently not run — green lines and a PASS. Counting what actually ran is what closes it.
 # 2 premises + 2 state vectors + 1 message content + 1 difference + 1 declaration-is-read + 1 refusal
 # + 2 core-yields-zero (claim + control)
 # + 3 pull-side (scaffold, preserve, refusal)
 # + 3 smoke-surface pull-side (scaffold, preserve, undeclared)                                  = 16
+# + 4 linter cli cells (three outcomes, distinctness) + 3 apply cli cells (pass, refuse, distinctness)
 # + BL-978's scaffold-ignore block, SIX_ASSERTIONS = 20: the G0 premise, (i)-(v), the GU
 #   unchecked control, (vi) second-pull WORKLIST, (vii) G1 second pull, (viii) tracked path, (F1)
 #   the ordinary pull and (F2) --finish over undisposed rows, the next-pull cells (a) (b) (c), the
@@ -67,7 +126,7 @@ trap 'rm -rf "$WORK"' EXIT
 #   undocumented state                                                                         = 36
 # The 2 installer arms (scaffold + preserve) moved to schema-install-fallback, which declares
 # scripts/install.sh; this fixture ships and cannot.
-EXPECTED_ASSERTIONS=36
+EXPECTED_ASSERTIONS=43
 
 echo "layer-crosswalk-home:"
 
@@ -130,7 +189,7 @@ write_legacy() { # write_legacy <root>
 # from one that silences it, and a boolean would score both as the same cell.
 vector() { # vector <linter> <root>
   local out rc
-  out="$(bash "$1" "$2/consumer" 2>&1)"; rc=$?
+  out="$(lint_eng "$1" "$2/consumer" 2>&1)"; rc=$?
   printf 'e16=%s w8=%s rc=%s' \
     "$(printf '%s\n' "$out" | grep -c '^ERROR  E16')" \
     "$(printf '%s\n' "$out" | grep -c '^WARN   W8')" \
@@ -141,6 +200,8 @@ vector() { # vector <linter> <root>
 # premises — the seed is the zero every assertion moves
 # ---------------------------------------------------------------------------
 R0="$(fresh)" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+lc_use "$LINTER" || { echo "FIXTURE BROKEN: sourcing $LINTER defined nothing" >&2; exit 2; }
+declare -F vle_main >/dev/null || { echo "FIXTURE BROKEN: $LINTER defined no vle_main when sourced" >&2; exit 2; }
 
 echo "HERMETIC-CONSUMED core/scripts/validate-layer-entries.sh"
 V0="$(vector "$LINTER" "$R0")"
@@ -173,7 +234,7 @@ V2="$(vector "$LINTER" "$R2")"
   || bad "row in the retired location: expected 'e16=0 w8=1 rc=0', got '$V2'"
 
 # W8 must name what it found, or an operator cannot act on it without diffing two files.
-W8LINE="$(bash "$LINTER" "$R2/consumer" 2>&1 | grep '^WARN   W8' || true)"
+W8LINE="$(lint_eng "$LINTER" "$R2/consumer" 2>&1 | grep '^WARN   W8' || true)"
 if grep -q '33' <<<"$W8LINE" && grep -qF "$CW_REL" <<<"$W8LINE"; then
   ok "W8 names the row it found and the path to move it to"
 else
@@ -183,8 +244,8 @@ fi
 # THE SPEC'S EXPLICIT BAR. A dual-read that produced the same output for both states would be
 # the silent kind, which the spec rules out by name. This compares the runs rather than
 # inferring the difference from the fact that a warn exists.
-O1="$(bash "$LINTER" "$R1/consumer" 2>&1)"
-O2="$(bash "$LINTER" "$R2/consumer" 2>&1)"
+O1="$(lint_eng "$LINTER" "$R1/consumer" 2>&1)"
+O2="$(lint_eng "$LINTER" "$R2/consumer" 2>&1)"
 [ "$O1" != "$O2" ] \
   && ok "a MIGRATED consumer and an UNMIGRATED one do not produce identical output" \
   || bad "migrated and unmigrated consumers produced byte-identical output — this is the silent dual-read the spec forbids"
@@ -214,11 +275,44 @@ V3="$(vector "$LINTER" "$R3")"
 R4="$WORK/w4"; cp -R "$R0" "$R4"; write_new_home "$R4"
 grep -v '^consumer_crosswalk_file:' "$R4/consumer/.claude/skills/ai-dlc/layer-contract.yaml" > "$R4/lc.new" \
   && mv "$R4/lc.new" "$R4/consumer/.claude/skills/ai-dlc/layer-contract.yaml"
-O4="$(bash "$LINTER" "$R4/consumer" 2>&1)"
+O4="$(lint_eng "$LINTER" "$R4/consumer" 2>&1)"
 if grep -q "could not read 'consumer_crosswalk_file:'" <<<"$O4"; then
   ok "an UNDECLARED crosswalk path is REFUSED by name, not silently treated as an empty table"
 else
   bad "removing the declaration did not produce a refusal — E16 and W7 would clear against a set nothing read"
+fi
+
+# ---------------------------------------------------------------------------
+# THE COMMAND LINE ANSWERS WHAT THE IN-PROCESS RUN ANSWERS (cli-lint-findings, cli-lint-clean, cli-lint-refusal)
+# ---------------------------------------------------------------------------
+# One `cli` cell per distinct command-line outcome of the linter, each byte-compared (stdout, stderr, exit) with lint_eng on
+# the same root: E16 reported (rc 1, R0), clean (rc 0, R1) and the undeclared-path refusal (R4). The three must differ.
+LQ="$WORK/lint-cells"
+if lc_eq cli-lint-findings lint_eng "$LINTER" "$LQ" "$R0/consumer" && lc_eq cli-lint-clean lint_eng "$LINTER" "$LQ" "$R1/consumer" \
+   && lc_eq cli-lint-refusal lint_eng "$LINTER" "$LQ" "$R4/consumer"; then
+  if lc_same "$LQ" cli-lint-findings && [ "$(cat "$LQ/cli-lint-findings.cli.rc")" = 1 ] && grep -q '^ERROR  E16' "$LQ/cli-lint-findings.cli.out"; then
+    ok "cli-lint-findings: the command line gives the in-process answer on a retired id with no row (rc 1, E16 reported)"
+  else
+    bad "cli-lint-findings: the command line and the in-process run differ on a retired id with no row (cli rc $(cat "$LQ/cli-lint-findings.cli.rc"), in rc $(cat "$LQ/cli-lint-findings.in.rc"))"
+  fi
+  if lc_same "$LQ" cli-lint-clean && [ "$(cat "$LQ/cli-lint-clean.cli.rc")" = 0 ] && [ -s "$LQ/cli-lint-clean.cli.out" ]; then
+    ok "cli-lint-clean: the command line gives the in-process answer on a consumer whose row is in the declared file (rc 0)"
+  else
+    bad "cli-lint-clean: the command line and the in-process run differ on a clean consumer (cli rc $(cat "$LQ/cli-lint-clean.cli.rc"), in rc $(cat "$LQ/cli-lint-clean.in.rc"))"
+  fi
+  if lc_same "$LQ" cli-lint-refusal && grep -q "could not read 'consumer_crosswalk_file:'" "$LQ/cli-lint-refusal.cli.out" "$LQ/cli-lint-refusal.cli.err"; then
+    ok "cli-lint-refusal: the command line gives the in-process answer on an undeclared crosswalk path (the refusal is named)"
+  else
+    bad "cli-lint-refusal: the command line and the in-process run differ on an undeclared crosswalk path (cli rc $(cat "$LQ/cli-lint-refusal.cli.rc"), in rc $(cat "$LQ/cli-lint-refusal.in.rc"))"
+  fi
+  if ! cmp -s "$LQ/cli-lint-findings.cli.out" "$LQ/cli-lint-clean.cli.out" && ! cmp -s "$LQ/cli-lint-findings.cli.out" "$LQ/cli-lint-refusal.cli.out" \
+     && ! cmp -s "$LQ/cli-lint-clean.cli.out" "$LQ/cli-lint-refusal.cli.out"; then
+    ok "  the three linter outcomes are distinct (three different outputs)"
+  else
+    bad "  two of cli-lint-findings, cli-lint-clean and cli-lint-refusal gave the same output, so an equivalence above compares one outcome with itself"
+  fi
+else
+  bad "setup: could not run the linter cli cells"
 fi
 
 # ---------------------------------------------------------------------------
@@ -278,8 +372,6 @@ echo "  --    the create-once and preserve-on-reinstall installer arms run in sc
 # `apply.sh` are different programs and only one of them was being asked.
 #
 # These arms run in BOTH layouts, unlike the installer's, because `apply.sh` IS shipped.
-APPLY="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/apply.sh" \
-              "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/apply.sh")"
 if [ -z "$APPLY" ]; then
   bad "cannot locate ai-dlc-update/reconcile/apply.sh from $HERE — the pull-side scaffold arms did not run, and an arm that never ran is silent rather than green"
   bad "  (scaffold-on-pull, preserve-on-pull, refusal are all unverified)"
@@ -336,7 +428,10 @@ else
   # --- the file arrives, and it arrives as THEIRS' template rather than as anything ------
   read -r SD SB SC ST <<<"$(synth yes)"
   echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/apply.sh"
-  bash "$APPLY" "$SD" "$SB" "$SC" "$ST" > "$WORK/apply1.out" 2>&1
+  lc_use "$APPLY" || { echo "FIXTURE BROKEN: sourcing $APPLY defined nothing" >&2; exit 2; }
+  declare -F apl_main >/dev/null || { echo "FIXTURE BROKEN: $APPLY defined no apl_main when sourced" >&2; exit 2; }
+  cp -R "$SC" "$WORK/sc.pristine" || { echo "FIXTURE ERROR: could not copy the pristine consumer" >&2; exit 2; }
+  ap_eng "$APPLY" "$SD" "$SB" "$SC" "$ST" > "$WORK/apply1.out" 2>&1
   if [ -f "$SC/$CW_REL" ] \
      && cmp -s "$SC/$CW_REL" "$SD/core/skills/ai-dlc/templates/$(basename "$CW_REL")"; then
     ok "the PULL scaffolds the declared crosswalk file, byte-identical to the template THEIRS ships"
@@ -357,7 +452,7 @@ else
   printf '%s\n' "$ROW" >> "$SC/$CW_REL"
   SUM="$(cksum < "$SC/$CW_REL")"
   printf 'web/src/**\n' >> "$SC/$SS_REL"; cp "$SC/$SS_REL" "$WORK/ss.kept"
-  bash "$APPLY" "$SD" "$SB" "$SC" "$ST" > "$WORK/apply1b.out" 2>&1
+  ap_eng "$APPLY" "$SD" "$SB" "$SC" "$ST" > "$WORK/apply1b.out" 2>&1
   [ "$(cksum < "$SC/$CW_REL")" = "$SUM" ] \
     && { ok "a SECOND pull preserves a populated crosswalk file — the rows are the consumer's"; } \
     || bad "a second pull overwrote the populated crosswalk file, which is the whole ownership claim"
@@ -372,13 +467,40 @@ else
   # destination that is not there, and the failure surfaces as rows written into a file
   # nothing reads — the state this mechanism replaced.
   read -r ND NB NC NT <<<"$(synth no)"
-  bash "$APPLY" "$ND" "$NB" "$NC" "$NT" > "$WORK/apply2.out" 2>&1
+  ap_eng "$APPLY" "$ND" "$NB" "$NC" "$NT" > "$WORK/apply2.out" 2>&1
   if grep -q '^DECISION	crosswalk-undeclared' "$WORK/apply2.out" \
      && grep -q '^DECISION	restamp-withheld' "$WORK/apply2.out" \
      && [ ! -f "$NC/$CW_REL" ]; then
     ok "THEIRS declaring no crosswalk file is REFUSED by name and withholds the re-stamp, rather than guessing a path"
   else
     bad "an undeclared crosswalk file did not produce 'DECISION crosswalk-undeclared' plus a withheld re-stamp: $(tr '\n' ' ' < "$WORK/apply2.out" | cut -c1-200)"
+  fi
+  # --- the command line answers what the in-process run answers (cli-pass, cli-refuse) ---------------
+  # A completed pull over the first world (rc 0, scaffolds written) and an unknown-option refusal (rc 2), each from a
+  # fresh copy of the pristine consumer at the same path, byte-compared (stdout, stderr, exit) with ap_eng; they must differ.
+  AQ="$WORK/apply-cells"; AQC="$WORK/eqc"
+  aq_reset() { rm -rf "$AQC"; cp -R "$WORK/sc.pristine" "$AQC"; }
+  LC_RESET=aq_reset
+  lc_eq cli-pass ap_eng "$APPLY" "$AQ" "$SD" "$SB" "$AQC" "$ST" && lc_eq cli-refuse ap_eng "$APPLY" "$AQ" --bogus "$SD" "$SB" "$AQC" "$ST"
+  LC_RESET=
+  if [ -s "$AQ/cli-pass.cli.out" ] || [ -s "$AQ/cli-pass.in.out" ]; then
+    if lc_same "$AQ" cli-pass && [ "$(cat "$AQ/cli-pass.cli.rc")" = 0 ]; then
+      ok "cli-pass: the command line gives the in-process answer on a completed pull (rc 0, $(wc -c < "$AQ/cli-pass.cli.out" | tr -d ' ') bytes of report)"
+    else
+      bad "cli-pass: the command line and the in-process run differ on a completed pull (cli rc $(cat "$AQ/cli-pass.cli.rc"), in rc $(cat "$AQ/cli-pass.in.rc"))"
+    fi
+  else
+    bad "cli-pass: neither run produced a report, so the equivalence compares nothing"
+  fi
+  if lc_same "$AQ" cli-refuse && [ "$(cat "$AQ/cli-refuse.cli.rc")" = 2 ] && grep -q 'unknown option' "$AQ/cli-refuse.cli.err"; then
+    ok "cli-refuse: the command line gives the in-process answer on an unknown option (rc 2, named)"
+  else
+    bad "cli-refuse: the command line and the in-process run differ on an unknown option (cli rc $(cat "$AQ/cli-refuse.cli.rc"), in rc $(cat "$AQ/cli-refuse.in.rc"))"
+  fi
+  if [ "$(cat "$AQ/cli-pass.cli.rc")$(cat "$AQ/cli-refuse.cli.rc")" = 02 ] && ! cmp -s "$AQ/cli-pass.cli.out" "$AQ/cli-refuse.cli.out"; then
+    ok "  the two pull outcomes are distinct (rc 0 against rc 2, different output)"
+  else
+    bad "  cli-pass and cli-refuse are not distinct outcomes, so the equivalence above compares one outcome with itself"
   fi
   # The same undeclaring THEIRS ships the smoke template: with no declaration nothing is written and no
   # smoke-surface row of any kind is printed (the smoke arms fall back to their default and SKIP).
@@ -464,9 +586,9 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
     [ -z "${4:-}" ] || C="$w/cons-$4"
     c="$w/cons-$3"; cp -R "$C" "$c" || return 1
     if [ "$1" = G0 ]; then
-      GIT_CEILING_DIRECTORIES="$w" GIT_CONFIG_NOSYSTEM=1 bash "$2" "$D" "$B" "$c" "$T" > "$w/$3.out" 2>&1
+      GIT_CEILING_DIRECTORIES="$w" GIT_CONFIG_NOSYSTEM=1 ap_eng "$2" "$D" "$B" "$c" "$T" > "$w/$3.out" 2>&1
     else
-      GIT_CONFIG_NOSYSTEM=1 bash "$2" "$D" "$B" "$c" "$T" > "$w/$3.out" 2>&1
+      GIT_CONFIG_NOSYSTEM=1 ap_eng "$2" "$D" "$B" "$c" "$T" > "$w/$3.out" 2>&1
     fi
     return 0
   }
@@ -521,7 +643,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
         ng) printf '%s\n!%s\n' "$SS_REL" "$SS_REL" > "$c/.gitignore" ;;
       esac
       local D B C T; read -r D B C T < "$WORK/six-GY/.refs"
-      GIT_CONFIG_NOSYSTEM=1 bash "$2" "$D" "$B" "$c" "$T" > "$WORK/six-GY/$1.out" 2>&1
+      GIT_CONFIG_NOSYSTEM=1 ap_eng "$2" "$D" "$B" "$c" "$T" > "$WORK/six-GY/$1.out" 2>&1
       return 0
     }
     for t in a b b2 n1 n2 n3 ng; do six_cell_run "next-$t" "$APPLY" "$t"; done
@@ -533,7 +655,7 @@ if [ -n "$APPLY" ] && [ "$SIX_SKIP" = 0 ]; then
       read -r D B C T < "$w/.refs"
       c="$w/cons-$3"; cp -R "$w/cons-$4" "$c" || return 1
       if [ "${5:-}" = exact ]; then for p in $SIX_MD; do printf '%s\n' "$p" >> "$c/.gitignore"; done; fi
-      GIT_CONFIG_NOSYSTEM=1 bash "$2" --finish "$D" "$B" "$c" "$T" > "$w/$3.out" 2>&1
+      GIT_CONFIG_NOSYSTEM=1 ap_eng "$2" --finish "$D" "$B" "$c" "$T" > "$w/$3.out" 2>&1
       return 0
     }
     six_finish GX "$APPLY" finish base; six_finish G1 "$APPLY" finish base; six_finish GX "$APPLY" finish-exact base exact

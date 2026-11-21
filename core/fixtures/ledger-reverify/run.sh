@@ -178,7 +178,7 @@ lr_badf() { local _l; printf -v _l "$@"; bad "${_l%$'\n'}"; }
 # FRESH memo, exactly as private to that run as the CLI's, unless the caller exported one (as `u_run`
 # does). A memo shared across runs would let one run read another engine's cache.
 #
-# KEPT END TO END, and why: the baseline `OUT` (the CLI's rc-0 outcome), the cells of `inproc-seam` (the
+# KEPT END TO END, and why: the baseline `OUT` is in process (the `cli-seeded` cell of `inproc-seam` is byte-compared with it), the cells of `inproc-seam` (the
 # CLI against the in-process answer on every distinct CLI outcome), and `memo_standalone`, whose property
 # -- a run with no memo handed to it builds one and removes it -- is decided by lib.sh at `$BASH_SUBSHELL`
 # 0, the top of a process, which no subshell is.
@@ -237,7 +237,7 @@ trap '[ -n "${LR_UNIT_ERR:-}" ] && [ -s "$LR_UNIT_ERR" ] && cat "$LR_UNIT_ERR" >
 # THE BASELINE RUNS FROM `/`, a directory where no consumer-relative path resolves, and its exit
 # status is kept. cwd-invariance compares it byte-for-byte against a run from the consumer root, and
 # exit-code reads OUT_RC, so neither re-renders the whole ledger to ask its question.
-OUT="$(cd / && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"; OUT_RC=$?
+OUT="$(cd / && lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"; OUT_RC=$?
 
 ASSERTIONS=0
 
@@ -416,13 +416,13 @@ local _w="$(dirname "$DIST")/inproc-seam" _k _ok=1 _seen=""
 mkdir -p "$_w/noled"
 for _k in seeded swapped noledger refusal; do
   case "$_k" in
-    seeded)   (cd / && bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS") > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
+    seeded)   (cd / && FXCELL=cli-seeded bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS") > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
               (cd / && lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS") > "$_w/$_k.in" 2>&1; echo $? >> "$_w/$_k.in" ;;
-    swapped)  bash "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
+    swapped)  FXCELL=cli-swapped bash "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
               lr_eng "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" > "$_w/$_k.in" 2>&1; echo $? >> "$_w/$_k.in" ;;
-    noledger) bash "$CLOSER" "$DIST" "$BASE" "$_w/noled" "$THEIRS" > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
+    noledger) FXCELL=cli-noledger bash "$CLOSER" "$DIST" "$BASE" "$_w/noled" "$THEIRS" > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
               lr_eng "$CLOSER" "$DIST" "$BASE" "$_w/noled" "$THEIRS" > "$_w/$_k.in" 2>&1; echo $? >> "$_w/$_k.in" ;;
-    refusal)  TMPDIR="$_w/no-such-dir" bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
+    refusal)  TMPDIR="$_w/no-such-dir" FXCELL=cli-refusal bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" > "$_w/$_k.cli" 2>&1; echo $? >> "$_w/$_k.cli"
               TMPDIR="$_w/no-such-dir" AI_DLC_RECONCILE_MEMO="$_w" lr_eng "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" > "$_w/$_k.in" 2>&1; echo $? >> "$_w/$_k.in" ;;
   esac
   cmp -s "$_w/$_k.cli" "$_w/$_k.in" || { _ok=0; printf '          | %s differs\n' "$_k"; }
@@ -3013,7 +3013,7 @@ MS_LED="$(lr_subledger memo 'Entry SH-DIST-REVSPEC hands')" || MS_LED="$DIST/no-
 memo_standalone() {
   local r="$1" t out left
   t="$(mktemp -d "$(dirname "$DIST")/memo-tmp.XXXXXX")" || { echo "FAIL could not create a private TMPDIR"; return; }
-  out="$(unset AI_DLC_RECONCILE_MEMO; TMPDIR="$t" bash "$r/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$MS_LED" 2>&1)"
+  out="$(unset AI_DLC_RECONCILE_MEMO; TMPDIR="$t" FXCELL=e2e-memo-standalone bash "$r/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$MS_LED" 2>&1)"
   left="$(ls -d "$t"/reconcile-memo.* 2>/dev/null | grep -c .)" || left=0
   if ! printf '%s\n' "$out" | awk -F'\t' '$2 ~ /SH-DIST-REVSPEC / && $1=="STILL-LIVE" {f=1} END{exit !f}'; then
     echo "BROKEN the run produced no SH-DIST-REVSPEC STILL-LIVE control row, so it establishes nothing about the memo"
@@ -3309,7 +3309,7 @@ lr_unit_bl890() {
 # The shipped run builds the distribution and the consumer worlds into the cache.
   _wc="$(dirname "$DIST")/bl890-worlds"
   ASSERTIONS=$((ASSERTIONS + 1))
-  _o="$(bash "$_rec" "$(dirname "$CLOSER")" "" "$_wc" 2>&1)"; _rc=$?
+  _o="$(LR_RCELL=e2e-receipt-bl890 bash "$_rec" "$(dirname "$CLOSER")" "" "$_wc" 2>&1)"; _rc=$?
   # SCRUB-RAN (BL-965): the receipt's AI_DLC_* scrub must have unset its probe; presence-shaped, so a
   # receipt that printed nothing fails it too.
   ASSERTIONS=$((ASSERTIONS + 1))
@@ -3343,7 +3343,7 @@ lr_unit_bl932() {
   fi
   _wc="$(dirname "$DIST")/bl932-worlds"
   ASSERTIONS=$((ASSERTIONS + 1))
-  _o="$(bash "$_rec" "$_rd" "" "$_wc" 2>&1)"; _rc=$?
+  _o="$(LR_RCELL=e2e-receipt-bl932 bash "$_rec" "$_rd" "" "$_wc" 2>&1)"; _rc=$?
   # SCRUB-RAN (BL-965), as in lr_unit_bl890.
   ASSERTIONS=$((ASSERTIONS + 1))
   if grep -q '^SCRUB-RAN ' <<< "$_o"; then lr_okf '%-22s the receipt'"'"'s AI_DLC_* scrub unset its probe variable\n' "bl932-SCRUB-RAN"

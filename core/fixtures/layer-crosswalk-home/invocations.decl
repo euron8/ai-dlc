@@ -5,6 +5,9 @@
 # --finish runs over GX, G1 and GX with exact-path lines) and 23 copy runs (LM and LN over the
 # sibling-less reconcile copy, ST over the stub-library copy, and the 20 mutants), each with the starts
 # apply.sh makes inside itself.
-195 *
-8 core/scripts/validate-layer-entries.sh
-24 core/skills/ai-dlc-update/reconcile/apply.sh
+# BL-878 conversion, rows DERIVED from the cell design (no counted run; the combined-tree seed confirms): * 195-8-24-3+5; linter 8->3 (cli cells), inproc 11 = 8 + 3 cli-cell passes; apply.sh 24->2 (cli cells), inproc 29 = 24 + 3 copy runs (lm, without, st) + 2 cli-cell passes.
+179 *
+3 core/scripts/validate-layer-entries.sh
+2 core/skills/ai-dlc-update/reconcile/apply.sh
+11 inproc:core/scripts/validate-layer-entries.sh
+29 inproc:core/skills/ai-dlc-update/reconcile/apply.sh

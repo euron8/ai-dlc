@@ -188,6 +188,23 @@ if [ "$_wgate" = 1 ]; then
     fx_skip_exit "$HERE"
   fi
 fi
+# THE SAME ANSWER FOR A PRE-WRAP apply.sh, in the shard that runs unit b7, before receipt-bl706.sh loads it: a driver carrying
+# neither the `apl_main() {` line nor the column-0 source guard predates the wrap. (Spelled through _bgate, never as an
+# `if sg` line, for the same reason as _wgate.)
+_bgate=0; sg b7 && _bgate=1
+if [ "$_bgate" = 1 ]; then
+  _ba="$(dirname "$DIFFER")/apply.sh"
+  if [ -f "$_ba" ]; then
+    grep -q '^apl_main() {' "$_ba"; _bx=$?
+    [ "$_bx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_ba (grep exit $_bx) -- an unreadable driver is not one that predates the wrap" >&2; exit 2; }
+    grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$_ba"; _by=$?
+    [ "$_by" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_ba (grep exit $_by) -- an unreadable driver is not one that predates the wrap" >&2; exit 2; }
+    if [ "$_bx" -ne 0 ] && [ "$_by" -ne 0 ]; then
+      echo "SKIP: $NAME -- apply.sh predates the in-process wrap. Nothing was asserted."
+      fx_skip_exit "$HERE"
+    fi
+  fi
+fi
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
@@ -1224,7 +1241,7 @@ fi  # end of the wrapped-writer branch
 fi  # ---- end of unit wr
 
 # ---- B7: BL-706 -- the shipping apply.sh runs the differential on EVERY ordinary pull ------------------------
-# receipt-bl706.sh drives the shipping apply.sh and the helper beside it over seeded worlds (cells a a2 a3 a4 a5 a6 b b4 b5 b6 b7 d l c e e2 f g h i i2 j k,
+# receipt-bl706.sh drives the shipping apply.sh and the helper beside it over seeded worlds (cells a a2 a3 a4 a5 a6 b b4 b5 b6 b7 d l c e e2 f g h i i2 j k eq,
 # its header names each) and prints one `CELL <id> ok|FAIL` line per cell. It runs once here and every cell is asserted.
 b7_state() { awk -v c="$2" '$1 == "CELL" && $2 == c { print $3; f = 1; exit } END { if (!f) print "MISSING" }' <<<"$1"; }
 b7_text() { awk -v c="$2" '$1 == "CELL" && $2 == c { sub(/^CELL [^ ]+ [^ ]+ /, ""); print; exit }' <<<"$1"; }
@@ -1234,7 +1251,7 @@ b7_real() {
   B7_RCPT="$HERE/receipt-bl706.sh"
   [ -f "$B7_RCPT" ] && [ -f "$B7_RECON/apply.sh" ] || { echo "FIXTURE ERROR: receipt-bl706.sh or the reconcile/ directory is missing" >&2; exit 2; }
   B7_REAL="$(TMPDIR="$WORK" bash "$B7_RCPT" "$B7_RECON" "$READER" 2>&1)"; B7_RC=$?
-  for _c in a a2 a3 a4 a5 a6 b b4 b5 b6 b7 d l c e e2 f g h i i2 j k; do
+  for _c in a a2 a3 a4 a5 a6 b b4 b5 b6 b7 d l c e e2 f g h i i2 j k eq; do
     if [ "$(b7_state "$B7_REAL" "$_c")" = ok ]; then
       ok "B7$_c $(b7_text "$B7_REAL" "$_c" | cut -c1-200)"
     else bad "B7$_c the shipping apply.sh/helper did not hold cell $_c: $(b7_text "$B7_REAL" "$_c" | cut -c1-300) (state $(b7_state "$B7_REAL" "$_c"))"; fi
