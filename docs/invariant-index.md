@@ -30,7 +30,7 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I16 | runtime-pipeline prose must cite CONSUMER paths, never `core/`-prefixed ones. |
 | I17 | apply.sh's runtime composition writes where install.sh writes |
 | I18 | ONE bold-anchor rule. The SAME split as I15, one function down. layer-drift.sh |
-| I19 | SKILL.md Rule 8's intensity table is the ONLY place the validation-cycle |
+| I19 | the SKILL.md Rule 8 stub's intensity table owns the validation-cycle minimums; rule-bodies/rule-8.md carries a copy bound by I131 |
 | I20 | every fixture is DRIVEN, or declares in writing that it cannot be |
 | I21 | ONE home for the reconcile helpers, and nothing may grow a second. |
 | I22 | every role has a config entry, and every entry resolves. |
@@ -146,3 +146,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I128 | Check B's pause-write allow list, updater-marker ERE and Explore role ERE are the pause hook's, byte for byte |
 | I129 | the finding-class set is ONE set across code-reviewer.md, qa.md, the merge's grammar (both gates) and the record-only route |
 | I130 | every core/skills/ai-dlc/rule-bodies/rule-N.md is named by exactly one READ AND FOLLOW pointer sentence in SKILL.md |
+| I131 | the Rule 8 intensity table in the SKILL.md stub is byte-identical to the one in rule-bodies/rule-8.md |

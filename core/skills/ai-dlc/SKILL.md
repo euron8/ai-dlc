@@ -109,143 +109,33 @@ conventions are `docs/coding-conventions.md`.
 
 ### Rule 2 -- Single conversation is the default
 
-Run the entire pipeline in this conversation unless a sanctioned
-handoff exception applies. Handoff triggers:
-
-- (a) **Human-requested handoff** -- the user explicitly asks to
-  continue in a new session (directly, or in response to a reminder).
-- (b) **Yellow-threshold reminder** (first token threshold crossed) --
-  the lead outputs a one-line reminder with routing options;
-  non-blocking, user decides.
-- (c) **Red-threshold reminder** (degradation-zone token threshold
-  crossed) -- the lead outputs a more urgent one-line reminder;
-  still non-blocking, still the user's call.
-- (d) **Imminent-threshold reminder** (auto-compact is a few turns away)
-  -- the lead refreshes the pipeline snapshot so the coming compaction
-  recovers from a current record, then reminds in one line. **Still
-  non-blocking. Still the user's call.**
-
-Only path (a) initiates a handoff. Paths (b), (c) and (d) are reminders
-only. The lead does NOT force handoff at any threshold; critical
-operations may require continuing past every reminder threshold,
-and the user's judgment is authoritative. Thresholds are model-aware
-absolute token counts; percentages are not used.
-
-**A threshold is not a request.** The lead may *name* a handoff as an option;
-it may never *take* one.
-
-Reminders (b) and (c) are fired by the `ai-dlc-context-sensor.sh` Stop
-hook, which measures resident context from the session transcript on
-every turn. The lead neither measures nor estimates its own context.
-Reminder text is owned by that hook. Full snapshot structure, recurrence
-arithmetic, and auto-handoff configuration live in the two **Handoff
-Protocol** sections below and in `gate-validation.md` Check 14.
+Run the entire pipeline in this conversation unless a sanctioned handoff exception applies. Only a human-requested handoff (the user explicitly asks to continue in a new session) initiates one; the yellow, red and imminent token-threshold reminders are non-blocking and the user's call. **A threshold is not a request.** The lead may *name* a handoff as an option; it may never *take* one. READ AND FOLLOW `rule-bodies/rule-2.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 3 -- Never stall the pipeline
 
-The pipeline runs as a continuous, uninterrupted flow. Exactly
-FOUR pause points exist where you stop and wait for human input:
+The pipeline runs as a continuous, uninterrupted flow. Exactly FOUR pause points exist where you stop and wait for human input: (a) ambiguity resolution and operator-only decisions (Rule 11), (b) the Production Validation Checkpoint (Rule 10), (c) the retro commentary prompt, (d) sprint-scope confirmation. At (b), (c) and any terminal STOP that awaits a human, `touch _bmad-output/pipeline-paused.flag` before ending the turn; (a) and (d) set NO flag. Every `AskUserQuestion` carries 2-4 options per question.
 
-- (a) **Ambiguity resolution and operator-only decisions** (Rule 11).
-- (b) **Production Validation Checkpoint** (Rule 10), including the
-  stop before it while a locked requirement awaits its recorded
-  disposition (`steps/deploy-validate.md` §5).
-- (c) **Retro commentary prompt**.
-- (d) **Sprint-scope confirmation** (`route-fresh-start.md` Step 6) -- the only
-  pause point upstream of planning. Confirm or correct the scope you
-  already resolved; it is never a question about what to build.
-
-At a pause point -- and at any terminal STOP or integrity failure that
-awaits a human -- `touch _bmad-output/pipeline-paused.flag` before
-ending the turn. The Stop hook recognizes an intentional pause by that
-flag alone; without it your pause reads as a stall and the hook returns
-a forced-continuation reason urging you to pair the text with a tool
-call, pushing you past the very checkpoint you stopped at.
-
-(a) and (d) are the exceptions and set NO flag: each is solicited with
-`AskUserQuestion`, so the turn never ends and the Stop hook never runs.
-A flag set there is a pause nobody clears. (b) and (c) set the flag and
-end the turn.
-
-**EVERY `AskUserQuestion` CARRIES 2-4 OPTIONS PER QUESTION. A question with one
-option is REJECTED BY THE HARNESS**, not by this rule -- `InputValidationError`,
-`"code":"too_small"`, `"minimum":2` -- and the decision it carried is lost unless
-you re-ask. Measured on one sprint: three rejections in three sessions, two of
-them followed by a compaction inside three minutes, so the escalation went into a
-summary and the operator never saw it. If you have only one course of action you
-do not have a question; state it and act, or find the real alternative. This is
-the single statement of that constraint; `steps/route.md` and
-`steps/_gate-procedures.md` cite it rather than restating it.
-
-If you are not at one of these four pause points, you are not done.
-Keep working. A phase transition is not a pause point: run its gate
-(`gate-validation.md`) and proceed without waiting for approval. Do not ask if you should continue -- that is about
-continuing, never about an action only the operator can take.
-
-**Show your work.** Output sub-skill results so the human can
-observe the pipeline, then immediately continue to the next action.
-Outputting and continuing = correct. Outputting and stopping = stalling.
-
-**Tool call first, recap second.** When transitioning between
-pipeline steps, issue the next tool call (Read the next step file)
-IN THE SAME response as any status recap. A response that contains
-only text and no tool call is a natural turn end — the model will
-stop. A response that contains a tool call continues regardless of
-surrounding text. Always pair recap text with the next action's
-tool call. Never emit a recap without a tool call in the same response.
+If you are not at one of these four pause points, you are not done: keep working, and pair every status recap with the next tool call in the same response. READ AND FOLLOW `rule-bodies/rule-3.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 4 -- No step may be skipped regardless of perceived simplicity
 
-When a step file is loaded via "READ AND FOLLOW", execute every
-numbered section sequentially. Do not skip sections. Do not jump to
-the next step file until the current step's execution sequence is
-complete and its gate validation has passed.
-
-"This is simple" is never a valid reason to bypass a step or
-sub-step. A step that has nothing to do completes quickly — but it
-MUST be loaded (Read tool call per Rule 21) and its execution
-sequence MUST run. Skipping validation, Skill invocations, or gate
-checks to save time or tokens is a pipeline violation. Violation
-fails the next gate unconditionally.
-
-The sequence is the step-file routing ("READ AND FOLLOW" directives
-and `nextStepFile` in frontmatter), not your judgment: do not reorder
-steps or jump ahead. Review every element of every artifact
-exhaustively; do not summarize.
+When a step file is loaded via "READ AND FOLLOW", execute every numbered section sequentially. Do not skip sections, and do not jump to the next step file until the current step's execution sequence is complete and its gate validation has passed. "This is simple" is never a valid reason to bypass a step or sub-step. A step that has nothing to do completes quickly — but it MUST be loaded (Read tool call per Rule 21) and its execution sequence MUST run. Skipping validation, Skill invocations, or gate checks to save time or tokens is a pipeline violation. The sequence is the step-file routing, not your judgment: do not reorder steps or jump ahead. READ AND FOLLOW `rule-bodies/rule-4.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 5 -- Follow the routing
 
-Rule 4.
+Rule 4. READ AND FOLLOW `rule-bodies/rule-5.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 6 -- Walk through everything
 
-Rule 4.
+Rule 4. READ AND FOLLOW `rule-bodies/rule-6.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 7 -- Apply all recommended improvements
 
-When party mode, adversarial review, or advanced elicitation surface
-a finding INSIDE the validation cycle, it is fixed directly in the
-artifact by the dispatched repair seat -- a `remediator` for planning
-artifacts (`_gate-procedures.md`, "Adversarial repair dispatch"), dev
-teammates for code -- not inline by the lead. Do not present a menu of
-options. Do not ask "should I fix this?" Just dispatch it. After the series
-stamps `EXIT_CONDITION_MET`, a finding is DEFERRED to the next step's
-artifact or it re-opens the series on this record.
-
-Fixing directly governs disposition, not shape. A finding that adds
-mechanism MUST state why a simpler change is insufficient (Rule
-26(d)); a finding that removes or simplifies mechanism is applied
-with the same directness as one that adds it.
+A finding that party mode, adversarial review or advanced elicitation surfaces INSIDE the validation cycle is fixed directly in the artifact by the dispatched repair seat -- a `remediator` for planning artifacts, dev teammates for code -- not inline by the lead. Do not present a menu of options and do not ask "should I fix this?": dispatch it. After the series stamps `EXIT_CONDITION_MET`, a finding is DEFERRED to the next step's artifact or it re-opens the series on this record. A finding that adds mechanism MUST state why a simpler change is insufficient (Rule 26(d)). READ AND FOLLOW `rule-bodies/rule-7.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 8 -- Run the validation cycle per declared intensity
 
-Validation intensity is declared at route time (see route-fresh-start.md Step 6)
-and recorded in the pipeline snapshot as `validation_intensity`. The
-intensity determines the MINIMUM validation cycle at each planning
-phase. The lead MUST NOT run less than the declared minimum.
-`test-strategy.md` is the one exception: its minimum is the convergence
-review alone (`steps/stories-test-strategy.md` §5 step 2). Running
-more is always permitted.
+Validation intensity is declared at route time and recorded in the pipeline snapshot as `validation_intensity`; it determines the MINIMUM validation cycle at each planning artifact, and the lead MUST NOT run less than the declared minimum (`test-strategy.md` alone runs the convergence review only). Running more is always permitted.
 
 | Intensity | Trigger | Minimum cycle per planning artifact |
 |---|---|---|
@@ -254,335 +144,29 @@ more is always permitted.
 | `carry-over-single` | carry-over variant with ≤2 stories touching service code paths | Party Mode → Adversarial Review |
 | `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review at discovery (or requirements) + stories-test-strategy only |
 
-**The Adversarial Review runs until a pass stamps `EXIT_CONDITION_MET`. That
-verdict is the only thing that ends it, and it is honoured the moment it is met,
-including at pass 1.** The residue that decides it: `team-roles/adversary.md`.
-Pass 2+ reviews the REPAIR, not the document again, and verifies the prior
-pass's findings landed.
-
-**A MAJOR whose every quoted span the previous repair wrote does not block the exit, and is
-still repaired, never deferred:** `team-roles/adversary.md`, "The verdict".
-
-**Divergence is a HARD_BLOCK, not a reason for another pass.** Pass N+1's
-`findings_critical_prior_scope` above pass N's `findings_critical` means the repair
-is injecting defects. STOP and escalate. A blocking MAJOR count above
-`MAJOR_EXIT_CEILING`, at no more than `CRITICAL_EXIT_CEILING` CRITICAL, not reduced
-across more than `STALL_THRESHOLD` consecutive passes is a STALL, and stops the cycle
-the same way. CRITICALs in scope ADDED
-mid-cycle are NOT divergence: no cycle converges on a growing artifact -- freeze
-scope, shrink the sprint, restart. Contract: `team-roles/adversary.md`.
-
-**A series is bounded at p3.** A p3 that does not stamp `EXIT_CONDITION_MET` stops the
-cycle as a STALL does, and the next pass must declare `resolves_divergence:`. A pass after
-the first is dispatched over the parts `merge-adversarial-shards.sh --derived-map` prints; in files mode that
-is narrowed to the repair; in document and subject modes it is narrowed by the pass file's `part_sha:` and `part_run:` fields, and falls to the full map with a `full width:` reason where a list is missing or unjoinable. Procedure:
-`steps/_gate-procedures.md`, "Divergence resolution dispatch".
-
-**A stop is not the end of the cycle: STOP -> ADJUDICATE -> RESOLVE -> VERIFY.** A repair
-edits the artifact on UNCHANGED scope -- that is what diverged. A RESOLUTION changes what
-is under review, is written to a record the gate reads, and is followed by ONE verification
-pass in the SAME series. Until that record exists the hooks deny every dispatch. FREEZE is
-NOT a resolution. Kinds + procedure: `steps/_gate-procedures.md`.
-
-The per-intensity skips are enforced by each planning step's own
-intensity gate, not tracked centrally. Follow each step's gate.
-
-`carry-over-single` may only be assigned to carry-over variants. If
-actual story count exceeds 2 at `stories-test-strategy`, intensity MUST
-be revised upward to `standard`.
-
-The gate log MUST record the declared intensity and confirm the
-minimum was met. A gate that passes under `lightweight` with zero
-adversarial passes at discovery (or requirements) is a violation.
-
-Intensity does NOT reduce the following (always required regardless):
-- Carry-over eval party mode (evaluates slot/close/defer decisions)
-- Story validation party mode (real subagents)
-- Adversarial review on stories and sprint output (run it; converge it)
-- Deploy-validate smoke test (hard gate, see deploy-validate.md)
-- Retro party mode (Rule 20 Skill invocation mandate)
+**The Adversarial Review runs until a pass stamps `EXIT_CONDITION_MET`. That verdict is the only thing that ends it, and it is honoured the moment it is met, including at pass 1.** Divergence is a HARD_BLOCK, not a reason for another pass: STOP and escalate. READ AND FOLLOW `rule-bodies/rule-8.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 9 -- Autonomous gates
 
-Rule 3.
+Rule 3. READ AND FOLLOW `rule-bodies/rule-9.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 10 -- Production validation is the only human checkpoint
 
-After deployment and smoke tests, present the Production Validation
-Checkpoint to the human. For multi-sprint features (Rule 14), the
-checkpoint runs after each sprint; the agent does not proceed to the
-next sprint until the human validates the current one.
-
-**Minimum mechanism (Rule 26(c)).** Failure caught: a sprint reaching
-production with no human validating its live behaviour; this is the only
-human gate before production, and Rule 14's one-phase-at-a-time clause
-rests on it. False-positive cost: one operator checkpoint per sprint,
-after smoke. Removal condition: none while the pipeline deploys to a live
-environment.
+After deployment and smoke tests, present the Production Validation Checkpoint to the human. For multi-sprint features (Rule 14), the checkpoint runs after each sprint; the agent does not proceed to the next sprint until the human validates the current one. READ AND FOLLOW `rule-bodies/rule-10.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 11 -- Seek clarity when ambiguous -- HARD_BLOCK severity
 
-Two observable requirements.
+Two observable requirements. **(a) Ambiguity resolution.** Ask for clarification on genuine ambiguity in the user's request, requirements or intent, never about matters resolvable by reading artifacts, project memory or professional defaults. Put the question to the operator with `AskUserQuestion`, the recommended option first unless the question is unbadged, and set NO pause flag for it. Before any question reaches the operator: search the recorded prior answers, derive what the tree or config can give, gloss every project-internal id in plain language, and dispatch ready work, then ask.
 
-**(a) Ambiguity resolution.** Ask for clarification when you detect
-genuine ambiguity in the user's request, requirements, or intent. Do
-not ask about matters resolvable by reading existing artifacts,
-project memory, or applying professional defaults. **Relief for a live
-defect that only the operator can apply is an operator-only decision and
-is ALWAYS asked** (`bug-investigation.md` §2b): professional defaults and
-Rule 12 Tier 2 do not reach it, because Tier 2 covers choices the lead
-can carry out itself.
+**Every option states its concrete effect, INCLUDING the value it leaves in force.** A question is UNBADGED when it decides a value the operator alone owns and no operator words fix: its options set, relax, inherit or leave in force a config leaf, a threshold or literal on a money path, a byte-pin, an `LR-` or `LRC-` id, or a `D-<n>` operator decision. Its options are presented neutrally, none marked `(Recommended)` and none placed first as the pick.
 
-**Put the question to the operator with `AskUserQuestion`, the
-recommended option first unless the question is unbadged (below), and set
-NO pause flag for it.** The option
-constraint on every `AskUserQuestion` is stated in Rule 3's pause-point
-section and is not restated here.
-
-**Every option states its concrete effect, INCLUDING the value it leaves
-in force** -- on the option itself, not only in the question: *"inherit
-the offramp leaves: swap skipped for balances <= 0.01 token0"*, not
-*"inherit and say so"*. **A question is UNBADGED -- options presented
-neutrally, none marked `(Recommended)` and none placed first as the
-pick -- when it decides a value the operator alone owns and no operator
-words fix: its options set, relax, inherit or leave in force a config
-leaf, a threshold or literal on a money path, a byte-pin, an `LR-` or
-`LRC-` id, or a `D-<n>` operator decision in the spine.** Those values
-are the operator's to own, and a badge on one hands the
-operator's decision back to the lead under the operator's name. A question typed as prose at the end
-of a reply, followed by ending the turn, reads as narration: the
-operator sees a paragraph of recap, not a decision that is theirs to
-take, and the decision is never taken. The tool holds the turn open, so
-the Stop hook never runs and a flag set here is a pause nobody clears --
-the same reason Rule 3 gives for (d).
-
-**Before any question reaches the operator, do four things to it.**
-(1) Search for a prior answer in the sprint's `LOCKED_REQUIREMENTS`
-block, `_bmad-output/operator-requests-history.md` (the operator's typed
-words, the initial prompt included) and
-`_bmad-output/operator-answers-history.md`; a value found there is
-applied with its citation, not asked again. (2) Derive what the tree,
-the config or a read-only chain or API read can give -- an address, a
-band, a list of entries -- and put the derivation to the operator for
-veto instead of asking for the value; when the derived value is a config
-leaf, a money threshold or literal, an address, or an `LR-` or `D-<n>`
-value, that veto question goes out UNBADGED, as above. (3) Gloss every project-internal
-term in the question text itself: a check number, a band, a gap or
-evaluation id, a `D-<n>`, `LR-` or `FR-` id gets a plain-language clause
-saying what it is, because the operator reads the question, not the
-artifact behind it. (4) Dispatch, then ask, as Rule 12's
-`#### Operator decisions: dispatch, then ask`.
-
-**Item (3)'s plain-language duty binds every piece of lead prose the
-operator reads, not only question text:** the Production Validation
-Checkpoint and every other checkpoint or pause presentation, status
-reports, answers to the operator's own questions, and the handoff,
-resume and next-sprint prompts the operator reads or pastes. In that
-prose a label the lead coined itself -- in its planning artifacts or
-earlier in the session, such as a name it gave one piece of an
-operator's item -- is replaced by the plain phrase it stands for;
-defining the label beside it does not satisfy this rule. Every id that
-names a requirement, check, record, story or decision -- an `LR-`,
-`CO-`, `HB-`, `D-<n>`, escalation, story or check id -- carries a
-plain-language clause saying what it is, whether or not the operator
-has seen it before; one clause may cover a contiguous range or a class
-of ids. A commit sha or an image digest is not such an id. Where a
-template slot or another rule requires the id or label itself -- a
-verbatim quote of a requirement bullet, a cited entry id, a disposition
-key, failing output -- keep it unchanged and put the plain-language
-clause beside it or after the quotation, never inside the quoted text.
-
-**One shape for every operator decision, the sort before asking, and no re-ask of an attested act** -- stated in full under Rule 12's four `#### Operator decisions` subsections; apply all four to every question you put to the operator.
-
-**(b) In-flight interpretation preamble.** The first line of the
-agent's response to ANY user message that arrives during or after an
-execution phase MUST be a one-sentence interpretation stating whether
-the message is being treated as a question or a directive. Example:
-*"Reading this as a question about the escalation decision --
-answering below, not acting."* A missing first-line interpretation is
-a rule violation, not a soft fail.
-
-**Absolute.** The preamble requirement has no exceptions. "The intent
-seems clear" is not a valid reason to skip it. A known degradation
-mode in long sessions: as the conversation accumulates execution
-turns, the lead starts pattern-matching on recent behavior and
-misreads user questions as directives. The preamble requirement is
-the mitigation -- forcing the lead to state its interpretation out
-loud makes the misread visible before it becomes action.
-Rationalizing around this rule is itself the failure mode the rule
-catches.
+**(b) In-flight interpretation preamble.** The first line of the agent's response to ANY user message that arrives during or after an execution phase MUST be a one-sentence interpretation stating whether the message is being treated as a question or a directive. The preamble has no exceptions. READ AND FOLLOW `rule-bodies/rule-11.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 ### Rule 12 -- Escalate asynchronously via file
 
-Write escalations to `docs/escalations/pending.md`. Escalations have
-three tiers that determine whether work blocks or continues.
-
-**Tier 1 -- HARD_BLOCK (work stops):**
-- A finding contradicts an explicit human-approved decision.
-- The agent cannot implement a requirement as specified (requirement
-  divergence) and needs human sign-off on an alternative approach.
-- A carry-over item deferral is proposed (`DEFERRAL_REQUEST`).
-
-Action: mark task BLOCKED, message the lead (a teammate: `SendMessage` `to: "main"`), move to next unblocked task.
-
-**Tier 2 -- DECIDED_AUTONOMOUSLY (work continues):**
-- A trade-off has no objectively correct answer; agent picks the best
-  option, documents rationale, proceeds.
-- Requirements are ambiguous but can be reasonably inferred from
-  context, project memory, or existing patterns.
-- UI/UX direction decisions where no explicit user preference exists.
-- Implementation option selection among alternatives presented in a
-  carry-over item or story spec.
-
-Action: document decision and rationale, proceed without blocking. These
-bullets yield to `#### Operator decisions: sort before asking (Rule
-11(a))`: a choice that sort leaves asked is asked, whatever a bullet
-above says.
-
-**Tier 3 -- not an escalation:**
-Formatting, naming, phrasing, minor refactors, test structure, or any
-issue where a professional default exists. Just do it.
-
-The escalation entry format (append, do not overwrite) and the
-resolution lifecycle (how HARD_BLOCK / DEFERRAL_REQUEST / DECIDED
-statuses are closed at the production checkpoint) live in
-`escalations.md` alongside this file. READ AND FOLLOW it (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) when writing or
-resolving an escalation.
-
-When resolving a HARD_BLOCK changes how an acceptance criterion is
-verified (moving it between verification categories), the resolution MUST
-disclose the change for explicit operator acknowledgement — mechanism in
-`escalations.md` "AC verification-category-change disclosure".
-When a later event shows an outcome an earlier authorization relied on did
-not occur, the question returns to the operator — `escalations.md`
-"Authorization-premise invalidation disclosure".
+Write escalations to `docs/escalations/pending.md`. **Tier 1 -- HARD_BLOCK (work stops):** a finding contradicts an explicit human-approved decision, a requirement cannot be implemented as specified, or a carry-over deferral is proposed; mark the task BLOCKED, message the lead (a teammate: `SendMessage` `to: "main"`), move to the next unblocked task. **Tier 2 -- DECIDED_AUTONOMOUSLY (work continues):** document the decision and rationale and proceed; the Tier 2 bullets yield to Rule 11(a)'s sort before asking. **Tier 3 -- not an escalation:** just do it. READ AND FOLLOW `rule-bodies/rule-12.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 **Carrier:** `Check 2` -- the gate reads `docs/escalations/pending.md` and fails on an unresolved HARD_BLOCK or a Status outside the tier vocabulary. Whether an escalation that was due got written at all is not observed by any gate.
-
-#### Operator decisions: sort before asking (Rule 11(a))
-
-**Sort every question three ways before it is asked.** (i) **A design
-choice a source settles is decided, not asked.** The sources are the
-operator's own words -- a prior answer of any length in
-`_bmad-output/operator-answers-history.md`, a request in
-`_bmad-output/operator-requests-history.md`, or an operator quote inside
-a `LOCKED_REQUIREMENTS` entry -- and, for WHERE and HOW only (a code
-path, a check's placement, which component reads what), the tree. It is
-a HOW decision under Rule 13 (`rule-bodies/rule-13.md`): record it as a
-Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry naming its source and a
-one-line reason; it reaches the operator only under `### For Your
-Information` at the checkpoint (`steps/deploy-validate.md` §5). The
-standing-rulings record `_bmad-output/operator-standing-rulings.md` is
-consulted before a question is asked (`scripts/ai-dlc/standing-rulings.sh
-lookup <header>`; a hook denies a `AskUserQuestion` whose header equals an
-active row's `match:`, until the question text carries `not SR-<n>:
-<reason>`). A header match is a consult: if the row's `ruling:` decides the
-question, record a Rule 12 Tier 2 `DECIDED_AUTONOMOUSLY` entry citing the
-row instead of asking; if it does not, re-ask with `not SR-<n>: <reason>`.
-A row is created only from the operator's answer to a proposal whose text
-carries `Standing ruling proposal: match=<match>; class=<class>`, where
-`<match>` is the row's `match:` exactly and `<class>` is `pipeline-family`
-or `update-family`; a proposal naming a class of this sort's Outside list
-(`scope-confirmation`, `gate-stop`, `operator-relief`, `tier1`,
-`locked-requirement`, `step-reserved`), no class or another class never
-becomes a row, and a row never decides a question on that list. `source:`
-cites one of two entries: the answer's `operator-answers-history.md` entry
-for an `AskUserQuestion` proposal, or the `operator-requests-history.md`
-entry tagged `- Pending decision: DP-<s>-<n>` for a pending decision whose
-Decision/Question line carries the same marker; `ruling:` is the reply
-verbatim. This holds on a money path, a config leaf or a pinned span, PROVIDED the
-choice leaves every operator-owned value in force or sets it to the
-operator's verbatim value or that value exactly converted between units.
-Such a choice decides no value, so Rule 11(a)'s UNBADGED trigger does
-not reach it. A choice that otherwise sets, relaxes or widens a value, a
-limit or an authority is settled by no source. (ii) **A design choice no
-source settles is decided on the lead's recommendation only when every
-one of these holds:** no operator answer, request or
-`LOCKED_REQUIREMENTS` entry speaks to it, however unclearly (one that
-does is a Rule 11(a) ambiguity and is asked); it needs no fact only the
-operator holds (what they meant, intend or observed); none of its
-options sets, relaxes or widens a value, a limit or an authority, or
-keeps one in force that another option would change, where a value is
-any value Rule 11(a)'s UNBADGED trigger names (a config leaf, a
-threshold or literal on a money path, a byte-pin, an `LR-` or `LRC-` id,
-a `D-<n>` decision), an address, an enable flag, a cap, a ceiling, a
-timeout, a retry count or a rate, and an authority is who or what may
-act, sign, spend, deploy, waive, patch or re-baseline a check, or reach
-a secret; it changes no story, acceptance criterion or requirement in
-scope; it decides no action on a live system (a deploy, a fire, a write
-to live data, a spend) and no security, authentication, certificate or
-trust behaviour, whether written now or shipped as code; none of its
-options changes what the deployed system shows or does for a user, an
-operator or an external party; and its effect can be undone after the
-checkpoint. Record it as a Rule 12 Tier 2
-`DECIDED_AUTONOMOUSLY` entry whose `**Decision/Question:**` line opens
-`source: recommendation`, naming the options weighed and a one-line
-reason; it reaches the operator under
-`### For Your Information` at the checkpoint, not as a question. Any
-other design choice no source settles is asked with one option
-`(Recommended)`. (iii) **Only
-a value the operator alone owns and no operator words fix is asked
-UNBADGED, as Rule 11(a) says** -- a number, an address, a limit, an
-enable flag, a secret, wallet or security config. **The tree never
-settles a value**: a literal found in config, code or a staged artifact
-is a derivation to put for veto under Rule 11(a)'s item (2), not a
-source; and words a lead wrote into a `LOCKED_REQUIREMENTS` entry are no
-source for what they add. **Outside this sort, each asked as its own
-rule says:** the sprint-scope confirmation (`steps/route-fresh-start.md` Step 6),
-operator relief (Rule 11(a), `bug-investigation.md` §2b), a choice that
-moves a locked requirement's boundary (Rule 13), any Rule 12 Tier 1
-matter (a choice that contradicts an operator-approved decision, a
-requirement divergence, or a carry-over deferral), a gate STOP
-adjudication (`steps/_gate-procedures.md`), and any other decision a step
-reserves to the operator.
-
-#### Operator decisions: one shape (Rule 11(a))
-
-**Every decision put to the operator has one shape, wherever it is
-asked** -- an `AskUserQuestion`, a checkpoint's `### Decisions for You`
-item (`steps/deploy-validate.md` §5), a disposition at any step. It names
-the decision asked,
-gives every option with its effect and the consequence of choosing it,
-and marks exactly one option `(Recommended)`. A question that carries no
-badge -- an UNBADGED question (Rule 11(a)), or the sprint-scope confirmation
-(`steps/route-fresh-start.md` Step 6) --
-says so in its own text, with the reason,
-so the missing badge does not read as an omission.
-Each premise the question states as fact carries one `path:line`
-evidence locator.
-
-#### Operator decisions: an attested act is not raised again (Rule 11(a))
-
-**An act the operator has attested is not raised again.** When the
-operator says an act has happened -- a press, a deploy, a fired
-operation -- read the record that would attest it before asking
-anything further, and ask again only when that record is absent, naming
-the record you read and did not find. Once you have accepted the
-operator's word on an act,
-no later step puts it back to the operator:
-if you still want the record, read it yourself before any later
-question, and carry the act as attested. An escalation entry the act
-resolves still cites the operator's own message (`escalations.md`); the
-record replaces the re-ask, not the citation.
-A record read afterwards that shows the act did not occur is an authorization-premise invalidation (`escalations.md`), not a re-ask.
-
-#### Operator decisions: dispatch, then ask (Rule 11(a))
-
-**Immediately before every `AskUserQuestion`, dispatch, then ask.** Join
-every lane whose completion has arrived: read the completion and record
-it. Acting on its output is itself a ready action, dispatched below, not
-work to finish before asking. Dispatch every ready action the question
-does not hold, in the background (Rule 29), and arm its join. An action
-is ready when its inputs exist now, and the question holds it only when
-it reads the answer. Name the lanes held in your output beside the
-question, not inside it. Then send the question at once, in
-`AskUserQuestion`, unchanged by the lane state. Never wait for a running
-lane before asking, and never hold back, defer or drop a question, or
-fold it into a later one, to suit the lanes.
-
-#### Operator decisions: proceed on the recommendation (Rule 11(a))
-
-**A decision whose work is cheap to redo may be put as a pending decision instead of a question.** Number it `DP-<sprint>-<n>`, file a Rule 12 Tier 2 entry in `docs/escalations/pending.md` with `**Status:** DECIDED_AUTONOMOUSLY`, a `**Decision/Question:**` line opening `source: recommendation`, and `**Veto window:** open — DP-<sprint>-<n>`, dispatch the work under the `(Recommended)` option, then end the turn on a block whose heading line is `DECISION PENDING — DP-<sprint>-<n> — proceeding on (Recommended) unless you veto`, followed only by the option lines. The Stop hook then does not raise the Rule 11(a) warning for that turn. The window stays open until you close it: read the operator's reply, clear the pause flag, record the answer, and set the window to `closed — DP-<sprint>-<n> — _bmad-output/operator-requests-history.md:<heading line of the reply's entry>`. The window has no age limit and survives a resume; a resumed lead may re-ask an open decision with `AskUserQuestion`, and that answer closes it. A decision whose work is not cheap to redo is asked with `AskUserQuestion`.
 
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 
@@ -673,80 +257,7 @@ Validation evaluations -- the four `/bmad-*` sub-skills and the native `ai-dlc-a
      rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 21 -- READ AND FOLLOW is a Read tool call, not recall
 
-A `READ AND FOLLOW` directive MUST produce a `Read` tool call (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) for the
-target step file as the FIRST tool call in the response. No other
-action (Bash, Edit, Write, Agent, Skill) before the Read. The lead
-MUST NOT substitute memory, prior-session knowledge, or accumulated
-context for the Read. The Read tool call is the mechanical
-verification that the step was loaded into the current conversation
-context. **For `gate-validation.md` alone the Read is SLICED, never
-whole**: run `scripts/ai-dlc/gate-slice.sh --type <gate type>`, which
-emits the `offset`/`limit` spans covering the `GATE_MANIFEST` universal
-row plus the declared type's row, and issue one native `Read` per span.
-On a resume after a compaction, pass `--done "$(scripts/ai-dlc/gate-checkpoint.sh
---nonce <gate_nonce> done)"` so checks already verdicted at this nonce
-are omitted from the plan. The bounded Read is the compliant Read.
-
-**Each step file carries a `STEP_LOADED_TOKEN` HTML comment** (format:
-`<!-- STEP_LOADED_TOKEN: <step-name> -->`). It is a marker, and no gate
-reads it. No rule requires the gate log entry to cite the token and no gate
-fails on a missing citation; neither is implemented, so
-neither is claimed.
-A gate log entry is written by the same lead the rule constrains, so a
-token cited there is a SELF-REPORT: the lead this rule exists to catch
-— the one that pattern-matches on "I know what this step does" and
-skips the Read — writes the token from memory exactly as readily as one
-that read the file. The evidence that discriminates is the `Read` tool
-call in the transcript, which the checked agent does not author;
-`.claude/hooks/ai-dlc-acknowledge.sh` Check 2z consumes it that way for
-`route.md`, keyed deliberately on a `file_path` and not on this token.
-Extending that shape to the other step files is a separate, larger
-change and is not claimed here.
-
-**Sliced loading for `gate-validation.md`.** For
-`gate-validation.md` alone, "loaded" does NOT mean the whole file. That
-file is sliced by gate type: "loaded" means the **universal core** — the
-`GATE_MANIFEST` universal row in `gate-validation.md`, which is the single
-source for that set and MUST NOT be re-typed here — **and**
-every check the file's `GATE_MANIFEST` marks required for the declared
-gate type — that exact set present in context, nothing less. The
-invoking step MUST declare the gate type when it says "run gate
-validation" (format: `run gate validation [<type>]`, where `<type>` is
-one of `planning`, `story`, `implementation`, `sprint-review`, `retro`);
-the type is the step's already-known phase, not a new computation. The
-file-level `STEP_LOADED_TOKEN` no longer proves completeness (the file
-is not read whole), so each check carries its own
-`<!-- CHECK_LOADED: <id> -->` anchor and H1 reads the manifest and FAILS
-the gate if any required check's anchor is absent — completeness is a
-checked invariant, not a trust-the-loader assumption. See
-`steps/gate-validation.md` "Gate-type manifest". All OTHER step
-files remain whole-file `READ AND FOLLOW` as above.
-
-**The slice is EMITTED, never derived by hand.** `scripts/ai-dlc/gate-slice.sh
---type <type>` resolves the rendered manifest — core's table, or the
-`overrides/` entry shadowing it, plus every `extensions/checks/` entry
-declaring `gate_types:` — and prints one `offset<TAB>limit<TAB>checks`
-row per contiguous span. Issue exactly those Reads, natively; never route
-the file through a `ctx_*` tool (Rule 23(c)). It exits 2 rather than
-shortening the plan when a required check has no anchor. A consumer
-extension's checks are reported as a separate load.
-
-**A gate resumes; it does not restart.** Every check that reaches a
-verdict is recorded at once —
-`scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> record <id> <PASS|FAIL|SKIP|PENDING>`
-— and a resume after a compaction passes the settled set back as
-`--done`. Only `PASS` and `SKIP` narrow a resume. The ledger is keyed on
-the nonce; a re-dispatch mints a fresh nonce and reads an empty ledger.
-The gate is `open`ed at nonce mint and `close`d after Check 15, and
-`scripts/ai-dlc/gate-checkpoint.sh current` names the open nonce — a
-resume that finds none resumes no gate.
-
-**Failure mode this prevents.** In hot sessions with many completed
-gates, the lead pattern-matches on "I know what this step does" and
-skips the Read entirely, executing from memory. The Read tool call
-is the interrupt that forces re-engagement with the step's actual
-instructions. Memory of a step file is not equivalent to loading it.
-
+A `READ AND FOLLOW` directive MUST produce a `Read` tool call (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) for the target step file as the FIRST tool call in the response; no other action before the Read, and memory is never a substitute. For `gate-validation.md` alone the Read is SLICED: run `scripts/ai-dlc/gate-slice.sh --type <gate type>` and issue one native `Read` per emitted span. A gate resumes, it does not restart: record each verdict with `scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> record <id> <PASS|FAIL|SKIP|PENDING>`. READ AND FOLLOW `rule-bodies/rule-21.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
 
 **Carrier:** `.claude/skills/ai-dlc/steps/implementation.md`
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,

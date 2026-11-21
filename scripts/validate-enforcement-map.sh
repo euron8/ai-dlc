@@ -3171,8 +3171,8 @@ EOF
   fi
 fi
 
-# --- I19: SKILL.md Rule 8's intensity table is the ONLY place the validation-cycle
-# minimums are enumerated. Check 20 kept its own copy of them and the copy dropped a row:
+# --- I19: the SKILL.md Rule 8 stub's intensity table owns the validation-cycle minimums; rule-bodies/rule-8.md carries a copy bound by I131 ---
+# This scan stays on steps/ and does not read rule-bodies/. Check 20 kept its own copy of them and the copy dropped a row:
 # Rule 8 defines four intensities, Check 20 listed three, and `carry-over-single` appeared
 # ZERO times in gate-validation.md. A gate declaring it reached the one check that enforces
 # intensity and found no minimum to test against — indistinguishable from a gate that met it.
@@ -13441,6 +13441,28 @@ else
     i130_n="$(printf '%s\n' "$i130_ptrs" | grep -cx "$i130_b")" || i130_n=0
     [ "$i130_n" -eq 1 ] || err "I130 rule-bodies/$i130_b is named by $i130_n READ AND FOLLOW pointer sentence(s) in SKILL.md, not exactly one: an orphan body is unread, a doubled one is two stubs for one rule."
   done
+fi
+
+# --- I131: the Rule 8 intensity table in the SKILL.md stub is byte-identical to the one in rule-bodies/rule-8.md ---
+# The stub's table is the owner (I80 and the vocabulary index read it there); rule-8.md carries a copy because its
+# body moved verbatim. Table found as I80 finds it: the line opening `| Intensity | Trigger` and every
+# following line that opens with `|`. In-process read, no fork per row. Control: an empty extraction from either
+# file is an error, since two empties compare equal.
+i131_tbl() {
+  I131_T=""; I131_ON=0
+  while IFS= read -r i131_l; do
+    case "$i131_l" in '| Intensity | Trigger'*) I131_ON=1 ;; esac
+    if [ "$I131_ON" -eq 1 ]; then
+      case "$i131_l" in '|'*) I131_T="$I131_T$i131_l"$'\n' ;; *) break ;; esac
+    fi
+  done <"$1"
+}
+i131_tbl "$REPO_ROOT/core/skills/ai-dlc/SKILL.md"; i131_a="$I131_T"
+i131_tbl "$REPO_ROOT/core/skills/ai-dlc/rule-bodies/rule-8.md"; i131_b="$I131_T"
+if [ -z "$i131_a" ] || [ -z "$i131_b" ]; then
+  err "I131 extracted no intensity table from $([ -z "$i131_a" ] && echo SKILL.md)$([ -z "$i131_a" ] && [ -z "$i131_b" ] && echo ' or ')$([ -z "$i131_b" ] && echo rule-bodies/rule-8.md); two empty extractions compare equal, so nothing was checked."
+elif [ "$i131_a" != "$i131_b" ]; then
+  err "I131 the Rule 8 intensity table in SKILL.md differs from the copy in rule-bodies/rule-8.md. The SKILL.md stub table is the owner; make rule-8.md's table byte-identical to it."
 fi
 
 # --- Verdict ------------------------------------------------------------------

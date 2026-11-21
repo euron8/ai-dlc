@@ -671,7 +671,7 @@ A10_i79_carrier_path_absent() {
 A11_i79_carrier_none_with_no_reason() {
   fresh_t
   if edit "$t/$SKILL_REL" \
-        '/^\*\*Carrier:\*\* none -- write shape is invisible/ { print "**Carrier:** none"; next } { print }'; then
+        '/^\*\*Carrier:\*\* `scripts\/ai-dlc\/validate-spawn-ledger\.sh`$/ { print "**Carrier:** none"; next } { print }'; then
     assert_fires "I79: 'carrier: none' with no reason is REPORTED" \
                  "with no reason"
   fi
