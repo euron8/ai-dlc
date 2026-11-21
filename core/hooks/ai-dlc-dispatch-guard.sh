@@ -1811,10 +1811,10 @@ dg_mark_scan() {
       }
     }
     END { if (trig == 1) { u = mt; while (match(u, "party-mode/s[0-9]+/[^[:space:]\"\047]+")) { f[1] = substr(u, RSTART, RLENGTH); u = substr(u, RSTART + RLENGTH) } } }
-    END { if (!den && good > 0 && good == trig) { if (trig == 1) print "rendered\t" f[1]; else print "rendered" } }'
+    END { if (!den && good > 0 && good == trig) { if (trig == 1 && f[1] !~ /^<[^<>]*>$/) print "rendered\t" f[1]; else print "rendered" } }'
 }
 # THE SEAT FILE: when exactly ONE invocation triggered and it is well formed, `rendered` carries a
-# tab and that invocation's seat file, and the row records it as `mark_file`. Several invocations
+# tab and that invocation's seat file (an unfilled `<...>` file argument names no seat: it prints bare `rendered`), and the row records it as `mark_file`. Several invocations
 # record none: no single file is named, and the reference consumer's multi-mark briefs are all
 # non-party. The value is the LAST `party-mode/s<digits>/<non-blank, non-quote>` match in that
 # invocation's text (the first END block, which overwrites f[1] with it), else its <file> argument

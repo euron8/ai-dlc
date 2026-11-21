@@ -343,9 +343,9 @@ you have manufactured a check that cannot fire, which reads exactly like a check
 passes. That is a worse defect than the one you were sent to repair, and it is the defect
 this whole pipeline exists to prevent.
 
-Measured: a repair removed the predicate an AC tested against. The AC became unfalsifiable,
-an operator-LOCKED requirement went unmet, and the next adversarial pass stamped
-`DIVERGENT_HARD_BLOCK` — the repair had become the defect source. Deleting is cheap and
+Never remove a predicate an AC tests against: the AC becomes unfalsifiable, an
+operator-LOCKED requirement goes unmet, and the next adversarial pass stamps
+`DIVERGENT_HARD_BLOCK` — the repair is then the defect source. Deleting is cheap and
 looks decisive. **When the thing in front of you is load-bearing, cheap and decisive is how
 you break the sprint.** Escalate instead; it costs the lead one turn.
 

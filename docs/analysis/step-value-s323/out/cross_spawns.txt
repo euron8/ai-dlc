@@ -1,0 +1,14 @@
+s317: spawns 673 cross 123 per-story 5.86 usd 411.5 usd/story 19.59 share 34% stories 21 (regex)
+   by step: {'stories-test-strategy': 24, 'implementation': 68, 'sprint-review': 31}
+s318: spawns 929 cross 158 per-story 12.15 usd 417.7 usd/story 32.13 share 29% stories 13 (regex)
+   by step: {'architecture': 36, 'stories-test-strategy': 36, 'requirements': 38, 'gate-validation[architecture]': 6, 'implementation': 6, 'carry-over-evaluation': 36}
+s319: spawns 1561 cross 360 per-story 18.00 usd 512.1 usd/story 25.60 share 29% stories 20 (regex)
+   by step: {'implementation': 171, 'requirements': 39, 'stories-test-strategy': 30, 'gate-validation[stories-test-strategy]': 6, 'carry-over-evaluation': 30, 'architecture': 54, 'gate-validation[sprint-review]': 30}
+s320: spawns 1102 cross 177 per-story 13.62 usd 396.8 usd/story 30.52 share 32% stories 13 (regex)
+   by step: {'stories-test-strategy': 65, 'carry-over-evaluation': 42, 'implementation': 4, 'requirements': 30, 'architecture': 36}
+s321: spawns 1234 cross 22 per-story 0.88 usd 94.2 usd/story 3.77 share 5% stories 25 (regex)
+   by step: {'stories-test-strategy': 11, 'architecture': 6, 'requirements': 4, 'implementation': 1}
+s322: spawns 668 cross 14 per-story 1.75 usd 57.6 usd/story 7.19 share 6% stories 8 (regex)
+   by step: {'carry-over-evaluation': 2, 'requirements': 4, 'architecture': 2, 'stories-test-strategy': 6}
+s323: spawns 1138 cross 9 per-story 0.50 usd 32.3 usd/story 1.80 share 2% stories 18 (regex)
+   by step: {'requirements': 2, 'architecture': 1, 'gate-validation[stories-test-strategy]': 1, 'stories-test-strategy': 1, 'carry-over-evaluation': 4}

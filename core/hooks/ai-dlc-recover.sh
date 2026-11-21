@@ -38,6 +38,10 @@
 # ask it (scripts/validate-enforcement-map.sh binds the copies). It fails TOWARD recovery: no
 # transcript, an unreadable one, or no marker leaves today's behaviour untouched.
 #
+# A step file with a `## Resume` table narrows the second mandate to two line ranges when the snapshot's
+# `- sub_step` matches (see THE STEP FILE'S RESUME RANGES below); the marker then carries `step_ranges` and
+# `step_ranges_id` for the gate, and every other state keeps the whole-file mandate.
+#
 # The marker also records `session_id`, so the gate can tell a recovery owed to ITS session from
 # one another session left behind.
 #
@@ -301,6 +305,56 @@ if [ -r "$_AI_DLC_HP" ]; then
   fi
 fi
 
+# THE STEP FILE'S RESUME RANGES. A step file with an unfenced `## Resume` table lets the snapshot's
+# `- sub_step: <step-file>.md#<value>` name the one section a compacted lead needs, so the mandate
+# names two ranges instead of the whole file: R1 = line 1 through the line before the next unfenced
+# `## ` after `## Resume`, R2 = the unique unfenced `### <value>. ` section through the line before
+# the next unfenced `#`/`##` heading or the next `### <row>. ` heading of another Resume row (or EOF).
+# Used only when exactly ONE sub_step line sits inside Pipeline Position, its file part is this step
+# file's basename, and its value is a row of the Resume table; anything else (and zero or two headings
+# for the value, or R2 not after R1) leaves today's whole-file mandate. The gate reads the result
+# from the marker (`step_ranges`, `step_ranges_id`) and never reads the snapshot (I113).
+STEP_RANGES=""; STEP_RANGES_ID=""; _rg_v=""
+if [ "$STEP_FILE_RESOLVED" -eq 1 ] && [ "$POSITION_COUNT" -ge 1 ] && [ "$POSITION_AMBIGUOUS" -lt 2 ]; then
+  _rg_ss="$(awk "$AI_DLC_POS_SECTION_AWK" "$SNAPSHOT" 2>/dev/null \
+    | grep -E '^[[:space:]]*- sub_step: [A-Za-z0-9._-]+\.md#[A-Za-z0-9._-]+[[:space:]]*$' 2>/dev/null)"
+  if [ -n "$_rg_ss" ] && [ "$(printf '%s\n' "$_rg_ss" | grep -c .)" = 1 ]; then
+    _rg_val="$(printf '%s\n' "$_rg_ss" | sed -E 's/^[[:space:]]*- sub_step: //; s/[[:space:]]*$//')"
+    case "$STEP_FILE" in /*) _rg_abs="$STEP_FILE" ;; *) _rg_abs="${PROJECT_DIR}/${STEP_FILE}" ;; esac
+    if [ "${_rg_val%%#*}" = "$(basename "$STEP_FILE")" ]; then
+      _rg_out="$(LC_ALL=C awk -v v="${_rg_val#*#}" '
+        { T[NR] = $0
+          if ($0 ~ /^[[:space:]]*(```|~~~)/) { fen = !fen; F[NR] = 1 } else F[NR] = fen }
+        END {
+          n = NR; r = 0
+          for (i = 1; i <= n; i++) if (!F[i] && T[i] ~ /^## Resume[[:space:]]*$/) { r = i; break }
+          if (!r) exit
+          b1 = n
+          for (i = r + 1; i <= n; i++) if (!F[i] && T[i] ~ /^## /) { b1 = i - 1; break }
+          for (i = r + 1; i <= b1; i++) if (!F[i] && T[i] ~ /^\|[[:space:]]*`[^`]+`[[:space:]]*\|/) {
+            s = T[i]; sub(/^\|[[:space:]]*`/, "", s); sub(/`.*$/, "", s); row[s] = 1 }
+          if (!(v in row)) exit
+          a2 = 0; k = 0
+          for (i = 1; i <= n; i++) if (!F[i] && T[i] ~ /^### /) { split(T[i], w, " "); if (w[2] == v ".") { k++; a2 = i } }
+          if (k != 1 || a2 <= b1) exit
+          b2 = n
+          for (i = a2 + 1; i <= n; i++) {
+            if (F[i]) continue
+            if (T[i] ~ /^##?[[:space:]]/) { b2 = i - 1; break }
+            if (T[i] ~ /^### /) { split(T[i], w, " "); t = w[2]
+              if (substr(t, length(t)) == "." && (substr(t, 1, length(t) - 1) in row)) { b2 = i - 1; break } }
+          }
+          if (b1 >= 1 && b2 >= a2) print "1-" b1 " " a2 "-" b2
+        }' "$_rg_abs" 2>/dev/null)"
+      _rg_sz="$(wc -c < "$_rg_abs" 2>/dev/null)" || _rg_sz=""; _rg_sz="${_rg_sz//[[:space:]]/}"
+      _rg_mt="$(stat -c %Y "$_rg_abs" 2>/dev/null || stat -f %m "$_rg_abs" 2>/dev/null)" || _rg_mt=""
+      if [ -n "$_rg_out" ] && [ -n "$_rg_sz" ] && [ -n "$_rg_mt" ]; then
+        STEP_RANGES="$_rg_out"; STEP_RANGES_ID="${_rg_sz}-${_rg_mt}"; _rg_v="${_rg_val#*#}"
+      fi
+    fi
+  fi
+fi
+
 # THE SECOND MANDATE IS BUILT, NOT INTERPOLATED, because its two branches are different
 # instructions rather than one sentence with a hole in it. When the step file resolved, the
 # lead is told which file to Read. When it did not, it is told to resolve it FROM the snapshot
@@ -320,7 +374,10 @@ files or already-produced planning artifacts; Rule 23(a) still applies."
 # snapshot named no step file, which is false, and would have reported that state to an
 # operator. The ambiguous branch names the count and the candidates and tells the lead to
 # decide and record the decision, because it is the one party that can.
-if [ "$STEP_FILE_RESOLVED" -eq 1 ]; then
+if [ "$STEP_FILE_RESOLVED" -eq 1 ] && [ -n "$STEP_RANGES" ]; then
+  _rg_b1="${STEP_RANGES%% *}"; _rg_b1="${_rg_b1#*-}"; _rg_r2="${STEP_RANGES#* }"
+  SECOND_MANDATE="**Your SECOND tool call MUST be \`Read ${STEP_FILE} offset=1 limit=${_rg_b1}\`, then lines ${_rg_r2} (section \`${_rg_v}\`), native Read in chunks of at most 16 KB, never \`ctx_*\`.** ${_MANDATE_WHY}"
+elif [ "$STEP_FILE_RESOLVED" -eq 1 ]; then
   SECOND_MANDATE="**Your SECOND tool call MUST be \`Read ${STEP_FILE}\` in full, with native Read in consecutive \`offset\`/\`limit\` chunks of at most 16 KB, never \`ctx_*\`.** ${_MANDATE_WHY}"
 elif [ "$POSITION_AMBIGUOUS" -ge 2 ]; then
   SECOND_MANDATE="**This snapshot's Pipeline Position names ${POSITION_AMBIGUOUS} DIFFERENT step
@@ -349,7 +406,12 @@ fi
 # the sessions where nothing was watching. That is worse than saying nothing: the honest-
 # disclosure paragraph further down is the only thing binding those sessions, and a lead that
 # believes it is being gated mechanically has no reason to reach it.
-if [ "$STEP_FILE_RESOLVED" -eq 1 ]; then
+if [ "$STEP_FILE_RESOLVED" -eq 1 ] && [ -n "$STEP_RANGES" ]; then
+  GATE_ASSURANCE="\`ai-dlc-recover-gate.sh\` refuses any other first tool call, so a skip is denied
+rather than noticed afterwards. Both files were confirmed readable before it
+armed, and only those two ranges of the step file are owed: complying is always
+available to you, which is why there is nothing to weigh."
+elif [ "$STEP_FILE_RESOLVED" -eq 1 ]; then
   GATE_ASSURANCE="\`ai-dlc-recover-gate.sh\` refuses any other first tool call, so a skip is denied
 rather than noticed afterwards. Both files were confirmed readable before it
 armed, and a bounded Read -- \`limit\` or a late \`offset\` -- is refused the same
@@ -807,6 +869,8 @@ mkdir -p "$STATE_DIR" 2>/dev/null || true
   printf 'snapshot_path=%s\n' "${SNAPSHOT#"$PROJECT_DIR"/}"
   printf 'step_file=%s\n' "$STEP_FILE"
   printf 'step_file_resolved=%s\n' "$STEP_FILE_RESOLVED"
+  # The Resume ranges the mandate named (absent unless a sub_step matched); the gate validates both.
+  [ -n "$STEP_RANGES" ] && printf 'step_ranges=%s\nstep_ranges_id=%s\n' "$STEP_RANGES" "$STEP_RANGES_ID"
   # WHOSE RECOVERY THIS IS. The gate stands down for a call from any other session, because a
   # marker with no owner gated every session in the tree. Empty when the harness sent none, which
   # reads to the gate exactly like a marker from before this key existed.

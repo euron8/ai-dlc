@@ -1748,6 +1748,33 @@ rassert "(s) pending, but steps/handoff.md is ABSENT -> falls back to the snapsh
 mv "$P_REC/${STEP_HANDOFF}.hidden" "$P_REC/$STEP_HANDOFF"
 [ -r "$P_REC/$STEP_HANDOFF" ] || broken "failed to restore $STEP_HANDOFF after case (s) — every later recover case would be testing an absent file"
 
+# (k16) A PENDING HANDOFF OWES THE WHOLE handoff.md, NEVER A RESUME RANGE OF THE INTERRUPTED STEP. The snapshot's sub_step
+#     names the interrupted step (implementation.md, which here carries a Resume table naming that value), and the Resume-range
+#     narrowing applies only to the step file the mandate resolved to; the override resolves handoff.md, so the file part does
+#     not match and the marker carries no step_ranges. THE CONTROL IS IN THE SAME ARM, same tree and snapshot bytes, one
+#     key apart: with no pending handoff the mandate resolves to the interrupted step and the SAME sub_step DOES narrow it,
+#     so the absence above is the override's doing and not a seed that cannot express a range.
+_k_snap="$ROOT/snap-substep.md"
+awk '/^current_step_file: implementation.md$/ { print "- current_step_file: implementation.md"; print "- sub_step: implementation.md#alpha"; next } { print }' "$SNAP_PLAIN" > "$_k_snap"
+grep -qF -- '- sub_step: implementation.md#alpha' "$_k_snap" || broken "the (k) seed carries no sub_step line, so it cannot express the case"
+_k_orig="$ROOT/impl-orig.md"; cp "$P_REC/$STEP_IMPL" "$_k_orig"
+printf '# implementation\n\nThe step the handoff interrupted.\n\n## Resume\n\n| Value | Meaning |\n| `alpha` | first |\n\n## Body\n\n### alpha. Alpha\nalpha body\n' > "$P_REC/$STEP_IMPL"
+rsetup "$P_REC" "$_k_snap" no no
+_k_ctl="$(rdrive "$P_REC" "$SESS_A")"
+_k_ctl_mk="$(grep -c '^step_ranges=' "$P_REC/_bmad-output/.recover-fired" 2>/dev/null)" || _k_ctl_mk=0
+rsetup "$P_REC" "$_k_snap" yes yes
+_k_ctx="$(rdrive "$P_REC" "$SESS_A")"
+_k_mk="$(grep -c '^step_ranges=' "$P_REC/_bmad-output/.recover-fired" 2>/dev/null)" || _k_mk=0
+cp "$_k_orig" "$P_REC/$STEP_IMPL"
+cmp -s "$_k_orig" "$P_REC/$STEP_IMPL" || broken "failed to restore $STEP_IMPL after case (k)"
+if [ "$_k_ctl_mk" != 1 ] || ! grep -qF -- "Read ${STEP_IMPL} offset=1 limit=" <<<"$_k_ctl"; then
+  bad "(k16) the CONTROL did not narrow: with no pending handoff the sub_step implementation.md#alpha left marker step_ranges lines=$_k_ctl_mk and mandate [$(grep -o 'SECOND tool call MUST be[^.]*' <<<"$_k_ctl" | head -1)] — the seed cannot express a range, so the absence below proves nothing"
+elif [ "$_k_mk" = 0 ] && grep -qF -- "Read ${STEP_HANDOFF}\` in full" <<<"$_k_ctx" && ! grep -qF -- "offset=1 limit=" <<<"$_k_ctx"; then
+  ok "(k16) a pending handoff plus a sub_step naming the interrupted step -> the whole handoff.md mandate and NO step_ranges in the marker (while the same sub_step with nothing pending narrows the interrupted step)"
+else
+  bad "(k16) a pending handoff with a sub_step on the interrupted step did not give the whole handoff.md mandate (marker step_ranges lines=$_k_mk): [$(grep -o 'SECOND tool call MUST be[^.]*' <<<"$_k_ctx" | head -1)]"
+fi
+
 # (o) KEY 2, the snapshot's handoff record, alone: no entry marker and no continuation log.
 #
 # TWO POSITIVE SHAPES AND ONE NEGATIVE, ordered by PROVENANCE, because this key is the one

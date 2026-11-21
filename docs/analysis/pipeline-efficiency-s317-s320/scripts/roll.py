@@ -50,11 +50,20 @@ def hosted_mix(rows, pre):
             m[int(r['sprint'])][f] += float(r.get(f"{pre}_{f}_calls", 0) or 0)
     return m
 
-def usd(r, pre, tokeq=False, mix=None, prices=P):
+# BL-1174: each cache write is priced by the tier its record states (steps.csv columns <seat>_<family>_cw5m and _cw1h,
+# from usage.cache_creation.ephemeral_5m_input_tokens and ephemeral_1h_input_tokens). The 5m tokens cost 1.25 x input,
+# the 1h tokens cost P's cw (2 x input), and the remainder cw - cw5m - cw1h (records with no breakdown, or a breakdown
+# that does not add up to cw) keeps P's cw, which is the pricing before this change. ROLL_CACHE_TIER=0 prices every
+# write at P's cw again (a steps.csv with no cw5m or cw1h column does the same). The uniform P5 table is never tiered.
+TIER = os.environ.get("ROLL_CACHE_TIER") != "0"
+
+def usd(r, pre, tokeq=False, mix=None, prices=P, tier=None):
     t = 0
+    tier = (TIER and prices is P) if tier is None else tier
     for f, (i, o, cr, cw) in prices.items():
         g = lambda k: float(r.get(f"{pre}_{f}_{k}", 0) or 0)
         t += (g('in') * i + g('out') * o + g('cr') * cr + g('cw') * cw) / 1e6
+        if tier: t -= g('cw5m') * (cw - 1.25 * i) / 1e6
     if tokeq:
         # Local calls are priced at the count-weighted price of THAT sprint's hosted calls on the same seat.
         # No hosted calls on the seat in that sprint: nothing to derive from, the figure is PENDING (returns None).
@@ -172,17 +181,17 @@ def classes(out):
         if s['kind'] == 'lead': segs[(s['unit'], s['step'], s['sprint'])] = s   # a segment that crosses a sprint edge is one row per sprint
     for l in open(os.path.join(out, 'classes.jsonl')):
         c = json.loads(l); cls[(c['unit'], c['step'], c['sprint'])].append(c)
-    def toks(tok): return {m: list(d) for m, d in (tok or {}).items()}
+    def toks(tok): return {m: list(d) + [0] * (7 - len(d)) for m, d in (tok or {}).items()}
     bad = 0
     for k in set(segs) | set(cls):
         want = toks(segs[k].get('tok')) if k in segs else {}
         got = {}
         for c in cls.get(k, []):
             for m, d in c['tok'].items():
-                g = got.setdefault(m, [0, 0, 0, 0, 0])
-                for i in range(5): g[i] += d[i]
+                g = got.setdefault(m, [0] * 7)
+                for i in range(len(d)): g[i] += d[i]
         if got != want: bad += 1
-    print(f"class tokens == segs tok (in, cw, cr, out, calls per model) on {len(set(segs) | set(cls)) - bad} of {len(set(segs) | set(cls))} (lead unit, step, sprint) rows")
+    print(f"class tokens == segs tok (in, cw, cr, out, calls, cw5m, cw1h per model) on {len(set(segs) | set(cls)) - bad} of {len(set(segs) | set(cls))} (lead unit, step, sprint) rows")
     if bad: print("INVARIANT FAILED: class token sum differs from segs"); sys.exit(1)
     # idle-wait is time only: a row of it carrying a call or a token would mean extract.py charged a usage-bearing
     # message to it, and the class-sum above would still balance.
@@ -200,7 +209,8 @@ def classes(out):
             a['act'] += c['active']; a['gap'] += c['gap']; a['calls'] += c['calls']
             for m, d in c['tok'].items():
                 f = fam(m)
-                for i, n in enumerate(('in', 'cw', 'cr', 'out', 'calls')): a[f"lead_{f}_{n}"] += d[i]
+                for i, n in enumerate(('in', 'cw', 'cr', 'out', 'calls', 'cw5m', 'cw1h')):
+                    if i < len(d): a[f"lead_{f}_{n}"] += d[i]
     print("per story, lead seat, pipeline bucket; h = transcript-timestamp hours on the monotone clock; "
           "lead $ token-equivalent and API; STORIES =", STORIES)
     for n in sorted(STORIES):
@@ -252,6 +262,7 @@ if __name__ == '__main__':
         a['el'] += float(r['elapsed_h']); a['act'] += float(r['active_h']); a['aw'] += float(r['agent_wait_h']); a['op'] += float(r['op_wait_h'])
         a['lead$'] += usd(r, 'lead'); a['sub$'] += usd(r, 'sub')
         a['lead$5'] += usd(r, 'lead', prices=P5); a['sub$5'] += usd(r, 'sub', prices=P5)
+        a['lead$1h'] += usd(r, 'lead', tier=False); a['sub$1h'] += usd(r, 'sub', tier=False)
         for seat in ('lead', 'sub'):
             mix = HM[seat][n]
             if sum(mix.values()) <= 0 and n in FALLBACK:
@@ -264,6 +275,8 @@ if __name__ == '__main__':
             a[seat + '$e'] += v
             v5 = usd(r, seat, True, mix, prices=P5)
             a[seat + '$e5'] += usd(r, seat, prices=P5) if v5 is None else v5
+            v1 = usd(r, seat, True, mix, tier=False)
+            a[seat + '$e1h'] += usd(r, seat, tier=False) if v1 is None else v1
         a['subh'] += float(r['sub_active_h']); a['comp'] += float(r['compactions'])
         a['tok'] += sum(float(v or 0) for c, v in r.items() if c.endswith(('_in', '_out', '_cr', '_cw')))
         for seat in ('lead', 'sub'):
@@ -312,14 +325,16 @@ if __name__ == '__main__':
         for seat in ('lead', 'sub'):
             c = MIX[(n, seat)]; tot = sum(c.values()) or 1
             print(f"     {seat} model mix (calls): " + ', '.join(f"{f} {v:.0f} ({100*v/tot:.0f}%)" for f, v in c.most_common()))
-    # Both cache-write rates, per sprint, beside roll.txt (which stays at the one-hour rate). Same rows, same mixes.
+    # Three cache-write pricings, per sprint, beside roll.txt (which is tiered unless ROLL_CACHE_TIER=0): every write at
+    # the one-hour rate (2 x input, the pricing before BL-1174), every write at the five-minute rate (1.25 x input), and
+    # each write at its recorded tier (what roll.txt prints by default). Same rows, same mixes.
     with open(os.path.join(sys.argv[1], 'roll_cachewrite.txt'), 'w') as fh:
-        fh.write("cache-write rate: 1h = 2 x input (roll.py P), 5m = 1.25 x input (P5); pipeline bucket; $ per sprint\n")
+        fh.write("cache-write pricing: all-1h = 2 x input (roll.py P, tier off), all-5m = 1.25 x input (P5), tiered = each write at its recorded tier (roll.txt default); pipeline bucket; $ per sprint\n")
         for n in sprints:
             T = collections.defaultdict(float)
             for (m, s_), a in A.items():
                 if m == n:
                     for k, v in a.items(): T[k] += v
-            for basis, k1, k5 in (('API', '$', '$5'), ('token-eq', '$e', '$e5')):
-                l1, s1, l5, s5 = T['lead' + k1], T['sub' + k1], T['lead' + k5], T['sub' + k5]
-                fh.write(f"s{n} {basis}: lead 1h {l1:.1f} 5m {l5:.1f} | subagent 1h {s1:.1f} 5m {s5:.1f} | total 1h {l1 + s1:.1f} 5m {l5 + s5:.1f}\n")
+            for basis, k1, k5, kt in (('API', '$1h', '$5', '$'), ('token-eq', '$e1h', '$e5', '$e')):
+                l1, s1, l5, s5, lt, st = T['lead' + k1], T['sub' + k1], T['lead' + k5], T['sub' + k5], T['lead' + kt], T['sub' + kt]
+                fh.write(f"s{n} {basis}: lead 1h {l1:.1f} 5m {l5:.1f} tiered {lt:.1f} | subagent 1h {s1:.1f} 5m {s5:.1f} tiered {st:.1f} | total 1h {l1 + s1:.1f} 5m {l5 + s5:.1f} tiered {lt + st:.1f}\n")

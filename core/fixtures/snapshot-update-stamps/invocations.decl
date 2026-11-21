@@ -25,7 +25,7 @@
 0 core/hooks/ai-dlc-recover.sh
 0 core/hooks/ai-dlc-dispatch-guard.sh
 1 core/scripts/validate-mandatory-rules.sh
-81 inproc:core/scripts/snapshot-update.sh
+83 inproc:core/scripts/snapshot-update.sh
 6 inproc:core/hooks/ai-dlc-continue.sh
 4 inproc:core/hooks/ai-dlc-recover.sh
 6 inproc:core/scripts/validate-artifact-budget.sh

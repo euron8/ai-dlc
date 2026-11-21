@@ -69,7 +69,7 @@ of ids. A commit sha or an image digest is not such an id. Where a
 template slot or another rule requires the id or label itself -- a
 verbatim quote of a requirement bullet, a cited entry id, a disposition
 key, failing output -- keep it unchanged and put the plain-language
-clause beside it or after the quotation, never inside the quoted text.
+clause beside it or after the quotation, never inside the quoted text. The plain-language gloss sits beside an item's id and never replaces it.
 
 **One shape for every operator decision, the sort before asking, and no re-ask of an attested act** -- stated in full under the four `#### Operator decisions` subsections that close this file; apply all four to every question you put to the operator.
 

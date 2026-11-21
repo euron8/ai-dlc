@@ -1058,6 +1058,10 @@ GF_NOBLANK='Run `/Users/n8/graph/scripts/ai-dlc/wait-for-deliverable.sh --mark /
 GF_QUOTED='Run `/Users/n8/graph/scripts/ai-dlc/wait-for-deliverable.sh --mark "/Users/n8/graph/_bmad-output/party-mode/s321/architecture-tea-01.md" architecture tea 1/6 findings=0`.'
 # G-c7: the same brief with its path single-quoted -> the tail stops before the closing apostrophe.
 GF_SQUOTED="Run \`/Users/n8/graph/scripts/ai-dlc/wait-for-deliverable.sh --mark '/Users/n8/graph/_bmad-output/party-mode/s321/architecture-tea-01.md' architecture tea 1/6 findings=0\`."
+# G-c8: an unfilled `<...>` seat-file argument (the placeholder a remediator brief carried) names no seat, so the row records
+# no mark_file; G-c9 is its near-miss, a real path merely containing `<`, which stays rendered with its path.
+GF_PH='Run `/g/scripts/ai-dlc/wait-for-deliverable.sh --mark <record> architecture dev 1/6 findings=0`.'
+GF_PHNEAR='Run `/g/scripts/ai-dlc/wait-for-deliverable.sh --mark /g/<x>.md architecture dev 1/6 findings=0`.'
 GCELL=""
 gcell() { # gcell <guard> <brief line> -> sets GCELL
   local d n m f
@@ -1070,13 +1074,13 @@ gcell() { # gcell <guard> <brief line> -> sets GCELL
 }
 gf_cell() { # gf_cell <guard> <cell> -> that cell's value
   local j
-  case "$2" in gc1) j="$GF_ONE" ;; gc2) j="$ML_NONE" ;; gc3) j="$GF_TWO" ;; gc4) j="$GF_BLANK" ;; gc5) j="$GF_NOBLANK" ;; gc6) j="$GF_QUOTED" ;; gc7) j="$GF_SQUOTED" ;; esac
+  case "$2" in gc1) j="$GF_ONE" ;; gc2) j="$ML_NONE" ;; gc3) j="$GF_TWO" ;; gc4) j="$GF_BLANK" ;; gc5) j="$GF_NOBLANK" ;; gc6) j="$GF_QUOTED" ;; gc7) j="$GF_SQUOTED" ;; gc8) j="$GF_PH" ;; gc9) j="$GF_PHNEAR" ;; esac
   gcell "$1" "$j"
   case "$2:$GCELL" in gc[4567]:*:*party-mode/s321/architecture-tea-01.md) GCELL="${GCELL%:*}:tail" ;; esac
   printf '%s' "$GCELL"
 }
-GF_WANT='gc1=allow:1:rendered:party-mode/s321/architecture-dev-01.md;gc2=allow:1:null:null;gc3=allow:1:rendered:null;gc4=allow:1:rendered:tail;gc5=allow:1:rendered:tail;gc6=allow:1:rendered:tail;gc7=allow:1:rendered:tail'
-GF_TIP="gc1=$(gf_cell "$HOOK" gc1);gc2=$(gf_cell "$HOOK" gc2);gc3=$(gf_cell "$HOOK" gc3);gc4=$(gf_cell "$HOOK" gc4);gc5=$(gf_cell "$HOOK" gc5);gc6=$(gf_cell "$HOOK" gc6);gc7=$(gf_cell "$HOOK" gc7)"
+GF_WANT='gc1=allow:1:rendered:party-mode/s321/architecture-dev-01.md;gc2=allow:1:null:null;gc3=allow:1:rendered:null;gc4=allow:1:rendered:tail;gc5=allow:1:rendered:tail;gc6=allow:1:rendered:tail;gc7=allow:1:rendered:tail;gc8=allow:1:rendered:null;gc9=allow:1:rendered:/g/<x>.md'
+GF_TIP="gc1=$(gf_cell "$HOOK" gc1);gc2=$(gf_cell "$HOOK" gc2);gc3=$(gf_cell "$HOOK" gc3);gc4=$(gf_cell "$HOOK" gc4);gc5=$(gf_cell "$HOOK" gc5);gc6=$(gf_cell "$HOOK" gc6);gc7=$(gf_cell "$HOOK" gc7);gc8=$(gf_cell "$HOOK" gc8);gc9=$(gf_cell "$HOOK" gc9)"
 _old_ifs="$IFS"; IFS=';'
 for _c in $GF_WANT; do
   case ";$GF_TIP;" in

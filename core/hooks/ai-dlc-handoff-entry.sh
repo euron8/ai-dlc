@@ -273,7 +273,8 @@ AID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null)"
 # APART.
 #
 # `ai-dlc-recover.sh` MANDATES `Read <step file>` as the second tool call after EVERY
-# compaction, and when a handoff is already pending it points that mandate at this very file.
+# compaction (a step file with a Resume table may narrow it to two line ranges; handoff.md carries none),
+# and when a handoff is already pending it points that mandate at this very file.
 # `ai-dlc-recover-gate.sh` then DENIES any other call until the Read happens. So a session
 # that merely compacts while paused is compelled to read handoff.md — and this hook, which
 # armed on any Read of that path unconditionally, wrote the entry marker on the strength of a

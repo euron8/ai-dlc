@@ -444,7 +444,7 @@ class Classer:
         if key[0] == "cls": return key[1]
         return "compaction-recovery" if key[1] in self.rec else CLASSES[self.best.get(key[1], RANK["other"])]
 
-    def write(self, unit, sess, usage, segs):
+    def write(self, unit, sess, usage, segs, TIERS):
         text = "".join(self.prompts)
         for mid, paths, off in self.writes:
             if any(text.find(p, off) >= 0 for p in paths): self.best[mid] = min(self.best[mid], RANK["dispatch"])
@@ -455,15 +455,44 @@ class Classer:
             R = row(s, self.cls(key)); R["active"] += a; R["gap"] += g
         for mid, (model, u, t, s) in usage.items():
             R = row(s, self.cls(("mid", mid)))
-            d = R["tok"].setdefault(model or "?", [0, 0, 0, 0, 0])
+            d = R["tok"].setdefault(model or "?", [0, 0, 0, 0, 0, 0, 0])
             d[0] += u.get("input_tokens", 0) or 0
             d[1] += u.get("cache_creation_input_tokens", 0) or 0
             d[2] += u.get("cache_read_input_tokens", 0) or 0
             d[3] += u.get("output_tokens", 0) or 0
             d[4] += 1; R["calls"] += 1
+            c5, c1 = TIERS[mid]; d[5] += c5; d[6] += c1
         for (s, k), R in sorted(rows.items()):
             cfh.write(json.dumps(dict(unit=unit, sess=sess, kind="lead", step=s[0], cls=k,
                                       sprint=sprint_of(segs[s]["first"]), **R)) + "\n")
+
+# Cache-write tier (BL-1174). usage.cache_creation carries ephemeral_5m_input_tokens and ephemeral_1h_input_tokens; the
+# per-model token row is [in, cw, cr, out, calls, cw5m, cw1h], cw being cache_creation_input_tokens. A record with no
+# breakdown contributes 0 to the last two, so its whole cw stays the un-tiered remainder cw - cw5m - cw1h. TIER_N counts
+# per (seat, sprint) the usage records scanned: n, with a breakdown, with none, whose 5m + 1h differs from cw, with
+# cw > 0, with non-zero 5m, with non-zero 1h.
+TIER_N = {}
+def tier_split(u, kind, t):
+    cc = u.get("cache_creation")
+    has = isinstance(cc, dict) and ("ephemeral_5m_input_tokens" in cc or "ephemeral_1h_input_tokens" in cc)
+    c5 = (cc.get("ephemeral_5m_input_tokens", 0) or 0) if has else 0
+    c1 = (cc.get("ephemeral_1h_input_tokens", 0) or 0) if has else 0
+    cw = u.get("cache_creation_input_tokens", 0) or 0
+    # A record with several usage.iterations (an advisor call inside the message) states cache_creation_input_tokens as
+    # the sum over its iterations but cache_creation for the first only: the iterations' own breakdowns are summed when
+    # every one carries one and they add up to cw.
+    its = u.get("iterations")
+    if has and c5 + c1 != cw and isinstance(its, list) and len(its) > 1 and all(isinstance(i, dict) and isinstance(i.get("cache_creation"), dict) for i in its):
+        i5 = sum((i["cache_creation"].get("ephemeral_5m_input_tokens", 0) or 0) for i in its)
+        i1 = sum((i["cache_creation"].get("ephemeral_1h_input_tokens", 0) or 0) for i in its)
+        if i5 + i1 == cw: c5, c1 = i5, i1
+    n = TIER_N.setdefault((kind, sprint_of(t)), dict(n=0, breakdown=0, none=0, mismatch=0, cw_pos=0, nz5m=0, nz1h=0))
+    n["n"] += 1; n["breakdown" if has else "none"] += 1
+    if has and c5 + c1 != cw: n["mismatch"] += 1
+    if cw: n["cw_pos"] += 1
+    if c5: n["nz5m"] += 1
+    if c1: n["nz1h"] += 1
+    return c5, c1
 
 GATE_EV = []   # (sprint, "open" | "closed" | "unclosed" | "left"), lead scans only
 
@@ -632,20 +661,24 @@ def scan(path, kind, meta):
     if glabel is not None and first is not None: GATE_EV.append((sprint_of(gopen), "unclosed"))
     if lead and FORK_DEDUPE: PRIOR.update(mine)
     if first is None: return
-    if K: K.write(unit, sess, usage, segs)
+    TIERS = {}   # message.id -> (cw5m, cw1h), filled below and read by K.write
+    for mid, (model, u, t, s) in usage.items():
+        TIERS[mid] = tier_split(u, kind, t)
+    if K: K.write(unit, sess, usage, segs, TIERS)
     tok = {}; utok = {}
     for mid, (model, u, t, s) in usage.items():
         k = (s, model)
-        d = tok.setdefault(k, [0, 0, 0, 0, 0])
+        d = tok.setdefault(k, [0, 0, 0, 0, 0, 0, 0])
         d[0] += u.get("input_tokens", 0) or 0
         d[1] += u.get("cache_creation_input_tokens", 0) or 0
         d[2] += u.get("cache_read_input_tokens", 0) or 0
         d[3] += u.get("output_tokens", 0) or 0
         d[4] += 1
+        c5, c1 = TIERS[mid]; d[5] += c5; d[6] += c1
     for (s, model), d in tok.items():
         S = seg(s); S.setdefault("tok", {})[model or "?"] = d
-        e = utok.setdefault(f"{s[0]}|{model}", [0, 0, 0, 0, 0])   # units.tok is per step, summed over its sprints
-        for i in range(5): e[i] += d[i]
+        e = utok.setdefault(f"{s[0]}|{model}", [0, 0, 0, 0, 0, 0, 0])   # units.tok is per step, summed over its sprints
+        for i in range(7): e[i] += d[i]
     fh["units"].write(json.dumps(dict(unit=unit, sess=sess, kind=kind, first=first, last=last,
         sprint=sprint_of(first), compactions=compactions, humans=humans, skills=skills, meta=meta,
         tok=utok)) + "\n")
@@ -793,6 +826,9 @@ for sp in sorted(gtab, key=lambda x: (x is None, x)):
         sp, g.get("open", 0), g.get("closed", 0), g.get("unclosed", 0), g.get("left", 0)), file=sys.stderr)
 for sp in sorted(BSRC, key=lambda x: (x is None, x)):
     print("boundary-source sprint=%s declared=%d inferred=%d" % (sp, BSRC[sp]["declared"], BSRC[sp]["inferred"]), file=sys.stderr)
+for (kd, sp), n in sorted(TIER_N.items(), key=lambda x: (x[0][0], x[0][1] is None, x[0][1] or 0)):
+    print("cache-tier seat=%s sprint=%s records=%d breakdown=%d no-breakdown=%d mismatch=%d cw>0=%d nonzero-5m=%d nonzero-1h=%d" % (
+        "lead" if kd == "lead" else "sub", sp, n["n"], n["breakdown"], n["none"], n["mismatch"], n["cw_pos"], n["nz5m"], n["nz1h"]), file=sys.stderr)
 for k in list(owner):
     seen = {k}; cur = k
     while owner[k][1] == "pre-step" and rec_by.get(cur) and rec_by[cur] in owner and rec_by[cur] not in seen:

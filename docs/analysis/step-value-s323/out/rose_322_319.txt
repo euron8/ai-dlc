@@ -1,0 +1,27 @@
+architecture                             subagent $/story s322    8.70 s319    9.48       | token-eq s322 11.3 s319 11.0 ROSE
+bug-investigation                        subagent $/story s322    3.13 s319    0.00 ROSE  | token-eq s322 4.5 s319 None n/a
+carry-over-evaluation                    subagent $/story s322   23.02 s319    4.33 ROSE  | token-eq s322 27.3 s319 5.3 ROSE
+deploy-validate                          subagent $/story s322    0.65 s319    0.56 ROSE  | token-eq s322 3.3 s319 1.7 ROSE
+discovery                                subagent $/story s322    0.00 s319    0.02       | token-eq s322 None s319 0.0 n/a
+gate-validation[architecture]            subagent $/story s322    5.04 s319    0.05 ROSE  | token-eq s322 6.2 s319 0.1 ROSE
+gate-validation[bug-investigation]       subagent $/story s322    0.33 s319    0.00 ROSE  | token-eq s322 0.4 s319 None n/a
+gate-validation[carry-over-evaluation]   subagent $/story s322    0.88 s319    0.06 ROSE  | token-eq s322 1.6 s319 0.2 ROSE
+gate-validation[implementation]          subagent $/story s322    8.90 s319    4.61 ROSE  | token-eq s322 13.1 s319 8.0 ROSE
+gate-validation[requirements]            subagent $/story s322    1.19 s319    0.09 ROSE  | token-eq s322 1.9 s319 0.2 ROSE
+gate-validation[retro]                   subagent $/story s322    0.44 s319    0.00 ROSE  | token-eq s322 1.1 s319 None n/a
+gate-validation[sprint-review]           subagent $/story s322    0.64 s319    3.02       | token-eq s322 1.8 s319 3.3 
+gate-validation[stories-test-strategy]   subagent $/story s322    0.40 s319    3.65       | token-eq s322 1.2 s319 4.3 
+handoff                                  subagent $/story s322    0.03 s319    0.00 ROSE  | token-eq s322 1.6 s319 0.8 ROSE
+implementation                           subagent $/story s322    8.18 s319   26.08       | token-eq s322 14.8 s319 33.3 
+pre-step                                 subagent $/story s322    0.41 s319    0.20 ROSE  | token-eq s322 0.1 s319 0.3 
+requirements                             subagent $/story s322   30.00 s319   11.70 ROSE  | token-eq s322 35.2 s319 14.1 ROSE
+retro                                    subagent $/story s322    1.78 s319    0.40 ROSE  | token-eq s322 5.3 s319 1.3 ROSE
+sprint-review                            subagent $/story s322    9.62 s319    1.93 ROSE  | token-eq s322 10.8 s319 2.6 ROSE
+stories-test-strategy                    subagent $/story s322   20.75 s319   22.06       | token-eq s322 26.4 s319 25.0 ROSE
+ui-direction                             subagent $/story s322    0.00 s319    0.04       | token-eq s322 None s319 0.1 n/a
+ROSE on subagent $ (14): bug-investigation, carry-over-evaluation, deploy-validate, gate-validation[architecture], gate-validation[bug-investigation], gate-validation[carry-over-evaluation], gate-validation[implementation], gate-validation[requirements], gate-validation[retro], handoff, pre-step, requirements, retro, sprint-review
+ROSE on token-equivalent $ only (2): architecture, stories-test-strategy
+C1 story map unchanged for [317, 318, 319, 320, 321, 322]: MATCH
+C2 s322 per-step subagent $ sum 992.66, sprint total 992.66: MATCH
+C2 s319 per-step subagent $ sum 1765.49, sprint total 1765.49: MATCH
+C3 impossible step QZXV-NO-SUCH-STEP-5512: 0 spawns

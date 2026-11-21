@@ -476,6 +476,8 @@ while IFS="$US" read -r op a b c; do
     }
     function isblk(i) { return (KV ~ /^[|>][-+]?$/) || blockend(i) > i }
     function posbullet_target(i) { return (SECT[i] ~ /^Pipeline Position/ || SECT[i] ~ /^Sprint Context/) && (hasbullet(L[i]) || hassp(L[i])) }
+    # A moved position drops the sub-step key: its value belongs to the step file it was set in.
+    function dropsub(h, was, lo, hi) { if (OKP && hasbullet(L[h]) && L[h] != was && keyfind("sub_step", lo, hi) == 1) D[HIT] = 1 }
     function secflags(i) { OKP = (SECT[i] ~ /^Pipeline Position/); OKS = (SECT[i] ~ /^Sprint Context/) }
     function statuscell_ok(v) { return (v == "in-flight" || v == "delivered-reachable" || v == "stopped") }
     # A free-text writer into In-Flight Teammates (--line-replace, and --line-add with tgt 0, since an
@@ -644,9 +646,12 @@ while IFS="$US" read -r op a b c; do
         if (m == 0) exit 3; if (m > 1) exit 4
         keyhit(L[HIT], A)
         if (isblk(HIT)) die(7, "refused: " A " is a block scalar; --set would orphan its continuation lines. Use --set-block.")
-        secflags(HIT); ind = substr(L[HIT], 1, KIND)
+        secflags(HIT); ind = substr(L[HIT], 1, KIND); was = L[HIT]; h = HIT
         L[HIT] = ind "- " A ": " B; guard(L[HIT], OKP, OKS)
         if (OKP && hasbullet(L[HIT]) && trim(B) == "") die(7, "refused: an empty value for " A)
+        s0 = h; while (s0 > 1 && L[s0] !~ /^## /) s0--
+        e0 = n + 1; for (i = h + 1; i <= n; i++) if (L[i] ~ /^## /) { e0 = i; break }
+        dropsub(h, was, s0 + 1, e0)
       } else if (op == "set-in") {
         m = keyfind(B, HS + 1, HE)
         if (m > 1) exit 4
@@ -665,8 +670,7 @@ while IFS="$US" read -r op a b c; do
           if (isblk(HIT)) die(7, "refused: " B " is a block scalar; --set-in would orphan its continuation lines. Use --set-block.")
           secflags(HIT); ind = substr(L[HIT], 1, KIND); was = L[HIT]
           L[HIT] = ind "- " B ": " C; guard(L[HIT], OKP, OKS)
-          # A moved position drops the sub-step key: its value belongs to the step file it was set in.
-          if (OKP && hasbullet(L[HIT]) && L[HIT] != was && keyfind("sub_step", HS + 1, HE) == 1) D[HIT] = 1
+          dropsub(HIT, was, HS + 1, HE)
         }
       } else if (op == "key-delete") {
         if (B == "current_step_file" || B == "sprint_id" || hasbullet("- " B ":") || hassp("- " B ":")) die(7, "refused: " B " is read by the continue, recover and dispatch-guard hooks and is never deleted")
