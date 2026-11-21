@@ -154,7 +154,8 @@ with the seats bound via the **Rule 20 role-manifest preamble** to their `.claud
 - Surface any that are clearly no longer worth doing
 
 Dispatch the live reads the evaluation names (the `ops` and `web-fetch` spawns that settle a mechanism or a
-blocking Day-0 gate) in the same message as the party round's seats, never after the party repair.
+blocking Day-0 gate) in the same message as the party round's seats, never after the party repair. The lead
+spawns the seats itself; this party round is never run by a round-dispatcher.
 
 ### 3a. Validation cycle (Rule 8)
 
@@ -199,14 +200,15 @@ Width, measured on the s319 and s320 carry-over evaluations, per shard: the
 high-consequence catches named above for party, elicitation and pass 1 were each made by a per-part shard (the
 claim-signing one by two cross shards as well), and none was made by a cross shard alone. The only high-consequence catches a cross group made alone are pass 2's half-fixed
 `Dependencies` field and its wrong claim about an IL field, and both were made by a cross agent that read every
-section. So the per-part shards stay, and the cross width narrows to the BL-811 ruling: party dispatches ONE cross
-agent per seat (not per cross group), and elicitation and each adversarial pass dispatch ONE cross agent briefed
-with every section. Cross spend removed per sprint (sum of the cross shards minus the costliest one, as BL-811
+section. So the per-part shards stay in party, elicitation and adversarial pass 1, and the cross width narrows to the
+BL-811 ruling: party dispatches ONE cross agent per seat (not per cross group), and elicitation and adversarial pass 1
+each dispatch ONE cross agent briefed with every section. Adversarial passes 2 and 3 are each one adversary, with no
+shard split and no cross agent. Cross spend removed per sprint (sum of the cross shards minus the costliest one, as BL-811
 counts it; party keeps one per seat, so its saving is below the figure): s319 $13.5 party, $7.5 elicitation, $6.0
 pass 1; s320 $16.3 party, $4.5 elicitation, $31.2 passes 1 to 3.
 
-False-positive cost: one agent per (seat, part), one cross agent per seat in the party round and one per
-elicitation or adversarial pass, and each round's repair. Removal condition: measured sprints in which a round carries no unique MAJOR or
+False-positive cost: one agent per (seat, part), one cross agent per seat in the party round and one each in
+elicitation and adversarial pass 1, one adversary in each of passes 2 and 3, and each round's repair. Removal condition: measured sprints in which a round carries no unique MAJOR or
 CRITICAL catch that survives to the shipped evaluation; the loop's terminal pass goes only when
 Rule 8 stops binding this step.
 
@@ -223,10 +225,15 @@ split and no cross agent, that writes `s<N>/coe-adversarial-p2.md` itself. Its r
 `scripts/ai-dlc/partition-document.sh --map --scope-ref <draft_sha> _bmad-output/planning-artifacts/s<N>/carry-over-evaluation.md`:
 the parts holding lines the document changed since the draft, which the adversary reads first and in full; it may read
 anything else it needs. A pass 2 that is not `EXIT_CONDITION_MET` is repaired by the remediator and judged by the same
-series rule as any pass (pass 3 is capped, arm M). Every pass-1 CRITICAL and MAJOR must be named by a `source:` token of
+series rule as any pass. Commit the document pass 2 reviews before its repair is written and keep that sha as
+`<p2_sha>`. Pass 3 (capped, arm M) is, like pass 2, one adversary with no shard split and no cross agent, that writes
+`s<N>/coe-adversarial-p3.md` itself. Its reading list is
+`scripts/ai-dlc/partition-document.sh --map --scope-ref <p2_sha> _bmad-output/planning-artifacts/s<N>/carry-over-evaluation.md`:
+the parts holding lines pass 2's repair changed, which the adversary reads first and in full; it may read anything else
+it needs. Every pass-1 CRITICAL and MAJOR must be named by a `source:` token of
 pass 1's repair record (`coe-repair-p1.md`); arm `P1J` refuses an unnamed one.
 
-Before you stamp pass 2, or any pass one adversary wrote itself because the map reports the document SERIAL, run
+Before you stamp pass 2 or pass 3, or any pass one adversary wrote itself because the map reports the document SERIAL, run
 `scripts/ai-dlc/merge-adversarial-shards.sh --check-keys <pass file>`: stamp it on `KEYS-OK` or `KEYS-SKIP`; on `REFUSED`, have the
 adversary apply the remedy the refusal prints and run the check again.
 

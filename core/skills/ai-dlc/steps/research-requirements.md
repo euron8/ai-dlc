@@ -119,19 +119,6 @@ block only if they originated from the user's input (not from research
 findings or agent analysis). Research may inform HOW requirements are met
 but does not create new locked WHAT requirements.
 
-### 3. PRD Validation
-
-Invoke `/bmad-prd` with the **validate** intent — structured completeness check
-against its own rubric. Dispatch the `pm` (role-bound per Rule 19) to fix the
-gaps it reports. The lead owns the routing, not the edit.
-
-It detects create / update / validate from the conversation, so say which you
-want rather than relying on inference: this call must not re-author the PRD. Under
-the headless contract the validate intent always writes both
-`validation-report.html` and `validation-report.md` into the run folder regardless
-of finding count, and returns `"offer_to_update": true` — read the report, do not
-treat the returned offer as an instruction to hand it the update.
-
 ### 4. Validation Cycle (Rule 8)
 
 Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on the PRD —

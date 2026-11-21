@@ -1009,5 +1009,31 @@ for _t in planning story sprint-review retro; do
   else bad "GRW $_t: arms judgment [$_jr] vs --expected [$_ex]"; fi
 done
 
+# GRS (BL-1209): a repeated --series at a gate checks EVERY series, not only the last. Row 24 of gate toy3 is a stub that
+# FAILs on a series naming "bad"; a {SERIES} row given two series is planned once per series (24.0, 24.1).
+#   GRS1 bad-then-good: exit 1, GATE-RESULT 24 FAIL naming bad-p, two outputs (a last-value parse acquits). control: GRS3.
+#   GRS2 good-then-bad: exit 1, the same FAIL, two outputs (a first-series-only expansion acquits). control: GRS3.
+#   GRS3 one good series: exit 0, GATE-RESULT 24 PASS naming good-p, one output 24.out.
+printf '#!/usr/bin/env bash\ncase "$2" in *bad*) echo "FAIL seeded at $2:1"; exit 1 ;; esac\necho "ok series $2"\n' > "$GRW/core/scripts/stub-series.sh"
+printf '# gate_type: planning\n1\tjudgment\t-\t-\n24\tscript\tstub-series.sh --series {SERIES}\tlegacy\n' > "$GRR/.claude/skills/ai-dlc/gates/toy3.arms"
+grs_run() { # <cell> <series...>: one gate-run.sh arms start; sets GRC and GRS_N (row-24 outputs written)
+  local c="$1"; shift; local a=() s
+  for s in "$@"; do a+=(--series "$s"); done
+  rm -rf "$GRR/_bmad-output/gate-run" "$GRR/_bmad-output/.gate-checkpoint" "$GRR/_bmad-output/gate-adjudication"
+  gr_run "$c" arms --gate toy3 --sprint 7 --step architecture.md "${a[@]}"
+  GRS_N="$(ls "$GRR"/_bmad-output/gate-run/*/ 2> /dev/null | grep -c '^24.*\.out$')" || GRS_N=0
+}
+for _c in grs1:s7/bad-p:s7/good-p grs2:s7/good-p:s7/bad-p; do
+  _n="${_c%%:*}"; _r="${_c#*:}"
+  grs_run "$_n" "${_r%%:*}" "${_r#*:}"
+  if [ "$GRC" = 1 ] && grep -q '^GATE-RESULT 24 FAIL .*FAIL seeded at s7/bad-p:1' "$GRW/$_n.out" && [ "$GRS_N" = 2 ]; then
+    ok "GRS ${_n#grs} --series ${_r%%:*} --series ${_r#*:}: exit 1, GATE-RESULT 24 FAIL names s7/bad-p, 2 outputs"
+  else bad "GRS ${_n#grs} --series ${_r%%:*} --series ${_r#*:}: rc=$GRC outputs=$GRS_N: $(grep -E '^(GATE-RESULT 24|GATE-RUN)' "$GRW/$_n.out" | tr '\n' ' ')"; fi
+done
+grs_run grs3 s7/good-p
+if [ "$GRC" = 0 ] && grep -q '^GATE-RESULT 24 PASS .*ok series s7/good-p' "$GRW/grs3.out" && [ "$GRS_N" = 1 ]; then
+  ok "GRS 3 one --series s7/good-p: exit 0, GATE-RESULT 24 PASS names s7/good-p, 1 output"
+else bad "GRS 3 rc=$GRC outputs=$GRS_N: $(grep -E '^(GATE-RESULT 24|GATE-RUN)' "$GRW/grs3.out" | tr '\n' ' ')"; fi
+
 echo
 report_end gate-transition

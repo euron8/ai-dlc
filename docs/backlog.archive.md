@@ -47639,6 +47639,8 @@ The `Step:` line (declared in batch 257; batch 255 carried none): this entry's B
 
 Outcome measured: graph s323, carry-over-evaluation plus requirements plus architecture plus stories-test-strategy, per story, s319 (20 stories) before and s323 (18 stories) after, by `docs/analysis/s323-outcomes-b261/bl508-bl543/group_four_steps_hours.py` and `docs/analysis/s323-outcomes-b261/bl508-bl543/group_four_steps.py` on the af44929cc clock at EXTRACT_WIN_END=2026-11-20T04:20:00Z: 1.83 h to 2.03 h gap-inclusive on the monotone clock (2.09 h to 7.19 h on the old clock, which charges an operator pause once per replayed record, BL-1174), token-equivalent $55.4 to $55.5 (API $55.4 to $46.9), 98.9M tokens before and 126.8M tokens after; lead active 0.83 h to 0.98 h, lead $7.8 to $8.6 (API $0.0 after: local models on 100% of the 3,766 lead calls, priced at s321's hosted mix); subagent active 4.30 h to 2.58 h, subagent $47.6 to $46.9. Against s322 (8 stories) the group fell on every measure: 4.30 h to 2.03 h, token-equivalent $100.1 to $55.5 (API $82.5 to $46.9), 208.0M to 126.8M tokens. Against s319, the entry's baseline, it did not fall: hours and tokens rose and token-equivalent dollars are flat, while API dollars fell only because the lead ran local. The declared step carry-over-evaluation rose from 0.14 h to 0.64 h and $5.3 to $11.2 (API $9.5), 9.8M to 27.4M tokens. What that cost buys is each round's catch, kept by the step-value ruling: `core/skills/ai-dlc/steps/carry-over-evaluation.md:193 "a funds-destination edit with no typed confirmation"` (party), `core/skills/ai-dlc/steps/carry-over-evaluation.md:194 "an operator-ruled threshold re-pinned to another value"` (elicitation), `core/skills/ai-dlc/steps/carry-over-evaluation.md:195 "an operator's decision recorded as the lead's call"` (adversarial pass 1), `core/skills/ai-dlc/steps/carry-over-evaluation.md:196 "a candidate cause with the wrong sign"` (passes 2 and later).
 
+**Superseded in part (v0.1218.0, BL-812).** The carry-over adversarial pass 2 and pass 3 width is now one adversary each, with no part shards and no cross agent, per BL-812 item 4; pass 3 reads `partition-document.sh --map --scope-ref <p2_sha>`.
+
 Step: carry-over-evaluation
 
 Verdict: carry-over-evaluation plus requirements plus architecture plus stories-test-strategy did not fall.
@@ -47818,6 +47820,8 @@ Requirements PRD validate, removed. `steps/requirements.md` loses the `**PRD val
 Outcome measured: graph s323 against s322 on the requirements PRD validate part, by `docs/analysis/s323-outcomes-b261/bl841-bl1141/bl1141_parts.py` (output `bl1141_parts.txt`; window end 2026-11-20T04:20:00Z, clock af44929cc). The part is a subagent spawn from `spawns.jsonl`, priced at the API figure by that script, and its agent-minutes are 5.6 min at s322 and 4.0 min at s323's final run (gap-inclusive hours are taken on the whole step, below). Whole requirements step per story, from `docs/analysis/step-value-b256/bl512/roll.s323.af44929cc.seats.txt:163` (BL-512's measured row, same clock): before 1.17 h gap-inclusive at s322, token-equivalent $35.2 (API $30.0), 69.8M tokens, lead $5.2, subagent $30.0; after 0.73 h gap-inclusive at s323, token-equivalent $14.8 (API $12.3), 33.1M tokens, lead $2.4, subagent $12.3. That step's cost per story dropped between s322 and s323, before this change shipped, so none of that drop is credited to it. The part itself: subagent seat before $1.28 at s322 (1 spawn), after $0.70 at s323's final run, $2.53 over its 3 spawns ($0.699 + $0.745 + $1.085); the call is removed from `steps/requirements.md` as of v0.1199.0, so the removed cost is a projected $1.28 to $2.53 per sprint, a saving no sprint has yet run (those dollars come from `spawns.jsonl` priced at the one-hour cache-write rate, 2x input, which this same release's BL-1174 shows overstates subagent writes, since they are written at the five-minute tier). The pipeline did not fall on this change, and the retro adjudicator's core-layer-immutability check, kept on consequence, carries its own catch, `core/skills/ai-dlc/steps/gate-validation.md:2779 "Failure caught: in-place core authoring that"`. Part a verified removed in the tree (`grep -c 'PRD validation' core/skills/ai-dlc/steps/requirements.md` gives 0, control `grep -c 'Write .architecture-impact.md.'` gives 1); part b, the retro gate adjudicator, kept on consequence, its weighing in the batch 262, D paragraph above.
 
 **LANDED (v0.1205.0).** batch 262, D, shipped in v0.1199.0: part a removed the requirements step's PRD validate call; part b kept on consequence. Close measured and recorded in batch 263, D.
+
+**Superseded in part (v0.1218.0, BL-812).** The research-requirements §3 PRD validate walk this entry kept is removed by BL-812 item 4, with Check 17's validate-only arm: no catch on record, and this entry's keep-reason named none.
 
 Verdict: pipeline did not fall.
 
@@ -48056,3 +48060,23 @@ Step: n/a
 
 verify: sh bash core/fixtures/reconcile-pull-driver/run.sh
 
+## BL-1209 — a gate given several `--series` checked only the last one, because `gate-run.sh arms` kept only the last value
+
+**DEFECT.** Filed 2026-11-21 (batch 263, cluster K). Owner: `core/scripts/gate_run.py` (`cmd_arms`) and `core/scripts/gate-run.sh`.
+
+Goal: a gate given several `--series` checks every one. One done condition: `gate-run.sh arms` with two `--series` plans a `{SERIES}` row once per series, and a fixture arm fails when either series is bad.
+
+Record: `cmd_arms` parsed `--series` as a single-valued option, so a repeated `--series` kept only the last value and a `{SERIES}` row (Check 24) judged that series alone. Live exposure since 0.1194.0, when `gate-validation.md` told the lead to pass one `--series` per series. Graph has run no gate since, so nothing passed wrongly.
+
+Work list:
+
+1. Make `--series` repeatable in `cmd_arms`, and plan a `{SERIES}` row once per series when more than one is given.
+2. Add arm GRS to `core/fixtures/gate-transition`: bad then good, and good then bad, each exit 1 naming the bad series; one good series as the control.
+
+**LANDED (v0.1218.0).** batch 263, K. `--series` is repeatable in `gate_run.py cmd_arms`, a `{SERIES}` row is planned once per series, and `core/fixtures/gate-transition` arm GRS holds both orders against a one-series control.
+
+Step: n/a
+
+Provenance: batch 263, cluster K; id allocated by the lead.
+
+verify: manual

@@ -19,6 +19,19 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1218.0] - 2026-11-21
+
+### Carry-over sprints run without the requirements gate, the party dispatcher and a sharded pass 3, the PRD validate walk is removed, and a gate checks every `--series` it is given (BL-812 advances, BL-1209)
+
+- For every consumer's lead on a carry-over sprint. The requirements step no longer runs its own planning gate on `carry-over`; the architecture planning gate validates the requirements work instead (Checks 1, 1c, 3, 20 and 24 cover it there, and Check 2 stops an unanswered lead-interpretation `HARD_BLOCK`). A feature sprint keeps the requirements gate. Saves about $1.80 and 0.14 agent-hours per carry-over sprint (3 adjudicator shards).
+- The carry-over party round no longer runs through a round-dispatcher: the lead spawns the seats itself. Saves about $1.59 per carry-over sprint.
+- Carry-over adversarial pass 3 is one adversary, like pass 2, reading the parts pass 2's repair changed, instead of part shards plus a cross agent. Saves up to $3.13 and 0.18 agent-hours when a pass 3 runs (the cross agent's figure; the part shards' cost was never measured).
+- The research-requirements PRD validate walk is removed, with Check 17's validate-only arm. It had no catch on record. No measured figure: graph's carry-over sprints never ran it, so they save nothing from it.
+- Together about $3.39 per carry-over sprint, plus up to $3.13 when pass 3 runs.
+- The sprint-review gate stays. Its step now names what it catches: a story's locked-requirement anchor check that passed vacuously at the story gate (Check 3), a strategy-named Test ID no Dev Agent Record cites (Check 21), and an earlier sprint's suppression still in force (Check 2).
+- A gate given several `--series` now checks every one. Before, `gate-run.sh arms` kept only the last `--series`, so the earlier series went unchecked; this was live since 0.1194.0 told the lead to pass one `--series` per series. Graph has run no gate since, so nothing passed wrongly (BL-1209).
+- What a consumer does: graph's `overrides/steps__gate-validation__check-20.md` is held for adjudication at the pull, because this release adds a carry-over sentence to Check 20; readopt merges it cleanly.
+
 ## [0.1217.0] - 2026-11-21
 
 ### An update PR no longer carries the operator's own uncommitted edits to a file the pull also writes, nor hook-written pipeline state (BL-1202 narrowed, BL-1204)

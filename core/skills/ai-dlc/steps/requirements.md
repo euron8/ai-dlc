@@ -172,7 +172,7 @@ This derives each bullet's state from the newest record whose question opens wit
 awk -v id='LR-S<N>-<m>' 'BEGIN { q = "- Question (lead-authored, NOT covered by the hash): " id " (lead interpretation): "; v = "UNANSWERED" } f == 2 && $0 == "```" { c = b; sub(/ [(]Recommended[)]$/, "", c); v = (c == "Confirm " id) ? "CONFIRMED" : (c == "Strike " id || c == "Reword " id) ? "DESCOPE" : "UNDECIDED"; f = 0; next } f == 2 { b = b s $0; s = "\n"; next } /^## / { f = 0 } index($0, q) == 1 { t = $0 " "; gsub(id "[^0-9]", " ", t); if (t !~ /LR-S[0-9]+-[0-9]+/) { f = 1; next } } f == 1 && $0 == "```text" { f = 2; b = ""; s = ""; next } END { print v }' _bmad-output/operator-answers-history.md
 ```
 
-`UNANSWERED` is a Rule 12 `HARD_BLOCK` before the requirements gate, through section 4(b)'s open-question channel.
+`UNANSWERED` is a Rule 12 `HARD_BLOCK` before the requirements gate, through section 4(b)'s open-question channel. On `carry-over`, where this step runs no gate (section 6), the stopper is Check 2 (unresolved `HARD_BLOCK`s) at the carry-over architecture planning gate (`gate-validation.md`).
 Every lead-interpretation `HARD_BLOCK` entry, whether filed paused on `UNANSWERED` or `UNDECIDED`, filed `RESOLVED` at the first ask, or resolved later, writes on its `Decision/Question:` line the bullet's id and label in the exact form `LR-S<N>-<m> (lead interpretation)`, then ` -- ` and what the entry records.
 While the entry is paused on `UNANSWERED` or `UNDECIDED`, that is the decision asked: `**Decision/Question:** LR-S<N>-<m> (lead interpretation) -- awaiting operator: Confirm, Strike or Reword "<the clause>"`.
 Once it is resolved, that is the disposition, `confirm` or `descope`, and the captured answer's `file:line`: `**Decision/Question:** LR-S<N>-<m> (lead interpretation) -- confirm, <answer file:line>` or `**Decision/Question:** LR-S<N>-<m> (lead interpretation) -- descope, <answer file:line>`.
@@ -227,7 +227,7 @@ mechanics, the returns handling, and why the spec is never a full-text anchor ta
   `LOCKED_REQUIREMENTS` bullet is a Rule 11 ambiguity and MUST be escalated as a Rule 12
   HARD_BLOCK before the gate, not carried as a note — unless it is resolved by the research
   sub-skills below, in which case it is not escalated.
-- A section 3 `(lead interpretation)` bullet that is unanswered is escalated the same way, as a Rule 12 `HARD_BLOCK` before the gate; no research sub-skill resolves it, only the operator's captured answer.
+- A section 3 `(lead interpretation)` bullet that is unanswered is escalated the same way, as a Rule 12 `HARD_BLOCK` before the gate; no research sub-skill resolves it, only the operator's captured answer. On `carry-over` every `HARD_BLOCK` "before the gate" in this section is stopped by Check 2 at the carry-over architecture planning gate instead (section 3).
 
 **Settle every cheaply checkable premise in this dispatch.** Before the first operator ask, each SPEC
 `open_questions[]` entry and each assumption the SPEC or PRD records as "unconfirmed" or as a later step's
@@ -386,6 +386,7 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
 ### 6. Gate Validation and Proceed
 
 Run auto-handoff evaluation at `Seam B` with the label `requirements end-of-step pre-gate`
-(see `_gate-procedures.md` "Auto-handoff evaluation"). If evaluation returns CONTINUE, run
-gate validation [planning] (`gate-validation.md`), then:
+(see `_gate-procedures.md` "Auto-handoff evaluation"). If evaluation returns CONTINUE: on
+`feature`, run gate validation [planning] (`gate-validation.md`); on `carry-over`, run no gate
+here, because the architecture gate validates this step's work (`architecture.md` §5). Then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/architecture.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`)

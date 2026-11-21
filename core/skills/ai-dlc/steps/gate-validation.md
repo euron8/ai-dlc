@@ -168,7 +168,7 @@ SKILL.md Rule 32 touchpoint G1 applies here, before the script arms run.
 
 **Script arms before the adjudicator.** At a planning, story, sprint-review or retro gate, at gate entry, BEFORE dispatching anything, the lead runs
 `scripts/ai-dlc/gate-run.sh arms --gate <gate-id> --sprint <N> --step <the invoking step file's basename> --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`
-(`<gate-id>` is the gate type; add `--series <path-prefix of the step's adversarial pass series>` for Check 24 and `--story <story file>` once per story to name fewer than the sprint's stories). It runs the script arm of every check the gate's `gates/<gate-id>.arms` declares (a check's EFFECTIVE class at this gate is `adjudication_by_gate[<gate_type>]` when the entry carries it, else `adjudication`, and `validate-gate-manifest.sh` GM3 holds the arms file to that class), including the script arm of an `adjudication: llm` check whose enforcement-map entry carries an `enforcer:`, and prints one `GATE-RESULT <check-id> <PASS|FAIL|SKIP|PENDING> examined=<n> evidence=<path:line> <message>` line per check. A `FAIL` there, or a `PASS` that examined nothing, is a **Gate Failure** now, while no adjudicator is running: the run exits 1, prints a `REMEDY` line per FAIL, mints no nonce and writes no OPEN marker. Exit 0 means it minted `gate_nonce` (`<gate_type>-<UTC>`), ran `gate-checkpoint.sh open`, recorded one ledger row per arm (judgment rows `PENDING`) and wrote the adjudicator worklist `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.worklist`; its `ADJUDICATE <worklist> nonce=<n>` line names both. The lead then decides this dispatch's `gate_series_id` (below) and dispatches the adjudicator against the worklist.
+(`<gate-id>` is the gate type; add `--series <path-prefix of the step's adversarial pass series>` for Check 24, once per series Check 24 reads at this gate (each runs as its own invocation of the arm, and any FAIL fails the row), and `--story <story file>` once per story to name fewer than the sprint's stories). It runs the script arm of every check the gate's `gates/<gate-id>.arms` declares (a check's EFFECTIVE class at this gate is `adjudication_by_gate[<gate_type>]` when the entry carries it, else `adjudication`, and `validate-gate-manifest.sh` GM3 holds the arms file to that class), including the script arm of an `adjudication: llm` check whose enforcement-map entry carries an `enforcer:`, and prints one `GATE-RESULT <check-id> <PASS|FAIL|SKIP|PENDING> examined=<n> evidence=<path:line> <message>` line per check. A `FAIL` there, or a `PASS` that examined nothing, is a **Gate Failure** now, while no adjudicator is running: the run exits 1, prints a `REMEDY` line per FAIL, mints no nonce and writes no OPEN marker. Exit 0 means it minted `gate_nonce` (`<gate_type>-<UTC>`), ran `gate-checkpoint.sh open`, recorded one ledger row per arm (judgment rows `PENDING`) and wrote the adjudicator worklist `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.worklist`; its `ADJUDICATE <worklist> nonce=<n>` line names both. The lead then decides this dispatch's `gate_series_id` (below) and dispatches the adjudicator against the worklist.
 
 **At a `sprint-review` gate**, before dispatching the adjudicator, run
 `scripts/ai-dlc/check-sprint-review-verdicts.sh` over every review file the sprint's stories and the
@@ -224,7 +224,8 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
 
 - For planning artifacts: Party Mode completed? Advanced Elicitation
   completed? Adversarial Review CONVERGED — does its terminal pass stamp
-  `EXIT_CONDITION_MET`?
+  `EXIT_CONDITION_MET`? On `carry-over` the architecture gate asks this of
+  the requirements step's cycle too, since that step runs no gate.
 - For implementation artifacts: Code Review approved? QA approved?
   Story Validation passed?
 - **Read each verdict from its review file, do not assert it.** Before the adjudicator is
@@ -274,8 +275,9 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
 **Scope.** This check fires at the research-requirements gate (variants
 `greenfield`, `brownfield-a`, `brownfield-b`, `brownfield-c`, which still
 run that step) and at the requirements gate (variants `feature` and
-`carry-over`, whose `requirements` step absorbed research-requirements),
-and only when the pipeline variant (read from
+`carry-over`, whose `requirements` step absorbed research-requirements;
+on `carry-over`, where the requirements step runs no gate, it fires at the
+architecture planning gate instead), and only when the pipeline variant (read from
 `_bmad-output/pipeline-snapshot.md` `pipeline_variant` field as-of
 start-of-gate-check) is one of `{greenfield, feature, brownfield-a,
 brownfield-b, brownfield-c, carry-over}`. SKIPS `{bug,
@@ -297,7 +299,7 @@ Two arms, either satisfies (dual-arm OR):
   `^(- |### )?\*{0,2}R[0-9]+\s+[—–-]\s`. The `\*{0,2}` optionally
   accepts bold-marker prefix `**R1 — ...**` which is the dominant
   style in real PRDs authored via `/bmad-deep-recon type=technical`. Single
-  match satisfies arm (b). At the requirements gate, arm (b) is ALSO
+  match satisfies arm (b). At the requirements gate, and on `carry-over` at the architecture planning gate, arm (b) is ALSO
   satisfied by a "Research Findings" section containing a skip record
   matching regex `^(- )?\*{0,2}Research skipped\*{0,2}:[[:space:]]+\S`,
   whose text names the SPEC `open_questions[]` state that justified
@@ -486,7 +488,9 @@ dispatched, so this check carries no adjudicator verdict; Check 2 there is the h
 <!-- CHECK_LOADED: 3 -->
 
 - For each planning artifact passing through this gate (brief, PRD,
-  story files), locate the `LOCKED_REQUIREMENTS` block.
+  story files), locate the `LOCKED_REQUIREMENTS` block. On `carry-over`
+  the architecture planning gate also covers the requirements step's
+  brief and PRD, since that step runs no gate.
 - For each requirement in the block, verify it appears in the artifact
   body with equivalent or greater specificity.
 - **Drift detection:** If a locked requirement has been weakened (e.g.,
@@ -1474,7 +1478,7 @@ does not account for.
 **Scope.** Runs at the retro gate unconditionally. Also runs at any
 gate where a validation evaluation (bmad-party-mode,
 bmad-advanced-elicitation, bmad-review with the adversarial lens,
-bmad-validate-prd, ai-dlc-adversary-review) was required by the current
+ai-dlc-adversary-review) was required by the current
 phase. Also runs at EVERY implementation gate for each declared folded
 bug-fix story (the implementation gate arm below): that obligation is keyed
 on the declaration on disk, not on what the gate produces, so an
@@ -1526,31 +1530,14 @@ under `_bmad-output/party-mode/s<N>/` is never this check's artifact.
   _bmad-output/planning-artifacts/prd.md --require-skill
   bmad-prd`.
   This arm is for the branches where `/bmad-prd` AUTHORS the PRD — greenfield and
-  brownfield-b, `research-requirements.md` §2. Where the only `bmad-prd` invocation
-  is §3's validate call, the arm below is the one that runs. I32 joins the pin to
+  brownfield-b, `research-requirements.md` §2. On brownfield-a and brownfield-c §2
+  updates the PRD by hand and nothing invokes `bmad-prd`, so this check has no PRD
+  arm on those branches. I32 joins the pin to
   `research-requirements.md` by the parenthetical, and the `requirements-step` fixture
   holds `requirements.md` to the same name.
-  `/bmad-prd` is the name a correct run stamps either way. It pinned `bmad-validate-prd` until this
-  release — a fork introduced when §3 was repointed and this arm was not — and the
-  gate would have failed on a correctly-executed run. A PRD stamped before the
-  repoint still passes: BMAD's `bmad-validate-prd` is a deprecated shim that forwards
-  here, and the schema's `superseded_skills` records that, so the pin accepts either
-  name. I32 now joins each `bmad-*` pin to the step file that invokes it.
-- **PRD gate, validate-only branch (research-requirements phase, brownfield-a
-  and brownfield-c):** run `scripts/ai-dlc/validate-provenance-block.sh
-  <run-folder>/validation-report.md --require-skill bmad-prd`, where
-  `<run-folder>` is the directory §3's validate call wrote its report pair into.
-  This arm REPLACES the arm above on every branch where §3's validate call is
-  the sprint's only `bmad-prd` invocation. `research-requirements.md` §2
-  authors `prd.md` through `/bmad-prd` on greenfield and brownfield-b only; on
-  brownfield-a and brownfield-c it updates the PRD by hand, so nothing stamps a
-  block into `prd.md` and §3 is forbidden to write one there. Rule 20 sites the
-  block in the artifact the invocation PRODUCES, and the validate intent
-  produces `validation-report.html` and `validation-report.md`, so the report is
-  both where a correct run puts the block and where this check has to look.
-  `--allow-missing` is wrong on this arm: an artifact carrying no block is the
-  finding this check exists to raise, and that flag acquits exactly the run that
-  skipped the stamp.
+  A PRD stamped `bmad-validate-prd` still passes: BMAD's `bmad-validate-prd` is a
+  deprecated shim that forwards here, and the schema's `superseded_skills` records
+  that, so the pin accepts either name.
 - **Story readiness gate (stories-test-strategy):** run
   `scripts/ai-dlc/validate-provenance-block.sh <story-file>
   --require-skill ai-dlc-adversary-review` for each story EXCEPT a folded
@@ -1816,7 +1803,9 @@ reduce the always-required floors — carry-over-eval Party Mode, retro
 Party Mode, and deploy-validate smoke remain mandatory at every
 intensity. At the requirements gate, one validation cycle run over the
 brief, the spec kernel and the PRD as one subject satisfies the
-per-planning-artifact minimum for all three.
+per-planning-artifact minimum for all three. On `carry-over` the
+requirements step runs no gate, and the architecture gate confirms that
+cycle's minimum as well as its own.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a planning gate that
 under-ran its declared intensity by SKIPPING an evaluation its row names,
@@ -2295,7 +2284,10 @@ artifact into the series.
 --transcript-dir <the directory that transcript sits in>`;
 exit 0 required. At the requirements gate the series prefix is
 `_bmad-output/planning-artifacts/s<N>/requirements-adversarial-p`, named literally, whatever its
-terminal pass's `artifact:` holds. At the `stories-test-strategy` gate Check 24 runs over BOTH
+terminal pass's `artifact:` holds. On `carry-over` the requirements step runs no gate, so the
+architecture gate runs Check 24 over BOTH that requirements series and the architecture series
+(when `architecture.md` §4's cycle ran), each as its own `--series`, whatever the requirements
+series' terminal verdict. At the `stories-test-strategy` gate Check 24 runs over BOTH
 the stories series and the test-strategy series, the latter named literally as
 `_bmad-output/planning-artifacts/s<N>/test-strategy-adversarial-p`. The test-strategy series is
 owed at every intensity, with no skip: a `--series` matching nothing means `stories-test-strategy`
@@ -2349,7 +2341,8 @@ sprint.** For each `_bmad-output/planning-artifacts/s<N>/*-adversarial-p*` serie
 pass stamps `EXIT_CONDITION_MET` and names one file in `artifact:`, invoke the same command with
 that series' prefix; exit 0 required. The requirements series
 `_bmad-output/planning-artifacts/s<N>/requirements-adversarial-p` is always one of them when it
-exists, although its terminal pass names the subject manifest. Skip this when the sprint directory
+exists, although its terminal pass names the subject manifest; at the carry-over architecture gate
+it is already a `--series` of the arm, as above. Skip this when the sprint directory
 holds no such series — a `--series` matching nothing exits 1. Arm J2 fails a series whose notarized file moved after MET
 with no repair chain and no re-open on the record; the amendment procedure is in
 `_gate-procedures.md`, *Divergence resolution dispatch*.

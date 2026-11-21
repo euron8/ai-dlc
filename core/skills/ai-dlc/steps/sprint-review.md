@@ -204,11 +204,16 @@ empty `Kind` or `Resolves to`; point a `test` row at the node as it now
 exists), commit, and re-run until it exits 0. Exit 2 is recorded verbatim in
 the gate log.
 
+*Catches:* a story's locked-requirement anchor check that passed vacuously
+at the story gate, examining nothing (Check 3); a strategy-named Test ID that no
+Dev Agent Record cites (Check 21); an earlier sprint's suppression still in force
+(Check 2).
+
 Run auto-handoff evaluation at `Seam B` with the label
 `sprint-review end-of-step pre-gate` (see `_gate-procedures.md`
 \"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
-`bash scripts/ai-dlc/gate-run.sh arms --gate sprint-review --sprint <N> --step sprint-review.md --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`
-(add `--series <path-prefix of the sprint adversarial pass series>` for Check 24), dispatch the adjudicator it names
+`bash scripts/ai-dlc/gate-run.sh arms --gate sprint-review --sprint <N> --step sprint-review.md --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`,
+dispatch the adjudicator it names
 (`gate-validation.md`), then run `bash scripts/ai-dlc/gate-run.sh close --gate sprint-review --nonce <gate_nonce> --sprint <N> --step sprint-review.md --transcript <this session's transcript_path>`. Check 20 loads at this
 gate and reads the minimum from Steps 1 and 2 above, so the gate log entry records
 `validation_intensity:` and `minimum_met:` here as it does at every planning gate.
