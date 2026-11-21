@@ -47874,3 +47874,20 @@ Work list:
 Step: n/a
 
 verify: manual
+## BL-1210 — a release commit subject can carry a spliced paragraph, because `validate-release-version.sh` parses the subject and bounds nothing about its length
+
+**DEFECT.** Filed 2026-11-21 (batch 263, fast-track). Owner: `scripts/validate-release-version.sh` (arm H, in `arm_ab`).
+
+Goal: a subject past a derived ceiling fails the push. One done condition: the validator fails on `7f17b6dee1d0757c4a7f76d676738a03256ca4ff`'s subject (1052 characters) and passes on `03ad3135d`'s (198).
+
+Record: arms A and B read the subject for a version token only. `7f17b6dee`'s subject had a blank line 2, so a blank-line-2 arm would not have fired; length is the discriminating property. Measured at `03ad3135d` over 2184 first-parent subjects on origin/main: byte maximum 625, character maximum 623, top five bytes 625, 491, 475, 457, 452; none above 700. The ceiling is `SUBJECT_MAX_LEN=800`, above the byte maximum so the locale cannot move a historical subject across it.
+
+Work list:
+
+1. Add `SUBJECT_MAX_LEN` and arm H to `arm_ab`, with its header and remedy text.
+
+**LANDED (v0.1211.0).** batch 263, fast-track. Arm H of `scripts/validate-release-version.sh` refuses a subject over 800 characters, naming the commit, the length and the ceiling; hand probe: fails on 1052, passes on 198, and a ceiling raised above 1052 no longer fails.
+
+Step: n/a
+
+verify: sh N=900; S=scripts/validate-release-version.sh; grep -q 'SUBJECT_MAX_LEN' "$S" || exit 9; S="$PWD/$S"; unset AI_DLC_PROJECT_ROOT; T="$(mktemp -d)" || exit 9; L="$(head -c "$N" /dev/zero | tr '\0' x)"; git -C "$T" init -q && printf '0.1.0\n' > "$T/VERSION" && printf '## [0.1.0] - 2026-01-01\n' > "$T/CHANGELOG.md" && git -C "$T" add -A && git -C "$T" -c user.name=r -c user.email=r@r -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -q -m "0.1.0: $L" || exit 9; o="$(cd "$T" && bash "$S" --commit HEAD 2>&1)"; rc=$?; [ -n "$T" ] && rm -rf "$T"; [ "$rc" -ne 0 ] && printf '%s' "$o" | grep -q '(arm H)'
