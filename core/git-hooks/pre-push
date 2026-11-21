@@ -253,6 +253,7 @@ ps_flush() {
     printf '\n── %s\n' "$title"
     if [ -f "$PS_W/$n.skipped" ]; then printf '   SKIPPED (AI_DLC_PRESUITE_SKIP=1)\n'; continue; fi
     if [ -f "$PS_W/$n.keyskip" ]; then
+      [ -z "${SKIPS_LOG:-}" ] || { skips_stamp; read -r sk_s < "$PS_W/$n.slug"; printf -v sk_l '%s\tSKIP\t%s\tpresuite\t%s\tkey\t\n' "$SKIPS_STAMP" "$$" "$sk_s"; SKIPS_PRE="${SKIPS_PRE:-}$sk_l"; }
       printf '   skipped on a recorded pass: none of its declared inputs changed\n   PASS\n'; ps_nskip=$((ps_nskip + 1)); continue
     fi
     why="$(awk -F'\t' -v s="$(cat "$PS_W/$n.slug" 2>/dev/null)" '$1 == s && $2 == "run" { print $3; exit }' "$PS_W/k/.kdec" 2>/dev/null)"
@@ -1335,6 +1336,10 @@ readset_live_trace() { # <out>
   ( trap '' HUP
     set +m
     sp="$(exec sh -c 'printf %s "$PPID"')"; t0="$(date +%s)"
+    # THE LOCK'S PID FILE IS WRITTEN HERE, by the process that releases the lock, so the write can never land
+    # after the release and overwrite a later holder's pid with this one's. Until it lands the lock dir has no
+    # pid file, which readset_lock_stale judges held while the dir is under a minute old.
+    readset_lock_write "$lk" "$sp"
     set -m
     AI_DLC_READSET_TRACE_ROOT="$tr" bash "$dv" --list "$names" --tracer sandbox --local-map "$READSET_LOCAL" &
     dp=$!
@@ -1347,17 +1352,11 @@ readset_live_trace() { # <out>
     # The subshell sends no signal to `-$dp` after it has reaped `$dp`: that group id may be reused, so
     # its forwarding trap is replaced by an ignore once the reap is done, which also keeps a late TERM
     # from interrupting `wait "$wp"` and losing the watchdog's verdict.
-    # THE WATCHDOG HAS NO TERM TRAP, AND ITS SLEEP IS SWEPT BY GROUP AFTER THE REAP. Every trap it
-    # carried leaked the sleep on a fast trace: one reading a saved `$s` raced the assignment (about 1 in 100);
-    # one sending TERM to `$(jobs -p)` was handled and lost by a child between fork and exec (10 of 10
-    # with that window forced); one sending KILL to `$(jobs -p)` leaked under load in two ways -- the
-    # trap ran with `jobs -p` not naming the sleep, or the stop arrived while the watchdog was blocked
-    # in `wait` and no trap ran at all, so `wait "$wp"` below hung with the lock held and no exit
-    # written. Measured, 12 concurrent drives of 150 fast traces: 12 of 1800 and 6 of 1800. With no
-    # trap the stop kills the watchdog by the default action, its sleep stays in group `$sp`, and the
-    # TERM to `-$sp` below, sent once `$wp` is reaped and while this subshell ignores TERM, ends it:
-    # 0 of 1800 under the same load, 0 of 10 with the fork-to-exec window forced (no handler exists
-    # to lose a TERM in that window). Without the sweep the sleep survives every fast trace.
+    # THE WATCHDOG HAS NO TERM TRAP. A stop kills it by the default action, so no handler exists to be lost
+    # or to run late. Its `sleep` stays in group `$sp` and is swept by the TERM to `-$sp` below, sent once
+    # `$wp` is reaped and while this subshell ignores TERM. The lock is released last, by
+    # `rm -f "$lk/pid"; rmdir "$lk"`; the pid file is this subshell's own (written at its start), so nothing
+    # else writes into `$lk` and `rmdir` cannot find it occupied.
     (
       sleep "$cl" & s=$!; wait "$s"
       trap '' TERM
@@ -1378,11 +1377,10 @@ readset_live_trace() { # <out>
     rm -f "$READSET_LOCAL.tmp.$dp"
     printf 'start %s\npid %s\nlist %s\nderiver %s\nceiling %s\nexit %s\nfinish %s\n' "$t0" "$sp" "$names" "$dp" "$cl" "$rc" "$(date +%s)" > "$READSET_LOCAL.status.tmp.$sp" 2>/dev/null \
       && mv "$READSET_LOCAL.status.tmp.$sp" "$READSET_LOCAL.status" 2>/dev/null
-    rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null || { sleep 1; rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null; }
+    rm -f "$lk/pid"; rmdir "$lk" 2>/dev/null
   ) </dev/null >"$logf" 2>&1 &
   tp="$!"
   set +m
-  readset_lock_write "$lk" "$tp"
   printf '   ..    read-set live trace: started detached for %s unmapped fixture(s) (%s) -> %s; ceiling %ss\n' "$n" "$names" "$logf" "$cl"
   return 0
 }
@@ -1708,6 +1706,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 dd6b4948a04c22742669aac0b53351884194a2f4805d85d7efb2a9f7660ce48c BL-1124 (c) readset_decl_parse per-fixture span, section and git.decl execs: readset_decl_spans parses spans.decl with builtins and readset_decl_spansbatch takes every fixture span presence and hash in one mapper start, one awk and one shasum, the `+` rows are collected by the row loop and hashed by readset_decl_hashes in one shasum for the whole pre-pass, readset_decl_ranges splits its paths with builtins, the glob expansion no longer moves a scratch file; every parse row is byte-identical, so no entry changes meaning
 # VS-IDENTITY 1 f9b807a1a25300e88515d3dd0b540b78d83247360d76ba0c357b745c18a52df3 BL-1163 memoizes readset_strip_keys and readset_tools' scan under the readset-memo record, off unless a depth-0 push entry; every key row, .dkeys, .ftools and .tools is byte-identical, so no stored entry changes meaning
 # VS-IDENTITY 1 746efba9d11a1197bda98bb7975dcaa74df97d66b77e8aef4890f0351a828e35 readset_excluded_re escapes each excluded name's dots with a parameter expansion, not a sed per name (BL-1124); the regex is byte-identical, so no entry changes meaning
+# VS-IDENTITY 1 168ce97fa31f560f8ee03b176d19aec6fa0eaa6fd20b789948bbe1a35a62ab2f readset_span_sha and readset_tail_sha are one awk and one shasum each, not a four-exec pipeline (BL-1124); every sha is byte-identical, so no entry changes meaning
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -1915,8 +1914,13 @@ readset_memo_on() { # the memo is on only at depth 0 (BL-1163); a hook a fixture
 #     name is also keyed on its whole-file hash, as for any declared file.
 # READSET_KEYROWS_BEGIN
 readset_span_sha() { # <file> <NAME> [raw]: `raw` keeps comment and blank lines (a declared span: its reader may read them)
-  if [ "${3:-}" = raw ]; then sed -n "/^# ${2}_BEGIN\$/,/^# ${2}_END\$/p" "$1" | shasum -a 256 | cut -d' ' -f1; return 0; fi
-  sed -n "/^# ${2}_BEGIN\$/,/^# ${2}_END\$/p" "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
+  local h x="" nl=1
+  if [ "${3:-}" = raw ]; then IFS= read -r -d '' x < "$1" 2>/dev/null || :; [ -z "$x" ] || [ "${x: -1}" = $'\n' ] || nl=0; fi
+  h="$(B="# ${2}_BEGIN" E="# ${2}_END" R="${3:-}" NL="$nl" awk 'BEGIN { b = ENVIRON["B"]; e = ENVIRON["E"]; r = (ENVIRON["R"] == "raw") }
+    function out(s) { if (r) { printf "%s%s", (p ? "\n" : ""), s; p = 1; l = NR } else if (s !~ /^[[:space:]]*(#|$)/) print s }
+    !on { if ($0 != b) next; on = 1; out($0); next } { out($0) } $0 == e { on = 0 }
+    END { if (p && (ENVIRON["NL"] == "1" || l != NR)) printf "\n" }' "$1" | shasum -a 256)"
+  printf '%s\n' "${h%% *}"
 }
 #   readset_section  <file> <heading>: the lines of the FIRST section of <file> headed <heading> (a line equal to it, or
 #     opening with it and a space) up to, not including, the next line opening with the heading's own `#` run and a
@@ -1935,7 +1939,9 @@ readset_section_of() {
     { i = index($0, " "); if (i > 1 && substr($0, 1, i - 1) == ENVIRON["P"]) { h = substr($0, i + 1); print (h ~ /^#+ [^ ]/) ? h : "!"; exit } }' "$1/section.decl"
 }
 readset_tail_sha() { # <file>: the top-level lines after its last line that is exactly `}`, comments and blanks dropped
-  awk '{ a[NR] = $0 } $0 == "}" { e = NR } END { for (i = e + 1; i <= NR; i++) print a[i] }' "$1" | grep -v -E '^[[:space:]]*(#|$)' | shasum -a 256 | cut -d' ' -f1
+  local h
+  h="$(awk '{ a[NR] = $0 } $0 == "}" { e = NR } END { for (i = e + 1; i <= NR; i++) if (a[i] !~ /^[[:space:]]*(#|$)/) print a[i] }' "$1" | shasum -a 256)"
+  printf '%s\n' "${h%% *}"
 }
 #   readset_decl_batch  <entries> <dist|cons> [<premap>] [m]: the inputs.decl parse of EVERY entry (`<fx>\t<inputs.decl>\t<scratch
 #     prefix>`) in ONE awk, so a declared set costs one start, not one per fixture. Each entry's fx and its `.p .r .mi .f`
@@ -3250,25 +3256,46 @@ cl_confirm() {
   return 0
 }
 
+# THE SKIP-SET RECORD (BL-878): `$SKIPS_LOG` (the distribution hook's real push entry sets it; every other hook, a nested
+# pool and a span a fixture sources leave it empty, and each function below then writes nothing). One header line per
+# push, `<stamp>\tPUSH\t<hook pid>\t<local shas>\t<HEAD tree>\t<suite key or ->\t<detail>`, then one
+# `<stamp>\tSKIP\t<hook pid>\t<layout>\t<fixture>\t<class or key>\t<state>` line per skipped unit. A write that fails
+# changes nothing: the caller tested the path with a builtin, and every append here is error-suppressed.
+skips_stamp() { [ -n "${SKIPS_STAMP:-}" ] || SKIPS_STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; }
+skips_flush() { # <log>: the pre-suite step lines queued in SKIPS_PRE follow the header
+  [ -z "${1:-}" ] || [ -z "${SKIPS_PRE:-}" ] || { printf '%s' "$SKIPS_PRE" >> "$1"; } 2>/dev/null || :
+  SKIPS_PRE=""
+}
+skips_header() { # <log> <detail> [<layout> <fixture> <why>]: a header, then one SKIP line when a layout is given
+  [ -n "${1:-}" ] || return 0
+  skips_stamp
+  { printf '%s\tPUSH\t%s\t%s\t%s\t%s\t%s\n' "$SKIPS_STAMP" "$$" "${SKIPS_SHAS:--}" "${SKIPS_TREE:--}" "${SKIPS_KEY:--}" "$2" >> "$1"
+    [ -z "${3:-}" ] || printf '%s\tSKIP\t%s\t%s\t%s\t%s\n' "$SKIPS_STAMP" "$$" "$3" "$4" "$5" >> "$1"; } 2>/dev/null || :
+  skips_flush "$1"
+}
 # A FIXTURE SKIPPED ON A RECORDED PASS KEEPS ITS PENDING COUNT IN SIGHT. Writes `<out>/.precorded`, C-sorted, one
 # `<fx>\t<n>` line per `skip` row of `.kdec` this push did not dispatch (no verdict file): n from `.kpn` (a
 # republished or store-skipped record), else from line `#pending` of `$KEYS_DIR/<fx>.key`, else `-` (a record or
 # entry written before the count was recorded, or a seeded one: unrecorded, never a run reason). A `skip` row of
 # `.cl/.kdec` is the line `<fx>@consumer\t<n>`, read the same way from `.cl/.kpn` and the consumer-layout keys dir
 # `.cl.keys` names. Called on the unchanged-push return and on the pool path, after the dispatch.
-readset_pending_recorded() { # <out>
-  local o="$1" ckd=""
+readset_pending_recorded() { # <out> [<skip record>]
+  local o="$1" ckd="" sl="${2:-}" rc
+  [ -z "$sl" ] || skips_stamp
   : > "$o/.precorded"
   read -r ckd 2>/dev/null < "$o/.cl.keys" || :
   if [ -s "$o/.kdec" ]; then set -- "$o/.kdec"; [ ! -s "$o/.cl/.kdec" ] || set -- "$o/.kdec" "$o/.cl/.kdec"
   elif [ -s "$o/.cl/.kdec" ]; then set -- "$o/.cl/.kdec"
-  else return 0; fi
-  awk -F'\t' -v out="$o" -v kd="$KEYS_DIR" -v ckd="$ckd" -v cl="$o/.cl/.kdec" '
+  else skips_header "$sl" no-kdec; return 0; fi
+  awk -F'\t' -v out="$o" -v kd="$KEYS_DIR" -v ckd="$ckd" -v cl="$o/.cl/.kdec" -v sl="$sl" -v id="$$" -v stp="${SKIPS_STAMP:--}" -v shas="${SKIPS_SHAS:--}" -v tree="${SKIPS_TREE:--}" -v sk="${SKIPS_KEY:--}" -v nc="${READSET_NO_CHANGE:-0}" '
     function kpn(c, A,   l, i) { while ((getline l < c) > 0) { i = index(l, "\t"); if (i > 1) A[substr(l, 1, i - 1)] = substr(l, i + 1) } }
-    BEGIN { kpn(out "/.kpn", C); kpn(out "/.cl/.kpn", CC) }
+    BEGIN { kpn(out "/.kpn", C); kpn(out "/.cl/.kpn", CC)
+      while (nc != 1 && (getline l < (out "/list")) > 0) { if (l ~ /@consumer$/) rc++; else rd++ } }
     $2 != "skip" { next }
     { b = $1; d = kd; if (FILENAME == cl) { b = b "@consumer"; d = ckd }
       v = out "/" b; if ((getline l < v) >= 0) { close(v); next }
+      if (FILENAME == cl) sc++; else sd++
+      sr = sr stp "\tSKIP\t" id "\t" (FILENAME == cl ? "consumer" : "dist") "\t" $1 "\t" ($4 == "" ? "key" : $4) "\t" $5 "\n"
       n = "-"
       if (FILENAME == cl && ($1 in CC)) n = CC[$1]
       else if (FILENAME != cl && ($1 in C)) n = C[$1]
@@ -3276,7 +3303,9 @@ readset_pending_recorded() { # <out>
              while (i < 4 && (getline l < r) > 0) { i++; if (l ~ /^#pending /) n = substr(l, 10) }
              close(r) }
       if (n !~ /^(0|[1-9][0-9]*)$/) n = "-"
-      print b "\t" n }' "$@" | LC_ALL=C sort > "$o/.precorded.t" && mv "$o/.precorded.t" "$o/.precorded"
+      print b "\t" n }
+    END { if (sl != "") printf "%s\tPUSH\t%s\t%s\t%s\t%s\tdist=%d/%d/%d consumer=%d/%d/%d\n%s", stp, id, shas, tree, sk, rd + sd, rd, sd, rc + sc, rc, sc, sr >> sl }' "$@" | LC_ALL=C sort > "$o/.precorded.t" && mv "$o/.precorded.t" "$o/.precorded"
+  rc=$?; skips_flush "$sl"; return $rc
 }
 # THE PENDING SUMMARY LINE, ONE RENDERER: <green count> fixtures this push ran printed PENDING rows (<green names>,
 # space-led), and <recorded file> holds `<fx>\t<n>` for every fixture skipped on a recorded pass (`-` names stdin);
@@ -3549,11 +3578,11 @@ run_fixtures() {
   ph="$ph select $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   readset_trace_report "$out"
   ph="$ph trace-report $((SECONDS - ph_t))s"; ph_t="$SECONDS"
-  readset_invalidation_guard "$out" || { rm -rf "$out"; trap - EXIT INT TERM HUP; return 1; }
+  readset_invalidation_guard "$out" || { skips_header "${SKIPS_LOG:-}" invalidation-guard; rm -rf "$out"; trap - EXIT INT TERM HUP; return 1; }
   ph="$ph guard $((SECONDS - ph_t))s"; ph_t="$SECONDS"
   # A REFUSED CONSUMER-LAYOUT SELECTION FAILS THE STEP before any dispatch or skip return (cl_select says why).
   if [ -s "$out/.cl.refused" ]; then
-    sed 's/^/   FAIL  consumer layout: /' "$out/.cl.refused"
+    sed 's/^/   FAIL  consumer layout: /' "$out/.cl.refused"; skips_header "${SKIPS_LOG:-}" cl-refused
     rm -rf "$out"; trap - EXIT INT TERM HUP; return 1
   fi
   if [ -s "$out/.cl.sel" ]; then
@@ -3572,7 +3601,7 @@ run_fixtures() {
     readset_keys_write "$out"
     cl_write "$out"
     cl_confirm "$out"
-    readset_pending_recorded "$out"
+    readset_pending_recorded "$out" "${SKIPS_LOG:-}"
     readset_pending_line 0 "" "$out/.precorded"
     rm -rf "$out"; trap - EXIT INT TERM HUP
     return 0
@@ -3581,7 +3610,7 @@ run_fixtures() {
   n_expected="$(grep -c . "$out/list" 2>/dev/null)"
   case "$n_expected" in ''|*[!0-9]*) n_expected=0 ;; esac
   if [ "$n_expected" -eq 0 ]; then
-    printf '   FAIL  no fixtures found -- an empty suite passes every assertion it never made\n'
+    printf '   FAIL  no fixtures found -- an empty suite passes every assertion it never made\n'; skips_header "${SKIPS_LOG:-}" empty-suite
     rm -rf "$out"; trap - EXIT INT TERM HUP; return 1
   fi
 
@@ -3886,7 +3915,7 @@ run_fixtures() {
     elif [ "$verdict" = REFUSED ]; then printf '   REFUSED  %s  (no progress for %s polls; a refusal costs a re-run, never a verdict)\n' "$b" "$POOL_STALL"; rc=1
     else                        printf '   FAIL  %s\n' "$b"; rc=1; rf_hard=1; fi
   done < "$out/list"
-  readset_pending_recorded "$out"
+  readset_pending_recorded "$out" "${SKIPS_LOG:-}"
   readset_pending_line "$pend_n" "$pend_fx" "$out/.precorded"
 
   # THE CONTROL PARALLELISM MAKES NECESSARY. Serially, a fixture that never ran could not

@@ -762,7 +762,7 @@ mkdir -p "$PROJECT_ROOT/tests/fixtures"
 # across four files, and the two that were missed at v0.316.0 were found by a failed
 # push rather than at authoring time. The list here and uninstall.sh's are the pair that
 # disagreed; deriving this one means the disagreement has one fewer side that can drift.
-# ONE `git ls-files` over core/fixtures for every fixture, and one `cp` per directory run, not one git, mkdir and cp per
+# ONE `git ls-files` over core/fixtures for every fixture, and one `tar` pipeline for the copy, not one git, mkdir and cp per
 # tracked file. The index order keeps a fixture's entries contiguous; a fixture not in the derived set is skipped.
 _fx_set="
 "
@@ -788,7 +788,7 @@ ai_dlc_src_git ls-files -z -- ":(literal)core/fixtures" > "$AI_DLC_FX_LS" \
   || { echo "Error: git ls-files failed for core/fixtures/"; exit 1; }
 # Every destination directory is made by one `mkdir -p` first: a fixture's own directory (it has a tracked file) and each
 # nested directory a non-dot tracked file sits in.
-_fx_mk=(); _fx_cur=""; _fx_on=0; _fx_dest=""; _fx_rd=""; _fx_run=(); _fx_chm=(); _fx_pd=""
+_fx_mk=(); _fx_cur=""; _fx_on=0; _fx_dest=""; _fx_run=(); _fx_chm=(); _fx_pd=""
 while IFS= read -r -d '' _fx_path; do
   case "$_fx_path" in core/fixtures/*/*) ;; *) continue ;; esac
   _fx_n="${_fx_path#core/fixtures/}"; _fx_name="${_fx_n%%/*}"; _fx_rel="${_fx_n#*/}"
@@ -805,19 +805,12 @@ $_fx_name
 done < "$AI_DLC_FX_LS"
 [ "${#_fx_mk[@]}" -eq 0 ] || mkdir -p "${_fx_mk[@]}"
 _fx_cur=""
-_fx_flush() {
-  if [ "${#_fx_run[@]}" -gt 0 ]; then
-    cp -p "${_fx_run[@]}" "$_fx_dest/${_fx_rd:+$_fx_rd/}"
-    _fx_run=()
-  fi
-}
 # chmod the whole glob, not two named scripts -- the same reasoning the reconcile
 # loop above states. `cp` preserves the source mode on a NEW file, so a fixture
 # shipping a third executable works by luck; on an OVERWRITE it keeps the
 # destination's existing mode, which is 0644 forever and silent. That is how a
 # guard once installed inert while every content diff stayed green. The chmod is one call after the last fixture.
 _fx_close() {
-  _fx_flush
   if [ "$_fx_on" = 1 ]; then
     for _fx_g in "$_fx_dest/"*.sh; do [ -e "$_fx_g" ] && _fx_chm+=("$_fx_g"); done
     echo "  $_fx_cur/ installed"
@@ -828,18 +821,22 @@ while IFS= read -r -d '' _fx_path; do
   _fx_n="${_fx_path#core/fixtures/}"; _fx_name="${_fx_n%%/*}"; _fx_rel="${_fx_n#*/}"
   if [ "$_fx_name" != "$_fx_cur" ]; then
     [ -z "$_fx_cur" ] || _fx_close
-    _fx_cur="$_fx_name"; _fx_on=0; _fx_rd=""
+    _fx_cur="$_fx_name"; _fx_on=0
     case "$_fx_set" in *"
 $_fx_name
 "*) _fx_on=1; _fx_dest="$PROJECT_ROOT/tests/fixtures/$_fx_name" ;; esac
   fi
   [ "$_fx_on" = 1 ] || continue
   case "$_fx_rel" in .*) continue ;; esac
-  case "$_fx_rel" in */*) _fx_d="${_fx_rel%/*}" ;; *) _fx_d="" ;; esac
-  if [ "$_fx_d" != "$_fx_rd" ]; then _fx_flush; _fx_rd="$_fx_d"; fi
-  _fx_run+=("$AI_DLC_ROOT/$_fx_path")
+  _fx_run+=("$_fx_n")
 done < "$AI_DLC_FX_LS"
 [ -z "$_fx_cur" ] || _fx_close
+# ONE tar pipeline copies every listed file, MODE kept (-p), mtime not (-m): no reader of an installed fixture file's mtime
+# exists. Two execs, not one `cp` per directory run.
+if [ "${#_fx_run[@]}" -gt 0 ]; then
+  ( set -o pipefail; printf '%s\0' "${_fx_run[@]}" | tar -C "$AI_DLC_ROOT/core/fixtures" -cf - --null -T - \
+    | tar -C "$PROJECT_ROOT/tests/fixtures" -xmpf - ) || { echo "Error: copying core/fixtures/ failed" >&2; exit 1; }
+fi
 [ "${#_fx_chm[@]}" -eq 0 ] || chmod +x "${_fx_chm[@]}" 2>/dev/null || true
 
 # Create feedback log

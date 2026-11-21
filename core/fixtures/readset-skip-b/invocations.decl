@@ -9,3 +9,5 @@
 277 *
 0 core/git-hooks/pre-push
 0 core/scripts/derive-fixture-readsets.sh
+# BL-878 (d): tk_rec drives readset_pending_recorded: one paired source and three calls (the third, READSET_NO_CHANGE=1), each logged by fx_inproc.
+4 inproc:core/git-hooks/pre-push

@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1212.0] - 2026-11-21
+
+### The pre-push hook does less work per push, records which fixtures it skipped, and a detached trace can no longer overwrite a second holder's lock (BL-1124 advances, BL-1192, BL-1178 advances, BL-878 advances, BL-1155 advances)
+
+- For everyone who pushes to this repository, and for a consumer's `scripts/install.sh` build. The distribution hook's read-set key code hashes each declared span and runner tail with one `awk` and one `shasum` instead of a four-command pipeline: 8 execs per runner per pass become 4, and every hash is byte-identical, so no stored verdict changes meaning.
+- `scripts/install.sh` copies the shipped fixtures with one `tar` pipe instead of one `cp` per fixture directory: `cp` 311 → 84, `tar` 0 → 2, with the same 1312 files, bytes and modes in the installed tree (only file mtimes differ, and a census of every mtime reader found none that reads a copied fixture). A failure on either side of that pipe stops the install with an error, as the `cp` it replaces did. Three fixtures that run `install.sh` under the sandbox now declare `tar`.
+- Each real push on the distribution hook now appends to `.git/ai-dlc-fixture-skips.log`: one `PUSH` header (local shas, tree, suite key, and per layout how many fixtures were listed, run and skipped) and one `SKIP` line per skipped fixture with its layout and the class or key that skipped it. A consumer's push writes nothing. Before this the skip set of a push was not recorded anywhere.
+- The read-set trace lock is now written by the trace subshell itself, right after it learns its own pid. Before, the launcher wrote the pid after the fork, so a trace that had already finished could have its dead pid written over a second holder's lock, and a third hook then judged the lock stale and could start a second trace at once. The reported release race in the same code (BL-1178 item 1) did not reproduce, and the retry that only served the late write is gone.
+- The whole-suite key's comment in the hook now lists every component the key hashes, and fixture `suite-content-key` gains arms rg1 to rg4 that hold the `### ranges` component: a row exists, a docs-only commit leaves the key unchanged, a history change with an identical tree moves it, and a bad range refuses the key.
+- Fixtures whose declared inputs missed files they read now declare them, from a sandbox trace of each one (BL-1155): `gate-transition` gains 96 lines (98 added, 2 of them dropped because those two files are not in an installed tree), `fixture-git-env-seam` gains 7, and each of `story-evidence-scaffold-b`, `-c`, `-d` and `-g` gains 24. A fixture that reads a changed file it did not declare could skip on a push that should have run it. The read-set map is retraced for `hook-registration-join` and `retro-compliance-workflow`.
+- The read-set skip record no longer double-counts: on a push where no fixture's inputs changed, the `PUSH` header in `.git/ai-dlc-fixture-skips.log` read `dist=2N/N/N` and now reads `dist=N/0/N`.
+- Still owed: BL-1124's two `legacy` declaration rows (`procsub-staged-refusal core/skills/`, `vocabulary-index core/`).
+- Filed: BL-1207, a once-seen failure of the `readset-skip` fixture's SLOT KILL arm that is not reproduced.
+
 ## [0.1211.0] - 2026-11-21
 
 ### A release commit subject longer than 800 characters is refused at pre-push (BL-1210)

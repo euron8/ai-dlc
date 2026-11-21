@@ -1,6 +1,6 @@
 # BL-878: set from one counted run through core/scripts/hermetic-run.sh (the judge's own J3 output); base was * 40 and
 # scripts/suite-content-key.sh 30. The subject starts are the four cli cells of cells.decl. The inproc row is one pass
-# per sck_main call: run.sh's key calls, the four cli_eqv in-process sides and the hook-driver worlds' answers.
-14 *
+# per sck_main call: run.sh's key calls, the four cli_eqv in-process sides and the hook-driver worlds' answers. BL-1192: the ranges world adds five range.sh bash starts and six in-process passes.
+19 *
 4 scripts/suite-content-key.sh
-34 inproc:scripts/suite-content-key.sh
+40 inproc:scripts/suite-content-key.sh

@@ -27,6 +27,7 @@ rmdir
 sed
 sort
 tail
+tar
 tr
 wc
 xargs

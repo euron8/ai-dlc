@@ -108,5 +108,9 @@ fi
 # VS-WRITER import .githooks/pre-push rec_import "$GITDIR/ai-dlc-suite-key" "$KEY_RECORD"
 # VS-WRITER import core/git-hooks/pre-push rec_import "$GITDIR/ai-dlc-fixture-keys" "$KEYS_DIR"
 # VS-WRITER import core/git-hooks/pre-push rec_import "$GITDIR/ai-dlc-fixture-verified" "$VERIFIED_RECORD" && rec_import "$GITDIR/ai-dlc-fixture-verified.format" "$VERIFIED_FORMAT"
+# The skip-set record is an audit log of the gate's skip decisions (read to answer which fixtures a push skipped); it holds no verdict and nothing reuses it as a pass.
+# VS-WRITER not-a-pass .githooks/pre-push if { : >> "$GITDIR/ai-dlc-fixture-skips.log"; } 2>/dev/null; then
+# VS-WRITER not-a-pass .githooks/pre-push SKIPS_LOG="$GITDIR/ai-dlc-fixture-skips.log"
+# VS-WRITER not-a-pass .githooks/pre-push else printf ' .. skip record: %s is not writable; this push records no skip set\n' "$GITDIR/ai-dlc-fixture-skips.log"; fi
 # VS-WRITERS_END
 exit "$rc"
