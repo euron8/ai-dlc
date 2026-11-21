@@ -378,9 +378,7 @@ av_world() {
     printf '    if [ ! -d .claude/agents ]; then\n      out="$(bash scripts/ai-dlc/render-agent-definitions.sh --root . 2>&1)"\n    fi\n'
     printf '    out="$(bash scripts/ai-dlc/render-agent-definitions.sh --check --root . 2>&1)"; rc=$?\n'
     printf '    case "$rc" in 0|3) return 0 ;; *) return 1 ;; esac\n  }\n  agent_definitions\nfi\n'
-    printf 'readset_deriver_path() {\n  local c\n'
-    printf '  for c in scripts/ai-dlc/derive-fixture-readsets.sh core/scripts/derive-fixture-readsets.sh; do\n'
-    printf '    [ -f "$c" ] && { printf '"'%%s'"' "$c"; return 0; }\n  done\n}\n'; } > "$w/cons/.githooks/pre-push"
+    printf '[ -f scripts/ai-dlc/derive-fixture-readsets.sh ] && printf present\n'; } > "$w/cons/.githooks/pre-push"
   chmod +x "$w/cons/.githooks/pre-push"
   bash "$w/cons/scripts/ai-dlc/render-agent-definitions.sh" --root "$w/cons" >/dev/null 2>&1
   [ "$3" = drift ] && printf 'a hand edit\n' > "$w/cons/.claude/agents/dev.md"
@@ -3190,12 +3188,12 @@ if sg av; then
 # the same in both layouts. Each stub carries exactly the property its arm keys on; the real
 # renderer and the real provenance validator are driven by the BL-456 receipt. The hook is a copy
 # of the shipped hook's SHAPES (the agent-definitions function, the trunk-push pipe, the readset
-# `for` list), and it is only ever SCANNED here: the consumer has no remote, so arm P never runs it.
+# existence test), and it is only ever SCANNED here: the consumer has no remote, so arm P never runs it.
 #
 #   world A (one pull, seven changed gating scripts, a clean consumer)
 #     render-agent-definitions.sh  rendered body changes: bare 2,2; hook argv 0,1        -> DEFER
 #     audit-rule-files.sh          second argv-dependent script: bare 1,1; hook 0,1      -> DEFER
-#     derive-fixture-readsets.sh   incoming exits 1, but the hook only LISTS it          -> OK, not gating
+#     derive-fixture-readsets.sh   incoming exits 1, but the hook only TESTS it exists   -> OK, not gating
 #     validate-audit-anchors.sh    incoming fails on the pushed ref read from STDIN      -> DEFER
 #     validate-artifact-paths.sh   its SIBLING artifact-path-config.sh fails at theirs   -> DEFER
 #     validate-rooted.sh           hook argv span holds `$ROOT`                          -> UNDECIDED
@@ -3233,7 +3231,7 @@ ss_assert "av-render-drift" "$(av_st "$AV_D" render-agent-definitions.sh) refusa
 ss_assert "av-second-argv" "$(av_st "$AV_A" audit-rule-files.sh)" SELF-UPDATE-DEFER \
   "a SECOND argv-dependent script: --fail-on=deterministic goes 0 to 1 where its bare default exits 1 on both sides"
 ss_assert "av-not-gating" "$(av_st "$AV_A" derive-fixture-readsets.sh) $(av_has "$AV_A" derive-fixture-readsets.sh '^not gating')" "SELF-UPDATE-OK yes" \
-  "a script the hook only lists in a \`for\` loop is not gating, and says so, though its incoming copy exits 1"
+  "a script the hook only tests for existence is not gating, and says so, though its incoming copy exits 1"
 ss_assert "av-agents-digest" "$(av_ag "$AV_A")" same \
   "the consumer's .claude/agents is byte-identical across the gate run: the hook's write-mode line is never run"
 ss_assert "av-siblings" "$(av_st "$AV_A" validate-artifact-paths.sh)" SELF-UPDATE-DEFER \
@@ -3602,6 +3600,22 @@ SH_RH="$( (eval "$(awk '/^gate_argv_scan\(\) \{/,/^\}/' "$GATE")"; gate_argv_sca
   | awk -F'\t' '$1 == "D" || $1 == "R" {printf "%s%s[%s]", (n++ ? " " : ""), $1, $3}')"
 ss_assert "sh-real-229" "${SH_HOOK:+found} $SH_RH" "found D[--root .] R[--check --root .]" \
   "the real hook's write-mode renderer capture stays D and its --check capture stays R"
+# HIDDEN RUNS: a path reaching a run through `set --` (with or without a variable prefix), a `"$V/<path>"` at
+# command position, or a `for` list item reads X. Twins one property apart: the same `"$V/<path>"` as an
+# argument of `cat` stays U, and a `-f` test inside a `for` body (the path is no list item) stays M test.
+SH_HID="$AV/hidden-hook"
+cat > "$SH_HID" <<'HIDEOF'
+if [ -f "$ct/t" ]; then set -- bash "$ct/scripts/ai-dlc/hid-set.sh" --root "$ct"; fi
+set -- bash scripts/ai-dlc/hid-lit.sh --root .
+bash "$ct/scripts/ai-dlc/hid-cmd.sh" --check
+cat "$ct/scripts/ai-dlc/hid-near.sh"
+for c in scripts/ai-dlc/hid-for.sh core/scripts/hid-for.sh; do hr="$c"; break; done
+if bash "$hr" --root .; then :; fi
+for c in a b; do [ -f scripts/ai-dlc/hid-fornear.sh ] && echo ok; done
+HIDEOF
+SH_HIDK="$( (eval "$(awk '/^gate_argv_scan\(\) \{/,/^\}/' "$GATE")"; for n in hid-set hid-lit hid-cmd hid-near hid-for hid-fornear; do printf '%s.sh=' "$n"; gate_argv_scan "$SH_HID" "$n.sh" | awk -F'\t' '{printf "%s%s", (k++ ? "," : ""), $1 ($1 == "M" ? ":" $3 : "")}'; printf ' '; done) 2>/dev/null)"
+ss_assert "sh-hidden-runs" "$SH_HIDK" "hid-set.sh=X hid-lit.sh=X hid-cmd.sh=X hid-near.sh=U hid-for.sh=X hid-fornear.sh=M:test " \
+  "set --, a command-position expansion and a for-list item read X; the same expansion as a cat argument stays U and an existence test inside a for body stays M test"
 SH_229='      out="$(bash scripts/ai-dlc/render-agent-definitions.sh --root . 2>&1)"'
 SH_W="$(grep -n -A2 -F -- "$SH_229" "$SH_HOOK" 2>/dev/null | sed 's/^[0-9]*[:-]//' | sed 's/render-agent-definitions/sa-w229/')"
 SH_S3="$(grep -n -A2 -F -- 'sa-w229.sh --root' "$AV/s/cons/.githooks/pre-push" | sed 's/^[0-9]*[:-]//')"

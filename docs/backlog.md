@@ -4689,13 +4689,27 @@ verify: manual
 
 **DEFECT.** Filed 2026-11-20 (batch 261, close). Owner: `core/skills/ai-dlc-update/reconcile/self-update-gate.sh` (`gate_argv_scan`, `:557-659`).
 
-Goal: every `scripts/ai-dlc/hermetic-run.sh` mention in the consumer hook is classified, so a pull whose range changes `hermetic-run.sh` is not left UNDECIDED by the hook's own text. One done condition: `gate_argv_scan core/git-hooks/pre-push hermetic-run.sh` on `origin/main` prints no `U` row, and a near-miss probe line still prints `U`.
+Goal: every `scripts/ai-dlc/hermetic-run.sh` mention in the consumer hook is classified soundly, so a pull whose range changes `hermetic-run.sh` is not left UNDECIDED, and is not waved through as not gating while the hook runs it. One done condition: `gate_argv_scan core/git-hooks/pre-push hermetic-run.sh` prints no `U` row and no `M` row that hides a run, and the gate's verdict for a changed `hermetic-run.sh` is DEFER, recorded as correct, per operator ruling, batch 262 (option A, soundness fix).
 
 Record: the rulings log (line 497) records that fix C (mention kind `eq`, 0.1193.0) took `hermetic-run.sh`'s `:3143` from U to M while its `:2758` and `:3807` stayed U. Measured on 966a7cc92 by running `gate_argv_scan` (extracted from `self-update-gate.sh:557-659`) over `core/git-hooks/pre-push` for `hermetic-run.sh`: 9 rows, one `U`, at `:3807` (`set -- bash "$ct/scripts/ai-dlc/hermetic-run.sh" --root "$ct" "$cf"`: the path follows a variable prefix inside a quoted word, which no kind spells). `:2758` (`if (p == "core/scripts/hermetic-run.sh" || p == "scripts/ai-dlc/hermetic-run.sh")`, inside an awk program) now reads `M eq`, so it is no longer UNDECIDED on this tree. Control: the same scan for `core-paths.sh` prints 3 rows, all `M`. The distribution hook `.githooks/pre-push` carries the same shape at `:4020`; it is not the gate's subject.
 
 Work list:
 
-1. Classify the `:3807` shape (a run whose path follows a `"$var/` prefix) as a run or a mention the gate can decide, and keep `:2758`'s awk string-equality shape classified; add a near-miss line that stays `U` and prove the rule fires on the hook line and not on the near-miss, once by hand.
+1. (a) `set -- [bash|sh] [<prefix>]scripts/ai-dlc/<name>` (with or without a `"$var/` prefix) and a `"$var/<path>"` at command position read X; a `"$var/<path>"` that is an argument (`cat "$x/scripts/ai-dlc/foo.sh"`) stays U.
+2. (b) Any `for VAR in ... <path> ...` list item reads X; the `M list` kind is retired. A for-list that does not hold the path yields no row. Fixture `self-update-gate` arm `sh-hidden-runs` holds each shape with its twin.
+
+OWED (not built; each shape is a run this scan reads as something else). None of (i)-(iv) and (vi)-(viii) has a live instance in either hook today.
+
+- (i) A function that prints a literal path, captured and run: `d(){ printf '%s' scripts/ai-dlc/y.sh; }; if bash "$(d)"; then` reads `M text`.
+- (ii) A string compare, then a run: `[[ "$v" == "scripts/ai-dlc/z.sh" ]] && bash "$v"` reads `M eq`.
+- (iii) An array argv: `arr=( scripts/ai-dlc/x.sh --k ); "${arr[@]}"` reads R with a guessed argv, which breaks the rule that an assignment is X.
+- (iv) A heredoc path read in a loop: a heredoc body line holding the path, fed to `while read s; do bash "$s"; done`, reads R with an empty argv.
+- (v) LIVE: `core/git-hooks/pre-push:545` is `for f in scripts/*.sh scripts/ai-dlc/*.sh .claude/hooks/*.sh \` and its body runs `bash -n "$f" || rc=1` (`:548`). That loop reads every script's status through a glob, but `INVOKED` (`self-update-gate.sh:1448`, a `grep -oE` for the literal `scripts/ai-dlc/<name>.sh`) derives no name from a glob, so the gate never scans this route. No other mechanism that might cover it was checked.
+- (vi) `echo ...; for c in scripts/ai-dlc/x.sh core/x.sh; do bash "$c"; done` still reads `M text`: the printf/echo branch (`self-update-gate.sh:654`) runs before the for branch and matches an echo anywhere earlier on the line. No live instance in either hook.
+- (vii) A static false DEFER from the gating-script emitters (`self-update-gate.sh:1875`, `:1877`, `:1879`, `:1888`) on a machinery-only pull is no longer asserted by `self-update-join-gate` arm 3. No arm of `core/fixtures/self-update-gate/run.sh` names `core-paths.sh` (`grep -c core-paths` = 0; control `grep -c validate-rooted` = 6); the nearest are `av-render-comment` (:3227), `av-render-drift` (:3229), `av-not-gating` (:3233), `av-dollar-nearmiss` (:3243) and `sh-signature` (:3629), over stub scripts.
+- (viii) A static false DEFER from the machinery-slice emitter (`self-update-gate.sh:1391`) on a machinery-only pull is no longer asserted by `self-update-join-gate` arm 3. No fixture names its message (grep `cannot be green on its own` over `core/fixtures/*/run.sh` = 0; control `rulebook-coupled-fixtures` = 4 hits); it is held only transitively by the `SELF-UPDATE-OK` terminal row in `quote-r2-*` (:2823) and `del-lack` / `del-claude`.
+
+**PARTIAL (v0.1201.0).** Batch 262, I. Items 1 and 2 built. The operator's done condition for `hermetic-run.sh` is met in both hooks: no `U` row, no unsound `M` row, and the verdict for a changed `hermetic-run.sh` is DEFER, which is correct. The OWED shapes (i)-(viii) stay open, so the entry stays open.
 
 Step: n/a
 

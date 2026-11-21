@@ -528,15 +528,20 @@ gate_refline() {
 #                            mode, and the `[ -d … ] \` / `&& printf` after it reads the TEST's
 #                            status, not the capture's, because only a next line's FIRST token
 #                            counts and that line opens with `[`.
-#   M<TAB><line><TAB><kind>  MENTIONED, never run: a comment, an existence test, a `for … in`
-#                            list, printf text, a string comparison (`== "<path>"` or `!= "<path>"`),
-#                            or a path that runs on into another name
-#                            (`x.sh=y.sh` executes a different file)
+#   M<TAB><line><TAB><kind>  MENTIONED, never run: a comment, an existence test, printf text, a
+#                            string comparison (`== "<path>"` or `!= "<path>"`), or a path that runs
+#                            on into another name (`x.sh=y.sh` executes a different file)
 #   X<TAB><line><TAB><argv>  run with its status read, but the argv span holds an expansion or
 #                            quoting this gate cannot resolve without executing the hook. AN
 #                            ASSIGNMENT IS X, NEVER M: the script's path assigned to `V`, then
 #                            `bash "$V" --k`, is a run this scan cannot follow, and reading the
-#                            assignment as a mention made the script "not gating" and OK.
+#                            assignment as a mention made the script "not gating" and OK. Three
+#                            more shapes are X, each a run reached through something the scan does
+#                            not follow: the path after `set --` (`set -- [bash|sh] "<…>/<path>"`,
+#                            which a later `"$@"` runs); the path under an expansion at command
+#                            position (`[bash|sh] "$V/<path>"`); and the path as an item of a
+#                            `for VAR in …` list, whatever VAR later reaches. A `"$V/<path>"` that
+#                            is neither at command position nor after `set --` stays U.
 #   U<TAB><line><TAB>        an occurrence of no shape above (`exec`, `env`, `timeout`, a command
 #                            word that is a variable). Unknown is never read as a mention.
 # EVERY occurrence the name list was derived from yields a row, comments included, so a name with
@@ -642,12 +647,16 @@ gate_argv_scan() {
           } else {
             printf "R\t%d\t%s\t%s\n", r, span, (guarded(pre, tail) ? "guarded" : "unguarded")
           }
+        } else if (pre ~ /(^|[;|&({]|\$\()[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*set[[:space:]]+--([[:space:]][^;|&)]*)?$/) {
+          printf "X\t%d\tthe path follows set --, and a later run of the positional parameters is not derived\n", r
+        } else if (pre ~ /(^|[;|&({]|\$\()[[:space:]]*((if|elif|while|until|then|do|else|!)[[:space:]]+)*((bash|sh)[[:space:]]+)?["\047]?[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?\/$/) {
+          printf "X\t%d\tthe path sits under an expansion at command position, which this gate cannot resolve\n", r
         } else if (pre ~ /(^|[^A-Za-z0-9_])(printf|echo)[[:space:]]/) {
           printf "M\t%d\ttext\n", r
         } else if (pre ~ /(^|[[:space:]])-[A-Za-z][[:space:]]+(\.\/)?$/) {
           printf "M\t%d\ttest\n", r
         } else if (pre ~ /(^|[;[:space:]])for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in[[:space:]]/) {
-          printf "M\t%d\tlist\n", r
+          printf "X\t%d\tthe path is a for-loop item, and what the hook runs through the loop variable is not derived\n", r
         } else if (pre ~ /[=!]=[[:space:]]*["\047]$/) {
           printf "M\t%d\teq\n", r
         } else {
