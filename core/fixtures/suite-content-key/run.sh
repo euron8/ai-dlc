@@ -518,5 +518,50 @@ for _v in pend legacy nostore; do
   if ip_ok "$_o" "$_v"; then ok "step 3b $_v: $(grep -E '^   1 declared|^   PENDING \(' <<< "$_o" | tr '\n' ' ')"
   else bad "step 3b $_v is wrong: $(printf '%s' "$_o" | tail -4 | tr '\n' '|')"; fi
 done
+# --- BL-1192. THE `### ranges` COMPONENT: HISTORY MOVES THE KEY WITH THE TREE UNCHANGED ------------------------------
+# A fixture of this world (rg) carries a git.decl `range @range.sh scripts` line; range.sh derives root..HEAD. The key folds
+# the hash of `rev-list <range> -- scripts` through readset_decl_ranges, sourced from this copy's .githooks/pre-push.
+#   rg1  --explain holds an `rg  git-range:1  <sha256>` row under `### ranges` (the component is present)
+#   rg2  commits that touch no declared path (an empty commit, a docs/ edit) leave the key unmoved, HEAD having moved
+#   rg3  a commit pair touching scripts/ and reverting it leaves the TREE byte-identical and moves the key
+#   rg4  an unresolvable range refuses the key (exit 1, no key, the refusal names rg); the restored line keys again
+RG="$T/core/fixtures/rg"; mkdir -p "$RG"
+printf 'body\n' > "$RG/run.sh"
+printf 'range @range.sh scripts\n' > "$RG/git.decl"
+cat > "$RG/range.sh" <<'RGS'
+printf '%s..HEAD\n' "$(git rev-list --max-parents=0 HEAD)"
+RGS
+git -C "$T" add -A core/fixtures/rg >/dev/null 2>&1 && git -C "$T" commit -q -m rg-world || broken "rg: could not commit the ranges world"
+KR0="$(key)"
+case "$KR0" in ????????????????????????????????????????????????????????????????) : ;; *) broken "rg: no well-formed key over the ranges world ('$KR0')" ;; esac
+RGROWS="$( ( fx_inproc "$KEY"; sck_main --explain ) 2>/dev/null | awk '/^### ranges$/ { s = 1; next } /^###/ { s = 0 } s' )"
+RGN="$(awk -F'\t' '$1 == "rg" && $2 == "git-range:1" && length($3) == 64 { n++ } END { print n + 0 }' <<< "$RGROWS")"
+if [ "$RGN" -eq 1 ]; then ok "rg1 --explain holds one rg git-range:1 row with a sha256 under ### ranges"
+else bad "rg1 the ### ranges component held $RGN rg git-range:1 row(s), want 1: $(printf '%s' "$RGROWS" | tr '\n' '|')"; fi
+
+RGH0="$(git -C "$T" rev-parse HEAD)"
+git -C "$T" commit -q --allow-empty -m outside-empty || broken "rg2: the empty commit failed"
+printf 'moved\n' >> "$T/docs/note.md"
+git -C "$T" commit -q -am outside-docs || broken "rg2: the docs commit failed"
+if [ "$(git -C "$T" rev-parse HEAD)" != "$RGH0" ] && [ "$(key)" = "$KR0" ]; then
+  ok "rg2 history moved outside the declared path (an empty commit, a docs/ edit): the key is unmoved"
+else bad "rg2 either HEAD did not move or a commit outside scripts/ moved the key"; fi
+
+RGT0="$(git -C "$T" rev-parse 'HEAD^{tree}')"
+printf 'x\n' > "$T/scripts/probe-range.txt"
+git -C "$T" add scripts/probe-range.txt >/dev/null 2>&1 && git -C "$T" commit -q -m inside-add || broken "rg3: the add commit failed"
+git -C "$T" rm -q scripts/probe-range.txt && git -C "$T" commit -q -m inside-revert || broken "rg3: the revert commit failed"
+RGC="$(git -C "$T" rev-list --count "$(git -C "$T" rev-list --max-parents=0 HEAD)..HEAD" -- scripts)"
+KR1="$(key)"
+if [ "$(git -C "$T" rev-parse 'HEAD^{tree}')" = "$RGT0" ] && [ "$RGC" = 2 ] && [ -n "$KR1" ] && [ "$KR1" != "$KR0" ]; then
+  ok "rg3 two commits touching scripts/ (add, revert) leave the tree byte-identical and move the key through the range alone"
+else bad "rg3 tree equal=$([ "$(git -C "$T" rev-parse 'HEAD^{tree}')" = "$RGT0" ] && echo y || echo n) scripts commits=$RGC (want 2), key moved=$([ "$KR1" != "$KR0" ] && echo y || echo n)"; fi
+
+printf 'range no-such-ref..HEAD scripts\n' > "$RG/git.decl"
+( fx_inproc "$KEY"; sck_main ) > "$WORK/rg.out" 2> "$WORK/rg.err"; RGRC=$?
+RGK2="$(printf 'range @range.sh scripts\n' > "$RG/git.decl"; key)"
+if [ "$RGRC" -eq 1 ] && [ ! -s "$WORK/rg.out" ] && grep -q 'readset_decl_ranges refuses a range line of rg' "$WORK/rg.err" && [ "$RGK2" = "$KR1" ]; then
+  ok "rg4 an unresolvable range refuses the key (exit 1, no key, rg named) and the restored line keys as before"
+else bad "rg4 refusal rc=$RGRC stdout bytes=$(wc -c < "$WORK/rg.out" | tr -d ' ') stderr=$(head -c 200 "$WORK/rg.err") restored=$([ "$RGK2" = "$KR1" ] && echo same || echo different)"; fi
 echo
 report_end suite-content-key

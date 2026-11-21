@@ -51,3 +51,10 @@ core/skills/ai-dlc-update/reconcile/setup-sites.md
 core/skills/ai-dlc-update/reconcile/template-sites.md
 !core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
+core/skills/ai-dlc-update/reconcile/ask-families.tsv
+core/skills/ai-dlc-update/reconcile/detector-rows.md
+core/skills/ai-dlc-update/reconcile/mask-reinject.md
+core/skills/ai-dlc-update/reconcile/pull-key.sh
+core/skills/ai-dlc-update/reconcile/pull.sh
+core/skills/ai-dlc-update/reconcile/self-update-refusals.md
+core/skills/ai-dlc-update/reconcile/untangle.md

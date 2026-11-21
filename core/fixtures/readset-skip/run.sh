@@ -1583,13 +1583,15 @@ printf 'alpha\t#deriver\tseeded\n' > "$READSET_LOCAL"; cp "$READSET_LOCAL" "$o/m
 lk="$GITDIR/ai-dlc-fixture-readsets.local.lock"
 al() { kill -0 -- "$1" 2>/dev/null && echo alive || echo gone; }
 readset_live_trace "$o" > "$o/msg" 2>&1
-tp="$(sed -n 1p "$lk/pid" 2>/dev/null | cut -d' ' -f1)"
 # THE STUB'S THREE RECORDS, OR THE TRACE SUBSHELL'S DEATH. The live controls below are read only once all
 # three exist, so a slow stub start no longer reads as a dead one.
 if grep -q 'started detached' "$o/msg"; then
   aw_wait '[ -s "$o/gc" ] && [ -s "$o/self" ] && ls "$READSET_LOCAL".tmp.* >/dev/null 2>&1' 'aw_status_pid "$READSET_LOCAL.status"' ''
   [ "$?" = 2 ] && aw_stalled "(t) the stub deriver neither wrote its gc, self and map-temp records nor advanced"
 fi
+# THE LOCK'S PID FILE is written by the trace subshell before it launches the deriver, so it exists once the
+# stub's records do; read it here, never right after the launcher returns.
+tp="$(sed -n 1p "$lk/pid" 2>/dev/null | cut -d' ' -f1)"
 gc="$(cat "$o/gc" 2>/dev/null)"; dp="$(cat "$o/self" 2>/dev/null)"
 tr="$(ls -d "$o/tmp/"ai-dlc-readset-live.* 2>/dev/null)"
 case "$tp" in ''|*[!0-9]*) tp=0 ;; esac; case "$dp" in ''|*[!0-9]*) dp=0 ;; esac; case "$gc" in ''|*[!0-9]*) gc=0 ;; esac
@@ -1832,13 +1834,13 @@ pj_lib() { # <pool copy> <out>: the reader and its helper, as the hook defines t
 PJ_LIB="$PJW/lib.sh"; pj_lib "$POOL" "$PJ_LIB"
 [ "$(grep -c '^[a-z_]*() {' "$PJ_LIB")" -eq 2 ] && grep -q '^readset_pid_start() {' "$PJ_LIB" && grep -q '^readset_lock_stale() {' "$PJ_LIB" \
   || broken "could not extract readset_pid_start and readset_lock_stale from the pool block"
-PJ_WLINE='  readset_lock_write "$lk" "$tp"'
+PJ_WLINE='    readset_lock_write "$lk" "$sp"'
 PJ_N="$(grep -cxF -- "$PJ_WLINE" "$POOL")" || PJ_N=0
 [ "$PJ_N" -eq 1 ] || broken "the lock writer line ($PJ_WLINE) occurs $PJ_N time(s) in the pool block, not 1"
 PJ_SEEDLIB="$PJW/seed.sh"
 { awk '/^readset_pid_start\(\) \{/,/^}/' "$POOL"
   awk '/^readset_lock_write\(\) \{/,/^}/' "$POOL"
-  printf 'pj_write_lock() { local tp="$1" lk="$2"\n'
+  printf 'pj_write_lock() { local sp="$1" lk="$2"\n'
   grep -xF -- "$PJ_WLINE" "$POOL"
   printf '}\n'
 } > "$PJ_SEEDLIB"
@@ -4827,6 +4829,35 @@ tk_old() { # <t>: every record as the PATH-resolved hook wrote it, its tool rows
       /^\// { n = $1; sub(/.*\//, "", n); print "/tk-old-path/" n "\t" $2; next } { print }' "$k" > "$k.t" && mv "$k.t" "$k" || return 1
   done
 }
+# tk_rec <pool> <fx root> <t> <decided dir>: THE SKIP-SET RECORD (BL-878). readset_pending_recorded is called directly, on a copy of
+# the decision apply_readset_skip just wrote (every fixture skipped, so `list` is untouched and no verdict exists), after ONE
+# fixture is given a verdict (it ran). The oracle is independent of `.kdec`: every run.sh the world
+# lists, minus the names holding a verdict. Prints "<SKIP lines>/<eq|ne>/<headers>h<SKIP lines of a world with no skip row>s".
+tk_rec() {
+  local p="$1" x="$2" t="$3" o="$4" d b n eq=ne nc=ne w
+  cp -Rp "$o" "$o.rec" && cp -Rp "$o" "$o.zero" && cp -Rp "$o" "$o.nc" || { printf SEED; return; }
+  read -r d < "$o.rec/list"; b="${d%/}"; printf ok > "$o.rec/${b##*/}"
+  { awk -F'\t' '$2 == "run"' "$o/.kdec"; printf 'zero-world-run-row\trun\n'; } > "$o.zero/.kdec"; rm -rf "$o.zero/.cl"
+  : > "$o.rec.log"; : > "$o.zero.log"; : > "$o.nc.log"
+  ( cd "$t" || exit 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
+    . "$p" 2>/dev/null
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
+    readset_pending_recorded "$o.rec" "$o.rec.log"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
+    readset_pending_recorded "$o.zero" "$o.zero.log"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
+    READSET_NO_CHANGE=1 readset_pending_recorded "$o.nc" "$o.nc.log" )
+  for d in "$t/$x"/*/; do [ -f "$d/run.sh" ] || continue; b="${d%/}"; b="${b##*/}"; [ -f "$o.rec/$b" ] || printf '%s\n' "$b"; done | LC_ALL=C sort > "$o.rec.want"
+  awk -F'\t' '$2 == "SKIP" && $4 == "dist" { print $5 }' "$o.rec.log" | LC_ALL=C sort > "$o.rec.got"
+  n="$(grep -c . "$o.rec.got")" || n=0
+  [ "$n" -gt 0 ] && cmp -s "$o.rec.want" "$o.rec.got" && eq=eq
+  # The no-change path leaves `list` holding every fixture and skips every one, so the PUSH line's dist triple is
+  # <fixtures>/0/<fixtures>, the fixture count taken from the run.sh files on disk, not from the writer.
+  w="$(for d in "$t/$x"/*/; do [ -f "$d/run.sh" ] && echo "${d%/}"; done | grep -c .)" || w=0
+  [ "$(awk -F'\t' '$2 == "PUSH" { c++; sub(/ .*/, "", $7); v = $7 } END { if (c == 1) print v }' "$o.nc.log")" = "dist=$w/0/$w" ] && [ "$w" -gt 0 ] && nc=eq
+  printf '%s/%s/%sh%ss/%s' "$n" "$eq" "$(grep -c '	PUSH	' "$o.zero.log")" "$(grep -c '	SKIP	' "$o.zero.log")" "$nc"
+}
 tk_w_inv() { local p="$1" x="$2" t="$3" e r=""
   ck_seed "$t" "$x" || { printf SEED; return; }
   printf 'git status\njq . python3 timeout\n' >> "$t/src/all.sh"
@@ -4838,11 +4869,12 @@ tk_w_inv() { local p="$1" x="$2" t="$3" e r=""
   ( inproc -i HOME="$HOME" PATH=/usr/bin:/bin -- "$TK_DRV" "$p" "$t" "$t.d.envi" )
   ( inproc -u GIT_EXEC_PATH DEVELOPER_DIR="$TK_DEV" -- "$TK_DRV" "$p" "$t" "$t.d.dev" )
   for e in hook envi dev; do r="$r $e=$(tk_same "$t.d.ref" "$t.d.$e")"; done
-  printf 'git=%s:%s tools=%s skip=%s%s' "$(cut -f1 "$t.d.ref/.tools" 2>/dev/null | grep -c '/git$')" \
+  printf 'git=%s:%s tools=%s skip=%s%s rec=%s' "$(cut -f1 "$t.d.ref/.tools" 2>/dev/null | grep -c '/git$')" \
     "$(cut -f1 "$t.d.ref/.tools" 2>/dev/null | grep -cxF "$TK_EXP")" \
-    "$([ -s "$t.d.ref/.tools" ] && echo y || echo n)" "$(awk -F'\t' '$2 == "skip"' "$t.d.ref/.kdec" 2>/dev/null | grep -c .)" "$r"
+    "$([ -s "$t.d.ref/.tools" ] && echo y || echo n)" "$(awk -F'\t' '$2 == "skip"' "$t.d.ref/.kdec" 2>/dev/null | grep -c .)" "$r" \
+    "$(tk_rec "$p" "$x" "$t" "$t.d.ref")"
 }
-TK_WANT_inv='git=1:1 tools=y skip=3 hook=same envi=same dev=same'
+TK_WANT_inv='git=1:1 tools=y skip=3 hook=same envi=same dev=same rec=2/eq/1h0s/eq'
 tk_w_pos() { local p="$1" x="$2" t="$3"
   ck_seed "$t" "$x" || { printf SEED; return; }
   tk_push "$p" "$t" 1 fixed; printf '# grown\n' >> "$t.bin/cktool"; tk_push "$p" "$t" 2 fixed
