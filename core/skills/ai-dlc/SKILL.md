@@ -144,7 +144,7 @@ Validation intensity is declared at route time and recorded in the pipeline snap
 | `carry-over-single` | carry-over variant with ≤2 stories touching service code paths | Party Mode → Adversarial Review |
 | `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review at discovery (or requirements) + stories-test-strategy only |
 
-**The Adversarial Review runs until a pass stamps `EXIT_CONDITION_MET`. That verdict is the only thing that ends it, and it is honoured the moment it is met, including at pass 1.** Divergence is a HARD_BLOCK, not a reason for another pass: STOP and escalate. READ AND FOLLOW `rule-bodies/rule-8.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the full, binding text of this rule.
+**The Adversarial Review runs until a pass stamps `EXIT_CONDITION_MET`. That verdict is the only thing that ends it, and it is honoured the moment it is met, including at pass 1.** Divergence is a HARD_BLOCK, not a reason for another pass: STOP and escalate. READ AND FOLLOW `rule-bodies/rule-8.md` (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`) before acting under this rule; that file carries the binding text of this rule except the intensity table above, which this stub owns; the table in that file is a copy bound byte-identically by I131.
 
 ### Rule 9 -- Autonomous gates
 

@@ -3172,7 +3172,7 @@ EOF
 fi
 
 # --- I19: the SKILL.md Rule 8 stub's intensity table owns the validation-cycle minimums; rule-bodies/rule-8.md carries a copy bound by I131 ---
-# This scan stays on steps/ and does not read rule-bodies/. Check 20 kept its own copy of them and the copy dropped a row:
+# This scan reads steps/ and rule-bodies/ with two alternatives: the prose grammar never matches rule-8.md's table (`[^|]*` stops at its cell pipes), and the table-row grammar is excluded for rule-8.md's own `|` lines because I131 binds that file's single table. Check 20 kept its own copy of them and the copy dropped a row:
 # Rule 8 defines four intensities, Check 20 listed three, and `carry-over-single` appeared
 # ZERO times in gate-validation.md. A gate declaring it reached the one check that enforces
 # intensity and found no minimum to test against — indistinguishable from a gate that met it.
@@ -3185,8 +3185,13 @@ fi
 # The signal is an intensity name and an evaluation name on one line — how a minimum is
 # written. Naming an intensity is fine and common (route.md declares one, discovery.md
 # branches on one); RESTATING what it requires is the defect.
-r8_dupes="$(grep -rnE '`(full|standard|lightweight|carry-over-single)`[^|]*(Party Mode|Advanced Elicitation|Adversarial Review)' \
-             "$REPO_ROOT/core/skills/ai-dlc/steps/" 2>/dev/null | grep -v '^[^:]*:[0-9]*:.*Rule 8' || true)"
+# FALSE-POSITIVE SET over rule-bodies/*.md, measured before widening: 0 hits of the prose grammar, 7 lines naming an
+# intensity with no evaluation (silent). The prose grammar's `[^|]*` stops at a cell pipe, so a pasted TABLE row never
+# matched it; the second alternative (`^| \`<intensity>\` |`) is the row shape. Over steps/ and rule-bodies/ that shape
+# occurs only in rule-bodies/rule-8.md:15-18 (4 hits, I131's bound copy); the `grep -v` below excludes exactly those
+# lines, leaving an empty set.
+r8_dupes="$(grep -rnE -e '`(full|standard|lightweight|carry-over-single)`[^|]*(Party Mode|Advanced Elicitation|Adversarial Review)' -e '^\| `(full|standard|carry-over-single|lightweight)` \|' \
+             "$REPO_ROOT/core/skills/ai-dlc/steps/" "$REPO_ROOT/core/skills/ai-dlc/rule-bodies/" 2>/dev/null | grep -vE '^[^:]*:[0-9]*:.*Rule 8|rule-bodies/rule-8\.md:[0-9]+:\|' || true)"
 if [ -n "$r8_dupes" ]; then
   err "the validation-intensity minimums are enumerated outside SKILL.md Rule 8's table — that table is the single source and a second copy is what dropped carry-over-single from Check 20. Cite the table's 'Minimum cycle per planning artifact' column instead of restating it:
 $r8_dupes"
@@ -13536,19 +13541,28 @@ fi
 # body moved verbatim. Table found as I80 finds it: the line opening `| Intensity | Trigger` and every
 # following line that opens with `|`. In-process read, no fork per row. Control: an empty extraction from either
 # file is an error, since two empties compare equal.
+# The read continues past the first table: a later line opening `| Intensity | Trigger` or an intensity row in rule-8.md is a
+# second table, an error (I19 excludes rule-8.md's `|` rows from its scan, so this is the only check that sees one).
 i131_tbl() {
-  I131_T=""; I131_ON=0
+  I131_T=""; I131_ON=0; I131_DONE=0; I131_X=0
   while IFS= read -r i131_l; do
+    if [ "$I131_DONE" -eq 1 ]; then
+      case "$i131_l" in '| Intensity | Trigger'*|'| `full` |'*|'| `standard` |'*|'| `carry-over-single` |'*|'| `lightweight` |'*) I131_X=1 ;; esac
+      continue
+    fi
     case "$i131_l" in '| Intensity | Trigger'*) I131_ON=1 ;; esac
     if [ "$I131_ON" -eq 1 ]; then
-      case "$i131_l" in '|'*) I131_T="$I131_T$i131_l"$'\n' ;; *) break ;; esac
+      case "$i131_l" in '|'*) I131_T="$I131_T$i131_l"$'\n' ;; *) I131_DONE=1 ;; esac
     fi
   done <"$1"
 }
 i131_tbl "$REPO_ROOT/core/skills/ai-dlc/SKILL.md"; i131_a="$I131_T"
 i131_tbl "$REPO_ROOT/core/skills/ai-dlc/rule-bodies/rule-8.md"; i131_b="$I131_T"
+i131_x="$I131_X"
 if [ -z "$i131_a" ] || [ -z "$i131_b" ]; then
   err "I131 extracted no intensity table from $([ -z "$i131_a" ] && echo SKILL.md)$([ -z "$i131_a" ] && [ -z "$i131_b" ] && echo ' or ')$([ -z "$i131_b" ] && echo rule-bodies/rule-8.md); two empty extractions compare equal, so nothing was checked."
+elif [ "$i131_x" -eq 1 ]; then
+  err "I131 rule-bodies/rule-8.md carries a second intensity table (a line after the first table opens with \`| Intensity | Trigger\` or an intensity row). The SKILL.md stub table is the owner and rule-8.md holds exactly one copy; delete the extra table."
 elif [ "$i131_a" != "$i131_b" ]; then
   err "I131 the Rule 8 intensity table in SKILL.md differs from the copy in rule-bodies/rule-8.md. The SKILL.md stub table is the owner; make rule-8.md's table byte-identical to it."
 fi
