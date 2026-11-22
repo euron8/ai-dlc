@@ -1,8 +1,0 @@
-# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
-# are run.sh itself (1) and the three cli cells of cells.decl (3). inproc rows (fx_inproc, one per source): the real
-# subject, the control copy and the two refusal copies, each sandbox copy sitting under the
-# subject's own relative path ($WORK/sbx-<name>/core/skills/ai-dlc-update/reconcile/).
-4 *
-3 core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
-# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
-11 inproc:core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh

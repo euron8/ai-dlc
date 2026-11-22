@@ -1,8 +1,0 @@
-# Measured by two agreeing counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output). The starts
-# are run.sh itself (1), the three cli cells of cells.decl (3), and the counting git shim, a #!/bin/bash script every
-# git call in the five suites and the cli cells goes through. inproc rows (fx_inproc, one per source): the real
-# subject and the four mutant copies, each copy at $W/mut/<name>/core/skills/ai-dlc-update/reconcile/dist-clone.sh.
-170 *
-3 core/skills/ai-dlc-update/reconcile/dist-clone.sh
-# inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
-25 inproc:core/skills/ai-dlc-update/reconcile/dist-clone.sh

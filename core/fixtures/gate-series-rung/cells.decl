@@ -1,6 +1,0 @@
-# gate-series-rung's starts of core/scripts/validate-gate-adjudication.sh (BL-879 grammar). Every other drive is in process:
-# run.sh asks vga_main through vga_f. One cli cell per distinct CLI outcome (exit 1 finding, exit 0 pass, exit 2 usage),
-# each started as FXCELL=<id> bash in eqv() and compared byte for byte with the in-process call on the same input.
-cli core/scripts/validate-gate-adjudication.sh cli-series-fail
-cli core/scripts/validate-gate-adjudication.sh cli-series-pass
-cli core/scripts/validate-gate-adjudication.sh cli-series-usage

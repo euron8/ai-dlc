@@ -1,6 +1,0 @@
-# Measured by a counted run through scripts/seed-verdict-store.sh (core/scripts/hermetic-run.sh, the judge's own J3/J7 output).
-# BL-878 (batch 259, C3e; * 34->7, hook 29->2): every drive runs ack_main in process (run.sh ack_ip); the 2 hook starts
-# are the cli cells of cells.decl.
-7 *
-2 core/hooks/ai-dlc-acknowledge.sh
-31 inproc:core/hooks/ai-dlc-acknowledge.sh

@@ -1,7 +1,0 @@
-# write-format-steering-multiformat's starts of core/scripts/validate-write-format-steering.sh (BL-879 grammar). Every
-# other drive is in process: run.sh's drive() is inproc_run of vwfs_main on each world's own copy. One cli cell per
-# distinct CLI outcome (exit 0 on the base world, exit 1 on MUTANT 3's duplicate), each started as
-# FXCELL=<id> bash <world>/core/scripts/validate-write-format-steering.sh in eq_cell() and compared byte for byte with
-# the in-process call.
-cli core/scripts/validate-write-format-steering.sh cli-pass
-cli core/scripts/validate-write-format-steering.sh cli-fail

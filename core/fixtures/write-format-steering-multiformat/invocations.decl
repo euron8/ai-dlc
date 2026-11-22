@@ -1,5 +1,0 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-# Re-measured (BL-878, batch 258 C4) by one counted run: each world's copy runs in process through drive (inproc row, logged under the tree's validator); it starts only in its cli cells (cells.decl).
-4 *
-2 core/scripts/validate-write-format-steering.sh
-9 inproc:core/scripts/validate-write-format-steering.sh

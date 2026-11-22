@@ -1,9 +1,0 @@
-# fanout-payload-channel reads ONE file outside its own directory: the subject under test.
-# Every arm runs report-propagation-fanout.sh against trees the
-# fixture builds under mktemp. Its own directory is copied by the runner without being named.
-!core/scripts/report-propagation-fanout.sh
-core/fixtures/lib/report.sh
-core/fixtures/lib/layout.sh
-core/fixtures/lib/inproc.sh
-core/fixtures/lib/mutant.sh
-core/fixtures/lib/world.sh

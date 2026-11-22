@@ -1,4 +1,0 @@
-# standing-rulings-hook's cells. Only a start of a `!` subject at its repository path is a cell: `grammar` over the real
-# tree is the one such start (invocations.decl measured 0 hook starts and 1 reader start). Every other run drives a
-# world COPY of the hook and reader, a different path the judge does not count as the subject.
-e2e core/scripts/standing-rulings.sh ship.grammar why=grammar over the real tree prints an ok line per emitter anchor; its argv and ok/FAIL lines have no sourced call

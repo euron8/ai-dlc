@@ -1,4 +1,0 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge J3 output). The subject rows are the cli cells of cells.decl; inproc rows count the fx_inproc passes (one per call of the entry function).
-5 *
-3 core/scripts/validate-steering-budget.sh
-11 inproc:core/scripts/validate-steering-budget.sh

@@ -197,10 +197,10 @@ take the reshaped form.
 
 **Verification.** `core/fixtures/layer-debt-ledger/run.sh` cannot currently see this: its
 `row()` helper builds the field with `json.loads(closes)` at
-`core/fixtures/layer-debt-ledger/run.sh:45`, so it can only ever emit a well-formed array.
+`core/fixtures/layer-debt-ledger/run.sh (deleted by BL-583 item 6)`, so it can only ever emit a well-formed array.
 Add an arm that writes the string form as a raw line, bypassing `row()`, and bump
-`EXPECTED_ASSERTIONS` at `core/fixtures/layer-debt-ledger/run.sh:33` — the file already
-asserts its own assertion count at `core/fixtures/layer-debt-ledger/run.sh:150`.
+`EXPECTED_ASSERTIONS` at `core/fixtures/layer-debt-ledger/run.sh (deleted by BL-583 item 6)` — the file already
+asserts its own assertion count at `core/fixtures/layer-debt-ledger/run.sh (deleted by BL-583 item 6)`.
 
 ## R3 — the effort binding commands a slash command that resolves to nothing
 

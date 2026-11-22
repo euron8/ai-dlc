@@ -1,5 +1,0 @@
-# Measured by one counted run through scripts/seed-verdict-store.sh (the judge's own J3/J7 output) on the converted tree:
-# the subject is asked in process (vmr_main, 66 fx_inproc passes) and started as a program only by the 4 cli cells.
-188 *
-4 core/scripts/validate-mutation-red.sh
-66 inproc:core/scripts/validate-mutation-red.sh
