@@ -17,3 +17,8 @@ core/fixtures/layer-readopt-gate-b/.dist-only
 core/fixtures/layer-readopt-gate-d/.dist-only
 core/fixtures/lib/report.sh
 core/skills/ai-dlc-update/reconcile/register-drift.sh
+# Unit stub drives pull.sh merge, which sources pull-key.sh and reads ask-families.tsv, apply.sh's and preclassify.sh's helper bodies.
+core/skills/ai-dlc-update/reconcile/pull.sh
+core/skills/ai-dlc-update/reconcile/pull-key.sh
+core/skills/ai-dlc-update/reconcile/ask-families.tsv
+core/skills/ai-dlc-update/reconcile/apply.sh

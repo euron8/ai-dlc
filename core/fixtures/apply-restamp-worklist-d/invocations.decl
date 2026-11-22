@@ -1,5 +1,5 @@
 # Measured by one counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge armed as .githooks/pre-push fxcount_arm arms it), for BL-1099.
-109 *
+108 *
 0 core/scripts/check-owed-derivations.sh
 0 core/scripts/sprint-status.sh
 0 core/skills/ai-dlc-update/reconcile/apply.sh

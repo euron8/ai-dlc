@@ -52,13 +52,13 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 #   b  e2       E2: register-drift refusals and the world battery
 #   c  c3       C3: layer-drift delegation, survival, loose and double-shadow arms
 #   d  gh j     G and H (additive / wrap-insensitive) and J (re-flowed paragraph)
-#   e  sup      OVERRIDE-SUPERSEDED: the supersession and surplus arms
+#   e  sup stub OVERRIDE-SUPERSEDED: the supersession and surplus arms; OVERRIDE-SHADOWS-POINTER-STUB (LC-O17)
 SHARDS="a b c d e"
 UNITS_a="main f"
 UNITS_b="e2"
 UNITS_c="c3"
 UNITS_d="gh j"
-UNITS_e="sup"
+UNITS_e="sup stub"
 GROUP=a; GROUP_SET=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -1830,6 +1830,134 @@ EOF
 
 fi
 
+fi
+if sg stub; then
+# --- OVERRIDE-SHADOWS-POINTER-STUB (LC-O17): a shadow whose core section became a load-pointer stub ---
+#
+# Its own world: one dist with a BASE, a theirs whose `## Rule 8` carries lib.sh's pointer sentence (the stub) and a
+# sibling theirs whose section is byte-identical but for that one line (the twin). The same override is driven
+# against both, so every stub arm has a twin one property apart. Shard e is .dist-only: the subject is always
+# present here, so a missing pointer grammar is a regression (bad), never a SKIP.
+REC_DIR="$(cd "$(dirname "$READOPT")" && pwd -P)"
+echo "HERMETIC-CONSUMED $REC_DIR/pull.sh"
+if [ -z "$DRIFT" ] || [ ! -f "$REC_DIR/pull.sh" ] || ! grep -q '^rule_body_pointers() {' "$REC_DIR/lib.sh"; then
+  bad "stub: layer-drift.sh, pull.sh or lib.sh's rule_body_pointers() is missing beside readopt-override.sh -- the pointer-stub arms cannot run"
+else
+  SW="$(mktemp -d "${TMPDIR:-/tmp}/lrg-stub.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+  SD="$SW/dist"; SC="$SW/consumer"
+  mkdir -p "$SD/core/skills/ai-dlc/rule-bodies" "$SC/.claude/skills/ai-dlc/overrides"
+  git -C "$SD" init -q && git -C "$SD" config user.email f@x && git -C "$SD" config user.name f
+  stub_skill() { # <divergence line> [pointer line] -> SKILL.md
+    printf '%s\n' '# AI/DLC' '' '## Rule 7 -- Before' '' 'Untouched.' '' '## Rule 8 -- Validation Depth' '' \
+      'Intro line kept across the range.' '' 'Second paragraph, kept across the range.' '' "$1"
+    [ -z "${2:-}" ] || printf '\n%s\n' "$2"
+    printf '%s\n' '' '## Rule 9 -- After' '' 'Tail section.'
+  }
+  stub_skill 'Divergence clause, OLD wording.' > "$SD/core/skills/ai-dlc/SKILL.md"
+  printf '# Rule 8 -- binding text\n\nThe rule body.\n' > "$SD/core/skills/ai-dlc/rule-bodies/rule-8.md"
+  git -C "$SD" add -A && git -C "$SD" commit -qm base
+  SB="$(git -C "$SD" rev-parse --short HEAD)"
+  stub_skill 'Divergence clause, NEW wording.' > "$SD/core/skills/ai-dlc/SKILL.md"
+  git -C "$SD" add -A && git -C "$SD" commit -qm twin
+  STW="$(git -C "$SD" rev-parse --short HEAD)"
+  git -C "$SD" checkout -q "$SB" 2>/dev/null
+  stub_skill 'Divergence clause, NEW wording.' 'READ AND FOLLOW `rule-bodies/rule-8.md` -- the binding text of this rule.' > "$SD/core/skills/ai-dlc/SKILL.md"
+  git -C "$SD" add -A && git -C "$SD" commit -qm stub
+  STS="$(git -C "$SD" rev-parse --short HEAD)"
+  git -C "$SC" init -q && git -C "$SC" config user.email f@x && git -C "$SC" config user.name f
+  git -C "$SD" show "${SB}:core/skills/ai-dlc/SKILL.md" > "$SC/.claude/skills/ai-dlc/SKILL.md"
+  SOV="$SC/.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md"
+  {
+    printf '%s\n' '---' 'shadows: SKILL.md#Rule 8' "base_sha: ${SB}" 'reason: consumer validation-intensity line.' '---' ''
+    printf '%s\n' '## Rule 8 -- Validation Depth' '' 'Consumer intensity: service/ is FULL, docs/ is LIGHT.' '' \
+      'Intro line kept across the range.' '' 'Second paragraph, kept across the range.' '' 'Divergence clause, OLD wording.'
+  } > "$SOV"
+  git -C "$SC" add -A && git -C "$SC" commit -qm consumer
+  st_diff="$(git -C "$SD" diff "$STW" "$STS" -- core/skills/ai-dlc/SKILL.md)"
+  [ -n "$SB" ] && [ -n "$STS" ] && [ -n "$STW" ] && [ "$STS" != "$STW" ] \
+    && [ "$(grep -c '^[-+][^-+]' <<<"$st_diff")" = 1 ] \
+    && grep -q '^+READ AND FOLLOW `rule-bodies/rule-8.md`' <<<"$st_diff" \
+    || { echo "FIXTURE ERROR: the pointer-stub world did not build its two theirs one line apart" >&2; exit 2; }
+  sov0="$(git hash-object "$SOV")"
+  cp "$SOV" "$SW/ovr.pristine" || { echo "FIXTURE ERROR: cannot keep the override" >&2; exit 2; }
+  stub_ro() { # <theirs> <args...> -> $SW/ro.out (stdout+stderr), $SW/ro.rc; each run starts from the pristine entry
+    local _t="$1"; shift
+    cp "$SW/ovr.pristine" "$SOV" || { echo "FIXTURE ERROR: cannot restore the override" >&2; exit 2; }
+    bash "$READOPT" "$SD" "$_t" "$SC" "$SOV" "$@" > "$SW/ro.out" 2>&1; echo "$?" > "$SW/ro.rc"
+  }
+
+  # layer-drift: the row on the stub theirs, none on the twin (whose own drift row is the positive conjunct).
+  bash "$DRIFT" "$SD" "$SB" "$STS" "$SC" > "$SW/ld-stub.out" 2>&1
+  bash "$DRIFT" "$SD" "$SB" "$STW" "$SC" > "$SW/ld-twin.out" 2>&1
+  if [ -n "$(awk -F'\t' '$1 == "OVERRIDE-SHADOWS-POINTER-STUB" && $2 ~ /SKILL__Rule-8\.md$/' "$SW/ld-stub.out")" ] \
+     && grep -q 'rule-bodies/rule-8.md' "$SW/ld-stub.out"; then
+    ok "stub-ld: layer-drift reports OVERRIDE-SHADOWS-POINTER-STUB on an override whose shadowed section is, at theirs, a load-pointer stub, naming rule-bodies/rule-8.md"
+  else
+    bad "stub-ld: no OVERRIDE-SHADOWS-POINTER-STUB row for the stub shadow: $(cut -f1,2 "$SW/ld-stub.out" | tr '\n\t' '| ' | cut -c1-300)"
+  fi
+  if [ -n "$(awk -F'\t' '$2 ~ /SKILL__Rule-8\.md$/' "$SW/ld-twin.out")" ] && ! grep -q 'OVERRIDE-SHADOWS-POINTER-STUB' "$SW/ld-twin.out"; then
+    ok "stub-ld-twin: the twin (the same section without the pointer sentence) gets its drift row and no pointer-stub row"
+  else
+    bad "stub-ld-twin: twin rows: $(cut -f1,2 "$SW/ld-twin.out" | tr '\n\t' '| ' | cut -c1-300)"
+  fi
+
+  # readopt-override: --check BLOCKED on the stub; the twin's gate speaks without the stub row.
+  stub_ro "$STS" --check
+  if [ "$(cat "$SW/ro.rc")" = 1 ] && grep -q '^BLOCKED  SKILL__Rule-8.md: OVERRIDE-SHADOWS-POINTER-STUB ' "$SW/ro.out"; then
+    ok "stub-check: --check exits 1 BLOCKED with OVERRIDE-SHADOWS-POINTER-STUB on the stub shadow"
+  else
+    bad "stub-check: --check rc=$(cat "$SW/ro.rc") out: $(head -3 "$SW/ro.out" | tr '\n' '|')"
+  fi
+  stub_ro "$STW" --check
+  if grep -q 'STALE-CORE-TEXT' "$SW/ro.out" && ! grep -q 'OVERRIDE-SHADOWS-POINTER-STUB' "$SW/ro.out"; then
+    ok "stub-check-twin: the twin's --check reads the stale divergence clause (STALE-CORE-TEXT), not the pointer stub"
+  else
+    bad "stub-check-twin: --check rc=$(cat "$SW/ro.rc") out: $(head -3 "$SW/ro.out" | tr '\n' '|')"
+  fi
+
+  # The refusals: rc 1, the row, and the override's bytes unchanged.
+  for _m in "--merge" "--stamp readopt" "--stamp reaffirm --note kept-on-purpose"; do
+    # shellcheck disable=SC2086
+    stub_ro "$STS" $_m
+    if [ "$(cat "$SW/ro.rc")" = 1 ] && grep -q '^REFUSED  SKILL__Rule-8.md: OVERRIDE-SHADOWS-POINTER-STUB ' "$SW/ro.out" \
+       && [ "$(git hash-object "$SOV")" = "$sov0" ]; then
+      ok "stub-refuse: $_m exits 1 REFUSED OVERRIDE-SHADOWS-POINTER-STUB and the override's bytes are unchanged"
+    else
+      bad "stub-refuse: $_m rc=$(cat "$SW/ro.rc") bytes-moved=$([ "$(git hash-object "$SOV")" = "$sov0" ] && echo no || echo yes) out: $(head -3 "$SW/ro.out" | tr '\n' '|')"
+    fi
+  done
+
+  # pull.sh merge: the stub's refusal relayed, exit 3, no decision row; the twin merges and records its row.
+  SDEC="$SC/_bmad-output/ai-dlc-update/pull-decisions.tsv"
+  SOV_REL=.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md
+  cp "$SW/ovr.pristine" "$SOV" || { echo "FIXTURE ERROR: cannot restore the override" >&2; exit 2; }
+  bash "$REC_DIR/pull.sh" merge "$SD" "$SB" "$SC" "$STS" "$SOV_REL" > "$SW/pm.out" 2> "$SW/pm.err" < /dev/null; pm_rc=$?
+  if [ "$pm_rc" = 3 ] && grep -q '^REFUSED  SKILL__Rule-8.md: OVERRIDE-SHADOWS-POINTER-STUB ' "$SW/pm.out" \
+     && ! grep -q '^DECIDE ' "$SW/pm.out" && [ ! -e "$SDEC" ] && [ "$(git hash-object "$SOV")" = "$sov0" ]; then
+    ok "stub-pull-merge: pull.sh merge relays the OVERRIDE-SHADOWS-POINTER-STUB refusal, exits 3, records no decision row and leaves the override's bytes"
+  else
+    bad "stub-pull-merge: rc=$pm_rc decisions-file=$([ -e "$SDEC" ] && echo present || echo absent) out: $(head -3 "$SW/pm.out" | tr '\n' '|') err: $(head -2 "$SW/pm.err" | tr '\n' '|')"
+  fi
+  cp "$SW/ovr.pristine" "$SOV" || { echo "FIXTURE ERROR: cannot restore the override" >&2; exit 2; }
+  bash "$REC_DIR/pull.sh" merge "$SD" "$SB" "$SC" "$STW" "$SOV_REL" > "$SW/pmt.out" 2> "$SW/pmt.err" < /dev/null; pmt_rc=$?
+  if [ "$pmt_rc" = 0 ] && grep -q '^DECIDE override-drift .claude/skills/ai-dlc/overrides/SKILL__Rule-8.md merged$' "$SW/pmt.out" \
+     && grep -q '^override-drift	.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md	' "$SDEC" 2>/dev/null \
+     && grep -q 'Divergence clause, NEW wording.' "$SOV" && grep -q 'Consumer intensity: service/ is FULL' "$SOV" \
+     && ! grep -q 'OVERRIDE-SHADOWS-POINTER-STUB' "$SW/pmt.out" "$SW/pmt.err"; then
+    ok "stub-pull-merge-twin: on the twin, pull.sh merge merges cleanly (theirs' clause in, the consumer line kept) and records its decision row"
+  else
+    bad "stub-pull-merge-twin: rc=$pmt_rc out: $(head -3 "$SW/pmt.out" | tr '\n' '|') err: $(head -2 "$SW/pmt.err" | tr '\n' '|')"
+  fi
+
+  # --stamp retire stays open on the stub: rc 0, RETIRED, the file gone.
+  stub_ro "$STS" --stamp retire
+  if [ "$(cat "$SW/ro.rc")" = 0 ] && grep -q '^RETIRED  SKILL__Rule-8.md' "$SW/ro.out" && [ ! -e "$SOV" ]; then
+    ok "stub-retire: --stamp retire stays open on the stub shadow (rc 0, RETIRED, the entry deleted)"
+  else
+    bad "stub-retire: rc=$(cat "$SW/ro.rc") file=$([ -e "$SOV" ] && echo present || echo deleted) out: $(head -3 "$SW/ro.out" | tr '\n' '|')"
+  fi
+  rm -rf "$SW"
+fi
 fi
 if sg gh; then
 # ---------------------------------------------------------------------------

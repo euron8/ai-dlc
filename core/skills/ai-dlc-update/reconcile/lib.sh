@@ -300,6 +300,23 @@ shadow_parts() { # shadow_parts <shadows-value>  -> one `<file>\t<anchor>` line 
 }
 
 # ---------------------------------------------------------------------------
+# rule_body_pointers — the ONE grammar of a SKILL.md load-pointer stub.
+# ---------------------------------------------------------------------------
+# A SKILL.md rule section whose text lives in `rule-bodies/rule-N.md` carries one sentence
+# `READ AND FOLLOW `rule-bodies/rule-N.md`` naming that file as the binding text. Invariant I130
+# (scripts/validate-enforcement-map.sh) loads THIS function to bind every rule body to exactly one
+# such sentence; layer-drift.sh (OVERRIDE-SHADOWS-POINTER-STUB) and readopt-override.sh read a
+# shadowed section and an override body with it. No second spelling of the sentence exists.
+# Reads stdin; prints one `rule-N.md` per pointer sentence. rc 0 found, 1 none, 3 the read failed.
+rule_body_pointers() { # rule_body_pointers  < text
+  local _rbp _rbp_rc=0
+  _rbp="$(grep -o 'READ AND FOLLOW `rule-bodies/rule-[0-9][0-9]*\.md`')" || _rbp_rc=$?
+  [ "$_rbp_rc" -le 1 ] || return 3
+  [ -n "$_rbp" ] || return 1
+  printf '%s\n' "$_rbp" | sed 's/^.*`rule-bodies\///; s/`$//' || return 3
+}
+
+# ---------------------------------------------------------------------------
 # unquote — strip ONE matched pair of surrounding quotes from a frontmatter value.
 # ---------------------------------------------------------------------------
 # `fm()` is a line reader, not a YAML parser: it hands back everything after the

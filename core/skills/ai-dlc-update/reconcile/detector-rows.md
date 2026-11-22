@@ -200,7 +200,9 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
      hand-edit the body.** It is a
      three-way merge (base = core@`base_sha`, ours = the override body, theirs =
      core@`theirs`), so upstream's change lands and the consumer's delta survives. A
-     conflict leaves markers and is the only case needing a human.
+     conflict leaves markers and is the only case needing a human. A shadowed section that
+     is a load-pointer stub at theirs is never merged: `pull.sh merge` exits 3 relaying
+     `OVERRIDE-SHADOWS-POINTER-STUB` (below), and that row's remedy replaces the merge.
 
      **`--stamp readopt` is REFUSED while the body still carries core text `theirs`
      superseded, or while conflict markers remain.** Drift is computed
@@ -248,6 +250,20 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
      widens the shadow to the whole section. **Report-only.** The row names the exact
      heading to substitute. E7 errors on this at authoring time; that validator is
      consumer-run and skippable, and this pull is not.
+   - `OVERRIDE-SHADOWS-POINTER-STUB` → a section the override shadows is, at theirs, a
+     load-pointer stub: it carries the `READ AND FOLLOW rule-bodies/rule-N.md` sentence
+     (`lib.sh` `rule_body_pointers`) naming another file as the rule's binding text. The entry
+     replaces the pointer, not the rule, and the binding file carries none of its change.
+     **Report-only** (LC-O17), and true or false at theirs, independent of any pull. While
+     `shadows:` names the stub, `readopt-override.sh` refuses `--merge` and `--stamp
+     readopt|reaffirm` on the entry (exit 1, nothing written), `--check` reads `BLOCKED` (exit 1),
+     and `pull.sh merge` relays that refusal row and its remedy verbatim and exits 3 with no
+     decision row; `--stamp retire` stays open. The same refusal fires on a body that says READ
+     AND FOLLOW its own shadow target (`shadows:` naming `rule-bodies/rule-N.md`). The row and the
+     refusal carry the remedy, verbatim: "run readopt-override.sh <dist> <theirs> <consumer>
+     <override> --stamp retire, then file this override's rows upstream as a change to the
+     intensity table of the stub that owns the rule (the SKILL.md stub, per distribution
+     invariants I19 and I131; rule-bodies/rule-N.md holds a copy)." Re-pointing `shadows:` at the rule-body file is not a remedy.
    - `OVERRIDE-DOUBLE-SHADOW` → two entries declare the same (file, anchor). Each is
      well-formed alone; precedence picks one body silently, and every commit touching
      the span invalidates BOTH stamps, so reconciling one looks complete.
@@ -533,6 +549,8 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
      `--merge` can do it** — a hand-merge is where half an upstream clause gets
      silently dropped. On CONFLICT, markers are left in the body and that is the one
      place a human is genuinely required; present the conflict hunk, nothing else.
+     On exit 3 with a relayed `OVERRIDE-SHADOWS-POINTER-STUB` row nothing was written and
+     no readopt is available: **retire**, and file the rows upstream as that row says.
    - **`HARD-UNREGISTERED-CORE-DRIFT`** → `reconcile/register-drift.sh <dist> <base>
      <consumer> <core-rel-path> --apply`. It authors the `overrides/` entry from the
      consumer's own sections, anchors it to real headings, stamps `base_sha` at **base**
@@ -617,7 +635,9 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
 
    **(5) Stamp**: `--stamp readopt` / `--stamp reaffirm --note "<their words>"` /
    `--stamp retire`. `--stamp readopt` is refused while superseded core text or
-   conflict markers remain, so a stamp cannot outrun the merge.
+   conflict markers remain, so a stamp cannot outrun the merge. `--stamp readopt` and
+   `--stamp reaffirm` are both refused while a shadowed section is a load-pointer stub
+   (`OVERRIDE-SHADOWS-POINTER-STUB`); `--stamp retire` is not.
 
    Then **re-run `layer-drift.sh` and `unregistered-drift.sh` and require ZERO `HARD-*`
    rows from runs that both exited 0.** Either one exits 2 with a `: REFUSED` line when a row
@@ -1033,8 +1053,9 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
    and `finish-unapplied` row is resolved, because the merge brings theirs' region and a sync
    before it moves the file's blob; then re-run this gate. A hand-written example, an unknown
    profile or a region never closed is not cleared by the sync: edit the file as the check's
-   `FIX` text says, then re-run this gate. Re-run `apply.sh --finish` after it only while the
-   `.claude/.ai-dlc-applying` marker stands; an apply that already stamped owes no re-stamp.
+   `FIX` text says, then re-run this gate. Re-run `pull.sh finish` after it only while the
+   `.claude/.ai-dlc-applying` marker stands (every driver apply leaves it); a direct apply that
+   already stamped owes no re-stamp.
 
 
 ## The finish (step 7)
@@ -1053,9 +1074,19 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
      `DECISION restamp-withheld` instead of `RESOLVED restamp`, leaves the stamp at
      `<base>`, and leaves `.claude/.ai-dlc-applying` in place — so the consumer's
      `pre-push` keeps refusing the fixture suite. That is correct: the tree really is
-     a mixture until you have done the rows. **When every `WORKLIST` and `DECISION`
-     row above is disposed, run
-     `reconcile/apply.sh --finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`.**
+     a mixture until you have done the rows. **Under the pull driver the ordinary run never
+     stamps, rows or none:** `pull.sh apply` passes `--stamp-at-finish`, and with nothing
+     outstanding that run writes no stamp field (neither pair), keeps the marker with its
+     `theirs:`, classify and template records, prints no `RESOLVED restamp` or `RESOLVED
+     consistent` row, and writes one `STAMP-DEFERRED<TAB><base><TAB><theirs>` line on stderr,
+     from which the driver prints `NEXT pull.sh finish [--carried-machinery-slice] <dist> <base>
+     <consumer> <theirs>`. That line is the next step, not a decision. The finish with that same
+     `<base>` is then the one write of the stamp, so its tree check runs against the base the
+     pull started from. `--stamp-at-finish` combined with `--finish` is a usage error (exit 2).
+     A direct `apply.sh` run without the flag stamps as described here. **When every
+     `WORKLIST` and `DECISION` row above is disposed, run
+     `reconcile/pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`**
+     (it runs `apply.sh --finish`, and only the driver rewrites the record deliver compares).
      It checks the tree, then does the stamp and the marker clear — it runs no resolution
      phase and writes no core file, so it cannot undo or redo your merges. Carry `--carried-machinery-slice`
      through to it if the first run had it; the withheld row prints the exact command,
@@ -1071,6 +1102,35 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
      the question and the option label. Ask exactly that question with AskUserQuestion, offering
      exactly that label, wait for the answer, and re-run apply. The finisher re-checks those rows
      and withholds while they are undone. It does not re-check a `scaffold-ignored` row; take that row's own exit, or the next pull raises it again.
+
+     **`restamp-withheld` on a stamped tree.** Under `--finish` on a tree whose stamp already reads
+     `<theirs>` with no `.ai-dlc-applying` (an earlier apply stamped it), both forms replace the
+     "Left at `<base>`, and `.ai-dlc-applying` is deliberately left in place" sentence with: "The
+     stamp already reads `<theirs>` (an earlier apply wrote it) and `.ai-dlc-applying` is absent;
+     this run changed neither." Every other state keeps the old sentence.
+
+     **`pull.sh record` rows.** `record` runs no `apply.sh` check and writes no stamp. On a finished
+     pull whose record names `<theirs>` it prints `NOTE pull-writes-recorded <n> <theirs>` (exit 0).
+     It prints `REFUSED record-pull-unfinished rc=2` while `.ai-dlc-applying` exists and `REFUSED
+     record-no-record rc=2` when the record is absent or names another `<theirs>`. It re-records only
+     the paths named after `--` (`pull.sh record <dist> <base> <consumer> <theirs> -- <path>...`): a
+     recorded path whose content moved and that is not named prints `NOTE pull-writes-moved <path>
+     recorded <blob> now <blob>`, then `REFUSED record-path-unnamed rc=2`, and nothing is written.
+     Each named path that moved is listed in `<git-dir>/ai-dlc-pull/pull-writes.rerecorded`, and
+     deliver discloses it as `NOTE pull-writes-rerecorded <path>` in the commit message and the PR
+     body. `record -- <path>` is the remedy of `REFUSED deliver-pull-writes-moved`; `REFUSED
+     apply-pull-writes-moved` keeps `pull.sh finish`.
+     A delivered pull writes `<git-dir>/ai-dlc-pull/pull-writes.delivered`, and the unfinished check
+     skips a record whose `<theirs>` it names.
+
+     **`deliver-dirty-overlap` and `--whole`.** A file dirty at the snapshot that the pull also changed
+     is committed as the pull's change only (a three-way merge), staged or not. Where the merge
+     overlaps or the pre-pull content was not recorded, deliver prints `NOTE deliver-dirty-overlap
+     <path> overlap|unrecorded` per path, then `REFUSED deliver-dirty-overlap rc=2`, before any write;
+     staging the file does not lift it. `pull.sh deliver --whole <path> ...` (repeatable) commits each
+     named path whole as the worktree holds it and writes `NOTE deliver-dirty-whole <path> delivered
+     whole at the operator's request; your uncommitted edits in it are in this commit` into the commit
+     message and the PR body.
 
      *Why a second invocation rather than a smarter first one.* The rows are work YOU
      complete after this program has exited, so there is no moment during the first run
@@ -1099,6 +1159,13 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
         The `DECISION restamp-withheld` row beside it echoes the `<base>` you typed, so do
         not copy its command on this row.
         A `<base>` typed as `<theirs>` makes every range empty, so this is not optional.
+        On a driver pull the stamp still reads the `<base>` the apply was given, so this check
+        fails only on a mistyped `<base>`, or when the apply that wrote the tree had already
+        stamped: an apply run by an engine that predates `--stamp-at-finish` (the pull that
+        delivers it under `SELF-UPDATE-DEFER` or `SELF-UPDATE-UNDECIDED`, when that apply
+        handed back nothing), or a second `finish` after one that stamped. There the stamp's
+        `commit:` is `<theirs>`; re-running with it exits 0 over an empty range, which checks
+        nothing that the earlier stamp did not, so record that finish as unchecked.
      3. **No file still reads as a pure apply.** It runs `preclassify.sh` with the same four
         arguments, and every row still bucketed `UPSTREAM-ONLY`, `UPSTREAM-ONLY-ADD` or
         `…SETUP-TOKENS…` is a `WORKLIST finish-unapplied` row naming the file — missing,
@@ -1190,20 +1257,24 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
      CORRECT — only that no file the ordinary run would have overwritten from theirs is still
      waiting for it, and that no handed-back file is still the copy the apply found.
 
-     It also runs the hook-registration validator and withholds again on a
-     `WORKLIST settings-merge` row, because by then the settings merge has happened and
-     the answer is verifiable rather than attested. It does not gate on a `DECISION` row:
+     It does not gate on a `DECISION` row:
      those you have already adjudicated, or they are the tool saying it could not look,
      and gating on one that cannot clear would wedge the consumer with no exit.
+     After the stamp it runs the hook-registration validator, the transient-ignore check, the
+     agent-definitions check and the taught-schema check, as the ordinary run does. Their
+     `WORKLIST` rows are advisory: they print (`pull.sh finish` reports each as
+     `DECIDE <kind> <path> advisory`), but they never hold the stamp or keep
+     `.claude/.ai-dlc-applying`. Do their work before deliver.
 
-     It also runs the consumer's `scripts/ai-dlc/sync-taught-schema.sh --check` and withholds on
-     a `WORKLIST taught-schema` row (each file whose generated example is stale; the remedy is
+     The taught-schema check runs the consumer's `scripts/ai-dlc/sync-taught-schema.sh --check`
+     and names a `WORKLIST taught-schema` row (each file whose generated example is stale; the remedy is
      the sync, after every merge row is done) or a `WORKLIST taught-schema-region` row (`file:line`
      of a hand-written example, an unknown profile or an unclosed region; the remedy is a hand
      edit). A stale file still owed a semantic merge is named on a `NOTE taught-schema-merge-first`
      row instead of the sync row: merge it first. Either WORKLIST row's remedy ends in one of two
-     forms. While the marker stands (under `--finish`, or an ordinary apply that withheld) it
-     ends "then re-run post-write-gates, then re-run `apply.sh --finish`". On an ordinary apply
+     forms. While the marker stands (a `--finish` or an ordinary apply that withheld, or any
+     driver apply, which never stamps) it ends "then re-run post-write-gates, then re-run
+     `pull.sh finish` (it runs `apply.sh --finish`)". On a run
      that stamped, the row prints after the stamp and ends "then re-run post-write-gates; this
      apply already stamped, so no re-stamp is owed": do not run `--finish` there, because with
      no marker it records the re-stamp as `DECISION restamp-identity-unchecked`. A check that
@@ -1211,15 +1282,16 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
      or `taught-schema-unreadable` row and does not withhold.
 
      **Every row `--finish` can emit that withholds the stamp**, derived from the `say WORKLIST`
-     sites outside `apply.sh`'s resolution phases, plus `staging-refused`, which
+     sites `--finish` runs before the stamp, plus `staging-refused`, which
      `ap_staging_refused` emits as a `WORKLIST` under `--finish`: `finish-marker-directory` (the marker's path is a directory), `finish-base-unverified`,
      `finish-unverified-tree`, `finish-unapplied`, `finish-classify-unmerged`,
      `finish-classify-unverified`, `finish-template-unmerged`, `finish-template-json-unmerged`,
      `finish-template-unverified`, `finish-template-unscanned`, `finish-refile-owed`,
      `finish-refile-unverified`,
-     `finish-exec-owed`, `staging-refused`, `hook-unshipped`, `settings-merge`,
-     `settings-local-dangling`, `transient-ignore`, `transient-ignore-tracked`,
-     `agent-definitions`, `taught-schema`, `taught-schema-region`. Three `DECISION` rows stop it without stamping, because they write
+     `finish-exec-owed`, `staging-refused`. The advisory rows printed after the stamp never
+     withhold: `hook-unshipped`, `settings-merge`, `settings-local-dangling`, `transient-ignore`,
+     `transient-ignore-tracked`, `agent-definitions`, `taught-schema`, `taught-schema-region` (and
+     a `staging-refused` from their own staging). Three `DECISION` rows stop it without stamping, because they write
      nothing: `restamp-identity-mismatch`, `restamp-unresolvable` and `restamp-absent` (no stamp
      file at all). `restamp-failed` and `skill-restamp-failed` also leave the stamp short of
      `<theirs>`, but only after a write was attempted.

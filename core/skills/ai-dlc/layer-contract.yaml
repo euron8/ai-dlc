@@ -597,6 +597,21 @@ clauses:
     code: OVERRIDE-BODY-UNCLAIMED
     fixture: layer-readopt-gate
 
+  - id: LC-O17
+    subject: override
+    level: WARN
+    since: 20
+    normative: >-
+      No section an override shadows is, at the incoming ref, a load-pointer stub: a SKILL.md
+      section carrying the `READ AND FOLLOW rule-bodies/rule-N.md` sentence that names another file
+      as the rule's binding text. Such an entry replaces the pointer, not the rule, and a three-way
+      merge against the stub re-adopts the pointer. readopt-override.sh refuses --merge, --check and
+      --stamp readopt|reaffirm on it while shadows: names the stub.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: OVERRIDE-SHADOWS-POINTER-STUB
+    fixture: layer-readopt-gate
+
   - id: LC-O10
     subject: override
     level: ERROR

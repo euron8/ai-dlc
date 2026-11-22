@@ -4093,19 +4093,20 @@ applying_guard() {
    .claude/.ai-dlc-applying exists — this tree is mid-pull, and its fixture suite would
    report failures that are neither a regression nor your fault.
 
-   The re-stamp was withheld for ONE of two reasons, and they have different exits. The
-   apply manifest says which: look for the DECISION restamp-withheld row.
+   The stamp is not written yet for ONE of three reasons, and they have different exits. The
+   apply manifest says which: look for the DECISION restamp-withheld row (reasons 1 and 2).
+   With no such row it is reason 3.
 
    1. A file could not be placed mechanically. Fix the paths that row names, then:
 
-        /ai-dlc-update      (re-run; it resumes and re-stamps once the tree is consistent)
+        /ai-dlc-update      (re-run; it resumes, and its finish stamps once the tree is consistent)
 
    2. WORKLIST or DECISION rows were handed back and are not yet disposed. Do them —
       each semantic merge, each override readopt/retire, each extension re-read, each
       operator call — and then do what the restamp-withheld row names. Usually that is
       the finisher:
 
-        reconcile/apply.sh --finish [--carried-machinery-slice] <dist> <base> . <theirs>
+        reconcile/pull.sh finish [--carried-machinery-slice] <dist> <base> . <theirs>
 
       RE-RUNNING /ai-dlc-update DOES NOT CLEAR THESE. A hand-back row is derived from the
       upstream range against your extensions, not from the tree, so a re-run re-emits it and
@@ -4124,6 +4125,11 @@ applying_guard() {
       If keeping one of those copies as it is IS the disposition, delete that file's own
       `classify: ... <path>` line from .claude/.ai-dlc-applying and re-run --finish. Every
       other check still runs, and this marker keeps blocking the suite until the stamp.
+
+   3. Nothing was handed back, and the finish has not run: an apply run by the pull
+      driver never stamps. Run the command its NEXT line printed, with the same <base> the apply was given:
+
+        reconcile/pull.sh finish [--carried-machinery-slice] <dist> <base> . <theirs>
 
    LAST RESORT, if that pull was abandoned and the tree is known good: remove the marker.
    This unblocks the fixture suite on whatever the tree holds, and the next --finish stamps

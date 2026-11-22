@@ -53,7 +53,7 @@
 #   rc  ra, merge WITHOUT the prior, --finish -> stamp|finish-template-json-unmerged rows|omitClaudeMd    1.0.0|1|false
 #   c3a C ordinary                       -> template-json-merge rows|settings-merge rows                    1|0
 #   c3b c3a, --finish                    -> finish-template-json-unmerged rows|settings-merge rows|stamp     1|0|1.0.0
-#   c3c c3a, json template: line deleted, --finish -> settings-merge rows|stamp                           1|1.0.0
+#   c3c c3a, json template: line deleted, --finish -> settings-merge rows (advisory)|stamp                1|2.0.0
 #   c3d C ordinary with settings-merge.sh absent beside apply.sh (the json test refuses)
 #                                        -> template-json-refused rows|settings-merge rows|stamp            1|0|1.0.0
 #   c3e c3a, --finish with settings-merge.sh absent beside apply.sh (the recorded json test refuses)
@@ -344,7 +344,7 @@ if want c3a || want c3b || want c3c || want c3e; then
   if want c3b; then x="$(cp_from "$C" c3b)"; fin "$x" "$R/c3b.out"
     check c3b '1|0|1.0.0' "$(rows "$R/c3b.out" WORKLIST finish-template-json-unmerged "$SJ")|$(rows "$R/c3b.out" WORKLIST settings-merge "$SJ")|$(stampv "$x")"; fi
   if want c3c; then x="$(cp_from "$C" c3c)"; dropline "$x" "$SJ"; fin "$x" "$R/c3c.out"
-    check c3c '1|1.0.0' "$(rows "$R/c3c.out" WORKLIST settings-merge "$SJ")|$(stampv "$x")"; fi
+    check c3c '1|2.0.0' "$(rows "$R/c3c.out" WORKLIST settings-merge "$SJ")|$(stampv "$x")"; fi
   if want c3e; then x="$(cp_from "$C" c3e)"; fin "$x" "$R/c3e.out" rec-nosm
     check c3e '1|0|1.0.0' "$(rows "$R/c3e.out" WORKLIST finish-template-json-unmerged "$SJ")|$(rows "$R/c3e.out" WORKLIST settings-merge "$SJ")|$(stampv "$x")"; fi
 fi

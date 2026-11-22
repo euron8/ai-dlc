@@ -1580,18 +1580,18 @@ if sg ts; then
 # ONE BASE WORLD, COPIED. A finished tree (C4's shape, marker recording base and theirs) plus the
 # script and schemas; each world is a copy varied by one property and driven by ONE `--finish`:
 #   W1 two stale regions, a team-role file FIRST and the extension second -> WORKLIST taught-schema
-#      naming both, withheld, marker kept
+#      naming both, printed after the stamp: stamped, marker removed (the row is advisory)
 #   W2 the region rendered by the consumer's own sync -> no taught-schema row, RESOLVED consistent
 #   W3 script and schema absent -> no row, stamps (the consumer's pre-push skips the check too)
 #   W7 schema present, script absent -> DECISION taught-schema-unchecked, stamps (W3's twin)
-#   W4 a hand-written example only -> WORKLIST taught-schema-region (the sync cannot clear it), withheld
+#   W4 a hand-written example only -> WORKLIST taught-schema-region (the sync cannot clear it), stamps
 #   W5 a schema that does not parse -> DECISION taught-schema-unparsed, stamps
 #   W8 W1 with the team-role file an untouched classify hand-back -> NOTE taught-schema-merge-first
 #      for it, and only the extension in the sync row
 #   WO a stale extension region on an ORDINARY apply that stamps -> the sync row is still emitted, after
 #      the stamp, and its remedy ends at post-write-gates: write_stamp removed the marker, so a
-#      `--finish` there would record the re-stamp as identity-unchecked. W1's remedy (marker standing)
-#      names `--finish`.
+#      `--finish` there would record the re-stamp as identity-unchecked. W8's remedy (withheld on its
+#      unmerged file, marker standing) names `--finish`.
 TS_SCRIPT=""; TS_PROV=""; TS_GATE=""
 for cand in "$ROOT/core/scripts/sync-taught-schema.sh" "$ROOT/scripts/ai-dlc/sync-taught-schema.sh"; do
   [ -f "$cand" ] && TS_SCRIPT="$cand" && break
@@ -1612,8 +1612,6 @@ ts_subj() { awk -F'\t' -v a="$2" -v b="$3" '$1==a && $2==b {print $3; exit}' <<<
 # ts_any <rows> -> how many rows carry a taught-schema id
 ts_any()  { awk -F'\t' 'index($2, "taught-schema") == 1 {n++} END {print n+0}' <<< "$1"; }
 ts_has()  { case " $1 " in *" $2 "*) return 0 ;; esac; return 1; }
-ts_held() { [ "$(stamp_ver "$1")" = 1.0.0 ] && [ "$(marker "$1")" = PRESENT ] \
-              && has_row "$2" DECISION restamp-withheld && ! has_row "$2" RESOLVED consistent; }
 ts_stamped() { [ "$(stamp_ver "$1")" = "$THEIRS_VER" ] && [ "$(marker "$1")" = GONE ] && has_row "$2" RESOLVED consistent; }
 
 if [ -z "$TS_SCRIPT" ] || [ -z "$TS_PROV" ] || [ -z "$TS_GATE" ]; then
@@ -1679,10 +1677,13 @@ else
           bad "TS the resolved apply.sh ($APPLY) emitted no taught-schema row in W1 or W7, so the row is absent. HARD in the distribution: the subject must be present here."
         fi
         s="$(ts_subj "$O1" WORKLIST taught-schema)"
-        if ts_has "$s" "$TS_EXT" && ts_has "$s" "$TS_ROLE" && ts_held "$W1" "$O1"; then
-          ok "TS-W1 two stale regions (team-role first, extension second): WORKLIST taught-schema names both, the stamp is withheld at 1.0.0, the marker stays, no RESOLVED consistent"
+        dW1="$(detail_of "$O1" WORKLIST taught-schema)"
+        case "$dW1" in *"already stamped"*) aW1=1 ;; *) aW1=0 ;; esac
+        case "$dW1" in *--finish*) aW1=0 ;; esac
+        if ts_has "$s" "$TS_EXT" && ts_has "$s" "$TS_ROLE" && ts_stamped "$W1" "$O1" && [ "$aW1" = 1 ]; then
+          ok "TS-W1 two stale regions (team-role first, extension second): WORKLIST taught-schema names both, printed after the stamp: --finish stamps $THEIRS_VER, removes the marker, and the remedy says the stamp already stands and names no --finish"
         else
-          bad "TS-W1 stale regions drew sync row '[${s}]' with stamp '$(stamp_ver "$W1")' marker $(marker "$W1") consistent=$(has_row "$O1" RESOLVED consistent && echo yes || echo no) — --finish declared a tree consistent that the consumer's pre-push refuses"
+          bad "TS-W1 (remedy-says-stamped=$aW1) stale regions drew sync row '[${s}]' with stamp '$(stamp_ver "$W1")' marker $(marker "$W1") consistent=$(has_row "$O1" RESOLVED consistent && echo yes || echo no) — the advisory row must print and must not hold the stamp"
         fi
         if ts_stamped "$W2" "$O2" && [ "$(ts_any "$O2")" = 0 ]; then
           ok "TS-W2 a region the consumer's sync rendered draws no taught-schema row and --finish stamps $THEIRS_VER with RESOLVED consistent"
@@ -1701,8 +1702,8 @@ else
         fi
         s="$(ts_subj "$O4" WORKLIST taught-schema-region)"
         case "$s" in "$TS_EXT"*) r4=1 ;; *) r4=0 ;; esac
-        if [ "$r4" = 1 ] && ! has_row "$O4" WORKLIST taught-schema && ts_held "$W4" "$O4"; then
-          ok "TS-W4 a hand-written example draws WORKLIST taught-schema-region naming $s, not the sync row, and withholds"
+        if [ "$r4" = 1 ] && ! has_row "$O4" WORKLIST taught-schema && ts_stamped "$W4" "$O4"; then
+          ok "TS-W4 a hand-written example draws WORKLIST taught-schema-region naming $s, not the sync row, and --finish still stamps"
         else
           bad "TS-W4 a hand-written example drew region '[${s}]' sync-row=$(has_row "$O4" WORKLIST taught-schema && echo yes || echo no) stamp '$(stamp_ver "$W4")' marker $(marker "$W4") — the sync cannot clear it, so a sync remedy or a stamp is wrong"
         fi
@@ -1718,14 +1719,14 @@ else
           bad "TS-W8 merge-first '[${n8}]' sync row '[${s}]' — running the sync over an unmerged file moves its blob and clears the unmerged guard falsely"
         fi
         s="$(ts_subj "$OO" WORKLIST taught-schema)"; dO="$(detail_of "$OO" WORKLIST taught-schema)"
-        d1="$(detail_of "$O1" WORKLIST taught-schema)"
+        d1="$(detail_of "$O8" WORKLIST taught-schema)"
         case "$dO" in *--finish*) fO=1 ;; *) fO=0 ;; esac
         case "$dO" in *"already stamped"*) aO=1 ;; *) aO=0 ;; esac
         case "$d1" in *"apply.sh --finish"*) f1=1 ;; *) f1=0 ;; esac
         if ts_has "$s" "$TS_EXT" && ts_stamped "$WO" "$OO" && [ "$fO" = 0 ] && [ "$aO" = 1 ] && [ "$f1" = 1 ]; then
-          ok "TS-O1 an ordinary apply that stamped still draws WORKLIST taught-schema naming the stale extension, and its remedy says the stamp already stands and names no --finish, while TS-W1's (marker standing) names apply.sh --finish"
+          ok "TS-O1 an ordinary apply that stamped still draws WORKLIST taught-schema naming the stale extension, and its remedy says the stamp already stands and names no --finish, while TS-W8's (withheld, marker standing) names apply.sh --finish"
         else
-          bad "TS-O1 ordinary apply sync row '[${s}]' stamp '$(stamp_ver "$WO")' marker $(marker "$WO") remedy-names-finish=$fO says-stamped=$aO, W1 remedy-names-finish=$f1 — a --finish after the stamp finds no marker and re-stamps identity-unchecked"
+          bad "TS-O1 ordinary apply sync row '[${s}]' stamp '$(stamp_ver "$WO")' marker $(marker "$WO") remedy-names-finish=$fO says-stamped=$aO, W8 remedy-names-finish=$f1 — a --finish after the stamp finds no marker and re-stamps identity-unchecked"
         fi
       fi
     else
@@ -2574,11 +2575,11 @@ if sg hu; then
 # THE CELLS, each presence-shaped. The rows come from the seam (`hk_seam`, above unit hr); the
 # stamp comes from a full `--finish`, one per distinct outcome, on (a)'s tree:
 #   (a) orphan            ai-dlc-gone.sh on disk, in neither set -> WORKLIST hook-unshipped naming
-#                         it, NOT named in a settings-merge row; end to end, the stamp WITHHELD.
-#   (b) exit 3            (a)'s tree, the hook then registered in settings.local.json -> no gating
-#                         row; end to end, --finish stamps.
-#   (c) exit 1            an orphan deleted -> no gating row (the worklist count --finish gates on
-#                         is 0, the state (b)'s end-to-end run stamps over).
+#                         it, NOT named in a settings-merge row; end to end, the row is advisory:
+#                         printed after the stamp, which --finish writes, and the marker removed.
+#   (b) exit 3            (a)'s tree, the hook then registered in settings.local.json -> no row;
+#                         end to end, the stamp stays at theirs.
+#   (c) exit 1            an orphan deleted -> no row (the worklist count is 0).
 #   (t) near-misses       ai-dlc-tmplonly.sh (template, not core/hooks) and ai-dlc-shipped.sh
 #                         (core/hooks, not template), both unregistered -> ONE settings-merge row
 #                         naming both, and no hook-unshipped row. Each name is the only seed that
@@ -2673,7 +2674,7 @@ if [ "$HU_OK" = 1 ]; then
 # SELF-PROBE, first half: the real validator exits 1 on the orphan world, or (a) would score the
 # validator rather than the row.
 hu_p1="$(bash "$HUW_O/scripts/ai-dlc/validate-hook-registration.sh" --root "$HUW_O" >/dev/null 2>&1; echo $?)"
-# (a) end to end: the orphan world, withheld.
+# (a) end to end: the orphan world, stamped with the advisory row printed.
 hu_fin "$HU_SUB/apply.sh" "$HUW_O" "$HU_R/e2e.O"
 HU_IDS="$(hk_ids "$HU_SUB/apply.sh")" || exit 2
 if [ "$(hk_n "$HU_R/e2e.O" WORKLIST hook-unshipped)" -ge 1 ] \
@@ -2682,15 +2683,15 @@ if [ "$(hk_n "$HU_R/e2e.O" WORKLIST hook-unshipped)" -ge 1 ] \
 else
   bad "HU-SEAM the seam and the full --finish disagree over the orphan tree (e2e hook-unshipped=$(hk_n "$HU_R/e2e.O" WORKLIST hook-unshipped), seam=$(hk_n "$HU_R/sub.O" WORKLIST hook-unshipped)) — the HU row cells would score a function the program does not run"
 fi
-if hu_arm_a "$HU_R/sub.O" && [ "$(stamp_ver "$HUW_O")" = 1.0.0 ] && [ "$(marker "$HUW_O")" = PRESENT ]; then
-  ok "HU-a an ai-dlc- hook theirs neither ships nor registers draws WORKLIST hook-unshipped naming it, the settings-merge row does not claim it, and --finish withholds on the tree"
+if hu_arm_a "$HU_R/sub.O" && [ "$(hk_n "$HU_R/e2e.O" WORKLIST hook-unshipped)" -ge 1 ] && [ "$(stamp_ver "$HUW_O")" = 2.0.0 ] && [ "$(marker "$HUW_O")" = GONE ]; then
+  ok "HU-a an ai-dlc- hook theirs neither ships nor registers draws WORKLIST hook-unshipped naming it, the settings-merge row does not claim it, and the row is advisory: --finish prints it, stamps 2.0.0 and removes the marker"
 else
-  bad "HU-a the orphan hook did not draw its own gating row, or --finish stamped over it (hook-unshipped=$(hk_n "$HU_R/sub.O" WORKLIST hook-unshipped), stamp '$(stamp_ver "$HUW_O")', marker $(marker "$HUW_O")) — the operator is sent to a merge that cannot clear it"
+  bad "HU-a the orphan hook did not draw its own row, or --finish withheld on it (hook-unshipped=$(hk_n "$HU_R/sub.O" WORKLIST hook-unshipped), stamp '$(stamp_ver "$HUW_O")', marker $(marker "$HUW_O")) — an advisory row must not hold the stamp"
 fi
 if hu_quiet "$HU_R/sub.X"; then
-  ok "HU-c exit 1 — deleting the file — leaves no gating row, the state --finish stamps over (HU-b, end to end)"
+  ok "HU-c exit 1 — deleting the file — leaves no row"
 else
-  bad "HU-c deleting the orphan still drew a gating row (worklist_n=$(hk_wl "$HU_R/sub.X")) — the finisher stays withheld"
+  bad "HU-c deleting the orphan still drew a row (worklist_n=$(hk_wl "$HU_R/sub.X")) — its remedy did not clear it"
 fi
 if hu_arm_t "$HU_R/sub.N"; then
   ok "HU-t a hook in the template only and one in core/hooks only both stay on the ONE settings-merge row, and no hook-unshipped row fires"
@@ -2709,9 +2710,9 @@ fi
 hu_seam "$HU_SUB/apply.sh" sub R "$HUW_O" >/dev/null 2>&1
 hu_fin "$HU_SUB/apply.sh" "$HUW_O" "$HU_R/e2e.R"
 if hu_quiet "$HU_R/sub.R" && [ "$(stamp_ver "$HUW_O")" = 2.0.0 ] && [ "$(marker "$HUW_O")" = GONE ]; then
-  ok "HU-b exit 3 — registering it in .claude/settings.local.json — clears the gating row and lets --finish stamp 2.0.0 and clear the marker"
+  ok "HU-b exit 3 — registering it in .claude/settings.local.json — clears the row, and the stamp stays at 2.0.0 with no marker"
 else
-  bad "HU-b the row's own exit 3 left the finisher withheld (worklist_n=$(hk_wl "$HU_R/sub.R"), stamp '$(stamp_ver "$HUW_O")', marker $(marker "$HUW_O"))"
+  bad "HU-b the row's own exit 3 left a row or moved the stamp (worklist_n=$(hk_wl "$HU_R/sub.R"), stamp '$(stamp_ver "$HUW_O")', marker $(marker "$HUW_O"))"
 fi
 fi  # ---- end of HU_OK
 fi  # ---- end of the BL-103 block
