@@ -953,6 +953,33 @@ pl_deliver_prepare() {
   echo "pull: each file above was already dirty when the pull began and the pull changed it too, and its change cannot be separated from your own edit (overlap: the edits touch the same lines; unrecorded: the pre-pull content was not recorded). Nothing was committed. Staging a file does not change this. For each file, re-run deliver with \`--whole <path>\` (one per file): deliver then commits the file whole as the worktree holds it, your uncommitted edit in it included, and says so in the commit message and the PR body. To keep your edit out of the commit, first save it aside and take it out of the file, re-run with \`--whole <path>\`, then restore your edit." >&2
   refuse "deliver-dirty-overlap" 2
 }
+# The NOTE kinds the PR body relays whole: those whose detail prescribes an act, or that SKILL.md step 7
+# has the model act on or adjudicate by hand. Step 7: derivation-unassessable (adjudicate, relay in full),
+# reconcile-log-name (write the log at that path), override-readopt-subsumed, extension-retire,
+# extension-contradicts-core (each cancels or subsumes a WORKLIST row). Emit text (reconcile/apply.sh):
+# the finish-* rows (confirm by hand, restore a file), taught-schema-merge-first (merge, then re-check),
+# extension-adjudicated-unrouted (check the register). Every other kind is one line per kind in the body.
+PL_NOTE_FULL=" derivation-unassessable reconcile-log-name override-readopt-subsumed extension-retire extension-contradicts-core finish-unverified finish-classify-unrecorded finish-template-unrecorded finish-template-manifest-unreadable taught-schema-merge-first extension-adjudicated-unrouted "
+# Every other NOTE kind apply.sh emits, and the three deliver notes (listed whole under "Deliver notes"), are
+# counted: PL_NOTE_FULL and PL_NOTE_COUNTED together classify every kind, `derivation-info-` being a prefix.
+# core/fixtures/reconcile-pull-driver nr-bind fails on an emitted kind in neither.
+PL_NOTE_COUNTED=" blockers-resolved derivation-note derivation-summary extension-adjudicated override-adjudicated reapproval-narrowed report-unverified report-verified derivation-info- deliver-dirty-whole deliver-state-unfiltered pull-writes-rerecorded "
+# pl_note_rows <consumer> -- the NOTE rows (tab-separated, unique) of every apply and --finish run of this
+# consumer's pulls from the boundary below; the commit message and the PR body both read it. Stands alone:
+# GD is resolved when unset.
+pl_note_rows() {
+  local gd="${GD:-}" h1="" h2="" h3="" h4="" d t
+  [ -n "$gd" ] || gd="$(gitdir_of "$1")" || return 0
+  # From the run the dirty snapshot names, whatever theirs it was written for (pl_deliver_select checks
+  # theirs; this does not): a snapshot left by an earlier pull makes this read from that pull's first run
+  # onward, the old behaviour. With no snapshot, or a v1 one naming no run, every run.
+  [ ! -f "$gd/ai-dlc-pull/dirty-snapshot" ] || read -r h1 h2 h3 h4 < "$gd/ai-dlc-pull/dirty-snapshot"
+  for d in "$gd"/ai-dlc-pull/run-*; do
+    [ -d "$d" ] || continue
+    t="${d##*/}"; [ -z "$h4" ] || [[ ! "${t%-*}" < "${h4%-*}" ]] || continue
+    cat "$d/apply.out" "$d/finish.out" 2>/dev/null
+  done | awk -F'\t' '$1 == "NOTE"' | sort -u
+}
 pl_deliver() {
   local br cut bv tv subj body p n_notes rc url xy ix wt pair n dm nl
   nl="$(printf '\n_')"; nl="${nl%_}"
@@ -996,7 +1023,7 @@ pl_deliver() {
   bv="$(git -C "$DIST" show "${BASE}:VERSION" 2>/dev/null | tr -d '[:space:]')"
   tv="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null | tr -d '[:space:]')"
   subj="chore(ai-dlc-update): reconcile distribution ${bv:-$BASE} → ${tv:-$THEIRS}"
-  n_notes="$(cat "$GD"/ai-dlc-pull/run-*/apply.out 2>/dev/null | awk -F'\t' '$1 == "NOTE"' | sort -u)"
+  n_notes="$(pl_note_rows "$CONSUMER")"
   [ ! -s "$RUN/deliver.notes" ] || n_notes="$(printf '%s\n%s\n' "$n_notes" "$(cat "$RUN/deliver.notes")" | sed '/^$/d')"
   { printf '%s\n\n' "$subj"
     printf 'Buckets applied: %s. Conflicts adjudicated (hook-recorded answers): %s.\n' \
@@ -1032,10 +1059,10 @@ pl_deliver() {
 
 # --- pr-body ------------------------------------------------------------------------------------
 # pl_pr_table <decisions file> -- the decisions table's rows, BYTE-bounded: a cell over 400 bytes is
-# cut (never inside a UTF-8 sequence) and ends `…`; rows stop once they would pass 30000 bytes, and
+# cut (never inside a UTF-8 sequence) and ends `…`; rows stop once they would pass the byte budget in $2 (default 30000), and
 # one line counts the rest and points at the decisions file in the PR's diff.
 pl_pr_table() {
-  LC_ALL=C awk -F'\t' -v rel="$DECISIONS_REL" -v q="'" '
+  LC_ALL=C awk -F'\t' -v rel="$DECISIONS_REL" -v q="'" -v budget="${2:-30000}" '
     function cell(s,   c) {
       if (length(s) <= 400) return s
       s = substr(s, 1, 400)
@@ -1046,7 +1073,7 @@ pl_pr_table() {
     NR > 1 && NF && !s[$0]++ {
       gsub(/\|/, "\\|")
       r = sprintf("| %s | `%s` | %s | %s | %s |", cell($1), cell($2), cell($4), cell($5), cell($6))
-      if (over || acc + length(r) + 1 > 30000) { over = 1; n++; next }
+      if (over || acc + length(r) + 1 > budget) { over = 1; n++; next }
       acc += length(r) + 1; print r
     }
     END { if (n) printf "… %d more decision rows omitted — see `%s` in this PR%ss diff\n", n, rel, q }' "$1"
@@ -1055,19 +1082,62 @@ pl_pr_table() {
 # stays under 60000 bytes where it can: when the whole is larger, each region section is one line
 # pointing at the report in the PR's diff. deliver refuses, before its push, a body still over.
 pl_pr_body() {
-  local c="${1:-}" t tp="${TMPDIR:-/tmp}/pull-pr" n
+  local c="${1:-}" t tp="${TMPDIR:-/tmp}/pull-pr" n nb nk dn fixed budget
   [ -n "$c" ] || usage
   t="$c/$DECISIONS_REL"
+  # NOTE rows: the act-bearing kinds whole (never budgeted, never shrunk); every other kind once, with its
+  # row count and its paths byte-bounded. The decisions table gets the room they leave.
+  pl_note_rows "$c" > "$tp-a.$$"
+  LC_ALL=C awk -F'\t' -v set="$PL_NOTE_FULL" 'index(set, " " $2 " ")' "$tp-a.$$" | tr '\t' ' ' > "$tp-n.$$"
+  LC_ALL=C awk -F'\t' -v set="$PL_NOTE_FULL" '
+    index(set, " " $2 " ") { next }
+    { k = $2; if (!(k in n)) ord[++m] = k; n[k]++
+      if (!((k SUBSEP $3) in seen)) { seen[k SUBSEP $3] = 1; dp[k]++
+        if (len[k] + length($3) + 2 <= 400) { pl[k] = pl[k] (pl[k] == "" ? "" : ", ") $3; len[k] += length($3) + 2; sh[k]++ } } }
+    END { for (i = 1; i <= m; i++) { k = ord[i]
+            l = sprintf("- `%s`: %d row(s); paths: %s%s", k, n[k], pl[k], (dp[k] > sh[k] ? " +" dp[k] - sh[k] " more" : ""))
+            if (over || acc + length(l) + 1 > 8000) { over = 1; rk++; rn += n[k]; continue }
+            acc += length(l) + 1; print l }
+          if (rk) printf "… %d more NOTE kinds (%d rows) — see the commit message and the apply.out files under the consumer git dir\n", rk, rn }' "$tp-a.$$" > "$tp-k.$$"
+  rm -f "$tp-a.$$"
+  # Every byte the body adds for the NOTE rows is counted: each row's "- " prefix, the per-kind section
+  # (capped at 8000 bytes above), the deliver notes, and 1500 for the section headings and their prose.
+  nb="$(wc -c < "$tp-n.$$" | tr -d ' ')"; nb=$((nb + 2 * $(wc -l < "$tp-n.$$" | tr -d ' ')))
+  nk="$(wc -c < "$tp-k.$$" | tr -d ' ')"
+  dn=0; [ ! -s "${RUN:-/nonexistent}/deliver.notes" ] || dn=$(( $(wc -c < "$RUN/deliver.notes" | tr -d ' ') + 2 * $(wc -l < "$RUN/deliver.notes" | tr -d ' ') ))
+  if [ $((nb + dn + 1500)) -gt 40000 ]; then
+    rm -f "$tp-n.$$" "$tp-k.$$"
+    echo "pull: the NOTE rows this pull must relay whole ($PL_NOTE_FULL) and the deliver notes are $((nb + dn)) bytes with their list prefixes, over the 38500 the body can carry; nothing was dropped and nothing was pushed. A 60000-byte PR body cannot carry them whole: stop and report to the operator the kinds and row counts (apply.out under the consumer git dir holds the rows), and ask which to relay before deliver is re-run." >&2
+    return 1
+  fi
+  fixed=$((nb + nk + dn + 1500))
+  budget=$((56000 - fixed)); [ "$budget" -le 30000 ] || budget=30000; [ "$budget" -ge 0 ] || budget=0
   {
     echo "### Decisions this pull took without asking"
     echo
     echo "Each row is a MODEL or SCRIPT decision; merging this PR approves them. Operator answers are recorded in \`${HIST_REL}\`."
     echo
-    pl_pr_table "$t" > "$tp-d.$$" 2>/dev/null
+    pl_pr_table "$t" "$budget" > "$tp-d.$$" 2>/dev/null
     if [ ! -s "$tp-d.$$" ]; then echo "none"; else
       echo "| kind | path | decider | verdict | evidence |"
       echo "|---|---|---|---|---|"
       cat "$tp-d.$$"
+    fi
+    if [ -s "$tp-k.$$" ]; then
+      echo
+      echo "### NOTE kinds of this pull's apply runs"
+      echo
+      echo "Each kind once, with its row count and paths; the rows themselves are in the pull's \`apply.out\` files under the consumer's git dir."
+      echo
+      cat "$tp-k.$$"
+    fi
+    if [ -s "$tp-n.$$" ]; then
+      echo
+      echo "### NOTE rows relayed whole"
+      echo
+      echo "Each row below is one the update skill has the model act on or adjudicate by hand (for example a \`derivation-unassessable\` row, a derivation the validator refused); none is cut."
+      echo
+      sed 's/^/- /' "$tp-n.$$"
     fi
     if [ -s "${RUN:-/nonexistent}/deliver.notes" ]; then
       echo
@@ -1076,7 +1146,7 @@ pl_pr_body() {
       sed 's/^/- /' "$RUN/deliver.notes"
     fi
   } > "$tp-h.$$"
-  rm -f "$tp-d.$$"
+  rm -f "$tp-d.$$" "$tp-n.$$" "$tp-k.$$"
   # The report's region as the pull leaves it, and the region the first --verify of this pull
   # recorded (the dry-run view this PR's review replaces), when the two differ.
   local rep="$c/$REPORT_REL" gd rec

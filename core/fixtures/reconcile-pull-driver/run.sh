@@ -99,10 +99,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(pwd -P)"
 if [ -f "$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh" ]; then
   REC_SRC="$ROOT/core/skills/ai-dlc-update/reconcile"; HOOK_SRC="$ROOT/core/hooks/ai-dlc-answer-capture.sh"
-  ESC_SRC="$ROOT/core/skills/ai-dlc/escalations.md"; REC_REL=core/skills/ai-dlc-update/reconcile; HOOK_REL=core/hooks
+  ESC_SRC="$ROOT/core/skills/ai-dlc/escalations.md"; REC_REL=core/skills/ai-dlc-update/reconcile; HOOK_REL=core/hooks; SKILL_SRC="$ROOT/core/skills/ai-dlc-update/SKILL.md"
 elif [ -f "$ROOT/.claude/skills/ai-dlc-update/reconcile/apply.sh" ]; then
   REC_SRC="$ROOT/.claude/skills/ai-dlc-update/reconcile"; HOOK_SRC="$ROOT/.claude/hooks/ai-dlc-answer-capture.sh"
-  ESC_SRC="$ROOT/.claude/skills/ai-dlc/escalations.md"; REC_REL=.claude/skills/ai-dlc-update/reconcile; HOOK_REL=.claude/hooks
+  ESC_SRC="$ROOT/.claude/skills/ai-dlc/escalations.md"; REC_REL=.claude/skills/ai-dlc-update/reconcile; HOOK_REL=.claude/hooks; SKILL_SRC="$ROOT/.claude/skills/ai-dlc-update/SKILL.md"
 else
   echo "FIXTURE BROKEN: reconcile/apply.sh not found under $ROOT in either layout (run from the repository root)" >&2
   exit 2
@@ -982,6 +982,65 @@ if ! grep -q 'earlier-pull.md' "$WORK/l-pr.out" && grep -q '^### Decisions' "$WO
 else
   bad "q: earlier-pull row still rendered or header lost: $(grep '^| \|^none' "$WORK/l-pr.out" | tr '\n' '~' | cut -c1-300)"
 fi
+# nr: the PR body relays a derivation-unassessable NOTE row whole (over 400 bytes, a pipe inside) past a truncated decisions table, lists a high-volume non-whole kind once, and reads only this pull's runs.
+NRGD="$S4/c/.git/ai-dlc-pull"; NRRUN=run-29990101T000000Z-1; NRSTALE=run-20000101T000000Z-1
+mkdir -p "$NRGD/$NRRUN" "$NRGD/$NRSTALE"
+nr_snap_had=0; if [ -f "$NRGD/dirty-snapshot" ]; then nr_snap_had=1; cp "$NRGD/dirty-snapshot" "$WORK/nr-snapshot.bak"; fi
+nr_long="$(awk 'BEGIN { for (i = 0; i < 60; i++) printf "derive%02d ", i }')"
+nr_row="$(printf 'NOTE\tderivation-unassessable\tdocs/nr.md\t%s | tail-after-pipe' "$nr_long")"
+{ printf '%s\n' "$nr_row"; awk 'BEGIN { pad = sprintf("%0380d", 0); for (i = 0; i < 3000; i++) printf "NOTE\tderivation-info-out-of-scope\tdocs/nr-info-%04d.md\t%s\n", i, pad
+  for (i = 0; i < 400; i++) printf "NOTE\tzz-nr-kind-%04d\tdocs/nr-kind.md\tinfo\n", i }'; } > "$NRGD/$NRRUN/apply.out"
+printf 'NOTE\tstale-kind-zz\tdocs/stale.md\tfrom an earlier pull\n' > "$NRGD/$NRSTALE/apply.out"
+nr_fin="$(printf 'NOTE\tfinish-unverified\tdocs/nr-fin.md\tconfirm by hand | %s' "$nr_long")"
+printf '%s\n' "$nr_fin" > "$NRGD/$NRRUN/finish.out"
+nr_ev="$(awk 'BEGIN { for (i = 0; i < 30; i++) printf "evidence-text "; }')"
+awk -v ev="$nr_ev" 'BEGIN { for (i = 0; i < 120; i++) printf "refile\tdocs/nr-%03d.md\t-\tmodel\tkept\t%s\n", i, ev }' >> "$S4/c/_bmad-output/ai-dlc-update/pull-decisions.tsv"
+rm -f "$NRGD/dirty-snapshot"
+bash "$REC/pull.sh" pr-body "$S4/c" > "$WORK/nr0.out" 2> "$WORK/nr0.err" < /dev/null; nr0_rc=$?
+printf 'ai-dlc-dirty-snapshot 2 %s %s\n' "$(printf '%064d' 0)" "$NRRUN" > "$NRGD/dirty-snapshot"
+bash "$REC/pull.sh" pr-body "$S4/c" > "$WORK/nr.out" 2> "$WORK/nr.err" < /dev/null; nr_rc=$?
+nr_want="- $(printf '%s' "$nr_row" | tr '\t' ' ')"
+nr_fwant="- $(printf '%s' "$nr_fin" | tr '\t' ' ')"
+if [ "$nr_rc" = 0 ] && [ "${#nr_long}" -gt 400 ] && grep -qxF -- "$nr_want" "$WORK/nr.out" && grep -qx '### NOTE rows relayed whole' "$WORK/nr.out" \
+   && grep -qxF -- "$nr_fwant" "$WORK/nr.out" && grep -q 'more decision rows omitted' "$WORK/nr.out"; then
+  ok "nr: a derivation-unassessable NOTE row over 400 bytes with a pipe, and a finish-unverified row from the run's finish.out, reach the PR body whole while the over-budget decisions table omits rows"
+else
+  bad "nr: pr-body rc=$nr_rc row-whole=$(grep -cxF -- "$nr_want" "$WORK/nr.out") section=$(grep -c '^### NOTE rows relayed whole' "$WORK/nr.out") omitted=$(grep -c 'more decision rows omitted' "$WORK/nr.out") err: $(head -c 200 "$WORK/nr.err")"
+fi
+if [ "$nr_rc" = 0 ] && [ "$(grep -c '^- `derivation-info-out-of-scope`: 3000 row(s); paths: ' "$WORK/nr.out")" = 1 ] \
+   && [ "$(grep -c 'derivation-info-out-of-scope' "$WORK/nr.out")" = 1 ] && [ "$(wc -c < "$WORK/nr.out" | tr -d ' ')" -lt 60000 ] \
+   && grep -qE '^… [0-9]+ more NOTE kinds \([0-9]+ rows\)' "$WORK/nr.out"; then
+  ok "nr-vol: 3000 rows (over 1 MB) of a non-whole NOTE kind are one per-kind line, 400 more distinct kinds end in a more-kinds line, pr-body exits 0 and the body stays under 60000 bytes"
+else
+  bad "nr-vol: rc=$nr_rc kind lines=$(grep -c 'derivation-info-out-of-scope' "$WORK/nr.out") body bytes=$(wc -c < "$WORK/nr.out" | tr -d ' ') err: $(head -c 200 "$WORK/nr.err")"
+fi
+if [ "$nr0_rc" = 0 ] && grep -q 'stale-kind-zz' "$WORK/nr0.out" && ! grep -q 'stale-kind-zz' "$WORK/nr.out"; then
+  ok "nr-run: with no snapshot an earlier run's NOTE kind is listed; with the snapshot naming this pull's first run it is absent"
+else
+  bad "nr-run: no-snapshot rc=$nr0_rc stale listed=$(grep -c 'stale-kind-zz' "$WORK/nr0.out") with snapshot stale listed=$(grep -c 'stale-kind-zz' "$WORK/nr.out")"
+fi
+rm -f "$NRGD/$NRRUN/apply.out" "$NRGD/$NRRUN/finish.out" "$NRGD/$NRSTALE/apply.out" "$NRGD/dirty-snapshot"
+[ "$nr_snap_had" = 0 ] || cp "$WORK/nr-snapshot.bak" "$NRGD/dirty-snapshot"
+# nr-bind: the kinds pull.sh relays whole (PL_NOTE_FULL) and the kinds it counts (PL_NOTE_COUNTED) partition every static `say NOTE <kind>` emit in apply.sh and every pl_dnote kind in pull.sh (derivation-info- is a prefix entry); each FULL kind has an emit site; the kinds step 7 names are named in SKILL.md; a seeded unclassified emit is reported.
+nr_full="$(sed -n 's/^PL_NOTE_FULL="\(.*\)"$/\1/p' "$REC/pull.sh")"
+nr_cnt="$(sed -n 's/^PL_NOTE_COUNTED="\(.*\)"$/\1/p' "$REC/pull.sh")"
+nr_miss() { local k m=""; for k in $1; do grep -qE -- "say NOTE $k( |\")" "$REC/apply.sh" || m="$m $k"; done; printf '%s' "$m"; }
+nr_emits() { { grep -v '^[[:space:]]*#' "$1" | sed -n 's/.*say NOTE "\{0,1\}\([a-z][a-z0-9-]*\).*/\1/p'; grep -v '^[[:space:]]*#' "$2" | sed -n 's/.*pl_dnote "NOTE \([a-z][a-z0-9-]*\).*/\1/p'; } | sort -u; }
+nr_unclass() { local k c inf inc out=""; for k in $(nr_emits "$1" "$2"); do inf=0; inc=0
+  for c in $nr_full; do [ "$c" = "$k" ] && inf=1; done
+  for c in $nr_cnt; do case "$c" in *-) case "$k" in "$c"*) inc=1 ;; esac ;; *) [ "$c" = "$k" ] && inc=1 ;; esac; done
+  [ $((inf + inc)) = 1 ] || out="$out $k"; done; printf '%s' "$out"; }
+cp "$REC/apply.sh" "$WORK/nr-apply-seed.sh"; printf '  say NOTE zz-unclassified-kind-zz "x" "y"\n' >> "$WORK/nr-apply-seed.sh"
+nr_n="$(printf '%s\n' $nr_full | grep -c .)" || nr_n=0
+nr_ne="$(nr_emits "$REC/apply.sh" "$REC/pull.sh" | grep -c .)" || nr_ne=0
+nr_real="$(nr_miss "$nr_full")"; nr_seed="$(nr_miss "$nr_full zz-unknown-kind-zz")"
+nr_un="$(nr_unclass "$REC/apply.sh" "$REC/pull.sh")"; nr_unseed="$(nr_unclass "$WORK/nr-apply-seed.sh" "$REC/pull.sh")"
+nr_sk=""; for k in derivation-unassessable reconcile-log-name override-readopt-subsumed extension-retire extension-contradicts-core; do case " $nr_full " in *" $k "*) grep -qF -- "$k" "$SKILL_SRC" || nr_sk="$nr_sk $k" ;; *) nr_sk="$nr_sk $k(not-full)" ;; esac; done
+if [ "$nr_n" -ge 11 ] && [ "$nr_ne" -ge 20 ] && [ -z "$nr_real" ] && [ "$nr_seed" = " zz-unknown-kind-zz" ] && [ -z "$nr_un" ] && [ "$nr_unseed" = " zz-unclassified-kind-zz" ] && [ -z "$nr_sk" ]; then
+  ok "nr-bind: $nr_ne emitted NOTE kinds each fall in exactly one of PL_NOTE_FULL ($nr_n) and PL_NOTE_COUNTED, every FULL kind has an emit site, the step-7 kinds are named in SKILL.md, and a seeded unclassified emit is reported"
+else
+  bad "nr-bind: full=$nr_n emits=$nr_ne no-emit-site:[$nr_real] seeded-unknown:[$nr_seed] unclassified:[$nr_un] seeded-unclassified:[$nr_unseed] step7-not-in-SKILL:[$nr_sk]"
+fi
 l_dg="$(awk '$1 == "ASK" && $2 == "orphaned-unknown" {print $4; exit}' "$WORK/l.out")"
 if [ "$l_rc" = 3 ] && [ "${#l_dg}" = 64 ] && [ "$l_dg" != "$s_dg" ] && [ -n "$s_dg" ]; then
   ok "l: theirs moved, the answer for the earlier theirs does not silence the row: it asks again under a new digest"
@@ -1273,4 +1332,4 @@ else
 fi
 # ===== end BL-1173 arms =====
 
-report_end reconcile-pull-driver 88
+report_end reconcile-pull-driver 92
