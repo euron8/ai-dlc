@@ -782,12 +782,9 @@ if LAYOUT != "distribution":
 elif MUTANT:
     emit("SKILL_ARG_SUBSTITUTION", [], 1)
 else:
+    # Never empty: LAYOUT is "distribution" only when core/skills/ai-dlc/SKILL.md is a file,
+    # and that file is in this glob.
     _sk = sorted(glob.glob("core/skills/*/SKILL.md"))
-    if not _sk:
-        sys.stdout.flush()
-        sys.stderr.write("audit-rule-files: FAIL — SKILL_ARG_SUBSTITUTION population "
-                         "core/skills/*/SKILL.md is empty in the distribution layout.\n")
-        sys.exit(2)
     emit("SKILL_ARG_SUBSTITUTION", skill_arg_hits(_sk), 1, f"  [{len(_sk)} population files]")
 
 # ---------------------------------------------------------------- Class 1

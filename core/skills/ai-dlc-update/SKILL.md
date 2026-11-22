@@ -169,6 +169,7 @@ and work only what it hands back. Its header is the contract; the subcommands ar
 - `pull.sh record <dist> <base> <consumer> <theirs> [-- <path>...]` — on a finished pull, re-records the
   named paths of the record of the pull's own writes from the work tree and nothing else; it stamps nothing.
 - `pull.sh pr-body <consumer>` — the rendered PR body.
+- `pull.sh cut-from <consumer> <branch>` — prints the branch `<branch>` was cut from (step 1's reflog derivation), or nothing.
 
 **Its lines.** `PULL run=<dir> key=<12> renders=<n>`; `REFUSED <what> rc=<n>`;
 `ASK <kind> <path> <digest> <question>`; `DECIDE <kind> <path> <verdict>`; `WORK classify <path>`;
