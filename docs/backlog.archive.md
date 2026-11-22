@@ -48862,3 +48862,55 @@ Survivors (by ruling, not owed):
 - A context-mode server added under any other name (`mcp add <other-name>`) is uncovered: its prefix is in neither `CTX_PREFIXES` nor the matcher.
 
 verify: sh grep -q 'PROTECTED_PATTERNS' core/hooks/ai-dlc-protect.sh || exit 9; W=$(mktemp -d); o=$(printf '%s' '{"tool_name":"mcp__context-mode__ctx_execute","tool_input":{"language":"shell","code":"x","file":".claude/team-roles/remediator.md"}}' | CLAUDE_PROJECT_DIR="$W" bash core/hooks/ai-dlc-protect.sh 2>/dev/null); [ -n "$o" ] && grep -q '"permissionDecision": *"deny"' <<<"$o"
+## BL-1219 — the unfolded tip-adversary defects of BL-1216: a guard in the new skill-argument audit arm that cannot fire, and an update-skill subcommand list that omits `cut-from`
+
+**DEFECT.** Filed 2026-11-22 (batch 264, cluster J). Owner: `core/scripts/audit-rule-files.sh` (Class 1e) and `core/skills/ai-dlc-update/SKILL.md` (the `pull.sh` subcommand list).
+
+Goal: the audit arm carries no guard that no input reaches, and the update skill's subcommand list names every subcommand `pull.sh` dispatches. One done condition: both hold on the tree and the arm still reports CLEAN with 3 population files.
+
+Record: Class 1e ran its population glob `core/skills/*/SKILL.md` only when `LAYOUT` is `distribution`, and `LAYOUT` is `distribution` only when `core/skills/ai-dlc/SKILL.md` is a file, which that glob lists. The empty-glob exit 2 therefore had no input. `pull.sh` dispatches `cut-from` (`core/skills/ai-dlc-update/reconcile/pull.sh:1201` "cut-from)"), and the list under "The driver" ended at `pr-body`.
+
+Failure caught: the BL-1216 tip adversary's two unfolded DEFECTs (guard unreachable; `cut-from` missing from the list), filed here because the release had gone to its gate.
+
+Work list:
+
+1. Delete the empty-glob exit 2 from Class 1e (fix by subtraction); a comment names why the glob is never empty.
+2. Add `pull.sh cut-from <consumer> <branch>` to the subcommand list as its own item, with no substitutable token.
+
+**LANDED (v0.1230.0).** Batch 264, cluster J. Class 1e has no unreachable exit; the list names `cut-from`. No validator or fixture joins that list to `pull.sh`'s dispatch (a file-reading search found none, against a control that matched `core/fixtures/reconcile-pull-driver/run.sh`), so the omission could not have been caught; not fixed here.
+
+Outcome: a tree built by `scripts/install.sh` into an empty directory reads layout `consumer`, Class 1e is N/A and exits 0, even with a vendored empty `core/skills/ai-dlc/SKILL.md`; a distribution tree with that file removed or dangling also reads `consumer`, so the removed guard's condition was unreachable in both layouts. The distribution tree reads CLEAN with 3 population files.
+
+Step: n/a
+
+Provenance: batch 264, cluster J (owner ai-dlc-1c).
+
+verify: manual
+
+## BL-1220 — BL-583's live entry cites a CHANGELOG line number, so the next release that edits it fails CITE1, and BL-1189 cites a docs file by bare name
+
+**DEFECT.** Filed 2026-11-22 (batch 264, cluster J). Owner: `docs/backlog.md` (the two citing lines); the arm is `scripts/validate-backlog-receipts.sh` (`cite_arm`, CITE1), unchanged.
+
+Goal: no live entry carries a citation CITE1 would fail the moment its entry is edited. One done condition: with every live entry forced into CITE1's population, no live entry yields CITE-MOVING-LINE, and every bare docs basename on a live evidence line is a full path with its phrase.
+
+Premise, measured on the combined tree (cluster G's arm over the 0.1224.0 base): with every entry of both ledgers forced into the population the arm reads 167 findings, 3 of them CITE-MOVING-LINE. Exactly one is in the live ledger, BL-583's work-list item 6 (a citation of CHANGELOG line 27185 on a line that quotes a PARTIAL stamp inside a pointer, which makes it an evidence line); the other two are archived (BL-725, BL-912) and fire only if those entries are edited. BL-583's other `CHANGELOG.md:N` citations (four, on lines that are not evidence lines) are not judged. Bare docs basenames: BL-1189's `pipeline-efficiency-s323-opportunities-b261.md:2157` is the only one on a live evidence line that exists under docs/ (BL-911 and BL-845 name untracked session artifacts, correctly CITE-NO-FILE). A basename lookup under docs/ would mis-resolve: 1104 tracked files, 59 basenames carry more than one directory, README.md 25.
+
+Decision: re-cite, no new mechanism. The arm's basename lookup stays core/ and scripts/ only.
+
+Work list:
+
+1. BL-583's `CHANGELOG.md:27185` becomes the phrase-only form `CHANGELOG.md "relabelled heading came back EMPTY"`, which resolves wherever the phrase stands and does not move when CHANGELOG is prepended.
+2. BL-1189's bare name becomes `docs/analysis/pipeline-efficiency-s323-opportunities-b261.md:2179 "the count derivations (914/915/929)"`; the old line 2157 never held those counts.
+3. Prove it by a probe and a mutant on the shipping validator: touch both lines; the tip yields neither finding, restoring either old citation yields it.
+
+Step: n/a
+
+Provenance: batch 264, cluster J (owner ai-dlc-1c); the two unfolded tip-adversary DEFECTs of cluster G's release (BL-1217).
+
+**LANDED (v0.1230.0).** batch 264, cluster J. Two citations in `docs/backlog.md` are re-cited; no script changes.
+
+Failure caught: with both lines touched, the base tree fails the push on BL-583 (scripts/validate-backlog-receipts.sh:1907 "CITE-MOVING-LINE") and on BL-1189 (scripts/validate-backlog-receipts.sh:1908 "CITE-NO-FILE"), the next release that edited either entry would have been refused for a citation it did not add; the tip yields neither.
+
+Outcome: no graph pipeline step; no cost change, since no script is edited. Forced-population CITE1 findings in the live ledger drop by 2 (CITE-MOVING-LINE 1 to 0, CITE-NO-FILE on a docs file 1 to 0).
+
+verify: manual

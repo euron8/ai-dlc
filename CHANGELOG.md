@@ -19,6 +19,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1230.0] - 2026-11-22
+
+### The update skill's subcommand list names cut-from, and two backlog citations are re-cited (BL-1219, BL-1220)
+
+- The update skill's list of `pull.sh` subcommands now names `cut-from`, so it lists all ten subcommands the driver accepts; and the skill-argument check in the rule-file audit loses an error exit nothing could reach (in a consumer install the check does not run, and in the distribution its file list always holds the main skill file) (BL-1219). For ai-dlc maintainers: two backlog citations that the citation check added in 0.1226.0 would have refused on their entries' next edit are re-cited: BL-583 cited a CHANGELOG line number, which moves every release, and now cites the CHANGELOG by phrase; BL-1189 cited an analysis report by bare name at a line that never held the quoted counts, and now names the full path and the line that does. The check itself is unchanged, because 70 file names under docs/ appear in more than one directory, so resolving bare names there would pick the wrong file (BL-1220).
+
 ## [0.1229.0] - 2026-11-22
 
 ### The context-mode file guard follows context-mode 2.x's tool names, subagent and stall-block Reads chunk at 16 KB, and a carry-over restart is judged at its opening pass (BL-911 closed, BL-1214 closed, BL-1212, BL-1175, BL-812, BL-1189, BL-846, BL-1187, BL-1207, BL-1174)
