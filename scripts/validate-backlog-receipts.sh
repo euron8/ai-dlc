@@ -1478,6 +1478,15 @@ EFF_BUCKETS="$(awk '/^GROUPS = \[/ { g = 1; next } g && /^\]/ { exit } g' "$EFF_
 eff_step_ok() {
   [ "$1" = 1 ]
 }
+# THE CITATION GRAMMAR, ONE SOURCE (BL-1217). eff_cite_ok's extraction below and the CITE1 arm
+# (cite_arm) both read these two strings and nothing else. LOC is a location: a path of two or more
+# `/`-joined segments (any extension or none, `.githooks/pre-push:N` included), or a bare basename
+# carrying one of the listed extensions, then `:N` or `:N-M`. TAIL is the phrase bound to it: an
+# optional closing backtick, then ONLY blanks, then a double-quoted phrase. A quote after any other
+# text is not that location's phrase (BL-976's `lib.sh:2622` (two `. "$1"` binds none). No interval
+# braces: awk reads both as dynamic regexes.
+CITE_LOC_ERE='([A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+|[A-Za-z0-9_-][A-Za-z0-9_.-]*[.](md|sh|py|tsv|json|yml|yaml|awk)):[0-9]+(-[0-9]+)?'
+CITE_TAIL_ERE='`?[ ]*"[^"]+"'
 # eff_cite_ok <outcome-text> <root> [live|archive] -- 0 iff some `path:line "phrase"` citation's
 # phrase QUALIFIES; else 2 if some phrase resolved (hit a line of a file under <root>), else 1.
 # THE VALUE CITATION (b255 F2b item (d); BL-817). LIVE: a phrase qualifies iff it is non-empty, hits
@@ -1519,7 +1528,7 @@ eff_cite_ok() {
       4) _res=2 ;;
     esac
   done <<EOF
-$(grep -oE '[A-Za-z0-9_./-]+\.(md|sh|py):[0-9]+[^"]{0,16}"[^"]+"' <<<"$1")
+$(grep -oE "${CITE_LOC_ERE}${CITE_TAIL_ERE}" <<<"$1")
 EOF
   return "$_res"
 }
@@ -1746,8 +1755,181 @@ eff_added_labels() { # eff_added_labels <ledger> <root> <out-file> [<step-base-n
     && awk -F'\t' 'NR == FNR { s[$1] = $9; next } !($1 in s) || s[$1] == "-" || s[$1] != $9 { print $1 }' "$_sb" "$3.tent" > "$3.stepchg" \
     && awk -F'\t' 'NR == FNR { s[$1] = $17; next } !($1 in s) || s[$1] != $17 { print $1 }' "$3.bent" "$3.tent" > "$3.mvchg" \
     || { echo "$(me): FAIL -- could not derive the entries added since merge-base ${_base}; refusing rather than judging the filing shape against an empty set." >&2; rm -f "$3" "$3.stepchg" "$3.mvchg"; return 2; }
+  # CITE1 reads the base and the ledger's root-relative path from here (and the base ledger from
+  # $3.blob): the one merge-base derivation, carried out of this subshell by file.
+  printf '%s %s\n' "$_base" "$_rel" > "$3.base"
   echo "against merge-base ${_base}"
 }
+# ===========================================================================
+# CITE1 -- A CLOSED ENTRY'S EVIDENCE CITATION NAMES WHAT ITS LINE HOLDS (BL-1217).
+# POPULATION: the entries, by BL id, whose body (blank lines dropped) in docs/backlog.md plus
+# docs/backlog.archive.md differs from that id's body in the same two files at the merge-base of HEAD
+# with origin/main, or that are absent there. A pure move (rotation of an unchanged body) is not in it;
+# a rotation that also stamps the LANDED version is. EVIDENCE LINES: a line of such an entry carrying
+# `**LANDED (v`, `**PARTIAL (v`, `Failure caught:` or `Outcome measured:`, plus the rest of an
+# `Outcome measured:` paragraph to the next blank line; never a `verify:` line. Citations are read with
+# CITE_LOC_ERE / CITE_TAIL_ERE above, the grammar eff_cite_ok shares.
+# THE RULES (each an ERROR: the push fails):
+#   CITE-MOVING-LINE   (A) `CHANGELOG.md:N` or `docs/backlog.md:N`, with or without a phrase: both files
+#                      move every release. The accepted form is `<file> "phrase"` with no :N, which
+#                      resolves iff the phrase, whitespace collapsed, is on some line of the file (for
+#                      docs/backlog.md: of it plus the archive) OUTSIDE every `"..."` span on that line,
+#                      so a citation cannot satisfy itself, nor can a second citing line.
+#   CITE-PHRASE-ABSENT (A) such a phrase-only citation that does not resolve.
+#   CITE-STALE-LINE    (B) any other tracked file, docs/backlog.archive.md included (append-only, so
+#                      its :N holds), with a phrase: the phrase, whitespace collapsed, must be in line N
+#                      (in lines N..M joined, for a range). The row prints what line N holds and where
+#                      the phrase is.
+#   CITE-NO-PHRASE     (C) a citation with no phrase to a tracked file, on a line NEW in its entry: a
+#                      line whose text is not in that BL id's body at the merge-base, both files joined.
+#                      Old bare lines are never forced, so a restamp-plus-rotate judges only the stamp.
+#   CITE-NO-FILE       a path that resolves to no tracked file: a bare basename resolves to the root file
+#                      of that name, else to the unique tracked file of that name under core/ or scripts/
+#                      (ambiguous or none: no file). Judged per entry when it carries a phrase, per new
+#                      line when bare.
+# CONSUMER PREFIXES, NOT JUDGED (a stated LIMIT: those trees are not here): scripts/ai-dlc/,
+# scripts/ai-dlc-local/, .claude/, _bmad-output/.
+# FALSE-POSITIVE STORY, how the set reached its value: replayed over the 40 first-parent commits that
+# touched either ledger up to ba8565a96, each judged against its parent as merge-base. Three narrowings
+# got it there. (1) The archive is append-only (backlog-rotate.sh appends; one known loss, 2 lines in
+# 5e13908d8), so `docs/backlog.archive.md:N` is judged by content (B), not refused as moving (A): BL-583's
+# and BL-912's archive citations pass. (2) The phrase binds only across an optional backtick and blanks:
+# `path:N` "phrase" (20 in the ledgers) binds, while BL-976's `lib.sh:2622` (two `. "$1"` captured a
+# phrase under the old `[^"]{0,16}` grammar and binds none now. (3) Scope is per ENTRY for A and B (a
+# per-line scope lost every real stale citation: they sit on lines carried unchanged into the closing
+# release) and per LINE for C (so old bare consumer-path lines are never forced). The replay's hits are
+# enumerated in BL-1217; the historical stale citations (BL-810's four, BL-1141; BL-1217 lists the rest) stay
+# as they are and fire only if their entries are edited: whoever edits an entry inherits its citations.
+# LIMITS: a consumer-prefix path is not judged; a phrase-only citation into a file other than the two
+# moving ones is not a citation; the phrase is matched as text, so a stale VALUE on the right line passes.
+# EXPECTED FIRING (not a false positive): a rebase onto a main where a peer edited a cited file can make
+# a closing entry's citation stale in the pushed tree; re-cite.
+# RUNS in the live-ledger invocations only (the default one pre-push makes at its "backlog receipts"
+# step, and --efficiency-only), never under --archive, and not on a re-entered run.
+# COST: fixed, never per citation or per entry: one `git show` (the base archive), one `git ls-files`,
+# one awk that reads both ledgers at both trees and each cited file once. Nothing when no merge-base
+# was evaluated (the OK line says why).
+# cite_arm <ledger> <root> <added-file> -> `FAIL: CITE1` rows then `CITE1-COUNTS <entries> <citations>
+# <consumer> <findings>`; rc 2 on a refusal (a base or listing read failed).
+cite_arm() {
+  local _b _rel _arel _ta
+  read -r _b _rel < "$3.base" || return 2
+  [ -n "$_b" ] && [ -n "$_rel" ] || return 2
+  _arel="${_rel%.md}.archive.md"; _ta="${1%.md}.archive.md"
+  [ -f "$_ta" ] || _ta=/dev/null
+  if ! git -C "$2" show "${_b}:${_arel}" > "$WORK/cite.barch" 2>/dev/null; then
+    # Absent at the base is an empty archive; any other failure refuses (never an empty set).
+    git -C "$2" cat-file -e "${_b}:${_arel}" 2>/dev/null && return 2
+    : > "$WORK/cite.barch"
+  fi
+  git -C "$2" ls-files > "$WORK/cite.files" || return 2
+  { ledger_entry_awk; backlog_entry_label_awk; printf '%s\n' "$CITE_PROG"; } > "$WORK/cite.awk" || return 2
+  CITE_LOC="$CITE_LOC_ERE" CITE_TAIL="$CITE_TAIL_ERE" CITE_ROOT="$2" CITE_LREL="$_rel" CITE_AREL="$_arel" \
+  CITE_FL="$WORK/cite.files" CITE_BL="$3.blob" CITE_BA="$WORK/cite.barch" CITE_TL="$1" CITE_TA="$_ta" \
+  CITE_CONS="scripts/ai-dlc/ scripts/ai-dlc-local/ .claude/ _bmad-output/" \
+    awk -f "$WORK/cite.awk" "$WORK/cite.files" "$3.blob" "$WORK/cite.barch" "$1" "$_ta"
+}
+# The program, a printf literal (no apostrophe may appear in it).
+CITE_PROG='
+function cws(s) { gsub(/[ \t]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
+function cdq(s) { gsub(/"[^"]*"/, " ", s); return s }
+function cres(p,   i, n, c) {
+  if (p in FL) return p
+  if (index(p, "/")) {
+    n = split(ENVIRON["CITE_CONS"], c, " ")
+    for (i = 1; i <= n; i++) if (index(p, c[i]) == 1) return "@CONS@"
+    return "@NOFILE@"
+  }
+  if ((p in BN) && BN[p] != "@AMBIG@") return BN[p]
+  return "@NOFILE@"
+}
+function cfind(code, i, detail) {
+  nf++
+  printf "FAIL: CITE1\t%s\t%s\t%s:%d\t%s\n", code, EL[i], EF[i], EN[i], detail
+}
+function cq(kind, i, f, n, m, ph) {
+  nq++; QK[nq] = kind; QI[nq] = i; QF[nq] = f; QN[nq] = n; QM[nq] = m; QP[nq] = cws(ph)
+  NEED[f] = NEED[f] " " nq
+}
+function cscan(path, f, ids,   x, rc, k, n, j, q, d) {
+  n = split(ids, j, " "); k = 0
+  while ((rc = (getline x < path)) > 0) {
+    k++; d = ""
+    for (q = 1; q <= n; q++) {
+      if (QK[j[q]] == "A") { if (d == "") d = cws(cdq(x)); if (index(d, QP[j[q]])) QH[j[q]] = 1; continue }
+      if (k >= QN[j[q]] && k <= QM[j[q]]) { QJ[j[q]] = QJ[j[q]] " " x; if (k == QN[j[q]]) QL[j[q]] = x }
+      if (index(cws(x), QP[j[q]]) && QW[j[q]] !~ /[.][.][.]$/) QW[j[q]] = QW[j[q]] (split(QW[j[q]], d2, " ") < 5 ? " " k : " ...")
+    }
+  }
+  close(path)
+  for (q = 1; q <= n; q++) { if (rc < 0) QRC[j[q]] = -1; QC[j[q]] += k }
+}
+BEGIN {
+  LOC = ENVIRON["CITE_LOC"]; TAIL = "^" ENVIRON["CITE_TAIL"]
+  MOV = "(^|[^A-Za-z0-9_./-])(CHANGELOG[.]md|docs/backlog[.]md)" ENVIRON["CITE_TAIL"]
+  TL = ENVIRON["CITE_TL"]; TA = ENVIRON["CITE_TA"]; BLF = ENVIRON["CITE_BL"]; BAF = ENVIRON["CITE_BA"]
+  FLF = ENVIRON["CITE_FL"]; LREL = ENVIRON["CITE_LREL"]; AREL = ENVIRON["CITE_AREL"]; ROOT = ENVIRON["CITE_ROOT"]
+}
+FILENAME == FLF {
+  FL[$0] = 1
+  if ($0 ~ /^(core|scripts)\//) { b = $0; sub(/^.*\//, "", b); BN[b] = (b in BN) ? "@AMBIG@" : $0 }
+  next
+}
+FNR == 1 { cur = ""; inoc = 0 }
+{
+  lbl = backlog_entry_label($0)
+  if (lbl != "") { cur = lbl; inoc = 0 }
+  else if (cur != "" && ledger_entry_shape($0) == "heading" && $0 ~ /^##[ \t]/) { cur = ""; next }
+  if (cur == "") next
+  isb = (FILENAME == BLF || FILENAME == BAF)
+  if ($0 !~ /^[ \t]*$/) { if (isb) { BB[cur] = BB[cur] "\n" $0; BLN[cur SUBSEP $0] = 1 } else TB[cur] = TB[cur] "\n" $0 }
+  if (isb) next
+  if (inoc && $0 ~ /^[ \t]*$/) inoc = 0
+  ev = inoc
+  if ($0 ~ /\*\*(LANDED|PARTIAL) \(v/ || index($0, "Failure caught:")) ev = 1
+  if (index($0, "Outcome measured:")) { ev = 1; inoc = 1 }
+  if (ev && $0 !~ /^[ \t]*verify:/) { ne++; EL[ne] = cur; ET[ne] = $0; EN[ne] = FNR; EF[ne] = (FILENAME == TL ? LREL : AREL) }
+}
+END {
+  for (l in TB) if (!(l in BB) || TB[l] != BB[l]) { POP[l] = 1; np++ }
+  for (i = 1; i <= ne; i++) {
+    if (!(EL[i] in POP)) continue
+    t = ET[i]; nw = !((EL[i] SUBSEP t) in BLN); s = t
+    while (match(s, LOC)) {
+      tok = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH); ph = ""
+      if (match(s, TAIL)) { ph = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH); sub(/^[^"]*"/, "", ph); sub(/"$/, "", ph) }
+      nc++
+      p = tok; sub(/:[0-9][0-9-]*$/, "", p)
+      nm = substr(tok, length(p) + 2); n = nm + 0; m = n
+      if (index(nm, "-")) m = substr(nm, index(nm, "-") + 1) + 0
+      r = cres(p)
+      if (r == "@CONS@") { ncons++; continue }
+      if (r == "CHANGELOG.md" || r == LREL) { cfind("CITE-MOVING-LINE", i, r ":" nm " is a line number into a file that moves every release"); continue }
+      if (r == "@NOFILE@") { if (ph != "" || nw) cfind("CITE-NO-FILE", i, p " resolves to no tracked file" (index(p, "/") ? "" : " (a bare name resolves at the root or to a unique file under core/ or scripts/)")); continue }
+      if (ph == "") { if (nw) cfind("CITE-NO-PHRASE", i, r ":" nm " names no phrase"); continue }
+      if (r == AREL && EF[i] == AREL && EN[i] >= n && EN[i] <= m) { cfind("CITE-STALE-LINE", i, r ":" nm " is the citing line itself"); continue }
+      cq("B", i, r, n, m, ph)
+    }
+    s = t
+    while (match(s, MOV)) {
+      q = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+      ph = q; sub(/^[^"]*"/, "", ph); sub(/"$/, "", ph)
+      nc++; cq("A", i, (index(q, "CHANGELOG.md") ? "CHANGELOG.md" : LREL), 0, 0, ph)
+    }
+  }
+  for (f in NEED) {
+    if (f == LREL) { cscan(TL, f, NEED[f]); if (TA != "/dev/null") cscan(TA, f, NEED[f]) }
+    else cscan(ROOT "/" f, f, NEED[f])
+  }
+  for (q = 1; q <= nq; q++) {
+    i = QI[q]
+    if (QRC[q] < 0) { cfind("CITE-NO-FILE", i, QF[q] " could not be read"); continue }
+    if (QK[q] == "A") { if (!QH[q]) cfind("CITE-PHRASE-ABSENT", i, QF[q] " \"" QP[q] "\" is on no line of " QF[q] (QF[q] == LREL ? " or its archive" : "") " outside a quoted span"); continue }
+    if (QN[q] > QC[q]) { cfind("CITE-STALE-LINE", i, QF[q] ":" QN[q] " is past the end of the file (" QC[q] " lines); the phrase is at line(s)" (QW[q] == "" ? " none" : QW[q])); continue }
+    if (!index(cws(QJ[q]), QP[q])) cfind("CITE-STALE-LINE", i, QF[q] ":" QN[q] (QM[q] > QN[q] ? "-" QM[q] : "") " holds \"" substr(cws(QL[q]), 1, 90) "\"; the phrase \"" QP[q] "\" is at line(s)" (QW[q] == "" ? " none" : QW[q]))
+  }
+  printf "CITE1-COUNTS %d %d %d %d\n", np, nc, ncons, nf
+}'
 }
 
 vbr_sec_eff() {
@@ -1761,6 +1943,26 @@ else
   EFF_SCOPE="$(eff_added_labels "$LEDGER" "$SUBJECT_ROOT" "$WORK/eff.added" "$EFF_XNAME")" || exit 2
 fi
 [ -f "$WORK/eff.added" ] && EFF_ADDED="$WORK/eff.added"
+# CITE1 (see cite_arm): the live-ledger invocations only, never a re-entered run.
+CITE_ROWS=""; CITE_NF=0
+if [ "${EFF_MODE:-live}" = live ] && [ -z "$RE_ENTRY" ]; then
+  if [ -f "$WORK/eff.added.base" ]; then
+    CITE_OUT="$(cite_arm "$LEDGER" "$SUBJECT_ROOT" "$WORK/eff.added")" \
+      || { echo "$(me): FAIL -- CITE1 could not read the merge-base archive, the file listing or a ledger; refusing rather than judging citations against an empty set." >&2; exit 2; }
+    case "$CITE_OUT" in *"CITE1-COUNTS "*) ;; *) echo "$(me): FAIL -- CITE1 printed no counts line; refusing." >&2; exit 2 ;; esac
+    CITE_ROWS="${CITE_OUT%CITE1-COUNTS *}"
+    read -r CITE_POP CITE_NC CITE_CONS CITE_NF <<<"${CITE_OUT##*CITE1-COUNTS }"
+    echo "CITE1-POPULATION: ${CITE_POP} entr(ies) changed since the merge-base (${EFF_SCOPE}) across ${LEDGER##*/} and its archive, ${CITE_NC} citation(s) on their evidence lines, ${CITE_CONS} in a consumer path not judged, ${CITE_NF} finding(s)."
+  else
+    echo "CITE1-POPULATION: ${EFF_SCOPE}"
+  fi
+fi
+cite_report() { # prints the CITE1 failure on stderr; returns 1 when there is one
+  [ "${CITE_NF:-0}" -gt 0 ] || return 0
+  printf '%s' "$CITE_ROWS" >&2
+  echo "FAIL: CITE1: $CITE_NF evidence citation(s) in entries changed since the merge-base with origin/main (rows above: code, entry, citing line, detail). A LANDED, PARTIAL, Failure caught: or Outcome measured: line cites \`path:N \"phrase\"\` (or \`path:N-M \"phrase\"\`) and the phrase must be on line N of that tracked file. CITE-MOVING-LINE: CHANGELOG.md and docs/backlog.md move every release, so cite them as \`CHANGELOG.md \"phrase\"\` or \`docs/backlog.md \"phrase\"\` with no :N; that form resolves only where the phrase stands outside a quoted span (CITE-PHRASE-ABSENT otherwise). CITE-STALE-LINE: re-cite the line the phrase is on (the row names it) -- including after a rebase onto a main that edited the cited file. CITE-NO-PHRASE: a new citation carries the phrase it points at. CITE-NO-FILE: name a tracked path (a bare basename only when unique under core/ or scripts/); consumer paths under scripts/ai-dlc/, scripts/ai-dlc-local/, .claude/ and _bmad-output/ are not judged. Whoever edits an entry inherits its stale citations: BL-810 and BL-1141 carry known ones in the archive (BL-1217 lists the rest), so an edit to them re-cites those lines in the same change." >&2
+  return 1
+}
 EFF_OUT="$(eff_corpus "$LEDGER" "$SUBJECT_ROOT" "${EFF_MODE:-live}" "$EFF_ADDED")"
 read -r EFF_ENT EFF_POP EFF_NS EFF_FADD EFF_ALIVE < "$WORK/eff.counts"
 # NOTE (b): STEP-AT-CLOSE is evaluated only where the merge-base step set was derived; say so on the
@@ -1779,7 +1981,9 @@ eff_report() {
   return 1
 }
 if [ -n "$EFF_MODE" ]; then
+  _cite_rc=0; cite_report || _cite_rc=1
   eff_report || exit 1
+  [ "$_cite_rc" -eq 0 ] || exit 1
   echo "OK: validate-backlog-receipts --$([ "$EFF_MODE" = archive ] && echo archive || echo efficiency-only) -- ${EFF_ENT} entries in ${LEDGER}, ${EFF_POP} in the efficiency close population, every one carrying a valid outcome line (${EFF_NS} on the no-graph-pipeline-step branch; ${EFF_SAC})${EFF_ASCOPE}; filing shape: ${EFF_FADD} added entr(y/ies) judged, ${EFF_FSCOPE}."
   exit 0
 fi
@@ -3764,6 +3968,7 @@ r9_run; _r9_rc=$?
 [ "$_r9_rc" -eq 2 ] && exit 2
 [ "$_r9_rc" -eq 0 ] || RC=1
 eff_report || RC=1
+cite_report || RC=1
 r13_corpus || RC=1
 [ "$RC" -ne 0 ] && exit 1
 
