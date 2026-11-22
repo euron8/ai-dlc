@@ -282,6 +282,49 @@ else
   printf '%s\n' "$out6" | sed 's/^/        /' | head -5
 fi
 
+# --- A FINISH OVER A TREE AN EARLIER APPLY ALREADY STAMPED (finish-base-unverified; the post-stamp staging remedy) --
+# Assertion 3 left CONSUMER stamped at THEIRS with no marker: the state an earlier apply (or finish) leaves. A
+# --finish naming BASE there cannot verify anything, and re-running it with the stamp's own commit as base (THEIRS)
+# makes every range empty. FC1 needs the row to say so; FC2 and FC3 are its twins, each one property apart (the stamp
+# is not THEIRS / the marker is present), and keep the re-run remedy. FE1 drives a staging refusal that runs AFTER
+# write_stamp under --finish, where no marker is left, and needs it NOT to send the reader to a --finish re-run.
+fc_row() { awk -F'\t' '$1=="WORKLIST" && $2=="finish-base-unverified"' <<<"$1"; }
+FC1_O="$(AP_S="$APPLY" ap_eng --finish "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
+FC1_R="$(fc_row "$FC1_O")"
+if [ "$(grep -c . <<<"$FC1_R")" = 1 ] && grep -qF 'there is nothing left to verify' <<<"$FC1_R" && grep -qF 'Deliver' <<<"$FC1_R" \
+   && ! grep -qF "Re-run with the stamp's own" <<<"$FC1_R"; then
+  ok "FC1 stamp == THEIRS and no marker: finish-base-unverified says nothing is left to verify and to deliver, and prescribes no re-run"
+else
+  bad "FC1 stamp == THEIRS, no marker: the finish-base-unverified row is wrong: $(cut -c1-500 <<<"$FC1_R")"
+fi
+FC2_C="$WORK/fc2"; FC2_T="$(gitc commit-tree "${THEIRS}^{tree}" -p "$THEIRS" -m other)"
+rm -rf "$FC2_C"; cp -R "$CONSUMER" "$FC2_C" && printf 'version: 2.0.0\ncommit: %s\n' "$FC2_T" > "$FC2_C/.claude/.ai-dlc-version"
+FC2_R="$(fc_row "$(AP_S="$APPLY" ap_eng --finish "$DIST" "$BASE" "$FC2_C" "$THEIRS" 2>&1)")"
+if [ -n "$FC2_T" ] && [ "$(grep -c . <<<"$FC2_R")" = 1 ] && grep -qF "Re-run with the stamp's own" <<<"$FC2_R" && ! grep -qF 'nothing left to verify' <<<"$FC2_R"; then
+  ok "FC2 stamp != THEIRS: finish-base-unverified keeps the re-run remedy"
+else
+  bad "FC2 stamp != THEIRS (commit '$FC2_T'): the row lost the re-run remedy or gained the deliver text: $(cut -c1-500 <<<"$FC2_R")"
+fi
+FC3_C="$WORK/fc3"; rm -rf "$FC3_C"; cp -R "$CONSUMER" "$FC3_C" && printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$FC3_C/.claude/.ai-dlc-applying"
+FC3_R="$(fc_row "$(AP_S="$APPLY" ap_eng --finish "$DIST" "$BASE" "$FC3_C" "$THEIRS" 2>&1)")"
+if [ "$(grep -c . <<<"$FC3_R")" = 1 ] && grep -qF "Re-run with the stamp's own" <<<"$FC3_R" && ! grep -qF 'nothing left to verify' <<<"$FC3_R"; then
+  ok "FC3 stamp == THEIRS but the marker is present: finish-base-unverified keeps the re-run remedy"
+else
+  bad "FC3 stamp == THEIRS with the marker present: the row lost the re-run remedy or gained the deliver text: $(cut -c1-500 <<<"$FC3_R")"
+fi
+FE_C="$WORK/fe"; rm -rf "$FE_C"; cp -R "$CONSUMER" "$FE_C" && mkdir -p "$FE_C/.claude/schemas" "$FE_C/scripts/ai-dlc" \
+  && printf '#!/usr/bin/env bash\nexit 0\n' > "$FE_C/scripts/ai-dlc/sync-transient-ignore.sh" \
+  && printf '{"paths":[{"transient":true,"ignore":"scratch-x/"}]}\n' > "$FE_C/.claude/schemas/pipeline-state-paths.json" \
+  && git -C "$FE_C" init -q 2>/dev/null
+FE_O="$(TMPDIR="$WORK/no-such-tmpdir" AP_S="$APPLY" ap_eng --finish "$DIST" "$BASE" "$FE_C" "$THEIRS" 2>&1)"
+printf "%s\n" "$FE_O" > /tmp/fe264.out
+FE_R="$(awk -F'\t' '$2=="staging-refused" && index($4, "transient path patterns")' <<<"$FE_O")"
+if [ ! -e "$FE_C/.claude/.ai-dlc-applying" ] && [ "$(grep -c . <<<"$FE_R")" = 1 ] && grep -qF 'post-write-gates' <<<"$FE_R" && ! grep -qF 're-run --finish' <<<"$FE_R"; then
+  ok "FE1 a staging refusal after the stamp under --finish (no marker) names no --finish re-run"
+else
+  bad "FE1 the post-stamp staging refusal row is wrong or absent: $(cut -c1-500 <<<"$FE_R")"
+fi
+
 # --- THE COMMAND LINE ANSWERS WHAT THE IN-PROCESS RUN ANSWERS (cli-pass, cli-refuse) ------------------
 # One `cli` cell per distinct command-line outcome of apply.sh, each byte-compared (stdout, stderr, exit) with ap_eng on
 # the same input from the same path: a completed apply (rc 0, the stamp advanced) and a usage refusal (rc 2).

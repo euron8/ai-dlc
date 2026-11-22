@@ -1108,13 +1108,20 @@ ap_staging_refused() {
 # tree before this run moved it), so the ordinary run names `reapply_remedy` -- which `say` counts
 # into `reapply_owed`, and the withheld row then names that procedure rather than `--finish`. Under
 # `--finish` nothing was written and re-running it is the exit.
-ap_rerun_remedy="$reapply_remedy"
-[ "$FINISH" = 1 ] && ap_rerun_remedy="re-run --finish."
+# Computed at call time, keyed on the marker: `--finish` is named only while the marker exists. These
+# sites also run after `write_stamp` under --finish, where no marker is left and a re-run of --finish
+# only reaches the stamped-tree withhold.
+ap_rerun_remedy() {
+  if [ "$FINISH" != 1 ]; then printf '%s' "$reapply_remedy"
+  elif [ -e "$APPLYING" ] || [ -L "$APPLYING" ]; then printf '%s' "re-run --finish."
+  else printf '%s' "re-run post-write-gates; this apply already stamped, so no re-stamp is owed."
+  fi
+}
 ap_stage_or_refuse() {
   local _rc=0
   ap_stage "$1" "$2" || _rc=$?
   [ "$_rc" -ne 0 ] || return 0
-  ap_staging_refused "$3" "$4" "$_rc" "$ap_rerun_remedy"
+  ap_staging_refused "$3" "$4" "$_rc" "$(ap_rerun_remedy)"
   [ "$FINISH" = 1 ] || mech_fail=$((mech_fail+1))
   return 1
 }
@@ -1357,7 +1364,7 @@ TP_LINES=""
 TP_JSON_OWED=0
 TP_F_STATE=""
 TP_F_ROWS=""
-tp_remedy_json="Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); p=\$(mktemp); git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$t\"; git -C <dist> show \"${BASE}:templates/settings.json.template\" > \"\$p\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" --prior-template \"\$p\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+tp_remedy_json="Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); p=\$(mktemp); git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$t\"; git -C <dist> show \"${BASE}:templates/settings.json.template\" > \"\$p\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" --prior-template \"\$p\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver)."
 # tp_rec_line <consumer-rel> -> the `template: ` line for the file as it stands now ("-" unreadable).
 tp_rec_line() {
   local _h _m=644
@@ -1627,13 +1634,13 @@ exec_audit() {
     | awk '$1=="100755" || $1=="100644" { m = $1; sub(/^[^\t]*\t/, ""); print m "\t" $0 }')" || _rc=$?
   if [ "$_rc" -eq 0 ] && [ -z "$_ne" ]; then _rc=empty; fi
   if [ "$_rc" != 0 ]; then
-    ap_staging_refused "core/" "the mode listing of \`${THEIRS}:core/\` (git ls-tree)" "$_rc" "$ap_rerun_remedy"
+    ap_staging_refused "core/" "the mode listing of \`${THEIRS}:core/\` (git ls-tree)" "$_rc" "$(ap_rerun_remedy)"
     [ "$FINISH" = 1 ] || mech_fail=$((mech_fail+1))
     return 0
   fi
   _rc=0; ap_stage exec-audit "$_ne" || _rc=$?
   if [ "$_rc" -ne 0 ]; then
-    ap_staging_refused "core/" "the mode listing of \`${THEIRS}:core/\`" "$_rc" "$ap_rerun_remedy"
+    ap_staging_refused "core/" "the mode listing of \`${THEIRS}:core/\`" "$_rc" "$(ap_rerun_remedy)"
     [ "$FINISH" = 1 ] || mech_fail=$((mech_fail+1))
     return 0
   fi
@@ -3490,7 +3497,7 @@ finish_identity() {
 # already stamps nothing; this check has no ref to classify against.
 finish_verify_tree() {
   local _fv_rows _fv_rc _fv_st _fv_path _fv_cons _fv_bucket _fv_sc _fv_bt _fv_st_t _fv_sited _fv_ss_rc _fv_ss_rows
-  local _fv_stamp="$CONSUMER/.claude/.ai-dlc-version" _fv_why=""
+  local _fv_stamp="$CONSUMER/.claude/.ai-dlc-version" _fv_why="" _fv_done=0
   git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" >/dev/null 2>&1 || return 0
   if ! git -C "$DIST" rev-parse -q --verify "${BASE}^{commit}" >/dev/null 2>&1; then
     _fv_why="\`${BASE}\` is not a commit in ${DIST}"
@@ -3507,7 +3514,15 @@ finish_verify_tree() {
       _fv_why="\`${_fv_sc}:core\` (the stamp's commit) or \`${BASE}:core\` does not resolve in ${DIST}"
     elif [ "$_fv_st_t" != "$_fv_bt" ]; then
       _fv_why="the stamp records \`${_fv_sc}\` (\`core/\` tree ${_fv_st_t}), but this command names \`${BASE}\` (\`core/\` tree ${_fv_bt}) as the base"
+      # The stamp's own commit is THEIRS and no marker is left: an earlier apply or finish wrote it, so a
+      # re-run with that commit as base is a typed-as-theirs base, whose empty ranges verify nothing.
+      if [ "$(git -C "$DIST" rev-parse -q --verify "${_fv_sc}^{commit}" 2>/dev/null || true)" = "$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null || true)" ] \
+         && [ ! -e "$APPLYING" ] && [ ! -L "$APPLYING" ]; then _fv_done=1; fi
     fi
+  fi
+  if [ -n "$_fv_why" ] && [ "$_fv_done" = 1 ]; then
+    say WORKLIST finish-base-unverified "${_fv_stamp#"$CONSUMER"/}" "${_fv_why}. The stamp already reads \`${THEIRS}\` and \`${APPLYING##*/}\` is absent, so an earlier apply or finish wrote it and there is nothing left to verify. Deliver: the stamp is already advanced, and a re-run with the stamp's \`commit:\` as \`<base>\` would verify nothing."
+    return 0
   fi
   if [ -n "$_fv_why" ]; then
     say WORKLIST finish-base-unverified "${_fv_stamp#"$CONSUMER"/}" "${_fv_why}. Whether this tree was brought to \`${THEIRS}\` is decided against the base it started from, and that base is not established, so nothing was verified and the stamp is not advanced. Re-run with the stamp's own \`commit:\`${_fv_sc:+ (\`${_fv_sc}\`)} as \`<base>\` -- the restamp-withheld row below echoes the \`<base>\` this command was given, so do not copy its command on this row."
@@ -3780,7 +3795,7 @@ if [ "$FINISH" = 1 ] && [ ! -e "$APPLYING" ] && [ ! -L "$APPLYING" ]; then
   _rs_sc="$(sed -n 's/^commit:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)"
   _rs_tc="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null || true)"
   if [ -n "$_rs_sc" ] && [ -n "$_rs_tc" ] && [ "$(git -C "$DIST" rev-parse -q --verify "${_rs_sc}^{commit}" 2>/dev/null || true)" = "$_rs_tc" ]; then
-    _rs_left="The stamp already reads ${THEIRS} (an earlier apply wrote it) and \`${APPLYING##*/}\` is absent; this run changed neither."
+    _rs_left="The stamp already reads ${THEIRS} (an earlier apply or finish wrote it) and \`${APPLYING##*/}\` is absent; this run changed neither."
   fi
 fi
 if [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; then
@@ -4068,7 +4083,7 @@ for c in cmds:
   [ "$hr_rc2" -eq 0 ] && { ap_stage hr-dangling "$hr_d_list" || hr_rc2=$?; }
   [ "$hr_rc2" -eq 0 ] && { ap_stage hr-names "${hr_names// /$NL_CH}" || hr_rc2=$?; }
   if [ "$hr_rc2" -ne 0 ]; then
-    ap_staging_refused ".claude/settings.json" "the hook-registration validator's name lists" "$hr_rc2" "re-run scripts/ai-dlc/validate-hook-registration.sh by hand, act on what it names, and then ${ap_rerun_remedy}"
+    ap_staging_refused ".claude/settings.json" "the hook-registration validator's name lists" "$hr_rc2" "re-run scripts/ai-dlc/validate-hook-registration.sh by hand, act on what it names, and then $(ap_rerun_remedy)"
     return 0
   fi
   while IFS= read -r _hn; do
@@ -4127,7 +4142,7 @@ for c in cmds:
     # caller that never ran the template scan (the fixture seam) keeps today's row.
     if [ -n "$hr_what" ] && [ "${TP_JSON_OWED:-0}" != 1 ]; then
       say WORKLIST settings-merge ".claude/settings.json" \
-        "${hr_what}Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); p=\$(mktemp); git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$t\"; git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$p\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" --prior-template \"\$p\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery."
+        "${hr_what}Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); p=\$(mktemp); git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$t\"; git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$p\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" --prior-template \"\$p\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver)."
     fi
     if [ -n "$hr_dangle_local" ]; then
       say WORKLIST settings-local-dangling ".claude/settings.local.json" \
@@ -4242,10 +4257,10 @@ if [ -f "$TI_RENDERER" ]; then
     case "$ti_out" in
       *"carries no AI/DLC transient-state block"*)
         say WORKLIST transient-ignore ".gitignore" \
-          "this consumer has NEVER had a transient-state ignore block written. Nothing drifted — the rendered region does not exist, so every path the declaration marks transient is unignored, and a broad \`git add\` commits pipeline scratch state as a tracked file. That is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Write it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it appends its own marker-bounded region and touches nothing else, and names anything already tracked). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')" ;;
+          "this consumer has NEVER had a transient-state ignore block written. Nothing drifted — the rendered region does not exist, so every path the declaration marks transient is unignored, and a broad \`git add\` commits pipeline scratch state as a tracked file. That is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Write it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it appends its own marker-bounded region and touches nothing else, and names anything already tracked). A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')" ;;
       *)
         say WORKLIST transient-ignore ".gitignore" \
-          "the transient-state ignore block no longer matches the declaration this apply just delivered. Every newly-declared transient path is unignored until it is re-rendered, and a broad \`git add\` then commits pipeline scratch state as a tracked file — which is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Re-render it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it rewrites only its own marker-bounded region, and names anything already tracked). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')" ;;
+          "the transient-state ignore block no longer matches the declaration this apply just delivered. Every newly-declared transient path is unignored until it is re-rendered, and a broad \`git add\` then commits pipeline scratch state as a tracked file — which is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Re-render it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it rewrites only its own marker-bounded region, and names anything already tracked). A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')" ;;
     esac
   elif [ "$ti_rc" != "0" ]; then
     say DECISION transient-ignore-unreadable ".gitignore" \
@@ -4333,7 +4348,7 @@ if [ -f "$AD_RENDERER" ]; then
     0|3) : ;;
     1)
       say WORKLIST agent-definitions ".claude/agents/" \
-        "the rendered agent definitions do not match \`aiDlcRoles\` in this consumer's settings. A role with no current definition runs at the session's launch-flag or settings-resolved reasoning effort, not at the one \`aiDlcRoles\` configures for it — the definition's \`effort:\` frontmatter is the only channel that binds the role's own level, and the dispatch guard's prompt sentence measurably does not. Re-render: \`bash scripts/ai-dlc/render-agent-definitions.sh\` (it writes only \`.claude/agents/<role>.md\` for roles \`aiDlcRoles\` declares with a model, removes its own stale projections, and leaves any hand-written definition alone). Detail: $(printf '%s' "$ad_out" | tr '\n' ' ')" ;;
+        "the rendered agent definitions do not match \`aiDlcRoles\` in this consumer's settings. A role with no current definition runs at the session's launch-flag or settings-resolved reasoning effort, not at the one \`aiDlcRoles\` configures for it — the definition's \`effort:\` frontmatter is the only channel that binds the role's own level, and the dispatch guard's prompt sentence measurably does not. Re-render: \`bash scripts/ai-dlc/render-agent-definitions.sh\` (it writes only \`.claude/agents/<role>.md\` for roles \`aiDlcRoles\` declares with a model, removes its own stale projections, and leaves any hand-written definition alone). A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver). Detail: $(printf '%s' "$ad_out" | tr '\n' ' ')" ;;
     *)
       say DECISION agent-definitions-unreadable ".claude/agents/" \
         "the agent-definition check could not run, so whether this consumer's roles bind their configured effort is UNKNOWN — and unknown reads exactly like clean. Detail: $(printf '%s' "$ad_out" | tr '\n' ' ')" ;;
@@ -4433,14 +4448,14 @@ if [ -n "$_merge" ]; then
 fi
 if [ -n "$_stale" ]; then
   say WORKLIST taught-schema "${_stale% }" \
-    "generated taught-schema example(s) are STALE against the schema this apply delivered: ${_stale}— the consumer's pre-push runs the same check and will refuse the push. Only after every semantic-merge and finish-unapplied row is resolved, run \`bash scripts/ai-dlc/sync-taught-schema.sh\` (no arguments; it rewrites only the generated regions), ${_then}."
+    "generated taught-schema example(s) are STALE against the schema this apply delivered: ${_stale}— the consumer's pre-push runs the same check and will refuse the push. Only after every semantic-merge and finish-unapplied row is resolved, run \`bash scripts/ai-dlc/sync-taught-schema.sh\` (no arguments; it rewrites only the generated regions), ${_then}. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver)."
 fi
 if [ -n "$_region" ]; then
   _region="$(printf '%s' "$_region" | tr '\n' ' ')"
   local _stop=""
   [ "${_halt:-0}" -gt 0 ] && _stop=" An unknown profile or an unclosed region STOPS the scan at that file, so files after it were not checked: re-run the check after the fix."
   say WORKLIST taught-schema-region "${_region% }" \
-    "taught-schema example(s) the sync cannot clear: ${_region}— a hand-written example outside a generated region, an unknown profile, or a region never closed. Edit each file as the check's FIX text says (\`bash scripts/ai-dlc/sync-taught-schema.sh --check\` prints it), ${_then}.${_stop}"
+    "taught-schema example(s) the sync cannot clear: ${_region}— a hand-written example outside a generated region, an unknown profile, or a region never closed. Edit each file as the check's FIX text says (\`bash scripts/ai-dlc/sync-taught-schema.sh --check\` prints it), ${_then}. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver).${_stop}"
 fi
 }
 
