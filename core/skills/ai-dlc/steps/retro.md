@@ -959,7 +959,7 @@ loads the retro slice (the checks `gate-validation.md` lists for `retro`).
 
     bash scripts/ai-dlc/gate-run.sh arms --gate retro --sprint <N> --step retro.md --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>
 
-It prints one `GATE-RESULT <check-id> <PASS|FAIL|SKIP|PENDING> examined=<n> evidence=<path:line|reason=<token>> <message>`
+It prints one `GATE-RESULT <check-id> <PASS|FAIL|SKIP|PENDING> examined=<n> evidence=<path:line[,path:line]...|reason=<token>> <message>`
 line per check; items 2-5 and `scripts/ai-dlc/validate-artifact-paths.sh` arrive as `retro-2`, `retro-3`,
 `retro-4`, `retro-5` and `retro-artifact-paths` (these are not the catalog's Checks 2-5), all from one
 `retro-gate.sh` run. A `SKIP` carries `reason=validator-absent` or `reason=examined-nothing` and is never a

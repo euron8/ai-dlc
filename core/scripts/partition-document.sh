@@ -640,7 +640,8 @@ case "${1:-}" in
       # opened while no merged record and no repair record of a pass below M stands in the sprint dir (RESTART_CYCLE
       # moved the dead cycle's passes to the archive; a continuing series holds its predecessor's merged or repair
       # record). Keyed on records only: write-ledger rows never expire, so they mark no cycle boundary. A dead cycle
-      # whose repair records stayed behind reads as a continuation and stays pre-era (SKIP). The producer stamps it.
+      # whose repair records stayed behind reads as a continuation and stays pre-era (SKIP). The producer stamps it; a
+      # restart's .era also carries era-token.sh's restart marker naming M, which arm P1J requires before judging pass M.
       SD_OPEN=1
       if [ "$PASS" -gt 1 ]; then
         SD_K=1
@@ -652,6 +653,7 @@ case "${1:-}" in
         done
       fi
       [ "$SD_OPEN" -eq 0 ] || [ -z "$AI_DLC_ERA_TOKEN" ] || printf '%s\n' "$AI_DLC_ERA_TOKEN" > "$SD_DIR/.era" || refuse "cannot write the era token into $SD_DIR"
+      [ "$SD_OPEN" -eq 0 ] || [ "$PASS" -le 1 ] || [ -z "$AI_DLC_ERA_TOKEN" ] || [ -z "${AI_DLC_ERA_RESTART:-}" ] || printf '%s %s\n' "$AI_DLC_ERA_RESTART" "$PASS" >> "$SD_DIR/.era" || refuse "cannot write the restart marker into $SD_DIR"
     fi
     cd "$SD_DIR" 2>/dev/null || refuse "cannot resolve $SD_DIR"
     pwd -P

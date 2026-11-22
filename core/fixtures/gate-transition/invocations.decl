@@ -1,5 +1,5 @@
 # Measured by two counted runs through core/scripts/hermetic-run.sh (the judge's own J3 output), which agreed.
-841 *
+842 *
 46 core/scripts/gate-transition.sh
 3 core/hooks/ai-dlc-dispatch-guard.sh
 16 core/scripts/gate-run.sh

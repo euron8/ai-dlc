@@ -2,8 +2,9 @@
 #
 # AI/DLC Path Protection Hook
 #
-# Prevents context-mode MCP tools (ctx_execute_file, ctx_batch_execute, ctx_index)
-# from consolidating files that AI/DLC requires to load verbatim.
+# Prevents context-mode MCP tools (ctx_execute with `file`, ctx_execute_file, ctx_batch,
+# ctx_batch_execute, ctx_index) from consolidating files that AI/DLC requires to load
+# verbatim. The dispatch set is CTX_PREFIXES x CTX_TOOLS below.
 #
 # PROTECTED PATHS (see PROTECTED_PATTERNS below):
 # Rule files, schemas, pipeline snapshot, gate log, escalations, setup skill,
@@ -23,16 +24,10 @@
 # INSTALL
 # 1. Place at .claude/hooks/ai-dlc-protect.sh
 # 2. chmod +x .claude/hooks/ai-dlc-protect.sh
-# 3. Ensure .claude/settings.json has:
-#      "hooks": {
-#        "PreToolUse": [{
-#          "matcher": "mcp__plugin_context-mode_context-mode__ctx_execute_file|mcp__plugin_context-mode_context-mode__ctx_batch_execute|mcp__plugin_context-mode_context-mode__ctx_index",
-#          "hooks": [{
-#            "type": "command",
-#            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-protect.sh"
-#          }]
-#        }]
-#      }
+# 3. Register it as the PreToolUse block of templates/settings.json.template whose
+#    command is $CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-protect.sh. Its matcher must
+#    match every CTX_PREFIXES x CTX_TOOLS name; invariant I132 of
+#    scripts/validate-enforcement-map.sh fails the push on one it misses.
 
 set -u
 
@@ -201,15 +196,42 @@ PATH_RE="$(path_alternation)"
 
 FILE_PATHS=""
 
-case "$TOOL_NAME" in
-  mcp__plugin_context-mode_context-mode__ctx_execute_file \
-  | mcp__plugin_context-mode_context-mode__ctx_index)
+# -----------------------------------------------------------------------------
+# Dispatch set, as data. A plugin install exposes mcp__plugin_context-mode_context-mode__<tool>,
+# an `mcp add` install mcp__context-mode__<tool>. context-mode 2.x registers ctx_execute
+# (`file` is read inside its sandbox), ctx_batch and ctx_index; ctx_execute_file and
+# ctx_batch_execute are the 1.x names a consumer may still call. Invariant I132 of
+# scripts/validate-enforcement-map.sh reads these two lines and requires the protect matcher
+# in templates/settings.json.template to match every prefix x tool.
+# -----------------------------------------------------------------------------
+CTX_PREFIXES="mcp__plugin_context-mode_context-mode__ mcp__context-mode__"
+CTX_TOOLS="ctx_execute ctx_execute_file ctx_index ctx_batch ctx_batch_execute"
+
+CTX_TOOL=""
+for _pre in $CTX_PREFIXES; do
+  case "$TOOL_NAME" in
+    "$_pre"*)
+      _t="${TOOL_NAME#"$_pre"}"
+      case " $CTX_TOOLS " in *" $_t "*) CTX_TOOL="$_t" ;; esac
+      ;;
+  esac
+done
+
+case "$CTX_TOOL" in
+  ctx_execute)
+    # `code` is not scanned: a command line naming a path is the batch arm's subject, and
+    # scanning free code denies ordinary pull and reconcile work.
+    FILE_PATHS=$(echo "$INPUT" | jq -r '.tool_input.file // empty')
+    ;;
+  ctx_execute_file | ctx_index)
     # ctx_index also accepts `content:` (bytes already in context — nothing to
     # protect) and a DIRECTORY `path:`, which walks up to maxFiles and indexes
     # each one. The directory arm of is_protected() is what covers that.
     FILE_PATHS=$(echo "$INPUT" | jq -r '.tool_input.path // empty')
     ;;
-  mcp__plugin_context-mode_context-mode__ctx_batch_execute)
+  ctx_batch | ctx_batch_execute)
+    # String elements (ctx_batch) and {label, command} objects (ctx_batch_execute) alike;
+    # `queries` is never scanned.
     FILE_PATHS=$(echo "$INPUT" | jq -r '.tool_input.commands[]? // empty' \
       | grep -oE "$PATH_RE" \
       | sort -u || true)
@@ -360,7 +382,7 @@ OFF_N=0
 OFF_LABELS=""
 OFF_LABN=0
 OFF_TOTAL=0
-if [ "$TOOL_NAME" = "mcp__plugin_context-mode_context-mode__ctx_batch_execute" ] && [ -z "$EXT_BAD" ] && [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
+if { [ "$CTX_TOOL" = ctx_batch ] || [ "$CTX_TOOL" = ctx_batch_execute ]; } && [ -z "$EXT_BAD" ] && [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
   OFF_ROWS=$(echo "$INPUT" | jq -r '
       (.tool_input.commands // []) | if type == "array" then . else [] end
       | to_entries[]

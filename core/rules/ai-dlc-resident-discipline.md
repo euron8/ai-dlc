@@ -23,12 +23,12 @@ POST-COMPACTION resume inside a gate re-reads the `gate-slice.sh` plan narrowed 
 `gate-checkpoint.sh done` (Rule 21), not the whole `gate-validation.md`.
 
 **(c) Offload high-volume observational Bash.** Large read-only output (test runs, gate
-output, `git log`/`diff`/`status`, log scans) MUST go through `ctx_batch_execute` /
+output, `git log`/`diff`/`status`, log scans) MUST go through `ctx_batch` /
 `ctx_execute`. Two hard limits: state-mutating commands (`git` commit/branch/merge, `gh`,
 `chmod`, file writes) MUST use native Bash — a context-mode subprocess discards filesystem
 changes and silently no-ops the mutation; and verbatim-load files (rule, step and role
-files, schemas, snapshot, `gate-log.md`, escalations, story files) MUST NOT be routed
-through `ctx_execute_file` / `ctx_batch_execute` / `ctx_index`, which drop directives.
-`ai-dlc-protect.sh` hard-blocks that set.
+files, schemas, snapshot, `gate-log.md`, escalations, story files) are never read through
+any `ctx_*` tool, which drops directives. `ai-dlc-protect.sh` blocks the file, path and
+batch-command forms only.
 
 Full text and exemptions: `.claude/skills/ai-dlc/SKILL.md`, Rule 23.

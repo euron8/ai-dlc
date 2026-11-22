@@ -25,7 +25,7 @@ After a compaction the snapshot's Pipeline Position carries `sub_step`, the sect
 | `3` | 3. Locked Requirements | re-read the locked-requirements block this step has written so far and finish it |
 | `4` | 4. Authoring Dispatch | join the authoring deliverable named in the snapshot's teammate rows; dispatch only an author that has no row |
 | `5` | 5. Validation Cycle | read the newest pass file of the cycle's adversarial series and continue at the next pass |
-| `6` | 6. Gate Validation and Proceed | run this step's closing gate |
+| `6` | 6. Gate Validation and Proceed | run the `Seam B` auto-handoff evaluation; on CONTINUE, on `feature` run gate validation [planning], and on `carry-over` run no gate here and read `architecture.md`, whose gate validates this step |
 
 ## EXECUTION SEQUENCE
 
@@ -378,10 +378,9 @@ every repair. `_gate-procedures.md` carries the subject case at each of those si
   not repaired; no repair dispatch runs after the series ends.
 - **on convergence:** append a changelog to
   `_bmad-output/planning-artifacts/s<N>/changelog-requirements.md` (`_gate-procedures.md` —
-  "Where a changelog is written"; NOT the artifacts themselves), then proceed to gate
-  validation.
+  "Where a changelog is written"; NOT the artifacts themselves), then proceed to section 6.
 
-**Escalation vocabulary check, the step's last action before the gate.** Run `bash scripts/ai-dlc/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md`; the required result is a `PASS` line and exit 0. A `FAIL` names every escalation header whose status is outside the derived vocabulary, and a dated entry with no status line is one of them: repair each named entry (`escalations.md`) and re-run before the gate, because Check 2's script arm refuses the same file and the gate then fails with no adjudicator running.
+**Escalation vocabulary check, the step's last action before section 6.** Run `bash scripts/ai-dlc/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md`; the required result is a `PASS` line and exit 0. A `FAIL` names every escalation header whose status is outside the derived vocabulary, and a dated entry with no status line is one of them: repair each named entry (`escalations.md`) and re-run before leaving this step, because Check 2's script arm refuses the same file at the next planning gate (this step's on `feature`, the architecture gate on `carry-over`) and that gate then fails with no adjudicator running.
 
 ### 6. Gate Validation and Proceed
 

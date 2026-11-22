@@ -240,7 +240,7 @@ fi
 # Rule 23 is the one rule whose absence causes the event that removes it: ctx_* calls per 1k
 # assistant turns run 8.88 in sessions that never compacted and 0.67 after one, so each
 # compaction makes the next likelier. Prose cannot fix it -- the prose is what is gone.
-if grep -q 'ctx_execute_file' <<<"$CTX" && grep -q 'Rule 23' <<<"$CTX"; then
+if grep -qF 'route it through `ctx_execute` with' <<<"$CTX" && grep -q 'Rule 23' <<<"$CTX"; then
   ok "Rule 23's discipline is carried in the directive, naming a concrete tool"
 else
   bad "Rule 23 has no carrier in the directive; it is past the re-attach cut, so nothing in the lead's context asks it to keep context small — and that is the self-amplifying one"

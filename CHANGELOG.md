@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1229.0] - 2026-11-22
+
+### The context-mode file guard follows context-mode 2.x's tool names, subagent and stall-block Reads chunk at 16 KB, and a carry-over restart is judged at its opening pass (BL-911 closed, BL-1214 closed, BL-1212, BL-1175, BL-812, BL-1189, BL-846, BL-1187, BL-1207, BL-1174)
+
+- For every consumer's lead. `ai-dlc-protect.sh` now guards the verbatim-load files through context-mode 2.x's real tools: `ctx_execute` with `file=`, `ctx_batch` commands, and a server installed under `mcp add` (`mcp__context-mode__<tool>`). Before, a `ctx_execute` call naming a protected file reached no hook. Replayed on graph's 244 context-mode calls of 2026-11-21, the old hook denied 0 and the new one denies exactly the 3 unguarded calls; the other 241 are allowed by both. The settings matcher names all 10 prefix and tool names, and invariant I132 fails the push when it misses one (BL-1214 closed).
+- Ruled survivors of that guard, not owed. A denied batch command re-sent as `ctx_execute` `code` is not scanned: scanning `code` would add 32 denies on graph's 2026-11-21 traffic, and no narrower scan had an empty false-positive set. Every `ctx_execute` call now starts the hook once, one bash start plus about 13 tool execs when allowed, on graph's 230 `ctx_execute` calls that day. A context-mode server added under any other name is uncovered.
+- For every consumer's lead. The remediator brief, a lead-written brief to a rendered agent and the stall block's step-file re-read now tell an agent to read a file over 16 KB in chunks, so context-mode no longer denies them: 45 of graph's 48 denials since 0.1184 had such an instruction behind them. The accepted cost, on graph's 2026-11-21 traffic: about 56 extra Reads and about 220k tokens a day. The 3 denials with no instruction behind them and the whole read of `docs/escalations/pending.md` stay open, so the entry stays open (BL-1212 advances).
+- For ai-dlc maintainers and carry-over sprints. Check 24's P1J now judges a restarted carry-over cycle's opening pass, and the coe sources rule in `join-remediator-shards.sh` follows it, but only when `partition-document.sh --shard-dir` stamped that pass's `.era` with the new `ai-dlc-era-restart: <M>` line; a restart stamped by 0.1199 to 0.1218 still reads SKIP. A repair round refuses a cross finding that a part's findings file also lists, and the era comments name `--shard-dir` as the one `.era` writer (BL-1175 advances).
+- Step prose now matches what runs, and a multi-series gate row names every failing series (BL-812, BL-1189 advance). The efficiency extractor reads a pause as a touch of `pipeline-paused.flag` in command position (BL-1174), and a red read-set skip SLOT KILL prints each part of its pre condition (BL-1207).
+- Records: BL-911 lands on its sprint 323 outcome; BL-846 and BL-1187 advance.
+
 ## [0.1228.0] - 2026-11-22
 
 ### The update PR body relays the NOTE rows that prescribe an act whole, outside the decisions table's budget, and counts every other NOTE kind

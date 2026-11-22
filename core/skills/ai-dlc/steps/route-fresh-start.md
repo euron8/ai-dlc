@@ -258,10 +258,10 @@ introduces new visual surfaces (new UI components, pages, or layout changes).
 This is determined during the stories-test-strategy step, not here.
 
 **Note:** For multi-sprint features (Rule 14), each subsequent sprint
-loops through: `sprint-review-next` → `implementation` → `sprint-review`
-→ `deploy-validate`. The `sprint-review-next` step validates the next
-sprint's stories before implementation begins. This loop is handled by
-`deploy-validate.md`'s post-validation routing, not by the router.
+loops through: `implementation` → `sprint-review` → `deploy-validate`.
+`deploy-validate.md`'s post-validation routing starts the next sprint
+(`deploy-validate-run.sh route next` sets `current_step_file: implementation.md`),
+not the router.
 
 **Note:** For `feature` variant, the requirements step is scoped — it updates
 existing artifacts rather than creating from scratch.
