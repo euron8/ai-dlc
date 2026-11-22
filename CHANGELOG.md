@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1227.0] - 2026-11-22
+
+### The distribution says one thing about which Rule 8 text binds: the SKILL.md stub owns the intensity table, `rule-bodies/rule-8.md` carries a bound copy, and a third copy in any rule body is caught (BL-1213 closed)
+
+- For every consumer. `SKILL.md`'s Rule 8 stub no longer calls `rule-bodies/rule-8.md` the whole binding text: that file carries the binding text except the intensity table, which the stub owns; the table in `rule-8.md` is a copy bound byte-identically by I131, and `rule-8.md`'s opening says to change the table only in the stub. The `READ AND FOLLOW` pointer sentence is unchanged.
+- Invariant I19 now scans `rule-bodies/` as well as `steps/` for a restated intensity minimum, so a third copy pasted into a rule body fails the gate; the widened scan has an empty false-positive set over all rule bodies and adds no process start.
+- I131 now also fails when `rule-bodies/rule-8.md` carries a second intensity table after the first, and I19's header describes both of its alternatives. BL-1124 is closed: its last open item, (e), is dispositioned in `docs/backlog.archive.md` "(e) shard-merge lettered units".
+
 ## [0.1226.0] - 2026-11-22
 
 ### A closed backlog entry's evidence citations are checked against the line they name (BL-1217)

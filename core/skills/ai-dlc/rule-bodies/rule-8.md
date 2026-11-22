@@ -1,6 +1,6 @@
 ### Rule 8 -- Run the validation cycle per declared intensity
 
-This file is the full text of Rule 8 of `SKILL.md`; the stub in that file is the load pointer. It ships with the skill and is audited as rule prose under the same standard as the stub.
+This file is the full text of Rule 8 of `SKILL.md`; the stub in that file is the load pointer. The intensity table below is a copy of the stub's table, which owns it (bound by I131); change the table only in the stub. It ships with the skill and is audited as rule prose under the same standard as the stub.
 
 Validation intensity is declared at route time (see route-fresh-start.md Step 6)
 and recorded in the pipeline snapshot as `validation_intensity`. The
