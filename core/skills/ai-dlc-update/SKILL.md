@@ -296,12 +296,13 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      **The branch a skill branch was cut from is derived one way, here**, and steps 2 and 8
      cite it: it is `<cut-from>` in steps 1 and 8 and `<original-branch>` in step 2, and a
      remembered value is never used. Read it from HEAD's reflog, the record git wrote for
-     the `git checkout -b` that cut the branch: in `git reflog --format=%gs`, take the
-     OLDEST line that begins with `checkout: moving from ` and ends with the fixed string
-     ` to <skill-branch>`, compared as a string and never as a pattern, so the dots in a
-     version cannot match other characters:
-     `git reflog --format=%gs | awk -v s=" to <skill-branch>" 'index($0, "checkout: moving from ") == 1 && length($0) > length(s) && substr($0, length($0) - length(s) + 1) == s' | tail -1`.
-     The text between `checkout: moving from ` and ` to <skill-branch>` is the branch. When
+     the `git checkout -b` that cut the branch: run `reconcile/pull.sh cut-from . <skill-branch>`.
+     It takes the OLDEST `git reflog --format=%gs` line that begins with `checkout: moving from `
+     and ends with the fixed string ` to <skill-branch>`, compared as a string and never as a
+     pattern, so the dots in a version cannot match other characters, and prints the text
+     between the two, which is the branch; it prints nothing, exit 0, when no line matches.
+     A nonzero exit (2 with a usage message, from an engine that predates `cut-from`) is not
+     that case: STOP and name the stale engine. When
      no reflog line matches (the reflog expired or is disabled), step 1's STOPs above name
      the branch and say that its origin is unknown; steps 2 and 8 state their own fallback.
    - **Remote exists but the current branch has no upstream** (never pushed) →

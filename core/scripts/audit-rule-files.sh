@@ -58,6 +58,7 @@ set -euo pipefail
 #   Class 1a  origin tag / origin parenthetical / embedded date    tier 1
 #   Class 1c  the identifier grant rule-authoring.md must carry    tier 1
 #   Class 1d  a role's model named or ranked (distribution only)   tier 1
+#   Class 1e  a skill-argument token in SKILL.md (distribution only) tier 1
 #   Class 1b  incomplete Rule 26(c) triple                         tier 2
 #   Class 2   rule weakness          (Rule 18)                     tier 2
 #   Class 3   complexity accretion   — NOT MECHANIZED, DID-NOT-RUN
@@ -734,6 +735,60 @@ else:
                          "distribution layout; a scan of nothing is not a clean scan.\n")
         sys.exit(2)
     emit("ROLE_MODEL_NAMING", model_hits(_pop), 1, f"  [{len(_pop)} population files]")
+
+# --------------------------------------------------------------- Class 1e
+# A token Claude Code substitutes when a skill is invoked WITH arguments, in text the
+# harness loads as a skill body. `$<digit>` is an argument index (`$0` is the first
+# argument), `$ARGUMENTS` the argument string, and a frontmatter `arguments:` key makes
+# each declared `$<name>` substitutable too. Substitution reaches code spans, so an awk
+# `$0` in a step's command is replaced by the operator's argument and the command
+# silently answers about different input. Tier 1: a hit is literal.
+#
+# POPULATION, DERIVED: the glob `core/skills/*/SKILL.md`, the files install.sh copies
+# to `.claude/skills/*/SKILL.md`. A file the agent later Reads (steps/*.md, reconcile/)
+# is out of population. A backslash-escaped `\$<digit>` fires too: move the command into
+# a script instead. A bare `$NAME` never fires; it is substitutable only under an
+# `arguments:` key, which fires on its own. The measured FP set on this tree is EMPTY.
+#
+# DISTRIBUTION LAYOUT ONLY, for Class 1d's reason: the consumer cannot edit this text.
+print("--- Class 1e: Skill Argument Substitution (tier 1) ---")
+SKILL_ARG_RX = re.compile(r"\$[0-9]|\$ARGUMENTS")
+SKILL_ARG_KEY_RX = re.compile(r"arguments\s*:")
+
+
+def skill_arg_hits(files):
+    hits = []
+    for p in files:
+        ls = lines(p)
+        fm_end = 0
+        if ls and ls[0].strip() == "---":
+            for j in range(1, len(ls)):
+                if ls[j].strip() == "---":
+                    fm_end = j
+                    break
+        for i, raw in enumerate(ls, 1):
+            if 1 < i <= fm_end and SKILL_ARG_KEY_RX.match(raw):
+                hits.append((p, i, f"frontmatter `arguments:` makes `$<name>` substitutable: {raw.strip()[:100]}"))
+            m = SKILL_ARG_RX.search(raw)
+            if m:
+                hits.append((p, i, f"skill-argument token '{m.group(0)}' is substituted at invocation: {raw.strip()[:100]}"))
+    return hits
+
+
+if LAYOUT != "distribution":
+    print("  SKILL_ARG_SUBSTITUTION: N/A  n=[]  (consumer layout: the population is core text the"
+          " consumer cannot edit; the arm runs in the distribution)")
+    print()
+elif MUTANT:
+    emit("SKILL_ARG_SUBSTITUTION", [], 1)
+else:
+    _sk = sorted(glob.glob("core/skills/*/SKILL.md"))
+    if not _sk:
+        sys.stdout.flush()
+        sys.stderr.write("audit-rule-files: FAIL — SKILL_ARG_SUBSTITUTION population "
+                         "core/skills/*/SKILL.md is empty in the distribution layout.\n")
+        sys.exit(2)
+    emit("SKILL_ARG_SUBSTITUTION", skill_arg_hits(_sk), 1, f"  [{len(_sk)} population files]")
 
 # ---------------------------------------------------------------- Class 1
 # Narrative drift: rule text carrying the story of its own origin. Tier 2 — a

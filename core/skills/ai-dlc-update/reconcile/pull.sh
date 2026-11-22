@@ -16,6 +16,7 @@
 #   pull.sh deliver [--whole <path>]... <dist> <base> <consumer> <theirs>
 #   pull.sh record  <dist> <base> <consumer> <theirs> [-- <path>...]
 #   pull.sh pr-body <consumer>
+#   pull.sh cut-from <consumer> <branch>
 #
 # STDOUT, one item per line (every other line a subcommand prints is listed with it below):
 #   RESOLVE dist=<path> base=<sha> theirs=<sha>        resolve, exit 0
@@ -57,6 +58,8 @@
 #   `--whole <path>` (one per path) commits such a path whole, as the worktree holds it, with
 #   `NOTE deliver-dirty-whole <path> ...` in the commit message and the PR body.
 #   Beside an ASK row whose answer cited a short digest: `NOTE ask-short-cite <path> ... <digest>`.
+#   cut-from prints the branch <branch> was cut from (SKILL.md step 1's reflog derivation), or nothing
+#   when no reflog line matches, exit 0; exit 2 on usage; git's own exit (128) when <consumer> is no repository.
 # Exit: 0 done; 2 refused (usage too); 3 pending: an ASK row awaits an operator answer, or a HARD row
 # must be resolved before anything is written, or (finish) a WORKLIST row withholds the stamp (an
 # advisory row does not).
@@ -1125,5 +1128,6 @@ case "$cmd" in
     [ $# -eq 4 ] || { [ $# -ge 6 ] && [ "$5" = -- ]; } || usage
     pl_record "$@" ;;
   pr-body) [ $# -eq 1 ] || usage; pl_pr_body "$@" ;;
+  cut-from) [ $# -eq 2 ] || usage; pl_cut_from "$@" ;;
   *) usage ;;
 esac

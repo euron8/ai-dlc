@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1225.0] - 2026-11-22
+
+### The update skill finds the branch a skill branch was cut from even when invoked with arguments (BL-1216)
+
+- For every consumer running `/ai-dlc-update` with arguments. Step 1 derived that branch with an awk one-liner whose `$0` Claude Code replaces with the first skill argument, so `/ai-dlc-update apply` printed nothing and the step fell back to "origin unknown" as if it had looked. Step 1 now runs `reconcile/pull.sh cut-from . <skill-branch>`, the same derivation `pull.sh deliver` already used; a nonzero exit from it (an engine without the subcommand) is a STOP naming the stale engine, not the no-match fallback.
+- This release edits the update engine and ships alone. The pull that delivers it still runs the consumer's installed step 1, so on that one pull, invoked with arguments on a skill branch, step 1 takes the no-match fallback once.
+- For the distribution: `audit-rule-files.sh` Class 1e (`SKILL_ARG_SUBSTITUTION`, tier 1) fails the push on `$<digit>`, `$ARGUMENTS` or a frontmatter `arguments:` key in any `core/skills/*/SKILL.md`. It prints N/A in a consumer layout.
+
 ## [0.1224.0] - 2026-11-22
 
 ### The vocabulary-index fixture no longer re-runs on edits under `core/` it cannot read (BL-1124 advances)
