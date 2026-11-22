@@ -8,6 +8,7 @@ cmp
 comm
 cp
 cut
+date
 diff
 dirname
 env

@@ -140,6 +140,13 @@ status that stops `apply`); **WARN** reports and never blocks.
   heading is the single-anchor shape and is silent here; only a heading at a level some claimed
   heading also uses is reported, because framing prose is not a failed claim. Remedy: restore the
   anchor to `shadows:`, move the text under a section an anchor does claim, or delete it.
+- **[LC-O17]** WARN — no section an override shadows is a load-pointer stub at the incoming ref: a
+  SKILL.md section whose `READ AND FOLLOW rule-bodies/rule-N.md` sentence names another file as the
+  rule's binding text. The entry replaces the pointer, not the rule, and `readopt-override.sh`
+  refuses `--merge`, `--check` and `--stamp readopt|reaffirm` on it while `shadows:` names the stub;
+  `--stamp retire` stays open. The row names the one remedy: `readopt-override.sh <dist> <theirs> <consumer> <override> --stamp
+  retire`, then file the override's rows upstream as a change to the intensity table of the SKILL.md
+  stub that owns the rule (invariants I19, I131; `rule-bodies/rule-N.md` holds a copy).
 
 ## Authoring routing (§7.1 — enforced)
 

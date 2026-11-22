@@ -28,6 +28,11 @@
 #                                         above is undisposed — so the stamp was NOT advanced and
 #                                         the in-flight marker was NOT cleared. Finish the rows,
 #                                         then re-run with --finish.
+#   (nothing, under --stamp-at-finish)    the pull driver's ordinary run never stamps: with nothing
+#                                         outstanding it writes no stamp field, keeps the marker,
+#                                         prints no restamp row and writes one `STAMP-DEFERRED`
+#                                         line on stderr. `pull.sh finish` (apply.sh --finish with
+#                                         the same <base>) is the one write of the stamp.
 #
 # THE KIND SET IS DERIVED FROM THIS FILE, NEVER HAND-LISTED HERE, AND THAT IS A REPAIR RATHER
 # THAN A STYLE CHOICE. This block used to name three WORKLIST kinds. It was eleven by the time
@@ -53,11 +58,12 @@
 # UPSTREAM-ONLY, but ALREADY-AT-THEIRS-shaped to every detector that compares against the stamp.
 #
 # So the stamp is now withheld while ANY row is outstanding, and `--finish` is the act that
-# advances it once they are disposed. Withholding without a reachable finisher would WEDGE the
+# advances it once they are disposed. Under the pull driver (`--stamp-at-finish`) `--finish` is the
+# only act that advances it, outstanding rows or none. Withholding without a reachable finisher would WEDGE the
 # consumer -- `core/git-hooks/pre-push` refuses the fixture suite while the marker exists -- so
 # the withheld row names the exact command, and the fixture asserts that it does.
 #
-# Usage:  apply.sh [--carried-machinery-slice] <dist> <base> <consumer> <theirs>
+# Usage:  apply.sh [--stamp-at-finish] [--carried-machinery-slice] <dist> <base> <consumer> <theirs>
 #         apply.sh --finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>
 # Exit:   0 = mechanical resolution completed (a residual WORKLIST/DECISION is normal, not failure)
 #         1 = an error while resolving; 2 = usage.
@@ -106,31 +112,43 @@ apl_main() { set -uo pipefail
 # and the exec-bit audit -- and withholds while either is still owed. See finish_reapply_owed(). And
 # it withholds while a file the ordinary run handed back as a semantic merge is still byte-identical
 # to the copy that run recorded in the marker. See finish_classify_unmerged().
+#
+# `--stamp-at-finish` is the pull driver's (reconcile/pull.sh `apply`): the ordinary run never
+# stamps, so the stamp still reads <base> when `pull.sh finish` runs, and the finish's tree check
+# (finish_verify_tree) is decided against the base the pull started from over a non-empty
+# BASE..THEIRS range. It gates the whole re-stamp arm of write_stamp, the skill pair included, and
+# is never combined with --finish. Without it the ordinary run stamps as it always has.
 CARRIED_MACHINERY=0
 FINISH=0
 CLASSIFY_CHECK=0
+STAMP_AT_FINISH=0
 _pos_n=0
 for _a in "$@"; do
   case "$_a" in
     --carried-machinery-slice) CARRIED_MACHINERY=1 ;;
     --finish) FINISH=1 ;;
     --classify-check) CLASSIFY_CHECK=1 ;;
+    --stamp-at-finish) STAMP_AT_FINISH=1 ;;
     --*)
       echo "apply: unknown option: $_a" >&2
-      echo "usage: apply.sh [--finish] [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
+      echo "usage: apply.sh [--finish | --stamp-at-finish] [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
       exit 2 ;;
     *)
       _pos_n=$((_pos_n+1))
       case "$_pos_n" in
         1) _p1="$_a" ;; 2) _p2="$_a" ;; 3) _p3="$_a" ;; 4) _p4="$_a" ;;
         *) echo "apply: too many arguments: $_a" >&2
-           echo "usage: apply.sh [--finish] [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
+           echo "usage: apply.sh [--finish | --stamp-at-finish] [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
            exit 2 ;;
       esac ;;
   esac
 done
+if [ "$STAMP_AT_FINISH" = 1 ] && [ "$FINISH" = 1 ]; then
+  echo "apply: --stamp-at-finish defers the ordinary run's stamp to --finish and is never combined with it" >&2
+  exit 2
+fi
 
-DIST="${_p1:?usage: apply.sh [--carried-machinery-slice] <dist> <base> <consumer> <theirs>}"
+DIST="${_p1:?usage: apply.sh [--stamp-at-finish] [--carried-machinery-slice] <dist> <base> <consumer> <theirs>}"
 BASE="${_p2:?}"
 CONSUMER="${_p3:?}"
 THEIRS="${_p4:?}"
@@ -2033,10 +2051,10 @@ fi
 #
 # INSIDE THE `FINISH=0` SPAN, DELIBERATELY, AND THE SITING IS THE LOAD-BEARING PART. `say`
 # increments `handback` and `worklist_n`, and `--finish` gates its stamp on `worklist_n` alone.
-# A row emitted where the trailing `hook_registration_row` / `transient_ignore_row` /
-# `agent_definitions_row` run would be re-derived by the finisher, on a tree whose layer files the
-# apply never rewrites, before `write_stamp` -- so the stamp would be withheld, `.ai-dlc-applying`
-# would stay, and `core/git-hooks/pre-push` would refuse every push with no exit. The second
+# A row emitted inside write_stamp's finish checks would be re-derived by the finisher, on a tree
+# whose layer files the apply never rewrites, before the stamp -- so the stamp would be withheld,
+# `.ai-dlc-applying` would stay, and `core/git-hooks/pre-push` would refuse every push with no
+# exit. The second
 # disposition SKILL.md offers ("record why reproducing the retired text is still correct") changes
 # nothing this detector reads and `layer-contract.yaml` carries no acknowledgement channel for it,
 # so there is no work that clears such a row. Here the row is a hand-back on the ordinary run and
@@ -2389,7 +2407,7 @@ LD_HARD="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="HARD-OVERRIDE-DRIFT-SECTIO
 ap_stage_or_refuse ld-hard "$LD_HARD" "-" "the layer-drift override-readopt list" \
 && while IFS= read -r ovr; do
   [ -n "$ovr" ] || continue
-  say WORKLIST override-readopt "$ovr" "merge the moved core section into the override body, then readopt-override.sh --stamp readopt"
+  say WORKLIST override-readopt "$ovr" "merge the moved core section into the override body (pull.sh merge), then readopt-override.sh --stamp readopt; when a shadowed section is a load-pointer stub at theirs (OVERRIDE-SHADOWS-POINTER-STUB), the merge and the readopt and reaffirm stamps refuse: take that row's remedy, or --stamp retire"
 done < "$AP_TMP/ld-hard"
 
 # A SUPERSEDED override is RETIRED, not re-adopted. Emitted separately from the readopt
@@ -3755,16 +3773,35 @@ if [ "$FINISH" = 1 ]; then
   [ -z "$finish_id_mismatch" ] && finish_reapply_owed
 fi
 if [ "$FINISH" = 1 ]; then outstanding="$worklist_n"; else outstanding="$handback"; fi
+# What the withheld rows say was left: under --finish on a tree whose stamp already reads <theirs> with
+# no in-flight marker (an earlier apply stamped it), neither the base nor the marker is there to leave.
+_rs_left="Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking."
+if [ "$FINISH" = 1 ] && [ ! -e "$APPLYING" ] && [ ! -L "$APPLYING" ]; then
+  _rs_sc="$(sed -n 's/^commit:[[:space:]]*//p' "$STAMP" 2>/dev/null | head -1)"
+  _rs_tc="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null || true)"
+  if [ -n "$_rs_sc" ] && [ -n "$_rs_tc" ] && [ "$(git -C "$DIST" rev-parse -q --verify "${_rs_sc}^{commit}" 2>/dev/null || true)" = "$_rs_tc" ]; then
+    _rs_left="The stamp already reads ${THEIRS} (an earlier apply wrote it) and \`${APPLYING##*/}\` is absent; this run changed neither."
+  fi
+fi
 if [ "$mech_fail" -gt 0 ] || [ "$outstanding" -gt 0 ]; then
   # A ROW ONLY A FRESH ORDINARY RUN CLEARS IS NOT FINISHED BY `--finish`, SO THE WITHHELD ROW DOES
   # NOT OFFER IT THEN (BL-402). It used to name `--finish` unconditionally, beside a drift row whose
   # own remedy said the finisher would stamp over the unrefiled tree -- and it did. `reapply_owed`
   # is counted in `say`, from the detail text, so this branch cannot miss a row the counter saw.
   if [ "$reapply_owed" -gt 0 ]; then
-  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed, ${reapply_owed} of them a step only a fresh ordinary run performs — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Follow those rows' own remedy (re-render the report, re-approve it, re-run apply with the same four arguments); that run re-stamps when nothing is left. The finish mode is NOT the next step here: it re-checks the rows only a fresh ordinary run clears and withholds while they are undone. It does not re-check a \`scaffold-ignored\` row; take that row's own exit, or the next pull raises it again.${withheld_extra}"
+  _rs_next="that run re-stamps when nothing is left. The finish mode is NOT the next step here: it re-checks the rows only a fresh ordinary run clears and withholds while they are undone."
+  [ "$STAMP_AT_FINISH" = 1 ] && _rs_next="under the pull driver that run never stamps; \`pull.sh finish${finish_flag} <dist> ${BASE} <consumer> ${THEIRS}\` after it does. The finish is NOT the next step before that re-run: it re-checks the rows only a fresh ordinary run clears and withholds while they are undone."
+  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed, ${reapply_owed} of them a step only a fresh ordinary run performs — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. ${_rs_left} Follow those rows' own remedy (re-render the report, re-approve it, re-run apply with the same four arguments); ${_rs_next} It does not re-check a \`scaffold-ignored\` row; take that row's own exit, or the next pull raises it again.${withheld_extra}"
   else
-  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. Left at ${BASE}, and \`${APPLYING##*/}\` is deliberately left in place so the fixture suite keeps blocking. Do the rows above, then advance the stamp with: pull.sh finish${finish_flag} <dist> ${BASE} <consumer> ${THEIRS} (it runs apply.sh --finish)${withheld_extra}"
+  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically and ${outstanding} WORKLIST/DECISION row(s) above are undisposed — the stamp would claim ${THEIRS} while the tree does not yet match it, and the next pull computes its merge base from that stamp. ${_rs_left} Do the rows above, then advance the stamp with: pull.sh finish${finish_flag} <dist> ${BASE} <consumer> ${THEIRS} (it runs apply.sh --finish)${withheld_extra}"
   fi
+elif [ "$STAMP_AT_FINISH" = 1 ] && [ -f "$STAMP" ]; then
+  # THE PULL DRIVER'S ORDINARY RUN NEVER STAMPS. Stamping here made the stamp read <theirs> before
+  # the finish ran, and the finish's tree check (finish_verify_tree, check 2) then passed only on a
+  # <base> typed as <theirs>, whose BASE..THEIRS range is empty: a vacuous pass. Nothing is written
+  # (neither pair), the marker keeps its `theirs:`/classify/template record for the finish, and no
+  # restamp row is printed. The driver prints the next step from the stderr line.
+  printf 'STAMP-DEFERRED\t%s\t%s\n' "$BASE" "$THEIRS" >&2
 elif [ -f "$STAMP" ]; then
   # RESOLVE THEIRS BEFORE WRITING ANYTHING, AND REFUSE IF IT DOES NOT RESOLVE.
   #
@@ -3948,14 +3985,10 @@ fi
 # UNCONDITIONAL -- outside the re-stamp branch above -- because a withheld stamp does not make
 # an inert hook less inert.
 #
-# UNDER `--finish` IT RUNS FIRST INSTEAD, AND THAT IS THE ONE ORDERING DIFFERENCE BETWEEN THE TWO
-# MODES. The paragraph above is why it runs LAST on an ordinary apply: settings.json is merged
-# several bullets later in step 7, so a gate here would fire on every correct run. `--finish` is
-# invoked at the END of step 7, after that merge, which is exactly when the question becomes
-# answerable -- and its answer is VERIFIED rather than attested, because the validator either
-# exits 0 or names the unwired hooks. Running it first there means its row is counted by the same
-# `handback` guard as every other, so the one WORKLIST site that structurally could not reach the
-# stamp predicate now does, on the invocation where it means something.
+# UNDER `--finish` IT ALSO RUNS AFTER THE STAMP. There the settings merge has happened, so its
+# answer is verified by the validator rather than attested, and its row names the unwired hooks;
+# it does not hold the stamp or the marker, so its own advisory state cannot wedge a consumer's
+# pull. The delivery gate is post-write-gates' hook-registration check.
 hook_registration_row() {
 HR_VALIDATOR=""
 if [ -x "$CONSUMER/scripts/ai-dlc/validate-hook-registration.sh" ]; then
@@ -4050,10 +4083,10 @@ for c in cmds:
   # `settings-merge.sh` re-applies the TEMPLATE's hook blocks and strips every other `ai-dlc-*`
   # block from settings.json, so the remedy the settings-merge row prints cannot register a name
   # the template does not carry -- measured: the validator stays at exit 1 after it, this row
-  # stays, and `--finish` withholds on every run with no in-band exit. Reachable because a hook
+  # stays, and its remedy can never clear the row. Reachable because a hook
   # upstream retires is a `DECISION deletion` this driver never acts on, so the file persists.
-  # Such a name gets its own WORKLIST row, still GATING: the consumer's pre-push runs the same
-  # validator, so a finisher that stamped past it would hand the operator a red push instead.
+  # Such a name gets its own WORKLIST row. It is advisory like every row here (it runs after the
+  # stamp); the consumer's pre-push runs the same validator, which is where it blocks.
   # A name in `${THEIRS}:core/hooks/` keeps the merge row whether or not the template registers
   # it -- that is the shipped set I13 binds to the template, and the sourced libraries there are
   # the validator's own exemption, not this row's. UNREADABLE TEMPLATE AT THEIRS -> no partition:
@@ -4239,9 +4272,9 @@ if [ -f "$TI_RENDERER" ]; then
     # rule-does-nothing state as a tracked transient path. `[]?` keeps an older declaration valid.
     ti_oor="$(jq -r '.out_of_root[]? | .pattern // empty' "$TI_SCHEMA" 2>/dev/null)"
     [ -z "$ti_oor" ] || ti_pats="$(printf '%s\n%s' "$ti_pats" "$ti_oor")"
-    # Staged like every other loop input here. This row runs AFTER the stamp on the ordinary run, so
-    # a failed stage only renders a staging-refused row (a DECISION there, a WORKLIST under --finish,
-    # where it runs before the stamp and withholds); it never reads as "nothing tracked".
+    # Staged like every other loop input here. This row runs AFTER the stamp in both modes, so a
+    # failed stage only renders a staging-refused row (a DECISION on the ordinary run, an advisory
+    # WORKLIST under --finish); it never reads as "nothing tracked".
     ap_stage_or_refuse ti-pats "$ti_pats" ".gitignore" "the transient path patterns of pipeline-state-paths.json" \
     && while IFS= read -r ti_p; do
       [ -n "$ti_p" ] || continue
@@ -4337,14 +4370,15 @@ fi
 # a DECISION, never a pass. GATED ON THE DECLARATION like transient_ignore_row: neither half
 # present is an older consumer this release has nothing to say about.
 #
-# THE REMEDY NAMES `--finish` ONLY WHILE THE MARKER STANDS. Under `--finish`, or on an ordinary run
-# that handed work back, the stamp is withheld and `--finish` is what writes it. On an ordinary run
-# that stamped, write_stamp removed the marker before this row ran; a `--finish` there finds no
-# marker and records the re-stamp as identity-unchecked, so the remedy ends at post-write-gates.
+# THE REMEDY NAMES `--finish` ONLY WHILE THE MARKER STANDS. On an ordinary run that handed work
+# back, on every driver run (`--stamp-at-finish`) and on a `--finish` that withheld, the stamp is
+# still owed and `--finish` is what writes it. On a run that stamped, write_stamp removed the
+# marker before this row ran; a `--finish` there finds no marker and records the re-stamp as
+# identity-unchecked, so the remedy ends at post-write-gates.
 taught_schema_row() {
 local _script="$CONSUMER/scripts/ai-dlc/sync-taught-schema.sh" _out _rc _stale="" _merge="" _region="" _p _unk _halt
 local _then="then re-run post-write-gates; this apply already stamped, so no re-stamp is owed"
-if [ "$FINISH" = 1 ] || [ -f "$APPLYING" ]; then
+if [ -f "$APPLYING" ]; then
   _then="then re-run post-write-gates, then re-run \`pull.sh finish\` (it runs \`apply.sh --finish\`)"
 fi
 if [ ! -f "$_script" ]; then
@@ -4410,58 +4444,29 @@ if [ -n "$_region" ]; then
 fi
 }
 
-# --- THE TWO ORDERS, DISPATCHED ONCE ---------------------------------------------------------
+# --- ONE ORDER, IN BOTH MODES: THE STAMP, THEN THE FOUR ADVISORY ROWS ------------------------
 #
-# Ordinary apply: stamp, then the hook row. The hook row cannot gate the stamp here because the
-# settings merge that answers it has not happened yet -- it is several bullets further into
-# step 7 -- so gating on it would withhold every correct run and wedge the consumer.
+# The hook-registration, transient-ignore, agent-definition and taught-schema rows run AFTER
+# write_stamp, on the ordinary run and under `--finish` alike. They print, and their WORKLIST rows
+# name the work, but they never hold the stamp or keep `.ai-dlc-applying`: the stamp waits only on
+# write_stamp's own finish checks (identity, finish_verify_tree against the real base, the
+# unapplied, classify, template and re-apply checks). `pull.sh finish` reports a WORKLIST row
+# printed after the restamp row as `advisory`, not `withheld`.
 #
-# `--finish`: the hook row FIRST, then the stamp. This invocation happens after that merge, so
-# the question is answerable and its answer is verified by a validator rather than attested. A
-# still-unwired hook therefore raises `handback` before the guard reads it, and the finisher
-# withholds -- which terminates, because registering the hooks is work that clears the row.
-#
-# The transient-ignore row rides with the hook row in both orders. It is answerable at either
-# moment -- unlike the hook row it depends on no later step-7 bullet, because the declaration it
-# checks was written by the pure-apply phase above -- so it takes the hook row's position rather
-# than introducing a third ordering for a reader to reason about.
-#
-# THE AGENT-DEFINITION ROW RIDES BESIDE IT AND IS NOT ANSWERABLE THE SAME WAY IN BOTH ORDERS,
-# which is stated rather than smoothed over. Its declaration is `aiDlcRoles` in
-# `.claude/settings.json`, written by the settings MERGE -- a later step-7 bullet, exactly like
-# the hook row's subject. On an ordinary apply it therefore reads the PRE-merge settings, and on
-# `--finish` it reads the post-merge ones. Both answers are about a real state of the consumer
-# and neither is withheld: a definition stale against the old settings is stale against the new
-# ones too whenever the merge did not touch `aiDlcRoles`, and where the merge DID move a role,
-# `--finish` is the invocation that sees it. Gating the stamp on the earlier answer is what
-# would be wrong, and `say` never does that for a WORKLIST row on the ordinary path.
-#
-# THE TAUGHT-SCHEMA ROW RIDES LAST, IN BOTH ORDERS. Its declaration is written by the pure-apply
-# phase, like the transient-ignore row's, so it is answerable at either moment. Under `--finish`
-# it runs before the stamp, so a stale or hand-written region withholds the stamp and keeps the
-# marker; on the ordinary run it follows the stamp and names the work without withholding, as
-# the agent-definition row does. It reads the marker's `classify:` record to keep a stale region
-# in an unmerged file out of its sync row; on the ordinary run that record is this run's own
-# (written before any write) and the marker is gone only when nothing was handed back.
+# The taught-schema row reads the marker's `classify:` record to keep a stale region in an
+# unmerged file out of its sync row; the marker is gone only when this run stamped, and a stamp
+# means no file is still owed a merge.
 #
 # THE TEMPLATE RECORD IS READ FIRST UNDER `--finish`, and it emits nothing there: its rows come
-# from write_stamp (finish_template_unmerged, behind the identity check). It is read ahead of the
-# hook row only so that row knows whether the settings merge is already handed back by the json
-# test. On the ordinary run template_scan ran in phase 0, before the marker write.
-if [ "$FINISH" = 1 ]; then
-  tp_finish_read
-  hook_registration_row
-  transient_ignore_row
-  agent_definitions_row
-  taught_schema_row
-  write_stamp
-else
-  write_stamp
-  hook_registration_row
-  transient_ignore_row
-  agent_definitions_row
-  taught_schema_row
-fi
+# from write_stamp (finish_template_unmerged, behind the identity check), and the hook row reads
+# it to know whether the settings merge is already handed back by the json test. On the ordinary
+# run template_scan ran in phase 0, before the marker write.
+[ "$FINISH" = 1 ] && tp_finish_read
+write_stamp
+hook_registration_row
+transient_ignore_row
+agent_definitions_row
+taught_schema_row
 
 exit 0
 }

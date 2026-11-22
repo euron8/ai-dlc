@@ -19,6 +19,20 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1223.0] - 2026-11-22
+
+### An update pull is stamped only by its finish, after a real tree check; advisory rows no longer hold the stamp; deliver refuses an overlapping or unrecorded dirty file and commits one whole only on `--whole <path>`; an override of a rule's load-pointer stub is refused (BL-1202 advances, BL-1213, BL-1215 filed, BL-1166)
+
+- For every consumer pulling a release. `pull.sh apply` no longer writes `.claude/.ai-dlc-version`: it leaves the stamp at the base and the in-flight marker in place, and when nothing is handed back it prints `NEXT pull.sh finish ... <base> ... <theirs>`. `pull.sh finish`, given that same base, checks the tree over the real base-to-theirs range against the pull's real base and then stamps. Before, an apply with nothing to hand back stamped theirs itself, so the finish's tree check passed only with the base typed as theirs, which checks nothing. Every pull now runs `finish` before `deliver` (deliver refuses while the marker stands).
+- Advisory rows (hook-registration, transient-ignore, agent-definitions, taught-schema) print at finish as `DECIDE <kind> <path> advisory` and no longer hold the stamp, so a consumer's own advisory state cannot wedge deliver and every push.
+- One time only, on the pull that delivers this release while step 2 defers its self-update (DEFER): the previous engine's apply still advances the stamp, so the new `pull.sh finish --carried-machinery-slice <dist> <base> <consumer> <theirs>` withholds once with `DECIDE finish-base-unverified .claude/.ai-dlc-version withheld` (exit 3). For that one pull, run `pull.sh finish --carried-machinery-slice <dist> <theirs> <consumer> <theirs>` (theirs passed as the base), then deliver. Every later pull has its stamp checked by finish against the base the pull started from.
+- Deliver never commits a file whole with the operator's own edit in it. A file already dirty when the pull began, that the pull also changed, and whose change cannot be separated from the operator's edit (the edits overlap, or its pre-pull content was not recorded) stops deliver before any write with `REFUSED deliver-dirty-overlap`, one `NOTE` per file; staging the file does not lift the refusal. The operator can instead name the file with `--whole <path>`: deliver commits that one file whole, and says so in the commit message and the PR body. `NOTE deliver-dirty-whole` is gone.
+- The pull-writes record: the pull records which files it wrote and their pre-pull content, deliver refuses edits made since the pull's last record, and a delivered pull leaves a delivered marker so it is no longer reported as unfinished. The snapshot is filtered at read time, so the withheld text on a stamped tree is the true one.
+- CONSUMER-VISIBLE, new subcommand: `pull.sh record <dist> <base> <consumer> <theirs> [-- <path>...]` re-records the pull's writes, disclosed as `NOTE pull-writes-rerecorded`.
+- CONSUMER-VISIBLE, new pre-push block reason in `core/git-hooks/pre-push`: a pull handed nothing back and `finish` has not run. The remedy is `pull.sh finish`.
+- A consumer override whose `shadows:` section is a rule-body pointer stub is refused by `readopt-override.sh` (`--merge`, `--stamp readopt`, `--stamp reaffirm`; `--check` fails); `pull.sh merge` relays the refusal. The remedy is `readopt-override.sh <dist> <theirs> <consumer> <override> --stamp retire`, then file the override's rows upstream as a change to the SKILL.md stub's intensity table (BL-1213).
+- BL-1202 advances and stays PARTIAL; the residual of its item 5 is owed in BL-1215 (d).
+
 ## [0.1222.0] - 2026-11-21
 
 ### Read-set traces survive a worktree removed mid-copy, gate-transition stops reading `hermetic-run.sh`, and two procsub shards declare file-level inputs (BL-1211 closed, BL-1155 advances, BL-1124 advances, BL-583 advances)

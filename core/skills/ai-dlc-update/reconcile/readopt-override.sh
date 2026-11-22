@@ -82,7 +82,8 @@
 #                 reaffirm  old core text deliberately kept; REQUIRES --note; re-stamps
 #                 retire    upstream absorbed it; deletes the override file
 #
-# Exit: 0 ok / 1 blocked (stale core text still in the body) / 2 usage, or a scan that did
+# Exit: 0 ok / 1 blocked (stale core text still in the body, or a shadowed section that is a
+#       load-pointer stub: OVERRIDE-SHADOWS-POINTER-STUB) / 2 usage, or a scan that did
 #       not run to completion (a refusal; its reason is on stderr).
 rov_main() {
 set -uo pipefail
@@ -522,8 +523,76 @@ _ro_rc=0; RESOLVE="$(anchors_resolve 2>/dev/null)" || _ro_rc=$?
 [ "$_ro_rc" -ne 3 ] || ro_refuse "the anchor-resolution check"
 
 # ---------------------------------------------------------------------------
+# The pointer stub (LC-O17, layer-drift's OVERRIDE-SHADOWS-POINTER-STUB at pull time).
+#
+# A shadowed section that is, at theirs, a load-pointer stub -- it carries lib.sh's
+# rule_body_pointers sentence, I130's grammar -- holds the pointer, not the rule. Every test above
+# then compares the stub: a three-way merge re-adopts the pointer, the stale-text gate reads OK, and
+# a re-stamp clears the block while the binding file carries none of the body. So no re-adoption
+# outcome is offered on such an entry; only retirement is. The same holds for a body that points at
+# its OWN shadow target (shadows: names rule-bodies/rule-N.md and the body says READ AND FOLLOW it).
+#
+# EVERY `shadows:` PART, through `shadow_parts`, not only the first part's file: a stub in part two
+# of a multi-file entry is the same defect, and the pull-time row reads every part.
+# A part's file read at theirs is split like `ro_section`'s: 0 reads, 128 (absent at theirs) is an
+# empty section, anything else refuses.
+# ---------------------------------------------------------------------------
+STUB=""
+ro_tab="$(printf '\t')"
+shadow_parts "$SHADOWS" > "$RO_T/stub-parts" || ro_refuse "the shadow-parts read for the pointer-stub test"
+printf '%s\n' "$BODY_FLAT" > "$RO_T/stub-body" || ro_refuse "staging the body for the pointer-stub test"
+_ro_rc=0; STUB_BODY_PTRS="$(rule_body_pointers < "$RO_T/stub-body")" || _ro_rc=$?
+[ "$_ro_rc" -le 1 ] || ro_refuse "the body's pointer read for the pointer-stub test"
+while IFS= read -r _sp; do
+  _sf="${_sp%%"$ro_tab"*}"; _sa="${_sp#*"$ro_tab"}"
+  [ -n "$_sf" ] || continue
+  case "$_sf" in
+    team-roles/*) _sc="core/${_sf}" ;;
+    *)            _sc="core/skills/ai-dlc/${_sf}" ;;
+  esac
+  case "$_sf" in
+    rule-bodies/*)
+      ro_has_line "$STUB_BODY_PTRS" "${_sf#rule-bodies/}" \
+        && STUB="${STUB}${STUB:+$NL}#${_sa} (${_sf}): the body says READ AND FOLLOW its own shadow target ${_sf}" ;;
+  esac
+  [ -n "$_sa" ] || continue
+  _ro_rc=0
+  git -C "$DIST" show "${THEIRS}:${_sc}" 2>/dev/null > "$RO_T/stub.raw" || _ro_rc=$?
+  case "$_ro_rc" in
+    0) ;;
+    128) : > "$RO_T/stub.raw" || ro_refuse "staging ${_sf} at ${THEIRS} for the pointer-stub test" ;;
+    *) ro_refuse "the read of ${_sf} at ${THEIRS} for the pointer-stub test" ;;
+  esac
+  section_of "$_sa" < "$RO_T/stub.raw" > "$RO_T/stub.sec" || ro_refuse "the #${_sa} section read for the pointer-stub test"
+  _ro_rc=0; _sp_ptrs="$(rule_body_pointers < "$RO_T/stub.sec")" || _ro_rc=$?
+  case "$_ro_rc" in
+    0) STUB="${STUB}${STUB:+$NL}#${_sa} (${_sf}) at ${THEIRS_SHA} is a load-pointer stub; its binding text is rule-bodies/$(printf '%s' "$_sp_ptrs" | tr '\n' ' ' | sed 's/ $//; s# # rule-bodies/#g')" ;;
+    1) ;;
+    *) ro_refuse "the #${_sa} pointer read for the pointer-stub test" ;;
+  esac
+done < "$RO_T/stub-parts"
+
+# ro_stub_rows -- the row and its remedy, on stdout; callers redirect. One row line first, so a
+# relaying driver can key on it.
+ro_stub_rows() { # ro_stub_rows <lead word>
+  printf '%s\n' "$1  $(basename "$OVR"): OVERRIDE-SHADOWS-POINTER-STUB -- a shadowed section holds a pointer to the rule, not the rule."
+  printf '%s\n' "$STUB" | sed 's/^/    | /'
+  printf '%s\n' \
+    "  A merge against the stub re-adopts the pointer, and a re-stamp clears the block while the" \
+    "  binding file carries none of this body. While shadows: names the stub, this script refuses" \
+    "  the merge, the gate and the readopt and reaffirm stamps on this entry; retire stays open." \
+    "  Remedy: run readopt-override.sh <dist> <theirs> <consumer> <override> --stamp retire, then file" \
+    "  this override's rows upstream as a change to the intensity table of the stub that owns the rule" \
+    "  (the SKILL.md stub, per distribution invariants I19 and I131; rule-bodies/rule-N.md holds a copy)."
+}
+
+# ---------------------------------------------------------------------------
 case "$MODE" in
   --check)
+    if [ -n "$STUB" ]; then
+      ro_stub_rows BLOCKED
+      exit 1
+    fi
     if [ "$RESOLVE" != yes ]; then
       echo "UNDECIDABLE  $(basename "$OVR"): a shadowed anchor does not resolve to a heading in core."
       anchors_resolve >/dev/null
@@ -577,6 +646,11 @@ case "$MODE" in
     # 0.142.0 on this comment alone. Describe a deleted string; do not reproduce it.
     # Each anchor is merged in its own span; anchors whose core section is byte-identical
     # between base and theirs are left ALONE, so the diff stays scoped to what drifted.
+    # A pointer stub refuses before any write (see the pointer-stub block above).
+    if [ -n "$STUB" ]; then
+      ro_stub_rows REFUSED >&2
+      exit 1
+    fi
     if [ "$RESOLVE" != yes ]; then
       echo "REFUSED  $(basename "$OVR"): a shadowed anchor resolves to no heading; cannot merge what cannot be located." >&2
       anchors_resolve >/dev/null
@@ -737,6 +811,14 @@ case "$MODE" in
         echo "RETIRED  $(basename "$OVR") deleted — upstream absorbed it."
         exit 0
         ;;
+      readopt|reaffirm)
+        if [ -n "$STUB" ]; then
+          ro_stub_rows REFUSED >&2
+          exit 1
+        fi
+        ;;
+    esac
+    case "$OUTCOME" in
       readopt)
         if grep -qE '^(<{7}|={7}|>{7})' "$OVR"; then
           echo "REFUSED  $(basename "$OVR"): unresolved merge conflict markers in the body." >&2
@@ -838,6 +920,8 @@ esac
 # the header, the panel titles and THE ONE QUESTION's three commands vanished from the dossier at
 # rc 0, and the panels below them read as belonging to the panel above. Each argument is one line of
 # the heredoc it replaces, so the healthy output is byte-identical.
+# A pointer stub leads the dossier: no re-adoption outcome below is offered on it.
+if [ -n "$STUB" ]; then ro_stub_rows BLOCKED; echo; fi
 printf '%s\n' \
   '================================================================================' \
   "RE-ADOPTION DOSSIER — $(basename "$OVR")" \

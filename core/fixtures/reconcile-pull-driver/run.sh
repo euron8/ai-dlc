@@ -56,9 +56,34 @@
 #   tracked state ledger; the pull's settings merge runs between the first apply and the resolution round):
 #   retry   the dirty snapshot (header 2) is kept verbatim over the same-theirs resolution round and holds the pre-merge blob.
 #   dirty-d the file the operator edited and the pull's merge also wrote is committed as the pull's change only (equal to the
-#           merge of the clean file); the operator's key stays an unstaged diff.   dirty-overlap  an edit on the lines the pull
-#           changed: REFUSED deliver-dirty-overlap, rc 2, nothing mutated.   dirty-v1 / dirty-w0  no pre-pull blob recorded:
-#           NOTE deliver-dirty-whole and the whole file.   re-deliver  a second deliver adds no commit.
+#           merge of the clean file); the operator's key stays an unstaged diff. It is the clean twin of dirty-overlap.
+#   eol     a `text eol=crlf` file dirty at the snapshot that the pull also changed is committed as the repository-form (LF)
+#           merge carrying the pull's line only.
+#   pw-moved  (world a-ov) the pull's settings line rewritten after finish: deliver REFUSED deliver-pull-writes-moved, HEAD
+#           unchanged, remedy `pull.sh record -- <path>`; its quiet twin is world a's deliver (no pull-writes NOTE).
+#           record-paths  a second pulled file, clean at the snapshot, edited too: a bare `record` REFUSED record-path-unnamed
+#           naming both, the record unchanged.   pw-record  `record -- <both>` exits 0 and records the edits.   dirty-overlap
+#           after that: NOTE deliver-dirty-overlap overlap, REFUSED deliver-dirty-overlap rc 2, HEAD and the file unchanged;
+#           staged-exit  the whole file staged: deliver still refuses, nothing mutated.   whole-ack  `deliver --whole <path>`
+#           commits it whole with NOTE deliver-dirty-whole, and both NOTE pull-writes-rerecorded, in the commit message and
+#           the PR body.   staged-clean-twin  (world a-st) dirty-d's file staged whole: deliver commits the merged blob,
+#           byte-identical to world a's.   dirty-v1 / dirty-w0  no pre-pull blob
+#           recorded: NOTE deliver-dirty-overlap unrecorded, REFUSED, HEAD unchanged.   re-deliver  a second deliver adds no
+#           commit.
+#   F1      (world s) an apply that hands back nothing never stamps: the stamp reads base, the marker stays, the last line is
+#           `NEXT pull.sh finish ...` with the same base; finish with that base exits 0 and stamps theirs.   F1-cms  (world c3)
+#           the same under --carried-machinery-slice: neither pair after apply, both pairs after finish.
+#   F2      (world c3 copy) a written file reverted before finish: DECIDE finish-unapplied withheld, never
+#           finish-base-unverified, the stamp kept.
+#   adv     (world c3) the F1-cms finish with an agent-definition check that fires: DECIDE agent-definitions advisory,
+#           exit 0, the stamp written and the marker removed.
+#   pw-retry  (world k, after an ABANDON to the original branch) a pull-written file edited, the same theirs retried:
+#           REFUSED apply-pull-writes-moved, nothing written; twin (no edit): the retry proceeds.
+#   pw-unfinished  (world k) a new theirs while the pull's writes are uncommitted: REFUSED apply-pull-unfinished, the
+#           snapshot kept; twin (the writes committed): the new theirs's snapshot is written.
+#   pw-delivered  (world a-nx) after deliver, an operator edit kept uncommitted in a pull-written file: a new theirs's
+#           apply proceeds (deliver wrote pull-writes.delivered); its twin is pw-unfinished (no deliver).
+#   rw-stamped  (world a, delivered) finish on a stamped tree with no marker: the restamp-withheld row says so.
 #   st      a tracked pipeline-state file a hook appended to after the snapshot stays out; st-ctl the exempt names are committed;
 #           st-exempt the exempt names are still schema names; st-noschema (world s) no schema: the NOTE and the file committed.
 set -uo pipefail
@@ -86,8 +111,9 @@ echo "resolved: $REC_SRC"
 # THE SUBJECT, AND ITS OLD-TEXT SIGNATURE (a consumer whose engine predates this driver): SKIP, never ok.
 if [ ! -f "$REC_SRC/pull.sh" ] || [ ! -f "$REC_SRC/pull-key.sh" ] || [ ! -f "$REC_SRC/ask-families.tsv" ] \
    || ! grep -q '^pk_conflict_ledger() {' "$REC_SRC/pull-key.sh" || ! grep -q 'pk_conflict_ledger' "$REC_SRC/readopt-override.sh" \
-   || ! grep -q '^pl_hook_pre_gate_repair() {' "$REC_SRC/pull.sh" || ! grep -q '^pl_deliver_merge() {' "$REC_SRC/pull.sh"; then
-  echo "SKIP reconcile-pull-driver: reconcile/pull.sh (with its conflict ledger and pre-gate repair) is not installed beside apply.sh; it arrives with the pull that carries this fixture"
+   || ! grep -q '^pl_hook_pre_gate_repair() {' "$REC_SRC/pull.sh" || ! grep -q '^pl_deliver_merge() {' "$REC_SRC/pull.sh" \
+   || ! grep -qF -- '--stamp-at-finish) STAMP_AT_FINISH=1' "$REC_SRC/apply.sh" || ! grep -q '^pl_writes_record() {' "$REC_SRC/pull.sh"; then
+  echo "SKIP reconcile-pull-driver: reconcile/pull.sh (with its conflict ledger, pre-gate repair, pl_deliver_merge(), the pull-writes record pl_writes_record()) and apply.sh --stamp-at-finish are not installed; they arrive with the pull that carries this fixture"
   fx_skip_exit "$HERE"
 fi
 [ -f "$HOOK_SRC" ] && [ -f "$ESC_SRC" ] && [ -f "$HERE/escalation-validator.seed" ] \
@@ -161,7 +187,14 @@ printf '{\n  "k1": 1,\n  "k2": 2,\n  "k3": 3,\n  "k4": 4,\n  "k5": 5,\n  "k6": 6
   > "$A/c/.claude/settings.json"
 printf '{"row":1}\n' > "$A/c/_bmad-output/spawn-ledger.jsonl"
 printf '{"rec":1}\n' > "$A/c/_bmad-output/subagent-context.jsonl"
+# eol: a `text eol=crlf` file, committed from a CRLF worktree (the blob is LF, repository form); the operator edits line 2
+# before the pull (dirty at the snapshot, whose raw blob is CRLF) and the pull's resolution round edits line 8.
+mkdir -p "$A/c/docs" && printf 'docs/crlf.txt text eol=crlf\n' > "$A/c/.gitattributes" \
+  && printf 'c1\r\nc2\r\nc3\r\nc4\r\nc5\r\nc6\r\nc7\r\nc8\r\n' > "$A/c/docs/crlf.txt" || { echo "FIXTURE BROKEN: cannot write the eol file" >&2; exit 2; }
 world_commit "$A/c" "operator notes" >/dev/null || { echo "FIXTURE BROKEN: cannot commit the operator notes" >&2; exit 2; }
+[ "$(world_git -C "$A/c" rev-parse HEAD:docs/crlf.txt)" = "$(printf 'c1\nc2\nc3\nc4\nc5\nc6\nc7\nc8\n' | world_git -C "$A/c" hash-object --no-filters --stdin)" ] && [ -z "$(world_git -C "$A/c" status --porcelain=v1 -- docs/crlf.txt)" ] \
+  || { echo "FIXTURE BROKEN: the eol file is not LF in HEAD or not clean after its commit" >&2; exit 2; }
+printf 'c1\r\nc2 OPERATOR\r\nc3\r\nc4\r\nc5\r\nc6\r\nc7\r\nc8\r\n' > "$A/c/docs/crlf.txt"
 printf 'operator edit\n' >> "$A/c/notes/op-mod.txt"
 sed 's/"k1": 1,/"k1": "operatorDirtyKey",/' "$A/c/.claude/settings.json" > "$A/c/.claude/settings.json.new" \
   && mv -f "$A/c/.claude/settings.json.new" "$A/c/.claude/settings.json" || { echo "FIXTURE BROKEN: cannot dirty settings.json" >&2; exit 2; }
@@ -218,6 +251,8 @@ SET_T="$WORK/settings.template"; SET_P="$WORK/settings.prior"; printf '{}\n' > "
 world_git -C "$A/dist" show "${AT}:templates/settings.json.template" > "$SET_T" || { echo "FIXTURE BROKEN: cannot read the settings template" >&2; exit 2; }
 SNAP_A="$A/c/.git/ai-dlc-pull/dirty-snapshot"; snap_a1="$(git hash-object "$SNAP_A")"
 ( cd "$A/c" && bash "$REC/settings-merge.sh" --consumer .claude/settings.json --template "$SET_T" --prior-template "$SET_P" ) > "$WORK/a-merge.out" 2>&1; sm_rc=$?
+# eol: the resolution round's change to the crlf file, in its worktree (CRLF) form.
+printf 'c1\r\nc2 OPERATOR\r\nc3\r\nc4\r\nc5\r\nc6\r\nc7\r\nc8 PULL\r\n' > "$A/c/docs/crlf.txt"
 count_on a "$WORK/log-d"
 bash "$REC/pull.sh" apply "$A/dist" "$AB" "$A/c" "$AT" > "$WORK/d.out" 2> "$WORK/d.err" < /dev/null; d_rc=$?
 count_off
@@ -298,11 +333,11 @@ deliver_env() {
   printf '%s\n' '#!/usr/bin/env bash' 'ls "$(git rev-parse --absolute-git-dir)"/ai-dlc-pull/run-*/pr-body.md > "$PREPUSH_LOG" 2>/dev/null; exit 0' > "$WORK/$1/c/.git/hooks/pre-push" || return 1
   chmod +x "$WORK/$1/c/.git/hooks/pre-commit" "$WORK/$1/c/.git/hooks/pre-push"
 }
-# deliver_run <world> <dist> <base> <consumer> <theirs>
+# deliver_run <world> <dist> <base> <consumer> <theirs> [<deliver option>...]
 deliver_run() {
   PATH="$WORK/bin:$PATH" GH_LOG="$WORK/$1-gh" PRECOMMIT_LOG="$WORK/$1-precommit" PREPUSH_LOG="$WORK/$1-prepush" \
   GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@invalid GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@invalid \
-    bash "$REC/pull.sh" deliver "$2" "$3" "$4" "$5" > "$WORK/$1-deliver.out" 2> "$WORK/$1-deliver.err" < /dev/null
+    bash "$REC/pull.sh" deliver "${@:6}" "$2" "$3" "$4" "$5" > "$WORK/$1-deliver.out" 2> "$WORK/$1-deliver.err" < /dev/null
 }
 GATE_NEW="$(sed -n '2p' "$A/c/.git/ai-dlc-pull/pull-artifacts" 2>/dev/null)"
 if [ "$gate_rc" = 0 ] && [ "$(sed -n 1p "$A/c/.git/ai-dlc-pull/pull-artifacts" 2>/dev/null)" = "ai-dlc-pull-artifacts 1 $AT" ] \
@@ -319,10 +354,11 @@ printf '{"row":2}\n' >> "$A/c/_bmad-output/spawn-ledger.jsonl"
 # st-rec: a second tracked state file, clean at the snapshot and written after it, that a decisions row of this pull names (column 2).
 printf '{"rec":2}\n' >> "$A/c/_bmad-output/subagent-context.jsonl"
 printf 'refile\t_bmad-output/subagent-context.jsonl\t-\tmodel\tkept\ta hook-written state file this pull'"'"'s record names\n' >> "$ADEC"
+printf 'refile\tdocs/crlf.txt\t-\tmodel\tkept\tthe resolution round merged line 8 into the eol file\n' >> "$ADEC"
 mkdir -p "$A/c/_bmad-output/implementation-artifacts" || { echo "FIXTURE BROKEN: mkdir implementation-artifacts" >&2; exit 2; }
 printf 'a hook wrote this story\n' > "$A/c/_bmad-output/implementation-artifacts/story-1.md"
 printf '# archive\n' > "$A/c/_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md"
-for _v in ov v1 w0; do copy_world a "a-$_v"; done
+for _v in ov v1 w0 st; do copy_world a "a-$_v"; done
 # ov: the pull's change also lands on the line the operator edited (HEAD, the snapshot blob and the worktree all differ there).
 sed 's/"k1": "operatorDirtyKey",/"k1": "pullRewroteThis",/' "$WORK/a-ov/c/.claude/settings.json" > "$WORK/a-ov/c/.claude/settings.json.new" \
   && mv -f "$WORK/a-ov/c/.claude/settings.json.new" "$WORK/a-ov/c/.claude/settings.json" || { echo "FIXTURE BROKEN: cannot build world a-ov" >&2; exit 2; }
@@ -402,6 +438,15 @@ if [ "$dl_rc" = 0 ] && grep -qx 'M	.claude/settings.json' <<<"$dl_ns" && grep -q
 else
   bad "dirty-d: rc=$dl_rc committed==clean-twin: $(cmp -s "$twin" "$WORK/a-head-settings.json" && echo yes || echo no) diff vs HEAD: $(tr '\n' '|' <<<"$dd_diff" | cut -c1-200) status '$(dl_st .claude/settings.json)' commit: $(tr '\n\t' '| ' <<<"$dl_ns" | cut -c1-300)"
 fi
+# eol: the crlf file is committed as the LF merge carrying the pull's line 8 only; the operator's line 2 stays an unstaged diff.
+eol_head="$(world_git -C "$A/c" rev-parse -q --verify HEAD:docs/crlf.txt)"
+eol_want="$(printf 'c1\nc2\nc3\nc4\nc5\nc6\nc7\nc8 PULL\n' | world_git -C "$A/c" hash-object --no-filters --stdin)"
+if [ "$dl_rc" = 0 ] && grep -qx 'M	docs/crlf.txt' <<<"$dl_ns" && [ -n "$eol_want" ] && [ "$eol_head" = "$eol_want" ] \
+   && [ "$(dl_st docs/crlf.txt)" = " M docs/crlf.txt" ] && grep -q 'c2 OPERATOR' "$A/c/docs/crlf.txt"; then
+  ok "eol: a text eol=crlf file dirty at the snapshot is committed as the repository-form (LF) merge carrying the pull's line only; the operator's line stays unstaged"
+else
+  bad "eol: rc=$dl_rc committed '$eol_head' want '$eol_want' status '$(dl_st docs/crlf.txt)' notes: $(grep '^NOTE' "$WORK/a-deliver.out" | tr '\n' '|' | cut -c1-300)"
+fi
 # st: a tracked state ledger clean at the snapshot and appended to by a hook stays out of the commit, in the worktree, unstaged.
 if grep -qx 'M	.claude/settings.json' <<<"$dl_ns" && ! grep -q 'spawn-ledger.jsonl' <<<"$dl_ns" && grep -qx '{"row":2}' "$A/c/_bmad-output/spawn-ledger.jsonl" \
    && [ "$(world_git -C "$A/c" show HEAD:_bmad-output/spawn-ledger.jsonl)" = '{"row":1}' ] \
@@ -433,35 +478,174 @@ if [ "$a_rd_rc" = 0 ] && [ -s "$WORK/a-deliver.out" ] && [ "$a_head1" = "$(world
 else
   bad "re-deliver: rc=$a_rd_rc head moved=$([ "$a_head1" = "$(world_git -C "$A/c" rev-parse HEAD)" ] && echo no || echo yes) out: $(tr '\n' '|' < "$WORK/a-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-deliver.err")"
 fi
-# dirty-overlap: the operator's edit lies on the lines the pull changed: the merge cannot split them, so the whole file is
-# committed (the operator's key in it), one NOTE deliver-dirty-whole names it in the output, the PR body and the commit message.
+# pw-moved, quiet twin: world a's deliver read this pull's record of its own writes (settings.json named in it) and refused nothing.
+A_PW="$A/c/.git/ai-dlc-pull/pull-writes"
+if [ "$dl_rc" = 0 ] && [ "$(sed -n 1p "$A_PW" 2>/dev/null)" = "ai-dlc-pull-writes 1 $AT" ] && grep -q '^\.claude/settings\.json	' "$A_PW" \
+   && ! grep -q 'pull-writes' "$WORK/a-deliver.out"; then
+  ok "pw-moved twin: with every file the pull wrote still at its recorded content, deliver reads the record (settings.json in it) and refuses nothing"
+else
+  bad "pw-moved twin: rc=$dl_rc record header '$(sed -n 1p "$A_PW" 2>/dev/null)' out: $(grep 'pull-writes' "$WORK/a-deliver.out" | tr '\n' '|' | cut -c1-300)"
+fi
+# pw-delivered: world a is delivered with the operator's settings.json edit still uncommitted, at the content the pull recorded.
+# A copy (a-nx) on a plain branch at that commit (the PR merged) applies a new theirs: deliver marked its pull delivered, so the
+# kept edit is the operator's and the apply proceeds. Its twin, a pull with no deliver, is pw-unfinished (world ku).
+copy_world a a-nx
+NX="$WORK/a-nx"
+world_git -C "$NX/c" checkout -q -b merged-main || { echo "FIXTURE BROKEN: cannot branch a-nx" >&2; exit 2; }
+printf '2.0.1\n' > "$NX/dist/VERSION" && world_commit "$NX/dist" "theirs moves" >/dev/null || { echo "FIXTURE BROKEN: cannot move theirs in a-nx" >&2; exit 2; }
+NX_T="$(world_git -C "$NX/dist" rev-parse HEAD)"
+nx_sb="$(world_git -C "$NX/c" hash-object --no-filters -- .claude/settings.json)"
+nx_pre="$( [ -n "$(world_git -C "$NX/c" status --porcelain=v1 -- .claude/settings.json)" ] && grep -qx ".claude/settings.json	$nx_sb" "$NX/c/.git/ai-dlc-pull/pull-writes" && echo y)"
+bash "$REC/pull.sh" apply "$NX/dist" "$AB" "$NX/c" "$NX_T" > "$WORK/a-nx.out" 2> "$WORK/a-nx.err" < /dev/null; nx_rc=$?
+if [ "$nx_pre" = y ] && [ "$(cat "$NX/c/.git/ai-dlc-pull/pull-writes.delivered" 2>/dev/null)" = "$(world_git -C "$NX/dist" rev-parse "$AT")" ] \
+   && grep -q '^PULL run=' "$WORK/a-nx.out" && ! grep -q 'pull-writes-unfinished\|apply-pull-unfinished' "$WORK/a-nx.out" \
+   && [ "$(sed -n 1p "$NX/c/.git/ai-dlc-pull/dirty-snapshot" | awk '{print $3}')" = "$NX_T" ]; then
+  ok "pw-delivered: after deliver, an operator edit kept uncommitted in a file the pull wrote does not hold the next theirs's apply as unfinished (rc=$nx_rc, its own snapshot written)"
+else
+  bad "pw-delivered: precondition='$nx_pre' delivered='$(cat "$NX/c/.git/ai-dlc-pull/pull-writes.delivered" 2>/dev/null)' rc=$nx_rc out: $(tr '\n' '|' < "$WORK/a-nx.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-nx.err")"
+fi
+# rw-stamped: finish on the delivered world a (stamp at theirs, no in-flight marker) withholds on its unverified base; its
+# restamp-withheld row says the stamp already reads theirs and the marker is absent, never that either was left in place.
+a_sc="$(sed -n 's/^commit:[[:space:]]*//p' "$A/c/.claude/.ai-dlc-version" | head -1)"
+# The delivered world re-raises its blend block (arm j's) with a new digest; it is answered as j answers it, then finish re-runs.
+bash "$REC/pull.sh" finish "$A/dist" "$AB" "$A/c" "$AT" > "$WORK/a-rw0.out" 2> "$WORK/a-rw0.err" < /dev/null
+a_rw_dg="$(awk '$1 == "ASK" && $2 == "blend" {print $4; exit}' "$WORK/a-rw0.out")"
+[ "${#a_rw_dg}" = 64 ] && answer "$A/c" "Blend the session driver? digest $a_rw_dg" "blend it" \
+  || bad "rw-stamped: the delivered world's finish raised no blend ASK to answer, or the hook wrote no record: $(tr '\n' '|' < "$WORK/a-rw0.out" | cut -c1-200)"
+bash "$REC/pull.sh" finish "$A/dist" "$AB" "$A/c" "$AT" > "$WORK/a-rw.out" 2> "$WORK/a-rw.err" < /dev/null; a_rw_rc=$?
+a_rw_row="$(cat "$(ls -td "$A/c/.git/ai-dlc-pull"/run-*/ | head -1)finish.out" 2>/dev/null | awk -F'\t' '$2 == "restamp-withheld"')"
+if [ "$(world_git -C "$A/dist" rev-parse "$a_sc")" = "$(world_git -C "$A/dist" rev-parse "$AT")" ] && [ ! -e "$A/c/.claude/.ai-dlc-applying" ] \
+   && [ "$(grep -c . <<<"$a_rw_row")" = 1 ] && grep -qF "The stamp already reads ${AT} (an earlier apply wrote it) and \`.ai-dlc-applying\` is absent; this run changed neither." <<<"$a_rw_row" \
+   && ! grep -q 'deliberately left in place' <<<"$a_rw_row"; then
+  ok "rw-stamped: finish on a stamped tree with no marker: the restamp-withheld row says the stamp already reads theirs and the marker is absent"
+else
+  bad "rw-stamped: rc=$a_rw_rc stamp '$a_sc' row: $(cut -c1-400 <<<"$a_rw_row") out: $(tr '\n' '|' < "$WORK/a-rw.out" | cut -c1-200)"
+fi
+# ov_state <consumer>: HEAD, the settings.json bytes and the whole status, one line (nothing mutated compares equal).
+ov_state() { printf '%s %s %s\n' "$(world_git -C "$1" rev-parse HEAD)" "$(world_git -C "$1" hash-object --no-filters -- .claude/settings.json)" \
+  "$(world_git -C "$1" status --porcelain=v1 --untracked-files=all | world_git -C "$1" hash-object --stdin)"; }
+# pw-moved: world a-ov rewrites the operator's settings line after finish (a step-7 merge the last driver step did not see):
+# deliver refuses, naming the path, before any write.
 OV="$WORK/a-ov"
 deliver_env a-ov || { echo "FIXTURE BROKEN: deliver_env a-ov" >&2; exit 2; }
-deliver_run a-ov "$OV/dist" "$AB" "$OV/c" "$AT"; ov_rc=$?
-world_git -C "$OV/c" show HEAD:.claude/settings.json > "$WORK/a-ov-head-settings.json"
-ov_pb="$(cat "$OV"/c/.git/ai-dlc-pull/run-*/pr-body.md 2>/dev/null)"
-ov_cm="$(world_git -C "$OV/c" log -1 --format=%B HEAD)"
-ov_n="$(grep -c "^NOTE deliver-dirty-whole .claude/settings.json your uncommitted edits in this file overlap the pull's change and are in this commit\$" "$WORK/a-ov-deliver.out")" || ov_n=0
-if [ "$ov_rc" = 0 ] && [ "$ov_n" = 1 ] && grep -q pullRewroteThis "$WORK/a-ov-head-settings.json" && cmp -s "$WORK/a-ov-head-settings.json" "$OV/c/.claude/settings.json" \
-   && [ -z "$(world_git -C "$OV/c" status --porcelain=v1 -- .claude/settings.json)" ] \
-   && grep -q '^### Deliver notes' <<<"$ov_pb" && grep -q 'NOTE deliver-dirty-whole .claude/settings.json' <<<"$ov_pb" \
-   && grep -q 'NOTE deliver-dirty-whole .claude/settings.json' <<<"$ov_cm"; then
-  ok "dirty-overlap: an operator edit on the lines the pull changed: exit 0, one NOTE deliver-dirty-whole (output, PR body Deliver notes, commit message), the whole file committed"
+ov_s0="$(ov_state "$OV/c")"; ov_br="$(world_git -C "$OV/c" symbolic-ref -q --short HEAD)"
+deliver_run a-ov "$OV/dist" "$AB" "$OV/c" "$AT"; ov_m_rc=$?
+cp "$WORK/a-ov-deliver.out" "$WORK/a-ov-moved.out"
+if [ "$ov_m_rc" = 2 ] && grep -qx 'REFUSED deliver-pull-writes-moved rc=2' "$WORK/a-ov-moved.out" \
+   && [ "$(grep -c '^NOTE pull-writes-moved ' "$WORK/a-ov-moved.out")" = 1 ] \
+   && grep -q '^NOTE pull-writes-moved \.claude/settings\.json recorded [0-9a-f]\{40\} now [0-9a-f]\{40\}$' "$WORK/a-ov-moved.out" \
+   && [ "$(ov_state "$OV/c")" = "$ov_s0" ] && [ -z "$(world_git --git-dir="$WORK/a-ov-origin.git" rev-parse -q --verify "refs/heads/$ov_br" 2>/dev/null)" ] \
+   && grep -q 'run `pull.sh record` with the same arguments followed by `-- <path>` for each file above' "$WORK/a-ov-deliver.err"; then
+  ok "pw-moved: a file the pull wrote, changed after finish: deliver REFUSED deliver-pull-writes-moved naming it, its remedy naming pull.sh record, HEAD, the file and the status unchanged, nothing pushed"
 else
-  bad "dirty-overlap: rc=$ov_rc notes=$ov_n out: $(tr '\n' '|' < "$WORK/a-ov-deliver.out" | cut -c1-300) pr-body notes: $(grep -c 'deliver-dirty-whole' <<<"$ov_pb") commit msg notes: $(grep -c 'deliver-dirty-whole' <<<"$ov_cm") err: $(head -c 200 "$WORK/a-ov-deliver.err")"
+  bad "pw-moved: rc=$ov_m_rc out: $(tr '\n' '|' < "$WORK/a-ov-moved.out" | cut -c1-300) err: $(head -c 400 "$WORK/a-ov-deliver.err") state unchanged: $([ "$(ov_state "$OV/c")" = "$ov_s0" ] && echo yes || echo no)"
 fi
-# dirty-v1 / dirty-w0: no pre-pull blob recorded for the path: the whole file, and one NOTE deliver-dirty-whole line.
+# record-paths: a second file the pull wrote, clean at the snapshot (deliver stages it whole), is edited after the finish too.
+# A bare `pull.sh record` refuses record-path-unnamed naming both moved files, and the record is unchanged.
+OV_PW="$OV/c/.git/ai-dlc-pull/pull-writes"
+ov_cp="$(awk -F'\t' -v fs="$OV/c/.git/ai-dlc-pull/dirty-snapshot" 'FILENAME == fs { if (FNR > 1) s[$4] = 1; next }
+  FNR > 1 && !($1 in s) && $2 ~ /^[0-9a-f]+$/ && length($2) == 40 { print $1; exit }' "$OV/c/.git/ai-dlc-pull/dirty-snapshot" "$OV_PW")"
+[ -n "$ov_cp" ] && [ -f "$OV/c/$ov_cp" ] || { echo "FIXTURE BROKEN: world a-ov records no pulled file clean at the snapshot" >&2; exit 2; }
+printf 'operator edit after the finish\n' >> "$OV/c/$ov_cp"
+cp "$OV_PW" "$WORK/a-ov-pw0"
+bash "$REC/pull.sh" record "$OV/dist" "$AB" "$OV/c" "$AT" > "$WORK/a-ov-rec0.out" 2> "$WORK/a-ov-rec0.err" < /dev/null; ov_r0_rc=$?
+if [ "$ov_r0_rc" = 2 ] && grep -qx 'REFUSED record-path-unnamed rc=2' "$WORK/a-ov-rec0.out" \
+   && [ "$(grep -c '^NOTE pull-writes-moved ' "$WORK/a-ov-rec0.out")" = 2 ] \
+   && grep -q '^NOTE pull-writes-moved \.claude/settings\.json recorded ' "$WORK/a-ov-rec0.out" && grep -qF "NOTE pull-writes-moved $ov_cp recorded " "$WORK/a-ov-rec0.out" \
+   && cmp -s "$OV_PW" "$WORK/a-ov-pw0" && [ ! -e "$OV_PW.rerecorded" ] && grep -q 'record <dist> <base> <consumer> <theirs> -- <path>' "$WORK/a-ov-rec0.err"; then
+  ok "record-paths: a bare pull.sh record with two moved files refuses record-path-unnamed naming both ($ov_cp), the record unchanged"
+else
+  bad "record-paths: rc=$ov_r0_rc out: $(tr '\n' '|' < "$WORK/a-ov-rec0.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-ov-rec0.err") record unchanged: $(cmp -s "$OV_PW" "$WORK/a-ov-pw0" && echo yes || echo no)"
+fi
+# pw-record: on this finished pull `pull.sh record -- <path>...` (the deliver refusal's remedy) exits 0, prints its NOTE and takes
+# both edits into the record, and lists both paths for deliver's disclosure.
+bash "$REC/pull.sh" record "$OV/dist" "$AB" "$OV/c" "$AT" -- .claude/settings.json "$ov_cp" > "$WORK/a-ov-finish.out" 2> "$WORK/a-ov-finish.err" < /dev/null; ov_f_rc=$?
+ov_sb="$(world_git -C "$OV/c" hash-object --no-filters -- .claude/settings.json)"
+ov_cb="$(world_git -C "$OV/c" hash-object --no-filters -- "$ov_cp")"
+if [ "$ov_f_rc" = 0 ] && grep -q "^NOTE pull-writes-recorded [1-9][0-9]* $AT\$" "$WORK/a-ov-finish.out" \
+   && grep -qx ".claude/settings.json	$ov_sb" "$OV_PW" && grep -qxF "$ov_cp	$ov_cb" "$OV_PW" \
+   && [ "$(sed -n 1p "$OV_PW.rerecorded")" = "ai-dlc-pull-rerecorded 1 $AT" ] && grep -qx '\.claude/settings\.json' "$OV_PW.rerecorded" && grep -qxF "$ov_cp" "$OV_PW.rerecorded"; then
+  ok "pw-record: pull.sh record -- <both> on the finished pull exits 0 with its NOTE, records both at their work-tree content and lists both for disclosure"
+else
+  bad "pw-record: rc=$ov_f_rc out: $(tr '\n' '|' < "$WORK/a-ov-finish.out" | cut -c1-200) err: $(head -c 200 "$WORK/a-ov-finish.err") row: $(grep '^\.claude/settings\.json' "$OV_PW" 2>/dev/null) rerecorded: $(tr '\n' '|' < "$OV_PW.rerecorded" 2>/dev/null)"
+fi
+# dirty-overlap: with that edit in the record the pull's change now lies on the operator's line, so the merge cannot split them:
+# REFUSED deliver-dirty-overlap, nothing mutated.
+ov_s1="$(ov_state "$OV/c")"
+deliver_run a-ov "$OV/dist" "$AB" "$OV/c" "$AT"; ov_rc=$?
+cp "$WORK/a-ov-deliver.out" "$WORK/a-ov-overlap.out"
+if [ "$ov_rc" = 2 ] && grep -qx 'REFUSED deliver-dirty-overlap rc=2' "$WORK/a-ov-overlap.out" \
+   && [ "$(grep -c '^NOTE deliver-dirty-overlap ' "$WORK/a-ov-overlap.out")" = 1 ] && grep -qx 'NOTE deliver-dirty-overlap .claude/settings.json overlap' "$WORK/a-ov-overlap.out" \
+   && ! grep -q 'pull-writes-moved' "$WORK/a-ov-overlap.out" && [ "$(ov_state "$OV/c")" = "$ov_s1" ] \
+   && grep -q pullRewroteThis "$OV/c/.claude/settings.json" && [ -z "$(world_git --git-dir="$WORK/a-ov-origin.git" rev-parse -q --verify "refs/heads/$ov_br" 2>/dev/null)" ]; then
+  ok "dirty-overlap: an operator edit on the line the pull changed: REFUSED deliver-dirty-overlap with one NOTE (overlap), HEAD, the file and the status unchanged, nothing pushed (twin: dirty-d)"
+else
+  bad "dirty-overlap: finish rc=$ov_f_rc deliver rc=$ov_rc out: $(tr '\n' '|' < "$WORK/a-ov-overlap.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-ov-deliver.err") finish: $(tr '\n' '|' < "$WORK/a-ov-finish.out" | cut -c1-200)"
+fi
+# staged-exit: the operator stages the whole file: staging is no acknowledgement, so deliver still refuses and mutates nothing.
+world_git -C "$OV/c" add -- .claude/settings.json || { echo "FIXTURE BROKEN: cannot stage a-ov settings.json" >&2; exit 2; }
+ov_s2="$(ov_state "$OV/c")"
+deliver_run a-ov "$OV/dist" "$AB" "$OV/c" "$AT"; ov_x_rc=$?
+if [ "$ov_x_rc" = 2 ] && grep -qx 'REFUSED deliver-dirty-overlap rc=2' "$WORK/a-ov-deliver.out" \
+   && grep -qx 'NOTE deliver-dirty-overlap .claude/settings.json overlap' "$WORK/a-ov-deliver.out" && [ "$(ov_state "$OV/c")" = "$ov_s2" ] \
+   && [ "$(world_git -C "$OV/c" status --porcelain=v1 -- .claude/settings.json)" = "M  .claude/settings.json" ] \
+   && grep -q 're-run deliver with `--whole <path>`' "$WORK/a-ov-deliver.err" && [ -z "$(world_git --git-dir="$WORK/a-ov-origin.git" rev-parse -q --verify "refs/heads/$ov_br" 2>/dev/null)" ]; then
+  ok "staged-exit: the whole file staged after the refusal: deliver still REFUSED deliver-dirty-overlap, its remedy naming --whole, HEAD, the file and the staged entry unchanged"
+else
+  bad "staged-exit: rc=$ov_x_rc out: $(tr '\n' '|' < "$WORK/a-ov-deliver.out" | cut -c1-300) err: $(head -c 300 "$WORK/a-ov-deliver.err")"
+fi
+# whole-ack: `deliver --whole .claude/settings.json` commits the file whole (equal to the worktree) and discloses it, with the two
+# re-recorded paths, in the commit message and the PR body.
+deliver_run a-ov "$OV/dist" "$AB" "$OV/c" "$AT" --whole .claude/settings.json; ov_w_rc=$?
+world_git -C "$OV/c" show HEAD:.claude/settings.json > "$WORK/a-ov-head-settings.json" 2>/dev/null
+ov_msg="$(world_git -C "$OV/c" log -1 --format=%B)"
+ov_head_cp="$(world_git -C "$OV/c" show "HEAD:$ov_cp")"
+ov_pr="$(ls -td "$OV/c/.git/ai-dlc-pull"/run-*/ | head -1)pr-body.md"
+ov_wn="NOTE deliver-dirty-whole .claude/settings.json delivered whole at the operator's request; your uncommitted edits in it are in this commit"
+ov_rn1="NOTE pull-writes-rerecorded .claude/settings.json re-recorded by pull.sh record at the operator's request; edits made in it after the pull's last step are in this commit"
+ov_rn2="NOTE pull-writes-rerecorded $ov_cp re-recorded by pull.sh record at the operator's request; edits made in it after the pull's last step are in this commit"
+if [ "$ov_w_rc" = 0 ] && grep -qx 'DECIDE pr https://example.invalid/pr/1 opened' "$WORK/a-ov-deliver.out" && ! grep -q '^NOTE deliver-dirty-overlap' "$WORK/a-ov-deliver.out" \
+   && grep -qxF "$ov_wn" <<<"$ov_msg" && grep -qxF "$ov_rn1" <<<"$ov_msg" && grep -qxF "$ov_rn2" <<<"$ov_msg" \
+   && grep -qxF -- "- $ov_wn" "$ov_pr" && grep -qxF -- "- $ov_rn2" "$ov_pr" \
+   && grep -q pullRewroteThis "$WORK/a-ov-head-settings.json" && cmp -s "$WORK/a-ov-head-settings.json" "$OV/c/.claude/settings.json" \
+   && grep -qx 'operator edit after the finish' <<<"$ov_head_cp" \
+   && [ -z "$(world_git -C "$OV/c" status --porcelain=v1 -- .claude/settings.json)" ]; then
+  ok "whole-ack: deliver --whole commits the overlapping file whole (equal to the worktree) and the re-recorded clean file with its edit, each disclosed in the commit message and the PR body"
+else
+  bad "whole-ack: rc=$ov_w_rc out: $(tr '\n' '|' < "$WORK/a-ov-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-ov-deliver.err") msg: $(tr '\n' '|' <<<"$ov_msg" | cut -c1-500)"
+fi
+# staged-clean-twin: world a-st is world a with dirty-d's settings.json staged whole (its index entry moved since the snapshot and
+# equals the worktree); its merge is clean, so deliver commits the merged blob, byte-identical to world a's, and the operator's key
+# comes back unstaged.
+ST="$WORK/a-st"
+deliver_env a-st || { echo "FIXTURE BROKEN: deliver_env a-st" >&2; exit 2; }
+world_git -C "$ST/c" add -- .claude/settings.json || { echo "FIXTURE BROKEN: cannot stage a-st settings.json" >&2; exit 2; }
+st_sx="$(awk -F'\t' '$4 == ".claude/settings.json" {print $2}' "$ST/c/.git/ai-dlc-pull/dirty-snapshot")"
+st_ix="$(world_git -C "$ST/c" rev-parse -q --verify :.claude/settings.json)"
+[ -n "$st_ix" ] && [ "$st_ix" != "$st_sx" ] && [ "$st_ix" = "$(world_git -C "$ST/c" hash-object -- .claude/settings.json)" ] \
+  || { echo "FIXTURE BROKEN: a-st's staged settings.json does not differ from the snapshot's index blob or the worktree" >&2; exit 2; }
+deliver_run a-st "$ST/dist" "$AB" "$ST/c" "$AT"; st_rc=$?
+world_git -C "$ST/c" show HEAD:.claude/settings.json > "$WORK/a-st-head-settings.json" 2>/dev/null
+if [ "$st_rc" = 0 ] && grep -qx 'DECIDE pr https://example.invalid/pr/1 opened' "$WORK/a-st-deliver.out" \
+   && cmp -s "$WORK/a-st-head-settings.json" "$WORK/a-head-settings.json" && grep -q operatorDirtyKey "$ST/c/.claude/settings.json" \
+   && [ "$(world_git -C "$ST/c" status --porcelain=v1 -- .claude/settings.json)" = " M .claude/settings.json" ] \
+   && ! grep -q '^NOTE deliver-dirty' "$WORK/a-st-deliver.out"; then
+  ok "staged-clean-twin: a staged candidate whose merge is clean is committed as the merge, byte-identical to the unstaged twin; the operator's key comes back unstaged"
+else
+  bad "staged-clean-twin: rc=$st_rc same-as-twin: $(cmp -s "$WORK/a-st-head-settings.json" "$WORK/a-head-settings.json" && echo yes || echo no) status '$(world_git -C "$ST/c" status --porcelain=v1 -- .claude/settings.json)' out: $(tr '\n' '|' < "$WORK/a-st-deliver.out" | cut -c1-300)"
+fi
+# dirty-v1 / dirty-w0: no pre-pull blob recorded for the path: the merge cannot be made, so deliver refuses (unrecorded).
 for _v in v1 w0; do
   _w="$WORK/a-$_v"
   deliver_env "a-$_v" || { echo "FIXTURE BROKEN: deliver_env a-$_v" >&2; exit 2; }
+  _s0="$(ov_state "$_w/c")"
   deliver_run "a-$_v" "$_w/dist" "$AB" "$_w/c" "$AT"; _rc=$?
-  world_git -C "$_w/c" show HEAD:.claude/settings.json > "$WORK/a-$_v-head-settings.json"
-  _n="$(grep -c '^NOTE deliver-dirty-whole .claude/settings.json ' "$WORK/a-$_v-deliver.out")" || _n=0
-  if [ "$_rc" = 0 ] && [ "$_n" = 1 ] && grep -q operatorDirtyKey "$WORK/a-$_v-head-settings.json" && grep -q bashOutputMaxChars "$WORK/a-$_v-head-settings.json" \
-     && cmp -s "$WORK/a-$_v-head-settings.json" "$_w/c/.claude/settings.json" && [ -z "$(world_git -C "$_w/c" status --porcelain=v1 -- .claude/settings.json)" ]; then
-    ok "dirty-$_v: no recorded pre-pull blob ($([ "$_v" = v1 ] && echo 'header 1' || echo 'blob absent from the store')): one NOTE deliver-dirty-whole, and the whole file is committed (equal to the worktree)"
+  if [ "$_rc" = 2 ] && grep -qx 'REFUSED deliver-dirty-overlap rc=2' "$WORK/a-$_v-deliver.out" \
+     && grep -qx 'NOTE deliver-dirty-overlap .claude/settings.json unrecorded' "$WORK/a-$_v-deliver.out" \
+     && [ "$(ov_state "$_w/c")" = "$_s0" ] && grep -q operatorDirtyKey "$_w/c/.claude/settings.json" && grep -q bashOutputMaxChars "$_w/c/.claude/settings.json"; then
+    ok "dirty-$_v: no recorded pre-pull blob ($([ "$_v" = v1 ] && echo 'header 1' || echo 'blob absent from the store')): NOTE deliver-dirty-overlap unrecorded, REFUSED, HEAD, the file and the status unchanged"
   else
-    bad "dirty-$_v: rc=$_rc notes=$_n out: $(tr '\n' '|' < "$WORK/a-$_v-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-$_v-deliver.err")"
+    bad "dirty-$_v: rc=$_rc out: $(tr '\n' '|' < "$WORK/a-$_v-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-$_v-deliver.err")"
   fi
 done
 # st-exempt: every name pull.sh exempts from the state filter is still a name in the schema (the filter's exemption is a list of schema names).
@@ -527,6 +711,7 @@ fi
 copy_world seed-main k
 Kw="$WORK/k"; KB="$(cat "$Kw/.B")"; KT="$(cat "$Kw/.T")"
 chmod +x "$Kw/c/scripts/ai-dlc/validate-gone.sh"
+K_ORIG="$(world_git -C "$Kw/c" symbolic-ref -q --short HEAD)"
 bash "$REC/pull.sh" apply "$Kw/dist" "$KB" "$Kw/c" "$KT" > "$WORK/k.out" 2> "$WORK/k.err" < /dev/null; k_rc=$?
 k_dg="$(awk '$1 == "ASK" && $2 == "delete-consumer-modified" && $3 == "scripts/validate-gone.sh" {print $4; exit}' "$WORK/k.out")"
 k_l="$(grep -c "^delete-consumer-modified	scripts/validate-gone.sh	${k_dg:-none}	" "$Kw/c/.git/ai-dlc-pull/asks.tsv" 2>/dev/null)" || k_l=0
@@ -541,6 +726,57 @@ if [ "$k2_rc" = 0 ] && ! grep -q '^ASK' "$WORK/k2.out"; then
   ok "k: answered through the hook, the same apply proceeds and asks nothing"
 else
   bad "k: answered apply rc=$k2_rc out: $(tr '\n' '|' < "$WORK/k2.out" | cut -c1-300)"
+fi
+
+# ================================ pw-retry, pw-unfinished: the pull's own writes after an ABANDON ==============
+# The k pull applied on its update branch; ABANDON returns the checkout to the original branch, the writes still in the
+# worktree. Copies: kr (a pull-written file edited, then the same theirs retried), ku / ku0 (a new theirs, the writes
+# left uncommitted / committed); k itself is kr's twin (the retry with no edit).
+K_SD=.claude/session-driver/ai-dlc-session-driver.sh
+K_BR="$(world_git -C "$Kw/c" symbolic-ref -q --short HEAD)"
+world_git -C "$Kw/c" checkout -q "$K_ORIG" 2>/dev/null || { echo "FIXTURE BROKEN: cannot ABANDON world k to $K_ORIG" >&2; exit 2; }
+grep -qF '# driver v2 UPSTREAM' "$Kw/c/$K_SD" && [ "$K_BR" != "$K_ORIG" ] && [ -f "$Kw/c/.git/ai-dlc-pull/pull-writes" ] \
+  || { echo "FIXTURE BROKEN: world k did not apply on its own branch, or left no pull-writes record" >&2; exit 2; }
+for _v in kr ku ku0; do copy_world k "$_v"; done
+printf '# operator edit after the abandon\n' >> "$WORK/kr/c/$K_SD"
+kr_sd0="$(git hash-object "$WORK/kr/c/$K_SD")"
+bash "$REC/pull.sh" apply "$WORK/kr/dist" "$KB" "$WORK/kr/c" "$KT" > "$WORK/kr.out" 2> "$WORK/kr.err" < /dev/null; kr_rc=$?
+if [ "$kr_rc" = 2 ] && grep -qx 'REFUSED apply-pull-writes-moved rc=2' "$WORK/kr.out" \
+   && grep -q "^NOTE pull-writes-moved $K_SD recorded [0-9a-f]\{40\} now [0-9a-f]\{40\}\$" "$WORK/kr.out" \
+   && [ "$(git hash-object "$WORK/kr/c/$K_SD")" = "$kr_sd0" ] && [ "$(world_git -C "$WORK/kr/c" symbolic-ref -q --short HEAD)" = "$K_ORIG" ]; then
+  ok "pw-retry: a pull-written file edited after ABANDON, the same theirs retried: REFUSED apply-pull-writes-moved naming it, the edit kept, no branch cut"
+else
+  bad "pw-retry: rc=$kr_rc out: $(tr '\n' '|' < "$WORK/kr.out" | cut -c1-300) err: $(head -c 300 "$WORK/kr.err")"
+fi
+bash "$REC/pull.sh" apply "$Kw/dist" "$KB" "$Kw/c" "$KT" > "$WORK/kr0.out" 2> "$WORK/kr0.err" < /dev/null; kr0_rc=$?
+if [ "$kr0_rc" = 0 ] && grep -q '^PULL run=' "$WORK/kr0.out" && ! grep -q 'pull-writes' "$WORK/kr0.out" \
+   && [ "$(world_git -C "$Kw/c" symbolic-ref -q --short HEAD)" != "$K_ORIG" ]; then
+  ok "pw-retry twin: the same retry with no edit proceeds (exit 0, a branch cut, no pull-writes row)"
+else
+  bad "pw-retry twin: rc=$kr0_rc out: $(tr '\n' '|' < "$WORK/kr0.out" | cut -c1-300) err: $(head -c 300 "$WORK/kr0.err")"
+fi
+# A new theirs (VERSION moves) in ku and ku0; ku0 commits the pull's writes first.
+world_git -C "$WORK/ku0/c" add -A && world_git -C "$WORK/ku0/c" commit -q -m "the k pull's writes, committed" || { echo "FIXTURE BROKEN: cannot commit ku0" >&2; exit 2; }
+for _v in ku ku0; do
+  printf '2.0.1\n' > "$WORK/$_v/dist/VERSION" && world_commit "$WORK/$_v/dist" "theirs moves" >/dev/null || { echo "FIXTURE BROKEN: cannot move theirs in $_v" >&2; exit 2; }
+done
+KU_T="$(world_git -C "$WORK/ku/dist" rev-parse HEAD)"; KU0_T="$(world_git -C "$WORK/ku0/dist" rev-parse HEAD)"
+k_th="$(world_git -C "$Kw/dist" rev-parse "$KT")"
+ku_snap() { sed -n 1p "$WORK/$1/c/.git/ai-dlc-pull/dirty-snapshot" 2>/dev/null | awk '{print $3}'; }
+bash "$REC/pull.sh" apply "$WORK/ku/dist" "$KB" "$WORK/ku/c" "$KU_T" > "$WORK/ku.out" 2> "$WORK/ku.err" < /dev/null; ku_rc=$?
+if [ "$ku_rc" = 2 ] && grep -qx 'REFUSED apply-pull-unfinished rc=2' "$WORK/ku.out" \
+   && grep -q "^NOTE pull-writes-unfinished $K_SD theirs $k_th\$" "$WORK/ku.out" && [ "$(ku_snap ku)" = "$k_th" ] \
+   && grep -qF '# driver v2 UPSTREAM' "$WORK/ku/c/$K_SD"; then
+  ok "pw-unfinished: a new theirs while the earlier pull's writes are uncommitted: REFUSED apply-pull-unfinished naming them, the earlier snapshot kept"
+else
+  bad "pw-unfinished: rc=$ku_rc out: $(tr '\n' '|' < "$WORK/ku.out" | cut -c1-300) snapshot theirs '$(ku_snap ku)' err: $(head -c 300 "$WORK/ku.err")"
+fi
+bash "$REC/pull.sh" apply "$WORK/ku0/dist" "$KB" "$WORK/ku0/c" "$KU0_T" > "$WORK/ku0.out" 2> "$WORK/ku0.err" < /dev/null; ku0_rc=$?
+if [ "$(ku_snap ku0)" = "$KU0_T" ] && [ "$KU0_T" != "$k_th" ] && ! grep -q 'pull-writes-unfinished\|apply-pull-unfinished' "$WORK/ku0.out" \
+   && grep -q '^PULL run=' "$WORK/ku0.out"; then
+  ok "pw-unfinished twin: the same new theirs with the earlier writes committed proceeds and writes its own snapshot (rc=$ku0_rc)"
+else
+  bad "pw-unfinished twin: rc=$ku0_rc snapshot theirs '$(ku_snap ku0)' want $KU0_T out: $(tr '\n' '|' < "$WORK/ku0.out" | cut -c1-300)"
 fi
 
 # ================================ e, f: F moves on the index and on the stamp ==============================
@@ -693,6 +929,23 @@ fi
 # file (absent then) is the pull's write and deliver commits it.
 s_snap_hdr() { sed -n 1p "$Sw/c/.git/ai-dlc-pull/dirty-snapshot" 2>/dev/null; }
 s_hdr3="$(s_snap_hdr)"
+# F1: round 3 handed back nothing, and the driver's apply never stamps: the stamp still reads base, the in-flight marker
+# stays, and the last line names the finish with the same base. That finish exits 0 and stamps theirs.
+s_commit() { sed -n 's/^commit:[[:space:]]*//p' "$Sw/c/.claude/.ai-dlc-version"; }
+if [ "$s3_rc" = 0 ] && [ "$(tail -1 "$WORK/s3.out")" = "NEXT pull.sh finish $Sw/dist $SB $Sw/c $ST" ] && [ "$(s_commit)" = "$SB" ] \
+   && [ -e "$Sw/c/.claude/.ai-dlc-applying" ] && [ "$(git hash-object "$Sw/c/.claude/.ai-dlc-version")" = "$s_stamp0" ] \
+   && ! grep -qi 'restamp\|stamp-deferred' "$WORK/s3.out"; then
+  ok "F1: an apply that hands back nothing leaves the stamp at base and the marker in place, and its last line is NEXT pull.sh finish with the same base"
+else
+  bad "F1: apply rc=$s3_rc stamp commit '$(s_commit)' (base $SB) stamp unchanged=$([ "$(git hash-object "$Sw/c/.claude/.ai-dlc-version")" = "$s_stamp0" ] && echo yes || echo no) marker=$([ -e "$Sw/c/.claude/.ai-dlc-applying" ] && echo kept || echo gone) stamp rows: $(grep -i 'restamp\|stamp-deferred' "$WORK/s3.out" | tr '\n' '|' | cut -c1-200) last line '$(tail -1 "$WORK/s3.out")'"
+fi
+bash "$REC/pull.sh" finish "$Sw/dist" "$SB" "$Sw/c" "$ST" > "$WORK/s-fin.out" 2> "$WORK/s-fin.err" < /dev/null; s_frc=$?
+if [ "$s_frc" = 0 ] && [ "$(world_git -C "$Sw/dist" rev-parse -q --verify "$(s_commit)^{commit}")" = "$ST" ] && grep -q '^version:[[:space:]]*2\.0\.0$' "$Sw/c/.claude/.ai-dlc-version" \
+   && [ ! -e "$Sw/c/.claude/.ai-dlc-applying" ] && ! grep -q 'finish-base-unverified' "$WORK/s-fin.out"; then
+  ok "F1: pull.sh finish with the ORIGINAL base exits 0, stamps theirs and clears the marker"
+else
+  bad "F1: finish rc=$s_frc stamp commit '$(s_commit)' (theirs $ST) out: $(tr '\n' '|' < "$WORK/s-fin.out" | cut -c1-300) err: $(head -c 300 "$WORK/s-fin.err")"
+fi
 printf '{"row":1}\n' > "$Sw/c/_bmad-output/spawn-ledger.jsonl"
 deliver_env s || { echo "FIXTURE BROKEN: deliver_env s" >&2; exit 2; }
 deliver_run s "$Sw/dist" "$SB" "$Sw/c" "$ST"; s_drc=$?
@@ -747,7 +1000,8 @@ S3GD="$S3/c/.git"
 rm -f "$S3/c/.claude/fixtures/stray/run.sh"
 if [ "$s3v_rc" = 0 ] && [ "$(sed -n 1p "$S3GD/ai-dlc-approved-region" 2>/dev/null)" = "ai-dlc-approved-region 1" ] \
    && [ ! -e "$S3GD/ai-dlc-approved-region.pull" ] && grep -q 'ORPHANED-UNKNOWN' "$S3GD/ai-dlc-approved-region"; then
-  bash "$REC/pull.sh" apply "$S3/dist" "$SB" "$S3/c" "$ST" > "$WORK/s3a.out" 2> "$WORK/s3a.err" < /dev/null; s3a_rc=$?
+  s3_st0="$(git hash-object "$S3/c/.claude/.ai-dlc-version")"
+  bash "$REC/pull.sh" apply --carried-machinery-slice "$S3/dist" "$SB" "$S3/c" "$ST" > "$WORK/s3a.out" 2> "$WORK/s3a.err" < /dev/null; s3a_rc=$?
   if [ "$s3a_rc" = 0 ] && grep -qF '# driver v2 UPSTREAM' "$S3/c/$SENT_REL" && [ -e "$S3GD/ai-dlc-approved-region.pull" ]; then
     ok "c3: a pre-driver record (no driver sidecar) carrying a since-settled ASK row is replaced, and pull.sh apply exits 0"
   else
@@ -755,6 +1009,43 @@ if [ "$s3v_rc" = 0 ] && [ "$(sed -n 1p "$S3GD/ai-dlc-approved-region" 2>/dev/nul
   fi
 else
   bad "c3: could not seed a pre-driver record (verify rc=$s3v_rc, header '$(sed -n 1p "$S3GD/ai-dlc-approved-region" 2>/dev/null)')"
+fi
+# F1-cms: the same deferral under --carried-machinery-slice: after apply neither pair moved (the stamp is byte-identical, no
+# skill pair) and the NEXT line carries the flag; finish with the flag and the original base writes both pairs.
+s3_stamp() { sed -n "s/^$1:[[:space:]]*//p" "$S3/c/.claude/.ai-dlc-version"; }
+if [ "$s3a_rc" = 0 ] && [ "$(tail -1 "$WORK/s3a.out")" = "NEXT pull.sh finish --carried-machinery-slice $S3/dist $SB $S3/c $ST" ] \
+   && [ "$(git hash-object "$S3/c/.claude/.ai-dlc-version")" = "${s3_st0:-none}" ] && [ -z "$(s3_stamp skill_commit)" ] && [ -e "$S3/c/.claude/.ai-dlc-applying" ]; then
+  ok "F1-cms: under --carried-machinery-slice the apply writes neither pair, keeps the marker, and its NEXT line carries the flag"
+else
+  bad "F1-cms: apply rc=$s3a_rc last line '$(tail -1 "$WORK/s3a.out")' stamp: $(tr '\n' '|' < "$S3/c/.claude/.ai-dlc-version")"
+fi
+# F2: a copy of that state with the pull-written driver file reverted to its base content before finish.
+copy_world s3 s3f2
+printf '#!/usr/bin/env bash\n# driver v1\n' > "$WORK/s3f2/c/$SENT_REL"
+s3f2_st0="$(git hash-object "$WORK/s3f2/c/.claude/.ai-dlc-version")"
+# adv: the F1-cms consumer's agent-definition check reports drift (a renderer whose --check exits 1), so the finish
+# prints WORKLIST agent-definitions; it runs after the stamp and is reported advisory, never withheld.
+printf '#!/usr/bin/env bash\necho "role dev: .claude/agents/dev.md is stale"\nexit 1\n' > "$S3/c/scripts/ai-dlc/render-agent-definitions.sh"
+bash "$REC/pull.sh" finish --carried-machinery-slice "$S3/dist" "$SB" "$S3/c" "$ST" > "$WORK/s3f.out" 2> "$WORK/s3f.err" < /dev/null; s3f_rc=$?
+s3_full() { world_git -C "$S3/dist" rev-parse -q --verify "$(s3_stamp "$1")^{commit}"; }
+if [ "$s3f_rc" = 0 ] && [ "$(s3_full commit)" = "$ST" ] && [ "$(s3_full skill_commit)" = "$ST" ] \
+   && [ "$(s3_stamp version)" = 2.0.0 ] && [ "$(s3_stamp skill_version)" = 2.0.0 ] && [ ! -e "$S3/c/.claude/.ai-dlc-applying" ]; then
+  ok "F1-cms: pull.sh finish --carried-machinery-slice with the original base exits 0 and writes both pairs to theirs"
+else
+  bad "F1-cms: finish rc=$s3f_rc stamp: $(tr '\n' '|' < "$S3/c/.claude/.ai-dlc-version") out: $(tr '\n' '|' < "$WORK/s3f.out" | cut -c1-300)"
+fi
+if [ "$s3f_rc" = 0 ] && grep -qx 'DECIDE agent-definitions .claude/agents/ advisory' "$WORK/s3f.out" && ! grep -q ' withheld$' "$WORK/s3f.out" \
+   && [ "$(s3_full commit)" = "$ST" ] && [ ! -e "$S3/c/.claude/.ai-dlc-applying" ]; then
+  ok "adv: a finish whose agent-definition check fires prints DECIDE agent-definitions advisory, exits 0, stamps theirs and removes the marker"
+else
+  bad "adv: finish rc=$s3f_rc stamp commit '$(s3_stamp commit)' marker=$([ -e "$S3/c/.claude/.ai-dlc-applying" ] && echo kept || echo gone) out: $(tr '\n' '|' < "$WORK/s3f.out" | cut -c1-300)"
+fi
+bash "$REC/pull.sh" finish "$WORK/s3f2/dist" "$SB" "$WORK/s3f2/c" "$ST" > "$WORK/s3f2.out" 2> "$WORK/s3f2.err" < /dev/null; s3f2_rc=$?
+if [ "$s3f2_rc" = 3 ] && grep -q "^DECIDE finish-unapplied $SENT_REL withheld\$" "$WORK/s3f2.out" && ! grep -q 'finish-base-unverified' "$WORK/s3f2.out" \
+   && [ "$(git hash-object "$WORK/s3f2/c/.claude/.ai-dlc-version")" = "$s3f2_st0" ] && [ -e "$WORK/s3f2/c/.claude/.ai-dlc-applying" ]; then
+  ok "F2: a pull-written file reverted before finish: DECIDE finish-unapplied withheld (never finish-base-unverified), exit 3, the stamp and marker kept"
+else
+  bad "F2: finish rc=$s3f2_rc out: $(tr '\n' '|' < "$WORK/s3f2.out" | cut -c1-400) err: $(head -c 300 "$WORK/s3f2.err")"
 fi
 
 # ================================ h, i: pull.sh merge on the override world ================================
@@ -982,4 +1273,4 @@ else
 fi
 # ===== end BL-1173 arms =====
 
-report_end reconcile-pull-driver 68
+report_end reconcile-pull-driver 88

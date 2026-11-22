@@ -87,6 +87,15 @@
 #                                    prose, and only the author knows.
 #                                    Report-only, and independent of any pull: true or false
 #                                    today, like its sibling.
+#   OVERRIDE-SHADOWS-POINTER-STUB    a section the override shadows is, at theirs, a load-pointer
+#                                    stub: it carries the `READ AND FOLLOW rule-bodies/rule-N.md`
+#                                    sentence (lib.sh rule_body_pointers, invariant I130's
+#                                    grammar) naming another file as the binding text. The entry
+#                                    replaces the stub only; the binding file carries none of the
+#                                    consumer's change, and a three-way merge against the stub
+#                                    re-adopts the pointer, not the rule. Independent of any pull:
+#                                    true or false at theirs. Report-only (LC-O17): its remedy
+#                                    rests on a load-time question the code does not decide.
 #   OVERRIDE-LOOSE-ANCHOR            a `shadows:` anchor resolves only by the REVERSE arm of
 #                                    the containment match — the anchor CONTAINS the heading —
 #                                    so it declares something finer than a heading and quietly
@@ -2184,7 +2193,7 @@ while IFS= read -r f; do
   # a single-section message on an override shadowing eight sections invites the
   # operator to reconcile that one and silently drop the rest.
   worst=OVERRIDE-OK
-  drifted=""; unprovable=""; unresolved=""; whole_file=""; delegated=""; loose=""
+  drifted=""; unprovable=""; unresolved=""; whole_file=""; delegated=""; loose=""; stubbed=""
   ov_ticks="$(body_of "$f" | ticks_of)"
   while IFS= read -r pair; do
     [ -n "$pair" ] || continue
@@ -2265,6 +2274,17 @@ while IFS= read -r f; do
         [ -n "$both" ] && delegated="${delegated:+$delegated; }#${id} -> ${both}"
       fi
     fi
+    # Is the shadowed section, at theirs, a load-pointer stub? The grammar is lib.sh's
+    # rule_body_pointers, the one I130 binds; rc 1 is "no pointer", anything past it refuses.
+    if [ -n "$s_theirs" ]; then
+      ld_stage "$LD_T/stub-sec" "$s_theirs" "the shadowed section of ${entry} #${id} for the pointer-stub read"
+      _pb_rc=0; _pb="$(rule_body_pointers < "$LD_T/stub-sec")" || _pb_rc=$?
+      case "$_pb_rc" in
+        0) stubbed="${stubbed:+$stubbed; }#${id} -> rule-bodies/$(printf '%s' "$_pb" | tr '\n' ' ' | sed 's/ $//; s# # rule-bodies/#g')" ;;
+        1) ;;
+        *) ld_refuse_staging "the pointer-stub read for ${entry} #${id}" "$_pb_rc" ;;
+      esac
+    fi
     if [ -z "$s_theirs" ]; then
       if [ "$a_changed" = yes ]; then
         [ "$worst" = HARD-OVERRIDE-DRIFT-SECTION ] || worst=OVERRIDE-DRIFT-FILE
@@ -2306,6 +2326,12 @@ while IFS= read -r f; do
   # of the real instances do exactly that.
   [ -n "$delegated" ] && emit OVERRIDE-DELEGATES-INTO-SHADOW "$entry" "$tgt" \
     "the body names construct(s) defined INSIDE the section(s) it replaces, so at load time (overrides > extensions > core) the delegation target is gone: ${delegated}. Every future upstream change to those constructs also fails to arrive here while every check stays green. Restate the construct in this override, narrow shadows: to the sub-headings actually rewritten, or delegate to something outside the shadowed span. Report-only -- delegating to a construct the lead is expected to open core for is sometimes deliberate."
+
+  # Asked separately again: not whether the stub moved, but whether what this entry shadows is the
+  # rule at all. An entry can read OK on every anchor (the stub unchanged) and still replace only a
+  # pointer to the binding text.
+  [ -n "$stubbed" ] && emit OVERRIDE-SHADOWS-POINTER-STUB "$entry" "$tgt" \
+    "shadowed section(s) that are, at ${THEIRS}, a load-pointer stub naming another file as the rule's binding text: ${stubbed}. This entry replaces the stub only; the binding file carries none of this entry's changes, and a three-way merge against the stub re-adopts the pointer, not the rule. While shadows: names the stub, readopt-override.sh refuses --merge, --check and --stamp readopt|reaffirm on this entry; --stamp retire stays open. Remedy: run readopt-override.sh <dist> <theirs> <consumer> <override> --stamp retire, then file this override's rows upstream as a change to the intensity table of the stub that owns the rule (the SKILL.md stub, per distribution invariants I19 and I131; rule-bodies/rule-N.md holds a copy). Report-only."
 
   # The sibling question, asked separately for the same reason: `worst` asks whether upstream
   # moved, and this asks whether the override's own body describes its own effect truthfully.

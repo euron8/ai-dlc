@@ -161,15 +161,22 @@ and work only what it hands back. Its header is the contract; the subcommands ar
   the gate's `SELF-UPDATE-SAFE-STOP`, `SELF-UPDATE-CARRY`, `SELF-UPDATE-UNDECIDED` and `SELF-UPDATE-DEFER` rows verbatim.
 - `pull.sh dry-run <dist> <base> <consumer> <theirs>` — the bare invocation's report; asks nothing.
 - `pull.sh apply [--carried-machinery-slice] <dist> <base> <consumer> <theirs>` — the whole apply (step 7).
-- `pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>` — the stamp.
+  It never stamps.
+- `pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>` — the stamp, the
+  only write of it on a driver pull, with the same `<base>` the apply was given.
 - `pull.sh merge <dist> <base> <consumer> <theirs> <override>` — an override re-adoption merge.
-- `pull.sh deliver <dist> <base> <consumer> <theirs>` — commit, push, `gh pr create` (step 8).
+- `pull.sh deliver [--whole <path>]... <dist> <base> <consumer> <theirs>` — commit, push, `gh pr create` (step 8).
+- `pull.sh record <dist> <base> <consumer> <theirs> [-- <path>...]` — on a finished pull, re-records the
+  named paths of the record of the pull's own writes from the work tree and nothing else; it stamps nothing.
 - `pull.sh pr-body <consumer>` — the rendered PR body.
 
 **Its lines.** `PULL run=<dir> key=<12> renders=<n>`; `REFUSED <what> rc=<n>`;
 `ASK <kind> <path> <digest> <question>`; `DECIDE <kind> <path> <verdict>`; `WORK classify <path>`;
-`HARD <row>`. **Exit** 0 done, 2 refused or usage, 3 pending (an ASK row awaits an answer, a HARD
-row must be resolved before anything is written, or `finish` withheld the stamp). A `REFUSED`
+`NOTE pull-writes-recorded <n> <theirs>` (`record`, exit 0); `NOTE pull-writes-rerecorded <path>` and `NOTE deliver-dirty-whole <path>` (deliver's disclosures); `HARD <row>`; `NEXT pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`
+(apply's last line when nothing it ran is outstanding: the next step, not a decision). **Exit** 0
+done, 2 refused or usage, 3 pending (an ASK row awaits an answer, a HARD row must be resolved
+before anything is written, `finish` withheld the stamp (an `advisory` row does not), or `merge` relayed a pointer-stub
+refusal). A `REFUSED`
 names the step that refused; clear its cause and re-run the same subcommand. Never edit the
 report's `reconcile-mechanical` region or the files under `<consumer git-dir>/ai-dlc-pull/`.
 
@@ -283,7 +290,7 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      failing) is a STOP that names the branch and every row's PR number and base, and
      returns nowhere. That STOP also checks for `.claude/.ai-dlc-applying` and says whether
      an apply is unfinished, then names the continuations and runs none of them:
-     `reconcile/apply.sh --finish …` as step 7's finish text gives it, step-8 delivery of
+     `reconcile/pull.sh finish …` as step 7's finish text gives it, step-8 delivery of
      this branch, or step 8's RETURN PROCEDURE in its ABANDON form to `<cut-from>` (the
      branch it was cut from, derived as the next sentences state) to abandon it.
      **The branch a skill branch was cut from is derived one way, here**, and steps 2 and 8
@@ -453,9 +460,9 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      Report the rows, and carry the machinery slice into the step-7 gated apply so machinery and
      rulebook land on ONE branch — the operator fixes the layer state there, and that is the only
      ordering in which the pre-push gate can go green. Say in one line that step 2 deferred and
-     why, and **advance `skill_version`/`skill_commit` with that apply rather than here — by
-     running `reconcile/apply.sh --carried-machinery-slice <dist> <base> <consumer> <theirs>` at
-     step 7.** That flag is the whole mechanism; do NOT set the two fields by hand, and do not
+     why, and **advance `skill_version`/`skill_commit` at step 7 rather than here — by passing
+     `--carried-machinery-slice` to `pull.sh apply` and `pull.sh finish`; the finish writes the
+     pair with the stamp.** That flag is the whole mechanism; do NOT set the two fields by hand, and do not
      read step 7's "preserve them" as overriding this. The two instructions describe different
      runs and the flag is what tells them apart — see step 7's re-stamp bullet.
      **The gate wrote `_bmad-output/ai-dlc-update/self-update-gate-<ts>.md` on this verdict too.**
@@ -1069,8 +1076,21 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    region once, records the approved region, prints every `ASK` and `HARD` row and exits 3 before
    any write if there is one, cuts the step-6 branch, runs `reconcile/apply.sh` (every MECHANICAL
    resolution, reusing that render's detector outputs), then prints the `WORK classify`, `ASK
-   deletion` and `DECIDE` rows and writes the decisions record. Work what it hands back, then run
-   `pull.sh finish`.
+   deletion` and `DECIDE` rows and writes the decisions record. It never writes the stamp: the
+   stamp still reads `<base>` after it and the in-flight marker stays. Work what it hands back,
+   then run `pull.sh finish` with the same four arguments and flag, `<base>` included (the
+   `NEXT pull.sh finish …` line prints that command when nothing it ran is outstanding).
+
+   **Two refusals stop `pull.sh apply` before its first write (exit 2).** `REFUSED
+   apply-pull-writes-moved`, on a retry of the same `<theirs>` off an `ai-dlc-update/*` branch,
+   follows one `NOTE pull-writes-moved <path> recorded <blob> now <blob>` per file the pull wrote
+   whose content changed since its last driver step: move your own edit out of each named file
+   (re-apply it after the PR merges), or, for a step-7 merge, re-run `pull.sh finish` so the record
+   takes it, then re-run apply. (`pull.sh record` is deliver's remedy; it refuses an apply that is not finished.) `REFUSED apply-pull-unfinished`, on a new `<theirs>`, follows one
+   `NOTE pull-writes-unfinished <path> theirs <sha>` per file another pull wrote and left
+   uncommitted at its written content: finish and deliver that pull with its own `<theirs>`, or
+   discard its writes to those files yourself, then re-run apply. `NOTE pull-writes-unrecorded`
+   (a pull begun under an engine that kept no record of its writes) refuses nothing.
 
    **On exit 3, nothing was written.** For each `ASK` row, ask its question (*The driver* above)
    and act on the answer. For each `HARD` row, resolve it as `reconcile/detector-rows.md` gives
@@ -1086,6 +1106,15 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    `DECIDE override-drift <rel> merged` and is recorded; a CONFLICT leaves markers in the body and
    prints `ASK conflict-hunk <rel> <digest> <question>` (exit 3): present that hunk, nothing else,
    and write the answer into the body. Never hand-edit a body that the merge can produce.
+   An override whose shadowed section is, at `<theirs>`, a load-pointer stub (a section carrying
+   the `READ AND FOLLOW rule-bodies/rule-N.md` sentence; `OVERRIDE-SHADOWS-POINTER-STUB` in
+   `reconcile/detector-rows.md`) is never merged: `pull.sh merge` relays `readopt-override.sh`'s
+   `REFUSED … OVERRIDE-SHADOWS-POINTER-STUB` row and its remedy verbatim, records no decision and
+   exits 3, and `--stamp readopt` and `--stamp reaffirm` refuse on it while `shadows:` names the
+   stub. The row's remedy, verbatim: "run readopt-override.sh <dist> <theirs> <consumer>
+   <override> --stamp retire, then file this override's rows upstream as a change to the
+   intensity table of the stub that owns the rule (the SKILL.md stub, per distribution
+   invariants I19 and I131; rule-bodies/rule-N.md holds a copy)."
 
    **The rows `apply.sh` hands back, by class** (each detail field is authoritative about its
    remedy; the driver prints each `WORKLIST` and `DECISION` row as a `DECIDE <kind> <path> pending`
@@ -1100,7 +1129,7 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      "migrate the drift" chore, automated), catalog relabels, **setup-sited merges**
      (`setup-site-merge`: a setup-sited file whose only consumer delta is its declared setup
      values, merged with `git merge-file` and checked against theirs outside its spans), and the
-     version re-stamp.
+     version re-stamp, which `pull.sh finish` prints and `pull.sh apply` never does.
    - `WORKLIST …` — the only things left for YOU. Work EVERY row, whatever its kind: each one
      names concrete work in its own detail field, and the re-stamp is withheld until all of them
      are disposed. `semantic-merge` is a BOTH-CHANGED 3-way PROSE merge per `classify-block.md`,
@@ -1149,7 +1178,8 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    `readopt-override.sh --merge` is run as `pull.sh finish`, `pull.sh apply` or `pull.sh merge`,
    with the same arguments and flag. Both paths refuse to stamp over an unanswered ask; the
    driver is the documented path because it also prints the `ASK` rows and flushes the
-   decisions record.
+   decisions record. Only the driver rewrites the record of the pull's own writes that deliver
+   compares; after a raw engine run, deliver refuses `deliver-pull-writes-moved`.
 
    **`apply.sh` runs the derivation differential and records what it finds; you do not run it for
    the record.** A derivation this pull broke is RECORDED OWED in
@@ -1240,15 +1270,20 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    are in `reconcile/detector-rows.md`.
 
    **THE STAMP IS WITHHELD WHILE ANY ROW IS OUTSTANDING, AND `pull.sh finish` IS HOW YOU ADVANCE
-   IT. THIS IS A REQUIRED STEP, NOT A RECOVERY PATH.** A first `apply.sh` run that hands back any
-   `WORKLIST` or `DECISION` row prints `DECISION restamp-withheld`, leaves the stamp at `<base>` and
-   leaves `.claude/.ai-dlc-applying` in place, so the consumer's fixture suite refuses on purpose.
-   When every row is disposed, run `reconcile/pull.sh finish [--carried-machinery-slice] <dist>
-   <base> <consumer> <theirs>`. It runs `apply.sh --finish`, which first checks the CONFLICT
+   IT. THIS IS A REQUIRED STEP ON EVERY PULL, NOT A RECOVERY PATH.** `pull.sh apply` runs
+   `apply.sh --stamp-at-finish`, which never stamps: it leaves the stamp at `<base>` and
+   `.claude/.ai-dlc-applying` in place, so the consumer's fixture suite refuses on purpose and
+   `pull.sh deliver` refuses `deliver-pull-unfinished`. A run that hands back any `WORKLIST` or
+   `DECISION` row prints `DECISION restamp-withheld`; a run with nothing outstanding prints no
+   restamp row, and the driver prints `NEXT pull.sh finish …`. When every row is disposed, run
+   `reconcile/pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>` with
+   the `<base>` the apply was given. It runs `apply.sh --finish`, which first checks the CONFLICT
    GUARD (an `ASK` row means a conflict or blend reached the tree without an answer: exit 3),
    then checks the tree and does the stamp and the marker clear; it writes no core file. A `DECIDE
    <kind> <path> withheld` row (exit 3) is a check `--finish` failed: dispose of it and run `finish`
-   again. When the `restamp-withheld` row says a fresh ordinary run is the remedy instead, run
+   again. A `DECIDE <kind> <path> advisory` row (hook registration, transient ignore, agent
+   definitions, taught schema) is printed after the stamp and never holds it or the marker: do its
+   work before deliver. When the `restamp-withheld` row says a fresh ordinary run is the remedy instead, run
    `pull.sh apply` again with the same arguments; `finish` is not the next step there. Every row
    `--finish` can emit is listed in `reconcile/detector-rows.md`.
 
@@ -1262,14 +1297,23 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      reported `SELF-UPDATE-DEFER`/`SELF-UPDATE-UNDECIDED` and handed its machinery
      slice to this apply, then this run DID install machinery, and the skill pair
      must advance with the rulebook pair — pass `--carried-machinery-slice` to
-     `pull.sh apply` and `pull.sh finish`, which pass it to `apply.sh`, and it writes all four.
+     `pull.sh apply` and `pull.sh finish`, which pass it to `apply.sh`, and the finish writes
+     all four.
      Withholding still applies to BOTH pairs or neither. A stale `skill_commit` makes every
      machinery file this apply wrote read as consumer drift on the next pull.
 
-     **The re-stamp fires whenever the consumer core now equals `theirs` — INCLUDING an empty
-     reconcile** (zero rulebook blocks applied, e.g. a self-update-only pull): the `apply` run is
-     then a stamp-only bump, and the log records "already current, stamp advanced <base> →
-     <theirs>."
+     **`pull.sh finish` stamps whenever its checks pass — INCLUDING an empty reconcile** (zero
+     rulebook blocks applied, e.g. a self-update-only pull): the `apply` run then hands back
+     nothing and prints `NEXT pull.sh finish …`, the finish is a stamp-only bump checked against
+     that `<base>`, and the log records "already current, stamp advanced <base> → <theirs>."
+
+     **When the apply that wrote this tree already stamped** (an apply run by an engine that
+     predates the deferral, which happens on the pull that delivers it under
+     `SELF-UPDATE-DEFER` or `SELF-UPDATE-UNDECIDED` when that apply handed back nothing), the
+     stamp reads `<theirs>` and the marker is gone, so the finish withholds once with
+     `finish-base-unverified`. Re-run `pull.sh finish` with the stamp's own `commit:` as `<base>`,
+     as that row says: it exits 0 and verifies nothing that the earlier apply did not, so record
+     it in the reconcile log as an unchecked finish.
 
    - **YOU write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, and `apply.sh` does NOT.** When the apply drew a `NOTE reconcile-log-name` row, `<ts>` is the stamp in that row's path: write the log at exactly that path, because the owed-derivations record's field 7 names it.
      Write it LAST, after the post-apply re-runs, because it records them. It carries the gates
@@ -1302,10 +1346,34 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
    only the pull's own writes (step 8's Commit bullet), pushes so the consumer's pre-push runs, and
    opens the PR against the branch the reflog says this one was cut from, with a script-rendered
    body, bounded in bytes and checked before the push: the decisions record, the reconcile region
-   and, where it differs, the dry-run region. A `DECIDE <status> <block> drain` row
+   and, where it differs, the dry-run region. Its refusals all come before any write.
+   `REFUSED deliver-pull-writes-moved` follows one `NOTE pull-writes-moved <path> recorded <blob>
+   now <blob>` per file the pull wrote whose content changed after its last driver step (`pull.sh
+   apply`, `finish` or `merge`): your own edit since then, or a step-7 merge made after the last
+   driver run. Move your own edit out of each named file (re-apply it after the PR merges), or,
+   for a merge, run `pull.sh record <dist> <base> <consumer> <theirs> -- <path>...` naming each
+   such file so the record takes it; then re-run deliver. `record` rewrites that record and nothing
+   else, and prints `NOTE pull-writes-recorded <n> <theirs>`; deliver discloses each re-recorded
+   path as `NOTE pull-writes-rerecorded <path>` in the commit message and the PR body. It refuses
+   `REFUSED record-path-unnamed rc=2` (one `NOTE pull-writes-moved` per path first) while a recorded
+   path whose content moved is not named after `--`, `REFUSED record-pull-unfinished
+   rc=2` while the in-flight marker `.ai-dlc-applying` exists and `REFUSED record-no-record rc=2`
+   when no record names this `<theirs>`. A delivered pull writes
+   `<git-dir>/ai-dlc-pull/pull-writes.delivered`, and the next `<theirs>`'s unfinished check skips a
+   record whose `<theirs>` it names.
+   `REFUSED deliver-dirty-overlap` follows one `NOTE deliver-dirty-overlap <path> overlap|unrecorded`
+   per file that was already dirty when the pull began, that the pull also changed, and whose
+   change cannot be separated from your edit (`overlap`: the edits touch the same lines;
+   `unrecorded`: its pre-pull content was not recorded). Staging the file does not lift the refusal.
+   Only the operator decides to commit such a file whole: re-run deliver with `--whole <path>` per
+   file, which commits the worktree file, their edit included, and writes `NOTE deliver-dirty-whole
+   <path>` into the commit message and the PR body. To keep the edit out, save it aside and take it
+   out of the file first, re-run with `--whole <path>`, then restore it. A `DECIDE <status> <block> drain` row
    is a push-drain row for step 8's drain. `DECIDE push-red <log>` (exit 3) is yours: diagnose the
    red push from that log, fix the cause on this branch, record the diagnosis as a decisions row,
-   and run `deliver` again. `ASK base-confirm` (exit 3) is step 8's no-reflog-line case. The driver
+   and run `deliver` again. A fix that edits a file the pull wrote makes that run refuse
+   `deliver-pull-writes-moved`; take that refusal's `pull.sh record -- <path>` remedy for the fix, then run `deliver`
+   again. `ASK base-confirm` (exit 3) is step 8's no-reflog-line case. The driver
    NEVER merges: on `DECIDE pr <url> opened`, the merge and the RETURN PROCEDURE are yours, exactly
    as step 8 states them.
 
@@ -1459,8 +1527,9 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
      pull's artifacts (the report, the reconcile log, the decisions file, the gate and push
      records), the paths this pull's own records name, and any path staged explicitly. The
      operator's pre-existing dirty, untracked and staged state stays out of the commit and is left
-     untouched, staged or not. A dirty file whose edit overlaps the pull's change is committed whole,
-     with a `NOTE deliver-dirty-whole` in the PR body. Never `git add -A` or `git add .`, and never `git commit -- <paths>`.
+     untouched, staged or not. A dirty file whose edit overlaps the pull's change, or whose
+     pre-pull content was not recorded, is committed whole only on the operator's `--whole <path>`,
+     disclosed in the PR: otherwise deliver refuses `deliver-dirty-overlap` before any write (step 7's deliver paragraph names the remedy). Never `git add -A` or `git add .`, and never `git commit -- <paths>`.
      The PR body is bounded in bytes and checked before the push. The commit has a subject
      like `chore(ai-dlc-update): reconcile distribution <base-ver> → <theirs-ver>`
      and a body summarizing buckets applied + conflicts adjudicated + the log path + every
@@ -1633,7 +1702,8 @@ collapses:
   base is the core rule it shadows (`base_sha` in the entry). If theirs changed
   that core rule between `base_sha` and HEAD, the override is re-adopted through
   `pull.sh merge` (override-drift, spec §10): a clean merge is a recorded decision, a
-  conflict hunk is asked. **This is computed by step 3c's
+  conflict hunk is asked, and a shadowed section that is a load-pointer stub at theirs
+  (`OVERRIDE-SHADOWS-POINTER-STUB`) is refused, never merged. **This is computed by step 3c's
   `layer-drift.sh`, not by hand** — it was prose here for its whole existence and
   consequently never ran. An override whose `base_sha` does not resolve in the
   distribution is a HARD finding that blocks `apply` (Rule 27(a)); it is never

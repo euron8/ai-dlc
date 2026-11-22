@@ -13507,9 +13507,19 @@ code-reviewer.md's template \`Class:\` line declares it and qa.md's \`## Finding
 # relocation-pointer resolution, run at pre-push with --fail-on=deterministic; not restated here.
 # Keyed on the pointer sentence (`READ AND FOLLOW` + backticked rule-bodies path), not a bare filename.
 # Control: the pointer count must be non-zero, or the scan saw nothing.
+# The sentence grammar is reconcile/lib.sh's rule_body_pointers(), loaded here, never restated: the pull's
+# pointer-stub detectors (layer-drift.sh, readopt-override.sh) read the same function. The arm loads it itself,
+# never through I40's la_fn/LA_LIB, so it runs when selected alone.
 i130_skill="$REPO_ROOT/core/skills/ai-dlc/SKILL.md"
 i130_dir="$REPO_ROOT/core/skills/ai-dlc/rule-bodies"
-i130_ptrs="$(grep -o 'READ AND FOLLOW `rule-bodies/rule-[0-9][0-9]*\.md`' "$i130_skill" | sed 's/^.*`rule-bodies\///; s/`$//')"
+i130_lib="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+i130_ptrs=""
+eval "$(awk '/^rule_body_pointers\(\) \{/,/^\}/' "$i130_lib" 2>/dev/null)"
+if ! command -v rule_body_pointers >/dev/null 2>&1; then
+  err "I130 cannot load rule_body_pointers() from reconcile/lib.sh; the pointer grammar has no home, so this check would scan nothing."
+else
+  i130_ptrs="$(rule_body_pointers < "$i130_skill")" || i130_ptrs=""
+fi
 if [ -z "$i130_ptrs" ]; then
   err "I130 found no 'READ AND FOLLOW \`rule-bodies/rule-N.md\`' pointer sentence in SKILL.md; the scan saw nothing, so a zero here proves nothing."
 else
