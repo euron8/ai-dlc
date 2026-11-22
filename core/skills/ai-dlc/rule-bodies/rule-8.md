@@ -10,7 +10,7 @@ phase. The lead MUST NOT run less than the declared minimum.
 review alone (`steps/stories-test-strategy.md` §5 step 2). Running
 more is always permitted.
 
-| Intensity | Trigger | Minimum cycle per planning artifact |
+| Intensity | Trigger (service code and pipeline-infra paths are the repo's own, declared in a Rule 27 layer entry that hooks `steps/route-fresh-start.md`) | Minimum cycle per planning artifact |
 |---|---|---|
 | `full` | ≥3 stories touching service code paths | Party Mode → Advanced Elicitation → Adversarial Review |
 | `standard` | 1-2 stories touching service code paths | Party Mode → Adversarial Review |

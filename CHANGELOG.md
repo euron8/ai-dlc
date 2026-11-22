@@ -19,6 +19,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1231.0] - 2026-11-22
+
+### A repo declares its own service-code and pipeline-infra paths for Rule 8 in a Rule 27 layer entry, instead of shadowing Rule 8 (BL-1226)
+
+- Rule 8's intensity table header and the fresh-start routing step now say that service code and pipeline-infra paths are the repo's own, declared in a Rule 27 layer entry that hooks `steps/route-fresh-start.md`, whose lists replace the defaults. A consumer no longer has to shadow Rule 8 to carry its directory lists.
+
 ## [0.1230.0] - 2026-11-22
 
 ### The update skill's subcommand list names cut-from, and two backlog citations are re-cited (BL-1219, BL-1220)

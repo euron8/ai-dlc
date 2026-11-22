@@ -48914,3 +48914,27 @@ Failure caught: with both lines touched, the base tree fails the push on BL-583 
 Outcome: no graph pipeline step; no cost change, since no script is edited. Forced-population CITE1 findings in the live ledger drop by 2 (CITE-MOVING-LINE 1 to 0, CITE-NO-FILE on a docs file 1 to 0).
 
 verify: manual
+## BL-1226 — Rule 8's intensity table names "service code paths" and "pipeline-infra paths" with no home for a repo's own lists, so a consumer shadowed Rule 8 to carry them
+
+**DEFECT.** Filed 2026-11-22 (batch 264, cluster O). Owner: `core/skills/ai-dlc/SKILL.md` and `core/skills/ai-dlc/rule-bodies/rule-8.md` (the table header) and `core/skills/ai-dlc/steps/route-fresh-start.md` (the intensity list).
+
+Goal: a consumer declares its own service-code and pipeline-infra directory lists in a Rule 27 layer entry hooking `steps/route-fresh-start.md`, and never shadows Rule 8. One done condition: the Rule 8 table header in both copies names that declaration point (byte-identical, I131) and route-fresh-start.md says the entry's lists replace the defaults.
+
+Record: a consumer shadowed Rule 8 only to carry its own path lists; its upstream candidate was PC-S324-RULE8-TRIGGER-PATH-LIST-INTO-UPSTREAM-STUB.
+
+Failure caught: the consumer-side shadow of Rule 8, which forks the intensity table.
+
+Work list:
+
+1. Replace the table header's Trigger cell in SKILL.md and rule-bodies/rule-8.md, byte-identical.
+2. Add one paragraph after the intensity list in steps/route-fresh-start.md.
+
+**LANDED (v0.1231.0).** Batch 264, cluster O. Both table headers and the route-fresh-start paragraph name the Rule 27 declaration point.
+
+Outcome: validate-enforcement-map.sh exits 0 on the tree and exits 1 with the I131 difference when only rule-8.md's header changes.
+
+Step: n/a
+
+Provenance: batch 264, cluster O (owner ai-dlc-af).
+
+verify: manual

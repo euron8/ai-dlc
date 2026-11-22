@@ -277,6 +277,8 @@ scope (or anticipated scope for carry-over/greenfield):
 - `lightweight` — all stories touch only pipeline-infra paths
   (scripts, config, docs, CI workflows)
 
+Service code paths and pipeline-infra paths are the repo's own: a Rule 27 layer entry hooking this file declares them, and its lists replace the defaults above.
+
 For carry-over and bug variants where story count is not yet known,
 estimate from the user's input. The intensity MAY be revised upward
 (never downward) at stories-test-strategy if the actual story scope
