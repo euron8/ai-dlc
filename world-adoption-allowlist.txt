@@ -22,7 +22,6 @@ audit-anchors-schema	predates H14: runs git init by hand
 backlog-ledger	predates H14: runs git init by hand
 backlog-real-ledger	predates H14: runs git init by hand
 backlog-receipt-traced-removal	predates H14: runs git init by hand
-census-hermetic-coverage	predates H14: runs git init by hand
 check-17-bypass	predates H14: runs git init -q . into the cwd of a cd-guarded subshell, then bare git config/commit there
 check-24-adversarial-convergence	predates H14: runs git init by hand
 check5-anchor-base	predates H14: runs git init by hand
@@ -30,8 +29,6 @@ claude-rules-joins	predates H14: runs git init by hand
 consumer-machinery-inventory	predates H14: runs git init by hand
 consumer-suite-pool	predates H14: runs git init by hand
 content-seal	predates H14: runs git init by hand under GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1, a config-free init world_git does not supply
-cycle-commits-enforce	predates H14: runs git init by hand
-dist-clone	predates H14: runs git init by hand
 document-partition	predates H14: runs git init by hand under GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1, a config-free init world_git does not supply
 emit-report-refusal	predates H14: runs git init by hand
 enforcement-map-sites	predates H14: runs git init by hand
@@ -42,7 +39,6 @@ gate-adjudication-rotate	predates H14: runs git init by hand
 gate-remediation-deny	predates H14: runs git init by hand
 handoff-completion-assertion	predates H14: runs git init by hand
 hermetic-runner	predates H14: runs git init by hand
-install-scaffold-ignored	predates H14: runs git init by hand
 layer-absorption-retire	predates H14: runs git init by hand
 layer-adjudication-tier	predates H14: runs git init by hand
 layer-anchor-declaration	predates H14: runs git init by hand
@@ -57,7 +53,6 @@ layer-reference-resolution	predates H14: runs git init by hand
 layer-retired-id-crosswalk	predates H14: runs git init by hand
 layer-title-join	predates H14: runs git init by hand
 ledger-reverify	predates H14: runs git init by hand
-ledger-reverify-dist-only-reach	predates H14: runs git init by hand
 ledger-reverify-unfalsifiable	predates H14: runs git init by hand
 ledger-rotate	predates H14: runs git init by hand
 mandatory-rules-skip-accounting	predates H14: runs git init by hand
@@ -65,12 +60,10 @@ mandatory-rules-snapshot-position	predates H14: runs git init by hand
 preclassify-mode-bucket	predates H14: runs git init by hand
 preclassify-rename-row	predates H14: runs git init by hand
 predicate-reclassification	predates H14: runs git init by hand
-pregate-self-check	predates H14: runs git init by hand
 prepush-pool-depth	predates H14: runs git init by hand
 prepush-ssh-keepalive	predates H14: runs git init by hand
 prepush-worktree-env-scrub	predates H14: runs git init by hand
 presuite-units	predates H14: runs git init by hand
-push-drain-refusals	predates H14: runs git init by hand
 readset-skip	predates H14: runs git init by hand
 reconcile-blocking-list	predates H14: runs git init by hand
 reconcile-emit-report	predates H14: runs git init by hand
@@ -80,8 +73,6 @@ relocation-preclassify	predates H14: runs git init by hand
 remediator-shard-join	predates H14: runs git init by hand
 retired-contract-token	predates H14: runs git init by hand
 retired-layer-contract	predates H14: runs git init by hand
-retired-layer-passage	predates H14: runs git init by hand
-retired-layer-token	predates H14: runs git init by hand
 retro-audit-scans	predates H14: runs git init by hand
 retro-branch-behind-main	predates H14: runs git init by hand
 retro-compliance-workflow	predates H14: runs git init by hand
@@ -93,14 +84,11 @@ self-update-gate	predates H14: runs git init by hand
 self-update-join-gate	predates H14: runs git init by hand
 self-update-reinvoke-liveness	predates H14: runs git init by hand
 setup-config-drift	predates H14: runs git init by hand
-setup-site-drift	predates H14: runs git init by hand
 shell-portability	predates H14: runs git init by hand
-shipped-rule-version-floor	predates H14: runs git init by hand
 snapshot-archive-rotate	predates H14: runs git init by hand
 snapshot-conservation	predates H14: runs git init by hand
 suite-content-key	predates H14: runs git init by hand
 transient-ignore-block	predates H14: runs git init by hand
-trunk-audit-classes	predates H14: runs git init by hand
 trunk-audit-gate	predates H14: runs git init by hand
 trunk-push-bound	predates H14: runs git init by hand
 validator-fork-budget	predates H14: runs git init by hand

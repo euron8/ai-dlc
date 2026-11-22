@@ -1,7 +1,0 @@
-# Measured by one counted run through scripts/seed-verdict-store.sh (the judge's own J3/J7 output). The 5 census starts
-# are the 3 cli cells plus the 2 pool workers their pool-driving runs start (the nested row); the 35 in-process passes
-# are 9 in-process census runs plus the 26 pool workers the run.sh-written bash shim answers through pair-worker.sh.
-# `*` counts every shim start: the 26 workers and each `bash` it passes through to the real one.
-117 *
-5 scripts/census-hermetic-coverage.sh
-35 inproc:scripts/census-hermetic-coverage.sh

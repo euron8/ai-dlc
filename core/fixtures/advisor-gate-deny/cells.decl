@@ -1,9 +1,0 @@
-# advisor-gate-deny's starts of core/hooks/ai-dlc-advisor-gate.sh (BL-879 grammar). Every other drive is in process:
-# lib.sh sources the hook once and runs adg_main through adg_ip in a subshell with the cell's payload on stdin. The hook
-# exits 0 on every path, so the cli cells are output classes (a deny, a WARN with no decision, silence, silence with
-# the fail-open reason on stderr), each started as FXCELL=<id> bash "$HOOK" in run.sh's eqv() and compared byte for
-# byte with the in-process call on the same payload.
-cli core/hooks/ai-dlc-advisor-gate.sh cli-deny
-cli core/hooks/ai-dlc-advisor-gate.sh cli-warn
-cli core/hooks/ai-dlc-advisor-gate.sh cli-allow
-cli core/hooks/ai-dlc-advisor-gate.sh cli-failopen

@@ -1,7 +1,0 @@
-# Measured by one counted run through scripts/seed-verdict-store.sh (stdin /dev/null; the judge's own J3/J7 output).
-# The starts are run.sh itself (1) and the three cli cells of cells.decl (3). The inproc row counts one fx_inproc pass
-# per inproc_run call of rii_main (drive): render-B, cli-ok, render-n1, cli-missing and cli-usage, each on a world's
-# copy at <world>/scripts/render-invariant-index.sh.
-4 *
-3 scripts/render-invariant-index.sh
-5 inproc:scripts/render-invariant-index.sh

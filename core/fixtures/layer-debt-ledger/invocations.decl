@@ -1,5 +1,0 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
-# Re-measured (BL-878, batch 258 C4) by one counted run: the subject runs in process through ald (inproc row); it starts only in its cli cells (cells.decl).
-3 *
-2 core/scripts/audit-layer-debt.sh
-11 inproc:core/scripts/audit-layer-debt.sh

@@ -1270,7 +1270,7 @@ that resolves in this tree can resolve nowhere in an installed one.
 - `core/fixtures/enforcement-map-sites/run.sh:692-745` — the shard pattern to copy
 - `core/fixtures/enforcement-map-sites-b/` — the wrapper + `.dist-only` shape to copy
 - `core/fixtures/enforcement-map-derivations/run.sh` — Step 2
-- `core/fixtures/layer-contract-conformance/run.sh:80-97, 504-539, 589-596` — Step 3, the hard one
+- `core/fixtures/layer-contract-conformance/run.sh (deleted by BL-583 item 6)` — Step 3, the hard one
 - `core/fixtures/self-update-join-gate/seed.sh:29-68` — Step 4
 - `scripts/validate-enforcement-map.sh` — Steps 5-7. `set -u` at `:155`, `REPO_ROOT` at `:157`,
   the stale 1582-fork budget at `:173-177`, `in_lines`/`in_body` at `:192-215`, `lc_file` at

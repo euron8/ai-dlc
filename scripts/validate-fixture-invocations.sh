@@ -1286,7 +1286,7 @@ fxc_inproc_listed() {
   [ -f "$FXC_INPROC_ALLOW" ] || return 1
   F="$1" awk -F'\t' '$0 ~ /^[[:space:]]*(#|$)/ { next } $1 == ENVIRON["F"] { f = 1 } END { exit f ? 0 : 1 }' "$FXC_INPROC_ALLOW"
 }
-FXC_CELLS_REMEDY="build the fixture in-process (.claude/rules/fixture-mutants.md 'One run per distinct state'; the reference fixtures BL-878 names: push-drain-refusals, ledger-reverify-unfalsifiable, story-evidence-scaffold), and declare each remaining start in cells.decl -- \`cli <subject> <cell-id>\`, \`e2e <subject> <cell-id> why=<reason>\`, \`nested <parent> <child> why=<reason>\` -- started as \`FXCELL=<cell-id> bash <subject>\`"
+FXC_CELLS_REMEDY="build the fixture in-process (.claude/rules/fixture-mutants.md 'One run per distinct state'; the reference fixtures BL-878 names: ledger-reverify-unfalsifiable, story-evidence-scaffold), and declare each remaining start in cells.decl -- \`cli <subject> <cell-id>\`, \`e2e <subject> <cell-id> why=<reason>\`, \`nested <parent> <child> why=<reason>\` -- started as \`FXCELL=<cell-id> bash <subject>\`"
 
 # fxc_judge <fixture> <decl> <log> <root>: messages on stdout; returns 0 pass, 1 FAIL, 2 BROKEN.
 fxc_judge() {
@@ -1990,3 +1990,4 @@ exit $?
 [ "${BASH_SOURCE[0]}" = "$0" ] || return 0
 fiv_main "$@"
 # FXC-IDENTITY 1 736ce02f923b7615282844c8d2a9592dd951298ad356dfaed73e4191602bb233 the command-line body is wrapped as fiv_main behind a column-0 source guard so a fixture can ask this judge in process (BL-878); the dispatch, the usage lines (now read from BASH_SOURCE) and every judgement are unchanged, so no counted fixture's judgement moves
+# FXC-IDENTITY 1 17a359540cd196b6ce314909831e12f242f41864336963fe337cae7591930a57 remedy text only: FXC_CELLS_REMEDY no longer names the deleted push-drain-refusals (BL-583); no fixture's judgement moves

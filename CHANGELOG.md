@@ -19,6 +19,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1221.0] - 2026-11-21
+
+### 64 push-suite test fixtures with no catch, carrier or enforcer claim are deleted (BL-583 advances)
+
+- For the gate and for every consumer. The push suite carries 64 fewer fixture directories; their summed dispatch cost over the census's 46 push logs was 6834 loaded seconds (the census baseline for all 170 families is 18377). None had a catch on record in the BL-583 census, none is the sole carrier of an enforcement-map or layer-contract row, and no enforcer or docs claim names one.
+- Consumers: 50 of the 64 shipped, so they no longer ship. The retired list in `uninstall.sh` (`retired_fixture_dir`) names them, and `reconcile/retired-fixtures.sh` removes the installed copies on the next pull. The other 14 were `.dist-only`.
+- Consumer pull: the removed fixture directories arrive as UPSTREAM-DELETED; accept each family whole, as one batch.
+- Kept: the 111 other candidates, because they are carriers, enforcer-claim or docs-claim subjects, shards of a kept fixture, carriers of this batch's change, or held by BL-912; BL-583 names each with its class.
+
+### The snapshot hand-edit hooks stay, and BL-912 closes on its recorded catches
+
+- Both hooks that stop the lead hand-editing the pipeline snapshot, `ai-dlc-snapshot-edit-deny.sh` and `ai-dlc-inflight-row.sh`, stay. BL-912 closes on the catches its own record holds: 11 lead snapshot edits refused in s322, and 24 of 55 checkable hand-written In-Flight deliverable cells that named the wrong lane's file. `inflight-row-hook` stays as its fixture (BL-583).
+
+  | Hook | Failure caught |
+  |---|---|
+  | `ai-dlc-snapshot-edit-deny.sh` | s322 lead snapshot Edits refused by the deny: 11 of 12 attempts, none succeeded |
+  | `ai-dlc-inflight-row.sh` | hand-written In-Flight rows naming the wrong lane's deliverable: 24 of 55 checkable cells in s322 |
+
 ## [0.1220.0] - 2026-11-21
 
 ### The shell-hygiene gate stops miscounting heredocs, two fixtures capture output to a file, a post-pool override of a read-only name is flagged, and the adversarial-convergence fixture drives its validator in process (BL-1162, BL-1008, BL-1161, BL-878)

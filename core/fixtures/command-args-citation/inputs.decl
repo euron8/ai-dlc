@@ -1,5 +1,0 @@
-# command-args-citation reads ONE file outside its own directory: the validator under test.
-# seed.sh resolves it from the fixture location; run.sh drives it.
-!core/scripts/validate-steering-budget.sh
-core/fixtures/lib/report.sh
-core/fixtures/lib/mutant.sh

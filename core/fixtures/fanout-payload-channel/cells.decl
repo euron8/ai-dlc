@@ -1,6 +1,0 @@
-# fanout-payload-channel's starts of core/scripts/report-propagation-fanout.sh (BL-879 grammar). Every other drive is
-# in process: run.sh loads the subject once and asks rpf_main through inproc_run. One cli cell per distinct CLI outcome
-# (exit 0 with a worklist, exit 3 SCOPING FAILURE on an unreadable payload), each started as FXCELL=<id> bash in eqv()
-# and compared byte for byte with the in-process call on the same input.
-cli core/scripts/report-propagation-fanout.sh cli-worklist
-cli core/scripts/report-propagation-fanout.sh cli-scoping

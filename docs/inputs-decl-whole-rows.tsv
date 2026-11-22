@@ -9,7 +9,6 @@
 #program	core/git-hooks/pre-push
 #program	core/scripts/hermetic-run.sh
 #program	scripts/ai-dlc/hermetic-run.sh
-absorbed-specifics-survive	core/skills/ai-dlc/rule-bodies/	whole
 agent-definition-render	!core/git-hooks/pre-push	whole
 apply-drift-after-write	core/skills/ai-dlc-update/reconcile/	whole
 apply-drift-refile	!core/skills/ai-dlc-update/reconcile/	legacy
@@ -25,17 +24,10 @@ apply-self-overwrite	!core/skills/ai-dlc-update/reconcile/	legacy
 apply-setup-sited-merge	!core/skills/ai-dlc-update/reconcile/	legacy
 apply-worklist-rows	core/skills/ai-dlc-update/reconcile/	whole
 bmad-invocation-resolve	!core/skills/ai-dlc/	whole
-census-hermetic-coverage	.githooks/pre-push	whole
-census-hermetic-coverage	core/scripts/hermetic-run.sh	whole
 changelog-sprint-slot	core/skills/ai-dlc/steps/	whole
 check-22-spawn-ledger	core/team-roles/	whole
-consumer-machinery-home	core/	legacy
-consumer-machinery-home	scripts/	legacy
-consumer-machinery-home	templates/	legacy
 consumer-suite-pool	!core/git-hooks/pre-push	whole
 content-seal	core/fixtures/adversarial-shard-merge/	legacy
-crosswalk-home-declaration	core/	legacy
-crosswalk-home-declaration	scripts/	legacy
 derived-fence-binding	core/team-roles/	whole
 derived-fence-binding	core/scripts/	whole
 dispatch-model-guard	core/hooks/	whole
@@ -80,25 +72,13 @@ hermetic-runner	core/scripts/hermetic-run.sh	whole
 hermetic-runner	core/git-hooks/pre-push	whole
 hermetic-runner	.githooks/pre-push	whole
 hermetic-runner	core/fixtures/lib/	legacy
-install-scaffold-ignored	core/	whole
-install-scaffold-ignored	patterns/	whole
-install-scaffold-ignored	templates/	whole
 layer-absorption-retire	core/skills/ai-dlc-update/reconcile/	whole
 layer-adjudication-tier	core/skills/ai-dlc-update/reconcile/	whole
-layer-contract-conformance-b	scripts/	legacy
-layer-contract-conformance-b	core/	whole
-layer-contract-conformance	scripts/	legacy
-layer-contract-conformance	core/	legacy
-layer-contract-conformance	templates/	legacy
-layer-contract-conformance	.githooks/	legacy
-layer-contract-conformance	patterns/	legacy
-layer-contract-conformance	.claude/rules/	legacy
 layer-crosswalk-home	core/skills/ai-dlc-update/reconcile/	legacy
 layer-crosswalk-home	core/skills/ai-dlc/	legacy
 layer-extends-grain	core/skills/ai-dlc-update/reconcile/	whole
 layer-qualifier-grain	core/skills/ai-dlc-update/reconcile/	whole
 layer-title-join	core/skills/ai-dlc-update/reconcile/	whole
-ledger-reverify-dist-only-reach	!core/skills/ai-dlc-update/reconcile/	legacy
 ledger-reverify-unfalsifiable	core/skills/ai-dlc-update/reconcile/	whole
 ledger-rotate	core/skills/ai-dlc-update/reconcile/	whole
 ledger-status-vocabulary	core/	legacy
@@ -108,8 +88,6 @@ ledger-status-vocabulary	templates/	legacy
 ledger-status-vocabulary	patterns/	legacy
 ledger-status-vocabulary	.claude/rules/	legacy
 post-write-gates	!core/skills/ai-dlc-update/reconcile/	legacy
-pregate-self-check	.githooks/pre-push	whole
-pregate-self-check	core/fixtures/procsub-staged-refusal/	legacy
 prepush-pool-depth	core/git-hooks/pre-push	whole
 prepush-pool-depth	.githooks/pre-push	whole
 prepush-ssh-keepalive	.githooks/pre-push	whole
@@ -154,8 +132,6 @@ requirements-step	core/skills/ai-dlc/steps/	whole
 resume-whole-read	core/fixtures/resume-whole-read/	legacy
 retired-contract-token	core/skills/ai-dlc-update/reconcile/	whole
 retired-layer-contract	core/skills/ai-dlc-update/reconcile/	whole
-retired-layer-passage	core/skills/ai-dlc-update/reconcile/	whole
-retired-layer-token	core/skills/ai-dlc-update/reconcile/	whole
 retro-audit-scans	!core/git-hooks/pre-push	whole
 review-shard-merge-b	core/fixtures/review-shard-merge/	legacy
 route-defect-classification	core/fixtures/route-defect-classification/	legacy
@@ -168,19 +144,6 @@ self-update-gate-d	!core/skills/ai-dlc-update/reconcile/	legacy
 self-update-join-gate	core/skills/ai-dlc-update/	whole
 setup-config-drift	core/skills/ai-dlc-update/reconcile/	whole
 shell-portability	.githooks/pre-push	whole
-shipped-rule-version-floor	core/fixtures/	legacy
-shipped-rule-version-floor	core/hooks/	legacy
-shipped-rule-version-floor	core/rules/	legacy
-shipped-rule-version-floor	core/schemas/	legacy
-shipped-rule-version-floor	core/scripts/	legacy
-shipped-rule-version-floor	core/session-driver/	legacy
-shipped-rule-version-floor	core/skills/	legacy
-shipped-rule-version-floor	core/team-roles/	legacy
-shipped-rule-version-floor	core/git-hooks/	legacy
-shipped-rule-version-floor	core/ci-templates/	legacy
-shipped-rule-version-floor	templates/	legacy
-shipped-rule-version-floor	patterns/	legacy
-smoke-surface-ignored	core/scripts/	whole
 story-evidence-receipts	core/scripts/	whole
 story-evidence-scaffold	core/scripts/	whole
 suite-content-key	scripts/	whole
@@ -214,4 +177,3 @@ vocabulary-index	scripts/	whole
 vocabulary-index	.githooks/	whole
 vocabulary-index	templates/	whole
 vocabulary-index	core/	legacy
-write-format-steering-multiformat	core/schemas/	whole

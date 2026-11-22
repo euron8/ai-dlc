@@ -1,9 +1,0 @@
-# Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output).
-# BL-878: the subjects run in process (inproc: rows, one per inproc_run pass); the program runs only in the six cli cells.
-31 *
-2 scripts/install.sh
-2 scripts/uninstall.sh
-2 core/hooks/ai-dlc-rules-floor.sh
-6 inproc:scripts/install.sh
-4 inproc:scripts/uninstall.sh
-17 inproc:core/hooks/ai-dlc-rules-floor.sh

@@ -1,7 +1,0 @@
-# subject-partition's starts of core/scripts/partition-subject.sh (BL-879 grammar). Every other drive is in process: run.sh answers each
-# `bash <script>` through ip_call (the `bash` function), the sibling calls of the subject and receipt.sh's included. The two cli cells are
-# started as `env FXCELL=<id> bash <script>` in cli_eqv() and compared byte for byte with the in-process call over the same world:
-# the passing map (exit 0, the part rows) and the refusal (exit 2, 'matches 0 file(s)' on stderr).
-cli core/scripts/partition-subject.sh cli-map
-cli core/scripts/partition-subject.sh cli-refuse
-nested core/scripts/partition-subject.sh core/scripts/partition-document.sh why=a started map starts the document partitioner once per subject file (--map ... --scope-ref)
