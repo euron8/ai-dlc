@@ -34,6 +34,9 @@ if [ -z "$SUBJ" ]; then
   done
 fi
 [ -n "$SUBJ" ] && [ -f "$SUBJ" ] || { echo "receipt: no validate-adversarial-convergence.sh to score" >&2; exit 9; }
+# The validator is asked in process when wrapped (vac-inproc.sh), as a process otherwise.
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")" && pwd)/vac-inproc.sh" || { echo "receipt: cannot source vac-inproc.sh beside this receipt" >&2; exit 9; }
 SD="$(cd "$(dirname "$SUBJ")" && pwd)"
 [ -f "$SD/merge-adversarial-shards.sh" ] && [ -f "$SD/partition-document.sh" ] \
   || { echo "receipt: the merge or the partitioner is not beside $SUBJ" >&2; exit 9; }
@@ -129,7 +132,7 @@ idiff="$(awk -F'\t' 'FNR == NR { o[$1] = $2; next } o[$1] != $2 { printf "%s ", 
 [ "$idiff" = "3 5 6 " ] || { echo "receipt: the index-diff control is '$idiff', not '3 5 6 '" >&2; exit 9; }
 
 run() {
-  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/s9/stories-adversarial-p" 2>&1)"; RC=$?; }
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" rcpt_vac "$SUBJ" --series "$B/$1/s9/stories-adversarial-p" 2>&1)"; RC=$?; }
 bad=""
 run nodelta
 [ "$RC" -eq 1 ] && [[ "$OUT" == *"FAIL (L -- ELICITATION)"* ]] \

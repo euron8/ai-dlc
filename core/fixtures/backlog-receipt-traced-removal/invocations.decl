@@ -20,6 +20,7 @@
 # (22 cli cells now) is one start, one --score-one and four --r13-one workers (drv.sh, data.txt and the two
 # variable-built reads, each removed alone), plus the seeded receipt runs those removals make. Measured by one counted
 # run (scripts/seed-verdict-store.sh, the judge's own J3 output) at AI_DLC_FIXTURE_JOBS=12.
-116 *
-77 scripts/validate-backlog-receipts.sh
+# 264-C: DEFAULT_MAX_R13 3 -> 0 (c-committed follows it): 116 -> 110 *, 77 -> 74 validator.
+110 *
+74 scripts/validate-backlog-receipts.sh
 12 inproc:scripts/validate-backlog-receipts.sh

@@ -4,5 +4,3 @@
 # conversion deletes its fixture's row in the same change, and the invocation judge FAILs a listed fixture that passes.
 # The reason names the subjects and carries NO count: nothing reads field 2, so a name that goes stale is accepted, and the
 # live count is the validator's R diagnostic, computed fresh on every run.
-check-24-adversarial-convergence-b	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell
-check-24-adversarial-convergence-c	core/scripts/validate-adversarial-convergence.sh runs outside a declared cell

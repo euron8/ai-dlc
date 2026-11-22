@@ -39,6 +39,9 @@ if [ -z "$SUBJ" ]; then
   done
 fi
 [ -n "$SUBJ" ] && [ -f "$SUBJ" ] || { echo "receipt: no validate-adversarial-convergence.sh to score" >&2; exit 9; }
+# The validator is asked in process when wrapped (vac-inproc.sh), as a process otherwise.
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")" && pwd)/vac-inproc.sh" || { echo "receipt: cannot source vac-inproc.sh beside this receipt" >&2; exit 9; }
 command -v git >/dev/null 2>&1 || { echo "receipt: git is not on PATH" >&2; exit 9; }
 # The era stamp is the validator's own constant; a copy without one (the base) is stamped at the
 # release after which every series is owed under any later constant.
@@ -156,7 +159,7 @@ strat lsplit > "$B/m-before"; [ "$(ids_all "$B/m-before")" = "$(ids_all "$B/merg
   || { echo "receipt: nostamp/pred stamp shape wrong" >&2; exit 9; }
 
 run() { # world -> RC, OUT
-  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/$D/test-strategy-adversarial-p" \
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" rcpt_vac "$SUBJ" --series "$B/$1/$D/test-strategy-adversarial-p" \
          --transcript "$B/transcript.jsonl" 2>&1)"; RC=$?
 }
 bad=""

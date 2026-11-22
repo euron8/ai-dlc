@@ -2914,17 +2914,11 @@ R14_EOF
 # TWO-SIDED RATCHET: the run FAILS when the live UNGUARDED-READ count is ABOVE it, and ALSO when it is BELOW it (a
 # stale-high ceiling hides a regrowth, as in the fork-budget gate), with a message naming the live count to lower it
 # to. `--max-unguarded` / AI_DLC_BACKLOG_MAX_UNGUARDED keep the same two-sided meaning.
-# THE THREE ROWS, all against BL-878's receipt (`bash scripts/validate-fixture-inprocess.sh --complete`, base exit 1):
-# scripts/fixture-inprocess-allowlist.txt, core/fixtures/lib/mutant.sh, and ENUMERATED(<n>) (every enumerated input
-# removed together). Removed, the driver exits 1 -- the receipt's own STILL-LIVE code -- on a DELETED input, which reads
-# as "rows remain". R7 reads exit 1 as a measurement, so a rename of any of them would leave BL-878 with no instrument.
-# scripts/validate-enforcement-map.sh, scripts/validate-fixture-hygiene.sh and scripts/validate-fixture-invocations.sh
-# are guarded: under --complete the driver exits 9 when any of them is absent or unopenable (its absent_refuse, and the
-# invocation judge's `A` join row for an absent cli subject), so R13 reads them as could-not-measure.
-# Any release that moves BL-878's unguarded count (rotating BL-878, or changing its driver or the files it reads) must
-# edit DEFAULT_MAX_R13 in scripts/validate-backlog-receipts.sh in the same commit; the two-sided ceiling fails the
-# 'backlog receipts' step otherwise.
-DEFAULT_MAX_R13=3
+# The open sh population is EMPTY while BL-878 declares `verify: manual`, so the live count is 0 and the ceiling is 0.
+# Any release that files an open `sh` receipt, or moves its unguarded count, must edit DEFAULT_MAX_R13 in
+# scripts/validate-backlog-receipts.sh in the same commit; the two-sided ceiling fails the 'backlog receipts' step
+# otherwise.
+DEFAULT_MAX_R13=0
 R13_MAX_REMOVALS=32
 
 # THE FIXTURE'S CHEAP MODE (fixture-mutants.md clause 5), never passed by the hook. core/fixtures/

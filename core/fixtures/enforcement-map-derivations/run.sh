@@ -230,18 +230,25 @@ arm_id_of() {
 # byte-for-byte. A tree that is not the loaded one is refused with rc 2, which every caller's
 # sel_guard (or A00's else branch) reports as FIXTURE BROKEN.
 run_map() {
-  local id="$1"
+  local id="$1" rm_cap rm_rc
+  # A pipe capture of the validator can lose a stderr line to EINTR, so its output goes to a regular file
+  # unique to this call and is read back.
   if [ -z "${VEM_TREE:-}" ] || [ "$VEM_TREE" != "$t" ]; then
     echo "FIXTURE BROKEN — run_map on '$t' but the loaded validator copy is '${VEM_TREE:-none}'; load the tree with vem_load first"
     return 2
   fi
   if [ -z "$id" ]; then
     printf 'f\n' >> "$WORK/calls"
-    ( fx_inproc "$VEM_TREE/scripts/validate-enforcement-map.sh"; vem_entry ) 2>&1
-    return $?
+    rm_cap="$(mktemp "$WORK/map.XXXXXX")" || { echo "run_map: mktemp failed"; return 2; }
+    ( fx_inproc "$VEM_TREE/scripts/validate-enforcement-map.sh"; vem_entry ) > "$rm_cap" 2>&1; rm_rc=$?
+    cat "$rm_cap"; rm -f "$rm_cap"
+    return "$rm_rc"
   fi
   printf 's %s\n' "$id" >> "$WORK/calls"
-  ( fx_inproc "$VEM_TREE/scripts/validate-enforcement-map.sh"; vem_entry --arms "$id" ) 2>&1
+  rm_cap="$(mktemp "$WORK/map.XXXXXX")" || { echo "run_map: mktemp failed"; return 2; }
+  ( fx_inproc "$VEM_TREE/scripts/validate-enforcement-map.sh"; vem_entry --arms "$id" ) > "$rm_cap" 2>&1; rm_rc=$?
+  cat "$rm_cap"; rm -f "$rm_cap"
+  return "$rm_rc"
 }
 
 # sel_guard <rc> <id> <output> — a validator exit of 2 is a SELECTION failure and never an

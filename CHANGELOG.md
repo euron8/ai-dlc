@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1220.0] - 2026-11-21
+
+### The shell-hygiene gate stops miscounting heredocs, two fixtures capture output to a file, a post-pool override of a read-only name is flagged, and the adversarial-convergence fixture drives its validator in process (BL-1162, BL-1008, BL-1161, BL-878)
+
+- For ai-dlc maintainers; nothing in this release changes what a consumer's install ships. The fixture-hygiene check H14 now counts a heredoc only when it feeds a shell, so a heredoc that only carries data no longer counts against a script (BL-1162 advances).
+- Two fixtures capture the `vem_entry` output into a file instead of a pipe, removing a pipe-timing dependence (BL-1008 advances).
+- The pre-push pool check (I66) now flags an indented override of a read-only name inside a function that runs after the worker pool starts, keyed on the function and the name. The second reported survivor is retired as not reproducible (BL-1161).
+- The `check-24-adversarial-convergence` fixture's `-b` and `-c` arms run the validator in process through a new `vac-inproc.sh`, the in-process allowlist is now empty, and R13's `DEFAULT_MAX_R13` drops from 3 to 0 (BL-878 advances).
+
 ## [0.1219.0] - 2026-11-21
 
 ### A carry-over evaluation is no longer failed at Check 24 on repairs its records mark repaired (BL-1175 advances)
