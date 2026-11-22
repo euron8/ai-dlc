@@ -5,7 +5,11 @@ core/fixtures/lib/report.sh
 core/fixtures/lib/world.sh
 # reason: core/scripts/ is enumerated by the parent this shard execs -- git diff over core/*.sh, core/fixtures/procsub-staged-refusal/run.sh:2022.
 core/scripts/
-core/skills/
+# core/skills/ narrowed to what its sandbox window read: the three files run.sh names, and reconcile/ whole because the units this shard runs read its scripts. This shard does not run the spelling arm (unit spell, shard a only), so it does not enumerate core/skills/ (BL-1124 (d)).
+core/skills/ai-dlc/artifact-path-grammar.md
+core/skills/ai-dlc/layer-contract.yaml
+core/skills/ai-dlc/steps/stories-test-strategy.md
+core/skills/ai-dlc-update/reconcile/
 core/schemas/provenance-block.json
 core/fixtures/procsub-staged-refusal-b/run.sh
 core/fixtures/procsub-staged-refusal/run.sh

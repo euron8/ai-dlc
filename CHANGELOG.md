@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1222.0] - 2026-11-21
+
+### Read-set traces survive a worktree removed mid-copy, gate-transition stops reading `hermetic-run.sh`, and two procsub shards declare file-level inputs (BL-1211 closed, BL-1155 advances, BL-1124 advances, BL-583 advances)
+
+- For the maintainer who traces read sets. A read-set trace no longer fails when a worktree removal or branch delete runs during its .git copy: refs, reflogs and worktrees bypass cp and the refs are rewritten by git, and an unreadable entry elsewhere in .git still fails the trace (BL-1211).
+- gate-transition's gate-run toy world no longer copies `core/scripts/hermetic-run.sh`, the last read of it; a retrace of the fixture reads it 0 times (BL-1155 owed item 1 built; its two retakes are superseded by the deletion of consumer-machinery-home and layer-contract-conformance-b in 0.1221.0). The retrace also showed it reading the two `research-citations.md` files undeclared; that read is stopped at its source, all three whole-skills copies in the fixture now omit both, rather than declared, since a consumer install never holds them.
+- `procsub-staged-refusal-b` and `-c` declare the three skill files they name and the `reconcile/` directory instead of all of `core/skills/`, so an edit elsewhere under `core/skills/` no longer re-runs them. `procsub-staged-refusal` (shard a, the only shard that runs the spelling arm, which reads every `.sh` under `core/skills/`) keeps `core/skills/` whole, now as a `whole` row instead of `legacy` (BL-1124 (d); the `vocabulary-index` row stays owed).
+- `hook-registration-join`'s read-set map row is refreshed from a sandbox trace (47 paths, control passed), so the push no longer runs it as stale (BL-583 trace row measured; the entry stays open for its item 6).
+- A consumer gets the copy fix, since `derive-fixture-readsets.sh` ships; the declaration, map and ledger changes are this repo's.
+
 ## [0.1221.0] - 2026-11-21
 
 ### 64 push-suite test fixtures with no catch, carrier or enforcer claim are deleted (BL-583 advances)

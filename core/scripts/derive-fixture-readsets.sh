@@ -651,10 +651,28 @@ readset_copy_tree() {
     rm -f "$scratch/copy.tar"
   fi
   if [ -d "$src/.git" ]; then
-    cp -a "$src/.git" "$dst/.git" || { echo "readset_copy_tree: copying .git failed" >&2; return 1; }
     # `.git/worktrees/` names the REAL linked worktrees in its `gitdir` files, so a `git worktree repair` in
-    # the copy would rewrite a real worktree's gitlink to point here. It is a literal subpath of the copy.
-    rm -rf "$dst/.git/worktrees" || { echo "readset_copy_tree: removing the copy's .git/worktrees failed" >&2; return 1; }
+    # the copy would rewrite a real worktree's gitlink to point here. `refs/`, `logs/` and `packed-refs` are
+    # what a concurrent `git worktree remove` or `git branch -D` deletes entries from. None of the four goes
+    # through `cp`: every other entry of `.git`, dotfiles included, is named to one `cp -a`, and the refs are
+    # rewritten into the copy by git (`for-each-ref` of the source into `update-ref --stdin`), which reads a
+    # vanishing ref as absent. Reflogs are not carried.
+    set --
+    for p in "$src/.git"/* "$src/.git"/.[!.]* "$src/.git"/..?*; do
+      [ -e "$p" ] || [ -L "$p" ] || continue
+      case "${p##*/}" in worktrees|refs|logs|packed-refs) ;; *) set -- "$@" "$p" ;; esac
+    done
+    mkdir "$dst/.git" || { echo "readset_copy_tree: creating the copy's .git failed" >&2; return 1; }
+    if [ "$#" -gt 0 ]; then
+      cp -a "$@" "$dst/.git/" || { echo "readset_copy_tree: copying .git failed" >&2; return 1; }
+    fi
+    mkdir -p "$dst/.git/refs/heads" "$dst/.git/refs/tags" || { echo "readset_copy_tree: creating the copy's refs failed" >&2; return 1; }
+    git -C "$src" for-each-ref --format='create %(refname) %(objectname)' > "$scratch/copy.refs" \
+      || { echo "readset_copy_tree: git for-each-ref failed in $src" >&2; return 1; }
+    if [ -s "$scratch/copy.refs" ]; then
+      env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR git -C "$dst" update-ref --stdin < "$scratch/copy.refs" \
+        || { echo "readset_copy_tree: writing the refs into the copy failed" >&2; return 1; }
+    fi
   else
     readset_git_standalone "$src" "$dst" || { echo "readset_copy_tree: building a standalone .git from the linked worktree failed" >&2; return 1; }
   fi

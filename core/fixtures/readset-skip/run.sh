@@ -2947,6 +2947,67 @@ EOF
       bad "  the linked-worktree copy is not a standalone repository answering like its source (dst '$LW_DST', src HEAD '$LW_SRC_HEAD'): $(tr '\n' ' ' < "$CSEED/lw.out")"
     fi
 
+    # BL-1211: `.git/worktrees/` is never COPIED, so an entry in it that `cp -a` cannot read (what a concurrent
+    # `git worktree remove` leaves mid-copy, made deterministic here by mode 000) cannot fail the copy. THE SEED
+    # MUST REPRODUCE THE FAILURE: a plain `cp -a` of that directory has to fail first, or the arm proves nothing.
+    # The positive conjuncts (HEAD, objects, the submodule's modules dir, the `copied` line) are what an `exit 0`
+    # subject cannot produce.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    : > "$CSEED/src/.git/worktrees/lw/unreadable" && chmod 000 "$CSEED/src/.git/worktrees/lw/unreadable" \
+      || broken "could not seed an unreadable entry under .git/worktrees"
+    if cp -a "$CSEED/src/.git/worktrees" "$CSEED/probe.wt" >/dev/null 2>&1; then
+      broken "cp -a read the mode-000 entry (running as a user that bypasses file modes?) — the BL-1211 arm could not tell a copy that skips worktrees/ from one that copies it"
+    fi
+    UNR_V="$(copy_with "$CP" unr)"
+    UNR_RC=0; grep -q '^readset_copy_tree: ' "$CSEED/unr.out" && UNR_RC=1
+    if [ "$UNR_RC" -eq 0 ] && [ -z "$UNR_V" ] && [ -f "$CSEED/dst.unr/.git/HEAD" ] && [ -d "$CSEED/dst.unr/.git/objects" ] \
+       && [ -d "$CSEED/dst.unr/.git/modules/lib/sub" ] && [ ! -e "$CSEED/dst.unr/.git/worktrees" ] \
+       && grep -q '^copied [0-9]* path(s) plus .git/' "$CSEED/unr.out"; then
+      ok "  an unreadable entry under .git/worktrees does not fail the copy: rc 0, .git has HEAD, objects and modules, and no worktrees/"
+    else
+      bad "  the copy failed or carried worktrees/ with an unreadable entry under it (rc $UNR_RC): $(tr '\n' ' ' < "$CSEED/unr.out")"
+    fi
+    chmod 600 "$CSEED/src/.git/worktrees/lw/unreadable"
+
+    # BL-1211: `git branch -D` (an agent-worktree cleanup runs it beside `git worktree remove`) deletes a ref and
+    # its reflog while the copy runs; `refs/`, `logs/` and `packed-refs` never pass through `cp`, so an entry
+    # `cp -a` cannot read under refs/heads or logs/refs/heads (mode 000 stands for the vanishing one,
+    # deterministically) cannot fail the copy, and the refs are rewritten by git. THE SEED MUST REPRODUCE THE
+    # FAILURE: a plain `cp -a` of each directory has to fail first. The NEGATIVE: an unreadable entry under
+    # objects/ is no vanishing ref and must still fail the copy rc 1 with its message.
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    : > "$CSEED/src/.git/refs/heads/zz-unreadable" && chmod 000 "$CSEED/src/.git/refs/heads/zz-unreadable" \
+      && : > "$CSEED/src/.git/logs/refs/heads/zz-unreadable" && chmod 000 "$CSEED/src/.git/logs/refs/heads/zz-unreadable" \
+      || broken "could not seed unreadable entries under .git/refs/heads and .git/logs/refs/heads"
+    if cp -a "$CSEED/src/.git/refs" "$CSEED/probe.refs" >/dev/null 2>&1 || cp -a "$CSEED/src/.git/logs" "$CSEED/probe.logs" >/dev/null 2>&1; then
+      broken "cp -a read a mode-000 ref or reflog entry — the BL-1211 refs arm could not tell a copy that skips refs/ and logs/ from one that copies them"
+    fi
+    REF_V="$(copy_with "$CP" refs)"
+    REF_RC=0; grep -q '^readset_copy_tree: ' "$CSEED/refs.out" && REF_RC=1
+    REF_SRC="$(cd "$CSEED/src" && git rev-parse refs/heads/lwcopy 2>/dev/null)"
+    REF_DST="$(cd "$CSEED/dst.refs" && git rev-parse refs/heads/lwcopy 2>/dev/null)"
+    if [ "$REF_RC" -eq 0 ] && [ -z "$REF_V" ] && [ -n "$REF_SRC" ] && [ "$REF_DST" = "$REF_SRC" ] \
+       && [ "$(cd "$CSEED/dst.refs" && git rev-parse HEAD 2>/dev/null)" = "$(cd "$CSEED/src" && git rev-parse HEAD 2>/dev/null)" ] \
+       && [ ! -e "$CSEED/dst.refs/.git/worktrees" ] && grep -q '^copied [0-9]* path(s) plus .git/' "$CSEED/refs.out"; then
+      ok "  an unreadable entry under .git/refs/heads and .git/logs/refs/heads does not fail the copy: rc 0, the copy resolves the source's branch and HEAD to the same commits"
+    else
+      bad "  the copy failed, or lost a ref, with an unreadable entry under refs/heads and logs/refs/heads (rc $REF_RC, branch '$REF_DST' vs '$REF_SRC'): $(tr '\n' ' ' < "$CSEED/refs.out")"
+    fi
+    chmod 600 "$CSEED/src/.git/refs/heads/zz-unreadable" "$CSEED/src/.git/logs/refs/heads/zz-unreadable"
+    rm -f "$CSEED/src/.git/refs/heads/zz-unreadable" "$CSEED/src/.git/logs/refs/heads/zz-unreadable"
+
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    : > "$CSEED/src/.git/objects/zz-unreadable" && chmod 000 "$CSEED/src/.git/objects/zz-unreadable" \
+      || broken "could not seed an unreadable entry under .git/objects"
+    copy_with "$CP" objbad >/dev/null
+    if grep -q '^readset_copy_tree: copying .git failed' "$CSEED/objbad.out" && ! grep -q '^copied ' "$CSEED/objbad.out"; then
+      ok "  a genuinely unreadable entry under .git/objects still fails the copy rc 1 with its message"
+    else
+      bad "  an unreadable entry under .git/objects did not fail the copy as 'copying .git failed': $(tr '\n' ' ' < "$CSEED/objbad.out")"
+    fi
+    chmod 600 "$CSEED/src/.git/objects/zz-unreadable"
+    rm -f "$CSEED/src/.git/objects/zz-unreadable"
+
   fi
 
   # ---------------------------------------------- submodule rows and the ignore filter ----

@@ -156,14 +156,30 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 # scripts directory except hermetic-run.sh, which no script in either tree reads: copying it would make the
 # fixture read an input its inputs.decl cannot declare.
 STUBS="verdict.sh validate-escalation-resolution.sh sprint-status.sh validate-stub-audit.sh validate-spawn-ledger.sh validate-provenance-block.sh validate-steering-budget.sh validate-h2-attestation.sh validate-gate3-tables.sh"
+# scr_list : sets SCRX to every entry of the scripts directory except hermetic-run.sh (builtins only, no process start).
+scr_list() {
+  local s
+  SCRX=()
+  for s in "$SCR"/* "$SCR"/.[!.]*; do
+    [ "${s##*/}" != hermetic-run.sh ] && [ -e "$s" ] && SCRX+=("$s")
+  done
+  return 0
+}
+# skx_list : sets SKX to every entry of the skills directory $SKD except the two research-citations files (the
+# distribution holds them, a consumer tree never does, and no copy of the skills directory reads either); builtins only.
+skx_list() {
+  local s
+  SKX=()
+  for s in "$SKD"/* "$SKD"/.[!.]*; do
+    case "${s##*/}" in research-citations.md|research-citations.md.not-shipped) ;; *) [ -e "$s" ] && SKX+=("$s") ;; esac
+  done
+  return 0
+}
 mk_tree() {
   local d="$1" s
   mkdir -p "$d/core/scripts" "$d/stub/core/scripts" || return 1
-  set --
-  for s in "$SCR"/* "$SCR"/.[!.]*; do
-    [ "${s##*/}" != hermetic-run.sh ] && [ -e "$s" ] && set -- "$@" "$s"
-  done
-  cp -R "$@" "$d/core/scripts/" && cp -R "$@" "$d/stub/core/scripts/" || return 1
+  scr_list
+  cp -R "${SCRX[@]}" "$d/core/scripts/" && cp -R "${SCRX[@]}" "$d/stub/core/scripts/" || return 1
   for s in $STUBS; do
     [ -f "$d/stub/core/scripts/$s" ] || return 1
     printf '#!/usr/bin/env bash\n# gate-transition fixture stub for %s: PASS unless GT_FX_REFUSE names it.\n[ %s != validate-spawn-ledger.sh ] || [ -z "${GT_FX_RC22:-}" ] || { [ "$GT_FX_RC22" != 3 ] || { if [ "${GT_FX_MSG22:-}" = norole ]; then echo "NO ROLE-BOUND ROWS: EXAMINED NOTHING -- 2 S1 row(s) exist and NONE of them was judged"; else echo "PRE-LEDGER: 4 row(s) in ledger.jsonl, NONE of them S1."; fi; echo "COUNTS: examined 0 S1 spawn row(s) of 4 in ledger.jsonl;"; }; exit "$GT_FX_RC22"; }\n[ "${GT_FX_REFUSE:-}" != %s ] || { echo "stub %s: REFUSED by the fixture" >&2; exit 1; }\n[ %s != validate-h2-attestation.sh ] || echo "H2_ATTESTED v1 sprint=1 stub"\n[ %s != validate-steering-budget.sh ] || echo "steering-count 0"\n[ %s != validate-gate3-tables.sh ] || echo "GATE-ARM 4 PASS examined=1 ok stub"\nexit 0\n' \
@@ -206,7 +222,7 @@ new_world() {
     > "$L/_bmad-output/pipeline-snapshot.md" || return 1
   # gate-run.sh reads the gate's arms file, the map and the manifest from the lead's skill tree; copied AFTER the
   # commit above, so the partition under test still sees only src/.
-  cp -R "$SKD"/. "$L/.claude/skills/ai-dlc/" && cp -R "$GRSCH" "$L/.claude/schemas"
+  skx_list; cp -R "${SKX[@]}" "$L/.claude/skills/ai-dlc/" && cp -R "$GRSCH" "$L/.claude/schemas"
 }
 shards() { grep -E '^[0-9]+	' "$1" 2> /dev/null; }
 nshards() { local n; n="$(shards "$1" | grep -c .)" || n=0; printf '%s' "$n"; }
@@ -894,7 +910,10 @@ GRW="$T/gr"; GRR="$GRW/root"
 SKD="$(dirname "$(dirname "$STEPF")")"
 GRSCH=""; for _c in "$_d/core/schemas" "$_d/.claude/schemas"; do [ -d "$_c" ] && { GRSCH="$_c"; break; }; done
 mkdir -p "$GRW/core/scripts" "$GRR/.claude/skills" "$GRR/_bmad-output/implementation-artifacts" || { echo "FIXTURE BROKEN: gate-run toy world" >&2; exit 2; }
-cp -R "$SCR"/. "$GRW/core/scripts/" && cp -R "$SKD" "$GRR/.claude/skills/ai-dlc" && cp -R "$GRSCH" "$GRR/.claude/schemas" || { echo "FIXTURE BROKEN: gate-run toy copies" >&2; exit 2; }
+# Every whole-skills copy (skx_list) omits the two research-citations files.
+skx_list
+mkdir -p "$GRR/.claude/skills/ai-dlc" || { echo "FIXTURE BROKEN: gate-run toy skills dir" >&2; exit 2; }
+scr_list; cp -R "${SCRX[@]}" "$GRW/core/scripts/" && cp -R "${SKX[@]}" "$GRR/.claude/skills/ai-dlc/" && cp -R "$GRSCH" "$GRR/.claude/schemas" || { echo "FIXTURE BROKEN: gate-run toy copies" >&2; exit 2; }
 world_repo "$GRR" > /dev/null 2>&1 || { echo "FIXTURE BROKEN: gate-run toy repo" >&2; exit 2; }
 printf '#!/usr/bin/env bash\necho "FAIL seeded offender at x:3"\nexit 1\n' > "$GRW/core/scripts/stub-fail.sh"
 printf '#!/usr/bin/env bash\necho "ok fine"\n' > "$GRW/core/scripts/stub-ok.sh"
@@ -973,7 +992,7 @@ if [ "$GRC" = 0 ] && [ "$(gr_entries)" = 1 ] && [ "$(gr_act)" = 1 ]; then
 else bad "GRC3 rc=$GRC entries=$(gr_entries) activity=$(gr_act): $(grep -E '^(GATE-RUN|REMEDY)' "$GRW/grc3.out" | head -2 | tr '\n' ' ')"; fi
 
 # GM3: the binding over a copy of the real skill tree
-GMS="$GRW/gm"; mkdir -p "$GMS/skills" && cp -R "$SKD" "$GMS/skills/ai-dlc" || { echo "FIXTURE BROKEN: gm copy" >&2; exit 2; }
+GMS="$GRW/gm"; mkdir -p "$GMS/skills/ai-dlc" && skx_list && cp -R "${SKX[@]}" "$GMS/skills/ai-dlc/" || { echo "FIXTURE BROKEN: gm copy" >&2; exit 2; }
 GMA="$GMS/skills/ai-dlc/gates/planning.arms"
 gm_run() { AI_DLC_PROJECT_ROOT="$GMS" FXCELL="$1" bash "$GRW/core/scripts/validate-gate-manifest.sh" "$GMS/skills/ai-dlc/steps/gate-validation.md" > "$GRW/$1.out" 2>&1 < /dev/null; GRC=$?; }
 cp "$GMA" "$GMA.orig"; awk -F'\t' '$1 != "37"' "$GMA.orig" > "$GMA"
