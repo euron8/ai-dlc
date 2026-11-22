@@ -497,7 +497,7 @@ else
 fi
 # No shipped caller passes the flag. Control in the same invocation: the same scan for the flag every
 # shipped caller DOES pass (--check) must find the pre-push hook, or the scan looked at nothing.
-seam_hits="$(grep -rlF -e '--skip-selfprobe' "$REPO/.githooks" "$REPO/core/scripts" "$REPO/core/git-hooks" "$REPO/core/skills" "$REPO/scripts" "$REPO/templates" 2>/dev/null | grep -v '/scripts/render-vocabulary-index.sh$')" || seam_hits=""
+seam_hits="$(grep -rlF -e '--skip-selfprobe' "$REPO/.githooks" "$REPO/scripts" "$REPO/templates" 2>/dev/null | grep -v '/scripts/render-vocabulary-index.sh$')" || seam_hits=""
 seam_ctl="$(grep -rlF -e 'render-vocabulary-index.sh --check' "$REPO/.githooks" "$REPO/scripts" 2>/dev/null | grep -c .)" || seam_ctl=0
 if [ -z "$seam_hits" ] && [ "$seam_ctl" -ge 1 ]; then
   ok "seam-callers -- no shipped caller passes --skip-selfprobe (control: $seam_ctl file(s) pass --check)"

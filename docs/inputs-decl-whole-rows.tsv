@@ -176,4 +176,3 @@ validator-path-resolution	core/schemas/	whole
 vocabulary-index	scripts/	whole
 vocabulary-index	.githooks/	whole
 vocabulary-index	templates/	whole
-vocabulary-index	core/	legacy

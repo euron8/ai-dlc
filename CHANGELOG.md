@@ -19,6 +19,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1224.0] - 2026-11-22
+
+### The vocabulary-index fixture no longer re-runs on edits under `core/` it cannot read (BL-1124 advances)
+
+- For the gate. `vocabulary-index` declared all of `core/`, so any edit there re-ran it (95 of the last 300 first-parent commits touched `core/` and none of `.githooks/`, `scripts/` or `templates/`). Its seam-callers arm now scans `.githooks`, `scripts` and `templates` only, the `core/` line is replaced by the three `core/fixtures/lib` files the run sources, and the `legacy` row for it is gone from `docs/inputs-decl-whole-rows.tsv`. The fixture's `.dist-only` reason is rewritten to state its actual subject. Nothing `install.sh` ships changes.
+
 ## [0.1223.0] - 2026-11-22
 
 ### An update pull is stamped only by its finish, after a real tree check; advisory rows no longer hold the stamp; deliver refuses an overlapping or unrecorded dirty file and commits one whole only on `--whole <path>`; an override of a rule's load-pointer stub is refused (BL-1202 advances, BL-1213, BL-1215 filed, BL-1166)
