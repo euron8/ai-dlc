@@ -48472,3 +48472,28 @@ Step: n/a
 Provenance: batch 263 close; id allocated by lead ai-dlc-17. Built in batch 264, cluster B (ai-dlc-f1).
 
 verify: manual
+
+## BL-1216 — the update skill's step-1 reflog derivation carries an awk `$0` that Claude Code replaces with the first skill argument, so under arguments it silently prints nothing
+
+**DEFECT.** Filed 2026-11-21 (batch 264, cluster F). Owner: `core/skills/ai-dlc-update/SKILL.md` step 1 (the cut-from derivation) and `core/skills/ai-dlc-update/reconcile/pull.sh` (`pl_cut_from`).
+
+Goal: the branch a skill branch was cut from is derived from the reflog whatever arguments `/ai-dlc-update` was invoked with, and no skill body the harness loads carries a token the harness substitutes. One done condition: step 1 runs a script for the derivation, and an arm fails the distribution push on a substitutable token in `core/skills/*/SKILL.md`.
+
+Record: Claude Code replaces `$N` (`$0` is the first argument), `$ARGUMENTS`, `$ARGUMENTS[N]` and each `$name` declared under a frontmatter `arguments:` key everywhere in a skill's SKILL.md, code spans included; an index with no argument stays literal (code.claude.com/docs/en/skills.md, "Available string substitutions"). Step 1's one-liner compared against awk's `$0`, so a bare invocation worked and `/ai-dlc-update apply` ran `index(apply, …)`. INFERENCE, not verified: files the agent later Reads (`steps/*.md`, `reconcile/`) are not substituted, because the docs scope substitution to the skill's markdown content and say nothing about Read files; the three `$0` instances in `core/skills/ai-dlc/steps/` are left unedited.
+
+Failure caught: graph's 0.1218.0 to 0.1220.0 pull (push-candidate ledger entry PC-S324, graph 6c74ae340): invoked with `apply`, then `515532ee3… apply`, step 1's derivation printed nothing while the reflog held the line, which routed the agent into the "no matching reflog line" fallback as if it had derived the branch.
+
+Work list:
+
+1. Move the derivation out of SKILL.md: `reconcile/pull.sh cut-from <consumer> <branch>` prints `pl_cut_from`'s answer, the function `pull.sh deliver` already uses; step 1 runs it.
+2. One arm, `audit-rule-files.sh` Class 1e (`SKILL_ARG_SUBSTITUTION`, tier 1, distribution layout only), over the derived glob `core/skills/*/SKILL.md`: `$<digit>` (escaped or not), `$ARGUMENTS`, and a frontmatter `arguments:` key.
+
+**LANDED (v0.1225.0).** Batch 264, cluster F. Step 1 runs `reconcile/pull.sh cut-from . <skill-branch>`; an engine without the subcommand exits 2 with its usage text, which step 1 now STOPs on as a stale engine, distinct from the no-match fallback. Class 1e's false-positive set on the fixed tree is empty (3 population files); on ba8565a96's tree it flags step 1's awk one-liner in `core/skills/ai-dlc-update/SKILL.md` alone. The fix: core/skills/ai-dlc-update/SKILL.md:299 "run `reconcile/pull.sh cut-from . <skill-branch>`" and core/skills/ai-dlc-update/reconcile/pull.sh:1131 "cut-from) [ $# -eq 2 ] || usage; pl_cut_from".
+
+Outcome: on a scratch clone of graph at 6c74ae340 with a real `git checkout -b`, the old step-1 command rendered with no argument printed the reflog line, rendered with `apply` printed nothing (exit 0), and rendered with `origin/main` printed nothing with an awk division-by-zero error (exit 0); `pull.sh cut-from` printed the source branch, exit 0; skill arguments cannot reach it, since its awk lives in a script. The substitution was rendered by hand (`sed`); the skill loader was not driven, because that means running a consumer pull.
+
+Step: n/a
+
+Provenance: batch 264, cluster F (owner ai-dlc-2e, lead ai-dlc-55).
+
+verify: manual
