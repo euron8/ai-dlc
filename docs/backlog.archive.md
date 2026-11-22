@@ -48448,3 +48448,27 @@ Outcome measured: graph s322 (8 stories; baseline s321, 25 stories) against s321
 
 verify: manual
 
+## BL-1211 — a read-set trace's `.git` copy races a concurrent worktree removal, so the trace fails rc 1 and records nothing
+
+**DEFECT.** OPEN. Filed 2026-11-21 (batch 263, close). Owner: `core/scripts/derive-fixture-readsets.sh` (`readset_copy_tree`).
+
+Goal: a read-set trace does not fail because another process removes a worktree while the tree is copied. One done condition: with a worktree removal running during the copy, the trace exits 0 and records its rows, and a fixture arm holds that shape and fails without the change.
+
+Record: batch 263, cluster G's first trace attempt (10:08) failed rc 1 and recorded nothing. `readset_copy_tree` copies `.git` while a concurrent worktree removal deletes `.git/worktrees/<id>`. Attempt 2 ran and passed. The cause is the lead's reading of that failure; it was not re-derived here. Existing entry: none (this file 0 mentions, the archive 1 closed mention; control BL-1195 live 1).
+
+Operator ruling (2026-11-21): a fresh session builds this next batch.
+
+Work list:
+
+1. Reproduce: remove a registered worktree while `readset_copy_tree` runs, and record the rc and the missing path.
+2. Make the copy tolerate the vanishing `.git/worktrees/<id>` path, or copy without it, with a probe that fails on the base and passes after.
+
+**LANDED (v0.1222.0).** A read-set trace's `.git` copy no longer passes `worktrees/`, `refs/`, `logs/` or `packed-refs` through `cp`; the refs are rewritten into the copy by `git for-each-ref` into `git update-ref --stdin`, so a concurrent `git worktree remove` or `git branch -D` cannot fail the copy, and a genuinely unreadable entry elsewhere in `.git` still fails rc 1. The readset-skip tracer unit holds both shapes: a mode-000 entry under `.git/worktrees/`, `.git/refs/heads` and `.git/logs/refs/heads` gives rc 0 with the source's branch and HEAD resolving in the copy, and a mode-000 entry under `.git/objects` gives rc 1. The seeded entries stand as the reproduction of the vanishing entry (operator ruling, batch 264); no concurrent real removal was run. Reflogs are not carried into the trace tree; no fixture reads the trace tree's reflog (`update-preflight-push` greps a reflog command as text, `dist-clone` expires reflogs in repos it builds).
+
+Evidence on record (batch 264, cluster B): the first arm (a mode-000 file under `.git/worktrees/lw/`, a plain `cp -a` of it required to fail) gave on the base `derive-fixture-readsets.sh` rc 1, `cp: ... Permission denied` under `readset_copy_tree: copying .git failed`; the arms drive `readset_copy_tree` through `copy_with`, which `validate-fixture-inprocess.sh` P2 requires; `bash core/fixtures/readset-skip-c/run.sh` gives PASS 79 assertions, and the base (515532ee3's deriver) fails both copy arms, the worktrees arm and the refs/logs arm (2 failed, 77 passed). No `VS-IDENTITY` pin is owed: `READSET_COPY` is not one of the four spans `validate-verdict-identity.sh` hashes (`READSET_UNIVERSE`, `READSET_TOOLS`, `READSET_VS`, `READSET_KEYROWS`). Real-corpus run (owner, main checkout, sandbox trace of gate-transition at c59370b86, dozens of agent worktrees live on the box): the new `.git` copy ran at rc 0 and printed `copied 3274 path(s) plus .git/`.
+
+Step: n/a
+
+Provenance: batch 263 close; id allocated by lead ai-dlc-17. Built in batch 264, cluster B (ai-dlc-f1).
+
+verify: manual

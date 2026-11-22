@@ -9,6 +9,7 @@ core/hooks/
 # reason: core/scripts/ is enumerated -- the spelling arm diffs every core/*.sh outside core/fixtures/ in the seeded repo, and core/fixtures/procsub-staged-refusal/run.sh:2022.
 core/scripts/
 core/session-driver/
+# reason: core/skills/ is enumerated -- the spelling arm (unit spell, shard a only) diffs every core/*.sh outside core/fixtures/, git pathspec * crossing /, so a new .sh anywhere under core/skills/ is read; core/fixtures/procsub-staged-refusal/run.sh:2024.
 core/skills/
 core/schemas/provenance-block.json
 core/fixtures/procsub-staged-refusal-b/run.sh
