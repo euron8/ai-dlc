@@ -4220,3 +4220,100 @@ Provenance: batch 264, cluster D (ai-dlc-41); id allocated by the lead.
 verify: manual
 
 
+
+## BL-1221 — pre-push consumer-layout selection: a skip on a confirmed placement record is named nowhere, and one box-wide record file per fixture lets pushes from different trees invalidate each other's `<fx>@consumer` units
+
+**NOTE.** Filed 2026-11-22 (batch 264, cluster L). Owner: `.githooks/pre-push` (`cl_select`, `cl_publish`; hook copies bound by I66).
+
+Goal: a push log names every `<fx>@consumer` unit it did not run, and a placement record written by one tree is not overwritten by another. One done condition: the log names the confirmed-record skips, and `cl_publish` keys or guards its record so a push from tree B leaves tree A's record intact.
+
+Baseline: 24 of 38 placement records written at 10:56:02 on 2026-11-22 hold installed `run.sh` sha256 values that match no revision of `core/fixtures/<fx>/run.sh` in any ref or any of the 58 worktrees (control: `adversarial-shard-merge-c` and `-d` found at 56877eb4d); the other 14 match a historical revision. The claimed 10:49:00 rewrite did not reproduce (none at that mtime; 36 at 11:09:53). The waste per push is not yet measured; item 3 owns it.
+
+Work list:
+
+1. Name the confirmed-record skips. `.githooks/pre-push:3376` "counted on the selection line and not named" says an `<fx>@consumer` unit skipped on an unchanged, confirmed record is counted and not named. The named sites are `:3369` "consumer layout: %s of %s shipping fixture(s)", the `$4 == "d"` skips at `:3371`, `:3383` "skipped on a pass recorded elsewhere" (unconfirmed-record skips only) and `:3524` "PENDING count is unrecorded". A by-name coverage check over the push log cannot tell such a unit from a gap; the count is recoverable only by subtraction.
+2. Key the placement records by content, or have `cl_publish` refuse to overwrite a record a different tree wrote. Records are one file per fixture, `<vs>/consumer-placement-keys/<repo root commit>/<fx>.key` (`rec_home`, `:3301`), with no per-tree or per-clone component, and `cl_publish` (`:3419` `mv "$kd/$2.key.tmp.$$" "$kd/$2.key"`) replaces the old file, so the last writer across every tree and clone on the box wins.
+3. Measure `<fx>@consumer` reruns per push before and after, from `.git/ai-dlc-suite-key.log` and `.git/ai-dlc-fixture-durations`, and write the outcome beside the baseline.
+
+Step: n/a
+
+Related: I66.
+
+Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
+
+verify: sh f=.githooks/pre-push; grep -q 'cl_publish() {' $f || exit 9; T=$(mktemp -d) || exit 9; sed -n '/^cl_publish() {/,/^}/p' $f > $T/fn.sh; [ -s $T/fn.sh ] || exit 9; mkdir -p $T/a/.cl/.k $T/b/.cl/.k $T/kd || exit 9; echo $T/kd > $T/a/.cl.keys; echo $T/kd > $T/b/.cl.keys; echo KEY-A > $T/a/.cl/.k/fx; echo KEY-B > $T/b/.cl/.k/fx; bash -c ". $T/fn.sh; cl_publish $T/a fx; cl_publish $T/b fx" || exit 9; [ -f $T/kd/fx.key ] || exit 9; grep -rqF KEY-A $T/kd
+
+## BL-1222 — update pull's PR body: "Buckets applied" counts RESOLVED rows from every run directory ever left, and the 8000-byte cap drops NOTE kinds in alphabetical order
+
+**DEFECT.** OPEN. Filed 2026-11-22 (batch 264, cluster L). Owner: `core/skills/ai-dlc-update/reconcile/pull.sh`, `core/skills/ai-dlc-update/reconcile/apply.sh`.
+
+Goal: the PR body's counts and its NOTE listing are bounded by the same run set, and what the cap drops is chosen by consequence. One done condition: a fixture arm per item, each killing its mutant: (a) a stale run's RESOLVED rows are not counted, (c) a set of 30 `derivation-info-` kinds does not push out `report-unverified` and `reapproval-narrowed`.
+
+Work list:
+
+1. (a) `pull.sh:1096` `"$(cat "$GD"/ai-dlc-pull/run-*/apply.out` counts RESOLVED rows across every run directory in the git dir. It ignores the dirty-snapshot run boundary that `pl_note_rows` honours (`:1042`) and never reads `finish.out`, which `pl_note_rows` does (`:1046` `cat "$d/apply.out" "$d/finish.out"`). Synthetic test: an old run with 5 RESOLVED rows and a newer run with 2 counted 7, while the NOTE rows were bounded correctly. Fix: count from the same bounded run set and both files, one reader for both.
+2. (b) The tip's claim "act-done rows are not rendered" is NOT REPRODUCED. The tokens `act-done`, `act_done` and `actdone` appear nowhere under `core/` (control: `PL_NOTE_COUNTED`, 2 hits in `pull.sh`), and the owning session is gone. Kept here unresolved; nothing to build until it is reproduced.
+3. (c) `pull.sh:1165` `if (over || acc + length(l) + 1 > 8000)` drops counted NOTE kinds in `sort -u` order (alphabetical, `pl_note_rows` `:1047`), not by consequence. `derivation-info-<scope>` is an open set (`apply.sh:3357` `"INFO${_T}"*)` emits `derivation-info-${_ddk}`), so 30 `derivation-info-sNN` kinds pushed out `report-unverified` and `reapproval-narrowed`; the body ended "… 14 more NOTE kinds (98 rows)" (`pull.sh:1167` "more NOTE kinds"). Fix: order the counted kinds by consequence before the cap, or fold the open `derivation-info-` set into one line.
+
+Step: n/a
+
+Related: BL-1218 (closed).
+
+Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
+
+verify: sh f=core/skills/ai-dlc-update/reconcile/pull.sh; grep -q 'more NOTE kinds' $f || exit 9; grep -q 'Buckets applied' $f || exit 9; T=$(mktemp -d) || exit 9; mkdir -p $T/c/.git/ai-dlc-pull/run-1-1 && git init -q $T/c || exit 9; a=$T/c/.git/ai-dlc-pull/run-1-1/apply.out; for k in $(seq 1 30); do for i in 1 2 3 4 5 6 7 8; do printf 'NOTE\tderivation-info-s%s\t_bmad-output/%0.60d-%s\td\n' $k 0 $i; done; done > $a; printf 'NOTE\treport-unverified\tR.md\td\n' >> $a; bash $f pr-body $T/c > $T/b.md 2>/dev/null; grep -q 'derivation-info-s1' $T/b.md || exit 9; grep -q 'report-unverified' $T/b.md || exit 1; ! grep -q 'cat "\$GD"/ai-dlc-pull/run-\*/apply.out' $f
+
+## BL-1223 — no validator joins the update skill's list of `pull.sh` subcommands to `pull.sh`'s dispatch
+
+**NOTE.** Filed 2026-11-22 (batch 264, cluster L). Owner: `core/skills/ai-dlc-update/SKILL.md`, `core/skills/ai-dlc-update/reconcile/pull.sh`, a validator arm.
+
+Goal: the two subcommand sets cannot drift. One done condition: an arm of `scripts/validate-enforcement-map.sh` reads both sets and fails when they differ, shown to fire on a seeded drift and stay quiet on the live tree.
+
+Work list:
+
+1. Join the `` - `pull.sh <cmd> ...` `` lines of `SKILL.md` (`:158` onward) to the `case "$cmd" in` dispatch of `pull.sh` (`:1249` onward). On this tree the sets agree at ten each (`resolve`, `gate`, `dry-run`, `apply`, `finish`, `merge`, `deliver`, `record`, `pr-body`, `cut-from`), because 0.1230.0 added `cut-from` by hand. No script under `scripts/` or `core/scripts/` names `pull.sh` at all (derived by a per-file loop; control: nine scripts name `ai-dlc-update/SKILL.md`).
+2. Probe for the join, once it exists: derive the dispatch names from `pull.sh` and require each to head a list line in `SKILL.md`, and the reverse.
+
+Step: n/a
+
+Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
+
+verify: sh grep -q 'pl_cut_from' core/skills/ai-dlc-update/reconcile/pull.sh || exit 9; grep -q 'ai-dlc-update/SKILL.md' scripts/validate-enforcement-map.sh || exit 9; grep -qE '^[^#]*reconcile/pull\.sh' scripts/validate-enforcement-map.sh
+
+## BL-1224 — a containment test with `git apply -R --check --cached` reads the current checkout's index, and the tool-hazards rulebook does not say so
+
+**NOTE.** Filed 2026-11-22 (batch 264, cluster L). Owner: `.claude/rules/tool-hazards.md`, `scripts/validate-claude-rules.sh` (arm A6).
+
+Goal: the bullet below sits under "## Git lies by default". One done condition: `.claude/rules/tool-hazards.md` carries it and arm A6 still passes.
+
+Work list:
+
+1. The bullet to land: "- A containment test `git apply -R --check --cached` reads the CURRENT checkout's index, not `origin/main`. Run it with `GIT_INDEX_FILE=<scratch>/x.index` after `git read-tree origin/main`, with a landed branch as positive control." The fix it states is a scratch index loaded from `origin/main`, a landed positive control and an unlanded negative.
+2. Land it within the ceiling, by subtracting vestigial durable prose, or after an operator ruling raises the ceiling (the header of `scripts/validate-claude-rules.sh` says a raise needs one). Measured on this tree by the validator's own run: `A6  ok  -- compaction-durable channel 48478/48530 bytes`; the 232-byte bullet makes it 48710, 180 over (`DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48530}"`, `:857`).
+
+Step: n/a
+
+Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
+
+verify: has .claude/rules/tool-hazards.md "read-tree origin/main"
+
+## BL-1225 — update engine: the delivered-retry and record path, and the update skill's text describing it, have five open faults (stray debug write, surviving marker, unquoted printed command, two contradicting passages, an overstated rule)
+
+**NOTE.** Filed 2026-11-22 (batch 264, cluster L). Owner: `core/skills/ai-dlc-update/reconcile/pull.sh`, `core/skills/ai-dlc-update/reconcile/apply.sh`, `core/skills/ai-dlc-update/SKILL.md`, `core/fixtures/apply-restamp-theirs/run.sh`. Source: cluster I's tip adversary, batch 264; citations re-derived on the tree that carries cluster I's release.
+
+Goal: the delivered-retry and record path is sound and the skill text describing it agrees with the code. One done condition: each of items 1 to 5 is fixed and the receipt below exits 0.
+
+Work list:
+
+1. N1: `core/fixtures/apply-restamp-theirs/run.sh:320` `printf "%s\n" "$FE_O" > /tmp/fe264.out` is a stray debug write in arm FE1, outside `$WORK`. Delete it.
+2. N2: `core/skills/ai-dlc-update/reconcile/pull.sh:356` `if [ "$(cat "$(pl_writes_file).delivered" 2>/dev/null)" = "$th" ]; then`, the delivered-retry branch, drops the old record when `.delivered` names this theirs. If the retry's `pl_writes_record` then fails, at `:367` `pl_status_rows "$RUN/snapshot" 1 || return 1` or at the `mv -f "$f.$$" "$f" || return 1` on `:437` before the `rm -f "$f.delivered"` on `:439`, `.delivered` survives with no record, and the next theirs passes silently with only a stderr line.
+3. N3: the advisory remedy clauses in `core/skills/ai-dlc-update/reconcile/apply.sh` at `:1367` (`tp_remedy_json`), `:4145`, `:4260`, `:4263`, `:4351`, `:4451` and `:4458` print `pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>` with the four values unquoted, so a path containing a space breaks the printed command. Quote them.
+4. N4: `core/skills/ai-dlc-update/SKILL.md:1285` "dispose of it and run `finish`" states the general rule (a withheld row, exit 3: dispose and run finish again). It conflicts with the exception at `:1317` "the row says there is nothing left to verify: deliver, and do not re-run `pull.sh finish`" and carries no cross-reference to it.
+5. N5: `core/skills/ai-dlc-update/SKILL.md:1367` "a new record (any `apply`, `finish`, `merge` or `record`)" says a new record removes `.delivered`. That overstates it: an `apply` that stops at its ASK rows writes no record, so `.delivered` stays.
+6. The receipt below cannot see N2 (`.delivered` surviving a failed record write), so N2 needs its own check before this entry closes. A passing receipt is never N2 closed.
+
+Step: n/a
+
+Provenance: batch 264, cluster L (ai-dlc-83), from cluster I's tip adversary; id allocated by the lead.
+
+verify: sh f=core/fixtures/apply-restamp-theirs/run.sh; grep -q 'FE_O' $f || exit 9; ! grep -qF '/tmp/fe264.out' $f || exit 1; a=core/skills/ai-dlc-update/reconcile/apply.sh; grep -q 'pull.sh record' $a || exit 9; ! grep -qF 'pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS}' $a || exit 1; s=core/skills/ai-dlc-update/SKILL.md; grep -q 'dispose of it and run' $s || exit 9; ! grep -qF 'a new record (any `apply`, `finish`, `merge` or `record`)' $s || exit 1; awk '/dispose of it and run `finish`/{f=NR} f && NR-f<=4 && /nothing left to verify/{ok=1} END{exit !ok}' $s
