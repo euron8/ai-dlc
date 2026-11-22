@@ -19,6 +19,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1219.0] - 2026-11-21
+
+### A carry-over evaluation is no longer failed at Check 24 on repairs its records mark repaired (BL-1175 advances)
+
+- For every consumer running a carry-over evaluation. Check 24's pass-1 key join (arm P1J) now follows the repair chain: a key closed by a section-part repair, a lane repair or a fan-in repair counts as closed, and so does a section shard that left the document untouched. Before, such a key read as open and the evaluation failed. Graph's live sprint 324 evaluation failed on 9 keys its records mark repaired; it now passes. Across graph's 24 carry-over series only sprint 324's verdict moves (BL-1175).
+
 ## [0.1218.0] - 2026-11-21
 
 ### Carry-over sprints run without the requirements gate, the party dispatcher and a sharded pass 3, the PRD validate walk is removed, and a gate checks every `--series` it is given (BL-812 advances, BL-1209)

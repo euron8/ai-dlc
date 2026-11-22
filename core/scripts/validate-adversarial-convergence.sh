@@ -4652,18 +4652,25 @@ J3_LAB='function lab(n,   r) { r = "^[[:space:]-]*[*_`]?[*_`]?" n "[*_`]?[*_`]?:
 # $1 repair record -> `T\t<triple>\t<before>\t<after>` per triple (the `artifact:` label opens one, as
 # repair_entries reads it; first before/after kept, lowercased), and `S\t<triple>\t<token>` per `source:`
 # token of an entry whose disposition is `repaired`, tied to the triple above it (0: above any triple).
+# $2 = 1 (arm P1J) also prints `H\t<triple>\t<header>` for each triple inside a `<!-- shard:` block of a record
+# the parallel join assembled whose `artifact:` value equals its header's: a triple stands above the first shard
+# marker (the join's header) and its after equals the sha256 of the record's `partition-document.sh: ASSEMBLED:`
+# line. Default: no H row.
 j3_sources() {
-  awk "$J3_LAB"'
-    function flush() { if (tr > 0) print "T\t" tr "\t" bf "\t" af }
+  awk -v hm="${2:-0}" "$J3_LAB"'
+    function flush() { if (tr > 0) { print "T\t" tr "\t" bf "\t" af; ta[tr] = af } }
+    hm == 1 && /partition-document\.sh: ASSEMBLED: .* sha256=[0-9a-fA-F]+/ { a = $0; sub(/.* sha256=/, "", a); sub(/[^0-9a-fA-F].*$/, "", a); asm = tolower(a) }
+    /^<!-- shard:/ && !insh { insh = 1; hdr = tr }
     /^### / || /^<!-- shard:/ { src = ""; next }
-    lab("artifact") { flush(); tr++; bf = ""; af = ""; next }
+    lab("artifact") { flush(); tr++; bf = ""; af = ""; ar[tr] = v; sub(/[[:space:]]+$/, "", ar[tr]); if (insh && hdr > 0) part[tr] = 1; next }
     lab("artifact_sha_before") { if (tr > 0 && bf == "") { bf = tolower(v); sub(/[[:space:]]+$/, "", bf) }; next }
     lab("artifact_sha_after") { if (tr > 0 && af == "") { af = tolower(v); sub(/[[:space:]]+$/, "", af) }; next }
     lab("source") { src = v; next }
     lab("disposition") { split(v, d, /[[:space:]]+/)
       if (tolower(d[1]) == "repaired" && src != "") { n = split(src, t, /[[:space:],;]+/); for (i = 1; i <= n; i++) if (t[i] != "") print "S\t" tr + 0 "\t" t[i] }
       src = ""; next }
-    END { flush() }' "$1"
+    END { flush()
+      if (hm == 1 && hdr > 0 && asm != "" && ta[hdr] == asm) for (i = hdr + 1; i <= tr; i++) if ((i in part) && ar[i] == ar[hdr]) print "H\t" i "\t" hdr }' "$1"
 }
 # $1 deferral record -> `<token>\t<step>` per deferred key.
 j3_deferrals() {
@@ -4839,17 +4846,36 @@ if [ "$P1J_ARM" -eq 1 ] && [ "${P_FILE[0]##*/}" = "${j3_stem}-adversarial-p1.md"
   case "$p1j_c" in ""|*[!0-9]*) p1j_c=0 ;; esac
   case "$p1j_m" in ""|*[!0-9]*) p1j_m=0 ;; esac
   p1j_unkeyed=$((p1j_c + p1j_m - p1j_nk))
-  for p1j_t in $(block_field "$p1j_f" 'artifact_sha'); do printf '%s\n' "${p1j_t#*[=@]}"; done | tr 'A-F' 'a-f' > "$AC_T/p1j-nsha"
-  : > "$AC_T/p1j-tok"
+  { for p1j_t in $(block_field "$p1j_f" 'artifact_sha'); do printf '%s\n' "${p1j_t#*[=@]}"; done
+    for p1j_t in $(block_field "$p1j_f" 'part_sha'); do printf '%s\n' "${p1j_t#*[=@]}"; done; } | tr 'A-F' 'a-f' > "$AC_T/p1j-nsha"
+  : > "$AC_T/p1j-tok"; : > "$AC_T/p1j-src"; p1j_ri=0
   for p1j_rec in "$j3_dir/${j3_stem}-repair-p1.md" "$j3_dir/${j3_stem}-serial-repair-p1.md"; do
     [ -f "$p1j_rec" ] || continue
+    p1j_ri=$((p1j_ri + 1))
     j3p1_escalated "$p1j_rec" >> "$AC_T/p1j-tok"
-    j3_sources "$p1j_rec" | awk -F'\t' 'FILENAME == ARGV[1] { if ($0 != "") n[$0] = 1; next }
-      $1 == "T" && $3 != $4 { m = split($3, t, /[[:space:]]+/)
-        for (i = 1; i <= m; i++) { s = t[i]; sub(/^[^=@]*[=@]/, "", s); if (s in n) lk[$2] = 1 } }
-      $1 == "S" { st[++ns] = $2; sk[ns] = $3 }
-      END { for (i = 1; i <= ns; i++) if (st[i] in lk) print sk[i] }' "$AC_T/p1j-nsha" - >> "$AC_T/p1j-tok"
+    j3_sources "$p1j_rec" 1 | awk -F'\t' -v r="$p1j_ri" '{ print r "\t" $0 }' >> "$AC_T/p1j-src"
   done
+  # THE LINK, over both records of pass 1: a triple that moved bytes is linked when a before member is a sha
+  # pass 1 notarized (artifact_sha or part_sha) or the after of a linked triple (a lane starts from the parallel
+  # join's bytes, a fan-in from the lane's), to a fixpoint; an identity triple is linked only on a sha a linked
+  # edit reached (already repaired, nothing left to edit), never on a notarized sha. One exception: a part triple
+  # of the join-assembled record (H row: same artifact as its header) whose before and after both equal its
+  # header's before is linked when its header is (a section shard that left the document untouched).
+  awk -F'\t' 'function shas(x, out,   m, i, s, t) { m = split(x, t, /[[:space:]]+/); for (i = 1; i <= m; i++) { s = t[i]; sub(/^[^=@]*[=@]/, "", s); if (s != "") out[s] = 1 } }
+    FILENAME == ARGV[1] { if ($0 != "") L[$0] = 1; next }
+    $2 == "T" { k = $1 ":" $3; tk[++nt] = k; bf[k] = $4; af[k] = $5; next }
+    $2 == "H" { hd[$1 ":" $3] = $1 ":" $4; next }
+    $2 == "S" { st[++ns] = $1 ":" $3; sk[ns] = $4 }
+    END {
+      do { ch = 0
+        for (i = 1; i <= nt; i++) { k = tk[i]; if ((k in lk) || bf[k] == af[k]) continue
+          split("", b); shas(bf[k], b); for (s in b) if (s in L) { lk[k] = 1; break }
+          if (k in lk) { ch = 1; split("", a); shas(af[k], a); for (s in a) { if (!(s in L)) R[s] = 1; L[s] = 1 } } }
+      } while (ch)
+      for (i = 1; i <= nt; i++) { k = tk[i]; if ((k in lk) || bf[k] != af[k]) continue
+        split("", b); shas(bf[k], b); for (s in b) if (s in R) { lk[k] = 1; break } }
+      for (k in hd) if ((hd[k] in lk) && bf[k] != "" && bf[k] == af[k] && bf[k] == bf[hd[k]]) lk[k] = 1
+      for (i = 1; i <= ns; i++) if (st[i] in lk) print sk[i] }' "$AC_T/p1j-nsha" "$AC_T/p1j-src" >> "$AC_T/p1j-tok"
   p1j_bad="$(awk -v pd="$p1j_pd" '
     function norm(t,   p) { if (index(t, pd "/") == 1) t = substr(t, length(pd) + 2)
       else { p = index(t, "/" pd "/"); if (p) t = substr(t, p + length(pd) + 2) }
@@ -4871,7 +4897,9 @@ if [ "$P1J_ARM" -eq 1 ] && [ "${P_FILE[0]##*/}" = "${j3_stem}-adversarial-p1.md"
 ${p1j_bad}
       Close each key in ${j3_stem}-repair-p1.md (or -serial-repair-p1.md): an entry whose 'source:' names
       <shard-file>#<id>, 'disposition: repaired' under a triple whose 'artifact_sha_before:' is a sha pass 1
-      notarized, or 'disposition: escalated'."
+      notarized (artifact_sha or part_sha) or the 'artifact_sha_after:' of such a triple (a lane or fan-in), or
+      inside a part of the record the parallel join assembled that left the header's before untouched, or
+      'disposition: escalated'."
   fi
 fi
 
