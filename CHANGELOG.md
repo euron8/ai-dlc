@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1228.0] - 2026-11-22
+
+### The update PR body relays the NOTE rows that prescribe an act whole, outside the decisions table's budget, and counts every other NOTE kind
+
+- For every consumer pulling a release. `pull.sh deliver` writes the NOTE rows of this pull's apply runs and `--finish` runs into the PR body: every row of 11 kinds whose detail prescribes an act (`derivation-unassessable`, `reconcile-log-name`, `override-readopt-subsumed`, `extension-retire`, `extension-contradicts-core`, `finish-unverified`, `finish-classify-unrecorded`, `finish-template-unrecorded`, `finish-template-manifest-unreadable`, `taught-schema-merge-first`, `extension-adjudicated-unrouted`) whole, outside the decisions table's byte budget, and every other kind once with its row count and its paths bounded, the per-kind section held to 8000 bytes and ending `… K more NOTE kinds (N rows)` past that. Before, a large decisions table (a pull deleting hundreds of pristine files) used the budget and those rows reached only the commit message. The decisions table takes the room they leave. When the whole rows, their list prefixes and the deliver notes pass the bound (40000 bytes, headings counted), deliver refuses before its push and tells the agent to stop and ask the operator which rows to relay. The body prints the rows; it does not state whether each act step 7 prescribes was done, which stays the agent's own statement.
+- NOTE rows (PR body and commit message) are read from the run the dirty snapshot names onward, not from every `run-*` directory; the snapshot's run is taken whatever theirs it was written for, so a snapshot left by an earlier pull reads from that pull's first run onward, as before.
+- On the pull that delivers this release, the PR body is rendered by the new engine: step 2 lands the self-update and re-invokes (the reconcile engine changes), so the deliver step runs the updated `pull.sh`. Under a `SELF-UPDATE-DEFER` the deferred machinery slice (`.claude/skills/ai-dlc-update/**`, which holds `reconcile/pull.sh`) is carried into the gated apply, which runs before deliver, so deliver reads the new file; the step-7 prose is read from the previously installed copy on that one pull. (Derived from `core/skills/ai-dlc-update/SKILL.md` step order, not run on a consumer.)
+- BL-1218 closes.
+
 ## [0.1227.0] - 2026-11-22
 
 ### The distribution says one thing about which Rule 8 text binds: the SKILL.md stub owns the intensity table, `rule-bodies/rule-8.md` carries a bound copy, and a third copy in any rule body is caught (BL-1213 closed)

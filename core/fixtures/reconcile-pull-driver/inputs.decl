@@ -54,3 +54,4 @@ core/fixtures/lib/report.sh
 core/fixtures/lib/world.sh
 core/fixtures/lib/layout.sh
 core/schemas/pipeline-state-paths.json
+core/skills/ai-dlc-update/SKILL.md
