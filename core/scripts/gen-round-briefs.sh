@@ -42,8 +42,9 @@
 # The --plan-file run writes `cross.brief` (the CROSS NOTE; no deliverable, no `lane.cmd`) and prints the lane join's `--artifact`,
 # `--pass` and `--artifact-path`.
 # Loadable: the body is grb_main, behind a column-0 BASH_SOURCE guard, so sourcing defines functions and runs nothing.
-# Exit: 0 written, 2 usage or an unreadable input, 3 a refusal (empty map, ordinal gap, provenance region absent; with
-# --plan-file: no LANE-ARTIFACT line in the plan, no cross.txt findings, or a cross.txt token with no or two CROSS items in the plan).
+# Exit: 0 written, 2 usage or an unreadable input, 3 a refusal (empty map, ordinal gap, provenance region absent; a repair
+# run whose cross.txt token is also listed in a part's <ordinal>.txt; with --plan-file: no LANE-ARTIFACT line in the plan,
+# no cross.txt findings, or a cross.txt token with no or two CROSS items in the plan).
 grb_main() {
 set -u
 LC_ALL=C; export LC_ALL
@@ -151,6 +152,23 @@ grb_write_adv() { # $1 ordinal-or-cross, $2 shard value, $3 subject text
   } > "$f"
 }
 
+# ONE OWNER PER FINDING: a cross.txt token must not also sit in a part's <ordinal>.txt (compared by `<file>.md#<id>`), or
+# a part remediator and the lane or fan-in both repair it. Both runs judge it.
+if [ "$KIND" = rep ] && [ -s "$FIND/cross.txt" ]; then
+  XDUP=""
+  for o in $ORD; do
+    [ -s "$FIND/$o.txt" ] || continue
+    while IFS= read -r ln; do
+      tok="${ln%% *}"; tb="${tok##*/}"; [ -n "$tb" ] || continue
+      c="$(sed 's/ .*//; s@.*/@@' "$FIND/$o.txt" | grep -cxF -- "$tb")" || c=0
+      [ "$c" -eq 0 ] || XDUP="${XDUP}${XDUP:+; }$tok in $o.txt"
+    done < "$FIND/cross.txt"
+  done
+  XFIX="delete it from the part's file"
+  [ -z "$PLANF" ] || XFIX="delete the token from the part's file, or from cross.txt if the part already repaired it"
+  [ -z "$XDUP" ] || grb_die "a cross.txt finding is also listed in a part's findings file: $XDUP; a cross finding is routed to one lane or the fan-in, never to a part: $XFIX" 3
+fi
+
 if [ -n "$PLANF" ]; then
   # The CROSS NOTE for the lane and fan-in briefs: name, pass and path copied from the parallel join's plan, never inferred.
   [ -f "$PLANF" ] || grb_die "--plan-file '$PLANF' is not a file"
@@ -193,13 +211,13 @@ if [ "$KIND" = adv ]; then
   while IFS="$(printf '\t')" read -r o a b c; do
     [ -n "$o" ] || continue
     if [ "$AXIS" = files ]; then
-      grb_write_adv "$o" "$o/$K $a" "Subject: ONE story file, $SUBJ/$a. Read it fully, plus the locked-requirements block and the sources it cites. Cite ONLY your own ordinal in \`stories:\` lines; cross-story defects are the cross shard's job."
+      grb_write_adv "$o" "$o/$K $a" "Subject: ONE story file, $SUBJ/$a. Read it fully (in one Read; a file over 16 KB in consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line, and when a chunk is refused for size, halve its limit), plus the locked-requirements block and the sources it cites. Cite ONLY your own ordinal in \`stories:\` lines; cross-story defects are the cross shard's job."
     else
       grb_write_adv "$o" "$o/$K $c" "Your span: lines $a-$b of the REAL document $DOC (read that range of the real file, read-only, never a copy; you may read the whole document for context, but raise findings only on your span). Every finding carries exactly one \`sections:\` line citing ONLY your own ordinal ($o)."
     fi
     PATHS="$PATHS $SDIR/$o.md"
   done < "$MAP"
-  if [ "$AXIS" = files ]; then CS="Subject: EVERY story file under $SUBJ (the whole map). Read them all. Raise cross-story defects only; every finding carries one \`stories:\` line citing two or more ordinals."
+  if [ "$AXIS" = files ]; then CS="Subject: EVERY story file under $SUBJ (the whole map). Read them all (each in one Read; a file over 16 KB in consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line, and when a chunk is refused for size, halve its limit). Raise cross-story defects only; every finding carries one \`stories:\` line citing two or more ordinals."
   else CS="Subject: the whole document $DOC. Raise cross-section defects only; every finding carries one \`sections:\` line citing two or more ordinals."; fi
   grb_write_adv cross "cross/$K g1/1 $ALLORD" "$CS"
   PATHS="$PATHS $SDIR/cross.md"
@@ -211,7 +229,7 @@ else
     [ -s "$FIND/$o.txt" ] || continue
     if [ "$AXIS" = files ]; then sv="$o/$K $a"; sub="Subject: ONE story file, $SUBJ/$a."; else sv="$o/$K $c"; sub="Subject: lines $a-$b of the REAL document $DOC."; fi
     {
-      echo "You are one shard of the AI/DLC $ART repair (sprint $SPRINT, $AXIS axis, pass $PASS). FIRST action: Read $ROLE (whole file) and follow it exactly."
+      echo "You are one shard of the AI/DLC $ART repair (sprint $SPRINT, $AXIS axis, pass $PASS). FIRST action: Read $ROLE (whole file, consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line; when a chunk is refused for size, halve its limit) and follow it exactly."
       echo
       echo "Deliverable: $SDIR/$o.md"
       echo "shard: $sv"

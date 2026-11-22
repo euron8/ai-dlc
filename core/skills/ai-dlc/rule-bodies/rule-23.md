@@ -35,16 +35,16 @@ is the `gate-slice.sh` plan narrowed by `gate-checkpoint.sh done`
 **(c) Offload high-volume observational Bash (context-mode).** Large
 *read-only* command output (test-suite runs, gate-validation script output,
 `git log`/`diff`/`status` inspection, log scans) MUST be run via
-`ctx_batch_execute` / `ctx_execute` so its bytes stay out of the resident
+`ctx_batch` / `ctx_execute` so its bytes stay out of the resident
 prefix. Two hard limits: (1) state-mutating commands (`git`
 commit/branch/merge/worktree, `gh`, `chmod`, file writes) MUST run via
 native Bash — a context-mode subprocess discards filesystem changes, so
 routing a mutation through ctx silently no-ops it; when in doubt whether a
 command mutates, use native Bash. (2) Verbatim-load files (rule/step/role
 files, schemas, snapshot, `gate-log.md`, escalations, `audit-anchors.md`,
-`sprint-status.yaml`, story files) MUST NOT be routed through
-`ctx_execute_file` / `ctx_batch_execute` / `ctx_index` — consolidation drops
-directives and breaks load fidelity. `ai-dlc-protect.sh` hard-blocks it and
+`sprint-status.yaml`, story files) are never read through any `ctx_*` tool —
+consolidation drops directives and breaks load fidelity.
+`ai-dlc-protect.sh` blocks the file, path and batch-command forms only, and
 is the SET's source of record: `PROTECTED_PATTERNS` there, extended per
 project by `extensions/protected-paths.json`. A directory or glob that spans
 one of those files is blocked too. Archives and the planning corpus (`prd.md`,

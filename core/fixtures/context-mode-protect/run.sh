@@ -227,6 +227,23 @@ if [ "${_cn:-0}" -gt 0 ] && [ "${_cd:-0}" -gt "${_cn:-0}" ] && costarm "$HOOK"; 
 else
   bad "allowed batch ran the naming step, or the jq counter is blind (allowed batch ${_cn:-?}, deny ${_cd:-?}, file call $(jqcount "$HOOK" "$J_ALLOWF"))"
 fi
+# --- Assertion 9e: the context-mode 2.x tools and the `mcp add` prefix -------
+# context-mode 2.x registers ctx_execute (its `file` is read inside the sandbox) and ctx_batch
+# (string commands); an `mcp add` install names every tool mcp__context-mode__<tool>. Each deny
+# sits beside its allow twin, one property apart: the file, the command, the server prefix.
+jx() { jq -nc --arg t "$1" --arg f "$2" '{tool_name:$t, tool_input:{language:"shell", code:"x", file:$f}}'; }
+jbs() { jq -nc --arg c "$1" '{tool_name:"mcp__plugin_context-mode_context-mode__ctx_batch", tool_input:{commands:[$c], queries:["q"]}}'; }
+expect deny  "$PLAIN" "$(jx mcp__plugin_context-mode_context-mode__ctx_execute .claude/team-roles/remediator.md)" \
+  "ctx_execute with file= a role file → deny"
+expect allow "$PLAIN" "$(jx mcp__plugin_context-mode_context-mode__ctx_execute _bmad-output/planning-artifacts/prd.md)" \
+  "ctx_execute with file= prd.md → allow"
+expect deny  "$PLAIN" "$(jbs 'cat .claude/skills/ai-dlc/SKILL.md')" "ctx_batch string command reading SKILL.md → deny"
+expect allow "$PLAIN" "$(jbs 'cat docs/retro/x.md')"                "ctx_batch string command reading a retro doc → allow"
+expect deny  "$PLAIN" "$(jx mcp__context-mode__ctx_execute .claude/team-roles/remediator.md)" \
+  "mcp__context-mode__ctx_execute (mcp add install) with file= a role file → deny"
+expect allow "$PLAIN" "$(jx mcp__other__ctx_execute .claude/team-roles/remediator.md)" \
+  "mcp__other__ctx_execute (another server) with file= a role file → allow"
+
 # --- Assertion 10: a MALFORMED layer file fails CLOSED ----------------------
 expect deny "$BROKEN" "$(jf _bmad-output/planning-artifacts/prd.md)" \
   "malformed layer file → deny even an unprotected path (fail closed)"

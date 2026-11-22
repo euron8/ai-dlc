@@ -196,11 +196,12 @@
 #
 # WHY HERE AND NOT `ai-dlc-protect.sh`, WHICH LISTS THE FILE. Traced: `ai-dlc-protect.sh` is
 # registered exactly once in `templates/settings.json.template`, on the context-mode MCP matcher
-# (`ctx_execute_file|ctx_batch_execute|ctx_index`), and its job is to stop CONSOLIDATION through
-# those tools. It never sees an Edit, Write or MultiEdit, which is why the s319 Edits went
-# through. Re-registering it on the edit matcher would deny the LEAD's own `pending.md` Edit --
-# arm 6 below permits that edit deliberately, because the escalation is the lead's sanctioned
-# exit from a stalled gate. So the close is keyed on the ROLE, here, where `agent_id` is read.
+# (`ctx_execute|ctx_execute_file|ctx_index|ctx_batch|ctx_batch_execute`, its CTX_TOOLS), and its
+# job is to stop CONSOLIDATION through those tools. It never sees an Edit, Write or MultiEdit,
+# which is why the s319 Edits went through. Re-registering it on the edit matcher would deny the
+# LEAD's own `pending.md` Edit -- arm 6 below permits that edit deliberately, because the
+# escalation is the lead's sanctioned exit from a stalled gate. So the close is keyed on the ROLE,
+# here, where `agent_id` is read.
 #
 # DENIED when ALL hold: the tool is Edit|Write|MultiEdit; the payload carries `agent_id`; the
 # target, made absolute against PROJECT_DIR when relative and collapsed lexically by `lpe_lex`,

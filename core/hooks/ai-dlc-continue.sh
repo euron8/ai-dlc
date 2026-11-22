@@ -2124,6 +2124,20 @@ else
 fi
 LAST_GATE=$(grep -iE "(last_gate_passed|last[ _]gate)" "$SNAPSHOT_FILE" 2>/dev/null | head -1 | sed 's/^[^:]*://;s/^[-* ]*//;s/[-* ]*$//' || echo "")
 
+# A STEP FILE OVER 16384 BYTES GETS THE CHUNK CLAUSE; one at or under it keeps the exact sentence, a
+# whole Read. The size is measured on the installed step file, else the distribution's.
+FIDELITY_CHUNK=""
+if [ -n "$CURRENT_STEP" ]; then
+  _fc_base="$(pos_base "$CURRENT_STEP")"
+  for _fc_f in "${PROJECT_DIR}/.claude/skills/ai-dlc/steps/${_fc_base}" "${PROJECT_DIR}/core/skills/ai-dlc/steps/${_fc_base}"; do
+    [ -n "$_fc_base" ] && [ -f "$_fc_f" ] || continue
+    _fc_n="$(wc -c < "$_fc_f" 2>/dev/null)"; _fc_n="${_fc_n//[!0-9]/}"
+    case "$_fc_n" in ''|*[!0-9]*) _fc_n=0 ;; esac
+    [ "$_fc_n" -gt 16384 ] && FIDELITY_CHUNK=' (it is over 16 KB: Read it in consecutive `offset`/`limit` chunks of at most 16 KB through its last line; when a chunk is refused for size, halve its limit)'
+    break
+  done
+fi
+
 REASON="Pipeline is active. You ended your turn without a tool call. This may be legitimate (presenting results mid-phase before the next action) or a stall.
 
 CHECK BEFORE ACTING: Did you just complete a sub-skill and need to present its output before invoking the next one? If so, this is a FALSE POSITIVE — combine the presentation with the next tool call in your next response. Do NOT skip steps to avoid this hook.
@@ -2136,7 +2150,7 @@ If you have a next action but emitted text first: pair the text with the tool ca
 
 IMPORTANT: This hook exists to prevent 'should I continue?' stalls (Rule 3). It does NOT mean 'skip the current step to produce a tool call faster.' Every numbered section in the current step file must be completed in full (Rule 4). If a section produces text output (party-mode results, failure classification, gate announcements), emit that text WITH the next section's tool call in the same response.
 
-FIDELITY CHECK: Do NOT pattern-match on prior sprint execution. Re-read the current step file's numbered sections and execute each one literally. The pipeline is designed for fidelity, not throughput. Rushing through deploy-validate and retro — treating them as formalities because implementation feels 'done' — is the documented failure mode. Each section exists for a reason. Execute it."
+FIDELITY CHECK: Do NOT pattern-match on prior sprint execution. Re-read the current step file's numbered sections${FIDELITY_CHUNK} and execute each one literally. The pipeline is designed for fidelity, not throughput. Rushing through deploy-validate and retro — treating them as formalities because implementation feels 'done' — is the documented failure mode. Each section exists for a reason. Execute it."
 
 # THE PAUSE-QUESTION PARAGRAPH, PREPENDED. Second reader of the predicate computed above; the
 # verdict is already block and does not move. It goes FIRST because the paragraph it has to

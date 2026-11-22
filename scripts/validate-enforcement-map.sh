@@ -6221,7 +6221,7 @@ fi
 # fixed point problem. A separate data file under scripts/ would be a second file to package,
 # classify and keep in step with this arm; inline, a re-stamp is one reviewed line in the
 # file that reads it. Format, one line per carried rule: `<rule> <body-sha256> <carrier-sha256>`.
-I79_CARRIER_STAMPS='23 313859a41d54220b0e22a544454bad75124e60956e87ce05a452be01d5c08e32 f852b40c4286a946021eb21ab46faa24a8781ed71c08a448be306df6b3208e8b'
+I79_CARRIER_STAMPS='23 68a70a4d940d43f3a413dfc9edd121e974df1a91fe52cf75513ed6e3d0a35a96 89d27ae4537c1e28ea8babdbf434bff156472288d42238f4f658993d4f22892c'
 
 # The rule-body extractor, as DATA, so the self-probe and the corpus run the same program.
 # A FENCED `## ` LINE IS A CODE SAMPLE, NOT A SECTION TERMINATOR, and reading it as one
@@ -13565,6 +13565,48 @@ elif [ "$i131_x" -eq 1 ]; then
   err "I131 rule-bodies/rule-8.md carries a second intensity table (a line after the first table opens with \`| Intensity | Trigger\` or an intensity row). The SKILL.md stub table is the owner and rule-8.md holds exactly one copy; delete the extra table."
 elif [ "$i131_a" != "$i131_b" ]; then
   err "I131 the Rule 8 intensity table in SKILL.md differs from the copy in rule-bodies/rule-8.md. The SKILL.md stub table is the owner; make rule-8.md's table byte-identical to it."
+fi
+
+# --- I132: the ai-dlc-protect.sh matcher in templates/settings.json.template matches every tool name the hook dispatches on ---
+# The hook holds its dispatch set as data, the CTX_PREFIXES and CTX_TOOLS lines of core/hooks/ai-dlc-protect.sh. A
+# name the matcher misses never reaches the hook, so the hook's arm for it blocks nothing. Every prefix x tool is
+# tested against the matcher as an UNANCHORED regex, the harness's own matcher semantics. The matcher is the last
+# `"matcher":` line before the protect command line, cleared after every `"command":` line, so a protect block with
+# no matcher of its own reads empty and errs. In-process reads, no fork. Controls: an empty data line, a protect
+# command count other than one, and an empty matcher each err.
+i132_hook="$REPO_ROOT/core/hooks/ai-dlc-protect.sh"; i132_tpl="$REPO_ROOT/templates/settings.json.template"
+i132_pre=""; i132_tools=""; i132_m=""; i132_last=""; i132_n=0
+if [ -f "$i132_hook" ] && [ -f "$i132_tpl" ]; then
+  while IFS= read -r i132_l; do
+    case "$i132_l" in
+      'CTX_PREFIXES="'*) i132_pre="${i132_l#CTX_PREFIXES=\"}"; i132_pre="${i132_pre%\"}" ;;
+      'CTX_TOOLS="'*)    i132_tools="${i132_l#CTX_TOOLS=\"}"; i132_tools="${i132_tools%\"}" ;;
+    esac
+  done <"$i132_hook"
+  while IFS= read -r i132_l; do
+    case "$i132_l" in
+      *'"matcher": "'*) i132_last="${i132_l#*\"matcher\": \"}"; i132_last="${i132_last%%\"*}" ;;
+      *'"command":'*)
+        case "$i132_l" in *'/.claude/hooks/ai-dlc-protect.sh"'*) i132_m="$i132_last"; i132_n=$((i132_n + 1)) ;; esac
+        i132_last="" ;;
+    esac
+  done <"$i132_tpl"
+fi
+if [ -z "$i132_pre" ] || [ -z "$i132_tools" ]; then
+  err "I132 read no CTX_PREFIXES or no CTX_TOOLS line from core/hooks/ai-dlc-protect.sh; with no dispatch set there is nothing to bind the matcher to, so nothing was checked."
+elif [ "$i132_n" -ne 1 ]; then
+  err "I132 templates/settings.json.template carries $i132_n command line(s) naming ai-dlc-protect.sh, not exactly one; the protect matcher cannot be identified."
+elif [ -z "$i132_m" ]; then
+  err "I132 the templates/settings.json.template block running ai-dlc-protect.sh has no \"matcher\": line of its own; an empty matcher binds nothing."
+else
+  i132_miss=""
+  for i132_p in $i132_pre; do
+    for i132_t in $i132_tools; do
+      i132_f="$i132_p$i132_t"
+      [[ $i132_f =~ $i132_m ]] || i132_miss="$i132_miss $i132_f"
+    done
+  done
+  [ -z "$i132_miss" ] || err "I132 the ai-dlc-protect.sh matcher in templates/settings.json.template does not match:$i132_miss. The hook dispatches on these names (CTX_PREFIXES x CTX_TOOLS in core/hooks/ai-dlc-protect.sh), so a call under one never reaches it. Add each name to that matcher."
 fi
 
 # --- Verdict ------------------------------------------------------------------

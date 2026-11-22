@@ -4802,24 +4802,31 @@ ${j3_bad}
 fi
 
 # =============================================================================
-# P1J. PASS-1 JOIN -- every CRITICAL/MAJOR of the carry-over series' first pass is on a repair record (BL-1175).
+# P1J. OPENING-PASS JOIN -- every CRITICAL/MAJOR of the carry-over series' opening pass is on a repair record
+# (BL-1175).
 # =============================================================================
 # GATE ONLY, like J3. The carry-over evaluation's second adversarial pass is ONE final pass scoped by the
-# document's diff from the draft (carry-over-evaluation.md), so nothing re-reads what the pass-1 repair did with
-# each finding: this arm joins them mechanically.
-#   subject    the series stem `coe` (or `carry-over-evaluation`) once a pass after the first exists; the key
-#              set is pass 1's `<shard-file>#<id>` CRITICAL and MAJOR headings, derived by j3_keys (J3's key
-#              grammar, CRITICAL added) and compared against pass 1's own records only: `coe-p1/cross.md#F-2`
+# document's diff from the draft (carry-over-evaluation.md), so nothing re-reads what the opening pass's repair did
+# with each finding: this arm joins them mechanically.
+#   opening    O, the pass number of the series' first pass file in the sprint dir: 1, or a restarted cycle's first
+#              pass (RESTART_CYCLE archived the dead cycle's passes). FAIL output for O = 1 is headed `PASS-1 JOIN`,
+#              for O >= 2 `OPENING-PASS JOIN (pass O)`.
+#   subject    the series stem `coe` (or `carry-over-evaluation`) once a pass after the opening one exists; the key
+#              set is pass O's `<shard-file>#<id>` CRITICAL and MAJOR headings, derived by j3_keys (J3's key
+#              grammar, CRITICAL added) and compared against pass O's own records only: `coe-p1/cross.md#F-2`
 #              and `coe-p2/cross.md#F-2` are two keys.
-#   closed     a `source:` token of a `disposition: repaired` entry of `<stem>-repair-p1.md` or
-#              `<stem>-serial-repair-p1.md` under a triple linked from pass 1's notarized sha (J3's link), or of
+#   closed     a `source:` token of a `disposition: repaired` entry of `<stem>-repair-p<O>.md` or
+#              `<stem>-serial-repair-p<O>.md` under a triple linked from pass O's notarized sha (J3's link), or of
 #              a `disposition: escalated` entry in either record (the operator owns it).
 #   FAIL       a key closed by neither, or fewer CRITICAL/MAJOR headings than the header's counts.
 #   SKIP       printed, never counted: the series opened under the old engine, whatever engine finishes it.
-#              The era key is era-token.sh's ai_dlc_era_open asked for pass 1: shards/<stem>-p1/.era
-#              (partition-document.sh --shard-dir writes the token there at each pass, SERIAL passes included; the
-#              merge copies it into a merged pass 1 only when .era carries it), or, for a series with no pass-1
-#              shard dir, the token line in the pass-1 file. No version or git history is read.
+#              The era key is era-token.sh's ai_dlc_era_open asked for pass O, answering O itself:
+#              shards/<stem>-p<O>/.era (partition-document.sh --shard-dir writes the token there at pass 1 and at a
+#              restarted cycle's first pass, SERIAL passes included; the merge copies it into a merged pass 1 only
+#              when .era carries it), or, at O = 1 for a series with no pass-1 shard dir, the token line in the
+#              pass-1 file. At O >= 2 that .era must also carry era-token.sh's restart marker line naming O, which
+#              only the current producer writes: a restart stamped without it, or not stamped, prints
+#              `SKIP (...) pre-era restart`. No version or git history is read.
 # The E4 era token: one definition, era-token.sh beside this script.
 AI_DLC_ERA_TOKEN=""; . "$(dirname "${BASH_SOURCE[0]}")/era-token.sh" 2>/dev/null || AI_DLC_ERA_TOKEN=""   # absent copy: no token written, no era judged
 declare -F ai_dlc_era_open >/dev/null || ai_dlc_era_open() { AI_DLC_ERA_OPEN=""; return 1; }
@@ -4836,10 +4843,26 @@ case "$j3_stem" in coe|carry-over-evaluation)
   case "$j3_m" in ""|*[!0-9]*) ;; *) [ "$N" -ge 2 ] && P1J_ARM=1 ;; esac ;;
 esac
 [ "$P1J_ARM" -eq 1 ] && { ac_on P1J || P1J_ARM=0; }
-if [ "$P1J_ARM" -eq 1 ] && [ "${P_FILE[0]##*/}" = "${j3_stem}-adversarial-p1.md" ]; then
-  p1j_f="${P_FILE[0]}"; p1j_pd="${j3_stem}-p1"
+# The opening pass O: the series' first pass file in the sprint dir. A restart (O >= 2) is judged only when its own
+# shard dir's .era carries the token (ai_dlc_era_open answers O itself) AND the restart marker naming O.
+p1j_o=""; p1j_hd="P1J -- PASS-1 JOIN"
+if [ "$P1J_ARM" -eq 1 ]; then
+  p1j_o="${P_FILE[0]##*/}"; p1j_o="${p1j_o#"${j3_stem}"-adversarial-p}"; p1j_o="${p1j_o%.md}"
+  case "$p1j_o" in ""|*[!0-9]*) p1j_o="" ;; esac
+  [ -n "$p1j_o" ] && [ "${P_FILE[0]##*/}" = "${j3_stem}-adversarial-p${p1j_o}.md" ] || p1j_o=""
+fi
+if [ -n "$p1j_o" ] && [ "$p1j_o" != 1 ]; then
+  p1j_hd="P1J -- OPENING-PASS JOIN (pass ${p1j_o})"
+  if ! { ai_dlc_era_open "$j3_dir" "$j3_stem" "$p1j_o" \
+      && [ -n "${AI_DLC_ERA_RESTART:-}" ] && grep -qxF -- "${AI_DLC_ERA_RESTART} ${p1j_o}" "$j3_dir/shards/${j3_stem}-p${p1j_o}/.era" 2>/dev/null; }; then
+    echo "SKIP (${p1j_hd}): ${P_FILE[0]##*/} opens a restarted cycle whose shards/${j3_stem}-p${p1j_o}/.era is absent or lacks the era token or the '${AI_DLC_ERA_RESTART:-ai-dlc-era-restart:} ${p1j_o}' line: pre-era restart."
+    p1j_o=""
+  fi
+fi
+if [ -n "$p1j_o" ]; then
+  p1j_f="${P_FILE[0]}"; p1j_pd="${j3_stem}-p${p1j_o}"
   p1j_era=""
-  ai_dlc_era_open "$j3_dir" "$j3_stem" 1 && p1j_era=1
+  ai_dlc_era_open "$j3_dir" "$j3_stem" "$p1j_o" && [ "$AI_DLC_ERA_OPEN" = "$p1j_o" ] && p1j_era=1
   j3_keys "$p1j_f" 1 > "$AC_T/p1j-keys"
   p1j_nk=0; while IFS= read -r p1j_l; do [ -n "$p1j_l" ] && p1j_nk=$((p1j_nk + 1)); done < "$AC_T/p1j-keys"
   p1j_c="$(block_field "$p1j_f" 'findings_critical')"; p1j_m="$(block_field "$p1j_f" 'findings_major')"
@@ -4849,14 +4872,14 @@ if [ "$P1J_ARM" -eq 1 ] && [ "${P_FILE[0]##*/}" = "${j3_stem}-adversarial-p1.md"
   { for p1j_t in $(block_field "$p1j_f" 'artifact_sha'); do printf '%s\n' "${p1j_t#*[=@]}"; done
     for p1j_t in $(block_field "$p1j_f" 'part_sha'); do printf '%s\n' "${p1j_t#*[=@]}"; done; } | tr 'A-F' 'a-f' > "$AC_T/p1j-nsha"
   : > "$AC_T/p1j-tok"; : > "$AC_T/p1j-src"; p1j_ri=0
-  for p1j_rec in "$j3_dir/${j3_stem}-repair-p1.md" "$j3_dir/${j3_stem}-serial-repair-p1.md"; do
+  for p1j_rec in "$j3_dir/${j3_stem}-repair-p${p1j_o}.md" "$j3_dir/${j3_stem}-serial-repair-p${p1j_o}.md"; do
     [ -f "$p1j_rec" ] || continue
     p1j_ri=$((p1j_ri + 1))
     j3p1_escalated "$p1j_rec" >> "$AC_T/p1j-tok"
     j3_sources "$p1j_rec" 1 | awk -F'\t' -v r="$p1j_ri" '{ print r "\t" $0 }' >> "$AC_T/p1j-src"
   done
-  # THE LINK, over both records of pass 1: a triple that moved bytes is linked when a before member is a sha
-  # pass 1 notarized (artifact_sha or part_sha) or the after of a linked triple (a lane starts from the parallel
+  # THE LINK, over both records of pass O: a triple that moved bytes is linked when a before member is a sha
+  # pass O notarized (artifact_sha or part_sha) or the after of a linked triple (a lane starts from the parallel
   # join's bytes, a fan-in from the lane's), to a fixpoint; an identity triple is linked only on a sha a linked
   # edit reached (already repaired, nothing left to edit), never on a notarized sha. One exception: a part triple
   # of the join-assembled record (H row: same artifact as its header) whose before and after both equal its
@@ -4876,7 +4899,7 @@ if [ "$P1J_ARM" -eq 1 ] && [ "${P_FILE[0]##*/}" = "${j3_stem}-adversarial-p1.md"
         split("", b); shas(bf[k], b); for (s in b) if (s in R) { lk[k] = 1; break } }
       for (k in hd) if ((hd[k] in lk) && bf[k] != "" && bf[k] == af[k] && bf[k] == bf[hd[k]]) lk[k] = 1
       for (i = 1; i <= ns; i++) if (st[i] in lk) print sk[i] }' "$AC_T/p1j-nsha" "$AC_T/p1j-src" >> "$AC_T/p1j-tok"
-  p1j_bad="$(awk -v pd="$p1j_pd" '
+  p1j_bad="$(awk -v pd="$p1j_pd" -v o="$p1j_o" '
     function norm(t,   p) { if (index(t, pd "/") == 1) t = substr(t, length(pd) + 2)
       else { p = index(t, "/" pd "/"); if (p) t = substr(t, p + length(pd) + 2) }
       if (match(t, /^[0-9]+\.md#/)) t = (substr(t, 1, RLENGTH - 4) + 0) substr(t, RLENGTH - 3)
@@ -4884,19 +4907,19 @@ if [ "$P1J_ARM" -eq 1 ] && [ "${P_FILE[0]##*/}" = "${j3_stem}-adversarial-p1.md"
       return t }
     FILENAME == ARGV[1] { if ($0 != "") k[++nk] = $0; next }
     { r[norm($1)] = 1 }
-    END { for (i = 1; i <= nk; i++) if (!(k[i] in r)) print "        " k[i] ": on no linked pass-1 repair entry" }' \
+    END { for (i = 1; i <= nk; i++) if (!(k[i] in r)) print "        " k[i] ": on no linked pass-" o " repair entry" }' \
     "$AC_T/p1j-keys" "$AC_T/p1j-tok")"
   if [ "$p1j_unkeyed" -gt 0 ]; then
     p1j_bad="${p1j_bad:+$p1j_bad
 }        ${p1j_unkeyed} of findings_critical ${p1j_c} + findings_major ${p1j_m} carry no keyed \`### \` heading under \`## Findings\`."
   fi
   if [ -z "$p1j_era" ]; then
-    echo "SKIP (P1J -- PASS-1 JOIN): ${p1j_f##*/} carries no '${AI_DLC_ERA_TOKEN}' line: a series the old engine opened, pre-era."
+    echo "SKIP (${p1j_hd}): ${p1j_f##*/} carries no '${AI_DLC_ERA_TOKEN}' line: a series the old engine opened, pre-era."
   elif [ -n "$p1j_bad" ]; then
-    err "P1J -- PASS-1 JOIN" "${p1j_f##*/} files CRITICAL/MAJOR findings the pass-1 repair never answered:
+    err "${p1j_hd}" "${p1j_f##*/} files CRITICAL/MAJOR findings the pass-${p1j_o} repair never answered:
 ${p1j_bad}
-      Close each key in ${j3_stem}-repair-p1.md (or -serial-repair-p1.md): an entry whose 'source:' names
-      <shard-file>#<id>, 'disposition: repaired' under a triple whose 'artifact_sha_before:' is a sha pass 1
+      Close each key in ${j3_stem}-repair-p${p1j_o}.md (or -serial-repair-p${p1j_o}.md): an entry whose 'source:' names
+      <shard-file>#<id>, 'disposition: repaired' under a triple whose 'artifact_sha_before:' is a sha pass ${p1j_o}
       notarized (artifact_sha or part_sha) or the 'artifact_sha_after:' of such a triple (a lane or fan-in), or
       inside a part of the record the parallel join assembled that left the header's before untouched, or
       'disposition: escalated'."

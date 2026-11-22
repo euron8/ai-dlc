@@ -233,7 +233,7 @@ render_one() {
   printf 'Your operating contract is `.claude/team-roles/%s.md`. Read it and follow it as your\n' "$1"
   _rf="$(role_file "$1")"
   if [ -n "$_rf" ]; then
-    printf 'contract: its text follows below, between the ROLE-CONTRACT BEGIN and END markers, so you hold it without a Read. If your brief tells you to Read that file, Read it: the file is then newer than the copy below. Read an appendix only when a pointer in the contract tells you to.\n'
+    printf 'contract: its text follows below, between the ROLE-CONTRACT BEGIN and END markers, so you hold it without a Read. If your brief tells you to Read that file, Read that file in consecutive `offset`/`limit` chunks of at most 16 KB through its last line (when a chunk is refused for size, halve its limit): the file is then newer than the copy below. Read an appendix only when a pointer in the contract tells you to.\n'
     printf '<!-- ROLE-CONTRACT BEGIN .claude/team-roles/%s.md -->\n' "$1"
     # Builtins only: each line as read, a final newline added only where the file lacks one.
     while IFS= read -r _l || [ -n "$_l" ]; do printf '%s\n' "$_l"; done < "$_rf"

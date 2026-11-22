@@ -166,12 +166,15 @@ Whatever the row names, the **Adversarial Review must CONVERGE**: its pass count
 floor, not a target, and Party Mode dispatches per §3.
 
 - **Review passes:** `_gate-procedures.md`, "Adversarial review dispatch" — ai-dlc-native,
-  no Skill. The evaluation is one document, so each pass is sharded by section, or is one
-  adversary when `partition-document.sh --map` reports it SERIAL (Rule 28, "Split dispatch":
+  no Skill. The evaluation is one document. Pass 1 is sharded by section, or is one adversary
+  when `partition-document.sh --map` reports the evaluation SERIAL (Rule 28, "Split dispatch":
   sections axis, serial exception 4); that procedure's "Shard a single document" owns the split.
-- **Repair passes:** `_gate-procedures.md`, "Adversarial repair dispatch" — section shards joined
-  and assembled per its "Shard by section", or one remediator when the map reports the document
-  SERIAL (exception 4). **The lead does not repair the artifact itself.**
+  Passes 2 and 3 are each one adversary with no shard split and no cross agent ("Pass 2 is ONE
+  final adversary pass", below).
+- **Repair passes:** `_gate-procedures.md`, "Adversarial repair dispatch" — pass 1's repair is
+  section shards joined and assembled per its "Shard by section", or one remediator when the map
+  reports the document SERIAL (exception 4); a pass 2 or pass 3 repair is one remediator. **The
+  lead does not repair the artifact itself.**
 
 - The series is `_bmad-output/planning-artifacts/s<N>/coe-adversarial-p<M>.md`, so in this
   step `<artifact>` in `_gate-procedures.md`'s review and repair dispatch paths is `coe`, never

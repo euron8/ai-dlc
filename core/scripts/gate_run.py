@@ -462,8 +462,10 @@ def cmd_arms(argv, root):
                     results[cid] = (v[0], v[1], ev, v[3])
             else:
                 fails = [s for s in sub if s[0] == "FAIL"]
-                if fails:
+                if len(fails) == 1:
                     results[rid] = fails[0]
+                elif fails:
+                    results[rid] = ("FAIL", str(len(sub)), ",".join(s[2] for s in fails), " ; ".join(s[3] for s in fails))
                 elif all(s[0] == "SKIP" for s in sub):
                     results[rid] = sub[0]
                 else:

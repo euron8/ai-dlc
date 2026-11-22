@@ -118,7 +118,7 @@ DEF_MARKER='<!-- AI/DLC GENERATED: rendered by scripts/ai-dlc/render-agent-defin
 # embed_role <role>: line 2 and the ROLE-CONTRACT region the renderer writes below line 1, the
 # role file verbatim between the markers.
 embed_role() {
-  printf '%s\n' 'contract: its text follows below, between the ROLE-CONTRACT BEGIN and END markers, so you hold it without a Read. If your brief tells you to Read that file, Read it: the file is then newer than the copy below. Read an appendix only when a pointer in the contract tells you to.'
+  printf '%s\n' 'contract: its text follows below, between the ROLE-CONTRACT BEGIN and END markers, so you hold it without a Read. If your brief tells you to Read that file, Read that file in consecutive `offset`/`limit` chunks of at most 16 KB through its last line (when a chunk is refused for size, halve its limit): the file is then newer than the copy below. Read an appendix only when a pointer in the contract tells you to.'
   printf '<!-- ROLE-CONTRACT BEGIN .claude/team-roles/%s.md -->\n' "$1"
   cat "$CONSUMER/.claude/team-roles/$1.md"
   printf '<!-- ROLE-CONTRACT END -->\n'

@@ -704,6 +704,10 @@ def in_window(p):
     t = last_ts(p)
     return t is None or t >= WIN_START
 
+# BL-1174: a pause is a command whose OWN invocation is `touch ... pipeline-paused.flag` (a command position: line or
+# statement start, after ; & | ( { or then/do/else, optionally behind sudo), never a command that merely mentions both words.
+TOUCH_FLAG_RE = re.compile(r"(?:^|[;&|(\n{]|\b(?:then|do|else)\b)\s*(?:sudo\s+)?touch\s+[^;&|\n]*pipeline-paused\.flag")
+
 def prescan(path):
     """One pass over a lead transcript, in the same record window scan() uses. Returns first / last / n over every
     timestamped record up to WIN_END (no WIN_START clip; the lead's span for derive_edges()), and for the windowed
@@ -732,7 +736,7 @@ def prescan(path):
                 if not isinstance(x, dict) or x.get("type") != "tool_use": continue
                 lt = ri
                 cmd = str((x.get("input") or {}).get("command") or "") if x.get("name") == "Bash" else ""
-                if "pipeline-paused.flag" in cmd and re.search(r"\btouch\b", cmd):
+                if "pipeline-paused.flag" in cmd and TOUCH_FLAG_RE.search(cmd):
                     if not pending: t0 = t
                     pending = True
     return dict(first=first, last=last, n=n, lt=lt, spans=spans, ts=sorted(tss))

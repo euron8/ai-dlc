@@ -761,8 +761,8 @@ issue 8.88 \`ctx_*\` calls; sessions after a compaction issue 0.67. Each compact
 makes the next one likelier, and nothing in the loop reports itself.
 
 So for the rest of this session, before you Read a file: if you intend to
-analyse, summarise, count or extract from it, route it through \`ctx_execute_file\`
-or a subagent and keep only the answer. Read it directly only when you intend to
+analyse, summarise, count or extract from it, route it through \`ctx_execute\` with
+\`file\` set, or to a subagent, and keep only the answer. Read it directly only to
 Edit it, or when it is one of the verbatim-load files above.
 
 ${SIDECAR_NOTE}

@@ -17,7 +17,7 @@
 #   count  native | legacy | -
 #
 # stdout, one line per row:
-#   GATE-RESULT <check-id> <PASS|FAIL|SKIP|PENDING> examined=<n|-> evidence=<path:line|reason=tok|-> <message>
+#   GATE-RESULT <check-id> <PASS|FAIL|SKIP|PENDING> examined=<n|-> evidence=<path:line[,path:line]...|reason=tok|-> <message>
 # then, in `arms`, either
 #   REMEDY <check-id> <text>                (one per FAIL; exit 1; no nonce, no OPEN, no worklist)
 #   ADJUDICATE <worklist-path> nonce=<n>    (judgment rows remain)   or   ADJUDICATE none

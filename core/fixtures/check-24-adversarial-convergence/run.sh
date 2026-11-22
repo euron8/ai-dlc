@@ -61,7 +61,7 @@ fi
 #   c  arms_ij pass1 j2h  arm J and I, the pass-1 guard, arm J2 and J's door, arm H by series
 #   d  k3 k3c           arm K3 (the subject worlds), K3 cross groups and the lone cross (every world a git repository)
 #   e  k3w              arm K3 widened (K3B_RELEASE)
-#   f  j2s              arm J2 per stem (J2S_RELEASE)
+#   f  j2s p1j          arm J2 per stem (J2S_RELEASE), arm P1J's opening-pass join (synthetic coe worlds)
 # The K3 family's shared helpers and world-free preparation sit under one `k3fam` guard; each unit builds only its own worlds.
 SHARDS="a b c d e f"
 UNITS_a="core corp pair"
@@ -69,7 +69,7 @@ UNITS_b="hook k2 elic j3"
 UNITS_c="arms_ij pass1 j2h"
 UNITS_d="k3 k3c"
 UNITS_e="k3w"
-UNITS_f="j2s"
+UNITS_f="j2s p1j"
 GROUP=a
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -2698,6 +2698,95 @@ if [ -n "$PAIR_MISSING" ]; then
 else
   printf '  ok    %-28s every denying case asserts the state the hooks read\n' "state-mode-pairing"
 fi
+fi
+if sg p1j; then
+# --- ARM P1J: the opening-pass join, on synthetic coe worlds (--arms P1J) ------------------------------------------
+# Every CRITICAL/MAJOR key of the series' opening pass must be closed by a `disposition: repaired` entry under a
+# LINKED triple: before = a notarized sha, or the after of a linked triple (a lane or fan-in), to a fixpoint, across
+# both records. The chain is seeded OUT OF ORDER (A2->A3 first, A1->A2 in the serial record, N->A1 last), so only the
+# fixpoint closes F-2 and F-3. Worlds live outside $ROOT (the pairing unit globs $ROOT/*/), each built once, one run.
+#   p1j-pass  F-1..F-3 closed through the chain                         exit 0, no P1J line, no SKIP
+#   p1j-fail  the same chain plus F-4 (no source: entry) and F-5 (a triple on bytes nothing linked reaches)
+#                                                                       exit 1 naming F-4 and F-5, never F-1..F-3
+#   p1j-rs    a restarted cycle (opening pass 2) whose .era carries `ai-dlc-era-restart: 2`, F-2 unanswered
+#                                                                       exit 1, OPENING-PASS JOIN (pass 2) naming F-2
+#   p1j-rsno  the same world without the marker                        exit 0, the pre-era restart SKIP line
+# p1j-pass is absence-shaped; its proof that P1J ran is p1j-fail, the same chain one property apart.
+PW="$(mktemp -d "${TMPDIR:-/tmp}/check24-p1j.XXXXXX")" || broken "mktemp failed for the P1J worlds"
+trap 'rm -rf "$ROOT" "$PW"' EXIT
+PJ_N=1111111111111111111111111111111111111111111111111111111111111111
+PJ_A1=2222222222222222222222222222222222222222222222222222222222222222
+PJ_A2=3333333333333333333333333333333333333333333333333333333333333333
+PJ_A3=6666666666666666666666666666666666666666666666666666666666666666
+PJ_X=4444444444444444444444444444444444444444444444444444444444444444
+PJ_Y=5555555555555555555555555555555555555555555555555555555555555555
+pj_pass() { # <file> <n> <major> <verdict> <era line 0|1> <key>... -> a pass file notarizing PJ_N, one MAJOR heading per key
+  local f="$1" n="$2" mj="$3" vd="$4" era="$5" k; shift 5
+  { printf '# coe pass %s\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\nmode: subagent\nlead_role: qa\n' "$n"
+    printf 'invoked_at: 2026-10-01T%02d:00:00Z\ntool_use_id: toolu_p1j_%s\nartifact: doc.md\nartifact_sha: %s\n' "$n" "$n" "$PJ_N"
+    printf 'findings_critical: 0\nfindings_major: %s\nfindings_minor: 0\nverdict: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$mj" "$vd"
+    [ "$era" = 1 ] && printf 'ai-dlc-era: e4-forward-1\n'
+    printf '\n## Findings\n'
+    for k in "$@"; do printf '\n### %s — MAJOR — finding %s\n' "$k" "$k"; done; } > "$f" || broken "cannot write $f"
+}
+pj_entry() { # <before> <after> <source token> -> one repaired entry under its own triple
+  printf '\n### R %s\n- artifact: doc.md\n- artifact_sha_before: %s\n- artifact_sha_after: %s\n- source: %s\n- disposition: repaired\n- edit: doc.md:3\n- derivation: grep -c x doc.md -> 1\n' \
+    "$3" "$1" "$2" "$3"
+}
+pj_chain() { # <dir> [<extra entries>] -> the out-of-order chain closing F-1..F-3 across both pass-1 records
+  { printf '# Repair record\n'; pj_entry "$PJ_A2" "$PJ_A3" coe-adversarial-p1.md#F-3; printf '%s' "${2:-}"; pj_entry "$PJ_N" "$PJ_A1" coe-adversarial-p1.md#F-1; } \
+    > "$1/coe-repair-p1.md" || broken "cannot write $1/coe-repair-p1.md"
+  { printf '# Serial repair record\n'; pj_entry "$PJ_A1" "$PJ_A2" coe-adversarial-p1.md#F-2; } > "$1/coe-serial-repair-p1.md" \
+    || broken "cannot write $1/coe-serial-repair-p1.md"
+}
+mkdir -p "$PW/p1j-pass" "$PW/p1j-fail" "$PW/p1j-rs/shards/coe-p2" "$PW/p1j-rsno/shards/coe-p2" || broken "cannot create the P1J worlds"
+pj_pass "$PW/p1j-pass/coe-adversarial-p1.md" 1 3 EXIT_CONDITION_NOT_MET 1 F-1 F-2 F-3
+pj_pass "$PW/p1j-pass/coe-adversarial-p2.md" 2 0 EXIT_CONDITION_MET 0
+pj_chain "$PW/p1j-pass"
+pj_pass "$PW/p1j-fail/coe-adversarial-p1.md" 1 5 EXIT_CONDITION_NOT_MET 1 F-1 F-2 F-3 F-4 F-5
+pj_pass "$PW/p1j-fail/coe-adversarial-p2.md" 2 0 EXIT_CONDITION_MET 0
+pj_chain "$PW/p1j-fail" "$(pj_entry "$PJ_X" "$PJ_Y" coe-adversarial-p1.md#F-5)
+"
+for _w in p1j-rs p1j-rsno; do
+  pj_pass "$PW/$_w/coe-adversarial-p2.md" 2 2 EXIT_CONDITION_NOT_MET 0 F-1 F-2
+  pj_pass "$PW/$_w/coe-adversarial-p3.md" 3 0 EXIT_CONDITION_MET 0
+  { printf '# Repair record\n'; pj_entry "$PJ_N" "$PJ_A1" coe-adversarial-p2.md#F-1; } > "$PW/$_w/coe-repair-p2.md" || broken "cannot write $_w's record"
+  printf 'ai-dlc-era: e4-forward-1\n' > "$PW/$_w/shards/coe-p2/.era" || broken "cannot write $_w's .era"
+done
+printf 'ai-dlc-era-restart: 2\n' >> "$PW/p1j-rs/shards/coe-p2/.era" || broken "cannot write the restart marker"
+pj_cell() { # <world> <want rc> <label> then words: +<line> must appear exactly, -<substring> must not appear
+  local w="$1" want="$2" label="$3" a miss=""; shift 3
+  ASSERTIONS=$((ASSERTIONS + 1))
+  vrun both "$VALIDATOR" --series "$PW/$w/coe-adversarial-p" --arms P1J
+  [ "$VR_RC" = "$want" ] || miss="$miss exit=$VR_RC want=$want;"
+  for a in "$@"; do
+    case "$a" in
+      +*) grep -qxF -- "${a#+}" <<<"$VR_OUT" || miss="$miss missing [${a#+}];" ;;
+      -*) ! grep -qF -- "${a#-}" <<<"$VR_OUT" || miss="$miss present [${a#-}];" ;;
+    esac
+  done
+  if [ -z "$miss" ]; then
+    printf '  ok    %-28s exit=%s  (%s)\n' "$w" "$VR_RC" "$label"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s%s  (%s)\n' "$w" "$miss" "$label"
+    printf '%s\n' "$VR_OUT" | sed 's/^/          | /'
+  fi
+}
+PJ_L="on no linked pass-1 repair entry"
+echo "--- arm P1J: the opening-pass join (--arms P1J, synthetic coe worlds)"
+pj_cell p1j-pass 0 "F-1..F-3 closed through an out-of-order lane/fan-in chain across both records" \
+  "+PASS: the cycle converged -- last pass stamps EXIT_CONDITION_MET, no divergent pass" "-(P1J --" "-SKIP (P1J"
+pj_cell p1j-fail 1 "F-4 has no source: entry, F-5 sits on bytes nothing linked reaches; the chain keys stay closed" \
+  "+FAIL (P1J -- PASS-1 JOIN): coe-adversarial-p1.md files CRITICAL/MAJOR findings the pass-1 repair never answered:" \
+  "+        coe-adversarial-p1.md#F-4: $PJ_L" "+        coe-adversarial-p1.md#F-5: $PJ_L" \
+  "-#F-1:" "-#F-2:" "-#F-3:"
+pj_cell p1j-rs 1 "a marked restart at pass 2 is judged: F-2 unanswered, F-1 closed" \
+  "+FAIL (P1J -- OPENING-PASS JOIN (pass 2)): coe-adversarial-p2.md files CRITICAL/MAJOR findings the pass-2 repair never answered:" \
+  "+        coe-adversarial-p2.md#F-2: on no linked pass-2 repair entry" "-#F-1:"
+pj_cell p1j-rsno 0 "the same restart without the marker is pre-era: SKIP, never judged" \
+  "+SKIP (P1J -- OPENING-PASS JOIN (pass 2)): coe-adversarial-p2.md opens a restarted cycle whose shards/coe-p2/.era is absent or lacks the era token or the 'ai-dlc-era-restart: 2' line: pre-era restart." \
+  "-FAIL (P1J"
 fi
 
 echo
