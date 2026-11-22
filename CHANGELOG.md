@@ -19,6 +19,13 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1226.0] - 2026-11-22
+
+### A closed backlog entry's evidence citations are checked against the line they name (BL-1217)
+
+- For ai-dlc maintainers only; nothing ships to consumers. The push gate's backlog-receipts step now checks every `path:N "phrase"` citation on the LANDED, PARTIAL, Failure-caught and Outcome lines of an entry changed since the merge-base: the phrase must be on line N. A line number into CHANGELOG.md or docs/backlog.md fails (cite those as `<file> "phrase"`), a new citation with no phrase fails, and a path that names no tracked file fails; consumer paths are not judged.
+- Archived entries are judged only when their text changes, so the known stale citations in BL-810, BL-1141 and older entries stay until someone edits them. BL-1217 lists them.
+
 ## [0.1225.0] - 2026-11-22
 
 ### The update skill finds the branch a skill branch was cut from even when invoked with arguments (BL-1216)

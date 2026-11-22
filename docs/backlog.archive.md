@@ -48497,3 +48497,39 @@ Step: n/a
 Provenance: batch 264, cluster F (owner ai-dlc-2e, lead ai-dlc-55).
 
 verify: manual
+## BL-1217 — a `path:N` citation in a closed entry's evidence lines is never checked against line N, so a stale or moving citation closes an entry
+
+**DEFECT.** Filed 2026-11-21 (batch 264, cluster G). Owner: `scripts/validate-backlog-receipts.sh` (`cite_arm`, arm CITE1).
+
+Goal: a stale `path:N` citation on a closed entry's evidence lines fails the push. One done condition: a LANDED, PARTIAL, Failure-caught or Outcome line in an entry changed since the merge-base whose citation names a line that does not hold its phrase, or names a line of CHANGELOG.md or docs/backlog.md, fails the push, with a measured, enumerated false-positive set.
+
+Corrected premise: the handoff said `eff_cite_ok` accepts a stale citation. Measured, it never sees one: it is fed only the Outcome paragraph, only on a `did not fall` verdict, and it searches the whole file for the phrase without reading N. LANDED, PARTIAL and Failure-caught lines reached no arm at all.
+
+Population, measured by replaying the shipped arm over the 40 first-parent commits that touched either ledger (ba8565a96 back to 9390e1165), each judged with its parent as merge-base: 181 changed entry-releases, 120 citations on their evidence lines, 12 of them under a consumer prefix and not judged, 27 findings, every one classified, none other:
+- CITE-STALE-LINE, 7, all real: BL-810's four (carry-over-evaluation.md lines 193 to 196, each phrase one line lower), BL-1141 (gate-validation.md line 2779 is now a CHECK_LOADED comment; the phrase is on 2772), BL-841 (pipeline-efficiency-s317-s322.md line 173, at two releases; the entry now cites that line bare).
+- CITE-MOVING-LINE, 2: BL-583 (CHANGELOG line 27185) and BL-912 (CHANGELOG line 37), both at 0.1221.0.
+- CITE-NO-PHRASE, 16: new bare citations to tracked files (BL-912 two archive lines, BL-1161 three pre-push lines, BL-841, BL-1195, BL-912 inflight-row, BL-1141 and BL-975 a seats file, BL-1189 three, BL-975, BL-972, BL-842).
+- CITE-NO-FILE, 2: BL-1189's bare `pipeline-efficiency-s323-opportunities-b261.md` (a docs file, outside the core/ and scripts/ basename lookup) and BL-819's bare `lead_time.py` (not in this tree).
+- Grammar captures: 0. BL-976's `lib.sh:2622` (two `. "$1"` bound a phrase under the old `[^"]{0,16}` extraction and binds none now.
+
+The archive is append-only (backlog-rotate.sh appends), so archive line numbers are judged by content like any other file. The one known exception in the window: 5e13908d8 removed 2 archive lines.
+
+Historical stale citations stay as they are; an archived entry is judged only when its body changes, and whoever edits it inherits them. With every entry forced into the population at ba8565a96 the arm reads 17: moving BL-583, BL-725 and BL-912 (one each); stale BL-810 (four), BL-569 (three, _gate-procedures.md), BL-695 (two), BL-510, BL-615, BL-913, BL-842 and BL-1141 (one each).
+
+Work list:
+
+1. One citation grammar (`CITE_LOC_ERE`, `CITE_TAIL_ERE`) read by both `eff_cite_ok` and CITE1; the archive's Outcome-line extraction is byte-identical before and after (23 citations).
+2. CITE1 over entries changed since the merge-base by BL id across both ledgers: rules A (moving-file line numbers), B (line content), C (bare citations on new lines), CITE-NO-FILE with the consumer-prefix list, and the self-satisfaction guard for phrase-only citations.
+3. Prove each rule, the guard and the population scope by a probe and a mutant, and replay the shipped arm over the 40-commit window.
+
+Step: n/a
+
+Provenance: batch 264, cluster G (owner ai-dlc-9c); id allocated by lead ai-dlc-55.
+
+**LANDED (v0.1226.0).** batch 264, cluster G. CITE1 runs in the live-ledger invocation of `scripts/validate-backlog-receipts.sh` that the pre-push "backlog receipts" step makes, never under --archive.
+
+Failure caught: replayed over the window, the arm fails the 0.1221.0 release on BL-912's line-numbered CHANGELOG citation (scripts/validate-backlog-receipts.sh:1907 "CITE-MOVING-LINE") and the 0.1218.0 release on BL-810's four citations, each one line off (core/skills/ai-dlc/steps/carry-over-evaluation.md:194 "an operator-owned choice the evaluation decided itself"), and on BL-1141's, whose phrase moved seven lines up (core/skills/ai-dlc/steps/gate-validation.md:2772 "in-place core authoring that").
+
+Outcome measured: no graph pipeline step; the cost lives in the push gate. The default "backlog receipts" invocation makes 39 git and 44 awk execs against 37 and 43 before (one git show, one git ls-files and one awk, fixed), and the --archive invocation is unchanged at 12 and 55.
+
+verify: manual
