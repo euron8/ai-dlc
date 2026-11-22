@@ -338,6 +338,8 @@ pl_theirs_sha() { git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/d
 #     none (deliver then prints `NOTE deliver-no-snapshot`).
 #   off such a branch, a different theirs or no snapshot: write one, unless another theirs's pull
 #     still has uncommitted writes at their recorded content (pl_writes_unfinished refuses).
+#   off such a branch, same theirs already delivered (`<pull-writes>.delivered` names it): the pull is
+#     finished; NOTE, drop the record and take a fresh snapshot.
 #   off such a branch, same theirs (a retry, e.g. after an ABANDON): keep it (the first attempt's
 #     writes can still be in the worktree, so a rewrite would call them the operator's own clean
 #     state), and refuse while a file the pull wrote moved since its last driver step
@@ -351,8 +353,15 @@ pl_dirty_snapshot() {
     ai-dlc-update/*) return 0 ;;
   esac
   if [ -f "$rec" ] && [ "$(sed -n 1p "$rec" | awk '{print $3}')" = "$th" ]; then
-    pl_writes_check apply
-    return 0
+    if [ "$(cat "$(pl_writes_file).delivered" 2>/dev/null)" = "$th" ]; then
+      # Delivered, then retried at the same theirs: that pull is finished. Its record and snapshot
+      # describe a worktree the operator has since edited, so both are replaced.
+      echo "NOTE pull-delivered-retry this theirs was already delivered; its record of the pull's writes is dropped and a fresh snapshot is taken"
+      rm -f "$(pl_writes_file)"
+    else
+      pl_writes_check apply
+      return 0
+    fi
   fi
   pl_writes_unfinished
   pl_status_rows "$RUN/snapshot" 1 || return 1
@@ -377,13 +386,47 @@ pl_writes_blob() { # <consumer-relative path> -> its raw content id, `-` absent,
   elif [ -e "$CONSUMER/$1" ]; then printf '?\n'
   else printf -- '-\n'; fi
 }
+# pl_writes_unrecorded <record rows file> <out> -- `<out>`: each path deliver's third selection disjunct takes now
+# (clean at the snapshot, outside the state tree (the filter applied to keep-selected paths too), less the record's own exclusions: always-stage, strong, marker and schema-ledger paths) that the record does not name, is tracked in
+# HEAD and whose content, hashed WITH the path's filters, differs from HEAD's blob: an edit made after the last
+# driver step. Untracked paths, renames and deletions are never named. Runs deliver's selection in a subshell
+# (it reassigns RUN).
+pl_writes_unrecorded() {
+  local snap="$GD/ai-dlc-pull/dirty-snapshot" p w h h1="" h2="" h3=""
+  : > "$2"
+  [ -f "$snap" ] || return 0
+  # A snapshot written for another theirs is one deliver does not use (deliver-no-snapshot): nothing is clean at it.
+  read -r h1 h2 h3 _ < "$snap"
+  case "$h1 $h2 $h3" in "ai-dlc-dirty-snapshot 1 $(pl_theirs_sha)"|"ai-dlc-dirty-snapshot 2 $(pl_theirs_sha)") ;; *) return 0 ;; esac
+  ( RUN="$RUN/pw-unrec.sel"; mkdir -p "$RUN" && pl_deliver_select > /dev/null 2>&1 && cp "$RUN/deliver.sel" "$2.sel" && cp "$RUN/deliver.state" "$2.state" && cp "$RUN/deliver.ledgers" "$2.ledgers" && cp "$RUN/deliver.notes" "$2.notes" \
+    && { pl_always_stage "$(pl_theirs_sha)"; cat "$RUN/deliver.strong" 2>/dev/null; printf '%s\n' .claude/.ai-dlc-applying; } > "$2.excl" ) || return 1
+  # The state-tree filter deliver's third disjunct applies, plus the schema ledgers (deliver.ledgers, which deliver itself still commits), applied here to every candidate, keep-selected or not. Without
+  # the schema or jq it is off, so a state path cannot be told from another: nothing is named (deliver's own pass prints its deliver-state-unfiltered NOTE).
+  [ -s "$2.state" ] || return 0
+  awk -F'\t' -v fs="$snap" -v fr="$1" -v fx="$2.excl" -v fst="$2.state" -v fl="$2.ledgers" '
+    function isstate(q,   i) { for (i = 0; i < ns; i++) if (q == st[i] || index(q, st[i] "/") == 1) return 1; return 0 }
+    FILENAME == fs { if (FNR > 1) insnap[$4] = 1; next }
+    FILENAME == fr { rec[$1] = 1; next }
+    FILENAME == fx { x[$0] = 1; next }
+    FILENAME == fst { st[ns++] = $0; next }
+    FILENAME == fl { lg[$0] = 1; next }
+    $5 == "-" && $1 !~ /[?DR]/ && !($4 in insnap) && !($4 in rec) && !($4 in x) && !($4 in lg) && !isstate($4) && !seen[$4]++ { print $4 }' \
+    "$snap" "$1" "$2.excl" "$2.state" "$2.ledgers" "$2.sel" > "$2.cand" || return 1
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    [ -f "$CONSUMER/$p" ] && [ ! -L "$CONSUMER/$p" ] || continue
+    h="$(git -C "$CONSUMER" rev-parse -q --verify "HEAD:$p" 2>/dev/null)" || continue
+    w="$(git -C "$CONSUMER" hash-object -- "$p" 2>/dev/null)" || continue
+    [ "$w" = "$h" ] || printf '%s\n' "$p" >> "$2"
+  done < "$2.cand"
+}
 pl_writes_record() {
   local f th p
   f="$(pl_writes_file)"; th="$(pl_theirs_sha)"
   RUN="$RUN/pull-writes.sel"
   mkdir -p "$RUN" || return 1
   pl_deliver_select > /dev/null 2>&1 || return 1
-  { pl_always_stage "$th"; cat "$RUN/deliver.strong" 2>/dev/null; printf '%s\n' .claude/.ai-dlc-applying; } > "$RUN/pw.excl"
+  { pl_always_stage "$th"; cat "$RUN/deliver.strong" "$RUN/deliver.ledgers" 2>/dev/null; printf '%s\n' .claude/.ai-dlc-applying; } > "$RUN/pw.excl"
   awk -F'\t' -v fx="$RUN/pw.excl" 'FILENAME == fx { x[$0] = 1; next } !($4 in x) && !seen[$4]++ { print $4 }' \
     "$RUN/pw.excl" "$RUN/deliver.sel" > "$RUN/pw.paths" || return 1
   { printf 'ai-dlc-pull-writes 1 %s\n' "$th"
@@ -391,7 +434,9 @@ pl_writes_record() {
       [ -n "$p" ] || continue
       printf '%s\t%s\n' "$p" "$(pl_writes_blob "$p")"
     done < "$RUN/pw.paths"; } > "$f.$$" || { rm -f "$f.$$"; return 1; }
-  mv -f "$f.$$" "$f"
+  mv -f "$f.$$" "$f" || return 1
+  # A new record supersedes the delivery marker: the pull it records is not the delivered one.
+  rm -f "$f.delivered"
 }
 # pl_writes_trap -- the EXIT trap pl_apply, pl_finish and pl_merge set before their writer runs. The
 # record is written in a subshell with no output, so a failure there never prints or exits for the
@@ -438,12 +483,18 @@ pl_writes_check() {
     [ "$now" = "$b" ] && continue
     echo "NOTE pull-writes-moved $p recorded $b now $now"; n=$((n + 1))
   done < "$RUN/pw-check.rows"
+  # A tracked path the record never named, edited after the last driver step, would be committed whole.
+  pl_writes_unrecorded "$RUN/pw-check.rows" "$RUN/pw-check.new" || refuse "$1-pull-writes-read" 2
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    echo "NOTE pull-writes-moved $p recorded none now $(pl_writes_blob "$p")"; n=$((n + 1))
+  done < "$RUN/pw-check.new"
   [ "$n" -eq 0 ] && return 0
   # deliver runs only on a finished pull, where finish refuses (finish-base-unverified on the stamped tree):
   # its remedy is `record`, which only rewrites the record. apply's retry is before the finish.
   local step="\`pull.sh finish\` with the same arguments"
-  [ "$1" = deliver ] && step="\`pull.sh record\` with the same arguments followed by \`-- <path>\` for each file above (the PR discloses each one)"
-  echo "pull: $n file(s) this pull wrote changed after its last driver step (pull.sh apply, finish, merge or record): your own edit since the pull's last step, or a step-7 merge made after the last driver run. Nothing was written. Move your own edit out of each file named above (re-apply it after the PR merges), or, for a step-7 merge, run $step so the record takes the merge; then re-run $1." >&2
+  [ "$1" = deliver ] && step="ONE \`pull.sh record $DIST $BASE $CONSUMER $THEIRS -- <path>...\` naming every file above that the pull wrote, after moving your own edits to the files named above aside (the PR discloses each one)"
+  echo "pull: $n file(s) this pull wrote changed after its last driver step (pull.sh apply, finish, merge or record): your own edit since the pull's last step, or a step-7 merge made after the last driver run. Nothing was written. If the pull wrote the change (a step-7 merge, or an edit a WORKLIST row sent you to make), run $step so the record takes it; if it is your own edit to a file named above, move that edit aside (stash it, or commit it on the working branch) and re-apply it after the PR merges. Pipeline-state files are never named here; do not revert them. Then re-run $1." >&2
   refuse "$1-pull-writes-moved" 2
 }
 # pl_record -- `pull.sh record <dist> <base> <consumer> <theirs> [-- <path>...]`: rewrites this theirs's
@@ -478,8 +529,17 @@ pl_record() {
       *) echo "NOTE pull-writes-moved $p recorded $b now $now"; n=$((n + 1)) ;;
     esac
   done < "$RUN/pw-check.rows"
+  pl_writes_unrecorded "$RUN/pw-check.rows" "$RUN/pw-check.new" || refuse "record-read" 2
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    case "$named" in
+      *"$nl$p$nl"*) printf '%s
+' "$p" >> "$RUN/pw-rerecorded" ;;
+      *) echo "NOTE pull-writes-moved $p recorded none now $(pl_writes_blob "$p")"; n=$((n + 1)) ;;
+    esac
+  done < "$RUN/pw-check.new"
   if [ "$n" -gt 0 ]; then
-    echo "pull: $n file(s) above changed since the pull's last driver step and were not named. record re-records only the files named after \`--\`, and deliver discloses each one in the PR. Nothing was written. Name each file whose new content belongs in the update (\`pull.sh record <dist> <base> <consumer> <theirs> -- <path>...\`), and move your own edit out of any other." >&2
+    echo "pull: $n file(s) above changed since the pull's last driver step and were not named. record re-records only the files named after \`--\`, and deliver discloses each one in the PR. Nothing was written. Name each file whose new content belongs in the update (\`pull.sh record <dist> <base> <consumer> <theirs> -- <path>...\`), and move your own edit out of any other file named above. Pipeline-state files are never named here; do not revert them." >&2
     refuse "record-path-unnamed" 2
   fi
   ( pl_writes_record ) > /dev/null 2>&1 || refuse "record-write" 2
@@ -768,14 +828,20 @@ pl_deliver_select() {
     return ;;
   esac
   srun="$h4"
-  : > "$RUN/deliver.state"
+  : > "$RUN/deliver.state"; : > "$RUN/deliver.ledgers"
   sch="$CONSUMER/.claude/schemas/pipeline-state-paths.json"
-  if [ ! -f "$sch" ]; then why="no $sch"
+  [ -f "$sch" ] || sch="$CONSUMER/core/schemas/pipeline-state-paths.json"
+  if [ ! -f "$sch" ]; then why="no $CONSUMER/.claude/schemas/pipeline-state-paths.json"
   elif ! command -v jq >/dev/null 2>&1; then why="no jq"
   else
+    # deliver.state: every schema name outside PL_STATE_EXEMPT (deliver's third disjunct reads it). deliver.ledgers: every ledger file of every
+    # entry, an exempt tree's included; only pl_writes_unrecorded reads it, so deliver still commits a ledger clean at the snapshot.
     jq -er --arg ex "$PL_STATE_EXEMPT" '($ex | split(" ")) as $e | .root as $r | select($r | type == "string")
       | .paths[].name | select(. as $n | ($e | map(. == $n) | any) | not) | $r + "/" + .' "$sch" > "$RUN/deliver.state" 2>>"$RUN/deliver.err" \
       && [ -s "$RUN/deliver.state" ] || { why="jq could not read the state names from $sch"; : > "$RUN/deliver.state"; }
+    if [ -z "$why" ] && ! jq -er '.root as $r | select($r | type == "string") | .paths[] | .name as $pn | (.ledgers // [])[] | $r + "/" + $pn + "/" + .name' "$sch" > "$RUN/deliver.ledgers" 2>>"$RUN/deliver.err"; then
+      : > "$RUN/deliver.ledgers"
+    fi
   fi
   [ -z "$why" ] || pl_dnote "NOTE deliver-state-unfiltered $why -- pipeline state files changed since the first apply may be in this commit"
   : > "$RUN/deliver.strong.raw"; : > "$RUN/deliver.weak.raw"

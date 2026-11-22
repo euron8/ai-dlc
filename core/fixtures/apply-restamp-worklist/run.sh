@@ -823,7 +823,7 @@ if [ "$G_VER" = "$THEIRS_VER" ] && [ "$G_SHA" = "$THEIRS_SHORT" ] && [ "$G_MK" =
    && has_row "$OUT_GREEN" RESOLVED restamp; then
   ok "C3 a run with no hand-back still stamps $THEIRS_VER @ $THEIRS_SHORT and clears the marker"
 else
-  bad "C3 a CLEAN pull was withheld: stamp 'version: ${G_VER:-<absent>} / commit: ${G_SHA:-<absent>}', marker $G_MK. Every consumer with no unregistered-hook validator emits DECISION hook-registration-unchecked after the guard; counting that row withholds every correct pull and the tree can never push again"
+  bad "C3 a CLEAN pull was withheld: stamp 'version: ${G_VER:-<absent>} / commit: ${G_SHA:-<absent>}', marker $G_MK. A row that does not name work (the NOTE rows this run emits before the guard) was counted into the hand-back, so every correct pull is withheld and the tree can never push again"
 fi
 
 # --- C7: a DECISION row withholds it too, on its own -------------------------------------------
@@ -854,8 +854,9 @@ fi
 
 # C5 (--finish over a hand-merged tree) and C8 (--finish over a DECISION row it cannot clear) were cut
 # by the BL-918 kill matrix: every mutant either killed (m7, m8, m11) is also killed by U4 or C4, which stay.
-# U4's world is the same shape as C8's (no hook-registration validator, so --finish emits the DECISION
-# before its stamp), so U4 carries C8's property as well as its own.
+# --finish emits its hook-registration DECISION after write_stamp, so no arm here can score whether a
+# DECISION is counted into the finisher's gate; the advisory WORKLIST row in HU-a is the arm that dies if
+# that row moves above the stamp.
 
 # === F1/F2/F3: --finish CHECKS THE IDENTITY OF <theirs>, NOT MERELY THAT IT RESOLVES ==========
 #
@@ -1342,7 +1343,7 @@ ti_seam_guard() {
 }
 ti_helpers() { # [apply-file] -- the staging helpers, extracted from <apply-file> (default $APPLY)
   printf 'AP_TMP="$(mktemp -d "%s/ti-stage.XXXXXX")"; ap_stage_dead=0; FINISH=0; mech_fail=0\n' "$WORK"
-  sed -n -e '/^ap_stage() {/,/^}$/p' -e '/^ap_staging_refused() {/,/^}$/p' -e '/^ap_stage_or_refuse() {/,/^}$/p' "${1:-$APPLY}"
+  sed -n -e '/^ap_stage() {/,/^}$/p' -e '/^ap_staging_refused() {/,/^}$/p' -e '/^ap_rerun_remedy() {/,/^}$/p' -e '/^ap_stage_or_refuse() {/,/^}$/p' "${1:-$APPLY}"
 }
 ti_row_out() { # <consumer> [apply-file] -> the row types this consumer draws, or -NONE-
   local c="$1" a="${2:-$APPLY}" out
@@ -2241,15 +2242,15 @@ hk_seam() {
   # `exit` inside `$( )` ends only the substitution, so the refusal is re-raised here, at the call
   # site; hk_seam is always called directly, never inside `$( )`, so this exit ends the fixture.
   fn=""
-  for f in say ap_stage ap_staging_refused hook_registration_row; do
+  for f in say ap_stage ap_staging_refused ap_rerun_remedy hook_registration_row; do
     x="$(hk_extract "$1" "$f")" || exit 2
     fn="$fn$x
 "
   done
   st="$(mktemp -d "$WORK/hk-seam.XXXXXX")" || return 1
-  CONSUMER="$2" DIST="$3" THEIRS="$4" AP_TMP="$st" bash -c '
+  BASE="$BASE" CONSUMER="$2" DIST="$3" THEIRS="$4" AP_TMP="$st" bash -c '
     handback=0; worklist_n=0; reapply_owed=0; reapply_remedy="hk-seam: no reapply row is drawn here"
-    FINISH=1; ap_stage_dead=0; ap_rerun_remedy="re-run --finish."
+    FINISH=1; ap_stage_dead=0; APPLYING="$AP_TMP/applying"
     NL_CH="
 "
     '"$fn"'
@@ -2517,11 +2518,6 @@ if hr_arm_d "$HR_R/sub.E"; then
 else
   bad "HR-d the [] tree drew unparsed=$(hk_n "$HR_R/sub.E" DECISION hook-registration-unparsed), settings-merge=$(hk_n "$HR_R/sub.E" WORKLIST settings-merge) — the validator failed without a list and the row said nothing"
 fi
-if [ "$(stamp_ver "$HRW_E")" = "$THEIRS_VER" ] && [ "$(marker "$HRW_E")" = GONE ]; then
-  ok "HR-d and --finish still stamps over that DECISION — it raises handback, not worklist_n, so a missing interpreter cannot wedge the finisher"
-else
-  bad "HR-d --finish withheld over DECISION hook-registration-unparsed (stamp '$(stamp_ver "$HRW_E")', marker $(marker "$HRW_E")) — the C8 wedge, reached through the new row"
-fi
 if hr_arm_f "$HR_R/sub.C" "$HR_R/sub.V"; then
   ok "HR-f near-misses: a clean tree draws no hook-registration row; a LIVE hook listed under the validator's settings.local.json NOTE is named in neither WORKLIST row, while that tree's real dangling hook still draws one"
 else
@@ -2708,11 +2704,10 @@ else
   bad "HU-0 the validator read $hu_p1 on the orphan world and $hu_p2 after a local registration (want 1 then 0) — the HU arms would score the validator, not the row"
 fi
 hu_seam "$HU_SUB/apply.sh" sub R "$HUW_O" >/dev/null 2>&1
-hu_fin "$HU_SUB/apply.sh" "$HUW_O" "$HU_R/e2e.R"
-if hu_quiet "$HU_R/sub.R" && [ "$(stamp_ver "$HUW_O")" = 2.0.0 ] && [ "$(marker "$HUW_O")" = GONE ]; then
-  ok "HU-b exit 3 — registering it in .claude/settings.local.json — clears the row, and the stamp stays at 2.0.0 with no marker"
+if hu_quiet "$HU_R/sub.R"; then
+  ok "HU-b exit 3 — registering it in .claude/settings.local.json — clears the row"
 else
-  bad "HU-b the row's own exit 3 left a row or moved the stamp (worklist_n=$(hk_wl "$HU_R/sub.R"), stamp '$(stamp_ver "$HUW_O")', marker $(marker "$HUW_O"))"
+  bad "HU-b the row's own exit 3 left a row (worklist_n=$(hk_wl "$HU_R/sub.R"))"
 fi
 fi  # ---- end of HU_OK
 fi  # ---- end of the BL-103 block

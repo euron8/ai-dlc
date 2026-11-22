@@ -187,6 +187,8 @@ printf '{\n  "k1": 1,\n  "k2": 2,\n  "k3": 3,\n  "k4": 4,\n  "k5": 5,\n  "k6": 6
   > "$A/c/.claude/settings.json"
 printf '{"row":1}\n' > "$A/c/_bmad-output/spawn-ledger.jsonl"
 printf '{"rec":1}\n' > "$A/c/_bmad-output/subagent-context.jsonl"
+# pw-ledger: a tracked ledger inside an exempt tree (planning-artifacts), clean at the snapshot, that a hook appends to after finish.
+mkdir -p "$A/c/_bmad-output/planning-artifacts" && printf '{"w":1}\n' > "$A/c/_bmad-output/planning-artifacts/.artifact-writes.jsonl"
 # eol: a `text eol=crlf` file, committed from a CRLF worktree (the blob is LF, repository form); the operator edits line 2
 # before the pull (dirty at the snapshot, whose raw blob is CRLF) and the pull's resolution round edits line 8.
 mkdir -p "$A/c/docs" && printf 'docs/crlf.txt text eol=crlf\n' > "$A/c/.gitattributes" \
@@ -358,7 +360,7 @@ printf 'refile\tdocs/crlf.txt\t-\tmodel\tkept\tthe resolution round merged line 
 mkdir -p "$A/c/_bmad-output/implementation-artifacts" || { echo "FIXTURE BROKEN: mkdir implementation-artifacts" >&2; exit 2; }
 printf 'a hook wrote this story\n' > "$A/c/_bmad-output/implementation-artifacts/story-1.md"
 printf '# archive\n' > "$A/c/_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md"
-for _v in ov v1 w0 st; do copy_world a "a-$_v"; done
+for _v in ov v1 w0 st ns; do copy_world a "a-$_v"; done
 # ov: the pull's change also lands on the line the operator edited (HEAD, the snapshot blob and the worktree all differ there).
 sed 's/"k1": "operatorDirtyKey",/"k1": "pullRewroteThis",/' "$WORK/a-ov/c/.claude/settings.json" > "$WORK/a-ov/c/.claude/settings.json.new" \
   && mv -f "$WORK/a-ov/c/.claude/settings.json.new" "$WORK/a-ov/c/.claude/settings.json" || { echo "FIXTURE BROKEN: cannot build world a-ov" >&2; exit 2; }
@@ -504,6 +506,47 @@ if [ "$nx_pre" = y ] && [ "$(cat "$NX/c/.git/ai-dlc-pull/pull-writes.delivered" 
 else
   bad "pw-delivered: precondition='$nx_pre' delivered='$(cat "$NX/c/.git/ai-dlc-pull/pull-writes.delivered" 2>/dev/null)' rc=$nx_rc out: $(tr '\n' '|' < "$WORK/a-nx.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-nx.err")"
 fi
+# pw-delivered-retry, pw-delivered-cleared: world a delivered; the operator's checkout returns to a plain branch (the update branch
+# abandoned) and edits a file the pull wrote; the SAME theirs is retried. The pull is finished, so the retry NOTEs, drops the old
+# record and takes a FRESH snapshot (the edit reads as the operator's, dirty at the snapshot, never the pull's own). The retry is then
+# abandoned undelivered with its writes in the worktree; the NEXT theirs refuses apply-pull-unfinished (the retry's record, not the
+# old delivery, decides).
+copy_world a a-rt
+RT="$WORK/a-rt"
+world_git -C "$RT/c" checkout -q -b merged-rt || { echo "FIXTURE BROKEN: cannot branch a-rt" >&2; exit 2; }
+rt_snap0="$(sed -n 1p "$RT/c/.git/ai-dlc-pull/dirty-snapshot")"
+printf '\n' >> "$RT/c/.claude/settings.json"
+rt_sb="$(world_git -C "$RT/c" hash-object --no-filters -- .claude/settings.json)"
+bash "$REC/pull.sh" apply "$RT/dist" "$AB" "$RT/c" "$AT" > "$WORK/a-rt.out" 2> "$WORK/a-rt.err" < /dev/null; rt_rc=$?
+if [ "$rt_rc" != 2 ] && grep -q '^NOTE pull-delivered-retry ' "$WORK/a-rt.out" && grep -q '^PULL run=' "$WORK/a-rt.out" \
+   && ! grep -q 'apply-pull-writes-moved' "$WORK/a-rt.out" \
+   && [ "$(sed -n 1p "$RT/c/.git/ai-dlc-pull/dirty-snapshot")" != "$rt_snap0" ] \
+   && awk -F'\t' '$4 == ".claude/settings.json" {f = 1} END {exit !f}' "$RT/c/.git/ai-dlc-pull/dirty-snapshot" \
+   && ! grep -q "^.claude/settings.json	$rt_sb\$" "$RT/c/.git/ai-dlc-pull/pull-writes"; then
+  ok "pw-delivered-retry: a delivered pull retried at the same theirs after an edit: NOTE, a fresh snapshot holding the edit as dirty, the edit not recorded as the pull's own (rc=$rt_rc)"
+else
+  bad "pw-delivered-retry: rc=$rt_rc out: $(tr '\n' '|' < "$WORK/a-rt.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-rt.err")"
+fi
+# The retry stopped at the blend ASK (apply.sh not started, so no record); answer it as rw-stamped does and run it on.
+rt_dg="$(awk '$1 == "ASK" && $2 == "blend" {print $4; exit}' "$WORK/a-rt.out")"
+if [ "${#rt_dg}" = 64 ] && answer "$RT/c" "Blend the session driver? digest $rt_dg" "blend it"; then
+  bash "$REC/pull.sh" apply "$RT/dist" "$AB" "$RT/c" "$AT" > "$WORK/a-rt1.out" 2> "$WORK/a-rt1.err" < /dev/null
+else
+  bad "pw-delivered-cleared: the retry raised no blend ASK to answer: $(tr '\n' '|' < "$WORK/a-rt.out" | cut -c1-200)"
+fi
+if [ ! -e "$RT/c/.git/ai-dlc-pull/pull-writes.delivered" ] && [ "$(sed -n 1p "$RT/c/.git/ai-dlc-pull/pull-writes" | awk '{print $3}')" = "$(world_git -C "$RT/dist" rev-parse "$AT")" ]; then
+  world_git -C "$RT/c" checkout -q merged-rt 2>/dev/null || { echo "FIXTURE BROKEN: cannot abandon a-rt" >&2; exit 2; }
+  printf '2.0.2\n' > "$RT/dist/VERSION" && world_commit "$RT/dist" "theirs moves again" >/dev/null || { echo "FIXTURE BROKEN: cannot move theirs in a-rt" >&2; exit 2; }
+  RT_T="$(world_git -C "$RT/dist" rev-parse HEAD)"
+  bash "$REC/pull.sh" apply "$RT/dist" "$AB" "$RT/c" "$RT_T" > "$WORK/a-rt2.out" 2> "$WORK/a-rt2.err" < /dev/null; rt2_rc=$?
+  if [ "$rt2_rc" = 2 ] && grep -qx 'REFUSED apply-pull-unfinished rc=2' "$WORK/a-rt2.out" && grep -q '^NOTE pull-writes-unfinished ' "$WORK/a-rt2.out"; then
+    ok "pw-delivered-cleared: the retry's record cleared the delivery marker, so its abandoned writes refuse the next theirs (apply-pull-unfinished)"
+  else
+    bad "pw-delivered-cleared: rc=$rt2_rc out: $(tr '\n' '|' < "$WORK/a-rt2.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-rt2.err")"
+  fi
+else
+  bad "pw-delivered-cleared: precondition: delivered marker '$(cat "$RT/c/.git/ai-dlc-pull/pull-writes.delivered" 2>/dev/null)' record '$(sed -n 1p "$RT/c/.git/ai-dlc-pull/pull-writes")' out: $(tr '\n' '|' < "$WORK/a-rt1.out" 2>/dev/null | cut -c1-300)"
+fi
 # rw-stamped: finish on the delivered world a (stamp at theirs, no in-flight marker) withholds on its unverified base; its
 # restamp-withheld row says the stamp already reads theirs and the marker is absent, never that either was left in place.
 a_sc="$(sed -n 's/^commit:[[:space:]]*//p' "$A/c/.claude/.ai-dlc-version" | head -1)"
@@ -515,7 +558,7 @@ a_rw_dg="$(awk '$1 == "ASK" && $2 == "blend" {print $4; exit}' "$WORK/a-rw0.out"
 bash "$REC/pull.sh" finish "$A/dist" "$AB" "$A/c" "$AT" > "$WORK/a-rw.out" 2> "$WORK/a-rw.err" < /dev/null; a_rw_rc=$?
 a_rw_row="$(cat "$(ls -td "$A/c/.git/ai-dlc-pull"/run-*/ | head -1)finish.out" 2>/dev/null | awk -F'\t' '$2 == "restamp-withheld"')"
 if [ "$(world_git -C "$A/dist" rev-parse "$a_sc")" = "$(world_git -C "$A/dist" rev-parse "$AT")" ] && [ ! -e "$A/c/.claude/.ai-dlc-applying" ] \
-   && [ "$(grep -c . <<<"$a_rw_row")" = 1 ] && grep -qF "The stamp already reads ${AT} (an earlier apply wrote it) and \`.ai-dlc-applying\` is absent; this run changed neither." <<<"$a_rw_row" \
+   && [ "$(grep -c . <<<"$a_rw_row")" = 1 ] && grep -qF "The stamp already reads ${AT} (an earlier apply or finish wrote it) and \`.ai-dlc-applying\` is absent; this run changed neither." <<<"$a_rw_row" \
    && ! grep -q 'deliberately left in place' <<<"$a_rw_row"; then
   ok "rw-stamped: finish on a stamped tree with no marker: the restamp-withheld row says the stamp already reads theirs and the marker is absent"
 else
@@ -535,7 +578,7 @@ if [ "$ov_m_rc" = 2 ] && grep -qx 'REFUSED deliver-pull-writes-moved rc=2' "$WOR
    && [ "$(grep -c '^NOTE pull-writes-moved ' "$WORK/a-ov-moved.out")" = 1 ] \
    && grep -q '^NOTE pull-writes-moved \.claude/settings\.json recorded [0-9a-f]\{40\} now [0-9a-f]\{40\}$' "$WORK/a-ov-moved.out" \
    && [ "$(ov_state "$OV/c")" = "$ov_s0" ] && [ -z "$(world_git --git-dir="$WORK/a-ov-origin.git" rev-parse -q --verify "refs/heads/$ov_br" 2>/dev/null)" ] \
-   && grep -q 'run `pull.sh record` with the same arguments followed by `-- <path>` for each file above' "$WORK/a-ov-deliver.err"; then
+   && grep -qF "run ONE \`pull.sh record $OV/dist $AB $OV/c $AT -- <path>...\` naming every file above" "$WORK/a-ov-deliver.err"; then
   ok "pw-moved: a file the pull wrote, changed after finish: deliver REFUSED deliver-pull-writes-moved naming it, its remedy naming pull.sh record, HEAD, the file and the status unchanged, nothing pushed"
 else
   bad "pw-moved: rc=$ov_m_rc out: $(tr '\n' '|' < "$WORK/a-ov-moved.out" | cut -c1-300) err: $(head -c 400 "$WORK/a-ov-deliver.err") state unchanged: $([ "$(ov_state "$OV/c")" = "$ov_s0" ] && echo yes || echo no)"
@@ -569,6 +612,97 @@ if [ "$ov_f_rc" = 0 ] && grep -q "^NOTE pull-writes-recorded [1-9][0-9]* $AT\$" 
 else
   bad "pw-record: rc=$ov_f_rc out: $(tr '\n' '|' < "$WORK/a-ov-finish.out" | cut -c1-200) err: $(head -c 200 "$WORK/a-ov-finish.err") row: $(grep '^\.claude/settings\.json' "$OV_PW" 2>/dev/null) rerecorded: $(tr '\n' '|' < "$OV_PW.rerecorded" 2>/dev/null)"
 fi
+# pw-unrecorded: a tracked file the pull never wrote, clean at the snapshot, is edited after the finish. deliver would stage it
+# whole, so it REFUSES deliver-pull-writes-moved naming it (recorded none), HEAD, the status and the remote untouched; then
+# `pull.sh record <dist> <base> <consumer> <theirs> -- <path>` on the finished pull exits 0 and puts it in the record.
+# The edit stays recorded: the whole-ack deliver below (rc 0) commits it.
+OV_UF=.gitattributes
+[ -n "$(world_git -C "$OV/c" ls-files -- "$OV_UF")" ] && ! awk -F'\t' -v p="$OV_UF" 'NR > 1 && $4 == p {f = 1} END {exit !f}' "$OV/c/.git/ai-dlc-pull/dirty-snapshot" \
+  && ! grep -q "^$OV_UF	" "$OV_PW" || { echo "FIXTURE BROKEN: a-ov $OV_UF is not tracked, clean at the snapshot and unrecorded" >&2; exit 2; }
+cp "$OV/c/$OV_UF" "$WORK/a-ov-uf0" && cp "$WORK/a-ov-uf0" "$OV/c/$OV_UF"
+OV_LG=_bmad-output/planning-artifacts/.artifact-writes.jsonl
+[ -n "$(world_git -C "$OV/c" ls-files -- "$OV_LG")" ] && ! awk -F'\t' -v p="$OV_LG" 'NR > 1 && $4 == p {f = 1} END {exit !f}' "$OV/c/.git/ai-dlc-pull/dirty-snapshot" \
+  && [ -z "$(world_git -C "$OV/c" status --porcelain=v1 -- "$OV_LG")" ] || { echo "FIXTURE BROKEN: a-ov $OV_LG is not tracked and clean at the snapshot" >&2; exit 2; }
+printf '{"w":2}\n' >> "$OV/c/$OV_LG"   # the hook's append after finish
+ov_u0="$(ov_state "$OV/c")"
+printf '# operator edit after the finish\n' >> "$OV/c/$OV_UF"
+ov_u1="$(ov_state "$OV/c")"
+deliver_run a-ov "$OV/dist" "$AB" "$OV/c" "$AT"; ov_u_rc=$?
+cp "$WORK/a-ov-deliver.out" "$WORK/a-ov-unrec.out"
+if [ "$ov_u_rc" = 2 ] && grep -qx 'REFUSED deliver-pull-writes-moved rc=2' "$WORK/a-ov-unrec.out" \
+   && grep -q "^NOTE pull-writes-moved $OV_UF recorded none now [0-9a-f]\{40\}\$" "$WORK/a-ov-unrec.out" && [ "$(grep -c '^NOTE pull-writes-moved ' "$WORK/a-ov-unrec.out")" = 1 ] \
+   && [ "$(ov_state "$OV/c")" = "$ov_u1" ] && [ "$ov_u0" != "$ov_u1" ]; then
+  ok "pw-unrecorded: a tracked file the pull never wrote, edited after the finish: deliver REFUSED deliver-pull-writes-moved naming it (recorded none), nothing mutated"
+else
+  bad "pw-unrecorded: rc=$ov_u_rc out: $(tr '\n' '|' < "$WORK/a-ov-unrec.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-ov-deliver.err")"
+fi
+# The remedy the refusal printed, taken from deliver's stderr and run exactly as printed (its `<path>` placeholder the one thing filled in).
+ov_ul="$(grep -o 'pull\.sh record [^`]*' "$WORK/a-ov-deliver.err" | head -1)"
+ov_ul="${ov_ul//<path>.../$OV_UF}"
+[ "$ov_ul" = "pull.sh record $OV/dist $AB $OV/c $AT -- $OV_UF" ] || bad "pw-unrecorded remedy: deliver printed '$ov_ul', want the four positionals and the path"
+bash "$REC/pull.sh" ${ov_ul#pull.sh } > "$WORK/a-ov-ur.out" 2> "$WORK/a-ov-ur.err" < /dev/null; ov_ur_rc=$?
+if [ "$ov_ur_rc" = 0 ] && grep -q "^NOTE pull-writes-recorded [1-9][0-9]* $AT\$" "$WORK/a-ov-ur.out" \
+   && grep -qxF "$OV_UF	$(world_git -C "$OV/c" hash-object --no-filters -- "$OV_UF")" "$OV_PW" && grep -qxF "$OV_UF" "$OV_PW.rerecorded"; then
+  ok "pw-unrecorded: the pull.sh record line deliver's refusal printed (four positionals, real values), run as printed on the finished pull, exits 0 and records the unrecorded file"
+else
+  bad "pw-unrecorded record: rc=$ov_ur_rc out: $(tr '\n' '|' < "$WORK/a-ov-ur.out" | cut -c1-200) err: $(head -c 200 "$WORK/a-ov-ur.err")"
+fi
+# pw-ledger: the hook's append to the ledger above (tracked, clean at the snapshot, in an exempt tree) is pipeline state: the refusal and
+# the record line name only the non-state twin ($OV_UF, refused above), and record neither demands nor takes the ledger.
+if [ "$(world_git -C "$OV/c" status --porcelain=v1 -- "$OV_LG")" = " M $OV_LG" ] && grep -q "^NOTE pull-writes-moved $OV_UF recorded none" "$WORK/a-ov-unrec.out" \
+   && ! grep -qF "$OV_LG" "$WORK/a-ov-unrec.out" "$WORK/a-ov-deliver.err" "$WORK/a-ov-ur.out" "$WORK/a-ov-ur.err" && [ "$ov_ur_rc" = 0 ] && ! grep -q "^$OV_LG	" "$OV_PW"; then
+  ok "pw-ledger: a ledger inside an exempt tree appended to after finish is no recorded-none row and no record demand, while the non-state twin $OV_UF is refused"
+else
+  bad "pw-ledger: ur rc=$ov_ur_rc unrec: $(grep -c . "$WORK/a-ov-unrec.out") rows $(grep '^NOTE pull-writes-moved' "$WORK/a-ov-unrec.out" | tr '\n' '|' | cut -c1-300) record: $(tr '\n' '|' < "$WORK/a-ov-ur.out" | cut -c1-200)"
+fi
+# pw-keep: a path an apply.sh row names (so deliver's keep set holds it), tracked and clean at the snapshot, is edited after the finish.
+# Keep membership is no exemption: deliver REFUSES deliver-pull-writes-moved naming it. (A state-tree path is filtered whether keep-selected
+# or not: arms st, st-ctl, st-rec.) pw-row: the `pull.sh record ...` line an advisory row printed, taken from the finish's real output
+# with the marker gone and run exactly as printed, exits 0 and records the path.
+ov_kp=""; ov_rl=""; ov_rp=""
+for _f in "$OV/c/.git/ai-dlc-pull"/run-*/finish.out "$OV/c/.git/ai-dlc-pull"/run-*/apply.out; do
+  [ -f "$_f" ] || continue
+  while IFS=$'\t' read -r _k _n _p _t; do
+    [ "$_k" = WORKLIST ] || [ "$_k" = DECISION ] || continue
+    [ -f "$OV/c/$_p" ] && [ -n "$(world_git -C "$OV/c" ls-files -- "$_p")" ] || continue
+    case "$_t" in
+      *'`pull.sh record '*) [ -n "$ov_rl" ] || { ov_rp="$_p"; ov_rl="$(printf '%s\n' "$_t" | grep -o 'pull\.sh record [^`]*' | head -1)"; } ;;
+    esac
+    [ -z "$ov_kp" ] || continue
+    awk -F'\t' -v p="$_p" 'NR > 1 && $4 == p {f = 1} END {exit !f}' "$OV/c/.git/ai-dlc-pull/dirty-snapshot" && continue
+    grep -q "^$_p	" "$OV_PW" && continue
+    [ -z "$(world_git -C "$OV/c" status --porcelain=v1 -- "$_p")" ] || continue
+    ov_kp="$_p"
+  done < "$_f"
+done
+ov_rows="$(cat "$OV/c/.git/ai-dlc-pull"/run-*/finish.out "$OV/c/.git/ai-dlc-pull"/run-*/apply.out 2>/dev/null | awk -F'\t' '$1 == "WORKLIST" || $1 == "DECISION" {print $2 ":" $3}' | sort -u | tr '\n' ' ')"
+[ -n "$ov_kp" ] || { echo "FIXTURE BROKEN: no row in world a-ov names a tracked, snapshot-clean, unrecorded file: rows: $ov_rows" >&2; exit 2; }
+[ -n "$ov_rl" ] || { echo "FIXTURE BROKEN: no row in world a-ov prints a pull.sh record line: rows: $ov_rows" >&2; exit 2; }
+cp "$OV/c/$ov_kp" "$WORK/a-ov-kp0"
+printf '# operator edit after the finish\n' >> "$OV/c/$ov_kp"
+deliver_run a-ov "$OV/dist" "$AB" "$OV/c" "$AT"; ov_k_rc=$?
+cp "$WORK/a-ov-deliver.out" "$WORK/a-ov-keep.out"
+if [ "$ov_k_rc" = 2 ] && grep -qx 'REFUSED deliver-pull-writes-moved rc=2' "$WORK/a-ov-keep.out" \
+   && grep -q "^NOTE pull-writes-moved $ov_kp recorded none now [0-9a-f]\{40\}\$" "$WORK/a-ov-keep.out"; then
+  ok "pw-keep: a keep-set path ($ov_kp) clean at the snapshot, edited after the finish: deliver REFUSED deliver-pull-writes-moved naming it (recorded none)"
+else
+  bad "pw-keep: path=$ov_kp rc=$ov_k_rc out: $(tr '\n' '|' < "$WORK/a-ov-keep.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-ov-deliver.err")"
+fi
+cp "$WORK/a-ov-kp0" "$OV/c/$ov_kp"
+# pw-row: the row's own line, its `<path>` placeholder the one thing filled in; the row's file edited after the finish first.
+ov_rl="${ov_rl//<path>.../$ov_rp}"
+ov_rl="${ov_rl//$A\//$OV/}"
+cp "$OV/c/$ov_rp" "$WORK/a-ov-rp0"
+printf '# operator edit after the finish\n' >> "$OV/c/$ov_rp"
+bash "$REC/pull.sh" ${ov_rl#pull.sh } > "$WORK/a-ov-kr.out" 2> "$WORK/a-ov-kr.err" < /dev/null; ov_kr_rc=$?
+case "$ov_rl" in "pull.sh record "*" -- $ov_rp") ov_kform=ok ;; *) ov_kform="" ;; esac
+if [ -n "$ov_kform" ] && [ "$ov_kr_rc" = 0 ] && grep -qxF "$ov_rp	$(world_git -C "$OV/c" hash-object --no-filters -- "$ov_rp")" "$OV_PW"; then
+  ok "pw-row: the pull.sh record line an advisory row printed, run as printed after finish, exits 0 and records $ov_rp"
+else
+  bad "pw-row: line '$ov_rl' form=$ov_kform rc=$ov_kr_rc out: $(tr '\n' '|' < "$WORK/a-ov-kr.out" | cut -c1-200) err: $(head -c 200 "$WORK/a-ov-kr.err")"
+fi
+cp "$WORK/a-ov-rp0" "$OV/c/$ov_rp"
+bash "$REC/pull.sh" record "$OV/dist" "$AB" "$OV/c" "$AT" -- "$ov_rp" > /dev/null 2>&1 || { echo "FIXTURE BROKEN: cannot re-record $ov_rp after restoring it" >&2; exit 2; }
 # dirty-overlap: with that edit in the record the pull's change now lies on the operator's line, so the merge cannot split them:
 # REFUSED deliver-dirty-overlap, nothing mutated.
 ov_s1="$(ov_state "$OV/c")"
@@ -609,10 +743,19 @@ if [ "$ov_w_rc" = 0 ] && grep -qx 'DECIDE pr https://example.invalid/pr/1 opened
    && grep -qxF -- "- $ov_wn" "$ov_pr" && grep -qxF -- "- $ov_rn2" "$ov_pr" \
    && grep -q pullRewroteThis "$WORK/a-ov-head-settings.json" && cmp -s "$WORK/a-ov-head-settings.json" "$OV/c/.claude/settings.json" \
    && grep -qx 'operator edit after the finish' <<<"$ov_head_cp" \
+   && grep -qx '# operator edit after the finish' <<<"$(world_git -C "$OV/c" show "HEAD:$OV_UF")" \
    && [ -z "$(world_git -C "$OV/c" status --porcelain=v1 -- .claude/settings.json)" ]; then
   ok "whole-ack: deliver --whole commits the overlapping file whole (equal to the worktree) and the re-recorded clean file with its edit, each disclosed in the commit message and the PR body"
 else
   bad "whole-ack: rc=$ov_w_rc out: $(tr '\n' '|' < "$WORK/a-ov-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-ov-deliver.err") msg: $(tr '\n' '|' <<<"$ov_msg" | cut -c1-500)"
+fi
+# pw-ledger (deliver): the whole-ack deliver above commits the ledger too (clean at the snapshot, appended to after finish): the state-tree
+# exemption is for the unrecorded-write check and record's demand only, never for deliver's selection.
+if [ "$ov_w_rc" = 0 ] && grep -qxF "$OV_LG" <<<"$(world_git -C "$OV/c" show --name-only --format= HEAD)" \
+   && [ "$(world_git -C "$OV/c" show "HEAD:$OV_LG")" = "$(cat "$OV/c/$OV_LG")" ] && [ -z "$(world_git -C "$OV/c" status --porcelain=v1 -- "$OV_LG")" ]; then
+  ok "pw-ledger: deliver commits the exempt-tree ledger appended to after finish (named by the delivered commit, equal to the worktree) and leaves it clean in git status"
+else
+  bad "pw-ledger: deliver rc=$ov_w_rc commit files: $(world_git -C "$OV/c" show --name-only --format= HEAD | tr '\n' '|' | cut -c1-300) status: '$(world_git -C "$OV/c" status --porcelain=v1 -- "$OV_LG")'"
 fi
 # staged-clean-twin: world a-st is world a with dirty-d's settings.json staged whole (its index entry moved since the snapshot and
 # equals the worktree); its merge is clean, so deliver commits the merged blob, byte-identical to world a's, and the operator's key
@@ -690,6 +833,22 @@ if [ "$v_reg" -gt 60000 ] && [ -n "$v_gh" ] && [ "$v_gh" -gt 0 ] && [ "$v_gh" -l
   ok "iv: a $v_reg-byte region: the PR body gh receives is $v_gh bytes with the pointer line, and it was on disk when the pre-push hook ran"
 else
   bad "iv: region=$v_reg gh body=${v_gh:-none} pre-push saw: '${v_body:-nothing}'"
+fi
+
+# ns: world a-ns: the snapshot on disk names an EARLIER theirs while this theirs's record is current (its apply ran on an ai-dlc-update/*
+# branch and wrote no snapshot): deliver and `record` take the deliver-no-snapshot path and refuse nothing.
+NS="$WORK/a-ns"
+ns_snap="$NS/c/.git/ai-dlc-pull/dirty-snapshot"
+awk 'NR == 1 { $3 = "0000000000000000000000000000000000000000" } { print }' "$ns_snap" > "$ns_snap.new" && mv -f "$ns_snap.new" "$ns_snap" || { echo "FIXTURE BROKEN: cannot rewrite the a-ns snapshot header" >&2; exit 2; }
+[ "$(sed -n 1p "$ns_snap" | awk '{print $3}')" != "$(sed -n 1p "$NS/c/.git/ai-dlc-pull/pull-writes" | awk '{print $3}')" ] || { echo "FIXTURE BROKEN: a-ns snapshot and record name the same theirs" >&2; exit 2; }
+deliver_env a-ns || { echo "FIXTURE BROKEN: deliver_env a-ns" >&2; exit 2; }
+bash "$REC/pull.sh" record "$NS/dist" "$AB" "$NS/c" "$AT" > "$WORK/a-ns-rec.out" 2> "$WORK/a-ns-rec.err" < /dev/null; ns_rec_rc=$?
+deliver_run a-ns "$NS/dist" "$AB" "$NS/c" "$AT"; ns_rc=$?
+if [ "$ns_rec_rc" = 0 ] && [ "$ns_rc" = 0 ] && grep -q '^NOTE deliver-no-snapshot ' "$WORK/a-ns-deliver.out" \
+   && ! grep -q 'pull-writes-read\|record-read' "$WORK/a-ns-rec.out" "$WORK/a-ns-rec.err" "$WORK/a-ns-deliver.out" "$WORK/a-ns-deliver.err"; then
+  ok "ns: a snapshot naming an earlier theirs with this theirs's record current: record rc 0, deliver rc 0 with NOTE deliver-no-snapshot, no pull-writes-read refusal"
+else
+  bad "ns: record rc=$ns_rec_rc ($(tr '\n' '|' < "$WORK/a-ns-rec.out" | cut -c1-200) $(head -c 200 "$WORK/a-ns-rec.err")) deliver rc=$ns_rc out: $(tr '\n' '|' < "$WORK/a-ns-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-ns-deliver.err")"
 fi
 
 # ================================ h twin: a consumer-MODIFIED delete asks =================================
@@ -1332,4 +1491,4 @@ else
 fi
 # ===== end BL-1173 arms =====
 
-report_end reconcile-pull-driver 92
+report_end reconcile-pull-driver 101

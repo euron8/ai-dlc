@@ -1086,7 +1086,7 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    **Two refusals stop `pull.sh apply` before its first write (exit 2).** `REFUSED
    apply-pull-writes-moved`, on a retry of the same `<theirs>` off an `ai-dlc-update/*` branch,
    follows one `NOTE pull-writes-moved <path> recorded <blob> now <blob>` per file the pull wrote
-   whose content changed since its last driver step: move your own edit out of each named file
+   whose content changed since its last driver step: move your own edit out of each named file (pipeline-state files are never named, and are never reverted)
    (re-apply it after the PR merges), or, for a step-7 merge, re-run `pull.sh finish` so the record
    takes it, then re-run apply. (`pull.sh record` is deliver's remedy; it refuses an apply that is not finished.) `REFUSED apply-pull-unfinished`, on a new `<theirs>`, follows one
    `NOTE pull-writes-unfinished <path> theirs <sha>` per file another pull wrote and left
@@ -1313,9 +1313,11 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      predates the deferral, which happens on the pull that delivers it under
      `SELF-UPDATE-DEFER` or `SELF-UPDATE-UNDECIDED` when that apply handed back nothing), the
      stamp reads `<theirs>` and the marker is gone, so the finish withholds once with
-     `finish-base-unverified`. Re-run `pull.sh finish` with the stamp's own `commit:` as `<base>`,
-     as that row says: it exits 0 and verifies nothing that the earlier apply did not, so record
-     it in the reconcile log as an unchecked finish.
+     `finish-base-unverified`. When the stamp's `commit:` is `<theirs>`, the marker is absent and
+     the command names a `<base>` whose `core/` tree differs from the stamp's, the row says there is nothing left to verify: deliver, and do not re-run `pull.sh finish`
+     with that commit as `<base>` (a base typed as theirs verifies nothing). Record the pull in
+     the reconcile log as an unchecked finish. Any other stamp: re-run `pull.sh finish` with the
+     stamp's own `commit:` as `<base>`, as that row says.
 
    - **YOU write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`, and `apply.sh` does NOT.** When the apply drew a `NOTE reconcile-log-name` row, `<ts>` is the stamp in that row's path: write the log at exactly that path, because the owed-derivations record's field 7 names it.
      Write it LAST, after the post-apply re-runs, because it records them. It carries the gates
@@ -1352,9 +1354,9 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
    `REFUSED deliver-pull-writes-moved` follows one `NOTE pull-writes-moved <path> recorded <blob>
    now <blob>` per file the pull wrote whose content changed after its last driver step (`pull.sh
    apply`, `finish` or `merge`): your own edit since then, or a step-7 merge made after the last
-   driver run. Move your own edit out of each named file (re-apply it after the PR merges), or,
-   for a merge, run `pull.sh record <dist> <base> <consumer> <theirs> -- <path>...` naming each
-   such file so the record takes it; then re-run deliver. `record` rewrites that record and nothing
+   driver run. A tracked file the record never named, clean when the pull began and edited since
+   (a file a WORKLIST row sent you to, such as `.gitignore` or `.claude/settings.json`), reads
+   `recorded none`; move your own edits out of each named file first (stash them, or commit them on the working branch, and re-apply after the PR merges); pipeline-state files are never named, and are never reverted; then run ONE `pull.sh record <dist> <base> <consumer> <theirs> -- <path>...` naming every file the pull wrote (a file a row sent you to edit, or a step-7 merge) so the record takes them; then re-run deliver. `record` rewrites that record and nothing
    else, and prints `NOTE pull-writes-recorded <n> <theirs>`; deliver discloses each re-recorded
    path as `NOTE pull-writes-rerecorded <path>` in the commit message and the PR body. It refuses
    `REFUSED record-path-unnamed rc=2` (one `NOTE pull-writes-moved` per path first) while a recorded
@@ -1362,7 +1364,9 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
    rc=2` while the in-flight marker `.ai-dlc-applying` exists and `REFUSED record-no-record rc=2`
    when no record names this `<theirs>`. A delivered pull writes
    `<git-dir>/ai-dlc-pull/pull-writes.delivered`, and the next `<theirs>`'s unfinished check skips a
-   record whose `<theirs>` it names.
+   record whose `<theirs>` it names; a new record (any `apply`, `finish`, `merge` or `record`)
+   removes that file. An `apply` for a `<theirs>` already delivered prints `NOTE
+   pull-delivered-retry`, drops the old record and takes a fresh snapshot.
    `REFUSED deliver-dirty-overlap` follows one `NOTE deliver-dirty-overlap <path> overlap|unrecorded`
    per file that was already dirty when the pull began, that the pull also changed, and whose
    change cannot be separated from your edit (`overlap`: the edits touch the same lines;
@@ -1374,7 +1378,7 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
    is a push-drain row for step 8's drain. `DECIDE push-red <log>` (exit 3) is yours: diagnose the
    red push from that log, fix the cause on this branch, record the diagnosis as a decisions row,
    and run `deliver` again. A fix that edits a file the pull wrote makes that run refuse
-   `deliver-pull-writes-moved`; take that refusal's `pull.sh record -- <path>` remedy for the fix, then run `deliver`
+   `deliver-pull-writes-moved`; move your own edits to the files it names aside (pipeline-state files are never named, and are never reverted), run ONE `pull.sh record <dist> <base> <consumer> <theirs> -- <path>...` naming every such file, then run `deliver`
    again. `ASK base-confirm` (exit 3) is step 8's no-reflog-line case. The driver
    NEVER merges: on `DECIDE pr <url> opened`, the merge and the RETURN PROCEDURE are yours, exactly
    as step 8 states them.

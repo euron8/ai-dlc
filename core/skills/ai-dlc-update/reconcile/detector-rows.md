@@ -1106,7 +1106,7 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
      **`restamp-withheld` on a stamped tree.** Under `--finish` on a tree whose stamp already reads
      `<theirs>` with no `.ai-dlc-applying` (an earlier apply stamped it), both forms replace the
      "Left at `<base>`, and `.ai-dlc-applying` is deliberately left in place" sentence with: "The
-     stamp already reads `<theirs>` (an earlier apply wrote it) and `.ai-dlc-applying` is absent;
+     stamp already reads `<theirs>` (an earlier apply or finish wrote it) and `.ai-dlc-applying` is absent;
      this run changed neither." Every other state keeps the old sentence.
 
      **`pull.sh record` rows.** `record` runs no `apply.sh` check and writes no stamp. On a finished
@@ -1155,7 +1155,9 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
         names content this tree was never approved for.
      2. **`<base>` is the base the tree started from.** It must resolve to a commit, and its
         `core/` tree must equal that of the stamp's own `commit:`. Otherwise
-        `WORKLIST finish-base-unverified`: re-run with the stamp's own `commit:` as `<base>`.
+        `WORKLIST finish-base-unverified`: re-run with the stamp's own `commit:` as `<base>`, except
+        when that commit is `<theirs>` and no marker is left, where the row says there is nothing
+        left to verify and to deliver.
         The `DECISION restamp-withheld` row beside it echoes the `<base>` you typed, so do
         not copy its command on this row.
         A `<base>` typed as `<theirs>` makes every range empty, so this is not optional.

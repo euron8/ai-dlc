@@ -1,6 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 # BL-878 conversion, rows DERIVED from the cell design (no counted run; the combined-tree seed confirms): * 329-46+3 (46 apply starts gone: 34 on the shipped path + 12 on reconcile copies; 3 cli cells start it), apply.sh 34->3, inproc 49 = 7 run.sh passes + 3 cli-cell passes + 39 receipt-bl886 passes.
-298 *
+299 *
 3 core/skills/ai-dlc-update/reconcile/apply.sh
 2 core/git-hooks/pre-push
-49 inproc:core/skills/ai-dlc-update/reconcile/apply.sh
+53 inproc:core/skills/ai-dlc-update/reconcile/apply.sh
