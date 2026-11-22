@@ -28,6 +28,9 @@ if [ -z "$SUBJ" ]; then
   done
 fi
 [ -n "$SUBJ" ] && [ -f "$SUBJ" ] || { echo "receipt: no validate-adversarial-convergence.sh to score" >&2; exit 9; }
+# The validator is asked in process when wrapped (vac-inproc.sh), as a process otherwise.
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")" && pwd)/vac-inproc.sh" || { echo "receipt: cannot source vac-inproc.sh beside this receipt" >&2; exit 9; }
 SEAL="$(cd "$(dirname "$SUBJ")" && pwd)/content-seal.sh"
 [ -f "$SEAL" ] || { echo "receipt: no content-seal.sh beside the validator" >&2; exit 9; }
 command -v git >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || { echo "receipt: git and jq are required" >&2; exit 9; }
@@ -66,7 +69,7 @@ world() { # name underived-v1 commit-v1(yes|no) invoked-v2 underived-v2
   || { echo "receipt: world shape wrong" >&2; exit 9; }
 
 run() { # world -> RC, OUT
-  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/$D/test-strategy-adversarial-p" 2>&1)"; RC=$?
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" rcpt_vac "$SUBJ" --series "$B/$1/$D/test-strategy-adversarial-p" 2>&1)"; RC=$?
 }
 bad=""
 run benign;   [ "$RC" -eq 0 ] && [[ "$OUT" != *"FAIL (B -- CONSISTENCY)"* ]] && [[ "$OUT" == *"recovered from git history"* ]] || bad="$bad benign(rc=$RC)"

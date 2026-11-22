@@ -386,7 +386,7 @@
 #     a row not on the list at origin/main FAILs H14-M4 (the shared m4). `--derive-h14` prints the rows.
 #     BL-1162 ROUTES READ BY THE CLAUSES BELOW (one set per arm, all feeding the H14 row): `git clone` (gi14/vg14/wr14
 #     read `(init|clone)`); a heredoc body line, read raw on a command-position git init/clone (`hd14`, a `#` line
-#     skipped); the quoted body of a `bash|sh|zsh|dash|ksh -c '...'` (`sc14`); a recursive `cp` whose first source word is
+#     skipped) of an EXECUTED heredoc only (`hdx14`: `bash|sh|zsh|dash|ksh` other than `-c`, or a pipe into one); the quoted body of a `bash|sh|zsh|dash|ksh -c '...'` (`sc14`); a recursive `cp` whose first source word is
 #     a `.git` directory (`cp14`); a wrapper body that is a `( )` subshell, or reaches git after `if`/`elif`/`while`/
 #     `until`/`time`, or reaches it through another wrapper that it forwards `$@`/`$*` to (WE rows, closed in the judge;
 #     only a callee defined earlier in the fixture is read). FP SET, how it reached 0: measured with the shipping scan
@@ -539,10 +539,22 @@ function maskcode(s,   out, i, n, c, top, r, re) {
   }
   return out
 }
+# hdx14 <pre> <post>: 1 when the heredoc opened between the masked text PRE (before `<<`) and POST (from its delimiter) feeds a
+# shell: the command owning the redirect is a `bash|sh|zsh|dash|ksh` (options and operands allowed, `-c` excepted: its
+# stdin is not the script), or POST pipes into one. A heredoc written to a file that is run later is not read as executed.
+# NOT read (executed): `env -i ... bash <<X`, `timeout 5 bash <<X`, `nice bash <<X`, `if bash <<X; then`, `! bash <<X`, `$BASH <<X`.
+# FALSE fires: `bash script.sh <<X` (the heredoc is the script's stdin data); `cat <<A | tee f; x | sh` (a later pipeline's `| sh`).
+function hdx14(pre, post,   seg, shre) {
+  shre = "(/usr/bin/|/bin/)?(ba|z|da|k)?sh"
+  seg = pre; sub(/^.*[;&|(){`]/, "", seg)
+  if (seg ~ ("^[[:space:]]*(((exec|command|env|sudo|time|nohup)|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*" shre "([[:space:]]|$)") && seg !~ /[[:space:]]-[A-Za-z]*c([[:space:]]|$)/) return 1
+  if (post ~ ("[|][[:space:]]*((exec|sudo|env|command)[[:space:]]+)?" shre "([[:space:];&)]|$)")) return 1
+  return 0
+}
 function maskl(s,   m, t, p, n, dash, q, c, w, e) {
   INHD = 0
   if (HDN > 0) {
-    INHD = 1; t = s; if (HDD[HDI]) sub(/^\t+/, "", t)
+    INHD = 1; HDXC = HDX[HDI]; t = s; if (HDD[HDI]) sub(/^\t+/, "", t)
     if (t == HDW[HDI]) { HDI++; if (HDI > HDN) { HDN = 0; HDI = 0 } }
     while (length(XS) < length(s)) XS = XS XS
     return substr(XS, 1, length(s))
@@ -558,7 +570,7 @@ function maskl(s,   m, t, p, n, dash, q, c, w, e) {
     c = substr(s, q, 1); w = ""
     if (c == SQ || c == "\"") { e = index(substr(s, q + 1), c); if (e) w = substr(s, q + 1, e - 1) }
     else { if (c == "\\") q++; if (match(substr(s, q), /^[A-Za-z_][A-Za-z0-9_]*/)) w = substr(s, q, RLENGTH) }
-    if (w != "") { HDN++; HDW[HDN] = w; HDD[HDN] = dash; HDI = 1 }
+    if (w != "") { HDN++; HDW[HDN] = w; HDD[HDN] = dash; HDI = 1; HDX[HDN] = hdx14(substr(m, 1, p - 1), substr(m, q)) }
     p = q
   }
   return m
@@ -1104,7 +1116,7 @@ function analyze(   i, s, off, st, q, w, ww, pre, pre0, neg, e, qe, nw, ts, a, h
     }
     if (ISF12) ps13(i)
     if (ISF12 && !HDL[i]) { gi14(i); wr14(i); sc14(i); cp14(i) }
-    if (ISF12 && HDL[i]) hd14(i)
+    if (ISF12 && HDL[i] && HDXL[i]) hd14(i)
     if (!HDL[i]) { h6(i); if (ISRUN || ISL12 || ISF12) h12(i) }
     # H10/H11 facts (the fixture contract's skeleton): a run.sh code line DEFINING ok or bad, and a run.sh code line
     # whose command-position `bash` runs a pre-push hook. Both read the masked line, so a comment, a string (a
@@ -1127,7 +1139,7 @@ pass == 2 && FNR == 1 {
   REL = relof(FILENAME); FX = fxof(REL); ISRUN = (REL == "core/fixtures/" FX "/run.sh"); ISL12 = (REL == "core/fixtures/" FX "/lib.sh"); ISF12 = (FX != "" && FX != "lib" && REL ~ /\.sh$/); loadtools(FX)
   print "F\t" REL
 }
-pass == 2 { NL++; O[NL] = $0; ST0[NL] = STK; M[NL] = maskl($0); HDL[NL] = INHD }
+pass == 2 { NL++; O[NL] = $0; ST0[NL] = STK; M[NL] = maskl($0); HDL[NL] = INHD; HDXL[NL] = INHD ? HDXC : 0 }
 END {
   if (CUR != "") analyze()
   print "T\tH1\t" (T1 + 0); print "T\tH2\t" (T2 + 0); print "T\tH6\t" (T6 + 0)

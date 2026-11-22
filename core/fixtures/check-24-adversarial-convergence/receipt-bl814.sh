@@ -64,6 +64,9 @@ if [ -z "$SUBJ" ]; then
   done
 fi
 [ -n "$SUBJ" ] && [ -f "$SUBJ" ] || { echo "receipt: no validate-adversarial-convergence.sh to score" >&2; exit 9; }
+# The validator is asked in process when wrapped (vac-inproc.sh), as a process otherwise.
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "$0")" && pwd)/vac-inproc.sh" || { echo "receipt: cannot source vac-inproc.sh beside this receipt" >&2; exit 9; }
 command -v git >/dev/null 2>&1 || { echo "receipt: git is not on PATH" >&2; exit 9; }
 # A copy with no constant (the base) is stamped at a release every later constant owes.
 REL="$(sed -n 's/^J3_RELEASE="\([0-9.]*\)"$/\1/p' "$SUBJ")"; [ -n "$REL" ] || REL="99.0.0"
@@ -288,14 +291,14 @@ fi
   || { echo "receipt: twof1/stalepass shape wrong" >&2; exit 9; }
 
 run() { # world stem -> RC, OUT
-  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/$D/$2-adversarial-p" \
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" rcpt_vac "$SUBJ" --series "$B/$1/$D/$2-adversarial-p" \
          --transcript "$B/transcript.jsonl" --transcript-dir "$B" 2>&1)"; RC=$?
 }
 bad=""
 # A failing world's output goes to stderr, so a NOT FIXED line can be read without rebuilding the world.
 run_() { run "$@"; }
 run() {
-  OUT="$(GIT_CEILING_DIRECTORIES="$B" bash "$SUBJ" --series "$B/$1/$D/$2-adversarial-p" \
+  OUT="$(GIT_CEILING_DIRECTORIES="$B" rcpt_vac "$SUBJ" --series "$B/$1/$D/$2-adversarial-p" \
          --transcript "$B/transcript.jsonl" --transcript-dir "$B" 2>&1)"; RC=$?
   [ -z "${RCPT_VERBOSE:-}" ] || printf '== %s rc=%s\n%s\n' "$1" "$RC" "$OUT" >&2; }
 nj() { [[ "$OUT" != *"(J3 -- "* ]]; }

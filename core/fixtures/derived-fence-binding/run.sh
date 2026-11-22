@@ -141,8 +141,14 @@ edit() {
 run_arm() {
   [ -n "${2:-}" ] || { echo "run_arm called with no arm"; return 2; }
   [ "$1" = "$TREE" ] || { echo "run_arm called on $1, but the entry was sourced from $TREE"; return 2; }
+  # The validator's err() writes stderr; a pipe capture can lose a line to EINTR, so the output goes to a
+  # regular file unique to this call and is read back.
+  local ra_cap ra_rc
+  ra_cap="$(mktemp "$WORK/arm.XXXXXX")" || { echo "run_arm: mktemp failed"; return 2; }
   fx_inproc "$TREE/$ARM"
-  ( vem_entry --arms "$2" ) 2>&1
+  ( vem_entry --arms "$2" ) > "$ra_cap" 2>&1; ra_rc=$?
+  cat "$ra_cap"; rm -f "$ra_cap"
+  return "$ra_rc"
 }
 
 # guard_sel <rc> <output> — a validator exit of 2 is a SELECTION or generated-subprogram

@@ -5543,10 +5543,13 @@ RT_EOF
   # anywhere in the pool block (a bare `unset NAME` or a mention does NOT define it, so `FXCOUNT_LEGACY_OK`, unset at
   # pool line 3306 of the distribution hook, stays a candidate; a first narrowing on any bare word acquitted it and
   # was dropped); 17 names remain per hook, all supplied from outside the pool; (2) read them only AFTER the pool
-  # block (a top-level assignment before it is configuration the pool consumes); (3) only at COLUMN 0 (the distribution
-  # hook's own post-pool functions set `AI_DLC_FX_CL_TREE`, `FXCOUNT_JUDGE`, `FXCOUNT_KEYROWS`, `FXCOUNT_LEGACY_STORE`,
-  # `FXCOUNT_LEGACY_OK` on indented lines, and `( unset FXCOUNT_JUDGE; ... )`: 7 rows before this step, none at column
-  # 0); (4) five exact names are exempt in the pool pre-pass, an exact-name list and never a prefix or pattern:
+  # block (a top-level assignment before it is configuration the pool consumes); (3) an INDENTED line is read too, except
+  # the six (enclosing function, NAME) pairs in the PAIR list below, the distribution hook's own setters:
+  # `fixture_suite_step` `AI_DLC_FX_CL_TREE`; `fxcount_arm` `FXCOUNT_JUDGE`, `FXCOUNT_KEYROWS`, `FXCOUNT_LEGACY_STORE`,
+  # `FXCOUNT_LEGACY_OK`; `inproc_pending_step` `FXCOUNT_JUDGE` (7 rows without the list, 0 with it). The function is the
+  # nearest column-0 `name()` line above, cleared by a column-0 `}`; the key is the pair, never the name alone, so
+  # `FXCOUNT_LEGACY_OK=1` indented in any other function (a new one appended after the pool) prints. The list grows
+  # only by a deliberate edit; (4) five exact names are exempt in the pool pre-pass, an exact-name list and never a prefix or pattern:
   # `PREPUSH_CL_ENTRY` (set by the distribution hook's main body at column 0) and the four BL-878 skip-set record
   # names `SKIPS_LOG`, `SKIPS_SHAS`, `SKIPS_TREE`, `SKIPS_KEY`. The distribution hook's real-push entry sets them at
   # column 0 (`.githooks/pre-push:4603` `SKIPS_LOG=""; ... SKIPS_SHAS=""; SKIPS_TREE=""; SKIPS_KEY="-"`, and :4606
@@ -5558,8 +5561,10 @@ RT_EOF
   # hooks; before the four skip-set exemptions the distribution hook printed four rows, all on :4603.
   # The measured escape `FXCOUNT_LEGACY_OK=1` appended at the end of EACH hook prints a row on both. Hits print
   # `(read-only)` after the form. Real-corpus candidate matches of the new `select` and `for NAME;` regexes, all quiet
-  # because the name is not a pool name, are enumerated in the BL-1161 LANDED paragraph. Not covered: an indented
-  # override inside a post-pool function, and arithmetic after the first `))` of a nested group.
+  # because the name is not a pool name, are enumerated in the BL-1161 LANDED paragraph. An indented override of a
+  # read-only name inside a post-pool function is read (the PAIR list above). Arithmetic after the first `))` of a nested group: no offender found (1,900
+  # generated nested shapes, 0 missed), so it needs no rule. NOT covered: multi-line arithmetic (`((` on one line and
+  # `NAME++ ))` on the next; `x=$((` then `((1)) + NAME++ ))`) and the legacy `$[ NAME++ ]` form.
   # The quote state is a STACK carried across lines (cut() blanks a multi-line string as a whole, so the line that
   # closes an awk string is not read as an opening quote) and resets only at the start of each hook. `s` is a
   # single-quoted span, `d` a double-quoted one; inside a double-quoted span a dollar-paren pushes `c`, a command
@@ -5603,10 +5608,10 @@ RT_EOF
         RAW = RAW c; BLK = BLK c; DQ = DQ c
       }
     }
-    function roskip(i) { return i <= pe || L[i] ~ /^[ \t]/ }
+    function roskip(i, nm) { return i <= pe || (L[i] ~ /^[ \t]/ && ((CF SUBSEP nm) in PAIR)) }
     function hit(i, nm, how,   k) {
       if (nm in G) k = "global"; else if (nm in F) k = "function"; else return
-      if ((nm in RO) && roskip(i)) return
+      if ((nm in RO) && roskip(i, nm)) return
       if ((i SUBSEP nm) in SEEN) return
       SEEN[i SUBSEP nm] = 1
       print nf "\t" i "\t" k "\t" nm (how == "" ? "" : " [" how "]") (nm in RO ? " (read-only)" : "")
@@ -5647,7 +5652,12 @@ RT_EOF
     }
     function scan(   i, s, t, rest, pre, nm, kind, n, inblk, dep, u, here, op, r, b, x, was, aa, v, w) {
       if (nf == "") return
-      n = 0; pb = 0; pe = 0; ub = 0; ue = 0; QS = ""; inblk = 0; split("", SEEN)
+      n = 0; pb = 0; pe = 0; ub = 0; ue = 0; QS = ""; inblk = 0; CF = ""; split("", SEEN)
+      split("", PAIR)
+      PAIR["fixture_suite_step" SUBSEP "AI_DLC_FX_CL_TREE"] = 1
+      PAIR["fxcount_arm" SUBSEP "FXCOUNT_JUDGE"] = 1; PAIR["fxcount_arm" SUBSEP "FXCOUNT_KEYROWS"] = 1
+      PAIR["fxcount_arm" SUBSEP "FXCOUNT_LEGACY_STORE"] = 1; PAIR["fxcount_arm" SUBSEP "FXCOUNT_LEGACY_OK"] = 1
+      PAIR["inproc_pending_step" SUBSEP "FXCOUNT_JUDGE"] = 1
       for (i = 1; i <= nl; i++) {
         if (L[i] == "# FIXTURE_POOL_BEGIN") pb = i
         else if (L[i] == "# FIXTURE_POOL_END") pe = i
@@ -5680,6 +5690,8 @@ RT_EOF
       for (i = 1; i <= nl; i++) {
         if (nf == cons && index(L[i], "# pool-shadow:") && !(ub && ue > ub && i > ub && i < ue)) print nf "\t" i "\tMARKER\t-"
         s = L[i]
+        if (match(s, /^[A-Za-z_][A-Za-z0-9_]*[ \t]*\(\)/)) { CF = substr(s, 1, RLENGTH); sub(/[ \t]*\(\)$/, "", CF) }
+        else if (s ~ /^\}/) CF = ""
         was = QS; cut(s); r = RAW; b = BLK
         if (was != "" && QS == "" && s ~ /^[ \t]*#/) print nf "\t" i "\tCOMCLOSE\t-"
         if (!inblk && s ~ /^[ \t]*\( /) { inblk = 1; dep = 0; op = i }
@@ -5714,14 +5726,14 @@ RT_EOF
           if (pre == "$") continue
           if (t ~ /=$/) { nm = t; sub(/(\[[^]]*\])?\+?=$/, "", nm); kind = "global"; if (!(nm in G)) continue }
           else { nm = t; sub(/[ \t]*\(\)$/, "", nm); kind = "function"; if (!(nm in F)) continue }
-          if ((nm in RO) && roskip(i)) continue
+          if ((nm in RO) && roskip(i, nm)) continue
           if ((i SUBSEP nm) in SEEN) continue
           SEEN[i SUBSEP nm] = 1
           print nf "\t" i "\t" kind "\t" nm (nm in RO ? " (read-only)" : "")
         }
         if (match(r, /(^|[;&|({ \t])rec_home[ \t]+[A-Za-z_][A-Za-z0-9_]*/)) {
           t = substr(r, RSTART, RLENGTH); sub(/.*rec_home[ \t]+/, "", t)
-          if ((t in G) && !((t in RO) && roskip(i))) print nf "\t" i "\tglobal\t" t (t in RO ? " (read-only)" : "")
+          if ((t in G) && !((t in RO) && roskip(i, t))) print nf "\t" i "\tglobal\t" t (t in RO ? " (read-only)" : "")
         }
         rest = b
         while (match(rest, /(^|[;&|({ \t])(for|select)[ \t]+[A-Za-z_][A-Za-z0-9_]*([ \t]+in([ \t]|$)|[ \t]*(;|$))/)) {

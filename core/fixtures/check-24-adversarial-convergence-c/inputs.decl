@@ -24,9 +24,9 @@ core/fixtures/check-24-adversarial-convergence-c/run.sh
 # The shards exec the parent run.sh and the parent seeds from its own seed.sh; a sibling directory is not copied unless declared.
 core/fixtures/check-24-adversarial-convergence/run.sh
 core/fixtures/check-24-adversarial-convergence/seed.sh
-# The BL-733 and BL-736 receipts, which units elic and j2h drive as arms (each builds its own worlds).
-core/fixtures/check-24-adversarial-convergence/receipt-bl733.sh
+# The BL-736 receipt (unit j2h), which builds its own worlds, and vac-inproc.sh, the in-process helper it and receipt-bl1175c.sh source (BL-878).
 core/fixtures/check-24-adversarial-convergence/receipt-bl736.sh
+core/fixtures/check-24-adversarial-convergence/vac-inproc.sh
 # The BL-1175 item 13 receipt (unit j2h), which seals its own worlds through content-seal.sh.
 core/fixtures/check-24-adversarial-convergence/receipt-bl1175c.sh
 core/scripts/content-seal.sh
