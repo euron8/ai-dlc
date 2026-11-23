@@ -7,12 +7,8 @@ carrier for the shipped version; this file binds work in this repo.
 
 ## Know which channel you are writing into
 
-- **`CLAUDE.md` and any `.claude/rules/` file with no `paths:` key** are re-injected on every compaction of
-  every session and reach subagents. This is the only durable channel and the expensive one;
-  `scripts/validate-claude-rules.sh` (arm A6) holds it to a byte ceiling.
-- **A `paths:`-scoped rule file** loads on the first matching Read or Edit, ONCE per session; Write, Grep, Glob
-  and Bash do not fire it. It is not re-injected after a compaction, and a subagent's read loads it inside that
-  subagent only.
+- **The durable channel** (`CLAUDE.md` and every `.claude/rules/` file with no `paths:`) reaches subagents and
+  is the expensive one. It and a **`paths:`-scoped rule file** load as `CLAUDE.md` states.
 - **A validator arm** runs whether anyone read anything and is the only channel that blocks.
 
 Scope a rule to `paths:` only when its work reliably begins with a matching read, a mechanism carries it

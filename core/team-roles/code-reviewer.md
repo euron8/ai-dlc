@@ -25,28 +25,6 @@ source; do not infer either value from anywhere else.
   does NOT make any of them. After gate 3 passes, the lead dispatches one
   `code-reviewer` as the closing writer (see "As the Closing Writer"), and the
   closing writer makes all of them.
-- The closing writer owns the **`done` transition**: the closing writer writes
-  `status: done` to `sprint-status.yaml` and the story file `Status:` header, in
-  the closing commit. Dev owns the earlier `status: review` write (`dev.md`); QA verifies
-  the two files match and rejects on mismatch. Three roles write this file by
-  design — the transitions are what separate them.
-- **With `done` the closing writer writes the story's `deferred_acs`, in BOTH canonical views**
-  (`_bmad-output/implementation-artifacts/sprint-status.yaml` and
-  `_bmad-output/planning-artifacts/sprint-status.yaml`): the id of every AC for
-  which QA's verdict recorded a deferral predicate (`qa.md` "Deferred-AC
-  discharge predicate"), as ONE single-line list — `deferred_acs: [AC5, AC6]`.
-  If the story has no deferred AC, the closing writer writes `deferred_acs: []`. Never a block list
-  and never a list wrapped over two lines: `sprint-status.sh check-stories`
-  reports either as a FINDING and `close` refuses on it. deploy-validate §4b
-  clears the ids; `close` refuses the sprint while any remain.
-  At `done` the closing writer also writes a `## Deferred ACs` section into the story file.
-  Each entry opens with `- **<id>**`, the IDENTICAL string written to `deferred_acs`,
-  and carries that AC's predicate text copied from the verdict file the gate-2 check read
-  (the latest-pass QA verdict (the highest `-p<N>`, or the unsuffixed file when there is only pass 1), which the closing writer reads), and cites that verdict path.
-  A story with no deferred AC gets the section with body `None.`.
-  The section sits directly BEFORE `## Dev Agent Record`;
-  in a story with no Dev Agent Record it is the last `## ` section, above any provenance block.
-  deploy-validate §4b reads each owed predicate from that section.
 
 ## Responsibilities
 
@@ -71,7 +49,7 @@ source; do not infer either value from anywhere else.
   writes the story's `deferred_acs` beside `status: done` in both views, and
   makes the upstream close-out, all in the closing commit. As a gate-1 reviewer
   you do NOT make these writes. The closing writer also writes the story file's
-  `## Deferred ACs` section (Ownership above) in that commit.
+  `## Deferred ACs` section (the closing-writer appendix) in that commit.
 
 ## Constraints
 
@@ -397,26 +375,7 @@ framework and in the same commit, cannot be deferred to a follow-up or
 to deploy-validate. A live or deployed-page AC is deferred only under
 `qa.md`'s "Deferred-AC discharge predicate (HARD GATE)".
 
-### Stubs in Execution Path = Critical
-
-A stub marker (`stub`, `TODO`, `FIXME`, `wired later`, `Phase N`,
-`NotImplementedError`) in a hot-path file (`.py`, `.ts`, `.tsx`, `.js`,
-`.sh`, `.sql`, `.github/workflows/**.yml`) is a **Critical** finding
-UNLESS the stub's surrounding comment block satisfies ALL FOUR
-elements enforced by `gate-validation.md` Check 16:
-
-1. Numbered carry-over item reference — regex `Item [0-9]+`.
-2. OPEN or IN-SPRINT status in
-   `_bmad-output/planning-artifacts/carry-over-backlog.md` for that
-   item (regex `^- Item [0-9]+.*(OPEN|IN SPRINT [0-9]+)`).
-3. `file:line` reference — regex `(^|\s)\S+:[0-9]+(\s|$)`.
-4. `deferral-reason:` line matching `^deferral-reason:\s+\S.{19,}`
-   AND reason body has ≥10 non-whitespace characters.
-
-"Will add in follow-up" with no item reference, deferral-reason `TBD`,
-or a CLOSED item reference → **Critical**, not deferrable. Reviewer's
-only valid responses: (a) APPROVED if all four elements are present
-and verifiable; (b) NEEDS_REWORK naming the missing element(s).
+Read `.claude/team-roles/appendix/code-reviewer-stubs.md` when the diff carries a stub marker (`stub`, `TODO`, `FIXME`, `wired later`, `Phase N`, `NotImplementedError`) in a hot-path file. It holds the Stubs in Execution Path classification.
 
 ### Missing Skill-Invocation Provenance Block = Critical
 

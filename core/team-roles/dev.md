@@ -100,24 +100,11 @@ carries the same instruction; this section is its standing copy.
   commit each phase atomically — in particular, a symbol-removal commit BEFORE
   the commit that updates its callers — so a mid-flight interruption leaves an
   inspectable `git diff` rather than a half-applied orphan.
-- The lead may route to `dev` stories that meet ALL of the following criteria
-  when `aiDlcRoles.dev` names a local model:
-  - The story has a precise implementation checklist with specific functions,
-    file paths, input/output contracts, and test cases defined in the ACs.
-  - No architectural judgment or cross-file reasoning beyond the files listed
-    in the story.
-  - No ambiguous or open-ended acceptance criteria.
-  - The implementation does not require reading large amounts of existing code
-    to understand context (the story spec provides all necessary context).
-  - The story does not involve complex multi-step test-fix-retest cycles.
-  Local model assignments are a cost optimization for high-volume, fully
-  prescribed work. If you are running on a local model and encounter a task
-  that exceeds these boundaries, message the lead (`SendMessage` `to: "main"`) immediately. The lead will
-  re-route the story to a role whose configured model can carry it rather than
-  having you struggle through it.
 - Post-approval cleanup commits (applying review suggestions, completing
   follow-up fixes found during visual review) must reference the originating
   story or review in the commit message body.
+
+Read `.claude/team-roles/appendix/dev-local-model.md` when `aiDlcRoles.dev` names a local model: it holds which stories the lead may route to you and what you do when a task exceeds them.
 
 ## Context Loading
 
@@ -220,15 +207,6 @@ Run every full-suite run (step 6) through `scripts/ai-dlc/suite-admission.sh --s
           full-file or full-suite runs when the metric claims to cover
           the full scope. Reviewer will re-run the embedded command;
           output mismatch is an Important-severity finding.
-    - [ ] **Cross-CI plugin-installation parity (HARD GATE):** If this
-          story adds a pytest or vitest plugin dependency or CLI flag,
-          grep `.github/workflows/**` for every `pytest` or `vitest`
-          invocation. For each invocation, verify either (a) the plugin
-          is installed in that job's deps install step, or (b) the flag
-          is not applied to that invocation (co-located pattern).
-          Log the grep output and plugin-install confirmation in the
-          story file under "Cross-CI Parity". Violation = Critical
-          code-review finding.
     - [ ] **Mutation self-check (mechanical, run BEFORE gate-1 submission).**
           For every new or changed behavioral guard, fix, or
           value-correctness oracle, revert or comment out the production
@@ -260,12 +238,6 @@ Run every full-suite run (step 6) through `scripts/ai-dlc/suite-admission.sh --s
           For a non-Python target pass `--syntax-check` with the language's
           parser (`'bash -n'`, `'node --check'`); without it a non-parsing
           mutant of that file can still read PROVEN.
-    - [ ] **Naming-implies-behavior assertion.** A method whose name asserts a
-          behavior (`batched`/`bulk`/`atomic`/`chunked`/…) MUST be proven by
-          `mock.call_count` / `call_args` on an N≥2 fixture, never by a
-          source-string check (e.g. `assertIn("batch", body)`). A name-only
-          test stays GREEN against a degenerate single-pass implementation;
-          code-review classifies such an AC unimplemented and QA rejects.
     - [ ] **Orphan-fixture check.** Every new or changed fixture file MUST be
           grep-referenced by ≥1 test file in the SAME PR (by filename), else
           delete it or add a one-line justification. An unreferenced fixture
@@ -274,13 +246,11 @@ Run every full-suite run (step 6) through `scripts/ai-dlc/suite-admission.sh --s
           `git diff` and read whether the intended change is already in the
           working tree. If it is present and uncommitted, commit it; do not
           apply it a second time.
-    - [ ] **Wall-clock ordering evidence.** For an AC whose correctness
-          depends on the wall-clock ordering of concurrent processes
-          (process reaps, signal or parent-PID races, spawn-then-kill), the
-          gate evidence is a repeated live or near-live harness: N≥10
-          real-process runs, every one clean, with the command and all
-          results logged in the story file. Mocked-timing unit tests and a
-          single live run do not satisfy the AC; mocked tests MAY supplement.
+
+Read `.claude/team-roles/appendix/dev-validation-evaluation.md` when your story requires a validation evaluation (`/bmad-party-mode`, `/bmad-advanced-elicitation`, `/bmad-review lenses=adversarial`, `/bmad-prd`, or the native `ai-dlc-adversary-review` convergence review), before you mark the task complete: it holds the provenance block the artifact carries and the `validate-provenance-block.sh` run that checks it.
+
+Read `.claude/team-roles/appendix/dev-conditional-checks.md` before you mark the task complete when your story adds a pytest or vitest plugin dependency or CLI flag, adds or changes a method whose name asserts a behavior (`batched`/`bulk`/`atomic`/`chunked`/…), or carries an AC whose correctness depends on the wall-clock ordering of concurrent processes: it holds the pre-submission checks those stories add.
+
 - Before reporting to gate 1, dispatch exactly one `pre-reviewer` with the
   `Agent` tool: `subagent_type: pre-reviewer`, no `name`, and a brief that
   carries the standing line *"Your operating contract is
@@ -290,25 +260,6 @@ Run every full-suite run (step 6) through `scripts/ai-dlc/suite-admission.sh --s
   `shard:` line. Repair each finding in the same session, or record in the
   Dev Agent Record why you did not. This check is part of your own
   assignment, not a re-delegation of it. Gate 1 is unchanged.
-- When a story requires a validation evaluation (`/bmad-party-mode`,
-  `/bmad-advanced-elicitation`, `/bmad-review lenses=adversarial`,
-  `/bmad-prd`, or the native `ai-dlc-adversary-review` convergence
-  review), the artifact produced MUST carry a
-  `SKILL_INVOCATION_PROVENANCE v1` block (schema in SKILL.md Rule 3).
-  Producing validation-shaped output without the real independent subagent
-  behind it is a Rule 3 violation. Pre-submission: run
-  `scripts/ai-dlc/validate-provenance-block.sh <artifact> --require-skill <the
-  evaluation this story's contract requires>` and confirm exit 0 — e.g.
-  `--require-skill ai-dlc-adversary-review` for a convergence review,
-  `--require-skill bmad-party-mode` for a party-mode artifact.
-  **The flag is what gives the check teeth.** Flagless, an artifact with NO
-  block at all FAILS unless `--allow-missing` declares that acceptable; where a
-  block IS present, flagless checks it is well-formed and names a KNOWN
-  skill — but never that it names the RIGHT one. A story artifact citing `bmad-party-mode` when its contract
-  required the convergence review exits 0 flagless and exits 1 pinned; that
-  gap is the whole check. Name the skill the contract requires, decided BEFORE
-  reading the block — pinning whatever the block happens to say is the same
-  vacuum with extra steps.
 16. Mark the task complete (QA will then validate).
 
 ## QA Handoff Evidence

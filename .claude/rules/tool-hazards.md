@@ -33,7 +33,7 @@ mutations. Where a Bash result has to be exact, DERIVE it: `md5`, `wc -c`, `cmp 
 
 - **Never kill by pattern.** Stop only a process you started, by a recorded pid or group. A plain
   `hermetic-run.sh` run in the distribution records nothing; `scripts/seed-verdict-store.sh` records into
-  `counted-<vk>`, which a push reads. Never point `AI_DLC_VERDICT_STORE` at a mktemp dir: those passes are lost.
+  `counted-<vk>`, which a push reads.
 - **A backgrounded `sleep` returns immediately.** Block on the condition instead.
 - **A claim about a call's output must not share a parallel block with the call**, and cleanup that
   presupposes an action's success (a branch delete beside its merge) must not either.
@@ -49,6 +49,8 @@ mutations. Where a Bash result has to be exact, DERIVE it: `md5`, `wc -c`, `cmp 
   plain output reaches nobody. A turn that opens with a `<cross-session-message>` does not end without one.
 - **Never brief a load generator** (`yes > /dev/null` and the like); it outlives the hand. Force the suspected
   interleaving in a scratch copy instead.
+- **TaskStop leaves a hand's backgrounded scripts running.** `lsof +D` the hand's scratch dir, read every
+  `ps -g <pgid>` member before any kill, `lsof` again (expect 0) before deleting.
 
 ## awk's `getline < file` reads an unopenable file as an empty one
 
@@ -105,6 +107,7 @@ mutation and never belongs in a read-only probe. When `git status` reads cleaner
 - `--follow` answers about ONE path. Derive a rename map (`-M --diff-filter=R --name-status` over all refs) and
   join it.
 - Commit or stash before any `git checkout` that names a path.
+- A containment test `git apply -R --check --cached` reads the CURRENT checkout's index, not `origin/main`. Run it with `GIT_INDEX_FILE=<scratch>/x.index` after `git read-tree origin/main`, with a landed branch as positive control.
 
 ## A validator that resolves its own root ignores the probe tree you built for it
 
