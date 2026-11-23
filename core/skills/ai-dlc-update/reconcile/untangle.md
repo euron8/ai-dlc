@@ -37,8 +37,8 @@ into an `extensions/`/`overrides/` file.
 `_bmad-output/ai-dlc-update/untangle-plan.md` (own filename; coexists with the
 ordinary pull's `reconcile-report.md` in the same directory) with a header
 stating `Generated: <UTC timestamp> by ai-dlc-update skill_version <X> @
-<sha>` — same reason as step 5's report: a fixed filename overwritten on
-every run, so the stamp is the only way to tell a fresh plan from a stale one
+<sha>` — the plan is a fixed filename overwritten on every run, so the stamp
+is the only way to tell a fresh plan from a stale one
 left over from before a skill update. Then: per-file bucket
 tally, proposed `extensions/`/`overrides/` file list (`hooks:`/`shadows:`+`id`
 per the entry contracts in `extensions/README.md`/`overrides/README.md`),

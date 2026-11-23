@@ -317,7 +317,6 @@ FE_C="$WORK/fe"; rm -rf "$FE_C"; cp -R "$CONSUMER" "$FE_C" && mkdir -p "$FE_C/.c
   && printf '{"paths":[{"transient":true,"ignore":"scratch-x/"}]}\n' > "$FE_C/.claude/schemas/pipeline-state-paths.json" \
   && git -C "$FE_C" init -q 2>/dev/null
 FE_O="$(TMPDIR="$WORK/no-such-tmpdir" AP_S="$APPLY" ap_eng --finish "$DIST" "$BASE" "$FE_C" "$THEIRS" 2>&1)"
-printf "%s\n" "$FE_O" > /tmp/fe264.out
 FE_R="$(awk -F'\t' '$2=="staging-refused" && index($4, "transient path patterns")' <<<"$FE_O")"
 if [ ! -e "$FE_C/.claude/.ai-dlc-applying" ] && [ "$(grep -c . <<<"$FE_R")" = 1 ] && grep -qF 'post-write-gates' <<<"$FE_R" && ! grep -qF 're-run --finish' <<<"$FE_R"; then
   ok "FE1 a staging refusal after the stamp under --finish (no marker) names no --finish re-run"

@@ -2248,7 +2248,9 @@ hk_seam() {
 "
   done
   st="$(mktemp -d "$WORK/hk-seam.XXXXXX")" || return 1
-  BASE="$BASE" CONSUMER="$2" DIST="$3" THEIRS="$4" AP_TMP="$st" bash -c '
+  # rec_cmd_args is apply.sh top-level state (the four positionals single-quoted) the row's remedy prints; the
+  # worlds' paths carry no quote, so its value is the four values each in single quotes.
+  BASE="$BASE" CONSUMER="$2" DIST="$3" THEIRS="$4" AP_TMP="$st" rec_cmd_args="'$3' '$BASE' '$2' '$4' " bash -c '
     handback=0; worklist_n=0; reapply_owed=0; reapply_remedy="hk-seam: no reapply row is drawn here"
     FINISH=1; ap_stage_dead=0; APPLYING="$AP_TMP/applying"
     NL_CH="
