@@ -165,63 +165,6 @@ For each completed task, verify:
   exercises the claimed behavior; false positive is a pure-constant-output
   AC with no possible degenerate impl (name the exemption); remove when
   discriminator ACs carry RED evidence by convention upstream.
-- [ ] **Per-locked-requirement adversarial null-impl (HARD GATE).** For each
-  locked requirement in the story, QA names the simplest wrong
-  (degenerate-but-type-valid) implementation and confirms ≥1 mapped AC REDs
-  against it. If NO AC REDs against the named degenerate impl, the
-  requirement is unimplemented-but-green — REJECT. Per-element ACs ("per
-  item / per record / per element") MUST be verified on an N≥2 fixture
-  asserting call-count / per-element args, never a source-string presence
-  check. Catches a requirement satisfied only in appearance; false positive
-  is a requirement whose only type-valid impl is the correct one (name it);
-  remove when locked-requirement discrimination is enforced by a
-  producer-side gate.
-- [ ] **An AC that omits a locked requirement's action is a deviation for the operator (HARD GATE).**
-  For each AC whose precondition falls inside the scope of a locked
-  requirement's verbatim text, compare the AC's expected outcome with every
-  action that text requires.
-  An AC whose expected outcome omits an action the text requires is a requirement divergence, never a PASS.
-  A precondition under which the required action has nothing to act on (an empty balance, an empty set) does not trigger this item.
-  QA files a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence`
-  (SKILL.md Rule 12), quoting the LR id, its verbatim text and the omitted
-  action, through the Escalation Protocol below.
-  QA writes `Verdict: NEEDS_REWORK` with a `####` finding naming the HARD_BLOCK id; the lead puts it to the operator by `AskUserQuestion` under Rule 3(a), with no flag, before dispatching dev rework.
-  If the operator accepts the degraded branch (`descope` of the omitted action), QA re-validates to PASS citing the entry; `do-now` proceeds as rework.
-  Exempt only when (1) the degraded outcome is the one the requirement's own
-  text prescribes (it asks to fail closed, or to degrade to exactly that
-  value), (2) a Tier 1 `HARD_BLOCK` with blocker type `requirement divergence` that cites this LR and names this degraded branch already carries a recorded operator disposition (cite that entry), or
-  (3) the AC's outcome performs none of the requirement's actions and reports that to the caller as a non-success (a refusal or error status, a disabled control, a dry-run marker), unless the requirement's verbatim text forbids that refusal.
-  An entry of another blocker type, or one that names no LR, does not exempt.
-  An answer to a trade-off is not a disposition of a requirement the AC no
-  longer delivers. Catches a skip or degraded branch written into an AC
-  against a locked requirement and passed as specified, so the requirement
-  ships undelivered and the operator first learns of it live; false positive
-  is an action the text requires only under a precondition the AC excludes
-  (name the precondition); remove when the stories step refuses an AC that
-  omits a locked requirement's action without a recorded disposition.
-- [ ] **Protective-direction check (HARD GATE).** Any AC guarding a
-  bound / limit / ceiling MUST assert the bound in the protective direction —
-  the side that constrains the risk — not merely the absence of the known
-  failure mode. REJECT if the AC stays green under a wrong-side bound.
-  Catches a bound assertion that still passes when the guard is inverted;
-  false positive is a symmetric bound where either direction is protective
-  (record which side is asserted); remove when bound ACs are generated from
-  a directional template.
-- [ ] **Perf-bound input-shape regime (HARD GATE).** Any AC bounding a
-  performance metric (latency, throughput, memory, query/allocation count)
-  MUST name the input-shape regime in which the bound holds — the concrete
-  size parameters that drive cost (e.g. collection size, fan-out /
-  cardinality, nesting or recursion depth) — and MUST be tested against a
-  fixture at the UPPER BOUND of observed / expected production load for
-  those parameters, not a convenience-sized fixture. A perf AC with no named
-  regime is unfalsifiable (it passes at any size the author picks); a perf
-  AC tested only at a small fixture is green by under-load and says nothing
-  about production. REJECT either. Catches a perf bound "proven" at a
-  fixture smaller than production, so the metric blows the bound live while
-  the AC stays green; false positive is a regime-independent bound (a
-  constant-time operation — name the exemption); remove when perf ACs are
-  generated against a load fixture derived from measured production
-  percentiles.
 - [ ] **Fixture-shape check (HARD GATE).** A fixture representing a
   producer's / writer's output MUST be constructed via the real write path
   (or a shape factory importing the writer's field list), not a
@@ -357,15 +300,6 @@ For each completed task, verify:
   A wrapper the project's coding conventions declare as a run form (a backticked `<program> <declared options> -- <pytest args>` span)
   is a canonical run when it passes only the declared options, each with its declared value, then `--` and the canonical pytest arguments; `--record-run` holds the
   invocation to RUN-FILTER only before it executes, the rule the merge holds the recorded invocation to at check time, and refuses with nothing run.
-- [ ] **Permitted pre-existing failures are enumerated by test ID (HARD GATE).**
-  If the story allows the suite to be non-green on failures it did not cause,
-  the allowance MUST list the failing test IDs, and the run MUST fail exactly
-  those. A count is not an identity: "11 failed" matching a baseline of "11
-  failed" can be a completely different 11, and a regression introduced by this
-  story then lands looking like the baseline. Catches a new failure swapping
-  places with a tolerated one; false positive is a parametrized ID that changes
-  legitimately (record the new ID and why); remove when the baseline is stored
-  as a machine-checked ID set rather than prose.
 - [ ] Code follows conventions in `docs/coding-conventions.md`
 - [ ] Commit messages follow conventional commits format
 - [ ] No files modified outside the teammate's ownership boundary
@@ -400,7 +334,6 @@ For each completed task, verify:
     coverage for a UI change. If the project has an existing browser
     test framework, UI smoke tests MUST use it.
   - **If smoke tests are missing, wrong type, or insufficient: REJECT.**
-- [ ] **Live-run attempted under envvar gate (HARD GATE):** For stories whose smoke tests include a live-against-production path gated by an envvar (e.g., `SMOKE_TESTS_LIVE=1`), verify the Dev Agent Record documents that the live run was attempted (not merely that the code path exists). Missing live-run attempt evidence = REJECT. A passing test suite run with the envvar unset does NOT satisfy this gate — the live path was skipped, not exercised.
 - [ ] **Producer-driven context testing (HARD GATE):** Tests for code
   that consumes a produced data structure (context object, parsed
   config, accumulated result) MUST obtain that input by driving the
@@ -430,6 +363,10 @@ For each completed task, verify:
   malformed `SKILL_INVOCATION_PROVENANCE v1` block = REJECT. Inline
   role-play without the Skill tool invocation is a structural
   reject per gate-validation.md Check 17.
+
+Read `.claude/team-roles/appendix/qa-locked-requirements.md` when the story carries a `LOCKED_REQUIREMENT`. It holds the per-locked-requirement null-impl item and the item for an AC that omits a locked requirement's action, both HARD GATE items of this checklist.
+
+Read `.claude/team-roles/appendix/qa-conditional-acs.md` when the story carries an AC guarding a bound, limit or ceiling, an AC bounding a performance metric, an allowance for pre-existing suite failures, or a smoke test whose live path is gated by an envvar. It holds those four HARD GATE items of this checklist.
 
 ## Communication
 
@@ -610,7 +547,7 @@ Follow the three-tier escalation model in SKILL.md Rule 12:
   Human resolves at production validation checkpoint.
   A `requirement divergence` HARD_BLOCK from the Validation Checklist is the
   exception: QA writes `Verdict: NEEDS_REWORK` instead of marking the task
-  BLOCKED, and the lead asks the operator (see that item).
+  BLOCKED, and the lead asks the operator (see the locked-requirements appendix).
 - **DECIDED_AUTONOMOUSLY** (ambiguous acceptance criteria that can be
   reasonably interpreted, judgment calls on test coverage sufficiency):
   Make the best decision, document rationale in

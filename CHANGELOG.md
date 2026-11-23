@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1234.0] - 2026-11-22
+
+### Six role files slim down (gate-adjudicator now under 16 KiB), the fixture-hygiene check reads more executed heredocs and git-through-variable wrappers and stops two false fires, and tool-hazards gains the `git apply -R --check --cached` bullet (BL-1187 and BL-1162 advance; BL-1224 landed)
+
+- Role files, for every consumer's agents. Situational paragraphs of qa, code-reviewer, gate-adjudicator, adversary, dev and remediator moved whole to `core/team-roles/appendix/`, each read on demand through a pointer. Bytes before to after: qa 42,835 to 37,721, code-reviewer 36,697 to 34,092, gate-adjudicator 16,667 to 16,349 (now under 16,384), adversary 35,418 to 33,901, dev 33,375 to 30,484, remediator 32,207 to 30,870. The other five stay over 16,384 B because what remains is bound by invariants, pins, sentinels or other readers, or is needed on every dispatch (BL-1187 advances; item 3 stays owed).
+- For ai-dlc maintainers. The fixture-hygiene check H14 now reads more executed heredocs and git calls made through a variable wrapper, and stops two false fires (BL-1162).
+- For ai-dlc maintainers. `tool-hazards.md` gains the bullet on `git apply -R --check --cached` reading the checkout's index and the `read-tree` into a scratch index that answers it, with cuts elsewhere in the durable channel so arm A6 held at 48282 of 48530 (BL-1224 landed); the TaskStop bullet below takes it to 48470 of 48530, 60 bytes of headroom.
+- For ai-dlc maintainers. A `tool-hazards.md` bullet now tells a session how to clean up after stopping a hand: list what still holds its scratch directory, read each process of its group before any kill, and re-check before deleting.
+- Owed, not fixed here: the BL-819 E1 orphans are filed.
+
 ## [0.1233.0] - 2026-11-22
 
 ### The update skill's subcommand list can no longer drift from pull.sh, the gate reads open escalations through the status validator instead of the whole file, and a push names the consumer-layout units it skipped and keeps a placement record no other tree can overwrite (BL-1223 closes; BL-1212, BL-1221 and BL-878 advance)

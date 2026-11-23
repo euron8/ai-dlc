@@ -48957,3 +48957,22 @@ Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
 
 verify: sh f=scripts/validate-enforcement-map.sh; [ -f core/skills/ai-dlc-update/reconcile/pull.sh ] || exit 9; [ -f core/skills/ai-dlc-update/SKILL.md ] || exit 9; [ -f $f ] || exit 9; grep -q '^# --- I133:' $f || exit 1; bash $f --arms I133 >/dev/null 2>&1 || exit 1
 
+## BL-1224 — a containment test with `git apply -R --check --cached` reads the current checkout's index, and the tool-hazards rulebook does not say so
+
+**NOTE.** Filed 2026-11-22 (batch 264, cluster L). Owner: `.claude/rules/tool-hazards.md`, `scripts/validate-claude-rules.sh` (arm A6).
+
+Goal: the bullet below sits under "## Git lies by default". One done condition: `.claude/rules/tool-hazards.md` carries it and arm A6 still passes.
+
+Work list:
+
+1. The bullet to land: "- A containment test `git apply -R --check --cached` reads the CURRENT checkout's index, not `origin/main`. Run it with `GIT_INDEX_FILE=<scratch>/x.index` after `git read-tree origin/main`, with a landed branch as positive control." The fix it states is a scratch index loaded from `origin/main`, a landed positive control and an unlanded negative.
+2. Land it within the ceiling, by subtracting vestigial durable prose, or after an operator ruling raises the ceiling (the header of `scripts/validate-claude-rules.sh` says a raise needs one). Measured on this tree by the validator's own run: `A6  ok  -- compaction-durable channel 48478/48530 bytes`; the 232-byte bullet makes it 48710, 180 over (`DURABLE_MAX="${AI_DLC_DURABLE_BYTES:-48530}"`, `:857`).
+
+Step: n/a
+
+Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
+
+**LANDED (v0.1234.0).** batch 265, 265-S. The bullet landed as the last "Git lies by default" bullet, after three cuts of durable prose restated elsewhere: `.claude/rules/resident-context.md`'s two channel bullets (loading rules live in `CLAUDE.md`, arm A6 caps the channel), `.claude/rules/operator-rulings.md`'s restated `<vs>` path (defined in `CLAUDE.md`, arm W1 of `scripts/validate-verdict-identity.sh`), and `.claude/rules/tool-hazards.md`'s mktemp-store sentence (`.claude/rules/operator-rulings.md` "Never record a verdict where no later run reads it", arm W1); A6 went from 48478/48530 to 48282/48530, and this release's TaskStop bullet then took it to 48470/48530 (60 bytes of headroom).
+
+verify: has .claude/rules/tool-hazards.md "read-tree origin/main"
+

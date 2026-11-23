@@ -75,7 +75,7 @@ resolved BEFORE the checkpoint, which is not presented while it lacks a
 recorded disposition — the lead files it, pauses per Rule 3 and stops,
 and the lead records the operator's disposition on the entry with its `Operator authorization:` citation
 (`steps/deploy-validate.md` §5). The `requirement divergence` HARD_BLOCK
-QA raises at gate 2 (`qa.md` Validation Checklist) is filed by QA, not the
+QA raises at gate 2 (`.claude/team-roles/appendix/qa-locked-requirements.md`) is filed by QA, not the
 lead, and the lead puts it to the operator by `AskUserQuestion` under Rule
 3(a) with no flag and no stop, then records the disposition on the entry.
 The lead-interpretation `HARD_BLOCK` of `steps/requirements.md` §3 is the other exception: when the operator's captured answer is an exact Strike or Reword option, the lead files it `RESOLVED` with that disposition and its `Operator authorization:` citation, with no flag and no stop.

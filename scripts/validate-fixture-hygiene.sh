@@ -386,17 +386,21 @@
 #     a row not on the list at origin/main FAILs H14-M4 (the shared m4). `--derive-h14` prints the rows.
 #     BL-1162 ROUTES READ BY THE CLAUSES BELOW (one set per arm, all feeding the H14 row): `git clone` (gi14/vg14/wr14
 #     read `(init|clone)`); a heredoc body line, read raw on a command-position git init/clone (`hd14`, a `#` line
-#     skipped) of an EXECUTED heredoc only (`hdx14`: `bash|sh|zsh|dash|ksh` other than `-c`, or a pipe into one); the quoted body of a `bash|sh|zsh|dash|ksh -c '...'` (`sc14`); a recursive `cp` whose first source word is
+#     skipped) of an EXECUTED heredoc only (`hdx14`: the command owning `<<`, past a keyword run and wrapper words with
+#     their options, is `bash|sh|zsh|dash|ksh` or `$BASH` taking the heredoc as its script -- no `-c`, no operand unless
+#     an `s` cluster -- or the heredoc's own pipeline pipes into one); the quoted body of a `bash|sh|zsh|dash|ksh -c '...'` (`sc14`); a recursive `cp` whose first source word is
 #     a `.git` directory (`cp14`); a wrapper body that is a `( )` subshell, or reaches git after `if`/`elif`/`while`/
 #     `until`/`time`, or reaches it through another wrapper that it forwards `$@`/`$*` to (WE rows, closed in the judge;
-#     only a callee defined earlier in the fixture is read). FP SET, how it reached 0: measured with the shipping scan
+#     only a callee defined earlier in the fixture is read), or whose command-position word is a variable on a line
+#     forwarding `$@`/`$*` (`vf14`). UNDECIDABLE FROM TEXT, so no clause reads them: a general `cp -R` and a
+#     printf-written script string. FP SET, how it reached 0: measured with the shipping scan
 #     at 24b80ee13, 53 new lines, 4 unlisted fixtures (retired-fixture-orphan, carried-findings, derivation-differential,
 #     review-shard-merge), all migrated to world_git in the same commit; heredoc 14 lines, all listed, all read; the
 #     `-c` clause 0 lines; cp14 0 lines. NARROWED OUT: a printf-written script string (review-shard-merge
 #     receipt-bl980.sh:114 is scan-root test data that is never run, so it would be a false positive) and a general
 #     `cp -R` (345 lines in 94 fixtures; the 7 `.git`-touching ones copy a world built through world_git and edit the
-#     copy). STILL BLIND: variable-held git in a wrapper body, an alias, `eval`, a longer option run, a callee defined
-#     after its caller.
+#     copy). STILL BLIND: a heredoc written to a file that is run later, `eval "$(cat <<X)"`, `. /dev/stdin <<X`, a
+#     `| bash` on a later line than the opener, an alias, `eval`, a longer option run, a callee defined after its caller.
 #     THE REMAINDER the grammar does not read, each re-derived at 619bfde94 by an uncommitted instrumented copy of this
 #     scan (its controls: hits on the known `gitq -C … init` and `G init` lines): wrapper-function inits, a command-
 #     position word other than git/world_git followed by `init`, 129 code lines in 29 fixtures, 19 of them with no
@@ -431,10 +435,10 @@
 #     `-P`, `--bare`, `-q`) and/or up to two dir-first words, then the whole word `init`; one count per line, the
 #     fixture's first such line is its H14 row. Keywords, builtins and undefined words are excluded by requiring the
 #     definition; core/fixtures/lib is out of the population, so a wrapper defined only there is read by no fixture.
-#     NAMED BLIND ROUTES (the entry stays open): variable-held git INSIDE A WRAPPER BODY (a body of only `"$REAL_GIT"` is
-#     no wrapper), a wrapper body that is a subshell (`g() ( git "$@" )`), a wrapper whose body reaches git only after `if`/`elif`/`while`/`until`/`time` (`g() { if git "$@"; then :; fi; }`), a wrapper that
-#     reaches git only through another wrapper, an alias, `eval`, and a wrapper call whose option run is longer than
-#     the grammar. At 747f89054 the clause reads 133 code lines in 30 fixtures (the census hand's figure; the entry's
+#     NAMED BLIND ROUTES (the entry stays open): an alias, `eval`, a wrapper call whose option run is longer than the
+#     grammar, and a callee defined after its caller. A body whose variable-held command forwards `$@`/`$*`
+#     (`"$REAL_GIT" "$@"`) IS a wrapper (`vf14`); the variable may hold any program, so the mark is read only through a
+#     call with `init`/`clone`, and a variable-held body that does not forward is no wrapper. At 747f89054 the clause reads 133 code lines in 30 fixtures (the census hand's figure; the entry's
 #     129/29 was taken at 619bfde94), 19 fixtures with no allowlist row, 11 listed; controls: 31 `gitq ... init` in
 #     procsub-staged-refusal, 20 `G init` (review-shard-merge 16, carried-findings 4). FP SET: 0. Every one of the 133
 #     lines was read: 11 listed fixtures by hand, 19 as the migration targets. How it reached 0 (the misses, not
@@ -539,16 +543,88 @@ function maskcode(s,   out, i, n, c, top, r, re) {
   }
   return out
 }
-# hdx14 <pre> <post>: 1 when the heredoc opened between the masked text PRE (before `<<`) and POST (from its delimiter) feeds a
-# shell: the command owning the redirect is a `bash|sh|zsh|dash|ksh` (options and operands allowed, `-c` excepted: its
-# stdin is not the script), or POST pipes into one. A heredoc written to a file that is run later is not read as executed.
-# NOT read (executed): `env -i ... bash <<X`, `timeout 5 bash <<X`, `nice bash <<X`, `if bash <<X; then`, `! bash <<X`, `$BASH <<X`.
-# FALSE fires: `bash script.sh <<X` (the heredoc is the script's stdin data); `cat <<A | tee f; x | sh` (a later pipeline's `| sh`).
-function hdx14(pre, post,   seg, shre) {
+# hdx14 <pre> <post> <raw>: 1 when the heredoc opened between the masked text PRE (before `<<`) and POST (from its
+# delimiter) feeds a shell. RAW is the unmasked text before `<<`, the same length as PRE: the command is cut on the mask
+# (a `${...}`/`$(...)` closed inside PRE, `2>&1`, `&>` and `>|` never cut) and its words are read from RAW at the same
+# offset, so `"$BASH"` is read through the mask. (1) The command owning the redirect, past an `if`/`elif`/`while`/`until`/
+# `then`/`do`/`else`/`!` run and wrapper words in any order (`exec`, `command`, `sudo`, `time`, `nohup`, `NAME=val`;
+# `env` with `-i`, `-u NAME`, `--`, `NAME=val`; `timeout` with `-k DUR`, `-s SIG`, `--long[=v]`, then its DURATION;
+# `nice` with `-n N`, `-N`, `--adjustment=`), is `bash|sh|zsh|dash|ksh` (`/bin/`, `/usr/bin/`) or `$BASH`/`${BASH}`,
+# and the shell takes the heredoc as its script: no `-c` cluster after the shell word, and no OPERAND before options end
+# unless a cluster carries `s` (`-o`/`+o`/`-O`/`+O`, `--rcfile`, `--init-file` take the next word; a lone `-`/`--` ends
+# options; a redirection is no operand; only the words before `<<` are read). (2) POST's own
+# pipeline (cut at `;`, `&&`, `||` and a lone `&`) pipes (`|` or `|&`) into a shell.
+# NOT read, so not executed: a heredoc written to a file run later, `eval "$(cat <<X)"`, `. /dev/stdin <<X`, a `| bash`
+# on a later line, an unclosed backquote before the shell, an option run past this grammar.
+function hdclose(s, j,   d, o, c, n) {
+  o = substr(s, j, 1); c = (o == "{") ? "}" : ")"; d = 0; n = length(s)
+  for (; j <= n; j++) { if (substr(s, j, 1) == o) d++; else if (substr(s, j, 1) == c && --d == 0) return j }
+  return 0
+}
+function hdtok(str, p,   n, c, w, r, k) {
+  n = length(str)
+  while (p <= n) {
+    c = substr(str, p, 1)
+    if (c ~ /[[:space:]]/) { p++; continue }
+    if (match(substr(str, p), /^[0-9]*(<<<|<<-|<<|>>|>&|<&|&>>|&>|>[|]|<>|>|<)/)) {
+      r = substr(str, p, RLENGTH); p += RLENGTH
+      if (r ~ /&$/ && match(substr(str, p), /^([0-9]+-?|-)/)) p += RLENGTH
+      else { while (substr(str, p, 1) ~ /[[:space:]]/) p++; wordat(str, p); p = WEND }
+      HTN++; HT[HTN] = r; HR[HTN] = 1; continue
+    }
+    if (c ~ /[;&|()`]/) { p++; continue }
+    if (substr(str, p, 2) == "$(") { k = hdclose(str, p + 1); if (!k) k = n; HTN++; HT[HTN] = substr(str, p, k - p + 1); HR[HTN] = 0; p = k + 1; continue }
+    w = wordat(str, p); if (WEND == p) { p++; continue }
+    while (w ~ /[$]$/ && substr(str, WEND, 1) == "(") { k = hdclose(str, WEND); if (!k) k = n; w = w substr(str, WEND, k - WEND + 1); WEND = k + 1 }
+    p = WEND; HTN++; HT[HTN] = w; HR[HTN] = 0
+  }
+}
+function hdx14(pre, post, raw,   n, i, c, k, cut, np, w, ex, scl, eo, shre) {
   shre = "(/usr/bin/|/bin/)?(ba|z|da|k)?sh"
-  seg = pre; sub(/^.*[;&|(){`]/, "", seg)
-  if (seg ~ ("^[[:space:]]*(((exec|command|env|sudo|time|nohup)|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*" shre "([[:space:]]|$)") && seg !~ /[[:space:]]-[A-Za-z]*c([[:space:]]|$)/) return 1
-  if (post ~ ("[|][[:space:]]*((exec|sudo|env|command)[[:space:]]+)?" shre "([[:space:];&)]|$)")) return 1
+  n = length(pre); cut = 0
+  for (i = 1; i <= n; i++) {
+    c = substr(pre, i, 1)
+    if (c == "\\") { i++; continue }
+    if (c == "$" && substr(pre, i + 1, 1) ~ /[{(]/) { k = hdclose(pre, i + 1); if (k) { i = k; continue } cut = i + 1; i++; continue }
+    if (c ~ /[;(){}`]/ || (c == "|" && substr(pre, i - 1, 1) != ">") || (c == "&" && substr(pre, i - 1, 1) !~ /[<>]/ && substr(pre, i + 1, 1) != ">")) cut = i
+  }
+  HTN = 0; split("", HT); split("", HR)
+  hdtok(raw, cut + 1); np = HTN
+  ex = 0
+  for (i = 1; i <= np; i++) {
+    w = HT[i]
+    if (HR[i] || w ~ /^(if|elif|while|until|then|do|else|!|exec|command|sudo|time|nohup)$/ || w ~ /^[A-Za-z_][A-Za-z0-9_]*=/) continue
+    if (w == "env") { while (i < np && (HT[i + 1] ~ /^-/ || HT[i + 1] ~ /^[A-Za-z_][A-Za-z0-9_]*=/)) { i++; if (HT[i] == "-u") i++ } continue }
+    if (w == "timeout") { while (i < np && HT[i + 1] ~ /^-/) { i++; if (HT[i] ~ /^-[ks]$/) i++ } i++; continue }
+    if (w == "nice") { while (i < np && HT[i + 1] ~ /^-/) { i++; if (HT[i] == "-n") i++ } continue }
+    gsub(/["\047]/, "", w)
+    if (w ~ ("^" shre "$") || w ~ /^[$]([{]BASH[}]|BASH)$/) ex = 1
+    break
+  }
+  for (i++; ex && i <= HTN; i++) {
+    w = HT[i]
+    if (HR[i]) continue
+    if (!eo) {
+      if (w == "-" || w == "--") { eo = 1; continue }
+      if (w ~ /^--./) { if (w ~ /^--(rcfile|init-file)$/) i++; continue }
+      if (w ~ /^[-+][A-Za-z]+$/) {
+        if (w ~ /^-[A-Za-z]*c/) ex = 0
+        if (w ~ /^[-+][A-Za-z]*s/) scl = 1
+        if (w ~ /[oO]$/) i++
+        continue
+      }
+    }
+    ex = scl; break
+  }
+  if (ex) return 1
+  n = length(post)
+  for (i = 1; i <= n; i++) {
+    c = substr(post, i, 1)
+    if (c == "\\") { i++; continue }
+    if (c == ";" || (c == "|" && substr(post, i + 1, 1) == "|")) break
+    if (c == "&" && (substr(post, i + 1, 1) == "&" || (substr(post, i - 1, 1) !~ /[<>|]/ && substr(post, i + 1, 1) != ">"))) break
+    if (c == "|" && substr(post, i - 1, 1) != ">") { i++; if (substr(post, i, 1) == "&") i++; if (substr(post, i) ~ ("^[[:space:]]*((exec|sudo|env|command)[[:space:]]+)?" shre "([[:space:];&)]|$)")) return 1; i-- }
+  }
   return 0
 }
 function maskl(s,   m, t, p, n, dash, q, c, w, e) {
@@ -570,7 +646,7 @@ function maskl(s,   m, t, p, n, dash, q, c, w, e) {
     c = substr(s, q, 1); w = ""
     if (c == SQ || c == "\"") { e = index(substr(s, q + 1), c); if (e) w = substr(s, q + 1, e - 1) }
     else { if (c == "\\") q++; if (match(substr(s, q), /^[A-Za-z_][A-Za-z0-9_]*/)) w = substr(s, q, RLENGTH) }
-    if (w != "") { HDN++; HDW[HDN] = w; HDD[HDN] = dash; HDI = 1; HDX[HDN] = hdx14(substr(m, 1, p - 1), substr(m, q)) }
+    if (w != "") { HDN++; HDW[HDN] = w; HDD[HDN] = dash; HDI = 1; HDX[HDN] = hdx14(substr(m, 1, p - 1), substr(m, q), substr(s, 1, p - 1)) }
     p = q
   }
   return m
@@ -997,7 +1073,8 @@ function gi14(i,   s, t) {
 # `WD <fx> <name>`. A code line whose command-position word is followed by an option run and/or up to two dir-first
 # words and then the whole word `init` emits `WU <fx> <word> <file>:<line>: <text>`; the judge counts a WU row only
 # when its fixture holds a WD row of that word (so a keyword, a builtin and any undefined word stay quiet). `git` and
-# `world_git` are never a WU word. A `"$REAL_GIT"` body is not a command-position `git`: variable-held git is out.
+# `world_git` are never a WU word. A body line whose command-position word is a variable and that forwards `$@`/`$*`
+# (`"$REAL_GIT" "$@"`, read by vf14) marks the wrapper too; a variable-held body that forwards nothing does not.
 function brc(t,   n, off, o, c) {
   n = 0; off = 0; o = 0; c = 0
   while (match(substr(t, off + 1), /(^|[[:space:];&|(])\{([[:space:]]|$)/)) { o++; off += RSTART + RLENGTH - 1 }
@@ -1010,6 +1087,25 @@ function pcn(t,   n, k, c) {
   while (k > 0) { c = substr(t, k, 1); if (c == "(") n++; else if (c == ")") n--; k-- }
   return n
 }
+# vf14 <line>: 1 when a command-position word of the code line is a variable (`"$V"`, `$V`, `${V}`; never `$1`, `$@`, `$*`)
+# and the line, its comment cut, forwards `$@`, `$*` or `${@...}`/`${*...}`. Command position is found on M[i], the word
+# read from O[i] at the same offset (vg14's mask trap); the comment starts at a `#` the mask Xes after a code blank or
+# `;&|` (a `#` inside a string follows a masked byte or its quote).
+function vf14(i,   s, o, off, p, w, re, k, n) {
+  o = O[i]; if (o !~ /[$][@*]|[$][{][@*]/) return 0
+  n = length(o)
+  for (k = 1; k <= n; k++) if (substr(o, k, 1) == "#" && substr(M[i], k, 1) == "X" && (k == 1 || substr(M[i], k - 1, 1) ~ /[[:space:];&|]/)) { o = substr(o, 1, k - 1); break }
+  if (o !~ /[$][@*]|[$][{][@*]/) return 0
+  s = "; " M[i]; o = "; " O[i]
+  re = "(;|&|[|]|[(]|[{]|!|[[:space:]]then|[[:space:]]do|[[:space:]]else)[[:space:]]*((if|elif|while|until|time|then|do|else|!)[[:space:]]+)*(((command|exec|env)|-u[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*"
+  off = 0
+  while (match(substr(s, off + 1), re)) {
+    p = off + RSTART + RLENGTH; off += RSTART
+    w = wordat(o, p); gsub(/["\047]/, "", w)
+    if (w ~ /^[$][{]?[A-Za-z_][A-Za-z0-9_]*[}]?$/) return 1
+  }
+  return 0
+}
 function wr14(i,   s, t, nm, off, m, w, gre, ure, cre, k, isdef, pc, cw) {
   s = M[i]; t = s; isdef = 0
   gre = "(^|[;&|({!]|[[:space:]]then|[[:space:]]do|[[:space:]]else)[[:space:]]*((if|elif|while|until|time|then|do|else|!)[[:space:]]+)*(((command|exec|env)|-u[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*git([[:space:]]|$)"
@@ -1020,7 +1116,7 @@ function wr14(i,   s, t, nm, off, m, w, gre, ure, cre, k, isdef, pc, cw) {
     sub(/^[A-Za-z_][A-Za-z0-9_.:-]*[[:space:]]*(\(\))?/, "", t)
     FDEF[FX, nm] = 1; ND++; DNM[ND] = nm; DST[ND] = BD; DGT[ND] = 0; DOP[ND] = 0; DLN[ND] = 0; DPR[ND] = (t ~ /^[[:space:]]*\(/); DPD[ND] = 0; isdef = 1
   }
-  if (t ~ gre) for (k = 1; k <= ND; k++) DGT[k] = 1
+  if (t ~ gre || (ND > 0 && vf14(i))) for (k = 1; k <= ND; k++) DGT[k] = 1
   if (ND > 0) {
     off = 0
     while (match(substr(t, off + 1), cre)) {

@@ -493,7 +493,7 @@ the field in any shape other than one single-line `[..]` list.
 
 **Read each owed predicate from the story file.** The lead reads each owed
 AC's predicate from the story file's `## Deferred ACs` section, which the
-closing writer writes at `done` (`code-reviewer.md` Ownership): each entry
+closing writer writes at `done` (`.claude/team-roles/appendix/code-reviewer-closing-writer.md`): each entry
 opens with `- **<id>**` and cites the QA verdict it was copied from.
 
 **A story file with no `## Deferred ACs` section is a pre-migration story.**
