@@ -5911,20 +5911,30 @@ fi
 # Survivors are judged by aw_wait on the settled-state predicates, never on a count of polls: a killed member is still
 # exiting, never blocked with nothing pending, so no load reads it as a survivor. Prints
 # "<pre>|<recorded groups>|<surviving groups>|<live control surviving>", pre=1 when the stream, the holding fixture,
-# the live control and the last recorded group were all up when the kill landed.
+# the live control and the last recorded group were all up when the kill landed, 0 when one was not, and `exited` when
+# the world exited before writing the gate, with its evidence in $SLOT_T/pre.exit.<prefix>. The world's output goes to
+# $T/world.out and its directory is kept (SW_KEEP).
 # Whatever the verdict, every recorded group and the live control are reaped by their recorded ids before it returns.
 # With a third argument (slot-shellkill) the teardown is that lib's pool_kill_tree applied to the world's shell pid, and the
 # caller's reap does NOT run before the census: the hook's own teardown is the only reaper the census reads.
 slot_kill_drive() { # <slot-world copy> <reap lib> <pool_kill_tree lib, or empty> <cell prefix>
   # (the cell prefix is the world's SW_CELL: its deriver A is the e2e cell <prefix>.hold of cells.decl)
-  local T gf swp d lp pre=0 ng=0 sv=0 lv=0 g
+  local T gf swp d lp pre=0 ng=0 sv=0 lv=0 g aw
   T="$(mktemp -d "$SLOT_T/kd.XXXXXX")" || broken "mktemp failed for the slot-kill world"
   gf="$T/groups"; : > "$gf"
-  ( inproc TMPDIR="$T" SW_GROUPS="$gf" SW_KILL_GATE="$T/gate" SW_CELL="$4" -- "$1" "$DERIVER" "$HOOK" hold ) >/dev/null 2>&1 &
+  # The world's output goes to $T/world.out and SW_KEEP keeps its directory (deriver A's hold/aout) on a clean exit, so
+  # a world that exits before its gate leaves its evidence behind; a SIGKILLed world never reaches that exit path.
+  ( inproc TMPDIR="$T" SW_GROUPS="$gf" SW_KILL_GATE="$T/gate" SW_CELL="$4" SW_KEEP=1 -- "$1" "$DERIVER" "$HOOK" hold ) >"$T/world.out" 2>&1 &
   swp=$!
   # The world writes the gate file only with A's tree up and then blocks until killed, so the KILL is never early or late.
-  aw_wait '[ -e "$T/gate" ]' 'echo "$swp"' ''
+  # aw_wait 1 is the world gone with no gate: pre reads `exited`, and the evidence file names its output and A's aout.
+  aw_wait '[ -e "$T/gate" ]' 'echo "$swp"' ''; aw=$?
   d="$(ls -d "$T"/slot-world.*/hold 2>/dev/null | head -1)"
+  if [ "$aw" = 1 ]; then
+    printf 'world FAIL lines: %s; world output tail: %s; A aout: %s; order: %s' \
+      "$(grep '^FAIL ' "$T/world.out" 2>/dev/null | tr '\n' ' ' | cut -c1-300)" "$(tail -n 5 "$T/world.out" 2>/dev/null | tr '\n' ' ' | cut -c1-300)" \
+      "$(tail -n 5 "$d/aout" 2>/dev/null | tr '\n' ' ' | cut -c1-300)" "$(tr '\n' ' ' < "$d/order" 2>/dev/null | cut -c1-200)" > "$SLOT_T/pre.exit.$4"
+  fi
   lp="$(cat "$d/order.live" 2>/dev/null)"
   g="$(tail -1 "$gf")"
   # pre is the chain of eight tests below, each evaluated only if the one before held (as the && chain it replaces did);
@@ -5940,6 +5950,7 @@ slot_kill_drive() { # <slot-world copy> <reap lib> <pool_kill_tree lib, or empty
   if [ "$p7" = 1 ]; then p8=0; kill -0 "$swp" 2>/dev/null && p8=1; fi
   printf 'gate=%s a-hold=%s a-stream-up=%s lp-set=%s lp-live=%s g-set=%s g-live=%s world-live=%s' "$p1" "$p2" "$p3" "$p4" "$p5" "$p6" "$p7" "$p8" > "$SLOT_T/pre.parts.$4"
   [ "$p8" = 1 ] && pre=1
+  [ "$aw" = 1 ] && pre=exited
   if [ -n "${3:-}" ]; then
     ( . "$3" && pool_kill_tree "$swp" "" "" ) 2>/dev/null; wait "$swp" 2>/dev/null
   else
@@ -5959,6 +5970,7 @@ SLOT_ARMS=$((SLOT_ARMS+1))
 _k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB" "" slot-kill)"
 if [ "$_k" = "1|2|0|0" ]; then
   ok "SLOT KILL: slot-world SIGKILLed mid-hold leaves no member of its 2 recorded groups (deriver A, live control) alive after the caller's reap ('$_k' pre|groups|surviving|live)"
+elif [ "${_k%%|*}" = exited ]; then bad "SLOT KILL: world exited before the gate, got '$_k' -- $(cat "$SLOT_T/pre.exit.slot-kill" 2>/dev/null)"
 else bad "SLOT KILL: expected '1|2|0|0' (pre|groups|surviving|live), got '$_k' (pre parts: $(cat "$SLOT_T/pre.parts.slot-kill" 2>/dev/null))"; fi
 # (slot-forkkill) THE WORLD SIGKILLed BETWEEN A LAUNCH AND THE STATEMENT AFTER IT (BL-875 item 5). The world once appended
 # deriver A's `$!` on the statement after its launch, so a KILL between the fork and that append left a group nobody
@@ -6005,6 +6017,7 @@ SLOT_ARMS=$((SLOT_ARMS+1))
 _k="$(slot_kill_drive "$SLOT_W" "$SLOT_REAP_LIB" "$SLOT_PKT_LIB" slot-shk)"
 if [ "$_k" = "1|2|0|0" ]; then
   ok "SLOT SHELLKILL: slot-world torn down mid-hold by the hook's own pool_kill_tree on its shell pid, no caller reap, leaves no member of its 2 recorded groups alive ('$_k' pre|groups|surviving|live)"
+elif [ "${_k%%|*}" = exited ]; then bad "SLOT SHELLKILL: world exited before the gate, got '$_k' -- $(cat "$SLOT_T/pre.exit.slot-shk" 2>/dev/null)"
 else bad "SLOT SHELLKILL: expected '1|2|0|0' (pre|groups|surviving|live), got '$_k' (pre parts: $(cat "$SLOT_T/pre.parts.slot-shk" 2>/dev/null))"; fi
 fi
 

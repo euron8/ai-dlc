@@ -1023,7 +1023,8 @@ unset CSP_PIDS CSP_FIFO CSP_STALL CSP_GATE CSP_GLIB
 # vs = the store-skip announce, kp2 = pend.key line 4 is `#pending 2`, unrec = the summary names pend's count unrecorded; cl.skip = push b selects 0 of 2 consumer-layout
 # units and names none in the consumer count-unrecorded clause, cl.crec = push b's recorded clause names pend and pend@consumer with 2,
 # cl.disp = push a's dispatched pend@consumer keeps its 2 rows on its ok row AND in the pool PENDING summary,
-# cl.kpend = `<records>:<records carrying #pending>` in the consumer-layout dir.
+# cl.kpend = `<records>:<records carrying #pending>` in the consumer-layout dir, cl.h = push a2 (a's tree content again, after push x
+# over tree x whose keys differ replaced the key records) selects 0 of 2 on the content-keyed side records and names both on the `placement records:` line.
 BL_REC2='   PENDING: 1 skipped on a recorded pass that printed a PENDING row: pend(recorded)=2'
 BL_PRAN='   ok    pend  (2 PENDING row(s): its subject is absent, so those parts checked nothing)'
 BL_VS='   ..    verdict store: 1 fixture(s) skipped on a pass recorded elsewhere: pend'
@@ -1077,14 +1078,14 @@ cl_seed() {                    # cl_seed <prefix> <post-P1 tree> [<hook>]: the c
   local p="$1" t="$1.cl" i
   cp -Rp "$2" "$t" && cp -Rp "$2.vs" "$t.vs" || broken "BL-998 seed cl: copying the post-P1 world failed"
   [ -z "${3:-}" ] || cp "$3" "$t/.githooks/pre-push" || broken "BL-998 seed cl: installing the hook copy failed"
-  for i in 0 a b; do
+  for i in 0 a b x a2; do
     # A fresh committed tree per run: run_fixtures removes the one it was handed, and cl_select keys the INSTALLED
     # tree through git (BL-1043). Bare run.sh units, no inputs.decl. Trees a and b carry pend's run.sh edited once,
     # so push a has units to dispatch after the census.
     mkdir -p "$t.ct$i/tests/fixtures/pend" "$t.ct$i/tests/fixtures/near" \
       && cp "$t/tests/fixtures/pend/run.sh" "$t.ct$i/tests/fixtures/pend/run.sh" \
       && cp "$t/tests/fixtures/near/run.sh" "$t.ct$i/tests/fixtures/near/run.sh" \
-      && { [ "$i" = 0 ] || printf '# moved after the census\n' >> "$t.ct$i/tests/fixtures/pend/run.sh"; } \
+      && { [ "$i" = 0 ] || printf '# moved after the census%s\n' "$([ "$i" != x ] || echo ' differently')" >> "$t.ct$i/tests/fixtures/pend/run.sh"; } \
       && ( cd "$t.ct$i" && git init -q && git add -A && git commit -qm ct ) >/dev/null 2>&1 || broken "BL-998 seed cl: building consumer-layout tree $i failed"
   done
   # THE CENSUS over tree 0: no push runs every candidate, so the records a push reads come from a census first. The
@@ -1099,13 +1100,28 @@ cl_seed() {                    # cl_seed <prefix> <post-P1 tree> [<hook>]: the c
       && cl_write "$o" ) || broken "BL-998 seed cl: the census over tree 0 failed: $(tr '\n' '|' < "$p.cl0.out" | tail -c 300)"
   grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.cl0.out" \
     || broken "BL-998 seed cl: the census did not select both fixtures: $(tr '\n' '|' < "$p.cl0.out" | tail -c 300)"
-  for i in a b; do
+  for i in a b x a2; do   # x: a tree whose keys differ, pushed over a's records; a2: a's content again (the content-keyed record)
     ( unset FXCOUNT_DIR FXCOUNT_RC FXCOUNT_JUDGE
       hook_drive "$t" "$p.cl$i.out" PREPUSH_POOL_DEPTH=0 AI_DLC_FIXTURE_JOBS=2 AI_DLC_FX_CL_TREE="$t.ct$i" AI_DLC_VERDICT_STORE="$t.vs" ) > "$p.cl$i.rc"
+    if [ "$i" = x ]; then   # D2: the foreign tree's record now says 9; a2's skip must still name the side record's own 2
+      for f in "$t.vs/consumer-placement-keys"/*/pend.key; do [ -f "$f" ] && sed '4s/.*/#pending 9/' "$f" > "$f.t" && mv "$f.t" "$f" || broken "BL-1221 seed cl: no pend.key to poison after push x"; done
+    fi
   done
   grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.cla.out" \
     || broken "BL-998 seed cl: push a did not run both fixtures in the consumer layout, so push b measures nothing: $(grep -E 'consumer layout|FAIL' "$p.cla.out" | tr '\n' '|' | tail -c 300)"
+  # D3: cl_select in census mode over a2's tree, with the side records now present: a prediction (AI_DLC_CL_DIST_OUT named, as
+  # scripts/predict-push-set.sh does) skips both on them, a real census (none named) still selects both.
+  ( cd "$t" && pool_span .githooks/pre-push "$t.pool2" FIXTURE_POOL || exit 1
+    fx_inproc "$HOOK"
+    AI_DLC_VERDICT_STORE="$t.vs" && . "$t.pool2" >/dev/null 2>&1 || exit 1
+    POOL_DEPTH_IN=0 && cl_tree="$t.cta2" && mkdir -p "$t.clp" "$t.clc" \
+      && AI_DLC_CL_DIST_OUT="$t.clp" cl_select "$t.clp" census > "$p.clp.out" 2>&1 \
+      || exit 1
+    fx_inproc "$HOOK"
+    cl_select "$t.clc" census > "$p.clc.out" 2>&1 ) || broken "BL-1221 seed cl: the census-mode selections over a2's tree failed"
   cp "$p.clb.out" "$p.cl.out" && cp "$p.clb.rc" "$p.cl.rc"
+  grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.clx.out" \
+    || broken "BL-1221 seed cl: push x (different keys) did not run both fixtures, so the a2 push measures nothing: $(grep -E 'consumer layout|FAIL' "$p.clx.out" | tr '\n' '|' | tail -c 300)"
 }
 bl_cell() {                    # bl_cell <seed>.<observable>, read off the loaded prefix C_T
   local s="${1%%.*}" c="${1#*.}" o="$C_T.${1%%.*}.out" t="$C_T.${1%%.*}" n m f
@@ -1118,6 +1134,12 @@ bl_cell() {                    # bl_cell <seed>.<observable>, read off the loade
     kp2)  yn [ "$(sed -n 4p "$(bl_k "$t")/pend.key" 2>/dev/null)" = '#pending 2' ] ;;
     skip) if [ "$(cat "$C_T.clb.rc" 2>/dev/null)" = 0 ] && grep -qF '   ..    consumer layout: 0 of 2 shipping fixture(s) run as <fx>@consumer in ' "$o" \
              && ! grep -qF '<fx>@consumer unit(s) skipped on a consumer-layout pass whose PENDING count is unrecorded' "$o"; then echo yes; else echo no; fi ;;
+    h) if [ "$(cat "$C_T.cla2.rc" 2>/dev/null)" = 0 ] && grep -qF '   ..    consumer layout: 0 of 2 shipping fixture(s) run as <fx>@consumer in ' "$C_T.cla2.out" \
+          && grep -qF '   ..    placement records: 2 <fx>@consumer unit(s) skipped on a content-keyed pass (a side record of exactly these keys): ' "$C_T.cla2.out" \
+          && grep -qF ' pend@consumer' "$C_T.cla2.out" && grep -qF ' near@consumer' "$C_T.cla2.out" && ! grep -qF 'skipped on a confirmed record:' "$C_T.cla2.out" \
+          && grep -qxF '   PENDING: 2 skipped on a recorded pass that printed a PENDING row: pend(recorded)=2 pend@consumer(recorded)=2' "$C_T.cla2.out"; then echo yes; else echo no; fi ;;
+    hp) if grep -qF '   ..    consumer layout: 0 of 2 shipping fixture(s) run as <fx>@consumer in ' "$C_T.clp.out" && grep -qF 'skipped on a content-keyed pass' "$C_T.clp.out" \
+          && grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$C_T.clc.out"; then echo yes; else echo no; fi ;;
     crec) yn grep -qxF '   PENDING: 2 skipped on a recorded pass that printed a PENDING row: pend(recorded)=2 pend@consumer(recorded)=2' "$o" ;;
     disp) if [ "$(cat "$C_T.cla.rc" 2>/dev/null)" = 0 ] \
              && grep -qxF '   ok    pend@consumer  (2 PENDING row(s): its subject is absent, so those parts checked nothing)' "$C_T.cla.out" \
@@ -1131,7 +1153,7 @@ bl_cell() {                    # bl_cell <seed>.<observable>, read off the loade
     *) echo "<unknown cell $1>" ;;
   esac
 }
-BL_CELLS="s1.rec2,s2.rec2,s2.vs,s2.kp2,s4.rec2,s3.rec2,su.pran,su.kp2,su.unrec,s5.unrec,sv.rec2,sv.kp2,sk.pran,sk.vs,sk.unrec,cl.skip,cl.crec,cl.disp,cl.kpend"
+BL_CELLS="s1.rec2,s2.rec2,s2.vs,s2.kp2,s4.rec2,s3.rec2,su.pran,su.kp2,su.unrec,s5.unrec,sv.rec2,sv.kp2,sk.pran,sk.vs,sk.unrec,cl.skip,cl.crec,cl.disp,cl.kpend,cl.h,cl.hp"
 bl_drive_cells() {             # bl_drive_cells <prefix> <post-P1 tree> <hook|-> <cells>: drives only the seeds the cells read
   local c s h="$3"; [ "$h" = - ] && h=""
   for c in $4; do s="${c%%.*}"; [ -f "$1.$s.out" ] || bl_seed "$s" "$1" "$2" "$h"; done
@@ -1180,9 +1202,9 @@ else bad "7b sv the stale republish: $(grep -E 'PENDING' "$BLF.sv.out" | tr '\n'
 if [ "$(cat "$BLF.sk.rc")" = 0 ] && _bl_eq sk.pran no && _bl_eq sk.vs yes && _bl_eq sk.unrec yes; then
   ok "7b sk a store entry written before the count (no '#pending' line) under the current digest is reused: pend skips on it and is named count unrecorded"
 else bad "7b sk the count-less entry (pran=$(mx_get "$BASE_bl" sk.pran) vs=$(mx_get "$BASE_bl" sk.vs) unrec=$(mx_get "$BASE_bl" sk.unrec)): $(grep -E 'PENDING|verdict store|   ok ' "$BLF.sk.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 400)"; fi
-if _bl_eq cl.skip yes && _bl_eq cl.crec yes && _bl_eq cl.disp yes && _bl_eq cl.kpend 2:2; then
-  ok "7b cl the consumer layout: push a runs pend@consumer and names it in the pool PENDING summary; both records carry #pending; push b selects 0 of 2 and names pend(recorded)=2 pend@consumer(recorded)=2, none count-unrecorded"
-else bad "7b cl the consumer layout (skip=$(mx_get "$BASE_bl" cl.skip) crec=$(mx_get "$BASE_bl" cl.crec) disp=$(mx_get "$BASE_bl" cl.disp) records:#pending=$(mx_get "$BASE_bl" cl.kpend)): a: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cla.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300) b: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cl.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300)"; fi
+if _bl_eq cl.skip yes && _bl_eq cl.crec yes && _bl_eq cl.disp yes && _bl_eq cl.kpend 2:2 && _bl_eq cl.h yes && _bl_eq cl.hp yes; then
+  ok "7b cl the consumer layout: push a runs pend@consumer and names it in the pool PENDING summary; both records carry #pending; push b selects 0 of 2 and names pend(recorded)=2 pend@consumer(recorded)=2, none count-unrecorded; push a2 (a's content after a different tree's push replaced the key records) selects 0 of 2 on the content-keyed side records and names both"
+else bad "7b cl the consumer layout (h=$(mx_get "$BASE_bl" cl.h) skip=$(mx_get "$BASE_bl" cl.skip) crec=$(mx_get "$BASE_bl" cl.crec) disp=$(mx_get "$BASE_bl" cl.disp) records:#pending=$(mx_get "$BASE_bl" cl.kpend)): a: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cla.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300) b: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cl.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300)"; fi
 
 # F10, VERSION SKEW: a runner sourcing a hook whose READSET_VS span predates the `#pending` entry line (no readset_vs_entry, no
 # READSET_VS_PENDING) turns the store OFF, says so, and writes nothing; the same run under the current span wrote

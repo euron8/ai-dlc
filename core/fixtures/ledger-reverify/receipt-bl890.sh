@@ -12,7 +12,7 @@
 # The world reads no reconcile file, so one cache serves every engine copy. A cache that exists
 # without its completion sentinel is refused (9), never rebuilt.
 #
-# THE ENGINE IS THE SHIPPING PROGRAM, run as `bash <dir>/ledger-reverify.sh <dist> <base> <consumer>
+# THE ENGINE IS THE SHIPPING PROGRAM, asked in process (see the line before the ROWS capture) as `bash <dir>/ledger-reverify.sh <dist> <base> <consumer>
 # <theirs>` from a scratch directory, never from the distribution root. Every cell reads its rows.
 #
 # ONE DISTRIBUTION, ONE CONSUMER LEDGER. Each cell has its own sprint prefix, so no cell's naming
@@ -189,7 +189,19 @@ B="$(cat "$R/B")" && T="$(cat "$R/T")" && [ -n "$B" ] && [ -n "$T" ] \
   || { echo "REFUSED: B/T do not resolve in the world's distribution" >&2; exit 9; }
 sha() { sed -n "s/^$1=//p" "$R/SHAS" | cut -c1-7; }
 mkdir -p "$R/tmp" "$R/cwd"
-ROWS="$(cd "$R/cwd" && TMPDIR="$R/tmp" FXCELL="${LR_RCELL:-}" bash "$REC/ledger-reverify.sh" "$R/dist" "$B" "$R/cons" "$T" 2>"$R/err")"; rc=$?
+# THE ENGINE IS ASKED IN PROCESS: the closer is sourced once and lr_main runs in a subshell made to look like a fresh bash
+# (core/fixtures/lib/inproc.sh), with a memo directory of its own handed in as lib.sh builds one only at the top of a
+# process. The fixture's run.sh gates a pre-wrap ledger-reverify.sh before it starts this receipt, so one without the wrap
+# (an `lr_main` entry behind a column-0 source guard) is refused here, never run as a process: sourcing it would run its body.
+RC_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)" || RC_LIB=""
+[ -n "$RC_LIB" ] || { echo "REFUSED: core/fixtures/lib is not beside this receipt's fixture directory" >&2; exit 9; }
+grep -qxF 'lr_main() {' "$REC/ledger-reverify.sh" && grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$REC/ledger-reverify.sh" \
+  || { echo "REFUSED: $REC/ledger-reverify.sh carries no in-process wrap (lr_main entry and column-0 source guard)" >&2; exit 9; }
+# shellcheck source=/dev/null
+. "$RC_LIB/inproc.sh" || { echo "FIXTURE BROKEN: cannot source lib/inproc.sh" >&2; exit 2; }
+inproc_load "$REC/ledger-reverify.sh" && declare -F lr_main >/dev/null || { echo "REFUSED: sourcing $REC/ledger-reverify.sh defined no lr_main" >&2; exit 9; }
+mkdir -p "$R/memo"
+ROWS="$(cd "$R/cwd" && TMPDIR="$R/tmp" AI_DLC_RECONCILE_MEMO="$R/memo" inproc_run "$REC/ledger-reverify.sh" lr_main "$R/dist" "$B" "$R/cons" "$T" 2>"$R/err")"; rc=$?
 [ "$rc" -eq 0 ] || { echo "REFUSED: the engine exited $rc: $(head -3 "$R/err" | tr '\n' ' ')" >&2; exit 9; }
 # kind <label> -> "<status> <detail>" of the first NAMED-UPSTREAM-family row for the exact label, or none
 kind() { printf '%s\n' "$ROWS" | LR_L="$1" awk -F'\t' '$2 == ENVIRON["LR_L"] && $1 ~ /^NAMED-UPSTREAM/ { print $1 "\t" $3; f = 1; exit } END { if (!f) print "none" }'; }

@@ -3084,7 +3084,7 @@ readset_keys_write() { # <out> [<keys dir>, default $KEYS_DIR]
 # or holds no row, keeps the unit running. A `d` row publishes no record and is not a consumer-layout pass:
 # `.k.always`, `.rskip` and `.vs.all` leave it out.
 cl_select() {
-  local out="$1" c b n_c n_s why="" kd vh base p dd="" n_d=0
+  local out="$1" c b n_c n_s why="" kd vh base p dd="" n_d=0 hh
   [ -n "${cl_tree:-}" ] || return 0
   for b in "$cl_tree"/tests/fixtures/*/; do
     [ -f "$b/run.sh" ] || continue
@@ -3162,6 +3162,25 @@ cl_select() {
         $2 == "run" && $4 == "k" && ($1 in P) && !($1 in U) && quiet($1) { print $1 "\tskip\t\td\t" $5; next }
         { print }' "$c/.kdec" > "$c/.kdec.t" && mv "$c/.kdec.t" "$c/.kdec" || rm -f "$c/.kdec.t"
     fi
+    # THE CONTENT-KEYED SIDE RECORD (cl_publish): a unit decided `run` on its key (`k`) whose prospective record hash has a
+    # side record under `<fx>.k/` passed at exactly these keys in some tree, so it is skipped (`h`). Not in a real census
+    # (a prediction, which names AI_DLC_CL_DIST_OUT as the `d` skip does, applies it). A key record with no side directory
+    # decides exactly as before. The skip's `#pending` count is the SIDE record's line 4, written to `.cl/.kpn`, never the
+    # `<fx>.key` another tree's push may have replaced.
+    if [ "$2" != census ] || [ -n "${AI_DLC_CL_DIST_OUT:-}" ]; then
+      : > "$c/.hhit"; awk -F'\t' '$2 == "run" && $4 == "k" { print $1 }' "$c/.kdec" > "$c/.hcand"
+      while IFS= read -r b; do
+        [ -d "$kd/$b.k" ] && [ -s "$c/.k/$b" ] || continue
+        hh="$(grep -v '^#' "$c/.k/$b" | shasum -a 256 | cut -d' ' -f1)"
+        [ -z "$hh" ] || [ ! -f "$kd/$b.k/$hh" ] || { printf '%s\n' "$b" >> "$c/.hhit"
+          awk -v f="$b" 'NR <= 4 && /^#pending / { n = substr($0, 10) } END { print f "\t" (n == "" ? "-" : n) }' "$kd/$b.k/$hh" >> "$c/.kpn"; }
+      done < "$c/.hcand"
+      if [ -s "$c/.hhit" ]; then
+        HH="$c/.hhit" awk -F'\t' 'BEGIN { while ((getline l < ENVIRON["HH"]) > 0) H[l] = 1 }
+          $2 == "run" && $4 == "k" && ($1 in H) { print $1 "\tskip\t\th\t" $5; next } { print }' "$c/.kdec" > "$c/.kdec.t" \
+          && mv "$c/.kdec.t" "$c/.kdec" || rm -f "$c/.kdec.t"
+      fi
+    fi
     awk -F'\t' '$2 == "run" { print $1 }' "$c/.kdec" > "$out/.cl.sel"
     awk -F'\t' '$2 == "skip" && ($4 == "v" || $4 == "m" || $4 == "b") { print $1 }' "$c/.kdec" > "$c/.k.always"
   fi
@@ -3172,14 +3191,18 @@ cl_select() {
     END { if (n) print "   ..    consumer layout: " n " <fx>@consumer unit(s) skipped, the distribution twin passed on this key and every moved installed input is a byte copy of a distribution file:" s }' "$c/.kdec"
   # EVERY UNIT SKIPPED ON A PASS RECORDED ELSEWHERE IS NAMED, in the distribution's own verdict-store line: a store hit
   # (`.vs`, readset_verdicts' hit list) and a record skip whose record is still UNCONFIRMED (`.vs.u`: cl_publish marked
-  # it and no run that reached its end has cleared the mark, so a stopped run or a census wrote it). A record a
-  # completed run published or confirmed is counted on the selection line and not named, as the distribution counts
-  # its key-record skips.
+  # it and no run that reached its end has cleared the mark, so a stopped run or a census wrote it). A skip on a record
+  # a completed run published or confirmed, and a skip on a content-keyed side record (`h`), is named on the
+  # `placement records:` line below.
   if [ -z "$why" ]; then
     awk -F'\t' '$2 == "skip" && $4 != "v" && $4 != "d" { print $1 }' "$c/.kdec" > "$c/.rskip"
     while IFS= read -r b; do [ ! -f "$kd/.unconfirmed/$b" ] || printf '%s\n' "$b"; done < "$c/.rskip" > "$c/.vs.u"
     cat "$c/.vs" "$c/.vs.u" > "$c/.vs.all" 2>/dev/null
   fi
+  [ -n "$why" ] || VU="$c/.vs.u" awk -F'\t' 'BEGIN { while ((getline l < ENVIRON["VU"]) > 0) U[l] = 1 }
+    $2 == "skip" && $4 != "v" && $4 != "d" && !($1 in U) { if ($4 == "h") { m++; t = t " " $1 "@consumer" } else { n++; s = s " " $1 "@consumer" } }
+    END { if (n) print "   ..    placement records: " n " <fx>@consumer unit(s) skipped on a confirmed record:" s
+      if (m) print "   ..    placement records: " m " <fx>@consumer unit(s) skipped on a content-keyed pass (a side record of exactly these keys):" t }' "$c/.kdec"
   [ -n "$why" ] || [ ! -s "$c/.vs.all" ] || printf '   ..    verdict store: %s fixture(s) skipped on a pass recorded elsewhere: %s\n' "$(grep -c . "$c/.vs.all")" "$(sed 's/$/@consumer/' "$c/.vs.all" | tr '\n' ' ' | sed 's/ $//')"
   return 0
 }
@@ -3208,15 +3231,22 @@ cl_any_record() {
 # The record lands UNCONFIRMED (`<keys dir>/.unconfirmed/<fx>`, written first) until cl_confirm clears the mark.
 # LINE 4 IS `#pending <n>`, the READSET_VS_PENDING rows of the unit's log `<out>/.log/<fx>@consumer` (the definition
 # .cl.pub carries); no log or no regex, no line, and a later skip on the record names its count unrecorded.
+# THE CONTENT-KEYED SIDE RECORD `<keys dir>/<fx>.k/<sha256 of the prospective record's non-# rows>` is a copy of the
+# published record, copied from this unit's own temporary file (never from `<fx>.key`, which a concurrent publish of
+# another tree may have replaced), written beside `<fx>.key` and never replaced by another tree's push: cl_select skips a unit whose
+# prospective record hash has one (decision `h`). All of it stays inside this function body, which is all .cl.pub carries.
 cl_publish() {
-  local kd="" n=""
+  local kd="" n="" h="" t=""
   read -r kd 2>/dev/null < "$1/.cl.keys" || return 0
   [ -n "$kd" ] && [ -s "$1/.cl/.k/$2" ] || return 0
   [ -n "${READSET_VS_PENDING:-}" ] && [ -f "$1/.log/$2@consumer" ] && n="$(grep -cE "$READSET_VS_PENDING" "$1/.log/$2@consumer")" || :
   case "$n" in ''|*[!0-9]*) n="" ;; esac
+  t="$kd/$2.key.tmp.$$"
   mkdir -p "$kd/.unconfirmed" 2>/dev/null && : > "$kd/.unconfirmed/$2" 2>/dev/null \
-    && awk -v n="$n" '{ print } NR == 3 && n != "" { print "#pending " n }' "$1/.cl/.k/$2" > "$kd/$2.key.tmp.$$" 2>/dev/null \
-    && mv "$kd/$2.key.tmp.$$" "$kd/$2.key" 2>/dev/null
+    && awk -v n="$n" '{ print } NR == 3 && n != "" { print "#pending " n }' "$1/.cl/.k/$2" > "$t" 2>/dev/null || return 0
+  h="$(grep -v '^#' "$1/.cl/.k/$2" | shasum -a 256 | cut -d' ' -f1)"
+  if [ -n "$h" ] && mkdir -p "$kd/$2.k" 2>/dev/null && cp "$t" "$kd/$2.k/$h.t$$" 2>/dev/null; then mv "$kd/$2.k/$h.t$$" "$kd/$2.k/$h" 2>/dev/null || :; fi
+  mv "$t" "$kd/$2.key" 2>/dev/null
   return 0
 }
 # cl_write <out>: publishes the remaining consumer-layout records through

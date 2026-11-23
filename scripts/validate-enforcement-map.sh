@@ -13609,6 +13609,63 @@ else
   [ -z "$i132_miss" ] || err "I132 the ai-dlc-protect.sh matcher in templates/settings.json.template does not match:$i132_miss. The hook dispatches on these names (CTX_PREFIXES x CTX_TOOLS in core/hooks/ai-dlc-protect.sh), so a call under one never reaches it. Add each name to that matcher."
 fi
 
+# --- I133: the update skill's pull.sh subcommand names agree across SKILL.md's list, pull.sh's usage header and pull.sh's dispatch ---
+# Three copies of the subcommand names: the `- `pull.sh <name> ...`` list lines of core/skills/ai-dlc-update/SKILL.md, the
+# `#   pull.sh <name>` lines of pull.sh's header between `# Usage:` and `# STDOUT`, and the two-space-indent `label)`
+# lines of pull.sh's one `case "$cmd" in` ... `esac` dispatch (label split on `|`, `*` dropped). A name in one set and
+# missing from another errs, naming the name and the side. Control: an empty extraction from any side errs, since a
+# grammar that reads nothing would compare equal to nothing. In-process while-read loops, no fork per line.
+i133_pull="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/pull.sh"
+i133_skill="$REPO_ROOT/core/skills/ai-dlc-update/SKILL.md"
+i133_d=" "; i133_s=" "; i133_u=" "
+if [ -f "$i133_pull" ] && [ -f "$i133_skill" ]; then
+  i133_st=0; i133_h=0
+  while IFS= read -r i133_l; do
+    if [ "$i133_h" -eq 0 ]; then
+      case "$i133_l" in '# Usage:'*) i133_h=1 ;; esac
+    elif [ "$i133_h" -eq 1 ]; then
+      case "$i133_l" in
+        '# STDOUT'*) i133_h=2 ;;
+        '#   pull.sh '*) i133_r="${i133_l#'#   pull.sh '}"; i133_u="$i133_u${i133_r%%[[:space:]]*} " ;;
+      esac
+    fi
+    if [ "$i133_st" -eq 0 ]; then
+      case "$i133_l" in 'case "$cmd" in') i133_st=1 ;; esac
+    elif [ "$i133_st" -eq 1 ]; then
+      case "$i133_l" in
+        'esac') i133_st=2 ;;
+        '  '[!\ ]*')'*)
+          i133_r="${i133_l#  }"; i133_r="${i133_r%%)*}"
+          case "$i133_r" in *[[:space:]]*) ;; *)
+            i133_r="$i133_r|"
+            while [ -n "$i133_r" ]; do
+              i133_n="${i133_r%%|*}"; i133_r="${i133_r#*|}"
+              case "$i133_n" in ''|'*') ;; *) i133_d="$i133_d$i133_n " ;; esac
+            done ;; esac ;;
+      esac
+    fi
+  done <"$i133_pull"
+  while IFS= read -r i133_l; do
+    case "$i133_l" in
+      '- `pull.sh '*) i133_r="${i133_l#'- `pull.sh '}"; i133_s="$i133_s${i133_r%%[[:space:]\`]*} " ;;
+    esac
+  done <"$i133_skill"
+fi
+if [ "$i133_d" = " " ] || [ "$i133_s" = " " ] || [ "$i133_u" = " " ]; then
+  err "I133 extracted no subcommand names from$([ "$i133_d" = " " ] && echo ' the pull.sh case dispatch')$([ "$i133_s" = " " ] && echo ' the SKILL.md pull.sh list')$([ "$i133_u" = " " ] && echo ' the pull.sh usage header'); an empty extraction proves nothing, so nothing was checked."
+else
+  for i133_a in "d:pull.sh dispatch:$i133_d" "s:SKILL.md list:$i133_s" "u:pull.sh usage header:$i133_u"; do
+    i133_an="${i133_a%%:*}"; i133_a="${i133_a#*:}"; i133_al="${i133_a%%:*}"; i133_as="${i133_a#*:}"
+    for i133_b in "d:pull.sh dispatch:$i133_d" "s:SKILL.md list:$i133_s" "u:pull.sh usage header:$i133_u"; do
+      i133_bn="${i133_b%%:*}"; i133_b="${i133_b#*:}"; i133_bl="${i133_b%%:*}"; i133_bs="${i133_b#*:}"
+      [ "$i133_an" != "$i133_bn" ] || continue
+      for i133_n in $i133_as; do
+        case "$i133_bs" in *" $i133_n "*) ;; *) err "I133 subcommand '$i133_n' is in the $i133_al but missing from the $i133_bl. The dispatch, SKILL.md's \`- \`pull.sh <name>\`\` list and pull.sh's usage header name one set; add or remove '$i133_n' in the side that lacks it." ;; esac
+      done
+    done
+  done
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
