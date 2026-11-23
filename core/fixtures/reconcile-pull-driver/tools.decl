@@ -46,3 +46,4 @@ tee
 fold
 tar
 sleep
+chflags

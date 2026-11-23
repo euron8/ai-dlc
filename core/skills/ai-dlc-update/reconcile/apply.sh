@@ -152,6 +152,13 @@ DIST="${_p1:?usage: apply.sh [--stamp-at-finish] [--carried-machinery-slice] <di
 BASE="${_p2:?}"
 CONSUMER="${_p3:?}"
 THEIRS="${_p4:?}"
+# The four positionals every printed `pull.sh record` remedy carries, each single-quoted (an embedded
+# quote as '\''), so a value with a space survives the paste as one argument. No fork unless a quote.
+rec_cmd_args=""
+for _rv in "$DIST" "$BASE" "$CONSUMER" "$THEIRS"; do
+  case "$_rv" in *"'"*) _rv="$(printf '%s' "$_rv" | sed "s/'/'\\\\''/g")" ;; esac
+  rec_cmd_args="$rec_cmd_args'$_rv' "
+done
 # `--classify-check` is the pull driver's (reconcile/pull.sh, BL-1190 D-5) and nobody else's: it
 # needs AI_DLC_PULL_RUN and is never combined with --finish. See CLASSIFY CHECK below.
 if [ "$CLASSIFY_CHECK" = 1 ] && { [ -z "${AI_DLC_PULL_RUN:-}" ] || [ "$FINISH" = 1 ]; }; then
@@ -1364,7 +1371,7 @@ TP_LINES=""
 TP_JSON_OWED=0
 TP_F_STATE=""
 TP_F_ROWS=""
-tp_remedy_json="Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); p=\$(mktemp); git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$t\"; git -C <dist> show \"${BASE}:templates/settings.json.template\" > \"\$p\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" --prior-template \"\$p\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver)."
+tp_remedy_json="Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); p=\$(mktemp); git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$t\"; git -C <dist> show \"${BASE}:templates/settings.json.template\" > \"\$p\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" --prior-template \"\$p\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${rec_cmd_args}-- <path>...\` naming every file this pull's rows had you edit (run it before deliver)."
 # tp_rec_line <consumer-rel> -> the `template: ` line for the file as it stands now ("-" unreadable).
 tp_rec_line() {
   local _h _m=644
@@ -4142,7 +4149,7 @@ for c in cmds:
     # caller that never ran the template scan (the fixture seam) keeps today's row.
     if [ -n "$hr_what" ] && [ "${TP_JSON_OWED:-0}" != 1 ]; then
       say WORKLIST settings-merge ".claude/settings.json" \
-        "${hr_what}Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); p=\$(mktemp); git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$t\"; git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$p\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" --prior-template \"\$p\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver)."
+        "${hr_what}Run the settings reconcile, which is the one program that owns this contract: \`t=\$(mktemp); p=\$(mktemp); git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$t\"; git -C <dist> show \"${THEIRS}:templates/settings.json.template\" > \"\$p\"; reconcile/settings-merge.sh --consumer .claude/settings.json --template \"\$t\" --prior-template \"\$p\"\`. Re-run scripts/ai-dlc/validate-hook-registration.sh afterwards; it must exit 0 before delivery. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${rec_cmd_args}-- <path>...\` naming every file this pull's rows had you edit (run it before deliver)."
     fi
     if [ -n "$hr_dangle_local" ]; then
       say WORKLIST settings-local-dangling ".claude/settings.local.json" \
@@ -4257,10 +4264,10 @@ if [ -f "$TI_RENDERER" ]; then
     case "$ti_out" in
       *"carries no AI/DLC transient-state block"*)
         say WORKLIST transient-ignore ".gitignore" \
-          "this consumer has NEVER had a transient-state ignore block written. Nothing drifted — the rendered region does not exist, so every path the declaration marks transient is unignored, and a broad \`git add\` commits pipeline scratch state as a tracked file. That is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Write it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it appends its own marker-bounded region and touches nothing else, and names anything already tracked). A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')" ;;
+          "this consumer has NEVER had a transient-state ignore block written. Nothing drifted — the rendered region does not exist, so every path the declaration marks transient is unignored, and a broad \`git add\` commits pipeline scratch state as a tracked file. That is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Write it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it appends its own marker-bounded region and touches nothing else, and names anything already tracked). A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${rec_cmd_args}-- <path>...\` naming every file this pull's rows had you edit (run it before deliver). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')" ;;
       *)
         say WORKLIST transient-ignore ".gitignore" \
-          "the transient-state ignore block no longer matches the declaration this apply just delivered. Every newly-declared transient path is unignored until it is re-rendered, and a broad \`git add\` then commits pipeline scratch state as a tracked file — which is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Re-render it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it rewrites only its own marker-bounded region, and names anything already tracked). A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')" ;;
+          "the transient-state ignore block no longer matches the declaration this apply just delivered. Every newly-declared transient path is unignored until it is re-rendered, and a broad \`git add\` then commits pipeline scratch state as a tracked file — which is how a stale handoff entry marker re-arms the handoff guard in sessions that never ran a handoff. Re-render it: \`bash scripts/ai-dlc/sync-transient-ignore.sh\` (it rewrites only its own marker-bounded region, and names anything already tracked). A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${rec_cmd_args}-- <path>...\` naming every file this pull's rows had you edit (run it before deliver). Detail: $(printf '%s' "$ti_out" | tr '\n' ' ')" ;;
     esac
   elif [ "$ti_rc" != "0" ]; then
     say DECISION transient-ignore-unreadable ".gitignore" \
@@ -4348,7 +4355,7 @@ if [ -f "$AD_RENDERER" ]; then
     0|3) : ;;
     1)
       say WORKLIST agent-definitions ".claude/agents/" \
-        "the rendered agent definitions do not match \`aiDlcRoles\` in this consumer's settings. A role with no current definition runs at the session's launch-flag or settings-resolved reasoning effort, not at the one \`aiDlcRoles\` configures for it — the definition's \`effort:\` frontmatter is the only channel that binds the role's own level, and the dispatch guard's prompt sentence measurably does not. Re-render: \`bash scripts/ai-dlc/render-agent-definitions.sh\` (it writes only \`.claude/agents/<role>.md\` for roles \`aiDlcRoles\` declares with a model, removes its own stale projections, and leaves any hand-written definition alone). A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver). Detail: $(printf '%s' "$ad_out" | tr '\n' ' ')" ;;
+        "the rendered agent definitions do not match \`aiDlcRoles\` in this consumer's settings. A role with no current definition runs at the session's launch-flag or settings-resolved reasoning effort, not at the one \`aiDlcRoles\` configures for it — the definition's \`effort:\` frontmatter is the only channel that binds the role's own level, and the dispatch guard's prompt sentence measurably does not. Re-render: \`bash scripts/ai-dlc/render-agent-definitions.sh\` (it writes only \`.claude/agents/<role>.md\` for roles \`aiDlcRoles\` declares with a model, removes its own stale projections, and leaves any hand-written definition alone). A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${rec_cmd_args}-- <path>...\` naming every file this pull's rows had you edit (run it before deliver). Detail: $(printf '%s' "$ad_out" | tr '\n' ' ')" ;;
     *)
       say DECISION agent-definitions-unreadable ".claude/agents/" \
         "the agent-definition check could not run, so whether this consumer's roles bind their configured effort is UNKNOWN — and unknown reads exactly like clean. Detail: $(printf '%s' "$ad_out" | tr '\n' ' ')" ;;
@@ -4448,14 +4455,14 @@ if [ -n "$_merge" ]; then
 fi
 if [ -n "$_stale" ]; then
   say WORKLIST taught-schema "${_stale% }" \
-    "generated taught-schema example(s) are STALE against the schema this apply delivered: ${_stale}— the consumer's pre-push runs the same check and will refuse the push. Only after every semantic-merge and finish-unapplied row is resolved, run \`bash scripts/ai-dlc/sync-taught-schema.sh\` (no arguments; it rewrites only the generated regions), ${_then}. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver)."
+    "generated taught-schema example(s) are STALE against the schema this apply delivered: ${_stale}— the consumer's pre-push runs the same check and will refuse the push. Only after every semantic-merge and finish-unapplied row is resolved, run \`bash scripts/ai-dlc/sync-taught-schema.sh\` (no arguments; it rewrites only the generated regions), ${_then}. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${rec_cmd_args}-- <path>...\` naming every file this pull's rows had you edit (run it before deliver)."
 fi
 if [ -n "$_region" ]; then
   _region="$(printf '%s' "$_region" | tr '\n' ' ')"
   local _stop=""
   [ "${_halt:-0}" -gt 0 ] && _stop=" An unknown profile or an unclosed region STOPS the scan at that file, so files after it were not checked: re-run the check after the fix."
   say WORKLIST taught-schema-region "${_region% }" \
-    "taught-schema example(s) the sync cannot clear: ${_region}— a hand-written example outside a generated region, an unknown profile, or a region never closed. Edit each file as the check's FIX text says (\`bash scripts/ai-dlc/sync-taught-schema.sh --check\` prints it), ${_then}. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${DIST} ${BASE} ${CONSUMER} ${THEIRS} -- <path>...\` naming every file this pull's rows had you edit (run it before deliver).${_stop}"
+    "taught-schema example(s) the sync cannot clear: ${_region}— a hand-written example outside a generated region, an unknown profile, or a region never closed. Edit each file as the check's FIX text says (\`bash scripts/ai-dlc/sync-taught-schema.sh --check\` prints it), ${_then}. A file this changes after the finish is recorded by moving your own edits aside, then ONE \`pull.sh record ${rec_cmd_args}-- <path>...\` naming every file this pull's rows had you edit (run it before deliver).${_stop}"
 fi
 }
 

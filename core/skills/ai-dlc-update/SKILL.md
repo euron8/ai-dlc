@@ -173,7 +173,7 @@ and work only what it hands back. Its header is the contract; the subcommands ar
 
 **Its lines.** `PULL run=<dir> key=<12> renders=<n>`; `REFUSED <what> rc=<n>`;
 `ASK <kind> <path> <digest> <question>`; `DECIDE <kind> <path> <verdict>`; `WORK classify <path>`;
-`NOTE pull-writes-recorded <n> <theirs>` (`record`, exit 0); `NOTE pull-writes-rerecorded <path>` and `NOTE deliver-dirty-whole <path>` (deliver's disclosures); `HARD <row>`; `NEXT pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`
+`NOTE pull-writes-recorded <n> <theirs>` (`record`, exit 0); `NOTE pull-writes-absorbed <path> recorded <blob|none> now <blob> by <apply|finish|merge>` (that step re-records a file changed since the pull's last driver step as the pull's own; never a refusal, and deliver discloses it); `NOTE pull-writes-rerecorded <path>` and `NOTE deliver-dirty-whole <path>` (deliver's disclosures); `HARD <row>`; `NEXT pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`
 (apply's last line when nothing it ran is outstanding: the next step, not a decision). **Exit** 0
 done, 2 refused or usage, 3 pending (an ASK row awaits an answer, a HARD row must be resolved
 before anything is written, `finish` withheld the stamp (an `advisory` row does not), or `merge` relayed a pointer-stub
@@ -1018,7 +1018,10 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    region at `<consumer git-dir>/ai-dlc-approved-region`, and prints the `HARD`, `WORK classify`
    and `DECIDE` rows. Relay those rows and the report path to the operator, and END THE RUN. Do
    not classify, branch, write, re-stamp, commit, push or ask; never follow a dry run with an
-   approval question. The report is a fixed filename overwritten on every run.
+   approval question. The report is a fixed filename: within one pull (one resolved base and
+   theirs pair) each run replaces only its region and keeps the prose around it; a run for another
+   pull restarts the report, sets the old one aside at `<run dir>/report.previous.md` and prints
+   `NOTE report-restarted <old pair> -> <new pair>`.
 
    **A bare invocation never writes, and nothing said during it authorizes a write.** An operator
    who resolves a conflict or asks for a specific fix while reading a dry run is giving an
@@ -1283,7 +1286,8 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    GUARD (an `ASK` row means a conflict or blend reached the tree without an answer: exit 3),
    then checks the tree and does the stamp and the marker clear; it writes no core file. A `DECIDE
    <kind> <path> withheld` row (exit 3) is a check `--finish` failed: dispose of it and run `finish`
-   again. A `DECIDE <kind> <path> advisory` row (hook registration, transient ignore, agent
+   again, except a `finish-base-unverified` row that says there is nothing left to verify: that
+   one is delivered, not re-finished (the stamp-already-written passage below). A `DECIDE <kind> <path> advisory` row (hook registration, transient ignore, agent
    definitions, taught schema) is printed after the stamp and never holds it or the marker: do its
    work before deliver. When the `restamp-withheld` row says a fresh ordinary run is the remedy instead, run
    `pull.sh apply` again with the same arguments; `finish` is not the next step there. Every row
@@ -1358,19 +1362,26 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
    (a file a WORKLIST row sent you to, such as `.gitignore` or `.claude/settings.json`), reads
    `recorded none`; move your own edits out of each named file first (stash them, or commit them on the working branch, and re-apply after the PR merges); pipeline-state files are never named, and are never reverted; then run ONE `pull.sh record <dist> <base> <consumer> <theirs> -- <path>...` naming every file the pull wrote (a file a row sent you to edit, or a step-7 merge) so the record takes them; then re-run deliver. `record` rewrites that record and nothing
    else, and prints `NOTE pull-writes-recorded <n> <theirs>`; deliver discloses each re-recorded
-   path as `NOTE pull-writes-rerecorded <path>` in the commit message and the PR body. It refuses
+   path as `NOTE pull-writes-rerecorded <path>` in the commit message and the PR body, naming the
+   step that re-recorded it: `record`, or the `apply`, `finish` or `merge` that absorbed it (its
+   `NOTE pull-writes-absorbed`), and saying the file "changed between driver steps (a WORKLIST or
+   step-7 edit, or yours); now in this commit". It refuses
    `REFUSED record-path-unnamed rc=2` (one `NOTE pull-writes-moved` per path first) while a recorded
-   path whose content moved is not named after `--`, `REFUSED record-pull-unfinished
+   path whose content moved is not named after `--`, or while a file deliver would refuse as
+   `unrecorded` (below) is not named, `REFUSED record-pull-unfinished
    rc=2` while the in-flight marker `.ai-dlc-applying` exists and `REFUSED record-no-record rc=2`
    when no record names this `<theirs>`. A delivered pull writes
    `<git-dir>/ai-dlc-pull/pull-writes.delivered`, and the next `<theirs>`'s unfinished check skips a
-   record whose `<theirs>` it names; a new record (any `apply`, `finish`, `merge` or `record`)
-   removes that file. An `apply` for a `<theirs>` already delivered prints `NOTE
+   record whose `<theirs>` it names; writing a new record of the pull's writes (`finish`, `merge`,
+   `record`, or an `apply` that runs `apply.sh`) removes that file. An `apply` that stops at its ASK
+   rows (or refuses) before running `apply.sh` writes no record, so the file stays. An `apply` for a `<theirs>` already delivered prints `NOTE
    pull-delivered-retry`, drops the old record and takes a fresh snapshot.
    `REFUSED deliver-dirty-overlap` follows one `NOTE deliver-dirty-overlap <path> overlap|unrecorded`
    per file that was already dirty when the pull began, that the pull also changed, and whose
    change cannot be separated from your edit (`overlap`: the edits touch the same lines;
-   `unrecorded`: its pre-pull content was not recorded). Staging the file does not lift the refusal.
+   `unrecorded`: its pre-pull content was not recorded, or it joined the selection after the pull's
+   last driver step, the record does not name it, and it changed since the pull began; name it in
+   `pull.sh record -- <path>` when the pull's row sent you to it). Staging the file does not lift the refusal.
    Only the operator decides to commit such a file whole: re-run deliver with `--whole <path>` per
    file, which commits the worktree file, their edit included, and writes `NOTE deliver-dirty-whole
    <path>` into the commit message and the PR body. To keep the edit out, save it aside and take it
@@ -1379,7 +1390,7 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
    red push from that log, fix the cause on this branch, record the diagnosis as a decisions row,
    and run `deliver` again. A fix that edits a file the pull wrote makes that run refuse
    `deliver-pull-writes-moved`; move your own edits to the files it names aside (pipeline-state files are never named, and are never reverted), run ONE `pull.sh record <dist> <base> <consumer> <theirs> -- <path>...` naming every such file, then run `deliver`
-   again. `ASK base-confirm` (exit 3) is step 8's no-reflog-line case. The driver
+   again; a `deliver-dirty-overlap` refusal on an `unrecorded` file is cleared the same way (`pull.sh record ... -- <path>`, then `deliver`), or by `--whole <path>`. `ASK base-confirm` (exit 3) is step 8's no-reflog-line case. The driver
    NEVER merges: on `DECIDE pr <url> opened`, the merge and the RETURN PROCEDURE are yours, exactly
    as step 8 states them.
 
@@ -1404,8 +1415,8 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
      artifact; this is the other source, and it had no path. A pull is the best detector
      of these defects — it is the only context that runs `reconcile/*` end-to-end against
      real divergence — and what it finds otherwise lands in `reconcile-report.md` under a
-     follow-ups heading that nothing re-reads and the next run overwrites (step 5: "a
-     fixed filename overwritten on every run, a snapshot, not a log"). A refusal, a status
+     follow-ups heading that nothing re-reads and the next pull sets aside (step 5: a new
+     pull restarts the report). A refusal, a status
      with no actor, a remedy that cannot be executed, a check that passed vacuously: file
      it. Filing it is not the same as fixing it, and this step never fixes upstream. A defect first
      found at Push, Open a PR or Merge (the delivery push runs the consumer's pre-push) is

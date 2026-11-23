@@ -191,12 +191,50 @@ pl_render() {
   kept="$(grep -c '^emit-report: keep-raw: kept ' "$RUN/render.err")" || kept=0
   REUSED=0; [ "$kept" = 1 ] && REUSED=1
 }
-# pl_write_region: the region replaces the report's region in place, or starts the report.
+# pl_report_pair <report>: `<base> <theirs>` as typed on the first line inside the report's
+# reconcile-mechanical region that is emit-report.sh's `_base_ `<b>` → _theirs_ `<t>`.` line; nothing
+# when there is no region or no such line.
+pl_report_pair() {
+  awk '
+    /BEGIN GENERATED: reconcile-mechanical/ { reg = 1; next }
+    /END GENERATED: reconcile-mechanical/ { if (reg) exit }
+    reg && /^_base_ `[^` ]+` → _theirs_ `[^` ]+`\.$/ {
+      b = $0; sub(/^_base_ `/, "", b); t = b; sub(/`.*$/, "", b)
+      sub(/^[^`]*` → _theirs_ `/, "", t); sub(/`\.$/, "", t)
+      print b " " t; exit }' "$1"
+}
+# pl_commit_of <rev>: the commit <rev> names in DIST, 40 hex; nothing when it does not resolve.
+pl_commit_of() { git -C "$DIST" rev-parse -q --verify "${1}^{commit}" 2>/dev/null; }
+# pl_write_region: the region replaces the report's region in place while the report describes this
+# pull (its region's resolved base/theirs pair is this run's); a report describing another pull, or no
+# identifiable one, is set aside at $RUN/report.previous.md and restarted under a header naming this
+# pull (NOTE report-restarted); no report starts one.
 pl_write_region() {
-  local rep="$CONSUMER/$REPORT_REL" tmp
+  local rep="$CONSUMER/$REPORT_REL" tmp old ob ot nb nt was="<unidentified>" restart=0
   mkdir -p "${rep%/*}" || return 1
   tmp="$rep.pull.$$"
-  if [ -f "$rep" ] && grep -q 'BEGIN GENERATED: reconcile-mechanical' "$rep"; then
+  if [ -f "$rep" ]; then
+    restart=1
+    nb="$(pl_commit_of "$BASE")" || nb=""
+    nt="$(pl_commit_of "$THEIRS")" || nt=""
+    old="$(pl_report_pair "$rep")" || old=""
+    if [ -n "$old" ]; then
+      ob="$(pl_commit_of "${old%% *}")" || ob=""
+      ot="$(pl_commit_of "${old#* }")" || ot=""
+      if [ -n "$ob" ] && [ -n "$ot" ]; then
+        was="$(printf '%.12s..%.12s' "$ob" "$ot")"
+        [ -n "$nb" ] && [ -n "$nt" ] && [ "$ob" = "$nb" ] && [ "$ot" = "$nt" ] && restart=0
+      fi
+    fi
+  fi
+  if [ "$restart" = 1 ]; then
+    cp "$rep" "$RUN/report.previous.md" || return 1
+    { printf '# reconcile report — %.12s..%.12s\n\n' "${nb:-$BASE}" "${nt:-$THEIRS}"; cat "$RUN/region"; } > "$tmp" || { rm -f "$tmp"; return 1; }
+    mv -f "$tmp" "$rep" || return 1
+    printf 'NOTE report-restarted %s -> %.12s..%.12s: the report'"'"'s prose described another pull; it was set aside at %s/report.previous.md\n' \
+      "$was" "${nb:-$BASE}" "${nt:-$THEIRS}" "$RUN"
+    return 0
+  elif [ -f "$rep" ]; then
     awk -v rf="$RUN/region" '
       /BEGIN GENERATED: reconcile-mechanical/ { while ((getline l < rf) > 0) print l; skip = 1; next }
       skip && /END GENERATED: reconcile-mechanical/ { skip = 0; next }
@@ -339,14 +377,15 @@ pl_theirs_sha() { git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/d
 #   off such a branch, a different theirs or no snapshot: write one, unless another theirs's pull
 #     still has uncommitted writes at their recorded content (pl_writes_unfinished refuses).
 #   off such a branch, same theirs already delivered (`<pull-writes>.delivered` names it): the pull is
-#     finished; NOTE, drop the record and take a fresh snapshot.
+#     finished; NOTE, take a fresh snapshot, and only once it is written drop the record and the
+#     delivery marker (a failed write leaves both; a later failed record write is the no-record case).
 #   off such a branch, same theirs (a retry, e.g. after an ABANDON): keep it (the first attempt's
 #     writes can still be in the worktree, so a rewrite would call them the operator's own clean
 #     state), and refuse while a file the pull wrote moved since its last driver step
 #     (pl_writes_check), since this retry would record that edit as the pull's own.
 # The snapshot itself is never deleted.
 pl_dirty_snapshot() {
-  local rec="$GD/ai-dlc-pull/dirty-snapshot" th cur
+  local rec="$GD/ai-dlc-pull/dirty-snapshot" th cur drop=0
   th="$(pl_theirs_sha)"
   cur="$(git -C "$CONSUMER" symbolic-ref -q --short HEAD 2>/dev/null)" || cur=""
   case "$cur" in
@@ -357,7 +396,7 @@ pl_dirty_snapshot() {
       # Delivered, then retried at the same theirs: that pull is finished. Its record and snapshot
       # describe a worktree the operator has since edited, so both are replaced.
       echo "NOTE pull-delivered-retry this theirs was already delivered; its record of the pull's writes is dropped and a fresh snapshot is taken"
-      rm -f "$(pl_writes_file)"
+      drop=1
     else
       pl_writes_check apply
       return 0
@@ -367,6 +406,7 @@ pl_dirty_snapshot() {
   pl_status_rows "$RUN/snapshot" 1 || return 1
   { printf 'ai-dlc-dirty-snapshot 2 %s %s\n' "$th" "${RUN##*/}"; cat "$RUN/snapshot.rows"; } > "$rec.$$" || return 1
   mv -f "$rec.$$" "$rec" || return 1
+  [ "$drop" = 0 ] || rm -f "$(pl_writes_file)" "$(pl_writes_file).delivered"
 }
 
 # --- the pull's own writes (what deliver compares) --------------------------------------------------
@@ -390,32 +430,49 @@ pl_writes_blob() { # <consumer-relative path> -> its raw content id, `-` absent,
 # (clean at the snapshot, outside the state tree (the filter applied to keep-selected paths too), less the record's own exclusions: always-stage, strong, marker and schema-ledger paths) that the record does not name, is tracked in
 # HEAD and whose content, hashed WITH the path's filters, differs from HEAD's blob: an edit made after the last
 # driver step. Untracked paths, renames and deletions are never named. Runs deliver's selection in a subshell
-# (it reassigns RUN).
+# (it reassigns RUN). With a third argument `late` (record and pl_writes_arm; never pl_writes_check, whose deliver
+# caller leaves them to pl_deliver_merge's `unrecorded` refusal) it also names each path DIRTY at the snapshot that
+# the selection keeps, under the same exclusions, tracked in HEAD and a regular file, whose raw (--no-filters) worktree
+# blob differs from the one the snapshot recorded.
+# pl_writes_excl <selection run dir> -- the record's exclusions, one path per line: always-stage, the selection's
+# strong set, the schema ledgers, the in-flight marker.
+pl_writes_excl() {
+  pl_always_stage "$(pl_theirs_sha)"; cat "$1/deliver.strong" "$1/deliver.ledgers" 2>/dev/null; printf '%s\n' .claude/.ai-dlc-applying
+}
 pl_writes_unrecorded() {
-  local snap="$GD/ai-dlc-pull/dirty-snapshot" p w h h1="" h2="" h3=""
+  local snap="$GD/ai-dlc-pull/dirty-snapshot" p k w h h1="" h2="" h3="" late=0
+  [ "${3:-}" != late ] || late=1
   : > "$2"
   [ -f "$snap" ] || return 0
   # A snapshot written for another theirs is one deliver does not use (deliver-no-snapshot): nothing is clean at it.
   read -r h1 h2 h3 _ < "$snap"
   case "$h1 $h2 $h3" in "ai-dlc-dirty-snapshot 1 $(pl_theirs_sha)"|"ai-dlc-dirty-snapshot 2 $(pl_theirs_sha)") ;; *) return 0 ;; esac
   ( RUN="$RUN/pw-unrec.sel"; mkdir -p "$RUN" && pl_deliver_select > /dev/null 2>&1 && cp "$RUN/deliver.sel" "$2.sel" && cp "$RUN/deliver.state" "$2.state" && cp "$RUN/deliver.ledgers" "$2.ledgers" && cp "$RUN/deliver.notes" "$2.notes" \
-    && { pl_always_stage "$(pl_theirs_sha)"; cat "$RUN/deliver.strong" 2>/dev/null; printf '%s\n' .claude/.ai-dlc-applying; } > "$2.excl" ) || return 1
+    && cp "$RUN/deliver.keep" "$2.keep" && pl_writes_excl "$RUN" > "$2.excl" ) || return 1
   # The state-tree filter deliver's third disjunct applies, plus the schema ledgers (deliver.ledgers, which deliver itself still commits), applied here to every candidate, keep-selected or not. Without
   # the schema or jq it is off, so a state path cannot be told from another: nothing is named (deliver's own pass prints its deliver-state-unfiltered NOTE).
   [ -s "$2.state" ] || return 0
-  awk -F'\t' -v fs="$snap" -v fr="$1" -v fx="$2.excl" -v fst="$2.state" -v fl="$2.ledgers" '
+  awk -F'\t' -v T="$TAB" -v late="$late" -v fs="$snap" -v fr="$1" -v fx="$2.excl" -v fst="$2.state" -v fl="$2.ledgers" -v fk="$2.keep" '
     function isstate(q,   i) { for (i = 0; i < ns; i++) if (q == st[i] || index(q, st[i] "/") == 1) return 1; return 0 }
-    FILENAME == fs { if (FNR > 1) insnap[$4] = 1; next }
+    FILENAME == fs { if (FNR > 1) { insnap[$4] = 1; w0[$4] = $3 } next }
     FILENAME == fr { rec[$1] = 1; next }
     FILENAME == fx { x[$0] = 1; next }
     FILENAME == fst { st[ns++] = $0; next }
     FILENAME == fl { lg[$0] = 1; next }
-    $5 == "-" && $1 !~ /[?DR]/ && !($4 in insnap) && !($4 in rec) && !($4 in x) && !($4 in lg) && !isstate($4) && !seen[$4]++ { print $4 }' \
-    "$snap" "$1" "$2.excl" "$2.state" "$2.ledgers" "$2.sel" > "$2.cand" || return 1
-  while IFS= read -r p; do
+    FILENAME == fk { keep[$0] = 1; next }
+    $5 == "-" && $1 !~ /[?DR]/ && (!($4 in insnap) || (late == 1 && ($4 in keep))) && !($4 in rec) && !($4 in x) && !($4 in lg) && !isstate($4) && !seen[$4]++ {
+      print $4 T (($4 in insnap) ? "late" : "clean") T (($4 in insnap) ? w0[$4] : "-") }' \
+    "$snap" "$1" "$2.excl" "$2.state" "$2.ledgers" "$2.keep" "$2.sel" > "$2.cand" || return 1
+  while IFS="$TAB" read -r p k w0; do
     [ -n "$p" ] || continue
     [ -f "$CONSUMER/$p" ] && [ ! -L "$CONSUMER/$p" ] || continue
     h="$(git -C "$CONSUMER" rev-parse -q --verify "HEAD:$p" 2>/dev/null)" || continue
+    # Dirty at the snapshot and kept: pl_deliver_merge's `unrecorded` test, less a file whose raw worktree
+    # blob still equals the snapshot's (the merge then commits nothing of the operator's).
+    if [ "$k" = late ]; then
+      [ "$(git -C "$CONSUMER" hash-object --no-filters -- "$p" 2>/dev/null)" = "$w0" ] || printf '%s\n' "$p" >> "$2"
+      continue
+    fi
     w="$(git -C "$CONSUMER" hash-object -- "$p" 2>/dev/null)" || continue
     [ "$w" = "$h" ] || printf '%s\n' "$p" >> "$2"
   done < "$2.cand"
@@ -426,7 +483,7 @@ pl_writes_record() {
   RUN="$RUN/pull-writes.sel"
   mkdir -p "$RUN" || return 1
   pl_deliver_select > /dev/null 2>&1 || return 1
-  { pl_always_stage "$th"; cat "$RUN/deliver.strong" "$RUN/deliver.ledgers" 2>/dev/null; printf '%s\n' .claude/.ai-dlc-applying; } > "$RUN/pw.excl"
+  pl_writes_excl "$RUN" > "$RUN/pw.excl"
   awk -F'\t' -v fx="$RUN/pw.excl" 'FILENAME == fx { x[$0] = 1; next } !($4 in x) && !seen[$4]++ { print $4 }' \
     "$RUN/pw.excl" "$RUN/deliver.sel" > "$RUN/pw.paths" || return 1
   { printf 'ai-dlc-pull-writes 1 %s\n' "$th"
@@ -449,7 +506,50 @@ pl_writes_trap() {
   fi
   exit "$rc"
 }
-pl_writes_arm() { PW_ON=1; trap pl_writes_trap EXIT; }
+# pl_writes_arm <apply|finish|merge> -- before the step's writer runs: when the record names this theirs, each
+# recorded path whose content moved and each path pl_writes_unrecorded names (`late`) is about to be re-recorded
+# as the pull's own by the EXIT trap. Each is disclosed, never refused: `NOTE pull-writes-absorbed <path> recorded
+# <blob|none> now <blob> by <step>` on stdout, and a `<path>\t<step>` row in `pull-writes.rerecorded`, which
+# deliver discloses. A failed read or write here prints one stderr line and never moves the exit.
+pl_writes_arm() { pl_writes_absorbed "$1"; PW_ON=1; trap pl_writes_trap EXIT; }
+pl_writes_absorbed() {
+  local f th h1="" h2="" h3="" p b now
+  f="$(pl_writes_file)"; th="$(pl_theirs_sha)"
+  [ ! -f "$f" ] || read -r h1 h2 h3 < "$f"
+  [ "$h1 $h2 $h3" = "ai-dlc-pull-writes 1 $th" ] || return 0
+  : > "$RUN/pw-absorbed"
+  if sed -n '2,$p' "$f" > "$RUN/pw-abs.rows"; then
+    while IFS="$TAB" read -r p b; do
+      [ -n "$p" ] || continue
+      now="$(pl_writes_blob "$p")"
+      [ "$now" = "$b" ] && continue
+      echo "NOTE pull-writes-absorbed $p recorded $b now $now by $1"
+      printf '%s\t%s\n' "$p" "$1" >> "$RUN/pw-absorbed"
+    done < "$RUN/pw-abs.rows"
+    if pl_writes_unrecorded "$RUN/pw-abs.rows" "$RUN/pw-abs.new" late; then
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        echo "NOTE pull-writes-absorbed $p recorded none now $(pl_writes_blob "$p") by $1"
+        printf '%s\t%s\n' "$p" "$1" >> "$RUN/pw-absorbed"
+      done < "$RUN/pw-abs.new"
+    else echo "pull: the files changed since the pull's last driver step could not all be listed; $1 re-records them as the pull's own without a disclosure" >&2; fi
+  else echo "pull: the record of this pull's own writes ($f) could not be read; $1 re-records it without disclosing what changed since the last driver step" >&2; fi
+  [ -s "$RUN/pw-absorbed" ] || return 0
+  pl_rerecorded_add "$RUN/pw-absorbed" \
+    || echo "pull: $(pl_writes_file).rerecorded could not be written; deliver will not disclose the files $1 absorbed above" >&2
+  return 0
+}
+# pl_rerecorded_add <rows file> -- appends rows to `pull-writes.rerecorded` (header `ai-dlc-pull-rerecorded 1
+# <theirs>`; a row is `<path>` from record, `<path>\t<step>` from pl_writes_absorbed). Another theirs's list is
+# replaced; this theirs's grows, each row once.
+pl_rerecorded_add() {
+  local rr th
+  rr="$(pl_writes_file).rerecorded"; th="$(pl_theirs_sha)"
+  if [ -f "$rr" ] && [ "$(sed -n 1p "$rr")" = "ai-dlc-pull-rerecorded 1 $th" ]; then cp "$rr" "$rr.$$" || return 1
+  else printf 'ai-dlc-pull-rerecorded 1 %s\n' "$th" > "$rr.$$" || return 1; fi
+  awk 'NR == 1 || !seen[$0]++' "$rr.$$" "$1" > "$rr.$$.u" && mv -f "$rr.$$.u" "$rr" || return 1
+  rm -f "$rr.$$"
+}
 # pl_writes_ran -- 0 when a run since this theirs's snapshot started apply.sh (its run dir holds an apply.out).
 pl_writes_ran() {
   local snap="$GD/ai-dlc-pull/dirty-snapshot" s="" r t
@@ -492,20 +592,28 @@ pl_writes_check() {
   [ "$n" -eq 0 ] && return 0
   # deliver runs only on a finished pull, where finish refuses (finish-base-unverified on the stamped tree):
   # its remedy is `record`, which only rewrites the record. apply's retry is before the finish.
-  local step="\`pull.sh finish\` with the same arguments"
-  [ "$1" = deliver ] && step="ONE \`pull.sh record $DIST $BASE $CONSUMER $THEIRS -- <path>...\` naming every file above that the pull wrote, after moving your own edits to the files named above aside (the PR discloses each one)"
+  local step="\`pull.sh finish\` with the same arguments" ra="" rv
+  # The four values single-quoted (an embedded quote as '\''), as apply.sh's rec_cmd_args prints them.
+  if [ "$1" = deliver ]; then
+    for rv in "$DIST" "$BASE" "$CONSUMER" "$THEIRS"; do
+      case "$rv" in *"'"*) rv="$(printf '%s' "$rv" | sed "s/'/'\\\\''/g")" ;; esac
+      ra="$ra'$rv' "
+    done
+  fi
+  [ "$1" = deliver ] && step="ONE \`pull.sh record ${ra}-- <path>...\` naming every file above that the pull wrote, after moving your own edits to the files named above aside (the PR discloses each one)"
   echo "pull: $n file(s) this pull wrote changed after its last driver step (pull.sh apply, finish, merge or record): your own edit since the pull's last step, or a step-7 merge made after the last driver run. Nothing was written. If the pull wrote the change (a step-7 merge, or an edit a WORKLIST row sent you to make), run $step so the record takes it; if it is your own edit to a file named above, move that edit aside (stash it, or commit it on the working branch) and re-apply it after the PR merges. Pipeline-state files are never named here; do not revert them. Then re-run $1." >&2
   refuse "$1-pull-writes-moved" 2
 }
 # pl_record -- `pull.sh record <dist> <base> <consumer> <theirs> [-- <path>...]`: rewrites this theirs's
 # record of the pull's own writes from the work tree, and nothing else. Only on a finished pull (the
 # in-flight marker gone) that already holds a record for this theirs; it stamps nothing and runs no
-# apply.sh check. Every recorded path whose content moved must be named after `--` (else
+# apply.sh check. Every recorded path whose content moved, and every path pl_writes_unrecorded names
+# (`late`: deliver's `unrecorded` refusal paths too), must be named after `--` (else
 # `REFUSED record-path-unnamed`, naming them); each named path that moved is appended to
 # `<git-dir>/ai-dlc-pull/pull-writes.rerecorded` (header `ai-dlc-pull-rerecorded 1 <theirs>`), which
 # deliver discloses as `NOTE pull-writes-rerecorded`.
 pl_record() {
-  local f th h1 h2 h3 p b now n=0 named rr nl
+  local f th h1 h2 h3 p b now n=0 named nl
   nl="$(printf '\n_')"; nl="${nl%_}"
   named=""
   if [ $# -gt 4 ]; then
@@ -514,7 +622,7 @@ pl_record() {
   named="$named$nl"
   pl_setup "$1" "$2" "$3" "$4"
   [ ! -e "$CONSUMER/.claude/.ai-dlc-applying" ] && [ ! -L "$CONSUMER/.claude/.ai-dlc-applying" ] || refuse "record-pull-unfinished" 2
-  f="$(pl_writes_file)"; th="$(pl_theirs_sha)"; rr="$f.rerecorded"
+  f="$(pl_writes_file)"; th="$(pl_theirs_sha)"
   h1=""; h2=""; h3=""
   [ ! -f "$f" ] || read -r h1 h2 h3 < "$f"
   [ "$h1 $h2 $h3" = "ai-dlc-pull-writes 1 $th" ] || refuse "record-no-record" 2
@@ -529,7 +637,7 @@ pl_record() {
       *) echo "NOTE pull-writes-moved $p recorded $b now $now"; n=$((n + 1)) ;;
     esac
   done < "$RUN/pw-check.rows"
-  pl_writes_unrecorded "$RUN/pw-check.rows" "$RUN/pw-check.new" || refuse "record-read" 2
+  pl_writes_unrecorded "$RUN/pw-check.rows" "$RUN/pw-check.new" late || refuse "record-read" 2
   while IFS= read -r p; do
     [ -n "$p" ] || continue
     case "$named" in
@@ -544,11 +652,7 @@ pl_record() {
   fi
   ( pl_writes_record ) > /dev/null 2>&1 || refuse "record-write" 2
   if [ -s "$RUN/pw-rerecorded" ]; then
-    # Another theirs's list is replaced; this theirs's grows, each path once.
-    if [ -f "$rr" ] && [ "$(sed -n 1p "$rr")" = "ai-dlc-pull-rerecorded 1 $th" ]; then cp "$rr" "$rr.$$" || refuse "record-write" 2
-    else printf 'ai-dlc-pull-rerecorded 1 %s\n' "$th" > "$rr.$$" || refuse "record-write" 2; fi
-    awk 'NR == 1 || !seen[$0]++' "$rr.$$" "$RUN/pw-rerecorded" > "$rr.$$.u" && mv -f "$rr.$$.u" "$rr" || refuse "record-write" 2
-    rm -f "$rr.$$"
+    pl_rerecorded_add "$RUN/pw-rerecorded" || refuse "record-write" 2
   fi
   echo "NOTE pull-writes-recorded $(($(wc -l < "$f") - 1)) $th"
   exit 0
@@ -630,7 +734,7 @@ pl_apply() {
        br="ai-dlc-update/${ver:-$(git -C "$DIST" rev-parse --short "$THEIRS" 2>/dev/null)}-reconcile-$(date -u +%Y%m%dT%H%M%SZ)"
        git -C "$CONSUMER" checkout -q -b "$br" 2>"$RUN/branch.err" || refuse "branch" "$?" ;;
   esac
-  pl_writes_arm
+  pl_writes_arm apply
   AI_DLC_PULL_RUN="$RUN" bash "$R/apply.sh" --stamp-at-finish ${flag:+"$flag"} "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$RUN/apply.out" 2> "$RUN/apply.err"
   arc=$?
   if grep -q '^ASK-UNANSWERED' "$RUN/apply.err"; then
@@ -716,7 +820,7 @@ pl_finish() {
   # Classify blocks written since the apply join the ledger. apply.sh --finish owns the ledger check
   # (every row pending or answered before the stamp, exit 3 otherwise), so a bare --finish runs it too.
   pl_classify_ledger
-  pl_writes_arm
+  pl_writes_arm finish
   bash "$R/apply.sh" --finish ${flag:+"$flag"} "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$RUN/finish.out" 2> "$RUN/finish.err"
   frc=$?
   if [ "$frc" -eq 3 ] && grep -q '^ASK-UNANSWERED' "$RUN/finish.err"; then
@@ -748,7 +852,7 @@ pl_merge() {
   [ -n "$ovr" ] || usage
   pl_setup "$1" "$2" "$3" "$4"
   case "$ovr" in /*) rel="${ovr#"$CONSUMER"/}" ;; *) rel="$ovr"; ovr="$CONSUMER/$ovr" ;; esac
-  pl_writes_arm
+  pl_writes_arm merge
   bash "$R/readopt-override.sh" "$DIST" "$THEIRS" "$CONSUMER" "$ovr" --merge > "$RUN/merge.out" 2> "$RUN/merge.err"
   rc=$?
   if [ "$rc" -eq 0 ]; then
@@ -814,7 +918,7 @@ pl_always_stage() {
 pl_dnote() { echo "$1"; echo "$1" >> "$RUN/deliver.notes"; }
 pl_deliver_select() {
   : > "$RUN/deliver.notes"
-  local snap="$GD/ai-dlc-pull/dirty-snapshot" th srun d k t h1 h2 h3 h4 sch why=""
+  local snap="$GD/ai-dlc-pull/dirty-snapshot" th k h1 h2 h3 h4 sch why=""
   pl_status_rows "$RUN/deliver" 0 || return 1
   th="$(pl_theirs_sha)"
   h1=""; h2=""; h3=""; h4=""
@@ -827,7 +931,6 @@ pl_deliver_select() {
     rm -f "$RUN/deliver.strong"
     return ;;
   esac
-  srun="$h4"
   : > "$RUN/deliver.state"; : > "$RUN/deliver.ledgers"
   sch="$CONSUMER/.claude/schemas/pipeline-state-paths.json"
   [ -f "$sch" ] || sch="$CONSUMER/core/schemas/pipeline-state-paths.json"
@@ -846,14 +949,10 @@ pl_deliver_select() {
   [ -z "$why" ] || pl_dnote "NOTE deliver-state-unfiltered $why -- pipeline state files changed since the first apply may be in this commit"
   : > "$RUN/deliver.strong.raw"; : > "$RUN/deliver.weak.raw"
   pl_always_stage "$th" >> "$RUN/deliver.strong.raw"
-  for d in "$GD"/ai-dlc-pull/run-*; do
-    [ -d "$d" ] || continue
-    t="${d##*/}"; [ -z "$srun" ] || [[ ! "${t%-*}" < "${srun%-*}" ]] || continue
-    cat "$d/apply.out" "$d/finish.out" 2>/dev/null \
-      | awk -F'\t' -v sf="$RUN/deliver.strong.raw" -v wf="$RUN/deliver.weak.raw" '
-          $1 == "NOTE" && $2 == "reconcile-log-name" { print $3 >> sf }
-          $1 == "RESOLVED" || $1 == "DECISION" || $1 == "WORKLIST" { print $3 >> wf }'
-  done
+  pl_run_outs "$GD" \
+    | awk -F'\t' -v sf="$RUN/deliver.strong.raw" -v wf="$RUN/deliver.weak.raw" '
+        $1 == "NOTE" && $2 == "reconcile-log-name" { print $3 >> sf }
+        $1 == "RESOLVED" || $1 == "DECISION" || $1 == "WORKLIST" { print $3 >> wf }'
   { awk -F'\t' 'NR > 1 {print $2}' "$CONSUMER/$DECISIONS_REL" 2>/dev/null
     awk -F'\t' '{print $2}' "$LEDGER" 2>/dev/null; } >> "$RUN/deliver.weak.raw"
   # A row may name a core-relative path; its consumer path is taken too.
@@ -905,23 +1004,41 @@ pl_deliver_unmerged() {
   esac
 }
 pl_deliver_merge() {
-  local snap="$GD/ai-dlc-pull/dirty-snapshot" v p w0 mode b bb tb
+  local snap="$GD/ai-dlc-pull/dirty-snapshot" v p w0 mode b bb tb fu un h1 h2 h3
   : > "$RUN/deliver.dm"; : > "$RUN/deliver.merged"; : > "$RUN/deliver.overlap"
   [ -f "$RUN/deliver.strong" ] || return 0
   v="$(sed -n 1p "$snap" | awk '{print $2}')"
-  awk -F'\t' -v T="$TAB" -v fs="$snap" -v fk="$RUN/deliver.keep" -v fst="$RUN/deliver.strong" '
+  # A candidate the record of this theirs does not name, outside its exclusions (pl_writes_excl) and the state tree,
+  # joined the selection after the pull's last driver step: its worktree content is not the pull's side (column 5 `u`).
+  # No record for this theirs, or no state filter (pl_writes_unrecorded then names nothing): off.
+  : > "$RUN/deliver.dmrec"; : > "$RUN/deliver.dmx"; un=0
+  h1=""; h2=""; h3=""
+  [ ! -f "$(pl_writes_file)" ] || read -r h1 h2 h3 < "$(pl_writes_file)"
+  if [ "$h1 $h2 $h3" = "ai-dlc-pull-writes 1 $(pl_theirs_sha)" ] && [ -s "$RUN/deliver.state" ]; then
+    sed -n '2,$p' "$(pl_writes_file)" > "$RUN/deliver.dmrec" && pl_writes_excl "$RUN" > "$RUN/deliver.dmx" || refuse "deliver-pull-writes-read" 2
+    un=1
+  fi
+  awk -F'\t' -v T="$TAB" -v un="$un" -v fs="$snap" -v fk="$RUN/deliver.keep" -v fst="$RUN/deliver.strong" -v fr="$RUN/deliver.dmrec" -v fx="$RUN/deliver.dmx" -v fss="$RUN/deliver.state" '
+    function isstate(q,   i) { for (i = 0; i < ns; i++) if (q == st[i] || index(q, st[i] "/") == 1) return 1; return 0 }
     FILENAME == fs { if (FNR > 1) { w0[$4] = $3; sx[$4] = $2 } next }
     FILENAME == fk { keep[$0] = 1; next }
     FILENAME == fst { strong[$0] = 1; next }
-    ($4 in w0) && ($4 in keep) && !($4 in strong) && $5 == "-" && $1 !~ /[?D]/ { print $4 T w0[$4] T sx[$4] T $2 }' \
-    "$snap" "$RUN/deliver.keep" "$RUN/deliver.strong" "$RUN/deliver.sel" > "$RUN/deliver.dmc"
-  while IFS="$TAB" read -r p w0 sx ix; do
+    FILENAME == fr { rec[$1] = 1; next }
+    FILENAME == fx { x[$0] = 1; next }
+    FILENAME == fss { st[ns++] = $0; next }
+    ($4 in w0) && ($4 in keep) && !($4 in strong) && $5 == "-" && $1 !~ /[?D]/ {
+      print $4 T w0[$4] T sx[$4] T $2 T ((un == 1 && !($4 in rec) && !($4 in x) && !isstate($4)) ? "u" : "-") }' \
+    "$snap" "$RUN/deliver.keep" "$RUN/deliver.strong" "$RUN/deliver.dmrec" "$RUN/deliver.dmx" "$RUN/deliver.state" "$RUN/deliver.sel" > "$RUN/deliver.dmc"
+  while IFS="$TAB" read -r p w0 sx ix fu; do
     [ -n "$p" ] || continue
     [ -f "$CONSUMER/$p" ] && [ ! -L "$CONSUMER/$p" ] || continue
     git -C "$CONSUMER" cat-file blob "HEAD:$p" > "$RUN/dm.ours" 2>/dev/null || continue
     tb="$(git -C "$CONSUMER" hash-object -w -- "$p")" && [ -n "$tb" ] \
       && git -C "$CONSUMER" cat-file blob "$tb" > "$RUN/dm.theirs" || refuse "deliver-dirty-merge" 2
-    if [ "$v" != 2 ] || [ "$w0" = "-" ] || ! git -C "$CONSUMER" cat-file -e "${w0}^{blob}" 2>/dev/null; then
+    # A late candidate whose raw worktree blob still equals the snapshot's carries nothing of the operator's past
+    # the snapshot: the merge below takes only the pull's side.
+    if [ "$fu" = u ] && [ "$v" = 2 ] && [ "$(git -C "$CONSUMER" hash-object --no-filters -- "$p" 2>/dev/null)" = "$w0" ]; then fu=-; fi
+    if [ "$v" != 2 ] || [ "$w0" = "-" ] || ! git -C "$CONSUMER" cat-file -e "${w0}^{blob}" 2>/dev/null || [ "$fu" = u ]; then
       pl_deliver_unmerged "$p" unrecorded
       continue
     fi
@@ -1016,7 +1133,12 @@ pl_deliver_prepare() {
     [ -n "$p" ] || continue
     echo "NOTE deliver-dirty-overlap $p $why"
   done < "$RUN/deliver.overlap"
-  echo "pull: each file above was already dirty when the pull began and the pull changed it too, and its change cannot be separated from your own edit (overlap: the edits touch the same lines; unrecorded: the pre-pull content was not recorded). Nothing was committed. Staging a file does not change this. For each file, re-run deliver with \`--whole <path>\` (one per file): deliver then commits the file whole as the worktree holds it, your uncommitted edit in it included, and says so in the commit message and the PR body. To keep your edit out of the commit, first save it aside and take it out of the file, re-run with \`--whole <path>\`, then restore your edit." >&2
+  local ra="" rv
+  for rv in "$DIST" "$BASE" "$CONSUMER" "$THEIRS"; do
+    case "$rv" in *"'"*) rv="$(printf '%s' "$rv" | sed "s/'/'\\\\''/g")" ;; esac
+    ra="$ra'$rv' "
+  done
+  echo "pull: each file above was already dirty when the pull began and the pull changed it too, and its change cannot be separated from your own edit (overlap: the edits touch the same lines; unrecorded: the pre-pull content was not recorded). Nothing was committed. Staging a file does not change this. For an unrecorded file the pull itself wrote, run ONE \`pull.sh record ${ra}-- <path>...\` naming it (after moving your own edits to it aside), then re-run deliver. Otherwise, for each file, re-run deliver with \`--whole <path>\` (one per file): deliver then commits the file whole as the worktree holds it, your uncommitted edit in it included, and says so in the commit message and the PR body. To keep your edit out of the commit, first save it aside and take it out of the file, re-run with \`--whole <path>\`, then restore your edit." >&2
   refuse "deliver-dirty-overlap" 2
 }
 # The NOTE kinds the PR body relays whole: those whose detail prescribes an act, or that SKILL.md step 7
@@ -1030,24 +1152,33 @@ PL_NOTE_FULL=" derivation-unassessable reconcile-log-name override-readopt-subsu
 # counted: PL_NOTE_FULL and PL_NOTE_COUNTED together classify every kind, `derivation-info-` being a prefix.
 # core/fixtures/reconcile-pull-driver nr-bind fails on an emitted kind in neither.
 PL_NOTE_COUNTED=" blockers-resolved derivation-note derivation-summary extension-adjudicated override-adjudicated reapproval-narrowed report-unverified report-verified derivation-info- deliver-dirty-whole deliver-state-unfiltered pull-writes-rerecorded "
-# pl_note_rows <consumer> -- the NOTE rows (tab-separated, unique) of every apply and --finish run of this
-# consumer's pulls from the boundary below; the commit message and the PR body both read it. Stands alone:
-# GD is resolved when unset.
-pl_note_rows() {
-  local gd="${GD:-}" h1="" h2="" h3="" h4="" d t
-  [ -n "$gd" ] || gd="$(gitdir_of "$1")" || return 0
-  # From the run the dirty snapshot names, whatever theirs it was written for (pl_deliver_select checks
-  # theirs; this does not): a snapshot left by an earlier pull makes this read from that pull's first run
-  # onward, the old behaviour. With no snapshot, or a v1 one naming no run, every run.
-  [ ! -f "$gd/ai-dlc-pull/dirty-snapshot" ] || read -r h1 h2 h3 h4 < "$gd/ai-dlc-pull/dirty-snapshot"
-  for d in "$gd"/ai-dlc-pull/run-*; do
+# pl_run_set <git-dir> -- the run directories this pull reads, one per line: from the run the dirty
+# snapshot names, whatever theirs it was written for (pl_deliver_select checks theirs; this does not), so
+# a snapshot left by an earlier pull makes this read from that pull's first run onward. With no
+# snapshot, or a v1 one naming no run, every run. pl_note_rows, deliver's "Buckets applied" count and
+# pl_deliver_select read it (through pl_run_outs); none globs run-* itself. With a second argument `outs`
+# it prints each such run's apply.out and finish.out instead of its directory.
+pl_run_set() {
+  local h1="" h2="" h3="" h4="" d t
+  [ ! -f "$1/ai-dlc-pull/dirty-snapshot" ] || read -r h1 h2 h3 h4 < "$1/ai-dlc-pull/dirty-snapshot"
+  for d in "$1"/ai-dlc-pull/run-*; do
     [ -d "$d" ] || continue
     t="${d##*/}"; [ -z "$h4" ] || [[ ! "${t%-*}" < "${h4%-*}" ]] || continue
-    cat "$d/apply.out" "$d/finish.out" 2>/dev/null
-  done | awk -F'\t' '$1 == "NOTE"' | sort -u
+    if [ "${2:-}" = outs ]; then cat "$d/apply.out" "$d/finish.out" 2>/dev/null; else printf '%s\n' "$d"; fi
+  done
+}
+# pl_run_outs <git-dir> -- apply.out and finish.out of every run pl_run_set names, concatenated.
+pl_run_outs() { pl_run_set "$1" outs; }
+# pl_note_rows <consumer> -- the NOTE rows (tab-separated, unique) of every apply and --finish run of this
+# consumer's pulls in pl_run_set; the commit message and the PR body both read it. Stands alone:
+# GD is resolved when unset.
+pl_note_rows() {
+  local gd="${GD:-}"
+  [ -n "$gd" ] || gd="$(gitdir_of "$1")" || return 0
+  pl_run_outs "$gd" | awk -F'\t' '$1 == "NOTE"' | LC_ALL=C sort -u
 }
 pl_deliver() {
-  local br cut bv tv subj body p n_notes rc url xy ix wt pair n dm nl
+  local br cut bv tv subj body p s n_notes rc url xy ix wt pair n dm nl
   nl="$(printf '\n_')"; nl="${nl%_}"
   pl_setup "$@"
   br="$(git -C "$CONSUMER" symbolic-ref -q --short HEAD 2>/dev/null)" || br=""
@@ -1069,12 +1200,15 @@ pl_deliver() {
   [ "$rc" -ne 0 ] || awk -F'\t' 'NF >= 2 {print "DECIDE " $1 " " $2 " drain"}' "$RUN/push-drain.out"
   # Commit: only the pull's own writes (pl_deliver_select), each by its own pathspec.
   pl_deliver_prepare
-  # Each path `pull.sh record -- <path>` re-recorded for this theirs is disclosed.
+  # Each path `pull.sh record -- <path>` re-recorded, or apply, finish or merge absorbed (pl_writes_absorbed), for this theirs is disclosed.
   if [ -f "$(pl_writes_file).rerecorded" ] && [ "$(sed -n 1p "$(pl_writes_file).rerecorded")" = "ai-dlc-pull-rerecorded 1 $(pl_theirs_sha)" ]; then
     sed -n '2,$p' "$(pl_writes_file).rerecorded" > "$RUN/deliver.rerecorded"
-    while IFS= read -r p; do
+    while IFS="$TAB" read -r p s; do
       [ -n "$p" ] || continue
-      pl_dnote "NOTE pull-writes-rerecorded $p re-recorded by pull.sh record at the operator's request; edits made in it after the pull's last step are in this commit"
+      case "${s:-record}" in
+        record) pl_dnote "NOTE pull-writes-rerecorded $p re-recorded by pull.sh record at the operator's request; edits made in it after the pull's last step are in this commit" ;;
+        *) pl_dnote "NOTE pull-writes-rerecorded $p absorbed by pull.sh $s, which re-recorded it as the pull's own; changed between driver steps (a WORKLIST or step-7 edit, or yours); now in this commit" ;;
+      esac
     done < "$RUN/deliver.rerecorded"
   fi
   dm="$nl$(cat "$RUN/deliver.dm")$nl"
@@ -1093,7 +1227,7 @@ pl_deliver() {
   [ ! -s "$RUN/deliver.notes" ] || n_notes="$(printf '%s\n%s\n' "$n_notes" "$(cat "$RUN/deliver.notes")" | sed '/^$/d')"
   { printf '%s\n\n' "$subj"
     printf 'Buckets applied: %s. Conflicts adjudicated (hook-recorded answers): %s.\n' \
-      "$(cat "$GD"/ai-dlc-pull/run-*/apply.out 2>/dev/null | awk -F'\t' '$1 == "RESOLVED"' | sort -u | wc -l | tr -d ' ')" \
+      "$(pl_run_outs "$GD" | awk -F'\t' '$1 == "RESOLVED"' | sort -u | wc -l | tr -d ' ')" \
       "$(awk -F'\t' 'NR > 1 && $4 == "operator"' "$CONSUMER/$DECISIONS_REL" 2>/dev/null | wc -l | tr -d ' ')"
     printf 'Log: %s\n' "$REPORT_REL"
     [ -z "$n_notes" ] || { printf '\nNOTE rows:\n'; printf '%s\n' "$n_notes" | tr '\t' ' '; }
@@ -1157,12 +1291,23 @@ pl_pr_body() {
   LC_ALL=C awk -F'\t' -v set="$PL_NOTE_FULL" 'index(set, " " $2 " ")' "$tp-a.$$" | tr '\t' ' ' > "$tp-n.$$"
   LC_ALL=C awk -F'\t' -v set="$PL_NOTE_FULL" '
     index(set, " " $2 " ") { next }
+    # The open derivation-info-<scope> set is ONE line, at the place of its first kind: its scopes in input
+    # (sorted) order with their row counts, byte-bounded, so no number of scopes pushes a closed kind out.
+    index($2, "derivation-info-") == 1 { k = $2; if (!dm) ord[++m] = "derivation-info-*"
+      if (!(k in dn)) dk[++dm] = k; dn[k]++; drows++; next }
     { k = $2; if (!(k in n)) ord[++m] = k; n[k]++
       if (!((k SUBSEP $3) in seen)) { seen[k SUBSEP $3] = 1; dp[k]++
         if (len[k] + length($3) + 2 <= 400) { pl[k] = pl[k] (pl[k] == "" ? "" : ", ") $3; len[k] += length($3) + 2; sh[k]++ } } }
     END { for (i = 1; i <= m; i++) { k = ord[i]
+            if (k == "derivation-info-*" && dm) {
+              l = sprintf("- `%s`: %d row(s) in %d scopes: ", k, drows, dm)
+              for (j = 1; j <= dm; j++) { it = sprintf("%s%s (%d)", (j > 1 ? ", " : ""), dk[j], dn[dk[j]])
+                if (length(l) + length(it) > 400) break
+                l = l it }
+              if (j <= dm) l = l " +" (dm - j + 1) " more scopes"
+            } else
             l = sprintf("- `%s`: %d row(s); paths: %s%s", k, n[k], pl[k], (dp[k] > sh[k] ? " +" dp[k] - sh[k] " more" : ""))
-            if (over || acc + length(l) + 1 > 8000) { over = 1; rk++; rn += n[k]; continue }
+            if (over || acc + length(l) + 1 > 8000) { over = 1; rk++; rn += (k == "derivation-info-*" && dm ? drows : n[k]); continue }
             acc += length(l) + 1; print l }
           if (rk) printf "… %d more NOTE kinds (%d rows) — see the commit message and the apply.out files under the consumer git dir\n", rk, rn }' "$tp-a.$$" > "$tp-k.$$"
   rm -f "$tp-a.$$"
