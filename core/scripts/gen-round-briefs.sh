@@ -138,7 +138,7 @@ EOF
 grb_write_adv() { # $1 ordinal-or-cross, $2 shard value, $3 subject text
   f="$OUTD/$1.brief"
   {
-    echo "You are an AI/DLC ADVERSARIAL $ROUND shard for sprint $SPRINT's $SUBJ_LABEL ($AXIS axis, pass $PASS). FIRST read your full role contract: $ROLE (whole file, consecutive chunks of at most 16 KB) and follow it."
+    echo "You are an AI/DLC ADVERSARIAL $ROUND shard for sprint $SPRINT's $SUBJ_LABEL ($AXIS axis, pass $PASS). FIRST read your full role contract: $ROLE (whole file, in consecutive \`offset\`/\`limit\` Read chunks of at most 16 KB through its last line; when a chunk is refused for size, halve its limit) and follow it."
     echo
     echo "Deliverable: $SDIR/$1.md"
     echo "shard: $2"

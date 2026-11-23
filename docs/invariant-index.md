@@ -148,3 +148,4 @@ To change this file, change the arm header it came from and re-run the renderer.
 | I130 | every core/skills/ai-dlc/rule-bodies/rule-N.md is named by exactly one READ AND FOLLOW pointer sentence in SKILL.md |
 | I131 | the Rule 8 intensity table in the SKILL.md stub is byte-identical to the one in rule-bodies/rule-8.md |
 | I132 | the ai-dlc-protect.sh matcher in templates/settings.json.template matches every tool name the hook dispatches on |
+| I133 | the update skill's pull.sh subcommand names agree across SKILL.md's list, pull.sh's usage header and pull.sh's dispatch |

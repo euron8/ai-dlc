@@ -19,6 +19,29 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1233.0] - 2026-11-22
+
+### The update skill's subcommand list can no longer drift from pull.sh, the gate reads open escalations through the status validator instead of the whole file, and a push names the consumer-layout units it skipped and keeps a placement record no other tree can overwrite (BL-1223 closes; BL-1212, BL-1221 and BL-878 advance)
+
+- For a maintainer of the AI/DLC repo and the leads who read its push logs. A new enforcement-map arm joins three sets: the `pull.sh <cmd>` list in the update skill's `SKILL.md`, `pull.sh`'s usage header and its `case "$cmd"` dispatch. A subcommand added to or dropped from one side now fails the push, and an arm that extracts nothing from a side refuses instead of passing. The live tree agrees at ten subcommands each (BL-1223).
+- For every lead running the gate. Check 2 of `gate-validation.md` no longer tells the lead to Read `docs/escalations/pending.md` whole (a file context-mode refuses over 16 KB). It runs `validate-escalation-status-vocabulary.sh --open docs/escalations/pending.md`, which prints header, line range and body only for the statuses Check 2 acts on (`HARD_BLOCK` first, then `DEFERRAL_REQUEST`) within a 12000-byte budget, one `OPEN-UNACTED <STATUS> <n>` line for each other open status, each statusless entry by header and range, a `TRUNCATED read lines X-Y` line for each body over budget, then `OPEN <k> of <m>`. On the reference consumer's file it prints 9,500 B (`OPEN 226 of 250`, 210 `DECIDED_AUTONOMOUSLY` on one line, nothing truncated) and exits 1 from 14 statusless entries that already fail at base. The adversary-brief wording in `gen-round-briefs.sh` now matches the remediator brief's chunked-Read clause. BL-1212 stays PARTIAL: the three denials with no instruction behind them need a context-mode setting upstream.
+- For anyone reading a pre-push log. The log gains a `placement records:` line naming each `<fx>@consumer` unit skipped on a confirmed record, and a second `placement records:` line naming each unit skipped on a content-keyed pass, so a unit absent from the log is a gap and not a count to subtract. A pass is also published under a side record keyed by its row content, and a push whose tree has the same rows skips on it, so a push from another tree or clone no longer makes this tree's `<fx>@consumer` units rerun. `scripts/predict-push-set.sh` applies the same skip, so its prediction matches the push, and a skipped unit's pending count is read from its own side record and not from a record another tree may have replaced. Records written before this release read as before. BL-1221 stays PARTIAL: the before and after reruns per push are measured after landing.
+- Internal: `ledger-reverify`'s two remaining receipts run `lr_main` in process like their sibling, and two process cells leave its cell list (BL-878 item b); item a, the `owed-derivations-c` `e2e-apply` cells, stays owed with its design written into the entry.
+
+Not-discharged: PC-S323-CONTEXT-MODE-ONE-READ-CAP-DENIES-VERBATIM-LOAD-READS-OVER-16KIB-NO-ALLOWLIST-KNOB (item 3 waits on context-mode upstream)
+
+### A failing SLOT KILL or SLOT SHELLKILL arm of the readset-skip fixture now says when the world exited before its gate and keeps the evidence, instead of reading an unexplained `0|2|0|0` (BL-1207 advances)
+
+- For ai-dlc maintainers and every consumer running the shipped readset-skip fixture. When the slot-kill world exits on its own before it writes its gate (deriver A died or refused before it held), the arm now reports `exited` as the verdict's first field and prints the world's FAIL lines, its output tail, deriver A's output tail and the order file. Before, the world's output went to /dev/null and its directory was removed on exit, so the red read `0|2|0|0` with nothing to diagnose it from. The passing path and its ok lines are unchanged.
+- BL-1207 records that the candidate cause in its Record paragraph is refuted, names the one code path that reads `0|2|0|0`, and stays open: the cause is named by the next red, and the deterministic arm (item 2) is still owed.
+
+### Records corrections: operator wait restated with the narrowed pause detector, old-clock hours corrected in their owner entries, BL-812 adjudication measured, five stale backlog records fixed (closes nothing)
+
+- Efficiency records: operator wait for s317-s323 is restated with the narrowed pause detector (s318 16.2 -> 16.1 h; every other sprint unchanged to 0.1 h; no committed output moves). The s321 29.3 h figure stands: the independent reader's 29.0 h missed real pauses past character 700 of a command. New outputs in docs/analysis/pipeline-efficiency-s317-s323-b265/. (BL-1174, BL-972)
+- Old-clock hour figures in BL-809, BL-512, BL-716, BL-804, BL-397 and BL-806 carry their monotone-clock values; none crosses its entry's decision rule. (BL-1174 list)
+- BL-812: the s323 adjudication rounds are measured read-only from graph (7 batch dirs, 40 files: 133 escalated items, 127 decided in a batch, 6 by the writer); its stale "NOT DECIDED" line points to BL-819's decision; the s323 48.0 -> 69.5 rise is owned by BL-819 items 7 and 14.
+- BL-583's two rows discharged by BL-1161 are struck; BL-910's C3/C4 misread is corrected (the i81_expr_of awk transient keeps it open); BL-1189 re-cites deploy-validate.md:629-633; BL-1167 (c) and BL-1175's missing fixture arm are folded into their owed lists.
+
 ## [0.1232.0] - 2026-11-22
 
 ### A delivered pull retried at its theirs is no longer refused for edits the operator made after it, a stale delivered marker no longer hides a later pull's writes, the finish-base-unverified row stops prescribing a re-run that verifies nothing, and a pull's own post-finish writes are recorded with `pull.sh record` (BL-1215 advances)

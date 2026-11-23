@@ -158,6 +158,58 @@ else
   bad "a mid-entry out-of-vocabulary token passed — the check has the line-anchored blind spot"
 fi
 
+# --- Assertion 4b: --open prints each NON-terminal entry (case M included) and no terminal one ----
+# One drive: a terminal entry first, an open entry whose only Status is mid-line (case M), a canonical open entry,
+# and a terminal entry last. Every printed row is required to APPEAR; the terminal bodies are required to be absent.
+OPENF="$WORK/pending-open.md"
+{
+  printf '# Escalations\n\n'
+  printf '## 2026-01-01 S1 closed-first\n**Status:** RESOLVED\nTERMINAL-BODY-ONE\n\n'
+  printf '## 2026-01-02 S1 midline-open\nfiled by the lead -- **Status:** HARD_BLOCK\nMIDLINE-BODY\n\n'
+  printf '## 2026-01-03 S1 canon-open\n**Status:** DEFERRAL_REQUEST\nCANON-BODY\n\n'
+  printf '## 2026-01-04 S1 closed-last\n**Status:** HARD_BLOCK\n**Status:** RESOLVED\nTERMINAL-BODY-TWO\n'
+} > "$OPENF"
+ev "$VALIDATOR" --open "$OPENF" "$SPEC_SRC" > "$WORK/open.out" 2> "$WORK/open.err"; OPEN_RC=$?
+if [ "$OPEN_RC" = 0 ] && grep -q '^L7-10 ## 2026-01-02 S1 midline-open$' "$WORK/open.out" \
+   && grep -q '^MIDLINE-BODY$' "$WORK/open.out" && grep -q '^CANON-BODY$' "$WORK/open.out" \
+   && grep -q '^OPEN 2 of 4$' "$WORK/open.out" && ! grep -q 'TERMINAL-BODY' "$WORK/open.out" \
+   && ! grep -q 'closed-first\|closed-last' "$WORK/open.out"; then
+  ok "--open prints the mid-line open entry and the canonical open one with their bodies, skips both terminal ones, and ends OPEN 2 of 4"
+else
+  bad "--open did not print exactly the two open entries (rc=$OPEN_RC out=[$(head -c 400 "$WORK/open.out")])"
+fi
+
+# --- Assertion 4c: --open prints bodies only for the statuses Check 2 acts on and COUNTS the rest ----
+# One drive. DEFERRAL_REQUEST is filed BEFORE HARD_BLOCK, so HARD_BLOCK printing first is order, not file position.
+# Two DECIDED_AUTONOMOUSLY entries are counted on one line, never printed. A statusless entry keeps its header.
+# Two acted-on 8000-byte bodies overrun the 12000-byte budget: the second prints its header and a TRUNCATED line
+# naming ONLY its own range, and a small third entry after it still prints its body.
+OPENG="$WORK/pending-open-acted.md"
+{
+  printf '# Escalations\n\n'
+  printf '## 2026-02-01 S1 deferral-first\n**Status:** DEFERRAL_REQUEST\nDEFER-BODY-BIG\n'
+  head -c 8000 /dev/zero | tr '\0' 'x'; printf '\n\n'
+  printf '## 2026-02-02 S1 hardblock-second\n**Status:** HARD_BLOCK\nHARD-BODY-BIG\n'
+  head -c 8000 /dev/zero | tr '\0' 'y'; printf '\n\n'
+  printf '## 2026-02-03 S1 decided-one\n**Status:** DECIDED_AUTONOMOUSLY\nDECIDED-BODY-ONE\n\n'
+  printf '## 2026-02-04 S1 decided-two\n**Status:** DECIDED_AUTONOMOUSLY\nDECIDED-BODY-TWO\n\n'
+  printf '## 2026-02-05 S1 no-status-entry\nNOSTATUS-BODY\n\n'
+  printf '## 2026-02-06 S1 small-last\n**Status:** HARD_BLOCK\nSMALL-BODY\n'
+} > "$OPENG"
+ev "$VALIDATOR" --open "$OPENG" "$SPEC_SRC" > "$WORK/openg.out" 2> "$WORK/openg.err"; OPENG_RC=$?
+if [ "$OPENG_RC" = 1 ] && grep -q '^OPEN-UNACTED DECIDED_AUTONOMOUSLY 2$' "$WORK/openg.out" \
+   && ! grep -q 'DECIDED-BODY\|decided-one\|decided-two' "$WORK/openg.out" \
+   && grep -q '^L[0-9]*-[0-9]* ## 2026-02-05 S1 no-status-entry$' "$WORK/openg.out" && ! grep -q 'NOSTATUS-BODY' "$WORK/openg.out" \
+   && grep -q '^HARD-BODY-BIG$' "$WORK/openg.out" && grep -q '^SMALL-BODY$' "$WORK/openg.out" \
+   && grep -q '^L[0-9]*-[0-9]* ## 2026-02-01 S1 deferral-first$' "$WORK/openg.out" && ! grep -q 'DEFER-BODY-BIG' "$WORK/openg.out" \
+   && [ "$(grep -n 'hardblock-second' "$WORK/openg.out" | head -1 | cut -d: -f1)" -lt "$(grep -n 'deferral-first' "$WORK/openg.out" | head -1 | cut -d: -f1)" ] \
+   && [ "$(grep -c '^TRUNCATED read lines ' "$WORK/openg.out")" = 1 ] && grep -q '^TRUNCATED read lines 3-7$' "$WORK/openg.out" \
+   && grep -q '^OPEN 6 of 6$' "$WORK/openg.out"; then
+  ok "--open: HARD_BLOCK prints first with its body, an unacted status is counted not printed, a statusless entry keeps its header, and each truncated body gets its own range"
+else
+  bad "--open acted-on/unacted split wrong (rc=$OPENG_RC out=[$(grep -v '^[xy]*$' "$WORK/openg.out" | head -c 700)])"
+fi
+
 # --- Assertion 5: THE DESIGN CLAIM — the set is DERIVED, not restated ---------
 # This is the assertion that distinguishes this validator from the hand-listed copy it
 # replaces. Add FILED to escalations.md's terminal-status line and the SAME drifted file

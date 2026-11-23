@@ -43,7 +43,17 @@
 # the second, cheaper arm beside it.
 #
 # USAGE
-#   validate-escalation-status-vocabulary.sh <pending.md> [escalations.md]
+#   validate-escalation-status-vocabulary.sh [--open] <pending.md> [escalations.md]
+#
+#   --open  also reports every entry whose winning Status is not terminal (the
+#           `**Terminal statuses**` line). Entries on a status Check 2 acts on (HARD_BLOCK, then
+#           DEFERRAL_REQUEST; see ACTED_ON below) print `L<first>-<last> <header>` plus the body.
+#           Any other open status prints one `OPEN-UNACTED <STATUS> <n>` line; a statusless entry
+#           prints `L<first>-<last> <header>` under `STATUSLESS-OPEN:`. Then `OPEN <k> of <m>`.
+#           Bodies stop at ~12000 bytes in total; an acted-on header is never dropped, and each
+#           body over budget gets its own `TRUNCATED read lines X-Y` line.
+#           The vocabulary FAIL is unchanged. gate-validation.md Check 2 reads this instead
+#           of Reading pending.md whole.
 #
 # EXIT
 #   0  every Status token is in the derived vocabulary (or the escalations file is absent or holds nothing)
@@ -58,9 +68,11 @@
 esv_main() {
 set -u
 
+ESV_OPEN=0
+if [ "${1:-}" = "--open" ]; then ESV_OPEN=1; shift; fi
 ESCALATIONS="${1:-}"
 if [ -z "$ESCALATIONS" ]; then
-  echo "FAIL: usage: validate-escalation-status-vocabulary.sh <pending.md> [escalations.md]" >&2
+  echo "FAIL: usage: validate-escalation-status-vocabulary.sh [--open] <pending.md> [escalations.md]" >&2
   exit 2
 fi
 
@@ -232,13 +244,14 @@ RECORDS="$(awk '
   function flush() {
     if (header != "" && status != "") printf "R\t%s\t%s\n", header, status
   }
-  function endentry() {
+  function endentry(last) {
     if (ehdr != "" && !ehas) printf "S\t%d\t%s\n", eline, ehdr
+    if (open && ehdr != "") printf "E\t%d\t%d\t%s\t%s\n", eline, last, (estat == "" ? "-" : estat), ehdr
   }
   /^#{2,3} / {
     flush(); header = $0; status = ""; canon = 0
     if ($0 ~ /^## /) {
-      endentry(); ehdr = ""; ehas = 0
+      endentry(NR - 1); ehdr = ""; ehas = 0; estat = ""; ecanon = 0
       if ($0 ~ /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/) { ehdr = $0; eline = NR }
     }
     next
@@ -251,12 +264,14 @@ RECORDS="$(awk '
     if (match(s, /[A-Z_]+/)) {
       status = substr(s, RSTART, RLENGTH)
       ehas = 1
+      if (!(ecanon && $0 !~ /^\*\*[Ss]tatus:\*\*/)) estat = status
+      if ($0 ~ /^\*\*[Ss]tatus:\*\*/) ecanon = 1
       if ($0 ~ /^\*\*[Ss]tatus:\*\*/) canon = 1
     }
     next
   }
-  END { flush(); endentry() }
-' "$ESCALATIONS")"
+  END { flush(); endentry(NR) }
+' open="$ESV_OPEN" "$ESCALATIONS")"
 
 if [ -z "$RECORDS" ]; then
   echo "OK: n=[] no **Status:** entries found in $ESCALATIONS."
@@ -268,6 +283,7 @@ bad=0
 n=0
 nostatus=0
 while IFS="$(printf '\t')" read -r kind a b; do
+  if [ "$kind" = "E" ]; then continue; fi
   if [ "$kind" = "S" ]; then
     nostatus=$((nostatus + 1))
     echo "FAIL: STATUSLESS $ESCALATIONS:$a $b"
@@ -286,6 +302,57 @@ while IFS="$(printf '\t')" read -r kind a b; do
 done <<EOF
 $RECORDS
 EOF
+
+if [ "$ESV_OPEN" -eq 1 ]; then
+  TERMINAL="$(awk '/^\*\*Terminal statuses\*\*/ { s = $0; sub(/^[^:]*:[[:space:]]*/, "", s); gsub(/`/, "", s)
+    k = split(s, p, /[|]/); for (i = 1; i <= k; i++) { t = p[i]; gsub(/[^A-Z_]/, "", t); if (t != "") print t } }' "$SPEC")"
+  # ACTED_ON: the statuses whose entry BODIES gate-validation.md Check 2 branches on -- HARD_BLOCK (the blocking
+  # clause) and DEFERRAL_REQUEST (the reopen-signal and deferred-item branches). escalations.md does not mark the
+  # set, so it is stated here once; DECIDED_AUTONOMOUSLY and OPERATOR_DECISION are informational there and
+  # SUPPRESSED is adjudicated by validate-suppression-lifetime.sh and is terminal, so --open skips it. The two informational statuses are counted, not printed.
+  ACTED_ON="HARD_BLOCK DEFERRAL_REQUEST"
+  open_n=0; all_n=0; budget=12000; trunc_n=0; trunc_list=""; unacted=""; statusless_list=""
+  for want in $ACTED_ON; do
+    while IFS="$(printf '\t')" read -r kind a b c d; do
+      [ "$kind" = "E" ] || continue
+      [ "$c" = "$want" ] || continue
+      if grep -qx "$c" <<<"$TERMINAL"; then continue; fi
+      printf 'L%s-%s %s\n' "$a" "$b" "$d"
+      body="$(sed -n "$((a + 1)),${b}p" "$ESCALATIONS")"
+      len=${#body}
+      if [ "$len" -le "$budget" ]; then
+        budget=$((budget - len)); printf '%s\n' "$body"
+      else
+        trunc_n=$((trunc_n + 1)); trunc_list="${trunc_list}TRUNCATED read lines $a-$b
+"
+      fi
+    done <<EOF
+$RECORDS
+EOF
+  done
+  while IFS="$(printf '\t')" read -r kind a b c d; do
+    [ "$kind" = "E" ] || continue
+    all_n=$((all_n + 1))
+    if grep -qx "$c" <<<"$TERMINAL"; then continue; fi
+    open_n=$((open_n + 1))
+    case " $ACTED_ON " in *" $c "*) continue ;; esac
+    if [ "$c" = "-" ]; then
+      statusless_list="${statusless_list}L$a-$b $d
+"
+    else
+      unacted="${unacted}${c}
+"
+    fi
+  done <<EOF
+$RECORDS
+EOF
+  [ -z "$statusless_list" ] || printf 'STATUSLESS-OPEN:\n%s' "$statusless_list"
+  if [ -n "$unacted" ]; then
+    awk 'NF { if (!($0 in c)) o[++n] = $0; c[$0]++ } END { for (i = 1; i <= n; i++) print "OPEN-UNACTED " o[i] " " c[o[i]] }' <<<"$unacted"
+  fi
+  [ "$trunc_n" -eq 0 ] || { echo "TRUNCATED $trunc_n body(ies); each range below is one entry:"; printf '%s' "$trunc_list"; }
+  echo "OPEN $open_n of $all_n"
+fi
 
 if [ "$nostatus" -gt 0 ]; then
   echo "FAIL: $nostatus dated escalation entries carry no **Status:** field (STATUSLESS-ENTRY, fail-closed): no status is outside the closed set." >&2

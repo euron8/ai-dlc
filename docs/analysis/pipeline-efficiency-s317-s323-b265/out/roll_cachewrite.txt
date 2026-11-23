@@ -1,0 +1,15 @@
+cache-write pricing: all-1h = 2 x input (roll.py P, tier off), all-5m = 1.25 x input (P5), tiered = each write at its recorded tier (roll.txt default); pipeline bucket; $ per sprint
+s317 API: lead 1h 186.4 5m 169.2 tiered 186.2 | subagent 1h 1215.1 5m 1010.1 tiered 1010.1 | total 1h 1401.4 5m 1179.3 tiered 1196.4
+s317 token-eq: lead 1h 372.1 5m 354.9 tiered 372.0 | subagent 1h 1215.1 5m 1010.1 tiered 1010.1 | total 1h 1587.2 5m 1365.1 tiered 1382.1
+s318 API: lead 1h 302.9 5m 280.8 tiered 302.7 | subagent 1h 1418.3 5m 1200.0 tiered 1200.0 | total 1h 1721.2 5m 1480.8 tiered 1502.7
+s318 token-eq: lead 1h 303.3 5m 281.2 tiered 303.1 | subagent 1h 1418.3 5m 1200.0 tiered 1200.0 | total 1h 1721.6 5m 1481.2 tiered 1503.1
+s319 API: lead 1h 472.2 5m 436.2 tiered 471.9 | subagent 1h 1761.4 5m 1473.5 tiered 1473.5 | total 1h 2233.6 5m 1909.8 tiered 1945.4
+s319 token-eq: lead 1h 472.2 5m 436.2 tiered 471.9 | subagent 1h 1761.4 5m 1473.5 tiered 1473.5 | total 1h 2233.6 5m 1909.8 tiered 1945.4
+s320 API: lead 1h 367.0 5m 341.1 tiered 366.7 | subagent 1h 1255.6 5m 1051.7 tiered 1051.7 | total 1h 1622.6 5m 1392.7 tiered 1418.4
+s320 token-eq: lead 1h 367.0 5m 341.1 tiered 366.7 | subagent 1h 1255.6 5m 1051.7 tiered 1051.7 | total 1h 1622.6 5m 1392.7 tiered 1418.4
+s321 API: lead 1h 486.8 5m 452.2 tiered 486.3 | subagent 1h 1877.8 5m 1647.3 tiered 1647.3 | total 1h 2364.6 5m 2099.5 tiered 2133.6
+s321 token-eq: lead 1h 507.2 5m 472.7 tiered 506.7 | subagent 1h 1877.8 5m 1647.3 tiered 1647.3 | total 1h 2385.1 5m 2120.0 tiered 2154.0
+s322 API: lead 1h 0.0 5m 0.0 tiered 0.0 | subagent 1h 989.4 5m 878.8 tiered 878.8 | total 1h 989.4 5m 878.8 tiered 878.8
+s322 token-eq: lead 1h 359.0 5m 359.0 tiered 359.0 | subagent 1h 989.4 5m 878.8 tiered 878.8 | total 1h 1348.4 5m 1237.9 tiered 1237.9
+s323 API: lead 1h 0.0 5m 0.0 tiered 0.0 | subagent 1h 1580.2 5m 1331.8 tiered 1331.8 | total 1h 1580.2 5m 1331.8 tiered 1331.8
+s323 token-eq: lead 1h 493.5 5m 493.5 tiered 493.5 | subagent 1h 1580.4 5m 1332.0 tiered 1332.0 | total 1h 2073.9 5m 1825.5 tiered 1825.5

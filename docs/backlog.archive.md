@@ -48938,3 +48938,22 @@ Step: n/a
 Provenance: batch 264, cluster O (owner ai-dlc-af).
 
 verify: manual
+## BL-1223 — no validator joins the update skill's list of `pull.sh` subcommands to `pull.sh`'s dispatch
+
+**NOTE.** Filed 2026-11-22 (batch 264, cluster L). Owner: `core/skills/ai-dlc-update/SKILL.md`, `core/skills/ai-dlc-update/reconcile/pull.sh`, a validator arm.
+
+**LANDED (v0.1233.0).** Batch 265, cluster H. Arm I133 of `scripts/validate-enforcement-map.sh` (header `:13612`) joins three sets, in both directions with a zero-guard per side: the `- `pull.sh <cmd>`` list of `SKILL.md`, the usage header of `pull.sh`, and its `case "$cmd" in` dispatch. On the live tree the three sets agree at 10, 10 and 10. A hand probe fired on each of: `cut-from` removed from one side, a bogus name added, `pr-body` dropped, and each of the three extractions emptied (the arm refuses with "extracted no subcommand names", it does not pass). The arm adds 0 forks. The close receipt replaces the one filed: its old second and third clauses were satisfiable at base (a grep for `ai-dlc-update/SKILL.md` in the validator, which nine scripts already name) or by a dead variable (a grep for any non-comment `reconcile/pull.sh` in the validator), and the first only checked that `pull.sh` carried `pl_cut_from`. The new receipt exits 9 on a missing input and 1 while the arm header is absent or `--arms I133` fails.
+
+Goal: the two subcommand sets cannot drift. One done condition: an arm of `scripts/validate-enforcement-map.sh` reads both sets and fails when they differ, shown to fire on a seeded drift and stay quiet on the live tree.
+
+Work list:
+
+1. Join the `` - `pull.sh <cmd> ...` `` lines of `SKILL.md` (`:158` onward) to the `case "$cmd" in` dispatch of `pull.sh` (`:1249` onward). On this tree the sets agree at ten each (`resolve`, `gate`, `dry-run`, `apply`, `finish`, `merge`, `deliver`, `record`, `pr-body`, `cut-from`), because 0.1230.0 added `cut-from` by hand. No script under `scripts/` or `core/scripts/` names `pull.sh` at all (derived by a per-file loop; control: nine scripts name `ai-dlc-update/SKILL.md`).
+2. Probe for the join, once it exists: derive the dispatch names from `pull.sh` and require each to head a list line in `SKILL.md`, and the reverse.
+
+Step: n/a
+
+Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
+
+verify: sh f=scripts/validate-enforcement-map.sh; [ -f core/skills/ai-dlc-update/reconcile/pull.sh ] || exit 9; [ -f core/skills/ai-dlc-update/SKILL.md ] || exit 9; [ -f $f ] || exit 9; grep -q '^# --- I133:' $f || exit 1; bash $f --arms I133 >/dev/null 2>&1 || exit 1
+

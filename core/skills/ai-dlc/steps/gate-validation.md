@@ -310,7 +310,7 @@ Two arms, either satisfies (dual-arm OR):
 ### 2. No unresolved HARD_BLOCKs?
 <!-- CHECK_LOADED: 2 -->
 
-- Read `docs/escalations/pending.md` (if it exists).
+- Run `scripts/ai-dlc/validate-escalation-status-vocabulary.sh --open docs/escalations/pending.md` and read its output: each `HARD_BLOCK` and `DEFERRAL_REQUEST` entry's header with its line range and its body, one `OPEN-UNACTED <STATUS> <n>` line per other open status, each statusless entry's header, then `OPEN <k> of <m>`. An absent or empty file prints `OK: EXAMINED NOTHING`. On each `TRUNCATED read lines X-Y` line, Read those lines in `offset`/`limit` chunks of at most 16 KB. Never Read `pending.md` whole.
 - **First, the vocabulary.** Run
 
       scripts/ai-dlc/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md

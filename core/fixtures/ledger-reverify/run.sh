@@ -3309,7 +3309,7 @@ lr_unit_bl890() {
 # The shipped run builds the distribution and the consumer worlds into the cache.
   _wc="$(dirname "$DIST")/bl890-worlds"
   ASSERTIONS=$((ASSERTIONS + 1))
-  _o="$(LR_RCELL=e2e-receipt-bl890 bash "$_rec" "$(dirname "$CLOSER")" "" "$_wc" 2>&1)"; _rc=$?
+  _o="$(bash "$_rec" "$(dirname "$CLOSER")" "" "$_wc" 2>&1)"; _rc=$?
   # SCRUB-RAN (BL-965): the receipt's AI_DLC_* scrub must have unset its probe; presence-shaped, so a
   # receipt that printed nothing fails it too.
   ASSERTIONS=$((ASSERTIONS + 1))
@@ -3343,7 +3343,7 @@ lr_unit_bl932() {
   fi
   _wc="$(dirname "$DIST")/bl932-worlds"
   ASSERTIONS=$((ASSERTIONS + 1))
-  _o="$(LR_RCELL=e2e-receipt-bl932 bash "$_rec" "$_rd" "" "$_wc" 2>&1)"; _rc=$?
+  _o="$(bash "$_rec" "$_rd" "" "$_wc" 2>&1)"; _rc=$?
   # SCRUB-RAN (BL-965), as in lr_unit_bl890.
   ASSERTIONS=$((ASSERTIONS + 1))
   if grep -q '^SCRUB-RAN ' <<< "$_o"; then lr_okf '%-22s the receipt'"'"'s AI_DLC_* scrub unset its probe variable\n' "bl932-SCRUB-RAN"
