@@ -572,14 +572,47 @@ $(tail_of)" "take Check $id through gate-validation.md Gate Failure now, while n
   # 3 is NOT a FAIL -- nothing was compared, and the lead falls back to the gate log's spawn table. Two causes, each
   # with its own first output line: `PRE-LEDGER: ...` (no row of this sprint) and `NO ROLE-BOUND ROWS: EXAMINED
   # NOTHING ...` (rows exist, none judged). The script's own first line is recorded, plus its COUNTS: line if any.
-  # Recorded as an input, never a clean pass and never a refusal; any other non-zero exit refuses, as Check 16's does.
-  ( cd "$ROOT" && bash "$SELF/validate-spawn-ledger.sh" --ledger _bmad-output/spawn-ledger.jsonl --sprint "$SPRINT" --probe _bmad-output/subagent-context.jsonl --settings .claude/settings.json ) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
+  # Recorded as an input, never a clean pass and never a refusal.
+  # --escalations docs/escalations/pending.md is passed when that file exists. Exit 4 (RECORDED: every violation is
+  # named by a current-sprint OVERRIDDEN entry) records `gate-log: Check 22 exit 4 ...` and one `check22-waiver:
+  # <header>` per distinct header of its VIOLATION lines, and the gate goes on to the adjudicator; `close` then
+  # refuses unless the verdict's check 22 is FAIL_WAIVED with a waiver_id in that set. Exit 1 refuses, naming the
+  # unnamed keys; any other non-zero exit refuses, as Check 16's does.
+  ESCF=""; [ ! -f "$ROOT/docs/escalations/pending.md" ] || ESCF=docs/escalations/pending.md
+  ( cd "$ROOT" && bash "$SELF/validate-spawn-ledger.sh" --ledger _bmad-output/spawn-ledger.jsonl --sprint "$SPRINT" --probe _bmad-output/subagent-context.jsonl --settings .claude/settings.json ${ESCF:+--escalations "$ESCF"} ) > "$W.out" 2> "$W.err" < /dev/null; RC=$?
   CL="$(grep -m1 '^COUNTS:' "$W.out")" || CL=""
+  C22H=""; C22U=""; C22R=""
+  if [ "$RC" = 1 ] || [ "$RC" = 4 ]; then
+    while IFS= read -r l; do
+      case "$l" in
+        "RECORDED: "*) [ -n "$C22R" ] || C22R="$l" ;;
+        "VIOLATION	"*"	-") l="${l#VIOLATION	}"; C22U="${C22U} ${l%%	*}" ;;
+        "VIOLATION	"*) l="${l#VIOLATION	*	*	}"
+           case "${C22H}" in *"
+${l}
+"*) ;; *) C22H="${C22H:-
+}${l}
+" ;; esac ;;
+      esac
+    done < "$W.out"
+  fi
+  C22U="${C22U# }"; [ -n "$C22U" ] || C22U="the tool_use_id of each violation the FAIL lines above print"
   case "$RC" in
     0) ;;
     3) input gate-log "Check 22 exit 3: $(first_line "$W.out")"; [ -z "$CL" ] || input gate-log "Check 22 $CL" ;;
+    4) if [ -z "$C22R" ] || [ -z "$C22H" ]; then
+         refuse check-22 "validate-spawn-ledger.sh --sprint $SPRINT exited 4 and printed no RECORDED line or no named VIOLATION header:
+$(tail_of)" "repair the validator install, then re-run gate-transition.sh $IDX 3"
+       else
+         input gate-log "Check 22 exit 4: $C22R"; [ -z "$CL" ] || input gate-log "Check 22 $CL"
+         while IFS= read -r l; do [ -z "$l" ] || input check22-waiver "$l"; done <<EOF
+$C22H
+EOF
+       fi ;;
+    1) refuse check-22 "validate-spawn-ledger.sh --sprint $SPRINT exited 1:
+$(tail_of)" "write a current-sprint OVERRIDDEN entry naming ${C22U} in docs/escalations/pending.md per gate-validation.md Check 22's four arms (or, for cite/shard/cover, re-dispatch with \`remediates:\`), then re-run gate-transition.sh $IDX 3" ;;
     *) refuse check-22 "validate-spawn-ledger.sh --sprint $SPRINT exited $RC:
-$(tail_of)" "take Check 22 through gate-validation.md Gate Failure now, while no adjudicator runs; then re-run gate-transition.sh $IDX 3" ;;
+$(tail_of)" "repair what the validator names, then re-run gate-transition.sh $IDX 3" ;;
   esac
   stop_if_refused
   # gate-run.sh arms runs the arms file's script rows, mints the nonce, runs `open`, records the ledger rows and
@@ -608,9 +641,10 @@ $(tail_of)" "take Check 22 through gate-validation.md Gate Failure now, while no
   write_plan 3
   ;;
 close)
+  NPLAN=""
   for p in "$PDIR/${IDX}-g3-p"*.plan; do
     [ -f "$p" ] || continue
-    while IFS= read -r l; do case "$l" in 'nonce: '*) NONCE="${l#nonce: }" ;; esac; done < "$p"
+    while IFS= read -r l; do case "$l" in 'nonce: '*) NONCE="${l#nonce: }"; NPLAN="$p" ;; esac; done < "$p"
   done
   if [ -z "$NONCE" ]; then
     slug="$(printf '%s' "$IDX" | sed -e 's/[[:punct:]]*$//' | tr 'A-Z.-' 'a-zxx')"
@@ -641,6 +675,35 @@ close)
     refuse close "no gate-3 ledger for nonce $NONCE in this checkout (ledgers are checkout-local)" "close from the checkout that ran gate 3, or re-run gate 3"
   elif ! awk -F'\t' '$1 == "26" && $2 == "PASS" { f = 1 } END { exit !f }' "$W.out"; then
     refuse close "the gate-3 ledger for nonce $NONCE has no '26 PASS' row" "gate 3 has not passed; finish it through Check 26"
+  fi
+  stop_if_refused
+  # A gate 3 that recorded `Check 22 exit 4` closes only on a verdict whose check 22 is FAIL_WAIVED with a
+  # waiver_id (trailing whitespace stripped) among that plan's `check22-waiver:` headers; never on a PASS.
+  C22X=0; C22H=""
+  if [ -n "$NPLAN" ]; then
+    while IFS= read -r l; do
+      case "$l" in
+        'gate-log: Check 22 exit 4'*) C22X=1 ;;
+        'check22-waiver: '*) l="${l#check22-waiver: }"; l="${l%"${l##*[![:space:]]}"}"; C22H="${C22H}
+${l}
+" ;;
+      esac
+    done < "$NPLAN"
+  fi
+  if [ "$C22X" = 1 ]; then
+    VF="$STATE_DIR/gate-adjudication/${NONCE}.verdict.json"
+    C22V="$(jq -r '[.verdicts[]? | select((.check_id | tostring) == "22")] | if length == 1 then (.[0].verdict // "" | tostring) + "\t" + (.[0].waiver_id // "" | tostring | sub("[[:space:]]+$"; "")) else "" end' "$VF" 2> /dev/null)" || C22V=""
+    C22W="${C22V#*	}"
+    if [ "${C22V%%	*}" != FAIL_WAIVED ] || [ -z "$C22W" ]; then
+      refuse close "gate 3 recorded Check 22 exit 4 ($NPLAN), and $VF does not carry one check 22 verdict FAIL_WAIVED with a waiver_id (read: '${C22V:-none}')" "record check 22 FAIL_WAIVED with waiver_id set to the naming entry's header, then re-run gate-transition.sh $IDX close"
+    else
+      case "$C22H" in
+        *"
+${C22W}
+"*) ;;
+        *) refuse close "check 22 is FAIL_WAIVED with waiver_id '$C22W', which is not a header gate 3 recorded as naming the violations ($NPLAN check22-waiver lines)" "set waiver_id to one of the recorded check22-waiver headers, then re-run gate-transition.sh $IDX close" ;;
+      esac
+    fi
   fi
   stop_if_refused
   MANIFEST=none; ROUTE="close 26 PASS"

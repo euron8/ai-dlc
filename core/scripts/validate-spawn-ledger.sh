@@ -113,7 +113,7 @@
 #
 # USAGE
 #   validate-spawn-ledger.sh --ledger <spawn-ledger.jsonl> --sprint <N> --settings <settings.json>
-#                            [--probe <subagent-context.jsonl>]
+#                            [--probe <subagent-context.jsonl>] [--escalations <pending.md>]
 #
 # EXIT
 #   0  every row for this sprint carries a resolvable role file, a Rule 19(b) contract
@@ -126,6 +126,18 @@
 #      (arm S4) -- S3 and S4 decided even where exit 3 would otherwise apply. Clearable per
 #      Check 22's four-arm disposition, which covers every class; a `cite`, `shard` or `cover`
 #      violation also clears by a remediating re-dispatch (above), after which it is not counted
+#   4  only with --escalations <pending.md>: RECORDED, not a pass. Every counted violation is
+#      named by a current-sprint entry (header matching `[Ss]<N>([^0-9]|$)`) whose `**Status:**`
+#      is OVERRIDDEN, by one of its keys as a WHOLE token of the entry (the entry split on
+#      `[^A-Za-z0-9_.-]+`, trailing dots stripped -- the dispatch guard's waiver grammar). A
+#      violation's keys: its tool_use_id; the agent_id the --probe file joins to that id in this
+#      sprint; its dispatch name, only when the name differs from the role and no other row of
+#      the sprint carries it. The adjudicator grades Check 22 (FAIL_WAIVED, waiver_id the header);
+#      arm 3, the operator citation, is not run here. With --escalations and any violation, one
+#      `VIOLATION<TAB><key><TAB><class><TAB><header after "## ", or ->` line per violation
+#      prints on stdout, key `-` when it has none. Exit 4 needs every header set, the line count
+#      equal to `violations=<n>` on COUNTS, and that total equal to the per-arm counters;
+#      anything else keeps exit 1. Every violation is counted by `viol` and nowhere else.
 #
 # MODE --remediated-keys (the dispatch guard's ARM 2 calls this; one predicate, not two copies)
 #   validate-spawn-ledger.sh --remediated-keys --sprint <N> --ledger <spawn-ledger.jsonl>
@@ -183,6 +195,7 @@ SPRINT=""
 SETTINGS=""
 PROBE=""
 CONTEXT=""
+ESCALATIONS=""
 MODE="check22"
 # THE CLASSES THAT CLEAR BY REPAIR, ONE LIST (operator rulings, BL-842). Every remediation decision
 # reads it; each class needs a v_elig and an r_clean line in shard_scan, or the run exits 2.
@@ -239,6 +252,9 @@ while [ $# -gt 0 ]; do
     --context)
       [ $# -ge 2 ] || { echo "FAIL: --context takes the path of subagent-context.jsonl" >&2; exit 2; }
       CONTEXT="$2"; shift 2 ;;
+    --escalations)
+      [ $# -ge 2 ] || { echo "FAIL: --escalations takes the path of docs/escalations/pending.md" >&2; exit 2; }
+      ESCALATIONS="$2"; shift 2 ;;
     -h|--help)  sed -n '2,62p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -708,6 +724,7 @@ if [ -z "$LEDGER" ] || [ -z "$SPRINT" ] || [ -z "$SETTINGS" ]; then
 fi
 SPRINT_NUM="$(printf '%s' "$SPRINT" | tr -cd '0-9')"
 [ -n "$SPRINT_NUM" ] || { echo "FAIL: --sprint must contain a number (got '$SPRINT')" >&2; exit 2; }
+[ -z "$ESCALATIONS" ] || [ -r "$ESCALATIONS" ] || { echo "FAIL: cannot read --escalations $ESCALATIONS; no violation can be shown named. Exit 2." >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || {
   echo "FAIL: jq is not on PATH. The ledger is JSONL and nothing here can be compared without it;" >&2
   echo "      this exits 2 rather than reporting a clean ledger it never read." >&2
@@ -1395,6 +1412,24 @@ remediated() {
 }
 REMEDIATED_N=0
 PENDING_REMEDY=0
+# viol <class> <tool_use_id> <name> <role>: THE ONE VIOLATION INCREMENT. It bumps the class's counter
+# and the total, and records the keys the --escalations join reads. No other line increments VIOL,
+# UNREADABLE, UNCITED, MISMATCH, EFFORT_MISMATCH, SHARD_VIOL or SHARD_COV.
+VIOLATIONS=0
+VL_RECS=""
+viol() {
+  case "$1" in
+    unread) VIOL=$((VIOL + 1)); UNREADABLE=$((UNREADABLE + 1)) ;;
+    cite)   VIOL=$((VIOL + 1)); UNCITED=$((UNCITED + 1)) ;;
+    tier)   VIOL=$((VIOL + 1)); MISMATCH=$((MISMATCH + 1)) ;;
+    effort) VIOL=$((VIOL + 1)); EFFORT_MISMATCH=$((EFFORT_MISMATCH + 1)) ;;
+    shard)  SHARD_VIOL=$((SHARD_VIOL + 1)) ;;
+    cover)  SHARD_COV=$((SHARD_COV + 1)) ;;
+    *) echo "FAIL: viol was called with no known class ('$1'); nothing was decided. Exit 2." >&2; exit 2 ;;
+  esac
+  VIOLATIONS=$((VIOLATIONS + 1))
+  VL_RECS="${VL_RECS}V	$1	${2:-__NONE__}	${3:-__NONE__}	${4:-__NONE__}${NL}"
+}
 
 while IFS="$(printf '\t')" read -r name role bound requested cited readable schema defbound effortbound tui tierpin tiermodel modelpin rix effjoin; do
   [ -n "$name" ] || continue
@@ -1466,7 +1501,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
     echo "      role file, so this teammate ran with no contract at all (Rule 19, fail-closed)." >&2
     echo "      It is a fact about the past: clear it only through Check 22's" >&2
     echo "      four-arm disposition, never by re-running the gate." >&2
-    remediated unread "$rix" || { VIOL=$((VIOL + 1)); UNREADABLE=$((UNREADABLE + 1)); }
+    remediated unread "$rix" || viol unread "$tui" "$name" "$role"
   fi
 
   # Rule 19(b): the dispatch guard recorded that the contract line reached the teammate by
@@ -1485,7 +1520,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
     echo "      Remediation path, no operator needed: re-dispatch role '${role:-<none>}' with a brief carrying the" >&2
     echo "      Rule 19(b) line and 'remediates: ${tui:-${name}}', and re-run this gate once it has run." >&2
     [ -n "$tui" ] || echo "      This row has no tool_use_id, so it can be named only by its dispatch name, and only if unique." >&2
-    VIOL=$((VIOL + 1)); UNCITED=$((UNCITED + 1))
+    viol cite "$tui" "$name" "$role"
     fi
   fi
 
@@ -1551,7 +1586,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
         echo "      recorded Rule 19(a) tier mismatch against the pin in force when it ran, not the" >&2
         echo "      pin in ${SETTINGS} today. It is a fact about the past: clear it only through Check 22's" >&2
         echo "      four-arm disposition, never by re-running the gate." >&2
-        remediated tier "$rix" || { VIOL=$((VIOL + 1)); MISMATCH=$((MISMATCH + 1)); }
+        remediated tier "$rix" || viol tier "$tui" "$name" "$role"
       fi
     fi
   else
@@ -1572,7 +1607,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
     echo "      aiDlcRoles.${role}.model='${EXPECT}'. This is a recorded Rule 19(a) tier" >&2
     echo "      mismatch. It is a fact about the past: clear it only through Check 22's" >&2
     echo "      four-arm disposition, never by re-running the gate." >&2
-    remediated tier "$rix" || { VIOL=$((VIOL + 1)); MISMATCH=$((MISMATCH + 1)); }
+    remediated tier "$rix" || viol tier "$tui" "$name" "$role"
   elif [ -n "$requested" ] && ! matches_pin "$requested"; then
     # Reported, NOT failed. Check 22 is explicit: the guard caught the slip before the
     # work ran and the teammate ran on the key its role names.
@@ -1645,7 +1680,7 @@ while IFS="$(printf '\t')" read -r name role bound requested cited readable sche
       echo "      runner that drops effort." >&2
       echo "      The spawn that already ran is a fact about the past: clear it only through" >&2
       echo "      Check 22's four-arm disposition, never by re-running the gate." >&2
-      remediated effort "$rix" || { VIOL=$((VIOL + 1)); EFFORT_MISMATCH=$((EFFORT_MISMATCH + 1)); }
+      remediated effort "$rix" || viol effort "$tui" "$name" "$role"
     fi
   fi
 done <<EOF
@@ -1716,8 +1751,8 @@ else
          esac ;;
       # The tool_use_id prints BESIDE the name: clearing arm 1 keys on the name, and names
       # repeat across a sprint, so the id is what tells two same-named rows apart.
-      X) SHARD_VIOL=$((SHARD_VIOL + 1))
-         if remediated shard "$sh_e"; then SHARD_VIOL=$((SHARD_VIOL - 1)); continue; fi
+      X) if remediated shard "$sh_e"; then continue; fi
+         viol shard "$sh_d" "$sh_a" "$sh_b"
          [ "$sh_c" = "__NONE__" ] && sh_c="<no shard_raw recorded>"
          [ -n "${sh_d:-}" ] && [ "$sh_d" != "__NONE__" ] || sh_d="<no tool_use_id recorded>"
          echo "FAIL: [${sh_a}] (tool_use_id ${sh_d}) role '${sh_b}' declared a serial exception that is not one of Rule 28's four:" >&2
@@ -1731,8 +1766,8 @@ else
          echo "      this gate once it has run." >&2
          echo "      Otherwise the spawn that already ran is a fact about the past: clear it only through" >&2
          echo "      Check 22's four-arm disposition, never by re-running the gate." >&2 ;;
-      C) SHARD_COV=$((SHARD_COV + 1))
-         if remediated cover "$sh_e"; then SHARD_COV=$((SHARD_COV - 1)); continue; fi
+      C) if remediated cover "$sh_e"; then continue; fi
+         viol cover "$sh_d" "$sh_a" "$sh_b"
          [ -n "${sh_d:-}" ] && [ "$sh_d" != "__NONE__" ] || sh_d="<no tool_use_id recorded>"
          echo "FAIL: [${sh_a}] (tool_use_id ${sh_d}) role '${sh_b}' is the ONE cross agent of its dispatch (G=1) and its brief does not name every section:" >&2
          echo "      shard: ${sh_c}" >&2
@@ -1780,6 +1815,7 @@ echo "  ${SH_PENDING} PENDING (written before the guard recorded the field); mer
 echo "  ${SH_ORPHAN} WARNED with no ledger row (passes read from ${SHARD_PASSDIR})."
 echo "  cover (S4): ${SHARD_COV} one-cross dispatch(es) (G=1) whose brief omits a section."
 echo "  remediation (classes: ${REMEDIABLE_CLASSES}): remediated=${REMEDIATED_N} pending-remedy=${PENDING_REMEDY}"
+echo "  violations=${VIOLATIONS}"
 # THE SEAT SET PRINTS ON EVERY RUN, because an empty one changes no verdict on its own: it only
 # removes rows from S1 and S3. WARN rather than exit 2 -- a consumer always has the directory
 # (the dispatch guard is inert without it), so an empty derivation is a moved or renamed
@@ -1799,6 +1835,76 @@ fi
 # it takes exit 3 rather than a new code the gate does not document. Without this arm the
 # filter above would turn a settings.json that lost its `aiDlcRoles` block into a silent
 # exit 0 on a sprint full of uncited dispatches.
+# THE --escalations JOIN (header, exit 4). It runs only when a violation was counted, reads the
+# keys `viol` recorded, and admits only when every violation is named and all three counts agree.
+if [ -n "$ESCALATIONS" ] && [ "$VIOLATIONS" -gt 0 ]; then
+  VJ_CTX=""
+  if [ -n "$PROBE" ] && [ -r "$PROBE" ]; then
+    VJ_CTX="$(jq -Rr --argjson s "$SPRINT_NUM" 'fromjson? | select(type == "object" and .sprint == $s
+      and (.tool_use_id // "") != "" and (.agent_id // "") != "")
+      | "A\t" + (.tool_use_id | tostring) + "\t" + (.agent_id | tostring)' "$PROBE" 2>/dev/null)" || VJ_CTX=""
+  fi
+  # stdin: `V` rows from viol (5 fields), `A` tool_use_id -> agent_id rows (3 fields), and the RECORDS
+  # rows, whose first field is the dispatch name. Then the escalation file, in the dispatch guard's
+  # entry grammar: `## ` header, body from the header on, the last `**Status:**` line's first word.
+  VJ_OUT="$(printf '%s%s\n%s\n' "$VL_RECS" "$VJ_CTX" "$RECORDS" | LC_ALL=C awk -F'\t' -v sprint="$SPRINT_NUM" '
+    function flush(   b, n, i, t, toks) {
+      if (hdr == "" || status != "OVERRIDDEN") return
+      if (hdr !~ ("[Ss]" sprint "([^0-9]|$)")) return
+      b = body
+      gsub(/[^A-Za-z0-9_.-]+/, " ", b)
+      n = split(b, toks, " ")
+      for (i = 1; i <= n; i++) {
+        t = toks[i]; sub(/[.]+$/, "", t)
+        if (t != "" && !(t in named)) named[t] = substr(hdr, 4)
+      }
+    }
+    FILENAME == "-" && $1 == "V" && NF == 5 { nv++; vc[nv] = $2; vt[nv] = $3; vn[nv] = $4; vr[nv] = $5; next }
+    FILENAME == "-" && $1 == "A" && NF == 3 { ag[$2] = ag[$2] " " $3; next }
+    FILENAME == "-" { if (NF >= 15) rows[$1]++; next }
+    /^## / { flush(); hdr = $0; body = $0; status = ""; next }
+    /^\*\*[Ss]tatus:\*\*/ {
+      s = $0; sub(/^\*\*[Ss]tatus:\*\*[[:space:]]*/, "", s)
+      if (match(s, /[A-Z_]+/)) status = substr(s, RSTART, RLENGTH)
+    }
+    { body = body "\n" $0 }
+    END {
+      flush()
+      for (i = 1; i <= nv; i++) {
+        nk = 0; split("", K)
+        if (vt[i] != "__NONE__" && vt[i] != "") K[++nk] = vt[i]
+        if (vt[i] in ag) { na = split(ag[vt[i]], A, " "); for (j = 1; j <= na; j++) if (A[j] != "") K[++nk] = A[j] }
+        if (vn[i] != "__NONE__" && vn[i] != "<unnamed>" && vn[i] != vr[i] && rows[vn[i]] == 1) K[++nk] = vn[i]
+        hit = 0
+        for (j = 1; j <= nk; j++) if (K[j] in named) { print "VIOLATION\t" K[j] "\t" vc[i] "\t" named[K[j]]; hit = 1; break }
+        if (!hit) print "VIOLATION\t" (nk ? K[1] : "-") "\t" vc[i] "\t-"
+      }
+    }' - "$ESCALATIONS")" || VJ_OUT=""
+  VJ_LINES=0; VJ_NAMED=0; VJ_UNNAMED=""
+  while IFS= read -r vj_l; do
+    case "$vj_l" in "VIOLATION	"*) ;; *) continue ;; esac
+    printf '%s\n' "$vj_l"
+    VJ_LINES=$((VJ_LINES + 1))
+    case "$vj_l" in
+      *"	-") vj_k="${vj_l#VIOLATION	}"; VJ_UNNAMED="${VJ_UNNAMED} ${vj_k%%	*}" ;;
+      *) VJ_NAMED=$((VJ_NAMED + 1)) ;;
+    esac
+  done <<EOF
+$VJ_OUT
+EOF
+  VJ_SUM=$((VIOL + SHARD_VIOL + SHARD_COV))
+  if [ "$VJ_LINES" -eq "$VIOLATIONS" ] && [ "$VJ_SUM" -eq "$VIOLATIONS" ] && [ "$VJ_NAMED" -eq "$VIOLATIONS" ]; then
+    echo "RECORDED: every one of the ${VIOLATIONS} violation(s) is named by a current-sprint OVERRIDDEN entry in ${ESCALATIONS}."
+    echo "  Not a pass: the adjudicator grades Check 22, expected FAIL_WAIVED with that entry's header as waiver_id."
+    exit 4
+  fi
+  if [ "$VJ_LINES" -ne "$VIOLATIONS" ] || [ "$VJ_SUM" -ne "$VIOLATIONS" ]; then
+    echo "FAIL: the --escalations join does not agree with itself: ${VJ_LINES} VIOLATION line(s), violations=${VIOLATIONS}," >&2
+    echo "      per-arm counters summing to ${VJ_SUM}. Nothing is admitted." >&2
+  fi
+  [ -z "$VJ_UNNAMED" ] || echo "FAIL: no current-sprint OVERRIDDEN entry in ${ESCALATIONS} names:${VJ_UNNAMED}" >&2
+  [ "$VJ_SUM" -gt 0 ] || exit 1
+fi
 if [ "$SHARD_VIOL" -gt 0 ]; then
   echo "FAIL: ${SHARD_VIOL} Rule 28 invalid serial exception(s) across the S${SPRINT_NUM} shardable row(s) (arm S3)." >&2
   [ "$VIOL" -gt 0 ] && echo "FAIL: ${VIOL} Rule 19 violation(s) across ${CHECKED} S${SPRINT_NUM} spawn row(s)." >&2

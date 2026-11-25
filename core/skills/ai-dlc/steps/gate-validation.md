@@ -2105,6 +2105,8 @@ ordinal 1..K, or the output was verified against the sections the brief omitted.
 
 A violation cleared by a verified `OVERRIDDEN` entry is recorded `FAIL_WAIVED`, with `waiver_id` set to that entry's escalation header, verbatim after `## `. It is never recorded `PASS`, and its gate-log line says `FAIL_WAIVED`, not `PASSED`. The operator's authority and the four-arm clearing rule are unchanged; only what is recorded changes.
 
+**Reaching the adjudicator with a recorded violation.** `gate-transition.sh <idx> 3` runs `validate-spawn-ledger.sh` with `--escalations docs/escalations/pending.md` when that file exists. The validator exits 4 (RECORDED, not a pass) when every violation it counts is named, as a whole token, by a current-sprint `OVERRIDDEN` entry: by its `tool_use_id`, by the agent id the subagent context joins to it, or by its dispatch `name` when that differs from the role and no other row of the sprint carries it. It prints one `VIOLATION<TAB><key><TAB><class><TAB><header>` line per violation. Gate 3 then records each naming header as a `check22-waiver:` plan line and goes on to the adjudicator, who still decides all four arms. `gate-transition.sh <idx> close` refuses unless check 22's verdict is `FAIL_WAIVED` with a `waiver_id` among those headers. A violation no such entry names keeps exit 1, and the refusal names its key: write the entry that names it (or, for a class that clears by repair, re-dispatch with `remediates:`), then re-run gate 3.
+
 **`DECIDED_AUTONOMOUSLY` does NOT clear this**, and that exclusion is the point:
 it is the lead dispositioning its own recorded violation, whether under Rule 19
 or Rule 28. A repair is not that: it is a teammate that ran, joined by the
