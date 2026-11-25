@@ -1623,6 +1623,53 @@ verify: sh case 'a\b' in *\\*) exit 0 ;; *) exit 1 ;; esac
 
 ---
 
+## Idl prose heading LR — an id-less heading whose entry is keyed by the backticked line below
+
+`PC-FXIDL-RELABEL-LR` —
+
+The receipt parse must key this entry on the id, not on the prose heading.
+
+verify: manual
+
+---
+
+## Idl prose heading SW — an id-less heading, then the id line, then an annotation that captures
+
+`PC-FXIDL-RELABEL-SW` —
+
+This entry carries no receipt of its own; the annotation bullet below captures one.
+
+- **Idl annotation lead-in SW** a non-id bold bullet with a receipt under it
+  verify: manual
+
+---
+
+## Idl prose heading ML — an id-less heading, then the id line, then a mid-line receipt
+
+`PC-FXIDL-RELABEL-ML` —
+
+A body sentence that ends in its receipt verify: sh true
+
+---
+
+## PC-FXIDL-SAME-ID — a closed heading entry whose own id line follows it
+
+ADOPTED UPSTREAM (v0.101.0, verified for the fixture). Closed.
+
+`PC-FXIDL-SAME-ID` —
+
+verify: manual
+
+---
+
+## Idl prose heading NODASH — an id-less heading, then an id line with no em dash
+
+`PC-FXIDL-NO-DASH`
+
+verify: manual
+
+---
+
 ## PC-FIXTURE-EOF-FENCE — a fence still open at the end of the ledger
 
 THE LAST ENTRY, and its fence never closes. No id-keyed line follows, so no reset can report
