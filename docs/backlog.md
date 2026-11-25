@@ -4306,3 +4306,86 @@ Provenance: batch 265 close (lead ai-dlc-19); id allocated by the lead.
 verify: manual
 
 
+## BL-1230 — a recorded Check 22 violation that an OVERRIDDEN escalation entry already names cannot reach the adjudicator, because `gate-transition.sh` refuses at gate 3 with a remedy that cannot succeed
+
+**DEFECT.** Filed 2026-11-25 (batch 266, cluster G). Filed by the consumer as PC-S324-CHECK22-WAIVER-IS-UNREACHABLE-FROM-GATE-TRANSITION. Owner: `core/scripts/validate-spawn-ledger.sh`, `core/scripts/gate-transition.sh`, `core/skills/ai-dlc/steps/gate-validation.md` (Check 22).
+
+Goal: a gate whose only Check 22 violations are each named, as a whole token, by a current-sprint OVERRIDDEN entry in `docs/escalations/pending.md` reaches the adjudicator, which grades Check 22 as FAIL_WAIVED, and `close` can never accept a PASS for it. One done condition: the real `validate-spawn-ledger.sh` on a copy of the s324 inputs given `--escalations` exits 4 with one VIOLATION line naming the entry's header, `gate-transition.sh` records `Check 22 exit 4` and one `check22-waiver` per header and goes on, `close` refuses a Check 22 verdict that is not FAIL_WAIVED with a recorded waiver id, and every other state still exits 1.
+
+Baseline: at f4cf60bc6 `gate-transition.sh` (:576-583) passes rc 0, records rc 3 as `input gate-log`, and refuses every other rc as `refuse check-22` with a remedy ("...while no adjudicator runs; then re-run gate-transition.sh") that cannot succeed on the same tree. `validate-spawn-ledger.sh` exits 1 on any violation (VIOL + SHARD_VIOL + SHARD_COV), and `unread`, `tier` and `effort` have no repair path (`REMEDIABLE_CLASSES="cite shard cover"`). `waiver_covers` (`gate_adjudication.py:126-128`) checks sprint and status only, never that the entry names the spawn, so the naming join exists mechanically only in the dispatch guard. The motivating case is graph spawn-ledger row toolu_1795574458187_0 (name qa, role closing-writer), named as a whole token by an OVERRIDDEN entry.
+
+Work list:
+
+1. `validate-spawn-ledger.sh`: one helper `viol <class> <tool_use_id> <name> <role>` is the only violation increment, called at every site (unread, cite, tier x2, effort, S3 shard, S4 cover); COUNTS gains `violations=<n>`.
+2. New optional `--escalations <pending.md>`: current-sprint OVERRIDDEN entries only, keys are the tool_use_id, the joined agent_id, and a dispatch name only when it differs from the role and is unique in the sprint; whole-token match on the dispatch guard's grammar; one `VIOLATION<TAB><key><TAB><class><TAB><header|->` line per violation; exit 4 only when every violation is named and VIOLATION lines equal `violations=`, else exit 1 with the unnamed keys. Without the flag every exit and stderr line is unchanged.
+3. `gate-transition.sh` gate 3 passes `--escalations` when `docs/escalations/pending.md` exists; rc 4 records `gate-log: Check 22 exit 4` and one `check22-waiver: <header>` per distinct header and continues; rc 1 refuses with a remedy that names a route that can succeed. `close` refuses after a recorded exit 4 unless the verdict's check 22 is FAIL_WAIVED with a waiver_id among the recorded headers.
+4. `gate-validation.md` Check 22 gains one paragraph stating the exit-4 route; the validator and gate-transition headers document it.
+5. Fixtures `check-22-spawn-ledger` and `gate-transition` gain arms for exit 4, exit 1 (other key, status not OVERRIDDEN, unnamed second violation, name equal to role or ambiguous) and the close refusal. Zero load-dependent tests (BL-868).
+
+Out of scope: Check 17's `--fold-architect` circular remedy (`gate-transition.sh:563,:569`) and the open HARD_BLOCK effect on Check 2 at graph's gate.
+
+Step: n/a
+
+Related: BL-1231 and BL-1232 (filed in the same cluster).
+
+Provenance: batch 266, cluster G; id allocated by the lead. Engine commit 3698bb775; probes P0-P5 and mutants m1a, m1b, m2 are in its message.
+
+verify: manual
+
+## BL-1231 — Check 33's request-coverage arm refuses the check's own NOT-YET-AUTHORED clause at the opening planning gate of every variant, so no variant's opening gate can mint its nonce
+
+**DEFECT.** Filed 2026-11-25 (batch 266, cluster G). Filed by the consumer as PC-S324-CHECK33-ARMS-ARM-REFUSES-THE-CHECK-OWN-NOT-YET-AUTHORED-CLAUSE-AT-CARRY-OVER-OPENING-GATES. Owner: `core/skills/ai-dlc/gates/planning.arms` (row 33), `core/scripts/validate-request-coverage.sh`, `core/scripts/gate_run.py`, `core/skills/ai-dlc/steps/gate-validation.md` (Check 33).
+
+Goal: at a variant's opening planning gate, a requests file with at least one operator entry and no `s<N>/locked-requirements.md` records Check 33 as SKIP with reason rc3 and the gate mints its nonce, while every other state still fails. One done condition: through `gate-run.sh arms` on a toy root, `--step` at each opening step gives `GATE-RESULT 33 SKIP ... reason=rc3` and a nonce, and a non-opening step, an absent requests file, and a requests file with no operator entry each give FAIL rc=2 with no nonce.
+
+Baseline: at f4cf60bc6 Check 33's body (`gate-validation.md:3226-3244`) says the clause is NOT-YET-AUTHORED when `locked-requirements.md` is absent at a variant's OPENING gate, but row 33 (`planning.arms:30`) declares `legacy skip=empty`, `validate-request-coverage.sh` exits 2 for an absent brief (`:157-160`), exit 3 is unused, and `gate_run.py:236-240` makes any rc != 0 a FAIL unless `rc<N>` is declared. Graph's s324 snapshot read `current_step_file: carry-over-evaluation.md`, `pipeline_variant: carry-over` across the opening gate.
+
+Scope, widened by the lead's ruling to all four opening planning gates: `carry-over-evaluation.md`, `codebase-inventory.md`, `deep-codebase-analysis.md`, `doc-reconciliation.md`. Graph's filing named only the first. The other three are measured scope beyond graph's filing: `steps/route-fresh-start.md:250-253` shows brownfield-a opening at `codebase-inventory.md`, brownfield-b (and analysis-only) at `deep-codebase-analysis.md`, and brownfield-c at `doc-reconciliation.md`, so each variant's opening gate has the same refusal. Not measured: no brownfield pull has been run against these gates in a consumer.
+
+Work list:
+
+1. `gate_run.py`: a `{STEP}` placeholder (ctx `STEP` from `--step`, `PH_GRAMMAR` entry `[A-Za-z0-9_.-]+\.md`), documented beside the other placeholders.
+2. `validate-request-coverage.sh`: optional `--gate-step <basename>`; without it behaviour is byte-identical. At the absent-brief guard, when the step is in the OPENING set and the requests file holds at least one `^## <ts> -- ` operator entry, print `NOT-YET-AUTHORED: ...` first and exit 3; every other state keeps the existing ERROR and exit 2. The OPENING set is held in one declared variable holding the four steps above.
+3. `planning.arms` row 33 appends `--gate-step {STEP}` and declares `skip=empty,rc3`; the validator header documents exit 3.
+4. `gate-validation.md` Check 33: whole paragraphs only (the clause paragraph and the Check-command paragraph) say the script decides the clause, keyed on the gate step, and name `--gate-step`; `enforcement-map.yaml` id 33 names exit 3 and reason=rc3.
+5. Fixture `request-coverage` gains in-process arms for exit 3 (each opening step with an entry), exit 2 (non-opening step), exit 2 (no `--gate-step`), exit 2 (opening step, zero entries); its `inproc:` invocation rows are re-counted on the final tree. One arm exercises `{STEP}` through the placeholder path. Zero load-dependent tests (BL-868).
+6. Probes through `gate-run.sh arms` on a toy root, once by hand: opening step -> SKIP reason=rc3 and a nonce; each of the three failing states -> FAIL rc=2; mutants: row back to `skip=empty` turns P1 red, dropping the entry-count requirement turns the zero-entry probe to SKIP. [PLACEHOLDER: engine sha and probe output go here when the fix hand reports.]
+
+Out of scope (NOTE): row 33 omits `--cite-sha`; `validate-trunk-audit-gate.sh:135` misreads a bolded `pipeline_variant`.
+
+Step: n/a
+
+Related: BL-1230 and BL-1232 (filed in the same cluster).
+
+Provenance: batch 266, cluster G; id allocated by the lead.
+
+verify: manual
+
+## BL-1232 — a brief's rendered `--mark` instruction seals no gate part and no verdict, and the merge refuses the marked bytes
+
+**DEFECT.** Filed 2026-11-25 (batch 266, cluster G). Filed by the consumer as PC-S324-RENDERED-MARK-INSTRUCTION-SEALS-NO-GATE-PART-AND-THE-MERGE-REFUSES-THE-MARKED-BYTES. Owner: `core/scripts/render-brief.sh`, `core/skills/ai-dlc/steps/_gate-procedures.md`.
+
+Goal: a rendered brief for a JSON or JSONL deliverable carries no closing `--mark` line, a rendered brief for any other deliverable still does, and a gate whose parts were produced from briefs merges. One done condition: in a world built like `core/fixtures/content-seal/gate-arms.sh`, render-brief for each gate part prints no `--mark` line, `--merge` exits 0 and writes the verdict, and the `.md` twin's brief still carries the line.
+
+Baseline: at f4cf60bc6 `render-brief.sh:78-79` prints the closing `wait-for-deliverable.sh --mark <DELIV> ...` line for every deliverable with no type branch. For a gate part, `wait-for-deliverable.sh:889-890` derives MK_STATE only for `*/planning-artifacts/*`, so the marker is appended with no seal row; `gate_adjudication.py:749` then runs `content-seal.sh --check` (`:457-460`), which refuses the marked part, and past the seal the marker line is not JSON, so `--merge` (`:872-877`) and `--check-part` (`:1198`) refuse it. Nothing reads a marker on a gate file: `_gate-procedures.md:176-177` already puts JSON and JSONL outside `--mark`'s scope and the gate-adjudicator role never mentions `--mark`.
+
+Measured scope beyond the filing:
+
+- The unsharded `.verdict.json` case: the same defect, with `json.load` failing "Extra data" at `gate_adjudication.py:1309`. The consumer has not hit it yet.
+- Graph's second instance: the 2026-11-24 story gate. Nonce story-20261124T204109Z parts 2of3 and 3of3 carry markers, that nonce has no verdict, and the gate was re-run as 205625Z.
+
+Work list:
+
+1. `render-brief.sh` prints the closing `--mark` line only when the deliverable is not `*.json` or `*.jsonl` (`--mark-step` stays required for argument shape). One predicate covers parts, a single part and the verdict.
+2. `_gate-procedures.md` states in one clause, at the procedure's existing `--mark` scope sentence and never mid-paragraph, that a rendered brief carries no `--mark` line for a JSON or JSONL deliverable.
+3. No change to `wait-for-deliverable.sh`, `content-seal.sh` or `gate_adjudication.py`.
+4. One arm pair in the fixture that already invokes `render-brief.sh` directly: a json/jsonl deliverable gets no `--mark` line, a `.md` deliverable does; a `.verdict.json` deliverable gets none. Zero load-dependent tests (BL-868).
+5. Probe once by hand: execute every `--mark` line each brief prints, then `--merge` exits 0 on the fix; the base `render-brief.sh` makes `--merge` exit 2 "changed after its last sealed write". [PLACEHOLDER: engine sha and probe output go here when the fix hand reports.]
+
+Step: n/a
+
+Related: BL-1230 and BL-1231 (filed in the same cluster).
+
+Provenance: batch 266, cluster G; id allocated by the lead.
+
+verify: manual
