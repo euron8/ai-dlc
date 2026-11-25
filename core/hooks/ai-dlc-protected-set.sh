@@ -198,8 +198,15 @@ ps_roots
 
 # normalize_to sets _PS_N with no fork; normalize prints it.
 normalize_to() {
-  local p="$1" root
+  local p="$1" root rel
   p="${p#./}"
+  # Exclusion is judged on the project-relative path, before the root-segment
+  # cut: the cut drops the prefix (docs/pre-ai-dlc/<stamp>/_divergence/) that
+  # the exclusion keys on. An absolute path outside the project dir is never
+  # pre-tested (an ancestor named pre-ai-dlc would exclude it, failing open).
+  _PS_EX=1; rel="$p"
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then rel="${p#"${CLAUDE_PROJECT_DIR}"/}"; fi
+  case "$rel" in /*|../*|*/../*|..) ;; *) is_excluded "$rel" && _PS_EX=0 ;; esac
   # shellcheck disable=SC2086
   for root in $ROOT_SEGMENTS; do
     case "$p" in
@@ -233,15 +240,15 @@ is_excluded() {
 }
 
 is_protected() {
-  local path
-  path="$(normalize "$1")"
-  is_protected_norm "$path"
+  normalize_to "$1"
+  is_protected_norm "$_PS_N"
 }
 
 # is_protected_norm <normalized path>: the decision, on a path normalize_to already produced.
 is_protected_norm() {
   local path="$1" pattern has_glob=1
 
+  [ "${_PS_EX:-1}" -eq 0 ] && return 1
   is_excluded "$path" && return 1
 
   case "$path" in *[*?]*) has_glob=0 ;; esac

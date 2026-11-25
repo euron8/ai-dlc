@@ -333,7 +333,11 @@ Two arms, either satisfies (dual-arm OR):
   every gate and re-reported `FAIL`, so an expiry that forced a re-run would be a
   no-op. Past its `**Expires after:**` count a suppression whose named check is
   still recorded `FAIL` needs fresh authorization; one whose cause was fixed
-  reports nothing. See `escalations.md` for the `SUPPRESSED` field set.
+  reports nothing. The count is of gates that recorded a row for the suppressed
+  `[catalog] check`, i.e. gates whose manifest loaded it; a gate type that does
+  not load the check is not charged; a `[catalog] check` no gate has ever recorded is charged
+  every gate. See `escalations.md` for the `SUPPRESSED`
+  field set.
   **The verdict it reads is the PREVIOUS gate's.** `gate-metrics.jsonl` is
   written by Check 12, after this check, so this gate's own verdict is not yet
   in it. The expiry FAIL names the `ts` of the row it read.
@@ -1375,19 +1379,6 @@ After Check 14 writes the snapshot, re-read
   Exit 1 → **Check 15 FAILS.** The budget check is the one part of Check
   14 that leaves no trace in the snapshot itself, so it is the one part
   Check 15 cannot verify any other way.
-
-  **The row it audits is the newest gate's, chosen by heading timestamp.**
-  With Check 14 rows in one section only, that section's last row. With
-  rows in several, the last row of the section whose heading-block
-  `Timestamp:` is newest (step 12). It also FAILS when:
-  - a row-bearing section has no heading-block timestamp;
-  - two sections tie on the newest timestamp;
-  - on the canonical live log, the snapshot's `last_gate_passed` names
-    a timestamp that is not in the selected section's heading block —
-    the snapshot is stale, or the newest entry is not this gate's. A
-    date-only key is compared against the selected section's date;
-  - the section whose heading carries that key logged no Check 14 row
-    at all — the gate the snapshot names never recorded its budget.
 
   The selected row must carry the `tok` measurement in its own cell. A
   cell reading `evidence line below` cites nothing and FAILS.
@@ -3231,8 +3222,8 @@ own step (`--gate-step`, the `--step` the gate runs under). When this sprint's
 step is a variant's OPENING planning step, and the requests file holds an operator
 entry, it prints `NOT-YET-AUTHORED` first and exits 3, which the gate records as
 SKIP `reason=rc3`. The opening steps are the ones `vrc_opening_steps` derives from
-`route-fresh-start.md`'s Step 6 route table: the First Step of every route whose
-sequence reaches `discovery` or `requirements` after it. `discovery.md` §4a authors
+`route-fresh-start.md`'s Step 6 route table: every step of a route's Pipeline Sequence that comes before its first
+`discovery` or `requirements` step, not only its First Step (brownfield-c runs `doc-reconciliation` and then `doc-repair-backfill` before `discovery`, `route-fresh-start.md:253`). `discovery.md` §4a authors
 the file, and the `requirements` step (§3, same grammar) writes it for the `feature`
 and `carry-over` variants. Any other step with the file absent, an absent requests
 file, or a requests file with no operator entry exits 2 and FAILS.

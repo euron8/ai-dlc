@@ -310,6 +310,11 @@ drive_run() { # <validator path> <drive> -> O E RC X
       E="$( vlt_drive --in-force --now "$CLK_NOW" --escalations "$CASES/clk-inf/pending.md" --gate-metrics "$GM_SL_W" \
               --enforcement-map "$MAP" 2>&1 >"$WORK/clk-inf.out" )"; RC=$?
       O="$(cat "$WORK/clk-inf.out")" ;;
+    gli)
+      # The gate-loaded world's query drive: stdout (the rows) in O, stderr in E.
+      E="$( vlt_drive --in-force --escalations "$CASES/gl-inf/pending.md" --gate-metrics "$GM_GL" \
+              --enforcement-map "$MAP" 2>&1 >"$WORK/gl-inf.out" )"; RC=$?
+      O="$(cat "$WORK/gl-inf.out")" ;;
     sli_*|slw_*)
       # The two query modes on a supersession world: stdout (the rows) in O, stderr in E.
       m="--in-force"; [ "${d%%_*}" = slw ] && m="--waivers"
@@ -599,12 +604,22 @@ ar_clksup()  { dv "$1" clksup; [ "$DV_RC" = 1 ] && sl_expfail && sl_n 0 && ! has
 ar_clk_past() { clk_q "$1" && clk_lists "$CLK_HP"; }
 ar_clk_tol()  { clk_q "$1" && clk_lists "$CLK_HP" && clk_lists "$CLK_HT"; }
 ar_clk_far()  { clk_q "$1" && clk_lists "$CLK_HP" && ! clk_lists "$CLK_HF"; }
+# ---- THE GATE THAT DID NOT LOAD THE CHECK: a lifetime counts only gates that recorded the (catalog, check) ----
+# One --in-force drive (seed.sh, GM_GL); each arm asks about ONE entry, with in_force=2 as the count both
+# listed entries need. The elapsed field is asserted as the number 1.
+gl_q() { dv "$1" gli; [ "$DV_RC" = 0 ] && grep -q '^IN-FORCE: .* in_force=2 ' <<<"$DV_E"; }
+gl_row() { grep -q "^core${SL_TAB}$1${SL_TAB}1${SL_TAB}1${SL_TAB}.*${SL_TAB}## \[S410 gate — $1, " <<<"$DV_O"; }
+ar_gl_notrun() { gl_q "$1" && gl_row 3a; }
+ar_gl_ran()    { gl_q "$1" && gl_row 3a && ! grep -q "${SL_TAB}33${SL_TAB}" <<<"$DV_O"; }
+ar_gl_cat()    { gl_q "$1" && gl_row 16; }
+ar_gl_zero()   { gl_q "$1" && gl_row 3a && ! grep -q "${SL_TAB}14${SL_TAB}" <<<"$DV_O"; }
+GL_ARMS="gl_notrun gl_ran gl_cat gl_zero"
 CLK_ARMS="clkself clksup clk_past clk_tol clk_far"
 ARCH_ARMS="arch_sup arch_over arch_mis arch_ovr"
 ARCHG_ARMS="arch_gx arch_bx arch_gi arch_gd"
 SL_ARMS="sl1 sl1b sl2 sl3 sl3b sl4 sl5 sl5e sl5s sl6 sl6b sl6c sl7 sl8a sl8b slf3 sl9 sl11 sl11b sl11c sl11d sl11e slq1 slq2 slq3 slq4 sl12 slvd sl10i sl10w slinf slinfx slw3"
 
-ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2x c2xi c2x18 c2xu c2xt c2u c2r c2m wsd $SL_ARMS $CLK_ARMS $ARCH_ARMS $ARCHG_ARMS"
+ARMS="s1 s2 s2m s3 s4 s4m s5 s6 s7 s8 s9 s9z s11 s12 s13a s13b s14 s15 s16 s17 s18 t18a t18b t18c t18d ident cand att17a att17b att17c att18 att19 att20 cwA_gates cwA_inf cwA_met cwA_agree cwA_root cwB_note cwB_inf cwB_gates c31 sen_A sen_B sen_C sen_D sen_E sen_F sr_Ag sr_Ai sr_Bg sr_Bi sr_Cg sr_Dg sr_Di sr_Eg sr_Ei sr_Fg w1 w1b w2 w3 w4 w5 w6 w7 w8 c1 c1b c1u c2ab c2ba c2a c2s c2x c2xi c2x18 c2xu c2xt c2u c2r c2m wsd $SL_ARMS $CLK_ARMS $ARCH_ARMS $ARCHG_ARMS $GL_ARMS"
 
 reg() { printf -v "OK_$1" '%s' "$2"; printf -v "BAD_$1" '%s' "$3"; }
 reg s1 "a SUPPRESSED entry inside its lifetime does not fire (exit 0)" "in-force suppression FAILED — the arm has no green state and would wedge every gate"
@@ -698,6 +713,10 @@ reg clksup "CLOCK (BL-966): a future-dated NEW supersedes nothing -- OLD's expir
 reg clk_past "CLOCK (BL-966): --in-force lists an entry authorized in the past, inside its lifetime" "CLOCK (BL-966): a past-dated in-force entry was not listed -- the clock comparison is reversed"
 reg clk_tol "CLOCK (BL-966): --in-force lists an entry authorized one hour ahead of the clock, inside the 7200 s tolerance" "CLOCK (BL-966): an entry one hour ahead was refused -- the tolerance for hand-typed stamps is gone"
 reg clk_far "CLOCK (BL-966): --in-force does not list an entry authorized in 2099" "CLOCK (BL-966): an entry authorized in 2099 was listed in force -- the clock does not bound sl_in_force, or the tolerance is unbounded"
+reg gl_notrun "GATE-LOADED: a [core] 3a suppression (Expires after 1) charged by one gate that recorded 3a is LISTED in force at 1 elapsed, though a later gate recorded rows for other checks only" "GATE-LOADED: a gate that recorded no row for 3a was charged to its lifetime -- a gate type that never runs the check expires its suppression"
+reg gl_ran "GATE-LOADED twin: a [core] 33 suppression whose later gate DID record 33 is not listed (2 elapsed, Expires after 1)" "GATE-LOADED twin: a suppression charged by two gates that recorded its check was listed in force -- the count no longer counts"
+reg gl_cat "GATE-LOADED catalog twin: a [core] 16 suppression whose later gate recorded only extension:x 16 is LISTED in force at 1 elapsed" "GATE-LOADED catalog twin: an extension:x row charged a [core] suppression -- the count ignores the catalog"
+reg gl_zero "GATE-LOADED zero-row twin: a [core] 14 suppression (Expires after 1) whose key NO gate records is charged every gate after the authorization (2 elapsed) and is NOT listed" "GATE-LOADED zero-row twin: a suppression of a key no gate records was listed in force -- it counts 0 elapsed forever and never expires"
 reg c2x18 "C2 (BL-968): an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an ARCHIVED SUPPRESSED entry of 32 with **Expires after:** 18, inside that count but outside the 1..3 cap" "C2 (BL-968): an archived over-cap suppression stood an OVERRIDDEN entry down -- the acquittal skipped the 1..3 cap sl_in_force holds"
 reg c2xu "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an archived SUPPRESSED entry of 32 with NO Expires after line" "C2: a suppression whose expiry cannot be read stood an OVERRIDDEN entry down -- the lifetime guard fails open"
 reg c2xt "C2: an OVERRIDDEN entry naming 32 FIRES when the row's waiver is an archived SUPPRESSED entry of 32 with NO authorization timestamp" "C2: a suppression whose authorization cannot be dated stood an OVERRIDDEN entry down -- the lifetime guard fails open"
@@ -807,6 +826,13 @@ in_set sen_C "$SHIP_PASS" || SAG_PRE=0
 if [ "$SAG_PRE" = 1 ] && ! grep -qF 'SL_ARCH_GATE' "$VALIDATOR" && [ "$SEN_IS_DIST" -ne 1 ]; then
   printf '  SKIP  the last-entry archive arms -- the installed validator predates them; this fixture ships one pull ahead of it\n'
   SKIPPED="$SKIPPED $ARCHG_ARMS "
+fi
+# The gate-loaded arms likewise: an installed validator that counts every gate lists none of the
+# three entries (2 elapsed each, in_force=0), so all three arms read 0.
+if in_set gl_notrun "$SHIP_FAIL" && in_set gl_cat "$SHIP_FAIL" && in_set gl_ran "$SHIP_FAIL" \
+   && ! grep -qF 'gates whose manifest loaded the suppressed check' "$VALIDATOR" && [ "$SEN_IS_DIST" -ne 1 ]; then
+  printf '  SKIP  the gate-loaded arms -- the installed validator predates them; this fixture ships one pull ahead of it\n'
+  SKIPPED="$SKIPPED $GL_ARMS "
 fi
 for a in $ARMS; do
   in_set "$a" "$SKIPPED" && continue

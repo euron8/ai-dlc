@@ -49321,3 +49321,150 @@ Step: n/a
 Provenance: batch 267, cluster D; id allocated by the lead.
 
 verify: sh f=core/scripts/dispatch-story.sh; grep -qF 'implementation-artifacts/s${N}/dev-${IDX}.md' $f || exit 1; grep -qF 'implementation-artifacts/dev-${NAME}.md' $f && exit 2; exit 0
+## BL-1228 — `scripts/validate-backlog-receipts.sh` refuses correct data: a live ledger whose only non-manual receipt is a `has` receipt, with zero `sh` receipts, is neither accepted nor scored
+
+**LANDED (v0.1243.0).** Batch 267, cluster P. `scripts/validate-backlog-receipts.sh`: `score_ledger` now counts `has`/`lacks` receipts in a fourth `counts` field and records their ids in `$WORK/haslacks`; `read_counts` reads and digit-checks the field (`HASLACKS_RECEIPTS`); R2 accepts a ledger where manual plus has/lacks equals the entry count with at least one has/lacks and no `sh` receipt, and the OK line names those ids (`R2 all-manual-or-has/lacks (has/lacks receipts: BL-904 )`). Probe on a `mktemp` clone with `AI_DLC_PROJECT_ROOT` set (output named no path outside the probe tree): 3 manual + 1 `has`, no `sh`: before rc 1 (R2 FAIL), after rc 0 naming BL-904; control with the `has` replaced by manual: rc 0 both sides; a ledger with `verify: nonsense.` still rc 1 (UNRECOGNISED + R2) after; mutant (acceptance guard made unsatisfiable) restores rc 1 on case a and leaves b and c unchanged.
+
+**DEFECT.** Filed 2026-11-22 (batch 265, close). Owner: `scripts/validate-backlog-receipts.sh` (arm R2).
+
+Goal: a live ledger whose receipts are all `verify: manual` except one or more `has` receipts, with no `sh` receipt, passes the validator when every entry is correct. One done condition: on such a ledger the validator exits 0 and names the `has` receipts, and a ledger with an unrecognised `verify:` value still fails.
+
+Baseline: the first pregate of the 0.1235.0 integration tree (13249bd2d, batch 265) failed on this state, a correct ledger. It passed only once 0.1234.0 had rotated BL-1224 out of the live ledger (batch-265 rulings record). The record does not name the arm that refused. The candidate is the R2 exit at `scripts/validate-backlog-receipts.sh:3873` "produced ZERO scored receipts ... Nothing was observed", which fires when `SCORED` and `N_PASS` are 0 and none of `R2_ALLMANUAL`, `R2_DECLEMPTY` and `R2_ALLDRIVER` is set; item 1 confirms or refutes it.
+
+Work list:
+
+1. Reproduce on a `mktemp` ledger: N `verify: manual` entries plus one `has` receipt and no `sh` receipt; record the exit and the arm that fails. Control: the same ledger with the `has` receipt replaced by `verify: manual` exits 0.
+2. Accept that ledger: count the `has` receipt as observed, or extend the all-manual acquittal to cover it, so R2 fires only when nothing was observed.
+3. Prove the arm still fires: a ledger of only unrecognised `verify:` values still fails R2.
+
+Step: n/a
+
+Related: BL-1229 (filed in the same close).
+
+Provenance: batch 265 close (lead ai-dlc-19); id allocated by the lead.
+
+verify: manual
+
+## BL-1239 — `validate-spawn-ledger.sh --escalations` splits `pending.md` only on `## `, so an OVERRIDDEN `###` sub-entry is read under its parent's header and the gate wedges between `close` and the adjudicator
+
+**LANDED (v0.1243.0).** batch 267, cluster S, owner ai-dlc-66. The `--escalations` join in `core/scripts/validate-spawn-ledger.sh` now flushes on `##` and `###` headers and keys on the header with its hashes removed, like the other escalation readers, so an OVERRIDDEN `###` sub-entry is judged under its own header; fixture `check-22-spawn-ledger` carries the arm and its twin. Item 4 (the carry window) is stated in the CHANGELOG entry: reconcile `validate-spawn-ledger.sh` in the same pull as `gate-transition.sh`.
+
+**DEFECT.** Filed 2026-11-25 (batch 266, cluster G tip adversary). Owner: `core/scripts/validate-spawn-ledger.sh` (the `--escalations` join).
+
+Goal: the `--escalations` join reads `docs/escalations/pending.md` with the same entry split and key rule the other escalation readers use, so an OVERRIDDEN `###` sub-entry that names a violation records the violation under its own header. One done condition: an OVERRIDDEN `###` sub-entry naming the violation, under a RESOLVED `##` parent, gives exit 4 with the VIOLATION line headed by the sub-entry's own header.
+
+Baseline: the join flushes an entry only on `^## ` (`validate-spawn-ledger.sh:1865`), while `SL_REC_AWK` (`core/scripts/validate-suppression-lifetime.sh:518`) and `validate-escalation-resolution.sh:482` flush on `^#{2,3} `. An OVERRIDDEN `###` sub-entry under a RESOLVED `##` parent therefore gives exit 4 under the parent's header, which the adjudicator's waiver set does not cover, so `close` and the adjudicator disagree and the gate wedges. It fails closed and acquits nothing. Graph has 0 of 282 Status lines under `###`.
+
+Work list:
+
+1. Make the join's entry split and key rule match `SL_REC_AWK`'s: flush on `^#{2,3} `, key = the header with `## ` or `### ` removed and trailing whitespace stripped.
+2. Add one arm to fixture `check-22-spawn-ledger`: an OVERRIDDEN `###` sub-entry under a RESOLVED `##` parent, naming the violation, exits 4 under the sub-entry's header; its twin, the same sub-entry with a non-OVERRIDDEN status, exits 1. Zero load-dependent tests (BL-868).
+3. Prove the arm fires once by hand against the current `^## `-only split (output in the sha message).
+4. The CARRY window (found by the cluster G tip adversary, batch 266): a consumer that carries a diverged `validate-spawn-ledger.sh` and takes 0.1238.0's `gate-transition.sh` refuses every gate 3 (the adversary's finding, relayed by cluster G's owner; not re-driven by the lead). Close it with item 1: drive the pair (diverged `validate-spawn-ledger.sh`, current `gate-transition.sh`) on a toy root, and the release that changes the join states, in its CHANGELOG entry, whether a consumer must reconcile `validate-spawn-ledger.sh` in the same pull as `gate-transition.sh`. The reference consumer is not exposed at batch 266's close: read-only `git hash-object` of its installed `scripts/ai-dlc/validate-spawn-ledger.sh` and `scripts/ai-dlc/gate-transition.sh` equals their blobs at `f4cf60bc6` (0.1235.0), as do 9 more of the 12 engine shell files batch 266 changed; `ai-dlc-protected-set.sh` is not installed there.
+
+Step: n/a
+
+Related: BL-1230 (the join this corrects), BL-1240 (filed in the same pass).
+
+Provenance: batch 266, cluster G tip adversary; ids allocated by the lead ai-dlc-9b.
+
+verify: manual
+
+## BL-1240 — Check 33's NOT-YET-AUTHORED clause covers only each route's First Step, so brownfield-c's `doc-repair-backfill.md` planning gate still fails before discovery authors the brief
+
+**DEFECT.** Filed 2026-11-25 (batch 266, cluster G tip adversary). Owner: `core/scripts/validate-request-coverage.sh` (`vrc_opening_steps`), `core/skills/ai-dlc/steps/gate-validation.md` (Check 33).
+
+Goal: every planning gate that runs before a route's first brief-authoring step records Check 33 as SKIP reason=rc3 when the brief is absent and the requests file holds an operator entry, not only the route's First Step. One done condition: `gate-run.sh arms` at `doc-repair-backfill.md` with the brief absent mints a nonce.
+
+Baseline: `vrc_opening_steps` (`validate-request-coverage.sh:78-94`) prints only a route's First Step, when `discovery` or `requirements` follows it. brownfield-c runs `doc-reconciliation` → `doc-repair-backfill` → `discovery` (`steps/route-fresh-start.md:253`), and `doc-repair-backfill.md:58` runs gate validation [planning] before discovery writes `locked-requirements.md`, so that gate still FAILs rc 2, as on base. Fixture `request-coverage` arm GS3 asserts that exit 2.
+
+Work list:
+
+1. Derive every step before the first brief-authoring step in each route's Pipeline Sequence, not only the First Step.
+2. Flip fixture `request-coverage` arm GS3 (`doc-repair-backfill.md`, brief absent) to exit 3, and keep a non-opening step's exit 2.
+3. Amend `gate-validation.md` Check 33 (the scope paragraph near :3237) to name the pre-authoring steps.
+4. Probe once by hand through `gate-run.sh arms` on a toy root at `doc-repair-backfill.md`: SKIP reason=rc3 and a nonce on the fix, FAIL rc=2 on the current derivation (output in the sha message).
+
+Step: n/a
+
+Related: BL-1231 (closed with the opening-step case), BL-1239 (filed in the same pass).
+
+Provenance: batch 266, cluster G tip adversary; ids allocated by the lead ai-dlc-9b.
+
+verify: manual
+
+**LANDED (v0.1243.0).** batch 267, 267-Q. `vrc_opening_steps` now emits every Pipeline Sequence step before a route's first `discovery`/`requirements` step, so brownfield-c's `doc-repair-backfill.md` planning gate is an opening step and Check 33 records SKIP reason=rc3 there with the brief absent; a route whose First Step is an author, or that names none, still adds nothing. Fixture `request-coverage` arm GS3 now asserts exit 3 at `doc-repair-backfill.md`, new arm GS3b keeps exit 2 at `discovery.md` (opening in no route), and GS7 derives five opening steps.
+
+## BL-1241 — the adversary role file tells every pass to copy the adversary-pass envelope and close with one verdict before its elicitation paragraph, so an elicitation shard that follows those lines is refused at `--check-header`
+
+**DEFECT.** Filed 2026-11-25 (batch 266, cluster R tip adversary). Owner: `core/team-roles/adversary.md`.
+
+Goal: an elicitation shard reading `adversary.md` top-down is never told to copy the adversary-pass envelope or to write a verdict. One done condition: the envelope line and the one-verdict line each scope themselves to review passes in-line, and every pinned substring of the file still matches.
+
+Baseline: the envelope line (`adversary.md:56-57`, "copy the exact envelope from \"The verdict\" below") and the one-verdict line (`adversary.md:309-310`, "Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted residue and exactly one verdict") both come before the elicitation paragraph at `:312`. An elicitation shard that follows them writes `skill: ai-dlc-adversary-review` and a `verdict:` line, and `merge-adversarial-shards.sh --check-header --axis elicitation` refuses it loudly, which costs a re-dispatch; it is never a false pass.
+
+Work list:
+
+1. Edit both lines in place so each names review passes and points an elicitation shard to the `:312` paragraph, keeping every pinned substring (no pin covers `:309` or "exact envelope").
+2. Read the file top-down as an elicitation shard and confirm no earlier line tells it to copy the adversary-pass envelope or write a verdict.
+
+Step: n/a
+
+Related: BL-1233 (added the elicitation paragraph this entry scopes the earlier lines to).
+
+Provenance: batch 266, cluster R tip adversary; id allocated by the lead ai-dlc-9b.
+
+**LANDED (v0.1243.0).** batch 267, 267-Q. Both lines of `core/team-roles/adversary.md` are edited in place, no paragraph added: Contract item 2's envelope line now reads "on a review pass, copy the exact envelope from \"The verdict\" below, HTML-comment delimiters included; an elicitation shard copies the region its brief carries instead", pointing at "An elicitation shard writes no verdict", and the one-verdict line now reads "Every review pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted residue and exactly one verdict from this set; an elicitation shard follows the next paragraph instead". No `process-rule-pins` row, and no other fixture or validator, pins a substring of either line (`git grep -F` over the tree hits only `adversary.md` and this entry); the `adv-shard-sentinel` pin in the same Contract paragraph still matches. Work list item 2: the top-down read found one more earlier line, Contract item 5's "Stamp your counts and verdict as usual" (files-axis shards, which an elicitation shard's `shard: <ordinal>/<K>` brief also matches), scoped in place the same way ("an elicitation shard stamps no verdict"); no pin covers it.
+
+verify: manual
+
+## BL-1242 — `pregate-self-check.sh` never dispatches an `.undeclarable` fixture, so a release whose only checker is one goes red at the push
+
+**DEFECT.** Filed 2026-11-25 (batch 266, lead ai-dlc-9b, after cluster C's red push). Owner: `scripts/pregate-self-check.sh` (section f).
+
+**LANDED (v0.1243.0).** Batch 267, cluster P. Section f's `F_AWK` now selects every RUN unit whose fixture directory carries `.undeclarable` with reason `UNDECLARABLE` (its `@consumer` twin included), and, because such a fixture has no `inputs.decl` and so cannot be counted-seeded, section f runs the non-consumer ones plain (`bash core/fixtures/<fx>/run.sh` from the repo root) and fails `f:undeclarable-fixtures` on a red. The seeded probe gained `fund` (undeclarable, names no changed path, in the RUN set; must be selected) and an undeclarable `fout` outside the RUN set (must not be). Probe by hand: with the `UNDECLARABLE` select neutralised the route matcher read the probe without `fund` and the script exited 2.
+
+Goal: every `.undeclarable` fixture in the predicted RUN set runs in pregate, so pregate green means the push's own red classes were run. One done condition: on a tree whose diff touches `core/hooks/`, pregate's section f runs `hook-registration-join` by name.
+
+Baseline: section f dispatches a RUN unit only through a `.dparse` DIR or DECLFILE row or a literal basename in its files (`F_AWK`, `scripts/pregate-self-check.sh:516-535`). An `.undeclarable` fixture has no `.dparse` row, and `hook-registration-join` names hooks by glob, so it is never dispatched (2 of 232 fixtures carry `.undeclarable`: `hook-registration-join`, `retro-compliance-workflow`). Catch on record: cluster C's pregate on `43f9feaaf` was rc 0; its push ran `hook-registration-join` and failed AUTHORING (`registered-but-not-shipped=[ai-dlc-recover-gate.sh]`), costing one red gate cycle and a rebuild (fixed at `a1661db9a`, landed as 0.1241.0). Who would notice it gone: every builder whose change only an undeclarable fixture checks, at the push instead of at pregate.
+
+Work list:
+
+1. In section f, add every RUN unit (and its `@consumer` twin) whose fixture directory carries `.undeclarable`, with reason `UNDECLARABLE`.
+2. Extend the seeded probe with an undeclarable fixture that names no changed path, and assert it is selected; prove once by hand that it is not selected at the current tip.
+
+Step: n/a
+
+Related: BL-583 item 4 (the value judgement of the two `.undeclarable` fixtures, which records this catch).
+
+Provenance: batch 266, lead ai-dlc-9b.
+
+verify: manual
+
+## BL-1246 — `validate-suppression-lifetime.sh` charges a suppression's lifetime to every recorded gate, so a gate type that never loads the suppressed check expires it
+
+**LANDED (v0.1243.0).** batch 267, cluster S, owner ai-dlc-66. `gates_since` in `core/scripts/validate-suppression-lifetime.sh` counts only gates that recorded a row for the suppressed `[catalog] check`; fixture `suppression-lifetime` carries the three-entry world. Closes the graph consumer's sprint-324 suppression-lifetime candidate.
+
+**DEFECT.** Filed 2026-11-25 (batch 267, cluster S). Owner: `core/scripts/validate-suppression-lifetime.sh` (`gates_since`).
+
+Filed by the consumer as PC-S324-SUPPRESSION-LIFETIME-CHARGES-GATES-THAT-DO-NOT-RUN-THE-CHECK
+
+Goal: a SUPPRESSED entry's `**Expires after:**` counts only gates that recorded a row for its `[catalog] check`, the gates whose manifest loaded it, so a check one gate type runs is not expired by gates of another type. One done condition: a `[core] 3a` suppression with `**Expires after:** 1`, charged by one gate that recorded 3a and followed by a gate that recorded only other checks, is listed by `--in-force` at 1 elapsed. A key that no gate records (a check `write_metrics` never emits, a retired one) is charged every gate after the authorization, so its suppression still expires.
+
+Baseline: `gates_since` (`validate-suppression-lifetime.sh:719`) counted every distinct `ts` in `gate-metrics.jsonl` after the authorization. On the reference consumer a `[core] 3a` (story-gate-only) suppression authorized 2026-11-25T04:19:08 with `**Expires after:** 1` was charged by the story gate at 2026-11-25T17:59:36Z (records 3a) and by the implementation gate at 2026-11-25T18:22:39Z (41 rows, none for 3a): 2 > 1, expired, and the operator had to renew it. Check 12 writes one row per check the gate's manifest loaded, NA included (GATE_METRIC v1, `steps/gate-validation.md`), so the rows keyed on `(catalog, check)` are the record of which gates ran it.
+
+Work list:
+
+1. `gates_since` takes the entry's `(catalog, check)` and counts distinct `ts` after the authorization among that key's rows, the catalog defaulting to `core` as in `latest_verdict`; `sl_past_lifetime`, `sl_in_force` and every caller pass the key.
+2. State in `escalations.md`, `steps/gate-validation.md` (Check 2's suppression-lifetime paragraph) and the script's header that `<n>` counts gates that recorded the suppressed `[catalog] check`. The emitted messages do not change (`reconcile/predicate-sites.md` reads them).
+3. Fixture `suppression-lifetime`: one `--in-force` world with three `**Expires after:** 1` entries: `[core] 3a` whose later gate records other checks only (listed, 1 elapsed), `[core] 33` whose later gate records 33 (not listed), and `[core] 16` whose later gate records only `extension:x` 16 (listed, 1 elapsed). Zero load-dependent tests (BL-868).
+4. Prove the arms fire once by hand against the current counter and against a mutant that ignores the catalog (output in the sha message).
+5. Run the current and the fixed script against a scratch copy of the reference consumer's `pending.md`, `pending-archive.md` and `gate-metrics.jsonl` in gate mode and `--in-force`, and enumerate every entry whose verdict or elapsed count moves.
+
+Step: n/a
+
+Related: BL-959 (supersession, which the renewal used), BL-966 (the clock, the other lifetime input).
+
+Provenance: batch 267, cluster S; id allocated by the lead ai-dlc-9f.
+
+verify: manual

@@ -41,6 +41,10 @@ checks:
     title: bmad-invocation-resolves
     enforcer: []
     adjudication: script
+  - id: 3a
+    title: story-only-check
+    enforcer: []
+    adjudication: script
   - id: 33
     title: single-catalog-control
     enforcer: []
@@ -643,6 +647,27 @@ mkdir -p "$SL_CWD_B_ROOT" "$SL_CWD_B_DECOY"
 sl_world_root "$SL_CWD_B_ROOT"
 sl_gm_series "$SL_CWD_B_DECOY/_bmad-output/implementation-artifacts/gate-metrics.jsonl" 1
 
+# THE GATE THAT DID NOT LOAD THE CHECK. Check 12 writes one row per check a gate's manifest loaded,
+# so a gate type that does not load a check writes no row for it and is not charged to a suppression
+# of it. G1 recorded all three suppressed checks; G2 recorded core 33, extension:x 16 and core 32 only.
+# One --in-force drive asks all three entries, each `**Expires after:** 1`:
+#   [core] 3a  -- G2 recorded no row for it: 1 gate elapsed, LISTED;
+#   [core] 33  -- G2 recorded it: 2 gates elapsed, NOT listed (the twin);
+#   [core] 16  -- G2 recorded `extension:x` 16 only: 1 gate elapsed, LISTED (the catalog twin);
+#   [core] 14  -- no row anywhere: charged every gate (2 elapsed), NOT listed (the zero-row twin).
+GM_GL="$WORK/gm-gate-loaded.jsonl"
+{
+  emit_cat "$G1" "core" "3a" "FAIL"; emit_cat "$G1" "core" "33" "FAIL"; emit_cat "$G1" "core" "16" "FAIL"
+  emit_cat "$G2" "core" "33" "FAIL"; emit_cat "$G2" "extension:x" "16" "FAIL"; emit_cat "$G2" "core" "32" "PASS"
+} > "$GM_GL"
+gl_e() { # <suppresses> <header>
+  printf '## %s\n**Status:** SUPPRESSED\n**Suppresses:** %s — t\n**Expires after:** 1 gates\n**Operator authorization:** %s | "Suppress it for one gate"\n\n' "$2" "$1" "$A0"
+}
+f="$(mkcase gl-inf)"
+{ gl_e "[core] 3a" "[S410 gate — 3a, not loaded by G2]"; gl_e "[core] 33" "[S410 gate — 33, loaded by G2]"
+  gl_e "[core] 16" "[S410 gate — 16, G2 loaded extension:x 16]"
+  gl_e "[core] 14" "[S410 gate — 14, no gate records it]"; } > "$f"
+
 # ---- baseline files --------------------------------------------------------
 printf 'TERMINAL:##[S400][Lead]-%s—gateBLOCKED\n' "$A0" > "$WORK/baseline-good.txt"
 printf 'TERMINAL:##[S400][Lead]-%s—gateBLOCKED\nEXPIRED:16\n' "$A0" > "$WORK/baseline-stale.txt"
@@ -669,6 +694,7 @@ GM_W_SD="$GM_W_SD"
 BASELINE_EXP32="$WORK/baseline-expired32.txt"
 GM_SL_W="$GM_SL_W"
 GM_SL_F="$GM_SL_F"
+GM_GL="$GM_GL"
 A0="$A0"
 A1="$A1"
 SL_OLD="$SL_OLD"

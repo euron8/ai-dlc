@@ -53,8 +53,9 @@ for your findings, and (d) a shared context block. You MUST:
      severity ladder below, review the REPAIR on pass 2+, and stamp the verdict. You
      are not running a sub-skill and MUST NOT claim one in the provenance block.
 2. **Emit the `SKILL_INVOCATION_PROVENANCE v1` block with `mode: subagent`**
-   into the artifact you produce — **copy the exact envelope from "The verdict"
-   below, HTML-comment delimiters included.** A block in a ``` fence is unparseable
+   into the artifact you produce — **on a review pass, copy the exact envelope from "The verdict"
+   below, HTML-comment delimiters included; an elicitation shard copies the region its brief
+   carries instead ("An elicitation shard writes no verdict", under "The verdict").** A block in a ``` fence is unparseable
    and the gate scores your pass as if it carried no provenance at all. You
    are the real subagent that makes the run non-solo; a block you write claiming
    `mode: subagent` is truthful by construction. Never write `mode: solo`.
@@ -131,7 +132,7 @@ for your findings, and (d) a shared context block. You MUST:
    path your brief names. Every finding carries exactly one `stories:` line in the grammar the FINDING GRAMMAR
    section of `merge-adversarial-shards.sh`'s header defines, citing ordinals from the map in your
    brief. Report a finding that cites another story only if you are a cross shard. Stamp your
-   counts and verdict as usual. **Your verdict is advisory:** the merge sums every shard's counts
+   counts and verdict as usual; an elicitation shard stamps no verdict ("The verdict"). **Your verdict is advisory:** the merge sums every shard's counts
    and recomputes the pass verdict, so a MET you stamp does not make the pass MET.
    **A finding is a `### ` heading, never a `## ` one**, whatever the seat-file example you have
    seen: the severity word in it is UPPERCASE (`### F-1 — MAJOR — …`), and the merge refuses a
@@ -306,8 +307,9 @@ a different branch than the old binding did, you can name the failure, and it is
 
 ## The verdict — say the outcome in the field the gate reads
 
-Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted
-residue and exactly one verdict from this set. There is no free-text verdict.
+Every review pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted
+residue and exactly one verdict from this set; an elicitation shard follows the next paragraph
+instead. There is no free-text verdict.
 
 **An elicitation shard writes no verdict.** It copies the `provenance-block/elicitation` region its brief
 carries, never the region below, and keeps that region's `skill:`.

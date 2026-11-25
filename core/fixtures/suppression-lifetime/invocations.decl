@@ -20,5 +20,5 @@
 11 *
 5 core/scripts/validate-suppression-lifetime.sh
 2 core/scripts/verdict.sh
-126 inproc:core/scripts/validate-suppression-lifetime.sh
+127 inproc:core/scripts/validate-suppression-lifetime.sh
 3 inproc:core/scripts/verdict.sh

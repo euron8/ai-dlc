@@ -307,11 +307,12 @@ fi
 # One property apart from each other, all with the brief ABSENT:
 #   GS1 carry-over-evaluation.md + an operator entry: exit 3, the NOT-YET-AUTHORED line first on stdout, stderr empty.
 #   GS2 codebase-inventory.md (a brownfield opening step): exit 3.
-#   GS3 doc-repair-backfill.md (a planning gate that is not a route's First Step): exit 2.
+#   GS3 doc-repair-backfill.md (a pre-discovery planning gate that is not a route's First Step): exit 3.
+#   GS3b discovery.md (the brief-authoring step itself, pre-discovery in no route): exit 2.
 #   GS4 no --gate-step: exit 2.
 #   GS5 carry-over-evaluation.md, a requests file with no operator entry: exit 2.
 #   GS6 carry-over-evaluation.md, brief PRESENT: the coverage verdict (exit 0 PASS), never the clause.
-#   GS7 the derived opening set over the real route table equals the four opening steps.
+#   GS7 the derived opening set over the real route table equals the five opening steps.
 #   GS8 consumer layout, gate_run.py beside the copy: a skill directory with gates/ and no route table is exit 2; the
 #       table under .claude/skills/ai-dlc/steps/ is exit 3.
 NOBRIEF="$WORK/absent-locked-requirements.md"
@@ -330,9 +331,13 @@ if [ "$RC" = 3 ] && grep -q '^NOT-YET-AUTHORED: .*(codebase-inventory.md)$' <<<"
   ok "GS2 brownfield opening gate codebase-inventory.md, brief absent: exit 3 NOT-YET-AUTHORED"
 else bad "GS2 rc=$RC out=[$(head -1 <<<"$OUT")] err=[$(head -1 <<<"$ERR")]"; fi
 gs_run "$REQ" "$NOBRIEF" --gate-step doc-repair-backfill.md
-if [ "$RC" = 2 ] && grep -q '^ERROR: brief not readable: ' <<<"$ERR" && ! grep -q 'NOT-YET-AUTHORED' <<<"$OUT"; then
-  ok "GS3 doc-repair-backfill.md (a planning gate, not a First Step), brief absent: exit 2 ERROR"
+if [ "$RC" = 3 ] && grep -q '^NOT-YET-AUTHORED: .*(doc-repair-backfill.md)$' <<<"$OUT"; then
+  ok "GS3 doc-repair-backfill.md (pre-discovery, not a First Step), brief absent: exit 3 NOT-YET-AUTHORED"
 else bad "GS3 rc=$RC out=[$(head -1 <<<"$OUT")] err=[$(head -1 <<<"$ERR")]"; fi
+gs_run "$REQ" "$NOBRIEF" --gate-step discovery.md
+if [ "$RC" = 2 ] && grep -q '^ERROR: brief not readable: ' <<<"$ERR" && ! grep -q 'NOT-YET-AUTHORED' <<<"$OUT"; then
+  ok "GS3b discovery.md (the brief-authoring step, opening in no route), brief absent: exit 2 ERROR"
+else bad "GS3b rc=$RC out=[$(head -1 <<<"$OUT")] err=[$(head -1 <<<"$ERR")]"; fi
 gs_run "$REQ" "$NOBRIEF"
 if [ "$RC" = 2 ] && grep -q '^ERROR: brief not readable: ' <<<"$ERR" && [ -z "$OUT" ]; then
   ok "GS4 no --gate-step, brief absent: exit 2 ERROR"
@@ -350,8 +355,8 @@ for _c in "$FX_ROOT/core/skills/ai-dlc/steps/route-fresh-start.md" "$FX_ROOT/.cl
   [ -f "$_c" ] && { RT_SRC="$_c"; break; }
 done
 GS_SET=""; [ -n "$RT_SRC" ] && GS_SET="$(inproc_run "$VALIDATOR" vrc_opening_steps "$RT_SRC" | LC_ALL=C sort | tr '\n' ' ')"
-if [ -n "$RT_SRC" ] && [ "$GS_SET" = "carry-over-evaluation.md codebase-inventory.md deep-codebase-analysis.md doc-reconciliation.md " ]; then
-  ok "GS7 the opening set derived from $RT_SRC is the four opening steps ($GS_SET)"
+if [ -n "$RT_SRC" ] && [ "$GS_SET" = "carry-over-evaluation.md codebase-inventory.md deep-codebase-analysis.md doc-reconciliation.md doc-repair-backfill.md " ]; then
+  ok "GS7 the opening set derived from $RT_SRC is the five opening steps ($GS_SET)"
 else bad "GS7 route table [$RT_SRC] derived [$GS_SET]"; fi
 if [ -n "$RT_SRC" ] && [ -f "$CT/scripts/ai-dlc/validate-request-coverage.sh" ]; then
   cons_gs() { ( cd "$CT/docs/sub" && inproc_run "$CT/scripts/ai-dlc/validate-request-coverage.sh" vrc_main --requests "$REQ" --brief "$NOBRIEF" --sprint 42 --gate-step carry-over-evaluation.md ) >/dev/null 2>&1; echo $?; }

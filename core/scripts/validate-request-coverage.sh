@@ -57,8 +57,8 @@
 #     --cite-sha   pin the entry by its recorded SHA256 instead of taking the newest
 #     --gate-step  the step file whose gate runs this check. When the brief is absent and this step is a
 #                  variant's OPENING planning step, the brief is not owed yet (exit 3). The opening steps
-#                  are derived from route-fresh-start.md's route table: the First Step of every route whose
-#                  sequence reaches a brief-authoring step (vrc_opening_steps) after it. The table is read
+#                  are derived from route-fresh-start.md's route table: every step before the first
+#                  brief-authoring step of a route's sequence (vrc_opening_steps). The table is read
 #                  from the skill directory gate_run.py's find_skill_dir resolves (gate_run.py beside this
 #                  script); no gate_run.py, no skill directory or no table there is exit 2.
 #
@@ -75,8 +75,9 @@
 #
 # Compatible with bash 3.2+ and Python 3 (standard on macOS).
 
-# vrc_opening_steps <route-fresh-start.md>: one line per opening planning step. A route's First Step is
-# opening when a step named in `authors` follows it in that route's Pipeline Sequence.
+# vrc_opening_steps <route-fresh-start.md>: one line per opening planning step. Every step before the first
+# step named in `authors` in a route's Pipeline Sequence is opening: the First Step as written, each later
+# one as `<token>.md`. A route whose First Step is an author, or that names no author, adds none.
 vrc_opening_steps() {
   local authors="discovery requirements"
   LC_ALL=C awk -v authors="$authors" '
@@ -86,9 +87,16 @@ vrc_opening_steps() {
       if (!match(c[4], /`[A-Za-z0-9_.-]+\.md`/)) next
       f = substr(c[4], RSTART + 1, RLENGTH - 2)
       m = split(c[3], s, "→")
-      for (i = 2; i <= m; i++) {
-        t = s[i]; gsub(/^[[:blank:]]+|[[:blank:]]+$/, "", t)
-        if (t in au) { print f; break }
+      k = 0
+      for (i = 1; i <= m; i++) {
+        t = s[i]; gsub(/^[[:blank:]]+|[[:blank:]]+$/, "", t); s[i] = t
+        if (t in au) { k = i; break }
+      }
+      if (k < 2) next
+      if (!(f in seen)) { seen[f] = 1; print f }
+      for (i = 2; i < k; i++) {
+        t = s[i] ".md"
+        if (!(t in seen)) { seen[t] = 1; print t }
       }
     }' "$1"
 }

@@ -6221,7 +6221,7 @@ fi
 # fixed point problem. A separate data file under scripts/ would be a second file to package,
 # classify and keep in step with this arm; inline, a re-stamp is one reviewed line in the
 # file that reads it. Format, one line per carried rule: `<rule> <body-sha256> <carrier-sha256>`.
-I79_CARRIER_STAMPS='23 68a70a4d940d43f3a413dfc9edd121e974df1a91fe52cf75513ed6e3d0a35a96 89d27ae4537c1e28ea8babdbf434bff156472288d42238f4f658993d4f22892c'
+I79_CARRIER_STAMPS='23 c4b88e6e9d9553209a92f6856bdc2311887fb9b7a778f897e934b283d51073c3 89d27ae4537c1e28ea8babdbf434bff156472288d42238f4f658993d4f22892c'
 
 # The rule-body extractor, as DATA, so the self-probe and the corpus run the same program.
 # A FENCED `## ` LINE IS A CODE SAMPLE, NOT A SECTION TERMINATOR, and reading it as one

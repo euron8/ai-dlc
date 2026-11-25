@@ -142,8 +142,11 @@ A `SUPPRESSED` entry MUST carry, in the same edit that sets the status:
 ```
 
 `<n>` defaults to 1 and may not exceed 3. **`<n>` counts gates RECORDED after the
-authorization, and the gate whose checks are running is recorded after they
-run — so an entry covers the authorizing gate and then `<n>` more.** `<catalog>` is `core` for a
+authorization that recorded a row for the suppressed `[catalog] check` — the
+gates whose manifest loaded it — and the gate whose checks are running is
+recorded after they run, so an entry covers the authorizing gate and then `<n>`
+more gates that run the check.** A gate type that does not load the check is not
+charged; a `[catalog] check` no gate has ever recorded is charged every gate. `<catalog>` is `core` for a
 distribution check and `extension:<id>` for a consumer domain check, matching
 the `GATE_METRIC v1` field of the same name — the id is a join key, so it is
 written the way the metrics write it. The `**Operator authorization:**` line

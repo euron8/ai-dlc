@@ -2002,8 +2002,9 @@ score_ledger() {
   # add` to that same path then fails five times and reads BROKEN.
   git -C "$_sl_root" worktree prune >/dev/null 2>&1 || true
   mkdir -p "$WORK/out" "$WORK/rec" "$WORK/t"
-  _sl_i=0; _sl_e=0; _sl_m=0
+  _sl_i=0; _sl_e=0; _sl_m=0; _sl_h=0
   : > "$WORK/unrec"
+  : > "$WORK/haslacks"
   # The has/lacks verb pair is bound to the classifier's own case arm: if it moves, refuse rather than drift.
   grep -qE '^[[:space:]]*has\|lacks\)' "$SELF_ROOT/scripts/backlog-reverify.sh" 2>/dev/null || { echo "$(me): FAIL -- backlog-reverify.sh no longer dispatches 'has|lacks)', so the verb pair recognised here has drifted from it." >&2; return 2; }
   while IFS="$(printf '\t')" read -r _l _c _r; do
@@ -2016,7 +2017,7 @@ score_ledger() {
     # char after `manual` that is not a space, so they match neither case above; falling through
     # silently left the ledger one entry short of its manual count with nothing naming the line.
     # has/lacks are ledger verbs resolved by backlog-reverify.sh: recognised, neither manual nor unrecognised.
-    case "$_r" in "has "*|"lacks "*) continue ;; esac
+    case "$_r" in "has "*|"lacks "*) _sl_h=$(( _sl_h + 1 )); printf '%s\t%s\n' "$_l" "$(printf '%s' "$_r" | cut -c1-60)" >> "$WORK/haslacks"; continue ;; esac
     case "$_r" in "sh "*|"sh") ;; *) printf '%s\t%s\n' "$_l" "$(printf '%s' "$_r" | cut -c1-20)" >> "$WORK/unrec"; continue ;; esac
     _sl_i=$(( _sl_i + 1 ))
     printf '%s\n%s\n' "$_l" "$_r" > "$WORK/rec/$(printf '%04d' "$_sl_i")"
@@ -2026,7 +2027,7 @@ EOF
   # THE COUNTS GO TO A FILE, NOT TO A VARIABLE. Every caller runs this in `$( )` to capture
   # its rows, and an assignment made inside a command substitution is lost to the subshell --
   # the caller would read an unbound variable, or worse, the PREVIOUS call's value.
-  printf '%s %s %s\n' "$_sl_i" "$_sl_e" "$_sl_m" > "$WORK/counts"
+  printf '%s %s %s %s\n' "$_sl_i" "$_sl_e" "$_sl_m" "$_sl_h" > "$WORK/counts"
   [ "$_sl_i" -eq 0 ] && return 0
 
   # THE COMPLETENESS SENTINEL IS DERIVED FROM THE SUBJECT, NEVER NAMED. A hardcoded path is
@@ -2163,10 +2164,10 @@ open_empty_line() { # open_empty_line <sh-receipt-count> -> the line, or nothing
 # The counts score_ledger wrote, read back in the PARENT shell. A missing file is a refusal:
 # a defaulted zero here would read as an empty ledger, which is a different finding.
 read_counts() {
-  SH_RECEIPTS=""; ENTRIES=""; MANUAL_RECEIPTS=""
+  SH_RECEIPTS=""; ENTRIES=""; MANUAL_RECEIPTS=""; HASLACKS_RECEIPTS=""
   [ -f "$WORK/counts" ] || { echo "$(me): FAIL -- the scorer wrote no population counts, so the ledger's size is unknown and no ratchet below could be read." >&2; exit 2; }
-  read -r SH_RECEIPTS ENTRIES MANUAL_RECEIPTS < "$WORK/counts"
-  case "${SH_RECEIPTS:-}${ENTRIES:-}${MANUAL_RECEIPTS:-}" in ''|*[!0-9]*) echo "$(me): FAIL -- the scorer's population counts did not parse." >&2; exit 2 ;; esac
+  read -r SH_RECEIPTS ENTRIES MANUAL_RECEIPTS HASLACKS_RECEIPTS < "$WORK/counts"
+  case "${SH_RECEIPTS:-}${ENTRIES:-}${MANUAL_RECEIPTS:-}${HASLACKS_RECEIPTS:-}" in ''|*[!0-9]*) echo "$(me): FAIL -- the scorer's population counts did not parse." >&2; exit 2 ;; esac
 }
 
 # r2_alldriver <rows> <sh-count> -- exit 0 iff a ZERO-scored ledger is accounted for by drivers:
@@ -3847,6 +3848,11 @@ R2_ALLPASS=""
 # The R5 floor (`--min-sh-receipts`) is lowered only when the entry count fell with it.
 R2_ALLMANUAL=""
 [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ] && [ "$ENTRIES" -gt 0 ] && [ "${MANUAL_RECEIPTS:-0}" -eq "$ENTRIES" ] && R2_ALLMANUAL=" R2 all-manual"
+# A has/lacks receipt is a ledger verb backlog-reverify.sh resolves, an observation by declaration: a ledger of
+# manual plus has/lacks receipts only (at least one has/lacks, no `sh`) is accounted for, and names those entries.
+if [ "$SCORED" -eq 0 ] && [ "$N_PASS" -eq 0 ] && [ -z "$R2_ALLMANUAL" ] && [ "${HASLACKS_RECEIPTS:-0}" -gt 0 ] && [ "$ENTRIES" -gt 0 ] && [ $(( ${MANUAL_RECEIPTS:-0} + HASLACKS_RECEIPTS )) -eq "$ENTRIES" ]; then
+  R2_ALLMANUAL=" R2 all-manual-or-has/lacks (has/lacks receipts: $(cut -f1 "$WORK/haslacks" | tr '\n' ' '))"
+fi
 # AND WHEN THE LEDGER IS DECLARED EMPTY: zero entries, so zero receipts by construction, and the
 # state the rotation of the last entry leaves. Whether a zero is DECLARED is decided by
 # `backlog-reverify.sh --declared-empty` alone (marker last, no BL- id anywhere) and asked ONLY at

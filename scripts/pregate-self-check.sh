@@ -532,19 +532,25 @@ function named(t, p,   s, k, b, a) {
   }
   return 0
 }
-END { for (k = 1; k <= no; k++) if (OB[k] in why) print O[k] "\t" substr(why[OB[k]], 2) }'
-mkdir -p "$W/f/keep" "$W/f/probe/core/fixtures/fname" "$W/f/probe/core/fixtures/fnear" "$W/f/probe/core/fixtures/fout" || exit 2
+END { for (k = 1; k <= no; k++) {
+  ud = ((getline l < ("core/fixtures/" OB[k] "/.undeclarable")) >= 0); close("core/fixtures/" OB[k] "/.undeclarable")
+  if (OB[k] in why) print O[k] "\t" substr(why[OB[k]], 2) (ud ? " UNDECLARABLE" : "")
+  else if (ud) print O[k] "\tUNDECLARABLE" } }'
+mkdir -p "$W/f/keep" "$W/f/probe/core/fixtures/fname" "$W/f/probe/core/fixtures/fnear" "$W/f/probe/core/fixtures/fout" "$W/f/probe/core/fixtures/fund" || exit 2
+# fund is undeclarable and names no changed path: selected by UNDECLARABLE alone. fout carries .undeclarable too but is not in the RUN set.
 # The probe: fnear sorts LAST in the RUN set and carries every near-miss (a longer directory, a longer file name, a
 # longer basename on both sides); fout reaches x.sh by all three routes but is not in the RUN set.
 printf '%s\n' core/scripts/x.sh > "$W/f/probe.changed"
-printf '%s\n' fdir ffile fname fname@consumer fnear > "$W/f/probe.run"
+printf '%s\n' fdir ffile fname fname@consumer fund fnear > "$W/f/probe.run"
 printf 'fdir\tN\nfdir\tD\tcore/scripts\t1\tcore/scripts\nffile\tF\tcore/scripts/x.sh\t0\tcore/scripts/x.sh\nfnear\tD\tcore/scriptsx\t1\tcore/scriptsx\nfnear\tF\tcore/scripts/x.shx\t1\tcore/scripts/x.shx\nfout\tD\tcore/scripts\t1\tcore/scripts\nfout\tF\tcore/scripts/x.sh\t1\tcore/scripts/x.sh\n' > "$W/f/probe.dparse"
 printf '%s\n' 'bash "$ROOT/core/scripts/x.sh" --check' > "$W/f/probe/core/fixtures/fname/run.sh"
 printf '%s\n' 'bash core/scripts/wx.sh' 'cat core/scripts/x.shy' > "$W/f/probe/core/fixtures/fnear/run.sh"
 printf '%s\n' 'bash core/scripts/x.sh' > "$W/f/probe/core/fixtures/fout/run.sh"
-f_probe="$( cd "$W/f/probe" && awk "$F_AWK" "$W/f/probe.changed" "$W/f/probe.run" "$W/f/probe.dparse" core/fixtures/fname/run.sh core/fixtures/fnear/run.sh core/fixtures/fout/run.sh | cut -f1 | tr '\n' ' ')"
-if [ "$f_probe" != "fdir ffile fname fname@consumer " ]; then
-  printf '   cannot run: the route matcher read "%s" on its seeded probe, expected "fdir ffile fname fname@consumer " -- it cannot be trusted on the RUN set\n' "$f_probe" >&2
+printf '%s\n' 'true' > "$W/f/probe/core/fixtures/fund/run.sh"
+: > "$W/f/probe/core/fixtures/fund/.undeclarable"; : > "$W/f/probe/core/fixtures/fout/.undeclarable"
+f_probe="$( cd "$W/f/probe" && awk "$F_AWK" "$W/f/probe.changed" "$W/f/probe.run" "$W/f/probe.dparse" core/fixtures/fname/run.sh core/fixtures/fnear/run.sh core/fixtures/fout/run.sh core/fixtures/fund/run.sh | cut -f1 | tr '\n' ' ')"
+if [ "$f_probe" != "fdir ffile fname fname@consumer fund " ]; then
+  printf '   cannot run: the route matcher read "%s" on its seeded probe, expected "fdir ffile fname fname@consumer fund " -- it cannot be trusted on the RUN set\n' "$f_probe" >&2
   exit 2
 fi
 git diff --name-only --no-renames "$E_MB" -- 'core/scripts/*.sh' 'scripts/*.sh' 'core/hooks/*.sh' 'core/skills/*.sh' 'core/session-driver/*.sh' > "$W/f/changed" 2> "$W/f/err" \
@@ -584,6 +590,15 @@ else
   f_why="no RUN unit that reaches a changed script is left to run"
   [ "$u_drop" -eq 0 ] || f_why="every selected unit is undeclared and runs plain in the push"
   seed_set "$W/f" "$F_JOBS" "$((f_k - u_drop))" f:reached-fixtures "$f_why"
+  # An `.undeclarable` fixture has no inputs.decl, so the drop above leaves it out of the seed: it runs plain here, as
+  # the push runs it, from the repo root.
+  awk -F'\t' '$2 ~ /UNDECLARABLE/ && $1 !~ /@consumer$/ { print $1 }' "$W/f/sel" > "$W/f/plain"
+  f_pl_red=""
+  while IFS= read -r u_pl; do
+    if bash "core/fixtures/$u_pl/run.sh" < /dev/null > "$W/f/keep/$u_pl.plain.out" 2>&1; then printf '     %s plain rc=0\n' "$u_pl"
+    else printf '     %s plain rc=1\n' "$u_pl"; f_pl_red="$f_pl_red $u_pl"; tail -5 "$W/f/keep/$u_pl.plain.out" | sed 's/^/       /'; fi
+  done < "$W/f/plain"
+  [ -z "$f_pl_red" ] || { printf '   FAIL: undeclarable fixture(s) red:%s\n' "$f_pl_red"; note_fail f:undeclarable-fixtures; }
 fi
 
 printf '\n'
