@@ -51,9 +51,7 @@ source; do not infer either value from anywhere else.
    section file. Every `edit:` line cites the section file by the project-relative path in the
    ledger's spelling (`_bmad-output/planning-artifacts/s<N>/…`), never a bare basename. A `derivation:` fence names the DOCUMENT by its project-relative path, never the
    section file: the join's assembly removes the section file, and the gate re-runs the fence
-   after it. For the same reason a section shard writes no siblings fence: every `repaired`
-   entry with an edit carries `- siblings: n/a (section shard; re-checked by the serial
-   remediator after assembly)`. A finding citing another section is not yours; report it in
+   after it. A finding citing another section is not yours; report it in
    your part as escalated.
 
    **Close your part with `--mark`.** As any shard (files, section or subject), your LAST act
@@ -80,7 +78,7 @@ source; do not infer either value from anywhere else.
 
    Read `.claude/team-roles/appendix/remediator-party.md` when your brief hands you a party round's seat findings (`_bmad-output/party-mode/s<N>/…`) or carries `revised-seats:`.
 
-**A gate repair record carries the live gate nonce, `remediator_agent_id:` and `repaired_checks:`.** The gate's record is `${AI_DLC_STATE_DIR:-_bmad-output}/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md`, the record `steps/gate-validation.md` "Gate Failure" names and the only remediator home the gate reads (its other is the lead's own `gate-<type>-resolution-p<M>.md`); it is always written as the full repair record this file teaches, its entries included. When the lead dispatches you for a FAILed gate check as the unsharded remediator, put the three lines in that record, beside its entries. `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<nonce>.repair.md` is a second home, and it needs only the three lines. The gate-remediation guard reads either home, and lifts on one only when the live nonce appears in its text. The gate never reads the second home, so writing it never discharges the sprint-directory record. A shard writes no agent id (item 1), so when the gate repair is sharded the join's record carries none: the lead gives the gate nonce and an id to ONE serial-round remediator, the fan-in remediator when the round-one join prints `FANIN-COUNT:` above 0 and otherwise the lane-1 remediator, and in the sharded case only that one writes `gate-adjudication/<nonce>.repair.md`, carrying its own id; as the lane-1 remediator, that file is the one exception to editing only the files your `LANE:` line names. When the join prints `SERIAL-REQUIRED: 0` and `ESCALATED-COUNT: 0`, no serial remediator runs, nobody writes that file, and the guard has no record to lift on. The nonce may sit anywhere in the record's text; write it as `gate_nonce: <nonce>`. Each field opens its own line, at column 0 or after a `- ` bullet, with emphasis on the label allowed and the colon immediately after the label, the same rule every repair record here follows; the FIRST row bearing each label is the one read. `remediator_agent_id:` is the teammate name or agentId the lead's dispatch gave you, or sent you after the spawn: one token of at least 8 characters, carrying a digit, made of letters, digits and `_@.:-` only, its first character a letter or digit. With neither, OMIT the field and tell the lead so when you return; never write prose in that field. `repaired_checks:` lists the bare check ids you repaired, or, as the sharded case's serial-round remediator, the pass's FAILed check ids your brief names, comma- or space-separated; the guard lifts only when it names a check the live pass FAILed. In addition to the record's entries, it carries these three lines:
+**A gate repair record carries the live gate nonce, `remediator_agent_id:` and `repaired_checks:`.** The gate's record is `${AI_DLC_STATE_DIR:-_bmad-output}/planning-artifacts/s<N>/gate-<type>-repair-p<M>.md`, the record `steps/gate-validation.md` "Gate Failure" names and the only remediator home the gate reads (its other is the lead's own `gate-<type>-resolution-p<M>.md`); it is always written as the full repair record this file teaches, its entries included. When the lead dispatches you for a FAILed gate check as the unsharded remediator, put the three lines in that record, beside its entries. `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<nonce>.repair.md` is a second home, and it needs only the three lines. The gate-remediation guard reads either home, and lifts on one only when the live nonce appears in its text. The gate never reads the second home, so writing it never discharges the sprint-directory record. A shard writes no agent id (item 1), so when the gate repair is sharded the join's record carries none: the lead gives the gate nonce and an id to ONE serial-round remediator, the fan-in remediator when the round-one join prints `FANIN-COUNT:` above 0 and otherwise the lane-1 remediator, and in the sharded case only that one writes `gate-adjudication/<nonce>.repair.md`, carrying its own id; as the lane-1 remediator, that file is the one exception to editing only the files your `LANE:` line names. When none of ESCALATED-COUNT, CROSS-COUNT and WORKLIST-COUNT is above 0 and the lead routed no finding serial, no serial remediator runs, nobody writes that file, and the guard has no record to lift on. The nonce may sit anywhere in the record's text; write it as `gate_nonce: <nonce>`. Each field opens its own line, at column 0 or after a `- ` bullet, with emphasis on the label allowed and the colon immediately after the label, the same rule every repair record here follows; the FIRST row bearing each label is the one read. `remediator_agent_id:` is the teammate name or agentId the lead's dispatch gave you, or sent you after the spawn: one token of at least 8 characters, carrying a digit, made of letters, digits and `_@.:-` only, its first character a letter or digit. With neither, OMIT the field and tell the lead so when you return; never write prose in that field. `repaired_checks:` lists the bare check ids you repaired, or, as the sharded case's serial-round remediator, the pass's FAILed check ids your brief names, comma- or space-separated; the guard lifts only when it names a check the live pass FAILed. In addition to the record's entries, it carries these three lines:
 
 ```
 - gate_nonce: <live gate nonce>
@@ -136,18 +134,6 @@ Then, per finding:
 - source: <seat-file>#<finding-id> [<seat-file>#<finding-id> ...]   (a party repair, and an entry for a `CROSS:` item)
 - disposition: repaired | escalated | skipped (nit)
 - edit: <artifact file:line(s)>
-- siblings:   (every `repaired` entry whose edit is not n/a, in ONE of four forms; the paragraph below)
-
-```text
-$ grep -rn -F '<the text you replaced>' <your shard's own files, or the document>
-<its output, verbatim>
-$ grep -c -F '<the text you wrote>' <the file you edited>
-<n>
-```
-
-- siblings: n/a (section shard; re-checked by the serial remediator after assembly)
-- siblings: n/a (insertion)
-- siblings: n/a (deletion)
 - closes: <part> <heading>   (a `repaired` entry in the same record, copied from the `ESCALATED:` line it resolves)
 - supersedes: <part> <heading>   (an escalated entry restating a part's escalation, copied the same way)
 - edit: <project-relative path of the file the fix lies in>:<line(s)> (escalated)   (an `escalated` entry's edit: line)
@@ -161,34 +147,6 @@ $ <the exact command>
 
 - claim now asserted: <the sentence you wrote, which the derivation above supports>
 ```
-
-**Re-check every sibling of the text you replaced.** A repair that fixes one copy of a sentence
-and leaves its sibling, or shifts a `<file>:<n>` cite, is the next pass's MAJOR. So every
-`repaired` entry whose `edit:` is not n/a carries a `- siblings:` field with no value, then a
-` ```text ` fence holding two commands: `grep -rn -F '<the text you replaced>'` over the files your `shard:` line
-names (as a files-mode shard), or over the document (as the one serial remediator of a
-document); run the fence after your last edit; its output is empty, or lists only sites you
-dispositioned not to change; and the control
-`grep -c -F '<the text you wrote>' <the file you edited>`, whose output is 1 or more. The
-fence is `text`, never `derived`: it records what the grep returned at your edit, and a later
-pass that rewrites that text must not turn it stale. The join counts the control's text in the
-file it names, once, and refuses a fence whose text is not there. Any other spelling of the
-field (`- siblings: checked`, a value with no fence, a `derived` fence) is refused. A
-files-mode shard greps ONLY its own files: another shard is editing the rest concurrently, so a
-copy you record there is fixed under you and your fence goes stale. A sibling you know of in a
-file outside your shard goes on an `escalated` entry with no fence, whose `edit:` line names
-that file as `- edit: <project-relative path>:<line(s)> (escalated)` and whose claim quotes the
-text; the join reads no escalated entry's `edit:` as a citation, because that file is the serial
-remediator's to edit. The cross-file grep is the serial remediator's, after the join. Never grep the sprint
-slot, `shards/` or any repair record: they hold this command's own text, so the replay after
-the join finds the replaced text there and the fence goes stale. A section or subject shard
-writes `- siblings: n/a (section shard; re-checked by the serial remediator after assembly)`
-instead of a fence: the control names your section file, which assembly deletes. An edit that
-only inserts new text, replacing none, writes `- siblings: n/a (insertion)`; an edit that only
-deletes text, writing none, writes `- siblings: n/a (deletion)` (it has no new text to count,
-and the serial remediator's cross-file grep still covers what it deleted). Cites the edit
-moved are re-checked by the serial remediator after the join, never inside a shard. The join
-refuses a `repaired` entry with an edit and no `siblings:` field.
 
 Read `.claude/team-roles/appendix/remediator-serial.md` when your brief carries `shard: none (authoring-chain)`, `adjudicator: read-only`, a `LANE:`, `FANIN:` or `ADJUDICATE:` line, adjudicator batch files, or an item carrying `CROSS:`.
 

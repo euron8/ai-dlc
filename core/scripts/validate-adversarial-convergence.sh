@@ -4652,17 +4652,22 @@ J3_LAB='function lab(n,   r) { r = "^[[:space:]-]*[*_`]?[*_`]?" n "[*_`]?[*_`]?:
 # $1 repair record -> `T\t<triple>\t<before>\t<after>` per triple (the `artifact:` label opens one, as
 # repair_entries reads it; first before/after kept, lowercased), and `S\t<triple>\t<token>` per `source:`
 # token of an entry whose disposition is `repaired`, tied to the triple above it (0: above any triple).
-# $2 = 1 (arm P1J) also prints `H\t<triple>\t<header>` for each triple inside a `<!-- shard:` block of a record
-# the parallel join assembled whose `artifact:` value equals its header's: a triple stands above the first shard
-# marker (the join's header) and its after equals the sha256 of the record's `partition-document.sh: ASSEMBLED:`
-# line. Default: no H row.
+# Every T row ends with the triple's `artifact:` value as a trailing field.
+# $2 = 1 (arm P1J) also prints `H\t<triple>\t<header>\t<shard file>` for each triple inside a `<!-- shard:` block
+# of a record the parallel join assembled whose `artifact:` value equals its header's: a triple stands above the
+# first shard marker (the join's header) and its after equals the sha256 of the record's
+# `partition-document.sh: ASSEMBLED:` line. A part is the join-written section only: the last block ends at its
+# marker line plus the line count of `<record dir>/shards/<record stem>/<shard file>` (join-remediator-shards.sh
+# fp_open reads the same extent); a triple beyond it is the serial remediator's tail and never a part, and a block
+# whose shard file cannot be opened has no H row. Default: no H row.
 j3_sources() {
-  awk -v hm="${2:-0}" "$J3_LAB"'
-    function flush() { if (tr > 0) { print "T\t" tr "\t" bf "\t" af; ta[tr] = af } }
+  local _rd="${1%/*}" _rs="${1##*/}"; [ "$_rd" != "$1" ] || _rd="."
+  awk -v hm="${2:-0}" -v sd="${_rd}/shards/${_rs%.md}" "$J3_LAB"'
+    function flush() { if (tr > 0) { print "T\t" tr "\t" bf "\t" af "\t" ar[tr]; ta[tr] = af } }
     hm == 1 && /partition-document\.sh: ASSEMBLED: .* sha256=[0-9a-fA-F]+/ { a = $0; sub(/.* sha256=/, "", a); sub(/[^0-9a-fA-F].*$/, "", a); asm = tolower(a) }
-    /^<!-- shard:/ && !insh { insh = 1; hdr = tr }
+    /^<!-- shard:/ { if (!insh) { insh = 1; hdr = tr }; ms++; mn[ms] = $0; sub(/^<!-- shard:[ \t]*/, "", mn[ms]); sub(/[ \t]*-->.*$/, "", mn[ms]); ml[ms] = FNR }
     /^### / || /^<!-- shard:/ { src = ""; next }
-    lab("artifact") { flush(); tr++; bf = ""; af = ""; ar[tr] = v; sub(/[[:space:]]+$/, "", ar[tr]); if (insh && hdr > 0) part[tr] = 1; next }
+    lab("artifact") { flush(); tr++; bf = ""; af = ""; ar[tr] = v; sub(/[[:space:]]+$/, "", ar[tr]); if (insh && hdr > 0) { part[tr] = 1; pb[tr] = ms; pl[tr] = FNR }; next }
     lab("artifact_sha_before") { if (tr > 0 && bf == "") { bf = tolower(v); sub(/[[:space:]]+$/, "", bf) }; next }
     lab("artifact_sha_after") { if (tr > 0 && af == "") { af = tolower(v); sub(/[[:space:]]+$/, "", af) }; next }
     lab("source") { src = v; next }
@@ -4670,7 +4675,11 @@ j3_sources() {
       if (tolower(d[1]) == "repaired" && src != "") { n = split(src, t, /[[:space:],;]+/); for (i = 1; i <= n; i++) if (t[i] != "") print "S\t" tr + 0 "\t" t[i] }
       src = ""; next }
     END { flush()
-      if (hm == 1 && hdr > 0 && asm != "" && ta[hdr] == asm) for (i = hdr + 1; i <= tr; i++) if ((i in part) && ar[i] == ar[hdr]) print "H\t" i "\t" hdr }' "$1"
+      if (hm == 1 && hdr > 0 && asm != "" && ta[hdr] == asm) {
+        for (b = 1; b <= ms; b++) { ok[b] = 0; f = sd "/" mn[b]
+          if (mn[b] != "" && mn[b] !~ /\//) { r = getline z < f; if (r >= 0) { ok[b] = 1; sn[b] = (r > 0); while ((getline z < f) > 0) sn[b]++ }; close(f) } }
+        for (i = hdr + 1; i <= tr; i++) if ((i in part) && ar[i] == ar[hdr]) { b = pb[i]
+          if (ok[b] && (b < ms || pl[i] <= ml[b] + sn[b])) print "H\t" i "\t" hdr "\t" mn[b] } } }' "$1"
 }
 # $1 deferral record -> `<token>\t<step>` per deferred key.
 j3_deferrals() {
@@ -4886,19 +4895,23 @@ if [ -n "$p1j_o" ]; then
   # header's before is linked when its header is (a section shard that left the document untouched).
   awk -F'\t' 'function shas(x, out,   m, i, s, t) { m = split(x, t, /[[:space:]]+/); for (i = 1; i <= m; i++) { s = t[i]; sub(/^[^=@]*[=@]/, "", s); if (s != "") out[s] = 1 } }
     FILENAME == ARGV[1] { if ($0 != "") L[$0] = 1; next }
-    $2 == "T" { k = $1 ":" $3; tk[++nt] = k; bf[k] = $4; af[k] = $5; next }
-    $2 == "H" { hd[$1 ":" $3] = $1 ":" $4; next }
+    function nx(t,   f) { f = t; sub(/#.*/, "", f); sub(/^.*\//, "", f)
+      if (match(f, /^[0-9]+\.md$/)) return (substr(f, 1, RLENGTH - 3) + 0) ".md"
+      if (match(f, /^cross-[0-9]+\.md$/)) return "cross-" (substr(f, 7, RLENGTH - 9) + 0) ".md"
+      return f }
+    $2 == "T" { k = $1 ":" $3; tk[++nt] = k; bf[k] = $4; af[k] = $5; art[k] = $6; next }
+    $2 == "H" { hd[$1 ":" $3] = $1 ":" $4; hx[$1 ":" $3] = nx($5); next }
     $2 == "S" { st[++ns] = $1 ":" $3; sk[ns] = $4 }
     END {
       do { ch = 0
         for (i = 1; i <= nt; i++) { k = tk[i]; if ((k in lk) || bf[k] == af[k]) continue
           split("", b); shas(bf[k], b); for (s in b) if (s in L) { lk[k] = 1; break }
-          if (k in lk) { ch = 1; split("", a); shas(af[k], a); for (s in a) { if (!(s in L)) R[s] = 1; L[s] = 1 } } }
+          if (k in lk) { ch = 1; split("", a); shas(af[k], a); for (s in a) { if (!(s in L) || (s in R)) { R[s] = 1; RA[s SUBSEP art[k]] = 1 }; L[s] = 1 } } }
       } while (ch)
       for (i = 1; i <= nt; i++) { k = tk[i]; if ((k in lk) || bf[k] != af[k]) continue
-        split("", b); shas(bf[k], b); for (s in b) if (s in R) { lk[k] = 1; break } }
-      for (k in hd) if ((hd[k] in lk) && bf[k] != "" && bf[k] == af[k] && bf[k] == bf[hd[k]]) lk[k] = 1
-      for (i = 1; i <= ns; i++) if (st[i] in lk) print sk[i] }' "$AC_T/p1j-nsha" "$AC_T/p1j-src" >> "$AC_T/p1j-tok"
+        split("", b); shas(bf[k], b); for (s in b) if ((s SUBSEP art[k]) in RA) { lk[k] = 1; break } }
+      for (k in hd) if (!(k in lk) && (hd[k] in lk) && bf[k] != "" && bf[k] == af[k] && bf[k] == bf[hd[k]]) { lk[k] = 1; hl[k] = 1 }
+      for (i = 1; i <= ns; i++) if ((st[i] in lk) && (!(st[i] in hl) || nx(sk[i]) == hx[st[i]])) print sk[i] }' "$AC_T/p1j-nsha" "$AC_T/p1j-src" >> "$AC_T/p1j-tok"
   p1j_bad="$(awk -v pd="$p1j_pd" -v o="$p1j_o" '
     function norm(t,   p) { if (index(t, pd "/") == 1) t = substr(t, length(pd) + 2)
       else { p = index(t, "/" pd "/"); if (p) t = substr(t, p + length(pd) + 2) }

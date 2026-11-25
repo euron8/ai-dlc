@@ -33,6 +33,50 @@ for _f in contract_check checks_field record_tail spec_render_probe spec_memlog_
   declare -F "$_f" >/dev/null || broken "$JOIN defined no $_f when sourced"
 done
 
+# The in-process route for the lib.sh worlds below (dvworld's dispatched drive and parts-mode join, EC23): a `bash <subject>` of the
+# join, the guard hook, the seal or the worklist runs in a subshell, the names scrubbed to a CLI child's and pipefail off, as in
+# run.sh. ER0's two CLI starts set RS_CLI=1 and carry their FXCELL tag.
+RS_ROOT="$PWD"
+rs_scrub() { # -> this subshell's names reduced to a CLI child's
+  local _uv _ue
+  _ue=" $(compgen -e | tr '\n' ' ') "
+  for _uv in $(compgen -v); do
+    case "$_uv" in
+      BASH*|IFS|OPTIND|OPTERR|OPTARG|PPID|UID|EUID|SHELLOPTS|HISTCMD|LINENO|RANDOM|SECONDS|FUNCNAME|PIPESTATUS|GROUPS|DIRSTACK|HOSTTYPE|MACHTYPE|OSTYPE|HOSTNAME|SHLVL|PWD|OLDPWD|_|SRCDIR|RS_*|_uv|_ue|PS1|PS2|PS4) continue ;;
+    esac
+    case "$_ue" in *" $_uv "*) continue ;; esac
+    unset -v "$_uv" 2>/dev/null; unset -v "$_uv" 2>/dev/null
+  done
+  for _uv in $(compgen -A function); do
+    case " bash fx_inproc rs_scrub " in *" $_uv "*) ;; *) unset -f "$_uv" ;; esac
+  done
+}
+bash() {
+  [ -z "${RS_CLI:-}" ] || { command bash "$@"; return; }
+  RS_K=""
+  case "${1:-}" in
+    "${SRCDIR:-/nonexistent/rs}/content-seal.sh") RS_K=seal ;;
+    "${SRCDIR:-/nonexistent/rs}/serial-remediation-worklist.sh") RS_K=srw ;;
+  esac
+  if [ -z "$RS_K" ] && [ -z "${RS_IN:-}" ]; then
+    case "${1:-}" in
+      "${JOIN:-/nonexistent/rs}") RS_K=join ;;
+      */ai-dlc-gate-remediation-guard.sh) RS_K=hook ;;
+    esac
+  fi
+  [ -n "$RS_K" ] || { command bash "$@"; return; }
+  RS_F="$1"; shift
+  (
+    RS_IN=1; set +o pipefail
+    case "$RS_K" in
+      join) fx_inproc "$RS_ROOT/core/scripts/join-remediator-shards.sh"; rs_scrub; . "$RS_F" || exit 125; join_main "$@" ;;
+      hook) fx_inproc "$RS_ROOT/core/hooks/ai-dlc-gate-remediation-guard.sh"; rs_scrub; set --; ( . "$RS_F" || exit 125; grg_config; fx_inproc "$RS_ROOT/core/hooks/ai-dlc-gate-remediation-guard.sh"; hook_pretool_head ) ;;
+      seal) rs_scrub; . "${RS_F%/*}/content-seal.sh" || exit 125; fx_inproc "$RS_ROOT/core/scripts/content-seal.sh"; seal_main "$@" ;;
+      srw) rs_scrub; . "${RS_F%/*}/serial-remediation-worklist.sh" || exit 125; fx_inproc "$RS_ROOT/core/scripts/serial-remediation-worklist.sh"; srw_main "$@" ;;
+    esac
+  )
+}
+
 # uenter <root> <record> -> RC, $JO: what `AI_DLC_PROJECT_ROOT=<root> join --escalations <record> --sprint 305`
 # prints, in a subshell. The values are the top level's own for that command line (join lines ~1469 and 1529-1550).
 uenter() {
@@ -75,12 +119,12 @@ u_gaploc() {
 # ER0: the seam equals the CLI. One refusing and one passing record, run both ways on the SAME file; stdout+stderr
 # (merged as the CLI cells merge them) and the exit code must be byte-identical, and the two worlds must differ.
 sw="$(mktemp -d "$WORK/seam.XXXXXX")" && mkdir -p "$sw/.claude" || broken "cannot make the seam world"
-printf '%b' '### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- siblings: n/a (insertion)\n\n### F-2 — MINOR\n- **Disposition:** frobnicated\n- edit: n/a\n' > "$sw/refuse.md"
+printf '%b' '### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- siblings: n/a (insertion)\n\n### F-2 — MINOR\n- outcome: done\n- edit: n/a\n' > "$sw/refuse.md"
 printf '%b' '### F-1 — MAJOR\n- disposition: escalated\n- edit: n/a\n' > "$sw/pass.md"
 seam_ok=1
 for _k in refuse pass; do
   uenter "$sw" "$sw/$_k.md"; cp "$JO" "$sw/$_k.unit"; echo "$RC" > "$sw/$_k.unit.rc"
-  FXCELL="cli-er0-$_k" AI_DLC_PROJECT_ROOT="$sw" bash "$JOIN" --escalations "$sw/$_k.md" --sprint 305 > "$sw/$_k.cli" 2>&1; echo "$?" > "$sw/$_k.cli.rc"
+  RS_CLI=1 FXCELL="cli-er0-$_k" AI_DLC_PROJECT_ROOT="$sw" bash "$JOIN" --escalations "$sw/$_k.md" --sprint 305 > "$sw/$_k.cli" 2>&1; echo "$?" > "$sw/$_k.cli.rc"
   cmp -s "$sw/$_k.unit" "$sw/$_k.cli" && cmp -s "$sw/$_k.unit.rc" "$sw/$_k.cli.rc" || seam_ok=0
 done
 if [ "$seam_ok" = 1 ] && ! cmp -s "$sw/refuse.unit" "$sw/pass.unit" && [ "$(cat "$sw/refuse.unit.rc")" = 2 ] && [ "$(cat "$sw/pass.unit.rc")" = 0 ]; then
@@ -89,13 +133,13 @@ else
   bad "ER0: the in-process seam differs from the CLI, or the two worlds do not differ (seam_ok=$seam_ok refuse=$(cat "$sw/refuse.unit.rc")/$(cat "$sw/refuse.cli.rc") pass=$(cat "$sw/pass.unit.rc")/$(cat "$sw/pass.cli.rc"))"
 fi
 
-p_escopen "$JOIN" && ok "EC20: --escalations, no seat dir, one escalation open and one closed -> rc 0, the open one reported, ESCALATED-COUNT: 1, no SERIAL-REQUIRED" \
+p_escopen "$JOIN" && ok "EC20: --escalations, no seat dir, one escalation open and one closed -> rc 0, the open one reported, ESCALATED-COUNT: 1" \
   || bad "EC20: --escalations did not report an open escalation on a non-party record (rc=$RC): $(cat "$JO")"
 p_escclosed "$JOIN" && ok "EC21: --escalations, every escalation closed and a shard fence whose text the serial pass rewrote -> rc 0, ESCALATED-COUNT: 0" \
   || bad "EC21: --escalations did not pass a fully closed record (rc=$RC): $(cat "$JO")"
 p_dispkey "$JOIN" && ok "EC22: an entry carrying edit: under a renamed key (outcome:) -> REFUSED, NODISP named; the dispositioned entry beside it is not" \
   || bad "EC22: an entry with edit: and no disposition: was not refused (rc=$RC): $(cat "$JO")"
-p_dispvocab "$JOIN" && ok "EC23: a disposition outside the vocabulary in era -> REFUSED; not-reproduced and the pre-era value accepted" \
+p_dispvocab "$JOIN" && ok "EC23: a disposition outside the vocabulary -> REFUSED wherever it stands; not-reproduced accepted" \
   || bad "EC23: the disposition vocabulary did not discriminate (rc=$RC): $(cat "$JO")"
 p_dispruling "$JOIN" && ok "EC24: operator-ruling resolves by ISO heading and by SHA256 line with no source:; an unresolved and a missing cite REFUSED" \
   || bad "EC24: the operator-ruling cite did not discriminate (rc=$RC): $(cat "$JO")"
@@ -103,7 +147,7 @@ p_gapfill "$JOIN" && ok "EC26: a repaired claim calling the fix a gap fill for v
   || bad "EC26: the gap-fill tripwire did not discriminate (rc=$RC): $(cat "$JO")"
 p_chkrec "$JOIN" && ok "EC28: --escalations -- a record with neither field is outside the era (rc 0); one that opened it without derivations: is REFUSED" \
   || bad "EC28: the check-fields era did not discriminate in record mode (rc=$RC): $(cat "$JO")"
-p_rulingedit "$JOIN" && ok "EC29: an operator-ruling entry with a real edit and no siblings: in the era -> REFUSED as a repaired edit is; the ruling with edit: n/a beside it is not" \
+p_rulingedit "$JOIN" && ok "EC29: an operator-ruling entry with a real edit whose claim sets a MAJOR aside -> REFUSED as a repaired edit is; the ruling with a plain claim beside it is not" \
   || bad "EC29: an operator-ruling edit escaped the repaired-edit checks (rc=$RC): $(cat "$JO")"
 p_rulingtab "$JOIN" && ok "EC30: a TAB in a heading is not read as the ruling cite (the cite-less entry refused for that); a CRLF cite resolves" \
   || bad "EC30: a tab-split heading or a CRLF cite was misread (rc=$RC): $(cat "$JO")"

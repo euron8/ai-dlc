@@ -1,21 +1,13 @@
 **As the serial remediator after a join**, your brief carries `shard: none (authoring-chain)`
-(Rule 28 exception 3: you read the joined output the shards produced), the join's `ESCALATED:` lines and
-its `SERIAL-REQUIRED:` count, and either ONE `LANE:` line with its `LANE-ITEM:` lines or the
+(Rule 28 exception 3: you read the joined output the shards produced), the join's `ESCALATED:` lines, and either ONE `LANE:` line with its `LANE-ITEM:` lines or the
 `FANIN:` lines. As a lane remediator you edit ONLY the files your `LANE:` line names, work only
 your lane's parts and items, and write your entries as the part your brief names
 (`shards/<lane artifact>-repair-p<M>/lane-<n>.md`, `<lane artifact>` as `_gate-procedures.md` defines it, closed with `--mark`), never an append to a
 record: a fix that needs a file outside your lane is escalated, and the fan-in owns it. As the
 fan-in remediator you work every `FANIN:` item after the lanes have joined, and append to the
-lanes' joined record. For every shard entry `repaired` with an edit, and every escalated
-sibling, run `grep -rn -F '<the text that entry replaced>'` over the artifact's own files: after
-a files-mode join that is `_bmad-output/planning-artifacts/s<N>/stories
-_bmad-output/planning-artifacts/s<N>/epics`; after a section or subject join it is the assembled
-document or subject files. After a section or subject join the brief also carries the lead's
+lanes' joined record. After a section or subject join the brief also carries the lead's
 `serial-remediation-worklist.sh` output (`REPLACED`, `HIT` and `MOVED-CITE` lines): adjudicate
-those hits and moved cites rather than deriving them, and still run the grep for any replaced
-text the worklist did not list. A files-mode join has no worklist, so there you run the grep
-yourself. Never grep the sprint slot `s<N>/` itself, `shards/` or any repair
-record. Record each as its own entry with a `siblings:` fence, and re-read every `<file>:<n>`
+those hits and moved cites rather than deriving them. Record each as its own entry, and re-read every `<file>:<n>`
 cite into each edited file. An entry of yours that resolves an escalated one carries
 `- closes: <part> <heading>`, copied from the tail of its `ESCALATED:` line (`01.md F-3 — MAJOR`):
 the join closes an escalation only by that line, never by a shared `source:` token, so a half
@@ -27,7 +19,7 @@ record or a part. The lane join refuses an adjudicator with any other write, at 
 item write `### <the item, verbatim>`, then `- decision: repair`, `no change` or `escalate`, the
 evidence as `derived` fences, and for a repair `- edit: <file>:<line(s)>` followed by a `text`
 fence opening `old` and a `text` fence opening `new`, holding the exact text to replace and its
-replacement. For a `no change` record the sibling or cite `grep` you decided on, as a `text` fence.
+replacement. For a `no change` record the `grep` you decided on, as a `text` fence.
 Your LAST act is `<lead engine>/wait-for-deliverable.sh --mark <your file> <step> adjudicator <b>/<k> findings=<items>`,
 `<b>/<k>` copied from your `shard:` line. `<lead engine>` is the lead checkout's `scripts/ai-dlc` path your brief carries when you run in a worktree, where a relative `scripts/ai-dlc` would resolve to an older engine; run the call from it, never from your worktree.
 
@@ -53,7 +45,7 @@ serial-routed finding: you apply the decisions, and you adjudicate yourself any 
 `escalate`, missing, or never dealt as an item. As the fan-in writer, run
 `scripts/ai-dlc/validate-artifact-derivations.sh` on the assembled files after every lane has joined,
 and before you apply any fan-in `CROSS:` decision, because the fan-in adjudicators ran while the
-lanes were still changing bytes. The sibling grep, the moved-cite check and the sweep stay yours. The writer's entry for a serial-routed finding carries `- source: <key>`, the item's key copied verbatim from its `CROSS:` line, in every round, adversarial rounds included; `join-remediator-shards.sh --escalations` and `--sources` read that line for `CROSS-OPEN`.
+lanes were still changing bytes. The moved-cite check and the sweep stay yours. The writer's entry for a serial-routed finding carries `- source: <key>`, the item's key copied verbatim from its `CROSS:` line, in every round, adversarial rounds included; `join-remediator-shards.sh --escalations` and `--sources` read that line for `CROSS-OPEN`.
 
 An `escalated` entry of yours that restates a part's escalation, carrying the same open
 decision forward, carries one `- supersedes: <part> <heading>` line per escalation it restates,

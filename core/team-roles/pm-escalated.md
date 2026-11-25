@@ -107,9 +107,7 @@ heading of its own is read as part of the one above it. Under the heading write
 resolves, each copied byte-exact from the tail of its `ESCALATED:` line, and every member of the
 chain gets its own line: a restating entry and each part escalation it supersedes. Then its
 `edit:` line: `- edit: n/a (operator answer folded)` when the answer changed no subject file;
-when it did, `- edit: <project-relative path>:<line(s)>` followed by one `- siblings:` line in a
-form `remediator.md` lists ("Re-check every sibling of the text you replaced"), or the join
-refuses the record before it reports any escalation. After the last entry is appended, run
+when it did, `- edit: <project-relative path>:<line(s)>`. After the last entry is appended, run
 `scripts/ai-dlc/join-remediator-shards.sh --escalations <record> --sprint <N>` (with a lane record,
 `--escalations <round one's record> --escalations <lane record> --sprint <N>`, round one's first), fix every entry it
 names on a `REFUSED:` line, and repeat until it prints no `REFUSED:` line; never hand back a record

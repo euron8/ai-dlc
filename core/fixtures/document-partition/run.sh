@@ -626,10 +626,10 @@ p_sd_serial() { # a SERIAL document: --map writes nothing (the one era producer 
   [ ! -e "$pa/s7/shards/z-p1" ] || return 1
   printf '# a1\n' > "$pa/archive/x-cycle-1/x-adversarial-p1.md"
   sd "$1" "$w" "$pa/s7/x.md" 2
-  [ "$SD_RC" -eq 0 ] && grep -qxF -- "$tok" "$SD_OUT/.era" || return 1
+  [ "$SD_RC" -eq 0 ] && grep -qxF -- "$tok" "$SD_OUT/.era" && grep -qxF -- 'ai-dlc-era-restart: 2' "$SD_OUT/.era" || return 1
   . "$(dirname "$1")/era-token.sh" && ai_dlc_era_open "$pa/s7" x 2 || return 1
   sd "$1" "$w" "$pa/s7/sub/y.md" 1
-  [ "$SD_RC" -eq 0 ] && grep -qxF -- "$tok" "$SD_OUT/.era" || return 1
+  [ "$SD_RC" -eq 0 ] && grep -qxF -- "$tok" "$SD_OUT/.era" && ! grep -q -- '^ai-dlc-era-restart:' "$SD_OUT/.era" || return 1
   sd "$1" "$w" "$w/docs/d.md" 1 --sprint 7
   [ "$SD_RC" -eq 0 ] && grep -qxF -- "$tok" "$SD_OUT/.era" || return 1
   mkdir -p "$pa/s7/shards/n-p1" && printf '# n\n' > "$pa/s7/n.md" && printf '# r\n' > "$pa/s7/n-repair-p1.md" || return 1

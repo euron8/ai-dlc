@@ -11,7 +11,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 #   --sources   src_refusals, seat_complete_check, then record_tail's own calls: contract_refusals 1 over the record(s)
 #               and checks_refusals "$(checks_field 1 "$r")" per record.
 # Top-level globals the join sets are set the way it sets them (PARTMODE=0, CF_DEFER=0 in files mode, JR_ROOT,
-# STATE_PARENT, SEAT_DIR); sib_control reads the first three for its file lookup.
+# STATE_PARENT, SEAT_DIR).
 #
 # WHAT STAYS END TO END in run.sh, one per mode: EC32 (a parts-mode refusal: rc 2, nothing written, silence), PS1 (a
 # parts-mode join), PS7 (--sources passes) and PS8 (--sources refuses). The unit cells cannot see that a refusal wrote
@@ -31,7 +31,7 @@ RSJ_J=core/scripts/join-remediator-shards.sh; RSJ_H=core/hooks/ai-dlc-gate-remed
 broken() { echo "FIXTURE BROKEN: $NAME: $1" >&2; exit 2; }
 # shellcheck source=/dev/null
 fx_inproc "$JOIN" && . "$JOIN" || broken "sourcing $JOIN failed"
-for _f in contract_check contract_refusals checks_field checks_refusals src_check src_refusals seat_complete_check sib_control; do
+for _f in contract_check contract_refusals checks_field checks_refusals src_check src_refusals seat_complete_check; do
   declare -F "$_f" >/dev/null || broken "$JOIN defined no $_f when sourced; nothing was asserted"
 done
 
@@ -40,7 +40,7 @@ UN=0
 uw() {
   UN=$((UN + 1)); UW="$WORK/u$UN"; UD="$UW/$SLOT/shards/stories-repair-p1"; UP="$UW/$PRD"
   mkdir -p "$UD" "$UP" "$UW/_bmad-output/party-mode/s305" "$UW/$REL" || broken "cannot make a world"
-  # the story files a siblings control names: sib_control looks them up under JR_ROOT
+  # the story files the parts' edit: lines cite
   local s; for s in "$S21" "$S22" "$S31"; do cp "$HERE/seed.$s" "$UW/$REL/$s" || broken "cannot seed $s"; done
 }
 # ustamp <dir>... -- stamp() of lib.sh in pure bash: append both check lines to each part lacking either field.
@@ -68,7 +68,7 @@ useam_parts() {
     fi
     fx_inproc $RSJ_J; fx_inproc $RSJ_J; contract_refusals 0 "$(contract_check 0 "$@")"
     printf '%s' "$ESC_LINES"
-    echo "ESC_N=$ESC_N SERIAL_N=$SERIAL_N"
+    echo "ESC_N=$ESC_N"
     echo "USEAM-REFUSED: $refuse_n"
   ) 2>&1
 }
@@ -98,26 +98,19 @@ oclean() { ohas "USEAM-REFUSED: 0"; }
 orefused() { ! oclean && ohas "REFUSED: $1"; }
 
 # ---------------------------------------------------------------------------------- the entry contract, parts mode
+# A record or part set carrying `siblings:` blocks, or omitting them, is read as plain entries: no refusal, no PENDING.
 uw; rawpart "$UW" 01 2.1; rawpart "$UW" 02 2.2; rawpart "$UW" 03 3.1; ustamp "$UD"
 O="$(useam_parts 0 "$UD"/*.md)"
-if orefused "01.md: the N9 — MINOR entry is repaired with an edit and carries no 'siblings:' field" \
-   && ohas "03.md: the M6 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" && ! ohas "PENDING:" \
-   && ohas "parts written before the install: re-dispatch the shards"; then
-  ok "EC1: every part omits siblings: (total omission) -> REFUSED, each repaired edit named, no PENDING (the era is the install, not the parts)"
-else bad "EC1: a part set omitting siblings: everywhere was not refused: $O"; fi
+if oclean && ! ohas "PENDING:" && ! ohas "siblings"; then
+  ok "EC1: every part omits siblings: -> not refused, nothing about siblings printed (the field is no longer read)"
+else bad "EC1: a part set omitting siblings: was refused or reported: $O"; fi
 
 uw; sibpart "$UW" 01 "$S21"; sibpart "$UW" 02 "$S22"; sibpart "$UW" 03 "$S31"; ustamp "$UD"
 O="$(useam_parts 0 "$UD"/*.md)"
 if oclean && ! ohas "PENDING:" && ohas "ESCALATED: 01.md F-2 — MINOR" && ohas "ESCALATED: 03.md F-2 — MINOR" \
-   && ohas "ESC_N=3 SERIAL_N=3"; then
-  ok "EC2: every part carries siblings: -> contract holds, no PENDING, each escalated entry by part, ESC_N 3 and SERIAL_N 3 (the edit: n/a repairs not counted)"
-else bad "EC2: a post-rule part set was refused, or its escalated entries were not read: $O"; fi
-
-uw; sibpart "$UW" 01 "$S21"; sibpart "$UW" 02 "$S22"; rawpart "$UW" 03 3.1; ustamp "$UD"
-O="$(useam_parts 0 "$UD"/*.md)"
-orefused "03.md: the M6 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" \
-  && ok "EC3: EC2 one property apart, part 03 a repaired MAJOR with an edit and no siblings: -> REFUSED by name" \
-  || bad "EC3: a repaired edit with no siblings: beside post-rule parts was not refused: $O"
+   && ohas "ESC_N=3"; then
+  ok "EC2: every part carries a siblings: fence (an old consumer record) -> ignored: contract holds, each escalated entry by part, ESC_N 3"
+else bad "EC2: a part set carrying siblings: blocks was refused, or its escalated entries were not read: $O"; fi
 
 uw; cp "$HERE/seed.block-setaside.md" "$UD/01.md"; ustamp "$UD"
 O="$(useam_parts 0 "$UD"/*.md)"
@@ -127,7 +120,7 @@ orefused "01.md:1: the stories-sm-05.md#F-3 — MAJOR entry is dispositioned rep
 
 uw; cp "$HERE/seed.block-handoff.md" "$UD/01.md"; ustamp "$UD"
 O="$(useam_parts 0 "$UD"/*.md)"
-if oclean && ohas "ESCALATED: 01.md stories-sm-05.md#F-3 (remainder) — MAJOR" && ohas "ESC_N=1 SERIAL_N=1"; then
+if oclean && ohas "ESCALATED: 01.md stories-sm-05.md#F-3 (remainder) — MAJOR" && ohas "ESC_N=1"; then
   ok "EC5: the same entry split, the remainder escalated under the same source -> contract holds, ESCALATED: 01.md ... (remainder), ESC_N 1"
 else bad "EC5: a handed-off split pair was refused or its escalated entry was not read: $O"; fi
 
@@ -146,39 +139,6 @@ sa_part 'The dashboard display in Story 1.4 is not required for the AC to hold.'
 orefused "01.md:1: the F-4 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside" \
   && ok "EC11: a repaired MAJOR set aside only as 'not required' -> REFUSED (the regex's second half)" \
   || bad "EC11: a 'not required' set-aside was not refused: $O"
-
-sib_part() { # <siblings text, printf %b> -- sibworld's one part, in a world holding the story the control names
-  uw
-  printf '### F-4 — MAJOR\n- disposition: repaired\n%s\n%b- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.\n' \
-    "$SIBW_EDIT" "$1" > "$UD/01.md"
-  ustamp "$UD"
-  O="$(useam_parts 0 "$UD"/*.md)"
-}
-ec15=1
-for _s in '- siblings: checked\n' \
-          '- siblings:\n- note: re-checked by hand\n' \
-          "- siblings:\n\n\`\`\`derived\n$SB_RN\n$SB_CTL\n1\n\`\`\`\n\n" \
-          "- siblings:\n\n\`\`\`text\n$SB_CTL\n1\n\`\`\`\n\n" \
-          "- siblings:\n\n\`\`\`text\n$SB_RN\n$SB_CTL\n0\n\`\`\`\n\n"; do
-  sib_part "$_s"
-  orefused "01.md: the F-4 — MAJOR entry is repaired with an edit and its 'siblings:' field is none of its four forms" || { ec15=0; EC15_O="$O"; }
-done
-[ "$ec15" = 1 ] \
-  && ok "EC15: five wrong siblings spellings (checked, an empty value with no fence, a derived fence, a text fence missing its grep -rn, a control count of 0) -> each REFUSED as none of the four forms" \
-  || bad "EC15: a wrong siblings spelling was accepted, or refused under another reason: ${EC15_O:-}"
-
-uw
-printf '### F-4 — MAJOR\n- disposition: repaired\n%s\n- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand; no sibling copy of the old title remains.\n' \
-  "$SIBW_EDIT" > "$UD/01.md"; ustamp "$UD"
-O="$(useam_parts 0 "$UD"/*.md)"
-orefused "01.md: the F-4 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" \
-  && ok "EC16: no siblings: field, the word sibling in the claim prose -> REFUSED as a missing field (the reader keys on the field, never the word)" \
-  || bad "EC16: an entry mentioning a sibling only in prose was not refused as NOSIB: $O"
-
-sib_part "- siblings:\n\n\`\`\`text\n$SB_RN\n\$ grep -c -F 'loads lazily' $REL/$S21\n1\n\`\`\`\n\n"
-orefused "01.md: the F-4 — MAJOR entry's siblings control counts 'loads lazily' in $REL/$S21, which holds it 0 times at the join" \
-  && ok "EC17: a text fence whose control text was never written to the file -> REFUSED at the join, 0 times" \
-  || bad "EC17: a siblings control naming absent text was not refused: $O"
 
 uw; part "$UW" 01 2.1; part "$UW" 02 2.2; part "$UW" 03 3.1
 { printf -- '- advisor: called\n- derivations: not replayed\n\n'; cat "$UD/02.md"; } > "$UD/02.x" && mv "$UD/02.x" "$UD/02.md"
@@ -249,16 +209,10 @@ orefused "rec.md:1: the F-1 — MAJOR entry is dispositioned repaired while its 
   && ok "EC6: --sources on a record whose resolving entry sets a MAJOR aside -> REFUSED, the set-aside refusal named (PS7 is its ALLOW twin)" \
   || bad "EC6: --sources did not apply the set-aside arm: $O"
 
-src_u '### F-1 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n- edit: s305/stories/a.md:3\n'
-if oclean && [ "$(ocount 'PENDING: 1 repaired edit(s) of this record precede its first entry carrying')" = 1 ]; then
-  ok "EC7: --sources over a pre-rule record (a repaired edit, no siblings: anywhere) -> not refused, one PENDING line"
-else bad "EC7: a pre-rule --sources record was refused or did not print one PENDING line: $O"; fi
-
 src_u '### F-1 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n- edit: s305/stories/a.md:3\n\n### F-2 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-2\n- edit: s305/stories/a.md:9\n- siblings: n/a (insertion)\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-3\n- edit: s305/stories/a.md:12\n'
-if orefused "rec.md: the F-3 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" \
-   && ! ohas "the F-1 — MAJOR entry is repaired with an edit" && ! ohas "re-dispatch the shards"; then
-  ok "EC8: --sources positional era: pre-rule entry, carrier, omitting entry -> REFUSED naming only the entry after the carrier"
-else bad "EC8: the --sources positional era did not bind from its first carrier: $O"; fi
+if oclean && ! ohas "PENDING:" && ! ohas "siblings"; then
+  ok "EC7: --sources over a record mixing entries that carry and omit siblings: -> not refused, no PENDING line"
+else bad "EC7: a --sources record mixing siblings: and none was refused or reported: $O"; fi
 
 src_u '### F-1 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-1\n- edit: n/a\n\n### F-2 — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-2\n- edit: n/a\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-3\n- edit: n/a (no edit)\n\n### F-3 (remainder) — MAJOR\n- disposition: escalated\n- source: architecture-dev-1.md#F-3\n- edit: n/a\n\n### serial F-1 — MAJOR\n- disposition: repaired\n- source: _bmad-output/party-mode/s305/architecture-dev-1.md#F-1\n- edit: n/a (no edit)\n- closes: rec.md F-1 — MAJOR\n'
 if oclean && ohas "ESCALATED: rec.md F-2 — MAJOR" && ohas "ESCALATED: rec.md F-3 (remainder) — MAJOR" \

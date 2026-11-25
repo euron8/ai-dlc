@@ -295,7 +295,7 @@ p_docjoin() { # three section writers, three parts -> JOINED, the document ASSEM
     && [ ! -e "$w/$RDREL/sections/2.md" ] && [ "$b" != "$a" ] \
     && grep -qx -- "- artifact: $DOCREL" "$o" \
     && grep -qx -- "- artifact_sha_before: $b" "$o" \
-    && grep -qx -- "- artifact_sha_after: $a" "$o" && has "$JO" "SERIAL-REQUIRED: 3"
+    && grep -qx -- "- artifact_sha_after: $a" "$o" && ! has "$JO" "SERIAL-REQUIRED"
 }
 p_docoverlap() { # one section copy written by two agents -> REFUSED, the document not assembled
   local w; w="$(doc_world)" || return 1
@@ -801,6 +801,32 @@ p_coeserial() { # <join> <source token> <expect: ok | the refusal token> -> rc 0
     [ "$RC" -eq 2 ] && has "$JO" "REFUSED:" && has "$JO" "$3" && [ ! -e "$w/$SLOT/coe-repair-p1.md" ]
   fi
 }
+# A coe OPENING-pass repair at PASS 2 (a restarted cycle): the coes_world pass-1 world moved to pass 2 (pass file, shards/coe-p2 with its
+# .era, the part under shards/coe-repair-p2, the part's token renamed), the era marker line appended as given, and, with review 1, a review shard
+# (the architecture dev-1 seat file as shards/coe-p2/1.md, F-1..F-3) so the sources resolve against it and the pass is not serial.
+coe2_world() { # <source token> <marker line | ""> <review 1|0> -> the world var on stdout
+  local w d; w="$(coes_world "$1")" || return 1
+  d="$w/$SLOT"
+  mv "$d/coe-adversarial-p1.md" "$d/coe-adversarial-p2.md" && mv "$d/shards/coe-p1" "$d/shards/coe-p2" \
+    && mv "$d/shards/coe-repair-p1" "$d/shards/coe-repair-p2" || return 1
+  sed 's/coe-adversarial-p1/coe-adversarial-p2/g' "$d/shards/coe-repair-p2/01.md" > "$d/shards/coe-repair-p2/01.md.new" \
+    && mv "$d/shards/coe-repair-p2/01.md.new" "$d/shards/coe-repair-p2/01.md" || return 1
+  [ -z "$2" ] || printf '%s\n' "$2" >> "$d/shards/coe-p2/.era"
+  [ "$3" != 1 ] || cp "$HERE/seed.seat-architecture-dev-1.md" "$d/shards/coe-p2/1.md" || return 1
+  printf '%s' "$w"
+}
+p_coe2() { # <join> <source token> <marker line | ""> <review 1|0> <expect: ok | skip | the refusal token>
+  local w; w="$(coe2_world "$2" "$3" "$4")" || return 1
+  stamp "$w"
+  AI_DLC_PROJECT_ROOT="$w" bash "$1" --sprint 305 --artifact coe --pass 2 --artifact-path "$SLOT" \
+    --since 2000-01-01T00:00:00Z --until "$(jnow)" > "$JO" 2>&1
+  RC=$?
+  case "$5" in
+    ok) [ "$RC" -eq 0 ] && has "$JO" "JOINED:" && ! has "$JO" "COE-SOURCES: SKIP" && [ -f "$w/$SLOT/coe-repair-p2.md" ] ;;
+    skip) [ "$RC" -eq 0 ] && has "$JO" "JOINED:" && has "$JO" "COE-SOURCES: SKIP pre-era coe" && [ -f "$w/$SLOT/coe-repair-p2.md" ] ;;
+    *) [ "$RC" -eq 2 ] && has "$JO" "REFUSED:" && has "$JO" "$5" && ! has "$JO" "COE-SOURCES: SKIP" && [ ! -e "$w/$SLOT/coe-repair-p2.md" ] ;;
+  esac
+}
 p_partynosrc() { # an entry with a disposition and no source line -> REFUSED by name, nothing written
   local w; w="$(party_world)" || return 1
   ppart "$w" 01 2.1 "architecture-dev-1.md#F-1"
@@ -897,27 +923,6 @@ p_sjnest() { # a NESTED state dir (out/bmad): map, split, join and the record ag
 sibpart() { # <world> <name> <story file> -- a part in the post-rule shape: a siblings: fence, plus one escalated entry
   sed "s/@STORY@/$3/g" "$HERE/seed.block-sib.md" > "$1/$SLOT/shards/stories-repair-p1/$2.md"
 }
-p_sibtotal() { # TOTAL omission: every part is graph's pre-rule shape (no siblings: anywhere) -> REFUSED,
-  # each repaired edit named, no PENDING line. The era is the install: an era decided over the parts reads PENDING here.
-  local w; w="$(new_world)"; three_writers "$w"
-  rawpart "$w" 01 2.1; rawpart "$w" 02 2.2; rawpart "$w" 03 3.1
-  run_join "$1" "$w"
-  refused "$w" "01.md: the N9 — MINOR entry is repaired with an edit and carries no 'siblings:' field" \
-    && has "$JO" "03.md: the M6 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" && ! has "$JO" "PENDING:" \
-    && has "$JO" "parts written before the install: re-dispatch the shards"
-}
-p_srcpending() { # --sources over a record that predates the rule (a repaired edit, no siblings: anywhere) -> rc 0, ONE PENDING line
-  local w n; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
-  src_rec "$w" '### F-1 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n- edit: s305/stories/a.md:3\n' "$1"
-  n="$(grep -c '^PENDING: 1 repaired edit(s) of this record precede its first entry carrying' "$JO")" || n=0
-  [ "$RC" -eq 0 ] && [ "$n" -eq 1 ]
-}
-p_srcera() { # --sources, positional era: a pre-rule entry, then a carrier, then an entry omitting the field -> rc 2 naming the LAST only
-  local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
-  src_rec "$w" '### F-1 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-1\n- edit: s305/stories/a.md:3\n\n### F-2 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-2\n- edit: s305/stories/a.md:9\n- siblings: n/a (insertion)\n\n### F-3 — MAJOR\n- disposition: repaired\n- source: architecture-dev-1.md#F-3\n- edit: s305/stories/a.md:12\n' "$1"
-  [ "$RC" -eq 2 ] && has "$JO" "rec.md: the F-3 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" \
-    && ! has "$JO" "the F-1 — MAJOR entry is repaired with an edit" && ! has "$JO" "re-dispatch the shards"
-}
 p_srcclosed() { # --sources: an escalated F-1 a LATER repaired entry names on a `closes:` line, an open F-2, and a split
   # pair (repaired THEN escalated under F-3) whose remainder stays open -> rc 0, F-2 and F-3 open, F-1 printed CLOSED,
   # count 2; no SERIAL-REQUIRED line (that record may be the serial remediator's own)
@@ -943,17 +948,6 @@ p_srccross() { # --sources over a JOINED record: F-1 escalated in BOTH 01.md and
   [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-CLOSED: 01.md F-1 — MAJOR" && has "$JO" "ESCALATED: 02.md F-1 — MAJOR" \
     && ! has "$JO" "ESCALATED: 01.md F-1 — MAJOR" && has "$JO" "ESCALATED-COUNT: 1 (1 closed"
 }
-p_sibdoc() { # --document: three section parts, the FIRST omitting siblings: (the others carry the section-shard form)
-  # -> REFUSED naming it, with the pre-install remedy; the siblings arm is every parts mode, not files mode alone
-  local w; w="$(doc_world)" || return 1
-  cp "$w/$DOCREL" "$w/prd.before"
-  sec_edit "$w" 1 "$AG1"; sec_edit "$w" 2 "$AG2"; sec_edit "$w" 3 "$AG3"
-  docpart "$w" 1; docpart "$w" 2; docpart "$w" 3
-  grep -v 'siblings:' "$w/$RDREL/1.md" > "$w/p1" && mv "$w/p1" "$w/$RDREL/1.md"
-  run_docjoin "$1" "$w"
-  doc_refused "$w" "1.md: the (before any heading) entry is repaired with an edit and carries no 'siblings:' field" \
-    && has "$JO" "parts written before the install: re-dispatch the shards" && cmp -s "$w/$DOCREL" "$w/prd.before"
-}
 saworld() { # <join> <claim tail> -- one writer, one part: a repaired MAJOR with an edit, its siblings line, the claim
   local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG1"
@@ -969,34 +963,12 @@ p_setasidenr() { # the regex's SECOND half alone: "not required", no shard phras
   saworld "$1" 'The dashboard display in Story 1.4 is not required for the AC to hold.'
   refused "$SA_W" "01.md:1: the F-4 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"
 }
-p_sibok() { # every part carries siblings: -> JOINED, no PENDING, and each escalated entry printed by part with the count
-  local w; w="$(new_world)"; three_writers "$w"
-  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; sibpart "$w" 03 "$S31"
-  run_join "$1" "$w"
-  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && ! has "$JO" "PENDING:" \
-    && has "$JO" "ESCALATED: 01.md F-2 — MINOR" && has "$JO" "ESCALATED: 03.md F-2 — MINOR" && has "$JO" "ESCALATED-COUNT: 3" \
-    && has "$JO" "SERIAL-REQUIRED: 3"
-}
-p_sibmissing() { # p_sibok one property apart: part 03 is a pre-rule entry (M6, repaired, an edit, no siblings:) -> REFUSED by name
-  local w; w="$(new_world)"; three_writers "$w"
-  sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; rawpart "$w" 03 3.1
-  run_join "$1" "$w"
-  refused "$w" "03.md: the M6 — MAJOR entry is repaired with an edit and carries no 'siblings:' field"
-}
 p_setaside() { # graph's set-aside MAJOR, repaired, no hand-off -> REFUSED naming the part and the entry heading line
   local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG1"
   cp "$HERE/seed.block-setaside.md" "$w/$SLOT/shards/stories-repair-p1/01.md"
   run_join "$1" "$w"
   refused "$w" "01.md:1: the stories-sm-05.md#F-3 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside"
-}
-p_handoff() { # the same entry split, the remainder escalated under the same source -> JOINED, the escalated entry printed
-  local w; w="$(new_world)"
-  drive "$w" Edit "$w/$REL/$S21" "$AG1"
-  cp "$HERE/seed.block-handoff.md" "$w/$SLOT/shards/stories-repair-p1/01.md"
-  run_join "$1" "$w"
-  joined_one "$(out_of "$w")" && has "$JO" "ESCALATED: 01.md stories-sm-05.md#F-3 (remainder) — MAJOR" \
-    && has "$JO" "ESCALATED-COUNT: 1" && has "$JO" "SERIAL-REQUIRED: 1"
 }
 p_srcsetaside() { # --sources applies the set-aside arm too: a resolving source, the set-aside claim -> rc 2, the refusal named
   local w; w="$(mktemp -d "$WORK/src.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 || return 1
@@ -1009,36 +981,36 @@ p_srcsetaside() { # --sources applies the set-aside arm too: a resolving source,
 # The prose world carries NO field and mentions a sibling in its claim: a reader keyed on the word
 # acquits it, a reader keyed on the field refuses it as NOSIB.
 SIBW_EDIT="- edit: $REL/$S21:4"
-sibw_build() { # <siblings text, printf %b> -> the world sibworld joins
+sibw_build() { # <siblings text, printf %b> [claim tail] -> the world sibworld joins
   local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG1"
-  printf '### F-4 — MAJOR\n- disposition: repaired\n%s\n%b- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand.\n' \
-    "$SIBW_EDIT" "$1" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+  printf '### F-4 — MAJOR\n- disposition: repaired\n%s\n%b- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand. %s\n' \
+    "$SIBW_EDIT" "$1" "${2:-}" > "$w/$SLOT/shards/stories-repair-p1/01.md"
   printf '%s' "$w"
 }
-sibworld() { # <join> <siblings text, printf %b> -> RC, $JO, SB_W: one writer, one part
-  local w; w="$(sibw_build "$2")"
+sibworld() { # <join> <siblings text, printf %b> [claim tail] -> RC, $JO, SB_W: one writer, one part
+  local w; w="$(sibw_build "$2" "${3:-}")"
   run_join "$1" "$w"; SB_W="$w"
 }
-# CP1: --check-part runs the join's own entry contract over one part. The near-miss `siblings: checked`
-# part: the JOIN refuses it, and --check-part on the same file exits 2 printing that BADSIB line
-# byte-for-byte. The control: a well-formed ```text fence part (its CTL control resolved under the
-# world's root) exits 0, and the same part joins. A missing field names the re-check, not a re-dispatch.
+# CP1: --check-part runs the join's own entry contract over one part. A part carrying `siblings: checked` (a spelling
+# the join once refused) is read as plain: the join and --check-part both accept it, and a text-fence part likewise. The
+# offender is a repaired MAJOR whose claim sets its fix aside: the JOIN refuses it, and --check-part on the same file
+# exits 2 printing that SETASIDE line byte-for-byte.
 p_checkpart() {
   local j="$1" w p bl
   sibworld "$j" '- siblings: checked\n'; w="$SB_W"; p="$w/$SLOT/shards/stories-repair-p1/01.md"
-  [ "$RC" -eq 2 ] || return 1
-  bl="$(grep -F "is none of its four forms" "$JO")" || return 1
+  [ "$RC" -eq 0 ] || return 1
   AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
-  [ "$RC" -eq 2 ] && [ "$(grep -F "is none of its four forms" "$JO")" = "$bl" ] || return 1
+  [ "$RC" -eq 0 ] && has "$JO" "CHECK-PART:" || return 1
   sibworld "$j" "- siblings:\n\n\`\`\`text\n$SB_RN\n$SB_CTL\n1\n\`\`\`\n\n"; w="$SB_W"; p="$w/$SLOT/shards/stories-repair-p1/01.md"
   [ "$RC" -eq 0 ] || return 1
   AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
   [ "$RC" -eq 0 ] && has "$JO" "CHECK-PART:" || return 1
-  sibworld "$j" ''; w="$SB_W"; p="$w/$SLOT/shards/stories-repair-p1/01.md"
+  sibworld "$j" '' 'the rest is outside this shard and not required.'; w="$SB_W"; p="$w/$SLOT/shards/stories-repair-p1/01.md"
+  [ "$RC" -eq 2 ] || return 1
+  bl="$(grep -F "claim sets part of the fix aside" "$JO")" || return 1
   AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" > "$JO" 2>&1; RC=$?
-  [ "$RC" -eq 2 ] && has "$JO" "carries no 'siblings:' field" && has "$JO" "run --check-part again" \
-    && ! has "$JO" "re-dispatch the shards" || return 1
+  [ "$RC" -eq 2 ] && [ "$(grep -F "claim sets part of the fix aside" "$JO")" = "$bl" ] || return 1
   AI_DLC_PROJECT_ROOT="$w" bash "$j" --check-part "$p" --sprint 305 > "$JO" 2>&1; RC=$?
   [ "$RC" -eq 2 ] && has "$JO" "takes no other flag"
 }
@@ -1125,42 +1097,6 @@ p_cpfields() { # <join>
 }
 SB_RN="\$ grep -rn -F 'loads eagerly' $REL/$S21"
 SB_CTL="\$ grep -c -F 'loads on demand' $REL/$S21"
-p_sibforms() { # five wrong spellings of the field -> each REFUSED as none of the four forms, nothing written
-  local s
-  for s in '- siblings: checked\n' \
-           '- siblings:\n- note: re-checked by hand\n' \
-           "- siblings:\n\n\`\`\`derived\n$SB_RN\n$SB_CTL\n1\n\`\`\`\n\n" \
-           "- siblings:\n\n\`\`\`text\n$SB_CTL\n1\n\`\`\`\n\n" \
-           "- siblings:\n\n\`\`\`text\n$SB_RN\n$SB_CTL\n0\n\`\`\`\n\n"; do
-    sibworld "$1" "$s"
-    refused "$SB_W" "01.md: the F-4 — MAJOR entry is repaired with an edit and its 'siblings:' field is none of its four forms" || return 1
-  done
-}
-p_sibprose() { # no siblings: field, the word in the claim prose -> REFUSED as NOSIB (the field is read, never the word)
-  local w; w="$(new_world)"
-  drive "$w" Edit "$w/$REL/$S21" "$AG1"
-  printf '### F-4 — MAJOR\n- disposition: repaired\n%s\n- derivation: n/a (no factual claim)\n- claim now asserted: the title reads loads on demand; no sibling copy of the old title remains.\n' \
-    "$SIBW_EDIT" > "$w/$SLOT/shards/stories-repair-p1/01.md"
-  run_join "$1" "$w"
-  refused "$w" "01.md: the F-4 — MAJOR entry is repaired with an edit and carries no 'siblings:' field"
-}
-p_sibnever() { # a ```text fence whose control text was never written to the file -> REFUSED at the join
-  sibworld "$1" "- siblings:\n\n\`\`\`text\n$SB_RN\n\$ grep -c -F 'loads lazily' $REL/$S21\n1\n\`\`\`\n\n"
-  refused "$SB_W" "01.md: the F-4 — MAJOR entry's siblings control counts 'loads lazily' in $REL/$S21, which holds it 0 times at the join"
-}
-p_sibstale() { # the fence joined, then its text legitimately rewritten -> the slot-wide derivations re-run reads
-  # NO stale; the same record with the fence re-labelled derived reads STALE in the same run (the two sides differ)
-  # The validator's output goes to a file in THIS world, not under $WORK.
-  local w r o; sibworld "$1" "- siblings:\n\n\`\`\`text\n$SB_RN\n$SB_CTL\n1\n\`\`\`\n\n"; w="$SB_W"; o="$w/dv.out"
-  [ "$RC" -eq 0 ] || return 1
-  r="$(out_of "$w")"
-  sed 's/loads on demand/loads when opened/' "$w/$REL/$S21" > "$w/st" && mv "$w/st" "$w/$REL/$S21" || return 1
-  ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$DVAL" "$SLOT" ) > "$o" 2>&1; DV_RC=$?
-  [ "$DV_RC" -eq 0 ] && ! has "$o" "STALE" || return 1
-  sed 's/^```text$/```derived/' "$r" > "$w/ctl.md" || return 1
-  ( cd "$w" && AI_DLC_PROJECT_ROOT="$w" bash "$DVAL" "$w/ctl.md" ) > "$o" 2>&1; DV_RC=$?
-  [ "$DV_RC" -eq 1 ] && has "$o" "FAIL (STALE)"
-}
 p_escpath() { # the tip adversary's collision: 01 repairs story 2.1 and escalates a sibling in story 2.2,
   # naming 2.2 on its escalated edit: line; 02 repairs 2.2 -> JOINED, the escalated path is not a citation
   local w; w="$(new_world)"
@@ -1182,7 +1118,7 @@ esc_rec() { # <join> <body> -> RC, $JO: --escalations over a record, NO party-mo
 p_escopen() { # a non-party repair after its serial pass, one escalation left open -> rc 0, reported, never refused
   esc_rec "$1" '<!-- shard: 01.md -->\n### F-1 — MAJOR\n- disposition: escalated\n- edit: _bmad-output/planning-artifacts/s305/stories/b.md:4\n\n### F-2 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n### serial F-2 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- closes: 01.md F-2 — MAJOR\n'
   [ "$RC" -eq 0 ] && has "$JO" "ESCALATED: 01.md F-1 — MAJOR" && has "$JO" "ESCALATED-CLOSED: 01.md F-2 — MAJOR" \
-    && has "$JO" "ESCALATED-COUNT: 1 (1 closed" && ! has "$JO" "REFUSED" && ! has "$JO" "SERIAL-REQUIRED"
+    && has "$JO" "ESCALATED-COUNT: 1 (1 closed" && ! has "$JO" "REFUSED"
 }
 p_escclosed() { # every escalation closed by the serial pass, and a shard entry whose fence text the serial pass
   # has since rewritten (its control text is in no file) -> rc 0, count 0: the control is counted at the join only
@@ -1204,15 +1140,22 @@ p_dispkey() { # graph's fold shape: an entry with edit: and `outcome:` in place 
   [ "$RC" -eq 2 ] && has "$JO" "the F-1 Brief: narrative moved entry carries an 'edit:' line and no 'disposition:' line" \
     && ! has "$JO" "the F-0 — MAJOR entry"
 }
-p_dispvocab() { # in era, `done` refused; `not-reproduced` and a pre-era `done` accepted -> rc 2, only the in-era one named
-  esc_rec "$1" '### F-0 — MINOR\n- disposition: done\n- edit: n/a\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- siblings: n/a (insertion)\n\n### F-2 — MINOR\n- disposition: not-reproduced\n- edit: n/a\n\n### F-3 — MINOR\n- disposition: done\n- edit: n/a\n'
+dvworld() { # <join> <part body> -> RC, $JO: parts mode, one writer, one part holding the body (BADDISP is parts-only)
+  local w; w="$(new_world)"
+  drive "$w" Edit "$w/$REL/$S21" "$AG1"
+  printf -- "$2" > "$w/$SLOT/shards/stories-repair-p1/01.md"
+  run_join "$1" "$w"
+}
+p_dispvocab() { # record mode accepts `done` (rc 0, a count row); a part with `done` refused, `not-reproduced` accepted
+  esc_rec "$1" '### F-0 — MINOR\n- disposition: done\n- edit: n/a\n\n### F-1 — MINOR\n- disposition: folded\n- edit: n/a\n'
+  [ "$RC" -eq 0 ] && has "$JO" "ESCALATED-COUNT: 0" && ! has "$JO" "dispositioned 'done'" || return 1
+  dvworld "$1" '### F-0 — MINOR\n- disposition: done\n- edit: n/a\n\n### F-2 — MINOR\n- disposition: not-reproduced\n- edit: n/a\n\n### F-3 — MINOR\n- disposition: done\n- edit: n/a\n'
   [ "$RC" -eq 2 ] && has "$JO" "the F-3 — MINOR entry is dispositioned 'done'" \
-    && ! has "$JO" "the F-0 — MINOR entry" && ! has "$JO" "the F-2 — MINOR entry"
+    && has "$JO" "the F-0 — MINOR entry is dispositioned 'done'" && ! has "$JO" "the F-2 — MINOR entry"
 }
 # BL-823: the key in ANY case on a LIST ITEM is a disposition; a capitalised column-0 line is a summary.
-# F-1 opens the era (its siblings: field), so F-2's out-of-set value is read by BADDISP.
-p_dispcap() { # `- **Disposition:** frobnicated` in era -> rc 2, BADDISP names it, never NODISP
-  esc_rec "$1" '### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n- siblings: n/a (insertion)\n\n### F-2 — MINOR\n- **Disposition:** frobnicated\n- edit: n/a\n'
+p_dispcap() { # `- **Disposition:** frobnicated` in a part -> rc 2, BADDISP names it, never NODISP
+  dvworld "$1" '### F-2 — MINOR\n- **Disposition:** frobnicated\n- edit: n/a\n'
   [ "$RC" -eq 2 ] && has "$JO" "the F-2 — MINOR entry is dispositioned 'frobnicated'" \
     && ! has "$JO" "the F-2 — MINOR entry carries an 'edit:' line and no 'disposition:' line"
 }
@@ -1258,10 +1201,10 @@ p_chkpart() { # p_disjoint's world, ONE property apart: part 02 states `derivati
   refused "$w" "02.md: derivations: not replayed" && has "$JO" "03.md: no derivations: line" && ! has "$JO" "01.md: no"
 }
 # ---- THE THIRD TIP ADVERSARY'S FOUR, each beside its near-miss.
-p_rulingedit() { # an operator-ruling entry with a REAL edit, in the siblings era, no siblings: -> rc 2, NOSIB
-  # named; the same entry with edit: n/a beside it is not (a ruling that edits owes what a repair owes)
-  ruling_world "$1" '### F-0 — MAJOR\n- disposition: repaired\n- edit: s305/a.md:1\n- siblings: n/a (insertion)\n\n### F-1 — MAJOR\n- disposition: operator-ruling\n- edit: s305/a.md:7\n- ruling: 2026-10-15T23:51:50Z\n\n### F-2 — MAJOR\n- disposition: operator-ruling\n- edit: n/a\n- ruling: 2026-10-15T23:51:50Z\n'
-  [ "$RC" -eq 2 ] && has "$JO" "the F-1 — MAJOR entry is repaired with an edit and carries no 'siblings:' field" \
+p_rulingedit() { # an operator-ruling entry with a REAL edit whose claim sets a MAJOR aside -> rc 2, the set-aside named
+  # (a ruling that edits owes what a repair owes); the ruling with an edit and a plain claim beside it is not
+  ruling_world "$1" '### F-1 — MAJOR\n- disposition: operator-ruling\n- edit: s305/a.md:7\n- ruling: 2026-10-15T23:51:50Z\n- claim now asserted: the rest is outside this shard and not required.\n\n### F-2 — MAJOR\n- disposition: operator-ruling\n- edit: s305/a.md:9\n- ruling: 2026-10-15T23:51:50Z\n- claim now asserted: the title reads loads on demand.\n'
+  [ "$RC" -eq 2 ] && has "$JO" "the F-1 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside" \
     && ! has "$JO" "the F-2 — MAJOR entry" && has "$JO" "ESCALATED-COUNT: 0"
 }
 p_rulingtab() { # a TAB inside a heading is a space: the heading's tail is never read as the cite -> the entry with
@@ -1281,14 +1224,14 @@ p_chkjoined() { # --escalations over a JOINED record: a shard with no repaired e
 }
 p_partsilent() { # a REFUSED parts join prints no escalation and no count, by design: nothing was joined, so a
   # count from the parts could be wrong (record mode prints them through a refusal; parts mode does not).
-  # p_handoff's world with a second part whose repaired edit carries no siblings: -> refused, silent
+  # a world with a second part whose repaired MAJOR sets its fix aside -> refused, silent
   local w; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG1"; drive "$w" Edit "$REL/$S22" "$AG2"
   cp "$HERE/seed.block-handoff.md" "$w/$SLOT/shards/stories-repair-p1/01.md"
-  printf '### F-9 — MINOR\n- disposition: repaired\n- edit: %s/%s:3\n' "$REL" "$S22" > "$w/$SLOT/shards/stories-repair-p1/02.md"
+  printf '### F-9 — MAJOR\n- disposition: repaired\n- edit: %s/%s:3\n- claim now asserted: the rest is outside this shard and not required.\n' "$REL" "$S22" > "$w/$SLOT/shards/stories-repair-p1/02.md"
   run_join "$1" "$w"
-  refused "$w" "02.md: the F-9 — MINOR entry is repaired with an edit and carries no 'siblings:' field" \
-    && ! has "$JO" "ESCALATED" && ! has "$JO" "SERIAL-REQUIRED"
+  refused "$w" "02.md:1: the F-9 — MAJOR entry is dispositioned repaired while its claim sets part of the fix aside" \
+    && ! has "$JO" "ESCALATED"
 }
 p_chkrec() { # --escalations: a record with neither field is outside the era -> rc 0; the same record with an
   # advisor: line and no derivations: line -> rc 2, named
@@ -1338,12 +1281,12 @@ p_supchain() { # (a) a serial escalation superseding the part escalation -> ESCA
 # at least as long as its opener. Every cell nests a ``` block (opened with an info string) inside a ````
 # fence and puts the content the reader must NOT see between the inner closer and the outer one.
 FN_O='````md\n```text\nquoted\n```\n'
-p_fencenest() { # (a) contract_check: in the siblings era (F-0 carries the field), a repaired edit with no
-  # siblings: inside the fence is not an entry -> rc 0, nothing refused; (b) checks_field: a `derivations: not
+p_fencenest() { # (a) contract_check: an entry dispositioned `done` inside the fence is not an entry -> rc 0, nothing
+  # refused; (b) checks_field: a `derivations: not
   # replayed` line inside it is not read -> rc 0; (c) --sources: src_kind and src_check read no part token inside
   # it, and src_ids reads the seat heading F-98 after a nested fence in the seat file -> both seat tokens
   # resolve, rc 0; (d) gap_section: a fenced `## ` heading is no heading, so the edit lands under the real one
-  esc_rec "$1" "### F-0 — MAJOR\n- disposition: repaired\n- edit: s305/a.md:1\n- siblings: n/a (insertion)\n\n${FN_O}### F-1 — MAJOR\n- disposition: repaired\n- edit: s305/a.md:3\n\`\`\`\`\n"
+  esc_rec "$1" "### F-0 — MAJOR\n- disposition: repaired\n- edit: s305/a.md:1\n\n${FN_O}### F-1 — MAJOR\n- disposition: done\n- edit: s305/a.md:3\n\`\`\`\`\n"
   [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-COUNT: 0 (0 closed" || return 1
   esc_rec "$1" "- advisor: called\n- derivations: replayed 1\n\n${FN_O}- derivations: not replayed\n\`\`\`\`\n\n### F-1 — MAJOR\n- disposition: repaired\n- edit: n/a (no edit)\n"
   [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" || return 1
@@ -2350,21 +2293,19 @@ p_derivsec() { # <hook> -- a part whose fence names the SECTION FILE: refused at
 }
 # ---- A CLOSING ENTRY APPENDED TO A JOINED RECORD (BL-734): the writer runs --escalations before handing back.
 # One joined record (a shard escalation, the serial triple) plus ONE appended serial `repaired` closing entry
-# carrying `- closes:`. The three siblings: shapes differ and nothing else: `checked` (refused), the field then a
-# blank line then a fence (the shape graph's record carried; accepted), a fence directly under it (accepted).
+# carrying `- closes:`. The three siblings: shapes differ and nothing else; the field is no longer read, so all
+# three are accepted.
 BL734_F=_bmad-output/planning-artifacts/s305/stories/a.md
 BL734_HEAD='- artifact: r.md\n\n<!-- shard: 01.md -->\n- artifact: p.md\n- advisor: called\n- derivations: replayed 1\n\n### F-3 — MAJOR\n- disposition: escalated\n- edit: n/a\n\n- artifact: s.md\n- advisor: called\n- derivations: replayed 1\n\n'
 BL734_PRE="### 08.md F-3 closing (MAJOR)\n- disposition: repaired\n- edit: ${BL734_F}:4\n- closes: 01.md F-3 — MAJOR\n"
 BL734_FENCE="\`\`\`text\n\$ grep -rn -F 'old' ${BL734_F}\n\$ grep -c -F 'new' ${BL734_F}\n1\n\`\`\`\n"
-BL734_REFUSED="REFUSED: stories-repair-p1.md: the 08.md F-3 closing (MAJOR) entry is repaired with an edit and its 'siblings:' field is none of its four forms; write '- siblings:' then a \`\`\`text fence holding the '\$ grep -rn -F' over your shard's own files and the control '\$ grep -c -F' with its count, or 'n/a (section shard; re-checked by the serial remediator after assembly)', 'n/a (insertion)' or 'n/a (deletion)' (team-roles/remediator.md, \"Re-check every sibling of the text you replaced\")"
-p_bl734() { # <join> -> (a) `- siblings: checked` rc 2 and the BADSIB REFUSED: line itself; (b) `- siblings:`, blank line,
-  # fence (the refuted shape) rc 0; (c) the fence directly under it rc 0; both accepted worlds print no REFUSED
-  esc_rec "$1" "${BL734_HEAD}${BL734_PRE}- siblings: checked\n"
-  [ "$RC" -eq 2 ] && grep -qxF -- "$BL734_REFUSED" "$JO" || return 1
-  esc_rec "$1" "${BL734_HEAD}${BL734_PRE}- siblings:\n\n${BL734_FENCE}"
-  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" || return 1
-  esc_rec "$1" "${BL734_HEAD}${BL734_PRE}- siblings:\n${BL734_FENCE}"
-  [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED"
+p_bl734() { # <join> -> a closing entry appended to a joined record, whatever its `- siblings:` shape (`checked`, the field,
+  # blank line, fence, or the fence directly under it) -> rc 0, no REFUSED, the escalation closed
+  local sh
+  for sh in "- siblings: checked\n" "- siblings:\n\n${BL734_FENCE}" "- siblings:\n${BL734_FENCE}"; do
+    esc_rec "$1" "${BL734_HEAD}${BL734_PRE}${sh}"
+    [ "$RC" -eq 0 ] && ! has "$JO" "REFUSED" && has "$JO" "ESCALATED-CLOSED: 01.md F-3 — MAJOR" || return 1
+  done
 }
 bl734_para() { # <file> <key> -> the blank-line-delimited paragraph holding <key>, newlines folded to spaces
   awk -v k="$2" 'BEGIN { RS = "" } index($0, k) { gsub(/\n/, " "); print; exit }' "$1" | tr -s ' '
@@ -2448,6 +2389,10 @@ p_lanehit() { # a replaced line still standing in the SPEC's file -> still 2 lan
   [ "$RC" -eq 0 ] && has "$JO" "LANE-COUNT: 2" && [ "$n" = 1 ] && has "$JO" "LANE-ITEM: 2 HIT" \
     && ! grep -q '^FANIN: HIT' "$JO" && ! has "$JO" "UNASSESSED"
 }
+p_wlcount() { # <n> -- reads the LAST run's $JO: ESCALATED-COUNT 0, no CROSS-COUNT, and WORKLIST-COUNT exactly <n>
+  # (above 0 dispatches the serial round with no escalation and no routed finding; 0 dispatches none)
+  has "$JO" "ESCALATED-COUNT: 0" && ! has "$JO" "CROSS-COUNT" && has "$JO" "WORKLIST-COUNT: $1"
+}
 p_laneround() { # the lane round's own join (--artifact stories-serial): lane parts under shards/stories-serial-repair-p1/
   # -> JOINED into stories-serial-repair-p1.md, and NO LANE or FANIN line (lanes of lanes would recurse)
   local w d; w="$(new_world)"; d="$w/$SLOT/shards/stories-serial-repair-p1"; mkdir -p "$d" || return 1
@@ -2455,7 +2400,7 @@ p_laneround() { # the lane round's own join (--artifact stories-serial): lane pa
   sed "s/@STORY@/$S21/g" "$HERE/seed.block-sib.md" > "$d/lane-1.md"
   sed "s/@STORY@/$S22/g" "$HERE/seed.block-sib.md" > "$d/lane-2.md"
   run_join "$1" "$w" --artifact stories-serial
-  [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 2 writers)" && has "$JO" "SERIAL-REQUIRED: 2" \
+  [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 2 writers)" && has "$JO" "ESCALATED-COUNT: 2" \
     && ! has "$JO" "LANE" && ! has "$JO" "FANIN" && ! has "$JO" "CROSS"
 }
 # ---- AN ESCALATION'S OWN FILE, AND THE ADJUDICATION PARTITION (BL-716). graph s320-s322: a files-mode escalation naming one
@@ -2609,14 +2554,14 @@ xworld() { local w; w="$(new_world)"; drive "$w" Edit "$w/$REL/$S21" "$AG1"; dri
   sibpart "$w" 01 "$S21"; sibpart "$w" 02 "$S22"; printf '%s' "$w"; }
 xroute() { local w="$1" l; shift; { printf '# findings-partition v1\n'; for l in "$@"; do printf '%b\n' "$l"; done; } > "$w/$SLOT/shards/stories-repair-p1/.findings-partition"; }
 p_xdeal() { # FOUR serial-routed findings on one lane's file -> that lane's CROSS items dealt (k=2); one naming two lanes' files, and
-  # one naming `-`, -> FANIN items (lanes never merge); CROSS-COUNT right after SERIAL-REQUIRED; the plan file carries it all
+  # one naming `-`, -> FANIN items (lanes never merge); CROSS-COUNT right after the escalation lines; the plan file carries it all
   local w d; w="$(xworld)"; d="$w/$SLOT/shards/stories-repair-p1"
   xroute "$w" "serial\tcross.md#F-1\t$REL/$S21" "serial\tcross.md#F-2\t$REL/$S21" "serial\t1.md#F-3\t$REL/$S21" "serial\tcross-2.md#F-4\t$REL/$S21" \
     "serial\tcross.md#F-5\t$REL/$S21 $REL/$S22" "serial\tcross.md#F-6\t-"
   run_join "$1" "$w"
   XD_OUT="$WORK/xdeal.out"; cp "$JO" "$XD_OUT"
   [ "$RC" -eq 0 ] && has "$JO" "CROSS-COUNT: 6" && has "$JO" "LANE-COUNT: 2" \
-    && [ "$(sed -n '/^SERIAL-REQUIRED: /{n;p;}' "$JO")" = "CROSS-COUNT: 6" ] \
+    && [ "$(sed -n '/^ESCALATED-COUNT: /{n;p;}' "$JO")" = "CROSS-COUNT: 6" ] \
     && has "$JO" "LANE-ITEM: 1 CROSS: cross.md#F-1 files: $REL/$S21" && has "$JO" "LANE-ITEM: 1 CROSS: cross-2.md#F-4 files: $REL/$S21" \
     && adj_ok "$JO" 1 2 \
     && has "$JO" "FANIN: CROSS: cross.md#F-5 files: $REL/$S21 $REL/$S22 (lanes 1 2)" && has "$JO" "FANIN: CROSS: cross.md#F-6 files: - (lanes out)" \
