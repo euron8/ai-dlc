@@ -4351,40 +4351,6 @@ Provenance: batch 266, cluster G tip adversary; ids allocated by the lead ai-dlc
 
 verify: manual
 
-## BL-1233 — an elicitation round's generated briefs carry the adversary-pass provenance region, so every elicitation shard stamped from them is refused by the merge
-
-**LANDED (vVERSION_PLACEHOLDER).** batch 266, cluster R, filed and closed in one release. Filed by the consumer as PC-S324-ELICITATION-BRIEF-EMITS-ADVERSARY-PASS-PROVENANCE-REGION-AND-MERGE-REFUSES-ALL-ITS-SHARDS (graph push-candidate ledger at 8484674a6, :820-880). Owner: `core/scripts/gen-round-briefs.sh`. `--round elicitation` now copies the generated `provenance-block/elicitation` region (the sub-skill's `skill: bmad-advanced-elicitation`, no `verdict:` line) out of the procedures file, named by a new `--procedures-file` flag (default `.claude/skills/ai-dlc/steps/_gate-procedures.md`, read only on an elicitation round: a missing file exits 2, a missing region or a region naming no skill exits 3), and adds a method line naming that skill as the Skill-tool invocation, scoped to the shard's part, findings recorded and nothing edited. Before, every elicitation shard stamped from the brief carried `skill: ai-dlc-adversary-review` and a `verdict:` line, and `merge-adversarial-shards.sh --check-header --axis elicitation` refused it. Review and repair briefs are byte-identical. A standalone paragraph in `core/team-roles/adversary.md` and one in its shard-provenance appendix say an elicitation shard copies its brief's `provenance-block/elicitation` region and writes no verdict; the role file's envelope and one-verdict paragraphs are unchanged. The adversary dispatch paragraph of `_gate-procedures.md` names the elicitation region as the elicitation brief's block. `story-evidence-scaffold`'s RBRIEFS arm drives one elicitation run (cell `cli-rbriefs-elic`); the probe and mutant are in the unit commit message.
-
-Step: n/a
-
-Provenance: batch 266 cluster R (owner ai-dlc-43, lead ai-dlc-9b); id allocated by the lead.
-
-verify: sh f=core/scripts/gen-round-briefs.sh; grep -q '^grb_main() {' $f || exit 9; grep -qF -- '--procedures-file) PROCF=' $f || exit 1; grep -qF 'with the Skill tool, scoped to your part' $f || exit 1
-
-## BL-1234 — the files-mode shard join counts a round's own `rounds/` rows as missing shards, and no `--since`/`--until` window can exclude them
-
-**LANDED (vVERSION_PLACEHOLDER).** batch 266, cluster R, filed and closed in one release. Filed by the consumer as two push-candidate ledger entries naming one defect (graph ledger at 8484674a6): PC-S324-JOIN-ROUNDS-ROWS-ARE-UNCOUNTED-AND-NO-WINDOW-EXCLUDES-THEM (:881-907) and PC-S323-JOIN-LEDGER-COUNTS-THE-DISPATCHER-RETURN-ROW-AND-THE-WINDOW-CANNOT-EXCLUDE-IT (:557-590). Owner: `core/scripts/join-remediator-shards.sh`. In files mode the join now drops ledger rows under `s<N>/rounds/` (dispatcher briefs, the `<round>.return` the dispatcher writes, part records a mis-named brief put there) beside the existing `s<N>/shards/` drop, at the ROWS, NOLANE and UNWRITTEN-remedy sites; before, each such row was refused as UNCITED and no window could exclude it without excluding the round. The record's files-mode disjointness sentence names both excluded dirs. Document and subject mode are unchanged. `remediator-shard-join` arms J8-J10 are new and A10, A14 and NL1 are extended; the probe and the single-site reverts are in the unit commit message.
-
-NOTES. The DROWS-site drop (the `--rerun`/overlap rebuild) was built and deleted: the `($2 in k)` filter after that rebuild keeps only paths ROWS already holds, so it pre-empts any drop there, and a hand-run revert survived every arm; the existing `shards/` drop at that site is redundant for the same reason. The `invocations.decl` header sums in both `remediator-shard-join` shards are stale. Join line citations in records (commit message, this entry's sources) are off by a few lines against the shipped file.
-
-Step: n/a
-
-Provenance: batch 266 cluster R (owner ai-dlc-43, lead ai-dlc-9b); id allocated by the lead; both consumer ids named in one entry by the lead's ruling.
-
-verify: sh f=core/scripts/join-remediator-shards.sh; grep -q 'SHARD_REL' $f || exit 9; grep -qF 'ROUNDS_REL="' $f || exit 1; n=$(grep -cF 'startswith($rd + "/")' $f) || n=0; [ "$n" -ge 3 ] || exit 1
-
-## BL-1235 — the strategy-rows letterer reads `FR-S324-2 (a)` and `answer (a)` as an AC's own lettered cases and binds spurious a/b rows
-
-**LANDED (vVERSION_PLACEHOLDER).** batch 266, cluster R, filed and closed in one release. Filed by the consumer as PC-S324-STRATEGY-ROWS-LETTER-EXCLUSION-MISSES-HYPHENATED-AND-ANSWER-CITATIONS (graph ledger at 8484674a6, :909-940). Owner: `core/scripts/strategy-rows.sh`. The citation exclusion now also matches an excluded word followed by hyphenated segments (`FR-S324-2`, `AD-12`) and the word `answer`, so a `(a)`/`(b)` after either is a citation and binds one row with Case `-`. An AC's own `(a)`/`(b)` after `FR-S9-2:` still letters. `story-evidence-scaffold`'s ERA world binds a second story, S9-1.2, whose LETTER arm holds both cases and the near-miss.
-
-NOTES. Roman `(i)` sub-items were not built: they stay outside the letter grammar.
-
-Step: n/a
-
-Provenance: batch 266 cluster R (owner ai-dlc-43, lead ai-dlc-9b); id allocated by the lead.
-
-verify: sh f=core/scripts/strategy-rows.sh; grep -q 'FR|AD' $f || exit 9; grep -qF '(-[A-Za-z0-9.]+)* $/) continue' $f || exit 1; grep -qF '[Aa]nswer $/) continue' $f || exit 1
-
 ## BL-1241 — the adversary role file tells every pass to copy the adversary-pass envelope and close with one verdict before its elicitation paragraph, so an elicitation shard that follows those lines is refused at `--check-header`
 
 **DEFECT.** Filed 2026-11-25 (batch 266, cluster R tip adversary). Owner: `core/team-roles/adversary.md`.
