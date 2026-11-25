@@ -1846,23 +1846,26 @@ if [ -n "$ESCALATIONS" ] && [ "$VIOLATIONS" -gt 0 ]; then
   fi
   # stdin: `V` rows from viol (5 fields), `A` tool_use_id -> agent_id rows (3 fields), and the RECORDS
   # rows, whose first field is the dispatch name. Then the escalation file, in the dispatch guard's
-  # entry grammar: `## ` header, body from the header on, the last `**Status:**` line's first word.
+  # entry grammar: `## ` or `### ` header, body from the header on, the last `**Status:**` line's first word.
   VJ_OUT="$(printf '%s%s\n%s\n' "$VL_RECS" "$VJ_CTX" "$RECORDS" | LC_ALL=C awk -F'\t' -v sprint="$SPRINT_NUM" '
-    function flush(   b, n, i, t, toks) {
+    function flush(   b, n, i, t, toks, k) {
       if (hdr == "" || status != "OVERRIDDEN") return
+      k = hdr
+      if (!sub(/^### /, "", k)) sub(/^## /, "", k)
+      sub(/[[:space:]]+$/, "", k)
       if (hdr !~ ("[Ss]" sprint "([^0-9]|$)")) return
       b = body
       gsub(/[^A-Za-z0-9_.-]+/, " ", b)
       n = split(b, toks, " ")
       for (i = 1; i <= n; i++) {
         t = toks[i]; sub(/[.]+$/, "", t)
-        if (t != "" && !(t in named)) named[t] = substr(hdr, 4)
+        if (t != "" && !(t in named)) named[t] = k
       }
     }
     FILENAME == "-" && $1 == "V" && NF == 5 { nv++; vc[nv] = $2; vt[nv] = $3; vn[nv] = $4; vr[nv] = $5; next }
     FILENAME == "-" && $1 == "A" && NF == 3 { ag[$2] = ag[$2] " " $3; next }
     FILENAME == "-" { if (NF >= 15) rows[$1]++; next }
-    /^## / { flush(); hdr = $0; body = $0; status = ""; next }
+    /^#{2,3} / { flush(); hdr = $0; body = $0; status = ""; next }
     /^\*\*[Ss]tatus:\*\*/ {
       s = $0; sub(/^\*\*[Ss]tatus:\*\*[[:space:]]*/, "", s)
       if (match(s, /[A-Z_]+/)) status = substr(s, RSTART, RLENGTH)

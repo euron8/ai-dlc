@@ -1618,5 +1618,22 @@ else
   bad "W1-W4: expected [$W_EXPECTED], got [$WGOT]"
 fi
 
+# X1-X2: the join splits on `### ` as well as `## ` (BL-1239). A RESOLVED `##` parent holds a `###`
+# sub-entry that names toolu_ESC1; the sub-entry's own Status decides, and a recorded violation is headed
+# by the sub-entry's own header, never the parent's.
+#   X1 sub-entry OVERRIDDEN                     -> exit 4, VIOLATION headed by the sub-entry's header
+#   X2 the same sub-entry, DECIDED_AUTONOMOUSLY -> exit 1, VIOLATION headed '-'
+subesc() { # status -> pending.md
+  printf '# Escalations\n\n## [S900-PARENT] resolved parent\n\n**Status:** RESOLVED\n\nNothing here.\n\n### %s\n\n**Status:** %s\n\nThe dispatch toolu_ESC1 ran with no contract; the operator accepted it.\n' "$ESC_HDR" "$1"
+}
+subesc OVERRIDDEN > "$WORK/rm/esc-x1.md"
+subesc DECIDED_AUTONOMOUSLY > "$WORK/rm/esc-x2.md"
+XGOT="$(escnamed esc-x1) $(escunnamed esc-x2)"
+if [ "$XGOT" = "NAMED UNNAMED" ]; then
+  ok "X1-X2 --escalations: an OVERRIDDEN '###' sub-entry naming toolu_ESC1 under a RESOLVED '##' parent exits 4 with the VIOLATION line headed by the sub-entry's own header; its twin with Status DECIDED_AUTONOMOUSLY exits 1 with V headed '-'"
+else
+  bad "X1-X2: expected [NAMED UNNAMED], got [$XGOT]"
+fi
+
 echo
 report_end check-22-spawn-ledger

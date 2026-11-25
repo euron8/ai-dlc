@@ -1492,7 +1492,7 @@ Delivered by E1 (numbering is this entry's):
 
 NOT DONE / PARTIAL in E1: the Check 12, 14 and 15 trim is PARTIAL (Check 14's rationale paragraphs are kept because many readers cite them); Check 2's vocabulary half stays a judgment row until E2's script id exists; the extension checks are `lead` rows; the step-file half of item 16 is not established (0 of 23 step files have a resume section and there is no sub-step key; item 21).
 
-Owed: item 6 is replaced by item 11 (operator ruling). Items 1 to 3: item 3's closing graph sprint is owed. The escalation fix's pre-gate repair WORKLIST row is carried by BL-1190 (E6). The retro-close runner is carried by BL-1189 (E5). The outcome reading is the next graph sprint, which measures all eight goals together; per-step tables attribute an effect to a step, not to one change inside it. The Check 12, 14 and 15 trim (the NOT DONE / PARTIAL line above) is owed and nothing is trimmed: the entry names the checks but not what to cut, so a builder first names the passages of Checks 12, 14 and 15 in `core/skills/ai-dlc/steps/gate-validation.md` that `gate_run.py` now scripts, cuts whole paragraphs only (Check 14's rationale paragraphs stay, many readers cite them), and re-cites every `gate-validation.md:<line>` citation the cut shifts. The extension checks stay `lead` rows: `core/scripts/gate_run.py` gives each extension check from the plan's `extension_checks` a PENDING row of kind `lead` and refuses the gate until the lead records PASS or SKIP for it at the nonce, so converting one needs a script id and an arm row of kind `script` or `rule` for it, which this entry does not define.
+Owed: item 6 is replaced by item 11 (operator ruling). Items 1 to 3: item 3's closing graph sprint is owed. The escalation fix's pre-gate repair WORKLIST row is carried by BL-1190 (E6). The retro-close runner is carried by BL-1189 (E5). The outcome reading is the next graph sprint, which measures all eight goals together; per-step tables attribute an effect to a step, not to one change inside it. The Check 12, 14 and 15 trim (the NOT DONE / PARTIAL line above) is started (batch 267, 267-Q, below): the one passage that both `gate-run.sh close` and the lead's hand path leave to a validator is cut. The rest is blocked, not unstarted: implementation gates 1 and 2, and a gate 3 whose adjudicator brief carries no single `story:` line, still run Checks 12, 14 and 15 by hand, so their format, snapshot and re-read prose stays until those gates close through `gate-run.sh close` (cut whole paragraphs only; Check 14's rationale paragraphs stay, many readers cite them). The extension checks stay `lead` rows: `core/scripts/gate_run.py` gives each extension check from the plan's `extension_checks` a PENDING row of kind `lead` and refuses the gate until the lead records PASS or SKIP for it at the nonce, so converting one needs a script id and an arm row of kind `script` or `rule` for it, which this entry does not define.
 
 **PARTIAL (v0.1194.0).** batch 261, E1. The entry stays open: it closes only on a measured graph sprint that runs this release with the other seven goals; that sprint's lead hours, compactions and calls are read against the s323 baseline above.
 
@@ -1517,6 +1517,8 @@ Owed: item 6 is replaced by item 11 (operator ruling). Items 1 to 3: item 3's cl
 **Status (batch 263, close).** Operator ruling (2026-11-21): item 19 is DROPPED, because shrinking `SKILL.md` further removes sentences a compacted lead acts on. It is no longer owed. No LANDED line is written here.
 
 Owed under items 7 and 14 (batch 265, 265-R): the outcome reading on the next graph sprint also explains the s323 `snapshot` class rise from 48.0 to 69.5 lead calls per story against s319 (`roll.py --classes`, BL-812's item 3 lead-calls row), the opposite of L3's projected fall.
+
+**PARTIAL (v0.1243.0).** batch 267, 267-Q. The Check 12, 14 and 15 trim, derived from what `gate_run.py`'s `close` executes: one `snapshot-update.sh --gate-passed` call, `verdict.sh validate-artifact-budget --only pipeline-snapshot.md`, `validate-artifact-budget.sh --check-evidence` on the candidate gate-log entry, the composed entry and its `GATE_METRIC v1` lines, then 12, 14 and 15 recorded PASS. Baseline: `gate-validation.md` 252,505 B (wc -c at origin/main 6ea7c7e9a). Measured waste per fix: one passage, Check 15's row-selector paragraph ("The row it audits is the newest gate's, chosen by heading timestamp" and its four "also FAILS when" bullets, 13 lines, 794 B), which restates the selector `validate-artifact-budget.sh --check-evidence` implements and its `THE EVIDENCE CELL` header owns; the program and the lead's hand path both run that validator. Outcome against baseline: 251,711 B after the cut (794 B less); 251,868 B in this release, which also carries BL-1240's Check 33 wording (157 B more). Kept: every other paragraph of Checks 12, 14 and 15, because implementation gates 1 and 2 and a gate 3 without a single `story:` line still write the gate-log entry, the snapshot rows and the re-read by hand (only `gates/implementation-g3.arms` among the implementation gates closes through `gate-run.sh close`); Check 14's FAIL-remedy bullets, because `validate-artifact-budget.sh` does not print every remedy they name; Check 14's rationale paragraphs. Owed: the rest of the trim once those implementation gates close through the program, and the outcome reading on the next graph sprint.
 
 Step: pipeline
 
@@ -4218,9 +4220,11 @@ Work list:
 6. (filed batch 266, C tip adversary) `core/skills/ai-dlc/rule-bodies/rule-23.md:48` names `ai-dlc-protect.sh` as the protected set's source of record, with `PROTECTED_PATTERNS` "there"; the array now lives in `core/hooks/ai-dlc-protected-set.sh`. Proposed fix: name `ai-dlc-protected-set.sh` as the source of record, sourced by `ai-dlc-protect.sh` and the read-intent guard.
 7. (filed batch 266, C integration, pre-existing at fa8f218e6) A file under `docs/pre-ai-dlc/<stamp>/_divergence/` that mirrors a protected path is treated as protected: `normalize` strips the leading directories down to the protected suffix before the `*/pre-ai-dlc/*` exclusion is tested, so the exclusion never sees the raw path. Driven on both: `ai-dlc-protect.sh` at fa8f218e6 and at this release each deny a `ctx_execute_file` of `docs/pre-ai-dlc/20261101T000000Z/_divergence/.claude/skills/ai-dlc/SKILL.md`, and each allow `docs/pre-ai-dlc/20261101T000000Z/notes.md`. On the reference consumer the read-intent guard armed 21 such files, and the uncapped hint asked for more than 16 KiB on 11 (a) and 17 (b). Proposed fix: test the exclusion on the raw path before normalizing, in `core/hooks/ai-dlc-protected-set.sh`.
 
+**PARTIAL (v0.1243.0).** Batch 267, cluster P. Items 6 and 7 are built; item 3 stays open upstream (context-mode), `verify: manual` unchanged. Item 6: `core/skills/ai-dlc/rule-bodies/rule-23.md` names `ai-dlc-protected-set.sh` as the protected set's source of record, sourced by `ai-dlc-protect.sh` and the read-intent guard in `ai-dlc-recover-gate.sh`; the body is not rendered into the postcompact digest and no pin reads it. Item 7: `normalize_to` in `core/hooks/ai-dlc-protected-set.sh` judges `is_excluded` on the project-relative path (the `CLAUDE_PROJECT_DIR` prefix stripped, no new subprocess) before the root-segment cut and records it in `_PS_EX`, which `is_protected_norm` reads, so `docs/pre-ai-dlc/<stamp>/_divergence/.claude/...` keeps its `*/pre-ai-dlc/*` exclusion through both `is_protected` and the read-intent arm; an absolute path outside the project dir and a path with a `..` segment are never pre-tested, so an ancestor directory named `pre-ai-dlc` does not exclude it, in absolute and `..`-relative spellings alike.
+
 **PARTIAL (v0.1241.0).** Batch 266, cluster C. Item 3 is narrowed, not closed. The three bucket-C denials cannot be prevented from AI/DLC: context-mode 2.1.7's `hook.mjs` denies a native Read with neither `offset` nor `limit` of a file over 16384 bytes, with no allowlist and no setting, and Claude Code runs every matching PreToolUse hook in parallel on the original input, a deny from any of them taking precedence, so an AI/DLC PreToolUse hook that added a `limit` would still lose to it. What this release closes is the cost after the deny, where a reader retried with one bounded chunk and then acted on part of the file. Population (the reference consumer's transcripts, read-only; contract figures, not re-derived): C1, the lead's `_bmad-output/pipeline-snapshot.md` (21,685 B), retried at `offset 1 limit 80` and read all 75 lines, complete after one retry; C2, an analyst subagent's `steps/carry-over-evaluation.md` (20,914 B), read lines 1-120 of 323 and never the rest of its own assigned section; C3, the lead's `postcompact-digest.md` (22,531 B), read lines 1-130 of 220, leaving Rules 23-32 and the initialization block unread for about 55 minutes, until the next compaction. Built: (a) the continuation guard, with no new hook registration. The arm is in `core/hooks/ai-dlc-recover-gate.sh` (already PreToolUse `*`): a Read with neither `offset` nor `limit` of a protected path records a read intent for that session and agent under `_bmad-output/.read-intent/` (transient state), never changing the gate's decision or output; it reads the payload's first 1024 characters with the `read` builtin, so a non-Read call and an unprotected Read start no added program (counted with exec shims against base 80741af21: 0 and 0, both sides). The hint is in `core/hooks/ai-dlc-handoff-entry.sh` (already PostToolUse `Read`): each later Read of the path by the same session and agent adds its line range, and until the ranges run contiguously from line 1 to the last line (one trailing empty line tolerated) the hook adds one line to the reader's context naming the file's length, the ranges read, and the `offset` and `limit` to continue with. A whole Read that succeeds clears its own record. Premise measured with headless Claude Code 2.1.332 in a scratch project, hooks appending their stdin: a PostToolUse Read payload carries `tool_response` = `{type, file:{filePath, content, numLines, startLine, totalLines}}` (a 40-line file read with limit 2: startLine 1, numLines 2, totalLines 41); a subagent's PreToolUse and PostToolUse Read payloads carry `agent_id` (and `agent_type`), the lead's carry neither; a whole Read of a 22,000-byte file refused by context-mode reaches the PreToolUse hook with only `file_path` in `tool_input` and produces no PostToolUse payload. The protected set now lives in one library, `core/hooks/ai-dlc-protected-set.sh`, which `ai-dlc-protect.sh` sources and without which, or with one empty or truncated, it fails closed; the gate's arm reads the extensions layer file through a content-compared cache, so it forks only when that file changes: on a project with an `extensions/protected-paths.json` layer file, the first whole Read of a protected path after the file's content changes runs `jq` three times and `mkdir` once (the `mkdir` only when the `.read-intent` directory is new), once per layer-content change per checkout. (b) Folded in by lead ruling, same item: touchpoint R of `core/hooks/ai-dlc-recover-gate.sh` credited any Read of the digest, denied or partial, as having read it, so C3 armed R on 130 of 220 lines. It now credits only Reads that executed (paired by id with a tool result that is not an error) and together cover the digest to the end, and its deny names the first uncovered offset (offset 1 when only a denied Read is on record). Against the population (predicted by the forensics replay of the recorded transcripts against the rule, not by driving the built hooks over them): the guard fires on C2 and on C3. On C3 the recovery's read stages had already cleared `.recover-fired` before the digest Read (measured on the transcript: the snapshot Read 1-66 of 67, then the step file 1-150 and 150-335 of 335, the last chunk the satisfying call that removes the marker, then the refused whole digest Read and the executed 1-130 of 220; touchpoint R, which runs only with the marker absent, refused a Bash call 18 s later), so the guard arms it and its hint names offset 131; touchpoint R also reaches C3, its deny naming offset 131. Both are silent on C1. Touchpoint R dates a covering digest Read by its `tool_use` line, so an advisor call in the same assistant message as that Read follows it and clears the stage, as at base. The hint's limit is sized in bytes, one 16384-byte chunk (item 5, built, with its measurement). Filed, not built: item 6, `rule-23.md` naming the old home of `PROTECTED_PATTERNS`, and item 7, the `docs/pre-ai-dlc/` exclusion missed after normalizing, pre-existing at fa8f218e6. The guard cannot reach a denied Read that the agent never follows with a bounded Read of the same file, because nothing fires after the deny. The entry stays open on item 3: the denial itself needs an allowlist or size setting in context-mode upstream. `verify: manual` stays (arm R12).
 
-**PARTIAL (v0.1233.0).** Batch 265, cluster H. Item 2 is built: the Check 2 bullet of `core/skills/ai-dlc/steps/gate-validation.md` (`:313`) is replaced in place by a direct call, `scripts/ai-dlc/validate-escalation-status-vocabulary.sh --open docs/escalations/pending.md`. The new `--open` mode prints header, line range and body only for the statuses Check 2 acts on (`HARD_BLOCK` first, then `DEFERRAL_REQUEST`; the set is stated once in the script as ACTED_ON, since `escalations.md` does not mark it), one `OPEN-UNACTED <STATUS> <n>` line per other open status, and each statusless entry by header and range, then `OPEN <n> of <m>`; bodies share a 12000-byte budget that never drops an acted-on header, and each overrun body gets its own `TRUNCATED read lines X-Y` line. Measured read-only on the reference consumer's `pending.md` (6,115 lines, 594,491 B when taken; the adversary's first build, on 6,077 lines, printed 35,441 B and truncated 222 bodies): 9,500 B on stdout, `OPEN 226 of 250` (210 `DECIDED_AUTONOMOUSLY` counted on one line, no `TRUNCATED` line), exit 1 from the 14 STATUSLESS entries, which is pre-existing at base (the installed copy is byte-identical to 704a4eacd and also exits 1; reproduce with `AI_DLC_PROJECT_ROOT=<graph checkout> bash scripts/ai-dlc/validate-escalation-status-vocabulary.sh docs/escalations/pending.md`, exit 1 and 14 STATUSLESS lines). The adversary-brief NOTE below is closed: `core/scripts/gen-round-briefs.sh:152 "halve its limit"` now carries the `offset`/`limit` and halving wording of `:214`. The entry stays open on item 3. Carries the reference consumer's PC-S323-CONTEXT-MODE-ONE-READ-CAP-DENIES-VERBATIM-LOAD-READS-OVER-16KIB-NO-ALLOWLIST-KNOB residue: item 3.
+**PARTIAL (v0.1233.0).** Batch 265, cluster H. Item 2 is built: the Check 2 bullet of `core/skills/ai-dlc/steps/gate-validation.md` (`:313`) is replaced in place by a direct call, `scripts/ai-dlc/validate-escalation-status-vocabulary.sh --open docs/escalations/pending.md`. The new `--open` mode prints header, line range and body only for the statuses Check 2 acts on (`HARD_BLOCK` first, then `DEFERRAL_REQUEST`; the set is stated once in the script as ACTED_ON, since `escalations.md` does not mark it), one `OPEN-UNACTED <STATUS> <n>` line per other open status, and each statusless entry by header and range, then `OPEN <n> of <m>`; bodies share a 12000-byte budget that never drops an acted-on header, and each overrun body gets its own `TRUNCATED read lines X-Y` line. Measured read-only on the reference consumer's `pending.md` (6,115 lines, 594,491 B when taken; the adversary's first build, on 6,077 lines, printed 35,441 B and truncated 222 bodies): 9,500 B on stdout, `OPEN 226 of 250` (210 `DECIDED_AUTONOMOUSLY` counted on one line, no `TRUNCATED` line), exit 1 from the 14 STATUSLESS entries, which is pre-existing at base (the installed copy is byte-identical to 704a4eacd and also exits 1; reproduce with `AI_DLC_PROJECT_ROOT=<graph checkout> bash scripts/ai-dlc/validate-escalation-status-vocabulary.sh docs/escalations/pending.md`, exit 1 and 14 STATUSLESS lines). The adversary-brief NOTE below is closed: `core/scripts/gen-round-briefs.sh:155 "halve its limit"` now carries the `offset`/`limit` and halving wording of `:214`. The entry stays open on item 3. Carries the reference consumer's PC-S323-CONTEXT-MODE-ONE-READ-CAP-DENIES-VERBATIM-LOAD-READS-OVER-16KIB-NO-ALLOWLIST-KNOB residue: item 3.
 
 **PARTIAL (v0.1229.0).** Batch 264, D2. Item 1 is built and covers 45 of the 48 denials (20 + 24 + 1). At or under 16384 bytes, and when the step file does not resolve, the stall-block text is byte-identical to the base. The entry stays open on items 2 and 3. The close receipt in item 2 covers item 2 only, so it reading 0 does not close item 3. NOTE: the adversary brief in `gen-round-briefs.sh` was left as it was in that release, with neither `offset`/`limit` nor the halving clause, so its wording did not match the remediator brief's; batch 265 aligned it (the paragraph above).
 
@@ -4267,28 +4271,6 @@ Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
 
 verify: manual
 
-## BL-1228 — `scripts/validate-backlog-receipts.sh` refuses correct data: a live ledger whose only non-manual receipt is a `has` receipt, with zero `sh` receipts, is neither accepted nor scored
-
-**DEFECT.** Filed 2026-11-22 (batch 265, close). Owner: `scripts/validate-backlog-receipts.sh` (arm R2).
-
-Goal: a live ledger whose receipts are all `verify: manual` except one or more `has` receipts, with no `sh` receipt, passes the validator when every entry is correct. One done condition: on such a ledger the validator exits 0 and names the `has` receipts, and a ledger with an unrecognised `verify:` value still fails.
-
-Baseline: the first pregate of the 0.1235.0 integration tree (13249bd2d, batch 265) failed on this state, a correct ledger. It passed only once 0.1234.0 had rotated BL-1224 out of the live ledger (batch-265 rulings record). The record does not name the arm that refused. The candidate is the R2 exit at `scripts/validate-backlog-receipts.sh:3873` "produced ZERO scored receipts ... Nothing was observed", which fires when `SCORED` and `N_PASS` are 0 and none of `R2_ALLMANUAL`, `R2_DECLEMPTY` and `R2_ALLDRIVER` is set; item 1 confirms or refutes it.
-
-Work list:
-
-1. Reproduce on a `mktemp` ledger: N `verify: manual` entries plus one `has` receipt and no `sh` receipt; record the exit and the arm that fails. Control: the same ledger with the `has` receipt replaced by `verify: manual` exits 0.
-2. Accept that ledger: count the `has` receipt as observed, or extend the all-manual acquittal to cover it, so R2 fires only when nothing was observed.
-3. Prove the arm still fires: a ledger of only unrecognised `verify:` values still fails R2.
-
-Step: n/a
-
-Related: BL-1229 (filed in the same close).
-
-Provenance: batch 265 close (lead ai-dlc-19); id allocated by the lead.
-
-verify: manual
-
 ## BL-1229 — no `reconcile-pull-driver` arm asserts how the `NOTE report-restarted` row renders in the update PR body under 0.1235.0's NOTE cap and fold
 
 **NOTE.** Filed 2026-11-22 (batch 265, close). Owner: `core/fixtures/reconcile-pull-driver/run.sh` (subject `core/skills/ai-dlc-update/reconcile/pull.sh`).
@@ -4311,92 +4293,4 @@ Provenance: batch 265 close (lead ai-dlc-19); id allocated by the lead.
 
 verify: manual
 
-
-## BL-1239 — `validate-spawn-ledger.sh --escalations` splits `pending.md` only on `## `, so an OVERRIDDEN `###` sub-entry is read under its parent's header and the gate wedges between `close` and the adjudicator
-
-**DEFECT.** Filed 2026-11-25 (batch 266, cluster G tip adversary). Owner: `core/scripts/validate-spawn-ledger.sh` (the `--escalations` join).
-
-Goal: the `--escalations` join reads `docs/escalations/pending.md` with the same entry split and key rule the other escalation readers use, so an OVERRIDDEN `###` sub-entry that names a violation records the violation under its own header. One done condition: an OVERRIDDEN `###` sub-entry naming the violation, under a RESOLVED `##` parent, gives exit 4 with the VIOLATION line headed by the sub-entry's own header.
-
-Baseline: the join flushes an entry only on `^## ` (`validate-spawn-ledger.sh:1865`), while `SL_REC_AWK` (`core/scripts/validate-suppression-lifetime.sh:518`) and `validate-escalation-resolution.sh:482` flush on `^#{2,3} `. An OVERRIDDEN `###` sub-entry under a RESOLVED `##` parent therefore gives exit 4 under the parent's header, which the adjudicator's waiver set does not cover, so `close` and the adjudicator disagree and the gate wedges. It fails closed and acquits nothing. Graph has 0 of 282 Status lines under `###`.
-
-Work list:
-
-1. Make the join's entry split and key rule match `SL_REC_AWK`'s: flush on `^#{2,3} `, key = the header with `## ` or `### ` removed and trailing whitespace stripped.
-2. Add one arm to fixture `check-22-spawn-ledger`: an OVERRIDDEN `###` sub-entry under a RESOLVED `##` parent, naming the violation, exits 4 under the sub-entry's header; its twin, the same sub-entry with a non-OVERRIDDEN status, exits 1. Zero load-dependent tests (BL-868).
-3. Prove the arm fires once by hand against the current `^## `-only split (output in the sha message).
-4. The CARRY window (found by the cluster G tip adversary, batch 266): a consumer that carries a diverged `validate-spawn-ledger.sh` and takes 0.1238.0's `gate-transition.sh` refuses every gate 3 (the adversary's finding, relayed by cluster G's owner; not re-driven by the lead). Close it with item 1: drive the pair (diverged `validate-spawn-ledger.sh`, current `gate-transition.sh`) on a toy root, and the release that changes the join states, in its CHANGELOG entry, whether a consumer must reconcile `validate-spawn-ledger.sh` in the same pull as `gate-transition.sh`. The reference consumer is not exposed at batch 266's close: read-only `git hash-object` of its installed `scripts/ai-dlc/validate-spawn-ledger.sh` and `scripts/ai-dlc/gate-transition.sh` equals their blobs at `f4cf60bc6` (0.1235.0), as do 9 more of the 12 engine shell files batch 266 changed; `ai-dlc-protected-set.sh` is not installed there.
-
-Step: n/a
-
-Related: BL-1230 (the join this corrects), BL-1240 (filed in the same pass).
-
-Provenance: batch 266, cluster G tip adversary; ids allocated by the lead ai-dlc-9b.
-
-verify: manual
-
-## BL-1240 — Check 33's NOT-YET-AUTHORED clause covers only each route's First Step, so brownfield-c's `doc-repair-backfill.md` planning gate still fails before discovery authors the brief
-
-**DEFECT.** Filed 2026-11-25 (batch 266, cluster G tip adversary). Owner: `core/scripts/validate-request-coverage.sh` (`vrc_opening_steps`), `core/skills/ai-dlc/steps/gate-validation.md` (Check 33).
-
-Goal: every planning gate that runs before a route's first brief-authoring step records Check 33 as SKIP reason=rc3 when the brief is absent and the requests file holds an operator entry, not only the route's First Step. One done condition: `gate-run.sh arms` at `doc-repair-backfill.md` with the brief absent mints a nonce.
-
-Baseline: `vrc_opening_steps` (`validate-request-coverage.sh:78-94`) prints only a route's First Step, when `discovery` or `requirements` follows it. brownfield-c runs `doc-reconciliation` → `doc-repair-backfill` → `discovery` (`steps/route-fresh-start.md:253`), and `doc-repair-backfill.md:58` runs gate validation [planning] before discovery writes `locked-requirements.md`, so that gate still FAILs rc 2, as on base. Fixture `request-coverage` arm GS3 asserts that exit 2.
-
-Work list:
-
-1. Derive every step before the first brief-authoring step in each route's Pipeline Sequence, not only the First Step.
-2. Flip fixture `request-coverage` arm GS3 (`doc-repair-backfill.md`, brief absent) to exit 3, and keep a non-opening step's exit 2.
-3. Amend `gate-validation.md` Check 33 (the scope paragraph near :3237) to name the pre-authoring steps.
-4. Probe once by hand through `gate-run.sh arms` on a toy root at `doc-repair-backfill.md`: SKIP reason=rc3 and a nonce on the fix, FAIL rc=2 on the current derivation (output in the sha message).
-
-Step: n/a
-
-Related: BL-1231 (closed with the opening-step case), BL-1239 (filed in the same pass).
-
-Provenance: batch 266, cluster G tip adversary; ids allocated by the lead ai-dlc-9b.
-
-verify: manual
-
-## BL-1241 — the adversary role file tells every pass to copy the adversary-pass envelope and close with one verdict before its elicitation paragraph, so an elicitation shard that follows those lines is refused at `--check-header`
-
-**DEFECT.** Filed 2026-11-25 (batch 266, cluster R tip adversary). Owner: `core/team-roles/adversary.md`.
-
-Goal: an elicitation shard reading `adversary.md` top-down is never told to copy the adversary-pass envelope or to write a verdict. One done condition: the envelope line and the one-verdict line each scope themselves to review passes in-line, and every pinned substring of the file still matches.
-
-Baseline: the envelope line (`adversary.md:56-57`, "copy the exact envelope from \"The verdict\" below") and the one-verdict line (`adversary.md:309-310`, "Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted residue and exactly one verdict") both come before the elicitation paragraph at `:312`. An elicitation shard that follows them writes `skill: ai-dlc-adversary-review` and a `verdict:` line, and `merge-adversarial-shards.sh --check-header --axis elicitation` refuses it loudly, which costs a re-dispatch; it is never a false pass.
-
-Work list:
-
-1. Edit both lines in place so each names review passes and points an elicitation shard to the `:312` paragraph, keeping every pinned substring (no pin covers `:309` or "exact envelope").
-2. Read the file top-down as an elicitation shard and confirm no earlier line tells it to copy the adversary-pass envelope or write a verdict.
-
-Step: n/a
-
-Related: BL-1233 (added the elicitation paragraph this entry scopes the earlier lines to).
-
-Provenance: batch 266, cluster R tip adversary; id allocated by the lead ai-dlc-9b.
-
-verify: manual
-
-## BL-1242 — `pregate-self-check.sh` never dispatches an `.undeclarable` fixture, so a release whose only checker is one goes red at the push
-
-**DEFECT.** Filed 2026-11-25 (batch 266, lead ai-dlc-9b, after cluster C's red push). Owner: `scripts/pregate-self-check.sh` (section f).
-
-Goal: every `.undeclarable` fixture in the predicted RUN set runs in pregate, so pregate green means the push's own red classes were run. One done condition: on a tree whose diff touches `core/hooks/`, pregate's section f runs `hook-registration-join` by name.
-
-Baseline: section f dispatches a RUN unit only through a `.dparse` DIR or DECLFILE row or a literal basename in its files (`F_AWK`, `scripts/pregate-self-check.sh:516-535`). An `.undeclarable` fixture has no `.dparse` row, and `hook-registration-join` names hooks by glob, so it is never dispatched (2 of 232 fixtures carry `.undeclarable`: `hook-registration-join`, `retro-compliance-workflow`). Catch on record: cluster C's pregate on `43f9feaaf` was rc 0; its push ran `hook-registration-join` and failed AUTHORING (`registered-but-not-shipped=[ai-dlc-recover-gate.sh]`), costing one red gate cycle and a rebuild (fixed at `a1661db9a`, landed as 0.1241.0). Who would notice it gone: every builder whose change only an undeclarable fixture checks, at the push instead of at pregate.
-
-Work list:
-
-1. In section f, add every RUN unit (and its `@consumer` twin) whose fixture directory carries `.undeclarable`, with reason `UNDECLARABLE`.
-2. Extend the seeded probe with an undeclarable fixture that names no changed path, and assert it is selected; prove once by hand that it is not selected at the current tip.
-
-Step: n/a
-
-Related: BL-583 item 4 (the value judgement of the two `.undeclarable` fixtures, which records this catch).
-
-Provenance: batch 266, lead ai-dlc-9b.
-
-verify: manual
 

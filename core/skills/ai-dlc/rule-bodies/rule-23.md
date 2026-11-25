@@ -44,9 +44,11 @@ command mutates, use native Bash. (2) Verbatim-load files (rule/step/role
 files, schemas, snapshot, `gate-log.md`, escalations, `audit-anchors.md`,
 `sprint-status.yaml`, story files) are never read through any `ctx_*` tool —
 consolidation drops directives and breaks load fidelity.
-`ai-dlc-protect.sh` blocks the file, path and batch-command forms only, and
-is the SET's source of record: `PROTECTED_PATTERNS` there, extended per
-project by `extensions/protected-paths.json`. A directory or glob that spans
+`ai-dlc-protect.sh` blocks the file, path and batch-command forms only. The
+SET's source of record is `ai-dlc-protected-set.sh` (`PROTECTED_PATTERNS`),
+sourced by `ai-dlc-protect.sh` and the read-intent guard in
+`ai-dlc-recover-gate.sh`, extended per project by
+`extensions/protected-paths.json`. A directory or glob that spans
 one of those files is blocked too. Archives and the planning corpus (`prd.md`,
 `product-brief.md`, `carry-over-backlog.md`) are deliberately NOT protected —
 offload them freely.

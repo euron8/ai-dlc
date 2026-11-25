@@ -355,6 +355,8 @@ inf() {
   {
     printf '{"v": 1, "sprint": 49, "gate": "implementation", "ts": "2026-07-13T00:00:00Z", "catalog": "core", "check": "16", "verdict": "PASS"}\n'
     printf '{"v": 1, "sprint": 50, "gate": "implementation", "ts": "2026-07-14T00:00:00Z", "catalog": "core", "check": "22", "verdict": "PASS"}\n'
+    # A lifetime counts only gates that recorded the suppressed check, so the second gate records 16 too.
+    printf '{"v": 1, "sprint": 50, "gate": "implementation", "ts": "2026-07-14T00:00:00Z", "catalog": "core", "check": "16", "verdict": "PASS"}\n'
   } > "$ROOT/inf/$1/_bmad-output/implementation-artifacts/gate-metrics.jsonl"
   : > "$ROOT/inf/$1/docs/escalations/pending.md"
 }

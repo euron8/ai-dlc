@@ -184,7 +184,10 @@
 # only when a remediation lock is lifted.
 #
 # THE CLOCK: AN AUTHORIZATION MAY NOT BE DATED IN THE FUTURE
-# A lifetime is counted as gates recorded AFTER the authorization timestamp, so an entry authorized
+# A lifetime is counted as gates recorded AFTER the authorization timestamp that recorded a row for
+# the entry's (catalog, check) -- gates whose manifest loaded the suppressed check (gates_since) -- so
+# a gate type that does not load the check is not charged (a key NO gate records is charged every gate
+# after the authorization, so it still expires), and an entry authorized
 # at 2099-01-01 counts 0 gates at every gate until then: listed in force, a superseder of any expired
 # entry, and -- as the waiver on its own check's FAIL_WAIVED row -- green at the expiry arm and at
 # section 6c forever. One helper, sl_auth_future, compares the timestamp to the clock. sl_in_force
@@ -715,20 +718,39 @@ sl_lookup() {
   return 0
 }
 
-# gates_since <iso-ts> -> count of distinct gate events recorded strictly after it
+# gates_since <iso-ts> <check-id> [catalog] -> count of distinct gate events recorded strictly after
+# it that RECORDED A ROW for (catalog, check), i.e. gates whose manifest loaded the suppressed check.
+# Check 12 writes one row per check the gate's manifest loaded, NA included (GATE_METRIC v1), so a
+# gate type that does not load the check writes no row for it and is not charged to its lifetime.
+# The join is latest_verdict's: (catalog, check), an empty catalog resolving as `core`.
+# A key that NO row in the file carries (a check write_metrics never emits, a retired one) is charged every
+# gate after the authorization, so its suppression still expires.
 gates_since() {
-  local since="$1"
+  local since="$1" id="$2" cat="${3:-}"
+  [ -n "$cat" ] || cat="core"
   [ -n "$GATE_TS" ] || { printf '0\n'; return 0; }
-  awk -v s="$since" '$0 > s {n++} END {print n+0}' <<<"$GATE_TS"
+  awk -v s="$since" -v want="$id" -v wantcat="$cat" "$JSTR_AWK"'
+    {
+      t = jstr($0, "ts")
+      if (t > s && !(t in allseen)) { allseen[t] = 1; na++ }
+      if (jstr($0, "check") != want) next
+      g = jstr($0, "catalog"); if (g == "") g = "core"
+      if (g != wantcat) next
+      keyed = 1
+      if (t > s && !(t in seen)) { seen[t] = 1; n++ }
+    }
+    END { print (keyed ? n : na) + 0 }
+  ' "$GATE_METRICS"
 }
 
-# sl_past_lifetime <authts> <expires> -> 0 when the suppression authorized at <authts> has had
-# more than <expires> gates recorded since, with SL_ELAPSED set to that count. THE ONE expiry
-# count: the expiry arm asks it of a live SUPPRESSED entry whose shape it has already checked, and
-# sl_in_force negates it. Every other reader asks sl_in_force, which also holds the 1..3 cap.
+# sl_past_lifetime <authts> <expires> <check-id> [catalog] -> 0 when the suppression of (catalog,
+# check) authorized at <authts> has had more than <expires> gates recorded since that recorded the
+# check (gates_since), with SL_ELAPSED set to that count. THE ONE expiry count: the expiry arm asks
+# it of a live SUPPRESSED entry whose shape it has already checked, and sl_in_force negates it.
+# Every other reader asks sl_in_force, which also holds the 1..3 cap.
 SL_ELAPSED=0
 sl_past_lifetime() {
-  SL_ELAPSED="$(gates_since "$1")"
+  SL_ELAPSED="$(gates_since "$1" "$3" "${4:-}")"
   [ "$SL_ELAPSED" -gt "$2" ]
 }
 
@@ -741,7 +763,7 @@ sl_auth_future() {
   [ "${1//[!0-9]/}" -gt "$SL_CLOCK_LIMIT_N" ]
 }
 
-# sl_in_force <expires> <authts> -> 0 when a SUPPRESSED entry carrying these two fields is IN FORCE,
+# sl_in_force <expires> <authts> <check-id> [catalog] -> 0 when a SUPPRESSED entry carrying these two fields is IN FORCE,
 # with SL_ELAPSED set to the gates counted against it. THE ONE spelling of "in force": the
 # --in-force/--waivers listing asks it, so do the supersession test below and the terminal arm's
 # acquittal through a SUPPRESSED waiver, live or archived. The lifetime must
@@ -757,7 +779,7 @@ sl_in_force() {
   [ -n "$2" ] || return 1
   ! sl_auth_future "$2" || return 1
   if [ "$GATES_N" -eq 0 ]; then SL_ELAPSED=0; return 0; fi
-  ! sl_past_lifetime "$2" "$1"
+  ! sl_past_lifetime "$2" "$1" "$3" "${4:-}"
 }
 
 # sl_superseder <check> <catalog-or-empty> <expired wkey> <expired authts> -> 0, with SS_SHORT set
@@ -777,7 +799,7 @@ sl_superseder() {
   [ -n "$cands" ] || return 1
   while IFS="$US" read -r x a h; do
     [ -n "${h:-}" ] || continue
-    if sl_in_force "$x" "$a"; then SS_SHORT="$(printf '%s' "$h" | cut -c1-92)"; return 0; fi
+    if sl_in_force "$x" "$a" "$1" "$g"; then SS_SHORT="$(printf '%s' "$h" | cut -c1-92)"; return 0; fi
   done <<<"$cands"
   return 1
 }
@@ -909,7 +931,7 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
           echo "      consulted. A lifetime that cannot be counted is not a licence." >&2
           continue
         fi
-        if sl_in_force "$expires" "$authts"; then
+        if sl_in_force "$expires" "$authts" "$supp" "$suppcat"; then
           elapsed="$SL_ELAPSED"
           in_force_n=$((in_force_n + 1))
           if [ "$WAIVERS" -eq 1 ]; then
@@ -931,7 +953,7 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
       verdict="${vrow%%$'\t'*}"
       vts="${vrow#*$'\t'}"; vts="${vts%%$'\t'*}"
       vwid="${vrow##*$'\t'}"; vwid="${vwid%"${vwid##*[![:space:]]}"}"
-      if sl_past_lifetime "$authts" "$expires"; then
+      if sl_past_lifetime "$authts" "$expires" "$supp" "$suppcat"; then
         elapsed="$SL_ELAPSED"
         # FAIL_WAIVED is still failing for THIS entry only when THIS entry is the waiver the row
         # names, so a SUPPRESSED waiver expires on this same lifetime. A row waived by another id
@@ -1009,7 +1031,7 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
             case "$LK_STATUS" in
               OVERRIDDEN) continue ;;
               SUPPRESSED) if [ "$LK_SUPP" = "$id" ] && [ "${LK_SUPPCAT:-core}" = core ] \
-                             && sl_in_force "$LK_EXPIRES" "$LK_AUTHTS"; then continue; fi ;;
+                             && sl_in_force "$LK_EXPIRES" "$LK_AUTHTS" "$LK_SUPP" "$LK_SUPPCAT"; then continue; fi ;;
             esac
             # SUPERSESSION, terminal twin (header): the row's waiver is a SUPPRESSED entry whose own
             # target is (core, this check), and a fresh in-force authorization for that target
@@ -1114,9 +1136,9 @@ while IFS="$(printf '\t')" read -r wcat wcheck wts wid; do
         echo "WARN: superseded: check '$wcheck' [$wcat] -- archived waiver '$wshort' (FAIL_WAIVED at row ts $wts) is stood down by the in-force SUPPRESSED entry '$SS_SHORT'." >&2
         continue
       fi
-      if ! sl_in_force "$LK_EXPIRES" "$LK_AUTHTS"; then
+      if ! sl_in_force "$LK_EXPIRES" "$LK_AUTHTS" "$LK_SUPP" "$LK_SUPPCAT"; then
         bad=$((bad + 1))
-        wel="an uncountable number of"; [ -n "$LK_AUTHTS" ] && wel="$(gates_since "$LK_AUTHTS")"
+        wel="an uncountable number of"; [ -n "$LK_AUTHTS" ] && wel="$(gates_since "$LK_AUTHTS" "$LK_SUPP" "$LK_SUPPCAT")"
         echo "FAIL: check '$wcheck' [$wcat] is recorded FAIL_WAIVED at ts $wts under the ARCHIVED SUPPRESSED" >&2
         echo "      entry '$wshort', which is not in force: **Expires after:** ${LK_EXPIRES:-(none)}," >&2
         echo "      authorized ${LK_AUTHTS:-(no timestamp)}, $wel gate(s) recorded since, clock $SL_NOW ($SL_CLOCK_SRC)." >&2
