@@ -49,11 +49,18 @@
 #
 # USAGE
 #   validate-request-coverage.sh --requests <file> --brief <file> --sprint <n> [--cite-sha <sha>]
+#                                [--session <id>] [--gate-step <step.md>]
 #
 #     --requests   operator-requests-history.md, written by the UserPromptSubmit hook
 #     --brief      product-brief.md carrying the LOCKED blocks
 #     --sprint     sprint number, selecting which block is this sprint's
 #     --cite-sha   pin the entry by its recorded SHA256 instead of taking the newest
+#     --gate-step  the step file whose gate runs this check. When the brief is absent and this step is a
+#                  variant's OPENING planning step, the brief is not owed yet (exit 3). The opening steps
+#                  are derived from route-fresh-start.md's route table: the First Step of every route whose
+#                  sequence reaches a brief-authoring step (vrc_opening_steps) after it. The table is read
+#                  from the skill directory gate_run.py's find_skill_dir resolves (gate_run.py beside this
+#                  script); no gate_run.py, no skill directory or no table there is exit 2.
 #
 # A DISPOSITION, not a silence, is how an identifier is excluded. Inside the LOCKED block:
 #
@@ -63,8 +70,28 @@
 #   0  every named identifier is covered or dispositioned; or the ask named none
 #   1  an identifier the operator named reaches neither the block nor a disposition
 #   2  the requests file, the brief, or the sprint's block could not be resolved
+#   3  NOT-YET-AUTHORED: the brief is absent, --gate-step names an opening planning step, and the
+#      requests file holds at least one operator entry (VRC_ENTRY_RE). Printed first on stdout.
 #
 # Compatible with bash 3.2+ and Python 3 (standard on macOS).
+
+# vrc_opening_steps <route-fresh-start.md>: one line per opening planning step. A route's First Step is
+# opening when a step named in `authors` follows it in that route's Pipeline Sequence.
+vrc_opening_steps() {
+  local authors="discovery requirements"
+  LC_ALL=C awk -v authors="$authors" '
+    BEGIN { n = split(authors, a, " "); for (i = 1; i <= n; i++) au[a[i]] = 1 }
+    /^\|/ {
+      if (split($0, c, "|") < 5) next
+      if (!match(c[4], /`[A-Za-z0-9_.-]+\.md`/)) next
+      f = substr(c[4], RSTART + 1, RLENGTH - 2)
+      m = split(c[3], s, "→")
+      for (i = 2; i <= m; i++) {
+        t = s[i]; gsub(/^[[:blank:]]+|[[:blank:]]+$/, "", t)
+        if (t in au) { print f; break }
+      }
+    }' "$1"
+}
 
 vrc_main() {
 set -u
@@ -74,6 +101,9 @@ BRIEF=""
 SPRINT=""
 CITE_SHA=""
 SESSION=""
+GATE_STEP=""
+# The operator-entry header. The Python below and the exit-3 entry count both read this one value.
+VRC_ENTRY_RE='^## (\S+) -- (.*)$'
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -85,12 +115,17 @@ while [ $# -gt 0 ]; do
         # passes three or four, and promoting this one would turn each of them into the
         # exit-2 usage fault this block exists to keep distinguishable from a finding.
         --session)  SESSION="${2:-}";  shift 2 ;;
+        --gate-step) GATE_STEP="${2:-}"; shift 2 ;;
         *) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
     esac
 done
 
 if [ -z "$REQUESTS" ] || [ -z "$BRIEF" ] || [ -z "$SPRINT" ]; then
-    echo "usage: validate-request-coverage.sh --requests <file> --brief <file> --sprint <n> [--cite-sha <sha>] [--session <id>]" >&2
+    echo "usage: validate-request-coverage.sh --requests <file> --brief <file> --sprint <n> [--cite-sha <sha>] [--session <id>] [--gate-step <step.md>]" >&2
+    exit 2
+fi
+if [ -n "$GATE_STEP" ] && ! [[ "$GATE_STEP" =~ ^[A-Za-z0-9_.-]+\.md$ ]]; then
+    echo "ERROR: --gate-step must be a step file basename (<name>.md), got: $GATE_STEP" >&2
     exit 2
 fi
 
@@ -154,7 +189,8 @@ if [ ! -r "$REQUESTS" ]; then
     echo "       UserPromptSubmit hook (ai-dlc-pause.sh), or record why it is absent." >&2
     exit 2
 fi
-if [ ! -r "$BRIEF" ]; then
+# With --gate-step, an absent brief is decided after the root is resolved (below).
+if [ ! -r "$BRIEF" ] && [ -z "$GATE_STEP" ]; then
     echo "ERROR: brief not readable: $BRIEF" >&2
     exit 2
 fi
@@ -170,10 +206,13 @@ if [ ! -x "$ANCHOR" ] && [ ! -f "$ANCHOR" ]; then
     exit 2
 fi
 
+BLOCKS=""
+if [ -r "$BRIEF" ]; then
 BLOCKS="$(bash "$ANCHOR" "$BRIEF" --emit-blocks)" || {
     echo "ERROR: could not extract LOCKED blocks from $BRIEF (see above)." >&2
     exit 2
 }
+fi
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
 # Resolve the project root by walking UP for a marker, never by a fixed number of
@@ -210,6 +249,56 @@ AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 }
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
+# ---- ABSENT BRIEF AT A GATE STEP (--gate-step) -------------------------------------------
+# Exit 3 only when the step is an opening planning step derived from the route table AND the
+# requests file holds an operator entry; every other absent-brief state is the exit-2 ERROR.
+# Nothing is printed to stderr on the exit-3 path.
+if [ ! -r "$BRIEF" ]; then
+    # The skill directory comes from gate_run.py's find_skill_dir, the resolver the gate runner uses.
+    _vrc_route=""
+    if [ -f "$AI_DLC_SELF_DIR/gate_run.py" ]; then
+        _vrc_route="$(python3 -B -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import gate_run
+try:
+    print(gate_run.find_skill_dir(sys.argv[2]) + "/steps/route-fresh-start.md")
+except gate_run.Exit:
+    pass' "$AI_DLC_SELF_DIR" "$AI_DLC_ROOT" 2>/dev/null)" || _vrc_route=""
+    fi
+    if [ -z "$_vrc_route" ] || [ ! -f "$_vrc_route" ]; then
+        echo "ERROR: brief not readable: $BRIEF" >&2
+        echo "       route-fresh-start.md was not found through gate_run.py's find_skill_dir under" >&2
+        echo "       $AI_DLC_ROOT (gate_run.py beside this script, then a skill directory with gates/ and" >&2
+        echo "       steps/route-fresh-start.md), so --gate-step $GATE_STEP cannot be classified." >&2
+        exit 2
+    fi
+    _vrc_open="$(vrc_opening_steps "$_vrc_route")"
+    if [ -z "$_vrc_open" ]; then
+        echo "ERROR: brief not readable: $BRIEF" >&2
+        echo "       $_vrc_route yields no opening planning step; the route table did not parse." >&2
+        exit 2
+    fi
+    case "
+$_vrc_open
+" in
+        *"
+$GATE_STEP
+"*)
+            if VRC_ENTRY_RE="$VRC_ENTRY_RE" python3 -c '
+import os, re, sys
+r = re.compile(os.environ["VRC_ENTRY_RE"])
+t = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+sys.exit(0 if any(r.match(l) for l in t.splitlines()) else 1)' "$REQUESTS"; then
+                echo "NOT-YET-AUTHORED: $BRIEF is not owed at the opening planning gate ($GATE_STEP)"
+                exit 3
+            fi
+            ;;
+    esac
+    echo "ERROR: brief not readable: $BRIEF" >&2
+    exit 2
+fi
+
 # The harness-origin declaration is resolved HERE, in bash, and passed in. The Python below
 # runs from a heredoc, so it has no `__file__` to walk from -- a path derived there resolves
 # against the caller's cwd and finds nothing. Script-relative first (the package this copy
@@ -226,7 +315,7 @@ for _hoc in "$AI_DLC_SELF_DIR/../schemas/harness-origin.json" \
   [ -n "$_hoc" ] && [ -f "$_hoc" ] && { HARNESS_ORIGIN="$_hoc"; break; }
 done
 
-REQUESTS="$REQUESTS" BLOCKS="$BLOCKS" SPRINT="$SPRINT" CITE_SHA="$CITE_SHA" BRIEF="$BRIEF" HARNESS_ORIGIN="$HARNESS_ORIGIN" python3 <<'PYEOF'
+REQUESTS="$REQUESTS" BLOCKS="$BLOCKS" SPRINT="$SPRINT" CITE_SHA="$CITE_SHA" BRIEF="$BRIEF" HARNESS_ORIGIN="$HARNESS_ORIGIN" VRC_ENTRY_RE="$VRC_ENTRY_RE" python3 <<'PYEOF'
 import json
 import os
 import re
@@ -253,7 +342,7 @@ text = open(requests_path, encoding="utf-8", errors="replace").read()
 
 # ---- select the request entry ----------------------------------------------
 # Entries are `## <ts> -- <command>` followed by fields and a ```text fence.
-ENTRY_RE = re.compile(r"^## (\S+) -- (.*)$")
+ENTRY_RE = re.compile(os.environ["VRC_ENTRY_RE"])
 entries, cur = [], None
 for line in text.splitlines():
     m = ENTRY_RE.match(line)

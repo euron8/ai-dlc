@@ -1,9 +1,14 @@
-# request-coverage reads three files outside its own directory: the validator under test, the sibling
-# grammar it shells to (validate-locked-anchor.sh), and harness-origin.json, which the validator and
-# the BL-327 arm read. The map rows under .git/.claude/core/skills are walk-up probes, not reads.
+# request-coverage reads six files outside its own directory: the validator under test, the sibling
+# grammar it shells to (validate-locked-anchor.sh), harness-origin.json, which the validator and
+# the BL-327 arm read, route-fresh-start.md, the route table the --gate-step arms derive the
+# opening steps from, gate_run.py, whose find_skill_dir locates that table, and planning.arms,
+# which puts the gates/ directory find_skill_dir requires into the sandbox. The map rows under .git/.claude/core/skills are walk-up probes, not reads.
 !core/scripts/validate-request-coverage.sh
 core/scripts/validate-locked-anchor.sh
 core/schemas/harness-origin.json
+core/skills/ai-dlc/steps/route-fresh-start.md
+core/scripts/gate_run.py
+core/skills/ai-dlc/gates/planning.arms
 core/fixtures/lib/report.sh
 core/fixtures/lib/layout.sh
 core/fixtures/lib/inproc.sh

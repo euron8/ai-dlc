@@ -2105,6 +2105,8 @@ ordinal 1..K, or the output was verified against the sections the brief omitted.
 
 A violation cleared by a verified `OVERRIDDEN` entry is recorded `FAIL_WAIVED`, with `waiver_id` set to that entry's escalation header, verbatim after `## `. It is never recorded `PASS`, and its gate-log line says `FAIL_WAIVED`, not `PASSED`. The operator's authority and the four-arm clearing rule are unchanged; only what is recorded changes.
 
+**Reaching the adjudicator with a recorded violation.** `gate-transition.sh <idx> 3` runs `validate-spawn-ledger.sh` with `--escalations docs/escalations/pending.md` when that file exists. The validator exits 4 (RECORDED, not a pass) when every violation it counts is named, as a whole token, by a current-sprint `OVERRIDDEN` entry: by its `tool_use_id`, by the agent id the subagent context joins to it, or by its dispatch `name` when that differs from the role and no other row of the sprint carries it. It prints one `VIOLATION<TAB><key><TAB><class><TAB><header>` line per violation. Gate 3 then records each naming header as a `check22-waiver:` plan line and goes on to the adjudicator, who still decides all four arms. `gate-transition.sh <idx> close` refuses unless check 22's verdict is `FAIL_WAIVED` with a `waiver_id` among those headers. A violation no such entry names keeps exit 1, and the refusal names its key: write the entry that names it (or, for a class that clears by repair, re-dispatch with `remediates:`), then re-run gate 3.
+
 **`DECIDED_AUTONOMOUSLY` does NOT clear this**, and that exclusion is the point:
 it is the lead dispositioning its own recorded violation, whether under Rule 19
 or Rule 28. A repair is not that: it is a teammate that ran, joined by the
@@ -3223,15 +3225,17 @@ can diff against.
 ### 33. Every identifier the operator named reaches this sprint's scope (all planning gates).
 <!-- CHECK_LOADED: 33 -->
 
-**Scope — not yet authored.** Report `NOT-YET-AUTHORED` and move on when the gate
-being validated is a variant's OPENING planning gate and this sprint's
-`_bmad-output/planning-artifacts/s<N>/locked-requirements.md` does not exist.
-`discovery.md` §4a authors that file, and the `requirements` step (§3, same
-grammar) now also writes it for the `feature` and `carry-over` variants — every
-other mention in the step files reads it and cites its authoring step as its
-source — and the carry-over variant opens at `carry-over-evaluation.md`, which
-runs its planning gate before requirements has run, so the artifact this check
-reads is not owed yet.
+**Scope — not yet authored.** The script decides this clause, keyed on the gate's
+own step (`--gate-step`, the `--step` the gate runs under). When this sprint's
+`_bmad-output/planning-artifacts/s<N>/locked-requirements.md` does not exist, the
+step is a variant's OPENING planning step, and the requests file holds an operator
+entry, it prints `NOT-YET-AUTHORED` first and exits 3, which the gate records as
+SKIP `reason=rc3`. The opening steps are the ones `vrc_opening_steps` derives from
+`route-fresh-start.md`'s Step 6 route table: the First Step of every route whose
+sequence reaches `discovery` or `requirements` after it. `discovery.md` §4a authors
+the file, and the `requirements` step (§3, same grammar) writes it for the `feature`
+and `carry-over` variants. Any other step with the file absent, an absent requests
+file, or a requests file with no operator entry exits 2 and FAILS.
 
 **The condition is the FILE, never the sprint slot, and keying it on the slot makes
 this arm unable to fire on the case that motivated it.** The opening step writes
@@ -3252,7 +3256,8 @@ gate-type slicing and a reference to a sibling check is not loaded with it.
 **Check.** Run `scripts/ai-dlc/validate-request-coverage.sh --requests
 _bmad-output/operator-requests-history.md --brief
 _bmad-output/planning-artifacts/s<N>/locked-requirements.md --sprint <n>
---cite-sha <user_request_cite>`; exit 0 required. **`--brief` names whatever carries
+--gate-step <step.md> --cite-sha <user_request_cite>`; exit 0 required, exit 3
+(NOT-YET-AUTHORED, above) is SKIP `reason=rc3`. **`--brief` names whatever carries
 this sprint's LOCKED blocks**, which since discovery.md §4a (or, for `feature` and
 `carry-over`, requirements.md §3) moved them is the sprint slot's
 `locked-requirements.md`, not the durable brief. Every `CO-`, `LR-`, `CAP-`

@@ -15,5 +15,6 @@ python3
 rm
 sed
 shasum
+sort
 tr
 wc

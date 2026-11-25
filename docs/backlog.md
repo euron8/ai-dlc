@@ -4306,3 +4306,47 @@ Provenance: batch 265 close (lead ai-dlc-19); id allocated by the lead.
 verify: manual
 
 
+## BL-1239 — `validate-spawn-ledger.sh --escalations` splits `pending.md` only on `## `, so an OVERRIDDEN `###` sub-entry is read under its parent's header and the gate wedges between `close` and the adjudicator
+
+**DEFECT.** Filed 2026-11-25 (batch 266, cluster G tip adversary). Owner: `core/scripts/validate-spawn-ledger.sh` (the `--escalations` join).
+
+Goal: the `--escalations` join reads `docs/escalations/pending.md` with the same entry split and key rule the other escalation readers use, so an OVERRIDDEN `###` sub-entry that names a violation records the violation under its own header. One done condition: an OVERRIDDEN `###` sub-entry naming the violation, under a RESOLVED `##` parent, gives exit 4 with the VIOLATION line headed by the sub-entry's own header.
+
+Baseline: the join flushes an entry only on `^## ` (`validate-spawn-ledger.sh:1865`), while `SL_REC_AWK` (`core/scripts/validate-suppression-lifetime.sh:518`) and `validate-escalation-resolution.sh:482` flush on `^#{2,3} `. An OVERRIDDEN `###` sub-entry under a RESOLVED `##` parent therefore gives exit 4 under the parent's header, which the adjudicator's waiver set does not cover, so `close` and the adjudicator disagree and the gate wedges. It fails closed and acquits nothing. Graph has 0 of 282 Status lines under `###`.
+
+Work list:
+
+1. Make the join's entry split and key rule match `SL_REC_AWK`'s: flush on `^#{2,3} `, key = the header with `## ` or `### ` removed and trailing whitespace stripped.
+2. Add one arm to fixture `check-22-spawn-ledger`: an OVERRIDDEN `###` sub-entry under a RESOLVED `##` parent, naming the violation, exits 4 under the sub-entry's header; its twin, the same sub-entry with a non-OVERRIDDEN status, exits 1. Zero load-dependent tests (BL-868).
+3. Prove the arm fires once by hand against the current `^## `-only split (output in the sha message).
+
+Step: n/a
+
+Related: BL-1230 (the join this corrects), BL-1240 (filed in the same pass).
+
+Provenance: batch 266, cluster G tip adversary; ids allocated by the lead ai-dlc-9b.
+
+verify: manual
+
+## BL-1240 — Check 33's NOT-YET-AUTHORED clause covers only each route's First Step, so brownfield-c's `doc-repair-backfill.md` planning gate still fails before discovery authors the brief
+
+**DEFECT.** Filed 2026-11-25 (batch 266, cluster G tip adversary). Owner: `core/scripts/validate-request-coverage.sh` (`vrc_opening_steps`), `core/skills/ai-dlc/steps/gate-validation.md` (Check 33).
+
+Goal: every planning gate that runs before a route's first brief-authoring step records Check 33 as SKIP reason=rc3 when the brief is absent and the requests file holds an operator entry, not only the route's First Step. One done condition: `gate-run.sh arms` at `doc-repair-backfill.md` with the brief absent mints a nonce.
+
+Baseline: `vrc_opening_steps` (`validate-request-coverage.sh:78-94`) prints only a route's First Step, when `discovery` or `requirements` follows it. brownfield-c runs `doc-reconciliation` → `doc-repair-backfill` → `discovery` (`steps/route-fresh-start.md:253`), and `doc-repair-backfill.md:58` runs gate validation [planning] before discovery writes `locked-requirements.md`, so that gate still FAILs rc 2, as on base. Fixture `request-coverage` arm GS3 asserts that exit 2.
+
+Work list:
+
+1. Derive every step before the first brief-authoring step in each route's Pipeline Sequence, not only the First Step.
+2. Flip fixture `request-coverage` arm GS3 (`doc-repair-backfill.md`, brief absent) to exit 3, and keep a non-opening step's exit 2.
+3. Amend `gate-validation.md` Check 33 (the scope paragraph near :3237) to name the pre-authoring steps.
+4. Probe once by hand through `gate-run.sh arms` on a toy root at `doc-repair-backfill.md`: SKIP reason=rc3 and a nonce on the fix, FAIL rc=2 on the current derivation (output in the sha message).
+
+Step: n/a
+
+Related: BL-1231 (closed with the opening-step case), BL-1239 (filed in the same pass).
+
+Provenance: batch 266, cluster G tip adversary; ids allocated by the lead ai-dlc-9b.
+
+verify: manual

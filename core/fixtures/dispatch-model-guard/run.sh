@@ -2270,6 +2270,30 @@ if [ -n "$DL_RB" ]; then
   [ -n "$DL_FN_G" ] && [ "$(dl_same "$DL_FN_G" "$(dl_fn "$DL_RB")")" = SAME ] \
     && ok "DELIVERABLE-LINE bind: render-brief.sh's deliverable_of is byte-identical to the guard's" \
     || bad "DELIVERABLE-LINE bind: render-brief.sh's deliverable_of DIFFERS from the guard's, so it renders a line the guard reads differently"
+  # MARK-LINE: a JSON or JSONL deliverable's brief carries no closing --mark line; the .md twin in the same
+  # directory, with json in its name, carries the exact one. One start per seed shape.
+  echo "HERMETIC-CONSUMED $DL_RB"
+  ML_D="$WORK/mark-line/_bmad-output/gate-adjudication"; ML_N=planning-20261123T100000Z
+  ml_rb() { # ml_rb <cell> <deliverable> [render-brief args...] -> ML_RC, ML_B (the printed path)
+    local c="$1" d="$2"; shift 2
+    ML_B="$(FXCELL="$c" bash "$DL_RB" --role gate-adjudicator --step planning --deliverable "$d" --mark-step planning --out "$WORK/mark-line/briefs-$c" "$@" </dev/null 2>/dev/null)"; ML_RC=$?
+  }
+  ml_nomark() { # ml_nomark <deliverable>: rendered, Deliverable line present, no --mark line
+    [ "$ML_RC" = 0 ] && [ -f "$ML_B" ] && grep -qxF "Deliverable: $1" "$ML_B" && ! grep -q -- '--mark' "$ML_B"
+  }
+  ml_rb cli-rb-jsonl "$ML_D/$ML_N.part-1of2.jsonl" --shard "1/2 planning"
+  ml_nomark "$ML_D/$ML_N.part-1of2.jsonl" \
+    && ok "MARK-LINE: a sharded .jsonl gate part's brief is rendered with its Deliverable line and no --mark line" \
+    || bad "MARK-LINE: the .jsonl gate part's brief (rc=$ML_RC) lacks its Deliverable line or carries a --mark line the merge will refuse"
+  ml_rb cli-rb-json "$ML_D/$ML_N.verdict.json"
+  ml_nomark "$ML_D/$ML_N.verdict.json" \
+    && ok "MARK-LINE: a .verdict.json deliverable's brief is rendered with its Deliverable line and no --mark line" \
+    || bad "MARK-LINE: the .verdict.json brief (rc=$ML_RC) lacks its Deliverable line or carries a --mark line that breaks json.load"
+  ml_rb cli-rb-md "$ML_D/$ML_N.json.md"
+  [ "$ML_RC" = 0 ] && [ -f "$ML_B" ] \
+    && grep -qF "\`scripts/ai-dlc/wait-for-deliverable.sh --mark $ML_D/$ML_N.json.md planning gate-adjudicator none findings=<n>\`" "$ML_B" \
+    && ok "MARK-LINE twin: a .json.md deliverable in the same directory keeps its exact --mark line" \
+    || bad "MARK-LINE twin: the .json.md deliverable's brief (rc=$ML_RC) lost its --mark line, so render-brief drops more than JSON"
 else printf '  SKIP  DELIVERABLE-LINE bind: render-brief.sh is not installed beside the hooks (the subject ships ahead of a consumer pull)\n'; fi
 be_fn() { awk '/^brief_expand\(\) \{/ { f = 1 } f { print } f && /^\}$/ { exit }' "$1"; }
 DL_BE_G="$(be_fn "$HOOK")"; DL_BE_I="$(be_fn "$DL_IFR")"

@@ -182,7 +182,7 @@ mk_tree() {
   cp -R "${SCRX[@]}" "$d/core/scripts/" && cp -R "${SCRX[@]}" "$d/stub/core/scripts/" || return 1
   for s in $STUBS; do
     [ -f "$d/stub/core/scripts/$s" ] || return 1
-    printf '#!/usr/bin/env bash\n# gate-transition fixture stub for %s: PASS unless GT_FX_REFUSE names it.\n[ %s != validate-spawn-ledger.sh ] || [ -z "${GT_FX_RC22:-}" ] || { [ "$GT_FX_RC22" != 3 ] || { if [ "${GT_FX_MSG22:-}" = norole ]; then echo "NO ROLE-BOUND ROWS: EXAMINED NOTHING -- 2 S1 row(s) exist and NONE of them was judged"; else echo "PRE-LEDGER: 4 row(s) in ledger.jsonl, NONE of them S1."; fi; echo "COUNTS: examined 0 S1 spawn row(s) of 4 in ledger.jsonl;"; }; exit "$GT_FX_RC22"; }\n[ "${GT_FX_REFUSE:-}" != %s ] || { echo "stub %s: REFUSED by the fixture" >&2; exit 1; }\n[ %s != validate-h2-attestation.sh ] || echo "H2_ATTESTED v1 sprint=1 stub"\n[ %s != validate-steering-budget.sh ] || echo "steering-count 0"\n[ %s != validate-gate3-tables.sh ] || echo "GATE-ARM 4 PASS examined=1 ok stub"\nexit 0\n' \
+    printf '#!/usr/bin/env bash\n# gate-transition fixture stub for %s: PASS unless GT_FX_REFUSE names it.\n[ %s != validate-spawn-ledger.sh ] || [ -z "${GT_FX_RC22:-}" ] || { [ "$GT_FX_RC22" != 3 ] || { if [ "${GT_FX_MSG22:-}" = norole ]; then echo "NO ROLE-BOUND ROWS: EXAMINED NOTHING -- 2 S1 row(s) exist and NONE of them was judged"; else echo "PRE-LEDGER: 4 row(s) in ledger.jsonl, NONE of them S1."; fi; echo "COUNTS: examined 0 S1 spawn row(s) of 4 in ledger.jsonl;"; }; [ "$GT_FX_RC22" != 4 ] || { echo "VIOLATION\ttoolu_GTX1\tunread\t[S1-CHECK22-GT-OVERRIDE] fixture waiver"; echo "RECORDED: every one of the 1 violation(s) is named by a current-sprint OVERRIDDEN entry in docs/escalations/pending.md."; }; exit "$GT_FX_RC22"; }\n[ "${GT_FX_REFUSE:-}" != %s ] || { echo "stub %s: REFUSED by the fixture" >&2; exit 1; }\n[ %s != validate-h2-attestation.sh ] || echo "H2_ATTESTED v1 sprint=1 stub"\n[ %s != validate-steering-budget.sh ] || echo "steering-count 0"\n[ %s != validate-gate3-tables.sh ] || echo "GATE-ARM 4 PASS examined=1 ok stub"\nexit 0\n' \
       "$s" "$s" "$s" "$s" "$s" "$s" "$s" > "$d/stub/core/scripts/$s" || return 1
   done
 }
@@ -711,6 +711,39 @@ st_cp() { # close, story 3-1, its slugged verdict older than the storyless one: 
   V_CLOSEP=0
   [ "$RC" = 0 ] && grep -qxF "nonce: $NM3" "$P/3-1-gclose-p1.plan" && ! grep -q '^gate3-scope:' "$P/3-1-gclose-p1.plan" && V_CLOSEP=1
 }
+# G3W: gate 3 for story 1-4, the Check 22 arm exiting 4 with one named VIOLATION line and its RECORDED line (the
+# stub's GT_FX_RC22=4 output): admitted, a nonce minted into OPEN, the RECORDED gate-log line and the header's
+# check22-waiver line recorded. G3Q (rc 1, no lines) is its refusing twin.
+C22HDR='[S1-CHECK22-GT-OVERRIDE] fixture waiver'
+st_g3w() {
+  GT_FX_RC22=4 gtrun "$1" "$2" g3w 2 - 1-4 3 --transcript-dir "$WD/td"
+  V_G3W=0; Y="$(sed -n 's/^nonce: //p' "$P/1-4-g3-p1.plan" 2> /dev/null)"
+  [ "$RC" = 0 ] && [ -n "$Y" ] && [ "$(head -1 "$OPEN")" = "$Y" ] \
+    && grep -qxF "gate-log: Check 22 exit 4: RECORDED: every one of the 1 violation(s) is named by a current-sprint OVERRIDDEN entry in docs/escalations/pending.md." "$P/1-4-g3-p1.plan" \
+    && [ "$(grep -c '^check22-waiver: ' "$P/1-4-g3-p1.plan")" = 1 ] && grep -qxF "check22-waiver: $C22HDR" "$P/1-4-g3-p1.plan" && V_G3W=1
+}
+# c22v <check-22 verdict> [waiver_id] : story 1-4's verdict at nonce Y, carrying one check 22 verdict.
+c22v() {
+  mkdir -p "$L/_bmad-output/gate-adjudication"
+  jq -n --arg n "$Y" --arg v "$1" --arg w "${2:-}" '{schema_id: "GATE_ADJUDICATION_VERDICT v1", gate_type: "implementation",
+    gate_series_id: "implementation-story1x4-s1-20260301T000000Z", gate_nonce: $n,
+    verdicts: [{check_id: 22, verdict: $v} + (if $w == "" then {} else {waiver_id: $w} end)]}' \
+    > "$L/_bmad-output/gate-adjudication/$Y.verdict.json"
+}
+st_cwp() { # close after G3W over a check 22 PASS verdict: CLOSEWP
+  [ -z "$Y" ] || bash "$SCR/gate-checkpoint.sh" --nonce "$Y" record 26 PASS > /dev/null 2>&1
+  c22v PASS
+  gtrun "$1" "$2" cwp 2 - 1-4 close
+  V_CLOSEWP=0
+  [ "$RC" = 1 ] && grep -qF "REFUSED close: gate 3 recorded Check 22 exit 4" "$WD/cwp.err" && grep -qF "(read: 'PASS" "$WD/cwp.err" \
+    && [ ! -e "$P/1-4-gclose-p1.plan" ] && V_CLOSEWP=1
+}
+st_cww() { # the same close over check 22 FAIL_WAIVED with the recorded header as waiver_id: CLOSEWW
+  c22v FAIL_WAIVED "$C22HDR"
+  gtrun "$1" "$2" cww 2 - 1-4 close
+  V_CLOSEWW=0
+  [ "$RC" = 0 ] && [ -n "$Y" ] && grep -qx 'gate: close' "$P/1-4-gclose-p1.plan" && grep -qxF "nonce: $Y" "$P/1-4-gclose-p1.plan" && V_CLOSEWW=1
+}
 
 echo "gate-transition:"
 printf 'HERMETIC-CONSUMED %s\n' "$GT"
@@ -893,6 +926,15 @@ st_cm cm "$GTR"
 st_cp cp "$GTR"
 [ "$V_CLOSEP" = 1 ] && ok "CLOSEP a story-slug verdict ($NM3) wins over a newer storyless one ($NM2): no gate3-scope line" \
   || bad "CLOSEP rc=$RC: $(grep -E '^(nonce|gate3-scope):' "$P/3-1-gclose-p1.plan" 2> /dev/null | tr '\n' ' ') $(head -2 "$WD/cp.err" | tr '\n' ' ')"
+st_g3w g3w "$GT3"
+[ "$V_G3W" = 1 ] && ok "G3W gate 3 with the Check 22 arm exiting 4 (RECORDED, one named VIOLATION line): exit 0, nonce: $Y in the plan and OPEN, the RECORDED gate-log line and one 'check22-waiver: $C22HDR' line" \
+  || bad "G3W rc=$RC nonce=[$Y]: $(grep -E '^(gate-log: Check 22|check22-waiver)' "$P/1-4-g3-p1.plan" 2> /dev/null | tr '\n' ' ') $(head -3 "$WD/g3w.err" | tr '\n' ' ')"
+st_cwp cwp "$GTR"
+[ "$V_CLOSEWP" = 1 ] && ok "CLOSEWP close after G3W with 26 PASS and a check 22 PASS verdict: exit 1, REFUSED close naming the exit-4 record and reading 'PASS', no close plan" \
+  || bad "CLOSEWP rc=$RC: $(head -2 "$WD/cwp.err" | tr '\n' ' ')"
+st_cww cww "$GTR"
+[ "$V_CLOSEWW" = 1 ] && ok "CLOSEWW the same close over check 22 FAIL_WAIVED with waiver_id the recorded header: exit 0, gate: close, nonce: $Y" \
+  || bad "CLOSEWW rc=$RC: $(head -2 "$WD/cww.err" | tr '\n' ' ')"
 
 # --- GATE-RUN (BL-819): the real gate-run.sh over a toy world, and GM3's binding -----------------------------------
 # One toy root (a copy of the skill tree, schemas, a whole copy of the scripts directory plus three stub arms) and a
@@ -900,7 +942,8 @@ st_cp cp "$GTR"
 #   GRF  a seeded legacy FAIL: exit 1, a REMEDY line naming 2a, no nonce, no OPEN marker, no worklist.
 #        control: GRO.
 #   GRO  the clean near-miss: exit 0, an ADJUDICATE line naming the worklist, and the printed GATE-RESULT ids equal the
-#        arms file's ids; the ledger carries 2a PASS and 1 PENDING. control: GRF.
+#        arms file's ids; the ledger carries 2a PASS and 1 PENDING; row 2a's {STEP} is filled with the --step value.
+#        control: GRF.
 #   GRN  a native arm printing PASS with examined=0: exit 1, `examined-nothing`, no nonce. control: GRO (examined=4 passes).
 #   GRC1 close with no snapshot on disk: exit 1, no gate-log entry, OPEN still set. control: GRC2.
 #   GRC2 the same close once the snapshot exists: exit 0, exactly ONE `## Gate Log:` entry, OPEN cleared (D4). control: GRC1.
@@ -916,7 +959,7 @@ mkdir -p "$GRR/.claude/skills/ai-dlc" || { echo "FIXTURE BROKEN: gate-run toy sk
 scr_list; cp -R "${SCRX[@]}" "$GRW/core/scripts/" && cp -R "${SKX[@]}" "$GRR/.claude/skills/ai-dlc/" && cp -R "$GRSCH" "$GRR/.claude/schemas" || { echo "FIXTURE BROKEN: gate-run toy copies" >&2; exit 2; }
 world_repo "$GRR" > /dev/null 2>&1 || { echo "FIXTURE BROKEN: gate-run toy repo" >&2; exit 2; }
 printf '#!/usr/bin/env bash\necho "FAIL seeded offender at x:3"\nexit 1\n' > "$GRW/core/scripts/stub-fail.sh"
-printf '#!/usr/bin/env bash\necho "ok fine"\n' > "$GRW/core/scripts/stub-ok.sh"
+printf '#!/usr/bin/env bash\necho "ok fine $*"\n' > "$GRW/core/scripts/stub-ok.sh"
 printf '#!/usr/bin/env bash\necho "GATE-ARM 25 PASS examined=0 f:1 read nothing"\n' > "$GRW/core/scripts/stub-n0.sh"
 printf '#!/usr/bin/env bash\necho "GATE-ARM 25 PASS examined=4 f:1 read four"\n' > "$GRW/core/scripts/stub-n4.sh"
 for _gp in gate-run validate-gate-manifest validate-gate-adjudication; do printf 'HERMETIC-CONSUMED core/scripts/%s.sh\n' "$_gp"; done
@@ -935,13 +978,14 @@ if [ "$GRC" = 1 ] && grep -q '^REMEDY 2a ' "$GRW/grf.out" && grep -q 'nonce=- ' 
   ok "GRF a seeded FAIL: exit 1, REMEDY 2a, nonce=-, no OPEN, no ledger, no worklist"
 else bad "GRF rc=$GRC: $(grep -E '^(GATE-RUN|REMEDY)' "$GRW/grf.out" | head -2 | tr '\n' ' ') checkpoint-files=$(gr_ckpt)"; fi
 
-gr_arms stub-ok.sh $'25\tscript\tstub-n4.sh\tnative'
+gr_arms 'stub-ok.sh --step {STEP}' $'25\tscript\tstub-n4.sh\tnative'
 gr_run gro arms "${GRX[@]}"
 GRN="$(grep -o 'nonce=[^ ]*' "$GRW/gro.out" | tail -1 | cut -d= -f2)"
 GRP="$(grep '^GATE-RESULT' "$GRW/gro.out" | awk '{print $2}' | sort | tr '\n' ' ')"; GRE="$(awk -F'\t' '!/^#/ && NF {print $1}' "$GRA" | sort | tr '\n' ' ')"
 GRL="$(bash "$GRW/core/scripts/gate-checkpoint.sh" --root "$GRR" --nonce "$GRN" list 2> /dev/null | awk -F'\t' '{print $1":"$2}' | sort | tr '\n' ' ')"
-if [ "$GRC" = 0 ] && grep -q '^ADJUDICATE .*\.worklist nonce=' "$GRW/gro.out" && [ "$GRP" = "$GRE" ] && [ -n "$GRP" ] && [ "$GRL" = "1:PENDING 25:PASS 2a:PASS " ] && [ -s "$GRR/_bmad-output/.gate-checkpoint/OPEN" ]; then
-  ok "GRO the clean near-miss: exit 0, ADJUDICATE, printed ids ($GRP) equal the arms ids, ledger $GRL, OPEN set"
+if [ "$GRC" = 0 ] && grep -q '^ADJUDICATE .*\.worklist nonce=' "$GRW/gro.out" && [ "$GRP" = "$GRE" ] && [ -n "$GRP" ] && [ "$GRL" = "1:PENDING 25:PASS 2a:PASS " ] && [ -s "$GRR/_bmad-output/.gate-checkpoint/OPEN" ] \
+   && grep -q '^GATE-RESULT 2a PASS .* ok fine --step requirements\.md$' "$GRW/gro.out"; then
+  ok "GRO the clean near-miss: exit 0, ADJUDICATE, printed ids ($GRP) equal the arms ids, ledger $GRL, OPEN set, {STEP} filled as requirements.md"
 else bad "GRO rc=$GRC printed=[$GRP] arms=[$GRE] ledger=[$GRL]: $(grep -E '^(GATE-RUN|ADJ)' "$GRW/gro.out" | tr '\n' ' ')"; fi
 
 gr_arms stub-ok.sh $'25\tscript\tstub-n0.sh\tnative'; rm -rf "$GRR/_bmad-output/.gate-checkpoint"

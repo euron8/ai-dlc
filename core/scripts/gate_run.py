@@ -129,9 +129,12 @@ def slice_plan(root, gtype):
 
 
 # ------------------------------------------------------------------ placeholders
+# An arm's {NAME} is filled from cmd_arms's ctx: {ROOT} {SPRINT} {STEP} (the --step value) {BASE} {SHA}
+# {TRANSCRIPT} {TRANSCRIPT_DIR} {SERIES} {STATE} {WORKTREE}, plus {STORY} and {STORIES[:flag]} from --story.
 PH_GRAMMAR = {
     "SPRINT": r"[0-9]+", "SHA": r"[0-9a-f]{7,64}", "BASE": r"[0-9a-fA-F]{7,64}|[A-Za-z0-9_./~^-]+",
     "NONCE": r"[a-z-]+-[0-9]{8}T[0-9]{6}Z", "WORKTREE": r"/[A-Za-z0-9_./+@:~-]+",
+    "STEP": r"[A-Za-z0-9_.-]+\.md",
 }
 
 
@@ -384,7 +387,7 @@ def cmd_arms(argv, root):
     run_id = now.strftime("%Y%m%dT%H%M%S") + "-%d" % os.getpid()
     stage = os.path.join(gate_run_dir(root), run_id)
     os.makedirs(stage, exist_ok=True)
-    ctx = {"STORIES": None, "ROOT": root, "SPRINT": o["sprint"], "BASE": o["base"], "SHA": o["sha"],
+    ctx = {"STORIES": None, "ROOT": root, "SPRINT": o["sprint"], "STEP": o["step"], "BASE": o["base"], "SHA": o["sha"],
            "TRANSCRIPT": o["transcript"], "TRANSCRIPT_DIR": o["transcript-dir"],
            "SERIES": (o["series"] or [None])[0], "STATE": st, "WORKTREE": o["worktree"]}
     stories = stories_for(root, o["sprint"], o["story"])

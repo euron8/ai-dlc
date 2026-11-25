@@ -9,6 +9,10 @@ cli core/scripts/validate-gate-adjudication.sh cli-vga-refuse
 cli core/hooks/ai-dlc-dispatch-guard.sh cli-dg-set
 cli core/hooks/ai-dlc-dispatch-guard.sh cli-dg-deny
 cli core/hooks/ai-dlc-dispatch-guard.sh cli-dg-quiet
+# render-brief.sh runs once per seed shape of its closing-line case: .jsonl, .json and the .md twin.
+e2e core/scripts/render-brief.sh cli-rb-jsonl why=render-brief.sh has no entry function or source guard, so its rendered file is read from one program start per seed shape of the closing-line case
+e2e core/scripts/render-brief.sh cli-rb-json why=render-brief.sh has no entry function or source guard, so its rendered file is read from one program start per seed shape of the closing-line case
+e2e core/scripts/render-brief.sh cli-rb-md why=render-brief.sh has no entry function or source guard, so its rendered file is read from one program start per seed shape of the closing-line case
 # The guard's own starts of the ledger validator and the merge run in process (dg_bash routes them to vsl_main / merge_main). The one start left is
 # section 15's stand-in validator, a script that exits 2, which the guard starts as a program: the fail-open arm exists only for a validator that is not the shipped one.
 e2e core/scripts/validate-spawn-ledger.sh dg-vsl-stub why=the guard's remediation predicate fails closed on a validator that exits 2; the stand-in is a one-line script, not the shipped validator, so no in-process entry exists

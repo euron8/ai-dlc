@@ -19,6 +19,25 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1238.0] - 2026-11-25
+
+### A gate whose Check 22 violations an OVERRIDDEN escalation entry names now reaches the adjudicator instead of refusing at gate 3 (BL-1230, PC-S324-CHECK22-WAIVER-IS-UNREACHABLE-FROM-GATE-TRANSITION)
+
+- For every consumer running the gate pipeline. `validate-spawn-ledger.sh` gains `--escalations <pending.md>` and a `violations=<n>` count; every violation now goes through one helper, at 7 sites. With the flag it prints one `VIOLATION<TAB><key><TAB><class><TAB><header>` line per violation; when every violation is named, as a whole token on the dispatch guard's grammar, by a current-sprint OVERRIDDEN `##` entry, it exits 4, otherwise it exits 1 as before, listing the unnamed keys. Without the flag every exit and stderr line is unchanged. `gate-transition.sh` gate 3 passes the flag when `docs/escalations/pending.md` exists, records `Check 22 exit 4` and one `check22-waiver: <header>` per header, and goes on to the gate-run arms; `close` refuses unless the verdict's check 22 is FAIL_WAIVED with a waiver_id among the recorded headers. The rc-1 refusal now names a route that can succeed. Cost: one validator run gains a pending.md parse; with no escalations file nothing changes except the COUNTS line.
+- When you see it: a gate at which Check 22's only violations are each named by a current-sprint OVERRIDDEN `##` entry in `docs/escalations/pending.md` no longer stops at `refuse check-22`; the adjudicator grades Check 22 and expects FAIL_WAIVED. Arm 3 (operator authorization) is still checked by the row 2a arm. An OVERRIDDEN `###` sub-entry is still read under its parent `##` header; BL-1239 carries it.
+
+### Check 33 no longer fails the opening planning gate of a variant for the file its own text says is not yet owed (BL-1231, PC-S324-CHECK33-ARMS-ARM-REFUSES-THE-CHECK-OWN-NOT-YET-AUTHORED-CLAUSE-AT-CARRY-OVER-OPENING-GATES)
+
+- For every consumer at the opening planning gate of carry-over, brownfield-a/b/c or analysis-only. Row 33 now passes `--gate-step {STEP}`. At an opening planning step, with at least one operator entry in the requests file and no `s<N>/locked-requirements.md`, `validate-request-coverage.sh` prints `NOT-YET-AUTHORED` and exits 3, and the row records SKIP reason=rc3 so the gate mints its nonce. Every other state keeps exit 2. A planning gate that runs after the opening step but before discovery (brownfield-c's `doc-repair-backfill.md`) still fails rc 2; BL-1240 carries it. The opening steps are derived at run time from `steps/route-fresh-start.md`'s route table, found through `gate_run.py`'s `find_skill_dir`: a route's First Step is opening when discovery or requirements follows it. On today's table that is `carry-over-evaluation.md`, `codebase-inventory.md`, `deep-codebase-analysis.md` and `doc-reconciliation.md`; a missing table yields exit 2. `gate_run.py` gains a `{STEP}` placeholder. The consumer's filing named only the carry-over step; the three brownfield openers share the refusal and are included.
+- Cost: at an absent brief with `--gate-step`, at most two `python3` starts (locate the table, count entries); a present brief is unchanged.
+
+### A rendered brief no longer tells the writer to mark a JSON or JSONL deliverable, so a gate part is no longer refused after its seal (BL-1232, PC-S324-RENDERED-MARK-INSTRUCTION-SEALS-NO-GATE-PART-AND-THE-MERGE-REFUSES-THE-MARKED-BYTES)
+
+- For every consumer running a gate whose parts or verdict are written from a rendered brief. `render-brief.sh` printed `wait-for-deliverable.sh --mark <DELIV>` for every deliverable; on a gate part that appended a marker no seal row covered, and `--merge` refused the marked bytes ("changed after its last sealed write"; the marker line is not JSON either). The line is now omitted for `*.json` and `*.jsonl`, the boundary `_gate-procedures.md` already states; a `.md` deliverable is unchanged. The unsharded `.verdict.json` case, which breaks `json.load` the same way, is closed by the same predicate.
+- When you see it: a gate's parts merge without a re-run. A nonce already left without a verdict by the old brief (graph's 2026-11-24 story gate, re-run under a new nonce) needs no cleanup.
+
+Fully discharges PC-S324-CHECK22-WAIVER-IS-UNREACHABLE-FROM-GATE-TRANSITION, PC-S324-CHECK33-ARMS-ARM-REFUSES-THE-CHECK-OWN-NOT-YET-AUTHORED-CLAUSE-AT-CARRY-OVER-OPENING-GATES and PC-S324-RENDERED-MARK-INSTRUCTION-SEALS-NO-GATE-PART-AND-THE-MERGE-REFUSES-THE-MARKED-BYTES.
+
 ## [0.1237.0] - 2026-11-25
 
 ### A lead beat armed with --dispatch on a role-less round-dispatcher no longer refuses when the harness echoes the spawn (BL-1237, PC-S323-WAIT-ROLELESS-FALLBACK-ONE-LINE-TEST-BROKEN-ON-API-REQUEST-BLOB)
