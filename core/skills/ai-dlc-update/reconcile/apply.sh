@@ -679,7 +679,9 @@ if [ "$FINISH" = 0 ] && [ "$CLASSIFY_CHECK" = 0 ]; then
           printf '%s\n' "$_ug_verr" | sed -n 's/^[[:space:]]*unseen: //p' > "$PR_RUN/unseen-rows" \
             || err "the unseen rows could not be staged under $PR_RUN; re-run pull.sh apply. NOTHING HAS BEEN WRITTEN."
           while IFS= read -r _pr_row; do
-            pr_decide unseen-row "${_pr_row##* }" "$_ra_dg" script proceed "rendered after the first-verified region; no ASK family"
+            # The subject is the whole row, the same text pr_unseen_ask_count tests; a TAB would split the column.
+            _pr_subj="${_pr_row//$'\t'/ }"
+            pr_decide unseen-row "$_pr_subj" "$_ra_dg" script proceed "rendered after the first-verified region; no ASK family"
           done < "$PR_RUN/unseen-rows"
         else
           {

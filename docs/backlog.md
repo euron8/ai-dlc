@@ -4305,3 +4305,13 @@ Provenance: batch 265 close (lead ai-dlc-19); id allocated by the lead.
 
 verify: manual
 
+
+## BL-1236 — update pull: the narrowed re-approval records each unseen report row under its last word, so the PR body's decisions table cannot say which row a decision disposed
+
+**LANDED (vVERSION_PLACEHOLDER).** batch 266, cluster U, filed and closed in one release. Filed by the consumer as a push-candidate ledger entry (the apply script's unseen-row decision recorded the last word of the row as its subject). Owner: `core/skills/ai-dlc-update/reconcile/apply.sh` (the narrowed re-approval branch, BL-1190 D-2). The loop that writes one `unseen-row` decisions row per `unseen:` row now records the whole row, with TABs folded to spaces, as column 2; before, a shell prefix-strip kept only the text after the row's last space, so nine rows of one class read `this`, `flag,`, `the`. The `proceed` verdict, the reason text, the region digest and the ASK-family test (`pr_unseen_ask_count`, which reads the same row text) are unchanged. Readers of column 2 treat it as free text: `pull.sh` `pl_pr_table` (cell cut at 400 bytes), the DECIDE print, the whole-line dedup in `pl_flush_decisions`, and the deliver selection, which only exact-matches it against changed paths. No fixture reaches the branch (no fixture names `unseen-row`); the probe and a first-word mutant are in the commit message.
+
+Step: n/a
+
+Provenance: batch 266 cluster U (lead ai-dlc-9b); id allocated by the lead.
+
+verify: sh f=core/skills/ai-dlc-update/reconcile/apply.sh; grep -q 'pr_decide unseen-row' $f || exit 9; ! grep -qF '${_pr_row##* }' $f || exit 1
