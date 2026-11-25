@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1242.0] - 2026-11-25
+
+### A later-pass round's cross dispatch is no longer refused by the dispatch guard's cover deny, because the cross shard's ledger line carries the positional cover 1..K (BL-1245)
+
+- **The cross shard's line is the positional cover** (BL-1245, PC-S324-GEN-ROUND-BRIEFS-CROSS-ORDINALS-FROM-MAP-NOT-1..K). For every consumer running a later-pass (derived, subset) round whose map's ordinals do not start at 1. `gen-round-briefs.sh` wrote the one cross shard's ledger line from the map's own ordinal column (3, 4, 5, 6, 7 at K=5), so the cover deny in `ai-dlc-dispatch-guard.sh` refused the cross dispatch, which that deny and `validate-spawn-ledger.sh` hold to every ordinal 1..K comma-joined. The line now reads `cross/5 g1/1 1, 2, 3, 4, 5`. Per-part briefs keep the map's document ordinals, and the cross subject text now names the map's ordinals the agent may cite, which is what `merge-adversarial-shards.sh` accepts in a cross shard's `sections:`/`stories:` citations. The `story-evidence-scaffold` fixture asserts it on a map with ordinals 2 and 3.
+
+### A dev dispatched by `dispatch-story.sh` is told to write its deliverable at `implementation-artifacts/s<N>/dev-<idx>.md`, so the path passes the consumer's pre-push artifact-path check (BL-1247)
+
+- For every consumer running a BMAD story dispatch (BL-1247, PC-S324-DISPATCH-STORY-PRESCRIBES-A-GRAMMAR-BLOCKED-DEV-PATH). The dev brief's `Deliverable:` line named `implementation-artifacts/dev-s<N>-<idx>.md`, a sprint token outside the reserved `s<N>/` directory slot, which `validate-artifact-paths.sh` classifies BLOCKING, so a dev following the brief produced a file the consumer could not push. The line now names `implementation-artifacts/s<N>/dev-<idx>.md`, the destination `migrate-artifact-paths.sh` plans for the old spelling. The in-flight row, the dispatch guard and `render-brief.sh` read the first path-shaped token of the line, so they follow it unchanged.
+
 ## [0.1241.0] - 2026-11-25
 
 ### A reader whose whole Read was refused for size is told where to continue until it reaches the end, and post-compaction recovery counts the digest as read only when it was read to the end (BL-1212 advances)

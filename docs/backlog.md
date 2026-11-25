@@ -4400,35 +4400,3 @@ Provenance: batch 266, lead ai-dlc-9b.
 
 verify: manual
 
-## BL-1245 — `gen-round-briefs.sh` writes the one cross shard line from the map's own ordinals, so a derived map's cross brief is refused by the dispatch guard's cover deny
-
-**DEFECT.** Filed by the consumer as PC-S324-GEN-ROUND-BRIEFS-CROSS-ORDINALS-FROM-MAP-NOT-1..K (graph s324, batch 267). Owner: `core/scripts/gen-round-briefs.sh`.
-
-**LANDED (vVERSION_PLACEHOLDER).** Batch 267, filed and closed in one release. `gen-round-briefs.sh` builds the cross line's `<ordinals>` as the positional cover 1..K (`COVER`, a shell loop, no fork) instead of the map's ordinal column, so a derived map (ordinals 3,4,5,6,7 at K=5) writes `cross/5 g1/1 1, 2, 3, 4, 5`, the contract of `core/skills/ai-dlc/rule-bodies/rule-28.md:390-391` "every ordinal 1..K, comma-joined" and `core/skills/ai-dlc/steps/_gate-procedures.md:450-451` "every ordinal 1..K comma-joined", which the cover deny in `ai-dlc-dispatch-guard.sh` and arm S4 of `validate-spawn-ledger.sh` read. Per-part briefs keep the map's document ordinals. `merge-adversarial-shards.sh` accepts a cross shard's `sections:`/`stories:` citations against 1..K of the FULL map (`norm_ord`, :2192-2197, used at :2786), the document ordinals, so the cross subject text now names the map ordinals the agent may cite (`ALLORD`). Fixture `story-evidence-scaffold` runs its elicitation cell on a map with ordinals 2,3 and asserts `cross/2 g1/1 1, 2` and the parts' `2/2`, `3/2`.
-
-Step: n/a
-
-Provenance: batch 267, release 267-B; id allocated by the lead ai-dlc-9f.
-
-verify: manual
-
-## BL-1247 — `dispatch-story.sh` prescribes the dev deliverable as `implementation-artifacts/dev-s<N>-<idx>.md`, a sprint token outside the `s<N>/` slot, so a consumer following it cannot push
-
-**LANDED (vVERSION_PLACEHOLDER).** batch 267, cluster D, filed and closed in one release. Filed by the consumer as a push-candidate ledger entry (graph ledger at df1dde6b1, :740-757). Owner: `core/scripts/dispatch-story.sh`. The brief's `Deliverable:` line now names `${WT}/_bmad-output/implementation-artifacts/s${N}/dev-${IDX}.md`, the destination `migrate-artifact-paths.sh` plans for the old spelling; by hand, `validate-artifact-paths.sh` reported BLOCKING on the old path and PASS on the new one in a scratch repo.
-
-**DEFECT.**
-
-Goal: a dev dispatched by `dispatch-story.sh` writes its deliverable where the consumer's pre-push `validate-artifact-paths.sh` accepts it. One done condition: the `Deliverable:` line carries the sprint only as the `s<N>/` directory.
-
-Baseline: `dispatch-story.sh:58` printed `dev-${NAME}.md` with NAME `s324-5-3`, a basename sprint token that the validator classifies BLOCKING.
-
-Work list:
-
-1. Print `s${N}/dev-${IDX}.md` on the `Deliverable:` line, the shape the migration tool plans.
-2. Confirm every reader of the line takes its first path-shaped token (`ai-dlc-inflight-row.sh`, `ai-dlc-dispatch-guard.sh`, `render-brief.sh`) and no other site quotes the old shape.
-
-Step: n/a
-
-Provenance: batch 267, cluster D; id allocated by the lead.
-
-verify: sh f=core/scripts/dispatch-story.sh; grep -qF 'implementation-artifacts/s${N}/dev-${IDX}.md' $f || exit 1; grep -qF 'implementation-artifacts/dev-${NAME}.md' $f && exit 2; exit 0
