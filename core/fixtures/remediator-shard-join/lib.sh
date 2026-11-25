@@ -211,6 +211,41 @@ p_shardrow() { # each remediator's Write of its OWN part file is a ledger row un
   run_join "$1" "$w"
   [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$(out_of "$w")" ]
 }
+# THE ROUND'S OWN MACHINERY under s<N>/rounds/ is dropped from the files-mode file set beside shards/.
+# A fourth agent id, the round-dispatcher, writes nothing else, so a join counting it reads 4 writers.
+AGD=a7d15ba7c4e2f0961
+p_roundsreturn() { # the dispatcher's `<round>.return` row under rounds/ -> JOINED, 3 parts / 3 writers
+  local w n; w="$(new_world)"; three_writers "$w"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  mkdir -p "$w/$SLOT/rounds"
+  drive "$w" Write "$w/$SLOT/rounds/stories-repair-p1.return" "$AGD"
+  n="$(grep -c 'rounds/stories-repair-p1\.return' "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl")" || n=0
+  [ "$n" -eq 1 ] || return 1   # the hook DID record it, so the join had to exclude it
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$(out_of "$w")" ]
+}
+p_roundslane() { # part records a mis-named brief put under rounds/<round>/ -> JOINED, 3 parts / 3 writers
+  local w n; w="$(new_world)"; three_writers "$w"
+  part "$w" 01 2.1; part "$w" 02 2.2; part "$w" 03 3.1
+  mkdir -p "$w/$SLOT/rounds/stories-repair-p1"
+  drive "$w" Write "$w/$SLOT/rounds/stories-repair-p1/lane-1.md" "$AG1"
+  drive "$w" Write "$SLOT/rounds/stories-repair-p1/lane-2.md" "$AG2"
+  n="$(grep -c 'rounds/stories-repair-p1/lane-' "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl")" || n=0
+  [ "$n" -eq 2 ] || return 1
+  run_join "$1" "$w"
+  [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers)" && [ -f "$(out_of "$w")" ]
+}
+p_roundsonly() { # a remediator whose ONLY record sits under rounds/ -> its story write is still a missing shard
+  local w n; w="$(new_world)"; three_writers "$w"
+  part "$w" 01 2.1; part "$w" 02 2.2
+  mkdir -p "$w/$SLOT/rounds/stories-repair-p1"
+  drive "$w" Write "$w/$SLOT/rounds/stories-repair-p1/lane-3.md" "$AG3"
+  n="$(grep -c 'rounds/stories-repair-p1/lane-3' "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl")" || n=0
+  [ "$n" -eq 1 ] || return 1
+  run_join "$1" "$w"
+  refused "$w" "$REL/$S31 was written in the window by $AG3 and is cited by no shard record -- a missing shard" \
+    && ! has "$JO" "rounds/"
+}
 
 # ---- DOCUMENT MODE (BL-372): one document, split by partition-document.sh, repaired by section.
 # The split is the REAL splitter's; every section write is a ledger row the REAL hook recorded.
@@ -414,17 +449,22 @@ p_uwboth() { # a before- and an after-window row -> BEFORE, then "; also " AFTER
 }
 p_uwaside() { # a --rerun part citing two files, the re-run rewriting only one: the other's in-window
   # row is superseded, so the join set it aside -> the ASIDE clause, naming that row
-  local w l; w="$(new_world)"
+  local w l n; w="$(new_world)"
   drive "$w" Edit "$w/$REL/$S21" "$AG1" "" "" 2026-06-01T00:05:00Z
   drive "$w" Edit "$w/$REL/$S22" "$AG1" "" "" 2026-06-01T00:06:00Z
   part "$w" 01 2.1 2.2
   drive "$w" Write "$w/$UW_PD/01.md" "$AG1" "" "" 2026-06-01T00:07:00Z
   drive "$w" Edit "$w/$REL/$S22" "$AG4" "" "" 2026-06-01T00:25:00Z
   drive "$w" Write "$w/$UW_PD/01.md" "$AG4" "" "" 2026-06-01T00:26:00Z
+  # The round-dispatcher's return row, in the window: the --rerun rebuild of the file set drops it as files mode does.
+  mkdir -p "$w/$SLOT/rounds"
+  drive "$w" Write "$w/$SLOT/rounds/stories-repair-p1.return" "$AGD" "" "" 2026-06-01T00:27:00Z
+  n="$(grep -c 'rounds/stories-repair-p1\.return' "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl")" || n=0
+  [ "$n" -eq 1 ] || return 1
   run_join_w "$1" "$w" --rerun 01.md@2026-06-01T00:20:00Z
   l="$(uw_line)" || return 1
   grep -qF -- "-- $REL/$S21 was written in the window at 2026-06-01T00:05:00Z by $AG1, but this join set that write aside (a --rerun supersedes it): the re-run writes it after its start, or the part stops citing it" <<<"$l" \
-    && ! grep -qF "reaches no Edit matcher" <<<"$l" && ! grep -qF "$UW_BEFORE" <<<"$l"
+    && ! grep -qF "reaches no Edit matcher" <<<"$l" && ! grep -qF "$UW_BEFORE" <<<"$l" && ! has "$JO" "rounds/"
 }
 # The NONE clause, byte-for-byte; A12 and A14 assert it whole. UW_L is the refusal line a predicate found.
 UW_NONE="the file was written through Bash or another tool that reaches no Edit matcher, or it was never written; re-dispatch that shard writing through Edit, Write or MultiEdit"
@@ -450,15 +490,24 @@ uwshard_build() { # -> the world p_uwshard joins
   drive "$w" Edit "$w/$REL/$S22" "$AG2" "" "" 2026-06-01T00:10:00Z
   abspart "$w/$UW_PD" "shards/stories-repair-p1/01.md"; part "$w" 02 2.2
   drive "$w" Write "$w/$UW_PD/01.md" "$AG1" "" "" 2026-06-01T00:11:00Z
+  # Part 03 cites a misplaced record under rounds/, written in the window by AG3.
+  printf -- '- **disposition:** repaired\n- **edit:** `%s:3`\n%s\n- **derivation:** n/a (no factual claim)\n' \
+    "rounds/stories-repair-p1/lane-3.md" "$SIB_INS" > "$w/$UW_PD/03.md"
+  mkdir -p "$w/$SLOT/rounds/stories-repair-p1"
+  drive "$w" Write "$w/$SLOT/rounds/stories-repair-p1/lane-3.md" "$AG3" "" "" 2026-06-01T00:12:00Z
   printf '%s' "$w"
 }
 p_uwshard() { # the cited token is a `/`-suffix only of the part's OWN record under shards/, written in
-  # the window: files mode never counts a shards/ row, so the lookup must not either -> the NONE clause
-  local w; UW_L=""; w="$(uwshard_build)"
+  # the window: files mode never counts a shards/ row, so the lookup must not either -> the NONE clause.
+  # The same holds for a token resolving only to a rounds/ row (UW_LR, part 03's line).
+  local w n; UW_L=""; UW_LR=""; w="$(uwshard_build)"
+  n="$(grep -c 'rounds/stories-repair-p1/lane-3' "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl")" || n=0
+  [ "$n" -eq 1 ] || return 1
   run_join_w "$1" "$w"
   [ "$RC" -eq 2 ] || return 1
   UW_L="$(grep -F "01.md cites shards/stories-repair-p1/01.md, which no dispatched agent wrote under $SLOT in the window -- " "$JO")" || return 1
-  [ "${UW_L#*in the window -- }" = "$UW_NONE" ]
+  UW_LR="$(grep -F "03.md cites rounds/stories-repair-p1/lane-3.md, which no dispatched agent wrote under $SLOT in the window -- " "$JO")" || return 1
+  [ "${UW_L#*in the window -- }" = "$UW_NONE" ] && [ "${UW_LR#*in the window -- }" = "$UW_NONE" ]
 }
 # ---- SUBJECT MODE. A git world holding the requirements subject (trunk main, sprint 9 on a
 # branch), split by the REAL partition-subject.sh; every write is a ledger row the REAL hook
@@ -1814,7 +1863,7 @@ p_rrfiles() { # FILES mode: story 2.1 re-run by a new agent after S_P -> without
   o="$(out_of "$w")"
   [ "$RC" -eq 0 ] && has "$JO" "(3 parts, 3 writers, 1 superseded rows)" && [ -f "$o" ] \
     && grep -qx -- "rerun: 01.md since $G_SP; superseded on $REL/$S21: $AG1 (1 rows, $(gts 19:25:00)..$(gts 19:25:00))" "$o" \
-    && grep -qx -- "every file under $SLOT outside _bmad-output/planning-artifacts/s305/shards/ was written by exactly one agent in its window." "$o"
+    && grep -qx -- "every file under $SLOT outside _bmad-output/planning-artifacts/s305/shards/ and _bmad-output/planning-artifacts/s305/rounds/ was written by exactly one agent in its window." "$o"
 }
 p_rrsubj() { # SUBJECT mode: one SECTIONED part re-run by a new agent after S_P -> JOINED with --rerun, the
   # in-place classification untouched (the re-run writes the section copy, not the file)
@@ -2715,7 +2764,12 @@ run_nljoin() { # <join> <world> <artifact> -> RC, $JO over [NL_S, NL_U]
 }
 p_nl2lane() { # graph's second instance: the lane round (stories-serial), two lanes, both `edit: n/a` -> JOINED,
   # the header's no-lane line REPLACING the one-writer sentence, 0 writers, no lane report (a -serial artifact)
-  local w o; w="$(nl_world stories-serial-repair-p1)" || return 1
+  # Lane 1 also wrote a copy of its record under rounds/ in the window: the round's machinery, never a subject row.
+  local w o n; w="$(nl_world stories-serial-repair-p1)" || return 1
+  mkdir -p "$w/$SLOT/rounds/stories-serial-repair-p1"
+  drive "$w" Write "$w/$SLOT/rounds/stories-serial-repair-p1/lane-1.md" "$AG1" "" "" 2026-06-01T00:10:30Z
+  n="$(grep -c 'rounds/stories-serial-repair-p1/lane-1' "$w/_bmad-output/planning-artifacts/.artifact-writes.jsonl")" || n=0
+  [ "$n" -eq 1 ] || return 1
   run_nljoin "$1" "$w" stories-serial
   o="$w/$SLOT/stories-serial-repair-p1.md"
   [ "$RC" -eq 0 ] && has "$JO" "stories-serial-repair-p1.md (2 parts, 0 writers)" && [ -f "$o" ] \

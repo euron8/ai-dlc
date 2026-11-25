@@ -3,7 +3,7 @@
 # the two extra bash starts each shard's own coverage join and driver add; the history of the unsplit rows (BL-974, BL-716, BL-967) is in git.
 # Shard a runs unit head (unit-reader-b, unit-parts, unit-record, unit-reader, unit-bind, unit-mark, EC40-EC43); shard b is
 # remediator-shard-join-b, unit tail.
-114 *
+116 *
 6 core/scripts/join-remediator-shards.sh
 4 core/hooks/ai-dlc-gate-remediation-guard.sh
 2 core/hooks/ai-dlc-derivation-capture.sh
@@ -13,11 +13,11 @@
 6 core/scripts/content-seal.sh
 2 core/scripts/validate-adversarial-convergence.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
-288 inproc:core/scripts/join-remediator-shards.sh
-268 inproc:core/hooks/ai-dlc-gate-remediation-guard.sh
+291 inproc:core/scripts/join-remediator-shards.sh
+280 inproc:core/hooks/ai-dlc-gate-remediation-guard.sh
 5 inproc:core/hooks/ai-dlc-derivation-capture.sh
 28 inproc:core/scripts/wait-for-deliverable.sh
 28 inproc:core/scripts/validate-artifact-derivations.sh
-108 inproc:core/scripts/content-seal.sh
+113 inproc:core/scripts/content-seal.sh
 2 inproc:core/scripts/validate-adversarial-convergence.sh
 7 inproc:core/scripts/serial-remediation-worklist.sh

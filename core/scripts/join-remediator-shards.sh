@@ -103,8 +103,11 @@
 #   - an empty shard directory (a glob that matched nothing is not a join of zero parts);
 #   - no ledger, or no ledger row under the artifact in the window (disjointness unproven);
 #     a row under `s<N>/shards/` is a shard's OWN record (a remediator writing its part, or an
-#     adversary its shard), never an artifact write, and is dropped from the file set first --
-#     otherwise every part a remediator writes reads as a written file no part cites;
+#     adversary its shard), and a row under `s<N>/rounds/` is the round's own machinery (a
+#     dispatcher brief, the `<round>.return` file, a part record written at a mis-named path);
+#     neither is an artifact write, and files mode drops both from the file set first --
+#     otherwise every such record reads as a written file no part cites. A remediator whose
+#     artifact writes no part under shards/ cites is still a missing shard;
 #   - any file under the artifact written by two or more distinct agent_ids in the window;
 #   - a written file that no part's `edit:` lines cite (the missing shard -- the file set is
 #     DERIVED from the ledger, never passed in);
@@ -2465,6 +2468,8 @@ fi
 # The shards root in the LEDGER's spelling: the hook writes `<basename of the state dir>/...`
 # (its STATE_DIR_NAME), so this is derived the same way, whether AI_DLC_STATE_DIR is absolute or not.
 SHARD_REL="${_STATE_DIR##*/}/planning-artifacts/s${SPRINT}/shards"
+# The round machinery root beside it (dispatcher briefs, `<round>.return`), dropped with shards/ in files mode.
+ROUNDS_REL="${SHARD_REL%/shards}/rounds"
 MANIFEST="${SHARD_DIR}/sections/.manifest"
 # THE PER-ROUND COMMIT. Round M joins only when round M-1's accepted repair record is committed: one commit per
 # round, so a later round's diff is its own. A missing previous record, a tree with no repository and a path the
@@ -2609,12 +2614,12 @@ fi
 # --- the ledger: per-file distinct writers inside the window, under the artifact path.
 [ -f "$LEDGER" ] || die "no write ledger at ${LEDGER}; disjointness cannot be proven"
 _jdoc="$DOCMODE"; [ "$SUBJMODE" = 1 ] && _jdoc=1
-ROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$_jdoc" '
+ROWS="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg ap "$APATH" --arg sh "$SHARD_REL" --arg rd "$ROUNDS_REL" --arg doc "$_jdoc" '
   [inputs | select(type == "object") | select(.kind == "artifact-write")
    | select((.agent_id // "") != "") | select((.ts | type) == "string")
    | select(.ts >= $since and .ts <= $until)
    | select(.path == $ap or (.path | startswith($ap + "/")))
-   | select($doc == "1" or ((.path | startswith($sh + "/")) | not))
+   | select($doc == "1" or ((.path | startswith($sh + "/") or startswith($rd + "/")) | not))
    | [.path, .agent_id]] | unique | .[] | @tsv' "$LEDGER" 2>/dev/null)" \
   || die "the write ledger ${LEDGER} does not parse as JSON lines"
 if [ "$SUBJMODE" = 1 ]; then
@@ -3083,7 +3088,7 @@ $RERUN
 RREOF
   if [ -n "$_rspec" ]; then
     # THE PART RECORDS: rows on `<repair dir>/<part>.md`, non-recursive, in the outer window. They sit
-    # outside every mode's file set (shards/ is dropped in files mode; document and subject mode keep
+    # outside every mode's file set (shards/ and rounds/ are dropped in files mode; document and subject mode keep
     # only section copies and subject files), so the authorship of the account is read here alone.
     _prpfx="${SHARD_REL}/${SHARD_DIR##*/}/"
     _prrows="$(jq -rn --arg since "$SINCE" --arg until "$UNTIL" --arg px "$_prpfx" '
@@ -3437,13 +3442,13 @@ if [ "$NOLANE" = 1 ]; then
     refuse "the ledger records no dispatched write under ${APATH} in [${SINCE}, ${UNTIL}]; disjointness is unproven"
   else
     _nlpx="${SHARD_REL}/${SHARD_DIR##*/}/"
-    _nlr="$(jq -rn --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$_jdoc" --arg px "$_nlpx" '
+    _nlr="$(jq -rn --arg ap "$APATH" --arg sh "$SHARD_REL" --arg rd "$ROUNDS_REL" --arg doc "$_jdoc" --arg px "$_nlpx" '
       inputs | select(type == "object") | select(.kind == "artifact-write")
        | select((.agent_id // "") != "") | select((.path | type) == "string")
        | (.path | ltrimstr($px)) as $b
        | if (.path | startswith($px)) and ($b | contains("/") | not) and ($b | endswith(".md"))
          then ["P", $b, (.agent_id | tostring)] | @tsv
-         elif (.path == $ap or (.path | startswith($ap + "/"))) and ($doc == "1" or ((.path | startswith($sh + "/")) | not))
+         elif (.path == $ap or (.path | startswith($ap + "/"))) and ($doc == "1" or ((.path | startswith($sh + "/") or startswith($rd + "/")) | not))
          then ["S", .path, (.agent_id | tostring), (.ts // "-" | tostring)] | @tsv
          else empty end' "$LEDGER" 2>/dev/null)" \
       || die "the write ledger ${LEDGER} does not parse as JSON lines"
@@ -3563,11 +3568,11 @@ UW_LOOK=""
 _uw="$(printf '%s\n' "$JOINRES" | awk -F'\t' '$1 == "UNWRITTEN" { print $3 }' | sort -u)"
 if [ -n "$_uw" ]; then
   UW_LOOK="$({ printf '%s\n' "$_uw" | sed '/^$/d; s/^/T\t/'
-               jq -rn --arg ap "$APATH" --arg sh "$SHARD_REL" --arg doc "$_jdoc" '
+               jq -rn --arg ap "$APATH" --arg sh "$SHARD_REL" --arg rd "$ROUNDS_REL" --arg doc "$_jdoc" '
     inputs | select(type == "object") | select(.kind == "artifact-write")
      | select((.agent_id // "") != "") | select((.ts | type) == "string")
      | select(.path == $ap or (.path | startswith($ap + "/")))
-     | select($doc == "1" or ((.path | startswith($sh + "/")) | not))
+     | select($doc == "1" or ((.path | startswith($sh + "/") or startswith($rd + "/")) | not))
      | ["R", .path, (.agent_id | tostring), .ts] | @tsv' "$LEDGER" 2>/dev/null; } | awk -F'\t' -v s="$SINCE" -v u="$UNTIL" '
     $1 == "T" { nt++; TK[nt] = $2; next }
     $1 == "R" { p = $2; ag = $3; ts = $4
@@ -3822,7 +3827,7 @@ TMP="${OUT}.join.$$"
     echo "- artifact_sha_before: ${DOC_BEFORE}"
     echo "- artifact_sha_after: ${DOC_AFTER}"
   else
-    if [ -n "$NOLANE_LINE" ]; then echo "${NOLANE_LINE}."; else echo "every file under ${APATH} outside ${SHARD_REL}/ was written by exactly one agent ${_inwin}."; fi
+    if [ -n "$NOLANE_LINE" ]; then echo "${NOLANE_LINE}."; else echo "every file under ${APATH} outside ${SHARD_REL}/ and ${ROUNDS_REL}/ was written by exactly one agent ${_inwin}."; fi
   fi
   echo ""
   while IFS= read -r p; do

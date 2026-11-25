@@ -1,6 +1,6 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), BL-1095: shard b of remediator-shard-join runs unit tail
 # (unit-reader-a, DK, BL-877's PC cells, the SR/CPS seat-row arms). Its derivation-capture row is absent: no drive of that hook is in this shard.
-326 *
+327 *
 2 core/scripts/join-remediator-shards.sh
 2 core/hooks/ai-dlc-gate-remediation-guard.sh
 1 core/scripts/serial-remediation-worklist.sh
@@ -8,7 +8,7 @@
 0 core/scripts/validate-artifact-derivations.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
 188 inproc:core/scripts/join-remediator-shards.sh
-724 inproc:core/hooks/ai-dlc-gate-remediation-guard.sh
+726 inproc:core/hooks/ai-dlc-gate-remediation-guard.sh
 3 inproc:core/scripts/wait-for-deliverable.sh
 5 inproc:core/scripts/validate-artifact-derivations.sh
 217 inproc:core/scripts/content-seal.sh
