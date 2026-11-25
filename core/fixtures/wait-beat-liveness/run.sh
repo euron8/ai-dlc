@@ -3156,9 +3156,12 @@ S29q_agent_reused_in_new_join_breaks_again() {
 #     key order. Seeds, in this order (the subject is not first): a launched role-less epoch spawn, a
 #     guard-denied role-bound spawn (no meta.json), the launched role-less dispatcher, a guard-denied
 #     role-less spawn (no meta.json), two launched spawns with no row that name a role one way each
-#     (`subagent_type` only, `team-roles/` only), and a launched role-less spawn on two lines. Only the
-#     two launched role-less spawns resolve, each to its own line's stamp cut to the second; the
-#     other three keep the 0-row refusal. One beat over the dead dispatcher names it FAILED.
+#     (`subagent_type` only, `team-roles/` only), and a launched role-less spawn on two lines; then
+#     the harness's `api-request-blob` line echoing every one of those Agent tool_uses (role-bound
+#     text included) and an `api-request-shape` line carrying the two subjects' ids (BL-1237). Only
+#     the two launched role-less spawns resolve, each to its own Agent line's stamp cut to the second
+#     with both echoes ignored; the other three keep the 0-row refusal, the two-line spawn among
+#     them. One beat over the dead dispatcher names it FAILED.
 # ===========================================================================
 S30_X=a975d15c00000e005; S30_E=a975e90c00000e006; S30_R=a975b0d000000e007
 s30_spawn() {  # $1 = tool_use_id, $2 = age, $3 = roleless|role|stype|troles, $4 = agent id to launch ('' = guard-denied)
@@ -3185,6 +3188,28 @@ S30_roleless_dispatch_ts() {
   s30_spawn toolu_s30troles 1590 troles a975b0d000000e008
   s30_spawn toolu_s30dup 1580 roleless a975d0b000000e009
   s30_spawn toolu_s30dup 1570 roleless ""
+  # The harness's request echoes (BL-1237): an `api-request-blob` line re-carries the whole
+  # conversation, every Agent tool_use above included, role-bound spawns' text with them; an
+  # `api-request-shape` line re-carries the ids. Neither is a spawn record.
+  s30_blob_=""
+  for s30_t_ in toolu_s30epoch:roleless toolu_s30denrole:role toolu_s30disp:roleless toolu_s30denless:roleless \
+                toolu_s30stype:stype toolu_s30troles:troles toolu_s30dup:roleless; do
+    case "${s30_t_#*:}" in
+      roleless) s30_i_='{"description":"Run sprint-review party round","prompt":"You are a round-dispatcher.","run_in_background":true}' ;;
+      role) s30_i_='{"description":"Party PM seat","prompt":"Read .claude/team-roles/pm.md first.","subagent_type":"pm","run_in_background":true}' ;;
+      stype) s30_i_='{"description":"Party PM seat","prompt":"You are the PM seat.","subagent_type":"pm","run_in_background":true}' ;;
+      troles) s30_i_='{"description":"Party PM seat","prompt":"Read .claude/team-roles/pm.md first.","run_in_background":true}' ;;
+    esac
+    s30_blob_="$s30_blob_${s30_blob_:+,}{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"${s30_t_%%:*}\",\"name\":\"Agent\",\"input\":$s30_i_}]}"
+  done
+  printf '{"type":"api-request-blob","hash":"h30","sessionId":"sess","request":{"messages":[%s]}}\n' "$s30_blob_" >> "$W/sess.jsonl" \
+    || broken "cannot write the section 30 api-request-blob line"
+  printf '{"type":"api-request-shape","hash":"h30","sessionId":"sess","shape":[{"type":"tool_use","id":"toolu_s30disp","name":"Agent"},{"type":"tool_use","id":"toolu_s30epoch","name":"Agent"}]}\n' >> "$W/sess.jsonl" \
+    || broken "cannot write the section 30 api-request-shape line"
+  s30_n_="$(grep -cF '"id":"toolu_s30disp"' "$W/sess.jsonl")" || s30_n_=0
+  case "$s30_blob_" in *'"subagent_type":"pm"'*team-roles/*) ;; *) s30_n_=0 ;; esac
+  [ "$s30_n_" -eq 3 ] \
+    || broken "the section 30 transcript does not carry toolu_s30disp on its Agent line and both echoes ($s30_n_ lines)"
   # A compaction later in the same session: the transcript keeps the Agent lines above it.
   printf '{"parentUuid":null,"logicalParentUuid":"u1600","isSidechain":false,"type":"system","subtype":"compact_boundary","content":"Conversation compacted","compactMetadata":{"trigger":"auto"},"uuid":"c1","timestamp":"%s"}\n' \
     "$(df_iso_ms 1550 100)" >> "$W/sess.jsonl" || broken "cannot write the section 30 compaction line"
@@ -3202,7 +3227,7 @@ S30_roleless_dispatch_ts() {
       || s30_bad_="$s30_bad_ $s30_d_[$OUT]"
   done
   if [ -z "$s30_bad_" ]; then
-    ok "dispatch-ts: a launched role-less spawn with no ledger row prints its own Agent tool_use stamp cut to the second ($s30_x_ by agentId and by toolu_ id; the epoch spawn $s30_e_), while a guard-denied role-less, a guard-denied role-bound, a launched spawn naming only a subagent_type, one naming only a team-roles/ path and a launched role-less id on two lines each keep the 0-row refusal"
+    ok "dispatch-ts: a launched role-less spawn with no ledger row prints its own Agent tool_use stamp cut to the second ($s30_x_ by agentId and by toolu_ id; the epoch spawn $s30_e_) past an api-request-blob line echoing its id beside role-bound text and an api-request-shape line carrying it, while a guard-denied role-less, a guard-denied role-bound, a launched spawn naming only a subagent_type, one naming only a team-roles/ path and a launched role-less id on two lines each keep the 0-row refusal"
   else bad "dispatch-ts: the role-less fallback answered wrongly [${s30_bad_# }]"; fi
   df_tx "$S30_X" user:1690 assistant:1680 req:1500
   df_beat "$DFS" --dispatch "$S30_X" _bmad-output/planning-artifacts/s1/rounds/r1.return

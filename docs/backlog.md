@@ -4306,3 +4306,26 @@ Provenance: batch 265 close (lead ai-dlc-19); id allocated by the lead.
 verify: manual
 
 
+## BL-1237 — `wait-for-deliverable.sh --dispatch` refuses a launched role-less spawn when the harness echoes its Agent tool_use id on an `api-request-blob` line of the lead transcript
+
+**DEFECT.** Filed 2026-11-25 (batch 266, cluster W). Owner: `core/scripts/wait-for-deliverable.sh` (`dispatch_roleless_ts`).
+
+Goal: a launched role-less spawn with no ledger row resolves its dispatch time from its own Agent tool_use line, whatever harness record lines also carry its id. One done condition: with the tool_use line plus an `api-request-blob` line echoing the same id, `--dispatch-ts <agentId>` prints the tool_use line's stamp cut to the second, and a role-less id on two tool_use lines still refuses.
+
+Record: from the graph push-candidate ledger, Sprint 323 stories party round. `dispatch_roleless_ts` (BL-975) took the dispatch time only when the toolUseId was on exactly one line of the lead transcript. The harness now writes `{"type":"api-request-blob",...}` record lines that echo the whole conversation, so the id is on a second line (consumer derivation: `grep -c` of the id in the lead transcript = 2, the second line opening `"type":"api-request-blob"`). The fallback returned 1 and `--dispatch`/`--dispatch-ts` refused with "the ledger holds 0 row(s) for tool_use_id ..., not one", rc 64. Arm A of the same script already skips every line opening `{"type":"api-request`.
+
+Work list:
+
+1. In `dispatch_roleless_ts`, drop lines opening `{"type":"api-request` (api-request, -blob, -shape) from the lead-transcript match before the one-line count, the role test and the stamp; update the function's header comment.
+2. Prove it by hand once: a lead transcript with one role-less Agent tool_use line and one `api-request-blob` line echoing its id refuses rc 64 at base and prints the stamp at the tip; a mutant excluding only `{"type":"api-request"` (closing quote) still refuses.
+
+**LANDED (vVERSION_PLACEHOLDER).** Batch 266, cluster W. Item 1: `dispatch_roleless_ts` filters the matched lines with `grep -v '^{"type":"api-request'` on a here-string before the count; the two-tool_use-line refusal, the role test and the guard-denied refusal are unchanged. Item 2: done by hand (the probe output is in the commit message). `core/fixtures/wait-beat-liveness` section 30 seeds an `api-request-blob` and an `api-request-shape` echo of the Agent lines; the two-line refusal stays its near-miss.
+
+Step: n/a
+
+Related: BL-975.
+
+Provenance: batch 266, cluster W (lead ai-dlc-9b); id allocated by the lead.
+
+verify: sh S=$PWD/core/scripts/wait-for-deliverable.sh; [ -f "$S" ] || exit 9; T=$(mktemp -d) || exit 9; mkdir -p "$T/s/subagents" "$T/_bmad-output" || exit 9; printf '{"v":1,"ts":"2026-11-25T10:00:00Z","name":"x","role":"dev","tool_use_id":"toolu_r1237other"}\n' > "$T/_bmad-output/spawn-ledger.jsonl"; printf '{"agentType":"general-purpose","toolUseId":"toolu_r1237"}\n' > "$T/s/subagents/agent-a1237d0000000e001.meta.json"; printf '{"message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_r1237","name":"Agent","input":{"prompt":"You are a round-dispatcher."}}]},"type":"assistant","timestamp":"2026-11-25T10:11:12.273Z"}\n{"type":"api-request-blob","request":{"messages":[{"content":[{"type":"tool_use","id":"toolu_r1237","name":"Agent","input":{"prompt":"Read .claude/team-roles/pm.md","subagent_type":"pm"}}]}]}}\n' > "$T/s.jsonl"; [ "$(grep -c toolu_r1237 "$T/s.jsonl")" = 2 ] || exit 9; o=$(cd "$T" && unset CLAUDE_CODE_SESSION_ID; AI_DLC_TEAMMATE_DIR="$T/s/subagents" AI_DLC_PROJECT_ROOT="$T" bash "$S" --dispatch-ts a1237d0000000e001 </dev/null 2>&1); [ "$o" = 2026-11-25T10:11:12Z ]
+
