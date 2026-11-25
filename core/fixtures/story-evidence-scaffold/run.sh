@@ -1246,7 +1246,8 @@ if gsel rbriefs; then
       echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/_gate-procedures.md"
       echo "HERMETIC-CONSUMED core/team-roles/adversary.md"
       printf 'focus\n' > "$RB_W/focus"
-      rb_e="$(FXCELL="cli-rbriefs-elic" bash "$RB_D/gen-round-briefs.sh" --round elicitation --axis files --sprint 9 --artifact stories --pass 1 --map "$RB_W/map" --subject-dir "$RB_W/stories" --focus "$RB_W/focus" --role-file "$RB_ROLE" --procedures-file "$RB_PROC" --shard-dir "$RB_W/shards/stories-elicitation" --out-dir "$RB_W/elic-out" 2>&1)"; rb_erc=$?
+      printf '2\tstory-1-2.md\n3\tstory-2-1.md\n' > "$RB_W/map-derived"
+      rb_e="$(FXCELL="cli-rbriefs-elic" bash "$RB_D/gen-round-briefs.sh" --round elicitation --axis files --sprint 9 --artifact stories --pass 1 --map "$RB_W/map-derived" --subject-dir "$RB_W/stories" --focus "$RB_W/focus" --role-file "$RB_ROLE" --procedures-file "$RB_PROC" --shard-dir "$RB_W/shards/stories-elicitation" --out-dir "$RB_W/elic-out" 2>&1)"; rb_erc=$?
       rb_m='Method: invoke `/bmad-advanced-elicitation` with the Skill tool, scoped to your part; it supplies the method. Record findings and edit nothing.'
       rb_sk="$(grep -c '^skill: bmad-advanced-elicitation ' "$RB_W/elic-out/2.brief" 2>/dev/null)" || rb_sk=0
       rb_xs="$(grep -c '^skill: bmad-advanced-elicitation ' "$RB_W/elic-out/cross.brief" 2>/dev/null)" || rb_xs=0
@@ -1256,6 +1257,16 @@ if gsel rbriefs; then
         ok "RBRIEFS: an elicitation round's part and cross briefs carry skill: bmad-advanced-elicitation once, no verdict: line, and the Skill-tool method line"
       else
         bad "RBRIEFS: elicitation rc=$rb_erc skill=$rb_sk cross-skill=$rb_xs verdict=$rb_v method=$(grep -cxF "$rb_m" "$RB_W/elic-out/2.brief" 2>/dev/null) out=[$rb_e]"
+      fi
+      # A DERIVED map (ordinals 2,3, not starting at 1): the one cross shard line is the POSITIONAL cover 1..K that the dispatch
+      # guard's cover deny and Check 22 arm S4 read (rule-28 <ordinals>), never the map's own ordinals; the part briefs keep the
+      # document ordinals. The predicate itself is not extracted from the guard here: that would add the guard to this fixture's
+      # inputs and a read-set trace for one string compare; the guard and S4 bind it byte-identically and own that fixture.
+      if grep -qxF 'shard: cross/2 g1/1 1, 2' "$RB_W/elic-out/cross.brief" 2>/dev/null \
+         && grep -qxF 'shard: 2/2 story-1-2.md' "$RB_W/elic-out/2.brief" 2>/dev/null && grep -qxF 'shard: 3/2 story-2-1.md' "$RB_W/elic-out/3.brief" 2>/dev/null; then
+        ok "RBRIEFS: a derived map (ordinals 2,3) briefs the cross shard as 'cross/2 g1/1 1, 2' (positional cover 1..K) and the parts as 2/2 and 3/2"
+      else
+        bad "RBRIEFS: derived-map shard lines cross=[$(grep -m1 '^shard:' "$RB_W/elic-out/cross.brief" 2>/dev/null)] 2=[$(grep -m1 '^shard:' "$RB_W/elic-out/2.brief" 2>/dev/null)] 3=[$(grep -m1 '^shard:' "$RB_W/elic-out/3.brief" 2>/dev/null)]"
       fi
     fi
   fi

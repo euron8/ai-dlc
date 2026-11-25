@@ -55,7 +55,7 @@ bash "$ST" "$NAME" ready-for-dev in-progress "$TEAMMATE" --no-seam || refuse "st
 
 cat <<EOF
 BRIEF:
-Deliverable: ${WT}/_bmad-output/implementation-artifacts/dev-${NAME}.md
+Deliverable: ${WT}/_bmad-output/implementation-artifacts/s${N}/dev-${IDX}.md
 Worktree: ${WT} (branch ${BR}, cut from ${SHA}). Every absolute path in this brief is that worktree or inside it.
 Every git command is \`git -C ${WT} <cmd>\`, or \`cd\` into the worktree on EVERY Bash call.
 Never run \`git stash\` or \`git stash pop\` inside this worktree; for a before/after base compare use \`git worktree add --detach <base>\`.

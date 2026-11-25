@@ -104,6 +104,9 @@ K="$(printf '%s\n' "$ORD" | grep -c .)" || K=0
 dup="$(printf '%s\n' "$ORD" | sort | uniq -d | head -1)"
 [ -z "$dup" ] || grb_die "--map $MAP repeats ordinal $dup" 3
 ALLORD="$(printf '%s\n' "$ORD" | paste -sd, - | sed 's/,/, /g')"
+# The cross shard line's cover is POSITIONAL, 1..K (rule-28 <ordinals>); a derived map's own ordinals are not.
+COVER=""; i=1
+while [ "$i" -le "$K" ]; do COVER="${COVER:+$COVER, }$i"; i=$((i + 1)); done
 
 PROV=""; METHOD=""
 if [ "$KIND" = adv ]; then
@@ -229,9 +232,9 @@ if [ "$KIND" = adv ]; then
     fi
     PATHS="$PATHS $SDIR/$o.md"
   done < "$MAP"
-  if [ "$AXIS" = files ]; then CS="Subject: EVERY story file under $SUBJ (the whole map). Read them all (each in one Read; a file over 16 KB in consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line, and when a chunk is refused for size, halve its limit). Raise cross-story defects only; every finding carries one \`stories:\` line citing two or more ordinals."
-  else CS="Subject: the whole document $DOC. Raise cross-section defects only; every finding carries one \`sections:\` line citing two or more ordinals."; fi
-  grb_write_adv cross "cross/$K g1/1 $ALLORD" "$CS"
+  if [ "$AXIS" = files ]; then CS="Subject: EVERY story file under $SUBJ (the whole map). Read them all (each in one Read; a file over 16 KB in consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line, and when a chunk is refused for size, halve its limit). Raise cross-story defects only; every finding carries one \`stories:\` line citing two or more of the map ordinals ($ALLORD)."
+  else CS="Subject: the whole document $DOC. Raise cross-section defects only; every finding carries one \`sections:\` line citing two or more of the map ordinals ($ALLORD)."; fi
+  grb_write_adv cross "cross/$K g1/1 $COVER" "$CS"
   PATHS="$PATHS $SDIR/cross.md"
   FLAG="--shard-header $HDR"
 else
