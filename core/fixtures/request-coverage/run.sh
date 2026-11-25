@@ -303,6 +303,68 @@ else
                 || bad "BL-327: the pre-relocation scripts/ copy exited $LG — its harness-origin lookup counts hops and lands above the project"
 fi
 
+# --- NOT-YET-AUTHORED at an opening planning gate (--gate-step) -------------------------------------------------------
+# One property apart from each other, all with the brief ABSENT:
+#   GS1 carry-over-evaluation.md + an operator entry: exit 3, the NOT-YET-AUTHORED line first on stdout, stderr empty.
+#   GS2 codebase-inventory.md (a brownfield opening step): exit 3.
+#   GS3 doc-repair-backfill.md (a planning gate that is not a route's First Step): exit 2.
+#   GS4 no --gate-step: exit 2.
+#   GS5 carry-over-evaluation.md, a requests file with no operator entry: exit 2.
+#   GS6 carry-over-evaluation.md, brief PRESENT: the coverage verdict (exit 0 PASS), never the clause.
+#   GS7 the derived opening set over the real route table equals the four opening steps.
+#   GS8 consumer layout, gate_run.py beside the copy: a skill directory with gates/ and no route table is exit 2; the
+#       table under .claude/skills/ai-dlc/steps/ is exit 3.
+NOBRIEF="$WORK/absent-locked-requirements.md"
+REQ_NOENTRY="$WORK/requests-noentry.md"
+printf '# Operator Requests\n\n---\n' > "$REQ_NOENTRY"
+gs_run() { # <requests> <brief> [--gate-step <s>] -> OUT (stdout), ERR (stderr), RC
+  inproc_run "$VALIDATOR" vrc_main --requests "$1" --brief "$2" --sprint 42 "${@:3}" > "$WORK/gs.out" 2> "$WORK/gs.err"; RC=$?
+  OUT="$(cat "$WORK/gs.out")"; ERR="$(cat "$WORK/gs.err")"
+}
+gs_run "$REQ" "$NOBRIEF" --gate-step carry-over-evaluation.md
+if [ "$RC" = 3 ] && [ "$(head -1 <<<"$OUT")" = "NOT-YET-AUTHORED: $NOBRIEF is not owed at the opening planning gate (carry-over-evaluation.md)" ] && [ -z "$ERR" ]; then
+  ok "GS1 carry-over opening gate, brief absent, one operator entry: exit 3, NOT-YET-AUTHORED first on stdout, stderr empty"
+else bad "GS1 rc=$RC out=[$(head -1 <<<"$OUT")] err=[$(head -1 <<<"$ERR")]"; fi
+gs_run "$REQ" "$NOBRIEF" --gate-step codebase-inventory.md
+if [ "$RC" = 3 ] && grep -q '^NOT-YET-AUTHORED: .*(codebase-inventory.md)$' <<<"$OUT"; then
+  ok "GS2 brownfield opening gate codebase-inventory.md, brief absent: exit 3 NOT-YET-AUTHORED"
+else bad "GS2 rc=$RC out=[$(head -1 <<<"$OUT")] err=[$(head -1 <<<"$ERR")]"; fi
+gs_run "$REQ" "$NOBRIEF" --gate-step doc-repair-backfill.md
+if [ "$RC" = 2 ] && grep -q '^ERROR: brief not readable: ' <<<"$ERR" && ! grep -q 'NOT-YET-AUTHORED' <<<"$OUT"; then
+  ok "GS3 doc-repair-backfill.md (a planning gate, not a First Step), brief absent: exit 2 ERROR"
+else bad "GS3 rc=$RC out=[$(head -1 <<<"$OUT")] err=[$(head -1 <<<"$ERR")]"; fi
+gs_run "$REQ" "$NOBRIEF"
+if [ "$RC" = 2 ] && grep -q '^ERROR: brief not readable: ' <<<"$ERR" && [ -z "$OUT" ]; then
+  ok "GS4 no --gate-step, brief absent: exit 2 ERROR"
+else bad "GS4 rc=$RC out=[$(head -1 <<<"$OUT")] err=[$(head -1 <<<"$ERR")]"; fi
+gs_run "$REQ_NOENTRY" "$NOBRIEF" --gate-step carry-over-evaluation.md
+if [ "$RC" = 2 ] && grep -q '^ERROR: brief not readable: ' <<<"$ERR" && ! grep -q 'NOT-YET-AUTHORED' <<<"$OUT"; then
+  ok "GS5 opening gate with a requests file holding no operator entry: exit 2 ERROR"
+else bad "GS5 rc=$RC out=[$(head -1 <<<"$OUT")] err=[$(head -1 <<<"$ERR")]"; fi
+gs_run "$REQ" "$COVERED" --gate-step carry-over-evaluation.md
+if [ "$RC" = 0 ] && grep -q '^PASS:' <<<"$OUT" && ! grep -q 'NOT-YET-AUTHORED' <<<"$OUT"; then
+  ok "GS6 opening gate with the brief present: the coverage verdict (exit 0 PASS)"
+else bad "GS6 rc=$RC out=[$(tail -1 <<<"$OUT")] err=[$(head -1 <<<"$ERR")]"; fi
+RT_SRC=""
+for _c in "$FX_ROOT/core/skills/ai-dlc/steps/route-fresh-start.md" "$FX_ROOT/.claude/skills/ai-dlc/steps/route-fresh-start.md"; do
+  [ -f "$_c" ] && { RT_SRC="$_c"; break; }
+done
+GS_SET=""; [ -n "$RT_SRC" ] && GS_SET="$(inproc_run "$VALIDATOR" vrc_opening_steps "$RT_SRC" | LC_ALL=C sort | tr '\n' ' ')"
+if [ -n "$RT_SRC" ] && [ "$GS_SET" = "carry-over-evaluation.md codebase-inventory.md deep-codebase-analysis.md doc-reconciliation.md " ]; then
+  ok "GS7 the opening set derived from $RT_SRC is the four opening steps ($GS_SET)"
+else bad "GS7 route table [$RT_SRC] derived [$GS_SET]"; fi
+if [ -n "$RT_SRC" ] && [ -f "$CT/scripts/ai-dlc/validate-request-coverage.sh" ]; then
+  cons_gs() { ( cd "$CT/docs/sub" && inproc_run "$CT/scripts/ai-dlc/validate-request-coverage.sh" vrc_main --requests "$REQ" --brief "$NOBRIEF" --sprint 42 --gate-step carry-over-evaluation.md ) >/dev/null 2>&1; echo $?; }
+  cp "$(dirname "$VALIDATOR")/gate_run.py" "$CT/scripts/ai-dlc/gate_run.py"
+  mkdir -p "$CT/.claude/skills/ai-dlc/gates" "$CT/.claude/skills/ai-dlc/steps"
+  GSA="$(cons_gs)"
+  cp "$RT_SRC" "$CT/.claude/skills/ai-dlc/steps/route-fresh-start.md"
+  GSB="$(cons_gs)"
+  if [ "$GSA" = 2 ] && [ "$GSB" = 3 ]; then
+    ok "GS8 consumer layout: a skill directory with gates/ and no route table is exit 2, the table under .claude/skills/ai-dlc/steps/ is exit 3"
+  else bad "GS8 consumer layout: without the table exit $GSA (want 2), with it exit $GSB (want 3)"; fi
+else bad "FIXTURE BROKEN: GS7/GS8 found no route table or no consumer-tree copy"; fi
+
 # --- The cli cells (cells.decl): the validator run as a PROGRAM once per distinct CLI outcome --------------------------
 # Each `FXCELL=<id> bash` start is compared with the in-process call on the same input: stdout, stderr and exit
 # separately, byte for byte. Outcomes: exit 0 PASS (cli-pass), exit 1 dropped identifiers (cli-fail), exit 2 on a

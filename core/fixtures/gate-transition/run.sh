@@ -942,7 +942,8 @@ st_cww cww "$GTR"
 #   GRF  a seeded legacy FAIL: exit 1, a REMEDY line naming 2a, no nonce, no OPEN marker, no worklist.
 #        control: GRO.
 #   GRO  the clean near-miss: exit 0, an ADJUDICATE line naming the worklist, and the printed GATE-RESULT ids equal the
-#        arms file's ids; the ledger carries 2a PASS and 1 PENDING. control: GRF.
+#        arms file's ids; the ledger carries 2a PASS and 1 PENDING; row 2a's {STEP} is filled with the --step value.
+#        control: GRF.
 #   GRN  a native arm printing PASS with examined=0: exit 1, `examined-nothing`, no nonce. control: GRO (examined=4 passes).
 #   GRC1 close with no snapshot on disk: exit 1, no gate-log entry, OPEN still set. control: GRC2.
 #   GRC2 the same close once the snapshot exists: exit 0, exactly ONE `## Gate Log:` entry, OPEN cleared (D4). control: GRC1.
@@ -958,7 +959,7 @@ mkdir -p "$GRR/.claude/skills/ai-dlc" || { echo "FIXTURE BROKEN: gate-run toy sk
 scr_list; cp -R "${SCRX[@]}" "$GRW/core/scripts/" && cp -R "${SKX[@]}" "$GRR/.claude/skills/ai-dlc/" && cp -R "$GRSCH" "$GRR/.claude/schemas" || { echo "FIXTURE BROKEN: gate-run toy copies" >&2; exit 2; }
 world_repo "$GRR" > /dev/null 2>&1 || { echo "FIXTURE BROKEN: gate-run toy repo" >&2; exit 2; }
 printf '#!/usr/bin/env bash\necho "FAIL seeded offender at x:3"\nexit 1\n' > "$GRW/core/scripts/stub-fail.sh"
-printf '#!/usr/bin/env bash\necho "ok fine"\n' > "$GRW/core/scripts/stub-ok.sh"
+printf '#!/usr/bin/env bash\necho "ok fine $*"\n' > "$GRW/core/scripts/stub-ok.sh"
 printf '#!/usr/bin/env bash\necho "GATE-ARM 25 PASS examined=0 f:1 read nothing"\n' > "$GRW/core/scripts/stub-n0.sh"
 printf '#!/usr/bin/env bash\necho "GATE-ARM 25 PASS examined=4 f:1 read four"\n' > "$GRW/core/scripts/stub-n4.sh"
 for _gp in gate-run validate-gate-manifest validate-gate-adjudication; do printf 'HERMETIC-CONSUMED core/scripts/%s.sh\n' "$_gp"; done
@@ -977,13 +978,14 @@ if [ "$GRC" = 1 ] && grep -q '^REMEDY 2a ' "$GRW/grf.out" && grep -q 'nonce=- ' 
   ok "GRF a seeded FAIL: exit 1, REMEDY 2a, nonce=-, no OPEN, no ledger, no worklist"
 else bad "GRF rc=$GRC: $(grep -E '^(GATE-RUN|REMEDY)' "$GRW/grf.out" | head -2 | tr '\n' ' ') checkpoint-files=$(gr_ckpt)"; fi
 
-gr_arms stub-ok.sh $'25\tscript\tstub-n4.sh\tnative'
+gr_arms 'stub-ok.sh --step {STEP}' $'25\tscript\tstub-n4.sh\tnative'
 gr_run gro arms "${GRX[@]}"
 GRN="$(grep -o 'nonce=[^ ]*' "$GRW/gro.out" | tail -1 | cut -d= -f2)"
 GRP="$(grep '^GATE-RESULT' "$GRW/gro.out" | awk '{print $2}' | sort | tr '\n' ' ')"; GRE="$(awk -F'\t' '!/^#/ && NF {print $1}' "$GRA" | sort | tr '\n' ' ')"
 GRL="$(bash "$GRW/core/scripts/gate-checkpoint.sh" --root "$GRR" --nonce "$GRN" list 2> /dev/null | awk -F'\t' '{print $1":"$2}' | sort | tr '\n' ' ')"
-if [ "$GRC" = 0 ] && grep -q '^ADJUDICATE .*\.worklist nonce=' "$GRW/gro.out" && [ "$GRP" = "$GRE" ] && [ -n "$GRP" ] && [ "$GRL" = "1:PENDING 25:PASS 2a:PASS " ] && [ -s "$GRR/_bmad-output/.gate-checkpoint/OPEN" ]; then
-  ok "GRO the clean near-miss: exit 0, ADJUDICATE, printed ids ($GRP) equal the arms ids, ledger $GRL, OPEN set"
+if [ "$GRC" = 0 ] && grep -q '^ADJUDICATE .*\.worklist nonce=' "$GRW/gro.out" && [ "$GRP" = "$GRE" ] && [ -n "$GRP" ] && [ "$GRL" = "1:PENDING 25:PASS 2a:PASS " ] && [ -s "$GRR/_bmad-output/.gate-checkpoint/OPEN" ] \
+   && grep -q '^GATE-RESULT 2a PASS .* ok fine --step requirements\.md$' "$GRW/gro.out"; then
+  ok "GRO the clean near-miss: exit 0, ADJUDICATE, printed ids ($GRP) equal the arms ids, ledger $GRL, OPEN set, {STEP} filled as requirements.md"
 else bad "GRO rc=$GRC printed=[$GRP] arms=[$GRE] ledger=[$GRL]: $(grep -E '^(GATE-RUN|ADJ)' "$GRW/gro.out" | tr '\n' ' ')"; fi
 
 gr_arms stub-ok.sh $'25\tscript\tstub-n0.sh\tnative'; rm -rf "$GRR/_bmad-output/.gate-checkpoint"

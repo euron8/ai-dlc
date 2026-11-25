@@ -791,7 +791,8 @@ checks:
       - site: gate-validation.md Check 33
         posture: "FAILS the gate (exit 0 required; exit 2 on absent evidence is also a FAIL;
           exit 0 with `NOT-APPLICABLE: EXAMINED NOTHING` is not a pass, nothing was
-          verified — the ask named no identifier)"
+          verified — the ask named no identifier; exit 3 `NOT-YET-AUTHORED` at an opening
+          planning step named by --gate-step is SKIP reason=rc3)"
         why: >-
           every byte-level guarantee in the pipeline terminates at product-brief.md
           — Check 3b anchors stories to it, Check 30 joins capabilities through it —

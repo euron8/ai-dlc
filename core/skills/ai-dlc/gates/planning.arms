@@ -27,7 +27,7 @@ failure	lead	-	-
 28	script	validate-spec-adoption.sh --verdict {SPRINT}	legacy	skip=pre-adoption
 29	judgment	-	-
 32	script	validate-bmad-invocations.sh	legacy
-33	script	validate-request-coverage.sh --requests _bmad-output/operator-requests-history.md --brief _bmad-output/planning-artifacts/s{SPRINT}/locked-requirements.md --sprint {SPRINT}	legacy	skip=empty
+33	script	validate-request-coverage.sh --requests _bmad-output/operator-requests-history.md --brief _bmad-output/planning-artifacts/s{SPRINT}/locked-requirements.md --sprint {SPRINT} --gate-step {STEP}	legacy	skip=empty,rc3
 34	script	validate-scope-confirmation.sh --snapshot _bmad-output/pipeline-snapshot.md --answers _bmad-output/operator-answers-history.md --backlog _bmad-output/planning-artifacts/carry-over-backlog.md	legacy
 35	script	validate-snapshot-conservation.sh	legacy	skip=empty
 36	script	validate-trunk-audit-gate.sh --sprint {SPRINT}	legacy	skip=empty
