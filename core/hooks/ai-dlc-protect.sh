@@ -6,7 +6,7 @@
 # ctx_batch_execute, ctx_index) from consolidating files that AI/DLC requires to load
 # verbatim. The dispatch set is CTX_PREFIXES x CTX_TOOLS below.
 #
-# PROTECTED PATHS (see PROTECTED_PATTERNS below):
+# PROTECTED PATHS (PROTECTED_PATTERNS, in the sibling library ai-dlc-protected-set.sh):
 # Rule files, schemas, pipeline snapshot, gate log, escalations, setup skill,
 # audit anchors, sprint status, story files. Consolidation risks pipeline
 # integrity drift.
@@ -32,61 +32,18 @@
 set -u
 
 # -----------------------------------------------------------------------------
-# Protected paths (core). A consumer EXTENDS this list through
-# extensions/protected-paths.json — see the layer resolution below. Core stays
-# project-agnostic on purpose: a consumer that keeps its architecture SoR at
-# docs/architecture.md declares that itself rather than shipping one project's
-# vocabulary to every other consumer.
+# The protected set -- PROTECTED_PATTERNS, EXCLUDED_PATTERNS, the consumer layer
+# (extensions/protected-paths.json, EXT_BAD when malformed), normalize(),
+# is_excluded() and is_protected() -- lives in ONE sourced sibling,
+# ai-dlc-protected-set.sh, which the read-intent guard (its arm in
+# ai-dlc-recover-gate.sh, its hint in ai-dlc-handoff-entry.sh) sources too. A missing, empty or truncated library FAILS CLOSED below: every call carrying a path
+# is denied, because a hook that cannot resolve its set must never read as one
+# that matched nothing and allowed.
 # -----------------------------------------------------------------------------
-
-PROTECTED_PATTERNS=(
-  ".claude/skills/ai-dlc/*"
-  ".claude/skills/ai-dlc-setup/SKILL.md"
-  ".claude/team-roles/*.md"
-  ".claude/schemas/*.json"
-  "CLAUDE.md"
-  "*/CLAUDE.md"
-  "SKILL.md"
-  "docs/coding-conventions.md"
-  "docs/escalations/pending.md"
-  "_bmad-output/pipeline-snapshot.md"
-  "_bmad-output/audit-anchors.md"
-  "_bmad-output/implementation-artifacts/gate-log.md"
-  "_bmad-output/implementation-artifacts/sprint-status.yaml"
-  "_bmad-output/planning-artifacts/sprint-status.yaml"
-  # STORY FILES, WHEREVER THEY SIT. This used to restate the corpus location
-  # (`_bmad-output/planning-artifacts/stories/*.md`) and would have gone silently
-  # inert the moment artifact-path-grammar.md moved the corpus under `s<N>/` —
-  # a protected-path pattern that matches nothing is indistinguishable from one
-  # that matched and allowed. Keying on the reserved `stories/` component instead
-  # is TOTAL over both layouts and needs no schema read in a hook that runs on
-  # every tool call. It is deliberately WIDER than the declared corpus: a
-  # `stories/` directory anywhere is protected. Over-protecting costs native
-  # Reads; under-protecting costs pipeline integrity, and only one of those is
-  # recoverable. `*` spans `/` in a bash `case` pattern, so this also covers any
-  # nesting below.
-  "*/stories/*.md"
-)
-
-# -----------------------------------------------------------------------------
-# Excluded paths — matched FIRST, and a match means allow.
-#
-# Archives and history files are the retro's analysis corpus: they are read to
-# be summarized, which is exactly what consolidation is for. They were already
-# allowed before this list existed, but only by accident of pattern spelling
-# (`gate-log-archive-s287.md` happens not to equal `gate-log.md`). Naming them
-# makes it a decision, and keeps the archive allowed once the live file's
-# pattern is widened.
-# -----------------------------------------------------------------------------
-
-EXCLUDED_PATTERNS=(
-  "*.archive.*"
-  "*-archive.md"
-  "*-archive-*.md"
-  "*-history.md"
-  "*/pre-ai-dlc/*"
-  "*/node_modules/*"
-)
+LIB_BAD=""
+_AI_DLC_PSET="${BASH_SOURCE[0]:-$0}"; case "$_AI_DLC_PSET" in */*) _AI_DLC_PSET="${_AI_DLC_PSET%/*}/ai-dlc-protected-set.sh" ;; *) _AI_DLC_PSET=./ai-dlc-protected-set.sh ;; esac
+if [ -r "$_AI_DLC_PSET" ]; then . "$_AI_DLC_PSET"; declare -F ps_load_ext >/dev/null && ps_load_ext; fi   # the union always; an inherited AI_DLC_PSET_LAZY never narrows it
+declare -F is_protected_norm >/dev/null && [ -n "${PROTECTED_PATTERNS+x}" ] && [ ${#PROTECTED_PATTERNS[@]} -gt 0 ] || { LIB_BAD="$_AI_DLC_PSET"; EXT_BAD=""; }   # missing, empty or truncated: fail closed
 
 # -----------------------------------------------------------------------------
 # Log configuration
@@ -117,47 +74,6 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# -----------------------------------------------------------------------------
-# Consumer layer: extensions/protected-paths.json
-#
-# A DATA EXTENSION in the sense extensions/README.md defines: consumer-owned
-# JSON that the reader owning a core list unions in, with no core edit. Shape:
-#
-#   { "protected_paths": ["docs/architecture.md"],
-#     "excluded_paths":  ["docs/architecture-drafts/*"] }
-#
-# Both keys optional. A present-but-malformed file fails CLOSED — every path
-# the call carries is treated as protected — because a broken layer file must
-# never silently degrade to the core-only list. It fails closed on the decision
-# it was asked to make, not on the whole tool: a call carrying no path still
-# passes, so a typo cannot wedge the session with no way out.
-# -----------------------------------------------------------------------------
-
-EXT_JSON=""
-for _cand in \
-  "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/ai-dlc/extensions/protected-paths.json" \
-  "${CLAUDE_PROJECT_DIR:-.}/skills/ai-dlc/extensions/protected-paths.json"; do
-  if [ -f "$_cand" ]; then EXT_JSON="$_cand"; break; fi
-done
-
-EXT_BAD=""
-if [ -n "$EXT_JSON" ]; then
-  if jq -e '
-        type == "object"
-        and ((.protected_paths // []) | type == "array")
-        and ((.excluded_paths  // []) | type == "array")
-        and ((((.protected_paths // []) + (.excluded_paths // [])) | map(type == "string") | all))
-      ' "$EXT_JSON" >/dev/null 2>&1; then
-    while IFS= read -r _p; do
-      [ -n "$_p" ] && PROTECTED_PATTERNS+=("$_p")
-    done <<< "$(jq -r '(.protected_paths // [])[]' "$EXT_JSON" 2>/dev/null)"
-    while IFS= read -r _x; do
-      [ -n "$_x" ] && EXCLUDED_PATTERNS+=("$_x")
-    done <<< "$(jq -r '(.excluded_paths // [])[]' "$EXT_JSON" 2>/dev/null)"
-  else
-    EXT_BAD="$EXT_JSON"
-  fi
-fi
 
 # -----------------------------------------------------------------------------
 # Path extraction
@@ -192,7 +108,8 @@ path_alternation() {
   printf '%s' "$out"
 }
 
-PATH_RE="$(path_alternation)"
+PATH_RE=""
+[ -n "$LIB_BAD" ] || PATH_RE="$(path_alternation)"
 
 FILE_PATHS=""
 
@@ -238,108 +155,16 @@ case "$CTX_TOOL" in
     ;;
 esac
 
-# -----------------------------------------------------------------------------
-# Normalization
-#
-# Cut everything before the last known root segment instead of stripping a
-# literal $CLAUDE_PROJECT_DIR prefix. The prefix strip failed open on every
-# absolute path that did not share the project root's exact spelling — which on
-# a consumer running story worktrees is most of them. A real s292 log line shows
-# /Users/n8/git/graph-s288-story-p1/docs/coding-conventions.md ALLOWED while the
-# same file under the main root denied. Suffix anchoring also absorbs symlinked
-# roots (/tmp vs /private/tmp) with no realpath call on a path that may not
-# exist yet.
-# -----------------------------------------------------------------------------
-
-# Space-delimited, not an array: bash 3.2 (the macOS system bash every consumer
-# runs) errors on "${arr[@]}" for an EMPTY array under `set -u`, and the hook's
-# only failure mode is a silent one — a non-zero exit produces no decision, the
-# tool proceeds, and the log records nothing. Root segments never contain
-# spaces, so a string is the shape that cannot fail.
-ROOT_SEGMENTS=""
-for _p in "${PROTECTED_PATTERNS[@]}"; do
-  case "$_p" in
-    */*) _s="${_p%%/*}" ;;
-    *)   continue ;;
+# THE LIBRARY IS MISSING: fail CLOSED on the decision the call asks for. Every path the call
+# carries is treated as protected; for a batch, whose paths are found through the set itself, every
+# command stands in for its paths. A call carrying no path still passes.
+if [ -n "$LIB_BAD" ]; then
+  case "$CTX_TOOL" in
+    ctx_batch | ctx_batch_execute)
+      FILE_PATHS=$(echo "$INPUT" | jq -r '.tool_input.commands[]? | if type == "string" then . else (.command // tojson) end' 2>/dev/null || true) ;;
   esac
-  case "$_s" in *[*?]*) continue ;; esac
-  case " $ROOT_SEGMENTS " in *" $_s "*) ;; *) ROOT_SEGMENTS="$ROOT_SEGMENTS $_s" ;; esac
-done
+fi
 
-normalize() {
-  local p="$1" root
-  p="${p#./}"
-  # shellcheck disable=SC2086
-  for root in $ROOT_SEGMENTS; do
-    case "$p" in
-      */"$root"/*) p="$root/${p##*/"$root"/}"; break ;;
-    esac
-  done
-  # Still absolute and inside the project? Fall back to the literal prefix strip.
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-    p="${p#"${CLAUDE_PROJECT_DIR}"/}"
-  fi
-  printf '%s' "$p"
-}
-
-# -----------------------------------------------------------------------------
-# Match against protected patterns
-# -----------------------------------------------------------------------------
-
-is_excluded() {
-  local path="$1" x
-  for x in "${EXCLUDED_PATTERNS[@]}"; do
-    # shellcheck disable=SC2254
-    case "$path" in
-      $x) return 0 ;;
-    esac
-  done
-  return 1
-}
-
-is_protected() {
-  local path pattern has_glob=1
-  path="$(normalize "$1")"
-
-  is_excluded "$path" && return 1
-
-  case "$path" in *[*?]*) has_glob=0 ;; esac
-
-  for pattern in "${PROTECTED_PATTERNS[@]}"; do
-    # (a) the ordinary case: the path names a protected file.
-    # shellcheck disable=SC2254
-    case "$path" in
-      $pattern) return 0 ;;
-    esac
-
-    # (b) a DIRECTORY reference that contains a protected rulebook file.
-    # `wc -l .claude/skills/ai-dlc` and ctx_index on `.claude/team-roles` read
-    # the whole rulebook while naming no file, and both appear in the live log.
-    # Scoped to .claude/ patterns deliberately: a rulebook directory is never
-    # legitimately consolidated wholesale, whereas an artifact directory sweep
-    # (planning-artifacts/, stories/) is precisely the Rule 24 offload.
-    case "$pattern" in
-      .claude/*)
-        case "$pattern" in
-          "$path"/*) return 0 ;;
-        esac
-        ;;
-    esac
-
-    # (c) the path is itself a GLOB that spans a protected file.
-    # `cat _bmad-output/implementation-artifacts/gate-log*.md` expands inside
-    # the sandbox to include the live gate-log; the literal token does not
-    # equal any pattern, so (a) waves it through. Match the other direction.
-    if [ "$has_glob" -eq 0 ]; then
-      # shellcheck disable=SC2254
-      case "$pattern" in
-        $path) return 0 ;;
-      esac
-    fi
-  done
-
-  return 1
-}
 
 # -----------------------------------------------------------------------------
 # Evaluate paths
@@ -351,7 +176,7 @@ if [ -n "$FILE_PATHS" ]; then
   while IFS= read -r path; do
     [ -z "$path" ] && continue
     ALL_PATHS+=("$path")
-    if [ -n "$EXT_BAD" ]; then
+    if [ -n "$EXT_BAD" ] || [ -n "$LIB_BAD" ]; then
       PROTECTED_HITS+=("$path")
     elif is_protected "$path"; then
       PROTECTED_HITS+=("$path")
@@ -382,7 +207,7 @@ OFF_N=0
 OFF_LABELS=""
 OFF_LABN=0
 OFF_TOTAL=0
-if { [ "$CTX_TOOL" = ctx_batch ] || [ "$CTX_TOOL" = ctx_batch_execute ]; } && [ -z "$EXT_BAD" ] && [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
+if { [ "$CTX_TOOL" = ctx_batch ] || [ "$CTX_TOOL" = ctx_batch_execute ]; } && [ -z "$EXT_BAD" ] && [ -z "$LIB_BAD" ] && [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
   OFF_ROWS=$(echo "$INPUT" | jq -r '
       (.tool_input.commands // []) | if type == "array" then . else [] end
       | to_entries[]
@@ -427,6 +252,7 @@ if [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
     echo "- Session: ${SESSION_ID}"
     echo "- Decision: deny"
     [ -n "$EXT_BAD" ] && echo "- Cause: malformed layer file \`${EXT_BAD}\` (fail-closed)"
+    [ -n "$LIB_BAD" ] && echo "- Cause: protected-set library missing or unusable \`${LIB_BAD}\` (fail-closed)"
     echo "- Protected paths detected:"
     for p in "${PROTECTED_HITS[@]}"; do
       echo "  - \`${p}\`"
@@ -435,7 +261,10 @@ if [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
     echo ""
   } >> "$LOG_FILE"
 
-  if [ -n "$EXT_BAD" ]; then
+  if [ -n "$LIB_BAD" ]; then
+    REASON="The AI/DLC protected-path library is missing or unusable (${LIB_BAD}), so the protected-path set cannot be resolved. Failing closed on every call that carries a path. Re-run the AI/DLC install or update so .claude/hooks/ai-dlc-protected-set.sh is restored."
+    CONTEXT="A hook that cannot resolve its protected set must never read as one that matched nothing and allowed. Use the native Read tool meanwhile; calls carrying no path are unaffected."
+  elif [ -n "$EXT_BAD" ]; then
     REASON="extensions/protected-paths.json is malformed, so the protected-path set cannot be resolved: ${EXT_BAD}. Failing closed. Fix the file (shape: {\"protected_paths\":[\"...\"],\"excluded_paths\":[\"...\"]}, both optional, string arrays) or remove it to fall back to the core set."
     CONTEXT="A broken layer file must never silently degrade to the core-only protected set — that would read as 'nothing matched' while the consumer's own verbatim-load paths went unguarded. Use the native Read tool meanwhile; calls carrying no path are unaffected."
   elif [ -n "$OFF_DESC" ]; then

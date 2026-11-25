@@ -679,26 +679,35 @@ p_legacy() {
 #    and the gate's first real `jq` call sits BELOW the stand-down checks — so an unarmed call
 #    forks no jq whether the fast-path is there or not. `mval` is the first thing past the
 #    line that forks, so `sed` is the first observable the line actually gates.
+#    THE READ-INTENT ARM (BL-1212) sits above the line and must add nothing to it: a non-Read
+#    call and a whole Read of an UNPROTECTED path run no `cat`, `jq`, `sed` or `mkdir` either (each
+#    shim names itself in the sentinel; `mkdir` is the arm's first program, so an arm that stopped
+#    testing protection shows here), and the armed control must reach `cat` and `sed`.
 p_fastpath() {
   _p="$(newproj architecture.md flat)"
   _b="$WORK/shim.$$"; rm -rf "$_b"; mkdir -p "$_b"
   _sent="$_p/sed-was-called"
-  _real="$(command -v sed)"
-  { printf '#!/usr/bin/env bash\n'
-    printf 'printf x >> "%s"\n' "$_sent"
-    printf 'exec %s "$@"\n' "$_real"
-  } > "$_b/sed"
-  chmod +x "$_b/sed"
+  for _t in sed cat jq mkdir; do
+    _real="$(command -v "$_t")"
+    { printf '#!/usr/bin/env bash\n'
+      printf 'printf "%s " >> "%s"\n' "$_t" "$_sent"
+      printf 'exec %s "$@"\n' "$_real"
+    } > "$_b/$_t"
+    chmod +x "$_b/$_t"
+  done
 
   # unarmed: no marker, so the gate must return before it parses anything
   PATH="$_b:$PATH" gate_call "$1" "$_p" "$(jcall Edit "$_p/decoy.md")" >/dev/null 2>&1
-  [ -e "$_sent" ] && { printf 'FAIL:did work on an ordinary call in a session with no recovery pending\n'; return; }
+  [ -e "$_sent" ] && { printf 'FAIL:did work on an ordinary call in a session with no recovery pending: %s\n' "$(cat "$_sent")"; return; }
+  PATH="$_b:$PATH" gate_call "$1" "$_p" "$(jcall Read "$_p/docs/unprotected.md")" >/dev/null 2>&1
+  [ -e "$_sent" ] && { printf 'FAIL:a whole Read of an unprotected path did work with no recovery pending: %s\n' "$(cat "$_sent")"; return; }
 
   # CONTROL: armed, the gate must reach the parser — otherwise the absence above proves only
   # that the shim was never reachable, which is what a dead arm looks like.
   arm_marker "$HOOK" "$_p"
   PATH="$_b:$PATH" gate_call "$1" "$_p" "$(jcall Edit "$_p/decoy.md")" >/dev/null 2>&1
-  [ -e "$_sent" ] || { printf 'FAIL:the sed shim was never reached even when armed, so the unarmed result proves nothing\n'; return; }
+  [ -e "$_sent" ] || { printf 'FAIL:the shims were never reached even when armed, so the unarmed result proves nothing\n'; return; }
+  grep -q 'sed ' "$_sent" && grep -q 'cat ' "$_sent" || { printf 'FAIL:armed, the gate reached [%s], not both cat and sed\n' "$(cat "$_sent")"; return; }
   printf 'PASS\n'
 }
 
@@ -1109,12 +1118,37 @@ areads() {
     printf '%s' "$_aj" | hook_run "$1" "$2" >/dev/null 2>&1
   done
 }
-# tline <kind> <project> -> one transcript line in the harness's shape
+# dread <id> <project> <startLine> <numLines> <totalLines> -> an EXECUTED digest Read: the assistant
+# tool_use and the user tool_result line whose toolUseResult.file carries the range, in the harness's shape.
+dread() {
+  _df="$2/.claude/skills/ai-dlc/postcompact-digest.md"
+  printf '{"type":"assistant","message":{"id":"m-%s","role":"assistant","content":[{"type":"tool_use","id":"%s","name":"Read","input":{"file_path":"%s","offset":%s,"limit":%s}}]},"isSidechain":false}\n' "$1" "$1" "$_df" "$3" "$4"
+  printf '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"%s","type":"tool_result","content":"%s\\tdigest line"}]},"toolUseResult":{"type":"text","file":{"filePath":"%s","content":"digest line","numLines":%s,"startLine":%s,"totalLines":%s}},"isSidechain":false,"sourceToolAssistantUUID":"u-%s"}\n' "$1" "$3" "$_df" "$4" "$3" "$5" "$1"
+}
+# tline <kind> <project> -> one transcript line (an executed Read: two) in the harness's shape
 tline() {
   case "$1" in
     grant)    printf '{"type":"attachment","attachment":{"type":"advisor_tool","available":true,"model":"m","toolChange":"add"}}\n' ;;
     boundary) printf '{"type":"system","subtype":"compact_boundary"}\n' ;;
-    digest)   printf '{"type":"assistant","message":{"id":"m-dig","content":[{"type":"tool_use","id":"t-dig","name":"Read","input":{"file_path":"%s/.claude/skills/ai-dlc/postcompact-digest.md"}}]}}\n' "$2" ;;
+    digest)   dread t-dig "$2" 1 1 1 ;;
+    digdeny)  # the harness's denied Read, copied from the reference consumer's C3 lines: is_error and a
+              # STRING toolUseResult; the same assistant message carried a ctx_search call whose
+              # result line lands between the denied result and the next Read, so pairing is by id.
+              printf '{"type":"assistant","message":{"id":"m-dd","role":"assistant","content":[{"type":"tool_use","id":"t-dd","name":"Read","input":{"file_path":"%s/.claude/skills/ai-dlc/postcompact-digest.md"}},{"type":"tool_use","id":"t-cs","name":"mcp__plugin_context-mode_context-mode__ctx_search","input":{"queries":["q"],"sort":"timeline"}}]},"isSidechain":false}\n' "$2"
+              printf '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"PreToolUse:Read hook error: context-mode: 22531-byte file, over the one-read limit. Run mcp__plugin_context-mode_context-mode__ctx_execute(language, code, file=\\"%s/.claude/skills/ai-dlc/postcompact-digest.md\\") instead.","is_error":true,"tool_use_id":"t-dd"}]},"toolUseResult":"Error: PreToolUse:Read hook error: context-mode: 22531-byte file, over the one-read limit. Run mcp__plugin_context-mode_context-mode__ctx_execute(language, code, file=\\"%s/.claude/skills/ai-dlc/postcompact-digest.md\\") instead.","isSidechain":false,"sourceToolAssistantUUID":"u-dd"}\n' "$2" "$2"
+              printf '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t-cs","content":[{"type":"text","text":"[timeline] results"}]}]},"toolUseResult":[{"type":"text","text":"[timeline] results"}],"isSidechain":false,"sourceToolAssistantUUID":"u-dd"}\n' ;;
+    dig130)   dread t-d1 "$2" 1 130 220 ;;
+    dig131)   dread t-d2 "$2" 131 90 220 ;;
+    dig219)   dread t-d3 "$2" 131 89 220 ;;
+    dig218)   dread t-d4 "$2" 131 88 220 ;;
+    digfull)  dread t-df "$2" 1 220 220 ;;
+    digsame)  # the whole digest Read and an advisor call in ONE assistant message: the advisor's lines
+              # land on disk BEFORE the Read's tool_result line
+              _ds="$(dread t-ds "$2" 1 220 220)"
+              printf '%s\n' "${_ds%%$'\n'*}"
+              printf '{"type":"assistant","message":{"id":"m-t-ds","content":[{"type":"server_tool_use","id":"s-adv","name":"advisor","input":{}}]}}\n'
+              printf '{"type":"assistant","message":{"id":"m-t-ds","content":[{"type":"advisor_tool_result","tool_use_id":"s-adv","content":{"type":"advisor_result","text":"ok"}}]}}\n'
+              printf '%s\n' "${_ds#*$'\n'}" ;;
     adv)      printf '{"type":"assistant","message":{"id":"m-adv%s","content":[{"type":"server_tool_use","id":"s-adv","name":"advisor","input":{}}]}}\n' "$RANDOM" ;;
     advok)    printf '{"type":"assistant","message":{"id":"m-res","content":[{"type":"advisor_tool_result","tool_use_id":"s-adv","content":{"type":"advisor_result","text":"ok"}}]}}\n' ;;
     advunav)  printf '{"type":"assistant","message":{"id":"m-res","content":[{"type":"advisor_tool_result","tool_use_id":"s-adv","content":{"type":"advisor_tool_result_error","error_code":"unavailable"}}]}}\n' ;;
@@ -1366,6 +1400,65 @@ a_blob() {
   [ -e "$_p/$OW" ] || { printf 'FAIL:a blob-carried advisor attempt removed the owed file\n'; return; }
   printf 'PASS\n'
 }
+# A16. ONLY AN EXECUTED DIGEST READ COUNTS, AND ONLY WHEN IT COVERS THE DIGEST (BL-1212). Each world
+#      carries a 220-line digest of 100-byte lines, so a chunk from line 131 is 90 lines and one from
+#      line 1 is 163. Owed-on-digest denies say "is not yet read" and name the transcript's first
+#      uncovered line; advisor-owed denies do not. C3's shape, a denied whole Read then an executed
+#      1-130 of 220, is held naming offset 131, with and without an advisor call after it. Its twins:
+#      1-130 + 131-220 is advisor-owed and an advisor call clears it; denied-only is held at offset 1,
+#      and no digest attempt at all is allowed; a compact_boundary between the chunks resets coverage
+#      (offset 1); 131-219 covers to the last line but one, 131-218 is held at offset 219. A whole
+#      digest Read with the advisor call in the SAME message clears R; the same Read alone is held.
+a_dworld() { # a_dworld <gate> <kinds...> -> project with a 220-line digest
+  _dp="$(a_world "$@")" || return 1
+  awk 'BEGIN { for (i = 1; i <= 220; i++) printf "%-99s\n", "digest line " i }' > "$_dp/.claude/skills/ai-dlc/postcompact-digest.md"
+  printf '%s\n' "$_dp"
+}
+a_digcov() {
+  _p="$(a_dworld "$1" grant boundary digdeny dig130)"
+  [ "$(wc -c < "$_p/.claude/skills/ai-dlc/postcompact-digest.md")" -eq 22000 ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the digest is not 220 lines of 100 bytes\n'; return; }
+  [ -e "$_p/$OW" ] || { printf 'FAIL:SEED CANNOT EXPRESS THE CASE: the lead Reads did not arm the advisor stage\n'; return; }
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:C3 shape (denied whole + executed 1-130 of 220) was allowed\n'; return; }
+  grep -q 'is not yet read' <<<"${d#*|}" && grep -qF 'offset=131 limit=90`' <<<"${d#*|}" || { printf 'FAIL:C3 shape deny does not name the digest chunk at offset 131 limit 90: %s\n' "${d#*|}"; return; }
+  _p="$(a_dworld "$1" grant boundary digdeny dig130 adv advok)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:an advisor call after a partial digest Read cleared R\n'; return; }
+  grep -qF 'offset=131 limit=90`' <<<"${d#*|}" || { printf 'FAIL:C3 shape with an advisor call does not name offset 131\n'; return; }
+  _p="$(a_dworld "$1" grant boundary dig130 dig131)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:chunks 1-130 + 131-220 with no advisor call were allowed\n'; return; }
+  grep -q 'touchpoint R' <<<"${d#*|}" || { printf 'FAIL:chunks 1-130 + 131-220 denied for some reason other than R\n'; return; }
+  grep -q 'is not yet read' <<<"${d#*|}" && { printf 'FAIL:a covered digest (1-130 + 131-220) was called unread\n'; return; }
+  _p="$(a_dworld "$1" grant boundary dig130 dig131 adv advok)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" || { printf 'FAIL:an advisor call after a covered chunked digest did not clear R\n'; return; }
+  _p="$(a_dworld "$1" grant boundary digdeny)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" && { printf 'FAIL:a denied-only digest Read was allowed\n'; return; }
+  grep -qF 'offset=1 limit=163`' <<<"${d#*|}" || { printf 'FAIL:denied-only deny does not name offset 1 limit 163\n'; return; }
+  _p="$(a_dworld "$1" grant boundary)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" || { printf 'FAIL:no digest attempt since the compaction was held\n'; return; }
+  _p="$(a_dworld "$1" grant boundary dig130 boundary dig131)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  grep -qF 'offset=1 limit=163`' <<<"${d#*|}" || { printf 'FAIL:a compact_boundary between chunks did not reset coverage (offset 1)\n'; return; }
+  _p="$(a_dworld "$1" grant boundary dig130 dig219)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  grep -q 'touchpoint R' <<<"${d#*|}" && ! grep -q 'is not yet read' <<<"${d#*|}" || { printf 'FAIL:1-219 of 220 (last line but one) is not covered\n'; return; }
+  _p="$(a_dworld "$1" grant boundary dig130 dig218)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  grep -qF 'offset=219 limit=2`' <<<"${d#*|}" || { printf 'FAIL:1-218 of 220 does not name offset 219\n'; return; }
+  # The digest Read and the advisor call in ONE message (advisor lines before the Read's result) clear R;
+  # the twin, the same executed whole Read with no advisor call, is held as advisor-owed.
+  _p="$(a_dworld "$1" grant boundary digsame)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  allowed "$d" || { printf 'FAIL:a digest Read and an advisor call in one message did not clear R: %s\n' "${d#*|}"; return; }
+  _p="$(a_dworld "$1" grant boundary digfull)"
+  d="$(acall "$1" "$_p" Agent "$_p/t.jsonl")"
+  grep -q 'touchpoint R' <<<"${d#*|}" && ! grep -q 'is not yet read' <<<"${d#*|}" || { printf 'FAIL:an executed whole digest Read with no advisor call was not held advisor-owed: %s\n' "${d#*|}"; return; }
+  printf 'PASS\n'
+}
 # A15. The detection library unreadable: the stage WARNS on stderr and is silent, file kept. The
 #      control is the same world through the shipped gate, which refuses.
 a_nolib() {
@@ -1404,7 +1497,7 @@ r_re="$(a_reclear "$HOOK")"
 if [ "$r_re" = PASS ]; then ok "R: a new recovery clears the advisor window the previous one left"
 else bad "R: a new recovery clears the advisor window the previous one left — ${r_re#FAIL:}"; fi
 
-APREDS="deny bashhold slice after before unavail nogrant mate nodigest bound session holder grantcons blob nolib"
+APREDS="deny bashhold slice after before unavail nogrant mate nodigest bound session holder grantcons blob digcov nolib"
 
 a_tpl "$GATE"
 for _n in $APREDS; do
@@ -1420,6 +1513,7 @@ for _n in $APREDS; do
     holder)   label="R: a no-grant lead holding mcp__advisor__consult is held until a consult after the digest Read" ;;
     grantcons) label="R: a granted lead's consult does not clear it; a withdrawn grant with the consult held is held" ;;
     blob)     label="R: an advisor attempt on an api-request-blob line clears nothing" ;;
+    digcov)   label="R: only an EXECUTED digest Read covering the digest counts; C3 shape (denied whole + 1-130 of 220) is held naming offset 131, denied-only offset 1, a boundary resets coverage, chunks to the last line but one count, an advisor call in the digest Read's own message clears R" ;;
     nolib)    label="R: the detection library unreadable -> stderr WARN, silent, owed file kept" ;;
     mate)     label="R: a teammate's dispatch is untouched while the lead owes R, and the lead is still held" ;;
     nodigest) label="R: no readable postcompact digest, no stage" ;;
@@ -2845,6 +2939,116 @@ done
 
 fi
 
+fi
+
+# =============================================================================
+# READ-INTENT GUARD (BL-1212 item 3) -- the arm in ai-dlc-recover-gate.sh (PreToolUse), the hint in
+# ai-dlc-handoff-entry.sh (PostToolUse Read)
+#
+# A plain project, NOT a recovery world: with `.recover-fired` present the guard leaves the digest to
+# the recovery, so the hint arm would fail for the wrong reason. Payloads carry the key order, key set
+# and tool_response shape a headless Claude Code run delivered to a Read hook (PreToolUse: only
+# file_path in tool_input for the whole Read context-mode refuses; PostToolUse: tool_response
+# {type, file:{filePath, content, numLines, startLine, totalLines}}, totalLines counting the trailing
+# empty line). One subject run per state: arm, partial (hint), rest (silent, record gone); the twin
+# arms a DIFFERENT protected file in the same session and reads the digest partially (silent); a
+# payload whose transcript_path pushes "tool_name" past the gate's 1024-character head still arms.
+# =============================================================================
+RI_HE="${GATE:+$(dirname "$GATE")/ai-dlc-handoff-entry.sh}"
+if [ -z "$RI_HE" ] || [ ! -f "$RI_HE" ] || ! grep -qF '.read-intent' "$RI_HE" || ! grep -qF 'rg_ri_arm' "$GATE" || ! command -v jq >/dev/null 2>&1; then
+  skip "read-intent guard" "the gate carries no read-intent arm or handoff-entry no hint, or jq is absent"
+else
+  ri_proj() { # a plain project: state dir, a 220-line digest, a second protected file; no recovery marker
+    _rp="$(mktemp -d "$WORK/ri.XXXXXX")" || return 1
+    mkdir -p "$_rp/_bmad-output" "$_rp/.claude/skills/ai-dlc" || return 1
+    awk 'BEGIN { for (i = 1; i <= 220; i++) printf "%-99s\n", "digest line " i }' > "$_rp/.claude/skills/ai-dlc/postcompact-digest.md"
+    printf '# skill\n' > "$_rp/.claude/skills/ai-dlc/SKILL.md"
+    printf '%s\n' "$_rp"
+  }
+  ri_pre() { # ri_pre <project> <file> [transcript_path] -- the whole Read context-mode refuses, as PreToolUse delivers it, through the gate
+    printf '{"session_id":"sess-A","transcript_path":"%s","cwd":"%s","prompt_id":"p-ri","permission_mode":"default","effort":{"level":"medium"},"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"%s"},"tool_use_id":"toolu_ri%s"}' \
+      "${3:-$1/t.jsonl}" "$1" "$1/$2" "$RANDOM" | hook_run "$GATE" "$1" 2>/dev/null
+  }
+  ri_post() { # ri_post <project> <file> <offset> <numLines> <totalLines> -- an executed bounded Read
+    printf '{"session_id":"sess-A","transcript_path":"%s/t.jsonl","cwd":"%s","prompt_id":"p-ri","permission_mode":"default","effort":{"level":"medium"},"hook_event_name":"PostToolUse","tool_name":"Read","tool_input":{"file_path":"%s","offset":%s,"limit":%s},"tool_response":{"type":"text","file":{"filePath":"%s","content":"lines","numLines":%s,"startLine":%s,"totalLines":%s}},"tool_use_id":"toolu_ri%s","duration_ms":8}' \
+      "$1" "$1" "$1/$2" "$3" "$4" "$1/$2" "$4" "$3" "$5" "$RANDOM" | hook_run "$RI_HE" "$1" 2>/dev/null
+  }
+  RI_DIG=".claude/skills/ai-dlc/postcompact-digest.md"
+  ri_rec() { ls "$1/_bmad-output/.read-intent/" 2>/dev/null | grep -E "^sess-A__lead__.*$2\$" || true; }
+  _rq="$(ri_proj)"
+  if [ -z "$_rq" ] || [ -e "$_rq/$mk" ]; then
+    bad "read-intent guard: SEED CANNOT EXPRESS THE CASE (no plain project, or a recovery marker present)"
+  else
+    _o1="$(ri_pre "$_rq" "$RI_DIG")"
+    _r1="$(ri_rec "$_rq" postcompact-digest.md)"
+    _o2="$(ri_post "$_rq" "$RI_DIG" 1 130 221)"; _c2="$(ctx_of "$_o2")"
+    _r2f="$_rq/_bmad-output/.read-intent/$_r1"; _r2="$(grep -cx '1 130' "$_r2f" 2>/dev/null)" || _r2=0
+    _o3="$(ri_post "$_rq" "$RI_DIG" 131 90 221)"; _c3="$(ctx_of "$_o3")"
+    _r3="$(ri_rec "$_rq" postcompact-digest.md)"
+    if [ -n "$_r1" ] && [ -z "$_o1" ]; then ok "read-intent: a refused whole Read of a protected file arms a record for the session and lead, and prints nothing"
+    else bad "read-intent: the whole Read did not arm a silent record (record [$_r1], stdout [$(printf '%s' "$_o1" | head -c 200)])"; fi
+    if grep -qF 'is 221 lines; read so far 1-130' <<<"$_c2" && grep -qF 'offset=131 limit=90' <<<"$_c2" && [ "$_r2" = 1 ]; then
+      ok "read-intent: an armed file read 1-130 of 221 hints 'offset=131 limit=90' (the 90 lines left, 9000 bytes) and records the range"
+    else bad "read-intent: the partial Read after the arm gave [$(printf '%s' "$_c2" | head -c 300)], range rows $_r2"; fi
+    if [ -n "$_r1" ] && [ -z "$_c3" ] && [ -z "$_r3" ]; then ok "read-intent: reading 131-220 of 221 (to totalLines-1) is silent and deletes the record"
+    else bad "read-intent: coverage to totalLines-1 gave [$(printf '%s' "$_c3" | head -c 300)], record left [$_r3]"; fi
+  fi
+  _rt="$(ri_proj)"
+  if [ -n "$_rt" ]; then
+    ri_pre "$_rt" .claude/skills/ai-dlc/SKILL.md >/dev/null
+    _ot="$(ri_post "$_rt" "$RI_DIG" 1 130 221)"; _ct="$(ctx_of "$_ot")"
+    _rs="$(ri_rec "$_rt" SKILL.md)"; _rd="$(ri_rec "$_rt" postcompact-digest.md)"
+    if [ -n "$_rs" ] && [ -z "$_ct" ] && [ -z "$_rd" ]; then ok "read-intent twin: the same partial Read of a file NOT armed (another file armed in the session) is silent"
+    else bad "read-intent twin: unarmed partial gave [$(printf '%s' "$_ct" | head -c 300)], other record [$_rs], digest record [$_rd]"; fi
+  else bad "read-intent twin: SEED CANNOT EXPRESS THE CASE (no project)"; fi
+  _rl="$(ri_proj)"
+  _lp="$_rl/$(printf 'long-transcript-dir-%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56)/t.jsonl"
+  if [ -n "$_rl" ] && [ "${#_lp}" -gt 1100 ]; then
+    ri_pre "$_rl" "$RI_DIG" "$_lp" >/dev/null
+    _rr="$(ri_rec "$_rl" postcompact-digest.md)"
+    if [ -n "$_rr" ]; then ok "read-intent: a whole Read whose transcript_path (${#_lp} chars) puts \"tool_name\" past the gate's 1024-character head still arms"
+    else bad "read-intent: a whole Read with a ${#_lp}-character transcript_path did not arm"; fi
+  else bad "read-intent long head: SEED CANNOT EXPRESS THE CASE (no project, or transcript_path only ${#_lp} chars)"; fi
+  # D8: with a recovery in flight the arm leaves the files the read stage governs to it (the snapshot
+  # here), and still arms a protected file the recovery does not govern, in the same world.
+  _rr8="$(newproj architecture.md flat)"; arm_marker "$HOOK" "$_rr8"
+  if [ -e "$_rr8/$mk" ] && grep -q '^snapshot_path=' "$_rr8/$mk"; then
+    ri_pre "$_rr8" _bmad-output/pipeline-snapshot.md >/dev/null
+    ri_pre "$_rr8" .claude/skills/ai-dlc/SKILL.md >/dev/null
+    _r8s="$(ri_rec "$_rr8" pipeline-snapshot.md)"; _r8k="$(ri_rec "$_rr8" SKILL.md)"
+    if [ -z "$_r8s" ] && [ -n "$_r8k" ]; then ok "read-intent D8: during a recovery a whole snapshot Read is not armed, and a whole Read of an ungoverned protected file is"
+    else bad "read-intent D8: during a recovery the snapshot record is [$_r8s] (want none) and the ungoverned file's [$_r8k] (want one)"; fi
+  else bad "read-intent D8: SEED CANNOT EXPRESS THE CASE (no marker naming snapshot_path)"; fi
+  # A ZERO-BYTE library sources with status 0 and defines nothing; the arm must stand down, so the
+  # gate's rc and stdout equal those with the library ABSENT. The control is the same copied gate
+  # beside the whole library, which must arm a record (the Read reaches the arm).
+  _rz="$WORK/ri-lib"; mkdir -p "$_rz/zero" "$_rz/none" "$_rz/whole"
+  for _d in zero none whole; do cp "$GATE" "$_rz/$_d/"; cp "${GATE%/*}/ai-dlc-advisor-detect.sh" "$_rz/$_d/" 2>/dev/null; done
+  : > "$_rz/zero/ai-dlc-protected-set.sh"; cp "${GATE%/*}/ai-dlc-protected-set.sh" "$_rz/whole/"
+  _zo=""; _zr=""; _no=""; _nr=""
+  for _d in zero none whole; do
+    _pz="$(ri_proj)"
+    _oz="$(printf '{"session_id":"sess-A","transcript_path":"%s/t.jsonl","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"%s/.claude/skills/ai-dlc/SKILL.md"},"tool_use_id":"toolu_riz"}' "$_pz" "$_pz" "$_pz" \
+      | hook_run "$_rz/$_d/${GATE##*/}" "$_pz" 2>/dev/null)"; _rcz=$?
+    case "$_d" in zero) _zo="$_oz"; _zr=$_rcz ;; none) _no="$_oz"; _nr=$_rcz ;; whole) _wr="$(ri_rec "$_pz" SKILL.md)" ;; esac
+  done
+  if [ ! -s "$_rz/zero/ai-dlc-protected-set.sh" ] && [ -n "$_wr" ]; then
+    if [ "$_zr" = 0 ] && [ "$_zr" = "$_nr" ] && [ "$_zo" = "$_no" ]; then ok "read-intent: a zero-byte protected-set library leaves the gate's rc (0) and stdout on a whole protected Read equal to the library absent; the whole library beside the same gate arms"
+    else bad "read-intent: zero-byte library rc=$_zr stdout [$(printf '%s' "$_zo" | head -c 120)] vs absent rc=$_nr stdout [$(printf '%s' "$_no" | head -c 120)]"; fi
+  else bad "read-intent zero-byte library: SEED CANNOT EXPRESS THE CASE (library not empty, or the whole-library control did not arm)"; fi
+  # The hint's limit is sized in BYTES: on 400 lines of 200 bytes read 1-50, the lines it names fit
+  # one 16384-byte chunk and are at least one line (a line-count limit, 351, asks for 70,200 bytes).
+  _rb="$(ri_proj)"; _rbf=".claude/skills/ai-dlc/steps/wide-lines.md"; mkdir -p "$_rb/${_rbf%/*}"
+  awk 'BEGIN { for (i = 1; i <= 400; i++) printf "%-199s\n", "wide line " i }' > "$_rb/$_rbf"
+  ri_pre "$_rb" "$_rbf" >/dev/null
+  if [ -n "$(ri_rec "$_rb" wide-lines.md)" ] && [ "$(wc -c < "$_rb/$_rbf")" -eq 80000 ]; then
+    _cb="$(ctx_of "$(ri_post "$_rb" "$_rbf" 1 50 401)")"
+    _bo="$(grep -o 'offset=[0-9]* limit=[0-9]*' <<<"$_cb" | head -1)"; _bl="${_bo##*limit=}"; _bo="${_bo#offset=}"; _bo="${_bo%% *}"
+    _bb="$(awk -v a="${_bo:-0}" -v e="$(( ${_bo:-0} + ${_bl:-0} - 1 ))" 'NR >= a && NR <= e { b += length($0) + 1 } END { print b + 0 }' "$_rb/$_rbf")"
+    if [ "$_bo" = 51 ] && [ "${_bl:-0}" -ge 1 ] && [ "$_bb" -le 16384 ] && [ "$_bb" -gt 0 ]; then
+      ok "read-intent: on 400 lines of 200 bytes read 1-50 the hint names offset 51 limit ${_bl}, ${_bb} bytes (at most 16384, at least one line)"
+    else bad "read-intent: the hint on 400 lines of 200 bytes read 1-50 named offset=${_bo:-none} limit=${_bl:-none}, ${_bb} bytes (want offset 51, 1..16384 bytes): [$(printf '%s' "$_cb" | head -c 200)]"; fi
+  else bad "read-intent byte cap: SEED CANNOT EXPRESS THE CASE (the wide file did not arm, or is not 80000 bytes)"; fi
 fi
 
 # =============================================================================

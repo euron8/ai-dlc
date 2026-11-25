@@ -1,7 +1,8 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 reduction over the unit's count log), once, then verified by a second counted run.
 # 1869 and 141 include the 10 gate starts under `ulimit -f 0` (s_killed at run.sh:2506, the race at :2799), which the counter
 # recorded only once it learned to count a start whose log append the file-size limit refuses: 2 of them are the real gate.
-57 *
+# BL-1212 (0.1241.0), one counted seed: `*` 57 to 66 (p_fastpath's cat, jq and mkdir shims are bash scripts the armed control starts); gate 232 to 250 (A16 digcov 11, p_fastpath's unprotected Read 1, the read-intent arms 6; the zero-byte library arm's gate copies are mktemp paths, not logged); recover 57 to 58 (the D8 world's arm_marker); handoff-entry 3 to 7 (the read-intent Posts, the byte-cap arm 1).
+66 *
 0 core/hooks/ai-dlc-advisor-detect.sh
 0 core/hooks/ai-dlc-context-provenance.sh
 0 core/hooks/ai-dlc-handoff-entry.sh
@@ -14,7 +15,7 @@
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
 8 inproc:core/hooks/ai-dlc-postcompact.sh
 # B22: W10-02's recover cells A12-A15 add 7 in-process gate runs (holder 3, grantcons 2, blob 1, nolib's control 1; nolib's copy of the gate is a mktemp path, not logged): 124 to 131, from one counted seed.
-232 inproc:core/hooks/ai-dlc-recover-gate.sh
-57 inproc:core/hooks/ai-dlc-recover.sh
-3 inproc:core/hooks/ai-dlc-handoff-entry.sh
+250 inproc:core/hooks/ai-dlc-recover-gate.sh
+58 inproc:core/hooks/ai-dlc-recover.sh
+7 inproc:core/hooks/ai-dlc-handoff-entry.sh
 6 inproc:core/scripts/validate-reattach-budget.sh

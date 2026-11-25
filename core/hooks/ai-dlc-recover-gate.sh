@@ -118,7 +118,10 @@
 # as before. While that file exists and the read marker does not, an `Agent`, `Task`,
 # `TaskCreate`, `Write`, `Edit`, `MultiEdit` or `NotebookEdit` call FROM THE LEAD is judged on the lead's
 # transcript: if a Read of `skills/ai-dlc/postcompact-digest.md` follows the last
-# `compact_boundary` and no advisor attempt follows that Read, it is DENIED. A `Bash` call is held
+# `compact_boundary` and no advisor attempt follows that Read, it is DENIED. The digest Read counts
+# only once the Reads that EXECUTED (paired with their `tool_result`; a denied one credits nothing)
+# cover it from line 1 to its last line but one; an attempted but uncovered digest holds the same
+# calls, naming the next chunk, and no advisor call clears it until the digest is covered. A `Bash` call is held
 # only when one of its segments runs `gate-run.sh` with an `arms` or `close` word, or any
 # `snapshot-update.sh` op (`-h`/`--help` excepted); every other tool and every other Bash call is
 # untouched -- the wait-beat a teammate row requires is a Bash call, and R puts it BEFORE the
@@ -253,13 +256,107 @@ owed_put() {
 }
 # owed_get <key> -- one value from the owed file, empty if absent.
 owed_get() { sed -n "s/^$1=//p" "$OWED" 2>/dev/null | head -1; }
+# Shared by the advisor stage's digest deny and the read stages; definitions only, no fork.
+# ai-dlc-handoff-entry.sh loads this span (CHUNK_OF) for its read-intent hint: one definition.
+# CHUNK_OF_BEGIN
+CHUNK_CAP=16384      # bytes: the context-mode size guard and one chunk's ceiling
+READ_DEFAULT=2000    # lines a Read with no limit loads
+# chunk_of <file> <next-uncovered-line | 0> [<range end> [<range start>]] -> "<offset> <limit>": the chunk
+# starting at that line, or (0) the LAST chunk of the range (default: the whole file). At most CHUNK_CAP bytes
+# and READ_DEFAULT lines, never fewer than 1 line, and never past the range end or (last chunk) before its start.
+chunk_of() {
+  LC_ALL=C awk -v nx="$2" -v cap="$CHUNK_CAP" -v mx="$READ_DEFAULT" -v en="${3:-0}" -v lo="${4:-1}" '
+    { L[NR] = length($0) + 1 }
+    END {
+      n = NR; if (n == 0) { print "1 1"; exit }
+      if (en > 0 && en < n) n = en
+      if (lo < 1 || lo > n) lo = 1
+      b = 0; c = 0
+      if (nx > 0) { s = (nx > n) ? n : nx; for (i = s; i <= n; i++) { if (c > 0 && (b + L[i] > cap || c >= mx)) break; b += L[i]; c++ } print s, c }
+      else { for (i = n; i >= lo; i--) { if (c > 0 && (b + L[i] > cap || c >= mx)) break; b += L[i]; c++ } print n - c + 1, c }
+    }' "$1" 2>/dev/null
+}
+# CHUNK_OF_END
+
+# --- THE READ-INTENT ARM (BL-1212 item 3) --------------------------------------------------
+# context-mode denies a native Read with neither offset nor limit of a file over its size cap,
+# and that deny cannot be pre-empted (PreToolUse hooks run in parallel; deny wins); PostToolUse
+# never fires for the denied call. So the INTENT is recorded here: a Read with no offset and no
+# limit of a protected path (ai-dlc-protected-set.sh, the protect hook's set) writes
+# ${STATE_DIR}/.read-intent/<session>__<agent|lead>__<normalized path, sanitised>, and
+# ai-dlc-handoff-entry.sh (PostToolUse Read) merges each later Read's lines into it and hints the
+# next offset until the file is covered. Side effect only: it never changes this hook's decision
+# or output, and every failure is silent.
+# COST. This hook runs on every tool call. The payload's first 1024 characters are read by the
+# `read` builtin and tested with `case`; a call whose `"tool_name"` there is not Read leaves with
+# no further read, and the readers below take the head plus the rest by the same `cat` they always
+# ran. Only a Read is read to the end (builtin), and only a whole Read of a path the core set
+# cannot decide alone, on a project with an extensions layer file whose cached copy is stale,
+# forks (jq, once per layer-file change). A head with no `"tool_name"` is decided on the whole
+# payload, never skipped.
+# Not armed while a recovery is in flight for the files its read stage governs (snapshot, step
+# file, digest): that stage owns their coverage.
+RG_HEAD=""; RG_TAIL=""
+IFS= read -r -d '' -n 1024 RG_HEAD 2>/dev/null || true
+rg_ri_arm() {
+  local _all _fp _sid _aid="" _l _v _n _d _lib _f _rec
+  case "$RG_HEAD" in
+    *'"tool_name":"Read"'*) ;;
+    *'"tool_name":'*) return 0 ;;
+    *) [ "${#RG_HEAD}" -ge 1024 ] || return 0 ;;
+  esac
+  IFS= read -r -d '' RG_TAIL 2>/dev/null || true
+  _all="${RG_HEAD}${RG_TAIL}"
+  case "$_all" in *'"tool_name":"Read"'*) ;; *) return 0 ;; esac
+  case "$_all" in *'"offset":'*|*'"limit":'*) return 0 ;; esac
+  case "$_all" in *'"file_path":"'*) ;; *) return 0 ;; esac
+  _fp="${_all#*\"file_path\":\"}"; _fp="${_fp%%\"*}"
+  case "$_fp" in ''|*\\*) return 0 ;; esac
+  case "$_all" in *'"session_id":"'*) ;; *) return 0 ;; esac
+  _sid="${_all#*\"session_id\":\"}"; _sid="${_sid%%\"*}"
+  case "$_all" in *'"agent_id":"'*) _aid="${_all#*\"agent_id\":\"}"; _aid="${_aid%%\"*}" ;; esac
+  _sid="${_sid//[^A-Za-z0-9._-]/_}"; _aid="${_aid//[^A-Za-z0-9._-]/_}"
+  [ -n "$_sid" ] && [ -d "$STATE_DIR" ] || return 0
+  _lib="${BASH_SOURCE[0]:-$0}"; case "$_lib" in */*) _lib="${_lib%/*}/ai-dlc-protected-set.sh" ;; *) _lib=./ai-dlc-protected-set.sh ;; esac
+  [ -r "$_lib" ] || return 0
+  AI_DLC_PSET_LAZY=1
+  . "$_lib" 2>/dev/null || return 0
+  declare -F normalize_to >/dev/null && declare -F is_protected_norm >/dev/null && declare -F ps_load_ext_cached >/dev/null || return 0
+  _d="${STATE_DIR}/.read-intent"
+  if [ -n "${EXT_JSON:-}" ]; then
+    [ -d "$_d" ] || mkdir -p "$_d" 2>/dev/null || return 0
+    ps_load_ext_cached "$_d"
+  fi
+  normalize_to "$_fp"; _n="$_PS_N"
+  if [ -z "${EXT_BAD:-}" ]; then is_protected_norm "$_n" || return 0; fi
+  if [ -f "$MARKER" ]; then
+    case "$_n" in */postcompact-digest.md|postcompact-digest.md) return 0 ;; esac
+    while IFS= read -r _l; do
+      case "$_l" in
+        snapshot_path=?*|step_file=?*)
+          normalize_to "${_l#*=}"; _v="$_PS_N"
+          case "$_n" in "$_v"|*/"$_v") return 0 ;; esac
+          case "$_v" in */"$_n") return 0 ;; esac ;;
+      esac
+    done < "$MARKER"
+  fi
+  [ -d "$_d" ] || mkdir -p "$_d" 2>/dev/null || return 0
+  for _f in "$_d"/*; do
+    [ -f "$_f" ] || continue
+    case "${_f##*/}" in "${_sid}__"*) ;; *) rm -f "$_f" 2>/dev/null || true ;; esac
+  done
+  _rec="${_d}/${_sid}__${_aid:-lead}__${_n//[^A-Za-z0-9._-]/_}"
+  [ -f "$_rec" ] || printf 'path=%s\n' "$_n" > "$_rec" 2>/dev/null
+  return 0
+}
+rg_ri_arm 2>/dev/null
 
 # --- THE ADVISOR STAGE (header: THE ADVISOR STAGE) ---------------------------------------
 # Runs only once the read stages have disarmed (no marker) and left the owed file behind, so
 # it costs one `[ -f ]` on every ordinary call and never overlaps a read stage.
 if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
   command -v jq >/dev/null 2>&1 || exit 0
-  R_IN="$(cat 2>/dev/null || true)"
+  R_IN="${RG_HEAD}${RG_TAIL}$(cat 2>/dev/null || true)"
   R_TOOL=""; R_AID=""; R_SID=""; R_TP=""; R_TUID=""; R_CMD=""
   R_P="$(printf '%s' "$R_IN" | jq -r '@sh "R_TOOL=\((.tool_name // "") | tostring) R_AID=\((.agent_id // "") | tostring) R_SID=\((.session_id // "") | tostring) R_TP=\((.transcript_path // "") | tostring) R_TUID=\((.tool_use_id // "") | tostring) R_CMD=\((.tool_input.command // "") | tostring)"' 2>/dev/null)" || exit 0
   eval "$R_P"
@@ -308,46 +405,76 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
   ADV_DETECT_JQ=""
   { [ -r "$_AI_DLC_DETECT" ] && . "$_AI_DLC_DETECT"; } 2>/dev/null
   [ -n "$ADV_DETECT_JQ" ] || { echo "WARN: ai-dlc-recover-gate: the advisor detection library is unreadable ($_AI_DLC_DETECT); touchpoint R is not enforced on this call" >&2; exit 0; }
-  # One pass: grant (latest advisor_tool attachment), dig (line of the last digest Read after
-  # the last compact_boundary, 0 if none), adv (line of the last advisor attempt), res (U when
-  # the latest advisor result is `unavailable`), seen (the incoming call's own line is on disk),
-  # mid (that line's `message.id`; `-` when it carries none or is not on disk), mcp (line of the
-  # last `mcp__advisor__consult`), held (1 when the lead holds the consult). Blocks are credited
-  # only through `adv_blocks`, so an `api-request-blob` line credits nothing.
+  # One pass: grant (latest advisor_tool attachment), dig (see below), adv (line of the last advisor
+  # attempt), res (U when the latest advisor result is `unavailable`), seen (the incoming call's own
+  # line is on disk), mid (that line's `message.id`; `-` when it carries none or is not on disk), mcp
+  # (line of the last `mcp__advisor__consult`), held (1 when the lead holds the consult), then the
+  # digest facts: dtry (line of the last digest Read ATTEMPT), dnx (first line the executed digest Reads
+  # leave uncovered), dtot (the digest's totalLines), dpath (the path the last attempt named). Blocks are
+  # credited only through `adv_blocks`, so an `api-request-blob` line credits nothing.
+  # THE DIGEST READ IS CREDITED ONLY WHEN IT EXECUTED (BL-1212). A digest `tool_use` records intent;
+  # its id goes into a pending map, and only a `tool_result` on a `user` line carrying that id, not
+  # `is_error`, whose line's `toolUseResult.file` is an object naming the digest with numeric
+  # startLine/numLines/totalLines, credits lines startLine..startLine+numLines-1. A denied Read (string
+  # toolUseResult, is_error) credits nothing. `dig` is the line of the digest `tool_use` whose executed
+  # result first makes the credited ranges contiguous from line 1 to totalLines-1 (the tool_use's
+  # line, not the result's, so an advisor call in the same message as that Read still follows it); after that, a later digest attempt moves it, as before.
+  # A compact_boundary resets every digest fact. Every test is type-guarded: a jq runtime error here
+  # would empty the scan, and an empty scan allows.
   r_scan() {
     jq -n -R -r --arg tuid "$R_TUID" "$ADV_DETECT_JQ"'
+      def r_isdig: (. // "") | tostring | test("(^|/)skills/ai-dlc/postcompact-digest\\.md$");
+      def r_num: type == "number";
       reduce (inputs | (fromjson? // empty) as $l | select(($l | type) == "object") | [input_line_number, $l]) as [$n, $l]
-        ({grant: null, dig: 0, adv: 0, res: "-", seen: 0, mid: "-", roster: null, mcp: 0};
+        ({grant: null, dig: 0, adv: 0, res: "-", seen: 0, mid: "-", roster: null, mcp: 0,
+          dtry: 0, dids: {}, drng: [], dtot: 0, dnx: 1, dpath: ""};
          if adv_attach($l) then adv_fold($l)
-         elif ($l.type == "system" and $l.subtype == "compact_boundary") then .dig = 0
+         elif ($l.type == "system" and $l.subtype == "compact_boundary") then
+           .dig = 0 | .dtry = 0 | .dids = {} | .drng = [] | .dtot = 0 | .dnx = 1 | .dpath = ""
          else
            reduce adv_blocks($l) as $b (.;
              if ($b | adv_attempt) then .adv = $n
              elif ($b | adv_res) != null then .res = ($b | adv_res)
              elif ($b | adv_consult) then .mcp = $n
              elif ($b.type == "tool_use" and $b.name == "Read"
-                   and ((($b.input.file_path // "") | tostring) | test("(^|/)skills/ai-dlc/postcompact-digest\\.md$"))) then .dig = $n
+                   and ($b.input | if type == "object" then .file_path else null end | r_isdig)) then
+               .dtry = $n | .dpath = (($b.input.file_path | tostring) | gsub("[\n\r]"; ""))
+               | (if .dig > 0 then .dig = $n else . end)
+               | (if (($b.id | type) == "string") and $b.id != "" then .dids[$b.id] = $n else . end)
+             elif ($b.type == "tool_result" and (($b.tool_use_id | type) == "string")
+                   and (.dids[$b.tool_use_id] != null) and ($b.is_error != true)
+                   and (($l.toolUseResult | type) == "object") and (($l.toolUseResult.file | type) == "object")
+                   and ($l.toolUseResult.file.startLine | r_num) and ($l.toolUseResult.file.numLines | r_num)
+                   and ($l.toolUseResult.file.totalLines | r_num) and ($l.toolUseResult.file.filePath | r_isdig)) then
+               ($l.toolUseResult.file) as $f
+               | .drng += [[$f.startLine, ($f.startLine + $f.numLines - 1)]] | .dtot = $f.totalLines
+               | .dnx = (reduce (.drng | sort | .[]) as $r (1; if $r[0] <= . and $r[1] + 1 > . then $r[1] + 1 else . end))
+               | (if .dig == 0 and .dnx >= .dtot then .dig = .dids[$b.tool_use_id] else . end)
              elif ($b.type == "tool_use" and $tuid != "" and (($b.id // "") | tostring) == $tuid) then
                .seen = 1 | .mid = ((($l.message.id? // "") | tostring | gsub("[[:space:]]"; "")) | if . == "" then "-" else . end)
              else . end)
          end)
-      | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.dig) \(.adv) \(.res) \(.seen) \(.mid) \(.mcp) \(if adv_held then 1 else 0 end)"' "$R_TP" 2>/dev/null
+      | "\(if .grant == null then "none" elif .grant then "on" else "off" end) \(.dig) \(.adv) \(.res) \(.seen) \(.mid) \(.mcp) \(if adv_held then 1 else 0 end) \(.dtry) \(.dnx) \(.dtot) \(.dpath)"' "$R_TP" 2>/dev/null
   }
   # r_judge: sets R_V to allow | clear | owed from R_STATE, and R_ARMED to 1 when the lead holds
   # an advisor the stage can demand: the built-in grant, or (no grant) the MCP consult.
   # A granted lead is cleared by a built-in attempt only and stands down on `unavailable`; a
   # no-grant lead that holds the consult is cleared by a consult only, as in the advisor gate.
+  # R_DOWE=1: a digest Read was attempted since the compaction but the executed ranges do not cover it,
+  # so the stage is owed on the DIGEST and no advisor call clears it until coverage completes (dig>0).
   r_judge() {
-    read -r R_GRANT R_DIG R_ADV R_RES R_SEEN R_MID R_MCP R_HELD <<<"$R_STATE"
+    read -r R_GRANT R_DIG R_ADV R_RES R_SEEN R_MID R_MCP R_HELD R_DTRY R_DNX R_DTOT R_DPATH <<<"$R_STATE"
     R_ARMED=0
     if [ "${R_GRANT:-none}" = on ] || [ "${R_HELD:-0}" = 1 ]; then R_ARMED=1; fi
-    R_V=owed
-    [ "${R_DIG:-0}" -gt 0 ] 2>/dev/null || R_V=allow
+    R_V=owed; R_DOWE=0
+    if [ "${R_DIG:-0}" -gt 0 ] 2>/dev/null; then :
+    elif [ "${R_DTRY:-0}" -gt 0 ] 2>/dev/null; then R_DOWE=1
+    else R_V=allow; fi
     if [ "${R_GRANT:-none}" = on ]; then
-      if [ "$R_V" = owed ] && [ "${R_ADV:-0}" -gt "${R_DIG:-0}" ] 2>/dev/null; then R_V=clear; fi
+      if [ "$R_V" = owed ] && [ "$R_DOWE" = 0 ] && [ "${R_ADV:-0}" -gt "${R_DIG:-0}" ] 2>/dev/null; then R_V=clear; fi
       if [ "$R_V" = owed ] && [ "${R_RES:--}" = U ]; then R_V=allow; fi
     else
-      if [ "$R_V" = owed ] && [ "${R_MCP:-0}" -gt "${R_DIG:-0}" ] 2>/dev/null; then R_V=clear; fi
+      if [ "$R_V" = owed ] && [ "$R_DOWE" = 0 ] && [ "${R_MCP:-0}" -gt "${R_DIG:-0}" ] 2>/dev/null; then R_V=clear; fi
     fi
     return 0
   }
@@ -432,6 +559,23 @@ if [ ! -f "$MARKER" ] && [ -f "$OWED" ]; then
   else
     R_ASK="You have no built-in advisor grant but hold mcp__advisor__consult: call mcp__advisor__consult in a message of its own, read its answer, then retry the same call. Any consult clears this, including one that errors."
   fi
+  # THE DIGEST IS NOT YET READ (R_DOWE): the deny names the first uncovered line from the transcript;
+  # only the limit comes from the file on disk, and a disk file shorter than that line falls back to
+  # the transcript's own count.
+  if [ "${R_DOWE:-0}" = 1 ]; then
+    case "$R_DNX" in ''|*[!0-9]*) R_DNX=1 ;; esac
+    case "$R_DTOT" in ''|*[!0-9]*) R_DTOT=0 ;; esac
+    case "$R_DPATH" in /*) _rdf="$R_DPATH" ;; *) _rdf="${PROJECT_DIR}/${R_DPATH}" ;; esac
+    _rdo=""; _rdl=""
+    read -r _rdo _rdl <<<"$(chunk_of "$_rdf" "$R_DNX")"
+    if [ "$_rdo" != "$R_DNX" ] || ! [ "${_rdl:-0}" -ge 1 ] 2>/dev/null; then
+      _rdl=$((R_DTOT - R_DNX + 1)); [ "$_rdl" -ge 1 ] || _rdl=1; [ "$_rdl" -le "$READ_DEFAULT" ] || _rdl="$READ_DEFAULT"
+    fi
+    if [ "$R_DNX" -gt 1 ]; then _rdcov="cover lines 1-$((R_DNX - 1)) of ${R_DTOT}"; else _rdcov="cover none of it"; fi
+    jq -n --arg m "AI/DLC post-compact recovery: SKILL.md Rule 32 touchpoint R is owed and postcompact-digest.md is not yet read: the executed Reads of it since this compaction ${_rdcov} (a denied Read loads nothing), so this ${R_TOOL} call -- a dispatch or a write -- is refused (message ${R_N} of ${R_MAX_DENIES}; every call of a refused message is refused, and the message counts once). Next: \`Read ${R_DPATH} offset=${R_DNX} limit=${_rdl}\`, then the following chunks to the end, then the advisor in a message of its own; an advisor call before the digest is covered does not clear this. If you hold no advisor tool, say so in one line (RECOVERY-SKIP: advisor -- <why>) and retry: after ${R_MAX_DENIES} refused messages this stage stands down." \
+      '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
+    exit 0
+  fi
   jq -n --arg m "AI/DLC post-compact recovery: SKILL.md Rule 32 touchpoint R is owed. You read postcompact-digest.md after this compaction and have made no advisor call since, so this ${R_TOOL} call -- a dispatch or a write -- is refused (message ${R_N} of ${R_MAX_DENIES}; every call of a refused message is refused, and the message counts once). ${R_ASK} If you hold no advisor tool, say so in one line (RECOVERY-SKIP: advisor -- <why>) and retry: after ${R_MAX_DENIES} refused messages this stage stands down. Arming a wait-beat (Bash) is not refused and belongs before the advisor call." \
     '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $m}}'
   exit 0
@@ -452,7 +596,7 @@ fi
 [ -f "$MARKER" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 
-INPUT="$(cat 2>/dev/null || true)"
+INPUT="${RG_HEAD}${RG_TAIL}$(cat 2>/dev/null || true)"
 [ -n "$INPUT" ] || exit 0
 
 # THE READ STAGES BIND THE LEAD ONLY (BL-590). The marker is project-wide and the matcher is
@@ -567,8 +711,6 @@ FABS=""
 # path of that role. One file per call, never a read-modify-write of a shared file, so parallel
 # chunk Reads issued together lose nothing (the BL-658 shape). A record whose size-mtime no longer
 # matches the file is ignored at judge time, so an edited file is owed again.
-CHUNK_CAP=16384      # bytes: the context-mode size guard and one chunk's ceiling
-READ_DEFAULT=2000    # lines a Read with no limit loads
 isint() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; [ "${#1}" -le 9 ] && [ "$((10#$1))" -ge 1 ]; }
 fid() { # fid <file> -> "<bytes>-<mtime>"; fails when either is unreadable
   local _s _m
@@ -581,21 +723,6 @@ fid() { # fid <file> -> "<bytes>-<mtime>"; fails when either is unreadable
 nlines() { awk 'END { print NR + 0 }' "$1" 2>/dev/null; }
 # range_bytes <file> <first> <last> -> the bytes of those lines, newline counted per line
 range_bytes() { LC_ALL=C awk -v a="$2" -v b="$3" 'NR >= a && NR <= b { s += length($0) + 1 } NR > b { exit } END { print s + 0 }' "$1" 2>/dev/null; }
-# chunk_of <file> <next-uncovered-line | 0> [<range end> [<range start>]] -> "<offset> <limit>": the chunk
-# starting at that line, or (0) the LAST chunk of the range (default: the whole file). At most CHUNK_CAP bytes
-# and READ_DEFAULT lines, never fewer than 1 line, and never past the range end or (last chunk) before its start.
-chunk_of() {
-  LC_ALL=C awk -v nx="$2" -v cap="$CHUNK_CAP" -v mx="$READ_DEFAULT" -v en="${3:-0}" -v lo="${4:-1}" '
-    { L[NR] = length($0) + 1 }
-    END {
-      n = NR; if (n == 0) { print "1 1"; exit }
-      if (en > 0 && en < n) n = en
-      if (lo < 1 || lo > n) lo = 1
-      b = 0; c = 0
-      if (nx > 0) { s = (nx > n) ? n : nx; for (i = s; i <= n; i++) { if (c > 0 && (b + L[i] > cap || c >= mx)) break; b += L[i]; c++ } print s, c }
-      else { for (i = n; i >= lo; i--) { if (c > 0 && (b + L[i] > cap || c >= mx)) break; b += L[i]; c++ } print n - c + 1, c }
-    }' "$1" 2>/dev/null
-}
 # cov_next <role> <id> <lines> [<start>] -> the first line at or after <start> (default 1) the valid records of
 # that role leave uncovered (lines+1 when start..lines is covered). A record carrying another identity is ignored.
 cov_next() {

@@ -110,11 +110,99 @@ INPUT="$(cat 2>/dev/null || true)"
 [ -n "$INPUT" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 
-TOOL="$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)"
+# One jq for the tool name and the read-intent guard's keys (session, agent).
+_hd="$(printf '%s' "$INPUT" | jq -r '(.tool_name // "" | tostring), (.session_id // "" | tostring), (.agent_id // "" | tostring)' 2>/dev/null)"
+TOOL=""; _ri_sid=""; _ri_aid=""
+{ IFS= read -r TOOL; IFS= read -r _ri_sid; IFS= read -r _ri_aid; } <<<"$_hd"
 [ "$TOOL" = "Read" ] || exit 0
 
 FPATH="$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
 [ -n "$FPATH" ] || exit 0
+
+# THE READ-INTENT GUARD, PostToolUse half. context-mode denies a native Read with neither offset
+# nor limit of a file over its size cap, and that deny cannot be pre-empted (PreToolUse hooks run
+# in parallel; deny wins). What it leaves is a reader that retries with ONE bounded chunk and then
+# acts on a partial file. The ARM is `ai-dlc-recover-gate.sh`'s (PreToolUse `*`, header: THE
+# READ-INTENT ARM): every whole Read of a protected path (ai-dlc-protected-set.sh) writes a
+# per-session, per-agent record. Here each Read of a path holding a record merges its line range
+# into it, deletes it once lines are covered contiguously from 1 to totalLines-1 (totalLines may
+# count one trailing empty line), and otherwise adds one additionalContext line naming the next
+# offset. A successful whole Read covers itself and clears its own record.
+# Records: ${STATE_DIR}/.read-intent/<session>__<agent|lead>__<normalized path, sanitised>.
+# Every failure is silent: no library, no session, no record, no tool_response fields.
+_ri_sid="${_ri_sid//[^A-Za-z0-9._-]/_}"
+_ri_aid="${_ri_aid//[^A-Za-z0-9._-]/_}"
+_ri_pfx="${_ri_sid}__${_ri_aid:-lead}__"
+_ri_dir="${STATE_DIR}/.read-intent"
+_ri_lib() {
+  local _l
+  _l="${BASH_SOURCE[0]:-$0}"; case "$_l" in */*) _l="${_l%/*}/ai-dlc-protected-set.sh" ;; *) _l=./ai-dlc-protected-set.sh ;; esac
+  [ -r "$_l" ] || return 1
+  . "$_l" 2>/dev/null && ps_load_ext 2>/dev/null
+  command -v normalize >/dev/null 2>&1
+}
+
+# PostToolUse: the hint, computed here and printed with any gate-close note as ONE object below.
+_ri_hint=""
+if [ -n "$_ri_sid" ] && [ -d "$_ri_dir" ]; then
+  for _ri_f in "$_ri_dir/${_ri_pfx}"*; do
+    [ -f "$_ri_f" ] || continue
+    _ri_lib || break
+    _ri_n="$(normalize "$FPATH")"
+    _ri_rec="${_ri_dir}/${_ri_pfx}${_ri_n//[^A-Za-z0-9._-]/_}"
+    [ -f "$_ri_rec" ] || break
+    _ri_rr="$(printf '%s' "$INPUT" | jq -r '(.tool_response.file // .tool_response) as $f
+      | if ($f | type) == "object" and ([$f.startLine, $f.numLines, $f.totalLines] | map(type == "number") | all)
+        then "\($f.startLine | floor) \($f.numLines | floor) \($f.totalLines | floor)" else "" end' 2>/dev/null)"
+    _ri_s=""; _ri_c=""; _ri_t=""
+    read -r _ri_s _ri_c _ri_t <<<"$_ri_rr"
+    [ -n "$_ri_t" ] || break
+    _ri_rg=""
+    while IFS=' ' read -r _ri_a _ri_b; do
+      case "$_ri_a$_ri_b" in ''|*[!0-9]*) continue ;; esac
+      _ri_rg="${_ri_rg} ${_ri_a}-${_ri_b}"
+    done < "$_ri_rec"
+    [ "$_ri_c" -gt 0 ] && _ri_rg="${_ri_rg} ${_ri_s}-$((_ri_s + _ri_c - 1))"
+    # Contiguous coverage from line 1: extend while any range starts at or before cov+1.
+    _ri_cov=0; _ri_mv=1
+    while [ "$_ri_mv" = 1 ]; do
+      _ri_mv=0
+      for _ri_x in $_ri_rg; do
+        _ri_a="${_ri_x%-*}"; _ri_b="${_ri_x#*-}"
+        if [ "$_ri_a" -le $((_ri_cov + 1)) ] && [ "$_ri_b" -gt "$_ri_cov" ]; then _ri_cov="$_ri_b"; _ri_mv=1; fi
+      done
+    done
+    if [ "$_ri_cov" -ge $((_ri_t - 1)) ]; then
+      rm -f "$_ri_rec" 2>/dev/null || true
+      break
+    fi
+    { printf 'path=%s\n' "$_ri_n"; for _ri_x in $_ri_rg; do printf '%s %s\n' "${_ri_x%-*}" "${_ri_x#*-}"; done; } \
+      > "${_ri_rec}.$$" 2>/dev/null && mv "${_ri_rec}.$$" "$_ri_rec" 2>/dev/null || rm -f "${_ri_rec}.$$" 2>/dev/null || true
+    # The limit fits one chunk of the file from the first uncovered line: chunk_of and CHUNK_CAP are
+    # recover-gate's CHUNK_OF span, read with builtins (the one fork is chunk_of's awk). Unreadable:
+    # the lines left, at most 2000.
+    _ri_lim=$((_ri_t - _ri_cov)); [ "$_ri_lim" -le 2000 ] || _ri_lim=2000
+    # The gate is a registered hook read here as text, never sourced: its name stays off the
+    # directory line, which the library derivations (I13, hook-registration-join) read as a source.
+    _ri_g="${BASH_SOURCE[0]:-$0}"; case "$_ri_g" in */*) _ri_g="${_ri_g%/*}" ;; *) _ri_g=. ;; esac
+    _ri_g="${_ri_g}/ai-dlc-recover-gate.sh"
+    if [ -r "$_ri_g" ] && [ -r "$FPATH" ]; then
+      _ri_sp=""; _ri_in=0
+      while IFS= read -r _ri_ln || [ -n "$_ri_ln" ]; do
+        case "$_ri_ln" in '# CHUNK_OF_BEGIN') _ri_in=1; continue ;; '# CHUNK_OF_END') break ;; esac
+        [ "$_ri_in" = 1 ] && _ri_sp="${_ri_sp}${_ri_ln}"$'\n'
+      done < "$_ri_g"
+      if [ -n "$_ri_sp" ] && eval "$_ri_sp" 2>/dev/null && declare -F chunk_of >/dev/null; then
+        _ri_co=""; _ri_cl=""
+        read -r _ri_co _ri_cl <<<"$(chunk_of "$FPATH" $((_ri_cov + 1)))"
+        case "$_ri_cl" in ''|*[!0-9]*|0) ;; *) _ri_lim="$_ri_cl" ;; esac
+      fi
+    fi
+    _ri_so="${_ri_rg# }"; _ri_so="${_ri_so// /, }"; [ -n "$_ri_so" ] || _ri_so="none"
+    _ri_hint="AI/DLC: ${_ri_n} is ${_ri_t} lines; read so far ${_ri_so}. Your whole Read of it did not complete (refused for size, or truncated); continue with Read offset=$((_ri_cov + 1)) limit=${_ri_lim} until the end before relying on it."
+    break
+  done
+fi
 
 # THE PER-CALL BREADCRUMB. `ai-dlc-recover-gate.sh` writes `.recover-satisfied.<tool_use_id>` for every
 # recovery-compelled Read of a handoff.md step file, so a chunk that is not the last one still
@@ -127,6 +215,7 @@ _RS_PC=""
 
 # THE GATE-LEAVE CLOSE (header: "IT ALSO CLOSES A GATE"). Every path through it falls through to
 # the handoff block below unchanged; it never exits.
+_m1_msg=""
 case "$FPATH" in
   *skills/ai-dlc*/steps/*.md)
     _m1="$(printf '%s' "$INPUT" | jq -r '(.agent_id // "" | tostring), (.session_id // "" | tostring),
@@ -197,16 +286,8 @@ case "$FPATH" in
          && printf '%s\t%s\t%s\n' "$_m1_open" "$_m1_x" "$_m1_st" > "${_m1_dir}/LEFT.$$" 2>/dev/null \
          && mv "${_m1_dir}/LEFT.$$" "${_m1_dir}/LEFT" 2>/dev/null; then
         _m1_w="$_m1_x"
-        _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
-        if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
-        else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
+        # Printed with the read-intent hint as ONE object, after this block.
         _m1_msg="Gate \`${_m1_open}\` was closed: this session left it at its whole Read of \`${_m1_x}.md\` without a \`close\`. If it is unfinished, \`gate-checkpoint.sh --nonce ${_m1_open} record|done\` re-opens it."
-        jq -n --arg context "$(ai_dlc_provenance_wrap ai-dlc-handoff-entry PostToolUse "$_m1_msg")" '{
-          hookSpecificOutput: {
-            hookEventName: "PostToolUse",
-            additionalContext: $context
-          }
-        }' 2>/dev/null || true
       else
         rm -f "${_m1_dir}/LEFT.$$" 2>/dev/null || true
       fi
@@ -244,6 +325,22 @@ case "$FPATH" in
     fi
     ;;
 esac
+
+# THE ONE STDOUT OBJECT: the gate-close note and the read-intent hint, joined, wrapped once.
+_ho_ctx="${_m1_msg:-}"
+if [ -n "$_ri_hint" ]; then _ho_ctx="${_ho_ctx}${_ho_ctx:+
+}${_ri_hint}"; fi
+if [ -n "$_ho_ctx" ]; then
+  _AI_DLC_PROV="$(dirname "${BASH_SOURCE[0]}")/ai-dlc-context-provenance.sh"
+  if [ -r "$_AI_DLC_PROV" ]; then . "$_AI_DLC_PROV"
+  else ai_dlc_provenance_wrap() { printf %s "${3:-}"; }; fi
+  jq -n --arg context "$(ai_dlc_provenance_wrap ai-dlc-handoff-entry PostToolUse "$_ho_ctx")" '{
+    hookSpecificOutput: {
+      hookEventName: "PostToolUse",
+      additionalContext: $context
+    }
+  }' 2>/dev/null || true
+fi
 
 case "$FPATH" in
   */steps/handoff.md) : ;;
