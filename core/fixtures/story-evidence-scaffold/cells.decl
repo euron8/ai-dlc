@@ -11,4 +11,5 @@ e2e core/scripts/gen-round-briefs.sh cli-rbriefs-par why=the CLI parallel repair
 e2e core/scripts/gen-round-briefs.sh cli-rbriefs-lane why=the CLI --plan-file run that writes the CROSS NOTE for the lane and fan-in briefs
 e2e core/scripts/gen-round-briefs.sh cli-rbriefs-lanejoin why=the CLI --plan-file refusal on a lane round's own plan, the allow twin
 e2e core/scripts/gen-round-briefs.sh cli-rbriefs-zero why=the CLI --plan-file refusal on a cross token the plan gives no CROSS item
+e2e core/scripts/gen-round-briefs.sh cli-rbriefs-elic why=the CLI elicitation run whose briefs must carry the elicitation region and the method line
 e2e core/scripts/gen-round-briefs.sh cli-rbriefs-two why=the CLI --plan-file refusal on a cross token the plan gives two CROSS items

@@ -10,8 +10,9 @@
 #     over the whole sprint from 1;
 #   - an AC gets lettered cases exactly when its own text enumerates its own sub-items as parenthesized lowercase letters
 #     in sequence from `(a)`, at least `(a)` and `(b)`. A `(x)` directly after a letter, digit, `_` or `)` (`AC3(c)`,
-#     `f(a)`) or after the word Rule, option, story, FR, AD, step, item, section or arm (any case of the first letter) is
-#     a citation and is not counted. Every other AC is one row with Case `-`.
+#     `f(a)`), after the word Rule, option, story, FR, AD, step, item, section or arm (any case of the first letter) alone
+#     or as an id with hyphenated segments (`FR-S324-2 (a)`, `AD-12 (b)`), or after the word answer, is a citation and is
+#     not counted. Every other AC is one row with Case `-`.
 #
 #   --letters <story id>:AC<n>=<k>   (repeatable) force k lettered cases on one AC whose text names a case it does not
 #                       letter (`S323-5.4:AC2=3`: "(a), (b) and the security-critical case"); the strategy says so where it uses it.
@@ -86,7 +87,8 @@ while IFS="$(printf '\t')" read -r _ id f; do
         tok = substr(s, RSTART + 1, 1); pre = substr(s, 1, RSTART - 1)
         s = substr(s, RSTART + RLENGTH)
         if (pre ~ /[A-Za-z0-9_)]$/) continue
-        if (pre ~ /([Rr]ule|[Oo]ption|[Ss]tory|FR|AD|[Ss]tep|[Ii]tem|[Ss]ection|[Aa]rm) $/) continue
+        if (pre ~ /([Rr]ule|[Oo]ption|[Ss]tory|FR|AD|[Ss]tep|[Ii]tem|[Ss]ection|[Aa]rm)(-[A-Za-z0-9.]+)* $/) continue
+        if (pre ~ /[Aa]nswer $/) continue
         if (tok == "a" && !(1 in seen) && pre ~ /(of|to|in|for|by|from|at|on|with|per|see|under|than|against) $/) continue
         seen[index("abcdefghijklmnopqrstuvwxyz", tok)] = 1
       }

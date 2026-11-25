@@ -1,5 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge's own J2 output). Every subject is asked in process (he-inproc.sh), so the starts are the run's own bash and, in group b, EQUIV's CLI rows.
-21 *
+23 *
 0 core/scripts/validate-handoff-evidence.sh
 0 core/scripts/sprint-status.sh
 0 core/scripts/record-only-diff.sh
@@ -10,5 +10,4 @@
 # PLACEHOLDER (E4 H5): the two rows below are estimates from the era arm's run.sh, not from a counted run; the lead sets them.
 1 core/scripts/strategy-rows.sh
 4 core/scripts/strategy-self-check.sh
-# PLACEHOLDER (batch 262 E-U5): the row below and the `*` bump (+3) are read from the RBRIEFS arm's run.sh, not from a counted run; the lead sets them.
-5 core/scripts/gen-round-briefs.sh
+6 core/scripts/gen-round-briefs.sh

@@ -319,6 +319,12 @@ p_epics "$JOIN"     && ok "J6: a shard whose part cites ONLY epics/epics.md (a r
   || bad "J6: an epics-only shard did not join under the sprint slot (rc=$RC): $(cat "$JO")"
 p_shardrow "$JOIN"  && ok "J7: remediators' own part-file writes under s305/shards/ are ledger rows and are not read as a missing shard -> JOINED" \
   || bad "J7: a part-file write under shards/ was read as an artifact write (rc=$RC): $(cat "$JO")"
+p_roundsreturn "$JOIN" && ok "J8: a round-dispatcher's s305/rounds/<round>.return write is the round's own machinery, not a missing shard -> JOINED, 3 parts / 3 writers" \
+  || bad "J8: a rounds/<round>.return write was read as an artifact write (rc=$RC): $(cat "$JO")"
+p_roundslane "$JOIN"   && ok "J9: two part records written at s305/rounds/<round>/lane-N.md (one absolute, one relative) are not read as a missing shard -> JOINED, 3 parts / 3 writers" \
+  || bad "J9: a part record under rounds/ was read as an artifact write (rc=$RC): $(cat "$JO")"
+p_roundsonly "$JOIN"   && ok "J10: a remediator whose ONLY record sits under s305/rounds/ -> its story write is REFUSED 'cited by no shard record -- a missing shard', and no rounds/ row is named" \
+  || bad "J10: a remediator with no part under shards/ was not refused as a missing shard, or a rounds/ row was named (rc=$RC): $(cat "$JO")"
 p_bothdirs "$JOIN"  && ok "J5: shards/stories-p1/ (adversary) beside shards/stories-repair-p1/ for the same pass -> the join reads only its own dir, 3 parts" \
   || bad "J5: the join read the adversary shard dir of the same pass (rc=$RC): $(cat "$JO")"
 p_docjoin "$JOIN"    && ok "D1: --document, three section writers and three parts -> JOINED, 3 parts / 3 writers, the document ASSEMBLED with all three edits, sections/ cleared, the record opening with the J2 link triple (root-relative artifact, split sha before, assembled sha after)" \
@@ -348,7 +354,7 @@ if p_uwbefore "$JOIN"; then ok "A8: the cited file written only BEFORE --since, 
 else bad "A8: the before-window remedy is not the latest row's, or still names the Bash cause (rc=$RC): $(cat "$JO")"; fi
 p_uwafter "$JOIN" && ok "A9: the cited file written only AFTER --until -> the EARLIEST after-window row and the new --until remedy" \
   || bad "A9: the after-window remedy is absent or not the earliest row's (rc=$RC): $(cat "$JO")"
-p_uwaside "$JOIN" && ok "A10: a --rerun part citing a file whose only in-window row the re-run superseded -> the set-aside remedy naming that row" \
+p_uwaside "$JOIN" && ok "A10: a --rerun part citing a file whose only in-window row the re-run superseded, a rounds/<round>.return row in the window -> the set-aside remedy naming that row, and no rounds/ row named" \
   || bad "A10: the set-aside remedy is absent (rc=$RC): $(cat "$JO")"
 p_uwboth "$JOIN" && ok "A11: a before- and an after-window row -> the BEFORE clause, then '; also ' and the AFTER clause" \
   || bad "A11: both window sides were not named, joined by '; also ' (rc=$RC): $(cat "$JO")"
@@ -356,7 +362,7 @@ if p_uwamb "$JOIN"; then ok "A12: a cited basename resolving to two paths once t
 else bad "A12: the ambiguous-once-untimed remedy is not exactly the NONE clause (rc=$RC): $(cat "$JO")"; fi
 p_sjaside "$JOIN" && ok "A13: subject mode, a part citing the prd.md written IN PLACE, no --rerun -> the no-rerun set-aside clause, and no '(a --rerun supersedes it)'" \
   || bad "A13: the subject-mode set-aside remedy is not the no-rerun text (rc=$RC): $(cat "$JO")"
-if p_uwshard "$JOIN"; then ok "A14: a token that is a /-suffix only of a path under shards/, written in the window -> exactly the NONE clause"
+if p_uwshard "$JOIN"; then ok "A14: a token that is a /-suffix only of a path under shards/, and one only of a path under rounds/, each written in the window -> exactly the NONE clause for both"
 else bad "A14: the shards/ row reached the remedy lookup (rc=$RC): $(cat "$JO")"; fi
 if p_sjrraside "$JOIN"; then ok "A15: subject mode WITH --rerun (A13's in-place prd.md row, another section re-run) -> exactly the rerun set-aside clause, '(a --rerun supersedes it)' included"
 else bad "A15: the subject-mode --rerun set-aside remedy is not the rerun text (rc=$RC): $(cat "$JO")"; fi

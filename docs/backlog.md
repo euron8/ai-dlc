@@ -4350,3 +4350,24 @@ Related: BL-1231 (closed with the opening-step case), BL-1239 (filed in the same
 Provenance: batch 266, cluster G tip adversary; ids allocated by the lead ai-dlc-9b.
 
 verify: manual
+
+## BL-1241 — the adversary role file tells every pass to copy the adversary-pass envelope and close with one verdict before its elicitation paragraph, so an elicitation shard that follows those lines is refused at `--check-header`
+
+**DEFECT.** Filed 2026-11-25 (batch 266, cluster R tip adversary). Owner: `core/team-roles/adversary.md`.
+
+Goal: an elicitation shard reading `adversary.md` top-down is never told to copy the adversary-pass envelope or to write a verdict. One done condition: the envelope line and the one-verdict line each scope themselves to review passes in-line, and every pinned substring of the file still matches.
+
+Baseline: the envelope line (`adversary.md:56-57`, "copy the exact envelope from \"The verdict\" below") and the one-verdict line (`adversary.md:309-310`, "Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted residue and exactly one verdict") both come before the elicitation paragraph at `:312`. An elicitation shard that follows them writes `skill: ai-dlc-adversary-review` and a `verdict:` line, and `merge-adversarial-shards.sh --check-header --axis elicitation` refuses it loudly, which costs a re-dispatch; it is never a false pass.
+
+Work list:
+
+1. Edit both lines in place so each names review passes and points an elicitation shard to the `:312` paragraph, keeping every pinned substring (no pin covers `:309` or "exact envelope").
+2. Read the file top-down as an elicitation shard and confirm no earlier line tells it to copy the adversary-pass envelope or write a verdict.
+
+Step: n/a
+
+Related: BL-1233 (added the elicitation paragraph this entry scopes the earlier lines to).
+
+Provenance: batch 266, cluster R tip adversary; id allocated by the lead ai-dlc-9b.
+
+verify: manual

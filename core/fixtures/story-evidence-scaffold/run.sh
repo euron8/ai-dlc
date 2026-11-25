@@ -1131,12 +1131,21 @@ if gsel era; then
     ER_W="$WORK/world-era"
     mkdir -p "$ER_W/stories" || bad "ERA: FIXTURE BROKEN -- cannot make the world"
     printf -- '---\nid: S9-1.1\nstatus: draft\n---\n# Story\n\n- **AC1 (EXISTENTIAL).** one\n- **AC2 (UNIVERSAL).** two\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-1.md"
+    # LETTER: the same --bind run letters a second story. AC1 cites another enumeration through a hyphenated id, AC2 through
+    # the word answer; AC3 is the near-miss, its own (a)/(b) right after an id token ended by a colon.
+    printf -- '---\nid: S9-1.2\nstatus: draft\n---\n# Story\n\n- **AC1 (EXISTENTIAL).** the venue holds FR-S9-2 (a) and FR-S9-2 (b) as read\n- **AC2 (EXISTENTIAL).** each path follows the operator answer (a) or answer (b)\n- **AC3 (UNIVERSAL).** FR-S9-2: (a) refuses and (b) logs\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-2.md"
     er_out="$(FXCELL="cli-era-bind" bash "$ER_D/strategy-rows.sh" --sprint 9 --stories-dir "$ER_W/stories" --bind 2>&1)"; er_rc=$?
     er_n="$(grep -cx 'ai-dlc-era: e4-forward-1' "$ER_W/stories/story-1-1.md")"
     if [ "$er_rc" -eq 0 ] && [ "$er_n" = 1 ] && grep -qxF '| ST9-1 | - |  |  |' "$ER_W/stories/story-1-1.md" && grep -qxF '| ST9-2 | - |  |  |' "$ER_W/stories/story-1-1.md"; then
       ok "ERA: strategy-rows.sh --bind wrote the ai-dlc-era: e4-forward-1 line once, as its own line, and one empty row per AC"
     else
       bad "ERA: --bind rc=$er_rc, token lines=$er_n [$er_out]"
+    fi
+    er_l="$(grep -E '^\| ST9-[345] \|' "$ER_W/stories/story-1-2.md" | tr '\n' ' ')"
+    if [ "$er_l" = "| ST9-3 | - |  |  | | ST9-4 | - |  |  | | ST9-5 | a |  |  | | ST9-5 | b |  |  | " ]; then
+      ok "LETTER: a (a)/(b) after FR-S9-2 or after answer is a citation (one row, Case -); an AC's own (a)/(b) after 'FR-S9-2:' is lettered a, b"
+    else
+      bad "LETTER: bound rows [$er_l]"
     fi
     er_set() { awk -v k="$1" '{ if ($0 == "| ST9-1 | - |  |  |") print "| ST9-1 | - | " k " | x.py::t |"; else if ($0 == "| ST9-2 | - |  |  |") print "| ST9-2 | - | test | y.py::t |"; else print }' "$ER_W/stories/story-1-1.md" > "$2"; }
     for er_k in unit test; do
@@ -1226,6 +1235,28 @@ if gsel rbriefs; then
       ok "RBRIEFS: a lane round's own plan (no LANE-ARTIFACT line) refuses with exit 3 and writes no cross brief"
     else
       bad "RBRIEFS: lane-join plan rc=$rb_rrc cross.brief=$([ -e "$RB_W/ref-out/cross.brief" ] && echo present || echo absent) out=[$rb_rout]"
+    fi
+    # An elicitation brief carries the procedures file's provenance-block/elicitation region (the sub-skill's skill:, no
+    # verdict:) and names that skill as the shard's method; the adversary-pass region would be refused by the merge.
+    RB_PROC="$(locate skills/ai-dlc/steps/_gate-procedures.md)" || RB_PROC=""
+    RB_ROLE="$(locate team-roles/adversary.md)" || RB_ROLE=""
+    if [ -z "$RB_PROC" ] || [ -z "$RB_ROLE" ]; then
+      bad "RBRIEFS: FIXTURE BROKEN -- _gate-procedures.md or adversary.md not found beside gen-round-briefs.sh (proc=[$RB_PROC] role=[$RB_ROLE])"
+    else
+      echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/_gate-procedures.md"
+      echo "HERMETIC-CONSUMED core/team-roles/adversary.md"
+      printf 'focus\n' > "$RB_W/focus"
+      rb_e="$(FXCELL="cli-rbriefs-elic" bash "$RB_D/gen-round-briefs.sh" --round elicitation --axis files --sprint 9 --artifact stories --pass 1 --map "$RB_W/map" --subject-dir "$RB_W/stories" --focus "$RB_W/focus" --role-file "$RB_ROLE" --procedures-file "$RB_PROC" --shard-dir "$RB_W/shards/stories-elicitation" --out-dir "$RB_W/elic-out" 2>&1)"; rb_erc=$?
+      rb_m='Method: invoke `/bmad-advanced-elicitation` with the Skill tool, scoped to your part; it supplies the method. Record findings and edit nothing.'
+      rb_sk="$(grep -c '^skill: bmad-advanced-elicitation ' "$RB_W/elic-out/2.brief" 2>/dev/null)" || rb_sk=0
+      rb_xs="$(grep -c '^skill: bmad-advanced-elicitation ' "$RB_W/elic-out/cross.brief" 2>/dev/null)" || rb_xs=0
+      rb_v="$(cat "$RB_W/elic-out/2.brief" "$RB_W/elic-out/cross.brief" 2>/dev/null | grep -c '^verdict:')" || rb_v=0
+      if [ "$rb_erc" -eq 0 ] && [ "$rb_sk" -eq 1 ] && [ "$rb_xs" -eq 1 ] && [ "$rb_v" -eq 0 ] \
+         && grep -qxF "$rb_m" "$RB_W/elic-out/2.brief" && grep -qxF "$rb_m" "$RB_W/elic-out/cross.brief"; then
+        ok "RBRIEFS: an elicitation round's part and cross briefs carry skill: bmad-advanced-elicitation once, no verdict: line, and the Skill-tool method line"
+      else
+        bad "RBRIEFS: elicitation rc=$rb_erc skill=$rb_sk cross-skill=$rb_xs verdict=$rb_v method=$(grep -cxF "$rb_m" "$RB_W/elic-out/2.brief" 2>/dev/null) out=[$rb_e]"
+      fi
     fi
   fi
 fi

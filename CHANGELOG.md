@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1240.0] - 2026-11-25
+
+### Elicitation shards are no longer refused by the merge, the shard join stops reading a round's own `rounds/` files as missing shards, and the strategy-rows letterer stops lettering citations (BL-1233, BL-1234, BL-1235)
+
+- **Elicitation rounds can merge again** (BL-1233, PC-S324-ELICITATION-BRIEF-EMITS-ADVERSARY-PASS-PROVENANCE-REGION-AND-MERGE-REFUSES-ALL-ITS-SHARDS). For every consumer running a stories elicitation round. `gen-round-briefs.sh --round elicitation` gave each shard the adversary-review provenance block (`skill: ai-dlc-adversary-review` and a `verdict:` line), so `merge-adversarial-shards.sh` refused every elicitation shard. The brief now copies the elicitation block from `_gate-procedures.md` (new `--procedures-file` flag), which names `bmad-advanced-elicitation` and carries no verdict, and tells the member to invoke that skill with the Skill tool on its own part. A standalone paragraph in the adversary role file, and one in its shard-provenance appendix, say an elicitation shard copies its brief's elicitation block and writes no verdict. Review and repair briefs are unchanged.
+- **The shard join no longer refuses a round's own files** (BL-1234, PC-S324-JOIN-ROUNDS-ROWS-ARE-UNCOUNTED-AND-NO-WINDOW-EXCLUDES-THEM and PC-S323-JOIN-LEDGER-COUNTS-THE-DISPATCHER-RETURN-ROW-AND-THE-WINDOW-CANNOT-EXCLUDE-IT). For every consumer whose repair rounds join in files mode. Rows under `s<N>/rounds/` (dispatcher briefs, the dispatcher's `<round>.return`, part records a mis-named brief put there) were refused as missing shards, and no `--since`/`--until` window could exclude them without excluding the round. Files mode now drops them beside `shards/`, and the record's disjointness sentence names both excluded directories. Document and subject mode are unchanged.
+- **Citations are no longer lettered as an AC's own cases** (BL-1235, PC-S324-STRATEGY-ROWS-LETTER-EXCLUSION-MISSES-HYPHENATED-AND-ANSWER-CITATIONS). For every consumer binding strategy rows. `FR-S324-2 (a)` and `answer (a)` bound spurious `a`/`b` rows; a `(a)`/`(b)` after a hyphenated id or after the word `answer` is now a citation with one row. An AC's own `(a)`/`(b)` still letters. Roman `(i)` sub-items are not covered.
+
 ## [0.1239.0] - 2026-11-25
 
 ### The update skill now keys a candidate recorded as a backticked id plus em dash under an id-less heading on its id, so reverify reports it under that id and the upstream-naming query can see it (BL-1238)

@@ -757,9 +757,9 @@ from reaching the merge. The merged record's `tool_use_id` is the derived id of 
 **Every adversary brief carries the `cited-paths:` block** of "Validation cycle" item 1, from one `scripts/ai-dlc/resolve-cited-paths.sh` run per pass over the artifact's files.
 
 It writes findings to `_bmad-output/planning-artifacts/s<N>/<artifact>-adversarial-p<M>.md`
-carrying a `SKILL_INVOCATION_PROVENANCE v1` block. Every adversary brief, sharded or not, carries
+carrying a `SKILL_INVOCATION_PROVENANCE v1` block. Every review brief, sharded or not, carries
 that block as the generated `provenance-block/adversary-pass` region of `team-roles/adversary.md`
-copied verbatim (`sync-taught-schema.sh` renders it from `.claude/schemas/provenance-block.json`),
+(an elicitation brief: the `provenance-block/elicitation` region above) copied verbatim (`sync-taught-schema.sh` renders it from `.claude/schemas/provenance-block.json`),
 never as a field list the lead retypes; an unsharded pass fills `tool_use_id` with THIS Agent
 dispatch's id. A SHARD writes `tool_use_id: NOT_ACCESSIBLE`, because a
 dispatched adversary cannot know its own dispatch id, and the merge derives each shard's dispatch id
