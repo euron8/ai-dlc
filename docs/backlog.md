@@ -350,6 +350,7 @@ Hand-run once, at authoring:
   - Limits stated in the analysis file: nine verdicts rest on the header plus sampled assertion lines, and two sub-searches were not run (`ledger-reverify-dist-only-reach` part B, and the namers of `ai-dlc-context-provenance.sh` for `context-mode-protect`). The consequence judgment is the census author's, made from each family's named property.
   - No fixture is removed in this release. Deleting the NO-CATCH-ON-RECORD families is owed item 6.
 - (c) Item 4, the two `.undeclarable` fixtures. Both run on every push, because neither is keyed by a declaration. Catch on record: none found for either; no red unit in any archive and no catch-language line. `hook-registration-join`: 6 s over every row (plain 1 s). Judgment KEEP-consequence: if it were absent, a hook that is on disk but never registered (for example the core guard) would pass as installed and never fire. It is the only fixture that damages `settings-merge.sh` and asserts the fail-closed rc 2 (arms 6-8, `run.sh:170-194`). The other three fixtures that name `validate-hook-registration.sh` (`apply-restamp-worklist`, `emit-report-refusal`, `post-write-gates`) stub it or mention the ownership pattern in comments only, with 1, 0 and 1 comment hits against 7 in `hook-registration-join`. Who would notice it gone: a consumer. It ships and carries `@consumer` rows, and a hook that is on disk but never registered would pass the validator unnoticed. `retro-compliance-workflow`: 17 s over every row (plain 7 s). Judgment KEEP-consequence: if it were absent, the consumer's retro-compliance CI workflow could read green while skipping every step. It is the only fixture naming its subject `core/ci-templates/validate-retro-compliance.yml` (grep over every `run.sh`; control: `preclassify.sh` named in 23), and that shipped workflow reads green while skipping every step (`run.sh` header, site 4). Who would notice it gone: a consumer with `.github/workflows`, whose retro-compliance check would skip silently. The fixture carries `@consumer` rows. Removing both would save at most about 8 s of loaded plain cost per push.
+- (c, batch 266) A catch on record for `hook-registration-join`: cluster C's push of `43f9feaaf` failed its AUTHORING arm in the distribution layout (`registered-but-not-shipped=[ai-dlc-recover-gate.sh]`, a hook name on a `BASH_SOURCE` line read as a sourced library); fixed in the release, landed as 0.1241.0. Pregate never ran it (BL-1242).
 - (d) Item 5, the fixtures unmapped in a linked worktree. Measured from this linked worktree with the hook's own composer, read-only: `bash scripts/predict-push-set.sh <worktree> <empty dir>` (rc 0). Here `READSET_LOCAL` is `$GITDIR/ai-dlc-fixture-readsets.local` (`.githooks/pre-push:1295`), the worktree's own git dir, which holds no local map. Unmapped: 0 of 296, by the composer's empty `.unmapped` file and independently by 294 `inputs.decl` plus 2 undeclarable fixtures with committed-map rows (46 and 14 rows in `.ai-dlc-fixture-readsets.tsv`), 294 + 2 = 296 = `ls core/fixtures/*/run.sh | wc -l`. The predict log carries no `read-set map:` line, so the 0 is read from `.unmapped`, not from a printed line. The linked-worktree difference now shows as STALE, not unmapped. Both undeclarable fixtures' committed `# digest` lines (`.ai-dlc-fixture-readsets.tsv:78-79`) differ from this tree's (`.cdig`: `differs` for both). `retro-compliance-workflow` was dispatched as `run stale`. `hook-registration-join` skipped only on a recorded pass, so it is not cleared. The main checkout's local map has 49 rows for the two and no `# digest` lines, and a linked worktree cannot read that map. Push log `push-r1182.log` (2026-11-19) prints `trace-report held: retro-compliance-workflow -- discarded 3 times in a row on its current run.sh and deriver, so it is NOT re-traced and runs on every push`. Item 5 is MEASURED: 0 of 296 fixtures are unmapped in a linked worktree. The staleness finding is handed to cluster H's trace (lead ruling, batch 263). H owns BL-1155, where `retro-compliance-workflow`'s re-trace is already owed, and that trace rides H's batch-263 release. The command, in the main checkout detached at the commit to trace: `bash core/scripts/derive-fixture-readsets.sh --list "hook-registration-join retro-compliance-workflow" --tracer sandbox`. Both are undeclared, so `--list` records them. The hold's keys have not moved since that push: `git log -1` gives `core/scripts/derive-fixture-readsets.sh` d2137329e (2026-11-16) and `core/fixtures/retro-compliance-workflow/run.sh` 925d02f39 (2026-11-15), both before it. So the hook's live trace still holds `retro-compliance-workflow`. Whether a hand `--list` run honours that hold was not checked.
 - Still open: owed item 6 (delete the 170 NO-CATCH-ON-RECORD families); the two-fixture stale trace (cluster H, BL-1155); `enforcement-map-sites` (held under BL-1109's ruling until BL-1008 closes); and the Owed rows above.
 
@@ -4324,6 +4325,7 @@ Work list:
 1. Make the join's entry split and key rule match `SL_REC_AWK`'s: flush on `^#{2,3} `, key = the header with `## ` or `### ` removed and trailing whitespace stripped.
 2. Add one arm to fixture `check-22-spawn-ledger`: an OVERRIDDEN `###` sub-entry under a RESOLVED `##` parent, naming the violation, exits 4 under the sub-entry's header; its twin, the same sub-entry with a non-OVERRIDDEN status, exits 1. Zero load-dependent tests (BL-868).
 3. Prove the arm fires once by hand against the current `^## `-only split (output in the sha message).
+4. The CARRY window (found by the cluster G tip adversary, batch 266): a consumer that carries a diverged `validate-spawn-ledger.sh` and takes 0.1238.0's `gate-transition.sh` refuses every gate 3 (the adversary's finding, relayed by cluster G's owner; not re-driven by the lead). Close it with item 1: drive the pair (diverged `validate-spawn-ledger.sh`, current `gate-transition.sh`) on a toy root, and the release that changes the join states, in its CHANGELOG entry, whether a consumer must reconcile `validate-spawn-ledger.sh` in the same pull as `gate-transition.sh`. The reference consumer is not exposed at batch 266's close: read-only `git hash-object` of its installed `scripts/ai-dlc/validate-spawn-ledger.sh` and `scripts/ai-dlc/gate-transition.sh` equals their blobs at `f4cf60bc6` (0.1235.0), as do 9 more of the 12 engine shell files batch 266 changed; `ai-dlc-protected-set.sh` is not installed there.
 
 Step: n/a
 
@@ -4374,5 +4376,26 @@ Step: n/a
 Related: BL-1233 (added the elicitation paragraph this entry scopes the earlier lines to).
 
 Provenance: batch 266, cluster R tip adversary; id allocated by the lead ai-dlc-9b.
+
+verify: manual
+
+## BL-1242 — `pregate-self-check.sh` never dispatches an `.undeclarable` fixture, so a release whose only checker is one goes red at the push
+
+**DEFECT.** Filed 2026-11-25 (batch 266, lead ai-dlc-9b, after cluster C's red push). Owner: `scripts/pregate-self-check.sh` (section f).
+
+Goal: every `.undeclarable` fixture in the predicted RUN set runs in pregate, so pregate green means the push's own red classes were run. One done condition: on a tree whose diff touches `core/hooks/`, pregate's section f runs `hook-registration-join` by name.
+
+Baseline: section f dispatches a RUN unit only through a `.dparse` DIR or DECLFILE row or a literal basename in its files (`F_AWK`, `scripts/pregate-self-check.sh:516-535`). An `.undeclarable` fixture has no `.dparse` row, and `hook-registration-join` names hooks by glob, so it is never dispatched (2 of 232 fixtures carry `.undeclarable`: `hook-registration-join`, `retro-compliance-workflow`). Catch on record: cluster C's pregate on `43f9feaaf` was rc 0; its push ran `hook-registration-join` and failed AUTHORING (`registered-but-not-shipped=[ai-dlc-recover-gate.sh]`), costing one red gate cycle and a rebuild (fixed at `a1661db9a`, landed as 0.1241.0). Who would notice it gone: every builder whose change only an undeclarable fixture checks, at the push instead of at pregate.
+
+Work list:
+
+1. In section f, add every RUN unit (and its `@consumer` twin) whose fixture directory carries `.undeclarable`, with reason `UNDECLARABLE`.
+2. Extend the seeded probe with an undeclarable fixture that names no changed path, and assert it is selected; prove once by hand that it is not selected at the current tip.
+
+Step: n/a
+
+Related: BL-583 item 4 (the value judgement of the two `.undeclarable` fixtures, which records this catch).
+
+Provenance: batch 266, lead ai-dlc-9b.
 
 verify: manual
