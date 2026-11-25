@@ -11,4 +11,4 @@
 1 core/scripts/strategy-rows.sh
 4 core/scripts/strategy-self-check.sh
 # PLACEHOLDER (batch 262 E-U5): the row below and the `*` bump (+3) are read from the RBRIEFS arm's run.sh, not from a counted run; the lead sets them.
-5 core/scripts/gen-round-briefs.sh
+6 core/scripts/gen-round-briefs.sh

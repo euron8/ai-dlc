@@ -4,7 +4,7 @@
 # Usage: gen-round-briefs.sh --round review|elicitation|repair --axis files|sections --sprint <N> --artifact <name>
 #          --pass <M> --shard-dir <dir> --map <file> --out-dir <dir> [--role-file <path>] [--focus <file>]
 #          [--gated <file>] [--subject-dir <dir>] [--doc <path>] [--findings-dir <dir>] [--step-label <step file>]
-#          [--prior <path>]...
+#          [--procedures-file <path>] [--prior <path>]...
 #
 # The lead used to write this program fresh every sprint; one hand-written line carried the wrong header flag into a
 # repair round and stalled it. The round KIND decides the flag, here, and nowhere else:
@@ -25,6 +25,9 @@
 #   --role-file P    the role contract the brief tells the member to read (default `.claude/team-roles/adversary.md`, or
 #                    `.claude/team-roles/remediator.md` for repair). Review briefs copy the generated
 #                    `provenance-block/adversary-pass` region out of the adversary role file, never a retyped field list.
+#   --procedures-file P  elicitation only: the file holding the generated `provenance-block/elicitation` region (default
+#                    `.claude/skills/ai-dlc/steps/_gate-procedures.md`). Elicitation briefs copy that region, which carries
+#                    the sub-skill's `skill:` and no `verdict:`, and name that skill as the shard's method.
 #   --step-label S   `lead_role:` value and the `--mark` step word's owner (default stories-test-strategy.md).
 #   --prior P        pass 2+ review: a prior pass's findings or a repair record the member must read (repeatable).
 #   --plan-file P    repair, SECOND run: the `PLAN-FILE:` path the parallel join printed (`<shard dir>/.join-plan`). This run
@@ -42,7 +45,7 @@
 # The --plan-file run writes `cross.brief` (the CROSS NOTE; no deliverable, no `lane.cmd`) and prints the lane join's `--artifact`,
 # `--pass` and `--artifact-path`.
 # Loadable: the body is grb_main, behind a column-0 BASH_SOURCE guard, so sourcing defines functions and runs nothing.
-# Exit: 0 written, 2 usage or an unreadable input, 3 a refusal (empty map, ordinal gap, provenance region absent; a repair
+# Exit: 0 written, 2 usage or an unreadable input, 3 a refusal (empty map, ordinal gap, provenance region absent or naming no skill; a repair
 # run whose cross.txt token is also listed in a part's <ordinal>.txt; with --plan-file: no LANE-ARTIFACT line in the plan,
 # no cross.txt findings, or a cross.txt token with no or two CROSS items in the plan).
 grb_main() {
@@ -50,7 +53,7 @@ set -u
 LC_ALL=C; export LC_ALL
 
 ROUND=""; AXIS=""; SPRINT=""; ART=""; PASS=""; SDIR=""; MAP=""; OUTD=""; ROLE=""; FOCUS=""; GATED=""; SUBJ=""; DOC=""; FIND=""
-STEP="stories-test-strategy.md"; PRIOR=""; PLANF=""
+STEP="stories-test-strategy.md"; PRIOR=""; PLANF=""; PROCF=".claude/skills/ai-dlc/steps/_gate-procedures.md"
 while [ $# -gt 0 ]; do
   case "$1" in
     --round) ROUND="${2:-}"; shift 2 ;;
@@ -69,6 +72,7 @@ while [ $# -gt 0 ]; do
     --findings-dir) FIND="${2:-}"; shift 2 ;;
     --step-label) STEP="${2:-}"; shift 2 ;;
     --plan-file) PLANF="${2:-}"; shift 2 ;;
+    --procedures-file) PROCF="${2:-}"; shift 2 ;;
     --prior) PRIOR="$PRIOR
 ${2:-}"; shift 2 ;;
     *) echo "gen-round-briefs: unknown argument '$1'" >&2; exit 2 ;;
@@ -85,6 +89,7 @@ case "$PASS" in ''|*[!0-9]*) grb_die "--pass <M> is required and numeric" ;; esa
 if [ "$KIND" = adv ]; then
   [ -f "$FOCUS" ] || grb_die "--focus FILE is required for a $ROUND round"
   [ -f "$ROLE" ] || grb_die "--role-file '$ROLE' is not a file"
+  [ "$ROUND" != elicitation ] || [ -f "$PROCF" ] || grb_die "--procedures-file '$PROCF' is not a file"
 else
   [ -d "$FIND" ] || grb_die "--findings-dir DIR is required for a repair round"
 fi
@@ -100,10 +105,16 @@ dup="$(printf '%s\n' "$ORD" | sort | uniq -d | head -1)"
 [ -z "$dup" ] || grb_die "--map $MAP repeats ordinal $dup" 3
 ALLORD="$(printf '%s\n' "$ORD" | paste -sd, - | sed 's/,/, /g')"
 
-PROV=""
+PROV=""; METHOD=""
 if [ "$KIND" = adv ]; then
-  PROV="$(awk '/<!-- BEGIN GENERATED: provenance-block\/adversary-pass/ { on = 1 } on { print } /<!-- END GENERATED: provenance-block/ { if (on) exit }' "$ROLE")"
-  case "$PROV" in *"SKILL_INVOCATION_PROVENANCE v1"*"<!-- END GENERATED"*) ;; *) grb_die "no generated provenance-block/adversary-pass region in $ROLE" 3 ;; esac
+  if [ "$ROUND" = elicitation ]; then PREG="elicitation"; PSRC="$PROCF"; else PREG="adversary-pass"; PSRC="$ROLE"; fi
+  PROV="$(awk -v r="<!-- BEGIN GENERATED: provenance-block/$PREG " 'index($0, r) == 1 { on = 1 } on { print } /<!-- END GENERATED: provenance-block/ { if (on) exit }' "$PSRC")"
+  case "$PROV" in *"SKILL_INVOCATION_PROVENANCE v1"*"<!-- END GENERATED"*) ;; *) grb_die "no generated provenance-block/$PREG region in $PSRC" 3 ;; esac
+  if [ "$ROUND" = elicitation ]; then
+    ESKILL="$(printf '%s\n' "$PROV" | sed -n 's/^skill:[[:space:]]*\([^[:space:]#]*\).*/\1/p' | head -1)"
+    [ -n "$ESKILL" ] || grb_die "the provenance-block/elicitation region in $PSRC names no skill" 3
+    METHOD="Method: invoke \`/$ESKILL\` with the Skill tool, scoped to your part; it supplies the method. Record findings and edit nothing."
+  fi
   if [ "$AXIS" = files ]; then CITE_ARGS=""; while IFS="$(printf '\t')" read -r _ b _; do CITE_ARGS="$CITE_ARGS $SUBJ/$b"; done < "$MAP"
   else CITE_ARGS="$DOC"; fi
   CITED=""
@@ -139,6 +150,7 @@ grb_write_adv() { # $1 ordinal-or-cross, $2 shard value, $3 subject text
   f="$OUTD/$1.brief"
   {
     echo "You are an AI/DLC ADVERSARIAL $ROUND shard for sprint $SPRINT's $SUBJ_LABEL ($AXIS axis, pass $PASS). FIRST read your full role contract: $ROLE (whole file, in consecutive \`offset\`/\`limit\` Read chunks of at most 16 KB through its last line; when a chunk is refused for size, halve its limit) and follow it."
+    [ -z "$METHOD" ] || { echo; echo "$METHOD"; }
     echo
     echo "Deliverable: $SDIR/$1.md"
     echo "shard: $2"

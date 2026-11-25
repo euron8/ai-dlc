@@ -309,6 +309,9 @@ a different branch than the old binding did, you can name the failure, and it is
 Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted
 residue and exactly one verdict from this set. There is no free-text verdict.
 
+**An elicitation shard writes no verdict.** It copies the `provenance-block/elicitation` region its brief
+carries, never the region below, and keeps that region's `skill:`.
+
 **Emit it EXACTLY like this — the HTML-comment delimiters are load-bearing.** The gate
 parses one form and one form only. A ``` code fence is **not** a provenance block: nothing
 parses it, so every field in it goes unadjudicated and the gate reports your pass as clean

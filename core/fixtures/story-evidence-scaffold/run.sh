@@ -1236,6 +1236,28 @@ if gsel rbriefs; then
     else
       bad "RBRIEFS: lane-join plan rc=$rb_rrc cross.brief=$([ -e "$RB_W/ref-out/cross.brief" ] && echo present || echo absent) out=[$rb_rout]"
     fi
+    # An elicitation brief carries the procedures file's provenance-block/elicitation region (the sub-skill's skill:, no
+    # verdict:) and names that skill as the shard's method; the adversary-pass region would be refused by the merge.
+    RB_PROC="$(locate skills/ai-dlc/steps/_gate-procedures.md)" || RB_PROC=""
+    RB_ROLE="$(locate team-roles/adversary.md)" || RB_ROLE=""
+    if [ -z "$RB_PROC" ] || [ -z "$RB_ROLE" ]; then
+      bad "RBRIEFS: FIXTURE BROKEN -- _gate-procedures.md or adversary.md not found beside gen-round-briefs.sh (proc=[$RB_PROC] role=[$RB_ROLE])"
+    else
+      echo "HERMETIC-CONSUMED core/skills/ai-dlc/steps/_gate-procedures.md"
+      echo "HERMETIC-CONSUMED core/team-roles/adversary.md"
+      printf 'focus\n' > "$RB_W/focus"
+      rb_e="$(FXCELL="cli-rbriefs-elic" bash "$RB_D/gen-round-briefs.sh" --round elicitation --axis files --sprint 9 --artifact stories --pass 1 --map "$RB_W/map" --subject-dir "$RB_W/stories" --focus "$RB_W/focus" --role-file "$RB_ROLE" --procedures-file "$RB_PROC" --shard-dir "$RB_W/shards/stories-elicitation" --out-dir "$RB_W/elic-out" 2>&1)"; rb_erc=$?
+      rb_m='Method: invoke `/bmad-advanced-elicitation` with the Skill tool, scoped to your part; it supplies the method. Record findings and edit nothing.'
+      rb_sk="$(grep -c '^skill: bmad-advanced-elicitation ' "$RB_W/elic-out/2.brief" 2>/dev/null)" || rb_sk=0
+      rb_xs="$(grep -c '^skill: bmad-advanced-elicitation ' "$RB_W/elic-out/cross.brief" 2>/dev/null)" || rb_xs=0
+      rb_v="$(cat "$RB_W/elic-out/2.brief" "$RB_W/elic-out/cross.brief" 2>/dev/null | grep -c '^verdict:')" || rb_v=0
+      if [ "$rb_erc" -eq 0 ] && [ "$rb_sk" -eq 1 ] && [ "$rb_xs" -eq 1 ] && [ "$rb_v" -eq 0 ] \
+         && grep -qxF "$rb_m" "$RB_W/elic-out/2.brief" && grep -qxF "$rb_m" "$RB_W/elic-out/cross.brief"; then
+        ok "RBRIEFS: an elicitation round's part and cross briefs carry skill: bmad-advanced-elicitation once, no verdict: line, and the Skill-tool method line"
+      else
+        bad "RBRIEFS: elicitation rc=$rb_erc skill=$rb_sk cross-skill=$rb_xs verdict=$rb_v method=$(grep -cxF "$rb_m" "$RB_W/elic-out/2.brief" 2>/dev/null) out=[$rb_e]"
+      fi
+    fi
   fi
 fi
 
