@@ -8,7 +8,8 @@
 #
 # Writes DIR/<role>-<step>[-<shard>].md, prints its path. Exit 2 on a refusal: an empty deliverable, a missing
 # argument, or a brief over 16384 bytes (context-mode cannot Read a larger file verbatim). The printed path must sit
-# under <project>/_bmad-output/planning-artifacts/ for the guard to expand it.
+# under <project>/_bmad-output/planning-artifacts/ for the guard to expand it. A `*.json` or `*.jsonl` deliverable gets
+# no closing --mark line: a marker appended to it is not JSON and unseals a gate part; --mark-step is still required.
 set -uo pipefail
 
 # deliverable_of: byte-identical to the copies in ai-dlc-dispatch-guard.sh and ai-dlc-inflight-row.sh (I33 forbids
@@ -75,8 +76,11 @@ MSH="${SHARD:-none}"
   [ -n "$SHARD" ] && printf 'shard: %s\n' "$SHARD"
   [ -n "$PLAN" ] && printf 'gate-plan: %s\n' "$PLAN"
   [ -n "$FIELDS" ] && printf '%s' "$FIELDS"
-  printf '\nWhen the deliverable is written, run `scripts/ai-dlc/wait-for-deliverable.sh --mark %s %s %s %s findings=<n>` with <n> the number of findings in it (0 when none).\n' \
-    "$DELIV" "$MSTEP" "$ROLE" "$MSH"
+  case "$DELIV" in
+    *.json|*.jsonl) ;;
+    *) printf '\nWhen the deliverable is written, run `scripts/ai-dlc/wait-for-deliverable.sh --mark %s %s %s %s findings=<n>` with <n> the number of findings in it (0 when none).\n' \
+         "$DELIV" "$MSTEP" "$ROLE" "$MSH" ;;
+  esac
 } > "$F" || die "cannot write $F"
 
 SZ="$(wc -c < "$F" | tr -d ' ')"

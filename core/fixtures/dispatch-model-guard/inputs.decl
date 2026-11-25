@@ -13,8 +13,8 @@ core/hooks/
 # core/hooks/ above) closes through the checkpoint script, which the fixture installs into its world.
 !core/scripts/gate-checkpoint.sh
 core/scripts/validate-adversarial-convergence.sh
-# the DELIVERABLE-LINE bind compares render-brief.sh's deliverable_of with the guard's
-core/scripts/render-brief.sh
+# the DELIVERABLE-LINE bind compares render-brief.sh's deliverable_of with the guard's, and MARK-LINE runs it
+!core/scripts/render-brief.sh
 core/schemas/gate-adjudication-verdict.json
 core/skills/ai-dlc/enforcement-map.yaml
 core/skills/ai-dlc/steps/_gate-procedures.md
