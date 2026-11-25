@@ -1148,13 +1148,12 @@ remediators and never after them.
 **Every escalated entry reaches the serial remediator.** A shard whose fix lies partly outside
 its files writes two entries with one `source:` token, `repaired` and `escalated`. The join, in
 every parts mode, prints one `ESCALATED: <part> <entry>` line per escalated entry, then
-`ESCALATED-COUNT: <n>`, then `SERIAL-REQUIRED: <n>`, the count of `repaired` entries with a
-real edit, each of which owes the cross-file sibling grep and moved-cite check below, then,
+`ESCALATED-COUNT: <n>`, then,
 only where `.findings-partition` exists, `CROSS-COUNT: <n>`, one per routed line. In every
-mode (files, sections, subject), dispatch the serial remediators after the join whenever SERIAL-REQUIRED or ESCALATED-COUNT is above 0, whenever CROSS-COUNT is above 0, and whenever the lead routed any
+mode (files, sections, subject), dispatch the serial remediators after the join whenever ESCALATED-COUNT is above 0, whenever CROSS-COUNT is above 0, whenever WORKLIST-COUNT (printed after FANIN-COUNT: the `HIT` and `MOVED-CITE` items of the join's own worklist run) is above 0, and whenever the lead routed any
 finding serial, whether or not the route file exists and whether or not any finding cited two
 files or parts. The join partitions that work into LANES of FILES and prints them after
-CROSS-COUNT (SERIAL-REQUIRED where there is none):
+CROSS-COUNT (ESCALATED-COUNT where there is none):
 `LANE-EDGES:`, one `LANE: <n> files: <file>... parts: <part>...` per lane with its
 `LANE-ITEM: <n> <item>` lines, one `FANIN: <item>` line per item no single lane owns, then
 `LANE-COUNT:` and `FANIN-COUNT:`. A routed line is the item `CROSS: <key> files: <files | ->`: it is
@@ -1193,8 +1192,7 @@ ONE fan-in serial remediator, briefed with the same `shard: none (authoring-chai
 lane join printed and the text of `cross.brief`, which appends to that record as above. A round whose join prints `LANE-COUNT: 1` and `FANIN-COUNT: 0`
 is one lane with no fan-in. A round whose join prints `LANE-COUNT: 0` and a `FANIN-COUNT` above 0 has no lane round, no lane remediator and no adjudicator: ONE serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` and `ESCALATED:` line of round one's `.join-plan` and the text of `cross.brief`, appends to round one's record. In `--sources` mode the
 `ESCALATED:` lines are the lead's to adjudicate, never a re-dispatch of the serial remediator:
-that record may be the serial remediator's own, so no SERIAL-REQUIRED line is printed there, and
-no `LANE:` or `FANIN:` line. An
+that record may be the serial remediator's own, so no `LANE:` or `FANIN:` line. An
 escalated entry is closed only by a later `repaired` entry carrying `- closes: <part> <entry>`
 copied from its `ESCALATED:` line, never by a shared `source:` token; the join prints each closed
 one as `ESCALATED-CLOSED: <part> <entry>`. After the serial remediators finish on a record that
@@ -1208,9 +1206,7 @@ every escalation still open; each open one is the lead's to adjudicate. A party 
 shard dir (found from the record's name), either call also prints `CROSS-OPEN: <key>` for each routed key no
 serial writer's `source:` token carries across the records passed (a shard's own entry never does), then `CROSS-OPEN-COUNT: <n>`; each is
 the lead's to adjudicate, as an open escalation is, and is never a refusal. The join also refuses a `repaired` MAJOR or CRITICAL whose claim sets part of the
-fix aside as outside the shard or not required without naming a hand-off, and, in every parts
-mode, a `repaired` entry with an edit whose `siblings:` field is absent or in none of its four
-forms, and a siblings fence whose control text is not in the file it names.
+fix aside as outside the shard or not required without naming a hand-off.
 
 **Commit each round before the next opens.** One commit per round holds the round's repair record and the artifact it repaired, made after the serial tail's last write to that artifact (`requirements-bookkeeping.sh`, a render, a seal) and before the next round's partition. `partition-document.sh --shard-dir` for round M and the join of round M refuse while round M-1's record is uncommitted; commit it and rerun. A series whose pass-1 shard directory carries no `.era` token prints `ROUND-COMMIT: SKIP pre-era <name>` and is not judged; leave that series' commits as they are.
 
@@ -1382,7 +1378,7 @@ in this order:
    line moved (`MOVED-CITE`); the remediator adjudicates those lines rather than deriving them.
    The run consumes the pre-repair copies it reads, so a later run exits 3 `UNASSESSABLE`
    unless the run before it passed `--keep`. A files-mode repair has no split directory, so
-   the script exits 3 there and the remediator runs the grep itself.
+   the script exits 3 there.
 
 The party and elicitation repairs run this same procedure, under the shard dirs and record
 names "Validation cycle" items 1 and 2 give them. For the requirements subject they take
@@ -1414,7 +1410,7 @@ Per finding — or per failed check — the disposition, the edit site, and the 
 that derives every factual claim the repair asserts, with its output. The next adversarial pass
 verifies against that record; so does the gate's re-run of the failed checks.
 
-**At a gate failure, give the remediator its own agent id.** When the caller is a gate failure, the id goes to ONE remediator, never to a shard, and that brief names the live `gate_nonce`, the remediator's own id, and the pass's FAILed check ids for its `repaired_checks:`. The id is one token of at least 8 characters, carrying a digit, made of letters, digits and `_@.:-` only, its first character a letter or digit: the teammate name you dispatch it under, or, when no name is known at dispatch, the agentId the spawn result returns, sent to it after the spawn. Unsharded, it is the remediator, and it writes the id into the gate's record `s<N>/gate-<type>-repair-p<M>.md`, the only remediator record the gate reads. The guard reads that record and a second home, `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<nonce>.repair.md`, lifting on either only when it carries the live nonce; the gate never reads the second home, so writing it never discharges the gate's record. Sharded, the join's record carries no agent id, and the one is a serial-round remediator: the fan-in remediator when the round-one join prints `FANIN-COUNT:` above 0, otherwise the lane-1 remediator; in the sharded case only it writes `gate-adjudication/<nonce>.repair.md`, carrying its own id. When the join prints `SERIAL-REQUIRED: 0` and `ESCALATED-COUNT: 0`, no serial remediator runs and the guard has no record to lift on: the deny stands until a re-run of the failed check per `gate-validation.md` "Gate Failure" writes a newest pass bound to a dispatch that records no FAIL, every FAIL is covered by an in-force SUPPRESSED entry or a verified waiver, or an operator authorization lifts it. The remediator writes its id as `remediator_agent_id:`, and the gate-remediation guard (`.claude/hooks/ai-dlc-gate-remediation-guard.sh`) lifts on that record when this session's transcript carries the id, refuses when the transcript is readable and does not carry it, and lifts unverified, logged, when no transcript is readable at all; a record with no id lifts nothing. The record's fields and their line grammar are `team-roles/remediator.md`'s paragraph **A gate repair record carries the live gate nonce**.
+**At a gate failure, give the remediator its own agent id.** When the caller is a gate failure, the id goes to ONE remediator, never to a shard, and that brief names the live `gate_nonce`, the remediator's own id, and the pass's FAILed check ids for its `repaired_checks:`. The id is one token of at least 8 characters, carrying a digit, made of letters, digits and `_@.:-` only, its first character a letter or digit: the teammate name you dispatch it under, or, when no name is known at dispatch, the agentId the spawn result returns, sent to it after the spawn. Unsharded, it is the remediator, and it writes the id into the gate's record `s<N>/gate-<type>-repair-p<M>.md`, the only remediator record the gate reads. The guard reads that record and a second home, `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<nonce>.repair.md`, lifting on either only when it carries the live nonce; the gate never reads the second home, so writing it never discharges the gate's record. Sharded, the join's record carries no agent id, and the one is a serial-round remediator: the fan-in remediator when the round-one join prints `FANIN-COUNT:` above 0, otherwise the lane-1 remediator; in the sharded case only it writes `gate-adjudication/<nonce>.repair.md`, carrying its own id. When none of ESCALATED-COUNT, CROSS-COUNT and WORKLIST-COUNT is above 0 and the lead routed no finding serial, no serial remediator runs and the guard has no record to lift on: the deny stands until a re-run of the failed check per `gate-validation.md` "Gate Failure" writes a newest pass bound to a dispatch that records no FAIL, every FAIL is covered by an in-force SUPPRESSED entry or a verified waiver, or an operator authorization lifts it. The remediator writes its id as `remediator_agent_id:`, and the gate-remediation guard (`.claude/hooks/ai-dlc-gate-remediation-guard.sh`) lifts on that record when this session's transcript carries the id, refuses when the transcript is readable and does not carry it, and lifts unverified, logged, when no transcript is readable at all; a record with no id lifts nothing. The record's fields and their line grammar are `team-roles/remediator.md`'s paragraph **A gate repair record carries the live gate nonce**.
 
 **Repair record name, again.** The adversarial repair record is `<artifact>-repair-p<M>.md` with no round word, never `<artifact>-adversarial-repair-p<M>.md` or `<artifact>-adversarial-p<k>-repair-p<M>.md`, whether a join or a serial remediator writes it; the join refuses the first of those wrong shapes.
 
@@ -1467,20 +1463,9 @@ Run it after the join and after the serial cross-section remediator.
 
 **Moved cites are the serial remediator's, after the join.** A `<file>:<n>` cite into a region a
 shard's edit shifted cannot be checked inside that shard: a section shard sees only its copy.
-The serial remediator re-reads every cite into each edited file AFTER the join or assembly,
-before these validators run, and repairs any that moved as its own entry. It also owns the
-cross-file sibling grep: a shard's siblings fence greps only its own files (a concurrent shard
-fixing a copy elsewhere would turn it stale), and a section or subject shard writes `siblings:
-n/a (section shard; ...)`, so for every `repaired` shard entry with an edit, and every
-escalated sibling line, the serial remediator runs `grep -rn -F '<the text that entry
-replaced>'` over the ASSEMBLED files (`s<N>/stories` and `s<N>/epics`, or the document), never the
-slot, `shards/` or a record, and records it as its own entry with a `siblings:` fence. That is
-why SERIAL-REQUIRED dispatches it: a round whose every finding stayed inside one shard still
-owes this grep. A lane remediator runs it for its lane's entries and edits only its lane's
-files; a hit in another lane's file is the fan-in's `FANIN:` item, and the fan-in remediator, after
-every lane has joined, runs the grep once more over the assembled files for the text each lane
-replaced, because a lane's edit can leave a hit in another lane. After a sections or subject join the lead's `serial-remediation-worklist.sh`
-output (the subject-axis step 4 above) is the starting list for both the grep and the cites.
+A serial remediator, dispatched when ESCALATED-COUNT, CROSS-COUNT or WORKLIST-COUNT is above 0 or the lead routed a finding serial, re-reads every cite into each edited file AFTER the join or assembly,
+before these validators run, and repairs any that moved as its own entry. After a section or subject join the lead's `serial-remediation-worklist.sh`
+output (the subject-axis step 4 above) is the starting list for the cites.
 
 Owed derivations are refused at gate-validation.md Check 37, not here.
 

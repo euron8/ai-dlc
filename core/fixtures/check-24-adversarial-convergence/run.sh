@@ -2763,6 +2763,7 @@ pj_cell() { # <world> <want rc> <label> then words: +<line> must appear exactly,
     case "$a" in
       +*) grep -qxF -- "${a#+}" <<<"$VR_OUT" || miss="$miss missing [${a#+}];" ;;
       -*) ! grep -qF -- "${a#-}" <<<"$VR_OUT" || miss="$miss present [${a#-}];" ;;
+      =*) [ "$(grep -cF -- "$PJ_L" <<<"$VR_OUT")" = "${a#=}" ] || miss="$miss count of [$PJ_L] is not ${a#=};" ;;
     esac
   done
   if [ -z "$miss" ]; then
@@ -2787,6 +2788,72 @@ pj_cell p1j-rs 1 "a marked restart at pass 2 is judged: F-2 unanswered, F-1 clos
 pj_cell p1j-rsno 0 "the same restart without the marker is pre-era: SKIP, never judged" \
   "+SKIP (P1J -- OPENING-PASS JOIN (pass 2)): coe-adversarial-p2.md opens a restarted cycle whose shards/coe-p2/.era is absent or lacks the era token or the 'ai-dlc-era-restart: 2' line: pre-era restart." \
   "-FAIL (P1J"
+# --- ARM P1J, the join-assembled record (BL-1175): the H exception ties a part to ITS block. Worlds are the join's own
+# emission (join-remediator-shards.sh: `<!-- shard: X -->`, the part's file, one blank line, no end marker), the part
+# files beside it under shards/coe-repair-p1/, and a serial remediator's tail appended after the last block.
+#   p1j-h     every key closed: an in-extent identity part in block 1; block 2's section-copy moving triple whose before is
+#             the notarized doc sha; a part in the zero-padded block 03.md answering 3.md#F-1 (not seeded first); a
+#             same-artifact identity triple on a sha a linked edit on that artifact produced; an in-extent part in the LAST
+#             block; a byte-moving tail triple linked from the header's after
+#   p1j-hx    the same chain with one property moved per key: 5.md#F-2 answered by a part of block 3, 5.md#F-3 answered by an
+#             identity triple past the last block's extent (the part file has no final newline, so the tail's artifact line
+#             sits at marker + line count + 1), 4.md#F-1 answered by an identity triple of ANOTHER artifact on a produced sha
+#                                                                       exit 1 naming exactly those three, never the closed keys
+PJ_ASM=7777777777777777777777777777777777777777777777777777777777777777
+PJ_S2=8888888888888888888888888888888888888888888888888888888888888888
+PJ_T2=9999999999999999999999999999999999999999999999999999999999999999
+pj_ent() { # <artifact> <before> <after> <source token> -> one repaired entry (the part-file form)
+  printf '\n### R %s\n- artifact: %s\n- artifact_sha_before: %s\n- artifact_sha_after: %s\n- source: %s\n- disposition: repaired\n- edit: doc.md:3\n- derivation: grep -c x doc.md -> 1\n' \
+    "$4" "$1" "$2" "$3" "$4"
+}
+pj_spass() { # <file> <n> <verdict> <key>... -> a SHARDED pass-1 file (`## Shard: section N` per key), era token on
+  local f="$1" n="$2" vd="$3" k; shift 3
+  pj_pass "$f" "$n" "$#" "$vd" 1
+  for k in "$@"; do printf '\n## Shard: section %s\n\n## Findings\n\n### %s — MAJOR — finding %s\n' "${k%%.md#*}" "${k#*#}" "$k" >> "$f"; done
+}
+pj_hworld() { # <world> <tail text> <part spec>... where a spec is `<name>=<file content>`; the LAST spec's file is written as given
+  local w="$1" tail="$2" d sp nm i=0 n; shift 2
+  d="$PW/$w"; mkdir -p "$d/shards/coe-repair-p1" || broken "cannot create $d"
+  for sp in "$@"; do nm="${sp%%=*}"; printf '%s' "${sp#*=}" > "$d/shards/coe-repair-p1/$nm" || broken "cannot write $nm"; done
+  { printf '# doc repair -- sprint s1, pass 1 (joined from %s shard records)\n\nJoined by join-remediator-shards.sh from shards;\n' "$#"
+    printf 'every section under doc was written by exactly one agent in that window;\npartition-document.sh: ASSEMBLED: doc.md sha256=%s\n\n' "$PJ_ASM"
+    printf -- '- artifact: doc.md\n- artifact_sha_before: %s\n- artifact_sha_after: %s\n\n' "$PJ_N" "$PJ_ASM"
+    for sp in "$@"; do nm="${sp%%=*}"; echo "<!-- shard: $nm -->"; cat "$d/shards/coe-repair-p1/$nm"; echo ""; done
+    printf '%s' "$tail"; } > "$d/coe-repair-p1.md" || broken "cannot write $w's record"
+  pj_pass "$d/coe-adversarial-p2.md" 2 0 EXIT_CONDITION_MET 0
+}
+mkdir -p "$PW/p1j-h" "$PW/p1j-hx" || broken "cannot create the H worlds"
+pj_spass "$PW/p1j-h/coe-adversarial-p1.md" 1 EXIT_CONDITION_NOT_MET 1.md#F-1 2.md#F-1 3.md#F-1 4.md#F-1 5.md#F-1 6.md#F-1
+pj_hworld p1j-h "$(pj_ent doc.md "$PJ_ASM" "$PJ_T2" 6.md#F-1)
+" \
+  "1.md=$(pj_ent doc.md "$PJ_N" "$PJ_N" 1.md#F-1)
+" \
+  "2.md=$(pj_ent sections/2.md "$PJ_N" "$PJ_S2" 2.md#F-1)
+" \
+  "03.md=$(pj_ent doc.md "$PJ_N" "$PJ_N" 3.md#F-1)
+" \
+  "4.md=$(pj_ent sections/2.md "$PJ_S2" "$PJ_S2" 4.md#F-1)
+" \
+  "5.md=$(pj_ent doc.md "$PJ_N" "$PJ_N" 5.md#F-1)
+"
+pj_spass "$PW/p1j-hx/coe-adversarial-p1.md" 1 EXIT_CONDITION_NOT_MET 1.md#F-1 3.md#F-1 4.md#F-1 5.md#F-1 5.md#F-2 5.md#F-3
+pj_hworld p1j-hx "$(printf -- '- artifact: doc.md\n- artifact_sha_before: %s\n- artifact_sha_after: %s\n- source: 5.md#F-3\n- disposition: repaired\n' "$PJ_N" "$PJ_N")
+" \
+  "1.md=$(pj_ent doc.md "$PJ_N" "$PJ_N" 1.md#F-1)
+" \
+  "2.md=$(pj_ent sections/2.md "$PJ_N" "$PJ_S2" 2.md#F-9)
+" \
+  "3.md=$(pj_ent doc.md "$PJ_N" "$PJ_N" 3.md#F-1)$(pj_ent doc.md "$PJ_N" "$PJ_N" 5.md#F-2)
+" \
+  "4.md=$(pj_ent other.md "$PJ_S2" "$PJ_S2" 4.md#F-1)
+" \
+  "5.md=$(pj_ent doc.md "$PJ_N" "$PJ_N" 5.md#F-1)"
+pj_cell p1j-h 0 "every part answers its own block's key: in-extent, zero-padded name, last block, same-artifact identity, byte-moving tail, notarized-before section copy" \
+  "+PASS: the cycle converged -- last pass stamps EXIT_CONDITION_MET, no divergent pass" "-(P1J --" "-SKIP (P1J" "=0"
+pj_cell p1j-hx 1 "a part answering another block's key, a tail identity triple and a cross-artifact identity triple stay open; the closed keys stay closed" \
+  "+FAIL (P1J -- PASS-1 JOIN): coe-adversarial-p1.md files CRITICAL/MAJOR findings the pass-1 repair never answered:" \
+  "+        5.md#F-2: $PJ_L" "+        5.md#F-3: $PJ_L" "+        4.md#F-1: $PJ_L" \
+  "-1.md#F-1:" "-3.md#F-1:" "-5.md#F-1:" "-2.md#F-1:" "=3"
 fi
 
 echo

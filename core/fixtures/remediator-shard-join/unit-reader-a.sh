@@ -4,7 +4,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # remediator-shard-join/unit-reader-a.sh -- the reader-level cells of half A, asked IN PROCESS. Driven by run.sh;
 # the header block is run.sh's.
 #
-# Families: SJ1-SJ9 and SJ1o; EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38; RR1-RR20; AL1-AL9; NW1-NW2; LN1-LN8 and LN10-LN16;
+# Families: SJ1-SJ9 and SJ1o; EC19 EC25 EC32 EC36 EC37 EC38; RR1-RR20; AL1-AL9; NW1-NW2; LN1-LN8 and LN10-LN16;
 # LP1-LP5; NL1-NL8c. Each cell asserts the decision its end-to-end cell in
 # run.sh asserted, through the SAME lib.sh predicate, unchanged. What changes is how a predicate's `bash <subject>`
 # runs: the `bash` function below catches the two subjects by path and runs each in a subshell of this process --
@@ -301,10 +301,6 @@ fi
 
 # ------------------------------------------------------------------------- EC: the entry contract, read in parts mode
 if ua_on EC; then
-p_sibdoc "$JOIN" && ok "EC14: --document, one section part omitting siblings: -> REFUSED naming it with the pre-install re-dispatch remedy, the document not assembled" \
-  || bad "EC14: a --document part omitting siblings: was not refused (rc=$RC): $(cat "$JO")"
-p_sibstale "$JOIN" && ok "EC18: the joined fence, its text later rewritten -> the slot-wide derivations re-run reads no STALE; the same fence re-labelled derived reads STALE" \
-  || bad "EC18: the siblings fence is replayed by the derivations validator, or the derived control did not go stale (rc=$RC dv=${DV_RC:-}): $(cat "$JO" "$SB_W/dv.out" 2>/dev/null | head -20)"
 p_escpath "$JOIN" && ok "EC19: an escalated entry naming the sibling's path on edit:, beside the shard that repairs that file -> JOINED (the escalated path is no citation)" \
   || bad "EC19: an escalated entry's edit: path collided with another shard's citation (rc=$RC): $(cat "$JO")"
 p_srcparts "$JOIN" && ok "EC25: --sources on a record citing only part tokens, seats present -> ONE refusal naming --escalations; a seat-token record resolves" \
@@ -395,10 +391,16 @@ p_lanedoc "$JOIN" && ok "LN2: document mode, three section parts of one document
   || bad "LN2: section parts of one document were not one lane (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
 if p_lanesubj "$JOIN"; then ok "LN3: subject mode, prd's three sections one lane and a MOVED-CITE from the SPEC joining it -> 1 lane, the cite that lane's item"
 else bad "LN3: the shared-file or MOVED-CITE edge did not join lanes (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"; fi
+p_wlcount 1 && ok "WL3: a MOVED-CITE alone (ESCALATED 0, no CROSS) -> WORKLIST-COUNT: 1" \
+  || bad "WL3: a moved-cite-only round did not print WORKLIST-COUNT: 1: $(grep -E '^(ESCALATED-COUNT|CROSS-COUNT|WORKLIST-COUNT)' "$JO")"
 p_lanesubjnear "$JOIN" && ok "LN4: LN3 one property apart, no cite -> 2 lanes" \
   || bad "LN4: lanes joined with no edge (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
+p_wlcount 0 && ok "WL2: the same round with no HIT and no moved cite -> WORKLIST-COUNT: 0 (no serial round)" \
+  || bad "WL2: a no-hit round did not print WORKLIST-COUNT: 0 (rc=$RC): $(grep -E '^(ESCALATED-COUNT|CROSS-COUNT|WORKLIST-COUNT)' "$JO")"
 p_lanehit "$JOIN" && ok "LN5: a replaced line still standing in the SPEC's file -> 2 lanes, the HIT is the SPEC lane's item (a HIT never joins lanes)" \
   || bad "LN5: a HIT joined lanes or was not the SPEC lane's item (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
+p_wlcount 1 && ok "WL1: ESCALATED 0, CROSS none, one worklist HIT -> WORKLIST-COUNT: 1 (the serial round is dispatched)" \
+  || bad "WL1: a HIT-only round did not print WORKLIST-COUNT: 1 (rc=$RC): $(grep -E '^(ESCALATED-COUNT|CROSS-COUNT|WORKLIST-COUNT)' "$JO")"
 p_laneround "$JOIN" && ok "LN7: the lane round's own join (--artifact stories-serial) JOINS its lane parts and prints no LANE or FANIN line" \
   || bad "LN7: the lane round's join did not join or printed lanes (rc=$RC): $(cat "$JO")"
 # ---- BL-716 second build: the ADJUDICATION PARTITION (LN10-LN12), an escalation's own unedited file (LN13, LN14), and the lane
@@ -424,7 +426,7 @@ else bad "LN6: the lane round's record was not read with round 1 (rc=$RC): $(cat
 p_lanename "$JOIN" && ok "LN8: the subject party join prints LANE-ARTIFACT: requirements-party-serial --pass 1, derived from its record" \
   || bad "LN8: the lane round's name was not derived from the record (rc=$RC): $(grep -E '^LANE-ARTIFACT' "$JO")"
 # ---- BL-716 route file (header 4d): serial-routed findings dealt as CROSS items; LN18-LN22. Every older arm above is an absent-file run and asserts no CROSS byte.
-if p_xdeal "$JOIN"; then ok "LN18: a route file -> CROSS-COUNT right after SERIAL-REQUIRED; one lane's CROSS items dealt (2 batches), a two-lane file and a - file FANIN items, lanes unmerged; the plan file carries them"
+if p_xdeal "$JOIN"; then ok "LN18: a route file -> CROSS-COUNT right after the escalation lines; one lane's CROSS items dealt (2 batches), a two-lane file and a - file FANIN items, lanes unmerged; the plan file carries them"
 else bad "LN18: the route file was not dealt (rc=$RC): $(grep -E '^(CROSS|LANE|FANIN|ADJ)' "$JO")"; fi
 p_xrefuse "$JOIN" && ok "LN19: a bad header, field count, key grammar, 01.md/1.md duplicate, .. path, absolute path, empty files field or non-serial first field -> exit 2, its own REFUSED text, no record and no .join-plan" \
   || bad "LN19: a malformed route file did not refuse as expected (rc=$RC): $(grep -m2 REFUSED "$JO")"

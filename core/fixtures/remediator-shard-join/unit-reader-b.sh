@@ -422,7 +422,7 @@ p_sjspecnone "$JOIN" && ok "SP8: --subject, the SPEC part's memlog does not exis
 p_agentwrites "$JOIN" && ok "AW1: --agent-writes <subject> over a ledger where a joined writer edited A, B and (earlier) D, a post-join non-subject edited F and the subject edited C and D -> exactly C, D and the not-covered trailer; an unknown agent -> the trailer alone, rc 0; an extra flag -> REFUSED rc 2" \
   || bad "AW1: --agent-writes did not print exactly the subject's paths plus the trailer, or the zero-row and extra-flag cases failed (rc=$RC): $(cat "$JO")"
 
-if p_checkpart "$JOIN"; then ok "CP1: --check-part on the near-miss 'siblings: checked' part -> rc 2 with the join's own BADSIB line byte-for-byte; a well-formed text-fence part -> rc 0 and it joins; no field -> the re-check remedy, never a re-dispatch; an extra flag -> REFUSED"
+if p_checkpart "$JOIN"; then ok "CP1: --check-part on a 'siblings: checked' part and on a text-fence part -> rc 0 and they join (the field is ignored); a set-aside part -> rc 2 with the join's own set-aside line byte-for-byte; an extra flag -> REFUSED"
 else bad "CP1: --check-part did not reproduce the join's classifier (rc=$RC): $(cat "$JO")"; fi
 
 

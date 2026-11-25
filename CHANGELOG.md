@@ -19,6 +19,24 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1246.0] - 2026-11-25
+
+### A repair round no longer runs a serial remediator just to re-check siblings of every edit (BL-508)
+
+- **The per-edit sibling grep is gone** (BL-508). For every consumer running a sharded repair round: a round runs a serial remediator only when it has an escalated item, a cross-routed item, a lead-routed finding, or a moved-cite worklist hit or moved cite. A round with none of those runs none. This includes a sharded gate-failure repair whose entries were all repaired: no serial round runs, and the gate's deny lifts by re-running the failed check, as it already did for a round whose entries were all `n/a`. No part or record has to carry a `siblings:` block any more, and an old record that still carries one is ignored. The join prints a new `WORKLIST-COUNT:` line beside `ESCALATED-COUNT:` and `CROSS-COUNT:`. The disposition-vocabulary check still applies to parts only, so existing closed records are accepted as before. Measured basis: on graph's s323, 161 sibling-grep fences produced no edit at another site. The entry stays PARTIAL; the per-story cost outcome is owed on a consumer sprint that runs this release.
+
+### A carry-over opening pass's repair can no longer close a finding with a forged part or by naming another block's finding (BL-1175)
+
+- **A part ties to its own block and an identity edit counts only on its own artifact** (BL-1175). For every consumer running a carry-over opening pass: a repair can no longer close a finding with a forged part placed after the join's own section, or by naming a finding that belongs to another block. An identity edit now counts only on the artifact whose edit produced it. New fixture arms cover the restarted-cycle marker, a pass-2 coe join and the pass-2 serial join. A census over 132 graph series moved no verdict. The entry stays PARTIAL.
+
+### The analysis reader counts route-A `DECISION PENDING` asks in their own column (BL-972)
+
+- **`ask_split.py` has a route-A column** (BL-972). For whoever reads the ask-split analysis (analysis tooling only, not shipped to consumers): route-A `DECISION PENDING` asks are counted separately instead of inside another column. The entry stays PARTIAL.
+
+### BL-804 refusal count re-keyed on the join and the seal; a reading only (BL-804)
+
+- **No consumer behaviour changes** (BL-804). The count of `derivations: not replayed` refusals is now keyed on both the join script and the seal (`--mark`) site. 24 refusals since the fix, each fixed inside its own dispatch, 0 re-dispatches; the seal site refused 0 times. The reading to close the entry is taken at sprint 324's close, so the entry stays PARTIAL.
+
 ## [0.1245.0] - 2026-11-25
 
 ### Thirteen fixtures declare the files they really read, two fixtures stop copying whole directories into their worlds, and the fixture-hygiene check sees a git init or clone inside a script written to a file and run later (BL-1155 and BL-1162 advance)

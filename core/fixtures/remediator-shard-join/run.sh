@@ -219,6 +219,21 @@ p_coeserial "$JOIN" "requirements-adversarial-p1.md#F-1" "requirements-adversari
   || bad "CS3: a serial coe source resolved against a file other than the coe pass (rc=$RC): $(cat "$JO")"
 p_coeserial "$JOIN" "coe-adversarial-p1.md#F-2" "coe-adversarial-p1.md#F-1 is a CRITICAL/MAJOR finding" && ok "CS4: the entry closes only the MINOR F-2 -> REFUSED naming the unclosed MAJOR F-1" \
   || bad "CS4: an unclosed MAJOR of a serial coe pass 1 was not refused (rc=$RC): $(cat "$JO")"
+# ---- a coe OPENING pass at PASS 2 (a restarted cycle): judged only when its shards/coe-p2/.era carries the token AND the marker line `ai-dlc-era-restart: 2`.
+p_coe2 "$JOIN" "1.md#F-1" "ai-dlc-era-restart: 2" 1 ok && ok "CS5: a marked restart (pass 2) with a review shard, the source resolves (1.md#F-1) -> JOINED, no SKIP line" \
+  || bad "CS5: a marked pass-2 coe repair with a resolving source did not join (rc=$RC): $(cat "$JO")"
+p_coe2 "$JOIN" "1.md#F-9" "ai-dlc-era-restart: 2" 1 "UNRESOLVED" && ok "CS6: the same marked restart, source 1.md#F-9 -> REFUSED UNRESOLVED, no record, no SKIP line" \
+  || bad "CS6: an unresolving source of a marked pass-2 coe repair was not refused (rc=$RC): $(cat "$JO")"
+p_coe2 "$JOIN" "1.md#F-9" "" 1 skip && ok "CS7: the same unresolving source with NO restart marker -> 'COE-SOURCES: SKIP pre-era coe' and JOINED" \
+  || bad "CS7: an unmarked pass-2 coe repair was judged or refused instead of SKIPPED (rc=$RC): $(cat "$JO")"
+p_coe2 "$JOIN" "1.md#F-9" "ai-dlc-era-restart: 3" 1 skip && ok "CS8: a marker naming pass 3 is no marker for pass 2 -> SKIP pre-era coe and JOINED" \
+  || bad "CS8: a pass-2 coe repair whose marker names pass 3 was judged (rc=$RC): $(cat "$JO")"
+p_coe2 "$JOIN" "1.md#F-9" "ai-dlc-era-restart: 2 x" 1 skip && ok "CS9: the marker line with trailing text is no marker (whole-line match) -> SKIP pre-era coe and JOINED" \
+  || bad "CS9: a pass-2 marker line with trailing text was accepted as the marker (rc=$RC): $(cat "$JO")"
+p_coe2 "$JOIN" "coe-adversarial-p1.md#F-2" "ai-dlc-era-restart: 2" 0 "coe-adversarial-p2.md#F-1 is a CRITICAL/MAJOR finding" && ok "CS10: a marked SERIAL pass-2 restart (no review shard), the entry closes only the MINOR F-2 -> REFUSED naming the unclosed MAJOR F-1" \
+  || bad "CS10: an unclosed MAJOR of a marked serial pass-2 coe repair was not refused (rc=$RC): $(cat "$JO")"
+p_coe2 "$JOIN" "coe-adversarial-p1.md#F-1" "ai-dlc-era-restart: 2" 0 ok && ok "CS11: the same serial pass-2 world, the entry closes the MAJOR F-1 -> JOINED, no SKIP line" \
+  || bad "CS11: a marked serial pass-2 coe repair closing its MAJOR did not join (rc=$RC): $(cat "$JO")"
 
 # ---- the entry contract (BL-508, BL-519). Each refusal has its ALLOW twin one property apart.
 bash "$HERE/unit-record.sh"; _ur=$?
@@ -282,7 +297,7 @@ RP="$(dirname "${ROLE:-/nonexistent/x}")/pm-escalated.md"
 if [ -z "${ROLE:-}" ] || [ ! -f "$RP" ]; then
   bad "EC39: FIXTURE BROKEN -- remediator.md or pm-escalated.md not found beside the role directory"
 else
-  if p_bl734 "$JOIN"; then ok "EC39a: --escalations over a joined record with an appended closing entry -- 'siblings: checked' is REFUSED with the BADSIB line itself, rc 2; the field then a blank line then a fence, and a fence directly under it, both rc 0"
+  if p_bl734 "$JOIN"; then ok "EC39a: --escalations over a joined record with an appended closing entry -- 'siblings: checked', the field then a blank line then a fence, and a fence directly under it all rc 0, the escalation closed"
   else bad "EC39a: the appended closing entry's siblings: shapes were not judged as specified (rc=$RC): $(cat "$JO")"; fi
   p_bl734prose "$ROLE" "$RP" && ok "EC39b: each role file's writer paragraph carries join-remediator-shards.sh --escalations with --sprint, remediator.md before --mark-repair and after the SPEC re-render, and the 'no procedure runs' negation is gone" \
     || bad "EC39b: a writer paragraph lacks the --escalations instruction (with --sprint), it precedes --mark-repair, or the old negation remains"
@@ -290,19 +305,12 @@ fi
 
 fi # sg head
 if sg tail; then
-# ---- unit-reader-a.sh: SJ1-SJ9/SJ1o, EC14 EC18 EC19 EC25 EC32 EC36 EC37 EC38, RR1-RR20, AL1-AL9, NW1-NW2, LN1-LN8 and
+# ---- unit-reader-a.sh: SJ1-SJ9/SJ1o, EC19 EC25 EC32 EC36 EC37 EC38, RR1-RR20, AL1-AL9, NW1-NW2, LN1-LN8 and
 # LN10-LN16, LP1-LP5, NL1-NL8c, asked in process through the same lib.sh predicates;
 # its SEAM-A and CLI-A cells keep one CLI pass and refusal per join mode it owns. One literal call line.
 bash "$HERE/unit-reader-a.sh"; _ura=$?
 case "$_ura" in 0) ;; 1) fails=$((fails + 1)) ;; *) bad "unit-reader-a.sh exited $_ura (FIXTURE BROKEN); nothing was asserted" ;; esac
 
-# ---- BL-823: one disposition-key predicate (DISP_KEY_ERE) at every site. A capitalised LIST ITEM is the key, so an
-# out-of-set value under it is refused BADDISP; a capitalised column-0 summary is not, so it neither refuses nor
-# overwrites the entry's disposition (graph s292's `**Disposition:** 4 repaired / 0 escalated.`).
-if p_dispcap "$JOIN"; then ok "DK1: \`- **Disposition:** frobnicated\` in era -> REFUSED BADDISP by name, not NODISP"
-else bad "DK1: a capitalised list-item disposition outside the vocabulary was not refused BADDISP (rc=$RC): $(grep -m2 -E 'REFUSED|JOINED|ESCALATED' "$JO")"; fi
-if p_dispsummary "$JOIN"; then ok "DK2: a column-0 \`**Disposition:** 4 repaired / 0 escalated.\` summary, in the preamble and inside an in-era entry -> rc 0, nothing refused"
-else bad "DK2: a capitalised summary line was read as a disposition key (rc=$RC): $(grep -m2 -E 'REFUSED|ESCALATED' "$JO")"; fi
 
 # Worlds and the --sources drive shared by the SR, SRC and CPS arms below: pcb_src (a --sources world), pcb_party (a party parts world), pcd_src.
 pcb_src() { local w; w="$(mktemp -d "$WORK/pcsrc.XXXXXX")" && mkdir -p "$w/.claude" && seat_seed "$w" 305 && printf '%s' "$w"; }
@@ -605,6 +613,13 @@ else
   else bad "MKPW: the real --mark did not mark CPS1's part relaying the seat WARN and NOTE (rc=$RC): $(head -5 "$JO")"; fi
 fi
 
+# ---- BL-823: one disposition-key predicate (DISP_KEY_ERE) at every site. A capitalised LIST ITEM is the key, so an
+# out-of-set value under it is refused BADDISP; a capitalised column-0 summary is not, so it neither refuses nor
+# overwrites the entry's disposition (graph s292's `**Disposition:** 4 repaired / 0 escalated.`).
+if p_dispcap "$JOIN"; then ok "DK1: \`- **Disposition:** frobnicated\` in a part -> REFUSED BADDISP by name, not NODISP"
+else bad "DK1: a capitalised list-item disposition outside the vocabulary was not refused BADDISP (rc=$RC): $(grep -m2 -E 'REFUSED|JOINED|ESCALATED' "$JO")"; fi
+if p_dispsummary "$JOIN"; then ok "DK2: a column-0 \`**Disposition:** 4 repaired / 0 escalated.\` summary, in the preamble and inside an in-era entry -> rc 0, nothing refused"
+else bad "DK2: a capitalised summary line was read as a disposition key (rc=$RC): $(grep -m2 -E 'REFUSED|ESCALATED' "$JO")"; fi
 # ---- SEAT FILE ROWS: a row carrying `mark_file` (the dispatch guard copies it from the brief) matches ONLY the cited seat
 # whose path ends in `party-mode/s305/<that basename>`, never enters step/ordinal/K inference, dates its own seat, and
 # covers it only when stamped at or after the install. Field-less rows keep the inference, for the seats no field-row

@@ -585,3 +585,37 @@ elif "2026-11-11" <= WIN_END: print("CONTROL (t) OK: s321 reads 56 deduplicated 
 if fail:
     for f in fail: print("CONTROL FAIL " + f)
     sys.exit(1)
+
+# ---- BL-972 route A: DECISION PENDING blocks (every line below is new; nothing above reads or changes it)
+# Rule-11 route A lets the lead put a decision as a turn ending on a block whose heading line opens
+# `DECISION PENDING — DP-<sprint>-<n> — proceeding on (Recommended) unless you veto`. That is not an AskUserQuestion,
+# so the asks above cannot see it. It is counted HERE, in its own column, and is in no column above: route A
+# dispatches before the block by rule, so ADJ-DISPATCH would read it as true by construction.
+# Population: lead, non-sidechain ASSISTANT records, `text` content blocks only, a line that OPENS with the marker.
+# A tool_result, a user message, or the marker mid-paragraph never counts. Deduplicated by (message.id, DP id).
+DP_OPEN = "DECISION PENDING — DP-"
+def session_dps(path, win_end):
+    out = set()
+    for line in open(path, errors="replace"):
+        if "DECISION PENDING" not in line: continue   # the dash may be stored escaped (—); match after json.loads
+        try: r = json.loads(line)
+        except Exception: continue
+        t = r.get("timestamp")
+        if not t or t < E[0][0] or t > win_end or r.get("type") != "assistant" or r.get("isSidechain"): continue
+        m = r.get("message") or {}
+        for c in m.get("content") or []:
+            if isinstance(c, dict) and c.get("type") == "text":
+                for ln in str(c.get("text") or "").split("\n"):
+                    if ln.startswith(DP_OPEN):
+                        out.add((m.get("id") or r.get("uuid") or line[:40], ln[len(DP_OPEN):].split(" ")[0], t))
+    return out
+DPS = {}
+for p in glob.glob(ROOT + "/*.jsonl"):
+    if os.path.getmtime(p) < ts(E[0][0]): continue
+    for mid, dpid, t in session_dps(p, WIN_END):
+        n = sp(t)
+        if n is not None: DPS[(mid, dpid)] = n
+for n in sorted({r["n"] for r in rows} | set(DPS.values())):
+    N = sum(1 for r in rows if r["n"] == n)
+    print(f"s{n}: BL-972 ROUTE-A DECISION-PENDING blocks {sum(1 for v in DPS.values() if v == n)}"
+          f" (own column; AskUserQuestion asks {N}; not counted in HELD, DISPATCHED or ADJ-DISPATCH)")
