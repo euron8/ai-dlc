@@ -19,6 +19,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1236.0] - 2026-11-25
+
+### An update pull's PR body now names the report row each narrowed re-approval decision disposed, instead of the row's last word (BL-1236, PC-S324-APPLY-UNSEEN-ROW-RECORDS-LAST-WORD-OF-ROW-AS-SUBJECT)
+
+- For every consumer running an update pull. When the region changed after approval and no unseen row belongs to an ASK family, apply proceeds and records one `unseen-row` decision per row for the PR body. Each decision's subject was the text after the row's last space, so nine rows of one class read `this`, `flag,`, `the`; it is now the whole row, so an operator reading the decisions table can trace each decision to its row. The proceed verdict, its reason, the region digest and the ASK-family test are unchanged.
+
 ## [0.1235.0] - 2026-11-22
 
 ### An update pull no longer commits an operator's late edit as the pull's own, discloses every edit a re-run absorbs, counts only its own runs in the PR body, and folds derivation-info notes so the cap drops no closed kind (BL-1202, BL-1215, BL-1222 and BL-1225 close)
