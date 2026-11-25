@@ -37,13 +37,19 @@
 #      ai-dlc-answer-capture.sh write the operator's request with no lead cooperation at
 #      all. This is the key that fires when the lead did nothing.
 #
-# KEY 3 IS BOUNDED TO THE CURRENT SESSION, AND THAT BOUND IS THE DISCHARGE. The log is
-# rotated per sprint (Rule 25(c)), so "any handoff row" stays true for every later session
-# in the sprint and would block ordinary work at its first Stop -- a guard that wedges
-# correct sessions is worse than the defect it catches. Measured on the reference
-# consumer's episode: the request and every turn for the next 37 minutes carry one session
-# id, which changes at the next session, so the window closes exactly where it should
-# without a new log event and without a new vocabulary member.
+# KEY 3 IS BOUNDED TO THE CURRENT SESSION, AND THAT BOUND IS THE CROSS-SESSION DISCHARGE.
+# The log is rotated per sprint (Rule 25(c)), so "any handoff row" stays true for every later
+# session in the sprint and would block ordinary work at its first Stop -- a guard that wedges
+# correct sessions is worse than the defect it catches. Measured on the reference consumer's
+# episode: the request and every turn for the next 37 minutes carry one session id, which
+# changes at the next session.
+#
+# THE IN-SESSION DISCHARGE IS THE VERIFIED COMPLETION STAMP. When `.handoff-complete` parses
+# and its `session:` line is the session being asked about, a row counts only if its
+# `## <ts> -- USER_PAUSE` header timestamp is >= the stamp's `completed_at`. A tie counts, a row
+# whose timestamp does not parse counts, and the comparison is by VALUE, never log position.
+# With no parseable stamp, or a stamp from another session, every row of the session counts.
+# The pause flag discharges nothing: every operator message re-raises it.
 #
 # AND IT IS NOT "THE MOST RECENT ROW". That spelling was built, measured against the
 # consumer's real log at each of its 22 recorded compactions, and REJECTED: it fires on 1
@@ -67,6 +73,31 @@
 # FAIL CLOSED TO "NOT PENDING". Every unreadable input returns 1. A false PENDING reroutes
 # a mandated Read and blocks a Stop; a false NOT-PENDING leaves today's behaviour standing.
 # Only one of those can wedge a correct session.
+#
+# A LEAD-STARTED HANDOFF (context pressure, no operator request row) is armed by key 1, the
+# entry marker, or by a NEW snapshot record line inside the grammar below. Nothing else arms it.
+
+# THE RECORD GRAMMAR, defined once. ai-dlc-continue.sh's stamp writer and key 2 both select
+# record lines through ai_dlc_handoff_records, the same `grep -iE` on this one expression; a
+# second copy of the regex is a second grammar. The optional `- ` is the list-item spelling.
+AI_DLC_HANDOFF_RECORD_RE='^[[:space:]]*(-[[:space:]]+)?(#{1,6}[[:space:]]*)?(\*\*)?HANDOFF POINT'
+ai_dlc_handoff_records() { # <snapshot> -> every record line, verbatim; exit 1 when there is none
+  grep -iE "$AI_DLC_HANDOFF_RECORD_RE" "$1" 2>/dev/null
+}
+
+# ai_dlc_handoff_stamp <stamp>: sets AI_DLC_HC_AT and AI_DLC_HC_SESS from a stamp whose line 1
+# parses as `completed_at: <UTC ISO>`; exit 1 and both empty otherwise (absent, legacy 0-byte,
+# unparseable). Builtins only: every Stop pays for this call.
+ai_dlc_handoff_stamp() {
+  local _l1="" _l2="" _re='^completed_at: ([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z)$'
+  AI_DLC_HC_AT=""; AI_DLC_HC_SESS=""
+  [ -f "$1" ] && [ -r "$1" ] || return 1
+  { IFS= read -r _l1; IFS= read -r _l2; } < "$1" 2>/dev/null
+  [[ $_l1 =~ $_re ]] || return 1
+  AI_DLC_HC_AT="${BASH_REMATCH[1]}"
+  case "$_l2" in "session: "*) AI_DLC_HC_SESS="${_l2#session: }" ;; esac
+  return 0
+}
 
 # ai_dlc_handoff_pending <state_dir> <session_id> <pause_routing_schema>
 # Exit 0 = a handoff is pending. Exit 1 = it is not, or the question could not be answered.
@@ -79,8 +110,10 @@ ai_dlc_handoff_pending() {
   # THE PAUSE FLAG IS NECESSARY AND NOWHERE NEAR SUFFICIENT. It is raised by every Rule 3
   # pause point and by every operator message, and steps/handoff.md step 5 creates it
   # itself -- so on its own it is as true after a completed handoff as during a pending
-  # one. It is here only to bound the keys below to a pipeline that is actually paused;
-  # the resume path removes it, which is what stops a stale key firing in a later turn.
+  # one. It is here only to bound the keys below to a pipeline that is actually paused. It
+  # discharges nothing: every operator message re-raises it, so in-session a stale key is
+  # discharged by the completion stamp (keys 2 and 3) and across sessions by key 3's session
+  # bound.
   [ -f "${_sd}/pipeline-paused.flag" ] || return 1
 
   # Key 1 -- the entry marker.
@@ -120,20 +153,29 @@ ai_dlc_handoff_pending() {
   # could not verify. A record a program writes from its own input attests intent and not
   # completion; this one is written by the reader that just checked the five steps.
   #
-  # THE TEST IS "SNAPSHOT NEWER THAN STAMP", NEVER "STAMP NEWER THAN SNAPSHOT", the same
-  # direction and the same reason as that hook's driver-signal arm: bash 3.2's `-nt` compares
-  # whole seconds, and two files written in one second are `-nt` each other in NEITHER
-  # direction -- so the positive form would disarm a compliant handoff whose step 3 and step 5
-  # landed in the same second, and this form arms it. A NEW record is written at step 3, after
-  # the previous handoff's stamp, so it is strictly newer and still fires the key; an absent
-  # stamp fires it too, which is the state every consumer is in before its first verified
-  # completion.
-  if [ -r "${_sd}/pipeline-snapshot.md" ] \
-     && grep -qiE '^[[:space:]]*(#{1,6}[[:space:]]*)?(\*\*)?HANDOFF POINT' "${_sd}/pipeline-snapshot.md" 2>/dev/null \
-     && { [ ! -f "${_sd}/.handoff-complete" ] \
-          || [ "${_sd}/pipeline-snapshot.md" -nt "${_sd}/.handoff-complete" ]; }; then
-    AI_DLC_HANDOFF_KEY="snapshot-section"
-    return 0
+  # THE DISCHARGE IS BY RECORD LINE, NEVER BY MTIME, WHEN THE STAMP PARSES. The stamp holds
+  # `completed_at:`, `session:` and every record line the snapshot carried when it was written.
+  # Key 2 fires iff the snapshot now carries a record line that is NOT among those lines, by
+  # exact whole-line set membership in awk: an ordinary later snapshot write leaves the record
+  # lines unchanged and stays discharged, and a new or edited record line arms it. Not
+  # session-bound: the snapshot is a shared document.
+  #
+  # WITH NO PARSEABLE STAMP (absent, legacy 0-byte, unparseable) THE TEST IS "SNAPSHOT NEWER
+  # THAN STAMP", never the inverse: bash 3.2's `-nt` is whole-second, two files written in one
+  # second are `-nt` in NEITHER direction, and this form arms that case. An absent stamp fires.
+  local _snap="${_sd}/pipeline-snapshot.md" _hc="${_sd}/.handoff-complete" _rec=""
+  if [ -r "$_snap" ]; then
+    if ai_dlc_handoff_stamp "$_hc"; then
+      if _rec="$(ai_dlc_handoff_records "$_snap")" \
+         && LC_ALL=C awk 'NR == FNR { if (FNR > 2) done[$0] = 1; next } !($0 in done) { hit = 1 } END { exit !hit }' "$_hc" - <<<"$_rec"; then
+        AI_DLC_HANDOFF_KEY="snapshot-section"
+        return 0
+      fi
+    elif ai_dlc_handoff_records "$_snap" >/dev/null \
+         && { [ ! -f "$_hc" ] || [ "$_snap" -nt "$_hc" ]; }; then
+      AI_DLC_HANDOFF_KEY="snapshot-section"
+      return 0
+    fi
   fi
 
   # Key 3 -- this session's request rows in the continuation log.
@@ -152,10 +194,22 @@ ai_dlc_handoff_pending() {
   # into exactly the "most recent row" reading this predicate exists to avoid, silently, and
   # a log with one row cannot tell the two apart. Caught by a probe seeding two rows where
   # the request is first and a question about it is second -- the episode's own shape.
-  _prose="$(awk -v sess="$_sess" '
-    /^##[[:space:]].*--[[:space:]]USER_PAUSE[[:space:]]*$/ { if (inb && mine) out = out buf; inb=1; mine=0; buf=""; next }
+  #
+  # THE STAMP BOUNDS THE ROWS, BY VALUE. `since` is the stamp's `completed_at` only when the
+  # stamp parses AND names this session; a row whose header timestamp (field 2) parses and is
+  # strictly below it is discharged. Compared as strings under LC_ALL=C on one fixed-width UTC
+  # format; never by position, because rows can be printed out of order.
+  local _since=""
+  ai_dlc_handoff_stamp "${_sd}/.handoff-complete" && [ "$AI_DLC_HC_SESS" = "$_sess" ] && _since="$AI_DLC_HC_AT"
+  _prose="$(LC_ALL=C awk -v sess="$_sess" -v since="$_since" '
+    /^##[[:space:]].*--[[:space:]]USER_PAUSE[[:space:]]*$/ {
+      if (inb && mine) out = out buf; inb=1; mine=0; buf=""
+      t = $2 ""
+      live = (since == "" || t !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z$/ || t >= since)
+      next
+    }
     /^##[[:space:]]/ { if (inb && mine) out = out buf; inb=0 }
-    inb && /^-[[:space:]]+Session:[[:space:]]/ { if (index($0, sess) > 0) mine=1 }
+    inb && live && /^-[[:space:]]+Session:[[:space:]]/ { if (index($0, sess) > 0) mine=1 }
     inb && /^-[[:space:]]+(Prompt|Answer)[[:space:]]*\(first[[:space:]]+120[[:space:]]+chars\)[[:space:]]*:/ {
       line=$0; sub(/^[^:]*:[[:space:]]*/, "", line); buf = buf line "\n"
     }

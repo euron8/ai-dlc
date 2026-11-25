@@ -49468,3 +49468,38 @@ Related: BL-959 (supersession, which the renewal used), BL-966 (the clock, the o
 Provenance: batch 267, cluster S; id allocated by the lead ai-dlc-9f.
 
 verify: manual
+## BL-1248 — the verified handoff completion stamp discharges keys 2 and 3, so a completed handoff stops re-arming the guard in-session
+
+**LANDED (v0.1244.0).** batch 267, cluster H, owner ai-dlc-39. `.handoff-complete` now holds `completed_at`, `session` and the snapshot record lines; key 2 discharges by record-line membership and key 3 by `completed_at` for the stamped session, with the shared grammar widened to `- HANDOFF POINT`. Closes PC-S324-HANDOFF-PENDING-KEY3-IS-NEVER-DISCHARGED-IN-SESSION.
+
+**DEFECT.** Filed 2026-11-25 (batch 267, cluster H). Owner: `core/hooks/ai-dlc-handoff-pending.sh` (keys 2 and 3), `core/hooks/ai-dlc-continue.sh` (the `.handoff-complete` writer on Check 0's satisfied branch).
+
+Filed by the consumer as PC-S324-HANDOFF-PENDING-KEY3-IS-NEVER-DISCHARGED-IN-SESSION.
+
+Goal: a handoff the Stop guard has VERIFIED complete does not re-arm Check 0 later in the same session, and a handoff that did not complete still arms it. One done condition: on a mktemp world, `ai_dlc_handoff_pending` reads NOT PENDING for a stamp holding the record line with the snapshot rewritten after it, and for this session's request row older than the stamp's `completed_at`, while each world without its stamp reads PENDING.
+
+Baseline, two measured mechanisms (reference consumer, read-only, session `aaafe3c2-a6f6-4a56-a902-56a90d9b4127`). Key tally over that session's continuation-log rows, one invocation: log-request 0, entry-marker 13, snapshot-section 6, sticky 8. The verified stamp was written at 15:37:16Z.
+1. Key 2 is defeated by snapshot mtime. The snapshot's one matching HANDOFF POINT line is byte-identical (cksum 2522104495 1137) in every snapshot commit from 9b36f261c (15:35Z) to 64d7f40b7, and each later ordinary snapshot write made "snapshot -nt stamp" true, so the false blocks from 17:53Z to 19:05Z are key 2. BL-281's mtime lifecycle is defeated by ordinary snapshot edits: PC-S312-HANDOFF-GUARD-ARMS-ON-A-STALE-DISK-RECORD-THROUGH-A-RECONCILE is regressed. The 8 sticky blocks (19:05Z to 19:18Z, after the operator's commit 2f31ecd2f removed the line) were seeded by that false key-2 arm.
+2. Key 3 has no completion test. Probe in mktemp: a USER_PAUSE `handoff` row for session S, then a stamp, then the pause flag gives `ai_dlc_handoff_pending` rc=0 key=log-request; the same files with session `other-session` give rc=1. The consumer's "not pause-conditioned" control cannot discriminate (rc=1 with and without the flag is NOT PENDING both times); the predicate does require the flag, and every operator message re-raises it (`ai-dlc-pause.sh`), so the flag discharges nothing in-session. The headers that claimed an in-session discharge (the predicate's key-3 and pause-flag paragraphs, `ai-dlc-continue.sh`'s "BOUNDED BY SESSION, WHICH IS ALSO THE DISCHARGE") were false.
+
+Mechanism:
+1. The stamp is `completed_at: <TIMESTAMP>` (the hook-start `$TIMESTAMP`, the format the continuation-log headers use), `session: <SESSION_ID>`, then every snapshot line the shared record grammar selects, written through a `.handoff-complete.tmp.<pid>` sibling moved over the stamp. The no-transcript and backoff branches still write nothing.
+2. Key 2, stamp parseable: fires iff the snapshot carries a record line that is not among the stamp's record lines (exact whole-line membership in awk). Stamp absent, legacy 0-byte or unparseable: the old `-nt` test, unchanged. Not session-bound.
+3. Key 3, stamp parseable and naming this session: a row counts only if its `## <ts> -- USER_PAUSE` header timestamp is >= `completed_at` (LC_ALL=C string comparison in awk; a tie and an unparseable timestamp count; by value, never position). Otherwise every row of the session counts.
+4. The record grammar is single-sourced (`AI_DLC_HANDOFF_RECORD_RE`, selected only through `ai_dlc_handoff_records`, used by the writer and key 2) and widened to the list-item spelling `- HANDOFF POINT`. Population, every distinct `+...HANDOFF POINT` snapshot line in the consumer's history (`--all`): the old grammar matches 1 of 21, with the list prefix 6 of 21, impossible-token control 0; the other 15 open with a timestamp or `contNN (`. The consumer's current snapshot: 0 lines match the widened grammar, against 110 non-blank lines, so the widening re-arms nothing stale there.
+5. The sticky record `.handoff-guard-armed` is unchanged. A lead-started handoff (context pressure, no request row) is armed by key 1 or by a NEW record line inside the grammar, and by nothing else; fixture arm (hc-B1) pins it.
+
+Work list:
+
+1. Writer, key 2, key 3 and the shared grammar as above; headers reconciled; `core/schemas/pipeline-state-paths.json` `.handoff-complete` reason, and a transient `.handoff-complete.tmp` entry for the temp sibling (ignore `_bmad-output/.handoff-complete.tmp*`).
+2. Fixture `handoff-completion-assertion` arms (hc-a) to (hc-vi), (hc-B1), the two near-misses (hc-nm1), (hc-nm2) and the list-prefix arm (hc-lp). On base 6ea7c7e9a exactly (hc-a), (hc-e), (hc-h), (hc-lp) and (hc-v) fail; every other new arm is fail-closed and passes on both.
+
+Not adopted, pre-existing: `LAST_ASST` can reuse an earlier resume block on a text-less turn; a lead can hand-write a `completed_at:` line (on base it can already `touch` the stamp). Not built: the consumer's fix shape "discharge key 3 once the driver signal is consumed or the pause flag removed", because the flag is re-raised by every operator message and the driver signal is not verified; the stamp is the one record another event (the guard's own check of every arm) wrote.
+
+Step: n/a
+
+Related: BL-281 (key 2's stamp lifecycle; its archived receipt still exits 0).
+
+Provenance: batch 267, cluster H; id allocated by the lead ai-dlc-9f.
+
+verify: sh set -e; h="core/hooks/ai-dlc-handoff-pending.sh"; s="core/schemas/pause-routing.json"; [ -r "$h" ] && [ -r "$s" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; d="$(mktemp -d)" || exit 9; r='**HANDOFF POINT (operator-requested, mid gate-3).** Gate-3 in progress.'; mkdir -p "$d/a" "$d/e"; touch "$d/a/pipeline-paused.flag" "$d/e/pipeline-paused.flag"; printf '%s\n' '# Snapshot' "$r" > "$d/a/pipeline-snapshot.md"; printf '%s\n' '## 2026-08-30T12:00:00Z -- USER_PAUSE' '- Session: S' '- Channel: UserPromptSubmit (typed message)' '- Prompt (first 120 chars): handoff' '' > "$d/e/pipeline-continuation-log.md"; p() { bash -c '. "$1" && ai_dlc_handoff_pending "$2" S "$3"' _ "$h" "$1" "$s"; }; if p "$d/a"; then :; else exit 9; fi; if p "$d/e"; then :; else exit 9; fi; printf 'completed_at: 2026-08-30T12:05:00Z\nsession: S\n%s\n' "$r" > "$d/a/.handoff-complete"; touch -t 202001010000 "$d/a/.handoff-complete"; touch -t 202101010000 "$d/a/pipeline-snapshot.md"; printf 'completed_at: 2026-08-30T12:05:00Z\nsession: S\n' > "$d/e/.handoff-complete"; if p "$d/a"; then exit 1; fi; if p "$d/e"; then exit 1; fi; exit 0

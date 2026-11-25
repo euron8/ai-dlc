@@ -598,13 +598,16 @@ HANDOFF_VOCAB_OK=0
 # handoff" is on disk, and this is the only channel that survives both a queued message and a
 # compaction. The log is read, never written, here.
 #
-# BOUNDED BY SESSION, WHICH IS ALSO THE DISCHARGE. The log is rotated per sprint (Rule 25(c)),
-# so "any handoff row" would stay true for every later session in the sprint and would block
-# ordinary work at its first Stop -- a guard that wedges correct sessions is worse than the
-# defect. Keying on THIS session's rows bounds it to the conversation that was actually asked,
-# needs no new log event, and ends when the session does. Measured on the same episode: the
-# request at 13:06:31Z and every turn through 13:43:15Z carry one session id, and it changes at
-# 13:45:38Z -- so the window closes exactly where it should.
+# BOUNDED BY SESSION, WHICH IS THE CROSS-SESSION DISCHARGE. The log is rotated per sprint (Rule
+# 25(c)), so "any handoff row" would stay true for every later session in the sprint and would
+# block ordinary work at its first Stop -- a guard that wedges correct sessions is worse than the
+# defect. Keying on THIS session's rows bounds it to the conversation that was actually asked.
+# Measured on the same episode: the request at 13:06:31Z and every turn through 13:43:15Z carry
+# one session id, and it changes at 13:45:38Z.
+#
+# THE IN-SESSION DISCHARGE IS THE VERIFIED COMPLETION STAMP this hook writes below: a row of this
+# session older than its `completed_at` no longer counts. The pause flag discharges nothing in-
+# session, because every operator message re-raises it.
 #
 # THE ROW'S OPERATOR-PROSE FIELD IS THE SIGNAL, NOT THE WHOLE ROW. `- Question` is lead-authored
 # and `ai-dlc-answer-capture.sh` labels it "NOT the intent signal" in the row itself; letting it
@@ -1310,7 +1313,8 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
       # unarmed and pass. Measured by driving this hook: no-transcript Stop then transcript Stop
       # without the block was ALLOW with the unconditional removal and BLOCK without it.
       [ "$HANDOFF_TRANSCRIPT_OK" = "1" ] && rm -f "$HANDOFF_ARMED_FILE"
-      # AND THE SNAPSHOT'S HANDOFF RECORD IS DISCHARGED HERE, which is key 2's whole lifecycle.
+      # AND THE SNAPSHOT'S HANDOFF RECORD AND THIS SESSION'S REQUEST ROWS ARE DISCHARGED HERE,
+      # which is the whole in-session lifecycle of keys 2 and 3.
       # That key reads a LINE in a document whose writers only append, so nothing in this
       # distribution can remove it and it armed this guard permanently -- measured on the
       # reference consumer as five blocks across one session against a record two days old.
@@ -1323,18 +1327,29 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
       # there would discharge the key on exactly the handoffs that failed their own arms,
       # three rapid blocks after the operator asked for one.
       #
-      # A LATER handoff re-arms the key by WRITING a new record at step 3, which is newer than
-      # this stamp. The predicate compares the two that way round -- snapshot newer than stamp
-      # -- because bash 3.2's `-nt` is whole-second and the inverse form would disarm a
-      # compliant handoff whose step 3 and step 5 landed in one second.
+      # THE STAMP'S CONTENT is `completed_at: <TIMESTAMP>`, `session: <SESSION_ID>`, then every
+      # snapshot line ai_dlc_handoff_records selects at this moment, verbatim. It discharges key 2
+      # (a record line it holds no longer arms) and, for this session, key 3 (a request row older
+      # than completed_at no longer counts). A LATER handoff re-arms key 2 by writing a NEW record
+      # line, and key 3 by a new request row.
+      #
+      # completed_at IS $TIMESTAMP, SET AT HOOK START, NEVER A FRESH `date`: a request typed while
+      # this Stop is being judged must count.
+      #
+      # WRITTEN TO A TEMP FILE AND MOVED OVER THE STAMP, so a reader never sees a half-written one.
+      # With the predicate library unloaded there is no grammar and no stamp is written; no key was
+      # read either, so there is nothing to discharge.
       #
       # NOT WITH NO TRANSCRIPT. There the resume arm read 1 = unknown, so "every arm was READ and
-      # found satisfied" is false and the stamp would discharge key 2 on an unverified resume.
-      # Left armed, key 2 is bounded by the pause flag, which the resume path takes down. The
-      # body is left unindented so its line stays byte-identical to the one the fixture's
-      # stamp-writer mutant anchors on.
+      # found satisfied" is false and the stamp would discharge keys 2 and 3 on an unverified
+      # resume.
       if [ "$HANDOFF_TRANSCRIPT_OK" = "1" ]; then
-      : > "${LOG_DIR}/.handoff-complete" 2>/dev/null || true
+        if declare -F ai_dlc_handoff_records >/dev/null; then
+          _hc_tmp="${LOG_DIR}/.handoff-complete.tmp.$$"
+          { printf 'completed_at: %s\nsession: %s\n' "$TIMESTAMP" "$SESSION_ID"
+            ai_dlc_handoff_records "${LOG_DIR}/pipeline-snapshot.md" || :; } > "$_hc_tmp" 2>/dev/null \
+            && mv -f "$_hc_tmp" "${LOG_DIR}/.handoff-complete" 2>/dev/null || rm -f "$_hc_tmp" 2>/dev/null
+        fi
       fi
     fi
   fi
