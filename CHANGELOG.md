@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1245.0] - 2026-11-25
+
+### Thirteen fixtures declare the files they really read, two fixtures stop copying whole directories into their worlds, and the fixture-hygiene check sees a git init or clone inside a script written to a file and run later (BL-1155 and BL-1162 advance)
+
+- **Editing the files a fixture reads now re-runs it** (BL-1155). For ai-dlc maintainers. 13 fixtures (budget-summary-verdict, gate-adjudication, gate-resume, handoff-record-carries-return, held-stories, inflight-row-shape, snapshot-evidence-cell, snapshot-section-schema, snapshot-supersession-marker, snapshot-update-stamps, sprint-status-lifecycle, verdict-pass-content, whole-read-pool) gained 63 `inputs.decl` lines naming files the fixture reads and had not declared, so a push that edits one of those files dispatches the fixture instead of skipping it on a stale record. Four fixtures reach files they now declare, so `tools.decl` gained `python3` (budget-summary-verdict, snapshot-update-stamps), `od` (snapshot-update-stamps) and `head` (sprint-status-lifecycle). BL-1155 stays PARTIAL.
+- **Two fixtures' world copies take only what they run** (BL-1155). For ai-dlc maintainers. In remediator-shard-join, the SJ1o arm no longer copies the whole scripts directory twice (it copies the nine files the join and the merge resolve beside themselves), and `p_vcrash` no longer copies every script (`cp "$SRCDIR"/*.sh`; it copies an 11-file sibling list). Its sandbox read set falls from 100 `core/scripts/` files to 13 entries, and `hermetic-run.sh` is no longer read. The postcompact-rulebook-recovery `race_dir` no longer copies all 32 hooks into its race worlds; it copies the five that the gate and the handoff-entry hook source or run. A file missing at the source or the destination fails the arm instead of passing on a smaller world. No declaration was added for either: the copy stopped at its source.
+- **H14 sees a git init or clone inside a script written to a file** (BL-1162). For ai-dlc maintainers. The fixture-hygiene check H14 read the body of a heredoc only when the heredoc was run directly. A heredoc written to a file by `cat` or `tee` or a redirect, whose first body line is a shell shebang, is now read as the script it becomes. On the real fixture corpus it adds three rows (fixture-invocation-budget `run.sh:273` and `:277`, prepush-worktree-env-scrub `run.sh:150`), none dropped, no false positives. A heredoc with no shebang, a non-shell shebang, or one written by another command is still not read. BL-1162 stays PARTIAL.
+
 ## [0.1244.0] - 2026-11-25
 
 ### A handoff the Stop guard verified complete stops re-arming it later in the same session, and a handoff that did not complete still arms it (BL-1248)

@@ -16,3 +16,6 @@ core/fixtures/lib/layout.sh
 core/fixtures/lib/inproc.sh
 core/fixtures/lib/mutant.sh
 core/scripts/era-token.sh
+core/hooks/ai-dlc-window.sh
+core/schemas/sprint-status.json
+core/scripts/sprint-status.sh

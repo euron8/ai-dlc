@@ -24,3 +24,4 @@ wc
 chmod
 stat
 mv
+python3
