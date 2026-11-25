@@ -291,6 +291,13 @@
       "reason": "Append-only log of a step entered without its current_step_file record: one line per mismatch, written by the PostToolUse Read hook, never read by a gate."
     },
     {
+      "name": ".read-intent",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-recover-gate.sh",
+      "ignore": "_bmad-output/.read-intent/",
+      "reason": "Per-session, per-agent whole-read intent records: <session>__<agent|lead>__<path>, armed by the recover gate's PreToolUse read-intent arm on a whole Read of a protected path, holding the line ranges read since, and removed by ai-dlc-handoff-entry.sh (PostToolUse Read) once the file is covered to its end; the arm removes other sessions' records. Also the arm's cached copy of the extensions layer file (.pset-ext.raw, .pset-ext.lists). A committed copy would hint another checkout's reader about reads it never attempted."
+    },
+    {
       "name": ".handoff-complete",
       "transient": true,
       "producer": "core/hooks/ai-dlc-continue.sh",

@@ -1,5 +1,6 @@
 !core/hooks/ai-dlc-recover.sh
 !core/hooks/ai-dlc-handoff-entry.sh
+core/hooks/ai-dlc-protected-set.sh
 !core/hooks/ai-dlc-recover-gate.sh
 !core/skills/ai-dlc/steps/gate-validation.md
 !core/scripts/gate-slice.sh

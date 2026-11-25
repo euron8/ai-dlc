@@ -808,7 +808,8 @@ A15_i84_restatement_is_reported() {
   # has an ordering hazard against values the worker wrapper has already resolved. Mutating a
   # file that happens to live under core/hooks/ is not driving a hook.
   local protect
-  protect="$t/core/hooks/""ai-dlc-protect.sh"
+  # The pattern lives in the protected-set library the protect hook sources.
+  protect="$t/core/hooks/""ai-dlc-protected-set.sh"
   if edit "$protect" \
        '!done && /^  "\*\/stories\/\*\.md"$/ { print "  \"_bmad-output/planning-artifacts/stories/*.md\""; done=1; next } { print }'; then
     assert_fires "I84 a shipped program restating an area-qualified story path is REPORTED" \

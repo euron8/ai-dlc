@@ -258,6 +258,27 @@ grep -q 'protected-paths.json' <<<"$OUTB" \
 expect allow "$BROKEN" "$(jb 'npm test')" \
   "malformed layer file + no path in the call → allow (fail-closed, not wedged)"
 
+# --- Assertion 10c: a TRUNCATED protected-set library fails CLOSED ----------
+# A library cut inside `PROTECTED_PATTERNS=(` sources with an error and defines no matcher; a hook
+# that went on would match nothing and allow. Its twin is the same copied hook beside the whole
+# library, one property apart, which allows the same unprotected path.
+_LT="$WORK/libtrunc"; _LW="$WORK/libwhole"; mkdir -p "$_LT" "$_LW"
+cp "$HOOK" "$_LT/ai-dlc-protect.sh"; cp "$HOOK" "$_LW/ai-dlc-protect.sh"
+cp "${HOOK%/*}/ai-dlc-protected-set.sh" "$_LW/ai-dlc-protected-set.sh"
+awk '{ print } /^PROTECTED_PATTERNS=\(/ { getline; print; exit }' "${HOOK%/*}/ai-dlc-protected-set.sh" > "$_LT/ai-dlc-protected-set.sh"
+if grep -q '^PROTECTED_PATTERNS=(' "$_LT/ai-dlc-protected-set.sh" && ! grep -q '^is_protected_norm()' "$_LT/ai-dlc-protected-set.sh"; then
+  OUTT="$(printf '%s' "$(jf _bmad-output/planning-artifacts/prd.md)" | CLAUDE_PROJECT_DIR="$PLAIN" bash "$_LT/ai-dlc-protect.sh" 2>/dev/null)"
+  OUTW="$(printf '%s' "$(jf _bmad-output/planning-artifacts/prd.md)" | CLAUDE_PROJECT_DIR="$PLAIN" bash "$_LW/ai-dlc-protect.sh" 2>/dev/null)"
+  if grep -q '"permissionDecision": *"deny"' <<<"$OUTT" && grep -qF "$_LT/ai-dlc-protected-set.sh" <<<"$OUTT" \
+     && ! grep -q '"permissionDecision": *"deny"' <<<"$OUTW"; then
+    ok "a protected-set library truncated inside PROTECTED_PATTERNS denies an unprotected path naming the library; the whole library beside the same hook allows it"
+  else
+    bad "truncated library: deny-and-name='$(grep -c '"deny"' <<<"$OUTT")' (want 1), whole-library twin deny='$(grep -c '"deny"' <<<"$OUTW")' (want 0)"
+  fi
+else
+  bad "FIXTURE BROKEN — the truncated library seed does not cut inside PROTECTED_PATTERNS=("
+fi
+
 # --- Assertion 11: the log records both decisions ---------------------------
 LOG="$PLAIN/_bmad-output/context-mode-protection-log.md"
 grep -q -- '-- PROTECTED' "$LOG" && grep -q -- '-- allowed' "$LOG" \

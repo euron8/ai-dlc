@@ -224,7 +224,7 @@ and this partly explains a skip the filing attributes wholly to conduct.
 
 - **New `PreToolUse` gate hook** under `core/hooks/`, registered in
   `templates/settings.json.template` (I13 makes the template the single registration site) with a
-  committed executable bit. Deny via the JSON contract at `core/hooks/ai-dlc-protect.sh:365` —
+  committed executable bit. Deny via the JSON contract at `core/hooks/ai-dlc-protect.sh:299` —
   `permissionDecision: "deny"`, never exit code 2. `core/hooks/ai-dlc-acknowledge.sh` is the
   precedent for a broad matcher list.
 - **Arm it only where it cannot wedge.** Fire only when `_bmad-output/.recover-fired` is fresh

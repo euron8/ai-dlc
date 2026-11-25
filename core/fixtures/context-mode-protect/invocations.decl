@@ -1,4 +1,5 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 # 54 -> 60, BL-1214: assertion 9e adds six hook runs (ctx_execute file=, ctx_batch strings, the mcp__context-mode__ prefix, each with its allow twin); one counted hermetic-run.sh run measured 60 (J3).
-60 *
+# 60 -> 62, BL-1212 (0.1241.0): assertion 10c drives a copied hook beside a truncated library and beside the whole one; one counted hermetic-run.sh run measured 62 (J3).
+62 *
 0 core/hooks/ai-dlc-context-provenance.sh
