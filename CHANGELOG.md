@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1237.0] - 2026-11-25
+
+### A lead beat armed with --dispatch on a role-less round-dispatcher no longer refuses when the harness echoes the spawn (BL-1237, PC-S323-WAIT-ROLELESS-FALLBACK-ONE-LINE-TEST-BROKEN-ON-API-REQUEST-BLOB)
+
+- For every lead that arms a wait beat with `--dispatch`, or asks `--dispatch-ts`, for a role-less round-dispatcher. The harness now writes `api-request-blob` and `api-request-shape` lines into the lead transcript that echo the spawn's Agent tool_use id, so the role-less fallback found the id on two lines and refused with rc 64, and the round's dispatcher lost its DISPATCH FAILED arm. Those echo lines are now ignored: the dispatch time is read from the spawn's own Agent line again. A spawn whose id is on two real Agent lines still refuses.
+
+Fully discharges PC-S323-WAIT-ROLELESS-FALLBACK-ONE-LINE-TEST-BROKEN-ON-API-REQUEST-BLOB.
+
 ## [0.1236.0] - 2026-11-25
 
 ### An update pull's PR body now names the report row each narrowed re-approval decision disposed, instead of the row's last word (BL-1236, PC-S324-APPLY-UNSEEN-ROW-RECORDS-LAST-WORD-OF-ROW-AS-SUBJECT)

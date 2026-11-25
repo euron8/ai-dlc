@@ -1847,7 +1847,9 @@ ledger_rows() {  # $1 = field, $2 = value -> the matching ledger lines (compact 
 # `timestamp` cut to the second (no later than the guard's row would have been). It applies only to
 # a spawn that LAUNCHED (this session's `agent-*.meta.json` carries the toolUseId; a guard-denied
 # dispatch never launches and has none), whose id is on exactly ONE line of the lead transcript, and
-# that is ROLE-LESS (no `subagent_type`, no `team-roles/` path on that line). Anything else returns 1
+# that is ROLE-LESS. A harness record line opening `{"type":"api-request` (api-request, -blob, -shape)
+# echoes the conversation and is never the tool_use record: it is dropped before the count, the role
+# test and the stamp (BL-1237). The one line must be ROLE-LESS (no `subagent_type`, no `team-roles/` path on that line). Anything else returns 1
 # and the refusal stands.
 dispatch_roleless_ts() {  # uses dp_tui_ -> sets dp_rl_ts_; 1 when the fallback does not apply
   dp_rl_ts_=""
@@ -1861,6 +1863,7 @@ dispatch_roleless_ts() {  # uses dp_tui_ -> sets dp_rl_ts_; 1 when the fallback 
   dp_rl_lead_="${TEAMMATE_DIR%/subagents}.jsonl"
   [ -f "$dp_rl_lead_" ] || return 1
   dp_rl_rec_="$(grep -F "\"id\":\"$dp_tui_\"" "$dp_rl_lead_" 2>/dev/null)" || return 1
+  dp_rl_rec_="$(grep -v '^{"type":"api-request' <<< "$dp_rl_rec_")" || return 1
   dp_rl_n_="$(printf '%s\n' "$dp_rl_rec_" | grep -c .)" || dp_rl_n_=0
   [ "$dp_rl_n_" -eq 1 ] || return 1
   case "$dp_rl_rec_" in *'"subagent_type"'*|*team-roles/*) return 1 ;; esac
