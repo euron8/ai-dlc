@@ -6,3 +6,6 @@ core/fixtures/lib/report.sh
 core/fixtures/lib/layout.sh
 core/fixtures/lib/inproc.sh
 core/fixtures/lib/mutant.sh
+core/hooks/ai-dlc-window.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/wait-for-deliverable.sh

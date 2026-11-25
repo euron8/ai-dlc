@@ -388,7 +388,8 @@
 #     read `(init|clone)`); a heredoc body line, read raw on a command-position git init/clone (`hd14`, a `#` line
 #     skipped) of an EXECUTED heredoc only (`hdx14`: the command owning `<<`, past a keyword run and wrapper words with
 #     their options, is `bash|sh|zsh|dash|ksh` or `$BASH` taking the heredoc as its script -- no `-c`, no operand unless
-#     an `s` cluster -- or the heredoc's own pipeline pipes into one); the quoted body of a `bash|sh|zsh|dash|ksh -c '...'` (`sc14`); a recursive `cp` whose first source word is
+#     an `s` cluster -- or the heredoc's own pipeline pipes into one -- or, written to a file by `cat`/`tee`, its first body
+#     line is a shell shebang, since such a file is a script, `maskl`'s SHEB/WFILE); the quoted body of a `bash|sh|zsh|dash|ksh -c '...'` (`sc14`); a recursive `cp` whose first source word is
 #     a `.git` directory (`cp14`); a wrapper body that is a `( )` subshell, or reaches git after `if`/`elif`/`while`/
 #     `until`/`time`, or reaches it through another wrapper that it forwards `$@`/`$*` to (WE rows, closed in the judge;
 #     only a callee defined earlier in the fixture is read), or whose command-position word is a variable on a line
@@ -399,7 +400,8 @@
 #     `-c` clause 0 lines; cp14 0 lines. NARROWED OUT: a printf-written script string (review-shard-merge
 #     receipt-bl980.sh:114 is scan-root test data that is never run, so it would be a false positive) and a general
 #     `cp -R` (345 lines in 94 fixtures; the 7 `.git`-touching ones copy a world built through world_git and edit the
-#     copy). STILL BLIND: a heredoc written to a file that is run later, `eval "$(cat <<X)"`, `. /dev/stdin <<X`, a
+#     copy). STILL BLIND: a run-later script heredoc with no shebang first line, one written through a helper function
+#     (`put`, `mw_sh_in`) or another command (`printf`), `eval "$(cat <<X)"`, `. /dev/stdin <<X`, a
 #     `| bash` on a later line than the opener, an alias, `eval`, a longer option run, a callee defined after its caller.
 #     THE REMAINDER the grammar does not read, each re-derived at 619bfde94 by an uncommitted instrumented copy of this
 #     scan (its controls: hits on the known `gitq -C … init` and `G init` lines): wrapper-function inits, a command-
@@ -501,7 +503,7 @@ trap 'rm -rf "$WORK"' EXIT
 
 # --- the scan ------------------------------------------------------------------------------------------------------
 read -r -d '' SCAN_AWK <<'AWK'
-BEGIN { XS = "XXXXXXXXXXXXXXXX"; SQ = sprintf("%c", 39); PROG8 = "s/^\\(AI_DLC_[A-Za-z0-9_]*\\)=.*/\\1/p"; EXITRE = "(^|[^A-Za-z0-9_$.-])exit([[:space:]]+0)?[[:space:]]*($|[;})&|\n])" }
+BEGIN { SHEB = "^#![[:space:]]*(/[^[:space:]]*/)?(env[[:space:]]+(-S[[:space:]]+)?)?(ba|z|da|k)?sh([[:space:]]|$)"; WFILE = "(^|[;&|({[:space:]])((cat|tee)[[:space:]][^|]*>[[:space:]]*[^&>[:space:]]|tee[[:space:]]+[^|<>[:space:]-])"; XS = "XXXXXXXXXXXXXXXX"; SQ = sprintf("%c", 39); PROG8 = "s/^\\(AI_DLC_[A-Za-z0-9_]*\\)=.*/\\1/p"; EXITRE = "(^|[^A-Za-z0-9_$.-])exit([[:space:]]+0)?[[:space:]]*($|[;})&|\n])" }
 function relof(p) { return substr(p, 1, length(ROOTP)) == ROOTP ? substr(p, length(ROOTP) + 1) : p }
 function fxof(r,   a, n) { n = split(r, a, "/"); return (n >= 4 && a[1] == "core" && a[2] == "fixtures") ? a[3] : "" }
 function pop() { STK = substr(STK, 1, length(STK) - 1) }
@@ -554,7 +556,7 @@ function maskcode(s,   out, i, n, c, top, r, re) {
 # unless a cluster carries `s` (`-o`/`+o`/`-O`/`+O`, `--rcfile`, `--init-file` take the next word; a lone `-`/`--` ends
 # options; a redirection is no operand; only the words before `<<` are read). (2) POST's own
 # pipeline (cut at `;`, `&&`, `||` and a lone `&`) pipes (`|` or `|&`) into a shell.
-# NOT read, so not executed: a heredoc written to a file run later, `eval "$(cat <<X)"`, `. /dev/stdin <<X`, a `| bash`
+# Also executed: a heredoc `cat`/`tee`-written to a file whose first body line is a shell shebang (read in maskl). NOT read: `eval "$(cat <<X)"`, `. /dev/stdin <<X`, a `| bash`
 # on a later line, an unclosed backquote before the shell, an option run past this grammar.
 function hdclose(s, j,   d, o, c, n) {
   o = substr(s, j, 1); c = (o == "{") ? "}" : ")"; d = 0; n = length(s)
@@ -630,7 +632,9 @@ function hdx14(pre, post, raw,   n, i, c, k, cut, np, w, ex, scl, eo, shre) {
 function maskl(s,   m, t, p, n, dash, q, c, w, e) {
   INHD = 0
   if (HDN > 0) {
-    INHD = 1; HDXC = HDX[HDI]; t = s; if (HDD[HDI]) sub(/^\t+/, "", t)
+    INHD = 1; t = s; if (HDD[HDI]) sub(/^\t+/, "", t)
+    if (!HDS[HDI]) { HDS[HDI] = 1; if (HDF[HDI] && t ~ SHEB) HDX[HDI] = 1 }
+    HDXC = HDX[HDI]
     if (t == HDW[HDI]) { HDI++; if (HDI > HDN) { HDN = 0; HDI = 0 } }
     while (length(XS) < length(s)) XS = XS XS
     return substr(XS, 1, length(s))
@@ -646,7 +650,7 @@ function maskl(s,   m, t, p, n, dash, q, c, w, e) {
     c = substr(s, q, 1); w = ""
     if (c == SQ || c == "\"") { e = index(substr(s, q + 1), c); if (e) w = substr(s, q + 1, e - 1) }
     else { if (c == "\\") q++; if (match(substr(s, q), /^[A-Za-z_][A-Za-z0-9_]*/)) w = substr(s, q, RLENGTH) }
-    if (w != "") { HDN++; HDW[HDN] = w; HDD[HDN] = dash; HDI = 1; HDX[HDN] = hdx14(substr(m, 1, p - 1), substr(m, q), substr(s, 1, p - 1)) }
+    if (w != "") { HDN++; HDW[HDN] = w; HDD[HDN] = dash; HDI = 1; HDX[HDN] = hdx14(substr(m, 1, p - 1), substr(m, q), substr(s, 1, p - 1)); HDS[HDN] = 0; HDF[HDN] = (substr(m, 1, p - 1) ~ WFILE) }
     p = q
   }
   return m

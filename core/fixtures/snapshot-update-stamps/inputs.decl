@@ -15,3 +15,15 @@ core/fixtures/lib/report.sh
 core/fixtures/lib/layout.sh
 core/fixtures/lib/inproc.sh
 core/fixtures/lib/mutant.sh
+core/hooks/ai-dlc-context-provenance.sh
+core/hooks/ai-dlc-handoff-pending.sh
+core/hooks/ai-dlc-window.sh
+core/schemas/pause-routing.json
+core/schemas/sprint-status.json
+core/scripts/sprint-status.sh
+core/scripts/validate-adversarial-convergence.sh
+core/scripts/validate-audit-anchors.sh
+core/scripts/validate-held-stories.sh
+core/scripts/validate-retro-evidence.sh
+core/scripts/validate-snapshot-conservation.sh
+core/scripts/wait-for-deliverable.sh

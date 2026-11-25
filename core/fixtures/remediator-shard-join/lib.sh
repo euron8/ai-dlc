@@ -1607,7 +1607,17 @@ p_claim() { # <wfd>
 p_vcrash() {
   local w pa sd f c rc
   RVC=setup; w="$(mktemp -d "$WORK/vc.XXXXXX")" || return 1; RVC_W="$w"
-  c="$w/crash"; mkdir -p "$c" && cp "$1"/*.sh "$c/" || return 1
+  # The copy carries the two scripts under test and what they run beside themselves (the join, the merge with its
+  # provenance validator, content-seal, era-token, the partition pair, the worklist, the convergence validator),
+  # never the whole dir. Builtins only; a sibling absent from $1 is BROKEN.
+  local _c _miss="" _f=()
+  for _c in wait-for-deliverable.sh validate-artifact-derivations.sh join-remediator-shards.sh merge-adversarial-shards.sh \
+            validate-provenance-block.sh content-seal.sh era-token.sh partition-document.sh partition-subject.sh \
+            serial-remediation-worklist.sh validate-adversarial-convergence.sh; do
+    if [ -f "$1/$_c" ]; then _f+=("$1/$_c"); else _miss="$_miss $_c"; fi
+  done
+  [ -z "$_miss" ] || { echo "FIXTURE BROKEN: p_vcrash: sibling(s)$_miss absent from $1; nothing was asserted" >&2; return 1; }
+  c="$w/crash"; mkdir -p "$c" && cp "${_f[@]}" "$c/" || return 1
   awk '{ print } /^set -uo pipefail$/ && !d { print "echo \"$AI_DLC_NO_SUCH_VAR_X\" > /dev/null"; d = 1 }' \
     "$1/validate-artifact-derivations.sh" > "$c/validate-artifact-derivations.sh" || return 1
   RVC=inject; cmp -s "$1/validate-artifact-derivations.sh" "$c/validate-artifact-derivations.sh" && return 1

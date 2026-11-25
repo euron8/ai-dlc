@@ -1934,12 +1934,23 @@ if [ "$_race_at" != yes ]; then
   skip "race arms" "the gate does not re-test the marker directly after its stage read (found: ${_race_at}); this fixture ships one pull ahead of its subject"
 else
 
-race_dir() { # race_dir -> a fresh copy of the WHOLE hooks directory, or nothing when a sibling did not arrive
+race_dir() { # race_dir -> a fresh copy of the gate and the siblings it sources, or nothing when one did not arrive
   _rd="$(mktemp -d "$WORK/race.XXXXXX")" || return 0
   _rs="$(dirname "$GATE")"
-  cp "$_rs"/*.sh "$_rd"/ 2>/dev/null
-  [ "$(ls "$_rs"/*.sh | wc -l)" -eq "$(ls "$_rd"/*.sh | wc -l)" ] || return 0
-  [ -f "$_rd/ai-dlc-recover-gate.sh" ] || return 0
+  # The gate and what it resolves beside itself: ai-dlc-protected-set.sh, ai-dlc-advisor-detect.sh and
+  # ai-dlc-context-provenance.sh (all sourced); and ai-dlc-handoff-entry.sh, the entry hook race F3 drives (it
+  # sources the same protected-set and provenance and reads the gate as text). Nothing else is copied.
+  _rn="ai-dlc-recover-gate.sh ai-dlc-protected-set.sh ai-dlc-advisor-detect.sh ai-dlc-context-provenance.sh ai-dlc-handoff-entry.sh"
+  _rl=""
+  for _rf in $_rn; do
+    [ -f "$_rs/$_rf" ] || return 0
+    _rl="$_rl $_rs/$_rf"
+  done
+  # shellcheck disable=SC2086
+  cp $_rl "$_rd"/ 2>/dev/null || return 0
+  for _rf in $_rn; do
+    [ -f "$_rd/$_rf" ] || return 0
+  done
   printf '%s\n' "$_rd"
 }
 # race_edit <src> <out> <awk program> <anchor> <line> [W] -- refused unless the anchor is ONE whole

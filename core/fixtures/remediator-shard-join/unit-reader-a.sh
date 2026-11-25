@@ -265,10 +265,18 @@ while [ -n "$_d" ] && [ "$_d" != "/" ]; do
   done
   _d="$(dirname "$_d")"
 done
-if [ ! -s "$SJO_OLD" ] || [ ! -f "$SRCDIR/merge-adversarial-shards.sh" ] || [ -z "$SJO_SCH" ]; then
-  bad "SJ1o: FIXTURE BROKEN -- $SJO_OLD, $SRCDIR/merge-adversarial-shards.sh or provenance-block.json above $SRCDIR is absent; nothing was asserted"
-elif ! { cp -Rp "$SRCDIR" "$sjo_cur" && cp -Rp "$SRCDIR" "$sjo_old" && cp "$SJO_OLD" "$sjo_old/merge-adversarial-shards.sh" \
-         && mkdir "$sjo_cur/../schemas" "$sjo_old/../schemas" \
+# The siblings each copy carries: the join, what it runs or sources beside itself (content-seal, era-token,
+# partition-subject, partition-document, serial-remediation-worklist, the convergence validator) and the merge
+# with the provenance validator its key (c) asks. Builtins only; a sibling absent from $SRCDIR is BROKEN.
+SJO_FILES=(); SJO_MISS=""
+for _c in join-remediator-shards.sh merge-adversarial-shards.sh validate-provenance-block.sh content-seal.sh era-token.sh \
+          partition-document.sh partition-subject.sh serial-remediation-worklist.sh validate-adversarial-convergence.sh; do
+  if [ -f "$SRCDIR/$_c" ]; then SJO_FILES+=("$SRCDIR/$_c"); else SJO_MISS="$SJO_MISS $_c"; fi
+done
+if [ ! -s "$SJO_OLD" ] || [ -n "$SJO_MISS" ] || [ -z "$SJO_SCH" ]; then
+  bad "SJ1o: FIXTURE BROKEN -- $SJO_OLD, provenance-block.json above $SRCDIR or the sibling(s)${SJO_MISS:- none} beside the join is absent; nothing was asserted"
+elif ! { mkdir "$sjo_cur" "$sjo_old" "$sjo_cur/../schemas" "$sjo_old/../schemas" \
+         && cp -p "${SJO_FILES[@]}" "$sjo_cur/" && cp -p "${SJO_FILES[@]}" "$sjo_old/" && cp "$SJO_OLD" "$sjo_old/merge-adversarial-shards.sh" \
          && cp "$SJO_SCH" "$sjo_cur/../schemas/" && cp "$SJO_SCH" "$sjo_old/../schemas/"; }; then
   bad "SJ1o: FIXTURE BROKEN -- the scripts-dir copies did not build"
 elif cmp -s "$sjo_cur/merge-adversarial-shards.sh" "$sjo_old/merge-adversarial-shards.sh"; then
