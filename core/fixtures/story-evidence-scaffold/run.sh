@@ -1131,12 +1131,21 @@ if gsel era; then
     ER_W="$WORK/world-era"
     mkdir -p "$ER_W/stories" || bad "ERA: FIXTURE BROKEN -- cannot make the world"
     printf -- '---\nid: S9-1.1\nstatus: draft\n---\n# Story\n\n- **AC1 (EXISTENTIAL).** one\n- **AC2 (UNIVERSAL).** two\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-1.md"
+    # LETTER: the same --bind run letters a second story. AC1 cites another enumeration through a hyphenated id, AC2 through
+    # the word answer; AC3 is the near-miss, its own (a)/(b) right after an id token ended by a colon.
+    printf -- '---\nid: S9-1.2\nstatus: draft\n---\n# Story\n\n- **AC1 (EXISTENTIAL).** the venue holds FR-S9-2 (a) and FR-S9-2 (b) as read\n- **AC2 (EXISTENTIAL).** each path follows the operator answer (a) or answer (b)\n- **AC3 (UNIVERSAL).** FR-S9-2: (a) refuses and (b) logs\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-2.md"
     er_out="$(FXCELL="cli-era-bind" bash "$ER_D/strategy-rows.sh" --sprint 9 --stories-dir "$ER_W/stories" --bind 2>&1)"; er_rc=$?
     er_n="$(grep -cx 'ai-dlc-era: e4-forward-1' "$ER_W/stories/story-1-1.md")"
     if [ "$er_rc" -eq 0 ] && [ "$er_n" = 1 ] && grep -qxF '| ST9-1 | - |  |  |' "$ER_W/stories/story-1-1.md" && grep -qxF '| ST9-2 | - |  |  |' "$ER_W/stories/story-1-1.md"; then
       ok "ERA: strategy-rows.sh --bind wrote the ai-dlc-era: e4-forward-1 line once, as its own line, and one empty row per AC"
     else
       bad "ERA: --bind rc=$er_rc, token lines=$er_n [$er_out]"
+    fi
+    er_l="$(grep -E '^\| ST9-[345] \|' "$ER_W/stories/story-1-2.md" | tr '\n' ' ')"
+    if [ "$er_l" = "| ST9-3 | - |  |  | | ST9-4 | - |  |  | | ST9-5 | a |  |  | | ST9-5 | b |  |  | " ]; then
+      ok "LETTER: a (a)/(b) after FR-S9-2 or after answer is a citation (one row, Case -); an AC's own (a)/(b) after 'FR-S9-2:' is lettered a, b"
+    else
+      bad "LETTER: bound rows [$er_l]"
     fi
     er_set() { awk -v k="$1" '{ if ($0 == "| ST9-1 | - |  |  |") print "| ST9-1 | - | " k " | x.py::t |"; else if ($0 == "| ST9-2 | - |  |  |") print "| ST9-2 | - | test | y.py::t |"; else print }' "$ER_W/stories/story-1-1.md" > "$2"; }
     for er_k in unit test; do
