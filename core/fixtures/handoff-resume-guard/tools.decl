@@ -17,6 +17,7 @@ jq
 ls
 mkdir
 mktemp
+mv
 rm
 sed
 sort

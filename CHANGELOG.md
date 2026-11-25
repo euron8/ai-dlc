@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1244.0] - 2026-11-25
+
+### A handoff the Stop guard verified complete stops re-arming it later in the same session, and a handoff that did not complete still arms it (BL-1248)
+
+- For every consumer lead that finishes a handoff and keeps working in the same session. The completion stamp `_bmad-output/.handoff-complete`, which the Stop guard writes only after checking every handoff step, now records when the handoff completed, for which session, and the snapshot's HANDOFF POINT record lines. An ordinary later snapshot write no longer re-arms the guard: the snapshot record arms it again only when a record line appears that the stamp does not hold. The operator's request rows in the continuation log stop arming it once they are older than the completion, for the session that completed; a request typed at or after the completion still arms it. Closes PC-S324-HANDOFF-PENDING-KEY3-IS-NEVER-DISCHARGED-IN-SESSION, and repairs the stale-snapshot-record re-arm that BL-281 fixed and ordinary snapshot edits had defeated.
+- For every consumer whose lead writes the handoff record as a list item (`- HANDOFF POINT (...)`). That spelling now arms the guard like the heading and bold forms; prose that merely mentions the record still does not.
+- Carry window. A stamp written before this release is empty and is still read the old way, by comparing modification times, until the next verified completion rewrites it. Consumer `.gitignore` sync also ignores `_bmad-output/.handoff-complete.tmp*`, the temporary file the stamp is written through.
+
 ## [0.1243.0] - 2026-11-25
 
 ### brownfield-c's backfill planning gate no longer fails before discovery writes the brief, the adversary role file stops telling an elicitation shard to write a verdict, and Check 15 stops restating its validator's selector (BL-1240, BL-1241, BL-819 advances)

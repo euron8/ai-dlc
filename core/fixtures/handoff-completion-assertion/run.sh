@@ -1658,10 +1658,69 @@ if [ "$r" = allow ] && [ "$_c5b" = present ]; then
 else
   bad "  the satisfied Stop verdict=$r stamp=$_c5b — key 2's discharge has no writer, so the reader above can never fire on a real tree"
 fi
+# (hc-h) THE STAMP'S CONTENT, from that same satisfied Stop. Line 1 is `completed_at: ` plus the
+#     hook's own timestamp, read independently off the ALLOWED_BY_PAUSE row the same run wrote;
+#     line 2 names the session; and the stamp holds the snapshot's record line, extracted here
+#     with a fixed-string grep, never with the predicate's grammar.
+H_STAMP="$ROOT/h-stamp"; cp "$(HC "$P_DISK")" "$H_STAMP" 2>/dev/null || : > "$H_STAMP"
+_h_ts="$(sed -n 's/^## \([^ ]*\) -- ALLOWED_BY_PAUSE$/\1/p' "$(disk_log)" 2>/dev/null | tail -1)"
+_h_rec="$(grep -F 'HANDOFF POINT' "$SNAP_BOLD_SRC" | head -1)"
+_h_l1="$(sed -n 1p "$H_STAMP")"; _h_l2="$(sed -n 2p "$H_STAMP")"
+if [ -n "$_h_ts" ] && [ -n "$_h_rec" ] && [ "$_h_l1" = "completed_at: $_h_ts" ] && [ "$_h_l2" = "session: $SESS_A" ] \
+   && grep -qxF -- "$_h_rec" "$H_STAMP"; then
+  ok "(hc-h) the satisfied Stop's stamp reads completed_at: $_h_ts (its own ALLOWED_BY_PAUSE row's timestamp), session: $SESS_A, and holds the snapshot's record line"
+else
+  bad "(hc-h) the stamp's content is wrong: line 1 [$_h_l1], line 2 [$_h_l2], hook row ts [$_h_ts], record line held: $(grep -cxF -- "$_h_rec" "$H_STAMP" 2>/dev/null) — keys 2 and 3 cannot discharge from it"
+fi
 rm -f "$P_DISK/_bmad-output/handoff-guard-state.txt" "$P_DISK/_bmad-output/.handoff-guard-armed"
 r="$(disk "$SESS_A")"
 [ "$r" = allow ] && ok "  and the NEXT paused Stop of that same tree ALLOWS — the two halves agree, which is the whole defect" \
                  || bad "  the next Stop of the completed tree still BLOCKED ($r) — the writer's stamp is not the file the reader reads, or the comparison is the wrong way round"
+
+# =============================================================================
+# KEY 3's IN-SESSION DISCHARGE — the stamp's completed_at bounds this session's rows, by value
+# =============================================================================
+# Every case: the pause flag, no snapshot, a literal stamp, and request rows at literal header
+# timestamps; nothing is ordered by sleeping. (hc-e) is the discharge and passes only on the fix;
+# (hc-f), (hc-g), (hc-iv) and (hc-vi) must still BLOCK, each one property from (hc-e), and are fail-closed.
+K3_AT="2026-08-30T12:05:00Z"
+k3() { # k3 <stamp-session> <row-ts>... -> verdict; one request row of SESS_A per ts, in argument order
+  local s="$1" t; shift
+  log_open "$LG"; for t in "$@"; do row_prompt "$LG" "$SESS_A" "$t" "$P_INTENT"; done
+  dsetup "$LG"
+  printf 'completed_at: %s\nsession: %s\n' "$K3_AT" "$s" > "$(HC "$P_DISK")"
+  disk "$SESS_A"
+}
+k3_via() { grep -qF -- "via log-request" "$(disk_log)" 2>/dev/null; }
+r="$(k3 "$SESS_A" "2026-08-30T12:00:00Z")"
+if [ "$r" = allow ] && grep -q -- '-- ALLOWED_BY_PAUSE$' "$(disk_log)" 2>/dev/null; then
+  ok "(hc-e) this session's request row OLDER than the stamp's completed_at -> ALLOW, the Stop reaching Check 1's ALLOWED_BY_PAUSE row (a verified completion discharges key 3 in-session)"
+else
+  bad "(hc-e) a request row older than this session's completion stamp gave $r — key 3 is never discharged in-session, and every later paused Stop re-arms the guard"
+fi
+r="$(k3 "$SESS_A" "2026-08-30T12:10:00Z")"
+{ [ "$r" = block ] && k3_via; } && ok "(hc-f) a request row NEWER than completed_at -> BLOCK via log-request (a request after the completion still arms)" \
+                               || bad "(hc-f) a request row after the completion gave $r (via log-request: $(k3_via && echo yes || echo no)) — the stamp discharges requests it never saw"
+r="$(k3 "$SESS_A" "$K3_AT")"
+{ [ "$r" = block ] && k3_via; } && ok "(hc-g) a request row AT completed_at (a tie) -> BLOCK via log-request (the tie fails closed)" \
+                               || bad "(hc-g) a request row tied with completed_at gave $r — the bound is strict the wrong way and a request typed while the Stop was judged is lost"
+r="$(k3 "$SESS_A" "2026-08-30T12:10:00Z" "2026-08-30T12:00:00Z")"
+{ [ "$r" = block ] && k3_via; } && ok "(hc-iv) a NEWER request row printed BEFORE an older one -> BLOCK via log-request (compared by value, never by position)" \
+                               || bad "(hc-iv) an out-of-order log with a request after completed_at gave $r — the bound is read off log position"
+r="$(k3 "$SESS_B" "2026-08-30T12:00:00Z")"
+{ [ "$r" = block ] && k3_via; } && ok "(hc-vi) a stamp from ANOTHER session, this session's row older than its completed_at -> BLOCK via log-request (the key-3 discharge is session-bound)" \
+                               || bad "(hc-vi) another session's stamp discharged this session's request ($r)"
+
+# (hc-B1) A LEAD-STARTED HANDOFF: no request row, the entry marker present, the snapshot's record line
+#      already held by the real writer's stamp (hc-h). Key 1 arms it. Fail-closed: passes on base too.
+dsetup "" yes
+snap_at "$P_DISK"
+touch -t 202001010000 "$P_DISK/_bmad-output/pipeline-snapshot.md"   # the driver signal must be NEWER than the snapshot
+cp "$H_STAMP" "$(HC "$P_DISK")"
+rr="$(reason "$(drive "$P_DISK" "$SESS_A" "$T_NONE")")"   # no transcript, as (nt2): only the disk arms convict
+{ has "$rr" "$MARKER_MARK" && grep -qF -- "via entry-marker" "$(disk_log)" 2>/dev/null; } \
+  && ok "(hc-B1) lead-started handoff, marker present, record line already stamped -> BLOCK via entry-marker with the step-5 text" \
+  || bad "(hc-B1) a lead-started handoff with its marker present was not blocked via entry-marker ($([ -n "$rr" ] && echo "different text" || echo "allowed")) — the stamp has disarmed key 1"
 
 # =============================================================================
 # ai-dlc-recover.sh — THE STEP-FILE OVERRIDE (the predicate, through the compact caller)
@@ -1785,7 +1844,7 @@ fi
 # only because it is a legal spelling the key must still accept. A battery carrying (o-synth)
 # alone passes against the grammar that shipped broken.
 rsetup "$P_REC" "$SNAP_BOLD" yes no
-rassert "(o) key 2 as the reference consumer ACTUALLY wrote it — a bold lead-in, no '#' -> handoff.md" \
+rassert "(o) key 2 as the reference consumer ACTUALLY wrote it — a bold lead-in, no '#' -> handoff.md [= hc-d: no stamp is PENDING]" \
   "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
   "(o) the ONE real handoff record that exists scores as a non-instance — a grammar that demands a heading misses the very record this key was added to detect, and a consumer mid-handoff at pull time has this key and nothing else"
 
@@ -1816,9 +1875,82 @@ rsetup "$P_REC" "$SNAP_BOLD" yes no
 : > "$(HC "$P_REC")"
 touch -t 202001010000 "$(HC "$P_REC")"
 cp "$SNAP_BOLD" "$P_REC/_bmad-output/pipeline-snapshot.md"
-rassert "  control: a record NEWER than the stamp still routes to handoff.md — the discharge is the ordering, not the file's presence" \
+rassert "  control: a record NEWER than the stamp still routes to handoff.md — the discharge is the ordering, not the file's presence [= hc-c: a legacy 0-byte stamp older than the snapshot is PENDING]" \
   "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
   "  a handoff record written after the previous handoff's stamp was acquitted — one completed handoff disarms the recovery override for good"
+# That control is also (hc-c): a legacy 0-byte stamp older than the snapshot is PENDING; and (o) is (hc-d):
+# no stamp is PENDING.
+
+# KEY 2 AGAINST A STAMP THAT HOLDS ITS RECORD LINES. Every snapshot below is the bold seed with one
+# line changed or appended; the stamp's record line is cut from that seed with a fixed-string grep,
+# never with the predicate's grammar. mtimes are literal (`touch -t`): K2_OLD for the earlier file,
+# K2_NEW for the later. (hc-a) and the round trip (hc-v) are the discharge and pass only on the fix; every
+# PENDING arm beside them differs in one property.
+K2_OLD=202001010000; K2_NEW=202101010000
+K2_REC="$(grep -F 'HANDOFF POINT' "$SNAP_BOLD" | head -1)"
+[ -n "$K2_REC" ] || broken "the bold seed carries no HANDOFF POINT line, so no key-2 stamp arm below can express its case"
+K2_STAMP="$ROOT/k2-stamp"; printf 'completed_at: 2026-08-30T12:05:00Z\nsession: %s\n%s\n' "$SESS_A" "$K2_REC" > "$K2_STAMP"
+K2_BAD="$ROOT/k2-stamp-unparseable"; printf 'completed: yesterday\nsession: %s\n%s\n' "$SESS_A" "$K2_REC" > "$K2_BAD"
+k2snap() { # k2snap <out> <base-snapshot> <awk program over it>
+  awk "$3" "$2" > "$1"
+}
+K2_SN_B="$ROOT/snap-k2-new-record.md";  k2snap "$K2_SN_B" "$SNAP_BOLD" '{ print } END { print ""; print "**HANDOFF POINT (operator-requested, second handoff after gate-3).** The next handoff." }'
+K2_SN_II="$ROOT/snap-k2-amended.md";    k2snap "$K2_SN_II" "$SNAP_BOLD" '/HANDOFF POINT/ { print $0 " (amended)"; next } { print }'
+K2_SN_III="$ROOT/snap-k2-lowercase.md"; k2snap "$K2_SN_III" "$SNAP_BOLD" '/HANDOFF POINT/ { sub(/HANDOFF POINT/, "handoff point") } { print }'
+K2_SN_N1="$ROOT/snap-k2-prose.md";      k2snap "$K2_SN_N1" "$SNAP_PLAIN" '{ print } END { print ""; print "see the HANDOFF POINT section below" }'
+K2_SN_N2="$ROOT/snap-k2-list-near.md";  k2snap "$K2_SN_N2" "$SNAP_PLAIN" '{ print } END { print ""; print "- the handoff point was moved" }'
+K2_SN_L="$ROOT/snap-k2-list.md";        k2snap "$K2_SN_L" "$SNAP_PLAIN" '{ print } END { print ""; print "- HANDOFF POINT (operator-requested, mid gate-3 for story-307-1)" }'
+grep -qxF -- "$K2_REC (amended)" "$K2_SN_II" && grep -qF 'handoff point (operator-requested' "$K2_SN_III" && ! grep -qF 'HANDOFF POINT' "$K2_SN_III" \
+  && grep -qxF -- '- HANDOFF POINT (operator-requested, mid gate-3 for story-307-1)' "$K2_SN_L" \
+  || broken "a key-2 stamp-arm snapshot did not take its one-line change"
+k2() { # k2 <snapshot> <stamp|-> <older: stamp|snapshot> -> sets up P_REC
+  rsetup "$P_REC" "$1" yes no
+  [ "$2" = - ] || cp "$2" "$(HC "$P_REC")"
+  if [ "$2" != - ]; then
+    if [ "$3" = stamp ]; then touch -t "$K2_OLD" "$(HC "$P_REC")"; touch -t "$K2_NEW" "$P_REC/_bmad-output/pipeline-snapshot.md"
+    else touch -t "$K2_OLD" "$P_REC/_bmad-output/pipeline-snapshot.md"; touch -t "$K2_NEW" "$(HC "$P_REC")"; fi
+  fi
+}
+k2 "$SNAP_BOLD" "$K2_STAMP" stamp
+rassert "(hc-a) a stamp holding the record line, then a LATER ordinary snapshot write -> the snapshot's own step file (the record line is discharged, whatever the mtime)" \
+  "$P_REC" "$SESS_A" "$STEP_IMPL" \
+  "(hc-a) an ordinary snapshot write after a verified completion re-armed key 2 — the discharge is by mtime and every later snapshot edit routes the recovery into handoff.md"
+k2 "$K2_SN_B" "$K2_STAMP" stamp
+rassert "(hc-b) the same stamp, then the snapshot gains a NEW record line -> handoff.md (the next handoff still arms)" \
+  "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
+  "(hc-b) a new record line written after the stamp was acquitted by the previous handoff's stamp"
+k2 "$SNAP_BOLD" "$K2_BAD" stamp
+rassert "(hc-i) a NON-EMPTY unparseable stamp holding the record line, the snapshot newer -> handoff.md (the legacy mtime path)" \
+  "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
+  "(hc-i) an unparseable stamp discharged key 2 by its record lines — only a parseable stamp is a membership discharge"
+k2 "$SNAP_BOLD" "$K2_BAD" snapshot
+rassert "  twin: the same unparseable stamp NEWER than the snapshot -> the snapshot's own step file (the legacy path still discharges by mtime)" \
+  "$P_REC" "$SESS_A" "$STEP_IMPL" \
+  "  an unparseable stamp newer than the snapshot armed key 2 — the legacy mtime path is gone, not kept"
+k2 "$K2_SN_II" "$K2_STAMP" stamp
+rassert "(hc-ii) a snapshot line EXTENDING the stamp's line (' (amended)') -> handoff.md (membership is whole-line, never prefix or substring)" \
+  "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
+  "(hc-ii) an amended record line was discharged by the stamp's shorter line — membership is a prefix or substring test"
+k2 "$K2_SN_III" "$K2_STAMP" stamp
+rassert "(hc-iii) a CASE-VARIANT record line ('handoff point') -> handoff.md (membership is exact; only selection is case-blind)" \
+  "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
+  "(hc-iii) a lower-case record line was discharged by the stamp's upper-case one — membership is case-blind"
+k2 "$K2_SN_N1" - -
+rassert "(hc-nm1) NEAR-MISS: a mid-line prose mention ('see the HANDOFF POINT section below') -> the snapshot's own step file" \
+  "$P_REC" "$SESS_A" "$STEP_IMPL" \
+  "(hc-nm1) a prose mention of the record armed key 2"
+k2 "$K2_SN_N2" - -
+rassert "(hc-nm2) NEAR-MISS: a list item not opening with the token ('- the handoff point was moved') -> the snapshot's own step file" \
+  "$P_REC" "$SESS_A" "$STEP_IMPL" \
+  "(hc-nm2) a list item merely naming the handoff point armed key 2 — the list prefix admits any following text"
+k2 "$K2_SN_L" - -
+rassert "(hc-lp) the LIST-ITEM record spelling ('- HANDOFF POINT (...)') -> handoff.md (the grammar takes the list prefix)" \
+  "$P_REC" "$SESS_A" "$STEP_HANDOFF" \
+  "(hc-lp) a list-item record line did not arm key 2 — the grammar has no list prefix"
+k2 "$SNAP_BOLD" "$H_STAMP" stamp
+rassert "(hc-v) round trip: the stamp a real satisfied Stop wrote (hc-h), then a later snapshot write -> the snapshot's own step file" \
+  "$P_REC" "$SESS_A" "$STEP_IMPL" \
+  "(hc-v) the real writer's stamp does not discharge key 2 after a later snapshot write — writer and reader disagree on the record lines"
 
 # (p) KEY 3, this session's request rows, alone: no entry marker and no HANDOFF POINT heading.
 #     TWO ROWS, request first and a question about it second. See log_two_row's header.

@@ -302,7 +302,14 @@
       "transient": true,
       "producer": "core/hooks/ai-dlc-continue.sh",
       "ignore": "_bmad-output/.handoff-complete",
-      "reason": "Written by the Stop guard on the branch where every handoff arm was read and found satisfied, and read by ai-dlc-handoff-pending.sh as key 2's discharge. The snapshot's HANDOFF POINT line has no writer that removes it, so without this stamp a completed handoff armed the guard permanently; the predicate re-arms on a snapshot NEWER than the stamp, which is what a later handoff's step 3 produces. A tracked copy discharges the key for a completion that never happened in this checkout."
+      "reason": "Written by the Stop guard on the branch where every handoff arm was read and found satisfied, and read by ai-dlc-handoff-pending.sh as the in-session discharge of keys 2 and 3. It holds completed_at (the Stop hook's timestamp), session, and the snapshot's HANDOFF POINT record lines at that moment: key 2 re-arms only on a record line the stamp does not hold, and key 3 counts only this session's request rows at or after completed_at. A legacy empty stamp re-arms key 2 on a snapshot NEWER than it. A tracked copy discharges the keys for a completion that never happened in this checkout."
+    },
+    {
+      "name": ".handoff-complete.tmp",
+      "transient": true,
+      "producer": "core/hooks/ai-dlc-continue.sh",
+      "ignore": "_bmad-output/.handoff-complete.tmp*",
+      "reason": "The sibling temp .handoff-complete.tmp.<pid> the completion stamp is written to before it is moved over .handoff-complete, so a reader never sees a half-written stamp; a leftover is from a hook killed between the write and the move."
     },
     {
       "name": "ai-dlc-update",
