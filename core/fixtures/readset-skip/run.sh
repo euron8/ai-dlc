@@ -4443,7 +4443,7 @@ ck_w_a() { local p="$1" x="$2" t="$3" k
     "$(grep -cxF "$t.bin/cktool	$(ck_sha "$t.bin/cktool")" "$k" 2>/dev/null)" \
     "$( { grep -cE '^/[^	]*	[0-9a-f]{64}$' "$k" 2>/dev/null | grep -qvx 0; } && echo y || echo n)" \
     "$(grep -cxF "src/a.sh	$(ck_sha "$t/src/a.sh")" "$k" 2>/dev/null)" \
-    "$( { [ -f "$k" ] && tail -n +4 "$k" | LC_ALL=C sort -c; } >/dev/null 2>&1 && echo y || echo n)" \
+    "$( { [ -f "$k" ] && grep -v '^#' "$k" | LC_ALL=C sort -c; } >/dev/null 2>&1 && echo y || echo n)" \
     "$(ck_ln "$t" 2 "$CK_A0")"
 }
 CK_WANT_a='p1=alpha beta delta|0 p2=|0 hdr=#format k1,#state ok,#tools canonical, tools=1 trow=y row=1 sorted=y ann=1'
@@ -5515,7 +5515,7 @@ vs_plant() { # <pool> <t> <decision dir> <store> <fx>: the entry the digest name
     # shellcheck disable=SC1090
     . "$1" 2>/dev/null
     id="$(readset_vs_ident_here)" || exit 1
-    tail -n +4 "$3/.k/$5" > "$3/.pl.rows" && [ -s "$3/.pl.rows" ] || exit 1
+    grep -v '^#' "$3/.k/$5" > "$3/.pl.rows" && [ -s "$3/.pl.rows" ] || exit 1
     readset_vs_input "$5" "$id" "$3/.pl.rows" > "$3/.pl.d" || exit 1
     mkdir -p "$4" && { printf '#format k1\n#state ok\n'; cat "$3/.pl.d"; printf '#pending 0\n'; } > "$4/$(shasum -a 256 < "$3/.pl.d" | cut -d' ' -f1)" )
 }
@@ -5705,7 +5705,7 @@ vs_census() { # <pool> <fixture root> <runner file> <t> <hook file>: "inj=<n> ct
     c=""
     for ps in d1 d2; do
       [ -s "$W.cd/$ps/ko.$f" ] || { c="$c/KO"; continue; }
-      tail -n +4 "$W.cd/$ps/.k/$f" > "$t/hk.$f.$ps" 2>/dev/null && [ -s "$t/hk.$f.$ps" ] || { c="$c/NOK"; continue; }
+      grep -v '^#' "$W.cd/$ps/.k/$f" > "$t/hk.$f.$ps" 2>/dev/null && [ -s "$t/hk.$f.$ps" ] || { c="$c/NOK"; continue; }
       if cmp -s "$W.cd/$ps/ko.$f" "$t/hk.$f.$ps"; then c="$c/same"
       else n="$(diff "$W.cd/$ps/ko.$f" "$t/hk.$f.$ps" | grep -c '^[<>]')"
         c="$c/differ:$n:$(diff "$W.cd/$ps/ko.$f" "$t/hk.$f.$ps" | grep '^[<>]' | head -1 | tr ' \t' '__')"; fi
@@ -5728,7 +5728,7 @@ vs_cnorm() { # <census t> <fixture root>
   local t="$1" x="$2" W="$1/W" s f src v="" ok r
   for s in hk ko; do
     for f in ref dsl crlf cons; do
-      if [ "$s" = hk ]; then src="$W.cd/d1/.k/$f"; [ -f "$src" ] && tail -n +4 "$src" > "$t/n.$s.$f.all" || : > "$t/n.$s.$f.all"
+      if [ "$s" = hk ]; then src="$W.cd/d1/.k/$f"; [ -f "$src" ] && grep -v '^#' "$src" > "$t/n.$s.$f.all" || : > "$t/n.$s.$f.all"
       else src="$W.cd/d1/ko.$f"; [ -f "$src" ] && cp "$src" "$t/n.$s.$f.all" || : > "$t/n.$s.$f.all"; fi
       awk -F'\t' -v o="$x/$f/" 'index($1, o) != 1' "$t/n.$s.$f.all" > "$t/n.$s.$f"
     done

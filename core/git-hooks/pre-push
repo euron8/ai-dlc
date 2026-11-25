@@ -122,7 +122,7 @@ ps_select() { # decides every keyed step in the runlist from the fixture mechani
   PS_KD="$kd"
   # THE MARK precedes the key pass, so a declared input changed after it is either in the keys or newer than the mark.
   : > "$c/.mark" 2>/dev/null
-  ( KEYS_DIR="$kd"; FXROOT="$PS_DECL_ROOT"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; VERIFIED_RECORD=/dev/null # pool-shadow: subshell
+  ( KEYS_DIR="$kd"; FXROOT="$PS_DECL_ROOT"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; VERIFIED_RECORD=/dev/null; READSET_NOMODES=1 # pool-shadow: subshell
     readset_drop_excluded() { cat; } # pool-shadow: subshell
     readset_manifest "$c"
     [ -s "$c/.now" ] || exit 1
@@ -981,7 +981,12 @@ readset_manifest() {
     :
   } | readset_universe_paths | sort -u > "$out/.paths.all"
   readset_drop_ignored "$out/.paths.all" "$out/.paths"; ign_rc=$?
-  while IFS= read -r p; do [ -f "$p" ] && printf '%s\n' "$p"; done < "$out/.paths" > "$out/.files"
+  # `.modes` (BL-1155): `<path>\t<tag>` for each admitted path that is not a plain regular file, `x` for an executable
+  # one and `l:<target>` for a symlink, so a mode or type change reaches the key decision. Builtins, and one readlink
+  # per symlink.
+  while IFS= read -r p; do [ -f "$p" ] || continue; printf '%s\n' "$p"
+    if [ -L "$p" ]; then printf '%s\tl:%s\n' "$p" "$(readlink "$p")" >&3; elif [ -x "$p" ]; then printf '%s\tx\n' "$p" >&3; fi
+  done < "$out/.paths" > "$out/.files" 3> "$out/.modes"
   tr '\n' '\000' < "$out/.files" | xargs -0 -n 200 shasum -a 256 -- > "$out/.sums" 2>/dev/null
   hash_rc=$?
   awk '{ path = $0; sub(/^[0-9a-f]+  /, "", path); print path "\t" $1 }' "$out/.sums" | sort > "$out/.now"
@@ -1006,6 +1011,8 @@ readset_key_records() { # <keys dir>
        /^#state / { print f "\t#state\t" substr($0, 8); next }
        /^#tools / { print f "\t#tools\t" substr($0, 8); next }
        /^#pending / { print f "\t#pending\t" substr($0, 10); next }
+       /^#modes / { print f "\t#modes\t" substr($0, 8); next }
+       /^#mode\t/ { print f "\t" $0; next }
        /^#/ { next }
        { print f "\t" $0 }' "$1"/*.key 2>/dev/null
 }
@@ -1707,6 +1714,7 @@ readset_git_exec_path() {
 # VS-IDENTITY 1 f9b807a1a25300e88515d3dd0b540b78d83247360d76ba0c357b745c18a52df3 BL-1163 memoizes readset_strip_keys and readset_tools' scan under the readset-memo record, off unless a depth-0 push entry; every key row, .dkeys, .ftools and .tools is byte-identical, so no stored entry changes meaning
 # VS-IDENTITY 1 746efba9d11a1197bda98bb7975dcaa74df97d66b77e8aef4890f0351a828e35 readset_excluded_re escapes each excluded name's dots with a parameter expansion, not a sed per name (BL-1124); the regex is byte-identical, so no entry changes meaning
 # VS-IDENTITY 1 168ce97fa31f560f8ee03b176d19aec6fa0eaa6fd20b789948bbe1a35a62ab2f readset_span_sha and readset_tail_sha are one awk and one shasum each, not a four-exec pipeline (BL-1124); every sha is byte-identical, so no entry changes meaning
+# VS-IDENTITY 1 ce67ecf996360cc3ca4cae76eef806c2cb576470a9fb3f8458ee8ebd848599b2 readset_manifest writes `.modes` and a key record's `#modes`/`#mode` lines are header lines to every record reader (BL-1155); no key row, digest input or store body changes, so no entry changes meaning
 # READSET_VS_BEGIN
 READSET_VS_FORMAT=1
 readset_vs_store() { # <project root>: prints <base>/<root commit sha>, or NOTHING (store OFF)
@@ -1777,10 +1785,11 @@ readset_vs_entry() { # <entry> <digest input file>
   cmp -s "$2.e" "$2" || return 1
   printf '%s\n' "$n"
 }
-# A KEY RECORD'S ROWS, ONE READER: every line but the header lines `#format `, `#state `, `#tools ` and `#pending `.
+# A KEY RECORD'S ROWS, ONE READER: every line but the header lines `#format `, `#state `, `#tools `, `#pending `,
+# `#modes ` and `#mode<blank>` (BL-1155).
 # Status 1 when it prints no row.
 readset_key_rows() { # <record>
-  grep -vE '^#(format|state|tools|pending) ' "$1"
+  grep -vE '^#(format|state|tools|pending|modes) |^#mode[[:blank:]]' "$1"
 }
 # MANY FIXTURES' DIGEST ROWS IN A FIXED NUMBER OF EXECS (readset_verdicts). For each <fx> line of <cand>, in order,
 # whose <keys dir>/<fx> holds a key row: `<fx>\tI\t` and readset_vs_inproc's row, `<fx>\tJ\t` and readset_vs_judge's
@@ -1823,7 +1832,7 @@ readset_vs_want() { # <cand> <keys dir> <scratch prefix>
         r = t ? substr(l, t + 1) : ""; t = index(r, "\t"); J[f] = t ? substr(r, 1, t - 1) : r }
       kd = ENVIRON["VD"] }
     { k = kd "/" $1; n = 0
-      while ((getline l < k) > 0) if (l !~ /^#(format|state|tools|pending) /) R[++n] = l
+      while ((getline l < k) > 0) if (l !~ /^#(format|state|tools|pending|modes) / && l !~ /^#mode[[:blank:]]/) R[++n] = l
       close(k)
       if (!n) next
       print $1 "\tI\t#inproc " (($1 in L) ? "listed" : "unlisted") " " (($2 == "n") ? "none" : ($2 == "s") ? $3 : (($3 in S) ? S[$3] : ""))
@@ -2852,7 +2861,8 @@ readset_keys() { # <list> <out>
   : > "$out/.khdr"; : > "$out/.kout"; : > "$out/.kpn"
   KPN="$out/.kpn" KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
   KM="$out/.mapped.all" KLOC="$out/.local.valid" KC="$out/.krecs" KF="$out/.kl" KH="$out/.khdr" KO="$out/.kout" \
-  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" KRL="$READSET_RUNNER_LEGACY" KRC="$READSET_RUNNER_CARRY" awk -v seed="$seed" -v root="$FXROOT" '
+  KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" KRL="$READSET_RUNNER_LEGACY" KRC="$READSET_RUNNER_CARRY" \
+  KMD="$out/.modes" awk -v seed="$seed" -v root="$FXROOT" -v nm="${READSET_NOMODES:+1}" '
     function rd(file, arr,   l, t) { while ((getline l < file) > 0) { t = index(l, "\t"); arr[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     function kids(file, set,   l, t, p, i) { while ((getline l < file) > 0) { t = index(l, "\t"); p = (t ? substr(l, 1, t - 1) : l)
         while ((i = match(p, /\/[^\/]*$/)) > 0) { set[substr(p, 1, i - 1) SUBSEP substr(p, i + 1)] = 1; p = substr(p, 1, i - 1) } } }
@@ -2918,7 +2928,10 @@ readset_keys() { # <list> <out>
         if (a[2] == "#state") RST[a[1]] = a[3]
         else if (a[2] == "#tools") RTL[a[1]] = a[3]
         else if (a[2] == "#pending") RPN[a[1]] = a[3]
+        else if (a[2] == "#modes") RMH[a[1]] = a[3]
+        else if (a[2] == "#mode") RMD[a[1] SUBSEP a[3]] = a[4]
         else { RK[a[1]] = RK[a[1]] "\n" a[2]; RV[a[1] SUBSEP a[2]] = a[3] } }
+      if (!nm) while ((getline l < ENVIRON["KMD"]) > 0) { t = index(l, "\t"); MD[substr(l, 1, t - 1)] = substr(l, t + 1) }
       while ((getline f < ENVIRON["KF"]) > 0) {
         delete K; delete R; delete X; delete LM
         um = !(f in MAPPED)
@@ -2957,8 +2970,19 @@ readset_keys() { # <list> <out>
             if (k == root && sibs_only(k)) { SB = 1; continue }
             if (first == "" || k < first) first = k; if (k ~ /\/$/) LM[k] = 1; else fch = 1 }
           for (k in K) if (!(k in R)) { if (substr(k, 1, 1) == "/") { if (!mig) tch = 1 } else if (first == "" || k < first) first = k } }
+        # A MODE OR TYPE CHANGE (BL-1155): a record carrying `#modes v1` compares each recorded file key present then and
+        # now on its tag (`#mode` lines; none is plain) against `.modes`, and a difference runs it, c `x`, which outranks
+        # a content change because the store, twin and side-record skips clear only `k`. A record without the header
+        # (written before it) adopts the current tags: `am`, republished c `a` when nothing else runs it.
+        mch = ""; am = 0
+        if (has && !seed && !nm) {
+          if (RMH[f] == "v1") { for (k in R) { if (substr(k, 1, 1) == "/" || k ~ /\/$/ || R[k] == "-" || cv(f, k) == "-") continue
+              if ((f in DECL) && !(k in K) && index(k, root f "/") != 1) continue
+              if (((k in MD) ? MD[k] : "") != (((f SUBSEP k) in RMD) ? RMD[f SUBSEP k] : "") && (mch == "" || k < mch)) mch = k } }
+          else am = 1 }
         run = 1; why = ""; c = ""
         if (!has) { why = "unrecorded"; c = "u" }
+        else if (mch != "") { why = "mode changed " mch; c = "x" }
         else if (st == "stale" && !(f in LOC) && !((f in DECL) && RK[f] != "")) { why = "stale"; c = "s" }
         else if (tch) { why = "tools changed"; c = "k" }
         else if (first != "") { why = um ? "unmapped: closure changed" : "changed " first; c = "k" }
@@ -2967,10 +2991,10 @@ readset_keys() { # <list> <out>
         if (!run && (f in UN)) { run = 1; why = (substr(UN[f], 1, 7) == "mapper " || index(UN[f], "git.decl range refused ") == 1 || index(UN[f], "spans.decl refused ") == 1) ? UN[f] : "tool unresolved " UN[f]; c = "k" }
         # A STALE RECORD WITH A VALID ROW SET AND NO MOVED KEY SKIPS, and its `ok` record is published
         # on this push through `.k.always`, as a seeded one is: c `v` marks it.
-        if (!run) { if (!seed && st != "stale" && !mig && !SB && !lg) { print f "\tskip\t\t\t" st; continue }
-                    ns = seed ? "seeded" : ((st == "stale") ? "ok" : st); if (!seed) c = (st == "stale") ? "v" : "m"
+        if (!run) { if (!seed && st != "stale" && !mig && !SB && !lg && !am) { print f "\tskip\t\t\t" st; continue }
+                    ns = seed ? "seeded" : ((st == "stale") ? "ok" : st); if (!seed) c = (st == "stale") ? "v" : ((am && !mig && !lg) ? "a" : "m")
                     if (SB && !seed && st != "stale") { c = "b"; ns = "ok" }
-                    if (c == "m" && rl && !(f in DECL)) for (k in R) if (substr(k, 1, 1) != "/") X[k] = 1 }
+                    if ((c == "m" || c == "a") && rl && !(f in DECL)) for (k in R) if (substr(k, 1, 1) != "/") X[k] = 1 }
         else if (!has || um) ns = "ok"
         else if (st == "stale" && !(f in DECL)) ns = ((f in LOC) ? "ok" : "stale")
         else if (fch && !(f in DECL)) ns = "stale"
@@ -2983,10 +3007,18 @@ readset_keys() { # <list> <out>
         for (k in X) print f "\t" k "\t" cv(f, k) > ENVIRON["KO"]
         print f "\t" (run ? "run" : "skip") "\t" why "\t" c "\t" ns }
     }' > "$out/.kdec"
-  LC_ALL=C sort -t "$tab" -k1,1 -k2 "$out/.kout" | awk -F'\t' -v kd="$out/.k" -v hdr="$out/.khdr" '
-    BEGIN { while ((getline l < hdr) > 0) { t = index(l, "\t"); st[substr(l, 1, t - 1)] = substr(l, t + 1) } }
-    $1 != f { if (f != "") close(o); f = $1; o = kd "/" f; print "#format k1" > o; print "#state " st[f] > o; print "#tools canonical" > o }
-    { print substr($0, length(f) + 2) > o }'
+  # THE RECORD carries `#modes v1` after its header and one `#mode\t<path>\t<tag>` line per non-plain file key in row
+  # order, ahead of its rows (BL-1155); the publish puts `#pending` above them. READSET_NOMODES (the pre-suite) writes neither.
+  LC_ALL=C sort -t "$tab" -k1,1 -k2 "$out/.kout" | KMD="$out/.modes" awk -F'\t' -v kd="$out/.k" -v hdr="$out/.khdr" -v nm="${READSET_NOMODES:+1}" '
+    function flush() { if (f == "") return; o = kd "/" f; print "#format k1" > o; print "#state " st[f] > o; print "#tools canonical" > o
+      if (!nm) { print "#modes v1" > o; if (mb != "") printf "%s", mb > o }
+      printf "%s", rb > o; close(o) }
+    BEGIN { while ((getline l < hdr) > 0) { t = index(l, "\t"); st[substr(l, 1, t - 1)] = substr(l, t + 1) }
+      if (!nm) while ((getline l < ENVIRON["KMD"]) > 0) { t = index(l, "\t"); MD[substr(l, 1, t - 1)] = substr(l, t + 1) } }
+    $1 != f { flush(); f = $1; mb = ""; rb = "" }
+    { r = substr($0, length(f) + 2); rb = rb r "\n"
+      if (!nm) { k = substr(r, 1, index(r, "\t") - 1); if (substr(k, 1, 1) != "/" && (k in MD)) mb = mb "#mode\t" k "\t" MD[k] "\n" } }
+    END { flush() }'
   readset_verdicts "$out"
 }
 
@@ -3182,7 +3214,7 @@ cl_select() {
       fi
     fi
     awk -F'\t' '$2 == "run" { print $1 }' "$c/.kdec" > "$out/.cl.sel"
-    awk -F'\t' '$2 == "skip" && ($4 == "v" || $4 == "m" || $4 == "b") { print $1 }' "$c/.kdec" > "$c/.k.always"
+    awk -F'\t' '$2 == "skip" && ($4 == "v" || $4 == "m" || $4 == "b" || $4 == "a") { print $1 }' "$c/.kdec" > "$c/.k.always"
   fi
   n_s="$(grep -c . "$out/.cl.sel")"; case "$n_s" in ''|*[!0-9]*) n_s=0 ;; esac
   printf '   ..    consumer layout: %s of %s shipping fixture(s) run as <fx>@consumer in %s%s\n' "$n_s" "$n_c" "$cl_tree" "${why:+ -- every one, because $why}"
@@ -3405,7 +3437,7 @@ apply_readset_skip() {
   if ! readset_keys "$list" "$out" || [ "$(grep -c . "$out/.kdec" 2>/dev/null)" != "$n_all" ]; then
     printf '   ..    could not build the fixture keys -- running all %s\n' "$n_all"; cl_select "$out" keys; return 0
   fi
-  awk -F'\t' '$2 == "skip" && ($5 == "seeded" || $4 == "v" || $4 == "m" || $4 == "b") { print $1 }' "$out/.kdec" > "$out/.k.always"
+  awk -F'\t' '$2 == "skip" && ($5 == "seeded" || $4 == "v" || $4 == "m" || $4 == "b" || $4 == "a") { print $1 }' "$out/.kdec" > "$out/.k.always"
 
   if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" ]; then
     : > "$out/.k.always"
@@ -3423,7 +3455,8 @@ apply_readset_skip() {
     "$(( n_all - n_sel ))"
   awk -F'\t' '$2 == "run" && n < 10 { n++; print "   ..      " $1 ": " $3 }' "$out/.kdec"
   awk -F'\t' '$4 == "b" { n++ } END { if (n) print "   ..    read-set listings: " n " record(s) skipped on a fixture-root listing moved only by new sibling fixture directories and republished with the new listing" }' "$out/.kdec"
-  awk -F'\t' '$4 == "m" { n++ } END { if (n) print "   ..    read-set tool keys: " n " record(s) written before the fixed tool dirs skipped on their tree keys alone and are republished with canonical tool keys (once per record)" }' "$out/.kdec"
+  awk -F'\t' '$4 == "m" { n++ } $4 == "a" { a++ } END { if (n) print "   ..    read-set tool keys: " n " record(s) written before the fixed tool dirs skipped on their tree keys alone and are republished with canonical tool keys (once per record)"
+    if (a) print "   ..    read-set modes: " a " record(s) written before mode keys skipped on their content keys and are republished with the present modes and types adopted (once per record)" }' "$out/.kdec"
   if [ -s "$out/.vs" ]; then printf '   ..    verdict store: %s fixture(s) skipped on a pass recorded elsewhere: %s\n' "$(grep -c . "$out/.vs")" "$(tr '\n' ' ' < "$out/.vs" | sed 's/ $//')"; fi
   # WHAT WOULD CLEAR EACH STALE FIXTURE: a committed trace whose `# digest` line matches this tree, or a
   # valid local row. Every stale fixture is named under the reason its committed rows did not clear it.
