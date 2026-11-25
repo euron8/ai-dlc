@@ -4399,3 +4399,15 @@ Related: BL-583 item 4 (the value judgement of the two `.undeclarable` fixtures,
 Provenance: batch 266, lead ai-dlc-9b.
 
 verify: manual
+
+## BL-1245 — `gen-round-briefs.sh` writes the one cross shard line from the map's own ordinals, so a derived map's cross brief is refused by the dispatch guard's cover deny
+
+**DEFECT.** Filed by the consumer as PC-S324-GEN-ROUND-BRIEFS-CROSS-ORDINALS-FROM-MAP-NOT-1..K (graph s324, batch 267). Owner: `core/scripts/gen-round-briefs.sh`.
+
+**LANDED (vVERSION_PLACEHOLDER).** Batch 267, filed and closed in one release. `gen-round-briefs.sh` builds the cross line's `<ordinals>` as the positional cover 1..K (`COVER`, a shell loop, no fork) instead of the map's ordinal column, so a derived map (ordinals 3,4,5,6,7 at K=5) writes `cross/5 g1/1 1, 2, 3, 4, 5`, the contract of `core/skills/ai-dlc/rule-bodies/rule-28.md:390-391` "every ordinal 1..K, comma-joined" and `core/skills/ai-dlc/steps/_gate-procedures.md:450-451` "every ordinal 1..K comma-joined", which the cover deny in `ai-dlc-dispatch-guard.sh` and arm S4 of `validate-spawn-ledger.sh` read. Per-part briefs keep the map's document ordinals. `merge-adversarial-shards.sh` accepts a cross shard's `sections:`/`stories:` citations against 1..K of the FULL map (`norm_ord`, :2192-2197, used at :2786), the document ordinals, so the cross subject text now names the map ordinals the agent may cite (`ALLORD`). Fixture `story-evidence-scaffold` runs its elicitation cell on a map with ordinals 2,3 and asserts `cross/2 g1/1 1, 2` and the parts' `2/2`, `3/2`.
+
+Step: n/a
+
+Provenance: batch 267, release 267-B; id allocated by the lead ai-dlc-ad.
+
+verify: manual
