@@ -4408,6 +4408,27 @@ verify: manual
 
 Step: n/a
 
-Provenance: batch 267, release 267-B; id allocated by the lead ai-dlc-ad.
+Provenance: batch 267, release 267-B; id allocated by the lead ai-dlc-9f.
 
 verify: manual
+
+## BL-1247 — `dispatch-story.sh` prescribes the dev deliverable as `implementation-artifacts/dev-s<N>-<idx>.md`, a sprint token outside the `s<N>/` slot, so a consumer following it cannot push
+
+**LANDED (vVERSION_PLACEHOLDER).** batch 267, cluster D, filed and closed in one release. Filed by the consumer as a push-candidate ledger entry (graph ledger at df1dde6b1, :740-757). Owner: `core/scripts/dispatch-story.sh`. The brief's `Deliverable:` line now names `${WT}/_bmad-output/implementation-artifacts/s${N}/dev-${IDX}.md`, the destination `migrate-artifact-paths.sh` plans for the old spelling; by hand, `validate-artifact-paths.sh` reported BLOCKING on the old path and PASS on the new one in a scratch repo.
+
+**DEFECT.**
+
+Goal: a dev dispatched by `dispatch-story.sh` writes its deliverable where the consumer's pre-push `validate-artifact-paths.sh` accepts it. One done condition: the `Deliverable:` line carries the sprint only as the `s<N>/` directory.
+
+Baseline: `dispatch-story.sh:58` printed `dev-${NAME}.md` with NAME `s324-5-3`, a basename sprint token that the validator classifies BLOCKING.
+
+Work list:
+
+1. Print `s${N}/dev-${IDX}.md` on the `Deliverable:` line, the shape the migration tool plans.
+2. Confirm every reader of the line takes its first path-shaped token (`ai-dlc-inflight-row.sh`, `ai-dlc-dispatch-guard.sh`, `render-brief.sh`) and no other site quotes the old shape.
+
+Step: n/a
+
+Provenance: batch 267, cluster D; id allocated by the lead.
+
+verify: sh f=core/scripts/dispatch-story.sh; grep -qF 'implementation-artifacts/s${N}/dev-${IDX}.md' $f || exit 1; grep -qF 'implementation-artifacts/dev-${NAME}.md' $f && exit 2; exit 0
