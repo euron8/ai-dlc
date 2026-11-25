@@ -1563,5 +1563,60 @@ else
   bad "R1-R17: expected [$R_EXPECTED], got [$RGOT] (differing: $(rmoved "$RGOT"))"
 fi
 
+# ============================================================================
+# W1-W4: the --escalations join (exit 4, RECORDED). One ledger: a clean epoch row, then V, an
+# unread-role row carrying tool_use_id toolu_ESC1 (its name r-esc is unique, so it is a key too,
+# and no entry below mentions it). One pending.md per channel, each one property from W1's:
+#   W1 a current-sprint OVERRIDDEN entry names toolu_ESC1 as a whole token -> exit 4
+#   W2 the same entry names the epoch row's toolu_REPOCH instead          -> exit 1
+#   W3 W1's entry with Status DECIDED_AUTONOMOUSLY                         -> exit 1
+#   W4 W1's entry names toolu_ESC10, which contains V's id but is not it   -> exit 1
+# Every arm requires its VIOLATION line and the `violations=1` total to APPEAR.
+# ============================================================================
+{ RMEP; rrow 900 dev r-esc true false toolu_ESC1; } | world esc
+rctx toolu_REPOCH toolu_ESC1 > "$WORK/rm/esc.ctx"
+ESC_HDR='[S900-CHECK22-UNREAD-ROLE-OVERRIDE] dev ran with no readable role file'
+escmd() { # status token -> one pending.md
+  printf '# Escalations\n\n## %s\n\n**Status:** %s\n\nThe dispatch %s ran with no contract; the operator accepted it.\n' \
+    "$ESC_HDR" "$1" "$2"
+}
+escmd OVERRIDDEN toolu_ESC1           > "$WORK/rm/esc-w1.md"
+escmd OVERRIDDEN toolu_REPOCH         > "$WORK/rm/esc-w2.md"
+escmd DECIDED_AUTONOMOUSLY toolu_ESC1 > "$WORK/rm/esc-w3.md"
+escmd OVERRIDDEN toolu_ESC10          > "$WORK/rm/esc-w4.md"
+escrun() { # pending-file -> "<rc>\n<output>"
+  local o r
+  o="$(bash "$VSL" --ledger "$WORK/rm/esc.jsonl" --sprint 900 --settings "$WORK/settings.json" "$RM_CTX_FLAG" "$WORK/rm/esc.ctx" --escalations "$WORK/rm/$1.md" 2>&1)"; r=$?
+  printf '%s\n%s' "$r" "$o"
+}
+TAB="$(printf '\t')"
+# escnamed: rc 4, the RECORDED line, the one VIOLATION line carrying the header, violations=1.
+escnamed() {
+  local R rc; R="$(escrun "$1")"; rc="$(ercv "$R")"
+  [ "$rc" = 4 ] || { printf '%s:rc=%s' "$1" "$rc"; return; }
+  grep -qxF "VIOLATION${TAB}toolu_ESC1${TAB}unread${TAB}${ESC_HDR}" <<<"$R" || { printf '%s:noviol' "$1"; return; }
+  [ "$(grep -c '^VIOLATION' <<<"$R")" = 1 ] || { printf '%s:violcount' "$1"; return; }
+  grep -qxF '  violations=1' <<<"$R" || { printf '%s:nototal' "$1"; return; }
+  grep -qF 'RECORDED: every one of the 1 violation(s)' <<<"$R" || { printf '%s:norecorded' "$1"; return; }
+  printf 'NAMED'
+}
+# escunnamed: rc 1, V's VIOLATION line with header `-`, violations=1, the unnamed key listed, no RECORDED.
+escunnamed() {
+  local R rc; R="$(escrun "$1")"; rc="$(ercv "$R")"
+  [ "$rc" = 1 ] || { printf '%s:rc=%s' "$1" "$rc"; return; }
+  grep -qxF "VIOLATION${TAB}toolu_ESC1${TAB}unread${TAB}-" <<<"$R" || { printf '%s:noviol' "$1"; return; }
+  grep -qxF '  violations=1' <<<"$R" || { printf '%s:nototal' "$1"; return; }
+  grep -qF 'OVERRIDDEN entry in' <<<"$R" && grep -qF 'names: toolu_ESC1' <<<"$R" || { printf '%s:nounnamed' "$1"; return; }
+  grep -qF 'RECORDED:' <<<"$R" && { printf '%s:recorded' "$1"; return; }
+  printf 'UNNAMED'
+}
+WGOT="$(escnamed esc-w1) $(escunnamed esc-w2) $(escunnamed esc-w3) $(escunnamed esc-w4)"
+W_EXPECTED="NAMED UNNAMED UNNAMED UNNAMED"
+if [ "$WGOT" = "$W_EXPECTED" ]; then
+  ok "W1-W4 --escalations: an unread-role violation named by tool_use_id as a whole token of a current-sprint OVERRIDDEN entry exits 4 with RECORDED, one VIOLATION<TAB>toolu_ESC1<TAB>unread<TAB><header> line and violations=1; the same entry naming another ledger row's id, carrying Status DECIDED_AUTONOMOUSLY, or naming only toolu_ESC10 (V's id as a substring) each exits 1 with V's VIOLATION line headed '-' and V's key listed unnamed"
+else
+  bad "W1-W4: expected [$W_EXPECTED], got [$WGOT]"
+fi
+
 echo
 report_end check-22-spawn-ledger
