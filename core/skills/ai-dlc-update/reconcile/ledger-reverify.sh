@@ -2406,6 +2406,7 @@ lr_entries() { # <ledger-file> -> label TAB ord TAB directive, one row per recei
   }
   {
     shape = ledger_entry_shape($0)
+    if (__lef_idl != "" && label != "" && ledger_entry_id(label) == "") { label = __lef_idl; next }
     if (shape == "bullet") {
       flush()
       l=$0; sub(/^(- )?\*\*/,"",l); sub(/\*\*.*/,"",l)
@@ -3431,6 +3432,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)$(ledger_entry_id_awk)${CLOSE_AWK}"'
   }
   {
     shape = ledger_entry_shape($0)
+    if (__lef_idl != "" && label != "" && ledger_entry_id(label) == "") { label = __lef_idl; next }
     if (shape != "") {
       flush()
       if (label != "" && idshape(label)) { prev_id = label; prev_id_hadv = hasv; prev_id_closed = hasclose }
@@ -3567,6 +3569,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)${CLOSE_AWK}${ELC_AWK}"'
   }
   {
     shape = ledger_entry_shape($0)
+    if (__lef_idl != "" && label != "" && ledger_entry_id(label) == "") { label = __lef_idl; next }
     if (shape != "") {
       flush()
       l = $0

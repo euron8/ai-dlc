@@ -19,6 +19,12 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1239.0] - 2026-11-25
+
+### The update skill now keys a candidate recorded as a backticked id plus em dash under an id-less heading on its id, so reverify reports it under that id and the upstream-naming query can see it (BL-1238)
+
+- For every consumer running an update pull whose ledger records a candidate as a column-0 backticked id followed by an em dash, under a section heading that carries no id. The shared ledger grammar did not tie that id to its entry, so reverify reported the entry under the prose heading and a receipt-less one never reached the upstream-naming query, so a pull never said upstream had named it; it now keys the entry on its id. A relabel, not a boundary, so no entry is split. Consumer cost on graph's next pull: two new rows. One is the NAMED-UPSTREAM row this fix exists to produce, for the candidate the 0.1237.0 release commit names in full. The other is a NAMED-UPSTREAM-AMBIGUOUS row on the shared sprint prefix, raised by the second candidate under that sprint, whose full slug no upstream commit names; it stays until that entry is closed or its slug is named upstream.
+
 ## [0.1238.0] - 2026-11-25
 
 ### A gate whose Check 22 violations an OVERRIDDEN escalation entry names now reaches the adjudicator instead of refusing at gate 3 (BL-1230, PC-S324-CHECK22-WAIVER-IS-UNREACHABLE-FROM-GATE-TRANSITION)

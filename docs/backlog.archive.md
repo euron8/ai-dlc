@@ -49234,3 +49234,25 @@ Related: BL-1230 and BL-1231 (filed in the same cluster).
 Provenance: batch 266, cluster G; id allocated by the lead.
 
 verify: manual
+
+## BL-1238 — update skill: the ledger grammar did not key a candidate recorded as a column-0 backticked id plus em dash under an id-less heading, so reverify reported it under the prose heading and a receipt-less one never reached the upstream-naming query
+
+**LANDED (v0.1239.0).** batch 266, cluster L, filed and closed in one release. Distribution-side; it has no PC id of its own. Owner: `core/skills/ai-dlc-update/reconcile/lib.sh` (`ledger_entry_shape()`) and `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh`. The form: a consumer ledger records a candidate as a column-0 backticked PC id followed by an em dash at end of line, under a section heading that carries no id. The shared grammar never tied that id to its entry, so `ledger-reverify.sh` keyed the entry and its receipt on the prose heading and reported it as NEEDS-REVIEW under a label that is not an entry id.
+
+Numbered work list (one done condition: reverify keys that form on its bare id):
+1. `ledger_entry_shape()` exposes `__lef_idl`, a side global holding the bare id of such a line outside a fence (empty on every other line); the shape return set is unchanged.
+2. The three ledger-reverify sites that read an entry label (`lr_entries`, the ENTRY-SWALLOWED pass, the mid-line receipt pass) take `__lef_idl` as the label when the current label carries no id.
+
+It is a RELABEL and not a boundary: a boundary splits entries whose own id heading precedes the same id line (measured on graph's 0.1177.0-reconcile ledger: rotate moved 8 of 101 lines). The regex is PC-only (`` `PC-…` ``) with the em dash at end of line; the wider form admitted a wrapped body line (67 copies in graph's archive).
+
+False-positive set, 232 files: graph live ledger and archive at 8484674a6, 196 distinct ledger blobs over 426 graph refs, ai-dlc backlog and archive, and 32 fixture seeds. Control lines hit (graph ledger lines 522 and 557 at 8484674a6) and miss (595, 674, 780).
+
+Proof: (i) graph's ledger copy with `verify: manual` injected after line 522: base reports NEEDS-REVIEW keyed on the prose heading "Sprint 323 stories party round: …"; the fix reports HAND-REVIEW keyed on the bare id. (ii) `bash -c '. "$1/lib.sh" >/dev/null 2>&1 || exit 7; . "$1/ledger-reverify.sh" || exit 8; lr_entries "$2"' _ <engine>/core/skills/ai-dlc-update/reconcile <ledger copy>` on the unmodified copy returns 15 rows at base and 17 with the fix (+2, -0); reverify itself ran as `bash <engine>/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> origin/main`. A hand-run mutant (the `__lef_idl = substr…` line in `lib.sh` deleted) reverts both. Re-measured on base 80741af21 with `bash <engine>/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh <dist-repo> 1544bc5a4 <consumer-root> 6f523fec8` on graph's unmodified ledger at 8484674a6: printed rows base 16 to tip 18, +2 -0 (the two rows above), no row degraded; lr_entries 15 to 17, +2 -0; rotate dry run byte-identical base vs tip. BL-868: zero load-dependent tests; the probe is a fixed-input run.
+
+Consumer cost on graph's next pull: two new rows. One is the NAMED-UPSTREAM row this fix exists to produce, for the candidate the 0.1237.0 release commit names in full. The other is a NAMED-UPSTREAM-AMBIGUOUS row on the shared sprint prefix, raised by the second candidate under that sprint, whose full slug no upstream commit names; it stays until that entry is closed or its slug is named upstream.
+
+Step: n/a
+
+Provenance: batch 266 cluster L; id allocated by the lead.
+
+verify: sh f=core/skills/ai-dlc-update/reconcile; grep -q '__lef_idl = substr' $f/lib.sh || exit 9; test "$(grep -c 'ledger_entry_id(label) == "") { label = __lef_idl' $f/ledger-reverify.sh)" = 3

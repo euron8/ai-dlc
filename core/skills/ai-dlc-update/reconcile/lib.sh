@@ -436,6 +436,13 @@ unquote() { # unquote <value>
 # `ledger_entry_id()` LIVES IN THIS EMITTER NOW, because the shape rule reads it. It used to
 # be `ledger_entry_id_awk()` on its own, and every caller loaded both; that emitter is kept as
 # a no-op so those concatenations still parse, and its header says why.
+#
+# THE BACKTICKED-ID LINE IS A RELABEL, NOT A BOUNDARY -- a column-0 `` `PC-…` `` span followed by
+# an em dash at end of line, outside a fence. It sets no shape; the function exposes its bare id
+# as `__lef_idl` (empty on every other line), and a reader whose current entry label carries no id
+# takes that id as the label. It is not a boundary because an entry whose own `## PC-X` heading
+# precedes the same id line would be split in two. The shape return set is unchanged. The regex
+# is PC-only and the em dash is a literal, never a bracket class.
 # A `printf` literal, not a heredoc -- see the emitter note above `nrm_awk`.
 ledger_entry_awk() {
   printf '%s\n' 'function ledger_entry_id(label) {
@@ -447,6 +454,7 @@ function ledger_entry_shape(l,   t, rest, sh, line) {
   if (FNR == 1 && __lef_nr != NR) { __lef_in = 0; __lef_stray = 0 }
   if (__lef_nr == NR) return __lef_shape
   __lef_nr = NR; __lef_reset = 0
+  __lef_idl = ""
   sh = ""
   if (l ~ /^\*\*`?(PC|BL)-[A-Za-z0-9_.-]+`?\*\*([ \t]+—|[ \t]*$)/) sh = "bullet"
   if (l ~ /^- \*\*/)           sh = "bullet"
@@ -486,6 +494,7 @@ function ledger_entry_shape(l,   t, rest, sh, line) {
       else sh = ""
     }
   }
+  if (!__lef_in && sh == "" && l ~ /^`PC-[A-Za-z0-9_.-]+`[ \t]+—[ \t]*$/) { __lef_idl = substr(l, 2); sub(/`.*/, "", __lef_idl) }
   __lef_shape = sh
   return sh
 }'

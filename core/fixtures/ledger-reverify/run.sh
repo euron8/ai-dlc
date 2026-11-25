@@ -38,7 +38,7 @@ SHARDS="a b c"
 # synthetic worlds and copies of the located engine.
 UNITS_a="off_subject named_commits unreadable_path memo_lifecycle unicode_escape receipts_undecided nonid_manual bl890 every_receipt cwd_invariance label_prefix name_signal cited_only bare_bold_record bl932 id_class naming_set"
 UNITS_b="sh_base_control sh_missing_subject midline_receipt consumer_root fenced_entries bootstrap_window caller_error short_id inproc_seam"
-UNITS_c="dist_checkout receipt_suffix two_line_sh no_colon_swallow entry_swallowed close_anchor backslash_anchor receiptless_named"
+UNITS_c="dist_checkout receipt_suffix two_line_sh no_colon_swallow entry_swallowed idl_relabel close_anchor backslash_anchor receiptless_named"
 DIST_SHARDS="b c"
 # The units whose verdict can depend on placement; the join fails if one is undeclared or dealt to a DIST_SHARDS
 # shard: off_subject, unreadable_path and bl890 run a receipt over the in-place reconcile directory; cited_only,
@@ -2258,6 +2258,35 @@ row_lacks "a-real-entry.sh" ENTRY-SWALLOWED \
 
 
 } # end lr_unit_entry_swallowed
+lr_unit_idl_relabel() {
+# --- THE BACKTICKED-ID LINE RELABELS AN ENTRY UNDER AN ID-LESS HEADING ----------------------
+# A column-0 `` `PC-…` `` span ending in an em dash is a RELABEL, not a boundary: an entry whose
+# heading carries no id takes that id. Three passes read the label (the receipt parse, the
+# ENTRY-SWALLOWED pass, the mid-line pass), one seed each, read off the baseline run.
+row_is "PC-FXIDL-RELABEL-LR" HAND-REVIEW \
+  "the receipt parse keys the entry on the backticked id below its id-less heading"
+row_is "Idl prose heading LR" ABSENT \
+  "and emits no row under the prose heading"
+ASSERTIONS=$((ASSERTIONS + 1))
+if printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /Idl annotation lead-in SW/ && index($3, "nearest id-shaped entry above: PC-FXIDL-RELABEL-SW)") > 0 {f=1} END{exit !f}'; then
+  lr_okf '%-22s the annotation that captured the receipt names the relabelled entry it swallowed\n' "idl-swallowed-names-id"
+else
+  lr_badf '%-22s no ENTRY-SWALLOWED row for the annotation names PC-FXIDL-RELABEL-SW\n' "idl-swallowed-names-id"
+  printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED"' | sed 's/^/          | /'
+fi
+row_has "PC-FXIDL-RELABEL-ML" NEEDS-REVIEW \
+  "the mid-line pass keys its row on the backticked id"
+row_is "Idl prose heading ML" ABSENT \
+  "and emits no row under the prose heading"
+# THE NEAR-MISSES. An id line under its own closed heading is no boundary, so the entry stays one
+# closed unit; an id line with no em dash is no relabel, so the prose heading keeps the entry.
+row_is "PC-FXIDL-SAME-ID" ABSENT \
+  "a closed heading entry followed by its own id line is one closed entry, not split into an open one"
+row_is "Idl prose heading NODASH" NEEDS-REVIEW \
+  "a backticked id with no em dash relabels nothing: the manual receipt stays under the prose label"
+row_is "PC-FXIDL-NO-DASH" ABSENT \
+  "and no row is keyed on that id"
+} # end lr_unit_idl_relabel
 lr_unit_no_colon_swallow() {
 # --- BL-013: THE NO-COLON SWALLOW, WHICH THE COLON SIGNAL CANNOT SEE ----------------------
 # The colon gate fires ZERO times on every corpus available — the reference consumer's live
