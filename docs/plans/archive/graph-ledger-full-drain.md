@@ -19910,3 +19910,65 @@ Lead `ai-dlc-84`, opened at `0.1160.0` `619bfde94`. Owners, one release each: C1
 - **Graph self-updated during the measurement (fact, re-read 21:31):** its carry-over branch at `a8fce3952` now reads `version:` 0.1248.0 / `commit:` c24e3d72 with `skill_version:` 0.1250.0 / `skill_commit:` b3df67760: step 2 of a pull to 0.1250.0 ran, its reconcile has not. Graph's own pull; 7a above predates it.
 - **Branch and worktree record:** every batch-267 owner reported removing its worktrees and branches after a controlled containment check; other sessions still register 9 detached worktrees (8 from 11-21, `rot-v1` from 11-25), none on a `267-*` branch. The lead removed its bundle worktrees and deleted `267-bundle-3` to `267-bundle-9` locally and on the remote (`ls-remote --heads origin '267-*'` 0; main 1). Live agent worktrees under `.claude/worktrees/` at close: 0. Kept: the three `267-U-*` refs above and `rescue/b264-a2dd2a-pull-sh`.
 
+## Action 1's measured history
+
+Moved from action 1 of the live plan at the batch-268 close, word for word. It is a RECORD: the directions it produced are in action 1.
+
+   **THE WALL-CLOCK RULING OF BATCH 119 IS SPENT AND ITS WORK IS DONE — DO NOT OPEN A BATCH ON
+   THE WALL CLOCK.** `docs/plans/pre-push-wall-clock.md` is the record: batches 119-130 ran it
+   across `v0.585.0`-`v0.601.0`, and its premise inverted at batch 130, when the pole fell below
+   the work-conservation floor and pole work had nothing left to buy. The full measurement trail
+   was archived in batch 137's record.
+
+   **Batch 130 returned this plan to its own provenance-first ordering**, which is where it stays
+   until the operator rules otherwise: the sweep decides, and a PC-backed entry outranks every
+   distribution-internal one. **A worklist that rises across a successful batch is the normal
+   shape here**, because a discharged candidate stays live upstream until the consumer PULLS. That
+   is still where a batch scopes from by default.
+
+   **THE LIST IS THIN AND EVERY ROW ON IT DISQUALIFIES ITSELF, SO THE JOIN IS NO LONGER WHERE A
+   BATCH SCOPES FROM. THE ANSWER IS NOT TO FORCE ONE — IT IS TO WORK THE CLASS THE JOIN CANNOT
+   SEE.** Measured at batch 140 against each entry's own body, not a paraphrase: `BL-067` records
+   its remedy UNSHIPPABLE at 3/3 false positives, `BL-132` carries a measured refutation,
+   `BL-145` says the obvious fix is not obviously right with an unmeasured FP set, `BL-215` says
+   no enforcer is constructible until ownership is settled. **Run the join and read each entry's
+   BODY anyway** — it is still the provenance-first input and a new candidate can arrive on it —
+   but when nothing there is a straightforward build, go to the RANKED UNFILED SET next, then the
+   `GATED-ON-THIS-FILING` class, rather than forcing a refuted remedy or reporting an empty batch.
+
+   **THAT CLASS IS EMPTY SINCE BATCH 141, SO THE UNFILED SET IS WHERE BATCH 142's WORK CAME FROM.**
+   Rank the unfiled candidates by `-S` date, newest first; route each with `core-paths.sh --is-core`
+   under CONSUMER path spelling, reading STDOUT; and read each CORE candidate's own body against the
+   tree before scoping it. Re-derive the class anyway, because it refills whenever a filing lands
+   as residue. An entry filed as the measured RESIDUE of a candidate whose headline the consumer has ARCHIVED
+   scores ZERO on this join by construction — the join keys on `live.txt` and the parent candidate
+   left it. Derive the class with the entry bodies FLATTENED (`## BL-` to the next `## BL-`,
+   whatever its number): a line-oriented grep scores 2 where the flattened derivation scores 4,
+   because the phrase wraps. Controls in the same invocation: each id reads `live=0 arch=1` while
+   a worklist id reads `live=1`, and an impossible phrase scores 0 flattened.
+
+   The number here is a record of when it was taken, never an input.
+
+   **SCORE CITATION OWNERSHIP BEFORE RANKING, BECAUSE THE JOIN CANNOT.** `pc()` matches any `PC-`
+   token in an entry and cannot tell "I close this" from "here is an example". `BL-140` cites its
+   id as one of four stuck EXAMPLES and `BL-145` cites its own as a false-positive TABLE ROW and
+   receipt ANCHOR — neither is a candidate the entry discharges. Score by ownership verb
+   (`Discharges`, `Carries the reference consumer's`, `Filed by the consumer as`) against an
+   impossible-verb control, per entry BODY with a non-empty-body control.
+
+   **AND THEN READ THE MATCHED LINE, BECAUSE THE VERB SCORING HAS ITS OWN TWO FAILURES — BOTH
+   MEASURED AT BATCH 137, BOTH AGAINST A HAND THAT REPORTED CONFIDENTLY.** A NEGATION scores as
+   ownership: `BL-279`'s only hit is *"Discharges **nothing** upstream"*, which is the entry
+   disclaiming the candidate in the very sentence the grep counts. And the COUNT ITSELF WAS WRONG
+   ONE BATCH EARLIER — `BL-067` was recorded at 1 and re-derives at **0** (control: the same grep
+   on `BL-132` returns 1), its single candidate mention being a bare id on its own line carrying
+   no verb. So the number of non-PC-backed rows is **three**, not the two an earlier revision of
+   this paragraph claimed. **Two hands agreeing is not a control; the matched LINE is.**
+
+   **OPERATOR RULING AT BATCH 147: NO MODEL REPLAY CLOSES A STEP-FILE OR PROMPT FIX.** *"No replay
+   is needed and would not guarantee anything."* A small replay on one model can neither confirm
+   nor refute whether a sentence of prose changes what a lead does. Close such an entry on the
+   structural trace (the binding text present at every point on the incident path, byte-compared
+   against what the lead read) plus a fixture that pins it. Do not propose a replay as a close
+   condition, and do not file an entry whose close needs one. The ruling's record is in the
+   archive, in batch 147's block.
