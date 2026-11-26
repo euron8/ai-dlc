@@ -19974,3 +19974,129 @@ Moved from action 1 of the live plan at the batch-268 close, word for word. It i
    archive, in batch 147's block.
 
 Also moved from action 1's opening paragraph: the scoping rule by invoker was an "Operator instruction, given at batch 52", and the rule not to merge while a dispatched hand is out cited "batch 63's merged branch was green at every phase when its second adversary returned two BLOCKERs, and batch 66's was green when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE."
+
+## Derive fence 2's measured history
+
+Moved from fence 2 of `### Derive the state; do not trust the numbers below` at the batch-268 close, word for word. Each paragraph's direction stays in the fence as a short comment.
+
+```
+# THREE deliberate widenings, each one a measured defect:
+#   1. NO TRAILING SPACE after the id -- that space hid 43 of 63 bullet-form entries.
+#   2. THE CLASS INCLUDES `.` -- an id may embed a version, and [A-Z0-9-] truncates it into a
+#      FALSE MEMBER that joins against nothing and reports as no absence at all.
+#   3. THE HEADING ARM IS `^#{2,6}`, NOT `^##` -- see the FIFTH FORM below. A `### PC-` entry
+#      nested under another entry's heading was invisible for three consecutive batches.
+# Also measured: a backticked bullet id (`- **`PC-...`**`, which lib.sh's ledger_entry_id admits) hid the live
+# candidate and one archived id, and `[A-Z0-9.-]` truncated PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX.
+# The optional `-? ?` also admits the DASH-LESS `**<id>**` at column 0, which is the subject of
+# PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY. An id ends non-dot.
+# The THIRD arm is the SIXTH FORM: a column-0 backticked id then ` —`, under an id-less section
+# heading. lib.sh's ledger_entry_shape() cannot see it; ledger-reverify.sh's lr_entries() can.
+
+# READ THE LEDGER AT THE CONSUMER'S SPRINT TIP, NOT FROM ITS WORKING TREE, AND NOT FROM `main`.
+# Measured at batch 85, which got this wrong TWICE IN ONE SESSION and in opposite directions.
+# That consumer branches per sprint and merges back at the retro, so a candidate filed AFTER the
+# sprint's PR merges sits on the sprint branch, committed and pushed, and is absent from `main`
+# until the retro merge. The working file answers with whatever is CHECKED OUT at that instant,
+# which the consumer changes while a batch is running.
+#
+# Batch 85 read the entry in full from the working tree at 02:00 (sprint tree checked out), then
+# read 0 twice afterwards (main checked out) and recorded the filing first as UNCOMMITTED and then
+# as WITHDRAWN. Two instruments agreed on a wrong answer because both were pointed at the wrong
+# ref. The consumer session supplied the correction; nothing in this derivation could have.
+# `git log -S ... -- <path>` keyed on `main` fails the same way and is the other half of the trap.
+#
+# So: resolve the sprint branch, and read the ledger THERE with `git show`. Report both counts
+# when they differ -- the delta IS the set of filings not yet on main, which is exactly the set a
+# sweep is looking for.
+# RECENCY IS THE WRONG KEY AND IT SHIPPED A WRONG ANSWER AT BATCH 89. `--sort=-committerdate |
+# head -1` picked a branch that was BEHIND main, and the subset control below fired at 7. The
+# obvious repair -- "the newest branch AHEAD of main" -- picked a branch carrying NO LEDGER FILE,
+# and `git show` on an absent path answers empty: live=0, silently, with every other control still
+# passing. Measured over all 22 consumer branches at batch 89: NO ref was a superset of main. Four
+# carried a ledger and each was a stale snapshot whose "extra" ids were ALL in main's ARCHIVE --
+# they predate closes and are not unmerged filings, which is the same output as a real filing.
+#
+# So qualify a ref on the PROPERTY that matters -- it carries the ledger AND its live set contains
+# main's -- and fall back to main, which is the answer whenever the retro has merged. Report the
+# candidates rather than electing one silently.
+#
+# THE GLOB WAS THE THIRD WRONG KEY, MEASURED AT BATCH 90. `ai-dlc/feature/*` and `*sprint*` are
+# two of the consumer's branch prefixes; its sprints also run under `ai-dlc/carry-over/*` (135
+# branches), `ai-dlc/bug/*` (19), `ai-dlc/fix-forward/*` and others. Batch 90's filing sat on
+# `ai-dlc/carry-over/chunk-max-usd-swap-sizing`, two commits ahead of main and UNPUSHED, and the
+# loop never visited it: `ledger ref: main`, every control green, live=55, and the filing invisible.
+# The candidate set is EVERY local branch ahead of main; the property test below is what keeps that
+# cheap and correct (a branch behind main fails the subset arm and is skipped).
+# THE ANCESTOR GATE WAS A CHECK THAT COULD NOT FIRE, AND IT IS GONE. `BL-270`, measured twice.
+# It required each candidate branch to CONTAIN `main`, and the consumer branches per sprint while
+# `main` advances independently, so a sprint branch DIVERGES rather than fast-forwarding. Measured
+# at filing: 0 of 723 non-main branches passed, while 178 CARRIED a ledger. Re-measured at batch
+# 130: 1 of 723 passed -- the one branch the consumer happened to have checked out -- so the loop
+# elected correctly BY LUCK, and would return to 0 at the next retro merge. Either way 177
+# ledger-carrying branches were never read.
+#
+# THE PROPERTY ARM BELOW IS THE CORRECT TEST AND WAS UNREACHABLE BEHIND THAT GATE. With the gate
+# removed it elects 3 refs, each with unexplained=0; a genuinely stale snapshot still fails.
+#
+# AND ELECTING ONE REF IS UNSOUND, WHICH IS WHY THIS IS A UNION. Measured at batch 130 over the
+# three qualifying refs: carry-over adds 4, story-1 adds 4, story-3 adds 4, and the UNION of adds
+# is **7** -- they are PAIRWISE INCOMPARABLE and overlap in exactly one id. No qualifying ref
+# dominates, so every single-ref rule loses real filings whichever tie-break it picks. `BL-270`'s
+# own "strict superset" claim was refuted on this input, both directions non-zero.
+#
+# THE UNION MUST SUBTRACT THE UNION OF THE ARCHIVES, OR IT RESURRECTS CLOSED CANDIDATES. Measured:
+# a bare union of the three live sets is 54, of which **6 ids are live on one qualifying ref and
+# ARCHIVED on another** -- candidates the consumer has closed, which a naive union re-opens.
+# Union-live MINUS union-archive is 48, and the 3 ids the carry-over branch "loses" to the other
+# two are exactly ids IT has archived. `main` is folded into both unions: it contributes nothing
+# today (48 either way, both directions 0) and it makes the empty-qualifying-set case correct by
+# construction rather than by a fallback.
+
+# REMOTE BRANCHES TOO, MEASURED AT BATCH 174. The consumer moved a filing OFF its carry-over branch
+# onto its own pushed branch (`origin/ai-dlc-update/pc-s315-derive-readsets-whole-tree-copy`) and
+# reset the carry-over branch past it, so a `refs/heads`-only loop would have scored the candidate
+# absent. `origin/HEAD` is a symref, never a candidate.
+
+# THE RAW SUBTRACTION IS NOT 0, AND A READER WHO "REPAIRS" IT BACK DELETES THE LOOP'S OWN
+# ACQUITTAL. The loop accepts a ref missing nothing main has THAT IT HAS NOT CLOSED -- the batch-113
+# repair -- so a ref on which the consumer has been closing candidates is LEGITIMATELY missing those
+# ids, and a bare `comm -23` counts every one of them. Measured at batch 114, sweep hand and lead
+# independently: raw **15**, all 15 in the elected ref's own ARCHIVE, UNEXPLAINED **0**. The line
+# below therefore subtracts the archive exactly as the loop does; the version without that
+# subtraction disagreed with its own premise and read as a broken loop on a correct derivation.
+# It is an ASSERTION on the loop, never a control -- a non-zero means the loop is broken, not that
+# the ledger moved, and a check that cannot fail reads exactly like one that passed. The
+# discriminating control is the one below it: the PRESENCE arm, which must be non-zero on main.
+
+# THE ASSERTION ARM NOW READS THE UNION'S OWN TWO FILES ON BOTH SIDES. It used to compute
+# `comm -23 live_main live | comm -23 - arch` against the ref the loop ELECTED -- so whenever the
+# loop fell back to `main`, it compared `main` with itself and answered 0 BY CONSTRUCTION. That is
+# `BL-270`'s second half, and it is why the gate could not be seen: the presence control read
+# non-zero because `main` does carry a ledger, `filings ahead` printed empty, and both controls
+# passed beside the wrong answer. `main` is now a MEMBER of the union, so its ids are in
+# `live.txt` unless the union archived them, and a non-zero here means a member ledger lost an id
+# no member closed -- which is a broken derivation, never a moved ledger.
+#
+# IT IS AN ASSERTION ON THE DERIVATION, NEVER A CONTROL. A check that cannot fail reads exactly
+# like one that passed; the discriminating controls are the two below it.
+
+# AND THE CONSUMER'S UNCOMMITTED WORKING-TREE LEDGER, WHICH NO REF ABOVE CAN SEE. Batches 188 and 234
+# both read live 0 / unfiled 0 over committed refs while graph held real filings uncommitted in its
+# working tree -- batch 234's whole scope was five of them. An id printed here is an uncommitted filing
+# no committed ref carries; check each against "$T"/filed.txt (built below) before calling it unfiled.
+
+grep -c '^## ' "$T"/mainled.md                      # CONTROL: must be NON-ZERO -- main's ledger file
+                                                    # resolved and carries sections. Keyed on the FILE,
+                                                    # not on ids: at batch 233 main's ledger held 0 live
+                                                    # ids, the program's goal state, and an id-keyed
+                                                    # control read 0 on a correct derivation (50 at
+                                                    # batch 258's close).
+wc -l < "$T"/live_main.txt                          # main's live ids. 0 is LEGITIMATE when the control
+                                                    # above is non-zero. A zero in BOTH means
+                                                    # the ref carried no ledger and `git show`
+                                                    # answered empty -- which is what the "newest
+                                                    # branch ahead of main" repair did at batch 89,
+                                                    # reporting live=0 with every other control
+                                                    # still passing.
+```
