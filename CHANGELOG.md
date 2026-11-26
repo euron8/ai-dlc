@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1265.0] - 2026-11-26
+
+### Five fixtures declare files they read and did not declare, so a change to those files now re-runs them
+
+- For every consumer: `apply-drift-refile-b` and `apply-drift-refile-c` now key on seven more `ai-dlc-update/reconcile/` files they copy (`ask-families.tsv`, `detector-rows.md`, `mask-reinject.md`, `pull-key.sh`, `pull.sh`, `self-update-refusals.md`, `untangle.md`). An edit to one of them now re-runs both fixtures instead of reusing a recorded pass.
+- In the distribution only: `validator-arm-selection` declares the 11 `.claude/rules/*.md` files and the 37 tracked `docs/*.sh` files the enforcement-map validator reads; `review-shard-merge-e` and `-g` declare `core/skills/ai-dlc/layer-contract.yaml`, which `sprint-status.sh` reads.
+- A sandbox trace of the five fixtures and their seven siblings finds no undeclared read left in any of them.
+- Action for consumers: none.
+
 ## [0.1264.0] - 2026-11-26
 
 ### Re-running deliver on an open pull request updates its body and exits 0; a hard-remedies record survives a self-update fast-forward and is dropped, visibly, once the operator commits non-machinery changes (BL-1257, BL-1256)
