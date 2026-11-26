@@ -92,6 +92,8 @@
 #   IFADDWRITE   the twin: a member-status row and a --- rule are written by --line-add there; a header
 #              into a header-less section is HDRREMEDY's applied half
 #   IFADDDUPHDR  a second header line-added beside the present one: exit 2, unchanged
+#   ESTIMATED    BL-806: four --activity lines with a bare `~HH:MMZ` -> exit 0, all four written, exactly one
+#              WARN ESTIMATED on stderr naming the estimated-now line; ESTMIDNIGHT: ~00:15Z at 23:58Z warns
 #   BUDGET       BL-819 item 5: over the ceiling and growing is exit 1, file identical; a net shrink and a grow inside the grace band are written; --gate-passed
 # CLOCK AND BACKGROUND, per arm: only LOCKWAIT runs a background process, and it blocks on the
 # writer's own file and on `wait`, never on a sleep's length; its poll loop is bounded by the writer
@@ -317,6 +319,28 @@ cell() {
       drive "$pr" "$s" --activity "$T_OK unrelated"
       if [ "$RC" = 0 ] && grep -qF "$T_OK unrelated" "$s"; then return 0; fi
       CELL_MSG="rc=$RC $OUT"; return 1 ;;
+    ESTIMATED)
+      # NOW is 21:33:20Z: (i) and (ii) read 1180 s ahead, (iii) 1200 s behind, (iv) 280 s ahead (inside the slack).
+      s="$(seed "$WORK/$t-estimated" 0)"
+      drive "$pr" "$s" --activity "cont999 (~21:53Z) estimated now" --activity "cont997 window to ~21:53Z" \
+        --activity "cont996 (~21:13Z) behind" --activity "cont995 (~21:38Z) inside the slack"
+      local nw ln; nw="$(grep -c '^WARN ESTIMATED ' <<<"$OUT")" || nw=0
+      ln="$(grep -n -F -- '- cont999 (~21:53Z) estimated now' "$s")"; ln="${ln%%:*}"
+      if [ "$RC" = 0 ] && [ -n "$ln" ] && grep -qF -- '- cont997 window to ~21:53Z' "$s" \
+         && grep -qF -- '- cont996 (~21:13Z) behind' "$s" && grep -qF -- '- cont995 (~21:38Z) inside the slack' "$s" \
+         && [ "$nw" = 1 ] && grep -qF "WARN ESTIMATED pipeline-snapshot.md:$ln: ~21:53Z is 1180s ahead of date -u" <<<"$OUT"; then return 0; fi
+      CELL_MSG="rc=$RC warn=$nw line=$ln $OUT"; return 1 ;;
+    ESTMIDNIGHT)
+      # NOW pinned to 2026-10-25T23:58:00Z: a bare ~00:15Z with no own date is tomorrow's, 1020 s ahead; the
+      # same time carrying its own date 2026-10-25 is 85380 s past and stays past (no next-day roll: `!own`).
+      s="$(seed "$WORK/$t-estmidnight" 0)"
+      AI_DLC_SNAPSHOT_NOW_EPOCH=$((NOW + 8680)) drive "$pr" "$s" --activity "cont998 (~00:15Z)" \
+        --activity "cont994 2026-10-25T~00:15Z own-dated"
+      local nw ln; nw="$(grep -c '^WARN ESTIMATED ' <<<"$OUT")" || nw=0
+      ln="$(grep -n -F -- '- cont998 (~00:15Z)' "$s")"; ln="${ln%%:*}"
+      if [ "$RC" = 0 ] && [ -n "$ln" ] && grep -qF -- '- cont994 2026-10-25T~00:15Z own-dated' "$s" \
+         && [ "$nw" = 1 ] && grep -qF "WARN ESTIMATED pipeline-snapshot.md:$ln: ~00:15Z is 1020s ahead" <<<"$OUT"; then return 0; fi
+      CELL_MSG="rc=$RC warn=$nw line=$ln $OUT"; return 1 ;;
     AMBIG-zero|AMBIG-two|AMBIG-cells)
       s="$(seed "$WORK/$t-$c" 0)"; cs="$(cksum < "$s")"
       case "$c" in
@@ -840,6 +864,8 @@ if cell IFLINEWRITE "$PROG" ship; then ok "IFLINEWRITE: --line-replace writes a 
 if cell IFADDREFUSE "$PROG" ship; then ok "IFADDREFUSE: --line-add into In-Flight Teammates refuses a free-text and a done status cell, names the value, file unchanged"; else bad "IFADDREFUSE: $CELL_MSG"; fi
 if cell IFADDWRITE "$PROG" ship; then ok "IFADDWRITE: --line-add into In-Flight Teammates writes a member status row and a --- rule"; else bad "IFADDWRITE: $CELL_MSG"; fi
 if cell IFADDDUPHDR "$PROG" ship; then ok "IFADDDUPHDR: --line-add of a second header beside the present one is refused, file unchanged"; else bad "IFADDDUPHDR: $CELL_MSG"; fi
+if cell ESTIMATED "$PROG" ship; then ok "ESTIMATED: an --activity write of four ~HH:MMZ lines is exit 0, all four written, and exactly one WARN ESTIMATED names the estimated-now line (not the connector twin, the past one or the one inside the slack)"; else bad "ESTIMATED: $CELL_MSG"; fi
+if cell ESTMIDNIGHT "$PROG" ship; then ok "ESTMIDNIGHT: at 23:58Z a bare ~00:15Z is read as the next day and warned 1020 s ahead, the line written"; else bad "ESTMIDNIGHT: $CELL_MSG"; fi
 if cell BUDGET "$PROG" ship; then ok "BUDGET: over the ceiling and growing is exit 1 with the file byte-identical; a net shrink and a grow inside the grace band are written; --gate-passed writes the gate facts and current_step_file from its argument"; else bad "BUDGET: $CELL_MSG"; fi
 
 # --- EQUIVALENCE: one command-line start per distinct CLI outcome (cells.decl), each held byte for byte (stdout, stderr, exit and
