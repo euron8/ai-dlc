@@ -10000,9 +10000,10 @@ core/hooks/ai-dlc-gate-remediation-guard.sh'
 # this arm's needles; a wrapper is a function call, not a fork.
 i103_bodies() { fn_bodies "$i103_needles" "$1"; }
 i103_pick() { fn_pick "$1" "$2"; i103_picked="$fn_picked"; }
-# ONE scan for BOTH needles. Two recursive greps over core/ and scripts/ is a cost the suite
-# pole pays on every shard, and the union answers the same question.
-i103_sites() { i103_re="$1"; shift; grep -rlE -- "$i103_re" "$@" 2>/dev/null; }
+# ONE scan for every needle, I134's included. Two recursive greps over core/ and scripts/ is a
+# cost the suite pole pays on every shard, and the union answers the same question. The scan
+# prints `<file>:<line>`; each matching line is split per needle with `[[ =~ ]]`, no fork.
+i103_sites() { grep -raE -- "$1" "$REPO_ROOT/core" "$REPO_ROOT/scripts" 2>/dev/null; }
 
 # The scan grammar is the one the corpus half uses, word-bounded so `cite_quoted_span` and
 # `cite_segment_of` are not members. `\b` is a GNU extension BSD grep does not honour, so the
@@ -10050,7 +10051,21 @@ EOF
   # HALF TWO: no fourth site. THE POSITIVE CONTROL IS THIS FILE, read in the same invocation --
   # it carries both needles in i103_needles= and throughout the prose above, so a scan that is
   # not reading the roots it was handed shows up here rather than as a clean fourth-copy report.
-  i103_hits="$(i103_sites "$i103_re" "$REPO_ROOT/core" "$REPO_ROOT/scripts" | LC_ALL=C sort)"
+  i134_re='(^|[^A-Za-z0-9_])deliverable_of([^A-Za-z0-9_]|$)'
+  i103_lines="$(i103_sites "$i103_re|$i134_re")"
+  i103_hits=''; i134_hits=''; i103_lf=''; i134_lf=''
+  while IFS= read -r i103_l; do
+    [ -n "$i103_l" ] || continue
+    i103_f="${i103_l%%:*}"; i103_t="${i103_l#*:}"
+    if [ "$i103_f" != "$i103_lf" ] && [[ $i103_t =~ $i103_re ]]; then
+      i103_hits="$i103_hits$i103_f"$'\n'; i103_lf="$i103_f"
+    fi
+    if [ "$i103_f" != "$i134_lf" ] && [[ $i103_t =~ $i134_re ]]; then
+      i134_hits="$i134_hits$i103_f"$'\n'; i134_lf="$i103_f"
+    fi
+  done <<EOF
+$i103_lines
+EOF
   i103_self="scripts/validate-enforcement-map.sh"
   if ! in_lines "$REPO_ROOT/$i103_self" "$i103_hits"; then
     err "I103's site scan did not find $i103_self, which carries both needles in this arm's own i103_needles= assignment. That is the control failing, not a finding about the tree: the scan is not reading the roots it was handed, so its report of no fourth copy would be a zero taken over a corpus it never opened. Fix the roots passed to i103_sites, or the resolution of REPO_ROOT, before reading anything below."
@@ -10068,6 +10083,37 @@ EOF
 $i103_hits
 EOF
     [ -z "$i103_extra" ] || err "I103: file(s) outside the three bound sites name the citation parser:$i103_extra. A fourth copy is an unbound copy -- the equality half above compares only the three it is given, so a fourth drifts in silence and parses the operator's own words its own way. Either resolve it from one of the three bound sites, or add it to i103_declared here in the same change so it is held byte-identical with them. A file that merely CITES the name in prose still counts."
+  fi
+
+  # --- I134: deliverable_of is named in three files only: the dispatch guard, the in-flight row writer and render-brief.sh ---
+  # BINDS: no file under core/ or scripts/ other than core/hooks/ai-dlc-dispatch-guard.sh,
+  # core/hooks/ai-dlc-inflight-row.sh and core/scripts/render-brief.sh names `deliverable_of`, a
+  # prose citation included; core/fixtures/ is excluded by directory and this file by name. The
+  # three copies' byte-identity is core/fixtures/dispatch-model-guard's DELIVERABLE-LINE bind.
+  # The hits are I103's one scan, split per needle above; the grammar is word-bounded on both
+  # sides, so `x_deliverable_of` and `deliverable_ofx` are not members and a line-final mention is.
+  # FALSE-POSITIVE SET: empty. On the live tree the scan hits the three sites, this file and
+  # core/fixtures/dispatch-model-guard/; the two exclusions remove the last two.
+  # POSITIVE CONTROL: this file carries the needle in i134_re, so the scan must list it; a scan
+  # that does not is broken and errs as one.
+  i134_declared='core/hooks/ai-dlc-dispatch-guard.sh
+core/hooks/ai-dlc-inflight-row.sh
+core/scripts/render-brief.sh'
+  if ! in_lines "$REPO_ROOT/$i103_self" "$i134_hits"; then
+    err "I134's site scan did not find $i103_self, which carries the needle in i134_re. The scan is broken, so its report of no fourth copy of deliverable_of is unread; fix i103_sites or REPO_ROOT."
+  else
+    i134_extra=''
+    while IFS= read -r i134_hit; do
+      [ -n "$i134_hit" ] || continue
+      i134_r="${i134_hit#"$REPO_ROOT"/}"
+      case "$i134_r" in
+        core/fixtures/*|scripts/validate-enforcement-map.sh) continue ;;
+      esac
+      in_lines "$i134_r" "$i134_declared" || i134_extra="$i134_extra $i134_r"
+    done <<EOF
+$i134_hits
+EOF
+    [ -z "$i134_extra" ] || err "I134: file(s) outside the three bound sites name deliverable_of:$i134_extra. A fourth copy drifts unbound from the three the dispatch-model-guard fixture holds byte-identical. Resolve it from one of the three sites, or add it to i134_declared here and to the fixture's bind in the same change; a prose citation counts."
   fi
 
 # --- I120: the citation floor's bash measure is node's, member for member ---

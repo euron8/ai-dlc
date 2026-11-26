@@ -1054,9 +1054,17 @@ readset_loss_canary() {
 # peaking under 400 were checked for a natural shape: in every one, other processes of the same
 # program in the same fixture's windows report the same path paired, so the row is a loss, and none
 # is exempted.
+# THE TRUST ROOT, ONE ROW, AND ITS SCOPE. READSET_STATPAIR_ALLOW (`<program> <tree-relative path>`)
+# names the only unpaired shape that is not counted, and only when that metadata report is the
+# process's FIRST report under the tree in the window. Program and path are compared by string
+# equality, never as a pattern or a prefix. The row is granted by the operator in batch 268. It recurs
+# in three batch-268 windows, 0.1146.0 and batch 265; the op sequence was compared only between two
+# batch-268 windows (retake-1, corpus), where it is identical. Every other unpaired row,
+# directories included, is a loss. An acquitted row is not written to $3 and not counted.
 readset_stat_pairing() {
-  local n
-  if awk -v tree="$2/" '
+  local n READSET_STATPAIR_ALLOW='Python core'
+  if awk -v tree="$2/" -v allow="$READSET_STATPAIR_ALLOW" '
+    BEGIN { split(allow, al, " ") }
     {
       i = index($0, "Sandbox: "); if (i == 0) next
       rest = substr($0, i + 9)
@@ -1066,10 +1074,15 @@ readset_stat_pairing() {
       op = substr(rest, 1, sp - 1); path = substr(rest, sp + 1)
       if (index(path, tree) != 1) next
       k = head ")\t" substr(path, length(tree) + 1)
+      if (!(head in fk)) { fk[head] = k; fo[head] = op }
       if (op == "file-read-metadata") m[k] = 1
       else if (op == "file-test-existence") e[k] = 1
     }
-    END { for (k in m) if (!(k in e)) print k }' "$1" > "$3" 2>/dev/null \
+    END { for (k in m) if (!(k in e)) {
+            t = index(k, ")\t"); h = substr(k, 1, t - 1); p = index(h, "(")
+            if (p > 0 && substr(h, 1, p - 1) == al[1] && substr(k, t + 2) == al[2] \
+                && fk[h] == k && fo[h] == "file-read-metadata") continue
+            print k } }' "$1" > "$3" 2>/dev/null \
     && LC_ALL=C sort -o "$3" "$3" 2>/dev/null; then
     n="$(grep -c . "$3")" || n=0
     printf '%s\n' "$n"

@@ -2262,11 +2262,11 @@ else bad "DELIVERABLE-LINE bind probe FAILED: the byte comparison or the definit
   && ok "DELIVERABLE-LINE bind: exactly one deliverable_of definition in the guard and one in ai-dlc-inflight-row.sh" \
   || bad "DELIVERABLE-LINE bind: the guard has $(dl_ndef < "$HOOK") deliverable_of definitions and ai-dlc-inflight-row.sh has $(dl_ndef < "$DL_IFR"), expected 1 and 1"
 if [ -n "$DL_RB" ]; then
-  # three copies: the guard, the row writer and render-brief.sh; a fourth anywhere in the hook or script directories fails
-  DL_NDEF_ALL="$(grep -rlE '^deliverable_of\(\) \{' "$(dirname "$HOOK")" "$(dirname "$DL_RB")" 2>/dev/null | wc -l | tr -d ' ')"
-  [ "$(dl_ndef < "$DL_RB")" = 1 ] && [ "$DL_NDEF_ALL" = 3 ] \
-    && ok "DELIVERABLE-LINE bind: render-brief.sh holds one deliverable_of definition and the hook and script directories hold exactly 3 files defining it" \
-    || bad "DELIVERABLE-LINE bind: render-brief.sh has $(dl_ndef < "$DL_RB") definitions and $DL_NDEF_ALL files define deliverable_of, expected 1 and 3"
+  # three copies: the guard, the row writer and render-brief.sh; invariant I134 in
+  # scripts/validate-enforcement-map.sh fails a fourth file naming deliverable_of under core/ or scripts/
+  [ "$(dl_ndef < "$DL_RB")" = 1 ] \
+    && ok "DELIVERABLE-LINE bind: render-brief.sh holds exactly one deliverable_of definition" \
+    || bad "DELIVERABLE-LINE bind: render-brief.sh has $(dl_ndef < "$DL_RB") deliverable_of definitions, expected 1"
   [ -n "$DL_FN_G" ] && [ "$(dl_same "$DL_FN_G" "$(dl_fn "$DL_RB")")" = SAME ] \
     && ok "DELIVERABLE-LINE bind: render-brief.sh's deliverable_of is byte-identical to the guard's" \
     || bad "DELIVERABLE-LINE bind: render-brief.sh's deliverable_of DIFFERS from the guard's, so it renders a line the guard reads differently"
