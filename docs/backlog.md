@@ -375,6 +375,32 @@ Hand-run once, at authoring:
 
 **PARTIAL (v0.1222.0).** Batch 264, cluster B. The trace row is measured: `bash core/scripts/derive-fixture-readsets.sh --list "hook-registration-join" --tracer sandbox` (no `sudo`), main checkout detached at 06aae44ad, rc 0, 47 paths, CONTROL PASS (2 of 2 read-sets a proper subset of the 58-path universe), 0 `.claude/worktrees/` rows. The map's only change is that fixture's digest row (its path rows are unchanged), committed as 58b7432ba. `scripts/predict-push-set.sh` over the tree reads 0 stale fixtures (18 changed); the control over the main checkout at 5d7857446 reads 1 stale and runs hook-registration-join and hook-registration-join@consumer. The row closes on this measurement. The entry stays open: owed item 6 (delete the 170 families) was worked by cluster E in 0.1221.0 (ba8565a96) and is not discharged here.
 
+**PARTIAL (batch 268, M; the entry stays open, `verify: manual` unchanged, no LANDED line).** Every owed row is done, built in this release, or carried by the live entry named in the list below. One item remains: the outcome on graph.
+
+The per-gate wall clock and session dollars were measured in batch 256: median 732 s and $0.167 per release push. The pole value judgment covers the 19 pole families (batches 257, 260 and 263) and the 225 families outside them (batch 263). Release 0.1221.0 deleted 64 fixture directories with no catch on record, 50 of them shipping.
+
+This repo's pushes, before and after 0.1221.0. Before, from the census population: 46 push logs of 2026-11-19T17:21Z to 2026-11-21T12:07Z, 1539 dispatched lines and 61523 loaded s, so 33.5 units and 1337 s per push. The deleted families' share was 6834 s, about 149 loaded s and about 12 s of wall clock per push at width 12, and about $0.003 per push at the batch-256 rate. Those 46 logs are no longer on disk, so neither the baseline nor that share could be re-priced; the before figures are the census's own. After: 29 md5-distinct real pushes of this repo after 0.1221.0 landed (ba8565a96, 2026-11-22T03:51Z), through 2026-11-25, selected as a transport tail plus a `read-set keys:` line, with fixture-world copies and consumer-repo logs excluded. 0 `done` lines name any of the 64 deleted families; the control in the same invocation, the kept family `adversarial-shard-merge`, reads 4 lines. Dispatched units per push: mean 13.6, median 8. Loaded seconds per push, priced at the current `.git/ai-dlc-fixture-durations`: mean 690, median 285, so about 58 s of wall clock per push at width 12 by the mean. No before-to-after ratio is stated, because the two populations differ in window and release mix. Every seconds figure here is a LOADED cost from the durations record, not a timing.
+
+Graph's pushes: the deletion reached the consumer. The 29 recovered graph push outputs of 2026-11-20T03:52Z to 2026-11-26T10:40Z are the 29 paths listed in `blobs.json` of the batch-268 m1167 scratchpad. 20 are under `~/.claude/projects/-Users-n8-git-graph/*/tool-results/` and 9 under graph session scratchpads, and each file was read directly. They read `read-set keys: N of 241` in 3 (2026-11-20), `of 244` in 6 (the last at 2026-11-22T00:18Z) and `of 194` in all 20 from 2026-11-22T04:40Z on. The first `of 194` output is graph session 0b1c5019, an `/ai-dlc-update` pull. It is the first recovered output after graph's 0.1220.0 to 0.1221.0 reconcile commit c95b32332 (2026-11-22T04:25Z, merged as 447fbd099, #1367). Graph's affc0f1a4 records the 50 retired fixture directories. 244 less 194 is 50, the shipping deletions. Counting command: per file, `/usr/bin/grep -ho 'read-set keys: [0-9]* of [0-9]*' <file> | awk '{print $NF}'`, split at 2026-11-22T03:51Z by each file's time in `blobs.json`, then `sort | uniq -c`. Control in the same invocation: `of 999` reads 0 over the same files, and the `of 244` count before the cut reads 6, not 0.
+
+Remaining: the outcome is read at graph S324's close, from its pipeline pushes against a graph baseline, by the sprint grammar of E1 and E2 in `scripts/validate-backlog-receipts.sh`. S324 is open: graph's first `(s324)` commit is b00756c1e (2026-11-21T01:57Z), and no `(s325)` commit exists. The outcome line names `s324` as a standalone word; states a direction, `fell` or `did not fall`, with a resolving value citation for `did not fall`; carries `token-equivalent`, `API` and `gap-inclusive`; gives a lead figure and a subagents figure, each in `h` or `$`; names its measuring script under this root (for example `docs/analysis/pipeline-efficiency-s317-s320/scripts/` plus a bare `extract.py`); and gives a before and an after figure. Only then does the entry take its LANDED line.
+
+N1, the stale-trace row: the 0.1222.0 trace listed only `hook-registration-join`, and `retro-compliance-workflow` was never traced. `scripts/predict-push-set.sh` reads `0 stale` on d378ff8fb, the pre-fold tip; this record changes only `docs/backlog.md`.
+
+Built in this release:
+- `self-update-gate-d`: its `inputs.decl` narrows the whole `!core/skills/ai-dlc-update/reconcile/` line to the 12 files the batch-265 trace read (`~/.cache/ai-dlc/readset-windows/batch-265/trace-1/declared.tsv`, main checkout at bd2935936), by lead ruling, batch 268. On a `pull.sh` edit the fixture's key no longer moves; on a `lib.sh` edit it does. One mutant survives: dropping `relabel-extension-checks.sh` from the narrowed declaration leaves the fixture green (rc 0). That is the over-declaration direction, accepted by the lead.
+- `core/fixtures/self-update-gate/run.sh` no longer prints the `HERMETIC-CONSUMED` line for the whole `reconcile/` directory, which no shard's `inputs.decl` declares as a `!` row any more; `core/scripts/hermetic-run.sh` reads such a line only to satisfy a `!` row. Seeded through `scripts/seed-verdict-store.sh`: `self-update-gate-d` and `self-update-gate` rc 0, `required_missing=0`.
+
+Re-homed rows and the live entry that carries each:
+- The `enforcement-map-sites` pole value judgment, and the repeat of A00 in its shards b and c, wait on the load-dependent A00 diagnosis. Carried by BL-1008; cluster W adds the carrying line there in this batch.
+- The `ledger-reverify` shard rebalance is blocked: the movable units can go only to a dist-only shard or to a new shipping shard, and no per-unit seconds are recorded to choose a move. Carried by BL-1255.
+
+Rows closed without an owner:
+- The `enforcement-map-derivations` wake is not narrowed, by the batch-257 lead ruling, because running its whole-tree controls with `--arms` would weaken a control. No action remains.
+- The `check-24` shard moves were measured as no gain and are not built.
+- The two-fixture stale trace closed on the 0.1222.0 measurement under the batch-263 operator ruling.
+- The overlap between the `self-update-gate` base differential and the `self-update-join-gate` cells is recorded and is not owed.
+
 verify: manual — the owed work is a judgment of the non-mutant poles and a per-gate wall clock and dollar figure from a real release push, so no predicate over the tree can test it; a live 0-mutants receipt would read CLOSE-CANDIDATE while that work is open.
 
 ## BL-806 — a lead can write an estimated, future-dated time into `pipeline-snapshot.md`, and a resuming session reads it as fact
@@ -420,6 +446,30 @@ The strict grammar above reads 331 / 303 / 59 on the same 356 files at the same 
 **Progress (batch 258, C1; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The exit condition is counted again and is still not met, so the wait stands and no arm is built. Batch 258's counter, `bl806count.py` (a perishable scratchpad path), reads **219** rc-0 writes carrying a strict bare token since graph's install of 0.1012.0 (2026-11-05T23:58:28Z), by the batch-256 grammar above, newest write 2026-11-17T16:12Z. That is below 300, with 300 − 219 = 81 remaining. Its control, in the same script, reproduces 1646 writes, 1560 rc-0 and 209 bare-bearing at the batch-256 cutoff, equal to the reading recorded above. That reading's projection, "the 91 remaining project to about 2026-11-15T08:54Z", did not hold. From that reading's newest write, 2026-11-12T12:48:49Z, to 2026-11-17T16:12Z is 5 d 3 h 23 min, 5.14 days, and the count rose 219 − 209 = 10, so 10 / 5.14 = about 1.9 a day, against the 32.1 a day the projection assumed. The two rates differ by a factor of about 17, so neither supports a date for the remaining 81, and none is projected. No new s323 readings were taken: by operator ruling they wait until s323 completes.
 
 **Progress (batch 261, C8; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The exit condition, counted per segment, is read through graph's sprint 323 close (2026-11-20T04:20:00Z; a9b015557) at 250 of 300 and is still not met, so the wait stands and no arm is built. The batch-258 counter `bl806count.py` was recovered from its transcript (agent-a156f95f8dbc0429d of session 2962d422, Write `toolu_013GkgxFi9hcV93FMYrQrxVM` plus two Edits and the whole-command `sed`) and re-run verbatim over `~/.claude/projects/-Users-n8-git-graph`, 7,480 jsonl files. Control: its reading at the batch-256 cutoff is 1646 writes, 1560 rc-0, 209 whole-command bare-bearing, and at 2026-11-17T16:12:10Z it is 219, both equal to the recorded figures; the `99:99Z` count is 0 (it shows the literal absent, not that the regex discriminates). Through the close it reads 2394 writes, 2274 rc-0 and **282** rc-0 writes whose command text carries a strict bare token. That is +63 since 219 and 18 short of 300; it is context only, because the close counts per segment. The scan read past the window end with 0 additional writes; the newest write is 2026-11-20T03:57:44Z. Per operator ruling 2026-11-20 the count that decides is the PER-SEGMENT one, the entry's own grammar (`snapshot-update.sh` to the end of its segment): it reads 180, 190 and **250** of 300, 50 short, and the close waits on 300 by that count. The recorded 209 and 219 are the whole-command reading, kept beside it as context. Neither figure is a false-positive count, and no rate is projected.
+
+**Progress (batch 268, M; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The exit condition is met: **385** rc-0 writes carry a strict bare token, counted per segment by the batch-256 grammar. The four arms are measured. No arm is built, by lead ruling.
+
+- Counter of record: the batch-258 `bl806count.py`, recovered as in batch 261 and re-run over 8,602 jsonl files under `~/.claude/projects/-Users-n8-git-graph`. It reads 3053 writes, 2870 rc-0, **385** per-segment bare-bearing and 418 whole-command, with `99:99Z` at 0. The newest write is 2026-11-26T10:38:28.863Z. Its output is md5-identical to a second recovered run (25366cf24e485b1de7d4e5af129b7579), and an independent extraction reads 3053 / 2870 / 385.
+- Reproductions in the same run: at the batch-256 cutoff it reads 1646 / 1560 / 209 whole-command, and at the s323 close (2026-11-20T04:20:00Z) 250 per-segment and 282 whole-command. All equal the recorded figures.
+- Population window: graph's install of 0.1012.0 (2026-11-05T23:58:28Z) to the newest write above.
+- Method: now = the tool_use `timestamp`. Each segment is split with `shlex` (477 of 477 segments parse). Op arities come from `core/scripts/snapshot-update.sh:286-330`. Only WRITTEN arguments are judged; 19 writes carry a bare token only in a match or key argument. A bare token is dated from the nearest preceding dated stamp (ISO, date-only or compact), with a 12 h previous-day rollover (1 fire rolled). A fire is more than 600 s ahead of now.
+- Partition of the 385: 302 bear a token only in the four arms' ops, 61 only in other ops, 11 only in non-written arguments, 8 in more than one, and 3 in a stray positional.
+- The four arms, each with N bare-bearing writes, the fires a 1% FP rate predicts, and the fires found:
+  - Arm 1, stamp-led Recent Activity (`--activity` with a leading stamp): N=55, 0.55 predicted, 8 fires, 0 TP and 8 FP. Not earned.
+  - Arm 2, the table and key ops, per op. `--activity` with no leading stamp: N=239, 2.39 predicted, 37 fires on 35 writes, 10 TP and 27 FP (25 writes). `--open-item`: N=14, 1 fire, FP. `--row-set <a> deliverable`, `--line-replace 'In-Flight Teammates'` and `--set in_flight_sub_step`: N=0 each, against 13, 31 and 0 rc-0 writes using the op.
+  - Arm 3, the range end without `Z`: N=17, 0.17 predicted, 1 fire, TP. Not earned; range ends are not exempted.
+  - Arm 4, the `CLOCK CORRECTION` exemption: it exempts 0, so it cannot fire. Not earned.
+- The Edit/Write channel: 17 Edit or Write calls on `pipeline-snapshot.md` since the install, all `is_error`, 0 succeeded. So every successful write goes through `snapshot-update.sh`.
+- Pooled, at the `--stamps-only` payload (`snapshot-update.sh:846` passes no op name, so an arm there cannot be keyed to `--activity`): N=371, 48 fires on 42 writes, 12 TP writes and 30 FP writes.
+- The 48 fires by class (36 FP, 12 TP):
+  - FP, a stated deadline spelled without an ISO date: 33. In arm 2 these are 24 fires on 23 writes of `Ceiling 11-15 17:52Z` (2026-11-10), 1 of `15 Nov 17:52Z` and 1 more in `--open-item`. In arm 1 they are 7, the `12:00Z`, `17:52Z` and `18:00Z` deadlines of 2026-11-10. This class is fixable in the dating rule, by reading `MM-DD HH:MMZ` and `DD Mon HH:MMZ`.
+  - FP, a quoted observation from the previous day, under 12 h old: 2 fires on 1 write (2026-11-13). Not separable by grammar.
+  - FP, a past dispatch time dated from the nearest dated stamp: 1 fire, in arm 1.
+  - TP: 12. Seven are `contNNN (~HH:MMZ)` estimated-now stamps written on 2026-11-25 between 18:48Z and 20:28Z, 710 to 1663 s ahead. This is the motivating class, and it is still occurring. The other 5 are one weak case (2026-11-17, classed TP by the hand), a spine START (2026-11-23), a range end (2026-11-25) and 2 `--line-replace` writes of Recent Activity (2026-11-23).
+- Blockers for any WARN or refusal at the write: `snapshot-update.sh:848-855` discards the validator's output on rc 0 and refuses on rc 1 or any other code, and `core/scripts/validate-artifact-budget.sh:1811-1813` exits 1 on any stamps finding. A warning needs a new channel or exit code and a caller change.
+- Lead ruling (batch 268, ai-dlc-72): no arm is built. The measurement chooses the mechanism. The goal survives. Its open item is a narrower detector keyed on estimated-now `~HH:MMZ` stamps, plus a dating-rule extension that reads `MM-DD HH:MMZ` and `DD Mon HH:MMZ`. Both are measured before any exit-code or `snapshot-update.sh` caller change.
+
+Source: the hand's scratch outputs `m806.TQ7a/rerun.out`, `classify.out`, `edits.out` and `fl.txt` in session 23e2d3bf's scratchpad, a perishable scratch path.
 
 verify: manual
 
@@ -3405,6 +3455,22 @@ NOTE: the rule-file audit calls `core-paths.sh --list` with a 30 s timeout and r
 
 Provenance: batch 259, cluster C4; row 11 of `docs/analysis/pipeline-efficiency-s317-s322.md`, which had no entry; id allocated by lead ai-dlc-64.
 
+**Progress (batch 268, M; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The hook steps are attributed from graph's own `step elapsed` lines. Item (a) closes, item (c) is attributed, and item (d) is added.
+
+- Window: the consumer step clock arrived in 0.1170.0 (6b00db863, 2026-11-18), and graph installed 0.1174.0 at eabdc576e, 2026-11-19T20:46Z (control: its parent commit carries 0 step lines). The pushes read are those from 2026-11-20T00:00Z to 2026-11-26T10:41Z.
+- Where the step lines came from: the transcripts' own `tool_result`s are context-mode stubs of about 200 characters, so the lines were read from the recovered hook output files (20 under graph's project `*/tool-results/*.txt`, 7 in graph scratchpads, and 3 truncated reds in one jsonl), joined to their push by session and time. A complete push prints 13 step lines: trunk push, 10 pool steps, fixture drivability and the fixture suite, then `pre-push: all gates green.` or `pre-push: BLOCKED.`
+- `is_error` marks a non-zero push: 18 of the 74 push rows, of which 4 are executed hook reds. The 74 rows include about 10 mentions that were not separated, and 7 are `--no-verify`.
+- Population: **29** recovered hook outputs, 19 pipeline (18 green, 1 red) and 10 update (9 green, 1 incomplete). The 3 truncated pipeline reds are not in it. The other push rows have no recoverable output; that bucket is unrecoverable, not zero.
+- Per step, median / max in seconds. Pipeline (n=19): `layer entries` 32 / 136, stray party-mode 11 / 58, artifact paths 3 / 17, shell syntax 1 / 3, rule-file audit 1 / 3, taught schema 0 / 2, the other pool steps 0 / 1-2, fixture suite 51 / 301. Update (n=10): `layer entries` 33 / 55, stray party-mode 11 / 19, artifact paths 3 / 4, shell syntax 1 / 2, rule-file audit 0 / 1, taught schema 0 / 1, fixture suite (n=9) 128 / 556.
+- Whole push wall clock: pipeline n=19, median 90 s (71 to 453), sum 2621 s; update n=5 timed, median 96 s (71 to 128), sum 484 s.
+- Item (a) CLOSES. The three keyable steps (taught schema, rule-file audit, shell syntax) were the longest pool step in 0 of 29 pushes, with maxima of 2, 3 and 3 s. Since the pool's wall clock is its longest step, keying them saves at most 0 s, so it is not built.
+- Item (c) is ATTRIBUTED. On the update pushes the pool's dominant step is `layer entries` (median 33 s, max 55 s). The fixture suite dominates the push overall (median 128 s, max 556 s). The four largest fixture-suite steps, all on update pushes, are in wrapper sessions ca28a972 (283 s), 49860761 (332 s), 40bd16ae (344 s) and 7ae64dc3 (556 s).
+- (d) Added work item: `layer entries` is the longest pool step in 29 of 29 pushes (median 32 s, a median gap of 21 s to the next step, 15 to 78 s). Read what it reads, and skip it when its inputs did not change, decided by the same rule as (a).
+- The fixture suite was the longest step overall in 27 pushes (18 pipeline, 9 update), and `layer entries` in 2.
+- Outcome: not measured. The hook landed mid-s323, and no graph sprint has completed since delivery: S324 has been open since about 2026-11-21T01:27Z. Preliminary S324 figures, context only: 16 timed pipeline pushes, sum 1857 s, median 83 s; 6 pushes under the routine rule, 830 s, median 132 s. The outcome waits for S324's close.
+
+Source: the hand's scratch directory `m1167/` (`ext.py`, `rows.json`) in session 23e2d3bf's scratchpad, a perishable scratch path.
+
 Step: pipeline
 
 verify: manual
@@ -4237,6 +4303,28 @@ Work list:
 - Before: not taken, and a source exists. `.git/ai-dlc-fixture-durations` keeps one cost per unit and `.git/ai-dlc-suite-key.log` one HIT or MISS per suite, so neither holds a per-push `<fx>@consumer` count. A push log from before 0.1233.0 would hold it, and none was read.
 - Item 3 stays owed: the before reading, and an `h` skip observed on a push.
 
+**Outcome, item 3 before (batch 268, M; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The before reading is taken from 10 real pushes of this repo made before 0.1233.0, all on 2026-11-22 (batch 264), all green, all run by the old hook (no `placement records:` line, and each log's mtime is before the 0.1233.0 commit at 20:36:44-05:00). Columns as above: ran, twin, confirmed, elsewhere; 174 shipping fixtures in each.
+
+| push log | time | ran | twin | confirmed | elsewhere |
+|---|---|---|---|---|---|
+| push-A | 08:39 | 17 | 4 | 104 | 49 |
+| push-B2 | 09:05 | 1 | 5 | 78 | 90 |
+| push-F | 09:29 | 3 | 6 | 100 | 65 |
+| push-G | 09:50 | 1 | 6 | 129 | 38 |
+| push-K | 10:06 | 10 | 7 | 123 | 34 |
+| push-H | 10:24 | 3 | 5 | 101 | 65 |
+| push-D | 10:42 | 9 | 14 | 147 | 4 |
+| push-J | 11:10 | 4 | 19 | 115 | 36 |
+| push-O | 13:39 | 15 | 18 | 106 | 35 |
+| push-I | 15:43 | 0 | 18 | 124 | 32 |
+
+- Derivation: the batch-265 derivation above, by the same script. The confirmed column before 0.1233.0 is BY SUBTRACTION (174 − ran − twin − elsewhere), because the old hook did not name those skips (item 1's defect).
+- Filter: 449 transport-tail files under the session scratchpads and `.git` (depth 4, at least 20 KB), 443 with the consumer-layout line, less 410 fixture-world copies and 3 `push.log` files of another repository, leaves 30 files and 29 distinct by md5. The 10 above are those before 0.1233.0. The logs are under session a99f7c96's scratchpad, `b264/`, a perishable scratch path.
+- Controls: non-ok `done` lines on an `@consumer` unit, 0; `ran` equals the selection line's "N of 174" in every log; `zz-nonexistent-fx9@consumer`, 0 in every log.
+- Cross-check: the same script over the batch-265 logs reproduces the three rows above (24/15/97/38, 6/43/121/4, 1/73/99/1).
+- The pushed shas are not recoverable: each log's tail names a branch, and the batch-264, -266 and -267 branches are deleted.
+- The `h` skip: 0 `skipped on a content-keyed pass` lines in each of 19 distinct real pushes after 0.1233.0 (20 files, one a duplicate), against a control of 1 `skipped on a confirmed record` line per log. So item 2's effect is still not observed on a push, and that half of item 3 stays owed.
+
 Step: n/a
 
 Related: I66.
@@ -4273,3 +4361,35 @@ Provenance: batch 267, lead ai-dlc-9f; found by cluster U's contract adversary; 
 verify: manual
 
 
+
+
+## BL-1255 — the ledger-reverify fixture's shards are unbalanced, and no per-unit cost is read to choose a move
+
+**NOTE (efficiency).** OPEN. Filed 2026-11-26, batch 268, cluster M, re-homed from BL-583; id allocated by lead ai-dlc-72. Owner: `core/fixtures/ledger-reverify*`.
+
+The cost lands in two places: this repo's pre-push gate, and every consumer push that dispatches shard a. Shard a (`ledger-reverify`) ships, and graph's pushes run it. Shards b and c are `.dist-only` and run only here.
+
+Goal: the three `ledger-reverify` shards are balanced by a move chosen from recorded per-unit costs, or the record shows that no move gains.
+
+- The loaded-cost record read shard a 555 s, b 108 s and c 60 s (BL-583's v0.1146.0 PARTIAL, from `.git/ai-dlc-fixture-durations` in the main checkout).
+- The suite is width-bound: wall clock is summed unit cost / width, at least the longest unit. A full suite then summed 15176 s of plain rows, about 1265 s at width 12.
+- In the 45 push logs of the batch-257 session scratchpads, priced at the same record, shard a was dispatched in 3 and was the floor in 2: 39 units at 488 s per 12 workers, and 26 units at 334 s.
+- Blocked two ways. A unit moved out of a can go to b or c, but those are `.dist-only`, so a consumer would stop running it. The other option is a new shipping shard (`uninstall.sh` plus both manifest copies). And no per-unit seconds are recorded to choose a move.
+
+"A step with no measured value goes" (`.claude/rules/operator-rulings.md`) applies to any unit the reading shows to be a repeat.
+
+Baseline: s324 (open; graph's first `(s324)` commit is b00756c1e, 2026-11-21T01:57Z). 1 of the 26 recovered graph push outputs from that time on dispatched shard a: graph session 40bd16ae, an `/ai-dlc-update` pull, at 2026-11-26T02:23Z, file `/private/tmp/claude-501/-Users-n8-git-graph/40bd16ae-64db-4558-ab98-f70ce5909f9a/scratchpad/push.txt`. It printed `done 7/56  ok ledger-reverify`, `read-set keys: 56 of 194`, and a fixture-suite `step elapsed 344s`. The output prints no per-unit seconds. In the consumer layout the unit is plain `ledger-reverify`, with no `@consumer` suffix. By session: 0 of 15 outputs from `/ai-dlc` sessions, 1 of 10 from `/ai-dlc-update` sessions, and 0 of 1 unclassified (5ccc89cc). These are the recovered outputs, the paths listed in `blobs.json` of the batch-268 m1167 scratchpad, each read directly. They are not every push: many push calls left no recoverable output. Counting command: over those files with a time at or after 2026-11-21T01:57Z, `/usr/bin/grep -lE 'done +[0-9]+/[0-9]+ +[^ ]+ +ledger-reverify$'`. Control in the same invocation: the kept sibling `ledger-reverify-unfalsifiable` reads 4 files. Distribution side: shard a 555 s, b 108 s and c 60 s, loaded costs from `.git/ai-dlc-fixture-durations` as read for BL-583's v0.1146.0 PARTIAL; shard a was the floor in 2 of 45 push logs.
+
+Expected movement: after a move, the gap between shard a's loaded cost and b's and c's narrows. A graph push that dispatches shard a then spends less of its fixture-suite step waiting on it. If item 1's reading shows no move gains, nothing moves and the entry records that.
+
+Work list:
+1. Read per-unit cost from `.git/ai-dlc-fixture-durations` (LOADED costs, already recorded) before any new measurement. No timing run.
+2. Choose a move from that reading, or record that none gains.
+
+Done condition: a move chosen in item 2 is built and the gate's recorded costs read after it, or the entry records from item 1's reading that no move gains.
+
+Step: pipeline
+
+Provenance: batch 268, cluster M; re-homed from BL-583's `ledger-reverify` rebalance row; id allocated by lead ai-dlc-72.
+
+verify: manual
