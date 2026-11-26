@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1264.0] - 2026-11-26
+
+### Re-running deliver on an open pull request updates its body and exits 0; a hard-remedies record survives a self-update fast-forward and is dropped, visibly, once the operator commits non-machinery changes (BL-1257, BL-1256)
+
+- For every consumer with an `origin`: `pull.sh deliver` looks up the open pull request for the branch before it writes anything. With no `origin`, deliver skips the lookup, commits, and then refuses `deliver-no-remote`, as before. With one open, it pushes, edits that pull request's body by number and prints `DECIDE pr <url> updated`, exit 0, instead of failing on `gh pr create` after the push. With more than one it refuses `deliver-gh-pr-multiple`, and a failed lookup refuses `deliver-gh-pr-lookup`, both before any write. A closed or merged pull request on the same branch is ignored and a new one is opened as before.
+- A gh edit or create that fails after the push now prints `DECIDE pr-failed <file>` and exits 3: the branch is pushed, fix gh and run deliver again. It used to print `REFUSED deliver-gh-pr-create rc=2`, which claimed nothing was written. This closes `PC-S325-DELIVER-REFUSES-GH-PR-CREATE-AFTER-PUSH`; graph closes S325 through a NAMED-UPSTREAM row from this release's commit message. Push still comes before create, so its filed line-order receipt stays passing.
+- The hard-remedies record (the paths a HARD round exited 3 on) is keyed on the consumer's HEAD when it was started. It survives the AI/DLC self-update fast-forward, which changes only machinery paths, as the consumer's installed `scripts/ai-dlc/core-paths.sh` classifies them (when it is unavailable the record is dropped, reason `classifier-unavailable`). Once the operator commits a change to any other path, or HEAD is no longer a descendant of the recorded one, the record is read as absent, and deliver names each dropped path as `NOTE hard-remedies-dropped <path> <reason>` in the PR body. A record written by the old engine is dropped the same way. Nothing refuses.
+- An origin that `gh` cannot resolve (for example a non-GitHub remote) now refuses `deliver-gh-pr-lookup` before the commit, with a remedy line, where the old deliver pushed and then failed at `gh pr create`.
+- Action for consumers: none. SKILL.md's deliver contract names every refusal and the new rows.
+
 ## [0.1263.0] - 2026-11-26
 
 ### A consumer-layout fixture whose installed file changed only its exec bit or symlink target now runs instead of skipping on an old pass (BL-1155, partial)
