@@ -4488,28 +4488,3 @@ Provenance: batch 268, cluster M; re-homed from BL-583's `ledger-reverify` rebal
 verify: manual
 
 
-## BL-1256 — the hard-remedies record never ages, so an abandoned HARD round carries into a much later pull
-
-**DEFECT.** OPEN. Filed 2026-11-26. Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (the hard-remedies record and its validity key).
-
-Goal: a hard-remedies record from an abandoned HARD round never decides what a later, unrelated pull delivers or which `pull-decisions.tsv` rows it keeps.
-
-Baseline, from cluster H's tip adversary against `pull.sh` at ce3f057d3:
-- Reproduction: round 1 exits 3 on HARD rows at T1 and the operator walks away; weeks later a pull at T5 still finds `pl_hr_valid` true, because no apply.sh has run since; the operator's own later edit to a recorded override or core file is committed whole into the new PR, and T1's leftover `pull-decisions.tsv` rows are kept.
-- Nothing ages the record, and a HARD-only round re-keys it, so a chain of HARD-only rounds keeps it valid indefinitely.
-- The same-theirs retry on base already keeps the T1 snapshot for every file; this carry is limited to the recorded paths.
-- Candidate key: the consumer's HEAD sha.
-
-Work list:
-
-1. Key the record's validity on a value that moves when the consumer's history moves (candidate: the consumer's HEAD sha at the snapshot), and treat a record whose key no longer matches as absent, never as a refusal.
-2. Keep the decisions-row carry under the same key, so stale rows are cut at the theirs change as they were before the record existed.
-3. A `reconcile-pull-driver` arm: a T1 HARD round, an operator commit, then a pull at a new theirs; the operator's later edit to a recorded path is not committed whole and T1's decisions rows are not kept, while world `hr`'s arms still pass.
-
-Done condition: item 3's arm passes on the tip and fails with item 1 reverted.
-
-Step: n/a
-
-Provenance: batch 268, lead ai-dlc-72; found by cluster H's tip adversary; id allocated by the lead. No consumer candidate.
-
-verify: manual
