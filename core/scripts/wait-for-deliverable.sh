@@ -717,15 +717,6 @@ seal_of() {
 #      --check-part exit 2 whose text is its own harness or argument fault -- AI_DLC_CHECK_BYTES
 #      unreadable, a wrong argument list -- is no verdict) -- the join itself
 #      still refuses those bytes, and a seat is never held on a check that gave no verdict.
-#   9. AN ADJUDICATOR BATCH FILE (BL-974's term 7) -- a `--mark` on a non-review file
-#      `planning-artifacts/s<N>/shards/<D>/<x>.md` whose <D> ends in `-adjudicate-p<M>`, M all digits --
-#      must be named `lane-<n>-b<b>.md` or `fanin-b<b>.md` (n, b whole numbers from 1, no leading zero),
-#      and the caller's last word before findings= must be `<b>/<k>` (each under 10 digits) with its b
-#      equal to the name's and b <= k. Any failure is exit 64 before the content-seal row is read, so
-#      nothing is written and no snapshot is taken; the text names the rule (name, field shape, or both
-#      values) and the brief's `shard:` line as the source of both, and a wrong name's remedy prints the
-#      `rm` of the refused file. Builtins only. The join has no counterpart (its read-only arm lists the
-#      adjudicate dir by glob and takes every file whatever its name), so this refusal is the mark's own.
 # ---------------------------------------------------------------------------
 mark_refuse() { echo "FAIL: $MK_MODE: $1 Nothing was written." >&2; exit 64; }
 # mk_sibling_ <file> <entry function>: 0 when <file> defines the entry function at a line start, so it holds
@@ -848,41 +839,6 @@ $MK_OUT
         if [ -n "$mk_rs_" ]; then MK_F="$mk_rs_ remediator ${mk_pb_%.md}"; fi ;;
       esac
     fi
-    # ADJUDICATOR BATCH FILE (header: "--mark", term 9): the name's b<b> is the <b> of the <b>/<k> field, and b <= k.
-    if [ "$MK_MODE" = "--mark" ] && [ -z "$MK_REVIEW" ]; then
-      mk_ap_="${MK_PHYS%/*}"; mk_ad_="${mk_ap_##*/}"; mk_ag_="${mk_ap_%/*}"; mk_ab_="${MK_PHYS##*/}"; mk_aj_=""
-      case "$mk_ag_" in */planning-artifacts/s[0-9]*/shards)
-        case "$mk_ad_" in *-adjudicate-p[0-9]*) case "${mk_ad_##*-adjudicate-p}" in *[!0-9]*) ;; *)
-          case "$mk_ab_" in ?*.md) mk_aj_=1 ;; esac ;; esac ;;
-        esac ;;
-      esac
-      if [ -n "$mk_aj_" ]; then
-        mk_asrc_="both come from your brief's \`shard: <b>/<k> <lane artifact> <n | fanin>\` line"
-        mk_aname_="Write your decisions to $mk_ap_/<lane-<n>|fanin>-b<b>.md as your brief's shard: line names (never mv); next remove this one (run the rm only if the file still holds your own decisions; otherwise leave it and report the collision):
-  rm '$MK_PHYS'
-then mark the file you wrote, as your last act."
-        mk_afld_="run --mark again with <step> adjudicator <b>/<k> from your brief's shard: line."
-        mk_abn_=""
-        case "$mk_ab_" in
-          fanin-b*.md) mk_abn_="${mk_ab_#fanin-b}" ;;
-          lane-*-b*.md) mk_aln_="${mk_ab_#lane-}"; mk_abn_="${mk_aln_#*-b}"; mk_aln_="${mk_aln_%%-b*}"
-            case "$mk_aln_" in ""|0*|*[!0-9]*) mk_abn_="" ;; esac ;;
-        esac
-        mk_abn_="${mk_abn_%.md}"
-        case "$mk_abn_" in ""|0*|*[!0-9]*) mk_abn_="" ;; esac
-        [ -n "$mk_abn_" ] || mark_refuse "'$MK_FILE' is not an adjudicator batch file name (lane-<n>-b<b>.md or fanin-b<b>.md); its name and its <b>/<k> field $mk_asrc_. $mk_aname_"
-        # The <b>/<k> field is the last positional word before findings= (one argument, never a split of MK_F).
-        eval "mk_abk_=\${$(( $# - 1 ))}"
-        mk_afb_="${mk_abk_%%/*}"; mk_afk_="${mk_abk_#*/}"
-        case "$mk_abk_" in */*) ;; *) mk_afb_="" ;; esac
-        case "$mk_afb_" in ""|0*|*[!0-9]*|??????????*) mk_afb_="" ;; esac
-        case "$mk_afk_" in ""|0*|*[!0-9]*|??????????*) mk_afb_="" ;; esac
-        [ -n "$mk_afb_" ] || mark_refuse "the <b>/<k> field '$mk_abk_' is not <b>/<k> (two whole numbers from 1, each under 10 digits); $mk_afld_"
-        if [ "$mk_afb_" != "$mk_abn_" ] || ! (( mk_afb_ <= mk_afk_ )); then
-          mark_refuse "'$MK_FILE': the file name carries b$mk_abn_, the field <b>/<k> $mk_abk_ (b must be the name's b, and b <= k); $mk_asrc_. Compare BOTH with that line and fix whichever differs: a wrong field, $mk_afld_ A wrong name: $mk_aname_"
-        fi
-      fi
-    fi
     MK_REM=""; [ "$MK_MODE" = "--mark-repair" ] && MK_REM=1
     [ "$MK_MODE" = "--mark" ] && [ -z "$MK_REVIEW" ] && [ -n "${mk_rs_:-}" ] && MK_REM=0
     if [ -n "$MK_REVIEW" ]; then :; else
@@ -907,9 +863,6 @@ then mark the file you wrote, as your last act."
           rm -f "$MK_SRC"
           case "$MK_PHYS" in
             */planning-artifacts/s[0-9]*/shards/*-repair-p*/*.md) MK_RESTORE="restore the file with Edit, then mark." ;;
-            # An adjudicator batch file (join-remediator-shards.sh, ADJUDICATE lines) is its adjudicator's alone, and the
-            # lane round's join keys its read-only arm on that file standing on disk: so before the generic shard arm.
-            */planning-artifacts/s[0-9]*/shards/*-adjudicate-p*/*.md) MK_RESTORE="delete that batch file (its decisions are void) and re-dispatch that batch's adjudicator, which writes it with Write and marks it again; never amend an adjudicator's batch file through Bash or a lead Write or Edit." ;;
             */planning-artifacts/s[0-9]*/shards/*/*.md) MK_RESTORE="re-dispatch the adversary for that shard, then merge with merge-adversarial-shards.sh --rerun <shard>.md@<ISO> (a lead Edit re-seals the bytes but leaves a shard last written by the top-level session, which the merge refuses)." ;;
             *) MK_RESTORE="restore the file with Edit, then mark." ;;
           esac

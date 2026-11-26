@@ -148,7 +148,7 @@ $ <the exact command>
 - claim now asserted: <the sentence you wrote, which the derivation above supports>
 ```
 
-Read `.claude/team-roles/appendix/remediator-serial.md` when your brief carries `shard: none (authoring-chain)`, `adjudicator: read-only`, a `LANE:`, `FANIN:` or `ADJUDICATE:` line, adjudicator batch files, or an item carrying `CROSS:`.
+Read `.claude/team-roles/appendix/remediator-serial.md` when your brief carries `shard: none (authoring-chain)`, a `LANE:` or `FANIN:` line, or an item carrying `CROSS:`.
 
 **As the serial remediator, or as the one unsharded remediator**, your LAST act is ONE Bash call
 closing what you wrote: `<lead engine>/wait-for-deliverable.sh --mark-repair <record> <pass>`,

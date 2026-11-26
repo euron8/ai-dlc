@@ -6,9 +6,9 @@
 2 core/scripts/join-remediator-shards.sh
 3 core/scripts/validate-gate-adjudication.sh
 4 core/scripts/wait-for-deliverable.sh
-392 inproc:core/scripts/content-seal.sh
-114 inproc:core/hooks/ai-dlc-content-seal.sh
+391 inproc:core/scripts/content-seal.sh
+113 inproc:core/hooks/ai-dlc-content-seal.sh
 148 inproc:core/scripts/merge-adversarial-shards.sh
-47 inproc:core/scripts/wait-for-deliverable.sh
+40 inproc:core/scripts/wait-for-deliverable.sh
 16 inproc:core/scripts/join-remediator-shards.sh
 4 inproc:core/scripts/validate-gate-adjudication.sh
