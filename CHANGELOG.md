@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1259.0] - 2026-11-26
+
+### dispatch-model-guard stops reading every script; the check that deliverable_of has no fourth copy moves into the distribution's push validator (BL-878)
+
+- For every consumer running the dispatch-model-guard fixture. It no longer greps every file in its hook and script directories to make sure no fourth file defines `deliverable_of`, so it stops reading files it does not declare. It now declares `core/scripts/content-seal.sh`, whose existence `validate-gate-adjudication.sh` checks to decide whether the seal check runs; that read was hidden under the old scan. It still checks that the dispatch guard, the in-flight row writer and `render-brief.sh` each define `deliverable_of` once and that the three copies are byte-identical.
+- The no-fourth-copy check now runs in the ai-dlc distribution's own push validator, as invariant I134 in `scripts/validate-enforcement-map.sh`: no file under `core/` or `scripts/` other than those three names `deliverable_of`. It shares the validator's existing site scan, so it adds no extra pass over the tree.
+- For consumers who trace fixture read sets with `derive-fixture-readsets.sh`. The tracer's stat-pairing guard no longer drops a fixture over one shape: a Python process whose first report under the tree is a metadata-only lookup of `core`. That one row is an exact allowlist entry (program, path and first-report position, all matched exactly). Every other unpaired metadata report, directories included, still counts as a lost report. The readset-skip fixture gains arm "STAT PAIRING TRUST ROOT", which seeds that row and six near-misses: another program, a longer program name, another path, a directory under `core`, a process whose first report is metadata of another path, and a process whose first report of `core` is a data read.
+
 ## [0.1258.0] - 2026-11-26
 
 ### The review-shard-merge fixture builds its last hand-made git repository through the shared world helper (BL-1162)

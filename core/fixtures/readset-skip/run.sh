@@ -3583,6 +3583,36 @@ d/-p'
     else
       bad "STAT PAIRING TWIN: expected 0 with no reason, then 'unreadable' with a reason, got '$SPT' / '$SPTW' / '$SPU' / '$SPUW'"
     fi
+    # THE TRUST ROOT (READSET_STATPAIR_ALLOW), one window. Only Python(30) holds every property of the
+    # allowlisted row (program Python, path core, its first report under the tree is that metadata
+    # report) and is not counted. Each other row is a near-miss for one clause of the rule:
+    #   bash(31) core          program equality (another program)
+    #   Python3(36) core       program equality, not prefix (Python3 extends Python)
+    #   Python(32) pkg         path equality (another path)
+    #   Python(35) core/scripts path equality, not prefix (a real directory under core)
+    #   Python(33) core        first-report KEY: its first report is a metadata report, of pkg/mod.py
+    #                          (seeded before its existence half; pairing ignores order)
+    #   Python(34) core        first-report OP: its first report is of core, but file-read-data
+    # The acquitted row is not seeded first.
+    mkdir -p "$SP_T/core/scripts" || broken "could not seed the trust-root tree"
+    { sp_line 121 'bash(31)' file-read-metadata "$SP_T/core"
+      sp_line 120 'Python(35)' file-read-metadata "$SP_T/core/scripts"
+      sp_line 123 'Python(33)' file-read-metadata "$SP_T/pkg/mod.py"
+      sp_line 122 'Python(33)' file-test-existence "$SP_T/pkg/mod.py"
+      sp_line 128 'Python(34)' file-read-data "$SP_T/core"
+      sp_line 124 'Python(30)' file-read-metadata "$SP_T/core"
+      sp_line 125 'Python(32)' file-read-metadata "$SP_T/pkg"
+      sp_line 126 'Python(33)' file-read-metadata "$SP_T/core"
+      sp_line 129 'Python(34)' file-read-metadata "$SP_T/core"
+      sp_line 127 'Python3(36)' file-read-metadata "$SP_T/core"
+    } > "$WORK/sp.awin"
+    TRACE_ARMS=$((TRACE_ARMS+1))
+    SPA="$(sp_with "$WORK/sp.awin" "$WORK/sp.awin.rows")"; SPAR="$(cat "$WORK/sp.awin.rows" 2>/dev/null)"
+    if [ "$SPA" = 6 ] && [ "$SPAR" = "$(printf 'Python(32)\tpkg\nPython(33)\tcore\nPython(34)\tcore\nPython(35)\tcore/scripts\nPython3(36)\tcore\nbash(31)\tcore')" ]; then
+      ok "STAT PAIRING TRUST ROOT: a first metadata-only report of core by Python is not counted; the same report by bash or Python3, of another path, of a directory under core, after a metadata report of another path, or after another op on core counts 6, named exactly"
+    else
+      bad "STAT PAIRING TRUST ROOT: expected 6 rows Python(32) pkg, Python(33) core, Python(34) core, Python(35) core/scripts, Python3(36) core, bash(31) core, got '$SPA' / '$SPAR'"
+    fi
 
     # A ONE-FIXTURE `--list` WHOSE FIXTURE IS OMITTED STILL WRITES THE MAP, DROPPING ITS STALE ROWS.
     # Seed a stale `fxa` row the trace can never produce, trace fxa with a lossy stream (the canary
