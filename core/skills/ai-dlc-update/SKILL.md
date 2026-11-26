@@ -745,12 +745,16 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
      recorded verdict in `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`
      under the `subject_digest` the row carries. **Blocks `apply`.** The remedy is to make
      the judgement and write it down, not to widen anything. Step 7 has the record shape.
-     The row carries the `clause` id as well as the `subject_digest`, and BOTH are copied
-     from it rather than derived — a wrong clause is well-formed, passes the schema, and
-     lands in an append-only register. A record clears only when it also carries
-     `read.entry_line` and `read.core_line` and both are found; one that does not is named in
-     the row as `[no read evidence]`, `[read.entry_line not in the entry]` or
-     `[read.core_line not in the <clause> core text]`.
+     One row per adjudicated subject; each ends in
+     `[adjudication-key clause=<C> subject_digest=<D> read=<R>]`. Copy `clause` and
+     `subject_digest` verbatim from that fragment rather than deriving them — a wrong clause
+     is well-formed, passes the schema, and lands in an append-only register. `<C>` is
+     `(unmapped)` and `<D>` is `unkeyable` or `jq-absent` when no key can be written: report
+     the row; `[adjudication-key missing]` means the detector wrote no key: report the row.
+     `read=<R>` names the read half the record lacks: `unrecorded`,
+     `no-read-evidence`, `entry-line-absent` (`read.entry_line` not in the entry) or
+     `core-line-absent` (`read.core_line` not in the clause core text); `core-text-unread` means
+     the core text could not be read.
    - `HARD-REGISTER-CONTRADICTION` [LC-A2] → that register states two different verdicts under one
      key and the later record declares no `supersedes` plus `reason`. **Blocks `apply`**,
      because a lookup would otherwise answer with whichever record was read last.

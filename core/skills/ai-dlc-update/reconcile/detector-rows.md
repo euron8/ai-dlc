@@ -715,9 +715,9 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
    no recorded verdict, and a `HARD-` status blocks `apply`. Write one JSON object per line into
    `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`, shape in
    `.claude/schemas/layer-adjudication-register.json`, copying `clause` AND `subject_digest`
-   **verbatim from the blocking row** — the row prints both, and the example below is one
-   clause of several that produce these rows, so its `LC-E4` is an illustration and never the
-   value to reuse:
+   **verbatim from the row's `[adjudication-key clause=<C> subject_digest=<D> read=<R>]` fragment**
+   — one row per adjudicated subject, and the example below is one clause of several that
+   produce these rows, so its `LC-E4` is an illustration and never the value to reuse:
 
    ```json
    {"clause":"LC-E4","entry":".claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md","subject_digest":"<copied from the row>","verdict":"still-additive","recorded_utc":"2026-07-29T10:00:00Z","reason":"core's change was to the gate-type enum; this entry adds a check row and does not restate it","read":{"entry_line":"<one line of the entry, verbatim>","core_line":"<one line of the core text the row names, verbatim>"}}
@@ -727,9 +727,11 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
    LC-E4 / LC-E6, an added or removed line of the range diff of the hooked file (marker
    stripped); LC-E14, a line of the declared `extends:` span at base or theirs; LC-O15, a line of
    the shadowed section at the entry's `base_sha` or at theirs; LC-E19, a line of the matched core
-   section at theirs. A record that exists and does not clear says so in the row and in
-   `--list-adjudications` (`recorded, not clearing: <which half>`): append a NEW record with
-   `read`, never edit the old one.
+   section at theirs. A record that exists and does not clear says so in the row's
+   `read=` token (`no-read-evidence`, `entry-line-absent`, `core-line-absent`; `unrecorded` for
+   none; `core-text-unread` when the core text could not be read) and in `--list-adjudications`
+   (`recorded, not clearing: <which half>`): append a NEW record with `read`, never edit the old
+   one. Re-read with `layer-drift.sh --list-adjudications` after a verdict clears the row.
 
    **If the verdict leaves work OWED, declare it — do not write it into `reason`.** A
    `still-additive` that is only true because somebody intends to fix something has recorded a

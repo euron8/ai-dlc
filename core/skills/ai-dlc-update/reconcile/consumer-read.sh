@@ -151,3 +151,16 @@ cr_run() {
   shift
   ( cd "$root" && "$@" )
 }
+
+# CR_ADJKEY_FN -- awk function text, the ONE extraction of the adjudication key from a layer-drift
+# row's detail column (layer-drift.sh's adj_key_frag writes it). hard-blockers.sh and emit-report.sh
+# both load it as `awk -F'\t' "$CR_ADJKEY_FN"'<program>'`, so the two renderings of one blocker are
+# byte-identical. A detail with no key yields `[adjudication-key missing]`.
+CR_ADJKEY_FN='function adjkey(d,  i, j) {
+  i = index(d, " [adjudication-key ")
+  if (!i) return "[adjudication-key missing]"
+  d = substr(d, i + 1); j = index(d, "]")
+  if (!j) return "[adjudication-key missing]"
+  return substr(d, 1, j)
+}
+'

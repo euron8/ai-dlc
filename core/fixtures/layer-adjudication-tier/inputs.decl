@@ -3,6 +3,7 @@
 # exits 1 without them, so the reconcile directory is declared whole.
 # The validator under test is the required input.
 !core/skills/ai-dlc-update/reconcile/layer-drift.sh
+!core/skills/ai-dlc-update/reconcile/emit-report.sh
 core/skills/ai-dlc-update/reconcile/
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/report.sh

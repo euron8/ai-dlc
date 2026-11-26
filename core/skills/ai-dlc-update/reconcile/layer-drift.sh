@@ -1055,7 +1055,7 @@ adj_digest() { # $1 entry (consumer-relative), $2 core-relative target, [$3 firi
 # The core text and the entry are read only when a record under the digest carries `read`, so a
 # register with none costs one jq pass per lookup, as before.
 ADJ_READ_WHY=""
-ADJ_READ_HALF=""
+ADJ_READ_HALF=""; ADJ_READ_TOK="unrecorded"
 
 adj_trim() { # $1 -> $1 with tabs as spaces and leading and trailing whitespace removed
   local s="${1//"$TAB"/ }"
@@ -1271,7 +1271,7 @@ adj_verdict() { # $1 digest, $2 status, $3 entry, $4 target -> the verdict of ev
 # token" -- the HARD row this writes is what blocks.
 adj_lookup() { # $1 digest, $2 status, $3 entry, $4 target
   local _v _st _fv="" _fs=""
-  ADJ_READ_WHY=""; ADJ_READ_HALF=""
+  ADJ_READ_WHY=""; ADJ_READ_HALF=""; ADJ_READ_TOK="unrecorded"
   cr_test "$CONSUMER" -f "$ADJ_REGISTER" || return 1
   command -v jq >/dev/null 2>&1 || return 2
   adj_records "$@" > "$LD_T/adj-sel" || return 1
@@ -1282,14 +1282,16 @@ adj_lookup() { # $1 digest, $2 status, $3 entry, $4 target
   done < "$LD_T/adj-sel"
   [ -n "$_fs" ] || return 1
   case "$_fs" in
-    no-read) ADJ_READ_HALF="no read evidence"
+    no-read) ADJ_READ_HALF="no read evidence"; ADJ_READ_TOK="no-read-evidence"
              ADJ_READ_WHY="the record carries no \`read\` evidence" ;;
-    entry)   ADJ_READ_HALF="read.entry_line not in the entry"
+    entry)   ADJ_READ_HALF="read.entry_line not in the entry"; ADJ_READ_TOK="entry-line-absent"
              ADJ_READ_WHY="its read.entry_line is not a line of this entry's body (verbatim, at least 20 characters, 10 letters or digits, not a heading)" ;;
     core-unread)
+             ADJ_READ_TOK="core-text-unread"
              ADJ_READ_HALF="the $(adj_clause_of "${2:-}") core text could not be read"
              ADJ_READ_WHY="the core text its read.core_line is checked against, $(adj_core_where "${2:-}" "${4:-}"), could not be read in this run, so the record is not cleared on an unread input; re-run, and if it persists the distribution clone is damaged" ;;
-    *)       ADJ_READ_HALF="read.core_line not in the $(adj_clause_of "${2:-}") core text"
+    *)       ADJ_READ_TOK="core-line-absent"
+             ADJ_READ_HALF="read.core_line not in the $(adj_clause_of "${2:-}") core text"
              ADJ_READ_WHY="its read.core_line is not $(adj_core_where "${2:-}" "${4:-}") (verbatim, at least 20 characters, 10 letters or digits, not a heading)" ;;
   esac
   ADJ_READ_WHY="a record under this digest carries verdict '${_fv}' and does NOT clear it: ${ADJ_READ_WHY}"
@@ -1438,6 +1440,14 @@ adj_clause_cell() { # $1 status -> `LC-E14`, or a stated absence
   else printf '%s' "<no clause in ${ADJ_CONTRACT_REL} at ${THEIRS} carries code '$1' — resolve it there before recording>"; fi
 }
 
+# THE MACHINE-READABLE KEY EVERY HARD-LAYER-ADJUDICATION-MISSING ROW ENDS WITH, BUILT HERE ONCE.
+# hard-blockers.sh and emit-report.sh carry ONLY this fragment of the detail (never the whole
+# column), extracted by consumer-read.sh's CR_ADJKEY_FN. No value holds a space or `]`.
+adj_key_frag() { # $1 status, $2 digest (or unkeyable|jq-absent), $3 read token
+  local _c; _c="$(adj_clause_of "$1")"; [ -n "$_c" ] || _c="(unmapped)"
+  printf ' [adjudication-key clause=%s subject_digest=%s read=%s]' "$_c" "$2" "$3"
+}
+
 adj_check() { # $1 status, $2 entry, $3 target
   adj_is_adjudicated "$1" || return 0
   case "$3" in ''|'?') return 0 ;; esac
@@ -1454,7 +1464,7 @@ adj_check() { # $1 status, $2 entry, $3 target
     # is the classifier's job, and this mode is a reader.
     [ "$MODE" = list ] && return 0
     emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
-      "row '$1' is clause ${cl} at level ADJUDICATED, but its subject digest could not be computed (entry or target unreadable), so no recorded verdict can be matched against it. This blocks rather than passes: an unkeyable row is the one case where 'no record found' and 'nothing to look up' are indistinguishable."
+      "row '$1' is clause ${cl} at level ADJUDICATED, but its subject digest could not be computed (entry or target unreadable), so no recorded verdict can be matched against it. This blocks rather than passes: an unkeyable row is the one case where 'no record found' and 'nothing to look up' are indistinguishable.$(adj_key_frag "$1" unkeyable unrecorded)"
     return 0
   }
   [ "$MODE" = list ] && return 0
@@ -1462,11 +1472,11 @@ adj_check() { # $1 status, $2 entry, $3 target
   case "$rc" in
     0) return 0 ;;
     2) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
-         "row '$1' is clause ${cl} and needs a recorded verdict, and jq is not on PATH, so ${ADJ_REGISTER#"$CONSUMER"/} cannot be read. A register that cannot be read is not an empty one." ;;
+         "row '$1' is clause ${cl} and needs a recorded verdict, and jq is not on PATH, so ${ADJ_REGISTER#"$CONSUMER"/} cannot be read. A register that cannot be read is not an empty one.$(adj_key_frag "$1" jq-absent unrecorded)" ;;
     3) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
-         "row '$1' is clause ${cl} at level ADJUDICATED, and ${ADJ_READ_WHY} [${ADJ_READ_HALF}]. A verdict clears only with evidence the entry was read against the core change. Append a NEW line to ${ADJ_REGISTER#"$CONSUMER"/} with clause ${cl}, subject_digest ${d}, your verdict and reason.$(adj_read_ask "$1" "$3")" ;;
+         "row '$1' is clause ${cl} at level ADJUDICATED, and ${ADJ_READ_WHY} [${ADJ_READ_HALF}]. A verdict clears only with evidence the entry was read against the core change. Append a NEW line to ${ADJ_REGISTER#"$CONSUMER"/} with clause ${cl}, subject_digest ${d}, your verdict and reason.$(adj_read_ask "$1" "$3")$(adj_key_frag "$1" "$d" "$ADJ_READ_TOK")" ;;
     *) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
-         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with clause ${cl} and subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. Both of those are COPIED from this row, not derived: the clause is the code this status maps to in ${ADJ_CONTRACT_REL} at ${THEIRS}, and a different clause produces a textually similar row. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path.$(adj_read_ask "$1" "$3")$(adj_spent_note "$2" "$d" "$(adj_clause_of "$1")")" ;;
+         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with clause ${cl} and subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. Both of those are COPIED from this row, not derived: the clause is the code this status maps to in ${ADJ_CONTRACT_REL} at ${THEIRS}, and a different clause produces a textually similar row. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path.$(adj_read_ask "$1" "$3")$(adj_spent_note "$2" "$d" "$(adj_clause_of "$1")")$(adj_key_frag "$1" "$d" "$ADJ_READ_TOK")" ;;
   esac
 }
 

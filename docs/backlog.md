@@ -1823,6 +1823,9 @@ The per-edit sibling-grep duty is removed. `join-remediator-shards.sh` no longer
 
 **PARTIAL (v0.1246.0).** batch 267, cluster Z. The duty is removed on the s323 record above; the outcome, the four-step group's per-story cost on a consumer sprint that runs this release, is still owed.
 
+Owed:
+- OPEN (batch 267, cluster Z's tip NOTE, ruled DEFECT by the lead): a moved-cite worklist run that exits non-zero leaves its hits unparsed, so WORKLIST-COUNT reads 0 and the round dispatches no serial remediator. That fails open behind a crash on the moved-cite trigger. The join treats a non-zero worklist exit as a refusal, never as zero hits.
+
 Step: stories-test-strategy
 
 Verdict: carry-over-evaluation plus requirements plus architecture plus stories-test-strategy did not fall.
@@ -3131,6 +3134,7 @@ Owed:
 - ~~A measured fix for the install-heavy fixtures' loss (schema-install-fallback, install-scaffold-ignored), then their trace.~~ Superseded by BL-1134's LANDED line (see above): their `core/` and `templates/` rows are decided as `whole` while `install.sh:24` stands.
 - OPEN, D1 (batch 267, cluster W): on a twin (`d`) or side-record (`h`) skip of a header-less `<fx>@consumer` record, rewrite that record with `#modes v1` and the present tags, with no run. This closes the open adoption window named in the cluster W paragraph below. It adds a pass-record writer site, so it needs a W1 row in `scripts/validate-verdict-identity.sh`.
 - OPEN, D2 (batch 267, cluster W): the new class has no regression guard in the suite. No fixture asserts class `x` or class `a`, so the hand-run mutant that removes the mode compare passes the suite.
+- OPEN, D3 (batch 267, lead): the 0.1247.0 CHANGELOG says a `<fx>@consumer` unit skipped by the twin rule or by a side record re-adopts on every push until it runs. The next two pushes (0.1248.0 and 0.1249.0) printed no `read-set modes:` line, and `.githooks/pre-push` prints that line only when the adopted count is above zero. Either those units adopt without being counted or they do not re-adopt. Measure which, then correct the count or the sentence.
 
 **PARTIAL (v0.1163.0).** Batch 258, C10. Trace: `core/scripts/derive-fixture-readsets.sh --list <21 names> --tracer sandbox --declared-out`, main checkout detached at 619bfde94, rc 0; 20 of 21 fixtures accepted. Every accepted window has 0 drop notices, 0 `READSET_STATPAIR` rows (STAT LOSS 0) and an empty canary file. Each fixture's removed path lines are from `git log -p 9cad095fe^..99c662068 -- 'core/fixtures/*/inputs.decl'`, comments excluded, judged against the accepted set (N paths) and the tip `inputs.decl`. SUFFICIENT: no accepted path under the removed line is uncovered by the tip decl. RESTORED: an accepted path under it was uncovered.
 - procsub-staged-refusal-b (64 paths), -c (69): `core/fixtures/lib/mutant.sh`, `core/fixtures/lib/matrix.sh`, `core/hooks/`, `core/session-driver/`, `core/fixtures/procsub-staged-refusal/`: all SUFFICIENT (0 file reads under any).
@@ -4317,3 +4321,29 @@ Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
 
 verify: manual
 
+
+## BL-1249 — the update deliver cannot tell a HARD remedy the model writes between dry-run and apply from an operator's own edit
+
+**DEFECT.** OPEN. Filed 2026-11-25. Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (the deliver's path selection).
+
+Goal: a HARD remedy file the model writes between `pull.sh dry-run` and `pull.sh apply` is delivered by the pull, for every HARD kind, and is never left behind as the operator's own dirt.
+
+Baseline, from cluster U's contract adversary (batch 267):
+- A HARD row names the file under adjudication, never the remedy file. The layer-adjudication register's path is fixed in `layer-drift.sh` and reaches the model only through prose (`SKILL.md` LC-A1, `reconcile/detector-rows.md`), so a kind-to-file map would be `pl_always_stage` under another key.
+- The deliver cannot see the dry-run's rows: the dry-run writes no `apply.out`, `pl_run_set` drops runs from before the snapshot, and nothing records the dry-run's run name.
+- Nothing records that a file was written after the dry-run, and an operator edit in that window is indistinguishable from the model's.
+- Today `pl_always_stage` (BL-1244) covers the only remedy file current HARD kinds prescribe: LC-A1 and LC-A2 write the register.
+
+Work list:
+
+1. Record the dry-run's HARD rows and the remedy path each prescribes, where the deliver can read them.
+2. Deliver a recorded remedy path; leave every other untracked path as the operator's.
+3. A `reconcile-pull-driver` arm that writes a remedy between dry-run and apply and asserts it is delivered, with a control file written in the same window outside the remedy set that is not.
+
+Done condition: item 3's arm passes on the tip and fails with item 2 reverted.
+
+Step: n/a
+
+Provenance: batch 267, lead ai-dlc-9f; found by cluster U's contract adversary; id allocated by the lead. No consumer candidate.
+
+verify: manual
