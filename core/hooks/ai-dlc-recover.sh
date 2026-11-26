@@ -672,10 +672,10 @@ hold. It comes from here. A lead that skips this runs the rest of the sprint on
 the quarter of the rulebook that happened to survive, and reports no problem,
 because a rule it never saw is indistinguishable from a rule that does not exist.
 
-It is an INDEX: it establishes that a rule EXISTS and what it governs, not enough
+It is an INDEX: it shows that a rule EXISTS and what it governs, not enough
 to APPLY one. Before acting on a rule you meet there, \`Read
-.claude/skills/ai-dlc/SKILL.md\` for its full text. Reading an entry and proceeding
-as though you had read the rule is the one way this costs more than it saves. Do
+.claude/skills/ai-dlc/SKILL.md\` in \`offset\`/\`limit\` chunks of at most 16 KB. Reading an entry and proceeding
+as though you had read the rule is the one real failure. Do
 not reconstruct a rule, and do not ask the operator to re-invoke \`/ai-dlc\`.
 
 Before acting, emit a verification turn naming: the current step file, the last

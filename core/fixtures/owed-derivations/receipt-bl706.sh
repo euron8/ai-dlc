@@ -112,6 +112,8 @@ mkc() {
 # covered by the nested row only when its logged parent is apply.sh. apl_mark, called inside the pass's own $( ) under a counted
 # run, appends one `#inproc` row to the start log (id i<receipt pid>.<n>, the previous FXCOUNT_PARENT, apply.sh's path) and
 # exports FXCOUNT_PARENT as that id, so the helper's start names the pass as its parent; the export dies with the $( ).
+# EVERY in-process apply.sh pass is marked, cell eq's two included: the judge requires the marker count to equal the
+# apply.sh `.inproc` row count, else every start parented by one of those markers reads C1.
 APN=0
 apl_mark() {
   [ -n "${FXCOUNT_LOG:-}" ] || return 0
@@ -275,10 +277,10 @@ cell_eq() {
   mkdir -p "$w/snap"
   # the pass world carries no artifact directory, so apply.sh makes no differential start (that child has no tagged parent here)
   mkc "$w/c" clean || exit 9; rm -rf "$w/c/_bmad-output" || exit 9; g "$w/c" add -A; g "$w/c" commit -qm noart; cp -R "$w/c" "$w/snap/c" || exit 9
-  (cd / && export TMPDIR="$D" && inproc_run "$APPLY" apl_main "$DIST" "$BASE" "$w/c" "$THEIRS") > "$w/ip-pass.out" 2> "$w/ip-pass.err"; echo "$?" > "$w/ip-pass.rc"
+  APN=$((APN + 1)); (cd / && export TMPDIR="$D" && apl_mark && inproc_run "$APPLY" apl_main "$DIST" "$BASE" "$w/c" "$THEIRS") > "$w/ip-pass.out" 2> "$w/ip-pass.err"; echo "$?" > "$w/ip-pass.rc"
   mv "$w/c" "$w/ip-c" && cp -R "$w/snap/c" "$w/c" || exit 9
   (cd / && export TMPDIR="$D" && FXCELL=cli-pass bash "$APPLY" "$DIST" "$BASE" "$w/c" "$THEIRS") > "$w/cl-pass.out" 2> "$w/cl-pass.err"; echo "$?" > "$w/cl-pass.rc"
-  (cd / && inproc_run "$APPLY" apl_main --bogus) > "$w/ip-ref.out" 2> "$w/ip-ref.err"; echo "$?" > "$w/ip-ref.rc"
+  APN=$((APN + 1)); (cd / && apl_mark && inproc_run "$APPLY" apl_main --bogus) > "$w/ip-ref.out" 2> "$w/ip-ref.err"; echo "$?" > "$w/ip-ref.rc"
   (cd / && FXCELL=cli-refuse bash "$APPLY" --bogus) > "$w/cl-ref.out" 2> "$w/cl-ref.err"; echo "$?" > "$w/cl-ref.rc"
   for r in pass ref; do
     for ipo in out err rc; do cmp -s "$w/ip-$r.$ipo" "$w/cl-$r.$ipo" || ok=1; done
