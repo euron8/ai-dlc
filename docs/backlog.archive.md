@@ -49668,3 +49668,23 @@ Step: n/a
 Provenance: cluster V (lead and owners named in the release commit); id allocated by the lead.
 
 verify: manual -- run `bash core/fixtures/layer-adjudication-tier/run.sh` from the repo root on the tip tree and on its parent with items 1 and 2 reverted: the Part 15 arms pass on the tip and fail on the parent. No sh receipt, because a grep over the scripts is satisfied by a comment naming the fragment.
+## BL-1254 — the suppression-lifetime cap is restated without the check-scoped counting rule, and its re-fire clause describes a state the validator no longer reaches
+
+**LANDED (v0.1251.0).** **DEFECT.** Filed and closed in one release. Owner: `core/skills/ai-dlc/escalations.md`, `core/skills/ai-dlc/steps/gate-validation.md`, `core/scripts/validate-suppression-lifetime.sh` (with the one printed count line in `core/scripts/gate_adjudication.py`). Filed by the consumer as PC-S324-SUPPRESSION-LIFETIME-CAP-STATED-WITHOUT-THE-CHECK-SCOPED-COUNTING-RULE.
+
+Goal: every restatement of the `**Expires after:**` window, in prose and in the validator's printed lines, states the model `gates_since` implements. The field definitions already say a lifetime is charged only by gates that recorded a row for the suppressed `[catalog] check`; the restatements still read as a sprint-wide gate counter, and their re-fire clause ("once the superseding entry expires, the expired one re-fires for a check the current gates do not re-run") describes a state that check-scoped counting makes unreachable. This is prose correctness: no behaviour, field grammar, `gates_recorded=` field, `FAIL: suppression of check '<c>' is past its lifetime` opening or `WARN: superseded:` prefix changes.
+
+Work list:
+
+1. `escalations.md` "Past expiry": the entry is past once more than `<n>` gates have recorded a row for the check, counted as the field definition states, and the validator counts those gates.
+2. `escalations.md` and `gate-validation.md` supersession paragraphs: the window is charged only by gates that record a row for the check; once the superseding entry is past its own lifetime the check's latest row decides (a `FAIL_WAIVED` row fires the expiry FAIL of the entry it names, a plain `FAIL` fires both, a non-failing row nothing), and a FAIL persists until another operator turn or a gate that loads the check records it not failing.
+3. `validate-suppression-lifetime.sh` supersession header comment: the same, pointing at the `gates_since` header, which owns the rule.
+4. Printed count lines: the expiry FAIL, the `WARN: superseded:` line and the archived-waiver FAIL count gates that recorded the check; the expiry FAIL's closing sentence names the scoped window in place of "one window of at most 3 gates"; `gate_adjudication.py`'s SUPPRESSED line names what was charged, including the no-row case in which every gate is.
+
+Done condition: none of the unscoped phrases ("window of at most", "most 3 gates", "Once `<n>` gates", "gate(s) recorded since", "gate(s) since authorization", "no more gates than", "the expired one re-fires for a check", "since authorization)") remains in the four files, nor does "which only such gates can bring about" (false where no gate has recorded the check, which `gates_since` charges every gate); the `WARN: superseded:` prefix, the `past its lifetime and the check is` opening, the `gates_recorded=` field and `STILL FAILING` are unchanged; and every fragment a fixture asserts of a changed printed line is byte-identical: `core/fixtures/suppression-lifetime/run.sh:472` ("latest recorded verdict is FAIL_WAIVED"), `run.sh:511-512` and `core/fixtures/suppression-lifetime/receipt-bl959.sh:64` and `:66` (the `WARN: superseded: check '32' [core] -- expired entry '` opening and the `stood down by the in-force SUPPRESSED entry '<S>'.` close of the superseded line).
+
+Step: n/a
+
+Provenance: cluster S (lead and owners named in the release commit); id allocated by the lead.
+
+verify: manual -- grep the four owner files case-insensitively for the unscoped phrases in the done condition: zero on the tip, non-zero on its parent, and the deleted clause zero on the tip, with the control tokens present in equal counts on both; grep the edited emission lines for each fixture-asserted fragment named in the done condition, present on both. The changed printed text is reached by `suppression-lifetime` through those fragments only, and the push gate runs it. No sh receipt, because the subject is prose and printed text whose changed words no fixture asserts.

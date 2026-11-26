@@ -160,10 +160,14 @@
 #
 # It is UNCONDITIONAL, with no transition-only flag: the lead's own Check 2 run is the same
 # command, so a flag scoped to gate-transition.sh would leave the manual path wrong. A refresh
-# buys ONE window of at most 3 gates per operator turn, because the grammar caps **Expires after:**
-# at 1..3; once it expires E re-fires, until another operator turn. No protocol step archives a
-# SUPPRESSED entry: escalations.md's terminal-entry archival and retro's archive step move only
-# RESOLVED and OVERRIDDEN.
+# buys ONE window per operator turn, charged only by gates that record a row for the check, the
+# rule the gates_since header owns. Once S is past its own lifetime, for a check some gate has
+# recorded the check's latest row postdates S's authorization and decides: FAIL_WAIVED fires
+# the expiry FAIL of whichever of S and E it names, a plain FAIL fires both, a non-failing row
+# nothing. A gate that does not load the check writes no row, so that FAIL persists until another
+# operator turn, or until a gate that loads the check records it not failing. No protocol step
+# archives a SUPPRESSED entry: escalations.md's terminal-entry archival and retro's archive step
+# move only RESOLVED and OVERRIDDEN.
 #
 # Moving E into pending-archive.md by hand -- off-protocol at any time -- does not clear Check 2:
 # section 6c judges an archived SUPPRESSED waiver exactly as the expiry arm judges a live one (its
@@ -963,7 +967,7 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
           # expiry down, loudly. `$elapsed` is THIS entry's count; the lookup overwrites SL_ELAPSED.
           if sl_superseder "$supp" "$suppcat" "$wkey" "$authts"; then
             superseded_n=$((superseded_n + 1))
-            echo "WARN: superseded: check '$supp' [${suppcat:-core}] -- expired entry '$short' ($elapsed gate(s) since authorization, **Expires after:** $expires; latest verdict $verdict at row ts $vts) is stood down by the in-force SUPPRESSED entry '$SS_SHORT'." >&2
+            echo "WARN: superseded: check '$supp' [${suppcat:-core}] -- expired entry '$short' ($elapsed gate(s) that recorded the check since authorization, **Expires after:** $expires; latest verdict $verdict at row ts $vts) is stood down by the in-force SUPPRESSED entry '$SS_SHORT'." >&2
             continue
           fi
           key="EXPIRED:$supp"
@@ -974,7 +978,7 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
             bad=$((bad + 1))
             echo "FAIL: suppression of check '$supp' is past its lifetime and the check is" >&2
             echo "      STILL FAILING. Authorized $authts, **Expires after:** $expires gate(s)," >&2
-            echo "      $elapsed gate(s) recorded since; latest recorded verdict is $verdict." >&2
+            echo "      $elapsed gate(s) that recorded this check since; latest recorded verdict is $verdict." >&2
             echo "      Verdict source: the row at ts $vts in $GATE_METRICS -- the PREVIOUS" >&2
             echo "      gate's recorded verdict. This gate's own row is written by Check 12," >&2
             echo "      which runs after Check 2." >&2
@@ -983,8 +987,8 @@ while IFS="$US" read -r header status supp expires authts named suppcat authline
             echo "      authorization as a NEW entry, or fix the underlying failure." >&2
             echo "      A NEW SUPPRESSED entry in this file for the same [catalog] check, in force," >&2
             echo "      authorized at a different timestamp, stands this FAIL down at the next run" >&2
-            echo "      (a WARN: superseded: line names both entries); it buys one window of at" >&2
-            echo "      most 3 gates." >&2
+            echo "      (a WARN: superseded: line names both entries); its window is charged only" >&2
+            echo "      by gates that record a row for this check." >&2
           fi
         fi
         # expired but no longer failing: the cause was fixed. Nothing to report.
@@ -1141,9 +1145,10 @@ while IFS="$(printf '\t')" read -r wcat wcheck wts wid; do
         wel="an uncountable number of"; [ -n "$LK_AUTHTS" ] && wel="$(gates_since "$LK_AUTHTS" "$LK_SUPP" "$LK_SUPPCAT")"
         echo "FAIL: check '$wcheck' [$wcat] is recorded FAIL_WAIVED at ts $wts under the ARCHIVED SUPPRESSED" >&2
         echo "      entry '$wshort', which is not in force: **Expires after:** ${LK_EXPIRES:-(none)}," >&2
-        echo "      authorized ${LK_AUTHTS:-(no timestamp)}, $wel gate(s) recorded since, clock $SL_NOW ($SL_CLOCK_SRC)." >&2
+        echo "      authorized ${LK_AUTHTS:-(no timestamp)}, $wel gate(s) that recorded this check since, clock $SL_NOW ($SL_CLOCK_SRC)." >&2
         echo "      In force means an expiry in 1..3, an authorization not later than the clock, and no" >&2
-        echo "      more gates than the expiry. Moving a suppression into the archive does not renew it." >&2
+        echo "      more gates that recorded this check than the expiry. Moving a suppression into the" >&2
+        echo "      archive does not renew it." >&2
         echo "      Obtain fresh operator authorization as a NEW SUPPRESSED entry in $ESCALATIONS," >&2
         echo "      or fix the underlying failure." >&2
       fi

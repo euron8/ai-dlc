@@ -350,9 +350,13 @@ Two arms, either satisfies (dual-arm OR):
   same superseding entry only when Check N's latest row is `FAIL_WAIVED` under an
   expired `SUPPRESSED` waiver that targets `[core] N`; on a plain `FAIL` row for N
   the gate still fails on that `OVERRIDDEN` entry. One operator turn buys one
-  window of at most 3 gates, the `**Expires after:**` cap: once the superseding
-  entry expires, the expired one re-fires for a check the current gates do not
-  re-run, and only another operator turn clears it.
+  window, charged only by gates that record a row for the suppressed
+  `[catalog] check`, counted as above. Once the superseding entry is past its own
+  `**Expires after:**`, the check's latest recorded row decides: a `FAIL_WAIVED` row fires the expiry FAIL of whichever of
+  the two entries it names, a plain `FAIL` fires both, and a row that is not
+  failing fires nothing. A gate that does not load the check writes no row, so
+  such a FAIL persists until another operator turn, or until a gate that loads
+  the check records it not failing.
   **An archived suppression is judged, not acquitted.** A `FAIL_WAIVED` row whose
   waiver is a `SUPPRESSED` entry found only in `pending-archive.md` is judged as a
   live waiver is: a waiver of another target fails, an in-force re-suppression in

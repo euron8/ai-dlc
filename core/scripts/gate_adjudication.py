@@ -1583,8 +1583,9 @@ def main():
             expires, elapsed, header = hit
             suppressed.append(cid)
             print(f"VALIDATE-GATE-ADJUDICATION: SUPPRESSED — check {cid!r} FAIL is covered by an "
-                  f"in-force SUPPRESSED entry (expires after {expires} gate(s), {elapsed} recorded "
-                  f"since authorization): {header}")
+                  f"in-force SUPPRESSED entry (expires after {expires} gate(s), {elapsed} charged "
+                  f"since authorization: gates that recorded this check, or every gate if none "
+                  f"has): {header}")
         else:
             blocking.append(cid)
 
