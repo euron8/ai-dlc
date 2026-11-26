@@ -108,14 +108,22 @@ mkc() {
   esac
   g "$c" add -A; g "$c" commit -qm "pull"
 }
-# Every pull that reaches the differential is one e2e cell (e2e-apply-<n>, numbered in the order the cells run): apply.sh starts the
-# helper as a child, and the helper's start is covered only when its logged parent is a start of apply.sh.
+# Every pull that reaches the differential is an in-process apply pass: apply.sh starts the helper as a child, whose start is
+# covered by the nested row only when its logged parent is apply.sh. apl_mark, called inside the pass's own $( ) under a counted
+# run, appends one `#inproc` row to the start log (id i<receipt pid>.<n>, the previous FXCOUNT_PARENT, apply.sh's path) and
+# exports FXCOUNT_PARENT as that id, so the helper's start names the pass as its parent; the export dies with the $( ).
 APN=0
-apply() { APN=$((APN + 1)); APPLY_OUT="$(cd / && TMPDIR="$D" FXCELL="e2e-apply-$APN" bash "$APPLY" "$DIST" "$BASE" "$1" "$THEIRS" 2>/dev/null)"; APPLY_RC=$?; }
+apl_mark() {
+  [ -n "${FXCOUNT_LOG:-}" ] || return 0
+  local p="$APPLY"; case "$p" in /*) ;; *) p="$PWD/$p" ;; esac
+  printf '#inproc\t%s\t\t%s\t%s\n' "i$$.$APN" "${FXCOUNT_PARENT:-}" "$p" 2>/dev/null >> "$FXCOUNT_LOG" || :
+  export FXCOUNT_PARENT="i$$.$APN"
+}
+apply() { APN=$((APN + 1)); APPLY_OUT="$(cd / && export TMPDIR="$D" && apl_mark && inproc_run "$APPLY" apl_main "$DIST" "$BASE" "$1" "$THEIRS" 2>/dev/null)"; APPLY_RC=$?; }
 rd() { ( cd / && AI_DLC_PROJECT_ROOT="$1" bash "$1/scripts/ai-dlc/check-owed-derivations.sh" 2>&1 ); }
 owed_rows() { awk -F'\t' '$1 == "OWED" { n++ } END { print n + 0 }' "$1/$REC" 2>/dev/null || echo 0; }
 sent() { awk 'END { print NR + 0 }' "$1/validator.ran" 2>/dev/null || echo 0; }
-apply2() { APN=$((APN + 1)); APPLY_OUT="$(cd / && TMPDIR="$D" FXCELL="e2e-apply-$APN" bash "$APPLY" "$DIST2" "$BASE2" "$1" "$THEIRS2" 2>/dev/null)"; APPLY_RC=$?; }
+apply2() { APN=$((APN + 1)); APPLY_OUT="$(cd / && export TMPDIR="$D" && apl_mark && inproc_run "$APPLY" apl_main "$DIST2" "$BASE2" "$1" "$THEIRS2" 2>/dev/null)"; APPLY_RC=$?; }
 dd2() { ( cd / && export TMPDIR="$D" && INPROC_LOADED="" && inproc_run "$DDS" dd_main "$DIST2" "$BASE2" "$@" 2>&1 ); }
 okeys() { awk -F'\t' '$1 == "OWED" { print $2 }' "$1" 2>/dev/null | sort | paste -sd, - ; }
 dd_direct() { ( cd / && export TMPDIR="$D" && INPROC_LOADED="" && inproc_run "$DDS" dd_main "$DIST" "$BASE" "$@" 2>&1 ); }
@@ -206,7 +214,7 @@ cell_g() {
 cell_h() {
   local w="$D/wh" wl dd
   mkdir -p "$w"; mkc "$w/c" clean || exit 9
-  APN=$((APN + 1)); APPLY_OUT="$(cd / && VD_ALL=1 TMPDIR="$D" FXCELL="e2e-apply-$APN" bash "$APPLY" "$DIST" "$BASE" "$w/c" "$THEIRS" 2>/dev/null)"
+  APN=$((APN + 1)); APPLY_OUT="$(cd / && export VD_ALL=1 && export TMPDIR="$D" && apl_mark && inproc_run "$APPLY" apl_main "$DIST" "$BASE" "$w/c" "$THEIRS" 2>/dev/null)"
   wl="$(rows "$APPLY_OUT" WORKLIST artifact-derivations)"
   mkdir -p "$D/wh2"; mkc "$D/wh2/c" clean || exit 9
   dd="$(VD_ALL=1 dd_direct "$D/wh2/c" "$THEIRS")"

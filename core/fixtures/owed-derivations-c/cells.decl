@@ -3,18 +3,8 @@
 # dd_main through inproc_run with nothing loaded, so each is one pass under its own inproc: row. The two cli cells are cell eq's CLI
 # halves, the apply.sh outcomes that differ (a refusal, exit 2 naming the option, and a passing pull): each is started once as
 # FXCELL=cli-<id> bash "$APPLY" and compared byte for byte (stdout, stderr, exit) with the in-process answer on the same input.
-# Every other apply.sh drive reaches the differential, which apply.sh starts as a child that needs a start of apply.sh as its logged
-# parent: e2e-apply-<n>, numbered in the order the receipt runs them. The helper's starts are those children, nested below.
-e2e core/skills/ai-dlc-update/reconcile/apply.sh e2e-apply-1 why=apply.sh starts the differential helper as a child whose start is covered only under a start of apply.sh as its logged parent
-e2e core/skills/ai-dlc-update/reconcile/apply.sh e2e-apply-2 why=apply.sh starts the differential helper as a child whose start is covered only under a start of apply.sh as its logged parent
-e2e core/skills/ai-dlc-update/reconcile/apply.sh e2e-apply-3 why=apply.sh starts the differential helper as a child whose start is covered only under a start of apply.sh as its logged parent
-e2e core/skills/ai-dlc-update/reconcile/apply.sh e2e-apply-4 why=apply.sh starts the differential helper as a child whose start is covered only under a start of apply.sh as its logged parent
-e2e core/skills/ai-dlc-update/reconcile/apply.sh e2e-apply-5 why=apply.sh starts the differential helper as a child whose start is covered only under a start of apply.sh as its logged parent
-e2e core/skills/ai-dlc-update/reconcile/apply.sh e2e-apply-6 why=apply.sh starts the differential helper as a child whose start is covered only under a start of apply.sh as its logged parent
-e2e core/skills/ai-dlc-update/reconcile/apply.sh e2e-apply-7 why=apply.sh starts the differential helper as a child whose start is covered only under a start of apply.sh as its logged parent
-e2e core/skills/ai-dlc-update/reconcile/apply.sh e2e-apply-8 why=apply.sh starts the differential helper as a child whose start is covered only under a start of apply.sh as its logged parent
-e2e core/skills/ai-dlc-update/reconcile/apply.sh e2e-apply-9 why=apply.sh starts the differential helper as a child whose start is covered only under a start of apply.sh as its logged parent
-e2e core/skills/ai-dlc-update/reconcile/apply.sh e2e-apply-10 why=apply.sh starts the differential helper as a child whose start is covered only under a start of apply.sh as its logged parent
+# The in-process apply passes that reach the differential start it as a child; before each such pass the receipt logs an #inproc
+# parent marker naming apply.sh and exports FXCOUNT_PARENT as its id, so those children are covered by the nested row below.
 cli core/skills/ai-dlc-update/reconcile/apply.sh cli-pass
 cli core/skills/ai-dlc-update/reconcile/apply.sh cli-refuse
 nested core/skills/ai-dlc-update/reconcile/apply.sh core/skills/ai-dlc-update/reconcile/derivation-differential.sh why=apply.sh hands the pull to the differential helper with bash "$DD_HELPER" (record mode, its own temp dir, EXIT trap and exit status read back by apply.sh); an in-process apply starts that child exactly as a CLI apply does
