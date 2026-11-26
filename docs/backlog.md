@@ -4490,7 +4490,7 @@ verify: manual
 
 ## BL-1256 — the hard-remedies record never ages, so an abandoned HARD round carries into a much later pull
 
-**DEFECT.** OPEN. Filed 2026-11-26. Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (the hard-remedies record and its validity key).
+**LANDED (vVERSION_PLACEHOLDER).** **DEFECT.** Filed 2026-11-26. Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (the hard-remedies record and its validity key).
 
 Goal: a hard-remedies record from an abandoned HARD round never decides what a later, unrelated pull delivers or which `pull-decisions.tsv` rows it keeps.
 
@@ -4512,4 +4512,32 @@ Step: n/a
 
 Provenance: batch 268, lead ai-dlc-72; found by cluster H's tip adversary; id allocated by the lead. No consumer candidate.
 
-verify: manual
+verify: sh grep -Fq 'dp-a:' core/fixtures/reconcile-pull-driver/run.sh || exit 9; o=$(mktemp) || exit 9; bash core/fixtures/reconcile-pull-driver/run.sh > "$o" 2>&1 || exit 1; grep -Fq 'PASS: reconcile-pull-driver' "$o" || exit 1; for l in 'hr-k deny:' 'hr-k allow:' 'hr-k note:'; do grep -Fq "ok    $l" "$o" || exit 1; done
+
+
+## BL-1257 — deliver pushes, then refuses on an already-open PR
+
+**LANDED (vVERSION_PLACEHOLDER).** **DEFECT.** Filed 2026-11-26. Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (`pl_deliver`).
+
+Goal: re-running deliver on a branch whose PR is already open pushes, updates that PR's body and exits 0, and a gh failure after the push is reported as a pushed-branch state, not as a refusal that claims nothing was written.
+
+Baseline, from the consumer's candidate against `pull.sh` at 7c6892b51:
+- Reproduction: deliver pushes the branch, then `gh pr create` fails because an open PR exists for the head, and deliver prints `REFUSED deliver-gh-pr-create rc=2`, which claims "nothing written" after the push moved the remote ref.
+- The open PR keeps its old body; a re-run repeats the same refusal indefinitely.
+
+Work list:
+
+1. Before any write, look up open PRs for the branch with `gh pr list --head <branch> --state open` (never `gh pr view`, which can resolve a closed or merged PR); a failed lookup refuses `deliver-gh-pr-lookup`, more than one open PR refuses `deliver-gh-pr-multiple`; with none, compute the cut-from base there so a skill-branch cut refuses before the commit.
+2. After the push, one open PR is edited by number with the new body and deliver prints `DECIDE pr <url> updated` (exit 0); with none, `gh pr create` as before and `DECIDE pr <url> opened`.
+3. A gh edit or create that fails after the push prints `DECIDE pr-failed <log>` and exits 3.
+4. Push stays before create and edit.
+5. SKILL.md's deliver contract and the `pull.sh` header name every refusal and the two new rows.
+6. A `reconcile-pull-driver` fixture world holds an open, a closed and an absent PR, and a failed lookup that leaves the remote ref unmoved.
+
+Done condition: the open-PR re-deliver arm passes on the tip and fails on 7c6892b51.
+
+Step: pipeline
+
+Provenance: batch 269, lead ai-dlc-5e, owner ai-dlc-5b; consumer candidate filed by graph.
+
+verify: sh grep -Fq 'dp-a:' core/fixtures/reconcile-pull-driver/run.sh || exit 9; o=$(mktemp) || exit 9; bash core/fixtures/reconcile-pull-driver/run.sh > "$o" 2>&1 || exit 1; grep -Fq 'PASS: reconcile-pull-driver' "$o" || exit 1; for l in 'dp-a:' 'dp-d:' 'dp-n:' 'dp-f:'; do grep -Fq "ok    $l" "$o" || exit 1; done

@@ -166,7 +166,7 @@ and work only what it hands back. Its header is the contract; the subcommands ar
   only write of it on a driver pull, with the same `<base>` the apply was given.
 - `pull.sh merge <dist> <base> <consumer> <theirs> <override>` — an override re-adoption merge.
 - `pull.sh register-drift <dist> <base> <consumer> <theirs> <core-rel-path>` — `HARD-UNREGISTERED-CORE-DRIFT`'s remedy.
-- `pull.sh deliver [--whole <path>]... <dist> <base> <consumer> <theirs>` — commit, push, `gh pr create` (step 8).
+- `pull.sh deliver [--whole <path>]... <dist> <base> <consumer> <theirs>` — commit, push, then `gh pr create` or an update of the branch's open PR (step 8).
 - `pull.sh record <dist> <base> <consumer> <theirs> [-- <path>...]` — on a finished pull, re-records the
   named paths of the record of the pull's own writes from the work tree and nothing else; it stamps nothing.
 - `pull.sh pr-body <consumer>` — the rendered PR body.
@@ -1375,7 +1375,10 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
    only the pull's own writes (step 8's Commit bullet), pushes so the consumer's pre-push runs, and
    opens the PR against the branch the reflog says this one was cut from, with a script-rendered
    body, bounded in bytes and checked before the push: the decisions record, the reconcile region
-   and, where it differs, the dry-run region. Its refusals all come before any write.
+   and, where it differs, the dry-run region. An open PR for the branch (`gh pr list --head <branch> --state open`) is edited by number, never
+   created twice. Its refusals `deliver-gh-pr-lookup` (the lookup failed; it runs only when an origin exists; the origin must be a GitHub remote `gh` can resolve and authenticate against: fix that and re-run deliver), `deliver-gh-pr-multiple` (more than one open PR) and
+   `deliver-cut-from-skill-branch` come before any write; `deliver-pr-body`, `deliver-pr-body-oversize`, `deliver-no-remote` and `deliver-index-reset` come
+   after the commit; a gh edit or create that fails after the push is `DECIDE pr-failed <file>` (exit 3, not a refusal).
    `REFUSED deliver-pull-writes-moved` follows one `NOTE pull-writes-moved <path> recorded <blob>
    now <blob>` per file the pull wrote whose content changed after its last driver step (`pull.sh
    apply`, `finish` or `merge`): your own edit since then, or a step-7 merge made after the last
@@ -1386,7 +1389,7 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
    path as `NOTE pull-writes-rerecorded <path>` in the commit message and the PR body, naming the
    step that re-recorded it: `record`, or the `apply`, `finish` or `merge` that absorbed it (its
    `NOTE pull-writes-absorbed`), and saying the file "changed between driver steps (a WORKLIST or
-   step-7 edit, or yours); now in this commit". It refuses
+   step-7 edit, or yours); now in this commit". A hard-remedies record the pull read as invalid is disclosed per recorded path as `NOTE hard-remedies-dropped <path> <reason>`, the reason one of `non-machinery-diff`, `not-descendant`, `empty-head`, `unknown-header` or `classifier-unavailable`, in the commit message and the PR body. It refuses
    `REFUSED record-path-unnamed rc=2` (one `NOTE pull-writes-moved` per path first) while a recorded
    path whose content moved is not named after `--`, or while a file deliver would refuse as
    `unrecorded` (below) is not named, `REFUSED record-pull-unfinished
@@ -1411,8 +1414,8 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
    red push from that log, fix the cause on this branch, record the diagnosis as a decisions row,
    and run `deliver` again. A fix that edits a file the pull wrote makes that run refuse
    `deliver-pull-writes-moved`; move your own edits to the files it names aside (pipeline-state files are never named, and are never reverted), run ONE `pull.sh record <dist> <base> <consumer> <theirs> -- <path>...` naming every such file, then run `deliver`
-   again; a `deliver-dirty-overlap` refusal on an `unrecorded` file is cleared the same way (`pull.sh record ... -- <path>`, then `deliver`), or by `--whole <path>`. `ASK base-confirm` (exit 3) is step 8's no-reflog-line case. The driver
-   NEVER merges: on `DECIDE pr <url> opened`, the merge and the RETURN PROCEDURE are yours, exactly
+   again; a `deliver-dirty-overlap` refusal on an `unrecorded` file is cleared the same way (`pull.sh record ... -- <path>`, then `deliver`), or by `--whole <path>`. `DECIDE pr-failed <file>` (exit 3) is the same class: the branch is pushed; fix gh from that file and run `deliver` again, which edits the open PR if the failed step was an edit and creates the PR if the failed step was the create. `ASK base-confirm` (exit 3) is step 8's no-reflog-line case. The driver
+   NEVER merges: on `DECIDE pr <url> opened` or `DECIDE pr <url> updated`, the merge and the RETURN PROCEDURE are yours, exactly
    as step 8 states them.
 
 8. **Deliver — branch → commit → push → PR → merge.** The reconcile is landed

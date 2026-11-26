@@ -50,11 +50,13 @@
 #   deliver discloses each re-recorded path as `NOTE pull-writes-rerecorded <path> ...` in the commit and the PR body. apply, about to snapshot a new theirs
 #   while another theirs's pull, not yet delivered, still has uncommitted writes: one `NOTE pull-writes-unfinished <path>
 #   theirs <sha>` per path, then `REFUSED apply-pull-unfinished rc=2`.
+#   deliver, before any write: `REFUSED deliver-gh-pr-lookup rc=2` (the open-PR lookup failed) or
+#   `REFUSED deliver-gh-pr-multiple rc=2` (more than one open PR for the branch).
 #   dry-run and apply, before any write: `REFUSED dry-run-already-applied rc=2` or
 #   `REFUSED apply-already-applied rc=2` when the stamp's `commit:` is <theirs>; otherwise
 #   `REFUSED dry-run-base-stale rc=2` or `REFUSED apply-base-stale rc=2` when it is not <base>.
 #   deliver also prints `DECIDE push-red <log>` (exit 3), `ASK base-confirm <branch> - <question>`
-#   (exit 3), one `DECIDE <status> <block> drain` per push-drain.sh row, and `DECIDE pr <url> opened`;
+#   (exit 3), one `DECIDE <status> <block> drain` per push-drain.sh row, and `DECIDE pr <url> opened` (`updated` when an open PR for the branch was edited), `DECIDE pr-failed <log>` (exit 3: the branch is pushed, the gh edit or create failed);
 #   with no dirty snapshot for this theirs, one `NOTE deliver-no-snapshot ...` line. A file dirty at
 #   the snapshot whose pull change cannot be separated from the operator's edit: one
 #   `NOTE deliver-dirty-overlap <path> overlap|unrecorded` per path, then
@@ -472,6 +474,8 @@ pl_dirty_snapshot() {
         && mv -f "$RUN/snapshot.carried" "$RUN/snapshot.rows" || return 1
       carry=1
     fi
+  elif [ "$drop" = 0 ] && [ -f "$rec" ]; then
+    pl_hr_note_dropped
   fi
   { printf 'ai-dlc-dirty-snapshot 2 %s %s\n' "$th" "${RUN##*/}"; cat "$RUN/snapshot.rows"; } > "$rec.$$" || return 1
   # The ignored sidecar, written before the snapshot it keys on: header `ai-dlc-dirty-ignored 1 <theirs>
@@ -487,7 +491,7 @@ pl_dirty_snapshot() {
   if [ "$carry" = 1 ]; then
     # The record follows its snapshot: re-keyed to this run, its rows kept (a later round adds to them).
     PL_HR_CARRIED=1
-    { printf 'ai-dlc-hard-remedies 1 %s\n' "${RUN##*/}"; sed -n '2,$p' "$(pl_hr_file)"; } > "$(pl_hr_file).$$" \
+    { printf 'ai-dlc-hard-remedies 2 %s %s\n' "${RUN##*/}" "$(sed -n 1p "$(pl_hr_file)" | awk '{print $4}')"; sed -n '2,$p' "$(pl_hr_file)"; } > "$(pl_hr_file).$$" \
       && mv -f "$(pl_hr_file).$$" "$(pl_hr_file)" \
       || { rm -f "$(pl_hr_file).$$"; echo "pull: the hard-remedies record could not be re-keyed to this snapshot; a later theirs change does not carry its paths" >&2; }
   fi
@@ -649,17 +653,63 @@ pl_writes_ran() {
   done
   return 1
 }
-# The hard-remedies record, `<git-dir>/ai-dlc-pull/hard-remedies`: header `ai-dlc-hard-remedies 1 <run>` (the
-# dirty snapshot's run), then one consumer-relative or core-relative path per line, each once: the column-2 path
+# The hard-remedies record, `<git-dir>/ai-dlc-pull/hard-remedies`: header `ai-dlc-hard-remedies 2 <run> <head>` (the
+# dirty snapshot's run; the consumer's HEAD when the record was first started, kept when it is re-keyed), then one consumer-relative or core-relative path per line, each once: the column-2 path
 # of each HARD row an apply ended on at exit 3 (and its consumer path), and the files `pull.sh register-drift`
 # wrote. Valid only while its run is the snapshot's and no apply.sh has run since (pl_writes_ran); otherwise it
-# is ignored, never refused. pl_dirty_snapshot carries its paths across a theirs change; deliver drops it.
+# is ignored, never refused; so is one whose <head> is not HEAD or an ancestor of it with only core-manifest paths
+# (the consumer's scripts/ai-dlc/core-paths.sh --is-core) changed since, and a v1 header. A non-empty record so read as
+# invalid is disclosed per path (pl_hr_note_dropped). pl_dirty_snapshot carries its paths across a theirs change; deliver drops it.
 pl_hr_file() { printf '%s\n' "$GD/ai-dlc-pull/hard-remedies"; }
 pl_hr_snaprun() { sed -n 1p "$GD/ai-dlc-pull/dirty-snapshot" 2>/dev/null | awk '{print $4}'; }
-pl_hr_valid() {
-  local s
-  s="$(pl_hr_snaprun)"
-  [ -n "$s" ] && [ -f "$(pl_hr_file)" ] && [ "$(sed -n 1p "$(pl_hr_file)")" = "ai-dlc-hard-remedies 1 $s" ] && ! pl_writes_ran
+pl_hr_head() { git -C "$CONSUMER" rev-parse -q --verify HEAD 2>/dev/null; }
+# pl_hr_check -- 0 when the record is valid. Otherwise 1, with PL_HR_WHY naming the key rule's reason (empty for an
+# absent record, another run's, or a pull whose apply has run).
+pl_hr_check() {
+  local f s h1="" h2="" h3="" h4="" cur p rc
+  PL_HR_WHY=""
+  f="$(pl_hr_file)"; s="$(pl_hr_snaprun)"
+  [ -n "$s" ] && [ -f "$f" ] || return 1
+  read -r h1 h2 h3 h4 < "$f"
+  [ "$h1 $h2" = "ai-dlc-hard-remedies 2" ] || { PL_HR_WHY="unknown-header"; return 1; }
+  { [ "$h3" = "$s" ] && ! pl_writes_ran; } || return 1
+  cur="$(pl_hr_head)"
+  [ -n "$h4" ] && [ -n "$cur" ] || { PL_HR_WHY="empty-head"; return 1; }
+  [ "$h4" != "$cur" ] || return 0
+  git -C "$CONSUMER" merge-base --is-ancestor "$h4" "$cur" 2>/dev/null || { PL_HR_WHY="not-descendant"; return 1; }
+  git -C "$CONSUMER" -c core.quotePath=false diff --name-only --no-renames "$h4" "$cur" > "$RUN/hr-diff.paths" 2>/dev/null || { PL_HR_WHY="non-machinery-diff"; return 1; }
+  pl_always_stage "$(pl_theirs_sha)" > "$RUN/hr-always.paths"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    # The self-update's own records are machinery: the stamp (pl_always_stage's own list) and the gate log
+    # (hand-listed: self-update-gate.sh writes it to GATE_REC_DIR, no shared constant).
+    grep -qxF -- "$p" "$RUN/hr-always.paths" && continue
+    case "$p" in _bmad-output/ai-dlc-update/self-update-gate-*.md) continue ;; esac
+    # The consumer's installed engine and its own manifest (cwd is the manifest's root); 1 = not core, anything else = unanswered.
+    ( cd "$CONSUMER" && bash scripts/ai-dlc/core-paths.sh --is-core "$p" ) > /dev/null 2>&1; rc=$?
+    [ "$rc" = 0 ] && continue
+    if [ "$rc" = 1 ]; then PL_HR_WHY="non-machinery-diff"; else PL_HR_WHY="classifier-unavailable"; fi
+    return 1
+  done < "$RUN/hr-diff.paths"
+  return 0
+}
+pl_hr_valid() { pl_hr_check; }
+# pl_hr_note_dropped -- after a pl_hr_check that named a reason: one `<path> <reason>` row per recorded path into
+# `<git-dir>/ai-dlc-pull/hard-remedies.dropped` (header `ai-dlc-hard-remedies-dropped 1 <theirs>`), which deliver
+# discloses as `NOTE hard-remedies-dropped <path> <reason>`. An empty record or no reason: no row.
+pl_hr_note_dropped() {
+  local f="$GD/ai-dlc-pull/hard-remedies.dropped" th p
+  [ -n "${PL_HR_WHY:-}" ] || return 0
+  th="$(pl_theirs_sha)"
+  if [ -f "$f" ] && [ "$(sed -n 1p "$f")" = "ai-dlc-hard-remedies-dropped 1 $th" ]; then cp "$f" "$f.$$" || return 0
+  else printf 'ai-dlc-hard-remedies-dropped 1 %s\n' "$th" > "$f.$$" || return 0; fi
+  # The record holds a path and its core-mapped twin (a consumer path mapped again is `.claude/.claude/...`); only a path that exists in the consumer is a row.
+  sed -n '2,$p' "$(pl_hr_file)" > "$f.$$.r" || { rm -f "$f.$$" "$f.$$.r"; return 0; }
+  { cat "$f.$$"; while IFS= read -r p; do [ -z "$p" ] || [ ! -e "$CONSUMER/$p" ] || printf '%s %s\n' "$p" "$PL_HR_WHY"; done < "$f.$$.r"; } > "$f.$$.v" \
+    && awk 'NR == 1 || !seen[$0]++' "$f.$$.v" > "$f.$$.u" \
+    && mv -f "$f.$$.u" "$f" || { rm -f "$f.$$.u"; echo "pull: the dropped hard-remedies rows could not be recorded; the PR body will not name them" >&2; }
+  rm -f "$f.$$.r" "$f.$$.v"
+  rm -f "$f.$$"
 }
 # pl_hr_add <paths file> -- appends the paths to the record, starting a new one when the current one is not valid.
 pl_hr_add() {
@@ -667,7 +717,7 @@ pl_hr_add() {
   f="$(pl_hr_file)"; s="$(pl_hr_snaprun)"
   [ -n "$s" ] || return 1
   if pl_hr_valid; then cp "$f" "$f.$$" || return 1
-  else printf 'ai-dlc-hard-remedies 1 %s\n' "$s" > "$f.$$" || return 1; fi
+  else pl_hr_note_dropped; printf 'ai-dlc-hard-remedies 2 %s %s\n' "$s" "$(pl_hr_head)" > "$f.$$" || return 1; fi
   awk 'NR == 1 || ($0 != "" && !seen[$0]++)' "$f.$$" "$1" > "$f.$$.u" && mv -f "$f.$$.u" "$f" || { rm -f "$f.$$" "$f.$$.u"; return 1; }
   rm -f "$f.$$"
 }
@@ -1308,7 +1358,7 @@ PL_NOTE_FULL=" derivation-unassessable reconcile-log-name override-readopt-subsu
 # the NOTE kinds pull.sh itself records for the body (report-restarted, pl_write_region) are counted:
 # PL_NOTE_FULL and PL_NOTE_COUNTED together classify every kind, `derivation-info-` being a prefix.
 # core/fixtures/reconcile-pull-driver nr-bind fails on an emitted kind in neither.
-PL_NOTE_COUNTED=" blockers-resolved derivation-note derivation-summary extension-adjudicated override-adjudicated reapproval-narrowed report-unverified report-verified derivation-info- deliver-dirty-whole deliver-state-unfiltered pull-writes-rerecorded deliver-ignored-untracked report-restarted "
+PL_NOTE_COUNTED=" blockers-resolved derivation-note derivation-summary extension-adjudicated override-adjudicated reapproval-narrowed report-unverified report-verified derivation-info- deliver-dirty-whole deliver-state-unfiltered pull-writes-rerecorded deliver-ignored-untracked report-restarted hard-remedies-dropped "
 # pl_run_set <git-dir> -- the run directories this pull reads, one per line: from the run the dirty
 # snapshot names, whatever theirs it was written for (pl_deliver_select checks theirs; this does not), so
 # a snapshot left by an earlier pull makes this read from that pull's first run onward. With no
@@ -1348,7 +1398,7 @@ pl_restart_mark_delivered() {
     || { rm -f "$rr.$$"; echo "pull: $rr could not be marked delivered; a retry of this theirs may relay its report-restarted rows" >&2; }
 }
 pl_deliver() {
-  local br cut bv tv subj body p s n_notes rc url xy ix wt pair n dm nl
+  local br cut bv tv subj body p s n_notes rc url xy ix wt pair n dm nl prl npr prn pru hd
   nl="$(printf '\n_')"; nl="${nl%_}"
   pl_setup "$@"
   br="$(git -C "$CONSUMER" symbolic-ref -q --short HEAD 2>/dev/null)" || br=""
@@ -1362,6 +1412,21 @@ pl_deliver() {
   ( pl_deliver_prepare ) > "$RUN/deliver.pre.out" 2> "$RUN/deliver.pre.err"
   rc=$?
   if [ "$rc" -ne 0 ]; then cat "$RUN/deliver.pre.out"; cat "$RUN/deliver.pre.err" >&2; exit "$rc"; fi
+  # The open-PR lookup, before any write: an open PR for this branch is updated after the push, never created
+  # twice; with none, the cut-from base is computed here so a skill-branch cut refuses before the commit.
+  # `gh pr view` is never used: it resolves a closed or merged PR.
+  prl=""
+  if git -C "$CONSUMER" remote get-url origin >/dev/null 2>&1; then
+  prl="$(gh pr list --head "$br" --state open --json number,url,baseRefName --jq '.[] | "\(.number)\t\(.url)"' 2>"$RUN/pr.err")" || { echo "pull: the open-PR lookup failed (gh pr list; see $RUN/pr.err) and nothing was written: origin must be a GitHub remote gh can resolve and authenticate against; fix that and re-run deliver." >&2; refuse "deliver-gh-pr-lookup" 2; }
+  fi
+  npr="$(printf '%s\n' "$prl" | awk 'NF' | wc -l | tr -d ' ')"
+  prn=""; pru=""; cut=""
+  case "$npr" in
+    0) cut="$(pl_cut_from "$CONSUMER" "$br")"
+       if [ -n "$cut" ] && [[ "$cut" =~ $SKILL_BRANCH_RE ]]; then refuse "deliver-cut-from-skill-branch" 2; fi ;;
+    1) IFS="$TAB" read -r prn pru <<< "$prl" ;;
+    *) refuse "deliver-gh-pr-multiple" 2 ;;
+  esac
   pl_bmad_probe
   # Step 8's drain reader: its rows are DECIDE rows for the model, which drains PUSH-CANDIDATE rows.
   bash "$R/push-drain.sh" "$DIST" "$THEIRS" "$CONSUMER" > "$RUN/push-drain.out" 2> "$RUN/push-drain.err"
@@ -1380,6 +1445,15 @@ pl_deliver() {
         *) pl_dnote "NOTE pull-writes-rerecorded $p absorbed by pull.sh $s, which re-recorded it as the pull's own; changed between driver steps (a WORKLIST or step-7 edit, or yours); now in this commit" ;;
       esac
     done < "$RUN/deliver.rerecorded"
+  fi
+  # A hard-remedies record the key rule read as invalid (pl_hr_note_dropped) is disclosed per path.
+  hd="$GD/ai-dlc-pull/hard-remedies.dropped"
+  if [ -f "$hd" ] && [ "$(sed -n 1p "$hd")" = "ai-dlc-hard-remedies-dropped 1 $(pl_theirs_sha)" ]; then
+    sed -n '2,$p' "$hd" > "$RUN/deliver.hrdropped"
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      pl_dnote "NOTE hard-remedies-dropped $p"
+    done < "$RUN/deliver.hrdropped"
   fi
   dm="$nl$(cat "$RUN/deliver.dm")$nl"
   while IFS="$TAB" read -r xy ix wt p pair; do
@@ -1422,10 +1496,15 @@ pl_deliver() {
   git -C "$CONSUMER" push -u origin "$br" > "$RUN/push.log" 2>&1
   rc=$?
   [ "$rc" -eq 0 ] || { echo "DECIDE push-red $RUN/push.log"; exit 3; }
-  cut="$(pl_cut_from "$CONSUMER" "$br")"
+  # An open PR is edited by NUMBER (its base stands); a failed edit or create is the push-red class: the branch is pushed,
+  # fix gh and re-run deliver, which finds the PR through the lookup above.
+  if [ -n "$prn" ]; then
+    gh pr edit "$prn" --body-file "$RUN/pr-body.md" > "$RUN/pr.out" 2>"$RUN/pr.err" || { echo "DECIDE pr-failed $RUN/pr.err"; exit 3; }
+    echo "DECIDE pr $pru updated"
+    exit 0
+  fi
   [ -n "$cut" ] || { echo "ASK base-confirm $br - No reflog line names the branch this one was cut from: which branch should the PR merge into?"; exit 3; }
-  if [[ "$cut" =~ $SKILL_BRANCH_RE ]]; then refuse "deliver-cut-from-skill-branch" 2; fi
-  url="$(gh pr create --base "$cut" --head "$br" --title "$subj" --body-file "$RUN/pr-body.md" 2>"$RUN/pr.err")" || refuse "deliver-gh-pr-create" "$?"
+  url="$(gh pr create --base "$cut" --head "$br" --title "$subj" --body-file "$RUN/pr-body.md" 2>"$RUN/pr.err")" || { echo "DECIDE pr-failed $RUN/pr.err"; exit 3; }
   echo "DECIDE pr $url opened"
   exit 0
 }

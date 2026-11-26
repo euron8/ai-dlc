@@ -1,7 +1,8 @@
-772 *
+942 *
 0 core/skills/ai-dlc-update/reconcile/apply.sh
 0 core/skills/ai-dlc-update/reconcile/emit-report.sh
 0 core/skills/ai-dlc-update/reconcile/pull-key.sh
 0 core/skills/ai-dlc-update/reconcile/pull.sh
 0 core/skills/ai-dlc-update/reconcile/readopt-override.sh
 0 core/hooks/ai-dlc-answer-capture.sh
+0 core/scripts/core-paths.sh

@@ -418,9 +418,34 @@ fi
 # deliver_env <world>: a bare origin, a consumer pre-commit hook recording the index it is shown, a pre-push
 # hook recording which run directories hold a pr-body.md at push time, and a stub gh recording --body-file's size.
 mkdir -p "$WORK/bin" || { echo "FIXTURE BROKEN: mkdir bin" >&2; exit 2; }
-printf '%s\n' '#!/usr/bin/env bash' \
-  'while [ $# -gt 0 ]; do case "$1" in --body-file) wc -c < "$2" | tr -d " " > "$GH_LOG"; shift ;; esac; shift; done' \
-  'echo https://example.invalid/pr/1' > "$WORK/bin/gh" && chmod +x "$WORK/bin/gh" || { echo "FIXTURE BROKEN: cannot write the gh stub" >&2; exit 2; }
+# The stub gh: with no $GH_STATE it lists no PR and answers create and edit with a URL. With $GH_STATE (a directory) it
+# keeps `prs` (number, head, state, url; tab-separated) and logs each subcommand to `log`: `pr list` prints the OPEN rows for
+# --head as `number<TAB>url` (rc 1 while `fail-list` exists), `pr create` fails rc 1 when an open PR holds the head and
+# otherwise records create.body and a new open row, `pr edit <n>` records edit.body and edit.num (rc 1 while `fail-edit` exists).
+cat > "$WORK/bin/gh" <<'GHSTUB' && chmod +x "$WORK/bin/gh" || { echo "FIXTURE BROKEN: cannot write the gh stub" >&2; exit 2; }
+#!/usr/bin/env bash
+st="${GH_STATE:-}"; sub="${1:-} ${2:-}"; hd=""; bf=""; num=""
+[ "$sub" != "pr edit" ] || num="${3:-}"
+while [ $# -gt 0 ]; do case "$1" in --head) hd="$2"; shift ;; --body-file) bf="$2"; shift ;; esac; shift; done
+[ -z "$bf" ] || wc -c < "$bf" | tr -d " " > "$GH_LOG"
+[ -z "$st" ] || echo "$sub $num" >> "$st/log"
+case "$sub" in
+  "pr list")
+    [ -n "$st" ] || exit 0
+    [ ! -f "$st/fail-list" ] || { echo "gh: lookup failed" >&2; exit 1; }
+    awk -F'\t' -v h="$hd" '$2 == h && $3 == "open" { print $1 "\t" $4 }' "$st/prs"; exit 0 ;;
+  "pr edit")
+    [ -z "$st" ] || [ ! -f "$st/fail-edit" ] || { echo "gh: edit failed" >&2; exit 1; }
+    [ -z "$st" ] || { cp "$bf" "$st/edit.body"; echo "$num" > "$st/edit.num"; }
+    echo "https://example.invalid/pr/$num"; exit 0 ;;
+  "pr create")
+    if [ -n "$st" ]; then
+      if awk -F'\t' -v h="$hd" '$2 == h && $3 == "open" { f = 1 } END { exit !f }' "$st/prs"; then echo "gh: a pull request for $hd already exists" >&2; exit 1; fi
+      cp "$bf" "$st/create.body"; printf '1\t%s\topen\thttps://example.invalid/pr/1\n' "$hd" >> "$st/prs"
+    fi ;;
+esac
+echo https://example.invalid/pr/1
+GHSTUB
 deliver_env() {
   world_git init -q --bare "$WORK/$1-origin.git" && world_git -C "$WORK/$1/c" remote add origin "file://$WORK/$1-origin.git" || return 1
   printf '%s\n' '#!/usr/bin/env bash' 'git diff --cached --name-only > "$PRECOMMIT_LOG"' > "$WORK/$1/c/.git/hooks/pre-commit" || return 1
@@ -451,7 +476,7 @@ printf 'refile\t_bmad-output/subagent-context.jsonl\t-\tmodel\tkept\ta hook-writ
 mkdir -p "$A/c/_bmad-output/implementation-artifacts" || { echo "FIXTURE BROKEN: mkdir implementation-artifacts" >&2; exit 2; }
 printf 'a hook wrote this story\n' > "$A/c/_bmad-output/implementation-artifacts/story-1.md"
 printf '# archive\n' > "$A/c/_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md"
-for _v in ov v1 w0 st ns lt ab; do copy_world a "a-$_v"; done
+for _v in ov v1 w0 st ns lt ab pp ps nr; do copy_world a "a-$_v"; done
 # ov: the pull's change also lands on the line the operator edited (HEAD, the snapshot blob and the worktree all differ there).
 sed 's/"k1": "operatorDirtyKey",/"k1": "pullRewroteThis",/' "$WORK/a-ov/c/.claude/settings.json" > "$WORK/a-ov/c/.claude/settings.json.new" \
   && mv -f "$WORK/a-ov/c/.claude/settings.json.new" "$WORK/a-ov/c/.claude/settings.json" || { echo "FIXTURE BROKEN: cannot build world a-ov" >&2; exit 2; }
@@ -1925,6 +1950,40 @@ mkdir -p "${HR_DEC%/*}" && { [ -f "$HR_DEC" ] || printf 'kind\tpath\tdigest\tdec
   && printf '# alpha step\n\n## Alpha\n\nDo alpha, T2 UPSTREAM.\n\n## Beta\n\nDo beta.\n' > "$HRD/core/skills/ai-dlc/steps/alpha.md" \
   && printf '3.0.0\n' > "$HRD/VERSION" && HRT2="$(prd_dist_commit "$HRD" t2)" \
   || { echo "FIXTURE BROKEN: cannot write the hr window or move upstream" >&2; exit 2; }
+# BL-1256 variants, cut after the window and before T2, one property apart: hrd (an operator commit of a non-machinery path),
+# hrm (a commit of a machinery path only), hrv (a v1-header record), hre (hrd's commit and an emptied record). Each has its own
+# origin, and the consumer-layout classifier pull.sh runs from the consumer (scripts/ai-dlc/core-paths.sh and its manifest, as an install lays them out).
+hr_cp_src() { for _c in "$@"; do [ -f "$ROOT/$_c" ] && { printf '%s\n' "$ROOT/$_c"; return 0; }; done; return 1; }
+HR_CP="$(hr_cp_src core/scripts/core-paths.sh scripts/ai-dlc/core-paths.sh)" && HR_CM="$(hr_cp_src core/skills/ai-dlc/core-manifest.md .claude/skills/ai-dlc/core-manifest.md)" \
+  || { echo "FIXTURE BROKEN: core-paths.sh or core-manifest.md not found in either layout" >&2; exit 2; }
+echo "HERMETIC-CONSUMED ${HR_CP#"$ROOT/"}"
+hr_variant() { # <name> <commit path or -> <v1|empty|->
+  copy_world hr "$1" && world_git init -q --bare "$WORK/$1-origin.git" && world_git -C "$WORK/$1/c" remote set-url origin "file://$WORK/$1-origin.git" \
+    && mkdir -p "$WORK/$1/c/scripts/ai-dlc" "$WORK/$1/c/.claude/skills/ai-dlc" \
+    && cp "$HR_CP" "$WORK/$1/c/scripts/ai-dlc/core-paths.sh" && cp "$HR_CM" "$WORK/$1/c/.claude/skills/ai-dlc/core-manifest.md" || return 1
+  if [ "$2" != - ]; then
+    for _p in $2; do   # $2 is a space-separated list of consumer-relative paths
+      mkdir -p "$(dirname "$WORK/$1/c/$_p")" && printf 'commit between T1 and T2\n' >> "$WORK/$1/c/$_p" && world_git -C "$WORK/$1/c" add "$_p" || return 1
+    done
+    GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@invalid GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@invalid \
+      world_git -C "$WORK/$1/c" commit -q -n -m "commit between T1 and T2" -- $2 || return 1
+  fi
+  _hf="$WORK/$1/c/.git/ai-dlc-pull/hard-remedies"
+  [ -f "$_hf" ] && [ "$(sed -n 1p "$_hf" | awk '{print $1 " " $2}')" = "ai-dlc-hard-remedies 2" ] || return 1
+  case "$3" in
+    v1) { sed -n 1p "$_hf" | awk '{print $1 " 1 " $3}'; sed -n '2,$p' "$_hf"; } > "$_hf.new" && mv -f "$_hf.new" "$_hf" ;;
+    empty) sed -n 1p "$_hf" > "$_hf.new" && mv -f "$_hf.new" "$_hf" && [ "$(wc -l < "$_hf" | tr -d ' ')" = 1 ] && [ -z "$(sed -n '2,$p' "$_hf")" ] ;;
+  esac
+}
+hr_t2() { # <name>: the T2 apply, finish and deliver on a variant
+  bash "$REC/pull.sh" apply "$WORK/$1/dist" "$HRB" "$WORK/$1/c" "$HRT2" > "$WORK/$1-t2.out" 2> "$WORK/$1-t2.err" < /dev/null; eval "$1_a_rc=\$?"
+  bash "$REC/pull.sh" finish "$WORK/$1/dist" "$HRB" "$WORK/$1/c" "$HRT2" > "$WORK/$1-fin.out" 2> "$WORK/$1-fin.err" < /dev/null; eval "$1_f_rc=\$?"
+  deliver_run "$1" "$WORK/$1/dist" "$HRB" "$WORK/$1/c" "$HRT2"; eval "$1_d_rc=\$?"
+}
+# The machinery commit is the shape of a real self-update commit: the version stamp, a skill file and a self-update-gate log (installed paths).
+HR_SELFUPD=".claude/.ai-dlc-version .claude/skills/ai-dlc-update/reconcile/detector-rows.md _bmad-output/ai-dlc-update/self-update-gate-20260101T000000Z.md"
+hr_variant hrd src/operator-change.txt - && hr_variant hrm "$HR_SELFUPD" - && hr_variant hrv - v1 && hr_variant hre src/operator-change.txt empty \
+  || { echo "FIXTURE BROKEN: cannot build the hr variants" >&2; exit 2; }
 bash "$REC/pull.sh" apply "$HRD" "$HRB" "$HRC" "$HRT2" > "$WORK/hr-t2.out" 2> "$WORK/hr-t2.err" < /dev/null; hr2_rc=$?
 bash "$REC/pull.sh" finish "$HRD" "$HRB" "$HRC" "$HRT2" > "$WORK/hr-fin.out" 2> "$WORK/hr-fin.err" < /dev/null; hrf_rc=$?
 deliver_run hr "$HRD" "$HRB" "$HRC" "$HRT2"; hrd_rc=$?
@@ -1978,4 +2037,127 @@ else
   bad "hr-f: committed decisions: $(world_git -C "$HRC" show HEAD:_bmad-output/ai-dlc-update/pull-decisions.tsv 2>&1 | tr '\n' '|' | cut -c1-300)"
 fi
 
-report_end reconcile-pull-driver 130
+# ================================ dp: deliver and an open PR for the branch (BL-1257) ================================
+# Two worlds cut from a before its deliver, each with the stub gh's state directory. pp: the lookup fails, then a CLOSED PR holds the
+# branch. ps: the branch was cut from a skill branch, then an OPEN PR holds it.
+dp_ref() { world_git --git-dir="$WORK/$1-origin.git" rev-parse -q --verify "refs/heads/$2"; }
+dp_calls() { grep -c "^$2\$" "$1/log" 2>/dev/null; true; }
+for _w in pp ps; do deliver_env "a-$_w" && mkdir -p "$WORK/$_w-gh" && : > "$WORK/$_w-gh/prs" || { echo "FIXTURE BROKEN: dp world $_w" >&2; exit 2; }; done
+PP="$WORK/a-pp"; PS="$WORK/a-ps"; PPG="$WORK/pp-gh"; PSG="$WORK/ps-gh"
+pp_br="$(world_git -C "$PP/c" symbolic-ref -q --short HEAD)"; pp_h0="$(world_git -C "$PP/c" rev-parse HEAD)"
+: > "$PPG/fail-list"
+GH_STATE="$PPG" deliver_run a-pp "$PP/dist" "$AB" "$PP/c" "$AT"; pp1_rc=$?
+pp1_ref="$(dp_ref a-pp "$pp_br")"; pp1_h="$(world_git -C "$PP/c" rev-parse HEAD)"
+if [ "$pp1_rc" = 2 ] && [ "$(cat "$WORK/a-pp-deliver.out")" = "REFUSED deliver-gh-pr-lookup rc=2" ] && [ -z "$pp1_ref" ] && [ "$pp1_h" = "$pp_h0" ] \
+   && [ "$(dp_calls "$PPG" 'pr list ')" = 1 ] && [ "$(dp_calls "$PPG" 'pr create ')" = 0 ] && [ -n "$pp_br" ]; then
+  ok "dp-c: the open-PR lookup failing refuses deliver-gh-pr-lookup before any write: the bare origin has no $pp_br and the consumer HEAD did not move"
+else
+  bad "dp-c: rc=$pp1_rc ref '$pp1_ref' head moved $([ "$pp1_h" = "$pp_h0" ] && echo no || echo yes) log: $(tr '\n' '|' < "$PPG/log") out: $(tr '\n' '|' < "$WORK/a-pp-deliver.out" | cut -c1-200)"
+fi
+rm -f "$PPG/fail-list"; printf '5\t%s\tclosed\thttps://example.invalid/pr/5\n' "$pp_br" > "$PPG/prs"
+GH_STATE="$PPG" deliver_run a-pp "$PP/dist" "$AB" "$PP/c" "$AT"; pp2_rc=$?
+if [ "$pp2_rc" = 0 ] && grep -qx 'DECIDE pr https://example.invalid/pr/1 opened' "$WORK/a-pp-deliver.out" \
+   && [ "$(dp_calls "$PPG" 'pr create ')" = 1 ] && [ "$(dp_calls "$PPG" 'pr edit .*')" = 0 ] && [ -s "$PPG/create.body" ] \
+   && [ "$(dp_ref a-pp "$pp_br")" = "$(world_git -C "$PP/c" rev-parse HEAD)" ] && [ "$(world_git -C "$PP/c" rev-parse HEAD)" != "$pp_h0" ]; then
+  ok "dp-d: a CLOSED PR on the branch is no PR: the same world that refused above (control: the push now moves $pp_br) creates one and prints opened, edit never called"
+else
+  bad "dp-d: rc=$pp2_rc log: $(tr '\n' '|' < "$PPG/log") out: $(tr '\n' '|' < "$WORK/a-pp-deliver.out" | cut -c1-200) err: $(head -c 200 "$WORK/a-pp-deliver.err")"
+fi
+# dp-a: the S325 case, a second deliver in the same world after a successful push, with the PR (made by the deliver above) open.
+pp_r2="$(dp_ref a-pp "$pp_br")"; cp "$PPG/create.body" "$PPG/first.body"
+printf 'refile\t_bmad-output/subagent-context.jsonl\t-\tmodel\tkept\tdp-a second deliver row\n' >> "$PP/c/_bmad-output/ai-dlc-update/pull-decisions.tsv"
+GH_STATE="$PPG" deliver_run a-pp "$PP/dist" "$AB" "$PP/c" "$AT"; pp3_rc=$?
+pp_r3="$(dp_ref a-pp "$pp_br")"
+if [ "$pp3_rc" = 0 ] && [ "$(grep '^DECIDE pr ' "$WORK/a-pp-deliver.out")" = 'DECIDE pr https://example.invalid/pr/1 updated' ] \
+   && [ "$(dp_calls "$PPG" 'pr edit 1')" = 1 ] && [ "$(dp_calls "$PPG" 'pr create ')" = 1 ] && [ "$(cat "$PPG/edit.num")" = 1 ] \
+   && [ -s "$PPG/edit.body" ] && ! cmp -s "$PPG/edit.body" "$PPG/first.body" && grep -q 'dp-a second deliver row' "$PPG/edit.body" && ! grep -q 'dp-a second deliver row' "$PPG/first.body" \
+   && [ -n "$pp_r2" ] && [ "$pp_r3" != "$pp_r2" ] && [ "$pp_r3" = "$(world_git -C "$PP/c" rev-parse HEAD)" ]; then
+  ok "dp-a: a second deliver after a successful push with the PR open edits that PR by number instead of creating one: updated, exit 0, the edit body is the new render carrying the new row, the origin head moved"
+else
+  bad "dp-a: rc=$pp3_rc log: $(tr '\n' '|' < "$PPG/log") out: $(tr '\n' '|' < "$WORK/a-pp-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-pp-deliver.err") head $pp_r2 -> $pp_r3"
+fi
+# dp-f: the edit fails after the push: the branch is pushed, deliver exits 3 with DECIDE pr-failed, nothing is claimed updated.
+cp "$PPG/edit.body" "$PPG/edit2.body"
+printf 'refile\t_bmad-output/subagent-context.jsonl\t-\tmodel\tkept\tdp-f third deliver row\n' >> "$PP/c/_bmad-output/ai-dlc-update/pull-decisions.tsv"
+: > "$PPG/fail-edit"
+GH_STATE="$PPG" deliver_run a-pp "$PP/dist" "$AB" "$PP/c" "$AT"; pp4_rc=$?
+pp_r4="$(dp_ref a-pp "$pp_br")"
+if [ "$pp4_rc" = 3 ] && grep -q "^DECIDE pr-failed .*/pr.err\$" "$WORK/a-pp-deliver.out" && ! grep -q '^DECIDE pr .* \(updated\|opened\)$' "$WORK/a-pp-deliver.out" \
+   && [ "$(dp_calls "$PPG" 'pr edit 1')" = 2 ] && cmp -s "$PPG/edit.body" "$PPG/edit2.body" \
+   && [ "$pp_r4" != "$pp_r3" ] && [ "$pp_r4" = "$(world_git -C "$PP/c" rev-parse HEAD)" ]; then
+  ok "dp-f: a gh edit failing after the push exits 3 with DECIDE pr-failed (the branch is pushed, the origin head moved) and claims no updated row"
+else
+  bad "dp-f: rc=$pp4_rc log: $(tr '\n' '|' < "$PPG/log") out: $(tr '\n' '|' < "$WORK/a-pp-deliver.out" | cut -c1-300) head $pp_r3 -> $pp_r4"
+fi
+# dp-n: a consumer with no origin commits and refuses deliver-no-remote; the PR lookup is not run (the stub would fail it).
+NR="$WORK/a-nr"; mkdir -p "$WORK/nr-gh" && : > "$WORK/nr-gh/prs" && : > "$WORK/nr-gh/fail-list" || { echo "FIXTURE BROKEN: dp world nr" >&2; exit 2; }
+nr_h0="$(world_git -C "$NR/c" rev-parse HEAD)"
+GH_STATE="$WORK/nr-gh" deliver_run a-nr "$NR/dist" "$AB" "$NR/c" "$AT"; nr_rc=$?
+if [ -z "$(world_git -C "$NR/c" remote)" ] && [ "$nr_rc" = 2 ] && grep -qx 'REFUSED deliver-no-remote rc=2' "$WORK/a-nr-deliver.out" \
+   && [ "$(world_git -C "$NR/c" rev-parse HEAD)" != "$nr_h0" ] && [ ! -s "$WORK/nr-gh/log" ]; then
+  ok "dp-n: a consumer with no origin commits and refuses deliver-no-remote (rc 2) without asking gh for a PR, though the stub's lookup would fail"
+else
+  bad "dp-n: rc=$nr_rc out: $(tr '\n' '|' < "$WORK/a-nr-deliver.out" | cut -c1-200) head moved $([ "$(world_git -C "$NR/c" rev-parse HEAD)" = "$nr_h0" ] && echo no || echo yes) log: $(tr '\n' '|' < "$WORK/nr-gh/log" 2>/dev/null)"
+fi
+ps_br="ai-dlc-update/2.0.0-reconcile-psbr";ps_h0="$(world_git -C "$PS/c" rev-parse HEAD)"
+world_git -C "$PS/c" checkout -q -b ai-dlc-update/1.0.0-reconcile-fx&& world_git -C "$PS/c" checkout -q -b "$ps_br" \
+  || { echo "FIXTURE BROKEN: cannot cut the ps branch from a skill branch" >&2; exit 2; }
+GH_STATE="$PSG" deliver_run a-ps "$PS/dist" "$AB" "$PS/c" "$AT"; ps1_rc=$?
+if [ "$ps1_rc" = 2 ] && [ "$(cat "$WORK/a-ps-deliver.out")" = "REFUSED deliver-cut-from-skill-branch rc=2" ] && [ -z "$(dp_ref a-ps "$ps_br")" ] \
+   && [ "$(world_git -C "$PS/c" rev-parse HEAD)" = "$ps_h0" ] && [ "$(dp_calls "$PSG" 'pr create ')" = 0 ]; then
+  ok "dp-c: a skill-branch cut with no open PR refuses deliver-cut-from-skill-branch before any write: the bare origin has no $ps_br and HEAD did not move"
+else
+  bad "dp-c skill: rc=$ps1_rc ref '$(dp_ref a-ps "$ps_br")' out: $(tr '\n' '|' < "$WORK/a-ps-deliver.out" | cut -c1-200) err: $(head -c 200 "$WORK/a-ps-deliver.err")"
+fi
+printf '7\t%s\topen\thttps://example.invalid/pr/7\n' "$ps_br" > "$PSG/prs"
+GH_STATE="$PSG" deliver_run a-ps "$PS/dist" "$AB" "$PS/c" "$AT"; ps2_rc=$?
+ps_pr="$(ls -td "$PS/c/.git/ai-dlc-pull"/run-*/ | head -1)pr-body.md"
+if [ "$ps2_rc" = 0 ] && [ "$(cat "$WORK/a-ps-deliver.out" | grep '^DECIDE pr ')" = 'DECIDE pr https://example.invalid/pr/7 updated' ] \
+   && [ "$(dp_calls "$PSG" 'pr edit 7')" = 1 ] && [ "$(dp_calls "$PSG" 'pr create ')" = 0 ] && [ "$(cat "$PSG/edit.num")" = 7 ] \
+   && [ -s "$PSG/edit.body" ] && cmp -s "$PSG/edit.body" "$ps_pr" \
+   && [ "$(dp_ref a-ps "$ps_br")" = "$(world_git -C "$PS/c" rev-parse HEAD)" ] && [ "$(world_git -C "$PS/c" rev-parse HEAD)" != "$ps_h0" ]; then
+  ok "dp-c skill control: with an open PR on the branch the skill-branch cut stands aside in the same world and the push moves $ps_br (edit 7, no create)"
+else
+  bad "dp-c skill control: rc=$ps2_rc log: $(tr '\n' '|' < "$PSG/log") out: $(tr '\n' '|' < "$WORK/a-ps-deliver.out" | cut -c1-200) err: $(head -c 200 "$WORK/a-ps-deliver.err")"
+fi
+
+# ================================ hr-key: the hard-remedies record is keyed on the consumer HEAD (BL-1256) ===========
+for _n in hrd hrm hrv hre; do hr_t2 "$_n"; done
+# hrk_*: what deliver left, per variant: the paths in its commit, Rule-8's status, whether T1's decisions row was kept, the NOTE rows in its PR body.
+hrk_inc() { world_git -C "$WORK/$1/c" show --name-only --format= HEAD | grep -cxF -- "$2"; true; }
+hrk_dec() { world_git -C "$WORK/$1/c" show HEAD:_bmad-output/ai-dlc-update/pull-decisions.tsv 2>/dev/null | grep -c '	hr T1 disposition row$'; true; }
+hrk_body() { printf '%s' "$(ls -td "$WORK/$1/c/.git/ai-dlc-pull"/run-*/ | head -1)pr-body.md"; }
+hrk_notes() { grep -c "^- NOTE hard-remedies-dropped " "$(hrk_body "$1")"; true; }
+# hrk_ok: T2's apply, finish and deliver exited 0 AND did their work: deliver printed `opened` and its commit carries the T2 write to alpha.md.
+hrk_ok() { eval "[ \"\$$1_a_rc\$$1_f_rc\$$1_d_rc\" = 000 ]" && grep -qx 'DECIDE pr https://example.invalid/pr/1 opened' "$WORK/$1-deliver.out" \
+  && [ "$(hrk_inc "$1" "$HR_ALPHA")" = 1 ] && grep -q 'T2 UPSTREAM' "$WORK/$1/c/$HR_ALPHA"; }
+HR_R8="$HR_OVR/SKILL__Rule-8.md"; HR_R9="$HR_OVR/SKILL__Rule-9.md"
+if hrk_ok hrd && [ "$(hrk_inc hrd "$HR_R8")" = 0 ] && [ "$(hrk_inc hrd "$HR_R9")" = 0 ] && [ "$(hrk_dec hrd)" = 0 ] \
+   && [ "$(world_git -C "$WORK/hrd/c" status --porcelain=v1 -- "$HR_R8")" = " M $HR_R8" ] && [ "$(world_git -C "$WORK/hrd/c" status --porcelain=v1 -- "$HR_R9")" = " M $HR_R9" ]; then
+  ok "hr-k deny: an operator commit of a non-machinery path between T1 and T2 ages the record out: the remedies edited after T1 stay dirty and out of the commit, and T1's decisions row is not kept"
+else
+  bad "hr-k deny: rc $hrd_a_rc/$hrd_f_rc/$hrd_d_rc r8 in commit $(hrk_inc hrd "$HR_R8") r9 $(hrk_inc hrd "$HR_R9") decisions row $(hrk_dec hrd)"
+fi
+if hrk_ok hrm && [ "$(hrk_inc hrm "$HR_R8")" = 1 ] && [ "$(hrk_inc hrm "$HR_R9")" = 1 ] && [ "$(hrk_dec hrm)" = 1 ] \
+   && [ -z "$(world_git -C "$WORK/hrm/c" status --porcelain=v1 -- "$HR_R8")" ] && [ "$(hrk_notes hrm)" = 0 ] \
+   && [ "$(world_git -C "$WORK/hrm/c" rev-parse HEAD)" != "$(world_git -C "$WORK/hrd/c" rev-parse HEAD)" ]; then
+  ok "hr-k allow: a machinery-only commit moves HEAD between T1 and T2 and the carry holds: the remedies are committed, T1's decisions row is kept, no hard-remedies-dropped row"
+else
+  bad "hr-k allow: rc $hrm_a_rc/$hrm_f_rc/$hrm_d_rc r8 in commit $(hrk_inc hrm "$HR_R8") r9 $(hrk_inc hrm "$HR_R9") decisions row $(hrk_dec hrm) notes $(hrk_notes hrm)"
+fi
+if grep -qxF -- "- NOTE hard-remedies-dropped $HR_R8 non-machinery-diff" "$(hrk_body hrd)" && grep -qxF -- "- NOTE hard-remedies-dropped $HR_R9 non-machinery-diff" "$(hrk_body hrd)" \
+   && grep -qxF -- "- NOTE hard-remedies-dropped $HR_ALPHA non-machinery-diff" "$(hrk_body hrd)" && [ "$(hrk_notes hrd)" = 4 ] \
+   && grep -qxF -- "- NOTE hard-remedies-dropped $HR_R8 unknown-header" "$(hrk_body hrv)" && grep -qxF -- "- NOTE hard-remedies-dropped $HR_ALPHA unknown-header" "$(hrk_body hrv)" && [ "$(hrk_notes hrv)" = 4 ] \
+   && ! grep -q 'non-machinery-diff' "$(hrk_body hrv)" && hrk_ok hrv; then
+  ok "hr-k note: the dropped record is disclosed per recorded path in the PR body, naming non-machinery-diff for the operator commit and unknown-header for a v1-header record"
+else
+  bad "hr-k note: deny rows $(hrk_notes hrd) v1 rows $(hrk_notes hrv): $(grep -h 'hard-remedies-dropped' "$(hrk_body hrd)" "$(hrk_body hrv)" | cut -c1-120 | tr '\n' '|')"
+fi
+if hrk_ok hre && [ "$(hrk_notes hre)" = 0 ] && ! grep -rq 'hard-remedies-dropped' "$WORK/hre-deliver.out" \
+   && [ "$(hrk_inc hre "$HR_R8")" = 0 ] && [ "$(hrk_notes hrd)" -gt 0 ]; then
+  ok "hr-k empty: the deny-arm commit over a record with no paths discloses nothing (the same commit over the full record, hrd, discloses $(hrk_notes hrd) rows)"
+else
+  bad "hr-k empty: rc $hre_a_rc/$hre_f_rc/$hre_d_rc notes $(hrk_notes hre) hrd notes $(hrk_notes hrd)"
+fi
+
+report_end reconcile-pull-driver 141

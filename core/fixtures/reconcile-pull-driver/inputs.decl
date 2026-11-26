@@ -50,6 +50,9 @@ core/skills/ai-dlc-update/reconcile/warn-shadowed-local-validators.sh
 # The escalation-status validator (escalation-validator.seed, in this directory) reads its vocabulary from here.
 core/skills/ai-dlc/escalations.md
 core/fixtures/lib/preamble.sh
+# The machinery classifier pull.sh runs from the hr variants' dist, and the manifest it reads (hr-k arms).
+!core/scripts/core-paths.sh
+core/skills/ai-dlc/core-manifest.md
 core/fixtures/lib/report.sh
 core/fixtures/lib/world.sh
 core/fixtures/lib/layout.sh
