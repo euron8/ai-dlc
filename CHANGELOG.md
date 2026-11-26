@@ -19,6 +19,17 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1257.0] - 2026-11-26
+
+### Post-compact recovery and the SKILL.md verification turn order the digest Read in bounded chunks, so context-mode's 16 KiB read cap no longer refuses it (BL-1212, partial)
+
+- For every consumer whose lead compacts. After a compaction the recovery text and the `SKILL.md` verification turn told the lead to Read the 22.5 KB postcompact digest whole, and context-mode refuses a native Read of a file over 16 KiB that has neither `offset` nor `limit`. On the reference consumer's sprint 324 lead transcripts, 31 of 62 post-compact first digest Reads were unbounded and all 31 were refused (9 by context-mode, 22 by AI/DLC's own recover-gate). The recovery text in `ai-dlc-recover.sh` and the verification turn now order the digest Read in full, in `offset`/`limit` chunks of at most 16 KB; `SKILL.md`'s "Read SKILL.md for that rule's full text" line and the digest's header line 16 now order the `SKILL.md` Read in `offset`/`limit` chunks of at most 16 KB, so the first Read is not refused.
+- For every consumer running a round. The sections-axis span brief and the cross brief from `gen-round-briefs.sh` order consecutive `offset`/`limit` chunks of at most 16 KB and halve the limit when a chunk is refused.
+- Not changed: Rule 22 and step files over 16 KiB. The denial itself needs an allowlist or size setting in context-mode, which 2.1.7 does not have. BL-1212 stays open on that item, and its item 4 is corrected: the claim of no digest denials since 0.1184 was false for sprint 324.
+- For ai-dlc maintainers: `postcompact-rulebook-recovery` gains assertion 2e (the digest line in the recovery output and in `SKILL.md` must name `offset` and `limit`).
+
+Not-discharged: PC-S323-CONTEXT-MODE-ONE-READ-CAP-DENIES-VERBATIM-LOAD-READS-OVER-16KIB-NO-ALLOWLIST-KNOB (context-mode 2.1.7 still denies a whole Read over 16 KiB, with no allowlist or size setting)
+
 ## [0.1256.0] - 2026-11-26
 
 ### A fix the model writes for a blocking row is delivered even when upstream moves before the next apply, and unregistered core drift is registered through the pull driver (BL-1249)

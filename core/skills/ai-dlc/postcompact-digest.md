@@ -13,7 +13,7 @@ fails the push if it drifts from `SKILL.md` by one byte.
 governs and the operative core of each. It does not carry the worked examples, the thresholds
 tables, the sub-clauses below the first, or the rationale.
 
-**So: before you act on a rule you find here, `Read .claude/skills/ai-dlc/SKILL.md` for that
+**So: before you act on a rule you find here, `Read .claude/skills/ai-dlc/SKILL.md` in `offset`/`limit` chunks of <=16 KB for that
 rule's full text.** A heading is enough to know a rule binds you and enough to know you do not
 hold it; it is not enough to apply it. Reading the entry and proceeding as though you had read
 the rule is the one way this file makes things worse than the full read it replaces.

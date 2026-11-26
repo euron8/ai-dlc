@@ -217,12 +217,12 @@ if [ "$KIND" = adv ]; then
     if [ "$AXIS" = files ]; then
       grb_write_adv "$o" "$o/$K $a" "Subject: ONE story file, $SUBJ/$a. Read it fully (in one Read; a file over 16 KB in consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line, and when a chunk is refused for size, halve its limit), plus the locked-requirements block and the sources it cites. Cite ONLY your own ordinal in \`stories:\` lines; cross-story defects are the cross shard's job."
     else
-      grb_write_adv "$o" "$o/$K $c" "Your span: lines $a-$b of the REAL document $DOC (read that range of the real file, read-only, never a copy; you may read the whole document for context, but raise findings only on your span). Every finding carries exactly one \`sections:\` line citing ONLY your own ordinal ($o)."
+      grb_write_adv "$o" "$o/$K $c" "Your span: lines $a-$b of the REAL document $DOC (read that range of the real file, read-only, never a copy; you may read the whole document for context, in consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line, and when a chunk is refused for size, halve its limit, but raise findings only on your span). Every finding carries exactly one \`sections:\` line citing ONLY your own ordinal ($o)."
     fi
     PATHS="$PATHS $SDIR/$o.md"
   done < "$MAP"
   if [ "$AXIS" = files ]; then CS="Subject: EVERY story file under $SUBJ (the whole map). Read them all (each in one Read; a file over 16 KB in consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line, and when a chunk is refused for size, halve its limit). Raise cross-story defects only; every finding carries one \`stories:\` line citing two or more of the map ordinals ($ALLORD)."
-  else CS="Subject: the whole document $DOC. Raise cross-section defects only; every finding carries one \`sections:\` line citing two or more of the map ordinals ($ALLORD)."; fi
+  else CS="Subject: the whole document $DOC (read it in consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line, and when a chunk is refused for size, halve its limit). Raise cross-section defects only; every finding carries one \`sections:\` line citing two or more of the map ordinals ($ALLORD)."; fi
   grb_write_adv cross "cross/$K g1/1 $COVER" "$CS"
   PATHS="$PATHS $SDIR/cross.md"
   FLAG="--shard-header $HDR"
