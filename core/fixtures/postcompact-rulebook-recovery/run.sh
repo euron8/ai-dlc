@@ -186,7 +186,7 @@ else
 fi
 
 # --- Assertion 1b: the directive names the DIGEST by its INSTALLED path -------
-# The recovery Read. SKILL.md is ~102 KB and re-reading it after every compaction is what
+# The recovery Read. SKILL.md is ~39 KB and re-reading it after every compaction is what
 # brings the next compaction closer, so the mandated Read is now
 # `.claude/skills/ai-dlc/postcompact-digest.md` -- a rendered selection of SKILL.md's own
 # bytes past the cut. Named by the consumer path for the same reason assertion 1 is: a lead
@@ -201,8 +201,8 @@ fi
 # "Check whether rules are missing" is the instruction that already failed — it asks the lead
 # to detect an absence it structurally cannot see. The subject is now the two GATED Reads --
 # the snapshot and the step file -- which `ai-dlc-recover-gate.sh` refuses when bounded by
-# `limit` or a late `offset`. The digest is not in this arm's scope: it is small enough that
-# a partial read is not the failure mode, and assertion 2d carries what it needs instead.
+# `limit` or a late `offset`. The digest (22,531 B on the consumer) is not in this arm's scope:
+# assertion 2d carries its INDEX disclosure and assertion 2e its chunked-Read instruction.
 if grep -qi 'IN FULL' <<<"$CTX"; then
   ok "directive demands the file IN FULL, not a spot check for what looks missing"
 else
@@ -221,6 +221,24 @@ if grep -q 'INDEX' <<<"$CTX" && grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$
   ok "directive discloses the digest as an INDEX and names SKILL.md for a rule's full text"
 else
   bad "the directive presents the digest without saying it is not enough to apply a rule; a lead will act on a heading and never learn it was missing the rule"
+fi
+
+# --- Assertion 2e: the digest Read names offset/limit chunks, in the hook AND in SKILL.md -------
+# The digest is over the harness's 16 KB whole-Read cap, so a Read that does not say to chunk it
+# is refused whole. The snapshot line of the same directive already carries offset/limit, so a
+# whole-CTX grep passes regardless: key on the line that NAMES the digest. Presence-shaped: no
+# such line, or a line without both words, fails. Reads the existing capture and SKILL.md only.
+DG_LINE="$(grep 'Read .*postcompact-digest\.md' <<<"$CTX")"
+if [ -n "$DG_LINE" ] && grep -q 'offset' <<<"$DG_LINE" && grep -q 'limit' <<<"$DG_LINE"; then
+  ok "the directive's digest Read line names offset/limit chunks"
+else
+  bad "the directive's digest Read line is missing or does not name offset/limit chunks (line: ${DG_LINE:-<none>})"
+fi
+SK_LINE="$(grep -A1 'postcompact-digest\.md. in' "$SKILL" | head -2 | tr '\n' ' ')"
+if [ -n "$SK_LINE" ] && grep -q 'offset' <<<"$SK_LINE" && grep -q 'limit' <<<"$SK_LINE"; then
+  ok "SKILL.md's verification-turn digest Read names offset/limit chunks"
+else
+  bad "SKILL.md's verification-turn digest Read is missing or does not name offset/limit chunks (line: ${SK_LINE:-<none>})"
 fi
 
 # --- Assertion 2b: the two mandatory Reads carry the SAME grade --------------

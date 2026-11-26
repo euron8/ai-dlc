@@ -661,14 +661,12 @@ ${GATE_RESUME}
 
 ## Most of your rulebook is not in your context
 
-Then \`Read .claude/skills/ai-dlc/postcompact-digest.md\` the same way. The harness re-attaches
+Then \`Read .claude/skills/ai-dlc/postcompact-digest.md\` in full, in \`offset\`/\`limit\` chunks of <=16 KB. The harness re-attaches
 only the first ~5,000 tokens of an invoked skill, under
 a QUARTER of SKILL.md. The back three quarters is gone: most of the numbered rules,
-the handoff triggers, and the snapshot schema. The digest is that missing part,
-SELECTED from SKILL.md's own bytes.
+the handoff triggers, and the snapshot schema. The digest is that missing part.
 
-You cannot find the cut by introspection. Nothing marks it, the surviving text
-ends mid-file without a seam, and the rules that govern re-reading are themselves
+You cannot find the cut by introspection. Nothing marks it, and the rules that govern re-reading are themselves
 past it -- so the instruction to recover them cannot come from a rule you still
 hold. It comes from here. A lead that skips this runs the rest of the sprint on
 the quarter of the rulebook that happened to survive, and reports no problem,
