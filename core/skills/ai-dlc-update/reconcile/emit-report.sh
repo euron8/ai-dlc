@@ -356,12 +356,10 @@ render() {
   # response was to WIDEN the input until the refusal went away rather than ask why the diff had
   # grown. A refusal computed from a bad input is not a verdict on the thing it names.
   #
-  # A ROW, NOT A REFUSAL, and the asymmetry is the reason. Re-reconciling from an older base is
-  # legitimate -- a deliberate re-run, a split pull, a recovery -- so denying it would wedge real
-  # work. But silence here is indistinguishable from agreement, which is the failure this release
-  # band has now fixed twice in other places, so a disagreement SAYS SO in the artifact the operator
-  # approves from. An absent or unreadable stamp renders nothing rather than inventing a finding:
-  # a consumer that has never been reconciled has no recorded base to disagree with.
+  # A ROW, NOT A REFUSAL: a bare render with a base that disagrees with the stamp keeps the row, in
+  # the artifact the operator approves from. pull.sh dry-run and apply refuse a base that is not the
+  # stamp's commit (REFUSED <cmd>-base-stale) before they render. An absent or unreadable stamp
+  # renders nothing: a consumer never reconciled has no recorded base to disagree with.
   if cr_test "$CONSUMER" -f .claude/.ai-dlc-version; then
     _rendered_base="$(cr_read "$CONSUMER" .claude/.ai-dlc-version | sed -n 's/^commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' | head -1)"
     _stamp_moved=0

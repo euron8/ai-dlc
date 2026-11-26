@@ -4317,26 +4317,3 @@ Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
 
 verify: manual
 
-## BL-1229 — no `reconcile-pull-driver` arm asserts how the `NOTE report-restarted` row renders in the update PR body under 0.1235.0's NOTE cap and fold
-
-**NOTE.** Filed 2026-11-22 (batch 265, close). Owner: `core/fixtures/reconcile-pull-driver/run.sh` (subject `core/skills/ai-dlc-update/reconcile/pull.sh`).
-
-Goal: the `NOTE report-restarted` row that `pull.sh` prints when it restarts the reconcile report reaches the update PR body the way the 0.1235.0 PR-body cap and fold intend, and an arm fails if it does not. One done condition: a `reconcile-pull-driver` arm drives a pull that restarts the report, through deliver's PR-body render, and asserts where the row lands, and a seeded mutant that drops the row from the body fails that arm.
-
-Baseline: `pull.sh:234` emits the row (`printf 'NOTE report-restarted %s -> ...`) on driver stdout. The kind is in neither `PL_NOTE_FULL` (`pull.sh:1150`) nor `PL_NOTE_COUNTED` (`pull.sh:1154`). Arm `nr-bind` partitions only the static `say NOTE <kind>` emit sites, so it does not see this row. Arms `report-restart` and `report-keep` assert the row on driver stdout, not in the PR body. 0.1235.0 shipped the restart and the PR-body cap and fold together, and the adversary pass over the combined tip was not run (batch-265 rulings record). The upstream full discharge rests on `report-restart` and `report-keep` alone.
-
-Work list:
-
-1. Decide the row's PR-body class (relayed whole, counted, or neither) from the fold's own contract in `pull.sh`, and add the kind to that set if it belongs in one.
-2. Add the arm named in the done condition, and fire it once by hand against a mutant that drops the row (that output goes in the sha message).
-3. Run the combined-tip adversary pass over the restart together with the cap and fold that batch 265 did not run, and fold its BLOCKERs.
-
-Step: n/a
-
-Related: BL-1228 (filed in the same close).
-
-Provenance: batch 265 close (lead ai-dlc-19); id allocated by the lead.
-
-verify: manual
-
-

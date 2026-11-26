@@ -49,6 +49,9 @@
 #   deliver discloses each re-recorded path as `NOTE pull-writes-rerecorded <path> ...` in the commit and the PR body. apply, about to snapshot a new theirs
 #   while another theirs's pull, not yet delivered, still has uncommitted writes: one `NOTE pull-writes-unfinished <path>
 #   theirs <sha>` per path, then `REFUSED apply-pull-unfinished rc=2`.
+#   dry-run and apply, before any write: `REFUSED dry-run-already-applied rc=2` or
+#   `REFUSED apply-already-applied rc=2` when the stamp's `commit:` is <theirs>; otherwise
+#   `REFUSED dry-run-base-stale rc=2` or `REFUSED apply-base-stale rc=2` when it is not <base>.
 #   deliver also prints `DECIDE push-red <log>` (exit 3), `ASK base-confirm <branch> - <question>`
 #   (exit 3), one `DECIDE <status> <block> drain` per push-drain.sh row, and `DECIDE pr <url> opened`;
 #   with no dirty snapshot for this theirs, one `NOTE deliver-no-snapshot ...` line. A file dirty at
@@ -233,6 +236,16 @@ pl_write_region() {
     mv -f "$tmp" "$rep" || return 1
     printf 'NOTE report-restarted %s -> %.12s..%.12s: the report'"'"'s prose described another pull; it was set aside at %s/report.previous.md\n' \
       "$was" "${nb:-$BASE}" "${nt:-$THEIRS}" "$RUN"
+    # The PR body's copy: `<git-dir>/ai-dlc-pull/report-restarted`, header `ai-dlc-report-restarted 1
+    # <theirs>`, one tab-form NOTE row per restart (appended under that exact header, replaced under any
+    # other: another theirs, or the ` delivered` mark deliver adds once it commits); pl_note_rows reads it
+    # while its theirs is the dirty snapshot's; a delivered retry drops it while it is still marked.
+    local rr="$GD/ai-dlc-pull/report-restarted" rh
+    rh="ai-dlc-report-restarted 1 $(pl_theirs_sha)"
+    [ -f "$rr" ] && [ "$(sed -n 1p "$rr")" = "$rh" ] || printf '%s\n' "$rh" > "$rr" \
+      || echo "pull: $rr could not be written; the PR body will not carry this report-restarted row" >&2
+    printf 'NOTE\treport-restarted\t%s/report.previous.md\t%s -> %.12s..%.12s\n' "ai-dlc-pull/${RUN##*/}" "$was" "${nb:-$BASE}" "${nt:-$THEIRS}" >> "$rr" 2>/dev/null \
+      || echo "pull: $rr could not be written; the PR body will not carry this report-restarted row" >&2
     return 0
   elif [ -f "$rep" ]; then
     awk -v rf="$RUN/region" '
@@ -299,6 +312,37 @@ pl_print_asks() {
     echo "ASK $f $p $d $(question_of "$f")"; ASK_N=$((ASK_N + 1))
     pl_short_note "$p" "$d"
   done < "$LEDGER"
+}
+
+# --- the stamp gate (dry-run and apply only) -----------------------------------------------------
+# pl_stamp_gate <cmd> <dist> <base> <consumer> <theirs> -- runs before pl_setup, so before any write.
+# The stamp's `commit:`, <theirs> and <base> are each resolved in <dist> (rev-parse ^{commit}).
+# Stamp equal to theirs: the tree already carries this pull (REFUSED <cmd>-already-applied). Otherwise
+# stamp not equal to base: <base> is not the one `pull.sh resolve` derives (REFUSED <cmd>-base-stale).
+# A missing stamp, a stamp with no `commit:` line, or a side that does not resolve decides nothing here.
+pl_stamp_gate() {
+  local cmd="$1" d="$2" b="$3" c="$4" t="$5" sc so to bo gd dl=""
+  [ -f "$c/.claude/.ai-dlc-version" ] || return 0
+  sc="$(sed -n 's/^commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$c/.claude/.ai-dlc-version" | head -1)"
+  [ -n "$sc" ] || return 0
+  so="$(git -C "$d" rev-parse -q --verify "${sc}^{commit}" 2>/dev/null)" || return 0
+  to="$(git -C "$d" rev-parse -q --verify "${t}^{commit}" 2>/dev/null)" || to=""
+  if [ -n "$to" ] && [ "$so" = "$to" ]; then
+    gd="$(gitdir_of "$c")" || gd=""
+    if [ -n "$gd" ] && [ -f "$gd/ai-dlc-pull/pull-writes.delivered" ]; then
+      dl="$(git -C "$d" rev-parse -q --verify "$(sed -n 1p "$gd/ai-dlc-pull/pull-writes.delivered")^{commit}" 2>/dev/null)" || dl=""
+    fi
+    if [ "$dl" = "$to" ]; then
+      echo "pull: the stamp records $sc, which is this theirs ($to), so this tree already carries the pull, and <git-dir>/ai-dlc-pull/pull-writes.delivered names it: there is nothing to do here; a new pull needs a newer theirs. Nothing was written." >&2
+    else
+      echo "pull: the stamp records $sc, which is this theirs ($to), so this tree already carries the pull; <git-dir>/ai-dlc-pull/pull-writes.delivered does not name it, so run \`pull.sh deliver\` with this pull's arguments. Nothing was written." >&2
+    fi
+    refuse "$cmd-already-applied" 2
+  fi
+  bo="$(git -C "$d" rev-parse -q --verify "${b}^{commit}" 2>/dev/null)" || return 0
+  [ "$so" = "$bo" ] && return 0
+  echo "pull: the stamp records $sc ($so), but this command names $b ($bo) as <base>. <base> must be the stamp's commit, the base \`pull.sh resolve\` derives: re-run with $so as <base>, or run \`pull.sh resolve <consumer>\`. Nothing was written." >&2
+  refuse "$cmd-base-stale" 2
 }
 
 # --- setup --------------------------------------------------------------------------------------
@@ -405,8 +449,20 @@ pl_dirty_snapshot() {
   pl_writes_unfinished
   pl_status_rows "$RUN/snapshot" 1 || return 1
   { printf 'ai-dlc-dirty-snapshot 2 %s %s\n' "$th" "${RUN##*/}"; cat "$RUN/snapshot.rows"; } > "$rec.$$" || return 1
+  # The ignored sidecar, written before the snapshot it keys on: header `ai-dlc-dirty-ignored 1 <theirs>
+  # <run>` (the snapshot's), then each `!!` row of status (a matched directory ends in `/`). deliver
+  # leaves an untracked path it covers out (pl_deliver_select). Unwritable: none, and the filter is off.
+  if ! { printf 'ai-dlc-dirty-ignored 1 %s %s\n' "$th" "${RUN##*/}"
+         git -C "$CONSUMER" -c core.quotePath=false status --porcelain=v1 -z --ignored=matching --untracked-files=normal 2>/dev/null \
+           | tr '\0' '\n' | awk 'substr($0, 1, 3) == "!! "'; } > "$rec.ignored.$$" \
+     || ! mv -f "$rec.ignored.$$" "$rec.ignored"; then
+    rm -f "$rec.ignored.$$" "$rec.ignored"
+  fi
   mv -f "$rec.$$" "$rec" || return 1
   [ "$drop" = 0 ] || rm -f "$(pl_writes_file)" "$(pl_writes_file).delivered"
+  # A report-restarted record still marked delivered is the delivered pull's (a restart since replaced it).
+  [ "$drop" = 0 ] || [ "$(sed -n 1p "$GD/ai-dlc-pull/report-restarted" 2>/dev/null)" != "ai-dlc-report-restarted 1 $th delivered" ] \
+    || rm -f "$GD/ai-dlc-pull/report-restarted"
 }
 
 # --- the pull's own writes (what deliver compares) --------------------------------------------------
@@ -686,6 +742,7 @@ pl_writes_unfinished() {
 # keeps); asks nothing.
 pl_dry_run() {
   local vrc cc
+  pl_stamp_gate dry-run "$@"
   pl_setup "$@"
   pl_render
   bash "$R/emit-report.sh" --verify --reuse "$RUN/raw" "$CONSUMER/$REPORT_REL" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$RUN/verify.out" 2> "$RUN/verify.err"
@@ -709,6 +766,7 @@ pl_apply() {
   # apply's own withheld row names the finish command with it.
   if [ "${1:-}" = --carried-machinery-slice ]; then flag="$1"; shift; fi
   [ $# -eq 4 ] || usage
+  pl_stamp_gate apply "$@"
   pl_setup "$@"
   # Before the first write this apply makes (the decisions epoch, the render, the region record).
   pl_dirty_snapshot || refuse "dirty-snapshot" 2
@@ -886,12 +944,16 @@ pl_cut_from() { # <consumer> <branch> -> the branch it was cut from, by HEAD's r
 }
 # pl_deliver_select -- `$RUN/deliver.sel`, the status rows deliver commits. A changed path is taken
 # when it is in the always-stage set (the report, the decisions file, the answers history, the
-# push-candidate ledger and its archive, the stamp, the pull-artifacts record's paths, this pull's
-# reconcile log), or this pull's own record names it, exactly (RESOLVED/DECISION/WORKLIST rows of its
-# runs' apply.out and finish.out, column 2 of the decisions file and of the ask ledger), or it was
-# dirty at the snapshot and its index blob moved since, or it was clean at the snapshot and is not
-# under the pipeline-state tree (a schema name under the schema's root, less PL_STATE_EXEMPT). A
-# state-tree path clean at the snapshot is a hook's write, not the pull's. Anything else is the
+# push-candidate ledger and its archive, the layer-adjudication register, the stamp, the
+# pull-artifacts record's paths, this pull's reconcile log), or this pull's own record names it,
+# exactly (RESOLVED/DECISION/WORKLIST rows of its runs' apply.out and finish.out, column 2 of the
+# decisions file and of the ask ledger), or it was dirty at the snapshot and its index blob moved
+# since, or it was clean at the snapshot and is not under the pipeline-state tree (a schema name under
+# the schema's root, less PL_STATE_EXEMPT) and is not an untracked path the snapshot's ignored sidecar
+# covers (an exact `!!` entry, or a `!!` directory above it; one deliver NOTE counts them, and
+# `$RUN/deliver.ignored` lists them). A file created after the snapshot under a FILE-level ignore
+# pattern the pull then drops is not covered; one under a matched DIRECTORY is. A state-tree path clean
+# at the snapshot is a hook's write, not the pull's. Anything else is the
 # operator's: a hook appending to a file that was already dirty, an untracked file, a staged entry. A
 # rename pair is taken or left whole. No snapshot for this theirs (a pull begun under an older
 # engine): every changed path, and one NOTE line. Without the schema or jq: the state filter is off,
@@ -910,7 +972,8 @@ PL_STATE_EXEMPT="ai-dlc-update implementation-artifacts planning-artifacts"
 pl_always_stage() {
   local pa="$GD/ai-dlc-pull/pull-artifacts"
   printf '%s\n' "$REPORT_REL" "$DECISIONS_REL" "_bmad-output/ai-dlc-update/push-candidate-ledger.md" ".claude/.ai-dlc-version" \
-    "$HIST_REL" "_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" "$BMAD_DIGEST_REL"
+    "$HIST_REL" "_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" "$BMAD_DIGEST_REL" \
+    "_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
   [ -f "$pa" ] && [ "$(sed -n 1p "$pa")" = "ai-dlc-pull-artifacts 1 $1" ] && sed -n '2,$p' "$pa"
   return 0
 }
@@ -965,23 +1028,38 @@ pl_deliver_select() {
     [ -n "$k" ] || continue
     { printf '%s\n' "$k"; map_consumer "core/$k"; } >> "$RUN/deliver.keep"
   done < "$RUN/deliver.weak.raw"
-  awk -F'\t' -v fs="$snap" -v fk="$RUN/deliver.keep" -v fst="$RUN/deliver.state" '
+  # The ignored sidecar counts only when its header is this snapshot's theirs and run; otherwise the filter is off.
+  : > "$RUN/deliver.ign"; : > "$RUN/deliver.ignored"
+  if [ -f "$snap.ignored" ] && [ "$(sed -n 1p "$snap.ignored")" = "ai-dlc-dirty-ignored 1 $h3 $h4" ]; then
+    sed -n '2,$p' "$snap.ignored" | awk 'substr($0, 1, 3) == "!! " { print substr($0, 4) }' > "$RUN/deliver.ign"
+  fi
+  awk -F'\t' -v fs="$snap" -v fk="$RUN/deliver.keep" -v fst="$RUN/deliver.state" -v fig="$RUN/deliver.ign" -v fio="$RUN/deliver.ignored" '
     function isstate(p,   i) { for (i = 0; i < ns; i++) if (p == st[i] || index(p, st[i] "/") == 1) return 1; return 0 }
+    function ign(p,   i) { if (p in ig) return 1
+      for (i = 1; i < length(p); i++) if (substr(p, i, 1) == "/" && (substr(p, 1, i) in ig)) return 1
+      return 0 }
     FILENAME == fs { if (FNR > 1) { insnap[$4] = 1; sidx[$4] = $2; sp = $5; sub(/o$/, "", sp); spair[$4] = sp } next }
     FILENAME == fk { keep[$0] = 1; next }
     FILENAME == fst { st[ns++] = $0; next }
+    FILENAME == fig { ig[$0] = 1; next }
     FNR == 1 { pass++ }
     pass == 1 {
-      if (($4 in keep) || (($4 in insnap) && $2 != sidx[$4]) || (!($4 in insnap) && !isstate($4))) {
+      if (($4 in keep) || (($4 in insnap) && $2 != sidx[$4]) || (!($4 in insnap) && !isstate($4) && !($1 == "??" && ign($4)))) {
         sel[$4] = 1
         cp = $5; sub(/o$/, "", cp); if (cp != "-") gc[cp] = 1
         if (($4 in spair) && spair[$4] != "-") gs[spair[$4]] = 1
-      }
+      } else if ($1 == "??" && !($4 in insnap) && !isstate($4) && ign($4)) print $4 > fio
       next
     }
     { cp = $5; sub(/o$/, "", cp)
       if (($4 in sel) || (cp != "-" && (cp in gc)) || (($4 in spair) && spair[$4] != "-" && (spair[$4] in gs))) print }' \
-    "$snap" "$RUN/deliver.keep" "$RUN/deliver.state" "$RUN/deliver.rows" "$RUN/deliver.rows" > "$RUN/deliver.sel"
+    "$snap" "$RUN/deliver.keep" "$RUN/deliver.state" "$RUN/deliver.ign" "$RUN/deliver.rows" "$RUN/deliver.rows" > "$RUN/deliver.sel" || return 1
+  [ -s "$RUN/deliver.ignored" ] || return 0
+  local ni pl
+  ni="$(wc -l < "$RUN/deliver.ignored" | tr -d ' ')"
+  pl="$(LC_ALL=C awk '{ if (len + length($0) + 2 <= 400) { s = s (s == "" ? "" : ", ") $0; len += length($0) + 2; sh++ } }
+    END { printf "%s", s; if (NR > sh) printf " +%d more", NR - sh }' "$RUN/deliver.ignored")"
+  pl_dnote "NOTE deliver-ignored-untracked $ni untracked path(s) ignored when the pull began and no longer ignored are left out of this commit as yours: $pl (full list: ai-dlc-pull/${RUN##*/}/deliver.ignored under the git dir)"
 }
 # pl_deliver_merge -- `$RUN/deliver.dm`: the selected paths staged by merge rather than whole (the
 # keep-selected paths dirty at the snapshot, tracked in HEAD, not always-stage); `$RUN/deliver.merged`:
@@ -1148,10 +1226,11 @@ pl_deliver_prepare() {
 # the finish-* rows (confirm by hand, restore a file), taught-schema-merge-first (merge, then re-check),
 # extension-adjudicated-unrouted (check the register). Every other kind is one line per kind in the body.
 PL_NOTE_FULL=" derivation-unassessable reconcile-log-name override-readopt-subsumed extension-retire extension-contradicts-core finish-unverified finish-classify-unrecorded finish-template-unrecorded finish-template-manifest-unreadable taught-schema-merge-first extension-adjudicated-unrouted "
-# Every other NOTE kind apply.sh emits, and the three deliver notes (listed whole under "Deliver notes"), are
-# counted: PL_NOTE_FULL and PL_NOTE_COUNTED together classify every kind, `derivation-info-` being a prefix.
+# Every other NOTE kind apply.sh emits, every deliver note (pl_dnote; listed whole under "Deliver notes"), and
+# the NOTE kinds pull.sh itself records for the body (report-restarted, pl_write_region) are counted:
+# PL_NOTE_FULL and PL_NOTE_COUNTED together classify every kind, `derivation-info-` being a prefix.
 # core/fixtures/reconcile-pull-driver nr-bind fails on an emitted kind in neither.
-PL_NOTE_COUNTED=" blockers-resolved derivation-note derivation-summary extension-adjudicated override-adjudicated reapproval-narrowed report-unverified report-verified derivation-info- deliver-dirty-whole deliver-state-unfiltered pull-writes-rerecorded "
+PL_NOTE_COUNTED=" blockers-resolved derivation-note derivation-summary extension-adjudicated override-adjudicated reapproval-narrowed report-unverified report-verified derivation-info- deliver-dirty-whole deliver-state-unfiltered pull-writes-rerecorded deliver-ignored-untracked report-restarted "
 # pl_run_set <git-dir> -- the run directories this pull reads, one per line: from the run the dirty
 # snapshot names, whatever theirs it was written for (pl_deliver_select checks theirs; this does not), so
 # a snapshot left by an earlier pull makes this read from that pull's first run onward. With no
@@ -1170,12 +1249,25 @@ pl_run_set() {
 # pl_run_outs <git-dir> -- apply.out and finish.out of every run pl_run_set names, concatenated.
 pl_run_outs() { pl_run_set "$1" outs; }
 # pl_note_rows <consumer> -- the NOTE rows (tab-separated, unique) of every apply and --finish run of this
-# consumer's pulls in pl_run_set; the commit message and the PR body both read it. Stands alone:
-# GD is resolved when unset.
+# consumer's pulls in pl_run_set, and the report-restarted record's rows when its theirs is the dirty
+# snapshot's; the commit message and the PR body both read it. Stands alone: GD is resolved when unset.
 pl_note_rows() {
-  local gd="${GD:-}"
+  local gd="${GD:-}" st="" rt=""
   [ -n "$gd" ] || gd="$(gitdir_of "$1")" || return 0
-  pl_run_outs "$gd" | awk -F'\t' '$1 == "NOTE"' | LC_ALL=C sort -u
+  [ ! -f "$gd/ai-dlc-pull/dirty-snapshot" ] || st="$(sed -n 1p "$gd/ai-dlc-pull/dirty-snapshot" | awk '{print $3}')"
+  [ ! -f "$gd/ai-dlc-pull/report-restarted" ] || rt="$(sed -n 1p "$gd/ai-dlc-pull/report-restarted")"
+  { pl_run_outs "$gd"
+      case "$rt" in "ai-dlc-report-restarted 1 $st"|"ai-dlc-report-restarted 1 $st delivered") [ -z "$st" ] || sed -n '2,$p' "$gd/ai-dlc-pull/report-restarted" ;; esac
+  } | awk -F'\t' '$1 == "NOTE"' | LC_ALL=C sort -u
+}
+# pl_restart_mark_delivered -- the report-restarted record's header `ai-dlc-report-restarted 1 <theirs>`
+# becomes `ai-dlc-report-restarted 1 <theirs> delivered`; its rows are unchanged.
+pl_restart_mark_delivered() {
+  local rr="$GD/ai-dlc-pull/report-restarted" h
+  h="ai-dlc-report-restarted 1 $(pl_theirs_sha)"
+  [ -f "$rr" ] && [ "$(sed -n 1p "$rr")" = "$h" ] || return 0
+  { printf '%s delivered\n' "$h"; sed -n '2,$p' "$rr"; } > "$rr.$$" && mv -f "$rr.$$" "$rr" \
+    || { rm -f "$rr.$$"; echo "pull: $rr could not be marked delivered; a retry of this theirs may relay its report-restarted rows" >&2; }
 }
 pl_deliver() {
   local br cut bv tv subj body p s n_notes rc url xy ix wt pair n dm nl
@@ -1237,6 +1329,8 @@ pl_deliver() {
   # unfinished check (pl_writes_unfinished) does not read an operator edit kept in those files as this pull.
   printf '%s\n' "$(pl_theirs_sha)" > "$(pl_writes_file).delivered" \
     || echo "pull: $(pl_writes_file).delivered could not be written; the next pull may read this delivered pull as unfinished" >&2
+  # The report-restarted record is marked delivered: still read by this pull's PR body (a re-deliver too), replaced by the next restart.
+  pl_restart_mark_delivered
   # The PR body is rendered and bounded BEFORE the push: an oversize body never leaves a pushed branch with no PR.
   pl_pr_body "$CONSUMER" > "$RUN/pr-body.md" || refuse "deliver-pr-body" 2
   n="$(wc -c < "$RUN/pr-body.md" | tr -d ' ')"

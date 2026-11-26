@@ -92,6 +92,23 @@
 #           before the snapshot's.   pw-absorb  (world a-ab) finish absorbs an edit to a recorded file; the PR body discloses it.
 #   pw-dlv-order  (world a-do) a delivered retry whose snapshot write fails keeps the record, marker and snapshot.
 #   nr-fold  thirty derivation-info scopes fold into one PR-body line; report-unverified and reapproval-narrowed survive.
+#   ign-untracked  (world a) an untracked file ignored at the snapshot and un-ignored by the pull stays out, NOTE
+#           deliver-ignored-untracked names it; twin: a never-ignored untracked file whose directory extends the name is committed.
+#   register-unstaged  (world a) the layer-adjudication register, an unstaged edit before the pull, is committed whole.
+#   restart-prbody  (world a) the first apply's report restart is one counted `report-restarted` row in the delivered PR body.
+#   restart-prune  (world a-rp) a delivered pull retried at the same theirs, restarting at its dry run: the PR body carries only
+#           the retry's row.   restart-cleared  (world a-rt) deliver marked the record delivered; a retry that restarts nothing
+#           leaves no report-restarted row in the PR body.
+#   already-applied  (world a-aa, delivered, stamp at AT) dry-run at AT with base $AB, apply at AT with the abbreviated stamp as
+#           base: each REFUSED <cmd>-already-applied rc=2, nothing written.   already-applied-undelivered  (world a before its
+#           deliver, no delivery marker) apply refuses naming `pull.sh deliver`, nothing written; world a's deliver opens the PR.
+#           base-stale  (world a-nx) a new theirs with base $AB: REFUSED apply-base-stale rc=2, nothing written; its twin is
+#           union-commit's round 1 (base the stamp's commit), which proceeds. re-deliver is the command-scope twin (deliver on the
+#           stamped tree, base $AB, not refused). The delivered retries (a-rt, a-rp, a-do) run below the stamp: on the pre-pull
+#           branch (below_stamp), the update PR unmerged.   restart-count  one report-restarted line per PR body.
+#   union-commit  (world a-nx after base-stale) a VERSION-only theirs, base AT, two rounds (ASK blend, which also carries
+#           pw-delivered; then a region re-rendered since approval, unseen=0): the union gate proceeds (NOTE blockers-resolved,
+#           NEXT pull.sh finish).
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -175,6 +192,16 @@ answer() {
   grep -q -- "$2" "$1/_bmad-output/operator-answers-history.md" 2>/dev/null
 }
 run_dir() { sed -n 's/^PULL run=\([^ ]*\) .*/\1/p' "$1" | tail -1; }
+# pull_state <consumer>: what a refused dry-run/apply must leave byte-identical -- the branch list, HEAD, the status, the
+# <git-dir>/ai-dlc-pull listing and each file's checksum, the report and the delivery marker.
+pull_state() {
+  world_git -C "$1" for-each-ref --format='%(refname) %(objectname)' refs/heads
+  world_git -C "$1" rev-parse HEAD
+  world_git -C "$1" status --porcelain=v1 --untracked-files=all
+  ( cd "$1/.git/ai-dlc-pull" && find . | LC_ALL=C sort && find . -type f -exec cksum {} + | LC_ALL=C sort )
+  cksum < "$1/_bmad-output/ai-dlc-update/reconcile-report.md" 2>&1
+  cat "$1/.git/ai-dlc-pull/pull-writes.delivered" 2>&1
+}
 
 # ================================ a, h, p: pull.sh apply on the pull world ================================
 copy_world seed-main a
@@ -208,6 +235,10 @@ mkdir -p "$A/c/_bmad-output/planning-artifacts" && printf '{"w":1}\n' > "$A/c/_b
 # before the pull (dirty at the snapshot, whose raw blob is CRLF) and the pull's resolution round edits line 8.
 mkdir -p "$A/c/docs" && printf 'docs/crlf.txt text eol=crlf\n' > "$A/c/.gitattributes" \
   && printf 'c1\r\nc2\r\nc3\r\nc4\r\nc5\r\nc6\r\nc7\r\nc8\r\n' > "$A/c/docs/crlf.txt" || { echo "FIXTURE BROKEN: cannot write the eol file" >&2; exit 2; }
+# ign-untracked: a tracked .gitignore ignoring a scratch directory (not a schema state name) that the pull later stops
+# ignoring.   register-unstaged: the tracked layer-adjudication register an LC-A1 verdict appends to before the snapshot.
+printf '# operator ignores\n_bmad-output/.beats/\n' > "$A/c/.gitignore" \
+  && printf '{"r":1}\n' > "$A/c/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl" || { echo "FIXTURE BROKEN: cannot write the ignore file or the register" >&2; exit 2; }
 world_commit "$A/c" "operator notes" >/dev/null || { echo "FIXTURE BROKEN: cannot commit the operator notes" >&2; exit 2; }
 [ "$(world_git -C "$A/c" rev-parse HEAD:docs/crlf.txt)" = "$(printf 'c1\nc2\nc3\nc4\nc5\nc6\nc7\nc8\n' | world_git -C "$A/c" hash-object --no-filters --stdin)" ] && [ -z "$(world_git -C "$A/c" status --porcelain=v1 -- docs/crlf.txt)" ] \
   || { echo "FIXTURE BROKEN: the eol file is not LF in HEAD or not clean after its commit" >&2; exit 2; }
@@ -220,6 +251,11 @@ printf 'operator staged\n' >> "$A/c/notes/op-staged.txt"
 world_git -C "$A/c" add notes/op-staged.txt && world_git -C "$A/c" mv notes/op-ren-old.txt notes/op-ren-new.txt \
   || { echo "FIXTURE BROKEN: cannot stage the operator entries" >&2; exit 2; }
 printf 'operator before the pull\n' >> "$A/c/notes/op-append.txt"
+mkdir -p "$A/c/_bmad-output/.beats" && printf 'scratch beat\n' > "$A/c/_bmad-output/.beats/b1.txt" \
+  && printf '{"r":2}\n' >> "$A/c/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl" \
+  && [ -z "$(world_git -C "$A/c" status --porcelain=v1 --untracked-files=all -- _bmad-output/.beats)" ] \
+  && [ "$(world_git -C "$A/c" status --porcelain=v1 -- _bmad-output/ai-dlc-update/layer-adjudication-register.jsonl)" = " M _bmad-output/ai-dlc-update/layer-adjudication-register.jsonl" ] \
+  || { echo "FIXTURE BROKEN: the scratch file is not ignored or the register is not an unstaged edit before the pull" >&2; exit 2; }
 # An earlier pull's report: its prose, its region (the seed pair, not this pull's theirs) and a judgment classify block.
 { printf '# AI/DLC reconcile report — an earlier pull\n\n## Worklist resolutions\n\nan earlier pull left this\n\n'; cat "$WORK/region-short"
   printf '\n## Ledger\n\nFILE: core/stale/earlier-pull-only.md\n  - id: stale-judgment-1\n    confirmation_kind: judgment\n'; } \
@@ -227,6 +263,8 @@ printf 'operator before the pull\n' >> "$A/c/notes/op-append.txt"
   || { echo "FIXTURE BROKEN: cannot seed the earlier pull's report" >&2; exit 2; }
 GATE_OLD=_bmad-output/ai-dlc-update/self-update-gate-20200101T000000Z.md
 printf '# an earlier pull'"'"'s gate record\n' > "$A/c/$GATE_OLD"
+# The pre-pull branch: a delivered retry is re-seated on it (below_stamp), the update PR unmerged.
+A_ORIG="$(world_git -C "$A/c" symbolic-ref -q --short HEAD)" && [ -n "$A_ORIG" ] || { echo "FIXTURE BROKEN: world a is not on a branch before its pull" >&2; exit 2; }
 bash "$REC/pull.sh" gate "$A/dist" "$AB" "$A/c" "$AT" > "$WORK/gate.out" 2> "$WORK/gate.err" < /dev/null; gate_rc=$?
 count_on a "$WORK/log-a"
 bash "$REC/pull.sh" apply "$A/dist" "$AB" "$A/c" "$AT" > "$WORK/a.out" 2> "$WORK/a.err" < /dev/null; a_rc=$?
@@ -282,6 +320,11 @@ SET_T="$WORK/settings.template"; SET_P="$WORK/settings.prior"; printf '{}\n' > "
 world_git -C "$A/dist" show "${AT}:templates/settings.json.template" > "$SET_T" || { echo "FIXTURE BROKEN: cannot read the settings template" >&2; exit 2; }
 SNAP_A="$A/c/.git/ai-dlc-pull/dirty-snapshot"; snap_a1="$(git hash-object "$SNAP_A")"
 ( cd "$A/c" && bash "$REC/settings-merge.sh" --consumer .claude/settings.json --template "$SET_T" --prior-template "$SET_P" ) > "$WORK/a-merge.out" 2>&1; sm_rc=$?
+# ign-untracked: the resolution round's ignore re-render drops the scratch directory's pattern (its file becomes `??`), and the
+# round writes a file under a sibling whose name only extends the dropped one (never ignored): the twin.
+printf '# operator ignores\n' > "$A/c/.gitignore" && mkdir -p "$A/c/_bmad-output/.beatsx" && printf 'pull wrote this\n' > "$A/c/_bmad-output/.beatsx/n.txt" \
+  && [ "$(world_git -C "$A/c" status --porcelain=v1 --untracked-files=all -- _bmad-output/.beats)" = "?? _bmad-output/.beats/b1.txt" ] \
+  || { echo "FIXTURE BROKEN: the scratch file did not become untracked when its ignore pattern was dropped" >&2; exit 2; }
 # eol: the resolution round's change to the crlf file, in its worktree (CRLF) form.
 printf 'c1\r\nc2 OPERATOR\r\nc3\r\nc4\r\nc5\r\nc6\r\nc7\r\nc8 PULL\r\n' > "$A/c/docs/crlf.txt"
 # report-keep: the model's prose and a judgment classify block for this pull, written between rounds, outlive the round.
@@ -416,12 +459,30 @@ done
 [ "$(sed -n 1p "$WORK/a-v1/c/.git/ai-dlc-pull/dirty-snapshot" | awk '{print $2}')" = 1 ] \
   && [ "$(awk -F'\t' '$4 == ".claude/settings.json" {print $3}' "$WORK/a-w0/c/.git/ai-dlc-pull/dirty-snapshot")" = 0000000000000000000000000000000000000000 ] \
   || { echo "FIXTURE BROKEN: the a-v1 / a-w0 snapshot rewrite changed nothing" >&2; exit 2; }
+# already-applied-undelivered (world a, finished and not yet delivered: the stamp's commit is AT, no delivery marker): apply at
+# AT refuses apply-already-applied naming `pull.sh deliver` and writes nothing -- one property (the marker) from already-applied.
+# World a's own deliver below is the remedy followed; its arm is after it.
+ud_sc="$(sed -n 's/^commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$A/c/.claude/.ai-dlc-version" | head -1)"
+[ ! -e "$A/c/.git/ai-dlc-pull/pull-writes.delivered" ] && [ -n "$ud_sc" ] \
+  && [ "$(world_git -C "$A/dist" rev-parse -q --verify "${ud_sc}^{commit}")" = "$(world_git -C "$A/dist" rev-parse "$AT")" ] \
+  || { echo "FIXTURE BROKEN: world a is not finished-undelivered before its deliver (stamp '$ud_sc', marker $([ -e "$A/c/.git/ai-dlc-pull/pull-writes.delivered" ] && echo present || echo absent))" >&2; exit 2; }
+pull_state "$A/c" > "$WORK/a-ud.s0" 2>&1
+bash "$REC/pull.sh" apply "$A/dist" "$AB" "$A/c" "$AT" > "$WORK/a-ud-apply.out" 2> "$WORK/a-ud-apply.err" < /dev/null; ud_rc=$?
+pull_state "$A/c" > "$WORK/a-ud.s1" 2>&1
 deliver_env a || { echo "FIXTURE BROKEN: deliver_env a" >&2; exit 2; }
 # Between finish and deliver: a hook appends to the already-dirty file (i-b), and the resolution stages a rename (iii).
 printf 'appended after apply\n' >> "$A/c/notes/op-append.txt"
 world_git -C "$A/c" mv tests/fixtures/synthetic-fx/run.sh tests/fixtures/synthetic-fx/run-renamed.sh || { echo "FIXTURE BROKEN: cannot stage the rename" >&2; exit 2; }
 dl_br="$(world_git -C "$A/c" symbolic-ref -q --short HEAD)"
 deliver_run a "$A/dist" "$AB" "$A/c" "$AT"; dl_rc=$?
+if [ "$ud_rc" = 2 ] && [ "$(cat "$WORK/a-ud-apply.out")" = "REFUSED apply-already-applied rc=2" ] \
+   && grep -qF 'so run `pull.sh deliver` with this pull'"'"'s arguments' "$WORK/a-ud-apply.err" && [ -s "$WORK/a-ud.s0" ] && cmp -s "$WORK/a-ud.s0" "$WORK/a-ud.s1" \
+   && [ "$dl_rc" = 0 ] && grep -qx 'DECIDE pr https://example.invalid/pr/1 opened' "$WORK/a-deliver.out" \
+   && [ "$(cat "$A/c/.git/ai-dlc-pull/pull-writes.delivered" 2>/dev/null)" = "$(world_git -C "$A/dist" rev-parse "$AT")" ]; then
+  ok "already-applied-undelivered: finished, not delivered: apply refuses apply-already-applied naming pull.sh deliver, nothing written; that deliver opens the PR and marks AT delivered"
+else
+  bad "already-applied-undelivered: apply rc=$ud_rc out: $(tr '\n' '|' < "$WORK/a-ud-apply.out" | cut -c1-120) err: $(head -c 200 "$WORK/a-ud-apply.err") state: $(diff "$WORK/a-ud.s0" "$WORK/a-ud.s1" | head -3 | tr '\n' '|') deliver rc=$dl_rc marker '$(cat "$A/c/.git/ai-dlc-pull/pull-writes.delivered" 2>/dev/null)'"
+fi
 dl_ns="$(world_git -C "$A/c" show --name-status -M --format= HEAD)"
 dl_cached="$(world_git -C "$A/c" diff --cached --name-only)"
 dl_st() { world_git -C "$A/c" status --porcelain=v1 -- "$1"; }
@@ -513,12 +574,42 @@ if grep -qx 'M	_bmad-output/subagent-context.jsonl' <<<"$dl_ns" && [ "$(world_gi
 else
   bad "st-rec: not committed: $(tr '\n\t' '| ' <<<"$dl_ns" | cut -c1-300) HEAD file: $(world_git -C "$A/c" show HEAD:_bmad-output/subagent-context.jsonl | tr '\n' '|')"
 fi
+# ign-untracked: the file ignored when the pull began and un-ignored by the pull stays out and untracked, one NOTE names it; its
+# twin under `.beatsx/` (an untracked file the snapshot never saw ignored) is committed.
+ign_note="NOTE deliver-ignored-untracked 1 untracked path(s) ignored when the pull began and no longer ignored are left out of this commit as yours: _bmad-output/.beats/b1.txt"
+dl_ign_line="$(grep '^NOTE deliver-ignored-untracked ' "$WORK/a-deliver.out" | head -1)"
+dl_ign_rest="${dl_ign_line#"$ign_note (full list: ai-dlc-pull/"}"
+ign_tail_re='^run-[0-9TZ]+-[0-9]+/deliver[.]ignored under the git dir[)]$'
+if [ "$dl_rc" = 0 ] && ! grep -q '\.beats/' <<<"$dl_ns" && [ "$(dl_st _bmad-output/.beats/b1.txt)" = "?? _bmad-output/.beats/b1.txt" ] \
+   && [ "$(grep -c '^NOTE deliver-ignored-untracked ' "$WORK/a-deliver.out")" = 1 ] && [ "$dl_ign_rest" != "$dl_ign_line" ] && [[ "$dl_ign_rest" =~ $ign_tail_re ]] \
+   && grep -qx 'A	_bmad-output/.beatsx/n.txt' <<<"$dl_ns" && grep -qx 'M	.gitignore' <<<"$dl_ns"; then
+  ok "ign-untracked: an untracked file ignored at the snapshot and un-ignored by the pull is left out with one NOTE deliver-ignored-untracked naming it; a never-ignored untracked file beside it is committed"
+else
+  bad "ign-untracked: b1 status '$(dl_st _bmad-output/.beats/b1.txt)' notes: $(grep '^NOTE deliver-ignored' "$WORK/a-deliver.out" | tr '\n' '|' | cut -c1-300) commit: $(grep 'beats\|gitignore' <<<"$dl_ns" | tr '\n\t' '| ')"
+fi
+# register-unstaged: the register, an UNSTAGED edit dirty at the snapshot, is committed whole by the one deliver.
+reg=_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl
+if [ "$dl_rc" = 0 ] && grep -qx "M	$reg" <<<"$dl_ns" && [ "$(world_git -C "$A/c" show "HEAD:$reg")" = "$(printf '{"r":1}\n{"r":2}')" ] && [ -z "$(dl_st "$reg")" ]; then
+  ok "register-unstaged: the layer-adjudication register, edited unstaged before the pull, is committed whole and left clean"
+else
+  bad "register-unstaged: status '$(dl_st "$reg")' HEAD: $(world_git -C "$A/c" show "HEAD:$reg" 2>&1 | tr '\n' '|') commit: $(grep 'register' <<<"$dl_ns" | tr '\n\t' '| ')"
+fi
+# restart-prbody: the report restart at a's first apply reaches the body deliver handed gh, as one counted row naming the set-aside copy.
+a_prs="$(ls "$A/c/.git/ai-dlc-pull"/run-*/pr-body.md 2>/dev/null)"
+if [ -n "$a_prs" ] && [ "$(grep -c . <<<"$a_prs")" = 1 ] && grep -qxF -- "- \`report-restarted\`: 1 row(s); paths: ai-dlc-pull/${A_RUN##*/}/report.previous.md" "$a_prs"; then
+  ok "restart-prbody: the delivered PR body carries the report-restarted row, counted, naming $A_RUN/report.previous.md"
+else
+  bad "restart-prbody: bodies: $(tr '\n' ' ' <<<"$a_prs") rows: $(grep 'report-restarted' $a_prs 2>/dev/null | tr '\n' '|' | cut -c1-300)"
+fi
 # re-deliver: a second deliver makes no new commit.
 a_head1="$(world_git -C "$A/c" rev-parse HEAD)"
 deliver_run a "$A/dist" "$AB" "$A/c" "$AT"; a_rd_rc=$?
 world_git -C "$A/c" show "HEAD:.claude/settings.json" > "$WORK/a-head2-settings.json"
-if [ "$a_rd_rc" = 0 ] && [ -s "$WORK/a-deliver.out" ] && [ "$a_head1" = "$(world_git -C "$A/c" rev-parse HEAD)" ] && cmp -s "$WORK/a-head2-settings.json" "$WORK/a-head-settings.json"; then
-  ok "re-deliver: a second deliver exits 0 and adds no commit"
+# It is also the stamp gate's command-scope ALLOW twin: the stamp's commit is AT and <base> the held $AB, which dry-run and apply refuse.
+a_rd_sc="$(sed -n 's/^commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$A/c/.claude/.ai-dlc-version" | head -1)"
+if [ "$a_rd_rc" = 0 ] && [ -s "$WORK/a-deliver.out" ] && [ "$a_head1" = "$(world_git -C "$A/c" rev-parse HEAD)" ] && cmp -s "$WORK/a-head2-settings.json" "$WORK/a-head-settings.json" \
+   && [ "$(world_git -C "$A/dist" rev-parse -q --verify "${a_rd_sc}^{commit}")" = "$(world_git -C "$A/dist" rev-parse "$AT")" ] && ! grep -q -- '-already-applied\|-base-stale' "$WORK/a-deliver.out"; then
+  ok "re-deliver: a second deliver on the tree the stamp says carries AT, base \$AB, is not refused, exits 0 and adds no commit"
 else
   bad "re-deliver: rc=$a_rd_rc head moved=$([ "$a_head1" = "$(world_git -C "$A/c" rev-parse HEAD)" ] && echo no || echo yes) out: $(tr '\n' '|' < "$WORK/a-deliver.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-deliver.err")"
 fi
@@ -531,8 +622,8 @@ else
   bad "pw-moved twin: rc=$dl_rc record header '$(sed -n 1p "$A_PW" 2>/dev/null)' out: $(grep 'pull-writes' "$WORK/a-deliver.out" | tr '\n' '|' | cut -c1-300)"
 fi
 # pw-delivered: world a is delivered with the operator's settings.json edit still uncommitted, at the content the pull recorded.
-# A copy (a-nx) on a plain branch at that commit (the PR merged) applies a new theirs: deliver marked its pull delivered, so the
-# kept edit is the operator's and the apply proceeds. Its twin, a pull with no deliver, is pw-unfinished (world ku).
+# A copy (a-nx) on a plain branch at that commit (the PR merged) applies a new theirs (union-commit's round 1): deliver marked its
+# pull delivered, so the kept edit is the operator's and the apply proceeds. Its twin, a pull with no deliver, is pw-unfinished (world ku).
 copy_world a a-nx
 NX="$WORK/a-nx"
 world_git -C "$NX/c" checkout -q -b merged-main || { echo "FIXTURE BROKEN: cannot branch a-nx" >&2; exit 2; }
@@ -542,13 +633,46 @@ nx_sb="$(world_git -C "$NX/c" hash-object --no-filters -- .claude/settings.json)
 nx_pre="$( [ -n "$(world_git -C "$NX/c" status --porcelain=v1 -- .claude/settings.json)" ] && grep -qx ".claude/settings.json	$nx_sb" "$NX/c/.git/ai-dlc-pull/pull-writes" && echo y)"
 # The marker is read before the apply: this new pull's own record, once written, clears it.
 nx_dl="$(cat "$NX/c/.git/ai-dlc-pull/pull-writes.delivered" 2>/dev/null)"
-bash "$REC/pull.sh" apply "$NX/dist" "$AB" "$NX/c" "$NX_T" > "$WORK/a-nx.out" 2> "$WORK/a-nx.err" < /dev/null; nx_rc=$?
+# base-stale (world a-nx): the stamp's commit is AT, theirs is newer, <base> is the held pre-pull $AB: REFUSED apply-base-stale
+# before any write. Its ALLOW twin, one property apart (<base> = the stamp's commit), is union-commit's round 1 on the same world.
+pull_state "$NX/c" > "$WORK/a-nb.s0" 2>&1
+bash "$REC/pull.sh" apply "$NX/dist" "$AB" "$NX/c" "$NX_T" > "$WORK/a-nb.out" 2> "$WORK/a-nb.err" < /dev/null; nb_rc=$?
+pull_state "$NX/c" > "$WORK/a-nb.s1" 2>&1
+if [ "$nb_rc" = 2 ] && [ "$(cat "$WORK/a-nb.out")" = "REFUSED apply-base-stale rc=2" ] && grep -q "re-run with $(world_git -C "$NX/dist" rev-parse "$AT") as <base>" "$WORK/a-nb.err" \
+   && [ -s "$WORK/a-nb.s0" ] && cmp -s "$WORK/a-nb.s0" "$WORK/a-nb.s1"; then
+  ok "base-stale: a new theirs with <base> not the stamp's commit: REFUSED apply-base-stale rc=2 naming the stamp's commit, nothing written"
+else
+  bad "base-stale: rc=$nb_rc out: $(tr '\n' '|' < "$WORK/a-nb.out" | cut -c1-200) err: $(head -c 300 "$WORK/a-nb.err") state: $(diff "$WORK/a-nb.s0" "$WORK/a-nb.s1" | head -5 | tr '\n' '|')"
+fi
+# union-commit (apply.sh's union gate), world a-nx: its VERSION-only theirs (core/ equal to the stamp's) applied at base AT in two
+# rounds. Round 1, the answers history moved aside, snapshots this theirs and stops at ASK blend (rc 3) with the approved-region
+# record written; round 2, the history restored and the alpha-domain extension moved aside, verifies a region re-rendered since
+# approval (RE-RENDERED-SINCE-APPROVAL, unseen=0) and PROCEEDS: the stamp's commit is not theirs, so this is no post-apply re-run.
+[ "$(world_git -C "$NX/dist" rev-parse "$NX_T:core")" = "$(world_git -C "$NX/dist" rev-parse "$AT:core")" ] \
+  || { echo "FIXTURE BROKEN: a-nx's theirs must share AT's core/ tree" >&2; exit 2; }
+uc_h=_bmad-output/operator-answers-history.md; uc_x=.claude/skills/ai-dlc/extensions/steps-domain/alpha-domain.md
+mv "$NX/c/$uc_h" "$WORK/a-nx.history" || { echo "FIXTURE BROKEN: union-commit: cannot move the history aside" >&2; exit 2; }
+bash "$REC/pull.sh" apply "$NX/dist" "$AT" "$NX/c" "$NX_T" > "$WORK/a-nx.out" 2> "$WORK/a-nx.err" < /dev/null; nx_rc=$?
+nx_snap="$(sed -n 1p "$NX/c/.git/ai-dlc-pull/dirty-snapshot" | awk '{print $3}')"
+[ -f "$NX/c/.git/ai-dlc-approved-region" ] && nx_rec=y || nx_rec=n
+# pw-delivered: deliver marked its pull delivered, so the operator's kept edit does not hold this theirs's apply as unfinished.
 if [ "$nx_pre" = y ] && [ "$nx_dl" = "$(world_git -C "$NX/dist" rev-parse "$AT")" ] \
-   && grep -q '^PULL run=' "$WORK/a-nx.out" && ! grep -q 'pull-writes-unfinished\|apply-pull-unfinished' "$WORK/a-nx.out" \
-   && [ "$(sed -n 1p "$NX/c/.git/ai-dlc-pull/dirty-snapshot" | awk '{print $3}')" = "$NX_T" ]; then
+   && grep -q '^PULL run=' "$WORK/a-nx.out" && ! grep -q 'pull-writes-unfinished\|apply-pull-unfinished\|^REFUSED' "$WORK/a-nx.out" \
+   && [ "$nx_snap" = "$NX_T" ]; then
   ok "pw-delivered: after deliver, an operator edit kept uncommitted in a file the pull wrote does not hold the next theirs's apply as unfinished (rc=$nx_rc, its own snapshot written)"
 else
-  bad "pw-delivered: precondition='$nx_pre' delivered-before-apply='$nx_dl' rc=$nx_rc out: $(tr '\n' '|' < "$WORK/a-nx.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-nx.err")"
+  bad "pw-delivered: precondition='$nx_pre' delivered-before-apply='$nx_dl' rc=$nx_rc snapshot theirs '$nx_snap' out: $(tr '\n' '|' < "$WORK/a-nx.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-nx.err")"
+fi
+mv "$WORK/a-nx.history" "$NX/c/$uc_h" && mv "$NX/c/$uc_x" "$WORK/a-nx.ext" || { echo "FIXTURE BROKEN: union-commit: cannot restore the history or move the extension" >&2; exit 2; }
+bash "$REC/pull.sh" apply "$NX/dist" "$AT" "$NX/c" "$NX_T" > "$WORK/a-nx2.out" 2> "$WORK/a-nx2.err" < /dev/null; nx2_rc=$?
+nx2_rd="$(run_dir "$WORK/a-nx2.out")"
+if [ "$nx_rc" = 3 ] && grep -q '^ASK blend ' "$WORK/a-nx.out" && [ "$nx_rec" = y ] \
+   && [ "$nx2_rc" = 0 ] && grep -q '^NEXT pull.sh finish ' "$WORK/a-nx2.out" && ! grep -q '^REFUSED' "$WORK/a-nx2.out" \
+   && [ -n "$nx2_rd" ] && grep -q 'RE-RENDERED-SINCE-APPROVAL' "$nx2_rd/apply.err" && grep -q 'unseen=0' "$nx2_rd/apply.err" \
+   && grep -q '^NOTE	blockers-resolved	' "$nx2_rd/apply.out"; then
+  ok "union-commit: a VERSION-only theirs (core/ equal to the stamp's) re-rendered since approval proceeds past the union gate (NOTE blockers-resolved, NEXT pull.sh finish)"
+else
+  bad "union-commit: round 1 rc=$nx_rc record=$nx_rec round 2 rc=$nx2_rc out: $(grep -E '^(REFUSED|NEXT|ASK)' "$WORK/a-nx2.out" | cut -c1-80 | tr '\n' '|') apply.err: $(grep -o '^apply: .\{0,160\}' "$nx2_rd/apply.err" 2>/dev/null | tail -1)"
 fi
 # pw-delivered-retry, pw-delivered-cleared: world a delivered; the operator's checkout returns to a plain branch (the update branch
 # abandoned) and edits a file the pull wrote; the SAME theirs is retried. The pull is finished, so the retry NOTEs, drops the old
@@ -557,13 +681,47 @@ fi
 # old delivery, decides).
 copy_world a a-rt
 copy_world a a-do   # pw-dlv-order (below the deliver arms): the delivered world, before rw-stamped's finish moves it
+copy_world a a-rp   # restart-prune
+copy_world a a-aa   # already-applied
+# below_stamp <world> <branch>: the operator back on the pre-pull branch (the update PR unmerged; `checkout -f`, since some git
+# builds refuse a merge checkout over staged changes): the stamp's commit is $AB, below theirs, while <git-dir>/ai-dlc-pull still
+# says AT was delivered. Each retry arm makes its own edit after it.
+below_stamp() {
+  world_git -C "$1/c" checkout -q -f -b "$2" "$A_ORIG" 2> "$1.co.err" || { echo "below_stamp $1: checkout -f $A_ORIG: $(head -c 400 "$1.co.err")" >&2; return 1; }
+  [ -z "$(world_git -C "$1/c" ls-files -u)" ] \
+    && [ "$(world_git -C "$1/dist" rev-parse -q --verify "$(sed -n 's/^commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$1/c/.claude/.ai-dlc-version" | head -1)^{commit}")" = "$(world_git -C "$1/dist" rev-parse "$AB")" ] \
+    && [ "$(cat "$1/c/.git/ai-dlc-pull/pull-writes.delivered" 2>/dev/null)" = "$(world_git -C "$1/dist" rev-parse "$AT")" ]
+}
+# already-applied (world a-aa, the delivered world on a plain branch at its commit: the stamp's commit is AT): dry-run at AT with
+# the held $AB and apply at AT with the stamp's own abbreviated commit as <base>, each REFUSED <cmd>-already-applied before any write.
+AA="$WORK/a-aa"
+world_git -C "$AA/c" checkout -q -b merged-aa || { echo "FIXTURE BROKEN: cannot branch a-aa" >&2; exit 2; }
+aa_sc="$(sed -n 's/^commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$AA/c/.claude/.ai-dlc-version" | head -1)"
+[ -n "$aa_sc" ] && [ "$aa_sc" != "$AT" ] && [ "$(world_git -C "$AA/dist" rev-parse -q --verify "${aa_sc}^{commit}")" = "$(world_git -C "$AA/dist" rev-parse "$AT")" ] \
+  || { echo "FIXTURE BROKEN: a-aa's stamp ('$aa_sc') is not an abbreviation of AT" >&2; exit 2; }
+pull_state "$AA/c" > "$WORK/a-aa.s0" 2>&1
+aa_bad=""
+for _ab in "dry-run $AB b" "apply $aa_sc s"; do
+  read -r _c _b _t <<<"$_ab"
+  bash "$REC/pull.sh" "$_c" "$AA/dist" "$_b" "$AA/c" "$AT" > "$WORK/a-aa-$_c-$_t.out" 2> "$WORK/a-aa-$_c-$_t.err" < /dev/null; _rc=$?
+  pull_state "$AA/c" > "$WORK/a-aa.s1" 2>&1
+  [ "$_rc" = 2 ] && [ "$(cat "$WORK/a-aa-$_c-$_t.out")" = "REFUSED $_c-already-applied rc=2" ] && grep -q 'there is nothing to do here' "$WORK/a-aa-$_c-$_t.err" \
+    && cmp -s "$WORK/a-aa.s0" "$WORK/a-aa.s1" || aa_bad="$aa_bad [$_c base=$_t rc=$_rc out=$(tr '\n' '|' < "$WORK/a-aa-$_c-$_t.out" | cut -c1-120) state: $(diff "$WORK/a-aa.s0" "$WORK/a-aa.s1" | head -3 | tr '\n' '|')]"
+done
+if [ -z "$aa_bad" ] && [ -s "$WORK/a-aa.s0" ]; then
+  ok "already-applied: dry-run (base \$AB) and apply (base the abbreviated stamp) at the theirs the stamp records: each REFUSED <cmd>-already-applied rc=2, nothing written"
+else
+  bad "already-applied:$aa_bad"
+fi
 RT="$WORK/a-rt"
-world_git -C "$RT/c" checkout -q -b merged-rt || { echo "FIXTURE BROKEN: cannot branch a-rt" >&2; exit 2; }
+below_stamp "$RT" merged-rt || { echo "FIXTURE BROKEN: cannot re-seat a-rt below the stamp" >&2; exit 2; }
 rt_snap0="$(sed -n 1p "$RT/c/.git/ai-dlc-pull/dirty-snapshot")"
+rt_rr0="$(sed -n 1p "$RT/c/.git/ai-dlc-pull/report-restarted" 2>/dev/null)"
+rt_rrn="$(grep -c "	ai-dlc-pull/${A_RUN##*/}/report.previous.md	" "$RT/c/.git/ai-dlc-pull/report-restarted" 2>/dev/null)" || rt_rrn=0
 printf '\n' >> "$RT/c/.claude/settings.json"
 rt_sb="$(world_git -C "$RT/c" hash-object --no-filters -- .claude/settings.json)"
 bash "$REC/pull.sh" apply "$RT/dist" "$AB" "$RT/c" "$AT" > "$WORK/a-rt.out" 2> "$WORK/a-rt.err" < /dev/null; rt_rc=$?
-if [ "$rt_rc" != 2 ] && grep -q '^NOTE pull-delivered-retry ' "$WORK/a-rt.out" && grep -q '^PULL run=' "$WORK/a-rt.out" \
+if [ "$rt_rc" = 3 ] && grep -q '^ASK blend ' "$WORK/a-rt.out" && grep -q '^NOTE pull-delivered-retry ' "$WORK/a-rt.out" && grep -q '^PULL run=' "$WORK/a-rt.out" \
    && ! grep -q 'apply-pull-writes-moved' "$WORK/a-rt.out" \
    && [ "$(sed -n 1p "$RT/c/.git/ai-dlc-pull/dirty-snapshot")" != "$rt_snap0" ] \
    && awk -F'\t' '$4 == ".claude/settings.json" {f = 1} END {exit !f}' "$RT/c/.git/ai-dlc-pull/dirty-snapshot" \
@@ -572,10 +730,49 @@ if [ "$rt_rc" != 2 ] && grep -q '^NOTE pull-delivered-retry ' "$WORK/a-rt.out" &
 else
   bad "pw-delivered-retry: rc=$rt_rc out: $(tr '\n' '|' < "$WORK/a-rt.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-rt.err")"
 fi
+# restart-cleared (world a-rt): world a's deliver marked its report-restarted record delivered (A_RUN's row in it); the retry,
+# which restarts nothing, takes the delivered-retry snapshot path, and no report-restarted row remains in the PR body.
+bash "$REC/pull.sh" pr-body "$RT/c" > "$WORK/a-rt-pr.out" 2> "$WORK/a-rt-pr.err" < /dev/null; rtp_rc=$?
+if [ "$rt_rr0" = "ai-dlc-report-restarted 1 $(world_git -C "$RT/dist" rev-parse "$AT") delivered" ] && [ "$rt_rrn" = 1 ] \
+   && grep -q '^NOTE pull-delivered-retry ' "$WORK/a-rt.out" && ! grep -q '^NOTE report-restarted' "$WORK/a-rt.out" \
+   && [ "$rtp_rc" = 0 ] && grep -q '^### Reconcile region' "$WORK/a-rt-pr.out" && ! grep -q 'report-restarted' "$WORK/a-rt-pr.out"; then
+  ok "restart-cleared: deliver marks the report-restarted record delivered, and a same-theirs retry that restarts nothing leaves no report-restarted row in the PR body"
+else
+  bad "restart-cleared: header before retry '$rt_rr0' A_RUN rows=$rt_rrn pr-body rc=$rtp_rc rows: $(grep 'report-restarted' "$WORK/a-rt-pr.out" | tr '\n' '|' | cut -c1-300) record after: '$(sed -n 1p "$RT/c/.git/ai-dlc-pull/report-restarted" 2>/dev/null)'"
+fi
+# restart-prune (world a-rp, the delivered world): a retry at the same theirs whose dry run meets an earlier pull's report
+# restarts it (the record, marked delivered, is replaced); the retry's apply takes the delivered-retry snapshot path, which keeps
+# an unmarked record. The apply's own outcome past its snapshot is not this arm's.
+RP="$WORK/a-rp"
+below_stamp "$RP" merged-rp || { echo "FIXTURE BROKEN: cannot re-seat a-rp below the stamp" >&2; exit 2; }
+cp "$WORK/a-report.seed" "$RP/c/_bmad-output/ai-dlc-update/reconcile-report.md" || { echo "FIXTURE BROKEN: a-rp: cannot seed the earlier report" >&2; exit 2; }
+bash "$REC/pull.sh" dry-run "$RP/dist" "$AB" "$RP/c" "$AT" > "$WORK/a-rp0.out" 2> "$WORK/a-rp0.err" < /dev/null; rp0_rc=$?
+RP0_RUN="$(run_dir "$WORK/a-rp0.out")"
+bash "$REC/pull.sh" apply "$RP/dist" "$AB" "$RP/c" "$AT" > "$WORK/a-rp.out" 2> "$WORK/a-rp.err" < /dev/null
+bash "$REC/pull.sh" pr-body "$RP/c" > "$WORK/a-rp-pr.out" 2> "$WORK/a-rp-pr.err" < /dev/null; rpp_rc=$?
+if [ "$rp0_rc" = 0 ] && [ -n "$RP0_RUN" ] && grep -q '^NOTE report-restarted ' "$WORK/a-rp0.out" && grep -q '^NOTE pull-delivered-retry ' "$WORK/a-rp.out" \
+   && [ "$rpp_rc" = 0 ] && grep -qxF -- "- \`report-restarted\`: 1 row(s); paths: ai-dlc-pull/${RP0_RUN##*/}/report.previous.md" "$WORK/a-rp-pr.out"; then
+  ok "restart-prune: a delivered pull retried at the same theirs: the PR body carries only the retry's own report-restarted row, never the delivered pull's"
+else
+  bad "restart-prune: dry-run rc=$rp0_rc run='$RP0_RUN' pr-body rc=$rpp_rc rows: $(grep 'report-restarted' "$WORK/a-rp-pr.out" | tr '\n' '|' | cut -c1-400) apply: $(grep '^NOTE pull-delivered\|^REFUSED' "$WORK/a-rp.out" | tr '\n' '|')"
+fi
+# restart-count: restart-prbody's body and restart-prune's each carry exactly one report-restarted line.
+rc_a="$(grep -c 'report-restarted' $a_prs 2>/dev/null)" || rc_a=0
+rc_p="$(grep -c 'report-restarted' "$WORK/a-rp-pr.out" 2>/dev/null)" || rc_p=0
+if [ "$rc_a" = 1 ] && [ "$rc_p" = 1 ]; then
+  ok "restart-count: the first pull's PR body and the below-stamp retry's each carry exactly one report-restarted line"
+else
+  bad "restart-count: report-restarted lines: first pull $rc_a, retry $rc_p (each must be 1)"
+fi
 # The retry stopped at the blend ASK (apply.sh not started, so no record); answer it as rw-stamped does and run it on.
 rt_dg="$(awk '$1 == "ASK" && $2 == "blend" {print $4; exit}' "$WORK/a-rt.out")"
 if [ "${#rt_dg}" = 64 ] && answer "$RT/c" "Blend the session driver? digest $rt_dg" "blend it"; then
-  bash "$REC/pull.sh" apply "$RT/dist" "$AB" "$RT/c" "$AT" > "$WORK/a-rt1.out" 2> "$WORK/a-rt1.err" < /dev/null
+  bash "$REC/pull.sh" apply "$RT/dist" "$AB" "$RT/c" "$AT" > "$WORK/a-rt1.out" 2> "$WORK/a-rt1.err" < /dev/null; rt1_rc=$?
+  if [ "$rt1_rc" = 0 ] && grep -q '^PULL run=' "$WORK/a-rt1.out" && ! grep -q '^REFUSED\|^ASK ' "$WORK/a-rt1.out"; then
+    ok "pw-delivered-retry apply: the answered retry below the stamp applies (rc=0, PULL run=, no REFUSED or ASK row)"
+  else
+    bad "pw-delivered-retry apply: rc=$rt1_rc out: $(tr '\n' '|' < "$WORK/a-rt1.out" | cut -c1-300) err: $(head -c 200 "$WORK/a-rt1.err")"
+  fi
 else
   bad "pw-delivered-cleared: the retry raised no blend ASK to answer: $(tr '\n' '|' < "$WORK/a-rt.out" | cut -c1-200)"
 fi
@@ -949,7 +1146,7 @@ fi
 # World a-do (world a delivered, then on a plain branch) retries the same theirs while the snapshot cannot be replaced (a `chflags uchg`
 # file: its rename fails, deletes beside it work; where chflags is absent, an `mv` on PATH that fails for that one target).
 DO="$WORK/a-do"; DO_PW="$DO/c/.git/ai-dlc-pull/pull-writes"
-world_git -C "$DO/c" checkout -q -b merged-do || { echo "FIXTURE BROKEN: cannot branch a-do" >&2; exit 2; }
+below_stamp "$DO" merged-do || { echo "FIXTURE BROKEN: cannot re-seat a-do below the stamp" >&2; exit 2; }
 [ -f "$DO_PW" ] && [ -f "$DO_PW.delivered" ] || { echo "FIXTURE BROKEN: a-do holds no record or no delivery marker" >&2; exit 2; }
 cp "$DO_PW" "$WORK/a-do-pw0" && cp "$DO_PW.delivered" "$WORK/a-do-dl0" && cp "$DO/c/.git/ai-dlc-pull/dirty-snapshot" "$WORK/a-do-snap0" \
   || { echo "FIXTURE BROKEN: a-do: cannot save the records" >&2; exit 2; }
@@ -964,7 +1161,7 @@ else
 fi
 PATH="$do_path" bash "$REC/pull.sh" apply "$DO/dist" "$AB" "$DO/c" "$AT" > "$WORK/a-do.out" 2> "$WORK/a-do.err" < /dev/null; do_rc=$?
 if [ -n "${DO_SNAP:-}" ]; then chflags nouchg "$DO_SNAP" || { echo "FIXTURE BROKEN: chflags nouchg" >&2; exit 2; }; DO_SNAP=""; fi
-if [ "$do_rc" != 0 ] && grep -q '^NOTE pull-delivered-retry ' "$WORK/a-do.out" && cmp -s "$DO_PW" "$WORK/a-do-pw0" \
+if [ "$do_rc" = 2 ] && grep -qx 'REFUSED dirty-snapshot rc=2' "$WORK/a-do.out" && grep -q '^NOTE pull-delivered-retry ' "$WORK/a-do.out" && cmp -s "$DO_PW" "$WORK/a-do-pw0" \
    && cmp -s "$DO_PW.delivered" "$WORK/a-do-dl0" && cmp -s "$DO/c/.git/ai-dlc-pull/dirty-snapshot" "$WORK/a-do-snap0"; then
   ok "pw-dlv-order: a delivered retry whose fresh snapshot cannot be written (rc=$do_rc) keeps the record, the delivery marker and the old snapshot byte for byte (twin: pw-delivered-retry)"
 else
@@ -1681,4 +1878,4 @@ else
 fi
 # ===== end BL-1173 arms =====
 
-report_end reconcile-pull-driver 112
+report_end reconcile-pull-driver 123
