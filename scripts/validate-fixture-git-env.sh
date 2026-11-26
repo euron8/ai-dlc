@@ -178,7 +178,10 @@ INVOKE_RE='(^|[[:space:]]|[;&|(])(bash|sh|source|\.)[[:space:]]'
 # review-shard-merge, whose receipt-bl980.sh carries a `git init` (its nogit self-probe's sp1) and is reached in two
 # hops -- run.sh sources lib.sh (`. "$HERE/lib.sh"`), and lib.sh's p_gmaint runs `bash "$LIB_DIR/receipt-bl980.sh"`.
 # The one-hop reading found no site, and the refusal branch reported the directory as (init-site-unresolved) over a
-# correct fixture. Whatever a sibling invokes is reached FROM the run.sh line that reaches the sibling, so its site is
+# correct fixture. That case is gone (BL-1162): receipt-bl980.sh builds that repository with world_git, so it carries
+# no INIT_RE line and review-shard-merge leaves the population (`git grep -lE "$INIT_RE" -- 'core/fixtures/*/*.sh'`
+# reads 107 files, 108 before). The second hop has no live subject in the corpus; fixture-git-env-seam's probe tree
+# (mk_twohop_fixture, arms W10/W11) still exercises it. Whatever a sibling invokes is reached FROM the run.sh line that reaches the sibling, so its site is
 # that line -- for a SOURCED sibling (it runs in run.sh's own shell) and for a RUN one alike (a child process inherits
 # GIT_DIR exactly as a sourced file does).
 # THE FIRST CUT FOLLOWED ONLY SOURCED SIBLINGS, AND THAT MASKED AN EARLIER ROUTE. Measured on a probe tree: run.sh
@@ -187,8 +190,8 @@ INVOKE_RE='(^|[[:space:]]|[;&|(])(bash|sh|source|\.)[[:space:]]'
 # read site 4, ok, while the init really runs at line 2, above the seam -- an acquitted clobber. Following every
 # sibling run.sh reaches places it at line 2, seam below: reported. The control (that tree less its lib.sh line)
 # reads unresolved either way.
-# EXACTLY ONE MORE HOP, NEVER A CLOSURE. The live population needed one (review-shard-merge, the only directory
-# whose init sits two hops away); a closure would follow chains nobody has written, through a reader that keys on a
+# EXACTLY ONE MORE HOP, NEVER A CLOSURE. The population once needed one (review-shard-merge, then the only directory
+# whose init sat two hops away; none does now); a closure would follow chains nobody has written, through a reader that keys on a
 # basename and a separator, and each extra hop widens what a comment-shaped or string-shaped mention can move. A
 # third hop stays (init-site-unresolved), which fails closed. One hop needs no cycle guard: no chain is followed past
 # the reached sibling, so `a.sh` reaching `b.sh` reaching `a.sh` is read once each and cannot loop.

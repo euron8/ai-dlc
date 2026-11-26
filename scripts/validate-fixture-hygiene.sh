@@ -397,12 +397,14 @@
 #     printf-written script string. FP SET, how it reached 0: measured with the shipping scan
 #     at 24b80ee13, 53 new lines, 4 unlisted fixtures (retired-fixture-orphan, carried-findings, derivation-differential,
 #     review-shard-merge), all migrated to world_git in the same commit; heredoc 14 lines, all listed, all read; the
-#     `-c` clause 0 lines; cp14 0 lines. NARROWED OUT: a printf-written script string (review-shard-merge
-#     receipt-bl980.sh:114 is scan-root test data that is never run, so it would be a false positive) and a general
-#     `cp -R` (345 lines in 94 fixtures; the 7 `.git`-touching ones copy a world built through world_git and edit the
-#     copy). STILL BLIND: a run-later script heredoc with no shebang first line, one written through a helper function
-#     (`put`, `mw_sh_in`) or another command (`printf`), `eval "$(cat <<X)"`, `. /dev/stdin <<X`, a
-#     `| bash` on a later line than the opener, an alias, `eval`, a longer option run, a callee defined after its caller.
+#     `-c` clause 0 lines; cp14 0 lines. NARROWED OUT: a general `cp -R` (the `.git`-touching ones copy a world built
+#     through world_git and edit the copy). The printf-written script string stays undecidable from text, with no
+#     live instance: review-shard-merge receipt-bl980.sh's sp1 self-probe ran a hand init through one and now builds
+#     that repository with world_git (BL-1162).
+#     STILL BLIND: a run-later script heredoc with no shebang first line; a heredoc or script written through a helper
+#     (`put`, `mw_sh_in`) or `printf`; `eval "$(cat <<X)"`; `. /dev/stdin <<X`; a `| bash` on a later line than the
+#     opener; an alias; `eval`; a longer option run (not FP-free from text: `gc(){ git commit "$@"; }; gc -m init`);
+#     a callee defined after its caller.
 #     THE REMAINDER the grammar does not read, each re-derived at 619bfde94 by an uncommitted instrumented copy of this
 #     scan (its controls: hits on the known `gitq -C … init` and `G init` lines): wrapper-function inits, a command-
 #     position word other than git/world_git followed by `init`, 129 code lines in 29 fixtures, 19 of them with no
@@ -437,8 +439,10 @@
 #     `-P`, `--bare`, `-q`) and/or up to two dir-first words, then the whole word `init`; one count per line, the
 #     fixture's first such line is its H14 row. Keywords, builtins and undefined words are excluded by requiring the
 #     definition; core/fixtures/lib is out of the population, so a wrapper defined only there is read by no fixture.
-#     NAMED BLIND ROUTES (the entry stays open): an alias, `eval`, a wrapper call whose option run is longer than the
-#     grammar, and a callee defined after its caller. A body whose variable-held command forwards `$@`/`$*`
+#     NAMED ROUTES H14 DOES NOT READ, each 0 instances or undecidable at BL-1162's close (the STILL BLIND list above
+#     is the whole set): an alias, `eval`, a
+#     wrapper call whose option run is longer than the grammar (not FP-free from text), a callee defined after its
+#     caller. A body whose variable-held command forwards `$@`/`$*`
 #     (`"$REAL_GIT" "$@"`) IS a wrapper (`vf14`); the variable may hold any program, so the mark is read only through a
 #     call with `init`/`clone`, and a variable-held body that does not forward is no wrapper. At 747f89054 the clause reads 133 code lines in 30 fixtures (the census hand's figure; the entry's
 #     129/29 was taken at 619bfde94), 19 fixtures with no allowlist row, 11 listed; controls: 31 `gitq ... init` in
