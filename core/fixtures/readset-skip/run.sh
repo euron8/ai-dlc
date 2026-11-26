@@ -4692,6 +4692,10 @@ fi
 #          the key carries the span and the exit mapping, never the whole runner
 #   dnar   the same, but decl's inputs.decl NARROWED from src/a.sh + src/b.sh to src/a.sh, every path still keyed ->
 #          run, changed <root>decl/inputs.decl: a narrowing runs once (dsame is its skip twin on the same record)
+#   dmode  decl's record carries `#modes v1`, and src/a.sh, which it keys, turns executable -> run, c `x`: a mode change
+#          outranks the stale skip (dsame is its twin on the same record)
+#   badopt the same push: beta's record has its `#modes v1` line stripped, nothing beta keys moved -> skip, c `a`, the
+#          header-less record adopts (beta, same record WITH the header, is its plain-skip twin)
 #   dempty the declared fixture's stale record holds NO key rows        -> run (a missing stored key is changed)
 #   ctl    UNDECLARED alpha, record stale, nothing moved                -> run, reason stale (the near-miss)
 #   beta   undeclared and ok in the same invocation                     -> skip (proves the driver decided)
@@ -4724,11 +4728,15 @@ ckd_world() { local p="$1" x="$2" t="$3" k kd
   printf '# HR_SANDBOX_BEGIN\nr1\n# HR_SANDBOX_END\nf() {\n  : store\n}\nexit 1\n' > "$t/core/scripts/hermetic-run.sh"; ckd_dec "$p" "$t" rout
   printf '# HR_SANDBOX_BEGIN\nr1\n# HR_SANDBOX_END\nf() {\n}\nexit 1\n' > "$t/core/scripts/hermetic-run.sh"
   printf 'src/a.sh\n' > "$t/$x/decl/inputs.decl"; ckd_dec "$p" "$t" nar; printf 'src/a.sh\nsrc/b.sh\n' > "$t/$x/decl/inputs.decl"
+  grep -qx '#modes v1' "$kd/decl.key" && grep -qx '#modes v1' "$kd/beta.key" && cp "$kd/beta.key" "$kd/beta.key.h" || { printf NOMODES; return; }
+  awk '$0 != "#modes v1" && index($0, "#mode\t") != 1' "$kd/beta.key.h" > "$kd/beta.key"; chmod +x "$t/src/a.sh"
+  ckd_dec "$p" "$t" mode; chmod -x "$t/src/a.sh"; mv "$kd/beta.key.h" "$kd/beta.key"
   sed -n 1,3p "$kd/decl.key" > "$kd/decl.key.t" && mv "$kd/decl.key.t" "$kd/decl.key"; ckd_dec "$p" "$t" empty
-  printf 'dsame=%s unrel=%s dchg=%s rchg=%s rout=%s dnar=%s dempty=%s ctl=%s beta=%s' "$(ckd_cell "$t.dd.same" decl)" "$(ckd_cell "$t.dd.unrel" decl)" \
-    "$(ckd_cell "$t.dd.chg" decl)" "$(ckd_cell "$t.dd.rchg" decl)" "$(ckd_cell "$t.dd.rout" decl)" "$(ckd_cell "$t.dd.nar" decl)" "$(ckd_cell "$t.dd.empty" decl)" "$(ckd_cell "$t.dd.same" alpha)" "$(ckd_cell "$t.dd.same" beta)"
+  printf 'dsame=%s unrel=%s dchg=%s rchg=%s rout=%s dnar=%s dmode=%s badopt=%s dempty=%s ctl=%s beta=%s' "$(ckd_cell "$t.dd.same" decl)" "$(ckd_cell "$t.dd.unrel" decl)" \
+    "$(ckd_cell "$t.dd.chg" decl)" "$(ckd_cell "$t.dd.rchg" decl)" "$(ckd_cell "$t.dd.rout" decl)" "$(ckd_cell "$t.dd.nar" decl)" "$(ckd_cell "$t.dd.mode" decl)" "$(ckd_cell "$t.dd.mode" beta)" \
+    "$(ckd_cell "$t.dd.empty" decl)" "$(ckd_cell "$t.dd.same" alpha)" "$(ckd_cell "$t.dd.same" beta)"
 }
-CKD_WANT='dsame=skip:v:ok unrel=skip:v:ok dchg=run:k:ok rchg=run:k:ok rout=skip:v:ok dnar=run:k:ok dempty=run:s:ok ctl=run:s:stale beta=skip::ok'
+CKD_WANT='dsame=skip:v:ok unrel=skip:v:ok dchg=run:k:ok rchg=run:k:ok rout=skip:v:ok dnar=run:k:ok dmode=run:x:ok badopt=skip:a:ok dempty=run:s:ok ctl=run:s:stale beta=skip::ok'
 # THE FIRST RESOLVED HOOK ONLY: the decision this world drives is inside the FIXTURE_POOL block, which I66 holds
 # code-identical across both hooks, and the second hook's own fixture root is proven wired by ckw's (d) arm.
 CKD_N="$CK_N"; CKD_P1="${CK_P1:-}"; CKD_X1="${CK_X1:-}"

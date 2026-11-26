@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1253.0] - 2026-11-26
+
+### The pushing session's mode-change window for consumer-layout units is closed, and says when it adopts (BL-1155)
+
+- For ai-dlc maintainers pushing from the distribution: a consumer-layout unit skipped by the twin rule (`d`) or by a side record (`h`) whose record had no `#modes v1` header is now rewritten with `#modes v1` and its `#mode` lines, with no run, in `cl_write` of both hooks. A later mode change to that unit's installed copy therefore runs it as class `x` instead of passing unseen. A prediction, a refused push and the census never write. Both hooks carry the same edit.
+- The consumer layout now prints its own `read-set modes:` line in `cl_select` when it adopts, so an adoption no longer goes uncounted. Before, the `read-set modes:` line counted only the distribution's records.
+- Correction to the 0.1247.0 note: its sentence that a `d` or `h` unit "re-adopts on every push until it runs" was wrong. Such a unit is decided `run` first because its content moved, so it never took class `a`; it stayed header-less, with no mode compare, until it ran. Adoption happened once, at 0.1247.0.
+- Regression guard: readset-skip now asserts class `x` (a `chmod +x` runs the fixture) and class `a` (a header-less record adopts); consumer-suite-pool asserts the `h` rewrite and that a prediction writes nothing. Not covered: an `h` skip never compares against the side record's own `#mode` lines, and no fixture builds a `d` world.
+
 ## [0.1252.0] - 2026-11-26
 
 ### owed-derivations-c's ten apply drives run in process, and the invocation judge reads an in-process parent marker (BL-878)

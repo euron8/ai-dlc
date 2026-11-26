@@ -1074,6 +1074,21 @@ bl_seed() {                    # bl_seed <seed> <prefix> <post-P1 tree> [<hook>]
   esac
   bl_drv "$t" "$p.$s.out" > "$p.$s.rc"
 }
+cl_strip() {                   # cl_strip <cl tree> <fx>...: drops `#modes v1`/`#mode` lines from each named consumer-layout record (a record written before mode keys)
+  local t="$1" f b n=0; shift
+  for b in "$@"; do
+    for f in "$t.vs/consumer-placement-keys"/*/"$b.key"; do
+      [ -f "$f" ] || continue; n=$((n + 1))
+      awk '$0 != "#modes v1" && index($0, "#mode\t") != 1' "$f" > "$f.t" && mv "$f.t" "$f" || return 1
+    done
+  done
+  [ "$n" = "$#" ]
+}
+cl_snap() {                    # cl_snap <cl tree> <dir>: copies pend's and near's consumer-layout records into <dir>
+  local f
+  mkdir -p "$2" || return 1
+  for f in "$1.vs/consumer-placement-keys"/*/pend.key "$1.vs/consumer-placement-keys"/*/near.key; do [ ! -f "$f" ] || cp "$f" "$2/" || return 1; done
+}
 cl_seed() {                    # cl_seed <prefix> <post-P1 tree> [<hook>]: the cl seed, two consumer-layout pushes a and b
   local p="$1" t="$1.cl" i
   cp -Rp "$2" "$t" && cp -Rp "$2.vs" "$t.vs" || broken "BL-998 seed cl: copying the post-P1 world failed"
@@ -1105,8 +1120,12 @@ cl_seed() {                    # cl_seed <prefix> <post-P1 tree> [<hook>]: the c
       hook_drive "$t" "$p.cl$i.out" PREPUSH_POOL_DEPTH=0 AI_DLC_FIXTURE_JOBS=2 AI_DLC_FX_CL_TREE="$t.ct$i" AI_DLC_VERDICT_STORE="$t.vs" ) > "$p.cl$i.rc"
     if [ "$i" = x ]; then   # D2: the foreign tree's record now says 9; a2's skip must still name the side record's own 2
       for f in "$t.vs/consumer-placement-keys"/*/pend.key; do [ -f "$f" ] && sed '4s/.*/#pending 9/' "$f" > "$f.t" && mv "$f.t" "$f" || broken "BL-1221 seed cl: no pend.key to poison after push x"; done
+      # BL-1155 D1: both records lose their mode header, so a2's `h` skips meet header-less records (snapshot m0).
+      cl_strip "$t" pend near && cl_snap "$t" "$p.m0" || broken "BL-1155 seed cl: stripping the mode header of pend.key and near.key after push x failed"
     fi
   done
+  # Before the prediction only pend's record loses its header again; near's keeps the one a2 gave it, so the decided count reads 1 of 2.
+  cl_snap "$t" "$p.m1" && cl_strip "$t" pend && cl_snap "$t" "$p.m2" || broken "BL-1155 seed cl: snapshotting a2's records or stripping pend's again failed"
   grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.cla.out" \
     || broken "BL-998 seed cl: push a did not run both fixtures in the consumer layout, so push b measures nothing: $(grep -E 'consumer layout|FAIL' "$p.cla.out" | tr '\n' '|' | tail -c 300)"
   # D3: cl_select in census mode over a2's tree, with the side records now present: a prediction (AI_DLC_CL_DIST_OUT named, as
@@ -1119,6 +1138,7 @@ cl_seed() {                    # cl_seed <prefix> <post-P1 tree> [<hook>]: the c
       || exit 1
     fx_inproc "$HOOK"
     cl_select "$t.clc" census > "$p.clc.out" 2>&1 ) || broken "BL-1221 seed cl: the census-mode selections over a2's tree failed"
+  cl_snap "$t" "$p.m3" || broken "BL-1155 seed cl: snapshotting the records after the census-mode selections failed"
   cp "$p.clb.out" "$p.cl.out" && cp "$p.clb.rc" "$p.cl.rc"
   grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.clx.out" \
     || broken "BL-1221 seed cl: push x (different keys) did not run both fixtures, so the a2 push measures nothing: $(grep -E 'consumer layout|FAIL' "$p.clx.out" | tr '\n' '|' | tail -c 300)"
@@ -1140,6 +1160,22 @@ bl_cell() {                    # bl_cell <seed>.<observable>, read off the loade
           && grep -qxF '   PENDING: 2 skipped on a recorded pass that printed a PENDING row: pend(recorded)=2 pend@consumer(recorded)=2' "$C_T.cla2.out"; then echo yes; else echo no; fi ;;
     hp) if grep -qF '   ..    consumer layout: 0 of 2 shipping fixture(s) run as <fx>@consumer in ' "$C_T.clp.out" && grep -qF 'skipped on a content-keyed pass' "$C_T.clp.out" \
           && grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$C_T.clc.out"; then echo yes; else echo no; fi ;;
+    mstrip) n=0
+            for f in "$C_T.m0/pend.key" "$C_T.m0/near.key"; do
+              [ -f "$f" ] && ! grep -qxF '#modes v1' "$f" && ! grep -qE '^#mode[[:blank:]]' "$f" && grep -q '^[^#]' "$f" && n=$((n + 1))
+            done
+            if [ "$n" = 2 ] && [ "$(sed -n 4p "$C_T.m0/pend.key")" = '#pending 9' ]; then echo yes; else echo no; fi ;;
+    madopt) n=0
+            for f in pend.key near.key; do
+              awk '!d && substr($0, 1, 1) != "#" { print "#modes v1"; d = 1 } { print }' "$C_T.m0/$f" > "$C_T.m0/$f.want" 2>/dev/null \
+                && cmp -s "$C_T.m0/$f.want" "$C_T.m1/$f" && n=$((n + 1))
+            done
+            if [ "$n" = 2 ] && [ "$(sed -n 4p "$C_T.m1/pend.key")" = '#pending 9' ] && [ "$(sed -n 5p "$C_T.m1/pend.key")" = '#modes v1' ] \
+               && grep -qF '; 2 <fx>@consumer record(s) skipped on a twin or side record (d/h) are decided to have the present modes added in place, with no run' "$C_T.cla2.out"; then echo yes; else echo no; fi ;;
+    mpred) n=0
+            for f in pend.key near.key; do cmp -s "$C_T.m2/$f" "$C_T.m3/$f" && n=$((n + 1)); done
+            if [ "$n" = 2 ] && cmp -s "$C_T.m0/pend.key" "$C_T.m2/pend.key" && cmp -s "$C_T.m1/near.key" "$C_T.m2/near.key" \
+               && grep -qF '; 1 <fx>@consumer record(s) skipped on a twin or side record (d/h) are decided to have the present modes added in place, with no run' "$C_T.clp.out"; then echo yes; else echo no; fi ;;
     crec) yn grep -qxF '   PENDING: 2 skipped on a recorded pass that printed a PENDING row: pend(recorded)=2 pend@consumer(recorded)=2' "$o" ;;
     disp) if [ "$(cat "$C_T.cla.rc" 2>/dev/null)" = 0 ] \
              && grep -qxF '   ok    pend@consumer  (2 PENDING row(s): its subject is absent, so those parts checked nothing)' "$C_T.cla.out" \
@@ -1153,7 +1189,7 @@ bl_cell() {                    # bl_cell <seed>.<observable>, read off the loade
     *) echo "<unknown cell $1>" ;;
   esac
 }
-BL_CELLS="s1.rec2,s2.rec2,s2.vs,s2.kp2,s4.rec2,s3.rec2,su.pran,su.kp2,su.unrec,s5.unrec,sv.rec2,sv.kp2,sk.pran,sk.vs,sk.unrec,cl.skip,cl.crec,cl.disp,cl.kpend,cl.h,cl.hp"
+BL_CELLS="s1.rec2,s2.rec2,s2.vs,s2.kp2,s4.rec2,s3.rec2,su.pran,su.kp2,su.unrec,s5.unrec,sv.rec2,sv.kp2,sk.pran,sk.vs,sk.unrec,cl.skip,cl.crec,cl.disp,cl.kpend,cl.h,cl.hp,cl.mstrip,cl.madopt,cl.mpred"
 bl_drive_cells() {             # bl_drive_cells <prefix> <post-P1 tree> <hook|-> <cells>: drives only the seeds the cells read
   local c s h="$3"; [ "$h" = - ] && h=""
   for c in $4; do s="${c%%.*}"; [ -f "$1.$s.out" ] || bl_seed "$s" "$1" "$2" "$h"; done
@@ -1205,6 +1241,9 @@ else bad "7b sk the count-less entry (pran=$(mx_get "$BASE_bl" sk.pran) vs=$(mx_
 if _bl_eq cl.skip yes && _bl_eq cl.crec yes && _bl_eq cl.disp yes && _bl_eq cl.kpend 2:2 && _bl_eq cl.h yes && _bl_eq cl.hp yes; then
   ok "7b cl the consumer layout: push a runs pend@consumer and names it in the pool PENDING summary; both records carry #pending; push b selects 0 of 2 and names pend(recorded)=2 pend@consumer(recorded)=2, none count-unrecorded; push a2 (a's content after a different tree's push replaced the key records) selects 0 of 2 on the content-keyed side records and names both"
 else bad "7b cl the consumer layout (h=$(mx_get "$BASE_bl" cl.h) skip=$(mx_get "$BASE_bl" cl.skip) crec=$(mx_get "$BASE_bl" cl.crec) disp=$(mx_get "$BASE_bl" cl.disp) records:#pending=$(mx_get "$BASE_bl" cl.kpend)): a: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cla.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300) b: $(grep -E 'consumer layout|@consumer|PENDING' "$BLF.cl.out" | grep -v '^   done ' | tr '\n' '|' | tail -c 300)"; fi
+if _bl_eq cl.mstrip yes && _bl_eq cl.madopt yes && _bl_eq cl.mpred yes && _bl_eq cl.hp yes; then
+  ok "7b cl BL-1155 D1: push a2's h skips meet header-less records and leave them carrying '#modes v1' just before the first row, every other byte kept; a prediction deciding the same h skips counts only the header-less record (1 of 2) and writes nothing"
+else bad "7b cl BL-1155 D1 (stripped=$(mx_get "$BASE_bl" cl.mstrip) adopted=$(mx_get "$BASE_bl" cl.madopt) predict-untouched=$(mx_get "$BASE_bl" cl.mpred)): a2: $(grep -E 'read-set modes|placement records' "$BLF.cla2.out" | tr '\n' '|' | tail -c 300) pend.key after a2: '$(sed -n 1,6p "$BLF.m1/pend.key" 2>/dev/null | tr '\n\t' ',:')'"; fi
 
 # F10, VERSION SKEW: a runner sourcing a hook whose READSET_VS span predates the `#pending` entry line (no readset_vs_entry, no
 # READSET_VS_PENDING) turns the store OFF, says so, and writes nothing; the same run under the current span wrote
@@ -1280,4 +1319,4 @@ fi
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-report_end consumer-suite-pool 47
+report_end consumer-suite-pool 48

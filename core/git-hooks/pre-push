@@ -3221,6 +3221,17 @@ cl_select() {
   [ -n "$why" ] || awk -F'\t' '$2 == "run" && n < 10 { n++; print "   ..      " $1 "@consumer: " $3 }' "$c/.kdec"
   [ -n "$why" ] || awk -F'\t' '$4 == "d" { n++; s = s " " $1 "@consumer" }
     END { if (n) print "   ..    consumer layout: " n " <fx>@consumer unit(s) skipped, the distribution twin passed on this key and every moved installed input is a byte copy of a distribution file:" s }' "$c/.kdec"
+  # THE CONSUMER LAYOUT'S MODE ADOPTION (BL-1155). An `a` row is republished through `.k.always` with the present modes.
+  # A `d` or `h` skip publishes no record, so its existing `<fx>.key` with no `#modes v1` line is listed in `.kmh` and
+  # rewritten in place by cl_write (header added, nothing else moved). Decided here, so a prediction prints it too.
+  : > "$c/.kmh"
+  [ -n "$why" ] || KMH="$c/.kmh" awk -F'\t' -v kd="$kd" -v nm="${READSET_NOMODES:+1}" '
+    function bare(r,   l, n, h) { n = 0; h = 0
+      while ((getline l < r) > 0) { n++; if (n == 1 && l != "#format k1") { close(r); return 0 }; if (l == "#modes v1") h = 1 }
+      close(r); return n > 0 && !h }
+    $2 == "skip" && $4 == "a" { a++ }
+    !nm && $2 == "skip" && ($4 == "d" || $4 == "h") && bare(kd "/" $1 ".key") { m++; print $1 > ENVIRON["KMH"] }
+    END { if (a || m) print "   ..    read-set modes: consumer layout: " a + 0 " <fx>@consumer record(s) written before mode keys are decided to be republished with the present modes and types adopted; " m + 0 " <fx>@consumer record(s) skipped on a twin or side record (d/h) are decided to have the present modes added in place, with no run" }' "$c/.kdec"
   # EVERY UNIT SKIPPED ON A PASS RECORDED ELSEWHERE IS NAMED, in the distribution's own verdict-store line: a store hit
   # (`.vs`, readset_verdicts' hit list) and a record skip whose record is still UNCONFIRMED (`.vs.u`: cl_publish marked
   # it and no run that reached its end has cleared the mark, so a stopped run or a census wrote it). A skip on a record
@@ -3297,6 +3308,21 @@ cl_write() {
     [ "$(cat "$out/$b@consumer" 2>/dev/null)" = ok ] || rm -f "$c/.k/$b"
   done < "$out/.cl.sel"
   readset_keys_write "$c" "$CL_KEYS_DIR"
+  # A `d`/`h` SKIP'S HEADER-LESS RECORD (`.kmh`, cl_select) TAKES `#modes v1` and one `#mode\t<path>\t<tag>` line per
+  # non-plain file key it rows, from the consumer layout's present `.modes`, just before its first row; every other byte
+  # is kept. temp + mv; a record already headed, absent or not `#format k1` is left as it is.
+  [ -n "${READSET_NOMODES:-}" ] || [ ! -s "$c/.kmh" ] || [ ! -f "$c/.modes" ] || while IFS= read -r b; do
+    [ -n "$b" ] && [ -f "$CL_KEYS_DIR/$b.key" ] || continue
+    KMD="$c/.modes" awk '
+      BEGIN { while ((getline l < ENVIRON["KMD"]) > 0) { t = index(l, "\t"); if (t > 1) MD[substr(l, 1, t - 1)] = substr(l, t + 1) } }
+      { L[NR] = $0; if ($0 == "#modes v1") h = 1
+        if (substr($0, 1, 1) != "#") { if (!p) p = NR; k = substr($0, 1, index($0, "\t") - 1)
+          if (k != "" && substr(k, 1, 1) != "/" && substr(k, length(k)) != "/" && (k in MD) && !(k in S)) { S[k] = 1; mb = mb "#mode\t" k "\t" MD[k] "\n" } } }
+      END { if (NR == 0 || L[1] != "#format k1" || h) exit 1
+        for (i = 1; i <= NR; i++) { if (i == p) printf "#modes v1\n%s", mb; print L[i] }
+        if (!p) printf "#modes v1\n%s", mb }' "$CL_KEYS_DIR/$b.key" > "$CL_KEYS_DIR/$b.key.mh.$$" 2>/dev/null \
+      && mv "$CL_KEYS_DIR/$b.key.mh.$$" "$CL_KEYS_DIR/$b.key" 2>/dev/null || rm -f "$CL_KEYS_DIR/$b.key.mh.$$"
+  done < "$c/.kmh"
   return 0
 }
 # cl_confirm <out>: at the end of a hook run, red or green (the distribution publishes its key records on a red run
