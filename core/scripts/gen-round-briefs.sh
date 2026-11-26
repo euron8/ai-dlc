@@ -118,14 +118,6 @@ if [ "$KIND" = adv ]; then
     [ -n "$ESKILL" ] || grb_die "the provenance-block/elicitation region in $PSRC names no skill" 3
     METHOD="Method: invoke \`/$ESKILL\` with the Skill tool, scoped to your part; it supplies the method. Record findings and edit nothing."
   fi
-  if [ "$AXIS" = files ]; then CITE_ARGS=""; while IFS="$(printf '\t')" read -r _ b _; do CITE_ARGS="$CITE_ARGS $SUBJ/$b"; done < "$MAP"
-  else CITE_ARGS="$DOC"; fi
-  CITED=""
-  if [ -x "$(dirname "${BASH_SOURCE[0]:-$0}")/resolve-cited-paths.sh" ]; then
-    # shellcheck disable=SC2086
-    CITED="$(bash "$(dirname "${BASH_SOURCE[0]:-$0}")/resolve-cited-paths.sh" $CITE_ARGS 2>/dev/null | grep -E '^(cited-paths:|SUFFIX|AMBIGUOUS|ABSENT)')"
-  fi
-  [ -n "$CITED" ] || CITED="cited-paths: resolve-cited-paths.sh produced no summary line"
   FOCUS_TXT="$(cat "$FOCUS")"
   GATED_TXT=""; [ -z "$GATED" ] || GATED_TXT="$(cat "$GATED")"
 fi
@@ -141,9 +133,6 @@ grb_adv_tail() { # $1 deliverable path, $2 shard value
 Record shape: the merge's grammar is the contract (\`merge-adversarial-shards.sh\` header: FINDING GRAMMAR and THE FINDING ID). Write the header EARLY: the title line, the \`shard:\` line, then the provenance block. Each finding is a \`### \` heading inside \`## Findings\` with an UPPERCASE severity word; on the convergence axis each CRITICAL or MAJOR finding carries its id. You are a SHARD: write the literal \`NOT_ACCESSIBLE\` for tool_use_id, \`mode: subagent\`, \`lead_role: $STEP\`; delete each line's trailing \` #\` comment because the merge reads every value literally. Fill \`invoked_at\` with the real UTC time and the counts truthfully.
 
 $PROV
-
-cited-paths block (one resolve-cited-paths.sh run for this pass):
-$CITED
 
 Write the deliverable with Write or Edit, never Bash. Once you have finished, and only then, close with ONE Bash call: \`scripts/ai-dlc/wait-for-deliverable.sh --mark $1 $STEPWORD adversary $2 findings=<n>\` where <n> is the number of \`### \` findings you wrote.
 EOF

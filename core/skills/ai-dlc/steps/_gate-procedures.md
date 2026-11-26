@@ -570,8 +570,6 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    the sha every elicitation shard notarized, and joined with
    `join-remediator-shards.sh --document <doc> <that dir>`.
 
-   **Every elicitation shard brief, part and cross, carries the `cited-paths:` block** of item 1, from one `scripts/ai-dlc/resolve-cited-paths.sh` run over the elicitation subject's files.
-
    **The delta clause — a story split or added after a correctly sharded stories elicitation.**
    When `shards/stories-elicitation/` is complete for the K it was elicited at, and `stories/`
    has since gained a story no ORDINAL shard in it names (a split, or an addition), elicit ONLY
@@ -753,8 +751,6 @@ exactly one, or whose `findings=<n>` differs from the findings it parses there. 
 unchecked, exactly as before. That is a directory written before this instruction, and also a
 round where no shard has finished — which the join's `--complete` beat, not the merge, keeps
 from reaching the merge. The merged record's `tool_use_id` is the derived id of `cross` (of `cross-1` in a per-group set).
-
-**Every adversary brief carries the `cited-paths:` block** of "Validation cycle" item 1, from one `scripts/ai-dlc/resolve-cited-paths.sh` run per pass over the artifact's files.
 
 It writes findings to `_bmad-output/planning-artifacts/s<N>/<artifact>-adversarial-p<M>.md`
 carrying a `SKILL_INVOCATION_PROVENANCE v1` block. Every review brief, sharded or not, carries
@@ -1150,7 +1146,7 @@ its files writes two entries with one `source:` token, `repaired` and `escalated
 every parts mode, prints one `ESCALATED: <part> <entry>` line per escalated entry, then
 `ESCALATED-COUNT: <n>`, then,
 only where `.findings-partition` exists, `CROSS-COUNT: <n>`, one per routed line. In every
-mode (files, sections, subject), dispatch the serial remediators after the join whenever ESCALATED-COUNT is above 0, whenever CROSS-COUNT is above 0, whenever WORKLIST-COUNT (printed after FANIN-COUNT: the `HIT` and `MOVED-CITE` items of the join's own worklist run) is above 0, and whenever the lead routed any
+mode (files, sections, subject), dispatch the serial remediators after the join whenever ESCALATED-COUNT is above 0, whenever CROSS-COUNT is above 0, whenever WORKLIST-COUNT (printed after FANIN-COUNT: the `HIT` and `MOVED-CITE` items of the join's own worklist run, plus one `WORKLIST UNASSESSED:` item when that run exits non-zero, so a crashed worklist counts at least 1) is above 0, and whenever the lead routed any
 finding serial, whether or not the route file exists and whether or not any finding cited two
 files or parts. The join partitions that work into LANES of FILES and prints them after
 CROSS-COUNT (ESCALATED-COUNT where there is none):
@@ -1165,7 +1161,7 @@ worklist) joins the two files it links. A `HIT` never joins lanes, and neither d
 one standing in, or naming files of, two or more lanes, or naming no lane's file, is a `FANIN`
 item. In files mode only, an escalation whose every named file is either one lane's or a file no
 part edited (on disk under the slot's `stories/` or `epics/`) is that lane's item, or a lane of its own
-whose `LANE:` line lists no part. `LANE-EDGES: UNASSESSED` means the worklist did not run clean and every file is one lane.
+whose `LANE:` line lists no part. `LANE-EDGES: UNASSESSED` means the worklist did not run clean: every file is one lane, the join still routes the items an exit-3 run printed, and it adds the one `WORKLIST UNASSESSED:` item WORKLIST-COUNT counts, as `LANE-ITEM: 1 WORKLIST UNASSESSED:` when there is one lane (no fan-in) and otherwise as a `FANIN:` item FANIN-COUNT counts; it is the writer's, never dealt to an adjudicator.
 The join also prints `LANE-ARTIFACT: <lane artifact> --pass <M>`, the lane round's name derived
 from round one's record name; copy LANE-ARTIFACT, never infer it from `--artifact` or `--subject`
 (the subject party round's is `requirements-party-serial --pass 1`, not `requirements-serial`,

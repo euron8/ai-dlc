@@ -2393,6 +2393,40 @@ p_wlcount() { # <n> -- reads the LAST run's $JO: ESCALATED-COUNT 0, no CROSS-COU
   # (above 0 dispatches the serial round with no escalation and no routed finding; 0 dispatches none)
   has "$JO" "ESCALATED-COUNT: 0" && ! has "$JO" "CROSS-COUNT" && has "$JO" "WORKLIST-COUNT: $1"
 }
+# p_wlstub <join> <0|1|3> -- p_lanesubjnear's world (no cite, no hit) with the worklist a stub (unit-reader-a.sh's
+# UA_SRW_RC/UA_SRW_OUT) in the real worklist's grammar. 0 and 1 print the same bytes, a replaced fragment no line still
+# carries; 3 prints three fragments each with a HIT in the SPEC, and an UNASSESSABLE line. A non-zero exit must join, mark
+# the edges UNASSESSED (every file one lane) and count one WORKLIST UNASSESSED item, lane 1's own, beside every item the
+# worklist emitted. 3 leaves four lane-1 items, enough to deal adjudicators were the writer-only UNASSESSED item dealt.
+p_wlstub() {
+  local base="REPLACED $SJPA/prd.md:5-5 -> 5-5  [entries: ]
+  text: an old line no file still carries
+SUMMARY files 2 replaced 1 hits 0 moved-cites 0 unassessable 0" r
+  UA_SRW_RC="$2"; UA_SRW_OUT="$base"
+  [ "$2" = 3 ] && UA_SRW_OUT="REPLACED $SJPA/prd.md:5-5 -> 5-5  [entries: ]
+  text: an old line the SPEC still carries
+    HIT $SPECREL:1
+  text: a second old line the SPEC still carries
+    HIT $SPECREL:2
+  text: a third old line the SPEC still carries
+    HIT $SPECREL:3
+UNASSESSABLE $SJPA/prd.md: no pre-repair copy
+SUMMARY files 2 replaced 1 hits 3 moved-cites 0 unassessable 1"
+  lane_subj "$1" 0 0; r=$?
+  unset -v UA_SRW_RC UA_SRW_OUT
+  [ "$r" -eq 0 ] && [ "$RC" -eq 0 ] && has "$JO" "JOINED: " && has "$JO" "ESCALATED-COUNT: 0" || return 1
+  case "$2" in
+    0) has "$JO" "0 MOVED-CITE edge(s)" && ! has "$JO" "UNASSESSED" && has "$JO" "LANE-COUNT: 2" && has "$JO" "WORKLIST-COUNT: 0" ;;
+    1) has "$JO" "LANE-EDGES: UNASSESSED" && has "$JO" "LANE-COUNT: 1" && has "$JO" "LANE-ITEM: 1 WORKLIST UNASSESSED: exit 1: REPLACED " \
+         && ! has "$JO" "FANIN: " && has "$JO" "FANIN-COUNT: 0" && has "$JO" "WORKLIST-COUNT: 1" ;;
+    3) has "$JO" "LANE-EDGES: UNASSESSED" && has "$JO" "LANE-COUNT: 1" && has "$JO" "LANE-ITEM: 1 WORKLIST UNASSESSED: exit 3: UNASSESSABLE $SJPA/prd.md" \
+         && has "$JO" "LANE-ITEM: 1 HIT \"an old line the SPEC still carries\" at $SPECREL:1" \
+         && has "$JO" "LANE-ITEM: 1 HIT \"a third old line the SPEC still carries\" at $SPECREL:3" \
+         && ! has "$JO" "FANIN: " && has "$JO" "FANIN-COUNT: 0" && has "$JO" "WORKLIST-COUNT: 4" \
+         && has "$JO" "ADJUDICATOR-COUNT: 0" && ! has "$JO" "ADJUDICATE: " ;;
+    *) return 1 ;;
+  esac
+}
 p_laneround() { # the lane round's own join (--artifact stories-serial): lane parts under shards/stories-serial-repair-p1/
   # -> JOINED into stories-serial-repair-p1.md, and NO LANE or FANIN line (lanes of lanes would recurse)
   local w d; w="$(new_world)"; d="$w/$SLOT/shards/stories-serial-repair-p1"; mkdir -p "$d" || return 1

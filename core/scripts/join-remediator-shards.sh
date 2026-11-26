@@ -963,7 +963,10 @@ src_probe() {
 #       script after assembly, and files mode keeps no pre-repair copy, so it has none (the worklist
 #       exits 3 there). A worklist exit other than 0, or a missing worklist, joins EVERY file into one
 #       lane -- the status quo, never N lanes that might share an edge nobody measured -- and says so
-#       on `LANE-EDGES: UNASSESSED`. A HIT never joins lanes: the fragment's hits all in one lane are
+#       on `LANE-EDGES: UNASSESSED`; it is never a refusal and never zero items: exit 3 routes the items
+#       it emitted, and any non-zero exit adds ONE `WORKLIST UNASSESSED:` item, so WORKLIST-COUNT is at
+#       least 1: `LANE-ITEM: 1 WORKLIST UNASSESSED:` when there is exactly one lane (no fan-in), else a
+#       `FANIN:` item FANIN-COUNT counts; a writer duty, never dealt to an adjudicator. A HIT never joins lanes: the fragment's hits all in one lane are
 #       that lane's item, and hits in two or more lanes (s319's sprint-title `architecture_refs` line
 #       HITs 18 stories) are ONE fan-in item. An escalation whose `edit:` files are one lane's is that
 #       lane's; one naming files in two or more lanes, or no file, goes to the fan-in (s319 stories
@@ -2663,7 +2666,8 @@ LPEOF
     printf '%s' "$FP_ROWS"
     if [ "$DOCMODE$SUBJMODE" = 00 ]; then printf 'F\t%s\n' "$_wl"
     elif [ "$_wrc" = 0 ]; then printf '%s\n' "$_wl" | sed 's/^/W\t/'
-    else printf 'U\texit %s: %s\n' "$_wrc" "$(printf '%s\n' "$_wl" | grep -m1 -E '^(UNASSESSABLE|ERROR)' || printf '%s\n' "$_wl" | head -1)"; fi
+    else [ "$_wrc" = 3 ] && printf '%s\n' "$_wl" | sed 's/^/W\t/'
+      printf 'U\texit %s: %s\n' "$_wrc" "$(printf '%s\n' "$_wl" | grep -m1 -E '^(UNASSESSABLE|ERROR)' || printf '%s\n' "$_wl" | head -1)"; fi
   } | awk -F'\t' -v slotp="$_slotp" '
     function fnd(x) { while (x in par) x = par[x]; return x }
     function uni(a, b) { a = fnd(a); b = fnd(b); if (a != b) { if (a < b) par[b] = a; else par[a] = b } }
@@ -2742,6 +2746,12 @@ LPEOF
         if (i in mvf) { nwk++; ls = lanes_of(SUBSEP mvf[i] SUBSEP mvt[i])
           if (ls ~ /^[0-9]+$/) item[ls] = item[ls] "LANE-ITEM: " ls " " x "\n"; else fan = fan "FANIN: " x " (lanes " ls ")\n" } }
       frag()
+      # A worklist that did not run clean is ONE item and one WORKLIST-COUNT unit (BL-508): its hits are partial or unread,
+      # so the serial round is dispatched and its writer runs the grep and the cite walk; never a count of 0. UNASSESSED
+      # joins every file into one lane, so with exactly one lane it is that lane`s item (one lane, no fan-in); otherwise a
+      # FANIN item. It is a writer duty, never dealt to an adjudicator (adj() skips it).
+      if (unassessed != "") { nwk++; x = "WORKLIST UNASSESSED: " unassessed " -- grep each replaced text and walk every cite into an edited file by hand\n"
+        if (nl == 1) item[1] = item[1] "LANE-ITEM: 1 " x; else fan = fan "FANIN: " x }
       # Escalations: one lane when every file it names is that lane`s; otherwise the fan-in.
       for (i = 1; i <= ne; i++) { ls = (es[i] in et) ? lanes_of(et[es[i]]) : "out"
         if (ls ~ /^[0-9]+$/) item[ls] = item[ls] "LANE-ITEM: " ls " ESCALATED: " es[i] "\n"; else fan = fan "FANIN: ESCALATED: " es[i] " (lanes " ls ")\n" }
@@ -2762,7 +2772,7 @@ LPEOF
       print "LANE-COUNT: " nl
       nf = gsub(/FANIN: /, "&", fan); print "FANIN-COUNT: " nf
       # THE MOVED-CITE WORKLIST ITEMS (a HIT fragment or a MOVED-CITE line, counted once each, from the one worklist call
-      # above): above 0 dispatches the serial round beside ESCALATED-COUNT and CROSS-COUNT.
+      # above, plus the one WORKLIST UNASSESSED item when it did not exit 0): above 0 dispatches the serial round beside ESCALATED-COUNT and CROSS-COUNT.
       print "WORKLIST-COUNT: " nwk + 0
       # THE ADJUDICATION PARTITION (BL-716). The serial tail is ADJUDICATION, not writing: measured on
       # graph s320-s322, writer turns (an artifact or record Edit/Write, the mark, the join) were 29-35%
@@ -2778,7 +2788,7 @@ LPEOF
       print "ADJUDICATOR-COUNT: " na
     }
     function adj(who, block, pre,   n, a, i, m, k, x, it) { n = split(block, a, "\n"); m = 0
-      for (i = 1; i <= n; i++) { x = a[i]; if (x == "" || index(x, "FANIN: sweep") == 1) continue
+      for (i = 1; i <= n; i++) { x = a[i]; if (x == "" || index(x, "FANIN: sweep") == 1 || index(x, pre "WORKLIST UNASSESSED: ") == 1) continue
         if (index(x, pre) == 1) x = substr(x, length(pre) + 1); it[++m] = x }
       if (m < 4) return 0
       k = int(m / 2); if (k > 4) k = 4
