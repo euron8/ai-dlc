@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1261.0] - 2026-11-26
+
+### Repair rounds stop dealing items to read-only adjudicators; the one lane or fan-in writer decides every item itself (BL-716, BL-812, BL-974, partial)
+
+- For every consumer whose planning repair rounds run lanes and a fan-in. `join-remediator-shards.sh` no longer deals a lane's or the fan-in's items into read-only adjudicator batches: it prints no `ADJUDICATE:` or `ADJUDICATOR-COUNT:` line, and the lane join no longer carries the adjudicator-only-write refusal. Each lane remediator decides and applies every `LANE-ITEM:` item of its lane, and the fan-in remediator, after every lane has joined, every `FANIN:` item, routed `CROSS:` items included. The route file, the `CROSS:` routing and the `CROSS-OPEN` coverage check are unchanged. The deal had saved no wall clock on record: across graph's sprint 323 the single-remediator tail rose from 7.36 to 8.56 h and the solo-remediator total from 9.24 to 9.90 h.
+- For the lead and the remediators, the step and role text follows: `_gate-procedures.md` drops the adjudicator dispatch and the fan-in writer's derivation re-run, and takes the lane join's `--since` from the first lane dispatch; `remediator.md` and `appendix/remediator-serial.md` drop the adjudicator's duties, and the writer keeps the `- source: <key>` line, the moved-cite check, the sweep and ownership of every serial-routed finding.
+- `wait-for-deliverable.sh --mark` drops header term 9, the adjudicator batch-file name check, and `content-seal.sh` drops the adjudicator batch-file remedy; such a file now gets the generic shard remedy.
+- Records: the deal is recorded removed, with its done condition unchanged apart from the engine it names (BL-716); the ruling on the carry-over adjudication remediators is taken, keeping the one that folds escalation decisions into the evaluation and leaving the closure-writer unchanged (BL-812, item 4); the `--mark` term-9 removal is recorded (BL-974). All three stay partial.
+
 ## [0.1260.0] - 2026-11-26
 
 ### Post-compact recovery and the consumer CLAUDE.md template order the SKILL.md Read in bounded chunks (BL-1212)

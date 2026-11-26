@@ -1209,7 +1209,7 @@ if gsel rbriefs; then
     else
       bad "RBRIEFS: parallel rc=$rb_rc join=[$rb_join] cross.brief=$([ -e "$RB_W/par/cross.brief" ] && echo present || echo absent) out=[$rb_out]"
     fi
-    printf 'JOINED: %s (2 parts, 2 writers)\nESCALATED-COUNT: 0\nLANE-ARTIFACT: stories-serial --pass 2\nLANE-ARTIFACT-PATH: _bmad-output/planning-artifacts/s9\nLANE-EDGES: files, by edit set\nLANE: 1 files: a.md parts: 1.md\nLANE-COUNT: 1\nFANIN-COUNT: 1\nFANIN: CROSS: stories-p2/cross.md#F-1 files: - (lanes out)\nADJUDICATOR-COUNT: 0\n' "$RB_W/stories-repair-p2.md" > "$RB_S/.join-plan"
+    printf 'JOINED: %s (2 parts, 2 writers)\nESCALATED-COUNT: 0\nLANE-ARTIFACT: stories-serial --pass 2\nLANE-ARTIFACT-PATH: _bmad-output/planning-artifacts/s9\nLANE-EDGES: files, by edit set\nLANE: 1 files: a.md parts: 1.md\nLANE-COUNT: 1\nFANIN-COUNT: 1\nFANIN: CROSS: stories-p2/cross.md#F-1 files: - (lanes out)\n' "$RB_W/stories-repair-p2.md" > "$RB_S/.join-plan"
     rb_lout="$(FXCELL="cli-rbriefs-lane" bash "$RB_D/gen-round-briefs.sh" $(rb_args) --shard-dir "$RB_S" --out-dir "$RB_W/lane-out" --plan-file "$RB_S/.join-plan" 2>&1)"; rb_lrc=$?
     if [ "$rb_lrc" -eq 0 ] && grep -qxF 'stories-p2/cross.md#F-1 (MAJOR)' "$RB_W/lane-out/cross.brief" \
        && grep -qF 'two rounds of edits stale' "$RB_W/lane-out/cross.brief" \

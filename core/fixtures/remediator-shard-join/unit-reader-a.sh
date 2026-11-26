@@ -4,7 +4,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 # remediator-shard-join/unit-reader-a.sh -- the reader-level cells of half A, asked IN PROCESS. Driven by run.sh;
 # the header block is run.sh's.
 #
-# Families: SJ1-SJ9 and SJ1o; EC19 EC25 EC32 EC36 EC37 EC38; RR1-RR20; AL1-AL9; NW1-NW2; LN1-LN8 and LN10-LN16;
+# Families: SJ1-SJ9 and SJ1o; EC19 EC25 EC32 EC36 EC37 EC38; RR1-RR20; AL1-AL9; NW1-NW2; LN1-LN8, LN13, LN14 and LN17-LN22;
 # LP1-LP5; NL1-NL8c. Each cell asserts the decision its end-to-end cell in
 # run.sh asserted, through the SAME lib.sh predicate, unchanged. What changes is how a predicate's `bash <subject>`
 # runs: the `bash` function below catches the two subjects by path and runs each in a subshell of this process --
@@ -411,38 +411,27 @@ p_wlstub "$JOIN" 0 && ok "WL4: stub worklist exit 0, no HIT and no moved cite ->
   || bad "WL4: a clean zero-hit stub worklist did not read 0 (rc=$RC): $(grep -E '^(LANE-EDGES|FANIN|WORKLIST-COUNT)' "$JO")"
 p_wlstub "$JOIN" 1 && ok "WL5: stub worklist exit 1, the same bytes -> JOINED, LANE-EDGES: UNASSESSED, one LANE-ITEM: 1 WORKLIST UNASSESSED item, no fan-in, WORKLIST-COUNT: 1" \
   || bad "WL5: a crashed worklist did not dispatch the serial round (rc=$RC): $(grep -E '^(JOINED|LANE-EDGES|FANIN|WORKLIST-COUNT)' "$JO")"
-p_wlstub "$JOIN" 3 && ok "WL6: stub worklist exit 3, three HITs and one UNASSESSABLE line -> JOINED, all lane 1's, no fan-in, WORKLIST-COUNT: 4, the UNASSESSED item never dealt (ADJUDICATOR-COUNT: 0)" \
+p_wlstub "$JOIN" 3 && ok "WL6: stub worklist exit 3, three HITs and one UNASSESSABLE line -> JOINED, all lane 1's, no fan-in, WORKLIST-COUNT: 4" \
   || bad "WL6: an exit-3 worklist's items were not counted (rc=$RC): $(grep -E '^(JOINED|LANE-EDGES|LANE-ITEM|FANIN|WORKLIST-COUNT)' "$JO")"
 p_laneround "$JOIN" && ok "LN7: the lane round's own join (--artifact stories-serial) JOINS its lane parts and prints no LANE or FANIN line" \
   || bad "LN7: the lane round's join did not join or printed lanes (rc=$RC): $(cat "$JO")"
-# ---- BL-716 second build: the ADJUDICATION PARTITION (LN10-LN12), an escalation's own unedited file (LN13, LN14), and the lane
-# round's read-only adjudicator arm (LN15, LN16).
-if p_adjfour "$JOIN"; then ok "LN10: four fan-in items -> ADJUDICATE fanin 1/2 and 2/2, two items each, the sweep never dealt, ADJUDICATOR-COUNT: 2"
-else bad "LN10: the fan-in was not dealt into two batches (rc=$RC): $(grep -E '^(FANIN|ADJUDICAT)' "$JO")"; fi
-p_adjthree "$JOIN" && ok "LN11: three fan-in items -> no ADJUDICATE line, ADJUDICATOR-COUNT: 0 (the writer adjudicates)" \
-  || bad "LN11: three items were dealt (rc=$RC): $(grep -E '^(FANIN|ADJUDICAT)' "$JO")"
-p_adjcap "$JOIN" && ok "LN12: eleven fan-in items -> k capped at 4, no batch over 3, ADJUDICATOR-COUNT: 4" \
-  || bad "LN12: eleven items were not dealt into four batches (rc=$RC): $(grep -E '^(FANIN|ADJUDICAT)' "$JO")"
-if p_planfile "$JOIN"; then ok "LN17: the join's last line is PLAN-FILE naming <shard dir>/.join-plan, which holds every line from JOINED: on byte for byte (fan-in dealt 2/2); a re-join refuses naming that file; with it gone the refusal says no plan file is there"
+# ---- BL-716 second build: the plan file (LN17) and an escalation's own unedited file (LN13, LN14).
+if p_planfile "$JOIN"; then ok "LN17: the join's last line is PLAN-FILE naming <shard dir>/.join-plan, which holds every line from JOINED: on byte for byte (the escalation its FANIN item); a re-join refuses naming that file; with it gone the refusal says no plan file is there"
 else bad "LN17: the plan file failed at case ${RPLAN:-?} (rc=$RC): $(tail -n 3 "$JO")"; fi
 if p_escown "$JOIN"; then ok "LN13: an escalation naming an unedited story in the slot -> a lane of its own, the escalation its LANE-ITEM, not FANIN"
 else bad "LN13: the unedited-file escalation was not a lane (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"; fi
 p_escnear "$JOIN" && ok "LN14: the same escalation naming an absent story, a file outside the slot, or two part lanes' files -> FANIN, LANE-COUNT: 2 (no lane added, none merged)" \
   || bad "LN14: a near-miss escalation was made a lane or merged lanes (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
-if p_adjwrote "$JOIN"; then ok "LN15: an adjudicator that edited a story BEFORE the lane window -> the lane join REFUSES, naming agent, file and ts"
-else bad "LN15: an adjudicator's artifact write was not refused (rc=$RC): $(grep -m2 REFUSED "$JO")"; fi
-p_adjclean "$JOIN" && ok "LN16: LN15 one write apart, the adjudicator wrote only its batch file -> JOINED" \
-  || bad "LN16: a read-only adjudicator was refused (rc=$RC): $(grep -m2 REFUSED "$JO")"
 if p_lanerec "$JOIN"; then ok "LN6: --escalations reads the lane round's record after round 1 and closes by it; either record alone REFUSED; the subject party record owes requirements-party-serial-repair-p1.md; no LANE/FANIN line in a record mode"
 else bad "LN6: the lane round's record was not read with round 1 (rc=$RC): $(cat "$JO")"; fi
 p_lanename "$JOIN" && ok "LN8: the subject party join prints LANE-ARTIFACT: requirements-party-serial --pass 1, derived from its record" \
   || bad "LN8: the lane round's name was not derived from the record (rc=$RC): $(grep -E '^LANE-ARTIFACT' "$JO")"
-# ---- BL-716 route file (header 4d): serial-routed findings dealt as CROSS items; LN18-LN22. Every older arm above is an absent-file run and asserts no CROSS byte.
-if p_xdeal "$JOIN"; then ok "LN18: a route file -> CROSS-COUNT right after the escalation lines; one lane's CROSS items dealt (2 batches), a two-lane file and a - file FANIN items, lanes unmerged; the plan file carries them"
-else bad "LN18: the route file was not dealt (rc=$RC): $(grep -E '^(CROSS|LANE|FANIN|ADJ)' "$JO")"; fi
+# ---- BL-716 route file (header 4d): serial-routed findings routed as CROSS items; LN18-LN22. Every older arm above is an absent-file run and asserts no CROSS byte.
+if p_xdeal "$JOIN"; then ok "LN18: a route file -> CROSS-COUNT right after the escalation lines; one lane's four CROSS items its LANE-ITEMs, a two-lane file and a - file FANIN items, lanes unmerged; the plan file carries them"
+else bad "LN18: the route file was not routed (rc=$RC): $(grep -E '^(CROSS|LANE|FANIN)' "$JO")"; fi
 p_xrefuse "$JOIN" && ok "LN19: a bad header, field count, key grammar, 01.md/1.md duplicate, .. path, absolute path, empty files field or non-serial first field -> exit 2, its own REFUSED text, no record and no .join-plan" \
   || bad "LN19: a malformed route file did not refuse as expected (rc=$RC): $(grep -m2 REFUSED "$JO")"
-p_xzero "$JOIN" && ok "LN20: a zero-lane round with one routed finding -> the FANIN CROSS line, LANE-COUNT: 0, ADJUDICATOR-COUNT: 0" \
+p_xzero "$JOIN" && ok "LN20: a zero-lane round with one routed finding -> the FANIN CROSS line, LANE-COUNT: 0, CROSS-COUNT: 3" \
   || bad "LN20: the zero-lane route case failed (rc=$RC): $(cat "$JO")"
 p_xlane "$JOIN" && ok "LN21: the lane round's join REFUSES a route file in its shard dir, writing nothing" \
   || bad "LN21: the lane round read or ignored a route file (rc=$RC): $(cat "$JO")"

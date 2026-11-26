@@ -1161,7 +1161,7 @@ worklist) joins the two files it links. A `HIT` never joins lanes, and neither d
 one standing in, or naming files of, two or more lanes, or naming no lane's file, is a `FANIN`
 item. In files mode only, an escalation whose every named file is either one lane's or a file no
 part edited (on disk under the slot's `stories/` or `epics/`) is that lane's item, or a lane of its own
-whose `LANE:` line lists no part. `LANE-EDGES: UNASSESSED` means the worklist did not run clean: every file is one lane, the join still routes the items an exit-3 run printed, and it adds the one `WORKLIST UNASSESSED:` item WORKLIST-COUNT counts, as `LANE-ITEM: 1 WORKLIST UNASSESSED:` when there is one lane (no fan-in) and otherwise as a `FANIN:` item FANIN-COUNT counts; it is the writer's, never dealt to an adjudicator.
+whose `LANE:` line lists no part. `LANE-EDGES: UNASSESSED` means the worklist did not run clean: every file is one lane, the join still routes the items an exit-3 run printed, and it adds the one `WORKLIST UNASSESSED:` item WORKLIST-COUNT counts, as `LANE-ITEM: 1 WORKLIST UNASSESSED:` when there is one lane (no fan-in) and otherwise as a `FANIN:` item FANIN-COUNT counts; it is the writer's.
 The join also prints `LANE-ARTIFACT: <lane artifact> --pass <M>`, the lane round's name derived
 from round one's record name; copy LANE-ARTIFACT, never infer it from `--artifact` or `--subject`
 (the subject party round's is `requirements-party-serial --pass 1`, not `requirements-serial`,
@@ -1186,7 +1186,7 @@ and run the same join over them, files mode, `--artifact <lane artifact> --pass 
 one; it writes `s<N>/<lane artifact>-repair-p<M>.md` and prints no `LANE:` line. Then dispatch
 ONE fan-in serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` line of ROUND ONE's `.join-plan`, every `ESCALATED:` line the
 lane join printed and the text of `cross.brief`, which appends to that record as above. A round whose join prints `LANE-COUNT: 1` and `FANIN-COUNT: 0`
-is one lane with no fan-in. A round whose join prints `LANE-COUNT: 0` and a `FANIN-COUNT` above 0 has no lane round, no lane remediator and no adjudicator: ONE serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` and `ESCALATED:` line of round one's `.join-plan` and the text of `cross.brief`, appends to round one's record. In `--sources` mode the
+is one lane with no fan-in. A round whose join prints `LANE-COUNT: 0` and a `FANIN-COUNT` above 0 has no lane round and no lane remediator: ONE serial remediator, briefed with the same `shard: none (authoring-chain)` line, every `FANIN:` and `ESCALATED:` line of round one's `.join-plan` and the text of `cross.brief`, appends to round one's record. In `--sources` mode the
 `ESCALATED:` lines are the lead's to adjudicate, never a re-dispatch of the serial remediator:
 that record may be the serial remediator's own, so no `LANE:` or `FANIN:` line. An
 escalated entry is closed only by a later `repaired` entry carrying `- closes: <part> <entry>`
@@ -1212,29 +1212,14 @@ fix aside as outside the shard or not required without naming a hand-off.
 
 **Close the serial tail with the requirements bookkeeping script.** The lead runs `scripts/ai-dlc/requirements-bookkeeping.sh --precheck <N>` there, then `--rederive`, `--mirror-lr` and `--seal` for the `PRECHECK FENCE` and `PRECHECK MIRROR` lines it names, until none is left. The other lines go where `requirements.md` ("Bookkeeping is a script") routes them: a `PRECHECK QUOTE` line on the slot or its PRD mirror to the lead, every other line to one remediator; `--precheck` runs again after that remediator and the SPEC render until it prints `PRECHECK clean`.
 
-**Adjudicators decide, one writer writes.** After `FANIN-COUNT:` the round-one join prints one
-`ADJUDICATE: <n | fanin> <b>/<k> <item>` line per item of every lane (`<n>`) and of the fan-in that
-holds four or more items, a `CROSS:` item among them, dealt into `<k>` batches, then `ADJUDICATOR-COUNT:`. For each such lane
-and for the fan-in, dispatch its `<k>` adjudicators in parallel, at the same time as every lane
-remediator of a lane that has none: each a `remediator` dispatch whose brief carries
-`shard: <b>/<k> <lane artifact> <n | fanin>`, the line `adjudicator: read-only`, and its batch's
-`ADJUDICATE:` lines verbatim. Each writes exactly one file,
-`s<N>/shards/<lane artifact>-adjudicate-p<M>/<lane-<n> | fanin>-b<b>.md`, closed with
-`<lead engine>/wait-for-deliverable.sh --mark <batch file> <step> adjudicator <b>/<k> findings=<items>`,
-`<lead engine>` being the lead checkout's `scripts/ai-dlc` path the brief carries for a worktree-isolated
-adjudicator, else `scripts/ai-dlc`;
-beat-join them with `--complete`. A lane with adjudicators then gets its lane remediator,
-briefed as above plus every adjudicator file of that lane; the fan-in remediator gets every
-`fanin-b<b>.md`. Each is the one writer of its files and applies those decisions as
-`remediator.md` says: it owns every serial-routed finding, so any `CROSS:` item whose decision is `escalate`
-or missing, and any routed finding with no item, is the writer's to adjudicate, and the fan-in writer re-runs
-`validate-artifact-derivations.sh` on the assembled files after every lane has joined before it applies a
-fan-in `CROSS:` decision. Run the lane join only after every adjudicator has delivered, with `--since`
-taken from the FIRST adjudicator dispatch, so its window arms see an adjudicator's write; its
-read-only arm also refuses, over the whole write ledger, an adjudicator whose batch file is on disk
-and that wrote anything else. `ADJUDICATOR-COUNT: 0` is the round as before.
+**One writer decides and writes.** Each lane remediator owns and decides every `LANE-ITEM:` item
+of its lane, and the fan-in remediator, which runs after every lane has joined, owns and decides every
+`FANIN:` item, a `CROSS:` item among them. Each is the one writer of its files and applies its own
+decisions as `remediator.md` says: it owns every serial-routed finding, so any routed finding with no
+item is the writer's to decide as well. Run the lane join only after every lane remediator has
+delivered, with `--since` taken from the FIRST lane dispatch, so its window arms see every lane's write.
 
-**Dispatch from the plan file.** A parts-mode join's last line is `PLAN-FILE: <shard dir>/.join-plan`, a byte copy of every line it printed from `JOINED:` on. Read the `ESCALATED:`, `LANE-ARTIFACT:`, `LANE-ARTIFACT-PATH:`, `LANE:`, `LANE-ITEM:`, `FANIN:` and `ADJUDICATE:` lines the lane, fan-in and adjudicator briefs above carry from that file, never from a cut of the join's stdout (`| tail`, `| head`, `| grep`). A join run again over its record refuses and names that file: dispatch from the file, never re-run the join.
+**Dispatch from the plan file.** A parts-mode join's last line is `PLAN-FILE: <shard dir>/.join-plan`, a byte copy of every line it printed from `JOINED:` on. Read the `ESCALATED:`, `LANE-ARTIFACT:`, `LANE-ARTIFACT-PATH:`, `LANE:`, `LANE-ITEM:` and `FANIN:` lines the lane and fan-in briefs above carry from that file, never from a cut of the join's stdout (`| tail`, `| head`, `| grep`). A join run again over its record refuses and names that file: dispatch from the file, never re-run the join.
 
 After a join refusal naming a file `which no dispatched agent wrote`, or a file `written by more
 than one agent in the window`, or a part whose entry `sets part of the fix aside` and names no
