@@ -169,6 +169,7 @@ not stable either: writing an id into this plan MOVES it from unnamed to named. 
 taken up when a BACKLOG ENTRY cites it. Prose is not a filing.
 
 ```
+: > /tmp/derive-fence2.stamp   # emptied first, so the fences below refuse while this one is running
 D=/Users/n8/git/graph/_bmad-output/ai-dlc-update
 # THREE deliberate widenings, each one a measured defect:
 #   1. NO TRAILING SPACE after the id -- that space hid 43 of 63 bullet-form entries.
@@ -433,6 +434,7 @@ grep -cx 'PC-S323-GATE-ADJUDICATION-S23-PRE-STRIPS-HR_BIN-BUT-NOT-THE-TRAP-FARM'
                                                       # in the BACKLOG. Without `_` in the class it reads `...-HR` and the id
                                                       # scores UNFILED, UNTOUCHED and UNNAMED while archived entries cite it
 grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
+printf '%s %s\n' "$(git rev-parse origin/main)" "$(date +%s)" > /tmp/derive-fence2.stamp  # the fences below refuse without it
 ```
 
 **The ledger moves when the CONSUMER WRITES, not only when they close**, so a figure here is a
@@ -445,6 +447,7 @@ instead of a measurement of coverage. **Report the partition below. Never report
 entry counts as progress.**
 
 ```
+read -r st_sha st_t 2>/dev/null < /tmp/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: /tmp/live.txt and its siblings are not from fence 2 run against this origin/main in the last hour; run fence 2 first"; exit 1; }
 pc() { grep -rohE 'PC-[A-Z0-9][A-Z0-9_.-]+' "$1" | sed -E 's/[.-]+$//' | sort -u; }
 pc docs/backlog.archive.md > /tmp/closed_here
 pc docs/backlog.md         > /tmp/open_here
@@ -474,6 +477,7 @@ overlap from `DISCHARGED`, never from `IN-FLIGHT`: a live entry citing an id is 
 whatever an archived entry said about it.
 
 ```
+read -r st_sha st_t 2>/dev/null < /tmp/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: /tmp/live.txt and its siblings are not from fence 2 run against this origin/main in the last hour; run fence 2 first"; exit 1; }
 comm -12 /tmp/live.txt /tmp/closed_here > /tmp/d.txt
 comm -12 /tmp/live.txt /tmp/open_here   > /tmp/f.txt
 comm -12 /tmp/d.txt /tmp/f.txt          # the overlap. NOT zero, and not an error
@@ -494,6 +498,7 @@ Run the JOIN, never the bare `awk` half — the `awk` alone answers a question a
 `docs/backlog.md` and says nothing about the consumer.
 
 ```
+read -r st_sha st_t 2>/dev/null < /tmp/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: /tmp/live.txt and its siblings are not from fence 2 run against this origin/main in the last hour; run fence 2 first"; exit 1; }
 LC_ALL=C awk '/^## BL-[0-9]+/{if(id!=""){out()}; id=$2; pcs=""}
      match($0,/PC-[A-Z0-9][A-Z0-9_.-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
      END{if(id!=""){out()}}
@@ -566,6 +571,7 @@ and this program's goal — draining THAT ledger — cannot be closed on the sid
 Derive the gap; it is not optional bookkeeping:
 
 ```
+read -r st_sha st_t 2>/dev/null < /tmp/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: /tmp/live.txt and its siblings are not from fence 2 run against this origin/main in the last hour; run fence 2 first"; exit 1; }
 # The stamp carries FOUR fields and they can differ (a self-update runs ahead of the reconcile): `commit:` is the
 # pull's <base>; `skill_commit:` is the OLD engine copy. Print and label all four on each ref; never write a bare "installed".
 for k in version commit skill_version skill_commit; do
@@ -1062,64 +1068,42 @@ given at batch 90.
    at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
    when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
 
-   **THE WALL-CLOCK RULING OF BATCH 119 IS SPENT AND ITS WORK IS DONE — DO NOT OPEN A BATCH ON
-   THE WALL CLOCK.** `docs/plans/pre-push-wall-clock.md` is the record: batches 119-130 ran it
-   across `v0.585.0`-`v0.601.0`, and its premise inverted at batch 130, when the pole fell below
-   the work-conservation floor and pole work had nothing left to buy. The full measurement trail
-   was archived in batch 137's record.
+   **Do not open a batch on the wall clock.** That program's record is
+   `docs/plans/pre-push-wall-clock.md`, and its work is done.
 
-   **Batch 130 returned this plan to its own provenance-first ordering**, which is where it stays
-   until the operator rules otherwise: the sweep decides, and a PC-backed entry outranks every
-   distribution-internal one. **A worklist that rises across a successful batch is the normal
-   shape here**, because a discharged candidate stays live upstream until the consumer PULLS. That
-   is still where a batch scopes from by default.
+   **Scope provenance-first.** The sweep decides, and a PC-backed entry outranks every
+   distribution-internal one. A worklist that rises across a successful batch is normal: a
+   discharged candidate stays live upstream until the consumer pulls.
 
-   **THE LIST IS THIN AND EVERY ROW ON IT DISQUALIFIES ITSELF, SO THE JOIN IS NO LONGER WHERE A
-   BATCH SCOPES FROM. THE ANSWER IS NOT TO FORCE ONE — IT IS TO WORK THE CLASS THE JOIN CANNOT
-   SEE.** Measured at batch 140 against each entry's own body, not a paraphrase: `BL-067` records
-   its remedy UNSHIPPABLE at 3/3 false positives, `BL-132` carries a measured refutation,
-   `BL-145` says the obvious fix is not obviously right with an unmeasured FP set, `BL-215` says
-   no enforcer is constructible until ownership is settled. **Run the join and read each entry's
-   BODY anyway** — it is still the provenance-first input and a new candidate can arrive on it —
-   but when nothing there is a straightforward build, go to the RANKED UNFILED SET next, then the
-   `GATED-ON-THIS-FILING` class, rather than forcing a refuted remedy or reporting an empty batch.
+   **When no worklist entry is a straightforward build, do not force one and do not report an
+   empty batch.** Run the join and read
+   each cited entry's BODY, since a body can record its own remedy as refuted or unshippable. Then
+   go, in this order, to:
+   - **The ranked unfiled set.** Rank the unfiled candidates by `-S` date, newest first; route
+     each with `core-paths.sh --is-core` under CONSUMER path spelling, reading STDOUT; read each
+     CORE candidate's own body against the tree before scoping it.
+   - **The `GATED-ON-THIS-FILING` class.** An entry filed as the measured RESIDUE of a candidate
+     whose headline the consumer has ARCHIVED scores ZERO on the join by construction, because the
+     join keys on `live.txt` and the parent candidate left it. Derive the class with entry bodies
+     FLATTENED (`## BL-` to the next `## BL-`, whatever its number), never line by line, because
+     the phrase wraps. Controls in the same invocation: each id reads `live=0 arch=1`, a worklist
+     id reads `live=1`, and an impossible phrase scores 0 flattened.
 
-   **THAT CLASS IS EMPTY SINCE BATCH 141, SO THE UNFILED SET IS WHERE BATCH 142's WORK CAME FROM.**
-   Rank the unfiled candidates by `-S` date, newest first; route each with `core-paths.sh --is-core`
-   under CONSUMER path spelling, reading STDOUT; and read each CORE candidate's own body against the
-   tree before scoping it. Re-derive the class anyway, because it refills whenever a filing lands
-   as residue. An entry filed as the measured RESIDUE of a candidate whose headline the consumer has ARCHIVED
-   scores ZERO on this join by construction — the join keys on `live.txt` and the parent candidate
-   left it. Derive the class with the entry bodies FLATTENED (`## BL-` to the next `## BL-`,
-   whatever its number): a line-oriented grep scores 2 where the flattened derivation scores 4,
-   because the phrase wraps. Controls in the same invocation: each id reads `live=0 arch=1` while
-   a worklist id reads `live=1`, and an impossible phrase scores 0 flattened.
+   **Score citation ownership before ranking.** `pc()` matches any `PC-` token in an entry and
+   cannot tell "I close this" from an example, a false-positive table row or a receipt anchor.
+   Score by ownership verb (`Discharges`, `Carries the reference consumer's`, `Filed by the
+   consumer as`) per entry BODY, against an impossible-verb control and a non-empty-body control.
+   Then READ each matched line: a negation (*"Discharges nothing upstream"*) scores as ownership,
+   and a bare id with no verb scores as none. Two hands agreeing is not a control; the matched
+   line is.
 
-   The number here is a record of when it was taken, never an input.
+   **Operator ruling: no model replay closes a step-file or prompt fix.** Close such an entry on
+   the structural trace (the binding text present at every point on the incident path,
+   byte-compared against what the lead read) plus a fixture that pins it. Never propose a replay
+   as a close condition, and never file an entry whose close needs one.
 
-   **SCORE CITATION OWNERSHIP BEFORE RANKING, BECAUSE THE JOIN CANNOT.** `pc()` matches any `PC-`
-   token in an entry and cannot tell "I close this" from "here is an example". `BL-140` cites its
-   id as one of four stuck EXAMPLES and `BL-145` cites its own as a false-positive TABLE ROW and
-   receipt ANCHOR — neither is a candidate the entry discharges. Score by ownership verb
-   (`Discharges`, `Carries the reference consumer's`, `Filed by the consumer as`) against an
-   impossible-verb control, per entry BODY with a non-empty-body control.
-
-   **AND THEN READ THE MATCHED LINE, BECAUSE THE VERB SCORING HAS ITS OWN TWO FAILURES — BOTH
-   MEASURED AT BATCH 137, BOTH AGAINST A HAND THAT REPORTED CONFIDENTLY.** A NEGATION scores as
-   ownership: `BL-279`'s only hit is *"Discharges **nothing** upstream"*, which is the entry
-   disclaiming the candidate in the very sentence the grep counts. And the COUNT ITSELF WAS WRONG
-   ONE BATCH EARLIER — `BL-067` was recorded at 1 and re-derives at **0** (control: the same grep
-   on `BL-132` returns 1), its single candidate mention being a bare id on its own line carrying
-   no verb. So the number of non-PC-backed rows is **three**, not the two an earlier revision of
-   this paragraph claimed. **Two hands agreeing is not a control; the matched LINE is.**
-
-   **OPERATOR RULING AT BATCH 147: NO MODEL REPLAY CLOSES A STEP-FILE OR PROMPT FIX.** *"No replay
-   is needed and would not guarantee anything."* A small replay on one model can neither confirm
-   nor refute whether a sentence of prose changes what a lead does. Close such an entry on the
-   structural trace (the binding text present at every point on the incident path, byte-compared
-   against what the lead read) plus a fixture that pins it. Do not propose a replay as a close
-   condition, and do not file an entry whose close needs one. The ruling's record is in the
-   archive, in batch 147's block.
+   The measurements behind these directions are in `docs/plans/archive/graph-ledger-full-drain.md`,
+   under `## Action 1's measured history`.
 
 1a. **`docs/backlog.md` HAS A CEILING OF LIVE ENTRIES** (`MAX` in `scripts/validate-backlog-size.sh`, arm B1; its OK line prints count and ceiling) — derive the count with
    `grep -cE '^## BL-[0-9]+' docs/backlog.md`, never read one here. The operator raised the ceiling
