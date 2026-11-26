@@ -67,12 +67,13 @@ REAL_GREP="$(command -v grep)"
 printf '#!/bin/bash\nprintf x >> "$GREP_LOG"\nexec %s "$@"\n' "$REAL_GREP" > "$W/shim/grep"
 chmod +x "$W/shim/grep" || exit 9
 
-# THE ONE COPY. Every top-level entry but .git, and core/ without core/fixtures/ (which neither arm
-# reads, and which is most of the tree's bytes).
+# THE ONE COPY: what `vem_entry --arms I83,I84` reads, and nothing else. The preamble (validate-enforcement-map.sh:1-1296)
+# opens only core/skills/ and the arm renderer under scripts/; I83 (:8880) and I84 (:8949) walk core/ bar core/fixtures/,
+# scripts/ and .githooks/ by `find`, and open core/schemas/sprint-status.json. Hence scripts/, .githooks/ and core/ without
+# core/fixtures/ (which neither arm reads, and which is most of the tree's bytes); docs/, templates/ and the root files
+# are never opened. Derived over those line ranges, and proved by a byte-equal run against the whole-tree copy.
 T="$W/t"
-for e in "$root"/* "$root"/.[!.]*; do
-  [ -e "$e" ] || continue
-  case "${e##*/}" in .git|core) continue ;; esac
+for e in "$root"/scripts "$root"/.githooks; do
   cp -R "$e" "$T/" || { echo "receipt-bl898: scratch copy failed at $e" >&2; exit 9; }
 done
 mkdir -p "$T/core/fixtures" || exit 9

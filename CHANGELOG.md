@@ -19,6 +19,33 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1263.0] - 2026-11-26
+
+### A consumer-layout fixture whose installed file changed only its exec bit or symlink target now runs instead of skipping on an old pass (BL-1155, partial)
+
+- For the distribution's own push gate. The consumer-layout side record, which lets an `<fx>@consumer` unit skip on a content-keyed pass, was named by a hash of its record's content rows alone. A tree whose keyed file differed only in exec bit or symlink target therefore matched another tree's side record and skipped. The hash now also covers the record's `#modes v1` line and its `#mode` lines, in both pre-push hooks, so such a unit runs.
+- `consumer-suite-pool` gains three cells: a mode change that must now run, a store holding only side records under the old hash, and the first fixture world that exercises the twin skip (`d`), where a skipped unit's header-less record gains its mode header in place.
+- Every existing consumer-layout side record (1215 over 131 units) becomes unreachable under the new key. On the gating push this adds 0 units (no unit takes the side-record skip on the current store, by `scripts/predict-push-set.sh`); afterwards a unit returning to a tree it passed before runs once and republishes at the new key. The cost falls only on the distribution's own `<fx>@consumer` units: `cl_select` returns at once when no consumer-layout tree is set (`core/git-hooks/pre-push:3120`), so installed consumers pay nothing.
+- BL-1155 stays open; the entry lists its owed readings.
+
+### The consumer pre-push's slowest step, the layer-entries check, does less work for the same answer (BL-1167, partial)
+
+- For consumers. `validate-layer-entries.sh` is the longest step in the consumer's pre-push (graph median 32 s). On graph's tree it now starts 6,285 external commands instead of 10,380 and makes 48 git calls instead of 188, with identical output: each extension file's history is walked once instead of twice, one tracked-file listing replaces 104 per-path git lookups, and repeated lookups within a run are remembered.
+- No skip on unchanged inputs was built: the step reads git history and index state that no content key sees.
+- The memo names its entries under the C locale, so a consumer whose root path holds an accented letter gets the same answer instead of a refusal.
+
+### `h2-attest-scripts-dir` copies only the schema it reads (BL-1155, partial)
+
+- The fixture copied every file in `core/schemas/`, including one it never declared as an input. It now copies only `provenance-block.json`, the one schema the programs it runs read, and reports a missing copy as a broken fixture. Its output is unchanged.
+
+### Fixture read-set declarations complete for 35 of 37 converted fixtures, and two whole-tree test copies shrink (BL-878, BL-1155)
+
+- Batch 269 retraced the fixtures earlier in-process conversions owed a read-set check. Nine fixtures now declare what they read or copy only what their subject reads, so a change to a file they read can no longer skip them.
+- Four shipping fixtures change for consumers: `wait-stale-deliverable`, `escalation-status-vocabulary`, `ledger-reverify` and `self-update-fixture-log`. They declare or copy only what they read, and `escalation-status-vocabulary`'s `verdict.sh` arm can no longer pass silently: with `verdict.sh` absent it now fails, naming the missing file.
+- `ledger-status-vocabulary`'s scratch world drops from 2937 to 1820 copied files, and `validator-fork-budget`'s receipt copy from 1525 to 384. Output is unchanged.
+- A new I55 arm 6 fails the push when `validator-fork-budget`'s `+docs/...sh` lines drift from `git ls-files -- 'docs/*.sh'`.
+- Still open: item 6 for `validator-arm-selection` and `schema-install-fallback`.
+
 ## [0.1262.0] - 2026-11-26
 
 ### A lead writing the pipeline snapshot is warned when it writes an estimated `~HH:MMZ` time ahead of the real clock (BL-806)

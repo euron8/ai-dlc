@@ -5,7 +5,8 @@
 # the lone copy, the script-relative copy, the reader control, the empty-file control and the refusal control, each copy
 # at a path ending in core/scripts/validate-escalation-status-vocabulary.sh. The `*` row is NOT re-measured: the stub
 # grep starts shrink with the removed mutant copies; the counted run states it.
-10 *
-4 core/scripts/validate-escalation-status-vocabulary.sh
+14 *
+6 core/scripts/validate-escalation-status-vocabulary.sh
+2 core/scripts/verdict.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
 59 inproc:core/scripts/validate-escalation-status-vocabulary.sh

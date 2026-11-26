@@ -1236,7 +1236,7 @@ fi
 
 # --- Part D12p: STEP 2'S PUSH IS JUDGED BY THE CHECKER THE SLICE JUST WROTE ------------------------------
 # Driven through the REAL reconcile/self-update-push.sh in a consumer that is its own repository with a
-# bare origin and no pre-push hook. The consumer's installed reconcile directory is the shipped one; the
+# bare origin and no pre-push hook. The consumer's reconcile directory holds the shipped lib.sh and preclassify.sh the checker reads beside itself; the
 # self-update commit writes lib/inproc.sh and overwrites the checker with a copy carrying one stderr
 # MARK line. The wrapper resolves its checker beside itself, so the push lands (rc 0) and the mark
 # appears once.
@@ -1251,7 +1251,7 @@ pp_build() { # pp_build <name> <push-wrapper-source> -> 0 when built
     pg() { git -c init.templateDir= -c user.name=ai-dlc-fixture -c user.email=fixture@invalid -c commit.gpgsign=false "$@"; }
     pg init -q --bare "$PP/$1/o.git" && pg init -q "$c" || exit 1
     r="$c/.claude/skills/ai-dlc-update/reconcile"
-    mkdir -p "$r" && cp -R "$RECONCILE/." "$r/" && printf 'base\n' > "$c/README" || exit 1
+    mkdir -p "$r" && cp "$RECONCILE/lib.sh" "$RECONCILE/preclassify.sh" "$r/" && printf 'base\n' > "$c/README" || exit 1
     pg -C "$c" add -A && pg -C "$c" commit -q --no-verify -m installed || exit 1
     pg -C "$c" remote add origin "$PP/$1/o.git" && pg -C "$c" checkout -q -b su || exit 1
     mkdir -p "$c/tests/fixtures/lib" && printf 'exit 0\n' > "$c/tests/fixtures/lib/inproc.sh" || exit 1

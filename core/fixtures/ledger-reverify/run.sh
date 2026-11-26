@@ -1479,7 +1479,7 @@ fi
 # subshell with SELF pointed at a copy of this directory.
 ASSERTIONS=$((ASSERTIONS + 1))
 CO_BOOT="$COD/boot"; rm -rf "$CO_BOOT"; mkdir -p "$CO_BOOT"
-cp "$(dirname "$CLOSER")"/*.sh "$CO_BOOT/" 2>/dev/null
+cp "$(dirname "$CLOSER")/lib.sh" "$(dirname "$CLOSER")/ledger-reverify.sh" "$CO_BOOT/" 2>/dev/null
 co_pat="$( SELF="$CO_BOOT"; . "$CO_BOOT/lib.sh" >/dev/null 2>&1; ledger_close_awk_pattern 2>/dev/null )"; co_prc=$?
 co_fn="$( SELF="$CO_BOOT"; . "$CO_BOOT/lib.sh" >/dev/null 2>&1; ledger_close_awk 2>/dev/null )" || co_fn=""
 co_np="$(printf '%s\n' "$co_pat" | grep -c .)" || co_np=0
@@ -1998,7 +1998,7 @@ esac
 # rule from this ledger-reverify.sh -- the lift the previous release's lib.sh performs on the pull
 # that delivers this file (lib.sh is unchanged by this arm, so the shipped copy IS that one).
 ASSERTIONS=$((ASSERTIONS + 1))
-SB_BOOT="$SBW/boot"; mkdir -p "$SB_BOOT"; cp "$(dirname "$CLOSER")"/*.sh "$SB_BOOT/" 2>/dev/null
+SB_BOOT="$SBW/boot"; mkdir -p "$SB_BOOT"; cp "$(dirname "$CLOSER")/lib.sh" "$(dirname "$CLOSER")/ledger-reverify.sh" "$SB_BOOT/" 2>/dev/null
 sb_lift="$( SELF="$SB_BOOT"; . "$SB_BOOT/lib.sh" >/dev/null 2>&1; ledger_close_awk_pattern >/dev/null 2>&1 && ledger_entry_line_close_awk >/dev/null 2>&1 && echo ok )"
 sb_n1="$(grep -cE '^[[:space:]]*/.*ADOPTED UPSTREAM.*closed=1 \}$' "$CLOSER")" || sb_n1=0
 if [ "$sb_lift" = ok ] && [ "$sb_n1" = 1 ]; then

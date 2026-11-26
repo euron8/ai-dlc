@@ -6,3 +6,6 @@ cli core/scripts/validate-escalation-status-vocabulary.sh cli-pass
 cli core/scripts/validate-escalation-status-vocabulary.sh cli-empty
 cli core/scripts/validate-escalation-status-vocabulary.sh cli-finding
 cli core/scripts/validate-escalation-status-vocabulary.sh cli-usage
+cli core/scripts/verdict.sh cli-vrd-pass
+cli core/scripts/verdict.sh cli-vrd-fail
+nested core/scripts/verdict.sh core/scripts/validate-escalation-status-vocabulary.sh why=every shipped call site runs the validator behind verdict.sh, which keeps only verdict lines

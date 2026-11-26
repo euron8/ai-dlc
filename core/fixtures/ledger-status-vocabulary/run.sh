@@ -77,7 +77,11 @@ mkdir -p "$BASE"
 # One tar pipeline instead of a mkdir+cp pair per file: the same tracked set at the same
 # working-tree content, for two forks in place of thousands. The COPIED floor below is what
 # catches a pipeline that produced nothing.
-git -C "$REPO" ls-files -z | (cd "$REPO" && tar -cf - --null -T - 2>/dev/null) | tar -xf - -C "$BASE"
+# THE SET IS WHAT THE VALIDATOR READS, NOT THE WHOLE TREE. scripts/validate-enforcement-map.sh opens $REPO_ROOT/{core,scripts,
+# templates,.githooks,.claude,patterns}/, CLAUDE.md (replaced below) and .ai-dlc-fixture-readsets.tsv (the :1-1296 preamble, the
+# per-arm greps). Every run below is `--arms I39` (:279), whose span has no find, so no docs/**/*.sh is read; docs/
+# and the other root files are never opened. A pathspec, so a new tracked file under a root is still copied.
+git -C "$REPO" ls-files -z -- core scripts .githooks templates patterns .claude .ai-dlc-fixture-readsets.tsv | (cd "$REPO" && tar -cf - --null -T - 2>/dev/null) | tar -xf - -C "$BASE"
 # CLAUDE.md is a scanned-corpus member of the validator (the I108/I121-I124 walks read it for copies of a
 # taught passage), never a subject of these assertions. A fixed sample stands in for the live file, so the
 # repository's CLAUDE.md is neither declared nor read here and its edits cannot move any verdict.

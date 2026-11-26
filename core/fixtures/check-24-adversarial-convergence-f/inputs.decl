@@ -36,3 +36,4 @@ core/hooks/ai-dlc-gate-remediation-guard.sh
 core/fixtures/check-24-adversarial-convergence-d/.dist-only
 core/fixtures/check-24-adversarial-convergence-e/.dist-only
 core/scripts/era-token.sh
+core/scripts/content-seal.sh

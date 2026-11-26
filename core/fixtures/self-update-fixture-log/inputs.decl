@@ -24,3 +24,4 @@ core/skills/ai-dlc-update/reconcile/template-sites.md
 core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
 core/fixtures/lib/mutant.sh
+core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh
