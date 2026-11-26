@@ -49503,3 +49503,47 @@ Related: BL-281 (key 2's stamp lifecycle; its archived receipt still exits 0).
 Provenance: batch 267, cluster H; id allocated by the lead ai-dlc-9f.
 
 verify: sh set -e; h="core/hooks/ai-dlc-handoff-pending.sh"; s="core/schemas/pause-routing.json"; [ -r "$h" ] && [ -r "$s" ] || exit 9; command -v jq >/dev/null 2>&1 || exit 9; d="$(mktemp -d)" || exit 9; r='**HANDOFF POINT (operator-requested, mid gate-3).** Gate-3 in progress.'; mkdir -p "$d/a" "$d/e"; touch "$d/a/pipeline-paused.flag" "$d/e/pipeline-paused.flag"; printf '%s\n' '# Snapshot' "$r" > "$d/a/pipeline-snapshot.md"; printf '%s\n' '## 2026-08-30T12:00:00Z -- USER_PAUSE' '- Session: S' '- Channel: UserPromptSubmit (typed message)' '- Prompt (first 120 chars): handoff' '' > "$d/e/pipeline-continuation-log.md"; p() { bash -c '. "$1" && ai_dlc_handoff_pending "$2" S "$3"' _ "$h" "$1" "$s"; }; if p "$d/a"; then :; else exit 9; fi; if p "$d/e"; then :; else exit 9; fi; printf 'completed_at: 2026-08-30T12:05:00Z\nsession: S\n%s\n' "$r" > "$d/a/.handoff-complete"; touch -t 202001010000 "$d/a/.handoff-complete"; touch -t 202101010000 "$d/a/pipeline-snapshot.md"; printf 'completed_at: 2026-08-30T12:05:00Z\nsession: S\n' > "$d/e/.handoff-complete"; if p "$d/a"; then exit 1; fi; if p "$d/e"; then exit 1; fi; exit 0
+## BL-1250 — `validate-enforcement-map.sh` I82 never reads the `cat` heredoc briefs in `core/scripts/*.sh` and cannot see a sprint token hidden in a `${VAR}`, so a brief prescribing `dev-${NAME}.md` passed
+
+**LANDED (v0.1248.0).** filed and closed in one release. Owner: `scripts/validate-enforcement-map.sh` (I82, I82b, I99), `core/scripts/artifact-path-config.sh`. I82 scanned markdown only, and its extraction charset lacked `$`, so `dev-${NAME}.md` extracted as `dev-`. The pre-0.1242.0 `core/scripts/dispatch-story.sh` printed a brief prescribing `_bmad-output/implementation-artifacts/dev-${NAME}.md`, where NAME holds `s<N>-<idx>`, and nothing flagged it. The I82 scan population now also includes the bodies of `cat <<WORD` heredocs in `core/scripts/*.sh` (one awk over every file into one temp file the I82 and I82b extractions read beside the markdown corpus, I99 reading the same `i82_seen`), the charset carries `$`, and a path whose basename carries a `$` expansion with no slot component anywhere (a whole component `s${N}` / `s$N` is the slot) is flagged by a new shell twin of I99's no-slot clause: `artifact-path-config.sh --conceal-var-re-prescribed` (three lines: the basename ERE, the slot ERE, and the sprint-token ERE for a component carrying `s${VAR}` / `s$VAR` as a prefix-token such as `s${N}-dev-${IDX}.md`, which is flagged outside the whole-component slot, so a sprint id in a basename under a slot directory is caught as its prose twin `s<N>-1-code-review.md` already is). `--slot-re-prescribed` and the other nine resolver modes are unchanged, so their callers answer as before. The static arm judges only the `${VAR}` SPELLING, never the expanded path: the expanded path is seen at use time by the dispatch guard's `deliverable_of` in `core/hooks/ai-dlc-dispatch-guard.sh`, and no runtime check is added there. False-positive set: scanning every `.sh` line adds 8 comment or example hits only the ledger could excuse (and ledgered validator comments would stop the stale-ledger direction firing), so the population is the cat-heredoc bodies, which hold 0 on the live tree; the markdown seen-set is unchanged by `$`. A `${SPRINT}` holding a whole slot (`rotate-gate-adjudication.sh`) is outside a cat heredoc. The probes and mutants are in the unit commit message.
+
+Work list:
+
+1. Extract `cat <<WORD` heredoc bodies from `core/scripts/*.sh` once and scan them in I82 and I82b; I99 reads the same set.
+2. Add `$` to both extraction charsets.
+3. Add `--conceal-var-re-prescribed` to `artifact-path-config.sh` and flag a `${VAR}` basename with no slot component in I82, and a component carrying `s${VAR}` / `s$VAR` as a prefix-token that is not the whole-component slot.
+4. Probe once by hand: the pre-fix `dispatch-story.sh` line fires I82, the live tree is quiet, the literal controls `dev-s324-5-3.md` and `${WT}/_bmad-output/implementation-artifacts/dev-s<N>-<idx>.md` fire, `s${N}/s${N}-dev-${IDX}.md` fires while `s${N}/dev-${IDX}.md` stays quiet, and each of two mutants silences the first.
+
+Done condition: I82 names `dev-${NAME}.md` when the pre-fix `dispatch-story.sh` brief is restored in a probe copy, and I82, I82b and I99 report nothing on the live tree.
+
+Step: n/a
+
+Provenance: batch 267, lead ai-dlc-9f, owner ai-dlc-bf; lead ruling (D) of the batch-267 dispatch-story fix, contract adversary census; id allocated by the lead; no consumer push-candidate.
+
+verify: manual -- run `bash scripts/validate-enforcement-map.sh` in a probe copy of the tree with the pre-0.1242.0 `core/scripts/dispatch-story.sh` restored (`git show bbb348b9d~1:core/scripts/dispatch-story.sh`): its output names I82 `dev-${NAME}.md`; the same command on the tip tree prints no I82, I82b or I99 line. No sh receipt, because a grep over the validator is satisfied by the validator's own prose with the scan removed.
+
+## BL-1251 — Check 15's "Direct-to-main commit audit" bullet is performed by nothing at the retro gate
+
+**LANDED (v0.1248.0).** **DEFECT.** Filed 2026-11-25 (batch 267, lead ai-dlc-9f, owner ai-dlc-bf). Closed in the release that files it, as a deletion. Owner: `core/skills/ai-dlc/steps/gate-validation.md`.
+
+Goal: Check 15 lists only checks something performs. One done condition: the "Direct-to-main commit audit" bullet is absent from `gate-validation.md` and the Check 15 remediation paragraph below it is intact.
+
+Baseline: the bullet (`gate-validation.md:1397-1403` at `bbb348b9d`) tells the retro gate to scan `git log main..<sprint-branch>` and flag any commit pushed directly to main. `core/skills/ai-dlc/gates/retro.arms` gives Check 15 a `lead` row, `core/scripts/gate_run.py` `cmd_close` drops 15 from its waited rows (`:613`) and records 12/14/15 PASS (`:703-705`), and `core/scripts/retro-gate.sh` never mentions main. Nothing performs the audit, so a gate that cannot fire reads exactly like one that passed.
+
+Lead ruling: delete, add no mechanism. Trunk policy is the consumer's; core states no branch policy (`core/scripts/validate-audit-anchors.sh:31-35`, header unchanged).
+
+Evidence the deletion loses nothing: the consumer's retros record real no-PR pushes to main (s158, s159, s175, s228, s232, s290, s291). The as-written window (`main..<sprint-branch>`, and merge-base(PR head, squash^)..squash^) is EMPTY on 4 of 4 recent sprints, s320-s323. A case-insensitive grep of the consumer's retros s292-s323 (graph `origin/main`, read-only) for violation, unauthorized or bypass on a direct-to-main line returned 1 hit, `docs/retro/s322/retro.md:828`, "**DEFECT**, not a violation", so no violation is recorded (controls: the s291 retro has 4 `direct-to-main` lines, s323 has 1; s292-s323 together have 2 such lines, s322:828 and s323:1264). The consumer has its own guard, `scripts/validate-no-direct-main-push.sh` (added s291). The `retro.md` 6c "Direct-to-main" path (how a retro commits when there is no PR) is a different thing and is kept.
+
+Work list:
+
+1. Delete the bullet as a whole list item from Check 15 in `gate-validation.md`; keep the remediation paragraph ("Gate FAILS ... Check 15 fails twice in a row").
+
+Step: n/a
+
+Related: BL-819 (its hand found the unperformed audit).
+
+Consumer action: a consumer extension that cites "Check 15 and its direct-to-main commit audit" should drop that clause; the known instance is graph's Check 915 in `.claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md`. Nothing is written to graph from here.
+
+Provenance: batch 267, lead ai-dlc-9f, owner ai-dlc-bf, ruling log line of 15:57 EST; id allocated by the lead.
+
+verify: sh grep -q 'if any of the above do not match' core/skills/ai-dlc/steps/gate-validation.md || exit 9; ! grep -q 'Direct-to-main commit audit' core/skills/ai-dlc/steps/gate-validation.md

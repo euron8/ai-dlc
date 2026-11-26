@@ -8391,6 +8391,23 @@ fi
 # than tidy. The ledger lists the offending paths verbatim; if the file were scanned, every entry
 # would be "still prescribed" by the ledger itself, the stale-entry arm could never fire, and the
 # ratchet would be a carve-out wearing its clothes.
+#
+# THE POPULATION ALSO INCLUDES THE BODIES OF `cat <<WORD` HEREDOCS in core/scripts/*.sh -- the text
+# a script prints to a model, which is where a brief prescribes an artifact path. Prose-only scanning
+# was blind to it: a brief printing `.../dev-${NAME}.md` (NAME holding `s<N>-<idx>`) passed. The
+# charset therefore carries `$`, so a `${VAR}` stays inside its component instead of cutting the
+# path at `dev-`, and an expansion in a basename with no slot component anywhere in the path is
+# flagged by the shell twin of I99's no-slot clause (artifact-path-config.sh
+# --conceal-var-re-prescribed; `s${N}` / `s$N` as a whole component is the slot). The static arm
+# judges the `${VAR}` SPELLING only, never the expanded path: that is seen at use time by the
+# dispatch guard's deliverable_of, and no runtime check is added here.
+# HOW THE FALSE-POSITIVE SET REACHED ZERO. Scanning EVERY line of core/scripts/*.sh adds 8
+# comment/example hits that only the ledger could excuse, and ledgered validator comments would
+# leave the stale-ledger direction below unable to fire. Narrowing to cat-heredoc BODIES gives 0
+# false positives on the live tree, and the markdown seen-set is byte-identical with and without
+# `$` in the charset. It fires on the pre-fix dispatch-story.sh brief (`dev-${NAME}.md`). A
+# `${SPRINT}` holding a whole slot (rotate-gate-adjudication.sh) is not in a cat heredoc and is out
+# of this population. I82b and I99 read the same widened set.
 I82_GRAMMAR="$REPO_ROOT/core/skills/ai-dlc/artifact-path-grammar.md"
 if [ ! -r "$I82_GRAMMAR" ]; then
   err "I82 cannot read core/skills/ai-dlc/artifact-path-grammar.md. It is the declared home of the artifact path grammar and of the migration ledger this invariant joins against; absent it, every prescription core makes is unchecked and this invariant's silence is indistinguishable from conformance."
@@ -8427,6 +8444,15 @@ else
   # exempt every component and report a clean zero over a corpus it never judged.
   i82_slot_re="$(bash "$REPO_ROOT/core/scripts/artifact-path-config.sh" --slot-re-prescribed 2>/dev/null)"
   [ -n "$i82_slot_re" ] || err "I82 could not resolve the sprint-slot ERE from core/scripts/artifact-path-config.sh --slot-re-prescribed. Falling back to the literal pair, which under-exempts: a prescription naming a concrete slot will be reported as a violation of the rule it satisfies."
+  i82_var_res="$(bash "$REPO_ROOT/core/scripts/artifact-path-config.sh" --conceal-var-re-prescribed 2>/dev/null)"
+  i82_var_re="${i82_var_res%%$'\n'*}"
+  i82_var_rest="${i82_var_res#*$'\n'}"
+  i82_varslot_re="${i82_var_rest%%$'\n'*}"
+  i82_vartok_re="${i82_var_rest#*$'\n'}"
+  if [ -z "$i82_var_res" ] || [ "$i82_var_re" = "$i82_var_res" ] || [ "$i82_vartok_re" = "$i82_var_rest" ]; then
+    err "I82 could not resolve the \`\${VAR}\` expansion EREs from core/scripts/artifact-path-config.sh --conceal-var-re-prescribed (three lines: basename, slot, sprint-token). Without them an expansion hidden in a brief's basename is invisible, and the arm reports it as conforming."
+    i82_var_re='(?!)'; i82_varslot_re='(?!)'; i82_vartok_re='(?!)'
+  fi
   # `[[ =~ ]]`, NOT `grep -qE <<<`, and the reason is I82b's verbatim: this runs once per
   # COMPONENT of every extracted path -- 316 components on today's corpus -- so the obvious
   # spelling forks twice per component. Measured before and after over the live 316: the grep
@@ -8462,6 +8488,17 @@ else
     [ "$f" = "$I82_GRAMMAR" ] && continue
     i82_corpus+=("$f")
   done
+  # The cat-heredoc BODIES of core/scripts/*.sh, ONE awk over every file, into one temp file that the
+  # extractions below read beside the markdown corpus. `<<-` strips leading tabs from the terminator.
+  i82_hd="$(mktemp)"
+  i82_hdtxt="$(awk 'FNR==1 { term="" }
+    term != "" { t=$0; if (strip) sub(/^\t+/, "", t); if (t == term) { term=""; next } print; next }
+    { s=$0
+      if (match(s, /cat[^<|;]*<<-?[ ]*['"'"'"]?[A-Za-z_][A-Za-z0-9_]*['"'"'"]?/)) {
+        w=substr(s, RSTART, RLENGTH); strip = (index(w, "<<-") > 0)
+        sub(/^cat[^<]*<<-?[ ]*/, "", w); gsub(/['"'"'"]/, "", w); term=w } }' "$REPO_ROOT"/core/scripts/*.sh 2>/dev/null)"
+  printf '%s\n' "$i82_hdtxt" >"$i82_hd"
+  [ -n "$i82_hdtxt" ] || err "I82 extracted ZERO cat-heredoc body lines from core/scripts/*.sh. The distribution prints briefs from them; zero means the heredoc extraction no longer matches, and an extractor that matches nothing reports every brief as conforming."
 
   # Both roots lists come from the grammar's own blocks, so widening either moves the
   # enforcement with it rather than leaving the new prefix unscanned. They answer different
@@ -8499,7 +8536,7 @@ else
     [ -n "$i82_orphan" ] && err "I82 artifact-path-grammar.md declares area root(s) that sit under no scan root:${i82_orphan}. The grammar would govern them and this invariant would never read them — a declared area nothing enforces."
 
     i82_alt="$(printf '%s\n' "$i82_roots" | sed 's#/*$##' | paste -sd'|' -)"
-    i82_seen="$(grep -rhoE "(${i82_alt})/[A-Za-z0-9_./<>{}*-]*" "${i82_corpus[@]}" 2>/dev/null \
+    i82_seen="$(grep -rhoE "(${i82_alt})/[A-Za-z0-9_./<>{}*\$-]*" "${i82_corpus[@]}" "$i82_hd" 2>/dev/null \
       | sed -e 's/[.,)]*$//' -e 's#/$##' | grep -E '.' | sort -u)"
     i82_ledger="$(awk '/^```legacy-artifact-paths$/{f=1;next} f&&/^```/{f=0} f' "$I82_GRAMMAR" | grep -E '.' | sort -u)"
 
@@ -8520,13 +8557,21 @@ else
         # bare `fi` two arms down and `--arm-lines` bucketed them into I99 -- an arm holding no
         # `tr` at all. That is `BL-268`, and this is the site it was hiding.
         i82_bad=""
+        i82_hasslot=0
         i82_rest="$p"
         while [ -n "$i82_rest" ]; do
           c="${i82_rest%%/*}"
           if [ "$c" = "$i82_rest" ]; then i82_rest=""; else i82_rest="${i82_rest#*/}"; fi
           [ -n "$c" ] || continue
           i82_is_sprint_token "$c" && i82_bad="$c"
+          if [[ "$c" =~ $i82_varslot_re ]]; then i82_hasslot=1
+          elif [[ "$c" =~ $i82_vartok_re ]]; then i82_bad="$c"; fi
+          [[ "$c" =~ $i82_slot_re ]] && i82_hasslot=1
         done
+        # `${VAR}` in the basename with no slot component anywhere: the shell twin of I99's clause.
+        if [ -z "$i82_bad" ] && [ "$i82_hasslot" -eq 0 ] && [[ "${p##*/}" =~ $i82_var_re ]]; then
+          i82_bad="${p##*/}"
+        fi
         [ -n "$i82_bad" ] || continue
         grep -qxF "$p" <<<"$i82_ledger" && continue
         i82_viol="${i82_viol}
@@ -8631,8 +8676,9 @@ The directory is the only sprint slot. A basename that carries one makes the rea
     # THE SAME EXTRACTION AS I82's, MINUS THE ONE `sed` THAT ERASES THE SUBJECT. `i82_seen` ends
     # with `s#/$##`, so by the time I82 sees a path it can no longer tell a directory from a file
     # — which is why this arm re-extracts rather than filtering that set.
-    i82b_dirs="$(grep -rhoE "(${i82_alt})/[A-Za-z0-9_./<>{}*-]*" "${i82_corpus[@]}" 2>/dev/null \
+    i82b_dirs="$(grep -rhoE "(${i82_alt})/[A-Za-z0-9_./<>{}*\$-]*" "${i82_corpus[@]}" "$i82_hd" 2>/dev/null \
       | sed -e 's/[.,)]*$//' | grep '/$' | sed 's#/*$##' | grep -E '.' | sort -u)"
+    rm -f "$i82_hd"
 
     if [ -z "$i82b_dirs" ]; then
       err "I82b extracted ZERO directory-shaped artifact paths from ${#i82_corpus[@]} rule file(s). Core prescribes several; zero means the trailing-slash extraction no longer matches how a directory is written, and an extractor that matches nothing reports every prescription as fully specified."
