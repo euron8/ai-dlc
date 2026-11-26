@@ -9,6 +9,7 @@
 #   artifact-path-config.sh --slot-re-prescribed
 #   artifact-path-config.sh --conceal-re-prescribed
 #   artifact-path-config.sh --conceal-id-re-prescribed
+#   artifact-path-config.sh --conceal-var-re-prescribed
 #   artifact-path-config.sh --grammar-file  [--root <dir>] [--grammar <file>]
 #   artifact-path-config.sh --consumer-file [--root <dir>]
 #   artifact-path-config.sh --consumer-syntax [--root <dir>]
@@ -53,6 +54,15 @@
 #                   SPELLS; this reads what it HIDES, and the grammar's own "what a syntactic
 #                   check cannot catch" section is the measurement it comes from. Prose only --
 #                   an expanded filename has no placeholders, so there is no real-path twin.
+#   --conceal-var-re-prescribed
+#                   the shell twin of the concealing-placeholder rule, for a prescription written
+#                   with a `${VAR}` expansion where the prose form writes `<id>`. THREE lines: the
+#                   ERE a BASENAME must match to carry an expansion, then the ERE for a whole
+#                   component that IS the slot (`s${N}`, `s$N`), then the ERE for a component that
+#                   carries `s${VAR}` as a prefix-token (`s${N}-dev-...`). A path whose basename
+#                   carries an expansion and that has no component matching the second line, or
+#                   any component matching the third that is not the slot, is flagged. A
+#                   separate mode, so --slot-re-prescribed answers its other callers unchanged.
 #   --grammar-file  the grammar path this resolver settled on, so a caller can report it.
 #   --consumer-file the contract-declared consumer artifact-paths file. Printed whether or not
 #                   it exists, because "go write this file" is the correct remedy when it does
@@ -183,22 +193,32 @@ CONCEAL_RE_PRESCRIBED='<([^>]*-)?(id|N|sprint)(-[^>]*)?>'
 # that acquits the first one sends an author to a push-time failure by way of its own remedy.
 CONCEAL_ID_RE_PRESCRIBED='<([^>]*-)?id(-[^>]*)?>'
 
+# THE `${VAR}` TWIN OF THE TWO ABOVE. A shell script that prints a brief writes the placeholder as an
+# expansion; the NAME is not judged (it may hold an id or a whole slot), only the spelling: an
+# expansion in the basename with no slot component anywhere in the path. A component `s${N}` /
+# `s$N` is the slot with its number expanded. Line 1 is the basename ERE, line 2 the slot ERE, line 3 the
+# sprint-token ERE for a component that carries `s${VAR}` / `s$VAR` as a prefix-token (`s${N}-dev-...`)
+# and is not the whole-component slot of line 2: the `${VAR}` twin of the token expression.
+CONCEAL_VAR_RE_PRESCRIBED='\$(\{[A-Za-z_]|[A-Za-z_])
+^s\$(\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)$
+(^|-)(s|S|sprint-)\$(\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)($|[-.])'
+
 while [ $# -gt 0 ]; do
   case "$1" in
-    --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--conceal-id-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax)
+    --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--conceal-id-re-prescribed|--conceal-var-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax)
       [ -z "$MODE" ] || { echo "$PROG: two modes given ('$MODE' and '$1'); it answers one question per call" >&2; exit 2; }
       MODE="$1"; shift ;;
     --root) ROOT="${2:-}"; [ -n "$ROOT" ] || { echo "$PROG: --root needs a directory" >&2; exit 2; }; shift 2 ;;
     --grammar) GRAMMAR_ARG="${2:-}"; [ -n "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar needs a file" >&2; exit 2; }; shift 2 ;;
     -h|--help) sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "$PROG: unknown option '$1'" >&2
-       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--conceal-id-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
+       echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--conceal-id-re-prescribed|--conceal-var-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
        exit 2 ;;
   esac
 done
 
 [ -n "$MODE" ] || { echo "$PROG: no mode given" >&2
-                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--conceal-id-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
+                    echo "usage: $PROG --scan-roots|--areas|--token-re|--token-re-prescribed|--slot-re|--slot-re-prescribed|--conceal-re-prescribed|--conceal-id-re-prescribed|--conceal-var-re-prescribed|--grammar-file|--consumer-file|--consumer-syntax [--root <dir>] [--grammar <file>]" >&2
                     exit 2; }
 
 # --token-re answers before any tree is consulted. It is a property of the grammar's RULES, not
@@ -210,6 +230,7 @@ if [ "$MODE" = "--slot-re" ]; then printf '%s\n' "$SLOT_RE"; exit 0; fi
 if [ "$MODE" = "--slot-re-prescribed" ]; then printf '%s\n' "$SLOT_RE_PRESCRIBED"; exit 0; fi
 if [ "$MODE" = "--conceal-re-prescribed" ]; then printf '%s\n' "$CONCEAL_RE_PRESCRIBED"; exit 0; fi
 if [ "$MODE" = "--conceal-id-re-prescribed" ]; then printf '%s\n' "$CONCEAL_ID_RE_PRESCRIBED"; exit 0; fi
+if [ "$MODE" = "--conceal-var-re-prescribed" ]; then printf '%s\n' "$CONCEAL_VAR_RE_PRESCRIBED"; exit 0; fi
 
 # THE ROOT, DECIDED HERE AND NOWHERE EARLIER. `--root` is read first because it is the stated
 # contract; only when the caller gave none does the resolved default apply. It used to be `.`,

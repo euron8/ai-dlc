@@ -1385,14 +1385,6 @@ After Check 14 writes the snapshot, re-read
   `validate-artifact-budget.sh`'s `THE EVIDENCE CELL` header owns the
   selector's grammar.
 
-- **Direct-to-main commit audit.** At retro gate, scan `git log
-  main..<sprint-branch>` for merge commits or commits that bypass
-  the sprint branch workflow. Any commit pushed directly to main
-  during the sprint window that is not a retro PR merge is flagged
-  as a process violation. The retro MUST document the commit and
-  classify it (emergency hotfix, operator override, or unauthorized
-  bypass).
-
 **Gate FAILS** if any of the above do not match. Remediation: re-run
 Check 14 (re-write the snapshot) and then re-run Check 15. If Check
 15 fails twice in a row, escalate as HARD_BLOCK — the snapshot

@@ -7,7 +7,7 @@
 # small-world file (+4, one file in four worlds).
 # 172 -> 102, BL-1102: the arm self-probes deleted from scripts/validate-enforcement-map.sh started bash in the
 # traced runs; one counted hermetic-run.sh run at AI_DLC_FIXTURE_JOBS=12 measured 102 (J3), the other rows as declared.
-102 *
+103 *
 5 scripts/validate-enforcement-map.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
 9 inproc:scripts/validate-enforcement-map.sh

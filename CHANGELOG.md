@@ -19,6 +19,13 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1248.0] - 2026-11-25
+
+### The retro gate's Check 15 stops listing a direct-to-main audit nothing performs, and I82 reads the heredoc briefs in core/scripts/*.sh (BL-1251, BL-1250)
+
+- For every consumer reading the retro gate: Check 15 in `gate-validation.md` no longer lists a "Direct-to-main commit audit" bullet. No mechanism ever fired that scan, and trunk policy is the consumer's own, so the gate no longer asks the lead to perform an audit nothing checks. The Check 15 remediation paragraph and the direct-to-main retro path in `retro.md` are unchanged. A consumer extension that cites "Check 15 and its direct-to-main commit audit" should drop that clause; the known instance is graph's Check 915 in `.claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md`. BL-1251.
+- For ai-dlc maintainers (the check runs in the distribution's push; `core/scripts/artifact-path-config.sh` also ships to consumers with a new `--conceal-var-re-prescribed` mode): `scripts/validate-enforcement-map.sh` I82 and I82b now also read the bodies of `cat <<WORD` heredocs in `core/scripts/*.sh`, and judge the `${VAR}` spelling. A brief prescribing `dev-${NAME}.md` outside an `s<N>/` slot component, which the earlier scan read as `dev-` and passed, now fails the distribution's push, and so does a basename carrying `s${N}` as a prefix-token under a slot directory (`s${N}/s${N}-dev-${IDX}.md`), as its prose twin `s<N>-1-code-review.md` already did. The expanded path stays the dispatch guard's job at use time. BL-1250.
+
 ## [0.1247.0] - 2026-11-25
 
 ### A mode or type change to a file a fixture keys now re-runs that fixture, in the distribution's push gate and in a consumer's installed pre-push hook (BL-1155 advances)
