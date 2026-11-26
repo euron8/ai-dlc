@@ -4334,35 +4334,6 @@ Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
 verify: manual
 
 
-## BL-1249 — the update deliver cannot tell a HARD remedy the model writes between dry-run and apply from an operator's own edit
-
-**DEFECT.** OPEN. Filed 2026-11-25. Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (the deliver's path selection).
-
-Goal: a HARD remedy file the model writes between `pull.sh dry-run` and `pull.sh apply` is delivered by the pull, for every HARD kind, and is never left behind as the operator's own dirt.
-
-Baseline, from cluster U's contract adversary (batch 267):
-- A HARD row names the file under adjudication, never the remedy file. The layer-adjudication register's path is fixed in `layer-drift.sh` and reaches the model only through prose (`SKILL.md` LC-A1, `reconcile/detector-rows.md`), so a kind-to-file map would be `pl_always_stage` under another key.
-- The deliver cannot see the dry-run's rows: the dry-run writes no `apply.out`, `pl_run_set` drops runs from before the snapshot, and nothing records the dry-run's run name.
-- Nothing records that a file was written after the dry-run, and an operator edit in that window is indistinguishable from the model's.
-- Today `pl_always_stage` (BL-1244) covers the only remedy file current HARD kinds prescribe: LC-A1 and LC-A2 write the register.
-
-Work list:
-
-1. Record the dry-run's HARD rows and the remedy path each prescribes, where the deliver can read them.
-2. Deliver a recorded remedy path; leave every other untracked path as the operator's.
-3. A `reconcile-pull-driver` arm that writes a remedy between dry-run and apply and asserts it is delivered, with a control file written in the same window outside the remedy set that is not.
-
-Done condition: item 3's arm passes on the tip and fails with item 2 reverted.
-
-Step: n/a
-
-Provenance: batch 267, lead ai-dlc-9f; found by cluster U's contract adversary; id allocated by the lead. No consumer candidate.
-
-verify: manual
-
-
-
-
 ## BL-1255 — the ledger-reverify fixture's shards are unbalanced, and no per-unit cost is read to choose a move
 
 **NOTE (efficiency).** OPEN. Filed 2026-11-26, batch 268, cluster M, re-homed from BL-583; id allocated by lead ai-dlc-72. Owner: `core/fixtures/ledger-reverify*`.
@@ -4391,5 +4362,32 @@ Done condition: a move chosen in item 2 is built and the gate's recorded costs r
 Step: pipeline
 
 Provenance: batch 268, cluster M; re-homed from BL-583's `ledger-reverify` rebalance row; id allocated by lead ai-dlc-72.
+
+verify: manual
+
+
+## BL-1256 — the hard-remedies record never ages, so an abandoned HARD round carries into a much later pull
+
+**DEFECT.** OPEN. Filed 2026-11-26. Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (the hard-remedies record and its validity key).
+
+Goal: a hard-remedies record from an abandoned HARD round never decides what a later, unrelated pull delivers or which `pull-decisions.tsv` rows it keeps.
+
+Baseline, from cluster H's tip adversary against `pull.sh` at ce3f057d3:
+- Reproduction: round 1 exits 3 on HARD rows at T1 and the operator walks away; weeks later a pull at T5 still finds `pl_hr_valid` true, because no apply.sh has run since; the operator's own later edit to a recorded override or core file is committed whole into the new PR, and T1's leftover `pull-decisions.tsv` rows are kept.
+- Nothing ages the record, and a HARD-only round re-keys it, so a chain of HARD-only rounds keeps it valid indefinitely.
+- The same-theirs retry on base already keeps the T1 snapshot for every file; this carry is limited to the recorded paths.
+- Candidate key: the consumer's HEAD sha.
+
+Work list:
+
+1. Key the record's validity on a value that moves when the consumer's history moves (candidate: the consumer's HEAD sha at the snapshot), and treat a record whose key no longer matches as absent, never as a refusal.
+2. Keep the decisions-row carry under the same key, so stale rows are cut at the theirs change as they were before the record existed.
+3. A `reconcile-pull-driver` arm: a T1 HARD round, an operator commit, then a pull at a new theirs; the operator's later edit to a recorded path is not committed whole and T1's decisions rows are not kept, while world `hr`'s arms still pass.
+
+Done condition: item 3's arm passes on the tip and fails with item 1 reverted.
+
+Step: n/a
+
+Provenance: batch 268, lead ai-dlc-72; found by cluster H's tip adversary; id allocated by the lead. No consumer candidate.
 
 verify: manual

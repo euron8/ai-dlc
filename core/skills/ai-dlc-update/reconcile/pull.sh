@@ -13,6 +13,7 @@
 #   pull.sh apply   [--carried-machinery-slice] <dist> <base> <consumer> <theirs>
 #   pull.sh finish  [--carried-machinery-slice] <dist> <base> <consumer> <theirs>
 #   pull.sh merge   <dist> <base> <consumer> <theirs> <override>
+#   pull.sh register-drift <dist> <base> <consumer> <theirs> <core-rel-path>
 #   pull.sh deliver [--whole <path>]... <dist> <base> <consumer> <theirs>
 #   pull.sh record  <dist> <base> <consumer> <theirs> [-- <path>...]
 #   pull.sh pr-body <consumer>
@@ -61,6 +62,9 @@
 #   `--whole <path>` (one per path) commits such a path whole, as the worktree holds it, with
 #   `NOTE deliver-dirty-whole <path> ...` in the commit message and the PR body.
 #   Beside an ASK row whose answer cited a short digest: `NOTE ask-short-cite <path> ... <digest>`.
+#   register-drift runs `register-drift.sh <dist> <base> <consumer> <core-rel-path> --apply` (the
+#   HARD-UNREGISTERED-CORE-DRIFT remedy) and relays its stdout, stderr and exit verbatim; on exit 0 the paths
+#   its REGISTERED, EXTENSION and `core reverted:` lines name join the hard-remedies record (THE RUN, below).
 #   cut-from prints the branch <branch> was cut from (SKILL.md step 1's reflog derivation), or nothing
 #   when no reflog line matches, exit 0; exit 2 on usage; git's own exit (128) when <consumer> is no repository.
 # Exit: 0 done; 2 refused (usage too); 3 pending: an ASK row awaits an operator answer, or a HARD row
@@ -71,7 +75,8 @@
 # `region`, `decisions.tsv` and the subjects' own logs. `<git-dir>/ai-dlc-pull/pull-writes` records
 # the pull's own writes (pl_writes_record). `<git-dir>/ai-dlc-pull/asks.tsv` is the pull's
 # ask ledger (conflict hunks, classify blocks tagged conflict or blend), read by apply.sh's CONFLICT
-# GUARD. Decision rows are copied to the tracked `_bmad-output/ai-dlc-update/pull-decisions.tsv` only
+# GUARD. `<git-dir>/ai-dlc-pull/hard-remedies` names the files a HARD row's remedy may write
+# (pl_hr_add). Decision rows are copied to the tracked `_bmad-output/ai-dlc-update/pull-decisions.tsv` only
 # after the last detector-reuse site, so writing them never moves the fingerprint F.
 #
 # Detectors run ONCE per `apply`: one render with --keep-raw, then the union gate and apply.sh's three
@@ -371,12 +376,14 @@ pl_flush_decisions() {
 }
 # pl_decisions_epoch: the decisions file holds ONE pull's rows. The first apply render for a theirs
 # other than the one `<git-dir>/ai-dlc-pull/decisions-theirs` records cuts the file back to its header
-# (the earlier pull's rows were delivered with its PR) and records this theirs.
+# (the earlier pull's rows were delivered with its PR) and records this theirs. When this apply's
+# snapshot carried a HARD remedy across the theirs change (PL_HR_CARRIED), the rows are the same
+# undelivered pull's and are kept.
 pl_decisions_epoch() {
   local t="$CONSUMER/$DECISIONS_REL" rec="$GD/ai-dlc-pull/decisions-theirs" th
   th="$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null)" || th="$THEIRS"
   [ -f "$rec" ] && [ "$(cat "$rec")" = "$th" ] && return 0
-  if [ -f "$t" ]; then sed -n 1p "$t" > "$t.epoch.$$" && mv -f "$t.epoch.$$" "$t" || return 1; fi
+  if [ -f "$t" ] && [ "$PL_HR_CARRIED" = 0 ]; then sed -n 1p "$t" > "$t.epoch.$$" && mv -f "$t.epoch.$$" "$t" || return 1; fi
   printf '%s\n' "$th" > "$rec"
 }
 
@@ -427,9 +434,14 @@ pl_theirs_sha() { git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/d
 #     writes can still be in the worktree, so a rewrite would call them the operator's own clean
 #     state), and refuse while a file the pull wrote moved since its last driver step
 #     (pl_writes_check), since this retry would record that edit as the pull's own.
+#   off such a branch, a different theirs while the hard-remedies record is valid (pl_hr_valid) and no
+#     live record of the pull's writes exists (absent, or the one its `.delivered` names): the fresh
+#     snapshot takes, for each recorded path, the old snapshot's row, or no row where the old one had
+#     none, so the remedy written between the rounds stays the pull's (PL_HR_CARRIED=1).
 # The snapshot itself is never deleted.
+PL_HR_CARRIED=0
 pl_dirty_snapshot() {
-  local rec="$GD/ai-dlc-pull/dirty-snapshot" th cur drop=0
+  local rec="$GD/ai-dlc-pull/dirty-snapshot" th cur drop=0 carry=0 pw ph=""
   th="$(pl_theirs_sha)"
   cur="$(git -C "$CONSUMER" symbolic-ref -q --short HEAD 2>/dev/null)" || cur=""
   case "$cur" in
@@ -448,6 +460,19 @@ pl_dirty_snapshot() {
   fi
   pl_writes_unfinished
   pl_status_rows "$RUN/snapshot" 1 || return 1
+  if [ "$drop" = 0 ] && [ -f "$rec" ] && pl_hr_valid; then
+    pw="$(pl_writes_file)"
+    [ ! -f "$pw" ] || ph="$(sed -n 1p "$pw" | awk '{print $3}')"
+    if [ ! -f "$pw" ] || { [ -n "$ph" ] && [ "$(cat "$pw.delivered" 2>/dev/null)" = "$ph" ]; }; then
+      awk -F'\t' -v fh="$(pl_hr_file)" -v fo="$rec" '
+        FILENAME == fh { if (FNR > 1 && $0 != "") p[$0] = 1; next }
+        FILENAME == fo { if (FNR > 1 && ($4 in p)) old[$4] = $0; next }
+        !($4 in p) { print }
+        END { for (k in old) print old[k] }' "$(pl_hr_file)" "$rec" "$RUN/snapshot.rows" > "$RUN/snapshot.carried" \
+        && mv -f "$RUN/snapshot.carried" "$RUN/snapshot.rows" || return 1
+      carry=1
+    fi
+  fi
   { printf 'ai-dlc-dirty-snapshot 2 %s %s\n' "$th" "${RUN##*/}"; cat "$RUN/snapshot.rows"; } > "$rec.$$" || return 1
   # The ignored sidecar, written before the snapshot it keys on: header `ai-dlc-dirty-ignored 1 <theirs>
   # <run>` (the snapshot's), then each `!!` row of status (a matched directory ends in `/`). deliver
@@ -459,6 +484,13 @@ pl_dirty_snapshot() {
     rm -f "$rec.ignored.$$" "$rec.ignored"
   fi
   mv -f "$rec.$$" "$rec" || return 1
+  if [ "$carry" = 1 ]; then
+    # The record follows its snapshot: re-keyed to this run, its rows kept (a later round adds to them).
+    PL_HR_CARRIED=1
+    { printf 'ai-dlc-hard-remedies 1 %s\n' "${RUN##*/}"; sed -n '2,$p' "$(pl_hr_file)"; } > "$(pl_hr_file).$$" \
+      && mv -f "$(pl_hr_file).$$" "$(pl_hr_file)" \
+      || { rm -f "$(pl_hr_file).$$"; echo "pull: the hard-remedies record could not be re-keyed to this snapshot; a later theirs change does not carry its paths" >&2; }
+  fi
   [ "$drop" = 0 ] || rm -f "$(pl_writes_file)" "$(pl_writes_file).delivered"
   # A report-restarted record still marked delivered is the delivered pull's (a restart since replaced it).
   [ "$drop" = 0 ] || [ "$(sed -n 1p "$GD/ai-dlc-pull/report-restarted" 2>/dev/null)" != "ai-dlc-report-restarted 1 $th delivered" ] \
@@ -616,6 +648,28 @@ pl_writes_ran() {
     return 0
   done
   return 1
+}
+# The hard-remedies record, `<git-dir>/ai-dlc-pull/hard-remedies`: header `ai-dlc-hard-remedies 1 <run>` (the
+# dirty snapshot's run), then one consumer-relative or core-relative path per line, each once: the column-2 path
+# of each HARD row an apply ended on at exit 3 (and its consumer path), and the files `pull.sh register-drift`
+# wrote. Valid only while its run is the snapshot's and no apply.sh has run since (pl_writes_ran); otherwise it
+# is ignored, never refused. pl_dirty_snapshot carries its paths across a theirs change; deliver drops it.
+pl_hr_file() { printf '%s\n' "$GD/ai-dlc-pull/hard-remedies"; }
+pl_hr_snaprun() { sed -n 1p "$GD/ai-dlc-pull/dirty-snapshot" 2>/dev/null | awk '{print $4}'; }
+pl_hr_valid() {
+  local s
+  s="$(pl_hr_snaprun)"
+  [ -n "$s" ] && [ -f "$(pl_hr_file)" ] && [ "$(sed -n 1p "$(pl_hr_file)")" = "ai-dlc-hard-remedies 1 $s" ] && ! pl_writes_ran
+}
+# pl_hr_add <paths file> -- appends the paths to the record, starting a new one when the current one is not valid.
+pl_hr_add() {
+  local f s
+  f="$(pl_hr_file)"; s="$(pl_hr_snaprun)"
+  [ -n "$s" ] || return 1
+  if pl_hr_valid; then cp "$f" "$f.$$" || return 1
+  else printf 'ai-dlc-hard-remedies 1 %s\n' "$s" > "$f.$$" || return 1; fi
+  awk 'NR == 1 || ($0 != "" && !seen[$0]++)' "$f.$$" "$1" > "$f.$$.u" && mv -f "$f.$$.u" "$f" || { rm -f "$f.$$" "$f.$$.u"; return 1; }
+  rm -f "$f.$$"
 }
 # pl_writes_check <apply|deliver> -- refuses (`REFUSED <apply|deliver>-pull-writes-moved rc=2`) when a
 # path the record names no longer holds its recorded content, naming each path. No record for this
@@ -782,6 +836,13 @@ pl_apply() {
   pl_print_asks
   hard="$(awk '/^HARD-/ { r = $0; gsub(/[[:space:]]+/, " ", r); if (!(r in s)) { s[r] = 1; print "HARD " r } }' "$RUN/region")"
   [ -z "$hard" ] || printf '%s\n' "$hard"
+  if [ -n "$hard" ]; then
+    # The files the HARD rows' remedies write are the pull's: recorded for a theirs change before the next round.
+    awk '/^HARD-/ && $2 != "" { print $2 }' "$RUN/region" > "$RUN/hard-remedies.raw" \
+      && while IFS= read -r p; do printf '%s\n' "$p"; map_consumer "core/$p" || :; done < "$RUN/hard-remedies.raw" > "$RUN/hard-remedies.add" \
+      && pl_hr_add "$RUN/hard-remedies.add" \
+      || echo "pull: the hard-remedies record could not be written; a remedy made before a theirs change may be left out of deliver's commit" >&2
+  fi
   if [ "$ASK_N" -gt 0 ] || [ -n "$hard" ]; then exit 3; fi
   # THE BRANCH (SKILL.md step 6): every write lands on an `ai-dlc-update/*` branch cut off the
   # current branch; a resolution round already on one stays there.
@@ -931,6 +992,23 @@ pl_merge() {
     exit 3
   fi
   refuse "readopt-override" "$rc"
+}
+
+# --- register-drift (HARD-UNREGISTERED-CORE-DRIFT's remedy) -------------------------------------
+# register-drift.sh --apply, relayed verbatim (stdout, stderr, exit). The files its own REGISTERED, EXTENSION and
+# `core reverted:` lines name join the hard-remedies record; it arms no record of the pull's writes.
+pl_register_drift() {
+  local rc
+  pl_setup "$1" "$2" "$3" "$4"
+  bash "$R/register-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$5" --apply > "$RUN/register-drift.out" 2> "$RUN/register-drift.err"
+  rc=$?
+  cat "$RUN/register-drift.out"; cat "$RUN/register-drift.err" >&2
+  [ "$rc" -eq 0 ] || exit "$rc"
+  sed -n -e 's/^REGISTERED  *//p' -e 's/^EXTENSION  *\([^ ]*\)  (.*$/\1/p' -e 's/^  core reverted: \(.*\) restored to .*$/\1/p' \
+    "$RUN/register-drift.out" > "$RUN/register-drift.paths"
+  [ -s "$RUN/register-drift.paths" ] && pl_hr_add "$RUN/register-drift.paths" \
+    || echo "pull: the files register-drift.sh wrote could not join the hard-remedies record; a theirs change before the next apply may leave them out of deliver's commit" >&2
+  exit 0
 }
 
 # --- deliver (SKILL.md step 8's mechanical part: commit, push, PR) --------------------------------
@@ -1329,6 +1407,7 @@ pl_deliver() {
   # unfinished check (pl_writes_unfinished) does not read an operator edit kept in those files as this pull.
   printf '%s\n' "$(pl_theirs_sha)" > "$(pl_writes_file).delivered" \
     || echo "pull: $(pl_writes_file).delivered could not be written; the next pull may read this delivered pull as unfinished" >&2
+  rm -f "$(pl_hr_file)"
   # The report-restarted record is marked delivered: still read by this pull's PR body (a re-deliver too), replaced by the next restart.
   pl_restart_mark_delivered
   # The PR body is rendered and bounded BEFORE the push: an oversize body never leaves a pushed branch with no PR.
@@ -1492,6 +1571,7 @@ case "$cmd" in
   apply)   pl_apply "$@" ;;
   finish)  pl_finish "$@" ;;
   merge)   [ $# -eq 5 ] || usage; pl_merge "$@" ;;
+  register-drift) [ $# -eq 5 ] || usage; pl_register_drift "$@" ;;
   deliver)
     while [ "${1:-}" = --whole ]; do
       [ -n "${2:-}" ] || usage
