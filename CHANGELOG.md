@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1262.0] - 2026-11-26
+
+### A lead writing the pipeline snapshot is warned when it writes an estimated `~HH:MMZ` time ahead of the real clock (BL-806)
+
+- For every consumer whose lead writes `_bmad-output/pipeline-snapshot.md` through `snapshot-update.sh`. A written time spelled `~HH:MMZ` that is more than 10 minutes ahead of the real clock now prints a warning on stderr, so the estimate is noticed before a resuming session reads it as fact. The write still goes through and the exit code is unchanged.
+- A `~` time after a connector word (to, until, till, by, before, ETA, due, closes, ceiling, deadline, window, expected, planned, or an arrow or en dash) is a stated future time and does not warn. Bare times without a `~` do not warn: measured over graph's transcripts and history they were mostly stated deadlines and past times, so no check is built on them.
+- No action needed.
+
 ## [0.1261.0] - 2026-11-26
 
 ### Repair rounds stop dealing items to read-only adjudicators; the one lane or fan-in writer decides every item itself (BL-716, BL-812, BL-974, partial)

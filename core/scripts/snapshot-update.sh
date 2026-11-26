@@ -853,11 +853,15 @@ if [ "$VRC" -eq 1 ]; then
   exit 1
 fi
 [ "$VRC" -eq 0 ] || { printf '%s\n' "$VOUT" >&2; refuse "the stamp check could not run (validate-artifact-budget.sh exit $VRC)"; }
+# A WARN line on exit 0 (ESTIMATED) does not refuse the write; it is kept from this attempt and printed once after the loop.
+SU_WARN=""; _cn="${CAND##*/}"; _sn="${SNAP##*/}"
+while IFS= read -r _vl; do case "$_vl" in "WARN "*) SU_WARN="$SU_WARN${_vl/$_cn/$_sn}"$'\n' ;; esac; done <<<"$VOUT"
 
 [ "$(snapsum)" = "$BEFORE" ] && break
 # Under the lock a change means an unlocked Edit or Write landed: rebuild from the new file.
 [ "$tries" -lt 3 ] || refuse "$SNAP changed under every one of 3 attempts (an unlocked writer is active); re-run it"
 done
+[ -z "$SU_WARN" ] || printf '%s' "$SU_WARN" >&2
 
 # THE BUDGET AT WRITE (header: exit 1). A candidate over the snapshot ceiling (budget plus grace,
 # the validator's own figures from --measure) AND larger than the file it replaces is refused before

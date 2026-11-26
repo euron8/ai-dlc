@@ -471,6 +471,26 @@ The strict grammar above reads 331 / 303 / 59 on the same 356 files at the same 
 
 Source: the hand's scratch outputs `m806.TQ7a/rerun.out`, `classify.out`, `edits.out` and `fl.txt` in session 23e2d3bf's scratchpad, a perishable scratch path.
 
+**Progress (batch 269, F).** The narrower detector was measured and shipped as a WARN.
+
+- Harness: at batch 268's cutoff, 2026-11-26T10:38:28.863Z, every figure reproduces: 3053 / 2870 / 385 per segment, and pooled N=371 with 48 fires on 42 writes (12 TP, 36 FP fires). At the new cutoff, the newest write 2026-11-26T19:11:42.102Z, it reads 3075 / 2892 / 387, pooled N=373, with the same fires.
+- Rule A, the arm that ships: a `~` plus a strict bare `HH:MM(:SS)?Z`, dated by the census rule, more than 600 s ahead of now, and suppressed after a connector word (to, until, till, by, before, ETA, due, closes, ceiling, deadline, window, expected, planned, or an arrow or en dash).
+  - Transcripts, pooled payload: 33 `~` tokens, 7 fires on 7 writes, all TP, the `contNNN (~HH:MMZ)` estimated-now stamps of 2026-11-25. All 7 come from one 100-minute burst. Recall is 7 of the 12 known TPs; the 5 without `~` are out of reach by design.
+  - History (graph `git log --all`, 1548 commits, file:// clone, each commit's own clock, certain fires): 48 fires, 47 TP and 1 FP (bca4fd351, `window to ~01:43Z`), which the connector rule removes. Two independent classification readings agree on that FP list. The count is a floor, because a commit lands after its write.
+  - Planned `~` times that the connector rule does not spell exist on the parent clock (`ETA cluster-7 reachability ~05:00Z`, `post-update run ~16:55Z`) and escape only on timing, so the arm is not free of false fires.
+- The shipped arm, run over the same populations: `ship.py` drove the branch's validator `--stamps-only` in place over 373 pooled transcript writes and 92 history commits. Its WARN set equals the Python model's: 7 = 7 on the transcripts and 47 = 47 on history, with shipped-only and model-only both empty (`ship_branch.out`). Controls in the same run: a constructed `cont999 (~19:00Z)` line 1200 s ahead warns (1 WARN, model 1), and its `window to ~19:00Z` twin does not (0, model 0).
+- Rule B, dating `MM-DD HH:MMZ` and `DD Mon HH:MMZ`: not built. Read as a dating rule it removes 0 of the 33 deadline FPs, because `11-15 17:52Z` is about 5 days ahead, and it adds 12 fires. The 7 arm-1 deadlines carry no date at all. No bare-token arm ships, so the deadline class has nothing to fire on.
+- The dated `~YYYY-MM-DDTHH:MMZ` form is not checked. On the payload and history it has 1 TP and 4 FP plans or deadlines; the connector rule removes 1 FP and leaves 3 (`rollout`, `elapses`, `read after`), so it is not separable.
+- The forward (next-day) rollover applies only to a token without its own date: the plain rule adds 22 false fires on own-dated past tokens in history, and the narrowed one adds 0.
+- Channel: a WARN on stderr from `snapshot-update.sh`, with no new exit code. The write proceeds.
+- Batch 253's history census (`bl806b.py`, recovered) reproduces exactly at 1190 commits (191 upper, 9 lower). Its grammar excluded `~`, so it never saw this class.
+- Classification by meaning, not only position: all 49 distinct TP fires (47 history fires on 45 distinct lines, plus 7 transcript fires, of which 5 are the same `cont` writes) read as estimates of the current or just-passed time written as fact. There are 0 plans and 0 clock mislabels. Of the 47 history fires, 39 were checked against an independent time (`clock39.tsv`, 39 data rows; source: the graph clone plus read-only `gh pr view` reads of graph's PRs): 23 against the branch commit of the same event, 12 against the PR's `mergedAt`, which bounds the write, and 4 against a related commit (a review commit or a same-line exact stamp, with the write at or before its own commit), which is weaker than an independent clock. The 5 `cont` lines of 2026-11-25 are confirmed by the transcripts' tool_use timestamps. The remaining 3 fires are on one line (7d3a67e66, the context-reminder times of 2026-10-11) and rest on commit time and their text alone. Example: in 9f63c21bb (PR #561), a 17:05-20:35Z timeline in a 16:44:31Z merge, each event's own branch commit is 15:19-16:31Z, so the error grows from +1 h 46 min to +4 h 04 min, which a fixed timezone offset cannot produce. For all 35 April-July fires, author time equals committer time (0 differ). The earlier positional readings misclassified own-dated past tokens (the 22 forward-rollover fires), which is why the meaning-level reading was taken.
+- Still owed: the non-`~` bare-token class (the 5 TPs) and the dated `~YYYY-MM-DDTHH:MMZ` form, each needing a separable false-positive set before an arm. The same snapshots carry exact (non-`~`) stamps that drift the same way (`16:35Z Gate PASSED` against a 15:10:57Z commit), so estimated times are not confined to the `~` spelling.
+
+Source: the hand's scratch dir `m806b.zcaU` (including `mean.out`, from `mean.py`, `shift.py`, `ship.py`, `ship_branch.out` and `clock39.tsv`) in session b05b88d2's scratchpad, a perishable scratch path.
+
+**PARTIAL (v0.1262.0).** Batch 269, F. The `~HH:MMZ` estimated-now detector ships as a WARN; the entry stays open for what is owed above.
+
 verify: manual
 
 ## Efficiency regression after the ranked set (filed 2026-10-26)

@@ -1188,17 +1188,78 @@ check_future_stamps() { # check_future_stamps <file> <rel> <now-epoch>
 # line `(2026-10-15T19:3xZ)`. In the gate scan that is text written before this rule existed
 # blocking the next gate; at write time it is feedback on the line being written now. So the
 # only caller is --stamps-only, whose input is the write payload.
-check_malformed_stamps() { # check_malformed_stamps <file> <rel>
-  LC_ALL=C awk -v ART="$2" '{
+#
+# ESTIMATED (WARN, folded into this awk so the write path starts no new process): with <now>,
+# <tags> (line numbers the payload matched) and <warn-file>, a bare `~HH:MM(:SS)?Z` on a matched
+# line more than FUTURE_SLACK_S ahead of now is an estimated-now stamp written ahead of the clock.
+# Measured basis: graph's 385 bare-bearing rc-0 writes, where 7 of 12 true positives are
+# `contNNN (~HH:MMZ)`; connector words, arrows and the next-day rule keep the deadline forms quiet.
+check_malformed_stamps() { # check_malformed_stamps <file> <rel> [<now-epoch> <tags-file> <warn-file>]
+  LC_ALL=C awk -v ART="$2" -v now="${3:-}" -v tagf="${4:-}" -v wfile="${5:-}" -v slack="$FUTURE_SLACK_S" '
+    function dep(dt, h, mi, s,   y, mo, d, yy, mm) {
+      y = substr(dt, 1, 4) + 0; mo = substr(dt, 6, 2) + 0; d = substr(dt, 9, 2) + 0
+      yy = (mo <= 2) ? y - 1 : y; mm = (mo > 2) ? mo - 3 : mo + 9
+      return ((365 * yy + int(yy / 4) - int(yy / 100) + int(yy / 400) \
+               + int((153 * mm + 2) / 5) + d - 1 - 719468) * 86400) + h * 3600 + mi * 60 + s
+    }
+    function wide(c3) { return (c3 == "\342\200\223" || c3 == "\342\206\222") }
+    function spaced(s, b,   n) {
+      if (substr(s, b, 1) != " ") return 0
+      n = 0
+      if (substr(s, b + 1, 1) == "-") n = 1
+      else if (wide(substr(s, b + 1, 3))) n = 3
+      else if (substr(s, b + 1, 2) == "to") n = 2
+      if (!n) return 0
+      n = b + 1 + n
+      if (substr(s, n, 1) == " ") n++
+      return (substr(s, n, 1) ~ /[0-9]/)
+    }
+    function connector(s, a,   k, e, w) {
+      k = a - 1
+      if (k >= 1 && substr(s, k, 1) == "(") k--
+      while (k >= 1 && substr(s, k, 1) == " ") k--
+      if (k >= 2 && substr(s, k - 1, 2) == "->") return 1
+      if (k >= 3 && wide(substr(s, k - 2, 3))) return 1
+      e = k
+      while (k >= 1 && substr(s, k, 1) ~ /[A-Za-z0-9:,]/) k--
+      w = tolower(substr(s, k + 1, e - k)); sub(/[:,]$/, "", w)
+      return (w ~ /^(to|until|till|by|before|eta|due|closes|ceiling|deadline|window|expected|planned)$/)
+    }
+    function estimated(s,   rest, pos, a, b, t, own, dt, i, ep, mid) {
+      if (index(s, "CLOCK CORRECTION")) return
+      rest = s; pos = 0
+      while (match(rest, /~[0-9][0-9]:[0-9][0-9](:[0-9][0-9])?Z/)) {
+        a = pos + RSTART; b = a + RLENGTH; t = substr(s, a + 1, RLENGTH - 1)
+        rest = substr(rest, RSTART + RLENGTH); pos = b - 1
+        if (substr(s, b, 1) ~ /[-0-9]/ || wide(substr(s, b, 3)) || spaced(s, b)) continue
+        if (connector(s, a)) continue
+        own = (a > 11 && substr(s, a - 11, 11) ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][T ]$/)
+        dt = own ? substr(s, a - 11, 10) : ""
+        for (i = a - 9; dt == "" && i >= 1; i--) {
+          if (substr(s, i, 10) ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) dt = substr(s, i, 10)
+          else if (substr(s, i, 9) ~ /^[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T$/)
+            dt = substr(s, i, 4) "-" substr(s, i + 4, 2) "-" substr(s, i + 6, 2)
+        }
+        if (dt != "") ep = dep(dt, substr(t, 1, 2) + 0, substr(t, 4, 2) + 0, (length(t) > 6) ? substr(t, 7, 2) + 0 : 0)
+        else { mid = now - (now % 86400); ep = mid + substr(t, 1, 2) * 3600 + substr(t, 4, 2) * 60 + ((length(t) > 6) ? substr(t, 7, 2) : 0) }
+        if (ep - now > 43200) ep -= 86400
+        else if (!own && now - ep > 43200) ep += 86400
+        if (ep - now > slack)
+          printf("WARN ESTIMATED %s:%d: %s is %ds ahead of date -u; rewrite it from `date -u`, never an estimate\n", ART, FNR, "~" t, ep - now) > wfile
+      }
+    }
+    tagf != "" && FILENAME == tagf { tag[$0 + 0] = 1; next }
+    {
     rest = $0; pos = 0
     while (match(rest, /[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:/)) {
       a = pos + RSTART; b = a + RLENGTH
       rest = substr(rest, RSTART + RLENGTH); pos = b - 1
       if (substr($0, b, 2) ~ /^[0-9][0-9]$/) continue
       if (a > 1 && substr($0, a - 1, 1) == "~") continue
-      printf "MALFORMED  %s line %d: %s is not a stamp\n", ART, NR, substr($0, a, 17)
+      printf "MALFORMED  %s line %d: %s is not a stamp\n", ART, FNR, substr($0, a, 17)
     }
-  }' "$1" 2>/dev/null
+    if (wfile != "" && (FNR in tag)) estimated($0)
+  }' ${4:+"$4"} "$1" 2>/dev/null
 }
 
 # -----------------------------------------------------------------------------
@@ -1797,17 +1858,22 @@ if [ -n "$STAMPS_ONLY" ]; then
   # The floor is 17 bytes, the shortest full stamp (`YYYY-MM-DDTHH:MMZ`): a bare stamp written
   # into one cell still reaches its row, and a shorter common prefix (`- 2026-10-16T0`)
   # cannot unmask every old line of that day.
-  LC_ALL=C awk 'FNR == NR { if ($0 != "") { P[$0] = 1; if (length($0) >= 17) F[++nf] = $0 } next }
-    /^## / || (/\|/ && /dispatched-at/) || ($0 in P) { print; next }
-    { for (i = 1; i <= nf; i++) if (index($0, F[i])) { print; next } print "" }' \
+  # The line number of every mask line that MATCHED the payload goes to stamps-tags; ESTIMATED
+  # judges only those, never a kept heading or dispatched-at row the write did not carry.
+  : > "$TMPROOT/stamps-tags"; : > "$TMPROOT/stamps-warn"
+  LC_ALL=C awk -v tagf="$TMPROOT/stamps-tags" 'FNR == NR { if ($0 != "") { P[$0] = 1; if (length($0) >= 17) F[++nf] = $0 } next }
+    { m = ($0 in P); if (!m) for (i = 1; i <= nf; i++) if (index($0, F[i])) { m = 1; break }
+      if (m) print FNR > tagf
+      if (m || /^## / || (/\|/ && /dispatched-at/)) print; else print "" }' \
     "$PAYLOAD_FILE" "$STAMPS_ONLY" > "$_mask" || exit 2
   _rel="${STAMPS_ONLY##*/}"
   {
     check_future_stamps "$_mask" "$_rel" "$SNAP_NOW"
-    check_malformed_stamps "$_mask" "$_rel"
+    check_malformed_stamps "$_mask" "$_rel" "$SNAP_NOW" "$TMPROOT/stamps-tags" "$TMPROOT/stamps-warn"
     check_backdated_dispatch "$_mask" "$_rel" "$(dirname "$STAMPS_ONLY")/spawn-ledger.jsonl" | grep -v '^SKIP '
     check_late_dispatch "$_mask" "$_rel" "$(dirname "$STAMPS_ONLY")" | grep -v '^SKIP '
   } > "$TMPROOT/stamps-out"
+  while IFS= read -r _w; do printf '%s\n' "$_w" >&2; done < "$TMPROOT/stamps-warn"
   [ -s "$TMPROOT/stamps-out" ] || exit 0
   echo "FAIL: this write to ${_rel} carries a stamp the snapshot must not hold:" >&2
   cat "$TMPROOT/stamps-out" >&2
