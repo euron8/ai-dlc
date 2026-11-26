@@ -1,13 +1,13 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (scripts/seed-verdict-store.sh, the judge's own J3 output), once, after the owed-derivations shard split.
-# 221 to 230 and the subject rows, BL-878: the 10 receipt apply.sh drives that reach the differential stay programs, each one e2e cell (e2e-apply-<n>)
-# because the helper they start is covered only under a start of apply.sh; cell eq adds cli-pass and cli-refuse (apply.sh 12) and its two in-process
-# answers (inproc apply.sh 2); the 7 direct differential drives are in process (inproc differential 7); the differential is started only by those 10
-# applies (10). The installed validator wrapper runs a copy, so the core validator path is not started. Values from one counted seed run.
-230 *
+# 230 to 220 and the subject rows, BL-878 (a): the 10 receipt apply.sh drives that reach the differential are in-process passes (inproc apply.sh 12, with
+# cell eq's two in-process answers); cell eq's cli-pass and cli-refuse are the only apply.sh starts (apply.sh 2); the 7 direct differential drives are in
+# process (inproc differential 7); the differential is started only by those 10 in-process applies (10), each under an #inproc parent marker the `*` row
+# does not count. The installed validator wrapper runs a copy, so the core validator path is not started. Values from one counted seed run.
+220 *
 0 core/scripts/check-owed-derivations.sh
 0 core/scripts/core-paths.sh
 0 core/scripts/validate-artifact-derivations.sh
-12 core/skills/ai-dlc-update/reconcile/apply.sh
+2 core/skills/ai-dlc-update/reconcile/apply.sh
 10 core/skills/ai-dlc-update/reconcile/derivation-differential.sh
-2 inproc:core/skills/ai-dlc-update/reconcile/apply.sh
+12 inproc:core/skills/ai-dlc-update/reconcile/apply.sh
 7 inproc:core/skills/ai-dlc-update/reconcile/derivation-differential.sh

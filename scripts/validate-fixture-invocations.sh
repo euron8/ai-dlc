@@ -32,6 +32,10 @@
 # not where it lives. The trap then exports FXCOUNT_PARENT=$$ and unsets FXCELL, so a
 # child logs this start's pid as its parent and an empty tag unless its own command line sets one: nested, inside `$( )`, and `bash -c` included. The
 # whole trap is wrapped in `{ } 2>/dev/null`, so xtrace output is unchanged and an unwritable log writes nothing.
+# AN IN-PROCESS PARENT MARKER is the one row the rc does not write: `#inproc\t<id>\t\t<FXCOUNT_PARENT before>\t<subject
+# path>`, appended by a fixture just before an inproc_run whose subject starts a counted child, with FXCOUNT_PARENT then
+# exported as <id> (unique in the log, never a pid) so that child logs the pass as its parent. Read only by
+# fxc_cells_judge (THE IN-PROCESS CELLS); it is no start.
 # A START UNDER A FILE-SIZE LIMIT (`ulimit -f 0`) MUST BEHAVE AS IT WOULD UNCOUNTED, and it is still counted. The plain
 # append there raises SIGXFSZ, which under the default disposition KILLED the bash before its first command (rc 153,
 # the subject never ran), and under `trap '' XFSZ` failed and left the row in the printf buffer, flushed onto the
@@ -126,8 +130,9 @@
 #   C3  each declared cli/e2e cell tags exactly one start of its subject.
 #   C stale  a fixture listed in scripts/fixture-inprocess-allowlist.txt that passes C1-C3, has a clean parse and
 #       whose every cli subject is guarded (C5) FAILs as stale; one still failing prints `C EXEMPT, not judged`.
-#   THE EMISSION FIELDS ARE READ ONLY HERE: every other reader of the start log -- fxc_count, the `*` row's `NR`, the
-#   J2 printout, the `.lim.*` merge -- reads field 1 or the row count, so the two extra fields move no J verdict.
+#   THE EMISSION FIELDS ARE READ ONLY HERE: every other reader of the start log -- fxc_count, the `*` row's count, the
+#   J2 printout, the `.lim.*` merge -- reads field 1 or the row count, so the two extra fields move no J verdict. An
+#   `#inproc` marker row (THE COUNTER) is no start: the `*` count skips it, and fxc_count's path match cannot match it.
 #   A start spelled relative to a directory the fixture `cd`'d into is judged like any other: the rc logs it under
 #   its own `$PWD` (THE COUNTER), so it is no blind route.
 #   C BLIND ROUTES (stated, not prevented): `env -i` drops FXCELL with the counter itself (B3); a fixture's own
@@ -511,6 +516,12 @@ fxc_census() {
 # THE EMISSION SITE: the fixture starts a subject as `FXCELL=<id> bash <subject>`. The counter rc logs `${FXCELL:-}`
 # as field 3 and FXCOUNT_PARENT, an EXPORTED carrier of the nearest logging start's `$$` (never `$PPID`, which is a
 # subshell's parent), as field 4, and unsets FXCELL inside the trap, so a grandchild logs an empty tag.
+# AN IN-PROCESS PARENT: a subject run by inproc_run is no start, so a child it starts has no logged parent of its own.
+# The fixture appends `#inproc\t<id>\t\t<previous FXCOUNT_PARENT>\t<subject path>` and exports FXCOUNT_PARENT=<id>
+# inside the pass's own subshell; the judge reads the marker as the parent <id>, its subject field 5 matched against
+# the path-row targets exactly as a start's path is, its own parent field 4, and counts, tags and prints nothing for it.
+# A subject declared only on an `inproc:` row is no target, so its marker resolves to no subject and cannot be the
+# parent a nested row names.
 # fxc_cells_parse <cells.decl>...: one awk over every file named. Rows:
 #   F\t<file>                                    one per file opened (the scanned-count control)
 #   R\t<file>\t<kind>\t<subject>\t<id or child>\t<why>\t<line>
@@ -602,9 +613,14 @@ fxc_cells_judge() {
         if (substr(q, 1, length(rt)) == rt && substr(q, length(rt) + 1) ~ /^[^\/]+\/run\.sh$/ && f0 !~ ("(^|/)core/fixtures/" outer "/run[.]sh$")) { x = substr(q, length(rt) + 1); sub(/\/run\.sh$/, "", x); if (x != outer && ((s SUBSEP t SUBSEP x) in IN)) return 1 }
         p = PP[p] }
       return 0 }
-    { f = ($1 ~ /(^|\/)\.\.?(\/|$)/ || index($1, "//") > 0) ? nrm($1) : $1; s = ""; best = 0
+    function subj(x,   f, s, best, i, p, lp) { f = (x ~ /(^|\/)\.\.?(\/|$)/ || index(x, "//") > 0) ? nrm(x) : x; s = ""; best = 0
       for (i = 1; i <= nt; i++) { p = T[i]; lp = length(p)
         if ((f == p || f == "/" p || (length(f) > lp + 1 && substr(f, length(f) - lp) == "/" p)) && lp > best) { best = lp; s = p } }
+      return s }
+    # An `#inproc` marker (THE IN-PROCESS PARENT MARKER, beside THE EMISSION SITE) is no start: it names its id as a parent
+    # whose subject is field 5 matched as a start path is, and links to field 4 for innerok, then stops.
+    $1 == "#inproc" { LP[$2] = subj($5); PP[$2] = $4; next }
+    { s = subj($1)
       par = ($4 != "" && ($4 in LP)) ? LP[$4] : ""
       LP[$2] = s; if (!($2 in PA0)) PA0[$2] = $1; PA[$2] = $1; if ($4 != $2) PP[$2] = $4
       if (s == "") { if ($3 != "") print "C2\t-\t" $3 "\t" $1; next }
@@ -669,9 +685,9 @@ fxc_cells_judge() {
 #     it inside the same function body or `( )`/`$( )` subshell, and every further call needs its own; a paired source
 #     at file level covers nothing. An UNGUARDED subject's SOURCE is also a drive and needs its own fx_inproc. P2 judges
 #     call SITES (static lines), while an `inproc:` row counts EXECUTIONS (one fx_inproc row per run of a paired line,
-#     judged by J3). lib/mutant.sh's own comment ("Call it once per pass, on the line before the `.`/`source` of the
-#     subject", citing P1) is SUPERSEDED by this text and stays as written until a release edits lib/mutant.sh for
-#     another reason.
+#     judged by J3). lib/mutant.sh's own comment still reads "Call it once per pass, on the line before the
+#     `.`/`source` of the subject" and cites the retired P1; where it and this text differ, this text is the unit P2
+#     judges. That comment is unedited, and is corrected in the first release that edits lib/mutant.sh (BL-1152 item 2).
 #   A UNIT CHANGE, stated: lib/mutant.sh documents one fx_inproc per SOURCE. Fixtures converted on that documented
 #     unit pair their sources exactly as it said; under the per-CALL unit those calls are OWED, and the ratchet carries
 #     them as owed against the push base they land on.
@@ -1304,7 +1320,7 @@ fxc_judge() {
   jl="$w/log"
   : > "$w/req"
   [ -f "$inp" ] && fxc_req "$inp" > "$w/req"
-  tot="$(awk 'END { print NR }' "$jl")"
+  tot="$(awk -F'\t' '$1 != "#inproc" { n++ } END { print n + 0 }' "$jl")"
   if [ ! -f "$decl" ]; then
     printf '%s: FAIL (J2): no invocations.decl in the fixture directory. Measured on this run -- write this as %s/invocations.decl:\n' "$fx" "${fd#"$root"/}"
     printf '  %s *\n' "$tot"
@@ -1991,3 +2007,4 @@ exit $?
 fiv_main "$@"
 # FXC-IDENTITY 1 736ce02f923b7615282844c8d2a9592dd951298ad356dfaed73e4191602bb233 the command-line body is wrapped as fiv_main behind a column-0 source guard so a fixture can ask this judge in process (BL-878); the dispatch, the usage lines (now read from BASH_SOURCE) and every judgement are unchanged, so no counted fixture's judgement moves
 # FXC-IDENTITY 1 17a359540cd196b6ce314909831e12f242f41864336963fe337cae7591930a57 remedy text only: FXC_CELLS_REMEDY no longer names the deleted push-drain-refusals (BL-583); no fixture's judgement moves
+# FXC-IDENTITY 1 a804b71737686f09f6522cbe465f3e176cc4211644a2af878cbae36b705f91af the #inproc parent marker (BL-878 (a)): fxc_cells_judge reads it as a parent id and the `*` count skips it; a log with no marker judges byte-identically

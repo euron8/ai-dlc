@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1252.0] - 2026-11-26
+
+### owed-derivations-c's ten apply drives run in process, and the invocation judge reads an in-process parent marker (BL-878)
+
+- For ai-dlc maintainers. `core/fixtures/owed-derivations/receipt-bl706.sh` now runs its ten `apply.sh` drives in process, where each was a separate `bash apply.sh` start. The receipt writes one `#inproc` parent-marker row into the invocation start log and exports `FXCOUNT_PARENT`, and `scripts/validate-fixture-invocations.sh` reads that marker: the `*` total skips it, and a child start whose parent is the marker resolves to the in-process subject, so the existing `nested apply.sh derivation-differential.sh` row still covers the differential. The ten `e2e-apply-<n>` cells leave `core/fixtures/owed-derivations-c/cells.decl`. The counted rows move: `*` 230 to 220, `apply.sh` starts 12 to 2, `inproc:apply.sh` 2 to 12. A log with no marker judges the same as before.
+- The judge's header sentence that called `lib/mutant.sh`'s comment superseded now states what that comment says and where it is corrected; the comment itself stays open until a release edits `lib/mutant.sh` (BL-1152).
+- For consumers: nothing. Only a counted fixture run sets `FXCOUNT_LOG`, so a consumer pays no cost and sees no change.
+
 ## [0.1251.0] - 2026-11-26
 
 ### The suppression-lifetime window is stated the way the validator counts it, and the stale re-fire clause is rewritten (BL-1254)
