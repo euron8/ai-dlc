@@ -94,7 +94,9 @@ bash() {
     case "$UA_K" in
       vad) ua_scrub "" ""; . "${UA_F%/*}/validate-artifact-derivations.sh" || exit 125; fx_inproc "$UA_ROOT/core/scripts/validate-artifact-derivations.sh"; vad_cli "$@" ;; # the loadable validator: sourcing runs nothing
       seal) ua_scrub "" ""; unset -v SRCDIR; . "${UA_F%/*}/content-seal.sh" || exit 125; fx_inproc "$UA_ROOT/core/scripts/content-seal.sh"; seal_main "$@" ;;
-      srw) ua_scrub "" ""; unset -v SRCDIR; . "${UA_F%/*}/serial-remediation-worklist.sh" || exit 125; fx_inproc "$UA_ROOT/core/scripts/serial-remediation-worklist.sh"; srw_main "$@" ;;
+      # UA_SRW_RC set: the worklist is a stub printing UA_SRW_OUT and exiting UA_SRW_RC (WL4-WL6), no source and no pass
+      srw) if [ -n "${UA_SRW_RC:-}" ]; then printf '%s\n' "$UA_SRW_OUT"; exit "$UA_SRW_RC"; fi
+           ua_scrub "" ""; unset -v SRCDIR; . "${UA_F%/*}/serial-remediation-worklist.sh" || exit 125; fx_inproc "$UA_ROOT/core/scripts/serial-remediation-worklist.sh"; srw_main "$@" ;;
       join) fx_inproc $RSJ_J; ua_scrub "$UA_JV" "$UA_JF"; export LC_ALL=C; join_main "$@" ;;
       hook) fx_inproc $RSJ_H; ua_scrub "" ""; ua_lc0; set --; ( . "$UA_F"; grg_config; fx_inproc "$UA_ROOT/core/hooks/ai-dlc-gate-remediation-guard.sh"; hook_pretool_head
             : > "$UA_LEADF" ) ;;
@@ -401,6 +403,16 @@ p_lanehit "$JOIN" && ok "LN5: a replaced line still standing in the SPEC's file 
   || bad "LN5: a HIT joined lanes or was not the SPEC lane's item (rc=$RC): $(grep -E '^(LANE|FANIN)' "$JO")"
 p_wlcount 1 && ok "WL1: ESCALATED 0, CROSS none, one worklist HIT -> WORKLIST-COUNT: 1 (the serial round is dispatched)" \
   || bad "WL1: a HIT-only round did not print WORKLIST-COUNT: 1 (rc=$RC): $(grep -E '^(ESCALATED-COUNT|CROSS-COUNT|WORKLIST-COUNT)' "$JO")"
+# ---- BL-508: a worklist that exits non-zero is never zero items and never a refusal. A stub worklist, one property apart:
+# WL4 exit 0 and WL5 exit 1 print the same bytes (a replaced fragment, no HIT); WL6 exit 3 three HITs and one UNASSESSABLE line.
+# UNASSESSED makes every file one lane, so the item is lane 1's; the >1-lane FANIN form is unreachable (the worklist runs only
+# in document and subject mode, and only files mode adds the escalation nodes that could make a second lane).
+p_wlstub "$JOIN" 0 && ok "WL4: stub worklist exit 0, no HIT and no moved cite -> WORKLIST-COUNT: 0, edges assessed" \
+  || bad "WL4: a clean zero-hit stub worklist did not read 0 (rc=$RC): $(grep -E '^(LANE-EDGES|FANIN|WORKLIST-COUNT)' "$JO")"
+p_wlstub "$JOIN" 1 && ok "WL5: stub worklist exit 1, the same bytes -> JOINED, LANE-EDGES: UNASSESSED, one LANE-ITEM: 1 WORKLIST UNASSESSED item, no fan-in, WORKLIST-COUNT: 1" \
+  || bad "WL5: a crashed worklist did not dispatch the serial round (rc=$RC): $(grep -E '^(JOINED|LANE-EDGES|FANIN|WORKLIST-COUNT)' "$JO")"
+p_wlstub "$JOIN" 3 && ok "WL6: stub worklist exit 3, three HITs and one UNASSESSABLE line -> JOINED, all lane 1's, no fan-in, WORKLIST-COUNT: 4, the UNASSESSED item never dealt (ADJUDICATOR-COUNT: 0)" \
+  || bad "WL6: an exit-3 worklist's items were not counted (rc=$RC): $(grep -E '^(JOINED|LANE-EDGES|LANE-ITEM|FANIN|WORKLIST-COUNT)' "$JO")"
 p_laneround "$JOIN" && ok "LN7: the lane round's own join (--artifact stories-serial) JOINS its lane parts and prints no LANE or FANIN line" \
   || bad "LN7: the lane round's join did not join or printed lanes (rc=$RC): $(cat "$JO")"
 # ---- BL-716 second build: the ADJUDICATION PARTITION (LN10-LN12), an escalation's own unedited file (LN13, LN14), and the lane

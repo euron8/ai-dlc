@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1254.0] - 2026-11-26
+
+### A crashed moved-cite worklist no longer skips the serial remediator, a failed I81 extraction names itself, and elicitation and adversary briefs drop the cited-paths block (BL-508, BL-1008, BL-550)
+
+- For every consumer running a sharded document- or subject-mode planning repair (files mode never runs the worklist): when the join's own `serial-remediation-worklist.sh` run crashes or exits non-zero, `join-remediator-shards.sh` no longer reads `WORKLIST-COUNT: 0` and silently skips the serial remediator. It never refuses: an exit-3 run's printed items are still routed, and any non-zero exit adds one `WORKLIST UNASSESSED:` item, so WORKLIST-COUNT is at least 1 and the serial round is dispatched. With one lane, which is what a crashed worklist produces, the item is lane 1's own (`LANE-ITEM: 1 WORKLIST UNASSESSED:`), so the round is one lane with no fan-in, and the item is never dealt to a read-only adjudicator. `_gate-procedures.md` now defines WORKLIST-COUNT and `LANE-EDGES: UNASSESSED` the way the join prints them (BL-508, PARTIAL: the outcome measurement is still owed).
+- For ai-dlc maintainers: when `validate-enforcement-map.sh`'s I81 arm cannot extract the live-series block from a hook (its `awk | sed` step fails), it now prints a `tool-fail:` line and exits 2, instead of scoring the empty block as a content finding with exit 1. BL-910 is folded into BL-1008, which stays PARTIAL: the cause of the load-dependent reading is still owed (BL-1008).
+- For every consumer running planning rounds: elicitation and adversary briefs (`gen-round-briefs.sh`, `_gate-procedures.md`, `adversary.md`) no longer carry the cited-paths block, which did not lower their miss rate. Party briefs keep it, because there it did (BL-550).
+- Batch records: BL-543, BL-552 and BL-550 close on their s323 readings, by operator ruling; BL-543 and BL-552 ship no code. BL-910 closes as superseded by BL-1008.
+
 ## [0.1253.0] - 2026-11-26
 
 ### The pushing session's mode-change window for consumer-layout units is closed, and says when it adopts (BL-1155)

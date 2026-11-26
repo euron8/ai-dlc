@@ -8081,14 +8081,23 @@ esac
 # BOTH SIDES DERIVED, and neither written here. The block is extracted from each hook by its own
 # markers, so this cannot pass by agreeing with a literal kept in this file.
 i81_hooks="core/hooks/ai-dlc-continue.sh core/hooks/ai-dlc-acknowledge.sh"
-i81_expr_of() { awk '/>>> I81 LIVE-SERIES BLOCK >>>/{f=1;next} /<<< I81 LIVE-SERIES BLOCK <<</{f=0} f' "$1" | sed 's/^[[:space:]]*//'; }
+# FAILS CLOSED. A failed extraction prints nothing, and an empty block reads as the content
+# finding below (rc 1), so a transient awk or sed failure would score as a broken hook. Its
+# status is read from PIPESTATUS (no extra process) and refused as a tool failure, exit 2.
+i81_expr_of() {
+  awk '/>>> I81 LIVE-SERIES BLOCK >>>/{f=1;next} /<<< I81 LIVE-SERIES BLOCK <<</{f=0} f' "$1" | sed 's/^[[:space:]]*//'
+  i81_ps="${PIPESTATUS[*]}"
+  [ "$i81_ps" = "0 0" ] && return 0
+  echo "tool-fail: I81 cannot extract the live-series block from $1 (awk|sed exit $i81_ps)" >&2
+  return 2
+}
 i81_missing=""
 for i81_h in $i81_hooks; do [ -f "$i81_h" ] || i81_missing="$i81_missing $i81_h"; done
 if [ -n "$i81_missing" ]; then
   err "I81 cannot find hook(s):${i81_missing}. These are the two readers that arm the Rule 8 stall block; an absent one makes this invariant compare a single copy against itself, which is its PASS."
 else
-  i81_a="$(i81_expr_of core/hooks/ai-dlc-continue.sh)"
-  i81_b="$(i81_expr_of core/hooks/ai-dlc-acknowledge.sh)"
+  i81_a="$(i81_expr_of core/hooks/ai-dlc-continue.sh)" || exit 2
+  i81_b="$(i81_expr_of core/hooks/ai-dlc-acknowledge.sh)" || exit 2
   # ONE block per hook, and it must be non-empty. The marker count is what catches a second
   # block; the line count is what catches a marker pair that opens and closes on nothing.
   i81_na="$(grep -c '>>> I81 LIVE-SERIES BLOCK >>>' core/hooks/ai-dlc-continue.sh)"

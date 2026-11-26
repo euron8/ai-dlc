@@ -438,11 +438,6 @@ Read `.claude/team-roles/appendix/adversary-verification-pass.md` before you rev
   returns. A path you guessed and did not list is not evidence that the code is
   absent, and a finding built on it is an invented one.
 
-- **Read a cited path through your brief's `cited-paths:` block.** A path the
-  artifact cites with no line there resolves as cited; for a
-  `SUFFIX <cited> <path>` line read `<path>` in its place; list an `AMBIGUOUS`
-  one before you read it; never open an `ABSENT` one.
-
 - **A search that errors found nothing, and nothing is not an absence.** A `grep`
   that exits with an error (`exceeds complexity limits`, `empty (sub)expression`)
   searched nothing, so its silence is not an absence: narrow the pattern, drop a
