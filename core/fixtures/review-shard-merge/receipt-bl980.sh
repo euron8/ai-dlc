@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 . "$(cd "$(dirname "$0")/../lib" && pwd)/preamble.sh" || { echo "FIXTURE BROKEN: cannot source lib/preamble.sh" >&2; exit 2; }
+. "$(cd "$(dirname "$0")/../lib" && pwd)/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
 # BL-980 receipt (no receipt in this fixture directory lets a commit spawn auto-maintenance). Usage:
 #   bash receipt-bl980.sh [--arm-table <file>] <script dir> <project root> [<scan root>]
 # <script dir> and <project root> are what lib.sh's receipt call sites name $sd and $PROJ (from the distribution's
@@ -99,6 +100,7 @@ r_class() {
 
 # ---- THE SELF-PROBE, before the corpus: three mktemp scan roots, one receipt each, judged by r_class.
 #   sp1 a literal `git` commit under `env -i` (no trace event; the text names git)        -> NOCOMMIT (BROKEN)
+#       (its repository is built here by world_git: `env -i` cannot exec a shell function)
 #   sp2 no `git` word, a helper that runs `git --version` (a trace event, no commit)       -> NOCOMMIT (BROKEN)
 #   sp3 no git at all (its one `git` is in a comment)                                      -> NOGIT
 sp_root() { # <n> <receipt body> [helper body] -> the root
@@ -111,7 +113,8 @@ sp_root() { # <n> <receipt body> [helper body] -> the root
 SP_GOT=""
 for _sp in 1 2 3; do
   case "$_sp" in
-    1) d="$(sp_root 1 'd="$(dirname "$0")/repo"; env -i PATH="$PATH" HOME="$d" git init -q "$d" && env -i PATH="$PATH" HOME="$d" git -C "$d" -c user.name=p -c user.email=p@p -c maintenance.auto=false -c gc.auto=0 commit -q --allow-empty -m p')" ;;
+    1) d="$(sp_root 1 'd="$(dirname "$0")/repo"; env -i PATH="$PATH" HOME="$d" git -C "$d" -c user.name=p -c user.email=p@p -c maintenance.auto=false -c gc.auto=0 commit -q --allow-empty -m p')"
+       [ ! -d "$d" ] || world_git init -q "$d/repo" || r_broken "SELF-PROBE: could not build scan root 1's repository" ;;
     2) d="$(sp_root 2 'bash "$(dirname "$0")/helper.sh"' 'git --version > /dev/null')" ;;
     3) d="$(sp_root 3 '# a comment naming git is no invocation
 : nothing runs here')" ;;

@@ -19,6 +19,13 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1258.0] - 2026-11-26
+
+### The review-shard-merge fixture builds its last hand-made git repository through the shared world helper (BL-1162)
+
+- For every consumer running the shipped `review-shard-merge` fixture: the BL-980 receipt's first self-probe repository is now built in the receipt's own code with `world_git` (`core/fixtures/lib/world.sh`), which the hand-init check (H14) reads, instead of by a `git init` inside a printf-generated script it cannot read. Behaviour is unchanged: the probe's verdict and the fixture's output are the same.
+- No action needed. The hand-init check (H14) now has no live instance of a route it cannot read; BL-1162 closes. BL-541 records why a proposed warning for repair-record waits armed without `--complete-repair --dispatch` was measured and not built.
+
 ## [0.1257.0] - 2026-11-26
 
 ### Post-compact recovery and the SKILL.md verification turn order the digest Read in bounded chunks, so context-mode's 16 KiB read cap no longer refuses it (BL-1212, partial)
