@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1255.0] - 2026-11-26
+
+### The self-update-gate-d fixture re-runs only when a reconcile file it reads changes
+
+- For every consumer: the shipping fixture `self-update-gate-d` now declares the 12 files under `core/skills/ai-dlc-update/reconcile/` that its sandbox trace read, where it used to declare the whole directory. An edit to any other file there, `pull.sh` for example, no longer re-runs it at push. An edit to a file it reads, `lib.sh` for example, still does.
+- The `self-update-gate` fixture no longer prints the consumed line for the whole `reconcile/` directory, because no shard declares that directory any more. No verdict changes.
+- A re-run on the first push after the pull is expected: the four `self-update-gate` shards' keys move with this release, so a consumer's next push runs each of them once in the consumer layout.
+
+### Records (docs/backlog.md)
+
+- The check for future-dated pipeline-snapshot stamps was measured on 385 writes, and no arm was built. The open item is a narrower detector for stamps that estimate "now" (BL-806).
+- The consumer push is attributed to its hook steps. Keying the three small steps would save 0 s, so the `layer entries` step is the next item (BL-1167).
+- The consumer-layout skip counts before 0.1233.0 are read from 10 pushes (BL-1221).
+- The `ledger-reverify` shard rebalance is now its own entry. Shard a ships, and consumers run it when its inputs move; shards b and c run only in the distribution. Graph baseline: 1 of 26 recovered S324 push outputs dispatched shard a, in a 344 s fixture-suite step (BL-1255).
+- The push-suite value and cost entry stays open. Its remaining rows are built or handed to live entries. Graph's pushes read 244 fixtures just before 0.1221.0's deletion and 194 after, so the deletion reached the consumer. The outcome is read when graph's S324 sprint closes (BL-583).
+
 ## [0.1254.0] - 2026-11-26
 
 ### A crashed moved-cite worklist no longer skips the serial remediator, a failed I81 extraction names itself, and elicitation and adversary briefs drop the cited-paths block (BL-508, BL-1008, BL-550)

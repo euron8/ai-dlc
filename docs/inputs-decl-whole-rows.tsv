@@ -140,7 +140,6 @@ schema-install-fallback	patterns/	whole
 schema-install-fallback	templates/	whole
 self-update-gate-b	!core/git-hooks/pre-push	whole
 self-update-gate-c	!core/git-hooks/pre-push	whole
-self-update-gate-d	!core/skills/ai-dlc-update/reconcile/	legacy
 self-update-join-gate	core/skills/ai-dlc-update/	whole
 setup-config-drift	core/skills/ai-dlc-update/reconcile/	whole
 shell-portability	.githooks/pre-push	whole

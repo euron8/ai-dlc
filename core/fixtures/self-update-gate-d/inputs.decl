@@ -1,11 +1,23 @@
 # self-update-gate and its three shard drivers (b, c, d, which exec the parent's run.sh --group) share ONE declaration shape;
 # the pre-push hook is the line that differs: declared (REQUIRED, !) in b and c, whose units print its HERMETIC-CONSUMED
 # sentinel, and undeclared in the parent and d, whose sandbox traces never read it.
-# self-update-gate reads one thing outside its own directory: the gate under test, with the
-# whole reconcile directory because the gate sources preclassify.sh and setup-sites.md beside
-# itself and the arms read unregistered-drift.sh and preclassify.sh by name.
+# Shard d reads twelve files of the reconcile directory: the gate's closure (self-update-gate.sh,
+# preclassify.sh, consumer-read.sh, lib.sh, setup-sites.md), unregistered-drift.sh which the mp arms
+# run by name, and the real apply.sh the av arm drives with what it sources and reads.
+# Set from the sandbox trace (--declared-out), not hand-listed.
 # Every other tree the fixture drives is seeded by seed.sh or built per arm under mktemp.
-!core/skills/ai-dlc-update/reconcile/
+core/skills/ai-dlc-update/reconcile/apply.sh
+core/skills/ai-dlc-update/reconcile/consumer-read.sh
+core/skills/ai-dlc-update/reconcile/layer-drift.sh
+core/skills/ai-dlc-update/reconcile/lib.sh
+core/skills/ai-dlc-update/reconcile/preclassify.sh
+core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh
+core/skills/ai-dlc-update/reconcile/retired-layer-passage.sh
+core/skills/ai-dlc-update/reconcile/scaffold-ignore.sh
+core/skills/ai-dlc-update/reconcile/self-update-gate.sh
+!core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/skills/ai-dlc-update/reconcile/template-sites.md
+core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 # Sourced by the parent run.sh's first line.
 core/fixtures/lib/preamble.sh
 # The shard drivers: the parent's coverage join reads every one. A fixture's OWN run.sh is not declared: the runner copies the fixture's own directory itself.

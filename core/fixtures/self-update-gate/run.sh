@@ -33,10 +33,8 @@ done
 # Reached only once the gate resolved. The gate's own closure is five files of its directory: it
 # loads preclassify.sh, which sources consumer-read.sh and lib.sh and reads setup-sites.md. Every
 # engine copy below takes that closure by name (sg_copy), never the directory by glob.
-# Two sentinels: shards a, b and c require setup-sites.md, which every engine reads; shard d still
-# requires the whole directory.
+# Every shard requires setup-sites.md, which every engine reads.
 echo "HERMETIC-CONSUMED $(cd "$(dirname "$GATE")" && pwd -P)/setup-sites.md"
-echo "HERMETIC-CONSUMED $(cd "$(dirname "$GATE")" && pwd -P)/"
 SG_CLOSURE="self-update-gate.sh preclassify.sh consumer-read.sh lib.sh setup-sites.md"
 # Checked here, at top level: sg_copy runs inside $( ) in sc_engine and mp_engine, where an exit
 # ends only the subshell.
