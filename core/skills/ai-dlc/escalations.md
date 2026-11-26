@@ -182,12 +182,13 @@ terminal entry that names a currently-failing check id and is NOT `SUPPRESSED`
 is malformed — use `SUPPRESSED` and declare the target and the lifetime, or
 resolve the underlying failure.
 
-**Past expiry the entry authorizes nothing.** Once `<n>` gates have been
-recorded since the authorization timestamp, a still-failing named check is a
-live failure again and the gate must obtain fresh authorization. The prior
+**Past expiry the entry authorizes nothing.** Once more than `<n>` gates have
+recorded a row for the suppressed `[catalog] check` since the authorization
+timestamp, counted as `**Expires after:**` defines above, a still-failing named
+check is a live failure again and the gate must obtain fresh authorization. The prior
 citation may not be re-cited; re-suppression is a new entry with a new operator
 turn. Enforced by `scripts/ai-dlc/validate-suppression-lifetime.sh` at Check 2,
-which counts elapsed gates from `gate-metrics.jsonl` and re-reads the named
+which counts those gates from `gate-metrics.jsonl` and re-reads the named
 check's own recorded verdict — the PREVIOUS gate's, since Check 12 writes that
 file after Check 2, and the FAIL names the row's `ts` — so a suppression whose cause has genuinely been
 fixed costs nothing, and only one that is still red is stopped.
@@ -201,9 +202,14 @@ re-fire down at the gate it authorizes, and the script prints a
 core check N is stood down by the same superseding entry only when Check N's
 latest row is `FAIL_WAIVED` under an expired `SUPPRESSED` waiver that targets
 `[core] N`; on a plain `FAIL` row for N the gate still fails on that
-`OVERRIDDEN` entry. One operator turn buys one window of at most 3 gates; once
-the superseding entry expires, the expired one re-fires for a check the current
-gates do not re-run. The expired entry stays in `pending.md`: the terminal-entry
+`OVERRIDDEN` entry. One operator turn buys one window, charged only by gates that
+record a row for the suppressed `[catalog] check`, as `**Expires after:**`
+defines above. Once the superseding entry is past its own `**Expires after:**`,
+the check's latest recorded row decides: a `FAIL_WAIVED` row fires the expiry FAIL of whichever of the two entries it
+names, a plain `FAIL` fires both, and a row that is not failing fires nothing. A
+gate that does not load the check writes no row, so such a FAIL persists until
+another operator turn, or until a gate that loads the check records it not
+failing. The expired entry stays in `pending.md`: the terminal-entry
 archival rule below moves only `RESOLVED` and `OVERRIDDEN` entries, so no step
 moves a `SUPPRESSED` one, and moving it by hand is off-protocol. It also buys
 nothing, even when it was the last entry and `pending.md` is left absent or empty

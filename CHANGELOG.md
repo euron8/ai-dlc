@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1251.0] - 2026-11-26
+
+### The suppression-lifetime window is stated the way the validator counts it, and the stale re-fire clause is rewritten (BL-1254)
+
+- For every consumer pulling this release: the sentences in `escalations.md` and `steps/gate-validation.md` that restate a `SUPPRESSED` entry's `**Expires after:**` window, and the counts `validate-suppression-lifetime.sh` and `gate_adjudication.py` print beside it, now say the window is charged only by gates that record a row for the suppressed `[catalog] check`. That is the rule the field definitions and `gates_since` already state and enforce. Before, those restatements said "one window of at most 3 gates" with no scope, so they read as a sprint-wide gate counter. Reported by the consumer as `PC-S324-SUPPRESSION-LIFETIME-CAP-STATED-WITHOUT-THE-CHECK-SCOPED-COUNTING-RULE`.
+- The supersession re-fire clause ("once the superseding entry expires, the expired one re-fires for a check the current gates do not re-run") described a state check-scoped counting makes unreachable. It now says what the validator does: once a superseding entry is past its own lifetime, the check's latest row decides. A `FAIL_WAIVED` row fires the expiry FAIL of the entry it names, a plain `FAIL` fires both entries, and a row that is not failing fires nothing. A FAIL persists until another operator turn, or until a gate that loads the check records it not failing.
+- Wording only: no verdict, field grammar, `gates_recorded=` field, `FAIL: suppression of check '<c>' is past its lifetime` opening or `WARN: superseded:` prefix changes, so nothing a consumer parses moves.
+
 ## [0.1250.0] - 2026-11-25
 
 ### A missing-adjudication blocking row now prints the clause and subject digest the register record must copy (BL-1253)
