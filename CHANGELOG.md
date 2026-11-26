@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1250.0] - 2026-11-25
+
+### A missing-adjudication blocking row now prints the clause and subject digest the register record must copy (BL-1253)
+
+- For every consumer pulling this release: a `HARD-LAYER-ADJUDICATION-MISSING` row in the reconcile report's Blocking-layer section, its Layer-drift section and the driver's `HARD <row>` line now ends in one `[adjudication-key clause=<C> subject_digest=<D> read=<R>]` fragment. Before, those rows dropped the clause id and the subject digest that the LC-A1 text tells the operator to copy into `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`, so the operator had to derive them, and a wrong clause is well-formed and lands in an append-only register. Copy `clause` and `subject_digest` verbatim from the fragment. `<R>` names the read half the record lacks: `unrecorded`, `no-read-evidence`, `entry-line-absent`, `core-line-absent` or `core-text-unread`. The row carries the key fragment rather than the detector's whole detail text, because that text varies with index state and register history while the report region is byte-compared. Other `HARD-*` rows are unchanged. Reported by the consumer as `PC-S324-HARD-ROW-RENDER-DROPS-CLAUSE-AND-SUBJECT-DIGEST-THAT-THE-ROW-CONTRACT-PRINTS`.
+- A row count that rises on the first pull carrying this release is expected. A `HARD-LAYER-ADJUDICATION-MISSING` entry with several adjudicated subjects now shows one row per subject, where the old render collapsed them into one. The `(N total)` count and the post-write-gates `hard=<n>` can therefore rise for such an entry. Each added row is a record that was already owed and that the collapse hid; none is a new blocker.
+- How it reaches a consumer: the fix is engine code in `core/skills/ai-dlc-update/**`. Step 2 of the delivering pull self-updates that engine and re-invokes, so it is live at that pull's reconcile render, unless step 2 DEFERs. `layer-drift.sh --list-adjudications` remains the way to re-read the register after a verdict clears a row.
+
 ## [0.1249.0] - 2026-11-25
 
 ### The update pull's deliver stops committing a consumer's untracked scratch that its own ignore re-render un-ignored, commits the layer-adjudication register whole, and carries the report-restarted note into the PR body (BL-1243, BL-1244, BL-1229)

@@ -895,7 +895,7 @@ render() {
   fi
 
   sub "Layer drift (overrides/extensions vs new core):"
-  ld="$(awk -F'\t' '$1!="EXTENSION-OK"{print $1"  "$2}' "$ld_raw" | sort -u)"
+  ld="$(awk -F'\t' "$CR_ADJKEY_FN"'$1!="EXTENSION-OK"{ k = ($1 == "HARD-LAYER-ADJUDICATION-MISSING") ? " " adjkey($4) : ""; print $1"  "$2 k }' "$ld_raw" | sort -u)"
   if [ "$ld_rc" -eq 0 ]; then none_or "$ld"; else
     echo "DETECTOR-REFUSED  layer-drift.sh exited ${ld_rc} without classifying, so this section is NOT a finding of 'none'. Run it directly against this consumer to see why: reconcile/layer-drift.sh <dist> <base> <theirs> <consumer>"
   fi

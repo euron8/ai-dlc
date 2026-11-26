@@ -25,6 +25,10 @@ DRIFT="$(pick "${1:-}" "$HERE/../../../core/skills/ai-dlc-update/reconcile/layer
                        "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/layer-drift.sh")"
 [ -n "$DRIFT" ] || { echo "FIXTURE ERROR: cannot locate layer-drift.sh" >&2; exit 2; }
 echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/layer-drift.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/hard-blockers.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/consumer-read.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/emit-report.sh"
+echo "HERMETIC-CONSUMED core/skills/ai-dlc-update/reconcile/pull.sh"
 
 ROOT="$(bash "$HERE/seed.sh")"
 trap 'rm -rf "$ROOT"' EXIT
@@ -1640,6 +1644,74 @@ else
   esac
 fi
 rm -rf "$P14CONS"
+
+# --- Part 15: the adjudication key reaches the blocking row (BL-1253) -------------------------
+#
+# layer-drift ends every HARD-LAYER-ADJUDICATION-MISSING row with `[adjudication-key clause=<C>
+# subject_digest=<D> read=<R>]`; hard-blockers.sh must carry that fragment, and only that fragment,
+# onto the Blocking-layer line of ITS rows. One world, three rows run through the SHIPPING
+# hard-blockers.sh: the `*` row (no register, read=unrecorded), the rc-3 row (a record with no
+# `read`, read=no-read-evidence) and a near-miss, a different HARD status whose detail carries a
+# SENTINEL key, which must render without it. Not asserted: the unkeyable and jq-absent spellings
+# (this world reaches neither).
+echo
+echo "Part 15 — the adjudication key reaches the blocking row"
+HB="${DRIFT%/*}/hard-blockers.sh"
+P15D="$ROOT/p15"; mkdir -p "$P15D"
+rm -f "$REG"
+p15_star="$(run | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING"{print; exit}')"
+p15_dig="$(digest)"
+printf '{"clause":"LC-E4","entry":"%s","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-01-01T00:00:00Z","reason":"seeded"}\n' "$ENTRY" "$p15_dig" > "$REG"
+p15_rc3="$(run | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING"{print; exit}')"
+rm -f "$REG"
+p15_k_star=" [adjudication-key clause=LC-E4 subject_digest=${p15_dig} read=unrecorded]"
+p15_k_rc3=" [adjudication-key clause=LC-E4 subject_digest=${p15_dig} read=no-read-evidence]"
+case "${#p15_dig}" in 40|64) p15_pre=1 ;; *) p15_pre=0 ;; esac
+p15_sent="$(printf 'HARD-OVERRIDE-SENTINEL\t.claude/skills/ai-dlc/overrides/sentinel.md\t?\tnear-miss row [adjudication-key clause=X subject_digest=SENTINEL read=unrecorded]')"
+if [ "$p15_pre" -eq 1 ] && [ "$p15_star" != "$p15_rc3" ] && [ -n "$p15_star" ] && [ -n "$p15_rc3" ]; then
+  case "$p15_star" in *"$p15_k_star") ok "P15 layer-drift: the no-register row ends in the key with the ${#p15_dig}-hex subject_digest and read=unrecorded" ;;
+    *) bad "P15 layer-drift: the no-register row does not end in '$p15_k_star': $(printf '%s' "$p15_star" | tail -c 120)" ;; esac
+  case "$p15_rc3" in *"$p15_k_rc3") ok "P15 layer-drift: the record-without-read row ends in the key with read=no-read-evidence" ;;
+    *) bad "P15 layer-drift: the record-without-read row does not end in '$p15_k_rc3': $(printf '%s' "$p15_rc3" | tail -c 120)" ;; esac
+  printf '%s\n%s\n%s\n' "$p15_star" "$p15_rc3" "$p15_sent" > "$P15D/ld.rows"
+  : > "$P15D/ud.rows"
+  p15_out="$(bash "$HB" --ld-rows "$P15D/ld.rows" --ld-rc 0 --ud-rows "$P15D/ud.rows" --ud-rc 0 "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  p15_l1="$(printf '%s\n' "$p15_out" | grep -F -- "$ENTRY" | grep -F 'no-read-evidence' | head -1)"
+  p15_l2="$(printf '%s\n' "$p15_out" | grep -F -- "$ENTRY" | grep -F 'read=unrecorded' | head -1)"
+  p15_l3="$(printf '%s\n' "$p15_out" | grep -F 'HARD-OVERRIDE-SENTINEL' | head -1)"
+  case "$p15_l1" in "HARD-LAYER-ADJUDICATION-MISSING "*" $ENTRY${p15_k_rc3}") ok "P15 hard-blockers: the Blocking-layer line for the rc-3 row carries the same key" ;;
+    *) bad "P15 hard-blockers: no rc-3 blocking line ending in the key; got '$p15_l1'" ;; esac
+  case "$p15_l2" in "HARD-LAYER-ADJUDICATION-MISSING "*" $ENTRY${p15_k_star}") ok "P15 hard-blockers: the Blocking-layer line for the no-register row carries the same key" ;;
+    *) bad "P15 hard-blockers: no no-register blocking line ending in the key; got '$p15_l2'" ;; esac
+  if [ -n "$p15_l3" ] && ! grep -qF -e 'subject_digest=SENTINEL' -e 'clause=X' <<<"$p15_out"; then
+    ok "P15 near-miss: a different HARD status carrying a sentinel key renders without it"
+  else
+    bad "P15 near-miss: the sentinel row is absent ('$p15_l3') or its key leaked into the rendered list"
+  fi
+  printf '# report\n\n%s\n' "$p15_out" > "$P15D/report.md"
+  bash "$HB" --check "$P15D/report.md" --ld-rows "$P15D/ld.rows" --ld-rc 0 --ud-rows "$P15D/ud.rows" --ud-rc 0 "$DIST" "$BASE" "$CONS" "$THEIRS" >/dev/null 2>&1; p15_crc=$?
+  [ "$p15_crc" -eq 0 ] && ok "P15 --check: a report holding the rendered region exits 0" \
+    || bad "P15 --check: a report holding the rendered region exited $p15_crc"
+  # emit-report.sh renders its own Layer-drift line beside the Blocking-layer one; pull.sh's normalising awk,
+  # read from pull.sh itself, must fold the two into exactly ONE HARD row that ends in the key. Seam: the
+  # shipping print mode on the register-absent world (no cheaper seam renders both sections).
+  P15PULL="${DRIFT%/*}/pull.sh"
+  p15_prog="$(grep -m1 "^  awk '/\^HARD-/" "$P15PULL")"; p15_prog="${p15_prog#  awk \'}"; p15_prog="${p15_prog%\' \"\$RUN/region\"}"
+  rm -f "$REG"
+  FXCELL=p15-render bash "${DRIFT%/*}/emit-report.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" > "$P15D/region" 2>/dev/null
+  p15_nrm="$(awk "$p15_prog" "$P15D/region")"
+  p15_nl="$(grep -c . <<<"$p15_nrm")"
+  case "$p15_prog" in '/^HARD-/'*) p15_pok=1 ;; *) p15_pok=0 ;; esac
+  case "$p15_nrm" in
+    "HARD HARD-LAYER-ADJUDICATION-MISSING "*"$p15_k_star") [ "$p15_nl" -eq 1 ] && [ "$p15_pok" -eq 1 ] \
+      && ok "P15 emit-report: pull.sh's own normalising awk folds the Blocking-layer and Layer-drift lines into exactly 1 HARD row ending in the key" \
+      || bad "P15 emit-report: normalised HARD rows=$p15_nl (want 1), awk program extracted=$p15_pok" ;;
+    *) bad "P15 emit-report: the normalised HARD rows are not one row ending in the key (rows=$p15_nl, awk ok=$p15_pok): $(tail -c 200 <<<"$p15_nrm")" ;;
+  esac
+else
+  bad "P15 precondition failed: digest length ${#p15_dig}, or the two layer-drift rows are empty or identical, so the key arms would measure nothing"
+fi
+rm -f "$REG"
 
 echo
 report_end layer-adjudication-tier

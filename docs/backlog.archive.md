@@ -49305,6 +49305,8 @@ verify: manual
 
 **LANDED (v0.1242.0).** batch 267, cluster D, filed and closed in one release. Filed by the consumer as a push-candidate ledger entry (graph ledger at df1dde6b1, :740-757). Owner: `core/scripts/dispatch-story.sh`. The brief's `Deliverable:` line now names `${WT}/_bmad-output/implementation-artifacts/s${N}/dev-${IDX}.md`, the destination `migrate-artifact-paths.sh` plans for the old spelling; by hand, `validate-artifact-paths.sh` reported BLOCKING on the old path and PASS on the new one in a scratch repo.
 
+Filed by the consumer as PC-S324-DISPATCH-STORY-PRESCRIBES-A-GRAMMAR-BLOCKED-DEV-PATH.
+
 **DEFECT.**
 
 Goal: a dev dispatched by `dispatch-story.sh` writes its deliverable where the consumer's pre-push `validate-artifact-paths.sh` accepts it. One done condition: the `Deliverable:` line carries the sprint only as the `s<N>/` directory.
@@ -49645,3 +49647,24 @@ Step: n/a
 Provenance: batch 267 cluster Y (owner ai-dlc-9c); id allocated by the lead.
 
 verify: manual
+## BL-1253 — the reconcile report's HARD-LAYER-ADJUDICATION-MISSING row drops the clause and subject digest the row contract prints, so the operator copies a wrong key
+
+**LANDED (v0.1250.0).** **DEFECT.** Filed and closed in one release. Owner: `core/skills/ai-dlc-update/reconcile/layer-drift.sh`, `core/skills/ai-dlc-update/reconcile/hard-blockers.sh`. Filed by the consumer as PC-S324-HARD-ROW-RENDER-DROPS-CLAUSE-AND-SUBJECT-DIGEST-THAT-THE-ROW-CONTRACT-PRINTS.
+
+Goal: every `HARD-LAYER-ADJUDICATION-MISSING` row carries the clause id and subject digest the SKILL.md LC-A1 text tells the operator to copy, in the reconcile report's Blocking-layer row, its Layer-drift row and the driver's `HARD <row>` line. One done condition: a row of that status ends in exactly one `[adjudication-key clause=<C> subject_digest=<D> read=<R>]` fragment on all three surfaces, and no other HARD status carries it.
+
+Work list:
+
+1. `layer-drift.sh` ends each such row's detail with the fragment: `<C>` a clause id or `(unmapped)`; `<D>` a 40/64-hex digest, `unkeyable` or `jq-absent`; `<R>` one of `unrecorded`, `no-read-evidence`, `entry-line-absent`, `core-line-absent`, `core-text-unread`.
+2. `hard-blockers.sh` keeps that fragment and only it for that status; other HARD statuses are unchanged.
+3. One row per adjudicated subject, so an entry with two subjects shows two rows and `(N total)` and post-write-gates `hard=<n>` grow for it.
+4. `SKILL.md` LC-A1 and `reconcile/detector-rows.md` name the fragment as what is copied and the `read=` tokens.
+5. `core/fixtures/layer-adjudication-tier` Part 15 asserts the fragment: the raw layer-drift row's key (`read=unrecorded` and `read=no-read-evidence`), the hard-blockers Blocking-layer line, and that emit-report's render yields exactly one driver `HARD` line carrying it.
+
+Done condition: the Part 15 arms of item 5 pass on the tip and fail against a build without items 1 and 2.
+
+Step: n/a
+
+Provenance: cluster V (lead and owners named in the release commit); id allocated by the lead.
+
+verify: manual -- run `bash core/fixtures/layer-adjudication-tier/run.sh` from the repo root on the tip tree and on its parent with items 1 and 2 reverted: the Part 15 arms pass on the tip and fail on the parent. No sh receipt, because a grep over the scripts is satisfied by a comment naming the fragment.

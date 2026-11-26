@@ -229,11 +229,15 @@ fi
 # every reader testing for the line's presence or absence then finds it inside the text about it.
 AT_NOTE="unregistered-drift.sh reported at least one core file already byte-identical to theirs, which is the documented tell that the base it was handed is STALE. Its statuses all mean consumer-edits-vs-base, so against a base that is already theirs this list is SILENT about in-place core edits rather than clean on them. Post-apply, re-run this wrapper with --post-apply; pre-apply, the base passed is not the pull's base."
 
+# ONLY HARD-LAYER-ADJUDICATION-MISSING KEEPS A THIRD COLUMN: the adjudication key (clause, subject
+# digest, read state) the operator copies into the register. It is the key alone, never the whole
+# detail, because the detail varies with index state, register history and PATH and `emit-report.sh
+# --verify` byte-compares this region. Every other HARD status stays status and path.
 collect() {
   printf '%s\n' "$UD_ROWS" \
     | awk -F'\t' '$1 ~ /^HARD-/ { print $1"\t"$2 }'
   printf '%s\n' "$LD_ROWS" \
-    | awk -F'\t' '$1 ~ /^HARD-/ { print $1"\t"$2 }'
+    | awk -F'\t' "$CR_ADJKEY_FN"'$1 ~ /^HARD-/ { if ($1 == "HARD-LAYER-ADJUDICATION-MISSING") print $1"\t"$2"\t"adjkey($4); else print $1"\t"$2 }'
 }
 
 BLOCKERS="$(collect | sort -u)"
@@ -342,16 +346,17 @@ if [ "$MODE" = "print" ]; then
   if [ -z "$BLOCKERS" ]; then
     [ -z "$REFUSALS" ] && [ -z "$UD_SUPPLIED_REFUSED" ] && echo "0 HARD blockers."
   else
-    while IFS="$(printf '\t')" read -r st path; do
+    while IFS="$(printf '\t')" read -r st path key; do
       [ -n "$st" ] || continue
-      printf '%-32s %s\n' "$st" "$path"
+      printf '%-32s %s%s\n' "$st" "$path" "${key:+ $key}"
     done < "$HB_T/blockers"
   fi
   # INSIDE THE GENERATED REGION, NOT ON STDERR, and that is the load-bearing choice. The one
   # programmatic reader of print mode is `emit-report.sh`, which invokes this script with
   # `2>/dev/null` — so a qualifier written to stderr would be dropped from the reconcile report,
-  # which is the artifact the operator actually approves `apply` from. Nothing byte-compares this
-  # region; the only transform applied to it strips the two marker lines.
+  # which is the artifact the operator actually approves `apply` from. `emit-report.sh --verify`
+  # byte-compares the reconcile-mechanical region, which includes this one, so a row here must not
+  # vary with index state, register history or PATH.
   [ -n "$DEGENERATE" ] && printf '%-32s %s\n' "DRIFT-RANGE-DEGENERATE" "$DEG_NOTE"
   [ -n "$AT_THEIRS" ] && printf '%-32s %s\n' "CORE-AT-THEIRS" "$AT_NOTE"
   echo "<!-- END GENERATED: hard-blockers -->"
@@ -389,7 +394,7 @@ fi
 missing=0
 n=0
 if [ -n "$BLOCKERS" ]; then
-  while IFS="$(printf '\t')" read -r st path; do
+  while IFS="$(printf '\t')" read -r st path key; do
     [ -n "$path" ] || continue
     n=$((n + 1))
     # The report references a blocker by its path (as the tool emits it, possibly with a

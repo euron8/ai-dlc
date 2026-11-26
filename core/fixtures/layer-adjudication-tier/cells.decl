@@ -1,0 +1,3 @@
+# Part 15 starts the shipping emit-report.sh once (print mode, register-absent world) to bind its Layer-drift line to the adjudication key.
+cli core/skills/ai-dlc-update/reconcile/emit-report.sh p15-render
+nested core/skills/ai-dlc-update/reconcile/emit-report.sh core/skills/ai-dlc-update/reconcile/layer-drift.sh why=emit-report.sh runs layer-drift.sh as its own detector child, once per render

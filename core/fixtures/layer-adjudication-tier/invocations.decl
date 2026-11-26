@@ -1,6 +1,7 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J2 output), once, then verified by a second counted run.
 # BL-878: every drive of layer-drift.sh is in process (ld_eng -> inproc_run ld_main); no start of the subject remains, and the
 # 71 drives are the inproc row (one per dcf miss or direct drive; dcf keys on world content, so the count does not move with load).
-22 *
-0 core/skills/ai-dlc-update/reconcile/layer-drift.sh
+38 *
+1 core/skills/ai-dlc-update/reconcile/layer-drift.sh
+1 core/skills/ai-dlc-update/reconcile/emit-report.sh
 71 inproc:core/skills/ai-dlc-update/reconcile/layer-drift.sh
