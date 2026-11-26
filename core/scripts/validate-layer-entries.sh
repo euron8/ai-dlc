@@ -319,6 +319,112 @@ vle_layer_list() {
   done
 }
 
+# ONE-PROCESS MEMO for the pure per-file readers (defined_anchors, defined_rules, heading_title,
+# heading_raw, hook_declared_ids). Held in shell variables, never on disk, so it lives exactly
+# as long as this run. The key is the helper name plus EVERY argument it reads. The file's
+# content is not in the key because no file it can be handed changes during the run: this
+# script writes only under "$VLE_T", and vle_memo refuses to cache any call naming that path.
+# Only a status-0 answer is kept, so a failed read is re-run and judged at each site as before.
+# A hit costs no fork; a miss costs the one `$( )` its caller paid already. Bash 3.2 has no
+# associative array, so each entry is a pair of shell variables named from the key (every
+# non-identifier byte mapped to `_`, under LC_ALL=C so a multibyte letter is mapped too):
+# `<name>` holds the value, `<name>_K` the exact key. Two keys mapping to one name are told apart
+# by `<name>_K`, and the second is simply never cached. Never a pattern match over one growing
+# string: bash's `${v#*pat}` is quadratic in the string's length.
+VLE_NL='
+'
+VLE_US="$(printf '\037')"
+VLE_MEMO=''
+VLE_MEMO_K=''
+VLE_MEMO_N=''
+vle_memo_get() { # vle_memo_get <helper> <arg>... -- rc 0 and VLE_MEMO set when the memo holds the call
+  local LC_ALL=C
+  local IFS="$VLE_US" _kn
+  VLE_MEMO_K="$*"
+  VLE_MEMO_N="VLE_M_${VLE_MEMO_K//[^A-Za-z0-9_]/_}"
+  _kn="${VLE_MEMO_N}_K"
+  [ "${!_kn-}" = "$VLE_MEMO_K" ] || return 1
+  VLE_MEMO="${!VLE_MEMO_N-}"
+}
+vle_memo() { # vle_memo <helper> <arg>... -- VLE_MEMO="$(<helper> <arg>...)", the helper's status returned
+  vle_memo_get "$@" && return 0
+  local _rc=0 _kn
+  VLE_MEMO="$("$@")" || _rc=$?
+  [ "$_rc" -eq 0 ] || return "$_rc"
+  case "$VLE_MEMO_K" in *"$VLE_T"*) return 0 ;; esac
+  _kn="${VLE_MEMO_N}_K"
+  [ -z "${!_kn-}" ] || return 0
+  printf -v "$VLE_MEMO_N" '%s' "$VLE_MEMO"
+  printf -v "$_kn" '%s' "$VLE_MEMO_K"
+}
+# vle_memo_print <helper> <arg>... -- the helper's own stdout, for defined_anchors and defined_rules
+# only: their output is sorted, de-blanked lines, so it is exactly VLE_MEMO plus one newline. Usable
+# inside a `$( )`: a hit reads the memo the parent shell inherited, a miss runs the helper.
+vle_memo_print() {
+  if vle_memo_get "$@"; then
+    [ -z "$VLE_MEMO" ] || printf '%s\n' "$VLE_MEMO"
+    return 0
+  fi
+  "$@"
+}
+# vle_stage_memo <site> <helper> <arg>... -- vle_stage through the memo, same staged bytes.
+vle_stage_memo() {
+  local site="$1" rc=0
+  shift
+  vle_memo "$@" || rc=$?
+  if [ -n "$VLE_MEMO" ]; then printf '%s\n' "$VLE_MEMO" > "$VLE_T/$site"; else : > "$VLE_T/$site"; fi
+  vle_accept "$rc" "$site ($1)"
+}
+
+# TRACKED-PATH ANSWERS FROM ONE LISTING. `vle_tracked <pathspec>` returns what
+# `git -C "$PROJECT_ROOT" ls-files --error-unmatch -- <pathspec>` returns. A pathspec is answered
+# in-shell only when it is a PLAIN path (no glob or magic character, no `.`/`..`/empty component,
+# no trailing `/`) that the one `git ls-files` listing names, as a file or as a leading directory
+# -- which is exactly what git matches for such a pathspec. Every other pathspec, and every plain
+# one the listing does not name, still asks git, so a negative answer is always git's own.
+VLE_TRACKED_HITS="$VLE_NL"
+VLE_TRACKED_INDEX=''
+VLE_REL=''
+vle_plain_rel() { # vle_plain_rel <pathspec> -- VLE_REL = its root-relative plain form; rc 1 = not plain
+  local _p="$1"
+  case "$_p" in
+    /*) case "$PROJECT_ROOT" in /*) ;; *) return 1 ;; esac
+        case "$_p" in "$PROJECT_ROOT"/*) _p="${_p#"$PROJECT_ROOT"/}" ;; *) return 1 ;; esac ;;
+  esac
+  case "$_p" in
+    ''|/*|*/|*//*|.|..|./*|../*|*/.|*/..|*/./*|*/../*) return 1 ;;
+    *\**|*\?*|*\[*|*\\*|*\"*|*:*) return 1 ;;
+  esac
+  VLE_REL="$_p"
+}
+vle_tracked_prime() { # vle_tracked_prime <file of pathspecs, one per line> -- one listing per run, one awk per call
+  local _q _rc=0
+  [ -s "$1" ] || return 0
+  if [ -z "$VLE_TRACKED_INDEX" ]; then
+    VLE_TRACKED_INDEX="$VLE_T/tracked-index"
+    git -C "$PROJECT_ROOT" ls-files > "$VLE_TRACKED_INDEX" 2>/dev/null || _rc=$?
+    # A listing that failed answers nothing in-shell, so every pathspec asks git itself.
+    [ "$_rc" -eq 0 ] || : > "$VLE_TRACKED_INDEX"
+  fi
+  : > "$VLE_T/tracked-queries"
+  while IFS= read -r _q; do
+    vle_plain_rel "$_q" && printf '%s\n' "$VLE_REL" >> "$VLE_T/tracked-queries"
+  done < "$1"
+  VLE_TRACKED_HITS="$VLE_TRACKED_HITS$(awk '
+    NR == FNR { if ($0 != "") q[$0] = 1; next }
+    { p = $0
+      while (1) {
+        if (p in q) { print p; delete q[p] }
+        if (!sub(/\/[^\/]*$/, "", p)) break
+      } }' "$VLE_T/tracked-queries" "$VLE_TRACKED_INDEX" 2>/dev/null)$VLE_NL"
+}
+vle_tracked() { # vle_tracked <pathspec>
+  if vle_plain_rel "$1"; then
+    case "$VLE_TRACKED_HITS" in *"$VLE_NL$VLE_REL$VLE_NL"*) return 0 ;; esac
+  fi
+  git -C "$PROJECT_ROOT" ls-files --error-unmatch -- "$1" >/dev/null 2>&1
+}
+
 # ONE heading normalizer. nrm() was defined identically in two awk programs in this file
 # (heading_title and rule_title) and a third copy was about to be added for the anchor-arm check
 # below. Two copies of a grammar in one file is the restatement smell I26 names; three is a fork
@@ -858,7 +964,7 @@ defined_step_anchors() {
   esac
   { grep -Eho '^#{2,4}[[:space:]]+Step[ -][0-9]+[a-z-]*' "$1" 2>/dev/null \
       | sed -E 's/^#+[[:space:]]+Step[ -]//'
-    defined_anchors "$1"
+    vle_memo_print defined_anchors "$1"
   } | sort -u
 }
 
@@ -1224,15 +1330,10 @@ crosswalk_rows() { # crosswalk_rows <file>
     }' "$1" | sort -u
 }
 
-# Every id <extractor> would harvest from any version of <file> in this repo's history.
-historical_ids() { # historical_ids <file> <defined_anchors|defined_rules>
-  local tmp added
-  tmp="$(mktemp "${TMPDIR:-/tmp}/vle-hist.XXXXXX")" || return 0
-  git -C "$PROJECT_ROOT" log -p --format='' -- "$1" 2>/dev/null | sed -n 's/^+//p' > "$tmp"
-  added=$?
-  "$2" "$tmp"
-  rm -f "$tmp"
-  return $added
+# Every line any version of <file> in this repo's history added, staged ONCE to <out>: both
+# extractors (defined_anchors, defined_rules) read the one staged walk.
+historical_ids() { # historical_ids <file> <out>
+  git -C "$PROJECT_ROOT" log -p --format='' -- "$1" 2>/dev/null | sed -n 's/^+//p' > "$2"
 }
 
 crosswalk_unreadable() { # crosswalk_unreadable <subject>
@@ -1338,6 +1439,10 @@ if [ -n "$MACHINERY_REL" ] && [ -n "$MACHINERY_HOME" ]; then
     elif [ "$(printf '%s\n' "$MACHINERY_LINES" | grep -c .)" = "1" ] && [ "$MACHINERY_LINES" = "none" ]; then
       : # explicitly empty, and that is a complete answer
     else
+      if [ -e "$PROJECT_ROOT/.git" ]; then
+        printf '%s\n' "$MACHINERY_LINES" > "$VLE_T/machinery-paths"
+        vle_tracked_prime "$VLE_T/machinery-paths"
+      fi
       while IFS= read -r mpath; do
         [ -n "$mpath" ] || continue
         case "$mpath" in "#"*) continue ;; esac
@@ -1364,7 +1469,7 @@ if [ -n "$MACHINERY_REL" ] && [ -n "$MACHINERY_HOME" ]; then
         # closed on it would wedge every one of them.
         if [ ! -e "$PROJECT_ROOT/$mpath" ]; then
           err E18 "$mpath: declared as ai-dlc machinery in $MACHINERY_REL but no such file exists in this project. A declared inventory that names paths which are not there is a list nothing checks, which is exactly the forgeability this contract removes. Either the path is stale and should be removed from the inventory, or the file was moved and the inventory did not follow."
-        elif [ -e "$PROJECT_ROOT/.git" ] && ! git -C "$PROJECT_ROOT" ls-files --error-unmatch -- "$mpath" >/dev/null 2>&1; then
+        elif [ -e "$PROJECT_ROOT/.git" ] && ! vle_tracked "$mpath"; then
           err E18 "$mpath: declared as ai-dlc machinery in $MACHINERY_REL and something exists at that path, but git tracks no file there -- so what is satisfying the path is build output, an editor artefact or another ignored leftover, and the declared machinery is gone. This reads GREEN on the checkout that has the leftover and RED on a fresh clone of the same commit, which is the worse of the two failures: the inventory looks checked and is not. Either the path is stale and should be removed from the inventory, or the files were deleted and the inventory did not follow. \`git clean -nxd '$mpath'\` names what is actually there."
         fi
       done <<MACHINERY_EOF
@@ -1406,10 +1511,12 @@ while IFS= read -r _lf; do
   # from" guard. Both harvests are therefore behind the read.
   _lh="$(fm "$_lf" hooks)" || entry_unreadable "$_lf"
   LIVE_ENTRY_N=$((LIVE_ENTRY_N+1))
+  vle_memo defined_anchors "$_lf"
   LIVE_ANCHORS="$LIVE_ANCHORS
-$(defined_anchors "$_lf")"
+$VLE_MEMO"
+  vle_memo defined_rules "$_lf"
   LIVE_RULES="$LIVE_RULES
-$(defined_rules "$_lf")"
+$VLE_MEMO"
   # AND THIS `continue` IS EXACTLY WHY THE GUARD ABOVE IT IS NOT OPTIONAL. An unreadable entry
   # yields an empty `hooks`, which reads as "declares no hook" and drops the file out of the
   # resolvability set WITHOUT a finding — the silent direction of PC-S307, in the one loop whose
@@ -1417,10 +1524,12 @@ $(defined_rules "$_lf")"
   [ -n "$_lh" ] || continue
   _lc="$(resolve_target "$_lh")"
   [ -f "$_lc" ] || continue
+  vle_memo defined_anchors "$_lc"
   LIVE_ANCHORS="$LIVE_ANCHORS
-$(defined_anchors "$_lc")"
+$VLE_MEMO"
+  vle_memo defined_rules "$_lc"
   LIVE_RULES="$LIVE_RULES
-$(defined_rules "$_lc")"
+$VLE_MEMO"
 done < "$VLE_T/live-extensions"
 LIVE_ANCHORS="$(printf '%s\n' "$LIVE_ANCHORS" | grep -E '.' | sort -u)"
 LIVE_RULES="$(printf '%s\n' "$LIVE_RULES" | grep -E '.' | sort -u)"
@@ -1444,6 +1553,7 @@ if [ -z "$LIVE_ANCHORS" ] && [ -z "$LIVE_RULES" ] && [ "$LIVE_ENTRY_N" -gt 0 ]; 
   err E16 "built an EMPTY resolvability set from the $LIVE_ENTRY_N layer entr(y/ies) present and the core files they hook. Every id any entry has ever defined would read as retired, so this arm's output is meaningless in both directions — it cannot be trusted to fire and it cannot be trusted to stay quiet."
 fi
 vle_layer_list extensions "$EXT_DIR"
+[ "$CROSSWALK_STATE" = ok ] && vle_tracked_prime "$VLE_T/extensions"
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   # THE GUARD GOES ON `kind`, NOT ON `hooks`, and the pipe is the reason. `$(fm … | awk …)`
@@ -1645,14 +1755,14 @@ while IFS= read -r f; do
   # ERROR is scoped to `kind: check`. The same collision exists in steps-domain
   # extensions, but a step number is never committed to evidence -- it is a
   # legibility problem in the rendered pipeline, not a corrupted audit trail.
-  core_anchors="$(defined_anchors "$core_path")"
-  vle_stage ext-anchors-e6 defined_anchors "$f"
+  vle_memo defined_anchors "$core_path"; core_anchors="$VLE_MEMO"
+  vle_stage_memo ext-anchors-e6 defined_anchors "$f"
   while IFS= read -r a; do
     [ -n "$a" ] || continue
     grep -Fxq -- "$a" <<<"$core_anchors" || continue
 
-    t_ext="$(heading_title "$f" "$a")"
-    t_core="$(heading_title "$core_path" "$a")"
+    vle_memo heading_title "$f" "$a"; t_ext="$VLE_MEMO"
+    vle_memo heading_title "$core_path" "$a"; t_core="$VLE_MEMO"
 
     if [ -n "$t_ext" ] && [ -n "$t_core" ] && ! same_title "$t_ext" "$t_core"; then
       # A labelled heading is the RESOLVED state, not a violation. The integer is
@@ -1679,8 +1789,8 @@ while IFS= read -r f; do
   # check number does (E6's stated reason for erroring), and the remedy is a
   # relabelling of the consumer's own catalog — blocking a pull on it would mean a
   # consumer cannot take a fix until it has renamed its own rules.
-  core_rules="$(defined_rules "$core_path")"
-  vle_stage ext-rules-w4 defined_rules "$f"
+  vle_memo defined_rules "$core_path"; core_rules="$VLE_MEMO"
+  vle_stage_memo ext-rules-w4 defined_rules "$f"
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     grep -Fxq -- "$n" <<<"$core_rules" || continue
@@ -1717,7 +1827,7 @@ while IFS= read -r f; do
   # not define never enters that loop, so the relabeller is blind to E15's entire
   # subject set by construction. Prescribing it would hand the operator a tool that
   # exits "no unlabelled core-number collisions" on a tree full of findings.
-  vle_stage ext-rules-e15 defined_rules "$f"
+  vle_stage_memo ext-rules-e15 defined_rules "$f"
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     want="$(out_of_band "$n")" || continue
@@ -1736,7 +1846,7 @@ while IFS= read -r f; do
   # beside a CORE section of the same number. A consumer section that must render inside
   # a core section is `kind: qualifier` with `extends:`, which is the grain built for it
   # and does not need to borrow core's integer to do it.
-  vle_stage ext-anchors-e15 defined_anchors "$f"
+  vle_stage_memo ext-anchors-e15 defined_anchors "$f"
   while IFS= read -r a; do
     [ -n "$a" ] || continue
     want="$(out_of_band "$a")" || continue
@@ -1761,11 +1871,12 @@ while IFS= read -r f; do
   # documents, because a bare `30` cannot say whether it resolves a check or a rule once
   # the table carries both.
   if [ "$CROSSWALK_STATE" = ok ]; then
-    if git -C "$PROJECT_ROOT" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+    if vle_tracked "$f"; then
+      historical_ids "$f" "$VLE_T/e16-hist"
       for _ns in anchors rules; do
         case "$_ns" in
-          anchors) _mine="$(defined_anchors "$f")"; _now="$LIVE_ANCHORS"; _was="$(historical_ids "$f" defined_anchors)"; _lbl='' ;;
-          rules)   _mine="$(defined_rules "$f")";   _now="$LIVE_RULES";   _was="$(historical_ids "$f" defined_rules)";   _lbl='Rule ' ;;
+          anchors) vle_memo defined_anchors "$f"; _mine="$VLE_MEMO"; _now="$LIVE_ANCHORS"; _was="$(defined_anchors "$VLE_T/e16-hist")"; _lbl='' ;;
+          rules)   vle_memo defined_rules "$f";   _mine="$VLE_MEMO"; _now="$LIVE_RULES";   _was="$(defined_rules "$VLE_T/e16-hist")";   _lbl='Rule ' ;;
         esac
         # A TRACKED file whose history yields no id IT currently defines is the
         # unreadable case, not a clean one: the diff sweep found nothing where the
@@ -1837,6 +1948,9 @@ all_files="$(
 )"
 # A "Step N" reference resolves against STEP definitions only -- never against the
 # numbered gate-check anchors. See defined_step_anchors() for what conflating them did.
+# Every file's anchors are memoized HERE, in the parent shell, so the `$( )` readers below and
+# GLOBAL_CHECK_ANCHORS read them instead of harvesting each file again.
+while IFS= read -r f; do [ -n "$f" ] && vle_memo defined_anchors "$f"; done <<< "$all_files"
 GLOBAL_STEP_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_step_anchors "$f"; done <<< "$all_files" | sort -u)"
 
 while IFS= read -r f; do
@@ -2253,6 +2367,8 @@ hook_resolves_ref() { # hook_resolves_ref <citing-file> <ref>
   grep -nE "Check[ -]$2([^0-9a-z-]|\$)" "$1" 2>/dev/null > "$VLE_T/w7-cite-lines" || _hr_rc=$?
   vle_read_status "$_hr_rc" 1 "$1" w7-cite-lines
   while IFS= read -r line; do
+    # A line with no `ai-dlc-` cannot match the hook-name scan below; it names no hook.
+    case "$line" in *ai-dlc-*) ;; *) continue ;; esac
     _hr_rc=0
     grep -oE 'ai-dlc-[a-z0-9-]+\.sh' <<<"$line" > "$VLE_T/w7-hook-raw" || _hr_rc=$?
     vle_accept "$_hr_rc" "the hook-name scan of a citation in $1"
@@ -2265,14 +2381,14 @@ hook_resolves_ref() { # hook_resolves_ref <citing-file> <ref>
       # a race — correct until the output after the match fills the pipe buffer, then wrong
       # permanently and with no symptom. I54b fails the push on the piped form; the here-string
       # below is the shape v0.231.0 converted seventeen sites to.
-      ids="$(hook_declared_ids "$HOOKS_DIR/$hook_base")"
+      vle_memo hook_declared_ids "$HOOKS_DIR/$hook_base"; ids="$VLE_MEMO"
       grep -Fxq -- "$2" <<<"$ids" && return 0
     done < "$VLE_T/w7-hook-names"
   done < "$VLE_T/w7-cite-lines"
   return 1
 }
 
-GLOBAL_CHECK_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_anchors "$f"; done <<< "$all_files" | sort -u)"
+GLOBAL_CHECK_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && vle_memo_print defined_anchors "$f"; done <<< "$all_files" | sort -u)"
 
 while IFS= read -r f; do
   [ -n "$f" ] || continue
@@ -2439,7 +2555,7 @@ line_tokens() {
 CONSUMER_LAYER_FILES="$( { layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; } 2>/dev/null | sort -u )"
 CORE_CATALOG_FILES="$( { find "$SKILL_DIR" -maxdepth 1 -name 'SKILL.md';
                          find "$SKILL_DIR/steps" -name '*.md' 2>/dev/null; } 2>/dev/null | sort -u )"
-CONSUMER_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_anchors "$f"; done \
+CONSUMER_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && vle_memo_print defined_anchors "$f"; done \
                       <<< "$CONSUMER_LAYER_FILES" | sort -u)"
 AMBIGUOUS_REFS=0
 
@@ -2473,21 +2589,25 @@ crosswalk_corroborates() { # crosswalk_corroborates <ref> <band-title-nrm> <core
   return 1
 }
 
-title_in() { # title_in <file-list> <anchor> -> first non-empty normalised title
-  local _f _t
+# Both are called directly, never through `$( )`, and answer in a variable, so the memo they
+# fill outlives the call.
+title_in() { # title_in <file-list> <anchor> -> VLE_IN = first non-empty normalised title
+  local _f
+  VLE_IN=''
   while IFS= read -r _f; do
     [ -n "$_f" ] || continue
-    _t="$(heading_title "$_f" "$2")"
-    [ -n "$_t" ] && { printf '%s' "$_t"; return 0; }
+    vle_memo heading_title "$_f" "$2"
+    [ -n "$VLE_MEMO" ] && { VLE_IN="$VLE_MEMO"; return 0; }
   done <<< "$1"
   return 0
 }
-raw_in() { # raw_in <file-list> <anchor> -> first matching raw heading line
-  local _f _t
+raw_in() { # raw_in <file-list> <anchor> -> VLE_IN = first matching raw heading line
+  local _f
+  VLE_IN=''
   while IFS= read -r _f; do
     [ -n "$_f" ] || continue
-    _t="$(heading_raw "$_f" "$2")"
-    [ -n "$_t" ] && { printf '%s' "$_t"; return 0; }
+    vle_memo heading_raw "$_f" "$2"
+    [ -n "$VLE_MEMO" ] && { VLE_IN="$VLE_MEMO"; return 0; }
   done <<< "$1"
   return 0
 }
@@ -2550,7 +2670,7 @@ while IFS= read -r f; do
       # on one subject means one of them is vacuous, and the vacuous one is this: there is no
       # core referent to be confused WITH. The subject is a citation that resolves to core and
       # may mean the band counterpart — so core must define <n>, or the case is W7's.
-      ctitle="$(title_in "$CORE_CATALOG_FILES" "$ref")"
+      title_in "$CORE_CATALOG_FILES" "$ref"; ctitle="$VLE_IN"
       [ -n "$ctitle" ] || continue
 
       # A CROSSWALK ROW RESOLVES IT — BUT ONLY WHEN THE ROW IS ABOUT SOMETHING ELSE, AND
@@ -2593,11 +2713,12 @@ while IFS= read -r f; do
       # table is hand-written prose in three known shapes and an index would silently read the
       # wrong cell in two of them.
       if grep -Fxq -- "$ref" <<<"$CROSSWALK_IDS" || grep -Fxq -- "Check $ref" <<<"$CROSSWALK_IDS"; then
-        crosswalk_corroborates "$ref" "$(title_in "$CONSUMER_LAYER_FILES" "$band")" "$ctitle" \
+        title_in "$CONSUMER_LAYER_FILES" "$band"
+        crosswalk_corroborates "$ref" "$VLE_IN" "$ctitle" \
           || continue
       fi
 
-      xtitle="$(title_in "$CONSUMER_LAYER_FILES" "$band")"
+      title_in "$CONSUMER_LAYER_FILES" "$band"; xtitle="$VLE_IN"
       cite="$(printf '%s' "$text" | sed -n "s/.*Check ${ref} *(\([^)]*\)).*/\1/p" | head -1)"
       cite_n="$(printf '%s\n' "$cite" | awk "$NRM_FN"'{ print nrm($0) }' | head -1)"
 
@@ -2611,7 +2732,8 @@ while IFS= read -r f; do
         # healthy empty set -- and 2 or more only when a stage failed. A failed side read as an
         # empty set, which withdrew the tag signal and demoted a finding to AMBIGUOUS.
         _tk_rc=0
-        prov_tokens "$(raw_in "$CONSUMER_LAYER_FILES" "$band")" > "$VLE_T/w12-prov" || _tk_rc=$?
+        raw_in "$CONSUMER_LAYER_FILES" "$band"
+        prov_tokens "$VLE_IN" > "$VLE_T/w12-prov" || _tk_rc=$?
         vle_accept "$_tk_rc" "the provenance-token read of \"$band\""
         _tk_rc=0
         line_tokens "$text" > "$VLE_T/w12-line" || _tk_rc=$?

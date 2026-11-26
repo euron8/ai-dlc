@@ -118,8 +118,12 @@ h2ip() { inproc_run "$1" vh2_main "${@:2}"; }
 # tests/scripts/ is deliberately never created, so check-17-bypass/run.sh's first
 # candidate ($HERE/../../scripts) cannot win by accident and mask a wrong answer.
 mkdir -p "$WORK/.git" "$WORK/.claude/schemas" "$WORK/scripts/ai-dlc" "$WORK/tests/fixtures" || exit 2
-cp "$SCHEMAS"/*.json "$WORK/.claude/schemas/" 2>/dev/null || {
-  echo "FIXTURE ERROR: no schemas to copy from $SCHEMAS" >&2; exit 2; }
+# Exactly the schemas the drive resolves under .claude/schemas/: provenance-block.json
+# (validate-provenance-block.sh:178,182). Nothing else is copied; an absent one is fatal.
+[ -f "$SCHEMAS/provenance-block.json" ] || {
+  echo "FIXTURE BROKEN: schema provenance-block.json not found in $SCHEMAS" >&2; exit 2; }
+cp "$SCHEMAS/provenance-block.json" "$WORK/.claude/schemas/" || {
+  echo "FIXTURE BROKEN: could not copy schemas from $SCHEMAS" >&2; exit 2; }
 
 # Exactly the validators the drive reaches: the subject, and the two check-17-bypass/run.sh
 # runs as PROV and EVID (its :48-49). Each is required by name; an absent one is fatal,

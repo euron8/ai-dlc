@@ -7240,6 +7240,40 @@ The pre-push hook skips the entire fixture suite when the key is unchanged, and 
 A bare inputs.decl line under an excluded top has no key row in the hook and no hash in the outer key, so the file can change and no verdict that reads it re-runs. Key it with a leading \`+\` if the fixture reads its content; delete the line if nothing reads it; if the fixture only needs the file to EXIST, put \`# copy-only: <path>:<line> <text>\` directly above it, citing the -f, -e or -d test that needs it."
     fi
 
+    # Arm 6: a fixture that keys tracked docs/**/*.sh by `+` line keys ALL of them and ONLY them. The decl
+    # grammar expands only a `<dir>/*/<name>` glob, so a walk that reads every *.sh at any depth (I54, :6773, in
+    # a full run of validator-fork-budget) is declared by name, and a NEW tracked docs .sh would get no key row
+    # while the walk read it. Subject: each inputs.decl carrying a `+docs/...sh` line, derived, never counted. The
+    # corpus is `git ls-files -- 'docs/*.sh'`, one call; a non-repo root (a copied world) is no subject, and a
+    # repo that lists ZERO fails, so an empty listing cannot pass.
+    i55_dsub="$(grep -l '^+docs/.*\.sh$' "$REPO_ROOT"/core/fixtures/*/inputs.decl 2>/dev/null)"
+    if [ -n "$i55_dsub" ]; then
+      i55_dtr="$(git -C "$REPO_ROOT" ls-files -- 'docs/*.sh' 2>/dev/null)"; i55_drc=$?
+      if [ "$i55_drc" -eq 0 ] && [ -z "$i55_dtr" ]; then
+        err "I55 arm 6: git ls-files -- 'docs/*.sh' listed ZERO tracked files while a fixture's inputs.decl names +docs/...sh lines. Over an empty corpus both directions compare equal and read as agreement; the listing is broken or every named file is gone, in which case delete the lines."
+      elif [ "$i55_drc" -eq 0 ]; then
+        while IFS= read -r i55_df; do
+          [ -n "$i55_df" ] || continue
+          i55_dd=""
+          while IFS= read -r i55_dl || [ -n "$i55_dl" ]; do
+            case "$i55_dl" in +docs/*.sh) i55_dd="${i55_dd}${i55_dl#+}${i55_nl}" ;; esac
+          done < "$i55_df"
+          i55_dmiss=""; i55_dextra=""
+          while IFS= read -r i55_dt; do
+            case "${i55_nl}${i55_dd}" in *"${i55_nl}${i55_dt}${i55_nl}"*) ;; *) i55_dmiss="${i55_dmiss}${i55_nl}  ${i55_dt}" ;; esac
+          done <<<"$i55_dtr"
+          while IFS= read -r i55_dt; do
+            [ -n "$i55_dt" ] || continue
+            case "${i55_nl}${i55_dtr}${i55_nl}" in *"${i55_nl}${i55_dt}${i55_nl}"*) ;; *) i55_dextra="${i55_dextra}${i55_nl}  ${i55_dt}" ;; esac
+          done <<<"$i55_dd"
+          if [ -n "$i55_dmiss" ] || [ -n "$i55_dextra" ]; then
+            err "I55 arm 6: ${i55_df#"$REPO_ROOT"/} names tracked docs/**/*.sh by \`+\` line, and the list differs from \`git ls-files -- 'docs/*.sh'\`.${i55_dmiss:+${i55_nl}tracked but not named (a full-run I54 walk reads it and no key row covers it):${i55_dmiss}}${i55_dextra:+${i55_nl}named but not tracked (the file is gone or was never tracked):${i55_dextra}}
+REMEDY: add each missing path as a \`+docs/<path>.sh\` line and delete each stale one, in the same change that adds or removes the file; the listing is \`git ls-files -- 'docs/*.sh'\`."
+          fi
+        done <<<"$i55_dsub"
+      fi
+    fi
+
     # Arm 4: EVERY cross-run record the hook keeps lives outside the working tree. A
     # record inside it would be hashed by the key it stores, so writing it would
     # invalidate that key and no push could ever hit -- the machinery would run forever

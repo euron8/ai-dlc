@@ -3403,7 +3403,7 @@ cl_select() {
       : > "$c/.hhit"; awk -F'\t' '$2 == "run" && $4 == "k" { print $1 }' "$c/.kdec" > "$c/.hcand"
       while IFS= read -r b; do
         [ -d "$kd/$b.k" ] && [ -s "$c/.k/$b" ] || continue
-        hh="$(grep -v '^#' "$c/.k/$b" | shasum -a 256 | cut -d' ' -f1)"
+        hh="$(awk '!/^#/ || $0 == "#modes v1" || index($0, "#mode\t") == 1' "$c/.k/$b" | shasum -a 256 | cut -d' ' -f1)"
         [ -z "$hh" ] || [ ! -f "$kd/$b.k/$hh" ] || { printf '%s\n' "$b" >> "$c/.hhit"
           awk -v f="$b" 'NR <= 4 && /^#pending / { n = substr($0, 10) } END { print f "\t" (n == "" ? "-" : n) }' "$kd/$b.k/$hh" >> "$c/.kpn"; }
       done < "$c/.hcand"
@@ -3487,7 +3487,7 @@ cl_publish() {
   t="$kd/$2.key.tmp.$$"
   mkdir -p "$kd/.unconfirmed" 2>/dev/null && : > "$kd/.unconfirmed/$2" 2>/dev/null \
     && awk -v n="$n" '{ print } NR == 3 && n != "" { print "#pending " n }' "$1/.cl/.k/$2" > "$t" 2>/dev/null || return 0
-  h="$(grep -v '^#' "$1/.cl/.k/$2" | shasum -a 256 | cut -d' ' -f1)"
+  h="$(awk '!/^#/ || $0 == "#modes v1" || index($0, "#mode\t") == 1' "$1/.cl/.k/$2" | shasum -a 256 | cut -d' ' -f1)"
   if [ -n "$h" ] && mkdir -p "$kd/$2.k" 2>/dev/null && cp "$t" "$kd/$2.k/$h.t$$" 2>/dev/null; then mv "$kd/$2.k/$h.t$$" "$kd/$2.k/$h" 2>/dev/null || :; fi
   mv "$t" "$kd/$2.key" 2>/dev/null
   return 0

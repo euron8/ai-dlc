@@ -1,4 +1,4 @@
 # Set from one counted run (scripts/seed-verdict-store.sh) after the batteries were removed; every row is exact.
-191 *
-3 inproc:core/git-hooks/pre-push
+194 *
+9 inproc:core/git-hooks/pre-push
 0 core/git-hooks/pre-push

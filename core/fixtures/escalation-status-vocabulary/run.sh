@@ -447,27 +447,30 @@ else
   # the near-miss (a world with no entries) prints PASS. verdict.sh is the one beside the subject.
   VEN_VS="$(cd "$(dirname "$VALIDATOR")" && pwd)/verdict.sh"
   if [ -f "$VEN_VS" ]; then
-    vo="$(AI_DLC_PROJECT_ROOT="$ESV_ROOT" bash "$VEN_VS" "$VALIDATOR" "$UNPARSED" "$SPEC_SRC" 2>&1)"; vrc=$?
-    vn="$(AI_DLC_PROJECT_ROOT="$ESV_ROOT" bash "$VEN_VS" "$VALIDATOR" "$HEADING" "$SPEC_SRC" 2>&1)"; vnrc=$?
+    echo "HERMETIC-CONSUMED core/scripts/verdict.sh"
+    vo="$(AI_DLC_PROJECT_ROOT="$ESV_ROOT" FXCELL=cli-vrd-fail bash "$VEN_VS" "$VALIDATOR" "$UNPARSED" "$SPEC_SRC" 2>&1)"; vrc=$?
+    vn="$(AI_DLC_PROJECT_ROOT="$ESV_ROOT" FXCELL=cli-vrd-pass bash "$VEN_VS" "$VALIDATOR" "$HEADING" "$SPEC_SRC" 2>&1)"; vnrc=$?
     if [ "$vrc" -eq 1 ] && grep -qF 'STATUSLESS' <<<"$vo" && grep -qF 'DA-283' <<<"$vo" && grep -qF 'DA-284' <<<"$vo" \
        && grep -qF 'remedy' <<<"$vo" && [ "$vnrc" -eq 0 ] && grep -q '^PASS' <<<"$vn"; then
       ok "through verdict.sh the offender world keeps its STATUSLESS lines and the remedy; the clean world prints PASS"
     else
       bad "through verdict.sh the STATUSLESS lines or remedy were dropped, or the clean world did not PASS (rc=$vrc/$vnrc)"
     fi
+  else
+    bad "through verdict.sh: verdict.sh is missing beside the subject at $VEN_VS, so the arm judged nothing"
   fi
 
-  # --- the whole-directory control: a copy of the WHOLE scripts dir at the subject's counted relative path ------
+  # --- the relocated-copy control: the subject alone, copied to a counted relative path (it reads no sibling file) ------
   VEN_SRC_DIR="$(cd "$(dirname "$VALIDATOR")" && pwd)"
   VEN_BASE="$(basename "$VALIDATOR")"
   VEN_D="$WORK/empty-ctl/control"; mkdir -p "$VEN_D/core"
-  if cp -R "$VEN_SRC_DIR" "$VEN_D/core/scripts"; then
+  if mkdir -p "$VEN_D/core/scripts" && cp "$VEN_SRC_DIR/$VEN_BASE" "$VEN_D/core/scripts/$VEN_BASE"; then
     VEN_CTL="$VEN_D/core/scripts/$VEN_BASE"
-    # THE CWD-INVARIANCE ARM, whole-directory control: the same five cells from `/` (BL-1007).
+    # THE CWD-INVARIANCE ARM, relocated-copy control: the same five cells from `/` (BL-1007).
     VEN_CWD="$(cd / && ven_cells "$VEN_CTL" && printf '%s' "$VEN_CELLS")"
-    if [ "$VEN_CWD" = 111111 ]; then ok "cwd-invariance: the whole-directory control scores $VEN_CWD from / as from the root"
-    else bad "cwd-invariance: the whole-directory control scores $VEN_CWD from /, wanted 111111"; fi
-  else bad "whole-dir control: could not copy $VEN_SRC_DIR"; fi
+    if [ "$VEN_CWD" = 111111 ]; then ok "cwd-invariance: the relocated-copy control scores $VEN_CWD from / as from the root"
+    else bad "cwd-invariance: the relocated-copy control scores $VEN_CWD from /, wanted 111111"; fi
+  else bad "relocated-copy control: could not copy $VEN_BASE from $VEN_SRC_DIR"; fi
 fi
 
 # --- Assertions 16-18: at Checks 2 and 2a, `OK: EXAMINED NOTHING` IS a pass ----------------
@@ -618,9 +621,9 @@ else
     esac
   done
 
-  # --- the refusal control: a copy of the whole scripts directory, at the subject's counted relative path ------------
+  # --- the refusal control: the subject alone, copied to a counted relative path (it reads no sibling file) ------------
   VR_MD="$VR/ctl-scripts"
-  cp -R "$(cd "$(dirname "$VALIDATOR")" && pwd)" "$VR_MD" || bad "refusal control: could not copy the scripts directory"
+  mkdir -p "$VR_MD" && cp "$(cd "$(dirname "$VALIDATOR")" && pwd)/$(basename "$VALIDATOR")" "$VR_MD/" || bad "refusal control: could not copy the validator"
   VR_SRC="$VR_MD/$(basename "$VALIDATOR")"
   VR_OUT="$VR/m/ctl/$ESV_REL"; mkdir -p "${VR_OUT%/*}"
   cp "$VR_SRC" "$VR_OUT"
