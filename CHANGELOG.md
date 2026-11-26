@@ -19,6 +19,32 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1247.0] - 2026-11-25
+
+### A mode or type change to a file a fixture keys now re-runs that fixture, in the distribution's push gate and in a consumer's installed pre-push hook (BL-1155 advances)
+
+- **A chmod or a symlink swap now dispatches the fixtures that key the path** (BL-1155). This applies to ai-dlc maintainers and to every consumer running the installed `core/git-hooks/pre-push`.
+  - Before: `readset_manifest` recorded the content hash only. So `chmod -x core/hooks/ai-dlc-core-guard.sh` skipped core-write-guard, though that hook is a `!` input of core-write-guard and its `run.sh` asserts `[ -x "$HOOK" ]`. A symlink swap to identical bytes skipped it as well.
+  - The manifest's per-path loop now also writes a tag for each admitted path that is not a plain regular file: `x` (executable) or `l:<readlink target>` (symlink). It uses builtins plus one `readlink` per symlink.
+  - Every key record carries `#modes v1`, and a `#mode` line per non-plain file key, after `#pending`. No key row, digest input or store body moves, and `hermetic-run.sh` is unchanged.
+  - A recorded file key whose tag differs runs the fixture as `mode changed <path>`, class `x`. No store skip, twin skip, side-record skip or invalidation guard clears or judges that class.
+  - The same edit is in `.githooks/pre-push` and `core/git-hooks/pre-push` (I66), with one VS-IDENTITY 1 row each.
+  - `readset-skip` now reads key records by their non-`#` lines instead of by line number.
+- **Adoption window** (BL-1155). A record written before this release adopts the present modes and types once, with no run (class `a`, announced as `read-set modes:`).
+  - It stays adoptable until a push publishes a record for that fixture.
+  - A fixture that went red, a killed push, a push refused before dispatch, and a whole-suite content-key HIT each publish no record. Each of these is a one-time window: the suite key hashes exec bits and symlink targets, so a mode change ends a HIT.
+  - The window stays OPEN for a `<fx>@consumer` unit skipped by the twin rule or by a side record. Neither publishes, so the unit re-adopts on every push until it runs. While it does, a change to its installed copy's mode is caught only when the distribution twin runs under class `x`.
+  - A stored pass clears no mode change against the fixture's last published record. A key absent from that record gets no mode compare.
+- **Measured** on df32694ee, against the real store, base hook vs this hook on the same tree:
+  - The dispatch set is identical: 46 run, 28 consumer. The only difference is 160 skips that read `a`.
+  - A one-file docs change dispatches identically, with identical PATH-resolved exec counts (1335 and 1335).
+- **Not done** (BL-1155 stays PARTIAL):
+  - Presuite keys get no mode state.
+  - A concurrent push from an older hook rewrites a record without its `#mode` lines, which reopens adoption for that record.
+  - A file keyed only through a span row (`<path>#<NAME>`) has no mode compare.
+  - Seeded keys get no mode compare. A mode change on a symlink's target is not seen.
+  - Open items: adopting on a twin or side-record skip (this needs a W1 row), and a regression guard: the new class has none in the suite yet.
+
 ## [0.1246.0] - 2026-11-25
 
 ### A repair round no longer runs a serial remediator just to re-check siblings of every edit (BL-508)
