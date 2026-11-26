@@ -367,11 +367,12 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
      accident → revert) and lossy if ignored. Same bar as the other `HARD-` statuses.
      Reached only after `HARD-CORE-BEHIND` has been ruled out, so the consumer's copy is
      anchored at `base` and the delta really is its own.
-     **`reconcile/register-drift.sh <dist> <base> <consumer> <core-rel-path> --apply`
-     does the refiling**: it authors the override from the consumer's own changed
-     sections, anchors it to real headings, stamps `base_sha` at **base**, and reverts
-     core. It leaves `reason:` as `TODO` — write one and record it as a decisions row.
-     Hooks are refused by design (no override grain exists for them); say so plainly.
+     **`reconcile/pull.sh register-drift <dist> <base> <consumer> <theirs> <core-rel-path>`
+     does the refiling** (it runs `register-drift.sh --apply`; never call that
+     directly): it authors the override from the consumer's own changed sections,
+     anchors it to real headings, stamps `base_sha` at **base**, and reverts core. It
+     leaves `reason:` as `TODO` — write one and record it as a decisions row. Hooks
+     are refused by design (no override grain exists for them); say so plainly.
    - `CORE-TEMPLATE-SUBSTITUTED` → differs only where the distribution carries a
      `{token}` site. That is what `install.sh` does; it is not drift, and it must
      never be reported as such.
@@ -551,8 +552,9 @@ family is in `reconcile/ask-families.tsv`. "Step N" means SKILL.md step N.
      place a human is genuinely required; present the conflict hunk, nothing else.
      On exit 3 with a relayed `OVERRIDE-SHADOWS-POINTER-STUB` row nothing was written and
      no readopt is available: **retire**, and file the rows upstream as that row says.
-   - **`HARD-UNREGISTERED-CORE-DRIFT`** → `reconcile/register-drift.sh <dist> <base>
-     <consumer> <core-rel-path> --apply`. It authors the `overrides/` entry from the
+   - **`HARD-UNREGISTERED-CORE-DRIFT`** → `reconcile/pull.sh register-drift <dist> <base>
+     <consumer> <theirs> <core-rel-path>`, which runs `register-drift.sh --apply` and relays
+     its lines and exit verbatim; never call `register-drift.sh --apply` directly. It authors the `overrides/` entry from the
      consumer's own sections, anchors it to real headings, stamps `base_sha` at **base**
      (where the delta forked from — NOT the sha being pulled; stamping `theirs` would
      claim the consumer had already read a change it has not), and reverts core.

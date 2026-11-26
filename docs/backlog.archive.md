@@ -49790,3 +49790,41 @@ verify: manual
 
 verify: manual
 
+## BL-1249 — the update deliver cannot tell a HARD remedy the model writes between dry-run and apply from an operator's own edit
+
+**LANDED (v0.1256.0).** **DEFECT.** Filed 2026-11-25. Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (the deliver's path selection).
+
+Goal: a HARD remedy file the model writes between `pull.sh dry-run` and `pull.sh apply` is delivered by the pull, for every HARD kind, and is never left behind as the operator's own dirt.
+
+Baseline, from cluster U's contract adversary (batch 267):
+- A HARD row names the file under adjudication, never the remedy file. The layer-adjudication register's path is fixed in `layer-drift.sh` and reaches the model only through prose (`SKILL.md` LC-A1, `reconcile/detector-rows.md`), so a kind-to-file map would be `pl_always_stage` under another key.
+- The deliver cannot see the dry-run's rows: the dry-run writes no `apply.out`, `pl_run_set` drops runs from before the snapshot, and nothing records the dry-run's run name.
+- Nothing records that a file was written after the dry-run, and an operator edit in that window is indistinguishable from the model's.
+- Today `pl_always_stage` (BL-1244) covers the only remedy file current HARD kinds prescribe: LC-A1 and LC-A2 write the register.
+
+Work list:
+
+1. Record the dry-run's HARD rows and the remedy path each prescribes, where the deliver can read them.
+2. Deliver a recorded remedy path; leave every other untracked path as the operator's.
+3. A `reconcile-pull-driver` arm that writes a remedy between dry-run and apply and asserts it is delivered, with a control file written in the same window outside the remedy set that is not.
+
+**Correction (cluster H contract, batch 268; the goal is unchanged).** The window this entry names, a remedy written between `pull.sh dry-run` and `pull.sh apply`, is outside the documented flow: `SKILL.md` step 5 forbids writes in a bare run. The live route is a `<theirs>` change between two apply rounds: round 1 exits 3 on HARD rows before any record of the pull's writes is armed, the model writes the remedy, and round 2 at a new `<theirs>` takes a fresh dirty snapshot that counts the remedy as the operator's edit, so deliver leaves it behind or merges it against a base that already holds it. The work list below is re-aimed at that route. The mechanism is a per-path snapshot carry-forward, not a widening of the always-staged set: an apply that ends at exit 3 on HARD rows writes `<git-dir>/ai-dlc-pull/hard-remedies` (each HARD row's path and its consumer path, keyed to the snapshot's run), and the next apply at a different `<theirs>`, while no apply.sh has run since that snapshot, keeps each recorded path's old snapshot row. `UNREGISTERED-CORE-DRIFT`'s remedy writes files no HARD row names, so it is routed through a new driver subcommand, `pull.sh register-drift <dist> <base> <consumer> <theirs> <core-rel-path>`, which adds the paths `register-drift.sh`'s own output names to the record. Folded by lead ruling (contract adversary D4): under the same condition the `pull-decisions.tsv` rows from round 1 are kept across the `<theirs>` change instead of being cut to the header. With no record, behaviour is unchanged.
+
+Re-aimed work list:
+
+1. At an apply exit 3 on HARD rows, record each HARD row's path in `<git-dir>/ai-dlc-pull/hard-remedies`, valid while no apply.sh has run since the recorded snapshot; deliver drops it.
+2. An apply at a different `<theirs>` with a valid record carries each recorded path's old snapshot row (or no row) into the fresh snapshot, and keeps `pull-decisions.tsv`'s rows across the change.
+3. `pull.sh register-drift` runs `register-drift.sh --apply`, relays it verbatim, and adds the files it wrote to the record; `SKILL.md` and `reconcile/detector-rows.md` prescribe it as that code's remedy.
+4. `core/fixtures/reconcile-pull-driver` world `hr`: one T1-to-T2 chain raising three HARD rows (`hr-chain`: T1 apply exit 3, `pull.sh register-drift` exit 0, upstream moves, T2 apply, finish and deliver exit 0) asserts `hr-a` a tracked override clean at T1 and remedied in the window is delivered; `hr-b` an override dirty at T1 then remedied is committed with the remedy only, the operator edit left unstaged; `hr-c` the override `pull.sh register-drift` wrote is delivered; `hr-d` a control file written in the same window stays untracked and out of the commit; `hr-e` the core file register-drift reverted and the T2 apply rewrote is committed as theirs, with no conflict; `hr-f` a T1 decisions row survives into the T2 deliver.
+
+Done condition: item 4's arms pass on the tip; `hr-a`, `hr-b`, `hr-c`, `hr-e` and `hr-f` fail with item 2's carry disabled (the decisions keep is gated by the same condition), and `hr-d` fails with the carry widened to commit the control file.
+
+Step: n/a
+
+Provenance: batch 267, lead ai-dlc-9f; found by cluster U's contract adversary; id allocated by the lead. No consumer candidate. Built in batch 268, cluster H (owner ai-dlc-39).
+
+verify: manual -- run `bash core/fixtures/reconcile-pull-driver/run.sh` from the repo root on the tip tree, then with the `pl_hr_valid` branch in `pull.sh` forced false, then with the carry widened to the control file: arms `hr-chain` and `hr-a` to `hr-f` pass on the tip; `hr-a`, `hr-b`, `hr-c`, `hr-e` and `hr-f` fail on the first mutant and `hr-d` on the second. No sh receipt, because a grep over `pull.sh` is satisfied by a comment naming the record.
+
+
+
+

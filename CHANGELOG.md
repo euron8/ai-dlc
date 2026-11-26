@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1256.0] - 2026-11-26
+
+### A fix the model writes for a blocking row is delivered even when upstream moves before the next apply, and unregistered core drift is registered through the pull driver (BL-1249)
+
+- For every consumer running `/ai-dlc-update` whose apply stops on `HARD` rows. When an apply stops on those rows and upstream moves before the next `pull.sh apply`, the next apply now still treats the fixes the model wrote in between as the pull's own. Before, it took a fresh dirty snapshot that counted those fixes as your own edits, so the deliver left them out of its commit or merged them against a base that already held them. The apply that stops writes `<git-dir>/ai-dlc-pull/hard-remedies`, which names each `HARD` row's file. The next apply at a different `<theirs>` keeps each named file's entry from the earlier snapshot, as long as no apply has written anything since. Under the same condition, the existing rows of `pull-decisions.tsv` are kept across the `<theirs>` change instead of being cut back to the header. Deliver removes the record. A file you edited before the first apply stays yours: only the pull's own change to it is committed. After such a `<theirs>` change, a file you created in between that the record does not name is not committed. With no record, for example when the first round ran on an older engine, the pull behaves as before.
+- New consumer-visible subcommand: `pull.sh register-drift <dist> <base> <consumer> <theirs> <core-rel-path>`. It is now the remedy `SKILL.md` and `reconcile/detector-rows.md` prescribe for `HARD-UNREGISTERED-CORE-DRIFT`. It runs `register-drift.sh --apply`, passes on its output, refusals and exit status unchanged, and adds the override, the extension and the reverted core file it wrote to the hard-remedies record, so they are delivered even if `<theirs>` moves. Calling `register-drift.sh <dist> <base> <consumer> <core-rel-path> --apply` directly still works exactly as before. The files it writes are just not carried across a `<theirs>` change.
+- The reconcile-pull-driver fixture gains world `hr`, one T1-to-T2 chain with three HARD rows (`hr-chain`), and arms `hr-a` to `hr-f`. They check that an override that was clean is delivered, that an override you edited first commits only the remedy, and that the `register-drift` override is delivered. They also check that a control file stays untracked, that the core file register-drift reverted lands as theirs with no conflict, and that a T1 decisions row survives into the deliver.
+
 ## [0.1255.0] - 2026-11-26
 
 ### The self-update-gate-d fixture re-runs only when a reconcile file it reads changes

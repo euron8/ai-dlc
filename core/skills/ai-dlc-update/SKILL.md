@@ -165,6 +165,7 @@ and work only what it hands back. Its header is the contract; the subcommands ar
 - `pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>` — the stamp, the
   only write of it on a driver pull, with the same `<base>` the apply was given.
 - `pull.sh merge <dist> <base> <consumer> <theirs> <override>` — an override re-adoption merge.
+- `pull.sh register-drift <dist> <base> <consumer> <theirs> <core-rel-path>` — `HARD-UNREGISTERED-CORE-DRIFT`'s remedy.
 - `pull.sh deliver [--whole <path>]... <dist> <base> <consumer> <theirs>` — commit, push, `gh pr create` (step 8).
 - `pull.sh record <dist> <base> <consumer> <theirs> [-- <path>...]` — on a finished pull, re-records the
   named paths of the record of the pull's own writes from the work tree and nothing else; it stamps nothing.
@@ -1132,6 +1133,14 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    <override> --stamp retire, then file this override's rows upstream as a change to the
    intensity table of the stub that owns the rule (the SKILL.md stub, per distribution
    invariants I19 and I131; rule-bodies/rule-N.md holds a copy)."
+
+   **`HARD-UNREGISTERED-CORE-DRIFT` is registered ONLY through `reconcile/pull.sh register-drift
+   <dist> <base> <consumer> <theirs> <core-rel-path>` — never call `register-drift.sh --apply`
+   directly.** It relays `register-drift.sh`'s lines, refusals and exit verbatim, and on exit 0
+   the override, extension and reverted core file it wrote are delivered by this pull, including
+   after `<theirs>` moves before the next `pull.sh apply`. Then write the override's `reason:`
+   line and record the disposition as a decisions row, as `reconcile/detector-rows.md` gives that
+   code.
 
    **The rows `apply.sh` hands back, by class** (each detail field is authoritative about its
    remedy; the driver prints each `WORKLIST` and `DECISION` row as a `DECIDE <kind> <path> pending`

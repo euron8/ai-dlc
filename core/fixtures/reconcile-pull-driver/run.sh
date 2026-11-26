@@ -109,6 +109,12 @@
 #   union-commit  (world a-nx after base-stale) a VERSION-only theirs, base AT, two rounds (ASK blend, which also carries
 #           pw-delivered; then a region re-rendered since approval, unseen=0): the union gate proceeds (NOTE blockers-resolved,
 #           NEXT pull.sh finish).
+#   BL-1249 (world hr, one chain: T1 apply exit 3 on three HARD rows, the remedies written, upstream moves, T2 apply, finish,
+#   deliver):   hr-chain  each step's exit.   hr-a  an override clean at T1 and remedied is committed.   hr-b  an override
+#           dirty at T1, then remedied: the commit holds the remedy only, the operator's edit stays unstaged.   hr-c  the
+#           override `pull.sh register-drift` wrote is committed.   hr-d  a control file written in the window stays untracked
+#           and out.   hr-e  the core file register-drift reverted and T2's apply rewrote is committed as theirs.   hr-f  a T1
+#           pull-decisions.tsv row survives into the commit.
 set -uo pipefail
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
@@ -1878,4 +1884,98 @@ else
 fi
 # ===== end BL-1173 arms =====
 
-report_end reconcile-pull-driver 123
+# ================================ hr: a HARD remedy written before a theirs change is delivered (BL-1249) ===========
+# World hr, one T1 -> T2 chain. Three HARD rows at T1: two SKILL.md overrides with no base_sha
+# (HARD-OVERRIDE-BASE-UNRESOLVABLE; Rule 9's carries an operator edit made before the pull) and a committed in-place
+# edit of steps/alpha.md (HARD-UNREGISTERED-CORE-DRIFT). In the window after T1's exit 3: base_sha written into both
+# overrides by hand, `pull.sh register-drift` for alpha.md, the model's T1 disposition row naming Rule 9's override, and
+# an untracked control file. Upstream then moves (T2 changes alpha.md's Alpha section, which apply.sh writes), and the
+# T2 apply, finish and deliver run.
+HR="$WORK/hr"; HRD="$HR/dist"; HRC="$HR/c"; HR_OVR=.claude/skills/ai-dlc/overrides; HR_ALPHA=.claude/skills/ai-dlc/steps/alpha.md
+hr_skill='# Rules\n\nSTATUS-OK is a status.\n\n## Rule 8 -- Depth\n\nLine A base.\n\n## Rule 9 -- Tail\n\nTail X base.\n'
+mkdir -p "$HRD/core/skills/ai-dlc/steps" "$HRD/core/session-driver" && world_git init -q "$HRD" \
+  && printf '1.0.0\n' > "$HRD/VERSION" && printf "$hr_skill" > "$HRD/core/skills/ai-dlc/SKILL.md" \
+  && printf '# alpha step\n\n## Alpha\n\nDo alpha.\n\n## Beta\n\nDo beta.\n' > "$HRD/core/skills/ai-dlc/steps/alpha.md" \
+  && printf '#!/usr/bin/env bash\n# driver v1\n' > "$HRD/core/session-driver/ai-dlc-session-driver.sh" \
+  && HRB="$(prd_dist_commit "$HRD" base)" && printf '2.0.0\n' > "$HRD/VERSION" \
+  && printf '#!/usr/bin/env bash\n# driver v2 UPSTREAM\n' > "$HRD/core/session-driver/ai-dlc-session-driver.sh" \
+  && HRT1="$(prd_dist_commit "$HRD" t1)" \
+  && mkdir -p "$HRC/.claude/skills/ai-dlc/steps" "$HRC/$HR_OVR" "$HRC/.claude/session-driver" "$HRC/.claude/schemas" \
+  && cp "$SCHEMA_SRC" "$HRC/.claude/schemas/" && printf "$hr_skill" > "$HRC/.claude/skills/ai-dlc/SKILL.md" \
+  && printf '# alpha step\n\n## Alpha\n\nDo alpha.\n\n## Beta\n\nDo beta, CONSUMER WAY.\n' > "$HRC/$HR_ALPHA" \
+  && printf '#!/usr/bin/env bash\n# driver v1\n' > "$HRC/.claude/session-driver/ai-dlc-session-driver.sh" \
+  && printf 'version: 1.0.0\ncommit: %s\n' "$HRB" > "$HRC/.claude/.ai-dlc-version" \
+  && printf -- '---\nshadows: SKILL.md#Rule 8\nreason: fixture\n---\n\n## Rule 8 -- Depth\n\nLine A OURS.\n' > "$HRC/$HR_OVR/SKILL__Rule-8.md" \
+  && printf -- '---\nshadows: SKILL.md#Rule 9\nreason: fixture\n---\n\n## Rule 9 -- Tail\n\nTail X OURS.\n' > "$HRC/$HR_OVR/SKILL__Rule-9.md" \
+  && prd_consumer_commit "$HRC" >/dev/null && deliver_env hr \
+  && printf '\nOPERATOR NOTE before the pull.\n' >> "$HRC/$HR_OVR/SKILL__Rule-9.md" \
+  || { echo "FIXTURE BROKEN: cannot build world hr" >&2; exit 2; }
+# hr_base_sha <file>: the remedy, base_sha written as the frontmatter's second line.
+hr_base_sha() { awk -v b="$HRB" 'NR == 2 { print "base_sha: " b } { print }' "$1" > "$1.new" && mv -f "$1.new" "$1"; }
+bash "$REC/pull.sh" apply "$HRD" "$HRB" "$HRC" "$HRT1" > "$WORK/hr-t1.out" 2> "$WORK/hr-t1.err" < /dev/null; hr1_rc=$?
+hr_r9_head="$(world_git -C "$HRC" show "HEAD:$HR_OVR/SKILL__Rule-9.md" | awk -v b="$HRB" 'NR == 2 { print "base_sha: " b } { print }')"
+hr_base_sha "$HRC/$HR_OVR/SKILL__Rule-8.md" && hr_base_sha "$HRC/$HR_OVR/SKILL__Rule-9.md" \
+  || { echo "FIXTURE BROKEN: cannot write the base_sha remedies" >&2; exit 2; }
+bash "$REC/pull.sh" register-drift "$HRD" "$HRB" "$HRC" "$HRT1" skills/ai-dlc/steps/alpha.md > "$WORK/hr-rd.out" 2> "$WORK/hr-rd.err" < /dev/null; hrr_rc=$?
+HR_RD="$(sed -n 's/^REGISTERED  *//p' "$WORK/hr-rd.out")"
+HR_DEC="$HRC/_bmad-output/ai-dlc-update/pull-decisions.tsv"
+mkdir -p "${HR_DEC%/*}" && { [ -f "$HR_DEC" ] || printf 'kind\tpath\tdigest\tdecider\tverdict\tevidence\n' > "$HR_DEC"; } \
+  && printf 'override-base\t%s\t-\tmodel\tremedied\thr T1 disposition row\n' "$HR_OVR/SKILL__Rule-9.md" >> "$HR_DEC" \
+  && printf 'operator scratch\n' > "$HRC/control.txt" \
+  && printf '# alpha step\n\n## Alpha\n\nDo alpha, T2 UPSTREAM.\n\n## Beta\n\nDo beta.\n' > "$HRD/core/skills/ai-dlc/steps/alpha.md" \
+  && printf '3.0.0\n' > "$HRD/VERSION" && HRT2="$(prd_dist_commit "$HRD" t2)" \
+  || { echo "FIXTURE BROKEN: cannot write the hr window or move upstream" >&2; exit 2; }
+bash "$REC/pull.sh" apply "$HRD" "$HRB" "$HRC" "$HRT2" > "$WORK/hr-t2.out" 2> "$WORK/hr-t2.err" < /dev/null; hr2_rc=$?
+bash "$REC/pull.sh" finish "$HRD" "$HRB" "$HRC" "$HRT2" > "$WORK/hr-fin.out" 2> "$WORK/hr-fin.err" < /dev/null; hrf_rc=$?
+deliver_run hr "$HRD" "$HRB" "$HRC" "$HRT2"; hrd_rc=$?
+hr_in_commit() { world_git -C "$HRC" show --name-only --format= HEAD | grep -cxF -- "$1"; }
+hr_st() { world_git -C "$HRC" status --porcelain=v1 -- "$1"; }
+if [ "$hr1_rc" = 3 ] && grep -qxF "HARD HARD-OVERRIDE-BASE-UNRESOLVABLE $HR_OVR/SKILL__Rule-8.md" "$WORK/hr-t1.out" \
+   && grep -qxF "HARD HARD-OVERRIDE-BASE-UNRESOLVABLE $HR_OVR/SKILL__Rule-9.md" "$WORK/hr-t1.out" \
+   && grep -qxF 'HARD HARD-UNREGISTERED-CORE-DRIFT skills/ai-dlc/steps/alpha.md' "$WORK/hr-t1.out" \
+   && [ "$hrr_rc" = 0 ] && [ -n "$HR_RD" ] && [ "$hr2_rc" = 0 ] && [ "$hrf_rc" = 0 ] && [ "$hrd_rc" = 0 ] \
+   && grep -qx 'DECIDE pr https://example.invalid/pr/1 opened' "$WORK/hr-deliver.out" && [ "$HRT2" != "$HRT1" ]; then
+  ok "hr-chain: T1 apply exit 3 on three HARD rows, register-drift exit 0, upstream moved, T2 apply, finish and deliver exit 0"
+else
+  bad "hr-chain: t1=$hr1_rc rd=$hrr_rc t2=$hr2_rc fin=$hrf_rc dl=$hrd_rc t1: $(grep '^HARD\|^REFUSED' "$WORK/hr-t1.out" | tr '\n' '|' | cut -c1-300) t2: $(grep '^HARD\|^REFUSED\|^ASK' "$WORK/hr-t2.out" | tr '\n' '|' | cut -c1-300) dl: $(tr '\n' '|' < "$WORK/hr-deliver.out" | cut -c1-300)"
+fi
+hr_r8_blob="$(world_git -C "$HRC" show "HEAD:$HR_OVR/SKILL__Rule-8.md")"
+if [ "$(hr_in_commit "$HR_OVR/SKILL__Rule-8.md")" = 1 ] && [ -z "$(hr_st "$HR_OVR/SKILL__Rule-8.md")" ] \
+   && grep -qx "base_sha: $HRB" <<< "$hr_r8_blob"; then
+  ok "hr-a: an override clean at T1 and remedied before the theirs change is in the deliver commit, with its base_sha, nothing left dirty"
+else
+  bad "hr-a: in commit $(hr_in_commit "$HR_OVR/SKILL__Rule-8.md"), status '$(hr_st "$HR_OVR/SKILL__Rule-8.md")'"
+fi
+hr_r9_diff="$(world_git -C "$HRC" diff -- "$HR_OVR/SKILL__Rule-9.md")"
+if [ "$(hr_in_commit "$HR_OVR/SKILL__Rule-9.md")" = 1 ] && [ "$(world_git -C "$HRC" show "HEAD:$HR_OVR/SKILL__Rule-9.md")" = "$hr_r9_head" ] \
+   && [ "$(hr_st "$HR_OVR/SKILL__Rule-9.md")" = " M $HR_OVR/SKILL__Rule-9.md" ] \
+   && grep -qx '+OPERATOR NOTE before the pull.' <<< "$hr_r9_diff" \
+   && [ "$(grep -c '^[-+][^-+]' <<< "$hr_r9_diff")" = 1 ]; then
+  ok "hr-b: an override dirty at T1, remedied in the window: the commit holds the remedy only, the operator's edit is left unstaged"
+else
+  bad "hr-b: in commit $(hr_in_commit "$HR_OVR/SKILL__Rule-9.md"), status '$(hr_st "$HR_OVR/SKILL__Rule-9.md")', HEAD blob: $(world_git -C "$HRC" show "HEAD:$HR_OVR/SKILL__Rule-9.md" | tr '\n' '|' | cut -c1-200)"
+fi
+if [ -n "$HR_RD" ] && [ "$(hr_in_commit "$HR_RD")" = 1 ] && [ -z "$(hr_st "$HR_RD")" ]; then
+  ok "hr-c: the consumer-drift override pull.sh register-drift wrote is in the deliver commit"
+else
+  bad "hr-c: '$HR_RD' in commit $(hr_in_commit "$HR_RD"), status '$(hr_st "$HR_RD")'"
+fi
+if [ -f "$HRC/control.txt" ] && [ "$(hr_st control.txt)" = '?? control.txt' ] && [ "$(hr_in_commit control.txt)" = 0 ]; then
+  ok "hr-d: the control file written in the same window is present, untracked and out of the commit"
+else
+  bad "hr-d: control status '$(hr_st control.txt)', in commit $(hr_in_commit control.txt)"
+fi
+if [ "$(world_git -C "$HRC" show "HEAD:$HR_ALPHA")" = "$(world_git -C "$HRD" show "$HRT2:core/skills/ai-dlc/steps/alpha.md")" ] \
+   && [ -z "$(hr_st "$HR_ALPHA")" ] && grep -q 'T2 UPSTREAM' "$HRC/$HR_ALPHA"; then
+  ok "hr-e: the core file register-drift reverted and the T2 apply rewrote is committed as theirs, no conflict, nothing left dirty"
+else
+  bad "hr-e: status '$(hr_st "$HR_ALPHA")' HEAD: $(world_git -C "$HRC" show "HEAD:$HR_ALPHA" | tr '\n' '|' | cut -c1-200)"
+fi
+hr_dec_blob="$(world_git -C "$HRC" show HEAD:_bmad-output/ai-dlc-update/pull-decisions.tsv 2>/dev/null)"
+if grep -q '	hr T1 disposition row$' <<< "$hr_dec_blob"; then
+  ok "hr-f: the T1 disposition row in pull-decisions.tsv survives the theirs change into the deliver commit"
+else
+  bad "hr-f: committed decisions: $(world_git -C "$HRC" show HEAD:_bmad-output/ai-dlc-update/pull-decisions.tsv 2>&1 | tr '\n' '|' | cut -c1-300)"
+fi
+
+report_end reconcile-pull-driver 130
