@@ -49547,3 +49547,101 @@ Consumer action: a consumer extension that cites "Check 15 and its direct-to-mai
 Provenance: batch 267, lead ai-dlc-9f, owner ai-dlc-bf, ruling log line of 15:57 EST; id allocated by the lead.
 
 verify: sh grep -q 'if any of the above do not match' core/skills/ai-dlc/steps/gate-validation.md || exit 9; ! grep -q 'Direct-to-main commit audit' core/skills/ai-dlc/steps/gate-validation.md
+## BL-1229 — no `reconcile-pull-driver` arm asserts how the `NOTE report-restarted` row renders in the update PR body under 0.1235.0's NOTE cap and fold
+
+**NOTE.** Filed 2026-11-22 (batch 265, close). Owner: `core/fixtures/reconcile-pull-driver/run.sh` (subject `core/skills/ai-dlc-update/reconcile/pull.sh`).
+
+Goal: the `NOTE report-restarted` row that `pull.sh` prints when it restarts the reconcile report reaches the update PR body the way the 0.1235.0 PR-body cap and fold intend, and an arm fails if it does not. One done condition: a `reconcile-pull-driver` arm drives a pull that restarts the report, through deliver's PR-body render, and asserts where the row lands, and a seeded mutant that drops the row from the body fails that arm.
+
+Baseline: `pull.sh:234` emits the row (`printf 'NOTE report-restarted %s -> ...`) on driver stdout. The kind is in neither `PL_NOTE_FULL` (`pull.sh:1150`) nor `PL_NOTE_COUNTED` (`pull.sh:1154`). Arm `nr-bind` partitions only the static `say NOTE <kind>` emit sites, so it does not see this row. Arms `report-restart` and `report-keep` assert the row on driver stdout, not in the PR body. 0.1235.0 shipped the restart and the PR-body cap and fold together, and the adversary pass over the combined tip was not run (batch-265 rulings record). The upstream full discharge rests on `report-restart` and `report-keep` alone.
+
+Work list:
+
+1. Decide the row's PR-body class (relayed whole, counted, or neither) from the fold's own contract in `pull.sh`, and add the kind to that set if it belongs in one.
+2. Add the arm named in the done condition, and fire it once by hand against a mutant that drops the row (that output goes in the sha message).
+3. Run the combined-tip adversary pass over the restart together with the cap and fold that batch 265 did not run, and fold its BLOCKERs.
+
+**LANDED (v0.1249.0).** batch 267, cluster U. The restart in `pl_write_region` keeps its stdout line (arms `report-restart` and `report-keep` read it) and now also writes `<gd>/ai-dlc-pull/report-restarted`: header `ai-dlc-report-restarted 1 <theirs>`, then one tab-form `NOTE` row per restart with the report path in column 3. `pl_note_rows` appends those rows when the header's theirs is the dirty snapshot's, so the PR body and the standalone `pr-body` carry the row. The kind `report-restarted` joins `PL_NOTE_COUNTED` (item 1: informational, prescribes no act). Arm `restart-prbody` of `core/fixtures/reconcile-pull-driver/run.sh` drives a restarting pull through the PR-body render and asserts where the row lands, fired once by hand against a mutant that drops the record's write (item 2). A re-pull at a theirs that was already delivered never relays the earlier pull's `report-restarted` row and keeps its own: deliver marks the record delivered (`pl_restart_mark_delivered` rewrites its header to `ai-dlc-report-restarted 1 <theirs> delivered`), a restart after delivery replaces the record, and the delivered-retry path of `pl_dirty_snapshot` deletes a record still marked delivered; the selection depends on order only, with no timestamps; arm `restart-prune` of `reconcile-pull-driver` covers it. Item 3 is discharged by this release's tip adversary pass.
+
+Step: n/a
+
+Related: BL-1228 (filed in the same close).
+
+Provenance: batch 265 close (lead ai-dlc-19); id allocated by the lead.
+
+verify: manual
+
+
+## BL-1243 — the pull's own `.gitignore` re-render un-ignores untracked pipeline scratch, and the deliver then commits it as the pull's own
+
+**DEFECT.** Filed 2026-11-25 (batch 267, cluster U). Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (`pl_dirty_snapshot`, `pl_deliver_select`).
+
+Goal: an untracked path that was ignored when the pull took its dirty snapshot is left out of the deliver commit as the operator's, even when the pull's own ignore re-render stops ignoring it. One done condition: a `reconcile-pull-driver` arm un-ignores a directory of untracked scratch between the snapshot and the deliver, and the deliver commits none of it and names the count, while a new untracked file that was never ignored is still committed.
+
+Baseline: the consumer's pull 0.1235.0 to 0.1241.0 re-rendered the managed block of `.gitignore` from the delivered schema (`core/scripts/sync-transient-ignore.sh`), which dropped a stale `_bmad-output/.beats/` line the schema never declared. 53 untracked beat-scratch files became `??` rows that were absent from the dirty snapshot (they were ignored then) and not under a pipeline-state name, so the third disjunct of `pl_deliver_select` took them as the pull's own and the deliver committed them; the consumer's pre-push then refused the commit (39 of the paths carry a sprint token outside the reserved slot). No `core/` file names `_bmad-output/.beats`; the cause is the selection, not that pattern.
+
+Work list:
+
+1. `pl_dirty_snapshot` writes the sidecar `dirty-snapshot.ignored` beside the snapshot: header `ai-dlc-dirty-ignored 1 <theirs> <run>`, then the `!!` rows of `git status --porcelain=v1 -z --ignored=matching --untracked-files=normal` (a matched directory ends in `/`). The snapshot header stays `ai-dlc-dirty-snapshot 2`.
+2. `pl_deliver_select` leaves a `??` path that is an exact sidecar entry or under one, only when the sidecar's theirs and run match the snapshot's; the keep and strong disjunct is untouched and wins; a missing or mismatched sidecar turns the filter off without a refusal.
+3. Deliver emits `deliver-ignored-untracked` (count, paths cut at 400 bytes, full list in `ai-dlc-pull/<run>/deliver.ignored` under the git dir); the kind joins `PL_NOTE_COUNTED`.
+4. Arm `ign-untracked` of `core/fixtures/reconcile-pull-driver/run.sh`, with its non-ignored twin, fired once by hand against a mutant that drops the ignore test.
+
+Residual, stated in the code comment: a file created after the snapshot under a FILE-level pattern that the pull drops is not caught; a file under a matched DIRECTORY is.
+
+**LANDED (v0.1249.0).** batch 267, cluster U, filed and closed in one release. Filed by the consumer as PC-S324-TRANSIENT-RENDER-UNDROPS-IGNORE-AND-DELIVER-COMMITS-UNTRACKED-SCRATCH (graph push-candidate ledger at ddc8acd90, :600-641). Items 1 to 4 built as listed; the remedy chosen is the snapshot-side record, not a refusal in `sync-transient-ignore.sh`, because it covers any ignore change the pull makes.
+
+Step: n/a
+
+Provenance: batch 267 cluster U (owner ai-dlc-68); id allocated by the lead ai-dlc-9f.
+
+verify: manual
+
+## BL-1244 — a model write to `layer-adjudication-register.jsonl` made before the apply is dropped from a re-deliver after the index returns to the snapshot's
+
+**DEFECT.** Filed 2026-11-25 (batch 267, cluster U). Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (`pl_always_stage`, `pl_deliver_select`).
+
+Goal: the layer-adjudication register is committed whole by every deliver, including a re-deliver after the unpushed deliver commit was undone. One done condition: a `reconcile-pull-driver` arm leaves the register modified and UNSTAGED before the apply, runs one deliver, and finds the register committed whole.
+
+Baseline: the consumer's model wrote 4 LC-A1 rows to `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl` before the apply; the first deliver committed them because the index had moved. After a red push the model ran `git reset --mixed HEAD~1` (no shipped text prescribes it), the index returned to the snapshot's, and the re-deliver read the register as dirty at the snapshot with its index unchanged, so it was not selected and the merge shipped the register without the 4 verdicts. The write lands before the snapshot, so it reads as operator dirt; only staging had carried it.
+
+Work list:
+
+1. Add the register to `pl_always_stage` beside the ledgers; every writer of the register is an LC-A1 verdict the next apply reads, so committing it whole is correct.
+2. Update the always-stage list in `pl_deliver_select`'s header comment and the step-8 commit set in `core/skills/ai-dlc-update/SKILL.md`.
+3. Arm `register-unstaged` of `core/fixtures/reconcile-pull-driver/run.sh`, fired once by hand against a mutant that removes the register from the set.
+
+Rejected: taking a path a previous deliver of the same theirs selected into the keep set; the keep route merges base = snapshot with worktree = theirs, returns HEAD and commits zero rows. Not built: other HARD remedies the model writes between dry-run and apply are still classified as operator dirt.
+
+**LANDED (v0.1249.0).** batch 267, cluster U, filed and closed in one release. Filed by the consumer as PC-S324-DELIVER-RESET-MIXED-DROPS-PRE-APPLY-MODEL-REGISTER-ROWS (graph push-candidate ledger at ddc8acd90, :643-679). Items 1 to 3 built as listed.
+
+Step: n/a
+
+Provenance: batch 267 cluster U (owner ai-dlc-68); id allocated by the lead ai-dlc-9f.
+
+verify: manual
+
+## BL-1252 — a pull retried at a theirs already applied wedges at apply
+
+**DEFECT.** Filed 2026-11-25 (batch 267, cluster Y). Owner: `core/skills/ai-dlc-update/reconcile/pull.sh` (`pl_stamp_gate`), `core/skills/ai-dlc-update/reconcile/apply.sh` (the stamp-at-theirs union-gate refusal, `:651`).
+
+Goal: a `pull.sh dry-run` or `pull.sh apply` run at a `<theirs>` the consumer's stamp already records, or with a `<base>` that is not the stamp's commit, stops before any write and names a remedy that exits. One done condition: a `reconcile-pull-driver` arm runs dry-run and apply at the stamp's own `<theirs>` and with the pre-delivery `<base>`, finds `REFUSED <cmd>-already-applied` or `REFUSED <cmd>-base-stale` with the branch list, HEAD, the snapshot, the report and `pull-writes.delivered` unchanged, and finds apply.sh's `:651` refusal naming a remedy that exits in every state it can be reached in.
+
+Baseline: a same-`<theirs>` retry that held the pre-delivery `<base>` was refused at `apply.sh:651` (STAMP-MOVED) only after it had cut a branch, rewritten the snapshot and the report, and dropped `pull-writes.delivered`; `:651`'s remedy told the session to re-run with the same four arguments, which re-used the stale `<base>` and could not exit. A retry with `<base>` = the stamp's commit got past it and delivered a degenerate report onto the open PR.
+
+Cause: a held `<base>`. `pull.sh resolve` derives `<base>` from the stamp and refuses `<base>` = `<theirs>`; the dry-run and apply subcommands took whatever `<base>` they were given.
+
+Work list:
+
+1. `pl_stamp_gate` (G1): dry-run and apply, before `pl_setup`, print `REFUSED <cmd>-already-applied rc=2` when the stamp's `commit:` is `<theirs>`; the remedy is `pull.sh deliver` when `pull-writes.delivered` does not name it, else nothing to do.
+2. `pl_stamp_gate` (G1b, folded): `REFUSED <cmd>-base-stale rc=2` when `<base>` is not the stamp's commit; the remedy is the stamp's commit as `<base>`, or `pull.sh resolve`. A stale `<base>` against a new `<theirs>` was refused only at finish (`apply.sh:3537`), after writes.
+3. `apply.sh:651` keeps only the remedy that is true where it is reached, "nothing left to apply: deliver it"; the base-stale states are refused earlier by item 2.
+4. BUILT, state C (measured: it wedged before the change): a VERSION- or docs-only new `<theirs>` with `<base>` = the stamp whose `--for-apply` verify exits 3 with unseen=0 was refused at `:651` with no exiting remedy. The union gate's post-apply arm now keys on the resolved stamp commit equalling `<theirs>`, not on core-tree equality, so that pull proceeds with `NOTE blockers-resolved`. A pull to a ref whose `core/` tree equals the stamp's but that is an older or sideways commit is now decided by `--verify` like any other pull, not refused by the post-apply arm; that arm never protected it: with verify exit 0 the same state already proceeded.
+
+**LANDED (v0.1249.0).** batch 267, cluster Y, filed and closed in one release. Items 1 to 4 built as listed; `pull.sh` refuses at both gates before any write, `SKILL.md` lists the four refusals with their remedies and scopes `NOTE pull-delivered-retry` to a delivered `<theirs>` the checkout does not carry.
+
+Step: n/a
+
+Provenance: batch 267 cluster Y (owner ai-dlc-9c); id allocated by the lead.
+
+verify: manual

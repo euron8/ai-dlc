@@ -173,7 +173,7 @@ and work only what it hands back. Its header is the contract; the subcommands ar
 
 **Its lines.** `PULL run=<dir> key=<12> renders=<n>`; `REFUSED <what> rc=<n>`;
 `ASK <kind> <path> <digest> <question>`; `DECIDE <kind> <path> <verdict>`; `WORK classify <path>`;
-`NOTE pull-writes-recorded <n> <theirs>` (`record`, exit 0); `NOTE pull-writes-absorbed <path> recorded <blob|none> now <blob> by <apply|finish|merge>` (that step re-records a file changed since the pull's last driver step as the pull's own; never a refusal, and deliver discloses it); `NOTE pull-writes-rerecorded <path>` and `NOTE deliver-dirty-whole <path>` (deliver's disclosures); `HARD <row>`; `NEXT pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`
+`NOTE pull-writes-recorded <n> <theirs>` (`record`, exit 0); `NOTE pull-writes-absorbed <path> recorded <blob|none> now <blob> by <apply|finish|merge>` (that step re-records a file changed since the pull's last driver step as the pull's own; never a refusal, and deliver discloses it); `NOTE pull-writes-rerecorded <path>`, `NOTE deliver-dirty-whole <path>` and `NOTE deliver-ignored-untracked <n> ... <paths>` (deliver's disclosures; the last names untracked paths that were ignored when the pull began, left out of the commit); `HARD <row>`; `NEXT pull.sh finish [--carried-machinery-slice] <dist> <base> <consumer> <theirs>`
 (apply's last line when nothing it ran is outstanding: the next step, not a decision). **Exit** 0
 done, 2 refused or usage, 3 pending (an ASK row awaits an answer, a HARD row must be resolved
 before anything is written, `finish` withheld the stamp (an `advisory` row does not), or `merge` relayed a pointer-stub
@@ -1021,7 +1021,7 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    approval question. The report is a fixed filename: within one pull (one resolved base and
    theirs pair) each run replaces only its region and keeps the prose around it; a run for another
    pull restarts the report, sets the old one aside at `<run dir>/report.previous.md` and prints
-   `NOTE report-restarted <old pair> -> <new pair>`.
+   `NOTE report-restarted <old pair> -> <new pair>`, which deliver's PR body relays.
 
    **A bare invocation never writes, and nothing said during it authorizes a write.** An operator
    who resolves a conflict or asks for a specific fix while reading a dry run is giving an
@@ -1096,6 +1096,14 @@ operator answer, and it NEVER authorizes a write on its own: only `apply` on thi
    uncommitted at its written content: finish and deliver that pull with its own `<theirs>`, or
    discard its writes to those files yourself, then re-run apply. `NOTE pull-writes-unrecorded`
    (a pull begun under an engine that kept no record of its writes) refuses nothing.
+
+   **`pull.sh dry-run` and `pull.sh apply` refuse before any write (exit 2) on the stamp.**
+   `REFUSED dry-run-already-applied` and `REFUSED apply-already-applied`: the stamp's `commit:` is
+   this `<theirs>`. Run `pull.sh deliver` with this pull's arguments when
+   `<git-dir>/ai-dlc-pull/pull-writes.delivered` does not name `<theirs>`; when it does, nothing is
+   left to do, and a new pull needs a newer `<theirs>`. `REFUSED dry-run-base-stale` and
+   `REFUSED apply-base-stale`: `<base>` is not the stamp's commit. Re-run with the stamp's commit as
+   `<base>`, or run `pull.sh resolve <consumer>`, which derives it.
 
    **On exit 3, nothing was written.** For each `ASK` row, ask its question (*The driver* above)
    and act on the answer. For each `HARD` row, resolve it as `reconcile/detector-rows.md` gives
@@ -1374,7 +1382,7 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
    `<git-dir>/ai-dlc-pull/pull-writes.delivered`, and the next `<theirs>`'s unfinished check skips a
    record whose `<theirs>` it names; writing a new record of the pull's writes (`finish`, `merge`,
    `record`, or an `apply` that runs `apply.sh`) removes that file. An `apply` that stops at its ASK
-   rows (or refuses) before running `apply.sh` writes no record, so the file stays. An `apply` for a `<theirs>` already delivered prints `NOTE
+   rows (or refuses) before running `apply.sh` writes no record, so the file stays. An `apply` for a delivered `<theirs>` that the checkout does not carry (the stamp is below it) prints `NOTE
    pull-delivered-retry`, drops the old record and takes a fresh snapshot.
    `REFUSED deliver-dirty-overlap` follows one `NOTE deliver-dirty-overlap <path> overlap|unrecorded`
    per file that was already dirty when the pull began, that the pull also changed, and whose
@@ -1537,7 +1545,8 @@ may invoke a skill the unchanged install lacks. Report exit 1 `FAIL:` lines as d
      prefix therefore cannot occur, and one that appears reads exactly like a sweep.
    - **Commit** the pull's own writes and nothing else, on the step-6 reconcile branch: the
      step-7 writes and the step-8 ledger writes above (the ledger and
-     `push-candidate-ledger.archive.md`, `operator-answers-history.md`), the paths that were clean when
+     `push-candidate-ledger.archive.md`, `operator-answers-history.md`), the
+     layer-adjudication register (`layer-adjudication-register.jsonl`), whole, the paths that were clean when
      the first apply ran except the pipeline's own state files
      (`.claude/schemas/pipeline-state-paths.json`) that no record of this pull names, and, for a file
      already dirty then that the pull also changed, only the pull's change to it; the

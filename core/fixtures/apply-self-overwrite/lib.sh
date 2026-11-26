@@ -269,8 +269,9 @@ p_rowtext() {
 
 # ASSERTION 6 (THE DEFECT): the bare re-run refuses AND diagnoses the post-apply state. Keyed on
 # the RECORD the gate matched: the refusal prints `records <sha>` where <sha> is the stamp's
-# `commit:`, which a message that merely lists a third cause cannot print. The row name
-# `driver-self-update` is the bound token the diagnosis cross-references. The refusal itself is
+# `commit:`, which a message that merely lists a third cause cannot print. The remedy
+# `nothing left to apply: deliver it` is the one the gate prints only when the stamp's commit IS
+# theirs, the state a bare re-run after apply is in. The refusal itself is
 # asserted too — rc=1, marker still GONE, stamp unmoved — because the carve-out that lets this run
 # through is a mutant in the battery, and it is the wrong fix.
 p_diag() {
@@ -280,7 +281,7 @@ p_diag() {
   sha="$(stamp_sha "$d")"
   WHY="rc=$rc marker=$(marker "$d") stamp=$sha stderr: $(head -c 200 "$d/out2.err" | tr '\n' ' ')"
   [ "$rc" -eq 1 ] && [ "$(marker "$d")" = GONE ] \
-    && grep -qF "records ${sha}" "$d/out2.err" && grep -q 'driver-self-update' "$d/out2.err" \
+    && grep -qF "records ${sha}" "$d/out2.err" && grep -qF 'nothing left to apply: deliver it' "$d/out2.err" \
     && ! grep -q 'Either upstream moved' "$d/out2.err" || return 1
   WHY="$sha"
 }
@@ -297,7 +298,7 @@ p_stale() {
   WHY="rc=$rc, marker $(marker "$d"), stderr: $(head -c 200 "$d/out1.err" | tr '\n' ' ')"
   [ "$rc" -eq 1 ] && [ "$(marker "$d")" = GONE ] \
     && grep -q 'Either upstream moved' "$d/out1.err" \
-    && ! grep -q 'records [0-9a-f]' "$d/out1.err" && ! grep -q 'driver-self-update' "$d/out1.err"
+    && ! grep -q 'records [0-9a-f]' "$d/out1.err" && ! grep -qF 'nothing left to apply: deliver it' "$d/out1.err"
 }
 
 # ASSERTION 8 (the state v0.493.0 got WRONG): a marker over an UNWRITTEN tree is not post-apply.

@@ -541,39 +541,23 @@ if [ "$FINISH" = 0 ] && [ "$CLASSIFY_CHECK" = 0 ]; then
     if [ "$_ug_rc" -eq 0 ]; then
       say NOTE report-verified "${UNION_REPORT#"${CONSUMER}"/}" "union-gate condition (1): the approved report's mechanical region matches what the detectors render at THIS run's theirs ($THEIRS).${_ar_note}"
     else
-      # THE THIRD CAUSE, DECIDED RATHER THAN LISTED. A region also fails to match when an apply
-      # of THIS theirs has already written this tree: the approved report describes the tree
-      # BEFORE that apply moved it, so the detectors now render every applied path as
-      # already-at-theirs and the bytes cannot agree. Measured on the reference consumer's
-      # 0.482.0 -> 0.489.0 pull, by obeying the driver-self-update row this file used to emit:
-      # rc=1, 26 rows moved UPSTREAM-ONLY -> ALREADY-AT-THEIRS, upstream unmoved, nothing
-      # hand-edited -- and the message named the two causes that were false and not the one
-      # that was true. The REFUSAL stands either way (there is nothing left for this run to
-      # write); the DIAGNOSIS is what was wrong. It is decided from the STAMP's `commit:` alone,
-      # compared by `core/` TREE, for the reason the --finish identity guard below gives: two
-      # refs can differ as commits while the bytes this pull writes are identical.
-      #
-      # NOT FROM THE IN-FLIGHT MARKER, and v0.493.0 shipped that and had to take it back. The
-      # marker's `theirs:` is written by THIS program, from THIS run's `$THEIRS`, before phase 1
-      # writes anything -- so `marker.theirs:core == THEIRS:core` holds by construction on every
-      # re-run with the same fourth argument, whatever the tree contains. It records that a run
-      # BEGAN, never that the tree was WRITTEN. Measured: a marker left by an aborted run over a
-      # tree still byte-identical to base made the diagnosis fire, and the `--finish` that
-      # message then offered stamped 2.0.0 over a tree at 1.0.0 -- the PC-S304 shape, reached
-      # through advice. A withheld-stamp re-run therefore falls through to the listed message
-      # below, which now names this cause as a POSSIBILITY; under-firing is the safe direction.
-      #
-      # THE STAMP IS A CLAIM ABOUT THE TREE, NOT A MEASUREMENT OF IT. It says an earlier apply
-      # brought this tree to theirs; it cannot say what was done by hand since. So the diagnosed
-      # message asserts only what the stamp asserts, states that limit, and prescribes nothing
-      # that writes: no `--finish`, no "nothing left to write". Absent or unresolvable stamp
-      # falls through to the listed message, never to a pass.
+      # THE THIRD CAUSE: A POST-APPLY RE-RUN. When the stamp's `commit:` and THEIRS both resolve in
+      # DIST (rev-parse ^{commit}) and are the same commit, an earlier apply or finish already
+      # brought this tree to theirs, and the approved report describes the tree before that apply,
+      # so it cannot verify. The key is the commit, never the `core/` tree: a theirs whose
+      # `core/` equals the stamp's but whose commit differs is a new pull, and its re-render
+      # belongs to the re-approval branch below. The in-flight marker never decides it: this
+      # program writes the marker's `theirs:` from THIS run's argument before writing anything.
+      # The stamp is a claim about the tree, not a measurement of it; the message states that
+      # limit. An absent stamp, a stamp with no `commit:` line, or a side that does not resolve
+      # falls through to the branches below, never to a pass.
       _ug_at=""
-      _ug_tt="$(git -C "$DIST" rev-parse "${THEIRS}:core" 2>/dev/null || true)"
       _ug_sc="$(sed -n 's/^commit:[[:space:]]*//p' "$CONSUMER/.claude/.ai-dlc-version" 2>/dev/null | head -1)"
-      if [ -n "$_ug_sc" ] && [ -n "$_ug_tt" ] \
-         && [ "$(git -C "$DIST" rev-parse "${_ug_sc}:core" 2>/dev/null || true)" = "$_ug_tt" ]; then
-        _ug_at="$_ug_sc"
+      if [ -n "$_ug_sc" ]; then
+        _ug_so="$(git -C "$DIST" rev-parse -q --verify "${_ug_sc}^{commit}" 2>/dev/null || true)"
+        if [ -n "$_ug_so" ] && [ "$_ug_so" = "$(git -C "$DIST" rev-parse -q --verify "${THEIRS}^{commit}" 2>/dev/null || true)" ]; then
+          _ug_at="$_ug_sc"
+        fi
       fi
       # THE FOURTH CAUSE, DECIDED BY --verify ITSELF (exit 3) AND THE COMMON ONE. SKILL.md step 7
       # requires every HARD-* blocker resolved BEFORE this program writes, and each resolution
@@ -648,7 +632,7 @@ if [ "$FINISH" = 0 ] && [ "$CLASSIFY_CHECK" = 0 ]; then
       # a pointer to a tool the operator must re-run. Forwarded whole, before the verdict line.
       printf '%s\n' "$_ug_verr" >&2
       if [ -n "$_ug_at" ]; then
-        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS) — and the consumer's stamp records ${_ug_at}, whose core/ tree is theirs'. That stamp says an earlier apply already brought this tree to theirs, so this is a post-apply re-run (the one the driver-self-update row used to prescribe): the approved report describes the tree BEFORE that apply moved it, and a report rendered then cannot verify against the tree as it now stands. The stamp is a claim about the tree, not a measurement of it — if a core file or the report was changed by hand since, this refusal cannot see that. To see the current driver's reading of this tree, re-run the dry run at $THEIRS so the report is rendered from the tree as it now stands, re-approve it, then apply. NOTHING HAS BEEN WRITTEN."
+        err "the report at ${UNION_REPORT#"${CONSUMER}"/} does not match what the detectors render at this run's theirs ($THEIRS) — and the consumer's stamp records ${_ug_at}, which is this theirs, so an earlier apply already brought this tree to theirs and this is a post-apply re-run: the approved report describes the tree BEFORE that apply moved it, and a report rendered then cannot verify against the tree as it now stands. The stamp is a claim about the tree, not a measurement of it — if a core file or the report was changed by hand since, this refusal cannot see that. There is nothing left to apply: deliver it, and a new pull needs a newer theirs. apply.sh has written nothing; under pull.sh the update branch and the dirty snapshot it took stand."
       elif [ "$_ug_rc" -eq 3 ]; then
         # The line is cut with parameter expansion after ONE awk read, so no second reader of the
         # grammar exists here. A line that is absent or malformed refuses: it is never read as
