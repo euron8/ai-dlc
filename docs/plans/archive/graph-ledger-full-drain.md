@@ -19972,3 +19972,5 @@ Moved from action 1 of the live plan at the batch-268 close, word for word. It i
    against what the lead read) plus a fixture that pins it. Do not propose a replay as a close
    condition, and do not file an entry whose close needs one. The ruling's record is in the
    archive, in batch 147's block.
+
+Also moved from action 1's opening paragraph: the scoping rule by invoker was an "Operator instruction, given at batch 52", and the rule not to merge while a dispatched hand is out cited "batch 63's merged branch was green at every phase when its second adversary returned two BLOCKERs, and batch 66's was green when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE."
