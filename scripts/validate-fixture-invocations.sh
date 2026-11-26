@@ -140,7 +140,8 @@
 #   `bash -c` wrapper takes the tag, which leaves the subject under it untagged, so C1 fires on it; a pid reused
 #   within one run resolves to the LATEST row with that pid, so a child logged after a reuse but parented by the
 #   earlier start is misattributed (no fixture measured reaches it); a parent that logged nothing (under its own
-#   `env -i`) leaves its child parentless.
+#   `env -i`) leaves its child parentless; a direct untagged child whose parent is a REAL `#inproc` marker id is
+#   accepted as covered (markers are not authenticated: only J3's exact row for the child bounds it).
 #
 # usage, also:  validate-fixture-invocations.sh --b2-census [--root R]
 #           the static J6 walk over R/core/fixtures/*/ (default: this script's tree), after the self-probe:
@@ -208,6 +209,7 @@
 # FXC-IDENTITY 1 06ebe5e1e7ca5b54a66a90709d4951f8be83b6eaf9a247a913968705652a23b8 nested-cell attribution (BL-1164): an inner fixture's declared cells credit only a tag whose start has that fixture's run.sh among its logged ancestors, so the judge can only move a fixture from FAIL to pass; every recorded pass stays valid
 # FXC-IDENTITY 1 76851c1313b10778fef27862ae33216f89ffabfa6398bd73a9c22c7b4dc4c930 nested-cell credit is opt-in (BL-1164): a fixture declares drives <inner> in its cells.decl for an inner fixture's cells to credit a tag, a drives row naming itself, its own shard parent or a fixture with no cells.decl is a C2 error, the ancestry match is anchored on the judged root, and the credit only narrows; no recorded pass carried a credited tag (the one fixture that had one, the seam, is an allowlist row and not judged)
 # FXC-IDENTITY 1 856140b0b6298704b078d84148c92f30ab42003c4014fa03d01b6a0e95549b66 the static join (arm R) credits the cli and e2e cells of a fixture a accepted `drives <X>` row names while inputs.decl holds its cells.decl, as fxc_judge's caller does (BL-878); fxc_judge is unchanged, so no counted fixture's judgement moves
+# FXC-IDENTITY 1 2ddb1d33bc7849e854f899b86676b212d69f047ac859390078807478ff4503d2 the marker-row equality (BL-878): per subject with an `#inproc` marker, markers must equal its <log>.inproc rows or every start covered through one reads C1; a log with no marker judges byte-identically, and the one marking fixture (owed-derivations-c) reruns on its own receipt edit
 set -u
 FXC_FORMAT=1
 
@@ -576,7 +578,7 @@ fxc_guarded() {
     END { if (cur != "") print (g ? "G" : "U") "\t" cur }' "$@" 2>/dev/null
 }
 
-# fxc_cells_judge <targets> <cells parse rows> <log>: THE DYNAMIC ARMS over one counted run's start log. A start is
+# fxc_cells_judge <targets> <cells parse rows> <log> [<outer> <root> [<log>.inproc]]: THE DYNAMIC ARMS over one counted run's start log. A start is
 # a start of subject S when its logged path, NORMALISED as fxc_count normalises it, equals S or ends in `/S`, S being
 # a path row of invocations.decl -- the declared path only: a renamed or relocated mutant copy is BL-878 item 3's
 # uncounted route, not this arm's subject. The longest matching target wins. Rows:
@@ -587,9 +589,15 @@ fxc_guarded() {
 #   SUM\t<subject starts>\t<tagged>\t<nested-covered>
 # The parent is looked up as the LATEST preceding row with that pid, so a pid reused later in a long run resolves to
 # the start that was live when the child logged. KNOWN ROUTE: a parent that is itself unlogged (a start under its own
-# `env -i`) is absent, so its child reads as having no parent.
+# `env -i`) is absent, so its child reads as having no parent. THE MARKER-ROW EQUALITY: for a subject with at least one
+# `#inproc` marker, the marker count must equal the <log>.inproc row count for that subject, or every start covered only
+# through one of its markers reads C1. The 6th argument is that file; absent, missing or unreadable it reads as empty
+# (/dev/null). The J7 call passes none.
 fxc_cells_judge() {
-  awk -F'\t' -v outer="${4:-}" -v root="${5:-}" 'function strip(p) { sub(/^\/private\//, "/", p); return p }
+  local ip="${6:-}"; [ -n "$ip" ] || ip=/dev/null
+  # An .inproc operand awk cannot open (missing, unreadable) is replaced by /dev/null before the main loop reads it.
+  awk -F'\t' -v outer="${4:-}" -v root="${5:-}" 'BEGIN { if ((getline ipl < ARGV[3]) < 0) ARGV[3] = "/dev/null"; else close(ARGV[3]) }
+    function strip(p) { sub(/^\/private\//, "/", p); return p }
     function nrm(s,   lead, n, a, i, k, o, r) {
       lead = (substr(s, 1, 1) == "/"); n = split(s, a, "/"); k = 0
       for (i = 1; i <= n; i++) {
@@ -619,17 +627,22 @@ fxc_cells_judge() {
       return s }
     # An `#inproc` marker (THE IN-PROCESS PARENT MARKER, beside THE EMISSION SITE) is no start: it names its id as a parent
     # whose subject is field 5 matched as a start path is, and links to field 4 for innerok, then stops.
-    $1 == "#inproc" { LP[$2] = subj($5); PP[$2] = $4; next }
+    # THE MARKER-ROW EQUALITY: per subject, the `#inproc` markers must equal the <log>.inproc rows (6th argument, matched
+    # by the same longest-target match). A start covered only through a marker of a subject whose counts differ is held
+    # and printed as C1 in END; a subject with no marker is never held, so a log with no marker judges as before.
+    FILENAME == ARGV[3] { if ($0 != "") IR[subj($0)]++; next }
+    $1 == "#inproc" { LP[$2] = subj($5); PP[$2] = $4; MK[$2] = 1; MC[LP[$2]]++; next }
     { s = subj($1)
       par = ($4 != "" && ($4 in LP)) ? LP[$4] : ""
       LP[$2] = s; if (!($2 in PA0)) PA0[$2] = $1; PA[$2] = $1; if ($4 != $2) PP[$2] = $4
       if (s == "") { if ($3 != "") print "C2\t-\t" $3 "\t" $1; next }
       ns++
       if ($3 != "") { if ((s SUBSEP $3) in C) { C[s SUBSEP $3]++; nt2++ } else if (innerok(s, $3, $4)) nt2++; else print "C2\t" s "\t" $3 "\t" $1; next }
-      if (par != "" && ((par SUBSEP s) in N)) { nn++; next }
+      if (par != "" && ((par SUBSEP s) in N)) { nn++; if ($4 in MK) { nh++; HS[nh] = s; HL[nh] = $1; HP[nh] = par }; next }
       print "C1\t" s "\t" $1 "\t" (par == "" ? "-" : par) }
     END { for (k in C) if (C[k] != 1) { split(k, a, SUBSEP); print "C3\t" a[1] "\t" a[2] "\t" C[k] }
-          print "SUM\t" ns + 0 "\t" nt2 + 0 "\t" nn + 0 }' "$1" "$2" "$3"
+          for (i = 1; i <= nh; i++) if (MC[HP[i]] != IR[HP[i]] + 0) { nn--; print "C1\t" HS[i] "\t" HL[i] "\t" HP[i] }
+          print "SUM\t" ns + 0 "\t" nt2 + 0 "\t" nn + 0 }' "$1" "$2" "$ip" "$3"
 }
 
 # ARM P2 (BL-982 subject (b), THE TREE-WIDE IN-PROCESS DRIVE; it subsumes P1, whose pairing rule it keeps). Every
@@ -1432,7 +1445,7 @@ EOF
       [ -n "$p" ] && [ "$p" != "$ck" ] && [ -f "$root/core/fixtures/$p/cells.decl" ] || continue
       fxc_cells_parse "$root/core/fixtures/$p/cells.decl" | awk -F'\t' -v OFS='\t' '$1 == "R" && ($3 == "cli" || $3 == "e2e") { $3 = "inner"; print }' >> "$w/cells"
     done < "$w/inner"
-    fxc_cells_judge "$w/tgts" "$w/cells" "$jl" "$ck" "$root" > "$w/cj"
+    fxc_cells_judge "$w/tgts" "$w/cells" "$jl" "$ck" "$root" "$log.inproc" > "$w/cj"
     nf="$(grep -cE '^C[123]	' "$w/cj")" || nf=0
     ne="$(grep -c '^E	' "$w/cells")" || ne=0
     awk -F'\t' '$1 == "R" && $3 == "cli" { print $4 }' "$w/cells" | LC_ALL=C sort -u > "$w/cli"

@@ -30,7 +30,7 @@ context Claude sees.
 This file does NOT contain AI/DLC autonomy rules, session model
 directives, or pipeline recovery protocols. If you are looking for
 Rule 1 through Rule 26, the Post-Compact Recovery Protocol, or the
-context threshold reminders, read SKILL.md instead.
+context threshold reminders, read `.claude/skills/ai-dlc/SKILL.md` in `offset`/`limit` chunks of at most 16 KB instead.
 
 ---
 

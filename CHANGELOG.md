@@ -19,6 +19,28 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1260.0] - 2026-11-26
+
+### Post-compact recovery and the consumer CLAUDE.md template order the SKILL.md Read in bounded chunks (BL-1212)
+
+- The post-compact recovery text now orders its Read of `.claude/skills/ai-dlc/SKILL.md` in `offset`/`limit` chunks of at most 16 KB, so it no longer orders a whole Read that context-mode refuses above 16 KiB. The paragraph is one character shorter, so gate-resume's character bounds are unaffected.
+- The CLAUDE.md template's pointer to SKILL.md names the full path and orders the same chunked Read.
+- `postcompact-rulebook-recovery` assertion 2e also requires the SKILL.md Read line in the hook's output to name `offset` and `limit`.
+- BL-1212 stays open on item 3: the denial itself needs an allowlist or size setting in context-mode upstream.
+
+### The ledger-reverify shard question is answered with no change, since the recorded costs show no move gains, and one unbuildable requirements item is closed (BL-1255 stays open for its outcome reading; BL-1175)
+
+- BL-1255 is answered on its reading of the per-unit durations record: shard a reads 109 s against a longest unit of 322 s, shards a and b are within 4 s, and a move between shards conserves summed unit cost, so no move gains. Nothing changes for consumers, and the entry stays open for its outcome reading.
+- BL-1175 item (h), the unquoted operator attributions, closes unbuilt: there is no verbatim text to verify. The entry stays open on its other owed items.
+
+### The invocation judge no longer accepts an in-process parent marker with no in-process pass behind it (BL-878, partial)
+
+- For anyone whose fixture writes `#inproc` parent markers, which today is only the shipped `owed-derivations-c` fixture. `scripts/validate-fixture-invocations.sh` now counts, for each subject that has a marker, its markers against the in-process passes `fx_inproc` logged to `<log>.inproc` for that subject. When the two counts differ, every separate-program start that was covered only through one of that subject's markers fails C1. Before this, a marker with no pass behind it could make a direct, untagged start of the differential read as covered.
+- `core/fixtures/owed-derivations/receipt-bl706.sh` now marks cell eq's two in-process `apply.sh` passes as well, so the receipt writes 12 markers for its 12 passes. No counted row of `owed-derivations-c` changes.
+- A start log with no marker is judged byte for byte as before. The judge's format stays 1, so no other fixture's counted verdict is invalidated.
+- Still not prevented, and now listed in the judge header: a direct untagged child whose parent is a real marker id is accepted. Only the exact J3 row for that child bounds it.
+- The BL-878 record also reconciles the owed P2 set: the "341 P2 drives" named earlier is 339 live rows (192 BL-982, 147 BL-1152). Two conversions are still owed: trunk-audit-gate's 10 e2e cells, and layer-readopt-gate's units e2, gh, j and stub.
+
 ## [0.1259.0] - 2026-11-26
 
 ### dispatch-model-guard stops reading every script; the check that deliverable_of has no fourth copy moves into the distribution's push validator (BL-878)

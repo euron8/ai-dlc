@@ -234,6 +234,12 @@ if [ -n "$DG_LINE" ] && grep -q 'offset' <<<"$DG_LINE" && grep -q 'limit' <<<"$D
 else
   bad "the directive's digest Read line is missing or does not name offset/limit chunks (line: ${DG_LINE:-<none>})"
 fi
+SM_LINE="$(grep -A1 'Read$' <<<"$CTX" | grep -B1 'ai-dlc/SKILL\.md' | tr '\n' ' ')"
+if [ -n "$SM_LINE" ] && grep -q 'offset' <<<"$SM_LINE" && grep -q 'limit' <<<"$SM_LINE"; then
+  ok "the directive's SKILL.md Read line names offset/limit chunks"
+else
+  bad "the directive's SKILL.md Read line is missing or does not name offset/limit chunks (line: ${SM_LINE:-<none>})"
+fi
 SK_LINE="$(grep -A1 'postcompact-digest\.md. in' "$SKILL" | head -2 | tr '\n' ' ')"
 if [ -n "$SK_LINE" ] && grep -q 'offset' <<<"$SK_LINE" && grep -q 'limit' <<<"$SK_LINE"; then
   ok "SKILL.md's verification-turn digest Read names offset/limit chunks"
