@@ -42,8 +42,8 @@ that file.
 **To rotate, write the new batch record above the newest one FIRST, then run `bash scripts/plan-rotate.sh docs/plans/graph-ledger-full-drain.md --apply`;
 the newest record is never taken.** **Never a discharge banner in the head window** — that
 silences P9 through P13 on this file. **A record is moved whole, including any standing rule
-written inside it**, so a rule that must outlive its batch belongs in `### NEXT ACTIONS`, not in
-a batch record.
+written inside it**, so a rule that must outlive its batch belongs in action 1r under
+`### NEXT ACTIONS`, not in a batch record.
 
 **BATCH 268 — CLOSED.** Lead `ai-dlc-72`. Landed nine releases (`git log --format='%h %s' 3a3415e9f..1ceb8a0eb`; PR numbers and merge shas from `gh pr view <n> --json mergeCommit`): 0.1251.0 = PR #1661 -> `ddf789007`, 0.1252.0 = PR #1662 -> `bfc5c1745`, 0.1253.0 = PR #1663 -> `bbdbb3dca`, 0.1254.0 = PR #1664 -> `d34c500d1`, 0.1255.0 = PR #1665 -> `bd0d090c7`, 0.1256.0 = PR #1666 -> `9ebe3dc35`, 0.1257.0 = PR #1667 -> `a7b5cd294`, 0.1258.0 = PR #1668 -> `eee5f41a4`, 0.1259.0 = PR #1669 -> `1ceb8a0eb`; then the batch-close docs commit that adds this record. Each landing was verified by tree (origin/main tree equal to the pushed tree, the previous main tree DIFF as control). Owners: S `ai-dlc-ad`, F `ai-dlc-7c`, R `ai-dlc-32`, W `ai-dlc-a3`, M `ai-dlc-28`, H `ai-dlc-39`, C `ai-dlc-26`, G `ai-dlc-62`, T `ai-dlc-89`; all CLOSABLE.
 - **What the batch delivered, in plain words:**
@@ -56,7 +56,7 @@ a batch record.
   - Post-compact recovery and `SKILL.md` read the digest in bounded chunks under context-mode's 16 KiB Read cap (0.1257.0; a local mitigation; PC-S323-CONTEXT-MODE stays open on its `Not-discharged:` line under BL-1212).
   - `review-shard-merge`'s BL-980 self-probe builds its repo with `world_git` (0.1258.0; BL-1162 closed; BL-541's warning measured and NOT built, its false-positive set non-separable).
   - `deliverable_of`'s fourth-copy check moved from `dispatch-model-guard`'s whole-tree grep into invariant I134 inside I103's shared scan; the read-set tracer's STAT LOSS guard trusts one exact (Python, `core`, first-report) row; `dispatch-model-guard` declares `core/scripts/content-seal.sh`, and its read-set trace is recorded, closing BL-878 item 6 (0.1259.0; BL-878 stays PARTIAL).
-- **Rulings that bind later batches** (carried from batches 265 to 267, still binding): batch 262's sprint ruling is NOT satisfied; rule 8's "never `--merge`" for `readopt-override`, remedy `--stamp retire` then file the intensity rows upstream; BL-583 item 6 (delete a fixture only when a survivor asserts its rule); a trace reading a path its `inputs.decl` omits goes to BL-1155, never into a docs-only close; one solo retake per STAT LOSS; `self-update-gate-d`'s narrowing is a BL-1151 decision; a tip adversary's DEFECT is re-tiered to BLOCKER and folded only when it is a fail-open protection hook or breaks the release's own use case; a PC id a release mitigates but does not discharge appears in its message only on one canonical `Not-discharged:` line; the pregate before a release that edits `.githooks/pre-push` is a PLAIN run with the main checkout detached at that release's sha, because a `--member` run writes no pregate record and the push is refused without one; the owner rule reserving `invocations.decl` and `tools.decl` moves to the lead stands. New this batch: (1) OPERATOR GRANT: the STAT LOSS guard in `core/scripts/derive-fixture-readsets.sh` trusts exactly one row, a Python process whose FIRST report is a metadata-only lookup of the directory `core`; the trust root and its evidence are named in the guard header and in BL-878 item 9; no other exemption is granted. (2) After a read-set trace, one records-only commit may follow if its diff joins 0 against the traced read set, the fixture's `inputs.decl` rows and the fixture's own directory (a control per source), and the fixture key is read unchanged either by a store-independent read (`hermetic-run.sh --root <tree> --key-only <fx>`) or by `predict-push-set.sh` BEFORE pregate (pregate seeds the verdict store, after which a moved key reads as skipped). (3) Retrace windows open only with no push running, and every push waits until the main checkout is released. (4) A fixture's undeclared recursive scan can hide a real input: `content-seal.sh` was read by `dispatch-model-guard` (an existence probe in `validate-gate-adjudication.sh`) and became visible only after the scan was deleted; a trace taken while such a scan runs cannot be compared file by file.
+- **Rulings that bind later batches:** action 1r under `### NEXT ACTIONS` holds the standing list. This batch added four: the operator-granted STAT LOSS trust root, the records-only commit after a trace, retrace windows, and an undeclared recursive scan hiding a real input.
 - **Close notes (NOTE tier):** BL-806 records THREE false-positive classes, not two; the third is a single arm-1 fire on a past dispatch dated from its nearest stamp. The per-file conditional comment strip on `run.sh` (`self-update-gate/run.sh` is keyed whole) has no rulebook carrier, only an operator memory note.
 - **Owed, as facts:** BL-1008 (W's open rows); BL-1155's remaining items; BL-1212 item 3 (upstream context-mode setting); BL-878 items other than 6; BL-583, BL-1167 and BL-1255 outcome readings (graph's sprint 324 is not closed: `sprint 324 closed` 0 at 10:46, controls 323 = 1, 999 = 0); BL-1256 (filed: the hard-remedies record never ages); BL-541 and BL-806 open items; batch 265's owed list (BL-1221 item 3, BL-1207, BL-1187 item 3).
 - **Live entries** (each a `^## BL-` heading in `docs/backlog.md` at `1ceb8a0eb`, 39; derive with `grep -oE '^## BL-[0-9]+' docs/backlog.md`).
@@ -174,18 +174,9 @@ taken up when a BACKLOG ENTRY cites it. Prose is not a filing.
 T="$(git rev-parse --absolute-git-dir)/ai-dlc-derive"; mkdir -p "$T"   # this checkout's own derive scratch, never a shared /tmp path
 : > "$T"/derive-fence2.stamp   # emptied first, so the fences below refuse while this one is running
 D=/Users/n8/git/graph/_bmad-output/ai-dlc-update
-# THREE deliberate widenings, each one a measured defect:
-#   1. NO TRAILING SPACE after the id -- that space hid 43 of 63 bullet-form entries.
-#   2. THE CLASS INCLUDES `.` -- an id may embed a version, and [A-Z0-9-] truncates it into a
-#      FALSE MEMBER that joins against nothing and reports as no absence at all.
-#   3. THE HEADING ARM IS `^#{2,6}`, NOT `^##` -- see the FIFTH FORM below. A `### PC-` entry
-#      nested under another entry's heading was invisible for three consecutive batches.
-# Also measured: a backticked bullet id (`- **`PC-...`**`, which lib.sh's ledger_entry_id admits) hid the live
-# candidate and one archived id, and `[A-Z0-9.-]` truncated PC-S330-PREPUSH-LEAKS-GIT_DIR-INTO-EVERY-FIXTURE-SANDBOX.
-# The optional `-? ?` also admits the DASH-LESS `**<id>**` at column 0, which is the subject of
-# PC-S305-BARE-BOLD-ENTRY-IS-INVISIBLE-TO-EVERY-REVERIFY. An id ends non-dot.
-# The THIRD arm is the SIXTH FORM: a column-0 backticked id then ` —`, under an id-less section
-# heading. lib.sh's ledger_entry_shape() cannot see it; ledger-reverify.sh's lr_entries() can.
+# Grammar, each clause a measured defect (history in the archive): no trailing space after the id;
+# the class includes `.` and `_`; headings match `^#{2,6}`; a bullet id may be backticked or dash-less
+# (`**<id>**` at column 0); the third arm reads a column-0 backticked id then ` —`. An id ends non-dot.
 lids() { { grep -hE '^#{2,6} PC-' "$1" | sed -E 's/^#+ (PC-[A-Z0-9]([A-Z0-9_.-]*[A-Z0-9_-])?).*/\1/'
            grep -hE '^-? ?\*\*`?PC-[A-Z0-9]' "$1" | sed -E 's/^-? ?\*\*`?(PC-[A-Z0-9]([A-Z0-9_.-]*[A-Z0-9_-])?).*/\1/'
            grep -hE '^`PC-[A-Z0-9][A-Z0-9_.-]*` —' "$1" | sed -E 's/^`(PC-[A-Z0-9]([A-Z0-9_.-]*[A-Z0-9_-])?)`.*/\1/'
@@ -207,65 +198,10 @@ lids_ctl() { local rc; ( R=/Users/n8/git/ai-dlc/core/skills/ai-dlc-update/reconc
   [ "$rc" -eq 0 ] && return 0
   [ "$rc" -eq 1 ] && echo "STOP: lids() differs from the shipping ledger grammar on $1"
   return "$rc"; }
-# READ THE LEDGER AT THE CONSUMER'S SPRINT TIP, NOT FROM ITS WORKING TREE, AND NOT FROM `main`.
-# Measured at batch 85, which got this wrong TWICE IN ONE SESSION and in opposite directions.
-# That consumer branches per sprint and merges back at the retro, so a candidate filed AFTER the
-# sprint's PR merges sits on the sprint branch, committed and pushed, and is absent from `main`
-# until the retro merge. The working file answers with whatever is CHECKED OUT at that instant,
-# which the consumer changes while a batch is running.
-#
-# Batch 85 read the entry in full from the working tree at 02:00 (sprint tree checked out), then
-# read 0 twice afterwards (main checked out) and recorded the filing first as UNCOMMITTED and then
-# as WITHDRAWN. Two instruments agreed on a wrong answer because both were pointed at the wrong
-# ref. The consumer session supplied the correction; nothing in this derivation could have.
-# `git log -S ... -- <path>` keyed on `main` fails the same way and is the other half of the trap.
-#
-# So: resolve the sprint branch, and read the ledger THERE with `git show`. Report both counts
-# when they differ -- the delta IS the set of filings not yet on main, which is exactly the set a
-# sweep is looking for.
-# RECENCY IS THE WRONG KEY AND IT SHIPPED A WRONG ANSWER AT BATCH 89. `--sort=-committerdate |
-# head -1` picked a branch that was BEHIND main, and the subset control below fired at 7. The
-# obvious repair -- "the newest branch AHEAD of main" -- picked a branch carrying NO LEDGER FILE,
-# and `git show` on an absent path answers empty: live=0, silently, with every other control still
-# passing. Measured over all 22 consumer branches at batch 89: NO ref was a superset of main. Four
-# carried a ledger and each was a stale snapshot whose "extra" ids were ALL in main's ARCHIVE --
-# they predate closes and are not unmerged filings, which is the same output as a real filing.
-#
-# So qualify a ref on the PROPERTY that matters -- it carries the ledger AND its live set contains
-# main's -- and fall back to main, which is the answer whenever the retro has merged. Report the
-# candidates rather than electing one silently.
-#
-# THE GLOB WAS THE THIRD WRONG KEY, MEASURED AT BATCH 90. `ai-dlc/feature/*` and `*sprint*` are
-# two of the consumer's branch prefixes; its sprints also run under `ai-dlc/carry-over/*` (135
-# branches), `ai-dlc/bug/*` (19), `ai-dlc/fix-forward/*` and others. Batch 90's filing sat on
-# `ai-dlc/carry-over/chunk-max-usd-swap-sizing`, two commits ahead of main and UNPUSHED, and the
-# loop never visited it: `ledger ref: main`, every control green, live=55, and the filing invisible.
-# The candidate set is EVERY local branch ahead of main; the property test below is what keeps that
-# cheap and correct (a branch behind main fails the subset arm and is skipped).
-# THE ANCESTOR GATE WAS A CHECK THAT COULD NOT FIRE, AND IT IS GONE. `BL-270`, measured twice.
-# It required each candidate branch to CONTAIN `main`, and the consumer branches per sprint while
-# `main` advances independently, so a sprint branch DIVERGES rather than fast-forwarding. Measured
-# at filing: 0 of 723 non-main branches passed, while 178 CARRIED a ledger. Re-measured at batch
-# 130: 1 of 723 passed -- the one branch the consumer happened to have checked out -- so the loop
-# elected correctly BY LUCK, and would return to 0 at the next retro merge. Either way 177
-# ledger-carrying branches were never read.
-#
-# THE PROPERTY ARM BELOW IS THE CORRECT TEST AND WAS UNREACHABLE BEHIND THAT GATE. With the gate
-# removed it elects 3 refs, each with unexplained=0; a genuinely stale snapshot still fails.
-#
-# AND ELECTING ONE REF IS UNSOUND, WHICH IS WHY THIS IS A UNION. Measured at batch 130 over the
-# three qualifying refs: carry-over adds 4, story-1 adds 4, story-3 adds 4, and the UNION of adds
-# is **7** -- they are PAIRWISE INCOMPARABLE and overlap in exactly one id. No qualifying ref
-# dominates, so every single-ref rule loses real filings whichever tie-break it picks. `BL-270`'s
-# own "strict superset" claim was refuted on this input, both directions non-zero.
-#
-# THE UNION MUST SUBTRACT THE UNION OF THE ARCHIVES, OR IT RESURRECTS CLOSED CANDIDATES. Measured:
-# a bare union of the three live sets is 54, of which **6 ids are live on one qualifying ref and
-# ARCHIVED on another** -- candidates the consumer has closed, which a naive union re-opens.
-# Union-live MINUS union-archive is 48, and the 3 ids the carry-over branch "loses" to the other
-# two are exactly ids IT has archived. `main` is folded into both unions: it contributes nothing
-# today (48 either way, both directions 0) and it makes the empty-qualifying-set case correct by
-# construction rather than by a fallback.
+# Read the ledger on EVERY consumer ref, local and remote, never the working tree or `main` alone. A
+# ref qualifies when it carries the ledger AND its live set contains main's minus what it archived.
+# Live = the UNION of qualifying live sets minus the UNION of their archives (refs are pairwise
+# incomparable, and a bare union resurrects closed ids); `main` is a member of both unions.
 QUAL=0
 : > "$T"/union_live_raw.txt; : > "$T"/union_arch_raw.txt; : > "$T"/qual_refs.txt
 git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$T"/mainled.md
@@ -274,10 +210,7 @@ lids "$T"/mainled.md >> "$T"/union_live_raw.txt
 git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > "$T"/mainarch.md
 lids_ctl "$T"/mainarch.md
 lids "$T"/mainarch.md >> "$T"/union_arch_raw.txt
-# REMOTE BRANCHES TOO, MEASURED AT BATCH 174. The consumer moved a filing OFF its carry-over branch
-# onto its own pushed branch (`origin/ai-dlc-update/pc-s315-derive-readsets-whole-tree-copy`) and
-# reset the carry-over branch past it, so a `refs/heads`-only loop would have scored the candidate
-# absent. `origin/HEAD` is a symref, never a candidate.
+# Remote branches count too; `origin/HEAD` is a symref, never a candidate.
 for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' refs/heads refs/remotes/origin); do
   case "$b" in main|origin/main|origin/HEAD|origin) continue ;; esac
   git -C /Users/n8/git/graph cat-file -e "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" 2>/dev/null || continue
@@ -331,50 +264,22 @@ sort -u "$T"/union_arch_raw.txt > "$T"/arch.txt
 # LIVE IS THE UNION MINUS THE UNION OF ARCHIVES. An id archived on ANY qualifying ref has been
 # closed by the consumer and must not be resurrected by another ref's staler copy.
 comm -23 "$T"/union_live.txt "$T"/arch.txt > "$T"/live.txt
-# THE RAW SUBTRACTION IS NOT 0, AND A READER WHO "REPAIRS" IT BACK DELETES THE LOOP'S OWN
-# ACQUITTAL. The loop accepts a ref missing nothing main has THAT IT HAS NOT CLOSED -- the batch-113
-# repair -- so a ref on which the consumer has been closing candidates is LEGITIMATELY missing those
-# ids, and a bare `comm -23` counts every one of them. Measured at batch 114, sweep hand and lead
-# independently: raw **15**, all 15 in the elected ref's own ARCHIVE, UNEXPLAINED **0**. The line
-# below therefore subtracts the archive exactly as the loop does; the version without that
-# subtraction disagreed with its own premise and read as a broken loop on a correct derivation.
-# It is an ASSERTION on the loop, never a control -- a non-zero means the loop is broken, not that
-# the ledger moved, and a check that cannot fail reads exactly like one that passed. The
-# discriminating control is the one below it: the PRESENCE arm, which must be non-zero on main.
+# The assertion below subtracts the archive exactly as the loop does. It is an ASSERTION on the
+# loop, never a control: non-zero means the loop is broken. The PRESENCE arm is the control.
 lids "$T"/mainled.md > "$T"/live_main.txt
-# THE ASSERTION ARM NOW READS THE UNION'S OWN TWO FILES ON BOTH SIDES. It used to compute
-# `comm -23 live_main live | comm -23 - arch` against the ref the loop ELECTED -- so whenever the
-# loop fell back to `main`, it compared `main` with itself and answered 0 BY CONSTRUCTION. That is
-# `BL-270`'s second half, and it is why the gate could not be seen: the presence control read
-# non-zero because `main` does carry a ledger, `filings ahead` printed empty, and both controls
-# passed beside the wrong answer. `main` is now a MEMBER of the union, so its ids are in
-# `live.txt` unless the union archived them, and a non-zero here means a member ledger lost an id
-# no member closed -- which is a broken derivation, never a moved ledger.
-#
-# IT IS AN ASSERTION ON THE DERIVATION, NEVER A CONTROL. A check that cannot fail reads exactly
-# like one that passed; the discriminating controls are the two below it.
+# The assertion reads the union's own files on both sides (`main` is a member), so a non-zero means a
+# member ledger lost an id no member closed: a broken derivation, never a moved ledger.
 comm -23 "$T"/live_main.txt "$T"/live.txt | comm -23 - "$T"/arch.txt | wc -l   # assertion: 0, or the derivation is broken
 comm -13 "$T"/live_main.txt "$T"/live.txt           # the filings ahead of main. THIS is the new work.
-# AND THE CONSUMER'S UNCOMMITTED WORKING-TREE LEDGER, WHICH NO REF ABOVE CAN SEE. Batches 188 and 234
-# both read live 0 / unfiled 0 over committed refs while graph held real filings uncommitted in its
-# working tree -- batch 234's whole scope was five of them. An id printed here is an uncommitted filing
-# no committed ref carries; check each against "$T"/filed.txt (built below) before calling it unfiled.
+# The consumer's UNCOMMITTED working-tree ledger, which no ref can see. An id printed here is an
+# uncommitted filing; check each against "$T"/filed.txt (built below) before calling it unfiled.
 git -C /Users/n8/git/graph diff -- _bmad-output/ai-dlc-update/push-candidate-ledger.md | grep '^+' | sed 's/^+//' > "$T"/wt_added.md
 lids "$T"/wt_added.md | comm -23 - "$T"/live.txt | comm -23 - "$T"/arch.txt   # uncommitted filings
 grep -cx 'PC-S999-NEVER-A-REAL-ID' "$T"/wt_added.md                            # control: 0
-grep -c '^## ' "$T"/mainled.md                      # CONTROL: must be NON-ZERO -- main's ledger file
-                                                    # resolved and carries sections. Keyed on the FILE,
-                                                    # not on ids: at batch 233 main's ledger held 0 live
-                                                    # ids, the program's goal state, and an id-keyed
-                                                    # control read 0 on a correct derivation (50 at
-                                                    # batch 258's close).
-wc -l < "$T"/live_main.txt                          # main's live ids. 0 is LEGITIMATE when the control
-                                                    # above is non-zero. A zero in BOTH means
-                                                    # the ref carried no ledger and `git show`
-                                                    # answered empty -- which is what the "newest
-                                                    # branch ahead of main" repair did at batch 89,
-                                                    # reporting live=0 with every other control
-                                                    # still passing.
+grep -c '^## ' "$T"/mainled.md                      # CONTROL: NON-ZERO -- main's ledger file resolved (keyed on the file:
+                                                    # 0 live ids is the goal state, not a failure)
+wc -l < "$T"/live_main.txt                          # main's live ids; 0 is legitimate when the control above is non-zero;
+                                                    # 0 in BOTH means the ref carried no ledger
 # CONTROL ON THE ELECTED SET ITSELF, WHICH THE LINE ABOVE CANNOT GIVE -- it reads `main`, not the
 # union. A qualifying ref whose archive is a superset of main's live set is acquitted by the
 # archive arm while carrying a one-id ledger, and every other control here still passes. The union
@@ -1059,7 +964,26 @@ given at batch 90.
      the fixture.** Batch 146's first cut moved a convergence-stamped story to the wrong arm and
      turned the in-flight sprint red; the fixture's own worlds could not hold that legacy residue.
 
-**1o. OUTCOME MEASUREMENT OF THE EFFICIENCY WORK — graph's s323 has closed, and every reading still owed waits on a sprint graph has not run.** The signal, from graph read-only: `git -C /Users/n8/git/graph log --all --format=%h --grep='finalize snapshot . sprint 323 closed' | wc -l` prints 1 (s323 closed); control `sprint 322 closed` prints 1; an impossible `sprint 999 closed` prints 0. The s323 readings were taken in batches 261 and 262. What is owed reads a LATER sprint: BL-972's and BL-1005's outcome readings, BL-1166's and BL-1167's first complete sprint, BL-1187 item 6, and the BL-1174, BL-1175, BL-812 and BL-819 re-takes. Graph runs no sprint until every backlog item from the s317-s323 pipeline analysis is built and pulled to graph (batch 262's ruling, which the newest batch record in the RESUME block carries in its "Rulings that bind later batches" bullet; it still binds), so take no `Outcome measured:` reading. What is still owed is that record's "Owed, as facts"; run the opening sweep (action 1b) for scope. The standing Rule 8 rule: never `--merge` and never `--stamp readopt` or `reaffirm` on an override whose shadowed section is a load-pointer stub; the remedy is `readopt-override.sh --stamp retire`, then filing the override's rows upstream as a change to the SKILL.md stub's intensity table (`core/skills/ai-dlc-update/SKILL.md`, the refusal's own remedy text). Re-run `sprint 324 closed` (same shape, read-only) at every roll call; the first non-zero reading of that `sprint 324 closed` command, `git -C /Users/n8/git/graph log --all --format=%h --grep='finalize snapshot . sprint 324 closed' | wc -l`, releases these readings. Every hand a reading spawns is local: writing hands pass `isolation: "worktree"`, read-only hands none.
+**1o. OUTCOME MEASUREMENT OF THE EFFICIENCY WORK — graph's s323 has closed, and every reading still owed waits on a sprint graph has not run.** The signal, from graph read-only: `git -C /Users/n8/git/graph log --all --format=%h --grep='finalize snapshot . sprint 323 closed' | wc -l` prints 1 (s323 closed); control `sprint 322 closed` prints 1; an impossible `sprint 999 closed` prints 0. The s323 readings were taken in batches 261 and 262. What is owed reads a LATER sprint: BL-972's and BL-1005's outcome readings, BL-1166's and BL-1167's first complete sprint, BL-1187 item 6, and the BL-1174, BL-1175, BL-812 and BL-819 re-takes. Graph runs no sprint until every backlog item from the s317-s323 pipeline analysis is built and pulled to graph (batch 262's ruling, listed in action 1r; it still binds), so take no `Outcome measured:` reading. What is still owed is the newest batch record's "Owed, as facts" bullet; run the opening sweep (action 1b) for scope. The standing Rule 8 rule: never `--merge` and never `--stamp readopt` or `reaffirm` on an override whose shadowed section is a load-pointer stub; the remedy is `readopt-override.sh --stamp retire`, then filing the override's rows upstream as a change to the SKILL.md stub's intensity table (`core/skills/ai-dlc-update/SKILL.md`, the refusal's own remedy text). Re-run `sprint 324 closed` (same shape, read-only) at every roll call; the first non-zero reading of that `sprint 324 closed` command, `git -C /Users/n8/git/graph log --all --format=%h --grep='finalize snapshot . sprint 324 closed' | wc -l`, releases these readings. Every hand a reading spawns is local: writing hands pass `isolation: "worktree"`, read-only hands none.
+
+**1r. STANDING RULINGS. Every one binds every batch until the operator rules otherwise.** A batch
+that makes a new standing ruling ADDS it here, in the same docs commit as its batch record; the
+record names only that it added one. Never restate this list in a batch record.
+   - Batch 262's sprint ruling: graph runs no sprint until every backlog item from the s317-s323 pipeline analysis is built and pulled to graph. It is NOT yet satisfied.
+   - Rule 8's "never `--merge`" for `readopt-override`, remedy `--stamp retire` then file the intensity rows upstream.
+   - BL-583 item 6 (delete a fixture only when a survivor asserts its rule).
+   - A trace reading a path its `inputs.decl` omits goes to BL-1155, never into a docs-only close.
+   - One solo retake per STAT LOSS.
+   - `self-update-gate-d`'s narrowing is a BL-1151 decision.
+   - A tip adversary's DEFECT is re-tiered to BLOCKER and folded only when it is a fail-open protection hook or breaks the release's own use case.
+   - A PC id a release mitigates but does not discharge appears in its message only on one canonical `Not-discharged:` line.
+   - The pregate before a release that edits `.githooks/pre-push` is a PLAIN run with the main checkout detached at that release's sha, because a `--member` run writes no pregate record and the push is refused without one.
+   - The owner rule reserving `invocations.decl` and `tools.decl` moves to the lead stands.
+   - OPERATOR GRANT: the STAT LOSS guard in `core/scripts/derive-fixture-readsets.sh` trusts exactly one row, a Python process whose FIRST report is a metadata-only lookup of the directory `core`; the trust root and its evidence are named in the guard header and in BL-878 item 9; no other exemption is granted.
+   - After a read-set trace, one records-only commit may follow if its diff joins 0 against the traced read set, the fixture's `inputs.decl` rows and the fixture's own directory (a control per source), and the fixture key is read unchanged either by a store-independent read (`hermetic-run.sh --root <tree> --key-only <fx>`) or by `predict-push-set.sh` BEFORE pregate (pregate seeds the verdict store, after which a moved key reads as skipped).
+   - Retrace windows open only with no push running, and every push waits until the main checkout is released.
+   - Before closing a fixture's read-set trace, declare the reads of any undeclared recursive scan it runs, or remove the scan: its reads hide the fixture's real inputs, so a trace taken while it runs cannot be compared file by file.
+
 
 1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below: the fences of `### Derive the
    state; do not trust the numbers below`, whose fence 2 reads the live ledger as the union over
