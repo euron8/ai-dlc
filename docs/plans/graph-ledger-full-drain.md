@@ -77,11 +77,13 @@ derive block" names a set and not a fence.** They group as the FIVE numbered ste
 Derive both rather than trusting this sentence: the fence total is
 `awk` over ` ``` ` markers between this heading and `### NEXT ACTIONS`, halved. Run them in this
 order, and read the prose between them — each one's controls are explained there, not in the
-fence:
+fence. **Run every fence from ONE checkout:** each keeps its working files in
+`T="$(git rev-parse --absolute-git-dir)/ai-dlc-derive"`, private to that checkout, and the later
+fences STOP unless fence 2 wrote them there against the current `origin/main` within the hour:
 
 1. the four-command INSTRUMENT block immediately below (repo head, backlog counts, receipt
    histogram);
-2. the `D=…` / `lids()` block, which builds `/tmp/live.txt`, `/tmp/arch.txt` and `/tmp/filed.txt`
+2. the `D=…` / `lids()` block, which builds `$T/live.txt`, `$T/arch.txt` and `$T/filed.txt`
    and carries the presence and absence controls — **actions 1b and 6 both depend on this one**;
 3. the `pc()` PARTITION block, then the four-line overlap block under it, which corrects
    DISCHARGED;
@@ -169,7 +171,8 @@ not stable either: writing an id into this plan MOVES it from unnamed to named. 
 taken up when a BACKLOG ENTRY cites it. Prose is not a filing.
 
 ```
-: > /tmp/derive-fence2.stamp   # emptied first, so the fences below refuse while this one is running
+T="$(git rev-parse --absolute-git-dir)/ai-dlc-derive"; mkdir -p "$T"   # this checkout's own derive scratch, never a shared /tmp path
+: > "$T"/derive-fence2.stamp   # emptied first, so the fences below refuse while this one is running
 D=/Users/n8/git/graph/_bmad-output/ai-dlc-update
 # THREE deliberate widenings, each one a measured defect:
 #   1. NO TRAILING SPACE after the id -- that space hid 43 of 63 bullet-form entries.
@@ -264,13 +267,13 @@ lids_ctl() { local rc; ( R=/Users/n8/git/ai-dlc/core/skills/ai-dlc-update/reconc
 # today (48 either way, both directions 0) and it makes the empty-qualifying-set case correct by
 # construction rather than by a fallback.
 QUAL=0
-: > /tmp/union_live_raw.txt; : > /tmp/union_arch_raw.txt; : > /tmp/qual_refs.txt
-git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/mainled.md
-lids_ctl /tmp/mainled.md
-lids /tmp/mainled.md >> /tmp/union_live_raw.txt
-git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > /tmp/mainarch.md
-lids_ctl /tmp/mainarch.md
-lids /tmp/mainarch.md >> /tmp/union_arch_raw.txt
+: > "$T"/union_live_raw.txt; : > "$T"/union_arch_raw.txt; : > "$T"/qual_refs.txt
+git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$T"/mainled.md
+lids_ctl "$T"/mainled.md
+lids "$T"/mainled.md >> "$T"/union_live_raw.txt
+git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > "$T"/mainarch.md
+lids_ctl "$T"/mainarch.md
+lids "$T"/mainarch.md >> "$T"/union_arch_raw.txt
 # REMOTE BRANCHES TOO, MEASURED AT BATCH 174. The consumer moved a filing OFF its carry-over branch
 # onto its own pushed branch (`origin/ai-dlc-update/pc-s315-derive-readsets-whole-tree-copy`) and
 # reset the carry-over branch past it, so a `refs/heads`-only loop would have scored the candidate
@@ -278,10 +281,10 @@ lids /tmp/mainarch.md >> /tmp/union_arch_raw.txt
 for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' refs/heads refs/remotes/origin); do
   case "$b" in main|origin/main|origin/HEAD|origin) continue ;; esac
   git -C /Users/n8/git/graph cat-file -e "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" 2>/dev/null || continue
-  git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/cand.md
-  git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > /tmp/mainled.md
-  lids_ctl /tmp/cand.md
-  lids /tmp/cand.md > /tmp/cand.txt; lids /tmp/mainled.md > /tmp/mainled.txt
+  git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$T"/cand.md
+  git -C /Users/n8/git/graph show "main:_bmad-output/ai-dlc-update/push-candidate-ledger.md" > "$T"/mainled.md
+  lids_ctl "$T"/cand.md
+  lids "$T"/cand.md > "$T"/cand.txt; lids "$T"/mainled.md > "$T"/mainled.txt
   # A QUALIFYING REF IS MISSING NOTHING MAIN HAS *THAT IT HAS NOT CLOSED*, and the second half of
   # that sentence was absent until batch 113, where it cost the batch its headline. The bare subset
   # arm was written at batch 89 to reject STALE snapshots, and it does — but a branch on which the
@@ -297,37 +300,37 @@ for b in $(git -C /Users/n8/git/graph for-each-ref --format='%(refname:short)' r
   # discrimination was verified by construction before this arm was written — 13 missing, 13 in
   # the branch archive, so the two readings differ on this input rather than agreeing by luck.
   git -C /Users/n8/git/graph cat-file -e "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" 2>/dev/null \
-    && git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > /tmp/cand_arch.md \
-    || : > /tmp/cand_arch.md
-  lids_ctl /tmp/cand_arch.md
-  lids /tmp/cand_arch.md > /tmp/cand_arch.txt
+    && git -C /Users/n8/git/graph show "${b}:_bmad-output/ai-dlc-update/push-candidate-ledger.archive.md" > "$T"/cand_arch.md \
+    || : > "$T"/cand_arch.md
+  lids_ctl "$T"/cand_arch.md
+  lids "$T"/cand_arch.md > "$T"/cand_arch.txt
   # EVERY LEDGER-CARRYING REF'S ARCHIVE JOINS THE ARCHIVE UNION, QUALIFIED OR NOT; qualification
   # below gates the LIVE union only. Measured at batch 240: a ref was admitted only if it ADDED or
   # DROPPED a live id against main, so a ref at goal state (live 0, main live 0) did neither, its
-  # archive never reached /tmp/arch.txt, and a stale branch copy could resurrect an id HEAD archived.
-  cat /tmp/cand_arch.txt >> /tmp/union_arch_raw.txt
+  # archive never reached "$T"/arch.txt, and a stale branch copy could resurrect an id HEAD archived.
+  cat "$T"/cand_arch.txt >> "$T"/union_arch_raw.txt
   # ids main has that the ref lacks, MINUS the ones the ref has archived == unexplained losses
-  comm -23 /tmp/mainled.txt /tmp/cand.txt | comm -23 - /tmp/cand_arch.txt > /tmp/lost.txt
-  [ "$(grep -c . /tmp/lost.txt || true)" -eq 0 ] || continue
+  comm -23 "$T"/mainled.txt "$T"/cand.txt | comm -23 - "$T"/cand_arch.txt > "$T"/lost.txt
+  [ "$(grep -c . "$T"/lost.txt || true)" -eq 0 ] || continue
   # and it must ADD something main lacks, or CARRY closes main has not seen
   qualifies=0
-  [ "$(comm -13 /tmp/mainled.txt /tmp/cand.txt | wc -l | tr -d ' ')" -gt 0 ] && qualifies=1
-  [ "$(comm -23 /tmp/mainled.txt /tmp/cand.txt | wc -l | tr -d ' ')" -gt 0 ] && qualifies=1
+  [ "$(comm -13 "$T"/mainled.txt "$T"/cand.txt | wc -l | tr -d ' ')" -gt 0 ] && qualifies=1
+  [ "$(comm -23 "$T"/mainled.txt "$T"/cand.txt | wc -l | tr -d ' ')" -gt 0 ] && qualifies=1
   [ "$qualifies" -eq 1 ] || continue
-  QUAL=$((QUAL + 1)); echo "$b" >> /tmp/qual_refs.txt   # step 5 reads the carry-over ones for their stamps
-  echo "qualifying ref: $b  live=$(wc -l < /tmp/cand.txt | tr -d ' ')  adds=$(comm -13 /tmp/mainled.txt /tmp/cand.txt | wc -l | tr -d ' ')"
-  cat /tmp/cand.txt      >> /tmp/union_live_raw.txt
+  QUAL=$((QUAL + 1)); echo "$b" >> "$T"/qual_refs.txt   # step 5 reads the carry-over ones for their stamps
+  echo "qualifying ref: $b  live=$(wc -l < "$T"/cand.txt | tr -d ' ')  adds=$(comm -13 "$T"/mainled.txt "$T"/cand.txt | wc -l | tr -d ' ')"
+  cat "$T"/cand.txt      >> "$T"/union_live_raw.txt
 done
 # REPORT THE COUNT, so an empty qualifying set is ASSERTED rather than inferred. 0 here is a
 # legitimate state -- it is the answer whenever every retro has merged -- and it used to be
 # byte-indistinguishable from a loop that crashed or skipped every branch, which is exactly how
 # the ancestor gate hid for as long as it did.
 echo "qualifying refs: $QUAL   (0 is legitimate: main alone, whenever the retro has merged)"
-sort -u /tmp/union_live_raw.txt > /tmp/union_live.txt
-sort -u /tmp/union_arch_raw.txt > /tmp/arch.txt
+sort -u "$T"/union_live_raw.txt > "$T"/union_live.txt
+sort -u "$T"/union_arch_raw.txt > "$T"/arch.txt
 # LIVE IS THE UNION MINUS THE UNION OF ARCHIVES. An id archived on ANY qualifying ref has been
 # closed by the consumer and must not be resurrected by another ref's staler copy.
-comm -23 /tmp/union_live.txt /tmp/arch.txt > /tmp/live.txt
+comm -23 "$T"/union_live.txt "$T"/arch.txt > "$T"/live.txt
 # THE RAW SUBTRACTION IS NOT 0, AND A READER WHO "REPAIRS" IT BACK DELETES THE LOOP'S OWN
 # ACQUITTAL. The loop accepts a ref missing nothing main has THAT IT HAS NOT CLOSED -- the batch-113
 # repair -- so a ref on which the consumer has been closing candidates is LEGITIMATELY missing those
@@ -338,7 +341,7 @@ comm -23 /tmp/union_live.txt /tmp/arch.txt > /tmp/live.txt
 # It is an ASSERTION on the loop, never a control -- a non-zero means the loop is broken, not that
 # the ledger moved, and a check that cannot fail reads exactly like one that passed. The
 # discriminating control is the one below it: the PRESENCE arm, which must be non-zero on main.
-lids /tmp/mainled.md > /tmp/live_main.txt
+lids "$T"/mainled.md > "$T"/live_main.txt
 # THE ASSERTION ARM NOW READS THE UNION'S OWN TWO FILES ON BOTH SIDES. It used to compute
 # `comm -23 live_main live | comm -23 - arch` against the ref the loop ELECTED -- so whenever the
 # loop fell back to `main`, it compared `main` with itself and answered 0 BY CONSTRUCTION. That is
@@ -350,22 +353,22 @@ lids /tmp/mainled.md > /tmp/live_main.txt
 #
 # IT IS AN ASSERTION ON THE DERIVATION, NEVER A CONTROL. A check that cannot fail reads exactly
 # like one that passed; the discriminating controls are the two below it.
-comm -23 /tmp/live_main.txt /tmp/live.txt | comm -23 - /tmp/arch.txt | wc -l   # assertion: 0, or the derivation is broken
-comm -13 /tmp/live_main.txt /tmp/live.txt           # the filings ahead of main. THIS is the new work.
+comm -23 "$T"/live_main.txt "$T"/live.txt | comm -23 - "$T"/arch.txt | wc -l   # assertion: 0, or the derivation is broken
+comm -13 "$T"/live_main.txt "$T"/live.txt           # the filings ahead of main. THIS is the new work.
 # AND THE CONSUMER'S UNCOMMITTED WORKING-TREE LEDGER, WHICH NO REF ABOVE CAN SEE. Batches 188 and 234
 # both read live 0 / unfiled 0 over committed refs while graph held real filings uncommitted in its
 # working tree -- batch 234's whole scope was five of them. An id printed here is an uncommitted filing
-# no committed ref carries; check each against /tmp/filed.txt (built below) before calling it unfiled.
-git -C /Users/n8/git/graph diff -- _bmad-output/ai-dlc-update/push-candidate-ledger.md | grep '^+' | sed 's/^+//' > /tmp/wt_added.md
-lids /tmp/wt_added.md | comm -23 - /tmp/live.txt | comm -23 - /tmp/arch.txt   # uncommitted filings
-grep -cx 'PC-S999-NEVER-A-REAL-ID' /tmp/wt_added.md                            # control: 0
-grep -c '^## ' /tmp/mainled.md                      # CONTROL: must be NON-ZERO -- main's ledger file
+# no committed ref carries; check each against "$T"/filed.txt (built below) before calling it unfiled.
+git -C /Users/n8/git/graph diff -- _bmad-output/ai-dlc-update/push-candidate-ledger.md | grep '^+' | sed 's/^+//' > "$T"/wt_added.md
+lids "$T"/wt_added.md | comm -23 - "$T"/live.txt | comm -23 - "$T"/arch.txt   # uncommitted filings
+grep -cx 'PC-S999-NEVER-A-REAL-ID' "$T"/wt_added.md                            # control: 0
+grep -c '^## ' "$T"/mainled.md                      # CONTROL: must be NON-ZERO -- main's ledger file
                                                     # resolved and carries sections. Keyed on the FILE,
                                                     # not on ids: at batch 233 main's ledger held 0 live
                                                     # ids, the program's goal state, and an id-keyed
                                                     # control read 0 on a correct derivation (50 at
                                                     # batch 258's close).
-wc -l < /tmp/live_main.txt                          # main's live ids. 0 is LEGITIMATE when the control
+wc -l < "$T"/live_main.txt                          # main's live ids. 0 is LEGITIMATE when the control
                                                     # above is non-zero. A zero in BOTH means
                                                     # the ref carried no ledger and `git show`
                                                     # answered empty -- which is what the "newest
@@ -376,16 +379,16 @@ wc -l < /tmp/live_main.txt                          # main's live ids. 0 is LEGI
 # union. A qualifying ref whose archive is a superset of main's live set is acquitted by the
 # archive arm while carrying a one-id ledger, and every other control here still passes. The union
 # cannot fall below main's live set minus what the union has archived, so assert that floor.
-comm -23 /tmp/live_main.txt /tmp/arch.txt | wc -l    # the FLOOR
-wc -l < /tmp/live.txt                                # must be >= the floor above
-grep -rohE 'PC-[A-Z0-9][A-Z0-9_.-]+' docs/backlog.md docs/backlog.archive.md | sed -E 's/[.-]+$//' | sort -u > /tmp/filed.txt
-wc -l < /tmp/live.txt                                 # LIVE candidates -- the denominator
-wc -l < /tmp/arch.txt                                 # already closed upstream, NOT our workload
-comm -12 /tmp/live.txt /tmp/arch.txt | wc -l          # control: must be 0, the two sets partition
-comm -12 /tmp/live.txt /tmp/filed.txt | wc -l         # live candidates a backlog entry cites
-comm -23 /tmp/live.txt /tmp/filed.txt                 # live candidates NOTHING has filed
-grep -cx 'PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT' /tmp/filed.txt  # control: 1
-grep -cx 'PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT' /tmp/arch.txt   # control: 1, a SPACED bullet.
+comm -23 "$T"/live_main.txt "$T"/arch.txt | wc -l    # the FLOOR
+wc -l < "$T"/live.txt                                # must be >= the floor above
+grep -rohE 'PC-[A-Z0-9][A-Z0-9_.-]+' docs/backlog.md docs/backlog.archive.md | sed -E 's/[.-]+$//' | sort -u > "$T"/filed.txt
+wc -l < "$T"/live.txt                                 # LIVE candidates -- the denominator
+wc -l < "$T"/arch.txt                                 # already closed upstream, NOT our workload
+comm -12 "$T"/live.txt "$T"/arch.txt | wc -l          # control: must be 0, the two sets partition
+comm -12 "$T"/live.txt "$T"/filed.txt | wc -l         # live candidates a backlog entry cites
+comm -23 "$T"/live.txt "$T"/filed.txt                 # live candidates NOTHING has filed
+grep -cx 'PC-S333-SKILL-RENDERS-THE-THEIRS-REF-UNQUOTED-AND-ZSH-EATS-IT' "$T"/filed.txt  # control: 1
+grep -cx 'PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT' "$T"/arch.txt   # control: 1, a SPACED bullet.
                                                       # READS `arch.txt`: no live entry of either bullet
                                                       # form remains, measured at batch 177 over every
                                                       # qualifying ref. Every live control this line
@@ -394,12 +397,12 @@ grep -cx 'PC-S309-PRE-PUSH-FLAG-MISMATCH-ORIGINAL-TEXT' /tmp/arch.txt   # contro
                                                       # append-only, so both forms stay reachable there;
                                                       # if a live bullet entry is filed again, control
                                                       # BOTH files.
-grep -cx 'PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED' /tmp/arch.txt
+grep -cx 'PC-S336-STEP-1-AUTOPUSH-IS-THE-UNGUARDED-TWIN-OF-THE-PUSH-STEP-2-HARDENED' "$T"/arch.txt
                                                       # control: 1, a BARE-BOLD bullet -- this is
                                                       # the arm that fails if anyone reinstates the
                                                       # trailing space, and a reinstated grammar
                                                       # reads as a clean, plausible 47
-grep -cx 'PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL' /tmp/arch.txt
+grep -cx 'PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL' "$T"/arch.txt
                                                       # control: 1, a LEVEL-THREE heading nested
                                                       # under another entry. Fails to 0 if anyone
                                                       # narrows the heading arm back to `^## `,
@@ -423,18 +426,18 @@ grep -cx 'PC-S308-DISPATCH-GUARD-SPRINT-FIELD-INTERMITTENTLY-NULL' /tmp/arch.txt
                                                       # is append-only, so the form stays reachable
                                                       # there; if a live `### PC-` entry is ever
                                                       # filed again, control BOTH files.
-grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' /tmp/arch.txt
+grep -cx 'PC-S300-SEVEN-VALIDATORS-SHIPPED-NON-EXECUTABLE-AT-0.242.0' "$T"/arch.txt
                                                       # control: 1, a DOTTED id. Fails as a TRUNCATION
                                                       # if the class loses its `.`, and a truncated id
                                                       # is a false member, never a reported absence
-grep -cx 'PC-S317-3.2-DERIVATION-HOOK-CWD' /tmp/filed.txt   # control: 1, a DOTTED id in the BACKLOG. Before batch 223's
+grep -cx 'PC-S317-3.2-DERIVATION-HOOK-CWD' "$T"/filed.txt   # control: 1, a DOTTED id in the BACKLOG. Before batch 223's
                                                       # widening this read `PC-S317-3`, so a shipped candidate scored
                                                       # UNFILED and UNTOUCHED (measured: 348 -> 345 ids with the strip)
-grep -cx 'PC-S323-GATE-ADJUDICATION-S23-PRE-STRIPS-HR_BIN-BUT-NOT-THE-TRAP-FARM' /tmp/filed.txt   # control: 1, an UNDERSCORE id
+grep -cx 'PC-S323-GATE-ADJUDICATION-S23-PRE-STRIPS-HR_BIN-BUT-NOT-THE-TRAP-FARM' "$T"/filed.txt   # control: 1, an UNDERSCORE id
                                                       # in the BACKLOG. Without `_` in the class it reads `...-HR` and the id
                                                       # scores UNFILED, UNTOUCHED and UNNAMED while archived entries cite it
-grep -cx 'PC-S999-NEVER' /tmp/filed.txt                                                  # control: 0
-printf '%s %s\n' "$(git rev-parse origin/main)" "$(date +%s)" > /tmp/derive-fence2.stamp  # the fences below refuse without it
+grep -cx 'PC-S999-NEVER' "$T"/filed.txt                                                  # control: 0
+printf '%s %s\n' "$(git rev-parse origin/main)" "$(date +%s)" > "$T"/derive-fence2.stamp  # the fences below refuse without it
 ```
 
 **The ledger moves when the CONSUMER WRITES, not only when they close**, so a figure here is a
@@ -447,21 +450,22 @@ instead of a measurement of coverage. **Report the partition below. Never report
 entry counts as progress.**
 
 ```
-read -r st_sha st_t 2>/dev/null < /tmp/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: /tmp/live.txt and its siblings are not from fence 2 run against this origin/main in the last hour; run fence 2 first"; exit 1; }
+T="$(git rev-parse --absolute-git-dir)/ai-dlc-derive"; mkdir -p "$T"
+read -r st_sha st_t 2>/dev/null < "$T"/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: run fence 2 first, in this checkout"; exit 1; }
 pc() { grep -rohE 'PC-[A-Z0-9][A-Z0-9_.-]+' "$1" | sed -E 's/[.-]+$//' | sort -u; }
-pc docs/backlog.archive.md > /tmp/closed_here
-pc docs/backlog.md         > /tmp/open_here
-git log --format='%B' origin/main | grep -ohE 'PC-[A-Z0-9][A-Z0-9_.-]+' | sed -E 's/[.-]+$//' | sort -u > /tmp/in_msgs
-comm -12 /tmp/live.txt /tmp/closed_here                    # DISCHARGED, still live upstream
-comm -12 /tmp/live.txt /tmp/open_here                      # in flight
-comm -23 /tmp/live.txt <(sort -u /tmp/closed_here /tmp/open_here)   # untouched
+pc docs/backlog.archive.md > "$T"/closed_here
+pc docs/backlog.md         > "$T"/open_here
+git log --format='%B' origin/main | grep -ohE 'PC-[A-Z0-9][A-Z0-9_.-]+' | sed -E 's/[.-]+$//' | sort -u > "$T"/in_msgs
+comm -12 "$T"/live.txt "$T"/closed_here                    # DISCHARGED, still live upstream
+comm -12 "$T"/live.txt "$T"/open_here                      # in flight
+comm -23 "$T"/live.txt <(sort -u "$T"/closed_here "$T"/open_here)   # untouched
 # control: the three sum to the live denominator PLUS the known overlap below -- never to the
 # denominator alone. DISCHARGED and IN-FLIGHT are NOT disjoint, so a bare sum reads as a partition
 # failure on a correct derivation. Compute the overlap and subtract it before judging:
-#   comm -12 /tmp/live.txt /tmp/closed_here | comm -12 - <(comm -12 /tmp/live.txt /tmp/open_here)
-comm -12 /tmp/live.txt /tmp/closed_here | comm -23 - /tmp/in_msgs   # discharged but INVISIBLE
+#   comm -12 "$T"/live.txt "$T"/closed_here | comm -12 - <(comm -12 "$T"/live.txt "$T"/open_here)
+comm -12 "$T"/live.txt "$T"/closed_here | comm -23 - "$T"/in_msgs   # discharged but INVISIBLE
 # TERMINAL -- discharged here AND closed in the consumer's ledger. The line above CANNOT see these.
-comm -12 /tmp/arch.txt /tmp/closed_here | wc -l
+comm -12 "$T"/arch.txt "$T"/closed_here | wc -l
 ```
 
 A sum over the denominator is EXPECTED, not a partition failure. The discharged-but-unnamed line
@@ -477,15 +481,16 @@ overlap from `DISCHARGED`, never from `IN-FLIGHT`: a live entry citing an id is 
 whatever an archived entry said about it.
 
 ```
-read -r st_sha st_t 2>/dev/null < /tmp/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: /tmp/live.txt and its siblings are not from fence 2 run against this origin/main in the last hour; run fence 2 first"; exit 1; }
-comm -12 /tmp/live.txt /tmp/closed_here > /tmp/d.txt
-comm -12 /tmp/live.txt /tmp/open_here   > /tmp/f.txt
-comm -12 /tmp/d.txt /tmp/f.txt          # the overlap. NOT zero, and not an error
-comm -23 /tmp/d.txt <(comm -12 /tmp/d.txt /tmp/f.txt) | wc -l   # DISCHARGED, corrected
+T="$(git rev-parse --absolute-git-dir)/ai-dlc-derive"; mkdir -p "$T"
+read -r st_sha st_t 2>/dev/null < "$T"/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: run fence 2 first, in this checkout"; exit 1; }
+comm -12 "$T"/live.txt "$T"/closed_here > "$T"/d.txt
+comm -12 "$T"/live.txt "$T"/open_here   > "$T"/f.txt
+comm -12 "$T"/d.txt "$T"/f.txt          # the overlap. NOT zero, and not an error
+comm -23 "$T"/d.txt <(comm -12 "$T"/d.txt "$T"/f.txt) | wc -l   # DISCHARGED, corrected
 ```
 
 **THE PC-BACKED WORKLIST. THIS IS THE SCOPING INPUT, AND EVERY BLOCK ABOVE ANSWERS A DIFFERENT
-QUESTION.** The unfiled join (`comm -23 /tmp/live.txt /tmp/filed.txt`) answers *which candidates
+QUESTION.** The unfiled join (`comm -23 $T/live.txt $T/filed.txt`) answers *which candidates
 has nobody filed an entry for* — a measurement of FILING COVERAGE. This one answers *which live
 entries here are still owed to a candidate the consumer still carries* — a measurement of WORK
 REMAINING. **A session that reads the first as the second concludes the program is finished while
@@ -498,35 +503,36 @@ Run the JOIN, never the bare `awk` half — the `awk` alone answers a question a
 `docs/backlog.md` and says nothing about the consumer.
 
 ```
-read -r st_sha st_t 2>/dev/null < /tmp/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: /tmp/live.txt and its siblings are not from fence 2 run against this origin/main in the last hour; run fence 2 first"; exit 1; }
+T="$(git rev-parse --absolute-git-dir)/ai-dlc-derive"; mkdir -p "$T"
+read -r st_sha st_t 2>/dev/null < "$T"/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: run fence 2 first, in this checkout"; exit 1; }
 LC_ALL=C awk '/^## BL-[0-9]+/{if(id!=""){out()}; id=$2; pcs=""}
      match($0,/PC-[A-Z0-9][A-Z0-9_.-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
      END{if(id!=""){out()}}
-     function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md > /tmp/entry_pcs.tsv
-wc -l < /tmp/entry_pcs.tsv     # INSTRUMENT: entries citing ANY PC id. NOT the worklist.
+     function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md > "$T"/entry_pcs.tsv
+wc -l < "$T"/entry_pcs.tsv     # INSTRUMENT: entries citing ANY PC id. NOT the worklist.
 if bash scripts/backlog-reverify.sh --declared-empty; then echo "worklist 0 (backlog declared empty)"
 elif [ "$(grep -cE 'PC-[A-Z0-9]' docs/backlog.md)" -eq 0 ]; then echo "worklist 0 (no live entry cites a PC id; control: $(grep -cE 'PC-[A-Z0-9]' docs/backlog.archive.md) archive lines do)"
-else [ -s /tmp/entry_pcs.tsv ] || echo "REFUSE: awk half matched nothing -- grammar, not corpus"; fi
-: > /tmp/pc_backed.tsv
+else [ -s "$T"/entry_pcs.tsv ] || echo "REFUSE: awk half matched nothing -- grammar, not corpus"; fi
+: > "$T"/pc_backed.tsv
 while IFS="$(printf '\t')" read -r id pcs; do
   for p in $(printf '%s' "$pcs" | tr ',' ' '); do
-    grep -qxF "$p" /tmp/live.txt && { printf '%s\t%s\n' "$id" "$p" >> /tmp/pc_backed.tsv; break; }
+    grep -qxF "$p" "$T"/live.txt && { printf '%s\t%s\n' "$id" "$p" >> "$T"/pc_backed.tsv; break; }
   done
-done < /tmp/entry_pcs.tsv
-wc -l < /tmp/pc_backed.tsv     # THE WORKLIST: entries whose candidate is STILL LIVE upstream
-cat /tmp/pc_backed.tsv         # read it -- the ids are the batch's candidate set
+done < "$T"/entry_pcs.tsv
+wc -l < "$T"/pc_backed.tsv     # THE WORKLIST: entries whose candidate is STILL LIVE upstream
+cat "$T"/pc_backed.tsv         # read it -- the ids are the batch's candidate set
 # controls, same invocation:
-wc -l < /tmp/live.txt                                            # 0 is LEGITIMATE here -- it is the program's goal
+wc -l < "$T"/live.txt                                            # 0 is LEGITIMATE here -- it is the program's goal
                                                                  # state, first read at batch 209's close -- PROVIDED
                                                                  # the `grep -c '^## '` presence control above is non-zero
                                                                  # and `arch.txt` holds main's ids. A 0 beside a 0
                                                                  # presence control is a broken derivation; do not
                                                                  # "fix" a correct 0 by widening the grammar.
-grep -cxF 'PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE' /tmp/arch.txt  # control: 1. READS `arch.txt`:
+grep -cxF 'PC-S316-UPDATE-STEP8-ORDERS-THE-LEDGER-DISPOSITIONS-AFTER-THE-PUSH-AND-MERGE' "$T"/arch.txt  # control: 1. READS `arch.txt`:
                                                                  # it read `live.txt` until the consumer archived the
                                                                  # id at its 0.691.0 pull, which turned a correct
                                                                  # derivation red. The archive is append-only.
-grep -cxF 'PC-S999-NEVER-A-REAL-ID' /tmp/live.txt                # impossible id: 0
+grep -cxF 'PC-S999-NEVER-A-REAL-ID' "$T"/live.txt                # impossible id: 0
 ```
 
 **`grep -qxF` reads a FILE here, never a pipe** — fed from a pipe it exits at first match and
@@ -571,7 +577,8 @@ and this program's goal — draining THAT ledger — cannot be closed on the sid
 Derive the gap; it is not optional bookkeeping:
 
 ```
-read -r st_sha st_t 2>/dev/null < /tmp/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: /tmp/live.txt and its siblings are not from fence 2 run against this origin/main in the last hour; run fence 2 first"; exit 1; }
+T="$(git rev-parse --absolute-git-dir)/ai-dlc-derive"; mkdir -p "$T"
+read -r st_sha st_t 2>/dev/null < "$T"/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: run fence 2 first, in this checkout"; exit 1; }
 # The stamp carries FOUR fields and they can differ (a self-update runs ahead of the reconcile): `commit:` is the
 # pull's <base>; `skill_commit:` is the OLD engine copy. Print and label all four on each ref; never write a bare "installed".
 for k in version commit skill_version skill_commit; do
@@ -582,9 +589,9 @@ for k in version commit skill_version skill_commit; do
 done
 git -C /Users/n8/git/graph rev-parse --abbrev-ref HEAD                                 # the checked-out branch
 # The carry-over branch is graph's sprint branch and a pull merges into IT, not main. Print its stamp for every
-# qualifying carry-over ref step 2 recorded in /tmp/qual_refs.txt (run step 2 first; an empty file prints nothing).
-[ -f /tmp/qual_refs.txt ] || echo "REFUSE: run step 2 first (no /tmp/qual_refs.txt)"
-for r in $(grep carry-over /tmp/qual_refs.txt); do
+# qualifying carry-over ref step 2 recorded in "$T"/qual_refs.txt (run step 2 first; an empty file prints nothing).
+[ -f "$T"/qual_refs.txt ] || echo "REFUSE: run step 2 first (no "$T"/qual_refs.txt)"
+for r in $(grep carry-over "$T"/qual_refs.txt); do
   for k in version commit skill_version skill_commit; do
     printf '%s %s: %s\n' "$r" "$k" "$(git -C /Users/n8/git/graph show "${r}:.claude/.ai-dlc-version" | awk -F': ' -v k="$k" '$1==k{print $2; exit}')"
   done
@@ -603,7 +610,7 @@ cat VERSION                                                                     
 # `-- VERSION` pathspec. Only when no versioned commit names the id, report the VERSION at the
 # oldest commit that does, labelled versionless with its sha: read that commit before calling it
 # an absorb, since a docs commit that only mentions an id takes the same row.
-for id in $(cat /tmp/live.txt) PC-ZZ-IMPOSSIBLE-CONTROL-Q7 PC-ZZ_IMPOSSIBLE-CONTROL-Q7; do
+for id in $(cat "$T"/live.txt) PC-ZZ-IMPOSSIBLE-CONTROL-Q7 PC-ZZ_IMPOSSIBLE-CONTROL-Q7; do
   sha="$(git log --format='%H' -F --grep="$id" origin/main -- VERSION | tail -1)"
   vsha="$(git log --format='%H' -F --grep="$id" origin/main | tail -1)"
   if [ -n "$sha" ]; then printf '%s\t%s\n' "$id" "$(git show "${sha}:VERSION")"
@@ -1054,19 +1061,17 @@ given at batch 90.
 
 **1o. OUTCOME MEASUREMENT OF THE EFFICIENCY WORK — graph's s323 has closed, and every reading still owed waits on a sprint graph has not run.** The signal, from graph read-only: `git -C /Users/n8/git/graph log --all --format=%h --grep='finalize snapshot . sprint 323 closed' | wc -l` prints 1 (s323 closed); control `sprint 322 closed` prints 1; an impossible `sprint 999 closed` prints 0. The s323 readings were taken in batches 261 and 262. What is owed reads a LATER sprint: BL-972's and BL-1005's outcome readings, BL-1166's and BL-1167's first complete sprint, BL-1187 item 6, and the BL-1174, BL-1175, BL-812 and BL-819 re-takes. Graph runs no sprint until every backlog item from the s317-s323 pipeline analysis is built and pulled to graph (batch 262's ruling, which the newest batch record in the RESUME block carries in its "Rulings that bind later batches" bullet; it still binds), so take no `Outcome measured:` reading. What is still owed is that record's "Owed, as facts"; run the opening sweep (action 1b) for scope. The standing Rule 8 rule: never `--merge` and never `--stamp readopt` or `reaffirm` on an override whose shadowed section is a load-pointer stub; the remedy is `readopt-override.sh --stamp retire`, then filing the override's rows upstream as a change to the SKILL.md stub's intensity table (`core/skills/ai-dlc-update/SKILL.md`, the refusal's own remedy text). Re-run `sprint 324 closed` (same shape, read-only) at every roll call; the first non-zero reading of that `sprint 324 closed` command, `git -C /Users/n8/git/graph log --all --format=%h --grep='finalize snapshot . sprint 324 closed' | wc -l`, releases these readings. Every hand a reading spawns is local: writing hands pass `isolation: "worktree"`, read-only hands none.
 
-1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below) AGAINST THE REF THAT CARRIES THE
-   LIVE LEDGER, RANK THE UNFILED CANDIDATES, THEN SCOPE THE BATCH — AND HOW YOU SCOPE IT DEPENDS ON
-   WHO INVOKED YOU.** Operator
-   instruction, given at batch 52. **If the one-liner was TYPED BY THE OPERATOR**, report the
-   candidates with a marked recommendation and ask, as every batch before has. **If it ARRIVED
-   FROM ANOTHER SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is
-   action 9's handoff — do NOT stop to ask: take the item(s) your own sweep and ranking
-   recommend, state that choice and its reason in your FIRST message to the operator, and
-   proceed; the operator can redirect at any ping. **Regardless of who invoked you, batch
-   multiple candidates into one release wherever action 2 allows it — and do not merge while a
-   hand you dispatched is still out, even on a green gate: batch 63's merged branch was green
-   at every phase when its second adversary returned two BLOCKERs, and batch 66's was green
-   when its adversary returned a BLOCKER establishing the shipped fix had made things WORSE.**
+1. **CHECK `ListAgents` FIRST, RUN THE SWEEP (action 1b below: the fences of `### Derive the
+   state; do not trust the numbers below`, whose fence 2 reads the live ledger as the union over
+   every consumer ref that carries one), RANK THE UNFILED CANDIDATES, THEN SCOPE THE BATCH — AND
+   HOW YOU SCOPE IT DEPENDS ON WHO INVOKED YOU.** **If the one-liner was TYPED BY THE OPERATOR**,
+   report the candidates with a marked recommendation and ask. **If it ARRIVED FROM ANOTHER
+   SESSION** — a cross-session message carrying `READ and FOLLOW …`, which is action 9's
+   handoff — do NOT stop to ask: take the item(s) your own sweep and ranking recommend, state
+   that choice and its reason in your FIRST message to the operator, and proceed; the operator
+   can redirect at any ping. **Regardless of who invoked you, batch multiple candidates into one
+   release wherever action 2 allows it — and do not merge while a hand you dispatched is still
+   out, even on a green gate: an adversary can return a BLOCKER after every gate is green.**
 
    **Do not open a batch on the wall clock.** That program's record is
    `docs/plans/pre-push-wall-clock.md`, and its work is done.
@@ -1131,20 +1136,22 @@ given at batch 90.
    The measured rate at which the two answers differ is **8 in 20**.
 
    Run **`### Derive the state; do not trust the numbers below`** first — jump to it BY NAME, it
-   sits above this action — it builds `/tmp/live.txt` and `/tmp/filed.txt`, and the set
+   sits above this action — it builds `$T/live.txt` and `$T/filed.txt`, and the set
    you want is the live candidates NO backlog entry cites. Then DATE each one's filing from the
    consumer's own history, because "unfiled" mixes genuinely new candidates with old ones no
    batch has examined, and only the date separates them:
 
    ```
+   T="$(git rev-parse --absolute-git-dir)/ai-dlc-derive"; mkdir -p "$T"
+   read -r st_sha st_t 2>/dev/null < "$T"/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: run fence 2 first, in this checkout"; exit 1; }
    D=_bmad-output/ai-dlc-update
-   comm -23 /tmp/live.txt /tmp/filed.txt > /tmp/unfiled.txt
-   wc -l < /tmp/unfiled.txt
+   comm -23 "$T"/live.txt "$T"/filed.txt > "$T"/unfiled.txt
+   wc -l < "$T"/unfiled.txt
    while IFS= read -r id; do
      printf '%s  %s\n' \
        "$(git -C /Users/n8/git/graph log --format='%ad' --date=short -S"$id" -- "$D/push-candidate-ledger.md" | tail -1)" \
        "$id"
-   done < /tmp/unfiled.txt | sort
+   done < "$T"/unfiled.txt | sort
    ```
 
    `-S` reports the commit that INTRODUCED the string, so `tail -1` is the filing. Measured, with
@@ -1170,13 +1177,15 @@ given at batch 90.
    directory` — measured, in the first revision of this very block.
 
    ```
+   T="$(git rev-parse --absolute-git-dir)/ai-dlc-derive"; mkdir -p "$T"
+   read -r st_sha st_t 2>/dev/null < "$T"/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: run fence 2 first, in this checkout"; exit 1; }
    L=/Users/n8/git/graph/_bmad-output/ai-dlc-update/push-candidate-ledger.md
    md5 -q "$L"              # moves whenever the CONSUMER writes, which is the normal case and not
                             # an alarm -- check the id set too, and check the consumer's porcelain,
                             # because an uncommitted filing has no -S date
-   wc -l < /tmp/live.txt    # the live denominator. It moves ONLY when the consumer files or pulls
+   wc -l < "$T"/live.txt    # the live denominator. It moves ONLY when the consumer files or pulls
                             # -- citing an id here moves CITED and never LIVE
-   wc -l < /tmp/unfiled.txt # a CEILING on the available set, never the set itself
+   wc -l < "$T"/unfiled.txt # a CEILING on the available set, never the set itself
    ```
 
    **AN UNMOVED md5 WITH A MOVED COUNT IS THE GRAMMAR, NOT THE CONSUMER.** Batch 43 read 72 live
@@ -1252,14 +1261,16 @@ given at batch 90.
    after the v0.436.0 merge:
 
    ```
-   # /tmp/live.txt comes from `### Derive the state; do not trust the numbers below` -- BOTH record forms
+   T="$(git rev-parse --absolute-git-dir)/ai-dlc-derive"; mkdir -p "$T"
+   read -r st_sha st_t 2>/dev/null < "$T"/derive-fence2.stamp; [ "${st_sha:-}" = "$(git rev-parse origin/main)" ] && [ $(( $(date +%s) - ${st_t:-0} )) -lt 3600 ] || { echo "STOP: run fence 2 first, in this checkout"; exit 1; }
+   # "$T"/live.txt comes from `### Derive the state; do not trust the numbers below` -- BOTH record forms
    awk '/^## BL-[0-9]+/{if(id!=""){out()}; id=$2; pcs=""}
         match($0,/PC-[A-Z0-9][A-Z0-9_.-]+/){p=substr($0,RSTART,RLENGTH); if(index(pcs,p)==0) pcs=pcs (pcs?",":"") p}
         END{if(id!=""){out()}}
         function out(){ if(pcs!="") printf "%s\t%s\n", id, pcs }' docs/backlog.md \
    | while IFS="$(printf '\t')" read -r id pcs; do
        for p in $(printf '%s' "$pcs" | tr ',' ' '); do
-         grep -qx "$p" /tmp/live.txt && { echo "$id"; break; }
+         grep -qx "$p" "$T"/live.txt && { echo "$id"; break; }
        done
      done
    ```
