@@ -18,6 +18,7 @@ e2e core/scripts/validate-adversarial-convergence.sh e2e-vac-10 why=the gate val
 e2e core/scripts/validate-adversarial-convergence.sh e2e-vac-11 why=the gate validator runs as a program on the merged pass series; the merge and seal starts under it need it as their logged parent
 e2e core/scripts/validate-adversarial-convergence.sh e2e-vac-12 why=the gate validator runs as a program on the merged pass series; the merge and seal starts under it need it as their logged parent
 e2e core/scripts/validate-adversarial-convergence.sh e2e-vac-13 why=the gate validator runs as a program on the merged pass series; the merge and seal starts under it need it as their logged parent
+e2e core/scripts/validate-adversarial-convergence.sh e2e-vac-14 why=the gate validator runs as a program on the merged pass series; the merge and seal starts under it need it as their logged parent
 nested core/scripts/merge-adversarial-shards.sh core/scripts/content-seal.sh why=the CLI merge hands every marked shard and the seal rows to content-seal.sh, which an in-process merge answers with seal_main
 nested core/scripts/validate-adversarial-convergence.sh core/scripts/merge-adversarial-shards.sh why=the gate validator starts the merge for its derived set; its logged parent is a start of the validator
 nested core/scripts/validate-adversarial-convergence.sh core/scripts/content-seal.sh why=the gate validator reads the seal rows through content-seal.sh; its logged parent is a start of the validator

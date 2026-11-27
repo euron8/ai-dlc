@@ -734,8 +734,9 @@ artifact path under review, the canonical output path, the pass number, and — 
 PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
 again. A sharded pass after the series' first dispatches only the parts
 `scripts/ai-dlc/merge-adversarial-shards.sh [--document <artifact path> | --subject <N> --base <base sha>] --derived-map <that dir>`
-prints (the mode flags are the ones the mode's join takes; every mode narrows, and a set that falls to the full map carries
-the engine's `full width:` reason on the header line), plus the cross shard
+prints (the mode flags are the ones the mode's join takes; files mode prints the full map with a `full width:` reason,
+document and subject modes narrow, and a set that falls to the full map carries the engine's `full width:` reason on
+the header line), plus the cross shard
 (which still reads the whole subject); the merge refuses a shard outside that set and the convergence
 validator refuses a dispatched set that differs from it. Every adversary brief, sharded or not, also carries the early-write instruction of
 "Validation cycle" item 1: header first, each finding appended as verified, and ONE final
@@ -789,7 +790,8 @@ skipped: every beat-join, MISSING re-dispatch, `--rerun` merge and post-compacti
 `--existing`, and only the first creation of a pass uses the creating form. Then run
 `scripts/ai-dlc/merge-adversarial-shards.sh --map <that dir>` for the series' first pass, and
 `scripts/ai-dlc/merge-adversarial-shards.sh --derived-map <that dir>` for every pass after it, which prints
-`<ordinal>\t<basename>` per story. Each per-story shard gets its ordinal and basename, the line
+`<ordinal>\t<basename>` for every story under a `full width:` reason, and the merge still stamps
+`shard_set_derived_from:`. Each per-story shard gets its ordinal and basename, the line
 `shard: <ordinal>/<K> <basename>`, and the output path `<that dir>/<ordinal>.md`. The cross-story
 shard gets `shard: cross/<K> g1/1 <ordinals>` (every ordinal 1..K), the whole map, every
 story to read ("Validation cycle" item 1, "The cross agent"),
@@ -879,7 +881,7 @@ A p3 that does not stamp `EXIT_CONDITION_MET` CAPS the series (`--cycle-state` s
 and STOPS it exactly as a STALL does: its record is `s<N>/<artifact>-resolution-p3.md`, resolving
 `<artifact>-adversarial-p3.md`, and the next pass declares it in `resolves_divergence:`. Every sharded
 pass after a series' first reviews the REPAIR: dispatch it over the parts
-`scripts/ai-dlc/merge-adversarial-shards.sh [--document <artifact path> | --subject <N> --base <base sha>] --derived-map <that dir>` prints (files mode narrows to the parts the engine derives from the repair; document and subject modes narrow by part digest, and a full map carries its `full width:` reason) plus the cross shard,
+`scripts/ai-dlc/merge-adversarial-shards.sh [--document <artifact path> | --subject <N> --base <base sha>] --derived-map <that dir>` prints (files mode prints the full map; document and subject modes narrow by part digest, and a full map carries its `full width:` reason) plus the cross shard,
 and the merge stamps `shard_set_derived_from:`.
 
 **STOP → ADJUDICATE → RESOLVE → VERIFY**

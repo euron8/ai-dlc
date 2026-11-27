@@ -19,6 +19,19 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1272.0] - 2026-11-27
+
+### Stories adversarial passes after the first review every story again (BL-1005)
+
+- A stories adversarial pass at p2 or later dispatches every story again, plus the cross shard. `merge-adversarial-shards.sh --derived-map` in files (stories) mode prints the full map with a `full width:` reason, and the merge still stamps `shard_set_derived_from:`. The narrowing to stories whose bytes changed since the prior pass is gone: it skipped a story whose text had not changed and so missed a confirmed production defect.
+- Requirements-document and subject passes (`--document`, `--subject`) still narrow by part digest, and the merge still refuses a shard outside their derived set. The p3 bound is unchanged.
+- The adversary's later-pass appendix (`team-roles/appendix/adversary-later-pass.md`) now says that in a stories pass, an adversary whose story is unchanged since the previous pass reviews the whole story, not only the repair. The rulebook prose (`steps/_gate-procedures.md`, `steps/_dispatch-protocol.md`, Rules 8 and 28) now says files mode dispatches the full map.
+- A series already under way when you pull keeps working: a stories pass an older engine dispatched narrowed is still judged by the narrower set it was dispatched under.
+- Cost: on a sprint shaped like s324, the full width adds about 33 story reads over p3 to p5, about $13 and 0.83 spawn-hours a sprint. This is derived from the s321 and s324 records, not measured.
+- Not yet changed: the later-pass brief that `gen-round-briefs.sh` writes still tells every shard, stories included, that the pass reviews the repair; only the adversary's later-pass appendix says an unchanged story is reviewed whole.
+- In this repo only: `.claude/rules/operator-rulings.md` gains a standing ruling that an entry's own decision rule, once a reading meets it, is applied by the lead and never put to the operator again.
+- Action for consumers: if a stories pass was dispatched narrowed before the pull and is merged after it, the merge refuses it with `shard N is missing from <dir> (expected: …)`, naming the ordinals the pass now owes; `--derived-map` now prints the full map.
+
 ## [0.1271.0] - 2026-11-27
 
 ### Pre-push pre-suite steps rerun when a declared input's file mode changes (BL-1155)

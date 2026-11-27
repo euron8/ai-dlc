@@ -46,8 +46,7 @@ green because it looks fine.
 
 Spawn agents liberally and in parallel; background anything long. Hands run locally as background agents,
 never in the cloud: writing hands pass `isolation: "worktree"`, read-only hands none (enforcer: P15,
-`scripts/validate-plan-shape.sh`). Where something waits on the answer, wall
-clock rules; where nothing does, cheaper tokens win even if slower. Profile the SCHEDULE per unit first:
+`scripts/validate-plan-shape.sh`). Where nothing waits, cheaper tokens win even if slower. Profile the SCHEDULE per unit first:
 measurement decides the ORDER, never the membership. A hand verifies ONLY its own change: `bash -n`, its
 discriminating probe, and CLAUDE.md's builder steps; the gate runs everything else. Never message a
 `graph-*` session, even read-only, without an explicit operator grant.
@@ -132,7 +131,8 @@ missing lead-held value degrades to the prior behaviour; it never refuses.
 ## Reaching the operator
 
 `AskUserQuestion` when a decision is genuinely theirs and the answer changes what happens next; a push
-notification only after a long silence. Present an operator stall as CHOICES WITH A MARKED RECOMMENDATION, not
+notification only after a long silence. An entry's own decision rule, once a reading meets it, is applied by
+the lead, never re-put to the operator. Present an operator stall as CHOICES WITH A MARKED RECOMMENDATION, not
 an open question. Report on any question, on any decision, and on completion including an early stop.
 
 Reports say in plain words what each release delivers and for whom; versions, cluster labels and BL ids only

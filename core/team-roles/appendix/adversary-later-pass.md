@@ -21,7 +21,9 @@ of your own count, not a second opinion about it.
 
 Pass 1 reviews the artifact. **Pass 2 and beyond review what the previous pass
 changed** — the repair is the artifact under review, including when your shard is one of
-a full-width map (`merge-adversarial-shards.sh --derived-map` prints a `full width:` reason when it does not narrow). You MUST:
+a full-width map (`merge-adversarial-shards.sh --derived-map` prints a `full width:` reason when it does not narrow).
+In a stories (files-mode) pass, a shard whose story is unchanged since the previous pass reviews
+the WHOLE story, not only the repair. You MUST:
 
 1. **Verify the prior pass's findings were repaired**, one by one: for each, state
    `repaired` / `partially repaired` / `not repaired` / `repaired wrongly`. A
