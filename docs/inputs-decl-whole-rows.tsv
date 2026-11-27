@@ -81,12 +81,6 @@ layer-qualifier-grain	core/skills/ai-dlc-update/reconcile/	whole
 layer-title-join	core/skills/ai-dlc-update/reconcile/	whole
 ledger-reverify-unfalsifiable	core/skills/ai-dlc-update/reconcile/	whole
 ledger-rotate	core/skills/ai-dlc-update/reconcile/	whole
-ledger-status-vocabulary	core/	legacy
-ledger-status-vocabulary	scripts/	legacy
-ledger-status-vocabulary	.githooks/	legacy
-ledger-status-vocabulary	templates/	legacy
-ledger-status-vocabulary	patterns/	legacy
-ledger-status-vocabulary	.claude/rules/	legacy
 post-write-gates	!core/skills/ai-dlc-update/reconcile/	legacy
 prepush-pool-depth	core/git-hooks/pre-push	whole
 prepush-pool-depth	.githooks/pre-push	whole

@@ -1,15 +1,16 @@
-# ledger-status-vocabulary copies the seeded tree's tracked files and runs the whole enforcement-map validator over
-# each mutated copy, so it takes every top that validator reads, as enforcement-map-sites does.
+# ledger-status-vocabulary copies the files `--arms I39` opens (run.sh LSV_FILES) and runs the validator over each
+# mutated copy: the validator, the arm-boundary renderer, the five manifests its preamble reads, and I39's three subjects.
 # The validator under test, REQUIRED: the sentinel prints past run.sh's distribution-only SKIP.
 !scripts/validate-enforcement-map.sh
-# reason: core/ is copied whole -- git ls-files -z over core/ and the other validator-read roots, core/fixtures/ledger-status-vocabulary/run.sh:84; the enforcement-map validator then walks the copy by content.
-core/
-scripts/
-.githooks/
-templates/
-patterns/
-.claude/rules/
-.ai-dlc-fixture-readsets.tsv
+scripts/render-invariant-index.sh
+core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/enforcement-map.yaml
+core/skills/ai-dlc/core-manifest.md
+core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/skills/ai-dlc-update/fixture-manifest.md
+core/skills/ai-dlc-update/SKILL.md
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/emit-report.sh
+core/fixtures/lib/layout.sh
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/report.sh
-core/fixtures/*/inputs.decl
