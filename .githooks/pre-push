@@ -268,7 +268,7 @@ ps_select() { # decides every keyed step in the runlist from the fixture mechani
   local c="$PS_W/k" n slug kd h keyed=0 dl df forced
   PS_KD=""
   mkdir -p "$c" || return 0
-  : > "$c/.list"; : > "$c/.mapped.all"; : > "$c/.kdec"
+  : > "$c/.list"; : > "$c/.mapped.all"; : > "$c/.kdec"; : > "$c/.k.always"
   for n in $(cat "$PS_W/runlist"); do
     slug="$(ps_slug "$(cat "$PS_W/$n.title")")"; printf '%s' "$slug" > "$PS_W/$n.slug"
     [ -f "${PS_DECL_ROOT}${slug}/inputs.decl" ] || continue
@@ -279,7 +279,7 @@ ps_select() { # decides every keyed step in the runlist from the fixture mechani
   PS_KD="$kd"
   # THE MARK precedes the key pass, so a declared input changed after it is either in the keys or newer than the mark.
   : > "$c/.mark" 2>/dev/null
-  ( KEYS_DIR="$kd"; FXROOT="$PS_DECL_ROOT"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; VERIFIED_RECORD=/dev/null; READSET_NOMODES=1 # pool-shadow: subshell
+  ( KEYS_DIR="$kd"; FXROOT="$PS_DECL_ROOT"; READSET_MAP="$c/.no-map"; READSET_LOCAL="$c/.no-local"; VERIFIED_RECORD=/dev/null # pool-shadow: subshell
     readset_drop_excluded() { cat; } # pool-shadow: subshell
     readset_manifest "$c"
     [ -s "$c/.now" ] || exit 1
@@ -311,7 +311,11 @@ PS_FORCED_EOF
 $forced
 " in *"
 $slug"$'\t'*) continue ;; esac
-    if awk -F'\t' -v s="$slug" '$1 == s && $2 == "skip" { f = 1 } END { exit f ? 0 : 1 }' "$c/.kdec"; then : > "$PS_W/$n.keyskip"; continue; fi
+    # A SKIP THAT ADOPTED THE PRESENT MODES (c `a`, a record written without `#modes v1`) is republished through
+    # `.k.always`, so the next push compares modes; no other skip and no forced step is listed.
+    if awk -F'\t' -v s="$slug" '$1 == s && $2 == "skip" { f = 1 } END { exit f ? 0 : 1 }' "$c/.kdec"; then : > "$PS_W/$n.keyskip"
+      awk -F'\t' -v s="$slug" '$1 == s && $2 == "skip" && $4 == "a" { f = 1 } END { exit f ? 0 : 1 }' "$c/.kdec" && printf '%s\n' "$slug" >> "$c/.k.always"
+      continue; fi
     # A STEP RUN ONLY BECAUSE ITS KEY ROWS DIFFER FROM <slug>.key (unrecorded, changed, tools changed) SKIPS ON A PASS
     # KEPT UNDER ITS ROWS' OWN NAME (ps_keep): every tree sharing the keys dir writes the one <slug>.key, so another
     # tree's pass at other content must not cost this tree its own. Any other run reason runs.
@@ -320,12 +324,13 @@ $slug"$'\t'*) continue ;; esac
     touch "$kd/$slug.$h.key" 2>/dev/null; : > "$PS_W/$n.keyskip"
   done
 }
-# ps_rowkey <record>: the first 16 hex of the sha256 of a key record's rows (its `#` header lines left out). Rows are
-# root-relative, so two trees whose declared inputs hold the same bytes print the same name.
+# ps_rowkey <record>: the first 16 hex of the sha256 of a key record's rows and its `#modes v1` and `#mode` lines (its
+# other `#` header lines left out). Rows are root-relative, so two trees whose declared inputs hold the same bytes and
+# modes print the same name.
 ps_rowkey() {
   local h
   [ -s "$1" ] || return 1
-  h="$(grep -v '^#' "$1" | shasum -a 256 | cut -c1-16)"
+  h="$(awk '!/^#/ || $0 == "#modes v1" || index($0, "#mode\t") == 1' "$1" | shasum -a 256 | cut -c1-16)"
   case "$h" in [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) printf '%s' "$h" ;; *) return 1 ;; esac
 }
 # ps_keep <record> <slug> <keys dir>: keeps a passed step's record as <slug>.<rowkey>.key beside <slug>.key, and prunes
@@ -428,7 +433,9 @@ ps_flush() {
     printf '   ..    step elapsed %ss\n' "$(cat "$PS_W/$n.sec" 2>/dev/null || echo 0)"
   done
   # A PASS IS PUBLISHED THROUGH THE FIXTURE MECHANISM'S OWN WRITER: a verdict file named for the step, then readset_keys_write.
-  if [ -n "$PS_KD" ] && [ -s "$PS_W/k/.passed" ]; then
+  # A mode-adopting skip (`.k.always`, ps_select) is published by the same writer.
+  if [ -n "$PS_KD" ] && { [ -s "$PS_W/k/.passed" ] || [ -s "$PS_W/k/.k.always" ]; }; then
+    : >> "$PS_W/k/.passed"
     while IFS= read -r slug; do printf ok > "$PS_W/k/$slug"; done < "$PS_W/k/.passed"
     readset_keys_write "$PS_W/k" "$PS_KD"
     while IFS= read -r slug; do ps_keep "$PS_W/k/.k/$slug" "$slug" "$PS_KD"; done < "$PS_W/k/.passed"
@@ -3062,7 +3069,7 @@ readset_keys() { # <list> <out>
   KPN="$out/.kpn" KN="$out/.now" KLN="$out/.ls.now" KLP="$lp" KLV="$lv" KPP="$pp" KPV="$pv" KV2="$v2" KR="$out/.krows" \
   KM="$out/.mapped.all" KLOC="$out/.local.valid" KC="$out/.krecs" KF="$out/.kl" KH="$out/.khdr" KO="$out/.kout" \
   KQ="$out/.qfx" KT="$out/.tools" KFT="$out/.ftools" KDF="$out/.dfx" KDK="$out/.dkeys" KDU="$out/.dunres" KRL="$READSET_RUNNER_LEGACY" KRC="$READSET_RUNNER_CARRY" \
-  KMD="$out/.modes" awk -v seed="$seed" -v root="$FXROOT" -v nm="${READSET_NOMODES:+1}" '
+  KMD="$out/.modes" awk -v seed="$seed" -v root="$FXROOT" '
     function rd(file, arr,   l, t) { while ((getline l < file) > 0) { t = index(l, "\t"); arr[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     function kids(file, set,   l, t, p, i) { while ((getline l < file) > 0) { t = index(l, "\t"); p = (t ? substr(l, 1, t - 1) : l)
         while ((i = match(p, /\/[^\/]*$/)) > 0) { set[substr(p, 1, i - 1) SUBSEP substr(p, i + 1)] = 1; p = substr(p, 1, i - 1) } } }
@@ -3131,7 +3138,7 @@ readset_keys() { # <list> <out>
         else if (a[2] == "#modes") RMH[a[1]] = a[3]
         else if (a[2] == "#mode") RMD[a[1] SUBSEP a[3]] = a[4]
         else { RK[a[1]] = RK[a[1]] "\n" a[2]; RV[a[1] SUBSEP a[2]] = a[3] } }
-      if (!nm) while ((getline l < ENVIRON["KMD"]) > 0) { t = index(l, "\t"); MD[substr(l, 1, t - 1)] = substr(l, t + 1) }
+      while ((getline l < ENVIRON["KMD"]) > 0) { t = index(l, "\t"); MD[substr(l, 1, t - 1)] = substr(l, t + 1) }
       while ((getline f < ENVIRON["KF"]) > 0) {
         delete K; delete R; delete X; delete LM
         um = !(f in MAPPED)
@@ -3175,7 +3182,7 @@ readset_keys() { # <list> <out>
         # a content change because the store, twin and side-record skips clear only `k`. A record without the header
         # (written before it) adopts the current tags: `am`, republished c `a` when nothing else runs it.
         mch = ""; am = 0
-        if (has && !seed && !nm) {
+        if (has && !seed) {
           if (RMH[f] == "v1") { for (k in R) { if (substr(k, 1, 1) == "/" || k ~ /\/$/ || R[k] == "-" || cv(f, k) == "-") continue
               if ((f in DECL) && !(k in K) && index(k, root f "/") != 1) continue
               if (((k in MD) ? MD[k] : "") != (((f SUBSEP k) in RMD) ? RMD[f SUBSEP k] : "") && (mch == "" || k < mch)) mch = k } }
@@ -3208,16 +3215,16 @@ readset_keys() { # <list> <out>
         print f "\t" (run ? "run" : "skip") "\t" why "\t" c "\t" ns }
     }' > "$out/.kdec"
   # THE RECORD carries `#modes v1` after its header and one `#mode\t<path>\t<tag>` line per non-plain file key in row
-  # order, ahead of its rows (BL-1155); the publish puts `#pending` above them. READSET_NOMODES (the pre-suite) writes neither.
-  LC_ALL=C sort -t "$tab" -k1,1 -k2 "$out/.kout" | KMD="$out/.modes" awk -F'\t' -v kd="$out/.k" -v hdr="$out/.khdr" -v nm="${READSET_NOMODES:+1}" '
+  # order, ahead of its rows (BL-1155); the publish puts `#pending` above them. The pre-suite's records carry both too.
+  LC_ALL=C sort -t "$tab" -k1,1 -k2 "$out/.kout" | KMD="$out/.modes" awk -F'\t' -v kd="$out/.k" -v hdr="$out/.khdr" '
     function flush() { if (f == "") return; o = kd "/" f; print "#format k1" > o; print "#state " st[f] > o; print "#tools canonical" > o
-      if (!nm) { print "#modes v1" > o; if (mb != "") printf "%s", mb > o }
+      print "#modes v1" > o; if (mb != "") printf "%s", mb > o
       printf "%s", rb > o; close(o) }
     BEGIN { while ((getline l < hdr) > 0) { t = index(l, "\t"); st[substr(l, 1, t - 1)] = substr(l, t + 1) }
-      if (!nm) while ((getline l < ENVIRON["KMD"]) > 0) { t = index(l, "\t"); MD[substr(l, 1, t - 1)] = substr(l, t + 1) } }
+      while ((getline l < ENVIRON["KMD"]) > 0) { t = index(l, "\t"); MD[substr(l, 1, t - 1)] = substr(l, t + 1) } }
     $1 != f { flush(); f = $1; mb = ""; rb = "" }
     { r = substr($0, length(f) + 2); rb = rb r "\n"
-      if (!nm) { k = substr(r, 1, index(r, "\t") - 1); if (substr(k, 1, 1) != "/" && (k in MD)) mb = mb "#mode\t" k "\t" MD[k] "\n" } }
+      k = substr(r, 1, index(r, "\t") - 1); if (substr(k, 1, 1) != "/" && (k in MD)) mb = mb "#mode\t" k "\t" MD[k] "\n" }
     END { flush() }'
   readset_verdicts "$out"
 }
@@ -3425,12 +3432,12 @@ cl_select() {
   # A `d` or `h` skip publishes no record, so its existing `<fx>.key` with no `#modes v1` line is listed in `.kmh` and
   # rewritten in place by cl_write (header added, nothing else moved). Decided here, so a prediction prints it too.
   : > "$c/.kmh"
-  [ -n "$why" ] || KMH="$c/.kmh" awk -F'\t' -v kd="$kd" -v nm="${READSET_NOMODES:+1}" '
+  [ -n "$why" ] || KMH="$c/.kmh" awk -F'\t' -v kd="$kd" '
     function bare(r,   l, n, h) { n = 0; h = 0
       while ((getline l < r) > 0) { n++; if (n == 1 && l != "#format k1") { close(r); return 0 }; if (l == "#modes v1") h = 1 }
       close(r); return n > 0 && !h }
     $2 == "skip" && $4 == "a" { a++ }
-    !nm && $2 == "skip" && ($4 == "d" || $4 == "h") && bare(kd "/" $1 ".key") { m++; print $1 > ENVIRON["KMH"] }
+    $2 == "skip" && ($4 == "d" || $4 == "h") && bare(kd "/" $1 ".key") { m++; print $1 > ENVIRON["KMH"] }
     END { if (a || m) print "   ..    read-set modes: consumer layout: " a + 0 " <fx>@consumer record(s) written before mode keys are decided to be republished with the present modes and types adopted; " m + 0 " <fx>@consumer record(s) skipped on a twin or side record (d/h) are decided to have the present modes added in place, with no run" }' "$c/.kdec"
   # EVERY UNIT SKIPPED ON A PASS RECORDED ELSEWHERE IS NAMED, in the distribution's own verdict-store line: a store hit
   # (`.vs`, readset_verdicts' hit list) and a record skip whose record is still UNCONFIRMED (`.vs.u`: cl_publish marked
@@ -3511,7 +3518,7 @@ cl_write() {
   # A `d`/`h` SKIP'S HEADER-LESS RECORD (`.kmh`, cl_select) TAKES `#modes v1` and one `#mode\t<path>\t<tag>` line per
   # non-plain file key it rows, from the consumer layout's present `.modes`, just before its first row; every other byte
   # is kept. temp + mv; a record already headed, absent or not `#format k1` is left as it is.
-  [ -n "${READSET_NOMODES:-}" ] || [ ! -s "$c/.kmh" ] || [ ! -f "$c/.modes" ] || while IFS= read -r b; do
+  [ ! -s "$c/.kmh" ] || [ ! -f "$c/.modes" ] || while IFS= read -r b; do
     [ -n "$b" ] && [ -f "$CL_KEYS_DIR/$b.key" ] || continue
     KMD="$c/.modes" awk '
       BEGIN { while ((getline l < ENVIRON["KMD"]) > 0) { t = index(l, "\t"); if (t > 1) MD[substr(l, 1, t - 1)] = substr(l, t + 1) } }

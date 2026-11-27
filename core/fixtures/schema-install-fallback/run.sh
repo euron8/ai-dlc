@@ -89,6 +89,28 @@ WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; ex
 WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
+# THE COPIED DISTRIBUTION. Every install run (in process and both cli cells) and the arms that read core/ or templates/
+# read $DIST. The files outside core/fixtures/ are copied once from the repo (git ls-files -z | tar); core/fixtures/ is
+# stubbed: install.sh reads a fixture's NAME (its directory, its `.dist-only` marker) and the index's file list, and
+# copies each file's bytes into the target's tests/fixtures/, which no arm reads, so each of those files is an empty
+# file in $DIST named from the index, never read from the repo. install.sh requires a git work tree whose top level is
+# its own root and takes its shipping fixtures from the index, so $DIST is a git repo with everything added, nothing
+# committed.
+DIST="$WORK/dist"; mkdir -p "$DIST" || { echo "FIXTURE ERROR: mkdir $DIST failed" >&2; exit 2; }
+( set -o pipefail; cd "$ROOT_DIR" && git ls-files -z -- core patterns templates scripts/install.sh scripts/install-scaffold-ignore.sh ':(exclude)core/fixtures' \
+    | tar -cf - --null -T - | tar -C "$DIST" -xf - ) || { echo "FIXTURE ERROR: copying the distribution into $DIST failed" >&2; exit 2; }
+( set -o pipefail; cd "$ROOT_DIR" && git ls-files -z -- ':(literal)core/fixtures' \
+    | python3 -I -c 'import os,sys
+for p in sys.stdin.buffer.read().split(b"\0"):
+    if p:
+        d = os.path.join(sys.argv[1].encode(), p)
+        os.makedirs(os.path.dirname(d), exist_ok=True)
+        open(d, "wb").close()' "$DIST" ) || { echo "FIXTURE ERROR: stubbing core/fixtures in $DIST failed" >&2; exit 2; }
+git init -q "$DIST" && git -C "$DIST" add -A -f || { echo "FIXTURE ERROR: git init/add in $DIST failed" >&2; exit 2; }
+[ -f "$DIST/scripts/install-scaffold-ignore.sh" ] && [ -d "$DIST/core/schemas" ] && [ -d "$DIST/patterns" ] && [ -d "$DIST/templates" ] \
+  || { echo "FIXTURE ERROR: the copied distribution in $DIST is incomplete" >&2; exit 2; }
+INSTALL="$DIST/scripts/install.sh"
+
 . "$HERE/../lib/report.sh" || { echo "FIXTURE BROKEN: cannot source lib/report.sh" >&2; exit 2; }
 # IN PROCESS (BL-878). install.sh is driven through lib/inproc.sh's inproc_run, which calls ai_dlc_install_main in a
 # subshell made to look like a fresh `bash install.sh`. No call sits under if, !, && or ||: install.sh's own `set -e`
@@ -527,7 +549,7 @@ echo ""
 # crosswalk file ONCE and a re-install preserves it. A file the installer re-copies is core's
 # however the contract describes it, and the consumer's rows would vanish at the next install.
 # CW_REL is read from the contract the install shipped from, never hard-coded.
-CW_REL="$(sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' "$ROOT_DIR/core/skills/ai-dlc/layer-contract.yaml" 2>/dev/null \
+CW_REL="$(sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' "$DIST/core/skills/ai-dlc/layer-contract.yaml" 2>/dev/null \
   | head -1 | sed 's/[[:space:]]*$//')"
 if [ -z "$CW_REL" ]; then
   bad "CW1 (layer-crosswalk-home): core/skills/ai-dlc/layer-contract.yaml declares no consumer_crosswalk_file:, so there is no crosswalk path to check"
@@ -553,7 +575,7 @@ fi
 # ok. jq, because the shape is nested and a grep for two filenames cannot say which EVENT each
 # sits under. The control: a hook name the template does NOT carry must resolve to nothing, or
 # the two readings came from a query that matches anything.
-_HES_TMPL="$ROOT_DIR/templates/settings.json.template"
+_HES_TMPL="$DIST/templates/settings.json.template"
 if [ ! -f "$_HES_TMPL" ]; then
   bad "HO1 (handoff-completion-assertion e6-order): templates/settings.json.template is absent from a tree that declares templates/ — the registration order is unverified"
   bad "HO2 (handoff-completion-assertion e6-order control): not reached: no template"

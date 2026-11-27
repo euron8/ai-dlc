@@ -13,9 +13,8 @@
 # which is derived from the validator's own location, so there is no tunable to point it at a
 # seeded file — and adding one would be a surface for weakening the gate, because unlike I36
 # BOTH of I39's sides are mutable, so an override could hand it two agreeing empty sets. Instead
-# the repo's TRACKED files are copied to a temp tree and the mutation is made THERE. Every other
-# invariant runs against a complete tree in each copy, which is what lets an assertion attribute
-# a failure to I39 rather than to the copy being incomplete.
+# the files I39 reads are copied to a temp tree at their working-tree content and the mutation is made THERE. The COPIED check holds
+# the copy to exactly that set, so a failure is I39's and not an incomplete copy's.
 #
 # Each mutant is a COPY guarded by `cmp -s`, asserts a POSITIVE outcome (the specific I39 message
 # appears), and asserts the run produced EXACTLY ONE failure line — except half-rename, whose
@@ -62,33 +61,36 @@ export -f fx_inproc
 echo "HERMETIC-CONSUMED core/fixtures/lib/mutant.sh"
 REPO="$(cd "$(dirname "$VAL")/.." && pwd)"
 
-# The mutation surface is the working tree, so the copy is of TRACKED files at their working-tree
-# content — the fixture tests the tree it is running in, not the last commit.
-if ! git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
-  echo "ledger-status-vocabulary: FIXTURE ERROR — $REPO is not a git checkout, so the tracked-file copy cannot be built. This is an error, not a skip: reporting clean here would be a check that cannot fire." >&2
-  exit 2
-fi
-
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/ledger-status-vocab-XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
 BASE="$TMP/base"
 mkdir -p "$BASE"
-# One tar pipeline instead of a mkdir+cp pair per file: the same tracked set at the same
-# working-tree content, for two forks in place of thousands. The COPIED floor below is what
-# catches a pipeline that produced nothing.
-# THE SET IS WHAT THE VALIDATOR READS, NOT THE WHOLE TREE. scripts/validate-enforcement-map.sh opens $REPO_ROOT/{core,scripts,
-# templates,.githooks,.claude,patterns}/, CLAUDE.md (replaced below) and .ai-dlc-fixture-readsets.tsv (the :1-1296 preamble, the
-# per-arm greps). Every run below is `--arms I39` (:279), whose span has no find, so no docs/**/*.sh is read; docs/
-# and the other root files are never opened. A pathspec, so a new tracked file under a root is still copied.
-git -C "$REPO" ls-files -z -- core scripts .githooks templates patterns .claude .ai-dlc-fixture-readsets.tsv | (cd "$REPO" && tar -cf - --null -T - 2>/dev/null) | tar -xf - -C "$BASE"
+# THE SET IS THE FILES `--arms I39` OPENS, NOT A TREE. The validator's preamble reads the five core/skills manifests
+# (gate-validation.md, enforcement-map.yaml, core-manifest.md, setup-sites.md, fixture-manifest.md) and, for the arm
+# selection, scripts/render-invariant-index.sh; the I39 span (scripts/validate-enforcement-map.sh) reads the three
+# ai-dlc-update files named below. Every run is `--arms I39` (:279), so no other file is opened. The copy lives in
+# $BASE, so the validator resolves its root there and never the distribution. A file added to this list is a file
+# the validator newly reads; the COPIED check below holds the list to the tree.
+LSV_FILES="scripts/validate-enforcement-map.sh
+scripts/render-invariant-index.sh
+core/skills/ai-dlc/steps/gate-validation.md
+core/skills/ai-dlc/enforcement-map.yaml
+core/skills/ai-dlc/core-manifest.md
+core/skills/ai-dlc-update/reconcile/setup-sites.md
+core/skills/ai-dlc-update/fixture-manifest.md
+core/skills/ai-dlc-update/SKILL.md
+core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+core/skills/ai-dlc-update/reconcile/emit-report.sh"
+LSV_NFILES="$(printf '%s\n' "$LSV_FILES" | grep -c .)"
+printf '%s\n' "$LSV_FILES" | (cd "$REPO" && tar -cf - -T - 2>/dev/null) | tar -xf - -C "$BASE"
 # CLAUDE.md is a scanned-corpus member of the validator (the I108/I121-I124 walks read it for copies of a
 # taught passage), never a subject of these assertions. A fixed sample stands in for the live file, so the
 # repository's CLAUDE.md is neither declared nor read here and its edits cannot move any verdict.
 printf '# Sample CLAUDE.md\n\nA seeded stand-in for the repository file; it carries no rule text.\n' > "$BASE/CLAUDE.md"
 COPIED="$(find "$BASE" -type f | wc -l | tr -d ' ')"
-if [ "$COPIED" -lt 100 ]; then
-  echo "ledger-status-vocabulary: FIXTURE ERROR — copied only $COPIED files; an incomplete tree fails every invariant and would score every mutant as a kill." >&2
+if [ "$COPIED" -ne $((LSV_NFILES + 1)) ]; then
+  echo "ledger-status-vocabulary: FIXTURE ERROR — copied $COPIED files, expected $((LSV_NFILES + 1)); an incomplete tree fails every invariant and would score every mutant as a kill." >&2
   exit 2
 fi
 

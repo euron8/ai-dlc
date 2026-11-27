@@ -19,6 +19,22 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1271.0] - 2026-11-27
+
+### Pre-push pre-suite steps rerun when a declared input's file mode changes (BL-1155)
+
+- In the distribution: a pre-push pre-suite step now reruns when a declared input's file mode changes (for example a script gaining or losing its executable bit), not only when its bytes change. Each existing pre-suite record is upgraded once, on the first push, without running its step; a step that skipped on a kept side record may run once.
+- For every consumer: the shipped `core/git-hooks/pre-push` carries the same edit (I66), but a consumer runs no pre-suite steps. The one cost is a one-time rerun of the 16 of 174 shipped fixtures that key the pre-push hook's bytes.
+- The backlog records the four remaining mode-key limits as latent, each with the event that would reopen it.
+- Action for consumers: none.
+
+### Two gate fixtures copy only the files they read, so their read-set trace is now recorded (BL-1155)
+
+- In the distribution only: the `ledger-status-vocabulary` fixture copies the 10 files its one validator arm opens (plus the seeded `CLAUDE.md` stand-in) instead of 1,820 tracked files, and its `inputs.decl` lists those files instead of six directories. The six matching rows leave `docs/inputs-decl-whole-rows.tsv`.
+- In the distribution only: the `schema-install-fallback` fixture runs all five of its installs from one scratch copy of the distribution (`install.sh`'s git calls into the real repository root 21 to 0), and the copy holds `core/fixtures/` as empty files named from the git index (repo files copied 1,747 to 334). Its declaration loses the line that named every fixture's `inputs.decl`.
+- Both fixtures now have a sandbox read-set reading, `PLUS 0` against their declarations: `schema-install-fallback` in a quiet window (346 paths recorded, no loss), `ledger-status-vocabulary` in a lossless one (18 paths). BL-868: the copies are file lists and git listings, with no clock or load.
+- Action for consumers: none.
+
 ## [0.1270.0] - 2026-11-27
 
 ### Every gate that runs gate validation now closes through the gate program, and the hand-written gate-log, snapshot and re-read steps are gone (BL-819, BL-1186)
