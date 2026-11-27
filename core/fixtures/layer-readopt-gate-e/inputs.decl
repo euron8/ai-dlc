@@ -1,5 +1,5 @@
 # layer-readopt-gate-e: shard 'e' of layer-readopt-gate (the OVERRIDE-SUPERSEDED arms); the driver execs the parent's run.sh --group e. Only the reconcile scripts this shard's units run or source are declared, so the parent's whole-directory row is not repeated.
-core/skills/ai-dlc-update/reconcile/readopt-override.sh
+!core/skills/ai-dlc-update/reconcile/readopt-override.sh
 core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
 core/skills/ai-dlc-update/reconcile/layer-drift.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
@@ -18,7 +18,10 @@ core/fixtures/layer-readopt-gate-d/.dist-only
 core/fixtures/lib/report.sh
 core/skills/ai-dlc-update/reconcile/register-drift.sh
 # Unit stub drives pull.sh merge, which sources pull-key.sh and reads ask-families.tsv, apply.sh's and preclassify.sh's helper bodies.
-core/skills/ai-dlc-update/reconcile/pull.sh
+!core/skills/ai-dlc-update/reconcile/pull.sh
 core/skills/ai-dlc-update/reconcile/pull-key.sh
 core/skills/ai-dlc-update/reconcile/ask-families.tsv
 core/skills/ai-dlc-update/reconcile/apply.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

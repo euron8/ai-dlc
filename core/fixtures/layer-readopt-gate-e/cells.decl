@@ -1,0 +1,6 @@
+# layer-readopt-gate-e's starts of its subjects (BL-879 grammar). Unit stub drives readopt-override.sh in process
+# (rov_main through inproc_run); its two pull.sh merge runs stay end to end, and pull.sh starts readopt-override.sh as
+# its own child, which the nested row covers.
+e2e core/skills/ai-dlc-update/reconcile/pull.sh stub-pm why=pull.sh has no entry function and sources reconcile/lib.sh, whose memo exists only at BASH_SUBSHELL 0; the merge relays the readopt-override.sh child's refusal and exit
+e2e core/skills/ai-dlc-update/reconcile/pull.sh stub-pmt why=pull.sh has no entry function and sources reconcile/lib.sh, whose memo exists only at BASH_SUBSHELL 0; the twin merge records the readopt-override.sh child's decision row
+nested core/skills/ai-dlc-update/reconcile/pull.sh core/skills/ai-dlc-update/reconcile/readopt-override.sh why=pull.sh merge starts readopt-override.sh --merge once per override

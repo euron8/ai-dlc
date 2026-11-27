@@ -66,13 +66,11 @@ trap 'rm -rf "$WORK"' EXIT
 
 # IN PROCESS WHERE IT CAN BE (BL-878). A gate run that reaches the audit starts its siblings
 # (validate-cycle-commits.sh, validate-audit-anchors.sh, validate-escalation-resolution.sh) as separate programs, and
-# a `nested` row covers such a child only when its logged parent is a START of the gate: driven in process, the gate
-# is no start, so every sibling start would be an untagged start of a declared subject (C1). Those ten worlds stay
-# end to end, one `e2e` cell each with its reason in cells.decl, and three `nested` rows cover the siblings. The two
-# worlds that start no sibling (feature, nobmad) and the two validate-audit-anchors.sh seed calls run in process
-# through core/fixtures/lib/inproc.sh inproc_run (never inproc_load: two subjects are driven, and a loaded one would
-# log every pass under its own path); the gate's two cli cells compare those worlds' in-process answers with the
-# program's. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECTS: a subject with neither its `<p>_main() {` line nor the
+# a `nested` row covers such a child only when its logged parent is the gate. Every world's gate drive and the two
+# validate-audit-anchors.sh seed calls run in process through core/fixtures/lib/inproc.sh inproc_run (never
+# inproc_load: two subjects are driven, and a loaded one would log every pass under its own path); each gate drive
+# logs an #inproc parent marker naming the gate first (drv_mark), so the three `nested` rows cover the sibling starts.
+# The gate's three cli cells compare three worlds' in-process answers with the program's. A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECTS: a subject with neither its `<p>_main() {` line nor the
 # column-0 source guard predates the wrap and reads SKIP through fx_skip_exit (exit 0 on a consumer, never an ok;
 # FIXTURE BROKEN in the distribution); exactly one half FAILs; an unreadable one is FIXTURE ERROR.
 . "$HERE/../lib/mutant.sh" || { echo "FIXTURE BROKEN: cannot source lib/mutant.sh" >&2; exit 2; }
@@ -213,81 +211,88 @@ echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-audit-anchors.sh"
 echo "HERMETIC-CONSUMED $SCHEMA"
 
 OUT=""; RC=""
+# Every drive is an in-process pass, and a pass that reaches the audit starts the gate's siblings as children. drv_mark,
+# called inside the pass's own $( ) under a counted run, appends one `#inproc` row to the start log (id i<fixture pid>.<n>,
+# the previous FXCOUNT_PARENT, the gate's path) and exports FXCOUNT_PARENT as that id, so each sibling's start names the
+# pass as its parent and the nested rows in cells.decl cover it; the export dies with the $( ).
+DPN=0
+drv_mark() {
+  [ -n "${FXCOUNT_LOG:-}" ] || return 0
+  printf '#inproc\t%s\t\t%s\t%s\n' "i$$.$DPN" "${FXCOUNT_PARENT:-}" "$SUBJ" 2>/dev/null >> "$FXCOUNT_LOG" || :
+  export FXCOUNT_PARENT="i$$.$DPN"
+}
 # Not a command substitution at the call site: OUT and RC must reach the caller.
-drive() { # $1 e2e cell id, or "" for an in-process call; $2 world dir. A fresh copy of the world
-          # per drive: the audit advances the watermark, so a second drive of one world would audit
-          # an empty range.
+drive() { # $1 world dir. A fresh copy of the world per drive: the audit advances the watermark, so a
+          # second drive of one world would audit an empty range.
   local cp="$WORK/run.$$.$RANDOM"
-  rm -rf "$cp"; cp -R "$2" "$cp"
-  if [ -z "$1" ]; then
-    OUT="$(AI_DLC_PROJECT_ROOT="$cp" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" inproc_run "$SUBJ" vtag_main --sprint 7 2>&1)"; RC=$?
-  else
-    OUT="$(AI_DLC_PROJECT_ROOT="$cp" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" FXCELL="$1" bash "$SUBJ" --sprint 7 2>&1)"; RC=$?
-  fi
+  rm -rf "$cp"; cp -R "$1" "$cp"
+  DPN=$((DPN + 1))
+  OUT="$(drv_mark && AI_DLC_PROJECT_ROOT="$cp" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" inproc_run "$SUBJ" vtag_main --sprint 7 2>&1)"; RC=$?
   rm -rf "$cp"
 }
 has() { grep -qF -- "$1" <<< "$OUT"; }
 
-# expect <e2e cell id, or "" in process> <world> <rc> <required verdict text>
+# expect <world> <rc> <required verdict text>
 expect() {
-  drive "$1" "$W/$2"
-  if [ "$RC" = "$3" ] && has "$4"; then return 0; fi
-  LAST="world $2: exit $RC (want $3), verdict: $(printf '%s\n' "$OUT" | grep '^verdict' | head -1)"
+  drive "$W/$1"
+  if [ "$RC" = "$2" ] && has "$3"; then return 0; fi
+  LAST="world $1: exit $RC (want $2), verdict: $(printf '%s\n' "$OUT" | grep '^verdict' | head -1)"
   return 1
 }
 
 echo "trunk-audit-gate:"
 
-if expect clean clean 0 'verdict  : PASS' && has 'audit_rc : 0' && has 'AUDIT-TRUNK: audited=1 ' \
+if expect clean 0 'verdict  : PASS' && has 'audit_rc : 0' && has 'AUDIT-TRUNK: audited=1 ' \
   && echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-cycle-commits.sh"; then
   ok "clean: the audit re-ran 1 commit at the gate -> PASS"
 else bad "clean: $LAST"; fi
-if expect finding finding 1 'reported findings' && has 'audit_rc : 1' && has 'findings=1'; then
+if expect finding 1 'reported findings' && has 'audit_rc : 1' && has 'findings=1'; then
   ok "finding: audit exit 1 -> gate FAIL exit 1, HARD_BLOCK named"
 else bad "finding: $LAST"; fi
-if expect empty empty 0 'verdict  : PASS' && has 'control: the trunk holds'; then
+if expect empty 0 'verdict  : PASS' && has 'control: the trunk holds'; then
   ok "empty range: PASS carries the audit's own control line"
 else bad "empty: $LAST"; fi
-if expect worklist worklist 0 'verdict  : WORKLIST' && has 'AUDIT-TRUNK: WORKLIST'; then
+if expect worklist 0 'verdict  : WORKLIST' && has 'AUDIT-TRUNK: WORKLIST'; then
   ok "worklist: undeclared taxonomy -> WORKLIST, exit 0, not a FAIL"
 else bad "worklist: $LAST"; fi
-if expect nogenesis nogenesis 2 'could not run (setup error)' && has 'audit_rc : 2' && ! has 'SHALLOW'; then
+if expect nogenesis 2 'could not run (setup error)' && has 'audit_rc : 2' && ! has 'SHALLOW'; then
   ok "nogenesis: audit exit 2 -> gate FAIL exit 2, not a clean result, not called shallow"
 else bad "nogenesis: $LAST"; fi
-if expect "" nobmad 2 'no readable pipeline snapshot'; then
+if expect nobmad 2 'no readable pipeline snapshot'; then
   ok "no _bmad-output/: exit 2, no verdict about nothing"
 else bad "nobmad: $LAST"; fi
-if expect "" feature 0 'NOT-APPLICABLE -- EXAMINED NOTHING' && ! has 'audit_rc'; then
+if expect feature 0 'NOT-APPLICABLE -- EXAMINED NOTHING' && ! has 'audit_rc'; then
   ok "feature variant: NOT-APPLICABLE, audit not run, no watermark needed"
 else bad "feature: $LAST"; fi
-if expect anchors anchors 0 'verdict  : PASS' && has "audit-anchors.md prior-sprint sha (${AG})" \
+if expect anchors 0 'verdict  : PASS' && has "audit-anchors.md prior-sprint sha (${AG})" \
   && has 'AUDIT-TRUNK: audited=1 '; then
   ok "anchors: no watermark, genesis from the prior sprint's required sha, no audit_window -> PASS"
 else bad "anchors: $LAST"; fi
-if expect wedge-resolved wedge-resolved 0 'verdict  : PASS' && has "exit     : ${BAD_R}" && has 'findings=1' \
+if expect wedge-resolved 0 'verdict  : PASS' && has "exit     : ${BAD_R}" && has 'findings=1' \
   && has 'AUDIT-TRUNK: audited=1 ' \
   && echo "HERMETIC-CONSUMED $SUBJ_DIR/validate-escalation-resolution.sh"; then
   ok "wedge-resolved: finding -> fix-forward -> operator-RESOLVED entry names the sha -> PASS"
 else bad "wedge-resolved: $LAST"; fi
-if expect wedge-noexit wedge-noexit 1 'reported findings' && has 'an escalation names'; then
+if expect wedge-noexit 1 'reported findings' && has 'an escalation names'; then
   ok "wedge-noexit: fix-forward with the entry still HARD_BLOCK -> still FAIL"
 else bad "wedge-noexit: $LAST"; fi
-if expect wedge-othersha wedge-othersha 1 'reported findings' && has 'no escalation entry names'; then
+if expect wedge-othersha 1 'reported findings' && has 'no escalation entry names'; then
   ok "wedge-othersha: a resolved entry naming another sha is not an exit -> still FAIL"
 else bad "wedge-othersha: $LAST"; fi
-if expect shallow shallow 2 'SHALLOW clone' && has 'git fetch --unshallow' && ! has 'setup error'; then
+if expect shallow 2 'SHALLOW clone' && has 'git fetch --unshallow' && ! has 'setup error'; then
   ok "shallow: exit 2 names the shallow history and git fetch --unshallow"
 else bad "shallow: $LAST"; fi
 
-# --- the cli cells (cells.decl): the gate run as a PROGRAM on the two in-process worlds ---------------------------
-# feature (exit 0, NOT-APPLICABLE) and nobmad (exit 2, no snapshot) are the gate's in-process outcomes. One
+# --- the cli cells (cells.decl): the gate run as a PROGRAM, one world per distinct exit -----------------------------
+# feature (exit 0, NOT-APPLICABLE), nobmad (exit 2, no snapshot) and finding (exit 1, reaches the audit). One
 # `FXCELL=<id> bash "$SUBJ"` start per outcome, each compared with the in-process call on a copy of the same world at
-# the same path: stdout, stderr and exit separately, byte for byte, plus the outcome's own wording; the two must differ.
+# the same path: stdout, stderr and exit separately, byte for byte, plus the outcome's own wording; the three exits must differ.
 EQ="$WORK/eq"; mkdir -p "$EQ"
 eqv() { # <cell-id> <world> -> $EQ/<id>.{ip,cl}.{out,err,rc}
   local id="$1" cpw="$WORK/eq.w"
   rm -rf "$cpw"; cp -R "$W/$2" "$cpw"
-  AI_DLC_PROJECT_ROOT="$cpw" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" inproc_run "$SUBJ" vtag_main --sprint 7 \
+  DPN=$((DPN + 1))
+  ( drv_mark && AI_DLC_PROJECT_ROOT="$cpw" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" inproc_run "$SUBJ" vtag_main --sprint 7 ) \
     > "$EQ/$id.ip.out" 2> "$EQ/$id.ip.err"; echo "$?" > "$EQ/$id.ip.rc"
   rm -rf "$cpw"; cp -R "$W/$2" "$cpw"
   AI_DLC_PROJECT_ROOT="$cpw" AI_DLC_AUDIT_ANCHORS_SCHEMA="$SCHEMA" FXCELL="$id" bash "$SUBJ" --sprint 7 \
@@ -305,9 +310,14 @@ if eqv cli-nobmad nobmad && [ "$(cat "$EQ/cli-nobmad.cl.rc")" = 2 ] \
    && grep -qF 'no readable pipeline snapshot' "$EQ/cli-nobmad.cl.out"; then
   ok "cli-nobmad: the program refuses the snapshot-less world exactly as the in-process call does (stdout, stderr, exit 2)"
 else bad "cli-nobmad: the program and the in-process call differ, or the outcome is not exit 2 with no snapshot ($(eq_twin cli-nobmad))"; fi
-if ! cmp -s "$EQ/cli-feature.cl.rc" "$EQ/cli-nobmad.cl.rc" && ! cmp -s "$EQ/cli-feature.cl.out" "$EQ/cli-nobmad.cl.out"; then
-  ok "cli cells discriminate: the feature and the snapshot-less world give different stdout and exit"
-else bad "cli cells do not discriminate: cli-feature and cli-nobmad gave the same stdout or exit"; fi
+if eqv cli-finding finding && [ "$(cat "$EQ/cli-finding.cl.rc")" = 1 ] \
+   && grep -qF 'reported findings' "$EQ/cli-finding.cl.out"; then
+  ok "cli-finding: the program fails the finding world exactly as the in-process call does (stdout, stderr, exit 1)"
+else bad "cli-finding: the program and the in-process call differ, or the outcome is not exit 1 with findings ($(eq_twin cli-finding))"; fi
+if ! cmp -s "$EQ/cli-feature.cl.rc" "$EQ/cli-nobmad.cl.rc" && ! cmp -s "$EQ/cli-feature.cl.out" "$EQ/cli-nobmad.cl.out" \
+   && ! cmp -s "$EQ/cli-finding.cl.rc" "$EQ/cli-feature.cl.rc" && ! cmp -s "$EQ/cli-finding.cl.rc" "$EQ/cli-nobmad.cl.rc"; then
+  ok "cli cells discriminate: the feature, snapshot-less and finding worlds give different exits"
+else bad "cli cells do not discriminate: two of cli-feature, cli-nobmad and cli-finding gave the same stdout or exit"; fi
 
 
 echo

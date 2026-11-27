@@ -3,10 +3,10 @@
 # The anchors world's two validate-audit-anchors.sh seed calls (--render, validate) run in process, so that subject's
 # one remaining start is the gate's genesis fallback. inproc rows count the fx_inproc passes: the gate's feature and
 # nobmad worlds plus the in-process sides of the 2 cli cells (4), and the 2 anchor seed calls.
-34 *
-12 core/scripts/validate-trunk-audit-gate.sh
-11 core/scripts/validate-cycle-commits.sh
+29 *
+3 core/scripts/validate-trunk-audit-gate.sh
+13 core/scripts/validate-cycle-commits.sh
 1 core/scripts/validate-audit-anchors.sh
 2 core/scripts/validate-escalation-resolution.sh
-4 inproc:core/scripts/validate-trunk-audit-gate.sh
+15 inproc:core/scripts/validate-trunk-audit-gate.sh
 2 inproc:core/scripts/validate-audit-anchors.sh

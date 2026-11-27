@@ -1,2 +1,4 @@
 # Measured by a counted run through core/scripts/hermetic-run.sh (the judge's own J3 output), once, then verified by a second counted run.
-51 *
+34 *
+0 core/skills/ai-dlc-update/reconcile/register-drift.sh
+17 inproc:core/skills/ai-dlc-update/reconcile/register-drift.sh
