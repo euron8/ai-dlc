@@ -1,7 +1,7 @@
 # layer-readopt-gate-b: shard 'b' of layer-readopt-gate (E2); the driver execs the parent's run.sh --group b. Only the reconcile scripts this shard's units run or source are declared, so the parent's whole-directory row is not repeated.
 core/skills/ai-dlc-update/reconcile/readopt-override.sh
 core/skills/ai-dlc-update/reconcile/unregistered-drift.sh
-core/skills/ai-dlc-update/reconcile/register-drift.sh
+!core/skills/ai-dlc-update/reconcile/register-drift.sh
 core/skills/ai-dlc-update/reconcile/lib.sh
 core/skills/ai-dlc-update/reconcile/consumer-read.sh
 core/skills/ai-dlc-update/reconcile/preclassify.sh
@@ -17,3 +17,6 @@ core/fixtures/layer-readopt-gate-d/.dist-only
 core/fixtures/layer-readopt-gate-e/.dist-only
 core/fixtures/lib/report.sh
 core/skills/ai-dlc-update/reconcile/layer-drift.sh
+core/fixtures/lib/inproc.sh
+core/fixtures/lib/mutant.sh
+core/fixtures/lib/layout.sh

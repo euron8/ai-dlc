@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1267.0] - 2026-11-26
+
+### Two gate fixtures run their subjects in process, so their suites start fewer programs
+
+- The shipped fixtures change; the consumer's installed engine does not. `trunk-audit-gate` runs its 10 end-to-end gate worlds in process and keeps one command-line cell per distinct outcome (exit 0, 2 and the new exit 1); `layer-readopt-gate`'s register-drift, gh, j and stub units run `register-drift.sh` and `readopt-override.sh` in process, and the fixture's header comment now names the units that start those subjects.
+- `layer-readopt-gate-e` gains a `cells.decl` (two end-to-end cells, `stub-pm` and `stub-pmt`, for unit stub's two `pull.sh merge` runs, plus a nested `pull.sh` to `readopt-override.sh` row) and declares `pull.sh` as a required subject, run end to end; shard a's `lrg_ip` hands `inproc_run` a literal-basename operand chosen by `case`.
+- Shards b, d and e of `layer-readopt-gate` declare the in-process subject and the three fixture libs they read, so a change to any of them re-runs those shards.
+- Action for consumers: none.
+
 ## [0.1266.0] - 2026-11-26
 
 ### The shard merge fixture asks the merge for a world's ordinal map once per distinct story listing, and DVRS reads DV2's run (BL-1175)

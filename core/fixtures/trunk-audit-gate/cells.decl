@@ -1,20 +1,11 @@
 # trunk-audit-gate's starts of core/scripts/validate-trunk-audit-gate.sh and of its three siblings (BL-879 grammar).
-# The two worlds that start no sibling run in process (inproc_run vtag_main), and one cli cell per distinct outcome
-# there (exit 0 feature, exit 2 nobmad) compares the program with the in-process call, byte for byte, in eqv().
+# Every world runs the gate in process (inproc_run vtag_main), and one cli cell per distinct outcome there (exit 0
+# feature, exit 2 nobmad, exit 1 finding) compares the program with the in-process call, byte for byte, in eqv().
 cli core/scripts/validate-trunk-audit-gate.sh cli-feature
 cli core/scripts/validate-trunk-audit-gate.sh cli-nobmad
-# Every world that reaches the audit stays end to end: the gate starts its siblings as programs, and a nested row
-# covers a sibling start only when its logged parent is a start of the gate, which an in-process gate is not.
-e2e core/scripts/validate-trunk-audit-gate.sh clean why=reaches the audit: its validate-cycle-commits.sh child must have the gate as logged parent
-e2e core/scripts/validate-trunk-audit-gate.sh finding why=reaches the audit: its validate-cycle-commits.sh child must have the gate as logged parent
-e2e core/scripts/validate-trunk-audit-gate.sh empty why=reaches the audit: its validate-cycle-commits.sh child must have the gate as logged parent
-e2e core/scripts/validate-trunk-audit-gate.sh worklist why=reaches the audit: its validate-cycle-commits.sh child must have the gate as logged parent
-e2e core/scripts/validate-trunk-audit-gate.sh nogenesis why=reaches the audit: its validate-cycle-commits.sh child must have the gate as logged parent
-e2e core/scripts/validate-trunk-audit-gate.sh anchors why=reaches the anchor resolver and the audit: both children must have the gate as logged parent
-e2e core/scripts/validate-trunk-audit-gate.sh wedge-resolved why=reaches the audit and the escalation reader: their children must have the gate as logged parent
-e2e core/scripts/validate-trunk-audit-gate.sh wedge-noexit why=reaches the audit and the escalation reader: their children must have the gate as logged parent
-e2e core/scripts/validate-trunk-audit-gate.sh wedge-othersha why=reaches the audit: its validate-cycle-commits.sh child must have the gate as logged parent
-e2e core/scripts/validate-trunk-audit-gate.sh shallow why=reaches the audit: its validate-cycle-commits.sh child must have the gate as logged parent
+cli core/scripts/validate-trunk-audit-gate.sh cli-finding
+# An in-process gate pass that reaches the audit starts its siblings as programs; before each pass the fixture logs an
+# #inproc parent marker naming the gate and exports FXCOUNT_PARENT as its id, so those children are covered below.
 nested core/scripts/validate-trunk-audit-gate.sh core/scripts/validate-cycle-commits.sh why=the gate re-runs the trunk audit once per round
 nested core/scripts/validate-trunk-audit-gate.sh core/scripts/validate-audit-anchors.sh why=the genesis fallback asks the anchor resolver for the prior sprint sha
 nested core/scripts/validate-trunk-audit-gate.sh core/scripts/validate-escalation-resolution.sh why=the exit route asks whether an entry naming the FAIL sha is operator-resolved

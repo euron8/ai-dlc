@@ -160,13 +160,12 @@ THEIRS="$(git -C "$DIST" rev-parse --short HEAD)"
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
-# IN PROCESS (BL-878), shard a's units (main, f). Every drive of readopt-override.sh, unregistered-drift.sh and
-# register-drift.sh there calls the subject's entry function (rov_main, ud_main, rd_main) through lib/inproc.sh's
-# inproc_run, in a subshell made to look like a fresh `bash <subject>`. No inproc_load: three subjects, so each pass
-# sources the path it runs and fx_inproc logs it under that path (the three `inproc:` rows). The command-line starts
-# left are the `cli` cells of cells.decl, one per distinct CLI outcome, each compared byte for byte with the in-process
-# call. The other shards' units (e2, c3, gh, j, sup) still start the subjects as programs: those shards' declarations
-# carry no subject row, and none of them is a row of scripts/fixture-inprocess-allowlist.txt.
+# IN PROCESS (BL-878), every shard. Every drive of readopt-override.sh, unregistered-drift.sh and register-drift.sh
+# (units main, f, e2, gh, j, stub) calls the subject's entry function (rov_main, ud_main, rd_main) through
+# lib/inproc.sh's inproc_run, in a subshell made to look like a fresh `bash <subject>`. No inproc_load: three subjects,
+# so each pass sources the path it runs and fx_inproc logs it under that path (one `inproc:` row per subject a shard
+# drives). The only command-line starts of the three are shard a's `cli` cells of cells.decl, one per distinct CLI
+# outcome, each compared byte for byte with the in-process call. Units c3 and sup drive none of the three.
 #
 # THE BLOB MEMO. A CLI run sources lib.sh at the top of its own process and builds a private memo for that run; in a
 # subshell lib.sh does not (it keys on `$BASH_SUBSHELL` 0). So `lrg_ip` hands each run a FRESH memo, as private to
@@ -177,7 +176,7 @@ THEIRS="$(git -C "$DIST" rev-parse --short HEAD)"
 # checked first, on its two halves: a subject with neither the `<p>_main() {` line nor the column-0 source guard
 # predates the wrap, which prints SKIP and exits 0 -- never an ok. Exactly one half is a respelled subject this
 # fixture can no longer drive, which FAILS; a subject the gate cannot read is FIXTURE ERROR.
-if sg main || sg f; then
+if sg main || sg f || sg e2 || sg gh || sg j || sg stub; then
   [ -f "$HERE/../lib/layout.sh" ] || { echo "FIXTURE ERROR: lib/layout.sh not found beside $HERE" >&2; exit 2; }
   . "$HERE/../lib/layout.sh" || { echo "FIXTURE ERROR: sourcing lib/layout.sh failed" >&2; exit 2; }
   [ -f "$HERE/../lib/mutant.sh" ] || { echo "FIXTURE ERROR: lib/mutant.sh not found beside $HERE" >&2; exit 2; }
@@ -202,12 +201,21 @@ if sg main || sg f; then
   [ -z "$REG" ] || lrg_gate "$REG" rd_main
 fi
 lrg_ip() { # <subject> <entry> [args...] -> what `bash <subject> [args...]` prints and exits with, in process
-  local _m _rc
+  # The subject is named by a literal basename, never forwarded as a positional: shard e declares the unguarded
+  # pull.sh, and an inproc_run operand no static scan can resolve would read as a source of it (P2).
+  local _m _rc _lrg_p
+  case "$1" in
+    "$READOPT") _lrg_p="${1%/*}/readopt-override.sh" ;;
+    "$UNREG")   _lrg_p="${1%/*}/unregistered-drift.sh" ;;
+    "$REG")     _lrg_p="${1%/*}/register-drift.sh" ;;
+    *) echo "lrg_ip: $1 is none of the three in-process subjects" >&2; return 125 ;;
+  esac
+  shift
   case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in
-    "declare -x"*) inproc_run "$@"; return ;;
+    "declare -x"*) inproc_run "$_lrg_p" "$@"; return ;;
   esac
   _m="$(mktemp -d "${TMPDIR:-/tmp}/reconcile-memo.XXXXXX")" || return 125
-  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$@"; _rc=$?
+  AI_DLC_RECONCILE_MEMO="$_m" inproc_run "$_lrg_p" "$@"; _rc=$?
   rm -rf "$_m"
   return "$_rc"
 }
@@ -1084,7 +1092,7 @@ EOF
   e2_run() { # <script> <world> <shim-dir or -> [--apply]
     local s="$1" w="$2" p="$3" P="$PATH"; shift 3
     [ "$p" = - ] || P="$p:$PATH"
-    PATH="$P" bash "$s" "$w/dist" "$(cat "$w/base")" "$w/cons" team-roles/x.md "$@" > "$w/out" 2> "$w/err"
+    PATH="$P" lrg_ip "$s" rd_main "$w/dist" "$(cat "$w/base")" "$w/cons" team-roles/x.md "$@" > "$w/out" 2> "$w/err"
     echo $? > "$w/rc"
   }
   e2_novr() { ls -A "$1/cons/.claude/skills/ai-dlc/overrides" 2>/dev/null | wc -l | tr -d ' '; }
@@ -1883,7 +1891,7 @@ else
   stub_ro() { # <theirs> <args...> -> $SW/ro.out (stdout+stderr), $SW/ro.rc; each run starts from the pristine entry
     local _t="$1"; shift
     cp "$SW/ovr.pristine" "$SOV" || { echo "FIXTURE ERROR: cannot restore the override" >&2; exit 2; }
-    bash "$READOPT" "$SD" "$_t" "$SC" "$SOV" "$@" > "$SW/ro.out" 2>&1; echo "$?" > "$SW/ro.rc"
+    ro "$SD" "$_t" "$SC" "$SOV" "$@" > "$SW/ro.out" 2>&1; echo "$?" > "$SW/ro.rc"
   }
 
   # layer-drift: the row on the stub theirs, none on the twin (whose own drift row is the positive conjunct).
@@ -1931,7 +1939,7 @@ else
   SDEC="$SC/_bmad-output/ai-dlc-update/pull-decisions.tsv"
   SOV_REL=.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md
   cp "$SW/ovr.pristine" "$SOV" || { echo "FIXTURE ERROR: cannot restore the override" >&2; exit 2; }
-  bash "$REC_DIR/pull.sh" merge "$SD" "$SB" "$SC" "$STS" "$SOV_REL" > "$SW/pm.out" 2> "$SW/pm.err" < /dev/null; pm_rc=$?
+  FXCELL=stub-pm bash "$REC_DIR/pull.sh" merge "$SD" "$SB" "$SC" "$STS" "$SOV_REL" > "$SW/pm.out" 2> "$SW/pm.err" < /dev/null; pm_rc=$?
   if [ "$pm_rc" = 3 ] && grep -q '^REFUSED  SKILL__Rule-8.md: OVERRIDE-SHADOWS-POINTER-STUB ' "$SW/pm.out" \
      && ! grep -q '^DECIDE ' "$SW/pm.out" && [ ! -e "$SDEC" ] && [ "$(git hash-object "$SOV")" = "$sov0" ]; then
     ok "stub-pull-merge: pull.sh merge relays the OVERRIDE-SHADOWS-POINTER-STUB refusal, exits 3, records no decision row and leaves the override's bytes"
@@ -1939,7 +1947,7 @@ else
     bad "stub-pull-merge: rc=$pm_rc decisions-file=$([ -e "$SDEC" ] && echo present || echo absent) out: $(head -3 "$SW/pm.out" | tr '\n' '|') err: $(head -2 "$SW/pm.err" | tr '\n' '|')"
   fi
   cp "$SW/ovr.pristine" "$SOV" || { echo "FIXTURE ERROR: cannot restore the override" >&2; exit 2; }
-  bash "$REC_DIR/pull.sh" merge "$SD" "$SB" "$SC" "$STW" "$SOV_REL" > "$SW/pmt.out" 2> "$SW/pmt.err" < /dev/null; pmt_rc=$?
+  FXCELL=stub-pmt bash "$REC_DIR/pull.sh" merge "$SD" "$SB" "$SC" "$STW" "$SOV_REL" > "$SW/pmt.out" 2> "$SW/pmt.err" < /dev/null; pmt_rc=$?
   if [ "$pmt_rc" = 0 ] && grep -q '^DECIDE override-drift .claude/skills/ai-dlc/overrides/SKILL__Rule-8.md merged$' "$SW/pmt.out" \
      && grep -q '^override-drift	.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md	' "$SDEC" 2>/dev/null \
      && grep -q 'Divergence clause, NEW wording.' "$SOV" && grep -q 'Consumer intensity: service/ is FULL' "$SOV" \
@@ -2089,7 +2097,7 @@ echo "== G. an ADDITIVE upstream change to a shadowed section is REPORTED =="
 # base_sha, so a falsely-refused re-adoption is re-stamped and the clause is never offered
 # again, under a note asserting the consumer declined text it had in fact taken. So the arm
 # must REPORT and must NOT refuse, and both halves are asserted here.
-out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --check 2>&1)"; rc=$?
+out="$(ro "$DIST" "$GTH" "$CONS" "$GOVR" --check 2>&1)"; rc=$?
 if grep -q 'UNADOPTED-CORE-TEXT' <<<"$out"; then
   ok "--check REPORTS: core ADDED text to the shadowed section and the body does not carry it"
 else
@@ -2108,7 +2116,7 @@ else
 fi
 
 before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$GOVR" | head -1)"
-out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --stamp readopt 2>&1)"; rc=$?
+out="$(ro "$DIST" "$GTH" "$CONS" "$GOVR" --stamp readopt 2>&1)"; rc=$?
 after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$GOVR" | head -1)"
 if [ "$rc" -eq 0 ] && grep -q 'UNADOPTED-CORE-TEXT' <<<"$out"; then
   ok "--stamp readopt LANDS and says what was not adopted -- the operator decides, having been told"
@@ -2124,7 +2132,7 @@ else
   bad "  base_sha is $after_sha (was $before_sha, theirs is $GTH): the stamp did not land"
 fi
 
-gok_out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOK" --check 2>&1)"
+gok_out="$(ro "$DIST" "$GTH" "$CONS" "$GOK" --check 2>&1)"
 if ! grep -q 'UNADOPTED-CORE-TEXT' <<<"$gok_out"; then
   ok "NEAR-MISS: a body that adopted the same addition RE-WRAPPED is not reported at all"
 else
@@ -2136,14 +2144,14 @@ fi
 # `--merge` is that remedy. Assert the whole round trip, ending in the stamp actually
 # landing -- asserting only the refusal would pass against a guard that refuses always.
 cp "$G3/additive.orig" "$GOVR"
-bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --merge >/dev/null 2>&1
-if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --check >/dev/null 2>&1; then
+ro "$DIST" "$GTH" "$CONS" "$GOVR" --merge >/dev/null 2>&1
+if ro "$DIST" "$GTH" "$CONS" "$GOVR" --check >/dev/null 2>&1; then
   ok "  --merge clears it: the body carries the addition and --check goes green"
 else
   bad "  --merge did NOT clear the new gate -- the remedy the message prints cannot satisfy it"
-  bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --check 2>&1 | sed 's/^/    /'
+  ro "$DIST" "$GTH" "$CONS" "$GOVR" --check 2>&1 | sed 's/^/    /'
 fi
-if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GOVR" --stamp readopt >/dev/null 2>&1 \
+if ro "$DIST" "$GTH" "$CONS" "$GOVR" --stamp readopt >/dev/null 2>&1 \
    && [ "$(sed -n 's/^base_sha:[[:space:]]*//p' "$GOVR" | head -1)" = "$GTH" ]; then
   ok "  and the stamp then LANDS, advancing base_sha to $GTH"
 else
@@ -2171,7 +2179,7 @@ This consumer also records the adjudicating team, which core does not ask for.
 Untouched across the range. Present so the fixture proves the gate is
 section-scoped and not merely file-scoped.
 EOF
-if grep -q 'UNADOPTED-CORE-TEXT' <<<"$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GFM" --check 2>&1)"; then
+if grep -q 'UNADOPTED-CORE-TEXT' <<<"$(ro "$DIST" "$GTH" "$CONS" "$GFM" --check 2>&1)"; then
   ok "  and core text quoted in \`reason:\` does NOT count as adoption: only the body the lead reads can carry it"
 else
   bad "an entry carrying core's new clause only in its \`reason:\` — to say it DECLINES it — was scored as having adopted it, so the report is silenced by the sentence that says it was not"
@@ -2182,7 +2190,7 @@ fi
 # Its ALLOW twin is the same clause as real body prose, asserted in the near-miss above.
 GHC="$CONS/.claude/skills/ai-dlc/overrides/G__comment-only.md"
 { cat "$G3/additive.orig"; printf '\n<!--\n**Every rule-7 adjudication now records the deciding session id**, and a record\nthat carries no session id is rejected at the gate rather than queued.\n-->\n'; } > "$GHC"
-if grep -q 'UNADOPTED-CORE-TEXT' <<<"$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$GHC" --check 2>&1)"; then
+if grep -q 'UNADOPTED-CORE-TEXT' <<<"$(ro "$DIST" "$GTH" "$CONS" "$GHC" --check 2>&1)"; then
   ok "  and core text pasted into an HTML COMMENT in the body does not count either"
 else
   bad "core text inside <!-- --> scored as adoption -- the report prints the offending lines verbatim, so the tool emits the exact text that silences it"
@@ -2190,14 +2198,14 @@ fi
 rm -f "$GFM" "$GHC"
 
 echo "== H. the body test is WRAP-INSENSITIVE in the superseded direction too =="
-out="$(bash "$READOPT" "$DIST" "$GTH" "$CONS" "$HOVR" --check 2>&1)"; rc=$?
+out="$(ro "$DIST" "$GTH" "$CONS" "$HOVR" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out"; then
   ok "--check RED: a superseded core sentence carried at a DIFFERENT wrap is still found"
 else
   bad "--check missed a superseded sentence the body demonstrably carries, re-wrapped (rc=$rc) -- and an override of a consumer-rewritten section is a re-wrap by definition"
   printf '%s\n' "$out" | sed 's/^/    /'
 fi
-if bash "$READOPT" "$DIST" "$GTH" "$CONS" "$HOK" --check >/dev/null 2>&1; then
+if ro "$DIST" "$GTH" "$CONS" "$HOK" --check >/dev/null 2>&1; then
   ok "CONTROL: a body carrying none of the superseded prose stays green"
 else
   bad "CONTROL FAILED: an override reproducing no core text was reported -- the containment test matches anything"
@@ -2373,7 +2381,7 @@ else
 fi
 
 echo "== J. a RE-FLOWED core paragraph, faithfully adopted, is not superseded text =="
-out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JOK" --check 2>&1)"; rc=$?
+out="$(ro "$DIST" "$JTH" "$CONS" "$JOK" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ] && ! grep -q 'STALE-CORE-TEXT' <<<"$out"; then
   ok "--check OK: a body carrying theirs' re-flowed paragraph verbatim is not refused"
 else
@@ -2381,7 +2389,7 @@ else
   printf '%s\n' "$out" | sed 's/^/    /'
 fi
 before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JOK" | head -1)"
-out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JOK" --stamp readopt 2>&1)"; rc=$?
+out="$(ro "$DIST" "$JTH" "$CONS" "$JOK" --stamp readopt 2>&1)"; rc=$?
 after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JOK" | head -1)"
 if [ "$rc" -eq 0 ] && [ "$after_sha" = "$JTH" ]; then
   ok "--stamp readopt LANDS on it ($before_sha -> $after_sha)"
@@ -2389,7 +2397,7 @@ else
   bad "--stamp readopt REFUSED a faithful re-flow adoption (rc=$rc, base_sha $before_sha -> $after_sha)"
   printf '%s\n' "$out" | sed 's/^/    /'
 fi
-out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JBAD" --check 2>&1)"; rc=$?
+out="$(ro "$DIST" "$JTH" "$CONS" "$JBAD" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out" && grep -q 'retention window live here' <<<"$out"; then
   ok "NEAR-MISS: the same re-flow adopted PLUS a sentence core genuinely dropped is still refused, naming the dropped sentence"
 else
@@ -2401,14 +2409,14 @@ if ! grep -q 'noun restriction' <<<"$out"; then
 else
   bad "  the refusal names the RE-FLOWED line as superseded -- the false positive is back, hiding behind a true one"
 fi
-out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JNEG" --check 2>&1)"; rc=$?
+out="$(ro "$DIST" "$JTH" "$CONS" "$JNEG" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out" && grep -q 'survival vocabulary names a DIFFERENT unit' <<<"$out"; then
   ok "NEGATED IN PLACE: a body carrying only the line core prefixed with Never is REFUSED, naming it"
 else
   bad "NEGATED IN PLACE: a body teaching the rule core INVERTED was not refused (rc=$rc) -- bare containment acquitted it because the old words survive inside the new line"
   printf '%s\n' "$out" | sed 's/^/    /'
 fi
-out="$(bash "$READOPT" "$DIST" "$JTH" "$CONS" "$JNEGOK" --check 2>&1)"; rc=$?
+out="$(ro "$DIST" "$JTH" "$CONS" "$JNEGOK" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 0 ] && ! grep -q 'STALE-CORE-TEXT' <<<"$out"; then
   ok "  and a body carrying core's Never line passes -- the same words, in the context theirs gives them"
 else
@@ -2598,7 +2606,7 @@ fi
 
 echo "== K. a line RE-FLOWED ACROSS SECTIONS, faithfully adopted, is not superseded text =="
 before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JXOK" | head -1)"
-out="$(bash "$READOPT" "$DIST" "$JKTH" "$CONS" "$JXOK" --stamp readopt 2>&1)"; rc=$?
+out="$(ro "$DIST" "$JKTH" "$CONS" "$JXOK" --stamp readopt 2>&1)"; rc=$?
 after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JXOK" | head -1)"
 if [ "$rc" -eq 0 ] && [ "$after_sha" = "$JKTH" ] && ! grep -q 'STALE-CORE-TEXT' <<<"$out"; then
   ok "--stamp readopt LANDS when a base line moved from one shadowed section to the tail of a longer line in another ($before_sha -> $after_sha)"
@@ -2606,7 +2614,7 @@ else
   bad "--stamp readopt REFUSED a faithful cross-section re-flow (rc=$rc, base_sha $before_sha -> $after_sha)"
   printf '%s\n' "$out" | sed 's/^/    /'
 fi
-out="$(bash "$READOPT" "$DIST" "$JNTH" "$CONS" "$JXNEG" --check 2>&1)"; rc=$?
+out="$(ro "$DIST" "$JNTH" "$CONS" "$JXNEG" --check 2>&1)"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out" && grep -qF -- "$JKL" <<<"$out"; then
   ok "NEGATED ELSEWHERE: a body carrying only the old line, while theirs' other section holds it behind Never, is REFUSED naming it"
 else
@@ -2620,7 +2628,7 @@ else
   printf '%s\n' "$out" | sed 's/^/    /'
 fi
 before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JXREV" | head -1)"
-out="$(bash "$READOPT" "$DIST" "$JRTH" "$CONS" "$JXREV" --stamp readopt 2>&1)"; rc=$?
+out="$(ro "$DIST" "$JRTH" "$CONS" "$JXREV" --stamp readopt 2>&1)"; rc=$?
 after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$JXREV" | head -1)"
 if [ "$rc" -eq 0 ] && [ "$after_sha" = "$JRTH" ] && ! grep -q 'STALE-CORE-TEXT' <<<"$out"; then
   ok "--stamp readopt LANDS when one line moved each way between the two shadowed sections ($before_sha -> $after_sha)"
