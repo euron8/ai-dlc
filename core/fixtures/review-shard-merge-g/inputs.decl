@@ -32,6 +32,7 @@ core/skills/ai-dlc/steps/gate-validation.md
 core/team-roles/code-reviewer.md
 core/team-roles/qa.md
 core/schemas/sprint-status.json
+core/skills/ai-dlc/layer-contract.yaml
 core/fixtures/lib/mutant.sh
 core/fixtures/lib/preamble.sh
 core/fixtures/lib/layout.sh
