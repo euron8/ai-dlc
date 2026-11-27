@@ -498,7 +498,7 @@ else
   seed_set "$W/e" "$E_JOBS" "$e_k" e:hook-fixtures "" "$e_reused"
 fi
 
-# --- (f) every fixture the push would run that reaches a changed script (BL-1122, BL-1129) ----------------------
+# --- (f) every fixture the push would run that reaches a changed script or fixture path (BL-1122, BL-1129) ----------------------
 # A change to a script's child starts moves the `<n> *` J3 row of EVERY fixture that runs the script, whether its
 # invocations.decl rows the child or not, and whether it names the script or sweeps its whole directory. So when the
 # diff from the merge-base with <base> to the work tree touches a `*.sh` path under core/scripts, scripts, core/hooks, core/skills (nested included: a git pathspec `*` matches `/`), core/session-driver (added,
@@ -508,18 +508,20 @@ fi
 #   DIR       a D row of the composer's own parse (predict-push-set's out/.dparse, readset_decl_parse) is a directory
 #             holding a changed path;
 #   DECLFILE  an F row of that parse is a changed path;
+#   OWN       a changed path under core/fixtures/<base>/ (a D row never names a fixture's own directory); every changed
+#             core/fixtures path also feeds DECLFILE (a shard's F row for its parent's run.sh), changed cells.decl paths
+#             DIR (another fixture's inputs.decl is not keyed through a directory), never NAME;
 #   NAME      a shell file under core/fixtures/<fx>/ names a changed script's basename, bounded as section e bounds a
 #             name (a `/` before it is a directory prefix).
 # Units section e already ran are not run again. Its self-probe runs first, both directions. With no prediction, or a
 # non-empty RUN set and no parse, the section cannot know what the push measures: a refusal.
-printf '== f. fixtures that reach a changed script (when the diff touches a *.sh under core/scripts, scripts, core/hooks, core/skills, core/session-driver)\n'
-F_AWK='FILENAME == ARGV[1] { C[++nc] = $0; B[nc] = $0; sub(/.*\//, "", B[nc]); next }
-FILENAME == ARGV[2] { u = $0; b = u; sub(/@consumer$/, "", b); if (!(u in U)) { U[u] = 1; O[++no] = u; OB[no] = b; R[b] = 1 }; next }
-FILENAME == ARGV[3] { n = split($0, f, "\t"); if (n < 3 || !(f[1] in R)) next
-  for (i = 1; i <= nc; i++) {
-    if (f[2] == "D" && index(C[i], f[3] "/") == 1 && !((f[1], "D", f[3]) in G)) { G[f[1], "D", f[3]] = 1; why[f[1]] = why[f[1]] " DIR:" f[3] }
-    if (f[2] == "F" && C[i] == f[3] && !((f[1], "F", f[3]) in G)) { G[f[1], "F", f[3]] = 1; why[f[1]] = why[f[1]] " DECLFILE:" f[3] }
-  }
+printf '== f. fixtures that reach a changed script or fixture path (when the diff touches a *.sh under core/scripts, scripts, core/hooks, core/skills, core/session-driver, or any path under core/fixtures)\n'
+F_AWK='FILENAME == ARGV[1] { C[++nc] = $0; B[nc] = $0; sub(/.*\//, "", B[nc]); K[++nk] = $0; L[++nl] = $0; next }
+FILENAME == ARGV[2] { X[++nx] = $0; K[++nk] = $0; if ($0 ~ /\/cells\.decl$/) L[++nl] = $0; next }
+FILENAME == ARGV[3] { u = $0; b = u; sub(/@consumer$/, "", b); if (!(u in U)) { U[u] = 1; O[++no] = u; OB[no] = b; R[b] = 1 }; next }
+FILENAME == ARGV[4] { n = split($0, f, "\t"); if (n < 3 || !(f[1] in R)) next
+  for (i = 1; i <= nl; i++) if (f[2] == "D" && index(L[i], f[3] "/") == 1 && !((f[1], "D", f[3]) in G)) { G[f[1], "D", f[3]] = 1; why[f[1]] = why[f[1]] " DIR:" f[3] }
+  for (i = 1; i <= nk; i++) if (f[2] == "F" && K[i] == f[3] && !((f[1], "F", f[3]) in G)) { G[f[1], "F", f[3]] = 1; why[f[1]] = why[f[1]] " DECLFILE:" f[3] }
   next }
 { split(FILENAME, q, "/"); x = q[3]; if (q[1] != "core" || q[2] != "fixtures" || !(x in R)) next
   for (i = 1; i <= nc; i++) if (!((x, "N", B[i]) in G) && named($0, B[i])) { G[x, "N", B[i]] = 1; why[x] = why[x] " NAME:" B[i] } }
@@ -532,7 +534,10 @@ function named(t, p,   s, k, b, a) {
   }
   return 0
 }
-END { for (k = 1; k <= no; k++) {
+END { for (i = 1; i <= nx; i++) { split(X[i], q, "/")
+    # OWN: a changed path under core/fixtures/<base>/ selects that RUN unit (narrow to inputs.decl and cells.decl by testing q[4]).
+    if (q[1] == "core" && q[2] == "fixtures" && q[4] != "" && (q[3] in R) && !((q[3], "O", X[i]) in G)) { G[q[3], "O", X[i]] = 1; why[q[3]] = why[q[3]] " OWN:" X[i] } }
+  for (k = 1; k <= no; k++) {
   ud = ((getline l < ("core/fixtures/" OB[k] "/.undeclarable")) >= 0); close("core/fixtures/" OB[k] "/.undeclarable")
   if (OB[k] in why) print O[k] "\t" substr(why[OB[k]], 2) (ud ? " UNDECLARABLE" : "")
   else if (ud) print O[k] "\tUNDECLARABLE" } }'
@@ -541,25 +546,43 @@ mkdir -p "$W/f/keep" "$W/f/probe/core/fixtures/fname" "$W/f/probe/core/fixtures/
 # The probe: fnear sorts LAST in the RUN set and carries every near-miss (a longer directory, a longer file name, a
 # longer basename on both sides); fout reaches x.sh by all three routes but is not in the RUN set.
 printf '%s\n' core/scripts/x.sh > "$W/f/probe.changed"
-printf '%s\n' fdir ffile fname fname@consumer fund fnear > "$W/f/probe.run"
-printf 'fdir\tN\nfdir\tD\tcore/scripts\t1\tcore/scripts\nffile\tF\tcore/scripts/x.sh\t0\tcore/scripts/x.sh\nfnear\tD\tcore/scriptsx\t1\tcore/scriptsx\nfnear\tF\tcore/scripts/x.shx\t1\tcore/scripts/x.shx\nfout\tD\tcore/scripts\t1\tcore/scripts\nfout\tF\tcore/scripts/x.sh\t1\tcore/scripts/x.sh\n' > "$W/f/probe.dparse"
+printf '%s\n' fdir ffile fname fname@consumer fund fnear > "$W/f/probe.run0"; : > "$W/f/probe.nochanged"
+printf 'fdir\tN\nfdir\tD\tcore/scripts\t1\tcore/scripts\nffile\tF\tcore/scripts/x.sh\t0\tcore/scripts/x.sh\nfnear\tD\tcore/scriptsx\t1\tcore/scriptsx\nfnear\tF\tcore/scripts/x.shx\t1\tcore/scripts/x.shx\nfout\tD\tcore/scripts\t1\tcore/scripts\nfout\tF\tcore/scripts/x.sh\t1\tcore/scripts/x.sh\nfhold\tF\tcore/fixtures/fdecl/inputs.decl\t1\tx\nfnh\tF\tcore/fixtures/fdecl/inputs.decls\t1\tx\nfdh\tD\tcore/fixtures/fcell\t1\tx\nfdn\tD\tcore/fixtures/fcellx\t1\tx\nfdi\tD\tcore/fixtures/fdecl\t1\tx\nfshard\tF\tcore/fixtures/fpar/run.sh\t1\tx\n' > "$W/f/probe.dparse"
 printf '%s\n' 'bash "$ROOT/core/scripts/x.sh" --check' > "$W/f/probe/core/fixtures/fname/run.sh"
 printf '%s\n' 'bash core/scripts/wx.sh' 'cat core/scripts/x.shy' > "$W/f/probe/core/fixtures/fnear/run.sh"
 printf '%s\n' 'bash core/scripts/x.sh' > "$W/f/probe/core/fixtures/fout/run.sh"
 printf '%s\n' 'true' > "$W/f/probe/core/fixtures/fund/run.sh"
 : > "$W/f/probe/core/fixtures/fund/.undeclarable"; : > "$W/f/probe/core/fixtures/fout/.undeclarable"
-f_probe="$( cd "$W/f/probe" && awk "$F_AWK" "$W/f/probe.changed" "$W/f/probe.run" "$W/f/probe.dparse" core/fixtures/fname/run.sh core/fixtures/fnear/run.sh core/fixtures/fout/run.sh core/fixtures/fund/run.sh | cut -f1 | tr '\n' ' ')"
-if [ "$f_probe" != "fdir ffile fname fname@consumer fund " ]; then
-  printf '   cannot run: the route matcher read "%s" on its seeded probe, expected "fdir ffile fname fname@consumer fund " -- it cannot be trusted on the RUN set\n' "$f_probe" >&2
+f_probe="$( cd "$W/f/probe" && awk "$F_AWK" "$W/f/probe.changed" "$W/f/probe.nochanged" "$W/f/probe.run0" "$W/f/probe.dparse" core/fixtures/fname/run.sh core/fixtures/fnear/run.sh core/fixtures/fout/run.sh core/fixtures/fund/run.sh | cut -f1 | tr '\n' ' ')"
+# The DECLFILE feed: fhold holds an F row for fdecl/inputs.decl, fshard one for its parent fpar/run.sh (both selected), fnh a near-miss F.
+# The DIR feed: fdh holds a D row over fcell, whose cells.decl changed (selected); fdn is a near-miss D, and fdi a D over fdecl, whose
+# changed inputs.decl must not feed DIR (not selected).
+# The OWN probe (.sh list empty): fdecl, fcell, fcell@consumer, finv, frun are RUN units; fdeclx and fnone are not. Own inputs.decl,
+# cells.decl, invocations.decl and run.sh select their unit; a neighbour fdeclx and an outside-RUN fnone select nothing, and
+# fdecl/run.sh naming inputs.decl is no NAME hit.
+mkdir -p "$W/f/probe/core/fixtures/fdecl" || exit 2
+printf '%s\n' 'cat core/fixtures/fdeclx/inputs.decl inputs.decl' > "$W/f/probe/core/fixtures/fdecl/run.sh"
+printf '%s\n' fdir ffile fname fname@consumer fund fnear fdecl fcell fcell@consumer finv frun fhold fnh fdh fdn fdi fshard > "$W/f/probe.run"
+printf '%s\n' core/fixtures/fdecl/inputs.decl core/fixtures/fcell/cells.decl core/fixtures/finv/invocations.decl core/fixtures/frun/run.sh core/fixtures/fpar/run.sh > "$W/f/probe.decl1"
+printf '%s\n' core/fixtures/fdeclx/inputs.decl core/fixtures/fnone/inputs.decl > "$W/f/probe.decl2"
+f_probe="$f_probe|$( cd "$W/f/probe" && awk "$F_AWK" "$W/f/probe.nochanged" "$W/f/probe.decl1" "$W/f/probe.run" "$W/f/probe.dparse" core/fixtures/fdecl/run.sh | cut -f1 | tr '\n' ' ')"
+f_probe="$f_probe|$( cd "$W/f/probe" && awk "$F_AWK" "$W/f/probe.nochanged" "$W/f/probe.decl2" "$W/f/probe.run" "$W/f/probe.dparse" core/fixtures/fdecl/run.sh | cut -f1 | tr '\n' ' ')"
+f_want="fdir ffile fname fname@consumer fund |fund fdecl fcell fcell@consumer finv frun fhold fdh fshard |fund "
+if [ "$f_probe" != "$f_want" ]; then
+  printf '   cannot run: the route matcher read "%s" on its seeded probe, expected "%s" -- it cannot be trusted on the RUN set\n' "$f_probe" "$f_want" >&2
   exit 2
 fi
 git diff --name-only --no-renames "$E_MB" -- 'core/scripts/*.sh' 'scripts/*.sh' 'core/hooks/*.sh' 'core/skills/*.sh' 'core/session-driver/*.sh' > "$W/f/changed" 2> "$W/f/err" \
   || { printf 'pregate-self-check: git diff against %s failed: %s\n' "$E_MB" "$(head -1 "$W/f/err")" >&2; exit 2; }
+git diff --name-only --no-renames "$E_MB" -- 'core/fixtures/*' > "$W/f/decl" 2> "$W/f/err" \
+  || { printf 'pregate-self-check: git diff against %s failed: %s\n' "$E_MB" "$(head -1 "$W/f/err")" >&2; exit 2; }
 f_nc="$(awk 'END { print NR }' "$W/f/changed")"
-if [ "$f_nc" -eq 0 ]; then
-  printf '   SKIPPED: the diff from %s touches no shell path a fixture can reach (core/scripts, scripts, core/hooks, core/skills, core/session-driver: *.sh)\n' "$(git rev-parse --short "$E_MB")"
+f_nd="$(awk 'END { print NR }' "$W/f/decl")"
+if [ "$f_nc" -eq 0 ] && [ "$f_nd" -eq 0 ]; then
+  printf '   SKIPPED: the diff from %s touches no shell path a fixture can reach (core/scripts, scripts, core/hooks, core/skills, core/session-driver: *.sh) and no fixture path under core/fixtures, so no changed script or fixture path is reached\n' "$(git rev-parse --short "$E_MB")"
 else
   printf '   %s changed script(s): %s\n' "$f_nc" "$(tr '\n' ' ' < "$W/f/changed")"
+  printf '   %s changed fixture path(s)\n' "$f_nd"
   pred_once
   [ "$P_OK" = 1 ] || { printf '   cannot run: no prediction of the RUN set (%s), so the fixtures a push measures are unknown\n' \
     "$( [ -f "$E_PRED" ] && { head -1 "$W/e/pred.err" 2>/dev/null; true; } || echo "no $E_PRED")" >&2; exit 2; }
@@ -572,7 +595,7 @@ else
   sed 's/@consumer$//' "$W/e/predrun" | sort -u | sed 's|.*|core/fixtures/&/*.sh|' > "$W/f/globs"
   set -f
   if [ -s "$W/f/globs" ]; then git ls-files -- $(cat "$W/f/globs") > "$W/f/sh" || { set +f; exit 2; }; else : > "$W/f/sh"; fi
-  awk "$F_AWK" "$W/f/changed" "$W/e/predrun" "$W/f/dparse" $(cat "$W/f/sh") > "$W/f/sel" || { set +f; exit 2; }
+  awk "$F_AWK" "$W/f/changed" "$W/f/decl" "$W/e/predrun" "$W/f/dparse" $(cat "$W/f/sh") > "$W/f/sel" || { set +f; exit 2; }
   set +f
   f_sel="$(awk 'END { print NR }' "$W/f/sel")"
   : > "$W/f/done"; [ -f "$W/e/torun" ] && cp "$W/e/torun" "$W/f/done"
@@ -582,8 +605,8 @@ else
   F_JOBS="${AI_DLC_FIXTURE_JOBS:-12}"
   # The drop runs before the count line, so "to run" excludes undeclared units; its lines print after the selection.
   drop_undeclared "$W/f" > "$W/f/undeclared"
-  printf '   predict-push-set.sh: %s of %s RUN unit(s) reach a changed script (DIR %s, DECLFILE %s, NAME %s); %s already run in section e; %s to run, %s-way\n' \
-    "$f_sel" "$f_run" "$(grep -c 'DIR:' "$W/f/sel")" "$(grep -c 'DECLFILE:' "$W/f/sel")" "$(grep -c 'NAME:' "$W/f/sel")" \
+  printf '   predict-push-set.sh: %s of %s RUN unit(s) reach a changed script or fixture path (DIR %s, DECLFILE %s, NAME %s, OWN %s); %s already run in section e; %s to run, %s-way\n' \
+    "$f_sel" "$f_run" "$(grep -c 'DIR:' "$W/f/sel")" "$(grep -c 'DECLFILE:' "$W/f/sel")" "$(grep -c 'NAME:' "$W/f/sel")" "$(grep -c 'OWN:' "$W/f/sel")" \
     "$((f_sel - f_k))" "$((f_k - u_drop))" "$F_JOBS"
   awk -F'\t' '{ printf "     %s  %s\n", $1, $2 }' "$W/f/sel"
   while IFS= read -r u_line; do printf '%s\n' "$u_line"; done < "$W/f/undeclared"

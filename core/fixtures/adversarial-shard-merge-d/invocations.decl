@@ -9,7 +9,7 @@
 6 core/scripts/merge-adversarial-shards.sh
 4 core/scripts/content-seal.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
-163 inproc:core/scripts/merge-adversarial-shards.sh
+106 inproc:core/scripts/merge-adversarial-shards.sh
 5 core/scripts/validate-adversarial-convergence.sh
 14 core/scripts/wait-for-deliverable.sh
 162 inproc:core/scripts/content-seal.sh

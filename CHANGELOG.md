@@ -19,6 +19,27 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1266.0] - 2026-11-26
+
+### The shard merge fixture asks the merge for a world's ordinal map once per distinct story listing, and DVRS reads DV2's run (BL-1175)
+
+- For every consumer: `adversarial-shard-merge` (shards a, c and d ship) writes each ordinal shard's `artifact_sha` from the merge's `--map` of the world. A copied world (the fixture's world cache) used to ask the merge again for a map it had already answered; the answer depends only on the shard dir's name and the names of the story files, so it is now kept per run, keyed on exactly those, and a world whose story listing changed still asks the merge. Fewer in-process merge passes per run: shard a 95 to 78, b 75 to 72, c 123 to 102, d 163 to 106. Every arm asserts what it asserted, on the same inputs.
+- DVRS's files-mode twin was the same `--derived-map` of the same unedited world that DV2 runs; it now reads DV2's output instead of running it again.
+- Action for consumers: none.
+
+### The pre-push self-check runs a fixture whose own declaration files changed, and the enforcement map binds five fixtures' directory file lists (BL-1155)
+
+- In the distribution only: `scripts/pregate-self-check.sh` section f now also selects a fixture the push would run when a file in that fixture's own directory changed (`inputs.decl`, `cells.decl`, `invocations.decl`, `tools.decl` or `run.sh`). A change to a fixture's declarations alone no longer reaches the gating push unrun, as `check-24-adversarial-convergence-d`, `-e` and `-f` did. A comment-only `run.sh` edit leaves the key unmoved, so it selects nothing.
+- In the distribution only: invariant I55 arm 6 now also checks `validator-arm-selection` against `.claude/rules/`, and `apply-drift-refile-b`, `apply-drift-refile-c`, `reconcile-pull-driver` and `fixture-git-env-seam` against `core/skills/ai-dlc-update/reconcile/`. Their `inputs.decl` lines must match the tracked files exactly, so a new file in either directory fails the push until it is declared. The validator's exec count is unchanged.
+- Action for consumers: none.
+
+### Backlog records for six entries are brought up to date, and the discard counter no longer counts a story-routing failure as a waiver (BL-1186, BL-1187, BL-819, BL-1005, BL-512, BL-1152)
+
+- For the maintainers of this repo: the backlog now says what is still owed on each of six open entries. `BL-1186` closes only checks 8 and 10 on reading (an operator ruling keeps them with the adjudicator); checks 3, 7 and 19 stay owed beside the outcome line until their rule-table proof holds. `BL-1187` narrows its remaining item to dispatches that cite a role file with no bound definition. `BL-819` drops a stale owed item that waited on an entry that has since landed. `BL-1152` names the half of its second item that is still open. None of these entries lands here.
+- `BL-1005` records, from graph's held shards, that s324 pass 3 was dispatched with the full 18-row map instead of the derived one: five unchanged-text shards ran, and one of them raised a CRITICAL that was confirmed as a production defect. The earlier count missed them because it never read the held directory. The artifact digests match their own story files, so there is no key mismatch. The dollars of those five shards are not taken. The entry stays open and the reading is referred to the lead.
+- `count_discards.py` (the discard counter for the step-value analysis) now counts a Check 22 failure as a waiver only when its evidence reports a status of OVERRIDDEN. A failure whose evidence says "no OVERRIDDEN entry" was counted as a waiver before; the s323 implementation cell moves from 1 to 0 and every earlier cell is unchanged. The new `count_discards.b270.out.txt` holds the probe output. `BL-512` records that the lead-caused subset on s323 is 0 of 34 verdicts, not 1.
+- Action for consumers: none. Nothing under `core/` or `install.sh` changes.
+
 ## [0.1265.0] - 2026-11-26
 
 ### Five fixtures declare files they read and did not declare, so a change to those files now re-runs them

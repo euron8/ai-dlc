@@ -7246,9 +7246,67 @@ A bare inputs.decl line under an excluded top has no key row in the hook and no 
     # while the walk read it. Subject: each inputs.decl carrying a `+docs/...sh` line, derived, never counted. The
     # corpus is `git ls-files -- 'docs/*.sh'`, one call; a non-repo root (a copied world) is no subject, and a
     # repo that lists ZERO fails, so an empty listing cannot pass.
+    #
+    # The same single ls-files call also lists two directories whole, partitioned below by `case` in a builtin
+    # loop (no extra exec). Five NAMED (fixture, prefix) pairs below declare a directory as one file line per
+    # tracked file, because a bare directory line fails invalidation-guard.sh r1; a NEW tracked file there gets
+    # no key row while the fixture's code reads the directory whole. fixture-git-env-seam reads reconcile/
+    # through its cells.decl `drives setup-config-drift`. A fixture that copies a directory whole and is not
+    # listed here is not bound.
+    i55_pfx_rules='.claude/rules/'
+    i55_pfx_rec='core/skills/ai-dlc-update/reconcile/'
+    i55_pairs="validator-arm-selection|${i55_pfx_rules}
+apply-drift-refile-b|${i55_pfx_rec}
+apply-drift-refile-c|${i55_pfx_rec}
+reconcile-pull-driver|${i55_pfx_rec}
+fixture-git-env-seam|${i55_pfx_rec}"
     i55_dsub="$(grep -l '^+docs/.*\.sh$' "$REPO_ROOT"/core/fixtures/*/inputs.decl 2>/dev/null)"
+    i55_dtr=""; i55_ltr=""; i55_rtr=""
+    i55_all="$(git -C "$REPO_ROOT" ls-files -- 'docs/*.sh' "${i55_pfx_rules}*" "${i55_pfx_rec}*" 2>/dev/null)"; i55_drc=$?
+    if [ "$i55_drc" -eq 0 ]; then
+      while IFS= read -r i55_dl; do
+        case "$i55_dl" in
+          "$i55_pfx_rules"*) i55_ltr="${i55_ltr}${i55_dl}${i55_nl}" ;;
+          "$i55_pfx_rec"*) i55_rtr="${i55_rtr}${i55_dl}${i55_nl}" ;;
+          docs/*.sh) i55_dtr="${i55_dtr}${i55_dl}${i55_nl}" ;;
+        esac
+      done <<<"$i55_all"
+      i55_dtr="${i55_dtr%"$i55_nl"}"
+      while IFS='|' read -r i55_pfx_fx i55_pfx; do
+        [ -n "$i55_pfx_fx" ] || continue
+        i55_pdecl="$REPO_ROOT/core/fixtures/${i55_pfx_fx}/inputs.decl"
+        if [ ! -f "$i55_pdecl" ]; then
+          err "I55 arm 6: the whole-directory pair (${i55_pfx_fx}, ${i55_pfx}) names a fixture with no core/fixtures/${i55_pfx_fx}/inputs.decl. REMEDY: delete that pair from the list in arm 6 of scripts/validate-enforcement-map.sh."
+          continue
+        fi
+        case "$i55_pfx" in "$i55_pfx_rules") i55_ptr="${i55_ltr%"$i55_nl"}" ;; *) i55_ptr="${i55_rtr%"$i55_nl"}" ;; esac
+        if [ -z "$i55_ptr" ]; then
+          err "I55 arm 6: git ls-files -- '${i55_pfx}*' listed ZERO tracked files while the pair (${i55_pfx_fx}, ${i55_pfx}) binds its inputs.decl to that listing. Over an empty corpus both directions compare equal and read as agreement; the listing is broken or the directory is gone, in which case delete the pair from arm 6."
+          continue
+        fi
+        i55_pd=""; i55_pwhole=""
+        while IFS= read -r i55_dl || [ -n "$i55_dl" ]; do
+          case "$i55_dl" in ''|'#'*) continue ;; '!'*|'+'*) i55_dl="${i55_dl#?}" ;; esac
+          case "$i55_dl" in "$i55_pfx"|"${i55_pfx%/}") i55_pwhole=1 ;; "$i55_pfx"?*) i55_pd="${i55_pd}${i55_dl}${i55_nl}" ;; esac
+        done < "$i55_pdecl"
+        if [ -n "$i55_pwhole" ]; then
+          err "I55 arm 6: core/fixtures/${i55_pfx_fx}/inputs.decl carries a whole-directory line for ${i55_pfx}, so the pair (${i55_pfx_fx}, ${i55_pfx}) is pointless. REMEDY: delete that pair from the list in arm 6 of scripts/validate-enforcement-map.sh."
+        fi
+        i55_dmiss=""; i55_dextra=""
+        while IFS= read -r i55_dt; do
+          case "${i55_nl}${i55_pd}" in *"${i55_nl}${i55_dt}${i55_nl}"*) ;; *) i55_dmiss="${i55_dmiss}${i55_nl}  ${i55_dt}" ;; esac
+        done <<<"$i55_ptr"
+        while IFS= read -r i55_dt; do
+          [ -n "$i55_dt" ] || continue
+          case "${i55_nl}${i55_ptr}${i55_nl}" in *"${i55_nl}${i55_dt}${i55_nl}"*) ;; *) i55_dextra="${i55_dextra}${i55_nl}  ${i55_dt}" ;; esac
+        done <<<"$i55_pd"
+        if [ -n "$i55_dmiss" ] || [ -n "$i55_dextra" ]; then
+          err "I55 arm 6: core/fixtures/${i55_pfx_fx}/inputs.decl names files under ${i55_pfx} one per line, and the list differs from \`git ls-files -- '${i55_pfx}*'\`; the fixture's code reads that directory whole.${i55_dmiss:+${i55_nl}tracked but not named (the fixture reads it and no key row covers it):${i55_dmiss}}${i55_dextra:+${i55_nl}named but not tracked (the file is gone or was never tracked):${i55_dextra}}
+REMEDY: add each missing path and delete each stale line in the same change that adds or removes the file, or delete the pair from arm 6 if the fixture no longer reads the directory whole."
+        fi
+      done <<<"$i55_pairs"
+    fi
     if [ -n "$i55_dsub" ]; then
-      i55_dtr="$(git -C "$REPO_ROOT" ls-files -- 'docs/*.sh' 2>/dev/null)"; i55_drc=$?
       if [ "$i55_drc" -eq 0 ] && [ -z "$i55_dtr" ]; then
         err "I55 arm 6: git ls-files -- 'docs/*.sh' listed ZERO tracked files while a fixture's inputs.decl names +docs/...sh lines. Over an empty corpus both directions compare equal and read as agreement; the listing is broken or every named file is gone, in which case delete the lines."
       elif [ "$i55_drc" -eq 0 ]; then

@@ -202,12 +202,37 @@ harness_record() { # <shard file>
 }
 self_line() { [ "${SELF_ID:-NOT_ACCESSIBLE}" = ABSENT ] || printf 'tool_use_id: %s\n' "${SELF_ID:-NOT_ACCESSIBLE}"; }
 
+# omap_of <shard dir> -> OMAP_V, the merge's files-mode --map of <shard dir>. That answer reads only the shard dir's
+# name, its shards/ parent and s<N> sprint, and the names (and -f/-r) of the *.md under <sprint>/<artifact>
+# (merge-adversarial-shards.sh merge_place, files_map_build), so under the world cache (ASM_WCACHE=1) a successful
+# answer is kept in $WC_ROOT/omap keyed on the dir name plus that listing, and a copied world whose listing is the same
+# reads it instead of asking again. Only s1/shards/stories-p<M> dirs are keyed (there <sprint>/<artifact> is
+# stories_of's dir); any other shape, and any answer that is not all `<ordinal>\t<name>` rows, asks the merge.
+omap_of() {
+  local d="$1" s f l="" k=""
+  s="$(dirname "$(dirname "$d")")"
+  if [ "${ASM_WCACHE:-0}" = 1 ] && [ -n "${WC_ROOT:-}" ]; then
+    case "$(basename "$d") $(basename "$(dirname "$d")") $(basename "$s")" in
+      stories-p[0-9]*" shards s1")
+        for f in "$s/stories"/*.md; do
+          [ -e "$f" ] || continue
+          l="$l${f##*/}:$([ -f "$f" ] && printf f)$([ -r "$f" ] && printf r)/"
+        done
+        k="$WC_ROOT/omap/$(printf '%s\n%s\n' "$(basename "$d")" "$l" | cksum | tr ' ' _)"
+        [ ! -f "$k" ] || { OMAP_V="$(cat "$k")"; return 0; } ;;
+    esac
+  fi
+  OMAP_V="$($ASM_RUN "$MERGE" --map "$d")" || return 0
+  [ -n "$k" ] && [ -n "$OMAP_V" ] || return 0
+  printf '%s\n' "$OMAP_V" | awk -F'\t' 'NF != 2 || $1 !~ /^[0-9]+$/ || $2 == "" { bad = 1 } END { exit bad }' || return 0
+  mkdir -p "$WC_ROOT/omap" && printf '%s' "$OMAP_V" > "$k"
+}
 # shard <shard-dir> <key: ordinal|cross|cross-<g>> <n-major> <verdict> <stories-cite> [sha-override] [invoked_at]
 shard() {
   local d="$1" k="$2" n="$3" v="$4" cite="$5" sha="${6:-}" at_o="${7:-}" i=0 b at hn
   if ! is_cross "$k" && [ -z "$sha" ]; then
     # ONE --map per world, not one per shard: a world's stories never change once its first shard is written.
-    if [ "${OMAP_D:-}" != "$d" ]; then OMAP_V="$($ASM_RUN "$MERGE" --map "$d")"; OMAP_D="$d"; fi
+    if [ "${OMAP_D:-}" != "$d" ]; then omap_of "$d"; OMAP_D="$d"; fi
     b="$(printf '%s\n' "$OMAP_V" | awk -F'\t' -v k="$k" '$1 + 0 == k + 0 { print $2 }')"
     sha="$(sha_of "$(stories_of "$d")/$b")"
   fi
@@ -2046,8 +2071,14 @@ dv_map() {
   DV_ORDS="$(cut -f1 "$WORK/dv.out" | awk 'NF { printf "%s%d", (n++ ? " " : ""), $1 }')"
   DV_HDR="$(cat "$WORK/dv.err")"
 }
-# DV2: story 6 changed on disk but no `edit:` names it (a serial remediator's edit) -> it is in the set.
-p_dv2() { local s; s="$(dvA_world)" || return 1; dv_map "$1" "$s" stories-p2; [ "$RC" -eq 0 ] && case " $DV_ORDS " in *" 6 "*) true ;; *) false ;; esac; }
+# DV2: story 6 changed on disk but no `edit:` names it (a serial remediator's edit) -> it is in the set. This is the
+# one --derived-map of an unedited dvA copy for p2; DVRS's files twin reads the same run's output ($WORK/dv2.*).
+p_dv2() {
+  local s; rm -f "$WORK/dv2.out" "$WORK/dv2.err" "$WORK/dv2.rc"; s="$(dvA_world)" || return 1
+  dv_map "$1" "$s" stories-p2 < /dev/null
+  cp "$WORK/dv.out" "$WORK/dv2.out" && cp "$WORK/dv.err" "$WORK/dv2.err" && printf '%s' "$RC" > "$WORK/dv2.rc" || return 1
+  [ "$RC" -eq 0 ] && case " $DV_ORDS " in *" 6 "*) true ;; *) false ;; esac
+}
 # DV3: B's p1 MAJORs on 5 (unedited) and 7 (`repaired`, `edit: n/a`) keep both in: exactly {3 5 6 7}.
 p_dv3() { local s; s="$(dvB_world)" || return 1; dv_map "$1" "$s" stories-p2; [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "3 5 6 7" ]; }
 # DV4: B plus a story `story-00-a.md` that sorts FIRST, so every ordinal shifts by one. Keyed on basename:
@@ -2206,9 +2237,10 @@ p_dvrs() {
   case "$rc" in 0|3) ;; *) return 1 ;; esac
   [ ! -e "$rd/sections/.before" ] && [ -f "$rd/sections/.manifest" ] || return 1
   dvrs_tail "$m" document "$s" test-strategy "$s/shards/test-strategy-p2" "4 6" --document "$doc" || return 1
-  s="$(dvA_world)" || return 1
-  dv_map "$m" "$s" stories-p2 < /dev/null
-  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "3 6" ] && has "$WORK/dv.err" "derived from stories-adversarial-p1.md" && ! has "$WORK/dv.err" "full width"
+  # The files twin is DV2's state (an unedited dvA copy, --derived-map for p2, stdin /dev/null): read DV2's run.
+  [ -f "$WORK/dv2.rc" ] && [ -f "$WORK/dv2.out" ] && [ -f "$WORK/dv2.err" ] || return 1
+  [ "$(cat "$WORK/dv2.rc")" = 0 ] && [ "$(cut -f1 "$WORK/dv2.out" | awk 'NF { printf "%s%d", (n++ ? " " : ""), $1 }')" = "3 6" ] \
+    && has "$WORK/dv2.err" "derived from stories-adversarial-p1.md" && ! has "$WORK/dv2.err" "full width"
 }
 # DVRSS: subject mode, the same sequence: a sectioned stem (prd) and a whole-file one (SPEC) each keep a snapshot
 # at the split, and the worklist consumes both.
