@@ -224,15 +224,16 @@ context, so no judgment is made in the lead's own context. The lead still owns P
 adopts the verdict only through Check 26.
 
 **Script arms before the adjudicator.** Nothing is dispatched until the script checks pass.
-At gate entry the lead first runs every `adjudication: script` check and the script arm of
-every `adjudication: llm` check whose enforcement-map entry carries an `enforcer:`. A FAIL
-there is repaired through `gate-validation.md` **Gate Failure** before any nonce exists, so
-no adjudicator is running while the repair happens. Only once those pass does the lead mint
-the nonce and dispatch. A script FAIL discovered after a dispatch costs a second full
+At gate entry `gate-run.sh arms` (at implementation gate 3, called by `gate-transition.sh <story> 3`)
+first runs every `adjudication: script` check and the script arm of every `adjudication: llm`
+check whose enforcement-map entry carries an `enforcer:` (`gate-validation.md` "Script arms
+before the adjudicator"). A FAIL there is repaired through `gate-validation.md` **Gate Failure**
+before any nonce exists, so no adjudicator is running while the repair happens. Only once
+those pass does the program mint the nonce and the lead dispatch. A script FAIL discovered after a dispatch costs a second full
 adjudication, because there is no partial re-adjudication to fall back on.
 
-**At gate entry, generate the nonce** — `<gate_type>-$(date -u +%Y%m%dT%H%M%SZ)`, e.g.
-`implementation-20260715T140322Z` — and derive the verdict path:
+**At gate entry `gate-run.sh arms` mints the nonce** — `<gate_type>-<UTC>` as `YYYYMMDDTHHMMSSZ`, e.g.
+`implementation-20260715T140322Z` — and the verdict path is:
 
     ${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.verdict.json
 

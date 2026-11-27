@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1270.0] - 2026-11-27
+
+### Every gate that runs gate validation now closes through the gate program, and the hand-written gate-log, snapshot and re-read steps are gone (BL-819, BL-1186)
+
+- For every consumer's lead: gate validation at the implementation step runs at gate 3 only, and every gate 3 is dispatched for exactly one story through `gate-transition.sh <story> 3`. Gates 1 and 2 run no gate validation; the lead records their plan's `gate-log:` lines and the verdict in the story's gate log. Check 17's folded bug-fix arm runs at gate 3 only.
+- For every consumer's lead: the bug-investigation gate opens and closes through `gate-run.sh arms` and `gate-run.sh close --gate bug-investigation`, from the new `gates/bug-investigation.arms`, like the planning, story, sprint-review and retro gates. No gate is left with a hand path, so `gate-validation.md` no longer tells the lead to mint a nonce, run `open`, append the gate-log entry, write the snapshot budget line or re-read the snapshot by hand: Checks 12, 14 and 15 describe what `gate-run.sh close` writes and checks. The context reminder reconciliation in Check 14 stays the lead's. The entry format, the MUST-include list, the absence and state-claim rules, the catalog labels, rotation, the `GATE_METRIC v1` and snapshot schemas Check 14's FAIL remedies and evidence-cell rationale, and Check 15's HARD_BLOCK after two refusals stay. `gate-validation.md` is 3,162 B smaller.
+- Action for consumers: none. The lead's step files change on the next pull.
+
 ## [0.1269.0] - 2026-11-26
 
 ### Eight fixtures count every in-process pass of their subjects, so no unrouted pass is left owed (BL-878)
