@@ -300,7 +300,7 @@ arm's cross-check, because the Scope Verification, Dev Agent Record and
 
 **One call per gate transition.** Before any gate-1, gate-2 or gate-3 reviewer,
 QA, adjudicator or closing-writer dispatch (the gate-3 call and the adjudicator only
-at a one-story gate 3, one whose adjudicator brief carries a `story:` line), run in the lead checkout
+at an implementation gate 3, which is dispatched for exactly one story and whose adjudicator brief carries a `story:` line), run in the lead checkout
 
 `scripts/ai-dlc/gate-transition.sh <story> <gate> [--pass M] -C <worktree> --base <sha> --sprint <N> --story-file <path> [--transcript-dir <dir>]`
 
@@ -313,7 +313,7 @@ directory the lead's own session transcript (`transcript_path`) sits in. Every l
 (`<flags>`). The plan's `<gate>` segment is `gclose` for `close`; at gate 3 the program
 calls `gate-run.sh arms --gate implementation-g3`, which mints the nonce, runs `gate-checkpoint.sh open`, records the
 script rows of `gates/implementation-g3.arms` and the judgment rows as `PENDING`, and writes the adjudicator worklist; the
-lead's `gate-checkpoint.sh --nonce <n> record` calls for rows 13 and H1 stay the lead's. At a one-story gate 3, after the
+lead's `gate-checkpoint.sh --nonce <n> record` calls for rows 13 and H1 stay the lead's. At an implementation gate 3, after the
 adjudicator's verdict, the lead runs `gate-run.sh close --gate implementation-g3 --nonce <n> --sprint <N> --step
 implementation.md --transcript <this session's transcript_path> --transcript-dir <the directory it sits in>`, which adopts
 the verdict through Check 26 and writes the snapshot rows, the gate-log entry and the checkpoint close. Check 25 is written
@@ -331,7 +331,7 @@ lines and the handoff output). A refusal exits 1, prints its remedies, and write
 plan: correct the named input and re-run the same command, which is idempotent and
 calls no `open` at gates 1 and 2. Every gated brief below carries
 `gate-plan: <plan path relative to the project root>`; the dispatch guard denies a
-code-reviewer, code-reviewer-escalated, qa or one-story gate-adjudicator brief whose plan is
+code-reviewer, code-reviewer-escalated, qa or implementation gate-3 gate-adjudicator brief whose plan is
 absent or does not match the story and the frozen sha. A gate-adjudicator brief with no
 `story:` line is not judged against a plan. The decisions stay with the
 lead, and the paragraphs below state what each outcome means.

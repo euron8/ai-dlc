@@ -599,6 +599,9 @@ fi
 #   route    as left, but the whole Read after the `done` is route.md   -> RESUME block, marker kept
 #   older    as left, but its open (a gate-transition.sh … 3) was at 14:00:01Z, an hour after the
 #            marker was minted: a refused transition left another session's marker -> RESUME, kept
+#   arms     as left, but opened by `gate-run.sh arms` and no `done` -> closed (the gate-run.sh path)
+#   armsneg  as arms, plus `gate-run.sh close` before the leave (a refused close) -> RESUME, kept
+#   armsnear as arms, but `gate-run.sh --help arms` (first argument is not a verb) -> RESUME, kept
 # TOKEN per world: <resume y|n><note y|n><marker y|n>. The subject is the hook's GATE_LEFT rule: a hook
 # without it is SKIP (HARD in the distribution).
 # ============================================================================
@@ -609,7 +612,7 @@ if [ -n "$CKPT" ] && grep -q 'GATE_LEFT' "$HOOK"; then
   _gl_nonce="planning-20260921T130000Z"
   gl_battery() { # gl_battery <hook> <tag> [worlds] -> "<world>:<tok> ..." (default: all seven)
     local hook="$1" tag="$2" w d c r k m out=""
-    for w in ${3:-left live return wholeM record other nolines older handoff route}; do
+    for w in ${3:-left live return wholeM record other nolines older handoff route arms armsneg armsnear}; do
       d="$WORK/g2-$tag-$w"; _mkconsumer "$d"
       cp "$hook" "$d/.claude/hooks/ai-dlc-recover.sh"
       gck --root "$d" --nonce "$_gl_nonce" open >/dev/null 2>&1
@@ -619,14 +622,20 @@ if [ -n "$CKPT" ] && grep -q 'GATE_LEFT' "$HOOK"; then
       { _gl_rd architecture
         if [ "$w" = older ]; then
           _gl_bs 'scripts/ai-dlc/gate-transition.sh s1 3' 2026-09-21T14:00:01.000Z
+        elif [ "$w" = arms ] || [ "$w" = armsneg ]; then
+          _gl_bs 'scripts/ai-dlc/gate-run.sh arms --gate planning --sprint 1 --step architecture.md' 2026-09-21T13:00:01.000Z
+        elif [ "$w" = armsnear ]; then
+          _gl_bs 'scripts/ai-dlc/gate-run.sh --help arms' 2026-09-21T13:00:01.000Z
         elif [ "$w" = other ]; then
           _gl_bs 'N=planning-20260921T110000Z; scripts/ai-dlc/gate-checkpoint.sh --nonce \"$N\" open' 2026-09-21T11:00:00.000Z
         else
           _gl_bs "N=$_gl_nonce; scripts/ai-dlc/gate-checkpoint.sh --nonce \\\"\$N\\\" open" 2026-09-21T13:00:01.000Z
         fi
         _gl_rd gate-validation ',"offset":1,"limit":40'
-        _gl_bs 'scripts/ai-dlc/gate-checkpoint.sh --nonce \"$N\" done'
+        case "$w" in arms|armsneg|armsnear) ;; *) _gl_bs 'scripts/ai-dlc/gate-checkpoint.sh --nonce \"$N\" done' ;; esac
         case "$w" in
+          arms|armsnear) _gl_rd stories-test-strategy ;;
+          armsneg) _gl_bs "scripts/ai-dlc/gate-run.sh close --gate planning --nonce $_gl_nonce --sprint 1 --step architecture.md"; _gl_rd stories-test-strategy ;;
           left|other|older) _gl_rd stories-test-strategy ;;
           return) _gl_rd stories-test-strategy; _gl_rd gate-validation ',"offset":40,"limit":10' ;;
           record) _gl_rd stories-test-strategy; _gl_bs 'scripts/ai-dlc/gate-checkpoint.sh --nonce \"$N\" record 15 PASS' ;;
@@ -647,7 +656,7 @@ except Exception: pass')"
     done
     printf '%s' "${out# }"
   }
-  _gl_want="left:nyn live:yny return:yny wholeM:yny record:yny other:yny nolines:yny older:yny handoff:yny route:yny"
+  _gl_want="left:nyn live:yny return:yny wholeM:yny record:yny other:yny nolines:yny older:yny handoff:yny route:yny arms:nyn armsneg:yny armsnear:yny"
   _gl_got="$(gl_battery "$HOOK" ship)"
   if [ "$_gl_got" = "$_gl_want" ]; then
     ok "a gate left at a whole read of another step is closed and not resumed; a live gate, a return to it by a read or a record, a re-read of its own step, a marker minted outside 120 s of this transcript's open on either side, a transcript with no gate line, and a whole Read of handoff.md or route.md after the open still resume [$_gl_got]"
