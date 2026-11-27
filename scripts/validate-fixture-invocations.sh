@@ -719,8 +719,13 @@ fxc_cells_judge() {
 #   body or subshell the call sits in), is read as the local function (the text order, not the
 #   run order: a definition inside dead code, or one the call reaches through another path, still shadows);
 #   a function defined with the `function` keyword (not parsed); code EXTRACTED from a declared subject into a renamed
-#   file (readset-skip's `$WORK/pool.sh`, `merge.sh` spans) is no pass of that subject, as BL-878 item 3's renamed
-#   mutant copies are not; a `case`, `in` or `esac` spelled as a bare word outside a case statement can misread the next `)` (`local case=x` and `$case` are excluded); an operand whose
+#   file (readset-skip's `$WORK/pool.sh`, `merge.sh` spans): this scan does not see the SOURCE of that file as a source
+#   of the subject, because a `.`/`source` operand is judged by its basename (OPERANDS, above). A call of a function
+#   the subject defines at column 0, made from that span, is still a drive by its name once the subject is activated
+#   (THE COUNTING UNIT, ACTIVATION), whichever file the definition was sourced from, and it is paired with an
+#   fx_inproc by presence alone: the pairing never reads the path the fx_inproc names. Which program a pass is credited
+#   to is decided at run time, by J7 (every logged pass must name an `inproc:` row's path) and J3 (the count on that
+#   row) against the fixture's invocations.decl; a `case`, `in` or `esac` spelled as a bare word outside a case statement can misread the next `)` (`local case=x` and `$case` are excluded); an operand whose
 #   literal tail names a file other than its real target reads by that tail, fail-OPEN;
 #   positional resolution follows a caller only when the function name is defined in the population (a same-named
 #   function in two files of one fixture pools their callers);

@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1274.0] - 2026-11-27
+
+### Installer version stamp tested from a versioned source; fixture comments match their code (BL-878, BL-1155)
+
+- `schema-install-fallback` gains arm VS. One re-install runs from a source carrying a VERSION file and a commit, and the arm checks that `.claude/.ai-dlc-version` records that version and commit and that the installer prints `Version: <version> (<sha>)`. No other fixture tested that path.
+- `ledger-status-vocabulary` no longer declares a seeded git repository it does not use; its `git.decl` is deleted.
+- The `readset-skip` header and the BLIND ROUTES comment in `validate-fixture-invocations.sh` now state what the in-process pairing check sees and misses. `layer-readopt-gate-e`'s two `pull.sh merge` cells now give their true reason for running end to end.
+- Action for consumers: none.
+
 ## [0.1273.0] - 2026-11-27
 
 ### The wait beat now tells you when a serial remediator finished without sealing its record
