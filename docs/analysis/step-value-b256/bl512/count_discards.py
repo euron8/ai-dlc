@@ -57,7 +57,7 @@ cannot remove a before-side discard. No LOWER/NOT LOWER reading changed.
     An unclosed gate (BL-1003: `gate-checkpoint.sh close` never run) is not itself a discard here: this counter
     reads nonces and verdicts, never the open..close span.
   REASON CLASS of a discard, from its FAIL rows (verdict, else the union of its parts, plus its gate-log rows):
-    c22-waiver  a Check 22 FAIL whose evidence names a waiver or an OVERRIDDEN entry      (lead-caused)
+    c22-waiver  a Check 22 FAIL whose evidence reports an entry with Status OVERRIDDEN   (lead-caused)
     lead-other  no FAIL row at all: the lead abandoned or re-issued the pass with no adjudicator finding
                 (malformed nonce, lapsed window, re-mint)                                (lead-caused)
     other       any other FAIL row (the failing check ids are printed per nonce, so a reader can re-class)
@@ -88,7 +88,11 @@ GATELOG_RX = re.compile(r"^_bmad-output/.*gate-log[^/]*\.md$")
 ENTRY_NONCE_RX = re.compile(r"(?i)\bnonce\W{1,3}(" + TYPES + r"-20\d{6}T\d{6}Z)")
 LOG_FAIL_RX = re.compile(r"^\|\s*(?:\[[A-Za-z0-9_-]+\]\s*)?([0-9]+[a-z]?|H\d+)\b[^|]*\|\s*FAILED\s*\|(.*)$")
 REFUSAL_RX = re.compile(r"dispatch guard: refused an? `?gate-adjudicator`? dispatch, because ([^.]{0,60})")
-WAIVER_RX = re.compile(r"waiv|OVERRIDDEN", re.I)
+# A waiver EXISTS when the evidence reports an entry whose status reads OVERRIDDEN ("Status OVERRIDDEN",
+# "**Status:** OVERRIDDEN"). A verdict row carries only check_id/verdict/evidence, so no waiver_id field exists to key on.
+# The first run keyed on the words waiv|OVERRIDDEN, which also matched a plain routing FAIL that says "no OVERRIDDEN
+# entry ... no waiver_id" (s323 implementation-20261119T015536Z).
+WAIVER_RX = re.compile(r"Status\W{0,6}OVERRIDDEN")
 SLUG_RX = re.compile(TYPES + r"-(story[a-z0-9]+)-s\d+-")
 IMPOSSIBLE = "implementation-20991231T235959Z"
 PRESENT = "implementation-20261010T230257Z"
@@ -202,7 +206,9 @@ def self_probe():
         other_role=int(is_refusal(tu, "AI/DLC dispatch guard: refused a `dev` dispatch, because", True)),
         read_of_guard=int(is_refusal({"name": "Read"}, "refused a gate-adjudicator dispatch, because x", False)),
         c22=classify(True, [{"check_id": "1", "verdict": "PASS"},
-                            {"check_id": "22", "verdict": "FAIL", "evidence": "OVERRIDDEN waiver names no spawn"}])[1],
+                            {"check_id": "22", "verdict": "FAIL", "evidence": "arm 2 passes (Status OVERRIDDEN); a waiver names no spawn"}])[1],
+        c22_plain=classify(True, [{"check_id": "22", "verdict": "FAIL",
+                                   "evidence": "there is no OVERRIDDEN entry naming this spawn; this is a plain FAIL with no waiver_id"}])[1],
         allpass_discarded=int(classify(True, [{"check_id": "1", "verdict": "PASS"}])[0]),
         abandoned=classify(False, [])[1],
         other=classify(True, [{"check_id": "21", "verdict": "FAIL", "evidence": "Strategy Test ID"}])[1],
@@ -218,7 +224,7 @@ def self_probe():
         log_pass=int(bool(LOG_FAIL_RX.match("| [core] 1 — Validation cycle complete | PASSED | x |"))),
         canon=canon("implementation-2026-10-11T083048Z")[0])
     want = dict(refusal=1, refusal_backtick=1, cap_error=0, other_role=0, read_of_guard=0, c22="c22-waiver",
-                allpass_discarded=0, abandoned="lead-other", other="other", c22_no_waiver="other",
+                allpass_discarded=0, abandoned="lead-other", other="other", c22_no_waiver="other", c22_plain="other",
                 entry_nonce="planning-20261109T134906Z", log_row="1", log_pass=0,
                 succ_same_story="same-story", succ_other_story_only="none", succ_no_slug="same-type",
                 succ_none_no_slug="none",
