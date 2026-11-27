@@ -19,6 +19,15 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1273.0] - 2026-11-27
+
+### The wait beat now tells you when a serial remediator finished without sealing its record
+
+- A `--complete-repair --dispatch` beat that finds every dispatched agent done and its repair record still missing the `repair-complete: serial ` line prints `DISPATCH FINISHED agent-<id>` and ends at once, instead of running out its 10-minute quantum. The charge is refunded.
+- Resume that agent by id with its `--mark-repair <record> <pass>` line, after reading the record.
+- A `--complete` join over a serial repair record whose brief asked for a `--mark` seal now prints a WARN; join serial records with `--complete-repair --dispatch` and brief serial remediators with `--mark-repair`, never `--mark`.
+- Action for consumers: none.
+
 ## [0.1272.0] - 2026-11-27
 
 ### Stories adversarial passes after the first review every story again (BL-1005)

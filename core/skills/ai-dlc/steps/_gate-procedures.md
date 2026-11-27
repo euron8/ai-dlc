@@ -1409,7 +1409,16 @@ synchronously, and needs no beat until the serial remediator appends to it. A se
 remediator whose block appended a `(decision)` entry to a spec's `.memlog.md` re-renders
 `SPEC.md` and appends its `- (event) Render <pass>: re-derived from memlog through <last decision>`
 line before its `--mark-repair`, so the render lies inside the dispatch this beat joins; the lead
-dispatches no separate render agent.
+dispatches no separate render agent. The brief of a serial or unsharded remediator names `--mark-repair`, never `--mark`.
+
+`DISPATCH FINISHED agent-<id>` (under `--complete-repair --dispatch`) means the dispatched agent completed and the record
+has no `repair-complete: serial ` line: read the record, then resume THAT agent by id with its `--mark-repair <record> <pass>`
+line; if the lead or another writer is sealing the record, beat again. The first beat that sees the agent FINISHED ends
+early and is refunded, and says so with its "This beat ended early on that report" line; later beats and `--status` still
+print the block.
+The `--complete` WARN "the dispatch guard recorded a `--mark` (seat-complete:) invocation on <T> in agent-<id>'s brief"
+means a serial repair record was briefed with `--mark`: join it with `--complete-repair --dispatch`, and brief a serial or
+unsharded remediator with `--mark-repair`, never `--mark`.
 
 **A completed record is never reopened by `SendMessage`.** Once a remediator's record carries its
 `repair-complete:` line, that remediator is finished, and it may not edit the record again

@@ -1904,7 +1904,7 @@ if [ -n "$DISPATCH" ]; then
   # The liveness scope (in_liveness_scope): each dispatch's agentId, found as the subagents-dir
   # meta.json whose toolUseId is the dispatch's tool_use_id. If ANY dispatch has none, the scope
   # stays the whole session -- a partial scope would drop the one transcript that matters.
-  DP_AGENTS_=""; dp_scope_ok_=1
+  DP_AGENTS_=""; dp_scope_ok_=1; DP_LROWS_=""
   for dp_one_ in "${DP_IDS_[@]}"; do
     dispatch_epoch_of "$dp_one_"
     if [ -z "$DISPATCH_EPOCH" ] || [ "$dp_e_" -lt "$DISPATCH_EPOCH" ]; then
@@ -1920,6 +1920,9 @@ if [ -n "$DISPATCH" ]; then
     fi
     if [ -n "$dp_ag_" ]; then DP_AGENTS_="${DP_AGENTS_}${DP_AGENTS_:+ }$dp_ag_"; else dp_scope_ok_=0; fi
     [ -z "$dp_ag_" ] || DP_ROW_AGENTS_="${DP_ROW_AGENTS_:-}${DP_ROW_AGENTS_:+ }$dp_ag_"
+    # This id's own ledger row (dp_rows_ is overwritten per id), for DISPATCH FINISHED's seal
+    # line and SEAT SEAL ON A SERIAL RECORD. A role-less spawn has no row and records none.
+    [ -z "$dp_ag_" ] || [ -z "$dp_rows_" ] || DP_LROWS_="${DP_LROWS_}"$'\n'"${dp_ag_}"$'\t'"${dp_rows_}"
   done
   [ "$dp_scope_ok_" = 1 ] || DP_AGENTS_=""
   if [ -n "$SINCE" ] && [ "$SINCE" -gt "$DISPATCH_EPOCH" ]; then
@@ -1950,6 +1953,7 @@ SINCE_WARNED=0
 # A refused write is one WARN line on stderr and never changes the beat's verdict or exit.
 # --status and --dispatch-ts never reach here: both exit before any DELIVERED line is said.
 DP_ROW_AGENTS_="${DP_ROW_AGENTS_:-}"
+DP_LROWS_="${DP_LROWS_:-}"
 RD_ERA_SENTINEL='rows are written by the ai-dlc-inflight-row hook'
 RD_ERA_=""   # the era read, once per process: 1 held, 0 not
 rd_era_held() {
@@ -2113,6 +2117,8 @@ dispatch_live() {
   # LIVE is decided first and on BUDGET alone, so an IDLE_SECS retuned below BUDGET can only
   # narrow the RECENT band, never take away a grant.
   DL_AGENT="$dl_a_"; DL_AGE="$dl_g_"
+  # A FINISHED agent (DISPATCH FINISHED, below) is STOPPED, whatever its age: no grant, no extension.
+  df_is_finished "$dl_a_" && return 3
   if [ "$dl_g_" -lt "$BUDGET" ]; then return 0; fi
   [ "$dl_g_" -lt "$IDLE_SECS" ] || return 3
   return 2
@@ -2141,6 +2147,9 @@ live_extend() {
   [ "$COMPLETE_REPAIR" -eq 1 ] || return 1
   [ -n "$LE_ARM" ] || return 1
   [ "$(cat "$LE_ARM" 2>/dev/null)" = "$LE_ARM_V" ] || return 1
+  # A fresh scan before any grant, once per quantum ($2 = now): an agent that finished or failed
+  # inside the scan memo's window is never extended.
+  df_scan 1 "${2:-}"
   dispatch_live || return 1
   case "${dl_m_:-}" in ''|*[!0-9]*) return 1 ;; esac
   [ "$dl_m_" -gt "$1" ] || return 1
@@ -2214,10 +2223,35 @@ live_extend() {
 # changes no exit code.
 # AGENT IDS: [A-Za-z0-9_-]; any other id is skipped. An id is only ever compared as a literal
 # (awk index(), `=`, quoted case patterns), never interpolated into a regex or a variable name.
+#
+# DISPATCH FINISHED: A SERIAL REMEDIATOR THAT COMPLETED WITHOUT ITS SEAL (BL-541). The same arm A
+# pass also returns ids whose LAST notice status is `completed`. FINISHED(X): X's last notice is
+# `completed` and no line of agent-X.jsonl is newer than it (a resume acquits, as for FAILED);
+# FAILED wins over FINISHED. Scope (DF_FINISHED, cleared otherwise): --complete-repair, every
+# --dispatch id resolved (DP_AGENTS_), and every resolved agent FINISHED or FAILED with at least
+# one FINISHED -- a running, killed or stopped sibling blocks it. Per target, it applies only to a
+# not-delivered target with NO line opening `repair-complete: serial ` at all (df_fin_open): a
+# bare marker still settling, a broken seal and an admit-refused marker are not this arm's.
+# WHEN HIT: the DISPATCH FINISHED block wherever the DISPATCH FAILED report runs, with the seal
+# line when that agent's ledger row (DP_LROWS_) records a rendered `--mark` naming the record
+# (df_rendered_on); the first beat to see it breaks early through DISPATCH FAILED's own sidecar
+# `failed-X-K` and refund, for the targets with no such line, so the cleanup globs are unchanged.
+# dispatch_live returns STOPPED (3) for a FINISHED agent: no grant, no live extension, and
+# live_extend rescans (df_scan 1) once per quantum before it grants. FINISHED and FAILED SHARE ONE
+# EARLY BREAK per agent per target per join: an agent that is FINISHED, breaks, is resumed and
+# later FAILS gets no second early break; that beat runs its quantum and still prints DISPATCH
+# FAILED. COST: no exec; the record is read by a builtin, once per target per scan, and only while
+# DF_FINISHED is non-empty. The report never claims the agent skipped its last act.
+# NARROWING: over 149 `--complete-repair --dispatch` beats the arm fires 5 times, 3 CATCH and 2
+# FP, enumerated: a lead seal written after the fire, and a beat armed with the wrong dispatch id
+# while the real writer sealed. Both are harmless because the remedy says to read the record and,
+# if another writer or the lead is sealing it, beat again. The per-target gate is the absence of
+# any `repair-complete: serial ` line, not `! is_delivered`: a bare marker still settling, a broken
+# seal and an admit-refused marker are not finished-without-seal, and all 5 fires hold under it.
 # ---------------------------------------------------------------------------
 OPEN_REQUEST_SECS="${AI_DLC_OPEN_REQUEST_SECS:-1200}"
 case "$OPEN_REQUEST_SECS" in ''|*[!0-9]*) OPEN_REQUEST_SECS=1200 ;; esac
-DF_AT=""; DF_FAILED=""; DF_BROKE_IDS=""
+DF_AT=""; DF_FAILED=""; DF_BROKE_IDS=""; DF_FINISHED=""; DF_FREC=""
 # DF_REC: one `<id><TAB><arm B seconds|-><TAB><arm A value|->` line per FAILED agent of the last
 # scan. An empty value is stored as `-` (a tab IFS collapses empty fields); a real arm A value
 # always carries `|`, so it is never `-`.
@@ -2236,15 +2270,15 @@ df_rec_get() {  # $1 = agent id -> sets dg_A_, dg_B_ from DF_REC
 # sidecars are removed with its join state as `failed-*-<key>`: a key is digits only, so the last
 # dash-separated field of the name is always the key, whatever dashes the agent id carries.
 df_sc_() { DF_SC_="${COUNTER_DIR}/failed-$1-$2"; }
-DF_KEYS_=""
+DF_KEYS_=""; DF_TKEYS_=""
 df_scan() {  # $1 = 1 to rescan regardless of the memo; $2 = now (optional) -> sets DF_FAILED, DF_REC
-  [ -n "$DP_ROW_AGENTS_" ] && [ -n "$TEAMMATE_DIR" ] || { DF_FAILED=""; return 0; }
+  [ -n "$DP_ROW_AGENTS_" ] && [ -n "$TEAMMATE_DIR" ] || { DF_FAILED=""; DF_FINISHED=""; DF_FREC=""; return 0; }
   ds_now_="${2:-}"; [ -n "$ds_now_" ] || ds_now_="$(date +%s)"
   if [ "${1:-0}" != 1 ] && [ -n "$DF_AT" ]; then
     ds_q_=60; [ "$POLL" -gt 60 ] && ds_q_="$POLL"
     [ $(( ds_now_ - DF_AT )) -lt "$ds_q_" ] && return 0
   fi
-  DF_AT="$ds_now_"; DF_FAILED=""; DF_REC=""
+  DF_AT="$ds_now_"; DF_FAILED=""; DF_REC=""; DF_FINISHED=""; DF_FREC=""
   ds_lead_="${TEAMMATE_DIR%/subagents}.jsonl"; ds_notes_=""
   if [ -f "$ds_lead_" ]; then
     ds_notes_="$(DF_IDS="$DP_ROW_AGENTS_" LC_ALL=C awk '
@@ -2264,7 +2298,7 @@ df_scan() {  # $1 = 1 to rescan regardless of the memo; $2 = now (optional) -> s
           S[i] = st; T[i] = ts; M[i] = substr(sm, 1, 120)
         }
       }
-      END { for (i = 1; i <= n; i++) if (S[i] == "failed") print ids[i] "\t" T[i] "\t" M[i] }' "$ds_lead_" 2>/dev/null)"
+      END { for (i = 1; i <= n; i++) if (S[i] == "failed" || S[i] == "completed") print ids[i] "\t" S[i] "\t" T[i] "\t" M[i] }' "$ds_lead_" 2>/dev/null)"
   fi
   for ds_a_ in $DP_ROW_AGENTS_; do
     case "$ds_a_" in *[!A-Za-z0-9_-]*) continue ;; esac
@@ -2291,18 +2325,145 @@ df_scan() {  # $1 = 1 to rescan regardless of the memo; $2 = now (optional) -> s
         if [ "$ds_g_" -ge "$OPEN_REQUEST_SECS" ]; then ds_B_="$ds_g_"; ds_hit_=1; fi
       fi
     fi
-    while IFS=$'\t' read -r dn_a_ dn_t_ dn_s_; do
+    ds_fin_=""
+    while IFS=$'\t' read -r dn_a_ dn_st_ dn_t_ dn_s_; do
       [ "$dn_a_" = "$ds_a_" ] || continue
       if [ "$ds_max_" = "-" ] || ! [[ "$ds_max_" > "$dn_t_" ]]; then
-        ds_A_="${dn_t_}|${dn_s_}"; ds_hit_=1
+        if [ "$dn_st_" = "failed" ]; then ds_A_="${dn_t_}|${dn_s_}"; ds_hit_=1; else ds_fin_="$dn_t_"; fi
       fi
       break
     done <<< "$ds_notes_"
     # A FAILED agent joins DF_FAILED and DF_REC. One that is not FAILED leaves its early-break
     # sidecar alone: that goes only with its target's join state (delivery or --reset).
+    # FAILED wins over FINISHED: arm B on a completed agent is FAILED.
     if [ "$ds_hit_" -eq 1 ]; then DF_FAILED="${DF_FAILED}${DF_FAILED:+ }$ds_a_"; fi
     [ "$ds_hit_" -eq 1 ] && DF_REC="${DF_REC}${DF_REC:+$DF_NL}${ds_a_}${DF_TAB}${ds_B_}${DF_TAB}${ds_A_}"
+    if [ "$ds_hit_" -eq 0 ] && [ -n "$ds_fin_" ]; then
+      DF_FINISHED="${DF_FINISHED}${DF_FINISHED:+ }$ds_a_"
+      DF_FREC="${DF_FREC}${DF_NL}${ds_a_}${DF_TAB}${ds_fin_}${DF_TAB}"
+    fi
   done
+  # DISPATCH FINISHED's agent gate: --complete-repair, every --dispatch id resolved, and every
+  # resolved agent FINISHED or FAILED. Any other agent (running, killed, stopped) clears the set.
+  if [ -n "$DF_FINISHED" ]; then
+    ds_all_=1
+    if [ "$COMPLETE_REPAIR" -ne 1 ] || [ -z "${DP_AGENTS_:-}" ]; then ds_all_=0; fi
+    for ds_a_ in $DP_AGENTS_; do
+      case " $DF_FAILED $DF_FINISHED " in *" $ds_a_ "*) ;; *) ds_all_=0 ;; esac
+    done
+    [ "$ds_all_" -eq 1 ] || { DF_FINISHED=""; DF_FREC=""; }
+  fi
+  return 0
+}
+df_is_finished() {  # $1 = agent id -> 0 when the current (memoised) check names it FINISHED
+  df_scan 0
+  case " $DF_FINISHED " in *" $1 "*) return 0 ;; esac
+  return 1
+}
+# $1 = a target -> 0 when it has no line opening `repair-complete: serial ` at all. A builtin read,
+# no exec, memoised per target until the next scan; asked only while DF_FINISHED is non-empty.
+df_fin_open() {
+  [ "$DF_FO_AT_" = "$DF_AT" ] || { DF_FO_AT_="$DF_AT"; DF_FO_YES_="|"; DF_FO_NO_="|"; }
+  case "$DF_FO_YES_" in *"|$1|"*) return 0 ;; esac
+  case "$DF_FO_NO_" in *"|$1|"*) return 1 ;; esac
+  fo_t_=""
+  [ -r "$1" ] && { IFS= read -r -d '' fo_t_ < "$1" || true; }
+  case "$DF_NL$fo_t_" in
+    *"${DF_NL}repair-complete: serial "*) DF_FO_NO_="${DF_FO_NO_}$1|"; return 1 ;;
+  esac
+  DF_FO_YES_="${DF_FO_YES_}$1|"; return 0
+}
+DF_FO_AT_=""; DF_FO_YES_="|"; DF_FO_NO_="|"
+# $1 = the |-separated targets NOT delivered -> 0 when the scan names an agent FINISHED and one of
+# them has no `repair-complete: serial ` line, i.e. when say_dispatch_finished prints a block. The
+# scan is the memoised one that report runs anyway, so this adds no exec.
+df_finished_open() {
+  [ -n "$DP_ROW_AGENTS_" ] && [ -n "${1:-}" ] || return 1
+  df_scan 0
+  [ -n "$DF_FINISHED" ] || return 1
+  IFS='|'
+  for fo_u_ in $1; do
+    IFS="$OLDIFS"
+    df_fin_open "$fo_u_" && return 0
+    IFS='|'
+  done
+  IFS="$OLDIFS"
+  return 1
+}
+# $1 = agent id -> DF_LROW_, that id's ledger row (DP_LROWS_), empty when it has none.
+df_lrow_of() {
+  DF_LROW_=""
+  case "$DP_LROWS_" in *"${DF_NL}$1${DF_TAB}"*) ;; *) return 0 ;; esac
+  DF_LROW_="${DP_LROWS_#*"${DF_NL}$1${DF_TAB}"}"; DF_LROW_="${DF_LROW_%%"$DF_NL"*}"
+}
+# $1 = a path -> DF_NP_, the form a ledger `mark_file` and a target are compared in: a leading `./`
+# stripped; an absolute path under this checkout's root made root-relative (never another
+# worktree's prefix); a relative target resolved from the cwd (KEY_PFX). Empty is NO MATCH: a `<`
+# (an unfilled placeholder), a backslash, or a `..` segment left after that.
+df_norm_() {  # $1 = path, $2 = 1 when it is a target (relative to the cwd)
+  DF_NP_="${1#./}"
+  case "$DF_NP_" in
+    /*) case "$DF_NP_" in
+          "$WD_ROOT"/*) DF_NP_="${DF_NP_#"$WD_ROOT"/}" ;;
+          "$WD_ROOT_P"/*) DF_NP_="${DF_NP_#"$WD_ROOT_P"/}" ;;
+        esac ;;
+    *) [ "${2:-0}" != 1 ] || DF_NP_="${KEY_PFX}${DF_NP_}" ;;
+  esac
+  case "/$DF_NP_/" in *'<'*|*'\'*|*/../*) DF_NP_="" ;; esac
+}
+# $1 = agent id, $2 = target -> 0 when that agent's ledger row is a remediator whose brief the
+# guard recorded a `--mark` (seat-complete:) invocation in, naming this target.
+df_rendered_on() {
+  df_lrow_of "$1"
+  case "$DF_LROW_" in *'"role":"remediator"'*) ;; *) return 1 ;; esac
+  case "$DF_LROW_" in *'"mark":"rendered"'*) ;; *) return 1 ;; esac
+  case "$DF_LROW_" in *'"mark_file":"'*) ;; *) return 1 ;; esac
+  rn_mf_="${DF_LROW_#*\"mark_file\":\"}"; rn_mf_="${rn_mf_%%\"*}"
+  df_norm_ "$rn_mf_" 0; rn_m_="$DF_NP_"
+  df_norm_ "$2" 1
+  [ -n "$rn_m_" ] && [ "$rn_m_" = "$DF_NP_" ]
+}
+# ---------------------------------------------------------------------------
+# SEAT SEAL ON A SERIAL RECORD (BL-541). Under --complete (never --complete-repair) with --dispatch
+# and every id resolved, a pending target T whose basename is `*-repair-p<digits>.md` and that is
+# not under a `shards/` directory is a serial repair record. When a resolved dispatch's own ledger
+# row (DP_LROWS_) is a remediator with `"mark":"rendered"`, a `mark_file` naming T (df_norm_), and
+# a shard absent, null or opening `none`, the dispatch guard recorded a `--mark` (seat-complete:)
+# invocation on that record in its brief, and `--complete` accepts that seal where a serial record
+# closes only with `--mark-repair`. One WARN line per agent and target, on the join's first beat
+# (as the --since WARN is), on stdout. Report only: no exit code, beat or grant changes. No exec:
+# the row was read at resolution and is parsed by parameter expansion. A role-less spawn has no
+# row and never warns.
+# THE PATH RULE (df_norm_): a plain relative `mark_file` is root-relative; an absolute one is made
+# root-relative only under this checkout's root; a `..` segment, a `<` or a backslash never matches.
+# NARROWING: over 1055 `--complete --dispatch` beats, 994 joined to a ledger row, it fires 6 times,
+# 6 CATCH, 0 FP. It reached zero by dropping the meta.json/brief-line signal (it flagged lane
+# remediators and missed null-shard rows), by excluding `--complete-repair` (2 FP there:
+# rendered-mark rows whose briefs named `--mark-repair`), and by matching only `mark_file` = the
+# target under the path rule, on a `*-repair-p<N>.md` record outside `shards/`.
+# ---------------------------------------------------------------------------
+say_seat_seal_on_serial() {  # $1 = a pending target
+  [ "$COMPLETE" -eq 1 ] && [ "$COMPLETE_REPAIR" -eq 0 ] && [ -n "${DP_AGENTS_:-}" ] || return 0
+  ss_b_="${1##*/}"
+  case "$ss_b_" in *-repair-p*.md) ;; *) return 0 ;; esac
+  ss_n_="${ss_b_##*-repair-p}"; ss_n_="${ss_n_%.md}"
+  case "$ss_n_" in ''|*[!0-9]*) return 0 ;; esac
+  case "$1" in /*) ss_p_="$1" ;; *) ss_p_="/${KEY_PFX}$1" ;; esac
+  case "$ss_p_" in */shards/*) return 0 ;; esac
+  # The caller's target loop runs with IFS='|'; the agent list is space-separated.
+  ss_ifs_="$IFS"; IFS="$OLDIFS"
+  for ss_a_ in $DP_AGENTS_; do
+    df_rendered_on "$ss_a_" "$1" || continue
+    case "$DF_LROW_" in
+      *'"shard":null'*|*'"shard":"none'*) ;;
+      *'"shard":'*) continue ;;
+    esac
+    echo "WARN: wait-for-deliverable: the dispatch guard recorded a \`--mark\` (seat-complete:) invocation on $1 in agent-${ss_a_}'s brief,"
+    echo "  a serial repair record; \`--complete\` will accept that seal. A serial remediator closes with"
+    echo "  \`--mark-repair $1 <pass>\`: resume agent-${ss_a_} with that line and join $1 with --complete-repair"
+    echo "  --dispatch ${ss_a_}."
+  done
+  IFS="$ss_ifs_"
   return 0
 }
 df_is_failed() {  # $1 = agent id -> 0 when the current (memoised) check names it FAILED
@@ -2315,17 +2476,31 @@ df_is_failed() {  # $1 = agent id -> 0 when the current (memoised) check names i
 df_early_break() {
   [ -n "$DP_ROW_AGENTS_" ] || return 1
   df_scan 0 "$1"
-  [ -n "$DF_FAILED" ] || return 1
-  # The pending targets' counter keys, taken once per beat (PENDING does not change inside the loop).
+  [ -n "$DF_FAILED" ] || [ -n "$DF_FINISHED" ] || return 1
+  # The pending targets' counter keys, taken once per beat (PENDING does not change inside the loop),
+  # each beside its target (DF_TKEYS_, `<target><TAB><key>` lines) for the FINISHED marker gate.
   if [ -z "$DF_KEYS_" ]; then
     IFS='|'
-    for eb_t_ in $PENDING; do DF_KEYS_="${DF_KEYS_} $(key_of "$eb_t_")"; done
+    for eb_t_ in $PENDING; do
+      eb_k_="$(key_of "$eb_t_")"
+      DF_KEYS_="${DF_KEYS_} $eb_k_"; DF_TKEYS_="${DF_TKEYS_}${DF_NL}${eb_t_}${DF_TAB}${eb_k_}"
+    done
     IFS="$OLDIFS"
   fi
+  # A FINISHED agent breaks only for the pending targets with no `repair-complete: serial ` line.
+  eb_fk_=""
+  if [ -n "$DF_FINISHED" ]; then
+    while IFS=$'\t' read -r eb_t_ eb_k_; do
+      [ -n "$eb_t_" ] || continue
+      df_fin_open "$eb_t_" && eb_fk_="${eb_fk_} $eb_k_"
+    done <<< "$DF_TKEYS_"
+  fi
   eb_=0; eb_hit_=" "
-  for eb_a_ in $DF_FAILED; do
+  for eb_a_ in $DF_FAILED $DF_FINISHED; do
+    eb_ks_="$DF_KEYS_"
+    case " $DF_FAILED " in *" $eb_a_ "*) ;; *) eb_ks_="$eb_fk_" ;; esac
     eb_new_=0
-    for eb_k_ in $DF_KEYS_; do
+    for eb_k_ in $eb_ks_; do
       df_sc_ "$eb_a_" "$eb_k_"
       [ -f "$DF_SC_" ] && continue
       sidecar_put "$DF_SC_" "$1"
@@ -2354,6 +2529,7 @@ df_early_break() {
 say_dispatch_failed() {
   [ -n "$DP_ROW_AGENTS_" ] && [ -n "${1:-}" ] || return 0
   df_scan "${2:-0}"
+  say_dispatch_finished "$1"
   [ -n "$DF_FAILED" ] || return 0
   sf_rows_="$DF_ROWS"
   if [ "$DF_ROWS_SET" != 1 ] && [ -f "${STATE_DIR}/pipeline-snapshot.md" ]; then
@@ -2388,10 +2564,48 @@ say_dispatch_failed() {
       echo "  Resume THIS agent by id (SendMessage to ${sf_a_})."
     fi
   done
-  # The early line is printed only when an agent this beat broke for is still FAILED.
+  sf_early_
+  return 0
+}
+# The early line is printed only when an agent this beat broke for is still FAILED or FINISHED.
+sf_early_() {
   sf_held_=0
-  for sf_a_ in $DF_BROKE_IDS; do case " $DF_FAILED " in *" $sf_a_ "*) sf_held_=1 ;; esac; done
+  for sf_a_ in $DF_BROKE_IDS; do case " $DF_FAILED $DF_FINISHED " in *" $sf_a_ "*) sf_held_=1 ;; esac; done
   [ "$sf_held_" -eq 0 ] || echo "  This beat ended early on that report: its beat charge was refunded, and the time already waited is not charged."
+}
+# DISPATCH FINISHED's report. $1 = the |-separated targets NOT delivered; reads the scan the caller
+# ran. One block per FINISHED agent and not-delivered target with no `repair-complete: serial ` line.
+# No exec: the description, the row and the record are read by builtins.
+say_dispatch_finished() {
+  [ -n "$DF_FINISHED" ] && [ -n "${1:-}" ] || return 0
+  sn_any_=0
+  for sn_a_ in $DF_FINISHED; do
+    sn_ts_="${DF_FREC#*"${DF_NL}${sn_a_}${DF_TAB}"}"; sn_ts_="${sn_ts_%%"$DF_TAB"*}"
+    sn_d_=""; sn_m_="$TEAMMATE_DIR/agent-${sn_a_}.meta.json"
+    if [ -r "$sn_m_" ]; then
+      IFS= read -r -d '' sn_j_ < "$sn_m_" || true
+      case "$sn_j_" in *'"description":"'*) sn_d_="${sn_j_#*\"description\":\"}"; sn_d_="${sn_d_%%\"*}" ;; esac
+    fi
+    [ -n "$sn_d_" ] || sn_d_="no meta.json"
+    IFS='|'
+    for sn_t_ in $1; do
+      IFS="$OLDIFS"
+      df_fin_open "$sn_t_" || { IFS='|'; continue; }
+      sn_any_=1
+      echo "DISPATCH FINISHED agent-${sn_a_} (${sn_d_}) -- the harness reported it completed at ${sn_ts_:-an unknown time}, and"
+      echo "  ${sn_t_} has no \`repair-complete: serial \` line"
+      if df_rendered_on "$sn_a_" "$sn_t_"; then
+        echo "  the dispatch guard recorded a \`--mark\` (seat-complete:) invocation naming this record in agent-${sn_a_}'s"
+        echo "  brief; a serial remediator closes with \`--mark-repair <record> <pass>\`"
+      fi
+      echo "  Resume THIS agent by id (SendMessage to ${sn_a_}) with the \`--mark-repair\` line, after reading ${sn_t_}:"
+      echo "  if another writer or the lead is sealing it, beat again."
+      IFS='|'
+    done
+    IFS="$OLDIFS"
+  done
+  # With no FAILED agent the early line is said here; otherwise after the FAILED blocks.
+  [ "$sn_any_" -eq 0 ] || [ -n "$DF_FAILED" ] || sf_early_
   return 0
 }
 
@@ -2750,6 +2964,7 @@ for t in $TARGETS; do
   # undelivered (unmarked or unsettled), and it did not "already have content". Without the
   # flag an undelivered non-empty file is always older, so this clause changes nothing there.
   [ "$FIRST" -eq 1 ] && [ -s "$t" ] && [ "$(mtime_of "$t")" -lt "$j" ] && PREEXISTING="${PREEXISTING}${PREEXISTING:+|}$t"
+  [ "$FIRST" -eq 1 ] && say_seat_seal_on_serial "$t"
 
   b=0; [ -f "$c" ] && b="$(cat "$c" 2>/dev/null || echo 0)"
   case "$b" in ''|*[!0-9]*) b=0 ;; esac
@@ -2970,8 +3185,13 @@ if [ -n "$EXHAUSTED" ]; then
     echo "  tail of its log (${PROGRESS_PATHS:-the --progress-path log}), SendMessage BLOCKED with that"
     echo "  tail to main, then end the turn."
   elif [ "$COMPLETE" -eq 0 ] || [ "$EX_ABSENT" -eq 1 ]; then
-    echo "  Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the"
-    echo "  teammate ONCE (then re-run with --reset), and if it fails again, HARD_BLOCK."
+    # A FINISHED agent is resumed by id, never re-dispatched: when its DISPATCH FINISHED block
+    # prints below, the bare re-dispatch is not printed beside it (2+ targets or agents, where
+    # dispatch_live answers before its STOPPED). The exit code is unchanged.
+    if ! df_finished_open "${PENDING}${PENDING:+${EXHAUSTED:+|}}${EXHAUSTED}"; then
+      echo "  Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the"
+      echo "  teammate ONCE (then re-run with --reset), and if it fails again, HARD_BLOCK."
+    fi
   fi
   [ "$OWN_JOB" -eq 1 ] || echo "  Do NOT keep beating: the wait never runs forever (Rule 29, Check C)."
   if [ -z "$PROGRESS_PATHS" ] && [ "$COMPLETE" -eq 0 ] && [ "$OWN_JOB" -eq 0 ]; then
@@ -3118,7 +3338,7 @@ while :; do
   if all_present; then break; fi
   lp_now_="$(date +%s)"
   if [ "$lp_now_" -ge "$DEADLINE" ]; then
-    live_extend "$QSTART" || break
+    live_extend "$QSTART" "$lp_now_" || break
     QSTART="$lp_now_"; DEADLINE=$(( DEADLINE + BUDGET ))
   fi
   # A dispatched agent that died breaks the beat early, once per agent per join (DISPATCH FAILED, above).
