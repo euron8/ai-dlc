@@ -163,6 +163,16 @@ harness re-invokes you with its result. Branch on the exit code THEN:
              re-dispatching its deliverable). The In-Flight row's deliverable is your own
              claim, so check it against the agent's description before resuming; never
              map seats to agents from memory.
+             `DISPATCH FINISHED agent-<id>` (under `--complete-repair --dispatch`) — the
+             dispatched agent completed and the record has no `repair-complete: serial `
+             line: read the record, then resume THAT agent by id with its
+             `--mark-repair <record> <pass>` line; if the lead or another writer is sealing
+             the record, beat again. The first beat that sees the agent FINISHED ends early
+             and is refunded, and says so with its "This beat ended early on that report"
+             line; later beats and `--status` still print the block. The `--complete` WARN "the dispatch guard recorded a `--mark`
+             (seat-complete:) invocation on <T> in agent-<id>'s brief" means a serial repair record was briefed
+             with `--mark`: join it with `--complete-repair --dispatch`, and brief a serial or
+             unsharded remediator with `--mark-repair`, never `--mark`.
 
 **The one hard invariant: never end your turn on an outstanding join
 without a live backgrounded beat armed.** The armed beat IS your own

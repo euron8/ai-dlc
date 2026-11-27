@@ -16,5 +16,5 @@
 0 core/scripts/wfd-start-of.sh
 # inproc rows are P2 units (scripts/validate-fixture-invocations.sh header): one fx_inproc per CALL of a guarded subject's entry, one per SOURCE of an unguarded one; an older "one per source" note above is superseded (BL-982).
 # BL-878 (c): fb_probe pairs its two wfd_start_of calls with fx_inproc; 334 -> 336, one counted run.
-336 inproc:core/scripts/wait-for-deliverable.sh
+337 inproc:core/scripts/wait-for-deliverable.sh
 35 inproc:core/scripts/merge-adversarial-shards.sh

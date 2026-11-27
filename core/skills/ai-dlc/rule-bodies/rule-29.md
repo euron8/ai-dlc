@@ -125,6 +125,19 @@ brief closes with the `--mark` line; `steps/_gate-procedures.md`, "Bounded-join 
               is NOT absent: the seat wrote a file. Read it before you decide;
               a re-dispatch over it discards its findings. Only `absent` is
               non-delivery.
+              `DISPATCH FINISHED agent-<id>` (under `--complete-repair
+              --dispatch`) means the dispatched agent completed and the record
+              has no `repair-complete: serial ` line: read the record, then
+              resume THAT agent by id with its `--mark-repair <record> <pass>`
+              line; if the lead or another writer is sealing the record, beat
+              again. The first beat that sees the agent FINISHED ends early and
+              is refunded, and says so with its "This beat ended early on that
+              report" line; later beats and `--status` still print the block.
+              The `--complete` WARN "the dispatch guard recorded a `--mark`
+              (seat-complete:) invocation on <T> in agent-<id>'s brief" means a serial repair
+              record was briefed with `--mark`: join it with `--complete-repair
+              --dispatch`, and brief a serial or unsharded remediator with
+              `--mark-repair`, never `--mark`.
     exit 64 -- REFUSED. The call was malformed and NO beat ran, so the join
               is NOT armed: read its `FAIL:` line, correct the call, and
               arm again. It is never non-delivery and never waiting.

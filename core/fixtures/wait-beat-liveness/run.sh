@@ -2824,7 +2824,7 @@ df_on_sleep() {  # $1 = transcript, $2 = agent id, $3 = reply|retry
 df_beat() {  # $1 = subject (in a sibling dir); rest = argv -> OUT, RC, DF_EL (virtual seconds the beat took)
   db_s_="$1"; shift; db_o_="$(fx_offset "$W")"
   ( cd "$W" && unset CLAUDE_CODE_SESSION_ID && export AI_DLC_WAIT_BEAT_SECS="${DF_BUDGET:-300}" AI_DLC_WAIT_POLL_SECS=30 \
-      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS="${DF_MAXB:-3}" AI_DLC_TEAMMATE_IDLE_SECS=3600 AI_DLC_WAIT_SETTLE_SECS=1 \
+      AI_DLC_WAIT_MARGIN_SECS=0 AI_DLC_MAX_WAIT_BEATS="${DF_MAXB:-3}" AI_DLC_TEAMMATE_IDLE_SECS=3600 AI_DLC_WAIT_SETTLE_SECS="${DF_SETTLE:-1}" \
       AI_DLC_TEAMMATE_DIR="$TD" AI_DLC_PROJECT_ROOT="$PWD" && wbl_ip "$db_s_" "$@" ) > "$BEATOUT" 2>&1
   RC=$?; OUT="$(cat "$BEATOUT")"; DF_EL=$(( $(fx_offset "$W") - db_o_ ))
 }
@@ -3378,6 +3378,203 @@ S31b_hung_review_seat() {
     ok "hung-seat: NEAR-MISS — the same hung transcript on a join with no --complete prints neither word"
   else bad "hung-seat: a non-review join printed the review-seat lines: $OUT"; fi
   rm -rf "$W"
+}
+
+# ===========================================================================
+# 32. DISPATCH FINISHED AND A SEAT SEAL ON A SERIAL RECORD (BL-541).
+#     Arm 1: under --complete-repair --dispatch, an agent whose LAST harness notice is `completed`, with
+#     nothing newer in its transcript, over a record with no `repair-complete: serial ` line at all, is
+#     named DISPATCH FINISHED; the first beat to see it breaks early through DISPATCH FAILED's sidecar and
+#     refund, and at the cap it is STOPPED, never LIVE. Arm 2: under --complete --dispatch, a remediator
+#     whose ledger row records a rendered `--mark` naming a pending unsharded `*-repair-p<digits>.md`
+#     target outside `shards/` gets one WARN on the join's first beat.
+#     The worlds are section 29's (df_world, df_tx, df_beat on the virtual clock); the ledger rows carry
+#     the dispatch guard's key order for the fields both arms read (role .. shard, invoked_bound, mark,
+#     mark_file). An installed engine one pull behind has neither arm: each case SKIPs by name on a
+#     consumer, and is FIXTURE BROKEN in the distribution.
+# ===========================================================================
+F541=a541f1n100000f001; F541R=a541run20000f002
+FIN_HDR='DISPATCH FINISHED agent-'
+SEAL_LINE='  the dispatch guard recorded a `--mark` (seat-complete:) invocation naming this record in agent-'
+SEAL_WARN='WARN: wait-for-deliverable: the dispatch guard recorded a `--mark` (seat-complete:) invocation on '
+s32_has() {  # $1 = the arm's function name -> 0 when the subject defines it; else SKIP on a consumer (1), BROKEN here
+  grep -qF "$1() {" "$SUBJ"; s32_r_=$?
+  [ "$s32_r_" -le 1 ] || broken "cannot read $SUBJ (grep exit $s32_r_)"
+  [ "$s32_r_" -eq 0 ] && return 0
+  echo "SKIP: wait-beat-liveness: section 32: $SUBJ predates $1 (BL-541)"
+  fx_dist_layout "$HERE" && fx_skip_exit "$HERE"
+  return 1
+}
+fr_agent() {  # $1 = agent id, $2 = part, $3 = role, $4 = the row's fields after parent_agent_id (may be empty) -> ledger row, meta.json
+  fr_t_="$(df_iso_ms 800 000)"
+  printf '{"v":1,"ts":"%sZ","name":"wbl","role":"%s","tool_use_id":"toolu_f541_%s","parent_agent_id":""%s}\n' "${fr_t_%.000Z}" "$3" "$1" "$4" \
+    >> "$W/_bmad-output/spawn-ledger.jsonl" || broken "cannot write the section 32 ledger row"
+  printf '{"agentType":"%s","isBuiltIn":false,"description":"Repair part %s brief","toolUseId":"toolu_f541_%s","spawnDepth":1}\n' "$3" "$2" "$1" \
+    > "$TD/agent-$1.meta.json" || broken "cannot write the section 32 meta.json"
+}
+fr_mark() {  # $1 = shard (a JSON value), $2 = mark_file -> the guard's fields for a brief with one rendered --mark
+  printf ',"shard":%s,"invoked_bound":true,"mark":"rendered","mark_file":"%s"' "$1" "$2"
+}
+fr_notice() {  # $1 = agent id, $2 = part, $3 = age -> one harness task-notification (status completed) in the lead transcript
+  printf '{"type":"queue-operation","operation":"enqueue","timestamp":"%s","sessionId":"s","content":"<task-notification>\\n<task-id>%s</task-id>\\n<tool-use-id>toolu_f541_%s</tool-use-id>\\n<status>completed</status>\\n<summary>Agent \\"Repair part %s brief\\" completed</summary>\\n</task-notification>"}\n' \
+    "$(df_iso_ms "$3" 500)" "$1" "$1" "$2" >> "$W/sess.jsonl" || broken "cannot write the lead transcript"
+}
+fr_world() {  # $1 = part -> W: one remediator, finished (completed notice newer than its last turn), its row a
+  # rendered --mark on rec-repair-p1.md (absolute, shard none), and the record present without any marker.
+  df_world; fr_agent "$F541" "$1" remediator "$(fr_mark '"none"' "$W/rec-repair-p1.md")"
+  df_tx "$F541" user:900 assistant:700; fr_notice "$F541" "$1" 500
+  printf '# record\n### e\n- edit: x\n' > "$W/rec-repair-p1.md" || broken "cannot write rec-repair-p1.md"
+}
+# (a, n, o, p, k) One join: beat 1 names FINISHED with the seal line, breaks at once and is refunded (0/3), and
+# writes the sidecar; arm 2 is silent under --complete-repair. Beat 2 finds the sidecar: no break, charged
+# (1/3, 270 s), still printed. --reset drops the sidecar, so the next beat breaks again.
+S32a_finished_breaks_once_and_names_seal() {
+  s32_has say_dispatch_finished || return 0
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  fr_world 1; fts_="$(df_iso_ms 500 500)"; fb_=""
+  df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" rec-repair-p1.md
+  has "${FIN_HDR}$F541 (Repair part 1 brief) -- the harness reported it completed at ${fts_}, and" || fb_="$fb_ b1-header"
+  has '  rec-repair-p1.md has no `repair-complete: serial ` line' || fb_="$fb_ b1-record"
+  has "${SEAL_LINE}${F541}'s" || fb_="$fb_ b1-seal"
+  has "  Resume THIS agent by id (SendMessage to $F541) with the \`--mark-repair\` line, after reading rec-repair-p1.md:" || fb_="$fb_ b1-remedy"
+  has "$DF_EARLY" || fb_="$fb_ b1-early"
+  has "WAITING   rec-repair-p1.md -- beat 0/3" || fb_="$fb_ b1-charged"
+  [ "$DF_EL" -eq 0 ] || fb_="$fb_ b1-seconds:$DF_EL"
+  [ -f "$(df_scf "$F541" rec-repair-p1.md)" ] && [ "$(df_nsc)" -eq 1 ] || fb_="$fb_ b1-sidecar"
+  has "$SEAL_WARN" && fb_="$fb_ b1-arm2-under-repair"
+  has "$DF_HDR" && fb_="$fb_ b1-failed"
+  [ "$RC" -eq 0 ] || fb_="$fb_ b1-rc:$RC"
+  fo1_="$OUT"
+  df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" rec-repair-p1.md
+  has "${FIN_HDR}$F541 (Repair part 1 brief)" || fb_="$fb_ b2-unnamed"
+  has "$DF_EARLY" && fb_="$fb_ b2-refunded"
+  has "WAITING   rec-repair-p1.md -- beat 1/3" || fb_="$fb_ b2-count"
+  [ "$DF_EL" -eq 270 ] || fb_="$fb_ b2-seconds:$DF_EL"
+  df_beat "$DFS" --reset --complete-repair --dispatch "toolu_f541_$F541" rec-repair-p1.md
+  has "${FIN_HDR}$F541" && has "$DF_EARLY" || fb_="$fb_ reset-no-break"
+  if [ -z "$fb_" ]; then
+    ok "dispatch-finished: a remediator completed over an unsealed record is named with its seal line, breaks beat 1 at 0s refunded (0/3), is named unrefunded on beat 2 (1/3, 270s), breaks again after --reset; no arm-2 WARN under --complete-repair"
+  else bad "dispatch-finished: the finished-remediator join went wrong [${fb_# }]: $fo1_ ... $OUT"; fi
+}
+# (b, b2, p twin) One finished agent, three targets: a --mark-repair sealed record (DELIVERED), a legacy bare
+# marker still settling (SETTLE 600), and an open record LAST. Exactly one block, for the open record, one
+# sidecar, and no seal line: this agent's row records no --mark.
+S32b_finished_only_without_any_marker() {
+  s32_has say_dispatch_finished || return 0
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; fr_agent "$F541" 2 remediator ""; df_tx "$F541" user:900 assistant:700; fr_notice "$F541" 2 500
+  printf '### e\n- edit: x\n' > "$W/sr.md" || broken "cannot write sr.md"
+  markcall "$SUBJ" --mark-repair "$W/sr.md" requirements || broken "--mark-repair refused sr.md: $(cat "$BEATOUT")"
+  printf '### e\n- edit: x\n%s\n' "$REPAIR_MARKER" > "$W/br.md" || broken "cannot write br.md"
+  printf '### e\n- edit: x\n' > "$W/op.md" || broken "cannot write op.md"
+  DF_SETTLE=600 df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" sr.md br.md op.md
+  if has "DELIVERED sr.md" && ! has "DELIVERED br.md" && [ "$(df_count "$FIN_HDR")" -eq 1 ] \
+     && has "${FIN_HDR}$F541 (Repair part 2 brief)" && has '  op.md has no `repair-complete: serial ` line' \
+     && ! has '  br.md has no' && ! has '  sr.md has no' && ! has "$SEAL_LINE" && has "$DF_EARLY" \
+     && [ -f "$(df_scf "$F541" op.md)" ] && [ ! -e "$(df_scf "$F541" br.md)" ] && [ "$(df_nsc)" -eq 1 ]; then
+    ok "dispatch-finished: of a sealed, a settling bare-marker and an open record, only the open one is named and breaks (1 block, 1 sidecar), with no seal line for a row that rendered no --mark"
+  else bad "dispatch-finished: the marker gate named a record carrying a repair-complete line, or missed the open one ($(df_count "$FIN_HDR") blocks, $(df_nsc) sidecars, rc=$RC): $OUT"; fi
+}
+# (c, d, d2, e) The agent gate, each one property from S32a's beat 1: a newer turn after the notice; a
+# running sibling (dispatched second); a dispatch id that resolves to no agent; a failed notice. None is
+# FINISHED, and each beat runs its whole quantum, charged.
+S32c_agent_gate_near_misses() {
+  s32_has say_dispatch_finished || return 0
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"; fc_=""
+  fr_world 3; df_tx "$F541" assistant:300
+  df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" rec-repair-p1.md
+  { ! has "$FIN_HDR" && has "WAITING   rec-repair-p1.md -- beat 1/3" && [ "$DF_EL" -eq 270 ]; } || fc_="$fc_ resumed"
+  fr_world 4; fr_agent "$F541R" 5 remediator ""; df_tx "$F541R" user:120 assistant:100
+  df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" --dispatch "toolu_f541_$F541R" rec-repair-p1.md
+  { ! has "$FIN_HDR" && has "WAITING   rec-repair-p1.md -- beat 1/3" && [ "$DF_EL" -eq 270 ]; } || fc_="$fc_ running-sibling"
+  fr_world 6; fr_agent "$F541R" 7 remediator ""; rm -f "$TD/agent-$F541R.meta.json"
+  df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" --dispatch "toolu_f541_$F541R" rec-repair-p1.md
+  { ! has "$FIN_HDR" && has "WAITING   rec-repair-p1.md -- beat 1/3" && [ "$DF_EL" -eq 270 ]; } || fc_="$fc_ unresolved"
+  df_world; fr_agent "$F541" 8 remediator "$(fr_mark '"none"' "$W/rec-repair-p1.md")"
+  df_tx "$F541" user:900 assistant:700; df_notice "$F541" 8 500
+  printf '# record\n' > "$W/rec-repair-p1.md" || broken "cannot write rec-repair-p1.md"
+  df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" rec-repair-p1.md
+  { ! has "$FIN_HDR" && has "${DF_HDR}$F541 (Repair part 8 brief) -- the harness reported it failed"; } || fc_="$fc_ failed"
+  if [ -z "$fc_" ]; then
+    ok "dispatch-finished: a turn after the notice, a running sibling, an unresolved dispatch id and a failed notice each print no FINISHED block (the first three run 270s charged, the last is DISPATCH FAILED)"
+  else bad "dispatch-finished: the agent gate named FINISHED, or a near-miss beat did not run [${fc_# }]: $OUT"; fi
+}
+# (f, g) S32a's world under --complete: no arm-1 block, and arm 2's WARN for that agent and record.
+S32d_complete_warns_seat_seal() {
+  s32_has say_seat_seal_on_serial || return 0
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  fr_world 9
+  df_beat "$DFS" --complete --dispatch "toolu_f541_$F541" rec-repair-p1.md
+  if [ "$RC" -eq 0 ] && has "${SEAL_WARN}rec-repair-p1.md in agent-${F541}'s brief," \
+     && has '  a serial repair record; `--complete` will accept that seal. A serial remediator closes with' \
+     && has "  \`--mark-repair rec-repair-p1.md <pass>\`: resume agent-$F541 with that line and join rec-repair-p1.md with --complete-repair" \
+     && [ "$(df_count "WARN: wait-for-deliverable: the dispatch guard")" -eq 1 ] && ! has "$FIN_HDR" && has "WAITING   rec-repair-p1.md"; then
+    ok "seat-seal: a remediator row rendering --mark on rec-repair-p1.md (shard none) WARNs once under --complete, and arm 1 stays silent"
+  else bad "seat-seal: --complete over a serial record with a rendered --mark did not WARN once, or printed FINISHED (rc=$RC): $OUT"; fi
+}
+# (m) At the cap with the record absent: a finished agent whose last turn is 10 s old is STOPPED, never LIVE,
+# and gets no grant. Twin, one property apart: the same world with no notice is LIVE and granted.
+S32e_finished_at_cap_is_stopped() {
+  s32_has say_dispatch_finished || return 0
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; fr_agent "$F541" 10 remediator ""; df_tx "$F541" user:20 req:15 assistant:10; fr_notice "$F541" 10 5; df_cap rm.md
+  DF_BUDGET=30 df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" rm.md
+  if [ "$RC" -eq 1 ] && has "${FIN_HDR}$F541 (Repair part 10 brief)" && has "  STOPPED DISPATCH agent-$F541 --" \
+     && ! has "LIVE DISPATCH" && ! has "PROGRESS" && ! has "Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the"; then
+    ok "dispatch-finished: at the cap a finished agent with a 10s-old turn is STOPPED, with no grant, no LIVE DISPATCH and no bare re-dispatch (rc 1)"
+  else bad "dispatch-finished: a finished agent at the cap was granted, read LIVE, or handed the bare re-dispatch (rc=$RC): $OUT"; fi
+  df_world; fr_agent "$F541" 10 remediator ""; df_tx "$F541" user:20 req:15 assistant:10; df_cap rm.md
+  DF_BUDGET=30 df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" rm.md
+  if [ "$RC" -eq 0 ] && has "PROGRESS  rm.md -- work observed in agent-$F541.jsonl" && ! has "$FIN_HDR"; then
+    ok "dispatch-finished: TWIN — the same world with no completed notice is LIVE and granted (rc 0)"
+  else bad "dispatch-finished: TWIN FAILED — without the notice the fresh turn was not granted, so the arm above proves nothing (rc=$RC): $OUT"; fi
+}
+# (m2) The cap with 2+ targets or 2+ agents, where dispatch_live answers before it can say STOPPED: the
+# FINISHED block prints and the bare "Re-dispatch the teammate ONCE" does not, beside it. Two worlds: one
+# finished agent over two absent capped records; two finished agents over one absent capped record.
+S32g_finished_at_cap_wide_no_bare_redispatch() {
+  s32_has say_dispatch_finished || return 0
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"; fw_=""
+  df_world; fr_agent "$F541" 17 remediator ""; df_tx "$F541" user:20 req:15 assistant:10; fr_notice "$F541" 17 5
+  df_cap rm.md; df_cap rm2.md
+  DF_BUDGET=30 df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" rm.md rm2.md
+  { [ "$RC" -eq 1 ] && has "${FIN_HDR}$F541 (Repair part 17 brief)" && has '  rm2.md has no `repair-complete: serial ` line' \
+    && ! has "Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the" && ! has "PROGRESS"; } || fw_="$fw_ two-targets"
+  fo2_="$OUT"
+  df_world; fr_agent "$F541" 18 remediator ""; fr_agent "$F541R" 19 remediator ""
+  df_tx "$F541" user:20 req:15 assistant:10; df_tx "$F541R" user:20 req:15 assistant:10
+  fr_notice "$F541" 18 5; fr_notice "$F541R" 19 5; df_cap rm.md
+  DF_BUDGET=30 df_beat "$DFS" --complete-repair --dispatch "toolu_f541_$F541" --dispatch "toolu_f541_$F541R" rm.md
+  { [ "$RC" -eq 1 ] && has "${FIN_HDR}$F541 (Repair part 18 brief)" && has "${FIN_HDR}$F541R (Repair part 19 brief)" \
+    && ! has "Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the" && ! has "PROGRESS"; } || fw_="$fw_ two-agents"
+  if [ -z "$fw_" ]; then
+    ok "dispatch-finished: at the cap over two records, and over two finished agents, the FINISHED block prints with no bare re-dispatch beside it (rc 1)"
+  else bad "dispatch-finished: a wide cap printed the bare re-dispatch beside FINISHED, or no block [${fw_# }]: $fo2_ ... $OUT"; fi
+}
+# (g2, h, i, j, l, q) One --complete beat, six remediators, six targets, each agent's row naming its own
+# target one property from S32d's: a mark_file naming another file; a target under shards/; a null shard and
+# a `./` mark_file (the one that WARNs, third); role adversary; shard `1/1 x`; basename `-repair-p1a.md`.
+S32f_seat_seal_near_misses() {
+  s32_has say_seat_seal_on_serial || return 0
+  DFS="$(sib_dir "$SUBJ")/wait-for-deliverable.sh"
+  df_world; mkdir -p "$W/_bmad-output/shards" || broken "cannot create the shards dir"
+  fr_agent a541h00000000f0h1 11 remediator "$(fr_mark '"none"' "$W/other-repair-p1.md")"
+  fr_agent a541i00000000f0i2 12 remediator "$(fr_mark '"none"' "_bmad-output/shards/i-repair-p1.md")"
+  fr_agent a541g00000000f0g3 13 remediator "$(fr_mark null "./g2-repair-p2.md")"
+  fr_agent a541j00000000f0j4 14 adversary "$(fr_mark '"none"' "j-repair-p1.md")"
+  fr_agent a541l00000000f0l5 15 remediator "$(fr_mark '"1/1 x"' "l-repair-p1.md")"
+  fr_agent a541q00000000f0q6 16 remediator "$(fr_mark '"none"' "q-repair-p1a.md")"
+  for fq_a_ in a541h00000000f0h1 a541i00000000f0i2 a541g00000000f0g3 a541j00000000f0j4 a541l00000000f0l5 a541q00000000f0q6; do
+    df_tx "$fq_a_" user:120 assistant:100
+  done
+  df_beat "$DFS" --complete --dispatch toolu_f541_a541h00000000f0h1 --dispatch toolu_f541_a541i00000000f0i2 \
+    --dispatch toolu_f541_a541g00000000f0g3 --dispatch toolu_f541_a541j00000000f0j4 --dispatch toolu_f541_a541l00000000f0l5 \
+    --dispatch toolu_f541_a541q00000000f0q6 h-repair-p1.md _bmad-output/shards/i-repair-p1.md g2-repair-p2.md j-repair-p1.md \
+    l-repair-p1.md q-repair-p1a.md
+  if [ "$RC" -eq 0 ] && [ "$(df_count "WARN: wait-for-deliverable: the dispatch guard")" -eq 1 ] \
+     && has "${SEAL_WARN}g2-repair-p2.md in agent-a541g00000000f0g3's brief," && has "WAITING   h-repair-p1.md" && has "WAITING   q-repair-p1a.md"; then
+    ok "seat-seal: of six remediators only the null-shard row with a ./ mark_file WARNs; another mark_file, shards/, role adversary, shard 1/1 and a -repair-p1a basename do not"
+  else bad "seat-seal: the near-misses did not leave exactly one WARN, for g2-repair-p2.md ($(df_count "WARN: wait-for-deliverable: the dispatch guard") WARNs, rc=$RC): $OUT"; fi
 }
 
 # ---------------------------------------------------------------------------
