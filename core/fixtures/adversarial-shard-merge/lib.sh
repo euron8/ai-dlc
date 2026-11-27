@@ -2026,8 +2026,8 @@ dv_root() { # <world> -- the rulebook, the legacy role file, the repository
   mkdir -p "$1/.claude/skills/ai-dlc/steps" && cp "$RULEBOOK" "$1/.claude/skills/ai-dlc/steps/_gate-procedures.md" \
     && legacy_roles "$1" && dv_git "$1"
 }
-dv_world_build() { # <A|B> -> the s1 dir of a files world whose p1 is merged and repaired
-  local w pa d o x n
+dv_world_build() { # <A> -> the s1 dir of a files world whose p1 is merged and repaired
+  local w pa d o x
   w="$(mktemp -d "$WORK/dv.XXXXXX")" || return 1
   pa="$w/_bmad-output/planning-artifacts"
   mkdir -p "$pa/s1/stories" "$pa/s1/shards/stories-p1" "$pa/s1/shards/stories-repair-p1" || return 1
@@ -2035,18 +2035,15 @@ dv_world_build() { # <A|B> -> the s1 dir of a files world whose p1 is merged and
   for o in 1 2 3 4 5 6 7 8; do printf '# Story %s\n\nBody of story %s.\n' "$o" "$o" > "$pa/s1/stories/story-0$o-k.md"; done
   d="$pa/s1/shards/stories-p1"
   for o in 1 2 3 4 5 6 7 8; do
-    n=0; [ "$1" = B ] && { [ "$o" = 5 ] || [ "$o" = 7 ]; } && n=1
-    shard "$d" "$o" "$n" EXIT_CONDITION_NOT_MET "$o"
+    shard "$d" "$o" 0 EXIT_CONDITION_NOT_MET "$o"
   done
   for x in $(xkeys 8); do shard "$d" "$x" 0 EXIT_CONDITION_NOT_MET "1, 2"; done
   $ASM_RUN "$MERGE" "$d" >/dev/null 2>&1 && [ -f "$pa/s1/stories-adversarial-p1.md" ] || return 1
   printf 'Repaired.\n' >> "$pa/s1/stories/story-03-k.md"; printf 'Repaired.\n' >> "$pa/s1/stories/story-06-k.md"
   printf -- '### F-3 — MAJOR\n- **disposition:** repaired\n- **edit:** `stories/story-03-k.md:4`\n' > "$pa/s1/shards/stories-repair-p1/01.md"
-  [ "$1" = B ] && printf -- '\n### F-7 — MAJOR\n- **disposition:** repaired\n- **edit:** n/a (no edit)\n' >> "$pa/s1/shards/stories-repair-p1/01.md"
   printf '%s' "$pa/s1"
 }
 dvA_world() { wc_get dvA dv_world_build A; }
-dvB_world() { wc_get dvB dv_world_build B; }
 # A section-mode world: a seven-section test-strategy.md, p1 merged by --document with a MAJOR on Section 6;
 # the repair kept `shards/test-strategy-repair-p1/sections/.before`, then INSERTED a Section 2b ahead of
 # Section 3 (every later ordinal shifts by one) and edited Section 4. The insertion is NOT at the top: part 1
@@ -2071,22 +2068,15 @@ dv_map() {
   DV_ORDS="$(cut -f1 "$WORK/dv.out" | awk 'NF { printf "%s%d", (n++ ? " " : ""), $1 }')"
   DV_HDR="$(cat "$WORK/dv.err")"
 }
-# DV2: story 6 changed on disk but no `edit:` names it (a serial remediator's edit) -> it is in the set. This is the
-# one --derived-map of an unedited dvA copy for p2; DVRS's files twin reads the same run's output ($WORK/dv2.*).
+# DV2: files (stories) mode is never narrowed: p2's --derived-map over dvA (stories 3 and 6 repaired, only 3
+# cited by an edit: line) prints the FULL map 1..8, derived from p1 with a `full width:` reason. This is the one
+# --derived-map of an unedited dvA copy for p2; DVRS's files twin reads the same run's output ($WORK/dv2.*).
 p_dv2() {
   local s; rm -f "$WORK/dv2.out" "$WORK/dv2.err" "$WORK/dv2.rc"; s="$(dvA_world)" || return 1
   dv_map "$1" "$s" stories-p2 < /dev/null
   cp "$WORK/dv.out" "$WORK/dv2.out" && cp "$WORK/dv.err" "$WORK/dv2.err" && printf '%s' "$RC" > "$WORK/dv2.rc" || return 1
-  [ "$RC" -eq 0 ] && case " $DV_ORDS " in *" 6 "*) true ;; *) false ;; esac
-}
-# DV3: B's p1 MAJORs on 5 (unedited) and 7 (`repaired`, `edit: n/a`) keep both in: exactly {3 5 6 7}.
-p_dv3() { local s; s="$(dvB_world)" || return 1; dv_map "$1" "$s" stories-p2; [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "3 5 6 7" ]; }
-# DV4: B plus a story `story-00-a.md` that sorts FIRST, so every ordinal shifts by one. Keyed on basename:
-# the new story (1), the changed 3 and 6 (now 4 and 7), the open 5 and 7 (now 6 and 8) -> {1 4 6 7 8}.
-p_dv4() {
-  local s; s="$(dvB_world)" || return 1
-  printf '# Story 0\n\nA story the repair added.\n' > "$s/stories/story-00-a.md"
-  dv_map "$1" "$s" stories-p2; [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "1 4 6 7 8" ]
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "1 2 3 4 5 6 7 8" ] \
+    && case "$DV_HDR" in *"derived from stories-adversarial-p1.md (full width: files (stories) mode"*) true ;; *) false ;; esac
 }
 # DV4D: section mode narrows by part CONTENT, so a CITED part that the repair left unchanged is owed at its NEW
 # ordinal. Section 2b inserted (every later ordinal shifts by one), Section 4 edited, p1's MAJOR on Section 6
@@ -2102,30 +2092,24 @@ p_dv4d() {
   [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "3 5 7" ] \
     && case "$DV_HDR" in *"derived from test-strategy-adversarial-p1.md"*) true ;; *) false ;; esac && ! has "$WORK/dv.err" "full width"
 }
-# DV5: p1's artifact_sha line removed (an unreadable predecessor sha list) -> the FULL map, said so.
-p_dv5() {
-  local s p; s="$(dvA_world)" || return 1; p="$s/stories-adversarial-p1.md"
-  sed '/^artifact_sha:/d' "$p" > "$p.n" && mv "$p.n" "$p" || return 1
-  dv_map "$1" "$s" stories-p2
-  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "1 2 3 4 5 6 7 8" ] && case "$DV_HDR" in *"full width: stories-adversarial-p1.md notarizes no"*) true ;; *) false ;; esac
-}
 # dv_gate <merge> <s1 dir>: the GATE (arm N) on the stories series, run with the validator beside <merge>.
 dv_gate() { asm_cell vac "$(dirname "$1")/validate-adversarial-convergence.sh"; FXCELL="$ASM_FX" bash "$(dirname "$1")/validate-adversarial-convergence.sh" --series "$2/stories-adversarial-p" > "$CO" 2>&1; }
 # DV10: a GAP in the series. A p3 dispatched with no p2 on disk derives from p1, the predecessor IN SERIES
 # ORDER, never literal M-1 (graph's s320 stories has no p5).
-# The GATE side of the same gap: that p3, merged over {3 6}, stamps shard_set_derived_from: p1, and arm N
-# reads p1 as its predecessor -- no FAIL (N), on a run that judged the series.
-# The same world carries three assertions no other arm checks (once DV1, DV6 and DV7): a dispatch adding the
-# underived shard 1 is REFUSED, nothing written; the narrowed merge notarizes all 8 stems at their disk shas;
-# and the same pass rewritten to dispatch {1 3 6} (a superset) fails arm N owed {3 6}.
+# The GATE side of the same gap: that p3, merged over the full map, stamps shard_set_derived_from: p1, and
+# arm N reads p1 as its predecessor and owes it the full map -- no FAIL (N), on a run that judged the series.
+# The same world carries the assertions no other arm checks: a dispatch missing shard 1 is REFUSED, nothing
+# written; the merge notarizes all 8 stems at their disk shas; the same pass rewritten as an OLDER engine's
+# narrowed one (dispatched exactly {3 6}, its old derivation) gets no FAIL (N); and rewritten to drop shard 1
+# from the full map (a subset) fails arm N.
 p_dv10() {
-  local m="$1" s d x o lst n st b sok=1 ids; DV_STAGE=derive; s="$(dvA_world)" || return 1; dv_map "$m" "$s" stories-p3
-  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "3 6" ] && case "$DV_HDR" in *"derived from stories-adversarial-p1.md"*) true ;; *) false ;; esac || return 1
+  local m="$1" s d x o lst n st b sok=1; DV_STAGE=derive; s="$(dvA_world)" || return 1; dv_map "$m" "$s" stories-p3
+  [ "$RC" -eq 0 ] && [ "$DV_ORDS" = "1 2 3 4 5 6 7 8" ] && case "$DV_HDR" in *"derived from stories-adversarial-p1.md (full width: files (stories) mode"*) true ;; *) false ;; esac || return 1
   d="$s/shards/stories-p3"; o="$s/stories-adversarial-p3.md"
-  for x in 1 3 6; do shard "$d" "$x" 0 EXIT_CONDITION_MET "$x"; done
+  for x in 2 3 4 5 6 7 8; do shard "$d" "$x" 0 EXIT_CONDITION_MET "$x"; done
   for x in $(xkeys 8); do shard "$d" "$x" 0 EXIT_CONDITION_MET "3, 6"; done
-  DV_STAGE=underived-refused; run_merge "$m" "$d"; [ "$RC" -eq 2 ] && has "$MO" "1.md is shard 1, outside the derived set {" && [ ! -e "$o" ] || return 1
-  rm -f "$d/1.md"
+  DV_STAGE=missing-refused; run_merge "$m" "$d"; [ "$RC" -eq 2 ] && has "$MO" "shard 1 is missing from" && [ ! -e "$o" ] || return 1
+  shard "$d" 1 0 EXIT_CONDITION_MET 1
   DV_STAGE=merge-stamps-p1; run_merge "$m" "$d"; [ "$RC" -eq 0 ] && has "$o" "shard_set_derived_from: stories-adversarial-p1.md" || return 1
   DV_STAGE=all-8-stems; lst="$(sed -n 's/^artifact_sha: //p' "$o" | head -1)"; n=0
   for st in $lst; do
@@ -2134,9 +2118,15 @@ p_dv10() {
   done
   [ "$n" -eq 8 ] && [ "$sok" -eq 1 ] || return 1
   DV_STAGE=gate-reads-p1; dv_gate "$m" "$s"; has "$CO" "pass artifact" && ! has "$CO" "FAIL (N -- WIDTH)" || return 1
-  DV_STAGE=superset-fails; ids="$(grep '^shard_tool_use_ids:' "$o")" || return 1
-  awk -v l="$ids" '/^shard_tool_use_ids:/ { print l " 1=toolu_01DvExtra000000000000"; next } { print }' "$o" > "$o.n" && mv "$o.n" "$o" || return 1
-  dv_gate "$m" "$s"; has "$CO" "dispatched parts {1 3 6} but owed {3 6}"
+  cp "$o" "$WORK/dv10.p3" || return 1
+  DV_STAGE=old-engine-narrowed; grep -q '^shard_tool_use_ids:.* 3=.* 6=' "$o" || return 1
+  awk '/^shard_tool_use_ids:/ { l = "shard_tool_use_ids:"; for (i = 2; i <= NF; i++) if ($i !~ /^[0-9]+=/ || $i ~ /^0*[36]=/) l = l " " $i; print l; next } { print }' \
+    "$WORK/dv10.p3" > "$o" || return 1
+  grep -qE '^shard_tool_use_ids: 3=[^ ]+ 6=[^ ]+ cross' "$o" || return 1
+  dv_gate "$m" "$s"; has "$CO" "pass artifact" && ! has "$CO" "FAIL (N -- WIDTH)" || return 1
+  DV_STAGE=subset-fails
+  awk '/^shard_tool_use_ids:/ { sub(/ 0*1=[^ ]+/, "") } { print }' "$WORK/dv10.p3" > "$o" || return 1
+  dv_gate "$m" "$s"; has "$CO" "dispatched parts {2 3 4 5 6 7 8} but owed {3 6}"
 }
 # ---- THE SHIPPED SEQUENCE (BL-911). DV4D seeds a world that still holds its pre-repair snapshot; the lead's
 # real flow never leaves one, and the narrowing never reads one (it joins p1's notarized `part_sha:`). These
@@ -2221,8 +2211,9 @@ dvrs_tail() {
   asm_cell vac "$(dirname "$m")/validate-adversarial-convergence.sh"; FXCELL="$ASM_FX" bash "$(dirname "$m")/validate-adversarial-convergence.sh" --series "$s/$art-adversarial-p" < /dev/null > "$CO" 2>&1
   has "$CO" "but owed {$want}, derived from $art-adversarial-p1.md"
 }
-# DVRS: document mode, the shipped sequence; and, in the same arm, a FILES-mode twin that still narrows to {3 6}
-# with no full-width reason -- so a merge printing full width everywhere fails this arm too.
+# DVRS: document mode, the shipped sequence, narrowed to {4 6} with no full-width reason; and, in the same arm, a
+# FILES-mode twin that prints the full map 1..8 with its full-width reason -- so a merge that narrows, or widens,
+# every mode alike fails this arm.
 p_dvrs() {
   local m="$1" s doc rd sha wl rc
   wl="$SRCDIR/serial-remediation-worklist.sh"; [ -f "$wl" ] || return 1
@@ -2239,8 +2230,8 @@ p_dvrs() {
   dvrs_tail "$m" document "$s" test-strategy "$s/shards/test-strategy-p2" "4 6" --document "$doc" || return 1
   # The files twin is DV2's state (an unedited dvA copy, --derived-map for p2, stdin /dev/null): read DV2's run.
   [ -f "$WORK/dv2.rc" ] && [ -f "$WORK/dv2.out" ] && [ -f "$WORK/dv2.err" ] || return 1
-  [ "$(cat "$WORK/dv2.rc")" = 0 ] && [ "$(cut -f1 "$WORK/dv2.out" | awk 'NF { printf "%s%d", (n++ ? " " : ""), $1 }')" = "3 6" ] \
-    && has "$WORK/dv2.err" "derived from stories-adversarial-p1.md" && ! has "$WORK/dv2.err" "full width"
+  [ "$(cat "$WORK/dv2.rc")" = 0 ] && [ "$(cut -f1 "$WORK/dv2.out" | awk 'NF { printf "%s%d", (n++ ? " " : ""), $1 }')" = "1 2 3 4 5 6 7 8" ] \
+    && has "$WORK/dv2.err" "derived from stories-adversarial-p1.md (full width: files (stories) mode"
 }
 # DVRSS: subject mode, the same sequence: a sectioned stem (prd) and a whole-file one (SPEC) each keep a snapshot
 # at the split, and the worklist consumes both.

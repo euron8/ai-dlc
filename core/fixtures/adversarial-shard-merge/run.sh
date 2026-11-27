@@ -1132,15 +1132,14 @@ fi
 
 fi # sg k
 if sg dv; then
-# ---- THE DERIVED SET (BL-911): a pass after a series' first reviews only the repair. lib.sh's dv worlds: eight
+# ---- THE DERIVED SET (BL-911): a document or subject pass after a series' first reviews only the repair; a
+# stories (files-mode) pass owes the full map. lib.sh's dv worlds: eight
 # stories, the rulebook carrying the era token committed at a fixed 2026-01-01, p1 merged, stories 3 and 6
 # repaired on disk, only 3 cited by the joined repair record.
 if ! dv_rulebook; then bad "DV: FIXTURE BROKEN -- _gate-procedures.md not found above $LIB_DIR; no derived-set arm can bind"
 else
   echo "HERMETIC-CONSUMED $RULEBOOK"
-  p_dv2 "$MERGE" && ok "DV2: story 6, changed on disk and cited by no edit: line (a serial edit), is in the set {$DV_ORDS}" || bad "DV2: ords [$DV_ORDS]"
-  p_dv3 "$MERGE" && ok "DV3: p1's MAJOR on unedited story 5 and its repaired + 'edit: n/a' MAJOR on story 7 keep both in: {3 5 6 7}" || bad "DV3: ords [$DV_ORDS], want [3 5 6 7]"
-  p_dv4 "$MERGE" && ok "DV4: a story sorting FIRST shifts every ordinal; keyed on basename the set is {1 4 6 7 8}" || bad "DV4: ords [$DV_ORDS], want [1 4 6 7 8]"
+  p_dv2 "$MERGE" && ok "DV2: files (stories) mode is never narrowed: p2's --derived-map prints the full map {$DV_ORDS}, derived from p1 with a full-width reason" || bad "DV2: ords [$DV_ORDS] hdr [$DV_HDR], want the full map 1..8 with a full-width reason"
   p_dv4d "$MERGE" && ok "DV4D: --document after p1, Section 2b inserted and Section 4 edited: {3 5 7}, the cited unchanged Section 6 owed at its NEW ordinal 7 (ordinal join {3 4 5 6 7 8}, cite-by-ordinal {3 5 6})" || bad "DV4D: ords [$DV_ORDS] hdr [$DV_HDR] ${PC_WHY:-}, want {3 5 7}"
   p_pc1 "$MERGE" && ok "PC1: a repack (Section 2 grows, Section 4 edited, seven parts become five): {2 3 4}, not the byte-identical Section 7 at another ordinal (ordinal and line-range joins {2 3 4 5})" || bad "PC1: ords [$DV_ORDS] hdr [$DV_HDR] ${PC_WHY:-}, want {2 3 4}"
   p_pcd "$MERGE" && ok "PCD: Section 3 rewritten into a byte copy of Section 5: both copies owed, {3 5 6} (a presence join owes {6})" || bad "PCD: ords [$DV_ORDS] ${PC_WHY:-}, want {3 5 6}"
@@ -1164,12 +1163,11 @@ else
   p_pckm "$MERGE" && ok "PCKm: a malformed, repeated or outside run in SECOND position of p1's part_run (1,2;3 / 1,2;2,3 / 1,2;3,99) owes the FULL map with its reason in both programs; near-misses: a good-only 1,2 narrows to {1}, a first-position 3;1,2 is FULL" || bad "PCKm: cell ${PC_CELL:-?}: ${PC_WHY:-}"
   p_pcmv "$MERGE" && ok "PCMV: SPEC.md moved between the part-digest hashing and the check (in-process seam, the merge's own sha_of wrapped) -> REFUSED naming it, p1 byte-unchanged; near-miss: the unhooked re-merge is UNCHANGED" || bad "PCMV: cell ${PC_CELL:-?}: ${PC_WHY:-}"
   p_pcn2 "$MERGE" && ok "PCN2: --part-sha --rows --scope-ref with a scope list the scoped map cannot read (rc=2) REFUSES and prints no run; near-miss: unwrapped, the same rows print the prd table's run" || bad "PCN2: cell ${PC_CELL:-?}: ${PC_WHY:-}"
-  p_dv5 "$MERGE" && ok "DV5: p1's sha list unreadable -> the FULL map, and the header says why" || bad "DV5: ords [$DV_ORDS] hdr [$DV_HDR]"
-  p_dv10 "$MERGE" && ok "DV10: p3 with no p2 on disk derives from p1 (series order); a dispatch adding underived shard 1 is REFUSED, nothing written (DV1); the merge of 3 and 6 stamps p1 and notarizes all 8 stems at their disk shas (DV7); arm N reads p1 as its predecessor, and the same pass dispatching {1 3 6} (a superset) FAILS owed {3 6} (DV6 superset half; the subset half is held by DVRS)" \
+  p_dv10 "$MERGE" && ok "DV10: p3 with no p2 on disk derives from p1 (series order) and owes the full map; a dispatch missing shard 1 is REFUSED, nothing written; the merge stamps p1 and notarizes all 8 stems at their disk shas; arm N reads p1 and owes the full pass the full map, an older engine's narrowed {3 6} pass its old derivation (no FAIL), and FAILs the full map less shard 1 (a subset)" \
     || bad "DV10: failed at stage ${DV_STAGE:-?}: rc=$RC ords [$DV_ORDS] hdr [$DV_HDR] $(head -1 "$MO") $(grep -m2 'FAIL (N' "$CO")"
   if [ -f "$SRCDIR/serial-remediation-worklist.sh" ]; then
     echo "HERMETIC-CONSUMED $SRCDIR/serial-remediation-worklist.sh"
-    p_dvrs "$MERGE" && ok "DVRS: document mode, the shipped sequence (split on p1's sha, a section edited, assembled, the worklist consuming .before): --derived-map prints exactly the --map rows {4 6} with no full-width reason, the full map dispatched is REFUSED, the derived p2 merges derived from p1, the gate reads no FAIL (N, and arm N FAILs a superset and a subset of {4 6} (N4); a files world in the same arm still narrows to {3 6}" \
+    p_dvrs "$MERGE" && ok "DVRS: document mode, the shipped sequence (split on p1's sha, a section edited, assembled, the worklist consuming .before): --derived-map prints exactly the --map rows {4 6} with no full-width reason, the full map dispatched is REFUSED, the derived p2 merges derived from p1, the gate reads no FAIL (N, and arm N FAILs a superset and a subset of {4 6} (N4); a files world in the same arm prints the full map 1..8 with its full-width reason" \
       || bad "DVRS: rc=$RC ords [$DV_ORDS] $(head -2 "$WORK/dvrs.err" 2>/dev/null) | $(head -2 "$MO") | $(grep -m2 'FAIL (N' "$CO")"
     p_dvrss "$MERGE" && ok "DVRSS: subject mode, the shipped sequence (split on p1's sha list, a prd section edited, assembled, the worklist consuming prd's and SPEC's .before): exactly the --map rows {1 2}, the full map REFUSED, p2 merges derived from p1, the gate reads no FAIL (N, and arm N FAILs a superset and a subset (N4)" \
       || bad "DVRSS: rc=$RC $(head -2 "$WORK/dvrs.err" 2>/dev/null) | $(head -2 "$MO") | $(head -2 "$WORK/dvrss.split" 2>/dev/null) | $(grep -m2 'FAIL (N' "$CO")"

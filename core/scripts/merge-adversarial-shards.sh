@@ -219,13 +219,18 @@
 #   (`.claude/skills/ai-dlc/steps/_gate-procedures.md`, first found walking up) carries the era token
 #   (ERA_TOKEN, declared in validate-adversarial-convergence.sh and read from there), a convergence pass
 #   M with a series predecessor (the HIGHEST earlier `<artifact>-adversarial-p<k>.md`, never literal
-#   M-1) owes only: the parts whose BYTES changed since the predecessor notarized them, the parts the
-#   predecessor's CRITICAL and MAJOR findings cite (on their own `stories:` lines, through
-#   the predecessor's embedded `## Shard ordinal map`, whatever their disposition), and the cross shard.
-#     files     a story is changed when its disk sha differs from the predecessor's `<stem>=<sha>`;
-#               keyed on story BASENAME, rendered onto this pass's ordinals.
-#     document, subject  by PART CONTENT: every such convergence pass notarizes `part_sha:`, one
-#               `<ordinal>=<sha256>` per map row (partition-document.sh --part-sha, the bytes --split
+#   M-1) has a derived set, and the merge stamps it.
+#     files     (stories) NEVER narrowed: pass M owes the FULL map, with the `full width:` reason
+#               FILES_FULL_WHY. --derived-set judges a pass that dispatched every ordinal of its map by
+#               that rule, and any other files pass (an older engine's narrowed one) by the older
+#               derivation: a story is owed when its disk sha differs from the predecessor's
+#               `<stem>=<sha>` (keyed on story BASENAME, rendered onto this pass's ordinals) or the
+#               predecessor's CRITICAL and MAJOR findings cite it.
+#     document, subject  owe only: the parts whose BYTES changed since the predecessor notarized them,
+#               the parts the predecessor's CRITICAL and MAJOR findings cite (on their own `stories:`
+#               lines, through the predecessor's embedded `## Shard ordinal map`, whatever their
+#               disposition), and the cross shard. Narrowed by PART CONTENT: every such convergence
+#               pass notarizes `part_sha:`, one `<ordinal>=<sha256>` per map row (partition-document.sh --part-sha, the bytes --split
 #               would cut), so no pre-repair snapshot is kept. A part is unchanged only when its digest
 #               (subject: (file, digest)) occurs exactly once in the predecessor's list and once in this
 #               pass's; a boundary that shifted, a renamed or new section and both copies of a duplicate
@@ -241,17 +246,19 @@
 #   `part_sha:` or no `part_run:` (an older engine merged it), the pass's own lists are absent
 #   (--derived-set), either list is malformed or not joinable to its map, or the series is LEGACY or
 #   NOTOKEN under NARROW_ERA_TOKEN.
-#   The merge then REFUSES a shard outside the derived set and a missing derived shard, notarizes the
-#   disk sha of EVERY stem (dispatched or not) so F4, REVERT_REPAIR and sha_key see a whole list, and
-#   writes `shard_set_derived_from: <predecessor basename>`. A files-mode first pass, elicitation, and a
+#   The merge then REFUSES a shard outside the derived set (reachable in document and subject mode
+#   only) and a missing derived shard, notarizes the disk sha of EVERY stem in files mode so F4,
+#   REVERT_REPAIR and sha_key see a whole list, and writes `shard_set_derived_from: <predecessor
+#   basename>`. A files-mode first pass, elicitation, and a
 #   files-mode tree whose rulebook lacks the token are unchanged byte for byte (a later convergence pass
 #   carries THE REPAIR-INTRODUCED CLASS's header lines in every mode and era); a document or subject
 #   convergence pass ALWAYS carries `part_sha:` and `part_run:`, in every era, first pass included.
 #   THE ERA is the convergence validator's era_resolve, extracted (d_era_load), keyed on the series'
-#   FIRST pass: the merge narrows exactly where arm N binds, and a LEGACY series keeps the full map. The
+#   FIRST pass: the merge stamps exactly where arm N binds, and a LEGACY series keeps the full map. The
 #   document and subject narrowing is a SECOND era, the same era_resolve asked with NARROW_ERA_TOKEN (d_nera).
 #   `--derived-map` (a flag on files mode, `--document` and `--subject`, in any position) prints the
-#   derived rows of the map that mode prints -- the lead's dispatch list; `--map` is unchanged, so its
+#   derived rows of the map that mode prints (in files mode the whole map, under a `# derived from
+#   <predecessor> (full width: ...)` header) -- the lead's dispatch list; `--map` is unchanged, so its
 #   other callers (party rounds, sprint review) keep the full map;
 #   `--derived-set <pass file>` recomputes the set pass M owed from its own notarized record (arm N).
 #
@@ -578,6 +585,8 @@ set -u
 export LC_ALL=C
 # The separator class this merge's own pair parser READS (validate-adversarial-convergence.sh's).
 PAIR_SEP='[=@]'
+# The `full width:` reason of every files-mode pass after the first (THE DERIVED SET).
+FILES_FULL_WHY='files (stories) mode reviews the full map on every pass'
 
 refuse() { [ "${CS_SKIP:-0}" != 1 ] || { printf 'SKIP: %s%s\n' "$*" "${CS_RAN:+ -- the self-only checks ran and passed ($CS_RAN); only the subject-dependent artifact/artifact_sha check did not run}"; exit 3; }; printf 'REFUSED: %s\n' "$*"; exit 2; }
 # collect: a refusal inside a phase that --dry-run walks to its end. Without --dry-run it IS refuse,
@@ -1433,7 +1442,14 @@ derived_set_main() {
       d_pairs "$pv" > "$T/cpairs"
       awk -F'\t' 'FILENAME == ARGV[1] { P[$1] = $2; next } { s = $2; sub(/\.md$/, "", s); print $2 "\t" ((s in P) ? P[s] : "-") }' \
         "$T/cpairs" "$T/cmap" > "$T/csrc" || return 2
-      derive_set files "$SPRINT_DIR" "$art" "$m" "$T/cmap" "$T/csrc" || return 2 ;;
+      derive_set files "$SPRINT_DIR" "$art" "$m" "$T/cmap" "$T/csrc" || return 2
+      # A pass that dispatched EVERY ordinal of its map was merged full width (FILES_FULL_WHY) and owes the
+      # full map; any other set is an older engine's narrowed pass and owes the derivation above.
+      if [ -n "$D_PRED" ] && [ -z "$D_FULL" ] \
+        && [ "$(printf '%s\n' $(field "$T/cpx" shard_tool_use_ids) | awk -F"$PAIR_SEP" 'NF >= 2 && $1 ~ /^[0-9]+$/ && $2 != "" { print $1 + 0 }' | LC_ALL=C sort -n -u | tr '\n' ' ')" \
+          = "$(cut -f1 "$T/cmap" | awk '{ print $1 + 0 }' | LC_ALL=C sort -n -u | tr '\n' ' ')" ]; then
+        D_FULL="$FILES_FULL_WHY"
+      fi ;;
     *)
       # Narrowed by part content (derive_set) from pass M's OWN `part_sha:`; reads no document bytes.
       d_era_load
@@ -2197,9 +2213,10 @@ norm_ord() { # "003" -> 03 at width W; empty unless digits within 1..K
 }
 # ---- THE DERIVED SET (header: THE DERIVED SET) ---------------------------------------------
 # Only where the installed rulebook above the sprint carries the era token, and never for elicitation.
-# A first pass (no predecessor) keeps the full map and stamps nothing. Otherwise ORDINALS becomes the
-# derived set, DERIVED_FROM names the predecessor, and the map K, the cross groups and every notarized
-# sha stay those of the FULL map.
+# A first pass (no predecessor) keeps the full map and stamps nothing. Otherwise DERIVED_FROM names the
+# predecessor; in document and subject mode ORDINALS becomes the derived set, and in files mode it stays
+# the full map with FILES_FULL_WHY as its `full width:` reason. The map K, the cross groups and every
+# notarized sha stay those of the FULL map.
 DERIVED_FROM=""; DERIVED_FULL=""
 d_era_load
 if [ "$ELICIT" -eq 0 ] && d_era_bound "$SPRINT_DIR" "$ARTIFACT"; then
@@ -2208,11 +2225,9 @@ if [ "$ELICIT" -eq 0 ] && d_era_bound "$SPRINT_DIR" "$ARTIFACT"; then
     if [ -n "$SUBJECT" ]; then _dm=subject; else _dm=document; fi
     derive_set "$_dm" "$SPRINT_DIR" "$ARTIFACT" "$PASS" "$T/map" "$T/dpsha" || refuse "the derived set did not run"
   else
-    : > "$T/dsrc" || refuse "cannot stage the derived set"
-    while IFS="$(printf '\t')" read -r _o _b; do
-      printf '%s\t%s\n' "$_b" "$(sha_of "$STORIES_DIR/$_b")" >> "$T/dsrc" || refuse "cannot stage the derived set"
-    done < "$T/map"
-    derive_set files "$SPRINT_DIR" "$ARTIFACT" "$PASS" "$T/map" "$T/dsrc" || refuse "the derived set did not run"
+    # Files (stories) mode is never narrowed: a pass after the first owes the full map, said so.
+    D_FULL=""; d_pred "$SPRINT_DIR" "$ARTIFACT" "$PASS"
+    [ -z "$D_PRED" ] || D_FULL="$FILES_FULL_WHY"
   fi
   if [ -n "$D_PRED" ]; then
     DERIVED_FROM="$(basename "$D_PRED")"
@@ -2899,9 +2914,9 @@ if [ -s "$T/bnd" ]; then
 fi
 
 phase_barrier
-# A NARROWED files-mode merge notarizes the disk sha of EVERY stem, dispatched or not, in ordinal
-# order, so F4, REVERT_REPAIR and every sha_key reader see the whole artifact. Each dispatched shard's
-# claim was already checked equal to its disk sha in the loop above.
+# A files-mode merge after the first pass notarizes the disk sha of EVERY stem in ordinal order, so F4,
+# REVERT_REPAIR and every sha_key reader see the whole artifact (its set is the full map, so each stem
+# is also a dispatched shard, whose claim was already checked equal to its disk sha in the loop above).
 if [ -n "$DERIVED_FROM" ] && [ -z "$DOCUMENT" ] && [ -z "$SUBJECT" ]; then
   SHA_LIST=""
   while IFS="$(printf '\t')" read -r _o _b; do

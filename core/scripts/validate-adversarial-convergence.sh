@@ -475,7 +475,7 @@ VALID_RESOLUTIONS="REVERT_REPAIR CHANGE_APPROACH CUT_SCOPE RESTART_CYCLE REOPEN_
 #   token, and no git work tree at all           BOUND: the installed token is the only evidence, and
 #                                                every series is bound.
 # ONE IMPLEMENTATION. ERA_TOKEN, era_cmp and era_resolve are read by merge-adversarial-shards.sh from
-# this file (count-guarded, as it reads at_key), so the merge narrows exactly where arm N binds.
+# this file (count-guarded, as it reads at_key), so the merge stamps its derived set exactly where arm N binds.
 ERA_TOKEN='A p3 that does not stamp'
 # THE NARROWING ERA (BL-911): document and subject passes are narrowed by part content only in a series
 # BOUND under this second token, resolved by the same era_resolve (the merge swaps it in for one call,
@@ -3021,15 +3021,17 @@ if [ "$N" -gt 0 ] && [ "$k3_go" -eq 1 ]; then
 fi
 
 # =============================================================================
-# N. WIDTH -- a sharded pass after the series' first reviews the REPAIR (BL-911).
+# N. WIDTH -- a sharded pass after the series' first dispatches exactly its derived set (BL-911).
 # =============================================================================
 # GATE ONLY: it re-derives through merge-adversarial-shards.sh and reads git (era_resolve).
 #   subject    every pass after the series' first whose `shard_tool_use_ids:` carries a numeric
 #              `<key>=<id>` token (k_has_ids) -- a merged sharded pass, a cross-only one included: a
 #              cross-only pass is the narrowest subset, the one this arm most exists to judge.
 #   owed       `merge-adversarial-shards.sh --derived-set <pass>`, the merge's own derivation, recomputed
-#              from the pass's notarized record: the parts whose bytes changed since the series
-#              predecessor, and the parts the predecessor's CRITICAL and MAJOR findings cite. An input it
+#              from the pass's notarized record. A files (stories) pass owes the FULL map, with a `full
+#              width:` reason, when it dispatched every ordinal of its map; any other files pass (an
+#              older engine's narrowed one) owes the parts whose bytes changed since the series
+#              predecessor and the parts the predecessor's CRITICAL and MAJOR findings cite. An input it
 #              cannot read widens the owed set to the full map, never narrows it. A document or subject
 #              pass is narrowed by part CONTENT (its own and its predecessor's `part_sha:`), and owes
 #              the full map, with a `full width:` reason, where either list is absent or unjoinable or
@@ -3075,8 +3077,8 @@ if [ -n "$n_cand" ]; then
       n_from="$(block_field "$n_f" 'shard_set_derived_from')"; n_from="${n_from%%[[:space:]]*}"
       if [ -z "$n_from" ]; then
         err "N -- WIDTH" "$n_b is a sharded pass after the series' first and carries no 'shard_set_derived_from:'.
-      A pass after the first reviews the REPAIR: dispatch the parts
-      scripts/ai-dlc/merge-adversarial-shards.sh --derived-map <its shard dir> prints, plus the cross shard,
+      Dispatch the parts scripts/ai-dlc/merge-adversarial-shards.sh --derived-map <its shard dir> prints
+      (the whole map for stories, the repaired and cited parts otherwise), plus the cross shard,
       and merge them; the merge stamps the line. Re-run the pass that way as the NEXT pass number."
         continue
       fi
