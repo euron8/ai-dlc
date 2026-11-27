@@ -57,6 +57,8 @@
 #   HO1/HO2  handoff-completion-assertion (e6-order): templates/settings.json.template registers
 #            the recover gate on PreToolUse and the handoff entry hook on PostToolUse (HO1), with
 #            an impossible-hook-name control (HO2).
+#   VS       BL-1155: CW2's re-install runs from the copy after it gains a fake VERSION and a commit, and its
+#            .claude/.ai-dlc-version stamp and "Version:" echo carry that version and the copy's short sha.
 #
 # DISTRIBUTION-ONLY (.dist-only): the subject is a tree install.sh builds, and install.sh is not
 # shipped. validator-path-resolution carries the distribution-side half of the same fix.
@@ -545,6 +547,17 @@ bl331_arm
 # $BASE/t, and every other world works on a copy.
 echo ""
 
+# VS (BL-1155): every install above ran from a copy with no VERSION and an unborn HEAD, so their stamp reads
+# `unknown`. The copy gains a fixed fake VERSION and one commit here, before CW2's re-install, the one install
+# run that follows; VS reads that run's stamp and its "Version:" echo, so install.sh's VERSION-present and
+# HEAD-present branches are asserted with no added run.
+. "$HERE/../lib/world.sh" || { echo "FIXTURE BROKEN: cannot source lib/world.sh" >&2; exit 2; }
+VS_VER="9.8.7-vs"
+printf '%s\n' "$VS_VER" > "$DIST/VERSION" && world_git -C "$DIST" add -f VERSION && world_git -C "$DIST" commit -q -m vs \
+  || { echo "FIXTURE ERROR: committing the copied distribution in $DIST failed" >&2; exit 2; }
+VS_SHA="$(world_git -C "$DIST" rev-parse --short HEAD)"
+[ -n "$VS_SHA" ] || { echo "FIXTURE ERROR: no HEAD in $DIST after its commit" >&2; exit 2; }
+
 # CW1/CW2, from layer-crosswalk-home (LC-N7 / W8): the installer scaffolds the consumer's
 # crosswalk file ONCE and a re-install preserves it. A file the installer re-copies is core's
 # however the contract describes it, and the consumer's rows would vanish at the next install.
@@ -566,6 +579,16 @@ elif [ -f "$BASE/t/$CW_REL" ]; then
 else
   bad "CW1 (layer-crosswalk-home): install.sh did not scaffold '$CW_REL' into a fresh tree"
   bad "CW2 (layer-crosswalk-home): preserve-on-reinstall not reached: nothing was scaffolded"
+fi
+VS_STAMP="$BASE/t/.claude/.ai-dlc-version"
+if [ ! -f "$WORK/reinstall.log" ]; then
+  bad "VS (BL-1155): the re-install from a copy carrying VERSION and a commit did not run, so no arm reads that stamp"
+elif grep -qxF "version: $VS_VER" "$VS_STAMP" && grep -qxF "commit: $VS_SHA" "$VS_STAMP" \
+     && grep -qxF "skill_version: $VS_VER" "$VS_STAMP" && grep -qxF "skill_commit: $VS_SHA" "$VS_STAMP" \
+     && grep -qxF "Version: $VS_VER ($VS_SHA)" "$WORK/reinstall.log"; then
+  ok "VS (BL-1155): from a source carrying VERSION and a commit, the stamp and the Version: echo name $VS_VER @ $VS_SHA"
+else
+  bad "VS (BL-1155): want version/skill_version $VS_VER and commit/skill_commit $VS_SHA in the stamp and 'Version: $VS_VER ($VS_SHA)' echoed; stamp has [$(grep -E '^(skill_)?(version|commit):' "$VS_STAMP" 2>/dev/null | tr '\n' ' ')], echo [$(grep -E '^Version:' "$WORK/reinstall.log" | head -1)]"
 fi
 
 # HO1/HO2, from handoff-completion-assertion's (e6)-(e13): that fixture drives the recover

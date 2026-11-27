@@ -104,8 +104,8 @@ ASSERTIONS=0
 echo "ledger-status-vocabulary fixture"
 echo
 
-# EVERY RUN IS INDEPENDENT, SO THEY GO THROUGH A POOL. Each assertion below copies the tracked
-# tree, mutates one file in the copy and runs `validate-enforcement-map.sh` over it — one run
+# EVERY RUN IS INDEPENDENT, SO THEY GO THROUGH A POOL. Each assertion below copies the file list
+# run.sh names, mutates one file in the copy and runs `validate-enforcement-map.sh` over it — one run
 # per assertion, sharing nothing. The pre-push suite is POLE-BOUND: its makespan tracks its
 # single longest unit, so an internally-serial fixture sets the wall clock for the whole push
 # whatever AI_DLC_FIXTURE_JOBS says.

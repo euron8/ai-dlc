@@ -1,6 +1,6 @@
 # schema-install-fallback walks up from its own directory for scripts/install.sh, copies the tracked files of core/, patterns/,
 # templates/ and the two install scripts ONCE into a scratch work tree, and runs every install from that copy into an empty
-# target; VERSION is not copied (the stamp value is asserted by no arm). The five scripts under test are the ones that
+# target; the repo's VERSION is not copied (arm VS writes a fake VERSION into the copy and commits it before the re-install). The five scripts under test are the ones that
 # install lays down at scripts/ai-dlc/, taken from core/scripts/. A fixture's own directory is copied by the runner, never declared.
 !scripts/install.sh
 # install.sh sources its function file before it writes anything and refuses the install when it is absent.
@@ -10,3 +10,4 @@ core/
 patterns/
 templates/
 core/fixtures/lib/report.sh
+core/fixtures/lib/world.sh

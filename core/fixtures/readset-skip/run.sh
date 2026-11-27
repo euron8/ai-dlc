@@ -496,9 +496,13 @@ f2b_world() { # <seed fn> <dst> [seed args]
 # content -- a mutant copy at that path is a pass of the subject it copies, as lib/inproc.sh states for inproc_run. A
 # renamed copy, a decision driver and hermetic-run.sh log nothing here. fx_inproc is kept through the function strip and
 # unset on the line that sources, and that paired source covers the rs_main call after it. AN EXTRACTED SPAN IS LOGGED AT
-# ITS DRIVE: every source of a span and every call of its entry functions carries its own fx_inproc naming the program the
-# span was cut from -- "$DERIVER" for a deriver span, "$ROOT/core/git-hooks/pre-push" for a pool span (never $HOOK, which
-# resolves to .githooks/pre-push here) -- and invocations.decl counts those passes on its inproc: rows.
+# ITS DRIVE: every call of a span's entry functions made in this file's own shell carries an fx_inproc naming the
+# program the span was cut from -- "$DERIVER" for a deriver span, "$ROOT/core/git-hooks/pre-push" for a pool span
+# (never $HOOK, which resolves to .githooks/pre-push here). A source of a span need not carry one (many are bare, e.g.
+# dm_merge, allist_with, can_with, both_verdict_with); the paired calls are the passes, and invocations.decl counts
+# those passes on its inproc: rows. A STATED BLIND ROUTE: the four heredoc drivers RT, CT, FX and PJ are written to a
+# file and run by a child bash (RT as `bash "$RT_DRIVER" ...`), and they call span functions bare (RT's
+# readset_live_trace, readset_pid_start, readset_lock_stale); they log no pass, and the inproc: rows do not count them.
 inproc() {
   local _ip_v _ip_keep
   _ip_keep=""
