@@ -320,6 +320,7 @@ ls_judge() {                   # ls_judge <hook> <fresh|old> -> held | stale | b
   grep -q '^readset_lock_stale() {' "$d/lib.sh" || { echo broken; return; }
   mkdir "$d/l.lock" && : > "$d/l.lock/pid" || { echo broken; return; }
   [ "$2" = old ] && { touch -t 200001010000 "$d/l.lock" || { echo broken; return; }; }
+  fx_inproc "$1"
   if ( . "$d/lib.sh" && readset_lock_stale "$d/l.lock" ) >/dev/null 2>&1; then echo stale; else echo held; fi
 }
 cw_green() {                   # alpha waits for bravo's and charlie's verdicts so it finishes LAST; bravo is noisy and green
@@ -1112,8 +1113,8 @@ cl_seed() {                    # cl_seed <prefix> <post-P1 tree> [<hook>]: the c
     fx_inproc "$HOOK"
     AI_DLC_VERDICT_STORE="$t.vs" && . "$t.pool" >/dev/null 2>&1 || exit 1
     POOL_DEPTH_IN=0 && cl_tree="$t.ct0" && o="$t.census" && mkdir -p "$o" && cl_select "$o" census >"$p.cl0.out" 2>&1 \
-      && while IFS= read -r i; do ( cd "$cl_tree" && bash "tests/fixtures/$i/run.sh" ) </dev/null >/dev/null 2>&1 && printf ok > "$o/$i@consumer" && cl_publish "$o" "$i"; done < "$o/.cl.sel" \
-      && cl_write "$o" ) || broken "BL-998 seed cl: the census over tree 0 failed: $(tr '\n' '|' < "$p.cl0.out" | tail -c 300)"
+      && while IFS= read -r i; do ( cd "$cl_tree" && bash "tests/fixtures/$i/run.sh" ) </dev/null >/dev/null 2>&1 && printf ok > "$o/$i@consumer" && fx_inproc "$HOOK" && cl_publish "$o" "$i"; done < "$o/.cl.sel" \
+      && fx_inproc "$HOOK" && cl_write "$o" ) || broken "BL-998 seed cl: the census over tree 0 failed: $(tr '\n' '|' < "$p.cl0.out" | tail -c 300)"
   grep -qF '   ..    consumer layout: 2 of 2 shipping fixture(s) run as <fx>@consumer in ' "$p.cl0.out" \
     || broken "BL-998 seed cl: the census did not select both fixtures: $(tr '\n' '|' < "$p.cl0.out" | tail -c 300)"
   for i in a b x a2; do   # x: a tree whose keys differ, pushed over a's records; a2: a's content again (the content-keyed record)

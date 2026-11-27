@@ -2864,6 +2864,26 @@ Done condition for these items: the hand seeding runs per release for grep-match
 - Readings, judged with batch 268's `compare.sh` (cluster C's method) with an asserted PLUS control (one uncovered tracked path added reads +1) and an asserted MINUS control (one hit declared row dropped reads +1) per fixture, all 10 held: `trunk-audit-gate` PLUS 0, MINUS 0; `layer-readopt-gate` PLUS 0, MINUS 0; `layer-readopt-gate-b` PLUS 0, MINUS 2 (`reconcile/preclassify.sh`, `reconcile/consumer-read.sh`); `layer-readopt-gate-d` PLUS 0, MINUS 2 (the same two); `layer-readopt-gate-e` PLUS 0, MINUS 1 (`reconcile/ask-families.tsv`). MINUS rows are recorded only, no edit. PLUS 0 everywhere, so nothing goes to BL-1155. The only `cp -R` in the two parent `run.sh` files copies fixture-built worlds, not the tree, so no undeclared recursive scan.
 - The 0.1267.0 `Still standing` item "a read-set retrace of trunk-audit-gate and layer-readopt-gate-b, -d and -e" now reads DONE (PLUS 0 on all four, and on the parent `layer-readopt-gate`). The other items of that bullet stand.
 
+**PARTIAL (v0.1269.0).** Batch 270, cluster F. Item (c) is done: the owed P2 set that `bash scripts/validate-fixture-inprocess.sh --complete` prints falls from 339 to 0, and the run exits 0. The entry stays PARTIAL, `verify: manual` unchanged, no LANDED line.
+- The route: every flagged in-process drive is paired with `fx_inproc <subject>` (`core/fixtures/lib/mutant.sh`, a builtin printf that starts nothing), on the line before it or earlier on the same line, one per drive. Neither pre-push hook is edited or wrapped. The 339 rows were 83 drives on 70 lines of `core/fixtures/readset-skip/run.sh`, counted once for each of its four shards (332), plus `consumer-suite-pool/run.sh` (3), `wait-beat-liveness/run.sh` (2, inside `fb_probe`'s two `$( )` calls of `wfd_start_of`) and `story-evidence-scaffold/he-inproc.sh` `rcpt_run` (2: one line, counted for gate-transition and story-evidence-receipts).
+- Each `fx_inproc` names the literal core path of the program the drive came from. Pool spans and hook functions are `"$ROOT/core/git-hooks/pre-push"`, never readset-skip's `$HOOK`, which resolves to `.githooks/pre-push` in the distribution. Deriver spans, `$impl` and `DG_HASH` are `"$DERIVER"`. The `readset-skip/run.sh` comment at the `inproc()` header saying an extracted span logs nothing is corrected.
+- Arm W: readset-skip's pre-wrap gate is not moved. Nine drives on 8 lines at 6 sites sat before it outside a column-0 function body (base `run.sh` :580, :861 twice, :1343, :1346, :1392, :1394, :1849, :1873: the t6 world, the `SP0` manifest, the indented `pt_drive` and `rf_drive` definitions, and the two `PJ_SEEDLIB` start reads), so they now sit inside column-0 functions. `pt_drive` and `rf_drive` move only their header and closing-brace lines to column 0; the other four become small functions called once, at the same place. A lagging consumer still SKIPs at the same point.
+- The `inproc:` rows, set from counted seeds (`scripts/seed-verdict-store.sh --keep`):
+  - readset-skip gains `96 inproc:core/git-hooks/pre-push` and `29 inproc:core/scripts/derive-fixture-readsets.sh`.
+  - readset-skip-b: pre-push goes from 4 to 238, plus a new `19 inproc:` row for the deriver.
+  - readset-skip-c: the deriver goes from 60 to 84, plus a new `12 inproc:` row for pre-push.
+  - readset-skip-d gains `109 inproc:core/git-hooks/pre-push`.
+  - consumer-suite-pool: pre-push goes from 9 to 14.
+  - wait-beat-liveness: `wait-for-deliverable.sh` goes from 334 to 336.
+  - story-evidence-receipts gains `1 inproc:` for each of `receipt-bl809.sh`, `-bl815.sh`, `-bl843.sh` and `-bl845.sh`.
+  - story-evidence-scaffold-c (the shard that runs the `receipts` unit) gains `1 inproc:` for each of `receipt-bl1036.sh`, `-bl1037.sh` and `-bl1040.sh`. J4 also needs those three receipts to be `!` lines of its `inputs.decl`, so the receipts unit of `story-evidence-scaffold/run.sh` now prints `HERMETIC-CONSUMED` for each one, and the shard declares them with `0 <receipt>` start rows, as story-evidence-receipts already does for its four.
+  - No `*` row, subject start row or FORK_BUDGET moved. gate-transition calls `rcpt_run` 0 times and logs no pass.
+- BL-868: no added `fx_inproc` sits in a poll loop.
+- Owed:
+  1. The `core/fixtures/readset-skip/run.sh` comment at :494-499 ("every source of a span and every call of its entry functions carries its own fx_inproc") is false at `dm_merge`, `allist_with`, `can_with` and `both_verdict_with`. In those four the call is paired and the source of the span is not.
+  2. `scripts/validate-fixture-invocations.sh:721-722` (BLIND ROUTES) says code extracted into a renamed file (readset-skip's `$WORK/pool.sh`, the `merge.sh` spans) "is no pass of that subject". That contradicts P2 and the `inproc:core/git-hooks/pre-push` rows. In the distribution those rows count `$POOL`, which is cut from `.githooks/pre-push`, a different FIXTURE_POOL block.
+- Still standing: item 6 readings, layer-readopt-gate-e's 2 e2e cells, and every item the paragraphs above list (not restated here).
+
 verify: manual
 
 ## BL-974 — a record-format error in a shard or repair part is found by the lead's join, so one malformed line costs a resume round trip

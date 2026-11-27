@@ -19,6 +19,16 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1269.0] - 2026-11-26
+
+### Eight fixtures count every in-process pass of their subjects, so no unrouted pass is left owed (BL-878)
+
+- For every consumer: `readset-skip` (all four shards), `consumer-suite-pool`, `wait-beat-liveness` and `story-evidence-receipts` ship. Each fixture used to drive pre-push hook spans, deriver spans, `wait-for-deliverable.sh` or the story-evidence receipts inside its own shell, and most of those passes went uncounted. Four fixtures already counted some: `readset-skip-b` 4 (pre-push), `readset-skip-c` 60 (deriver), `wait-beat-liveness` 334 (`wait-for-deliverable.sh`) and `consumer-suite-pool` 9 (pre-push). Each such drive now logs one pass through `fx_inproc`, which starts no program, and each fixture's `invocations.decl` declares the count. A change that makes a fixture drive its subject more often now fails the fixture's invocation budget instead of going unseen.
+- `scripts/validate-fixture-inprocess.sh --complete` (in the distribution only) used to list 339 unpaired in-process drives as owed. It now lists 0.
+- `story-evidence-scaffold-c` (in the distribution only) declares its three open-entry receipts as required inputs, and it prints the `HERMETIC-CONSUMED` line for each one where it runs it.
+- No fixture's assertions change. The consumer's pre-push hook is unchanged.
+- Action for consumers: none.
+
 ## [0.1268.0] - 2026-11-26
 
 ### The remediator reads its resolution guidance only when a repair cycle has stopped

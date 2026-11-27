@@ -432,15 +432,18 @@ select_in() {
   ( cd "$t" || exit 1
     # Only the launcher arms turn the live trace on, and they say so on their own drive.
     export AI_DLC_READSET_LIVE_TRACE=0
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     # shellcheck disable=SC1090
     . "$POOL" 2>/dev/null
     for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$scratch/list"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     readset_manifest "$scratch"
     # SEEDED AS THE HOOK WRITES IT: the record AND its `v2` format stamp. An arm modelling a
     # record an OLDER hook wrote removes the stamp in its own mutation.
     cp "$scratch/.now" .git/ai-dlc-fixture-verified 2>/dev/null && printf 'v2\n' > .git/ai-dlc-fixture-verified.format
     eval "$*"                                   # the caller's mutation of the tree
     cp "$scratch/list" "$scratch/l"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     apply_readset_skip "$scratch/l" "$scratch" > "$scratch/msg" 2>&1
     sed 's|core/fixtures/||g; s|/$||' "$scratch/l" | tr '\n' ' '
     printf '\n---MSG---\n'
@@ -491,8 +494,11 @@ f2b_world() { # <seed fn> <dst> [seed args]
 # EVERY DRIVE OF THE DERIVER IS ONE IN-PROCESS PASS (BL-982): fx_inproc (lib/mutant.sh) logs it when the sourced path IS
 # the deriver's, core/scripts/derive-fixture-readsets.sh in whatever world the drive runs, keyed on the PATH and never the
 # content -- a mutant copy at that path is a pass of the subject it copies, as lib/inproc.sh states for inproc_run. A
-# renamed copy, an extracted span, a decision driver and hermetic-run.sh log nothing. fx_inproc is kept through the
-# function strip and unset on the line that sources, and that paired source covers the rs_main call after it.
+# renamed copy, a decision driver and hermetic-run.sh log nothing here. fx_inproc is kept through the function strip and
+# unset on the line that sources, and that paired source covers the rs_main call after it. AN EXTRACTED SPAN IS LOGGED AT
+# ITS DRIVE: every source of a span and every call of its entry functions carries its own fx_inproc naming the program the
+# span was cut from -- "$DERIVER" for a deriver span, "$ROOT/core/git-hooks/pre-push" for a pool span (never $HOOK, which
+# resolves to .githooks/pre-push here) -- and invocations.decl counts those passes on its inproc: rows.
 inproc() {
   local _ip_v _ip_keep
   _ip_keep=""
@@ -577,10 +583,14 @@ else
 fi
 
 T="$WORK/t6"; f2b_world seed "$T" || broken "seed failed"
+t6_apply() {
+fx_inproc "$ROOT/core/git-hooks/pre-push"
 R="$( cd "$T" && scratch="$(mktemp -d "$WORK/n.XXXXXX")" && . "$POOL" 2>/dev/null && \
       for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$scratch/list" && \
       rm -f .git/ai-dlc-fixture-verified && cp "$scratch/list" "$scratch/l" && \
       apply_readset_skip "$scratch/l" "$scratch" 2>&1 | tr -d '\n' )"
+}
+t6_apply
 case "$R" in
   *"read-set keys: 3 of 3 fixture(s) run (0 changed, 3 unrecorded, 0 stale)"*) ok "with no verified state and no key records there is no seed: every fixture is unrecorded and runs" ;;
   *)                            bad "a missing verified-state record did not force a full run: $R" ;;
@@ -858,7 +868,10 @@ N_TR="$( cd "$TPL" && git ls-files | grep -c . )" || N_TR=0
 ( cd "$TPL" && git check-ignore -q _bmad-output/ai-dlc-update/reconcile-log-1.md ) \
   && broken "the untracked bookkeeping file the bookkeeping arm creates is git-ignored here, so the manifest would never list it"
 SP0="$(mktemp -d "$WORK/p.XXXXXX")" || broken "mktemp failed"
-( cd "$TPL" && . "$POOL" 2>/dev/null && readset_manifest "$SP0" )
+sp0_manifest() {
+( cd "$TPL" && fx_inproc "$ROOT/core/git-hooks/pre-push" && . "$POOL" 2>/dev/null && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_manifest "$SP0" )
+}
+sp0_manifest
 IA="$(grep -nxF "$APOS" "$SP0/.files" | cut -d: -f1)"
 IB="$(grep -nxF "zzz/b.sh" "$SP0/.files" | cut -d: -f1)"
 [ -n "$IA" ] && [ -n "$IB" ] && [ "$IA" -gt 200 ] && [ "$IA" -lt "$IB" ] \
@@ -877,9 +890,11 @@ drive() {
   fi
   ( cd "$t" || exit 1
     export AI_DLC_READSET_LIVE_TRACE=0
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     # shellcheck disable=SC1090
     . "$pool" 2>/dev/null
     for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$sc/list"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     readset_manifest "$sc"
     cp "$sc/.now" "$sc/seed.now"; cp "$sc/.files" "$sc/seed.files"
     if [ "$mode" = stale ]; then printf 'seed\tstale\n' > "$GITDIR/ai-dlc-fixture-verified"
@@ -887,6 +902,7 @@ drive() {
     printf 'v2\n' > "$GITDIR/ai-dlc-fixture-verified.format"
     eval "$mut"
     READSET_NO_CHANGE=0
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     apply_readset_skip "$sc/list" "$sc" > "$sc/msg" 2>&1
     sed 's|core/fixtures/||g; s|/$||' "$sc/list" | tr '\n' ' '
     printf '\n---MSG---\n'; cat "$sc/msg"
@@ -1192,12 +1208,15 @@ lsel_in() {
   scratch="$(mktemp -d "$WORK/ls.XXXXXX")" || return 1
   ( cd "$t" || exit 1
     export AI_DLC_READSET_LIVE_TRACE=0
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     . "$POOL" 2>/dev/null
     for d in core/fixtures/*/; do printf '%s\n' "$d"; done > "$scratch/list"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     readset_manifest "$scratch"
     cp "$scratch/.now" .git/ai-dlc-fixture-verified 2>/dev/null && printf 'v2\n' > .git/ai-dlc-fixture-verified.format
     eval "$*"
     cp "$scratch/list" "$scratch/l"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     apply_readset_skip "$scratch/l" "$scratch" > "$scratch/msg" 2>&1
     sed 's|core/fixtures/||g; s|/$||' "$scratch/l" | tr '\n' ' '
     printf '\n---MSG---\n'; cat "$scratch/msg"
@@ -1284,10 +1303,12 @@ lt_drive() { # <pool> <world> <setup>; prints "<message>|<invoked|not>"
   o="$(mktemp -d "$WORK/lo.XXXXXX")" || return 1
   ( cd "$t" || exit 1
     export STUB_ARGS="$o/args" AI_DLC_READSET_LIVE_TRACE=1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     . "$p" 2>/dev/null
     mkdir -p "$o/.log"; printf 'gamma\n' > "$o/.trace"; : > "$o/.trace.held"
     printf ok > "$o/gamma"; printf '  ok    g\n' > "$o/.log/gamma"
     eval "$setup"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     readset_live_trace "$o" > "$o/msg" 2>&1
     grep -q 'started detached' "$o/msg" && lt_wait "$GITDIR/ai-dlc-fixture-readsets.local.lock"
     :
@@ -1335,18 +1356,20 @@ else
   # naming gamma. It prints "<message>|<PT_LIST>". Two refusals share lines with readset_live_trace -- the
   # knob and the linked-worktree check -- so each is scored by its OWN arm, with a near-miss control that
   # lists gamma.
-  pt_drive() { # <pool> <world> <setup>; prints "<message>|<PT_LIST>"
+pt_drive() { # <pool> <world> <setup>; prints "<message>|<PT_LIST>"
     local p="$1" t="$2" setup="$3" o
     o="$(mktemp -d "$WORK/pt.XXXXXX")" || return 1
     ( cd "$t" || exit 1
       export AI_DLC_READSET_LIVE_TRACE=1
+      fx_inproc "$ROOT/core/git-hooks/pre-push"
       . "$p" 2>/dev/null
       mkdir -p "$o/.log"; printf 'gamma\n' > "$o/.trace"
       eval "$setup"
+      fx_inproc "$ROOT/core/git-hooks/pre-push"
       readset_pool_trace_prep "$o" > "$o/msg" 2>&1
       printf '%s|%s' "$(tr '\n' ' ' < "$o/msg")" "$PT_LIST"
     )
-  }
+}
   R="$(pt_drive "$POOL" "$(lt_fresh pt1)" ':')"; lt_arm
   case "$R" in
     *"read-set in-pool trace: 1 fixture(s) traced in the pool: gamma"*"|gamma") { ok "(pt1) near-miss control: with AI_DLC_READSET_LIVE_TRACE=1 the in-pool prep announces gamma and lists it"; } ;;
@@ -1376,7 +1399,7 @@ else
   # `tests/fixtures/` in the consumer's, which is the one an installed tree resolves first. Read off
   # the resolved block's own glob, the way the deriver reads it, and the world is seeded under it;
   # seeded only under core/fixtures/ the consumer run found no fixtures and every arm here went red.
-  rf_drive() { # <pool> <name> <setup>; prints "<rc>|<lock held>|<invoked>|<verified>|<stashed>|<row>|<args>"; <lock held> is sampled at return under STUB_GO, and after lt_wait (the trace released its lock) otherwise
+rf_drive() { # <pool> <name> <setup>; prints "<rc>|<lock held>|<invoked>|<verified>|<stashed>|<row>|<args>"; <lock held> is sampled at return under STUB_GO, and after lt_wait (the trace released its lock) otherwise
     local p="$1" t o
     t="$(lt_fresh "rf.$2")"; o="$WORK/rfo.$2"; mkdir -p "$o"
     if [ "$FXROOT" != core/fixtures ]; then
@@ -1389,8 +1412,10 @@ else
       # read the way the hook reads its own subshell's: the PPID of a child it execs.
       export STUB_ARGS="$o/args" AI_DLC_READSET_LIVE_TRACE=1 STUB_GO_OWNER="$(exec bash -c 'printf %s "$PPID"')"
       eval "$3"
+      fx_inproc "$ROOT/core/git-hooks/pre-push"
       . "$p" 2>/dev/null
       printf '%s\n' "${POOL_STALL:-}" > "$o/stall"
+      fx_inproc "$ROOT/core/git-hooks/pre-push"
       run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc"
       # `held` IS SAMPLED BEFORE lt_wait ONLY UNDER STUB_GO: the stub holds the trace there, so held=yes is
       # deterministic (arm (a): the launch returns with the lock held). Everywhere else it is sampled AFTER
@@ -1410,7 +1435,7 @@ else
       "$([ -f "$t/.git/ai-dlc-fixture-readsets.local.logs/gamma" ] && echo stashed || echo none)" \
       "$(grep -c '^gamma	core/fixtures/gamma/run.sh' "$t/.git/ai-dlc-fixture-readsets.local" 2>/dev/null || :)" \
       "$(cat "$o/args" 2>/dev/null)"
-  }
+}
   RA="$(rf_drive "$POOL" a "export STUB_GO=\"$WORK/rf.go.a\"")"; lt_arm
   # THE STUB LEFT BY GO, OR THIS DRIVE PROVES NOTHING ABOUT DETACHMENT. `orphan` or `nolockpid` on the
   # launcher is a harness that lost its order fact, never a verdict on the launcher.
@@ -1846,7 +1871,11 @@ PJ_SEEDLIB="$PJW/seed.sh"
 } > "$PJ_SEEDLIB"
 grep -q '^readset_lock_write() {' "$PJ_SEEDLIB" || broken "could not extract readset_lock_write from the pool block"
 kill -0 "$LOCKPID" 2>/dev/null || broken "the lock-pid sleep $LOCKPID is not alive"
+pj_live_start() {
+fx_inproc "$ROOT/core/git-hooks/pre-push"
 PJ_LIVE="$( . "$PJ_SEEDLIB"; readset_pid_start "$LOCKPID" )" || PJ_LIVE=""
+}
+pj_live_start
 [ -n "$PJ_LIVE" ] || broken "readset_pid_start printed nothing for the live lock pid $LOCKPID -- no world below can reach the start comparison"
 for _w in wrong right legacylive legacydead psfail psfailpad bothfail split; do mkdir -p "$PJW/j.$_w.lock" || broken "could not create the $_w lock world"; done
 printf '%s %s\n%s\n' "$LOCKPID" "$(date +%s)" 'Thu Jan  1 00:00:00 1970' > "$PJW/j.wrong.lock/pid"
@@ -1870,7 +1899,11 @@ cp "$PJW/psbin/ps" "$PJW/psbin/both/ps" && cp "$PJW/psbin/ps" "$PJW/psbin/both/p
 # a fixture on a host where the perl read is empty would score the fallback's absence as its presence.
 # PERL IS OPTIONAL (BL-686): a host with no perl, or not macOS, cannot give it, and that is a SKIP of
 # exactly the three cells that need it -- never `broken`, and never a false kill. PJ_PERL gates them.
+pj_psfail_start() {
+fx_inproc "$ROOT/core/git-hooks/pre-push"
 _pf="$( . "$PJ_SEEDLIB"; PATH="$PJW/psbin:$PATH"; readset_pid_start "$LOCKPID" )" || _pf=""
+}
+pj_psfail_start
 PJ_PERL=1
 if [ "$_pf" != "$PJ_LIVE" ]; then
   PJ_PERL=0
@@ -1933,8 +1966,9 @@ mkdir -p "$PJW/noperl" && printf '#!/bin/bash\nexit 0\n' > "$PJW/noperl/ps" && c
 pw_drive() { # <pool copy> <tag> -> the writer's outcome, then the reader's rc on that lock
   local o="$PJW/pw.$2"; mkdir -p "$o/l.lock" || return 1
   { awk '/^readset_pid_start\(\) \{/,/^}/' "$1"; awk '/^readset_lock_write\(\) \{/,/^}/' "$1"; awk '/^readset_lock_stale\(\) \{/,/^}/' "$1"; } > "$o/lib.sh"
+  fx_inproc "$ROOT/core/git-hooks/pre-push"
   ( . "$o/lib.sh"; PATH="$PJW/noperl"; readset_lock_write "$o/l.lock" "$LOCKPID" ) 2> "$o/err"
-  ( . "$o/lib.sh"; readset_lock_stale "$o/l.lock" ) > /dev/null 2>&1; local rr=$?
+  ( . "$o/lib.sh"; fx_inproc "$ROOT/core/git-hooks/pre-push"; readset_lock_stale "$o/l.lock" ) > /dev/null 2>&1; local rr=$?
   printf '%s|%s|%s|%s' "$(grep -c '' "$o/l.lock/pid" 2>/dev/null)" \
     "$(sed -n 2p "$o/l.lock/pid" 2>/dev/null | grep -q . && echo full || { [ "$(grep -c '' "$o/l.lock/pid")" -ge 2 ] && echo empty || echo none; })" \
     "$(grep -q 'could not read the start time of pid' "$o/err" && echo ann || echo noann)" "$rr"
@@ -2041,11 +2075,13 @@ rp_world() { # <pool> <name> <setup, eval'd in the seeded tree with $o, $RL, key
   fi
   mkdir -p "$o"
   ( cd "$t" || exit 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     # shellcheck disable=SC1090
     . "$p" 2>/dev/null
     RL="$READSET_LOCAL"
     key() { printf '%s:%s' "$(sha_of "$FXROOT$1/run.sh")" "$(sha_of core/scripts/derive-fixture-readsets.sh)"; }
     eval "$3"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     readset_trace_report "$o" ) > "$o/rep" 2>&1
   cat "$o/rep"
 }
@@ -2160,7 +2196,7 @@ rp_run() { # <pool> <name>; prints the run's output, also kept with its POOL_STA
   mkdir -p "$o"
   ( cd "$t" || exit 1; export AI_DLC_READSET_LIVE_TRACE=0
     # shellcheck disable=SC1090
-    . "$p" 2>/dev/null; printf '%s\n' "${POOL_STALL:-}" > "$o/stall"; run_fixtures ) > "$o/out" 2>&1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"; . "$p" 2>/dev/null; printf '%s\n' "${POOL_STALL:-}" > "$o/stall"; fx_inproc "$ROOT/core/git-hooks/pre-push"; run_fixtures ) > "$o/out" 2>&1
   cat "$o/out"
 }
 rp_called() { awk '/trace-report last trace:/ { r = NR } /^  *ok  *(alpha|beta|gamma)/ && !f { f = NR } END { exit !(r && f && r < f) }' <<< "$1"; }
@@ -2256,6 +2292,7 @@ else
   printf 'alpha\tsrc/NEW\n' > "$WORK/new.map"
   : > "$WORK/empty.map"
 
+  fx_inproc "$DERIVER"
   G="$(readset_merge_map "$WORK/old.map" "$WORK/new.map" "alpha" | LC_ALL=C sort | tr '\n' ' ')"
   MERGE_ARMS=$((MERGE_ARMS+1))
   case "$G" in
@@ -2270,6 +2307,7 @@ else
   esac
   # The case that matters most: a fixture that WAS mapped and is now omitted must lose its
   # read-set, or the map keeps asserting a dependency set nothing re-verified.
+  fx_inproc "$DERIVER"
   G2="$(readset_merge_map "$WORK/old.map" "$WORK/empty.map" "beta" | LC_ALL=C sort | tr '\n' ' ')"
   MERGE_ARMS=$((MERGE_ARMS+1))
   case "$G2" in
@@ -2287,6 +2325,7 @@ else
   #
   # The arms above could not see it because a one-word list has no newline in it. This one
   # drives the shape the caller actually produces.
+  fx_inproc "$DERIVER"
   G3="$(readset_merge_map "$WORK/old.map" "$WORK/new.map" "$(printf 'alpha\ndelta')" 2>"$WORK/g3.err" | LC_ALL=C sort | tr '\n' ' ')"
   MERGE_ARMS=$((MERGE_ARMS+1))
   if [ -s "$WORK/g3.err" ]; then
@@ -2384,7 +2423,7 @@ else
   printf 'alpha\tsrc/a\nalpha\tsrc/x\nbeta\tsrc/b\nbeta\tsrc/c\n# digest alpha aaaa\n# digest beta bbbb\n' > "$DM/old.map"
   printf 'alpha\tsrc/NEW\nbeta\tsrc/NEWB\n' > "$DM/new.map"
   printf 'beta\tsrc/b\nbeta\tsrc/c\n# digest beta bbbb\nbeta\tsrc/NEWB\n' > "$DM/beta.want"
-  dm_merge() { ( . "$1"; shift; readset_merge_map "$@" ) 2>/dev/null; }
+  dm_merge() { ( . "$1"; shift; fx_inproc "$DERIVER"; readset_merge_map "$@" ) 2>/dev/null; }
   dm_merge "$M" "$DM/old.map" "$DM/new.map" "" "$DM/root" > "$DM/out.4"
   dm_merge "$M" "$DM/old.map" "$DM/new.map" "" > "$DM/out.3"
   grep -v '^alpha' "$DM/out.4" | grep -v '^# digest alpha' > /dev/null
@@ -2413,7 +2452,7 @@ else
   # A MAPPED fixture that gains inputs.decl is dropped by the merge on purpose; readset_untraced_lost must not report it.
   sed -n '/^# READSET_UNTRACED_BEGIN$/,/^# READSET_UNTRACED_END$/p' "$DERIVER" > "$DM/untraced.span"
   dm_merge "$M" "$DM/old.map" "/dev/null" "" "$DM/root" > "$DM/merged.map"
-  dm_lost() { ( . "$DM/untraced.span"; readset_untraced_lost "$DM/old.map" "$DM/merged.map" "" "$@" ) 2>/dev/null | tr '\n' ' '; }
+  dm_lost() { ( . "$DM/untraced.span"; fx_inproc "$DERIVER"; readset_untraced_lost "$DM/old.map" "$DM/merged.map" "" "$@" ) 2>/dev/null | tr '\n' ' '; }
   MERGE_ARMS=$((MERGE_ARMS+1))
   _l4="$(dm_lost "$DM/root")"; _l3="$(dm_lost)"
   if [ -z "$_l4" ] && [ "$_l3" = "alpha " ]; then
@@ -2423,6 +2462,7 @@ else
   # --all lists no declared fixture.
   sed -n '/^# READSET_ALLLIST_BEGIN$/,/^# READSET_ALLLIST_END$/p' "$DERIVER" > "$DM/alllist.span"
   MERGE_ARMS=$((MERGE_ARMS+1))
+  fx_inproc "$DERIVER"
   _al="$( . "$DM/alllist.span"; readset_all_list "$DM/root" )"
   if [ "$_al" = beta ]; then ok "(h) readset_all_list skips the declared alpha (control: beta, which has a run.sh and no declaration, is listed)"
   else bad "(h) readset_all_list on a root with one declared and one undeclared fixture gave [$_al], wanted [beta]"
@@ -2454,7 +2494,7 @@ else
     : > "$ALR/aa/run.sh"; : > "$ALR/mid/run.sh"; : > "$ALR/zz/run.sh"; : > "$ALR/norun/other.sh"
     NLC='
 '
-    allist_with() { ( . "$1"; readset_all_list "$ALR" ) 2>/dev/null; }
+    allist_with() { ( . "$1"; fx_inproc "$DERIVER"; readset_all_list "$ALR" ) 2>/dev/null; }
     # al_newline / al_middle / al_exact: one verdict word each.
     al_newline() { case "$1" in *"$NLC"*) echo newline ;; '') echo empty ;; *) echo clean ;; esac; }
     al_middle()  { case " $1 " in *" mid "*) echo member ;; *) echo absent ;; esac; }
@@ -2489,7 +2529,7 @@ else
     UL_NL="traced-a${NLC}fx-om${NLC}traced-c"
     ul_with() { # $1 span copy, $2 old, $3 merged, $4 traced; prints "<rc>|<output, space-joined>"
       local o r
-      o="$( . "$1"; readset_untraced_lost "$2" "$3" "$4" 2>/dev/null )"; r=$?
+      o="$( fx_inproc "$DERIVER"; . "$1"; fx_inproc "$DERIVER"; readset_untraced_lost "$2" "$3" "$4" 2>/dev/null )"; r=$?
       printf '%s|%s' "$r" "$(printf '%s' "$o" | tr '\n' ' ' | sed 's/ $//')"
     }
     MERGE_ARMS=$((MERGE_ARMS+1))
@@ -2604,6 +2644,7 @@ else
   # status: a control replaced by `true` returns 0 with nothing printed, which an rc-only arm
   # cannot tell from a control that looked.
   CONTROL_ARMS=$((CONTROL_ARMS+1))
+  fx_inproc "$DERIVER"
   CA="$(readset_discrimination_control "$WORK/ctl.disc.map" 2>&1)"; CA_RC=$?
   case "$CA_RC:$CA" in
     0:*"PASS  CONTROL"*) ok "the deriver's control ACCEPTS a map in which a read-set is a proper subset of the union — the map can skip something" ;;
@@ -2613,6 +2654,7 @@ else
   # (b) EVERY READ-SET EQUAL TO THE UNION IS REFUSED. This is the map the control exists to
   # stop: it is written, it is correct, and it skips nothing.
   CONTROL_ARMS=$((CONTROL_ARMS+1))
+  fx_inproc "$DERIVER"
   CB="$(readset_discrimination_control "$WORK/ctl.cover.map" 2>&1)"; CB_RC=$?
   case "$CB_RC:$CB" in
     1:*"FAIL  CONTROL"*) ok "  and it REFUSES a map in which every read-set covers the whole universe — that map would select the whole suite on every change" ;;
@@ -2623,6 +2665,7 @@ else
   # its own universe, so it still fails -- which is what makes arm (d) evidence about the merge
   # rather than about a control that was loosened until `--list` stopped complaining.
   CONTROL_ARMS=$((CONTROL_ARMS+1))
+  fx_inproc "$DERIVER"
   CC="$(readset_discrimination_control "$WORK/ctl.single.map" 2>&1)"; CC_RC=$?
   case "$CC_RC:$CC" in
     1:*"FAIL  CONTROL"*) ok "  and a ONE-FIXTURE map still fails, so the single-fixture refresh was fixed by merging rather than by relaxing the control" ;;
@@ -2634,10 +2677,12 @@ else
   # map the run will WRITE. Judged on the traced entries alone -- the base behaviour -- this
   # returns 1 and refuses a refresh that is entirely correct.
   CONTROL_ARMS=$((CONTROL_ARMS+1))
+  fx_inproc "$DERIVER"
   readset_merge_map "$WORK/ctl.old.map" "$WORK/ctl.new.map" "alpha" | LC_ALL=C sort -u > "$WORK/ctl.merged.map"
   if [ "$(ctl_fixtures_of "$WORK/ctl.merged.map")" -lt 2 ]; then
     bad "the composed --list merge produced fewer than 2 fixtures, so arm (d) would test the single-fixture shape again instead of the merged one"
   else
+    fx_inproc "$DERIVER"
     CD="$(readset_discrimination_control "$WORK/ctl.merged.map" 2>&1)"; CD_RC=$?
     case "$CD_RC:$CD" in
       0:*"PASS  CONTROL"*) ok "a --list refresh of ONE fixture is judged on the MERGED map and passes — the mode the deriver advertises is reachable" ;;
@@ -2649,6 +2694,7 @@ else
   # number the function PRINTS against the same number recomputed in shell over the same map --
   # two independently derived values rather than one value read twice.
   CONTROL_ARMS=$((CONTROL_ARMS+1))
+  fx_inproc "$DERIVER"
   CP_FN="$(readset_discrimination_control "$WORK/ctl.disc.map" 2>&1 | sed -n 's/.*CONTROL: \([0-9][0-9]*\) of .*/\1/p')"
   CP_HAND="$(ctl_proper_by_hand "$WORK/ctl.disc.map")"
   if [ -n "$CP_FN" ] && [ "$CP_FN" = "$CP_HAND" ]; then
@@ -2661,6 +2707,7 @@ else
   # nothing returns 0 and prints nothing, which is what a `bad` here catches and an rc-only
   # assertion would not.
   CONTROL_ARMS=$((CONTROL_ARMS+1))
+  fx_inproc "$DERIVER"
   CTL_OUT="$( . "$CTL"; readset_discrimination_control "$WORK/ctl.disc.map" 2>&1 )"; CTL_RC=$?
   case "$CTL_RC:$CTL_OUT" in
     0:*"PROPER subset of the 4-path universe"*)
@@ -2893,7 +2940,7 @@ EOF
     copy_with() {
       local impl="$1" label="$2" dst="$CSEED/dst.$2" scr="$CSEED/scr.$2" v=""
       mkdir -p "$dst" "$scr"
-      ( . "$impl"; readset_copy_tree "$CSEED/src" "$dst" "$scr" ) > "$CSEED/$label.out" 2>&1
+      ( fx_inproc "$DERIVER"; . "$impl"; fx_inproc "$DERIVER"; readset_copy_tree "$CSEED/src" "$dst" "$scr" ) > "$CSEED/$label.out" 2>&1
       ( cd "$dst" && find . -path ./.git -prune -o \( -type f -o -type l \) -print ) | LC_ALL=C sort > "$CSEED/$label.pop"
       v="$(LC_ALL=C comm -3 "$CSEED/expected" "$CSEED/$label.pop" | sed 's/^\t/EXTRA:/; s/^\.\//MISSING:.\//' | tr '\n' ' ')"
       [ -L "$dst/link" ] && [ "$(readlink "$dst/link")" = tracked.txt ] || v="$v link-not-a-symlink"
@@ -2933,6 +2980,7 @@ EOF
     [ "$(cd "$CSEED/lw" && git rev-parse HEAD 2>/dev/null)" != "$(cd "$CSEED/src" && git rev-parse HEAD 2>/dev/null)" ] \
       || broken "the linked worktree's HEAD is the main checkout's — the arm below could not tell an overlaid copy from one that kept main's HEAD"
     mkdir -p "$CSEED/dst.lw" "$CSEED/scr.lw"
+    fx_inproc "$DERIVER"
     ( . "$CP"; readset_copy_tree "$CSEED/lw" "$CSEED/dst.lw" "$CSEED/scr.lw" ) > "$CSEED/lw.out" 2>&1
     LW_SRC_HEAD="$(cd "$CSEED/lw" && git rev-parse HEAD 2>/dev/null)"
     LW_PRIV_HEAD="$(cat "$CSEED/src/.git/worktrees/lw/HEAD" 2>/dev/null)"
@@ -3029,6 +3077,7 @@ EOF
     ( cd "$CSEED/src" && git check-ignore --stdin --non-matching --verbose < "$CSEED/batch" ) >/dev/null 2>&1
     CI_RC=$?
     [ "$CI_RC" -ne 0 ] || broken "raw check-ignore on the submodule batch exited 0 — the seed no longer reproduces the refusal"
+    fx_inproc "$DERIVER"
     DO="$( TREE="$CSEED/src"; . "$DR"; drop_ignored < "$CSEED/batch" )"
     if [ "$(printf '%s\n' "$DO" | LC_ALL=C sort)" = "$(cat "$CSEED/batch.expected")" ]; then
       ok "a batch carrying a SUBMODULE row still filters (raw check-ignore exits $CI_RC on it): both ignored rows dropped, tracked, untracked and negated rows kept, the inner row collapsed to the gitlink"
@@ -3044,6 +3093,7 @@ EOF
     printf 'RESOLVED\trelocate\tscripts/x.sh\tplaced\ntracked.txt\ncaf\303\251.md\n' > "$CSEED/qbatch"
     QR="$( cd "$CSEED/src" && git check-ignore --stdin --non-matching --verbose < "$CSEED/qbatch" 2>/dev/null | sed -n 's/^::[[:space:]]*//p' )"
     case "$QR" in *'"RESOLVED\t'*) ;; *) broken "raw check-ignore no longer quotes a tab-bearing name — the seed does not reproduce the defect" ;; esac
+    fx_inproc "$DERIVER"
     DQ="$( TREE="$CSEED/src"; . "$DR"; drop_ignored < "$CSEED/qbatch" )"
     if grep -q '^"' <<< "$DQ" || grep -q 'RESOLVED' <<< "$DQ"; then
       bad "a tab-bearing traced name reached the read-set (a quoted row empties the runner's manifest): $(printf '%s' "$DQ" | tr '\n' ' ')"
@@ -3080,6 +3130,7 @@ EOF
     printf '%s\n' src/a.sh src/neg.sh | LC_ALL=C sort > "$BW/sb"
     both_compare_with() { # $1 span file; prints "<counts>|<sandbox-missed paths>"
       ( TREE="$BW/r"; . "$DR"; . "$1"
+        fx_inproc "$DERIVER"
         c="$(readset_both_compare "$BW/fs" "$BW/sb" "$BW/cmp")" || c="rc=$?"
         printf '%s|%s' "$c" "$(tr '\n' ' ' < "$BW/cmp.sbmiss" 2>/dev/null)" )
     }
@@ -3092,7 +3143,7 @@ EOF
     fi
     # One verdict driver; the results rows are the shape the loop writes.
     both_verdict_with() { # $1 span  $2 list  $3 results file; prints "<rc>|<line>"
-      ( . "$1"; l="$(readset_both_verdict "$2" "$3" "$BW/missed" "$BW")"; printf '%s|%s' "$?" "$l" )
+      ( . "$1"; fx_inproc "$DERIVER"; l="$(readset_both_verdict "$2" "$3" "$BW/missed" "$BW")"; printf '%s|%s' "$?" "$l" )
     }
     printf 'fa\tcompared\t0\t2\t\nfb\tcompared\t0\t0\t\n' > "$BW/res.clean"
     printf 'fa\tcompared\t2\t0\t\nfb\tcompared\t1\t0\t\nfc\tcompared\t0\t0\t\n' > "$BW/res.miss"
@@ -3520,7 +3571,7 @@ d/-p'
     CAN_SPAN="$WORK/canary.sh"
     sed -n '/^# READSET_CANARY_BEGIN$/,/^# READSET_CANARY_END$/p' "$DERIVER" > "$CAN_SPAN"
     printf 'a\nb\n' > "$WORK/can.at"
-    can_with() { ( . "$1"; readset_loss_canary "$WORK/can.at" "$WORK/can.no-such-fs" "$WORK/can.out" ) 2>/dev/null; }
+    can_with() { ( . "$1"; fx_inproc "$DERIVER"; readset_loss_canary "$WORK/can.at" "$WORK/can.no-such-fs" "$WORK/can.out" ) 2>/dev/null; }
     can_why() { # $1 canary value; runs the deriver's own guard line on it
       local canary="$1" why="" fx=fxa WORK="$WORK" g
       g="$(grep -m1 '^  \[ "\$canary" = 0 \]    || why=' "$DERIVER")"
@@ -4187,7 +4238,7 @@ STUB
     sed -n '/^# READSET_UNIVERSE_BEGIN$/,/^# READSET_UNIVERSE_END$/p' "$BR/.githooks/pre-push" > "$WORK/br.span"
     DW_V="$( cd "$BR" && cp "$WORK/dw.fix.map" .ai-dlc-fixture-readsets.tsv && s="$(mktemp -d "$WORK/dwm.XXXXXX")" \
       && READSET_MAP=.ai-dlc-fixture-readsets.tsv && READSET_LOCAL=/dev/null && . "$WORK/br.span" \
-      && readset_manifest "$s" && readset_committed_digests "$s" && awk -F'\t' '$1 == "fxa" { print $2 }' "$s/.cdig"; git checkout -q -- . 2>/dev/null )"
+      && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_manifest "$s" && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_committed_digests "$s" && awk -F'\t' '$1 == "fxa" { print $2 }' "$s/.cdig"; git checkout -q -- . 2>/dev/null )"
     if [ "$DW1" = "0|1|1|0|0|3" ] && [ "$DW_V" = match ]; then
       ok "DIGEST: with the hook's span the run writes ONE fxa digest the hook recomputes as 'match', replaces the stale one, carries the untraced one, and counts 3 fixtures, not digest lines"
     else
@@ -4313,7 +4364,7 @@ STUB
     lm_seed; LD="$(lm_run "$SL/deriver.sh" "$SL/dir.list" same)"; LD_ROW="$(lmd_row)"; LD_RAW="$(lmd_raw)"
     LD_WANT="$( cd "$BR" && s="$(mktemp -d "$WORK/ldm.XXXXXX")" \
       && READSET_MAP=.ai-dlc-fixture-readsets.tsv && READSET_LOCAL=/dev/null && . "$WORK/br.span" \
-      && readset_manifest "$s" && cut -f1 "$s/.now" > "$s/.p" && readset_listings "$s/.p" "$s/ls" \
+      && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_manifest "$s" && cut -f1 "$s/.now" > "$s/.p" && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_listings "$s/.p" "$s/ls" \
       && awk -F'\t' '$1 == "src/" { print $2 }' "$s/ls" )"
     case "$LD_WANT" in
       '#listing:'[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) [ "${#LD_WANT}" -eq 73 ] || broken "the LOCAL oracle's src/ listing is not '#listing:' plus 64 hex: '$LD_WANT'" ;;
@@ -4444,11 +4495,13 @@ ck_push() { # <pool> <t> <tag>: one push's suite. Leaves <t>.o.<tag>/{out,rc,ran
   mkdir -p "$o" && : > "$o/log" || return 1
   ( cd "$2" || exit 1
     export CK_LOG="$o/log" CK_CTL="$2.ctl" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_JOBS=1 PATH="$2.bin:$PATH"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     # shellcheck disable=SC1090
     . "$1" 2>/dev/null
     # THE TOOL DIRS ARE THE BLOCK'S OWN FIXED LIST, NEVER PATH: the shim dir stands in for it, and an
     # exec-path stand-in that does not exist keeps the real git out of these worlds.
     READSET_TOOL_DIRS="$2.bin"; READSET_TOOL_XP="$2.xp"; printf '%s\n' "${POOL_STALL:-}" > "$o/stall"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc" )
   LC_ALL=C sort "$o/log" | tr '\n' ' ' | sed 's/ $//' > "$o/ran"
 }
@@ -4610,7 +4663,7 @@ CK_WANT_o='p2=0 st=#state ok row=0 sib=1 p3=0 p4=0'
 # that entry as new, so beta running is the cell that separates it from a listing taken from now.
 ck_w_i() { local p="$1" x="$2" t="$3"
   ck_seed "$t" "$x" || { printf SEED; return; }
-  ( cd "$t" && mkdir -p "$t.v2" && . "$p" 2>/dev/null && readset_manifest "$t.v2" \
+  ( cd "$t" && mkdir -p "$t.v2" && fx_inproc "$ROOT/core/git-hooks/pre-push" && . "$p" 2>/dev/null && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_manifest "$t.v2" \
     && [ -s "$t.v2/.now" ] && cp "$t.v2/.now" .git/ai-dlc-fixture-verified && printf 'v2\n' > .git/ai-dlc-fixture-verified.format ) \
     || { printf V2SEED; return; }
   # A new DIRECTORY entry, not a file: so this world stays independent of (c)'s
@@ -4908,10 +4961,12 @@ tk_push() { # <pool> <t> <tag> <canon|fixed>: ck_push with NO shim dir on PATH. 
   mkdir -p "$o" && : > "$o/log" || return 1
   ( cd "$2" || exit 1
     export CK_LOG="$o/log" CK_CTL="$2.ctl" AI_DLC_READSET_LIVE_TRACE=0 AI_DLC_FIXTURE_JOBS=1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     # shellcheck disable=SC1090
     . "$1" 2>/dev/null
     if [ "$4" = fixed ]; then READSET_TOOL_DIRS="$2.bin"; READSET_TOOL_XP="$2.xp"; fi
     printf '%s\n' "${POOL_STALL:-}" > "$o/stall"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     run_fixtures > "$o/out" 2>&1; echo "$?" > "$o/rc" )
   LC_ALL=C sort "$o/log" | tr '\n' ' ' | sed 's/ $//' > "$o/ran"
 }
@@ -5047,7 +5102,7 @@ hr_drive() { # <span> <pipefail|nopipefail> <last|unread>: prints "<rc>|<rows>"
   if [ "$3" = last ]; then printf 'a\nb\ndir\n' > "$d/set"; else chmod 000 "$d/t/b"; printf 'a\nb\n' > "$d/set"; fi
   ( if [ "$2" = pipefail ]; then set -o pipefail; else set +o pipefail; fi
     # shellcheck disable=SC1090
-    . "$1"; readset_hash_rows "$d/t" fx "$d/set" > "$d/rows" ); printf '%s|%s' "$?" "$(grep -c . "$d/rows")"
+    fx_inproc "$DERIVER"; . "$1"; fx_inproc "$DERIVER"; readset_hash_rows "$d/t" fx "$d/set" > "$d/rows" ); printf '%s|%s' "$?" "$(grep -c . "$d/rows")"
   chmod 600 "$d/t/b" 2>/dev/null
 }
 if [ -z "$DERIVER" ]; then
@@ -5097,15 +5152,18 @@ dg_digest() { # <pool> <t> <fixture>...: append the deriver's `# digest` line fo
   local p="$1" t="$2" s; shift 2
   s="$(mktemp -d "$WORK/dgs.XXXXXX")" || return 1
   ( cd "$t" || exit 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     # shellcheck disable=SC1090
     . "$p" 2>/dev/null; . "$DG_HASH"
-    readset_manifest "$s"; [ -s "$s/.paths" ] || exit 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"; readset_manifest "$s"; [ -s "$s/.paths" ] || exit 1
     for f in "$@"; do
       awk -F'\t' -v f="$f" '!/^#/ && $1 == f { print $2 }' .ai-dlc-fixture-readsets.tsv > "$s/$f.set"
+      fx_inproc "$DERIVER"
       readset_hash_rows . "$f" "$s/$f.set" || exit 1
     done > "$s/rows"
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     readset_dir_values "$s/rows" "$s/.now" "$s/.paths" "$s/rows2" || exit 1
-    readset_digests "$s/rows2" "$s/rows2.keep" .ai-dlc-fixture-readsets.tsv "$s/dg" ) > "$s/out" || return 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"; readset_digests "$s/rows2" "$s/rows2.keep" .ai-dlc-fixture-readsets.tsv "$s/dg" ) > "$s/out" || return 1
   [ "$(grep -c . "$s/out")" -eq "$#" ] || return 1
   awk -F'\t' 'NF == 2 { print "# digest " $1 " " $2 }' "$s/out" >> "$t/.ai-dlc-fixture-readsets.tsv"
   ( cd "$t" && git add -A && git -c user.email=f@f -c user.name=f commit -qm digest ) >/dev/null 2>&1
@@ -5122,11 +5180,14 @@ dg_local_rows() {
   local p="$1" t="$2" fx="$3" s
   s="$(mktemp -d "$WORK/dgl.XXXXXX")" || return 1
   ( cd "$t" || exit 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     # shellcheck disable=SC1090
     . "$p" 2>/dev/null; . "$DG_HASH"
     READSET_MAP=.ai-dlc-fixture-readsets.tsv; READSET_LOCAL=/dev/null
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     readset_manifest "$s"; [ -s "$s/.paths" ] || exit 1
     awk -F'\t' -v f="$fx" '!/^#/ && $1 == f { print $2 }' .ai-dlc-fixture-readsets.tsv > "$s/$fx.set"
+    fx_inproc "$DERIVER"
     readset_local_rows . "$fx" "$s/$fx.set" "$s/.now" "$s/.paths" ) > "$s/rows" || return 1
   [ -s "$s/rows" ] || return 1
   cat "$s/rows"
@@ -5408,7 +5469,7 @@ else
   }
   rc_list() { # <span> <repo>: the derived list, one `fx:reason` per line joined by spaces
     ( cd "$2" && READSET_MAP=.ai-dlc-fixture-readsets.tsv && READSET_LOCAL=/dev/null && . "$1" \
-      && readset_reconcile_list core/fixtures .git/ai-dlc-fixture-keys "$(mktemp -d "$WORK/rcl.XXXXXX")/s" ) 2>/dev/null \
+      && fx_inproc "$DERIVER" && readset_reconcile_list core/fixtures .git/ai-dlc-fixture-keys "$(mktemp -d "$WORK/rcl.XXXXXX")/s" ) 2>/dev/null \
       | tr '\t' ':' | tr '\n' ' ' | sed 's/ $//'
   }
   RC="$WORK/rcrepo"; rc_seed "$RC" yes yes yes || broken "could not seed the --reconcile repo"
@@ -5550,10 +5611,12 @@ vs_mk() { # <t> <fixture root> <runner file>: a git repo holding the hook, the r
 }
 vs_plant() { # <pool> <t> <decision dir> <store> <fx>: the entry the digest names, built from the hook's own functions
   ( cd "$2" || exit 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     # shellcheck disable=SC1090
     . "$1" 2>/dev/null
-    id="$(readset_vs_ident_here)" || exit 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"; id="$(readset_vs_ident_here)" || exit 1
     grep -v '^#' "$3/.k/$5" > "$3/.pl.rows" && [ -s "$3/.pl.rows" ] || exit 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     readset_vs_input "$5" "$id" "$3/.pl.rows" > "$3/.pl.d" || exit 1
     mkdir -p "$4" && { printf '#format k1\n#state ok\n'; cat "$3/.pl.d"; printf '#pending 0\n'; } > "$4/$(shasum -a 256 < "$3/.pl.d" | cut -d' ' -f1)" )
 }
@@ -5661,7 +5724,7 @@ vs_h() { # <pool> <fixture root> <t>
   o="$(vs_n "$S/$rc")"
   rm -rf "$S"; mkdir -p "$S"
   vs_dec "$p" "$C" "$S" h
-  ( cd "$C" && AI_DLC_VERDICT_STORE="$S" && export AI_DLC_VERDICT_STORE && . "$p" 2>/dev/null && printf 'ok' > "$C.vd.h/decl" && readset_keys_write "$C.vd.h" ) >/dev/null 2>&1
+  ( cd "$C" && AI_DLC_VERDICT_STORE="$S" && export AI_DLC_VERDICT_STORE && fx_inproc "$ROOT/core/git-hooks/pre-push" && . "$p" 2>/dev/null && printf 'ok' > "$C.vd.h/decl" && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_keys_write "$C.vd.h" ) >/dev/null 2>&1
   printf 'runner=%s hook=%s rec=%s' "$o" "$(vs_n "$S/$rc")" "$([ -f "$C.vd.h/.k/decl" ] && echo 1 || echo 0)"
 }
 if [ "$VS_N" -ge 1 ]; then
@@ -5713,13 +5776,14 @@ vs_cmk() { # <t> <fixture root> <runner file> <hook file>
 vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh) and <world>.cd/d2 (republished records, one foreign row each)
   ( cd "$2" || exit 1
     AI_DLC_READSET_LIVE_TRACE=0; AI_DLC_VERDICT_STORE="$2.cd/store"; export AI_DLC_READSET_LIVE_TRACE AI_DLC_VERDICT_STORE
+    fx_inproc "$ROOT/core/git-hooks/pre-push"
     # shellcheck disable=SC1090
     . "$1" 2>/dev/null
     o="$2.cd"; mkdir -p "$o/d1" "$o/d2" || exit 1
     KEYS_DIR="$o/keys"; VERIFIED_RECORD="$o/none"; READSET_LOCAL="$o/none.l"
     fl="$(cat "$2.fx")" && [ -n "$fl" ] || exit 1
     for d in "$FXROOT"*/; do [ -f "$d/run.sh" ] && printf '%s\n' "$d"; done > "$o/list"
-    readset_manifest "$o/d1" && readset_local_validate "$o/list" "$o/d1" && readset_keys "$o/list" "$o/d1" || exit 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_manifest "$o/d1" && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_local_validate "$o/list" "$o/d1" && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_keys "$o/list" "$o/d1" || exit 1
     # The runner's rows for THIS tree, taken per pass, because the tree changes between them (below).
     for f in $fl; do ( inproc -u AI_DLC_VERDICT_STORE -- "$3" --root "$2" --key-only "$f" ) > "$o/d1/ko.$f" 2>/dev/null; done
     mkdir -p "$KEYS_DIR" || exit 1
@@ -5730,7 +5794,7 @@ vs_cdrive() { # <pool> <world> <runner file>: decisions in <world>.cd/d1 (fresh)
     # record whose only difference from the tree is the foreign row is a `skip` under the single-sourced key,
     # which publishes nothing and leaves no rows to compare. Both shapes declare src/a.sh.
     printf 'v2\n' > src/a.sh
-    readset_manifest "$o/d2" && readset_local_validate "$o/list" "$o/d2" && readset_keys "$o/list" "$o/d2" || exit 1
+    fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_manifest "$o/d2" && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_local_validate "$o/list" "$o/d2" && fx_inproc "$ROOT/core/git-hooks/pre-push" && readset_keys "$o/list" "$o/d2" || exit 1
     for f in $fl; do ( inproc -u AI_DLC_VERDICT_STORE -- "$3" --root "$2" --key-only "$f" ) > "$o/d2/ko.$f" 2>/dev/null; done ) >/dev/null 2>&1
 }
 vs_census() { # <pool> <fixture root> <runner file> <t> <hook file>: "inj=<n> ctl=<fresh>/<carry> cen=<fresh>/<carry>"

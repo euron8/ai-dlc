@@ -7,9 +7,9 @@
 core/fixtures/story-evidence-scaffold/run.sh
 core/fixtures/story-evidence-scaffold/world.sh
 core/fixtures/story-evidence-scaffold/he-inproc.sh
-core/fixtures/story-evidence-scaffold/receipt-bl1036.sh
-core/fixtures/story-evidence-scaffold/receipt-bl1037.sh
-core/fixtures/story-evidence-scaffold/receipt-bl1040.sh
+!core/fixtures/story-evidence-scaffold/receipt-bl1036.sh
+!core/fixtures/story-evidence-scaffold/receipt-bl1037.sh
+!core/fixtures/story-evidence-scaffold/receipt-bl1040.sh
 # The sibling groups' drivers: the coverage join (run by every dist-only group) reads each one.
 core/fixtures/story-evidence-scaffold-b/run.sh
 core/fixtures/story-evidence-scaffold-b/.dist-only

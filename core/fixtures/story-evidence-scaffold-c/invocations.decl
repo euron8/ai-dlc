@@ -7,3 +7,11 @@
 590 inproc:core/scripts/record-only-diff.sh
 110 inproc:core/scripts/sprint-status.sh
 134 inproc:core/scripts/validate-handoff-evidence.sh
+# BL-878 (c): he-inproc.sh rcpt_run pairs its source of each receipt with fx_inproc; one counted run. The receipts are
+# REQUIRED inputs (J4), each sourced and never started (0 rows, as story-evidence-receipts declares its four).
+0 core/fixtures/story-evidence-scaffold/receipt-bl1036.sh
+0 core/fixtures/story-evidence-scaffold/receipt-bl1037.sh
+0 core/fixtures/story-evidence-scaffold/receipt-bl1040.sh
+1 inproc:core/fixtures/story-evidence-scaffold/receipt-bl1036.sh
+1 inproc:core/fixtures/story-evidence-scaffold/receipt-bl1037.sh
+1 inproc:core/fixtures/story-evidence-scaffold/receipt-bl1040.sh
