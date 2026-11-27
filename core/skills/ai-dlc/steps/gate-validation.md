@@ -166,9 +166,9 @@ fresh, independent `gate-adjudicator` context.
 
 SKILL.md Rule 32 touchpoint G1 applies here, before the script arms run.
 
-**Script arms before the adjudicator.** At a planning, story, sprint-review or retro gate, at gate entry, BEFORE dispatching anything, the lead runs
+**Script arms before the adjudicator.** At a planning, story, sprint-review, retro or bug-investigation gate, at gate entry, BEFORE dispatching anything, the lead runs
 `scripts/ai-dlc/gate-run.sh arms --gate <gate-id> --sprint <N> --step <the invoking step file's basename> --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`
-(`<gate-id>` is the gate type; add `--series <path-prefix of the step's adversarial pass series>` for Check 24, once per series Check 24 reads at this gate (each runs as its own invocation of the arm, and any FAIL fails the row), and `--story <story file>` once per story to name fewer than the sprint's stories). It runs the script arm of every check the gate's `gates/<gate-id>.arms` declares (a check's EFFECTIVE class at this gate is `adjudication_by_gate[<gate_type>]` when the entry carries it, else `adjudication`, and `validate-gate-manifest.sh` GM3 holds the arms file to that class), including the script arm of an `adjudication: llm` check whose enforcement-map entry carries an `enforcer:`, and prints one `GATE-RESULT <check-id> <PASS|FAIL|SKIP|PENDING> examined=<n> evidence=<path:line> <message>` line per check. A `FAIL` there, or a `PASS` that examined nothing, is a **Gate Failure** now, while no adjudicator is running: the run exits 1, prints a `REMEDY` line per FAIL, mints no nonce and writes no OPEN marker. Exit 0 means it minted `gate_nonce` (`<gate_type>-<UTC>`), ran `gate-checkpoint.sh open`, recorded one ledger row per arm (judgment rows `PENDING`) and wrote the adjudicator worklist `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.worklist`; its `ADJUDICATE <worklist> nonce=<n>` line names both. The lead then decides this dispatch's `gate_series_id` (below) and dispatches the adjudicator against the worklist.
+(`<gate-id>` is the gate type, and `bug-investigation` at the bug-investigation gate, whose gate type is `implementation`; add `--series <path-prefix of the step's adversarial pass series>` for Check 24, once per series Check 24 reads at this gate (each runs as its own invocation of the arm, and any FAIL fails the row), and `--story <story file>` once per story to name fewer than the sprint's stories). It runs the script arm of every check the gate's `gates/<gate-id>.arms` declares (a check's EFFECTIVE class at this gate is `adjudication_by_gate[<gate_type>]` when the entry carries it, else `adjudication`, and `validate-gate-manifest.sh` GM3 holds the arms file to that class), including the script arm of an `adjudication: llm` check whose enforcement-map entry carries an `enforcer:`, and prints one `GATE-RESULT <check-id> <PASS|FAIL|SKIP|PENDING> examined=<n> evidence=<path:line> <message>` line per check. A `FAIL` there, or a `PASS` that examined nothing, is a **Gate Failure** now, while no adjudicator is running: the run exits 1, prints a `REMEDY` line per FAIL, mints no nonce and writes no OPEN marker. Exit 0 means it minted `gate_nonce` (`<gate_type>-<UTC>`), ran `gate-checkpoint.sh open`, recorded one ledger row per arm (judgment rows `PENDING`) and wrote the adjudicator worklist `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.worklist`; its `ADJUDICATE <worklist> nonce=<n>` line names both. The lead then decides this dispatch's `gate_series_id` (below) and dispatches the adjudicator against the worklist.
 
 **At a `sprint-review` gate**, before dispatching the adjudicator, run
 `scripts/ai-dlc/check-sprint-review-verdicts.sh` over every review file the sprint's stories and the
@@ -176,11 +176,10 @@ sprint adversary cite (Check 1; `--gate 1` for a code-review file, `--gate 2` fo
 for a file cited for both). A `FAIL` line goes to Gate Failure now and is repaired before any shard runs, so
 the shards run once.
 
-**Implementation gates run the arms by hand or through `gate-transition.sh`.** At an implementation gate 3 dispatched for exactly one story (its adjudicator brief carries a `story:` line), the lead runs
-`scripts/ai-dlc/gate-transition.sh <story> 3 -C <worktree> --base <sha> --sprint <N> --story-file <path> --transcript-dir <dir>` (`<N>` the snapshot `sprint_id`, `<path>` the story file's canonical path, `<dir>` the directory the lead's session `transcript_path` sits in, as Check 2a below passes it), which runs the script arms that no row of `gates/implementation-g3.arms` carries, then `gate-run.sh arms --gate implementation-g3` (every script row of that file, the nonce, `gate-checkpoint.sh open`, one ledger row per arm and the adjudicator worklist) in one call (see `implementation.md`, "One call per gate transition"); a refusal there is a **Gate Failure** and writes no plan. At the other implementation gates, multi-story and storyless gate 3 included, at gate entry, BEFORE minting `gate_nonce` and before dispatching anything, the lead runs every check in the manifest whose EFFECTIVE class at this gate is `script` (`adjudication_by_gate[<gate_type>]` when the entry carries it, else `adjudication`) AND the script arm of every check whose effective class here is `llm` and whose enforcement-map entry carries an `enforcer:`, and a FAIL goes to **Gate Failure** now, while no adjudicator is running.
+**Implementation gate 3 runs the arms through `gate-transition.sh`.** Every implementation gate 3 is dispatched for exactly one story (its adjudicator brief carries a `story:` line). The lead runs
+`scripts/ai-dlc/gate-transition.sh <story> 3 -C <worktree> --base <sha> --sprint <N> --story-file <path> --transcript-dir <dir>` (`<N>` the snapshot `sprint_id`, `<path>` the story file's canonical path, `<dir>` the directory the lead's session `transcript_path` sits in, as Check 2a below passes it), which runs the script arms that no row of `gates/implementation-g3.arms` carries, then `gate-run.sh arms --gate implementation-g3` (every script row of that file, the nonce, `gate-checkpoint.sh open`, one ledger row per arm and the adjudicator worklist) in one call (see `implementation.md`, "One call per gate transition"); a refusal there is a **Gate Failure** and writes no plan. Implementation gates 1 and 2 run no gate validation: the lead records their plan's `gate-log:` lines and the verdict in the story's gate log (`implementation.md`).
 
-At a one-story implementation gate 3, do NOT mint a nonce and do NOT run `open`: `gate_nonce` is the plan's `nonce:` line, because `gate-transition.sh <story> 3 …` already minted it and ran `open`. `gate-run.sh arms` already recorded every script row and every judgment row (`PENDING`) at that nonce, so the `record` calls below are the lead's for the lead rows (13, H1) only, and Check 25 arrives in the plan as `steering-count:` for the lead to compare. At every other implementation gate, once the script checks pass: generate `gate_nonce` as `<gate_type>-$(date -u +%Y%m%dT%H%M%SZ)` (`open` refuses any other form), run
-`scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> open`.
+At implementation gate 3, do NOT mint a nonce and do NOT run `open`: `gate_nonce` is the plan's `nonce:` line, because `gate-transition.sh <story> 3 …` already minted it and ran `open`. `gate-run.sh arms` already recorded every script row and every judgment row (`PENDING`) at that nonce, so the `record` calls below are the lead's for the lead rows (13, H1) only, and Check 25 arrives in the plan as `steering-count:` for the lead to compare.
 At every gate, then decide this dispatch's `gate_series_id` before the brief is written.
 
 **The series id is decided at dispatch, never from `close`.** Its form is exactly `<gate_type>-<slug>-s<N>-<TS>` for a gate dispatched for exactly one story and exactly `<gate_type>-s<N>-<TS>` for every other gate, with nothing between the fields: `<slug>` is `story` followed by lowercase `[a-z0-9]`, `<N>` is the `sprint_id` line of `_bmad-output/pipeline-snapshot.md` (not `sprint-status.sh sprint-id`) with no leading zero, and `<TS>` is the series-entry time as `YYYYMMDDTHHMMSSZ`, never later than the nonce of a pass that carries it. `scripts/ai-dlc/validate-gate-adjudication.sh` refuses any other form on a new pass. The field order is load-bearing because the dispatch guard's nonce regex is unanchored and cannot match a timestamp that directly follows `-s<N>-`, so the slug goes before the sprint field and never after it.
@@ -201,18 +200,18 @@ adjudicator `run_in_background`, join its verdict. While it runs, evaluate ONLY 
 `project` / `lead` checks below — the script checks are already done;
 inline-evaluating an `llm` check is a Rule 20 solo violation.
 
-**Record every verdict the moment it is reached.** At a planning, story, sprint-review or retro gate, `gate-run.sh arms` has already recorded every script and judgment row; the lead records only the rows it owns, the `lead` rows of the gate's `.arms` file that `close` does not execute (13, H1, and every extension check), and every consumer-extension check. After each such check, and at every implementation gate after every check — script arm, lead check, or an adjudicator verdict adopted through Check 26 — run
+**Record every verdict the moment it is reached.** At every gate, `gate-run.sh arms` (at implementation gate 3, called by `gate-transition.sh <story> 3`) has already recorded every script and judgment row; the lead records only the rows it owns, the `lead` rows of the gate's `.arms` file that `close` does not execute (13, H1, and every extension check), and every consumer-extension check. After each such check, run
 `scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> record <check-id> <PASS|FAIL|SKIP|PENDING>`.
 A post-compaction resume reads this ledger to skip settled checks (Rule 21). Record a
 `FAIL` too. A `FAIL_WAIVED` check is checkpointed `PASS`: the checkpoint records gate progress,
-as `26 PASS` does, and the per-check `FAIL_WAIVED` lives in the verdict and in GATE_METRIC. On a re-dispatch at a one-story implementation gate 3, re-run `scripts/ai-dlc/gate-transition.sh <story> 3 <flags>` (the same call as above): it mints the fresh nonce, opens it, and writes the new g3 plan the dispatch guard checks. On a re-dispatch at any other gate, re-run `gate-run.sh arms` (an implementation gate mints the fresh nonce and `open`s it by hand); the old ledger needs no clearing. At a planning, story, sprint-review or retro gate, once the adjudicator's verdict is joined and the lead's rows are recorded, run (SKILL.md Rule 32 touchpoint G2 applies before it)
+as `26 PASS` does, and the per-check `FAIL_WAIVED` lives in the verdict and in GATE_METRIC. On a re-dispatch at implementation gate 3, re-run `scripts/ai-dlc/gate-transition.sh <story> 3 <flags>` (the same call as above): it mints the fresh nonce, opens it, and writes the new g3 plan the dispatch guard checks. On a re-dispatch at any other gate, re-run `gate-run.sh arms`; the old ledger needs no clearing. At a planning, story, sprint-review, retro or bug-investigation gate, once the adjudicator's verdict is joined and the lead's rows are recorded, run (SKILL.md Rule 32 touchpoint G2 applies before it)
 `scripts/ai-dlc/gate-run.sh close --gate <gate-id> --nonce <gate_nonce> --sprint <N> --step <the same step file basename> --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`,
-which does Checks 26, 14, 12 and 15 and the checkpoint close in that order: the worklist ids must equal the escalated set `validate-gate-adjudication.sh --expected <gate_type>` derives, the verdict is adopted through Check 26 (fail-closed), the snapshot rows of Check 14 are written in one `snapshot-update.sh` call first (a refusal there changes nothing else), the Check 12 gate-log entry and the `GATE_METRIC v1` lines are appended once per nonce (a retry after a later refusal appends neither again), Check 15 runs `validate-artifact-budget.sh --check-evidence` on the candidate entry before it is appended, and `gate-checkpoint.sh close` runs last. A refusal prints a `REMEDY` line per cause and exits 1 with `OPEN` still set. At a one-story implementation gate 3, once the verdict is joined and 13 and H1 are recorded, run `scripts/ai-dlc/gate-run.sh close --gate implementation-g3 --nonce <gate_nonce> --sprint <N> --step implementation.md --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>` in place of the hand-written Checks 26, 14, 12 and 15 and the checkpoint close. At every other implementation gate, after Check 15, run `gate-checkpoint.sh --nonce <gate_nonce> close` (SKILL.md
+which does Checks 26, 14, 12 and 15 and the checkpoint close in that order: the worklist ids must equal the escalated set `validate-gate-adjudication.sh --expected <gate_type>` derives, the verdict is adopted through Check 26 (fail-closed), the snapshot rows of Check 14 are written in one `snapshot-update.sh` call first (a refusal there changes nothing else), the Check 12 gate-log entry and the `GATE_METRIC v1` lines are appended once per nonce (a retry after a later refusal appends neither again), Check 15 runs `validate-artifact-budget.sh --check-evidence` on the candidate entry before it is appended, and `gate-checkpoint.sh close` runs last. A refusal prints a `REMEDY` line per cause and exits 1 with `OPEN` still set. At implementation gate 3, once the verdict is joined and 13 and H1 are recorded, run `scripts/ai-dlc/gate-run.sh close --gate implementation-g3 --nonce <gate_nonce> --sprint <N> --step implementation.md --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`, which does the same (SKILL.md
 Rule 32 touchpoint G2 applies before it).
 Adopt the adjudicator's per-check verdicts through the terminal **Check 26** (fail-closed).
 A verdict is valid ONLY for the dispatch that produced it. If you re-dispatch — because
 state moved, or the prior verdict cited state that has since changed — obtain a fresh
-`gate_nonce` (at a one-story implementation gate 3, by re-running `gate-transition.sh <story> 3 <flags>`; at a planning, story, sprint-review or retro gate, by re-running `gate-run.sh arms`; at any other gate, by minting one) and re-derive every check from current state; never carry forward, cite, or
+`gate_nonce` (at implementation gate 3, by re-running `gate-transition.sh <story> 3 <flags>`; at a planning, story, sprint-review, retro or bug-investigation gate, by re-running `gate-run.sh arms`) and re-derive every check from current state; never carry forward, cite, or
 reconcile against a verdict from a superseded dispatch. The `gate_series_id` is exempt from
 that: the same-series rule above decides whether it carries forward. The nonce is that dispatch's
 identity, not a staleness comparator: deleting inheritance dissolves the freshness problem
@@ -960,9 +959,7 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
 ### 12. Append gate log entry.
 <!-- CHECK_LOADED: 12 -->
 
-**At a planning, story, sprint-review or retro gate this check is `gate-run.sh close`'s, not the lead's.** `scripts/ai-dlc/gate-run.sh close` (see "Record every verdict" above) composes the entry below from facts on disk, one row per check of the gate's `gates/<gate-id>.arms` file, and appends it once per `gate_nonce`; the lead types no row. The rest of this check is the format that program writes and the format a lead follows at an implementation gate: a heading `## Gate Log: Sprint <N> — <gate> gate (<step>)` that BEGINS `## Gate Log: Sprint <N>`, a heading block carrying `Timestamp:`, `Gate: <gate-id> | nonce: <gate_nonce>`, `validation_intensity:`, `steering_violations:`, `hard_block_fail:` and the `story_status:` lines, then the `| Check | Result | Evidence |` table with the Check 14 row last, then one `GATE_METRIC v1` line per validation check.
-
-Create or append to `_bmad-output/implementation-artifacts/gate-log.md`.
+**At every gate this check is `gate-run.sh close`'s, not the lead's.** `scripts/ai-dlc/gate-run.sh close` (see "Record every verdict" above; `--gate implementation-g3` at implementation gate 3) composes the entry below from facts on disk, one row per check of the gate's `gates/<gate-id>.arms` file, and appends it once per `gate_nonce`; the lead types no row. The rest of this check is the format that program writes: a heading `## Gate Log: Sprint <N> — <gate> gate (<step>)` that BEGINS `## Gate Log: Sprint <N>`, a heading block carrying `Timestamp:`, `Gate: <gate-id> | nonce: <gate_nonce>`, `validation_intensity:`, `steering_violations:`, `hard_block_fail:` and the `story_status:` lines, then the `| Check | Result | Evidence |` table with the Check 14 row last, then one `GATE_METRIC v1` line per validation check.
 
 **Format.** Append the entry at the END of `gate-log.md`, never at the top. It opens with a level-two heading that BEGINS `## Gate Log: Sprint <N>` (`<N>` followed by whitespace or the end of the line; a trailing title such as `— Sweep Tx Idempotency` is fine), and its heading block, the lines between that heading and its first table row, carries the gate's ISO `Timestamp:` (`YYYY-MM-DDTHH:MM[:SS]Z`; seconds when two entries could share a minute). The heading is the join key `validate-mandatory-rules.sh` Check 5 isolates a sprint's section by, and the heading-block timestamp is Check 15's row selector: a differently shaped heading is a silent Check 5 SKIP, and a timestamp inside a table cell is not in the heading block. When the sprint's diff window carries non-test `web/**` changes, the entry's Deploy Status Report carries `USER-CONFIRMED` or playwright trace evidence, or Check 5 FAILs with `Check5_VISUAL_UI`. The format is stated here and nowhere else; never cite a "CLAUDE.md Autonomous Gate Protocol", which does not exist.
 
@@ -1000,9 +997,6 @@ The gate log entry MUST include:
     move, where an omitted line is indistinguishable from a story the writer
     forgot.
 
-A gate log entry without per-check results is incomplete and must be
-rewritten before proceeding.
-
 **An absence claim MUST carry its control.** Any evidence row asserting that
 something is not there — a zero count, "no hits", "no occurrences", "none found" —
 MUST state, in the same row, the control that proves the search could have found
@@ -1028,13 +1022,6 @@ label belongs here and not only in a rule upstream of it (see "Consumer-catalog
 crosswalk" above). Include the title in the row as well — it is the key that resolves
 any historical entry written before the label existed.
 
-**Post-write verification.** After appending the gate log entry, read
-the **tail** of `_bmad-output/implementation-artifacts/gate-log.md`
-(e.g. `tail` the last entry, not the whole file — per Rule 25(c)) and
-verify the entry appears at the end. A gate log write that silently
-fails (tool error, truncation, wrong path) means the gate passage is
-unrecorded. Verification catches this before the pipeline moves on.
-
 **Rotation (Rule 25(c)).** When the live gate-log exceeds its size
 threshold (default 25k tokens) or at an epoch boundary, move the
 closed-epoch entries to
@@ -1045,9 +1032,9 @@ closed-epoch entries to
 appends `-2`, `-3` — an ordinal, never a sprint token. The archive is
 write-only and never re-read in the hot path.
 
-**Structured metrics emission (`GATE_METRIC v1`).** After the prose entry
-is written and verified above, ALSO append — for every **validation** check
-evaluated at this gate — one JSON object per line to
+**Structured metrics emission (`GATE_METRIC v1`).** `gate-run.sh close` also appends,
+after the prose entry, for every **validation** check
+evaluated at this gate, one JSON object per line to
 `_bmad-output/implementation-artifacts/gate-metrics.jsonl` (append-only,
 machine-read only, never loaded verbatim; rotates with the gate-log epoch
 to `_bmad-output/implementation-artifacts/s<N>/gate-metrics-archive.jsonl`). This is the same per-check
@@ -1080,13 +1067,9 @@ cross-catalog confound). Per-line schema:
   loaded slice — the cost side of efficacy, so cost-vs-catch is computable
   without re-measuring. Never `null` — a record without a real `tok_slice`
   cannot answer "does this check earn its cost."
-  **How to source it.** Measure this check's own span in this file — from its
-  `<!-- CHECK_LOADED: N -->` anchor to the next one — and record the method
-  alongside the number in the gate log. Any stable basis is acceptable
-  (`chars/4` is fine) provided the SAME basis is used across a comparison; the
-  figure is only ever read as a ratio against other checks' slices, so a
-  consistent estimator beats an exact one nobody can reproduce. Do not emit an
-  unsourced number, and do not leave the field out.
+  `gate-run.sh close` measures it as this check's span in this file, from its
+  `<!-- CHECK_LOADED: N -->` anchor line up to the next anchor line (the last
+  check's to the end of the file), in characters divided by 4, rounded down.
 
 The prose gate-log is unchanged and remains the human/audit trail; this
 record is additive. Absence of the file on a consumer simply means audit
@@ -1109,7 +1092,7 @@ HARD_BLOCK ID from `docs/escalations/pending.md`.
 ### 14. Update pipeline snapshot.
 <!-- CHECK_LOADED: 14 -->
 
-**At a planning, story, sprint-review or retro gate `gate-run.sh close` writes this check's rows.** It makes ONE `snapshot-update.sh` call that sets `last_gate_passed` (`<gate-id> <UTC timestamp>`), `current_step_file` (the `--step` the gate was opened with, the step that invoked the gate), `branch` (from `git branch --show-current`) and the Recent Activity entry, then measures the budget with `verdict.sh validate-artifact-budget --only pipeline-snapshot.md` and puts that verdict line in the Check 14 row's `evidence` cell. A refusal there writes nothing else. The prose below is what the lead follows at an implementation gate and what the program implements: the sections, the single-valued `current_step_file` and the budget rule.
+**At every gate `gate-run.sh close` writes this check's rows.** It makes ONE `snapshot-update.sh` call that sets `last_gate_passed` (`<gate-id> <UTC timestamp>`), `current_step_file` (the `--step` the gate was opened with, the step that invoked the gate), `branch` (from `git branch --show-current`) and the Recent Activity entry, then measures the budget with `verdict.sh validate-artifact-budget --only pipeline-snapshot.md` and puts that verdict line in the Check 14 row's `evidence` cell. A refusal there writes nothing else. The context reminder threshold check below stays the lead's. The rest of the prose below is what the program implements: the sections, the single-valued `current_step_file` and the budget rule.
 
 Update `_bmad-output/pipeline-snapshot.md` to reflect the gate passage
 and current pipeline state. The snapshot is a living document maintained
@@ -1246,24 +1229,13 @@ SKILL.md Handoff Protocol and Pipeline Snapshot section for the
 snapshot's role and rationale (source of truth on handoff / recovery /
 self-orientation).
 
-**Snapshot budget (Rule 25(d)) — this check FAILS if the snapshot is over it.**
-After writing, run:
-
-    scripts/ai-dlc/verdict.sh validate-artifact-budget --only pipeline-snapshot.md
-
-`verdict.sh` prints one line and exits with the validator's own status. Never
-pipe a validator into `grep` to read its verdict — the pipe hands the exit
-status to `grep`, and a validator that prints FAIL and exits 1 then reads as a
-pass.
-
-**Paste the validator's verdict line verbatim into this check's `evidence` cell in
-the gate log** — the same way Check 24 cites its command and output. An evidence
+**The Check 14 row's `evidence` cell carries the budget validator's verdict line verbatim** — the same way Check 24 cites its command and output. An evidence
 cell reading `—` is not a record that the check passed; it is a record that nothing
 was measured, and the two are indistinguishable afterwards. Measured in the
 reference consumer: 12 consecutive Check 14 rows reading `done after this entry | —`,
 across a sprint in which the snapshot went from 99% to 156% of budget.
 
-Exit 1 → **Check 14 FAILS**, on any of these independent verdicts:
+When the budget measurement above (`verdict.sh validate-artifact-budget --only pipeline-snapshot.md`, Rule 25(d)) exits 1, **Check 14 FAILS**, on any of these independent verdicts:
 
 - **Over budget.** Trim the snapshot (the `Recent Activity` section holds the last
   ~10 entries and nothing more; superseded narrative and handoff appendices move to
@@ -1359,41 +1331,7 @@ A snapshot over budget means the schema stopped being enforced at gate passages.
 ### 15. Verify snapshot reflects this gate.
 <!-- CHECK_LOADED: 15 -->
 
-**At a planning, story, sprint-review or retro gate `gate-run.sh close` runs this check** as `validate-artifact-budget.sh --check-evidence` over the candidate gate-log entry BEFORE it is appended, so an entry whose Check 14 row cites no measured budget line is refused and never written. The bullets below are the conditions that arm enforces, and the lead's own re-read at an implementation gate.
-
-After Check 14 writes the snapshot, re-read
-`_bmad-output/pipeline-snapshot.md` and confirm:
-
-- The `last_gate_passed` name matches the gate being logged in
-  Check 12.
-- The `last_gate_passed` timestamp matches (equal to, or within a
-  few seconds of) the timestamp in the gate log entry Check 12
-  appended.
-- `current_step_file` matches the step file that invoked this gate.
-- If `context_reminders_sent` was advanced this cycle, the matching
-  `last_*_fire_tokens` / `last_*_fire_turns` were also set to
-  non-null values.
-- **The Check 14 row's `evidence` cell carries the budget validator's
-  verdict line**, not `—` and not a restatement like "budget OK". The
-  line is the validator's own output, and it carries the measured token
-  count. Verify it mechanically — do not eyeball your own cell:
-
-      scripts/ai-dlc/verdict.sh validate-artifact-budget --check-evidence
-
-  Exit 1 → **Check 15 FAILS.** The budget check is the one part of Check
-  14 that leaves no trace in the snapshot itself, so it is the one part
-  Check 15 cannot verify any other way.
-
-  The selected row must carry the `tok` measurement in its own cell. A
-  cell reading `evidence line below` cites nothing and FAILS.
-  `validate-artifact-budget.sh`'s `THE EVIDENCE CELL` header owns the
-  selector's grammar.
-
-**Gate FAILS** if any of the above do not match. Remediation: re-run
-Check 14 (re-write the snapshot) and then re-run Check 15. If Check
-15 fails twice in a row, escalate as HARD_BLOCK — the snapshot
-writer is broken and the gate should not pass with a stale
-recovery anchor.
+**At every gate `gate-run.sh close` runs this check** as `validate-artifact-budget.sh --check-evidence` over the candidate gate-log entry BEFORE it is appended, so an entry whose Check 14 row cites no measured budget line is refused and never written. That arm reads the newest gate section by its heading-block `Timestamp:`, requires its Check 14 row's `evidence` cell to carry the `<n> tok` measurement, refuses a PASS row whose measurement is over budget, and cross-checks the snapshot's `last_gate_passed`; `validate-artifact-budget.sh`'s `THE EVIDENCE CELL` header owns that grammar. A refusal prints its `REMEDY` line and the gate does not close. If `gate-run.sh close` refuses on Check 15 twice in a row, escalate as HARD_BLOCK — the snapshot writer is broken and the gate should not pass with a stale recovery anchor.
 
 ### 16. Stub audit (hot-path files) — content verification.
 <!-- CHECK_LOADED: 16 -->
@@ -1466,7 +1404,7 @@ does not account for.
 gate where a validation evaluation (bmad-party-mode,
 bmad-advanced-elicitation, bmad-review with the adversarial lens,
 ai-dlc-adversary-review) was required by the current
-phase. Also runs at EVERY implementation gate for each declared folded
+phase. Also runs at EVERY implementation gate 3 for each declared folded
 bug-fix story (the implementation gate arm below): that obligation is keyed
 on the declaration on disk, not on what the gate produces, so an
 implementation gate owes it whether or not the gate itself produced a
@@ -1586,7 +1524,7 @@ under `_bmad-output/party-mode/s<N>/` is never this check's artifact.
   provenance obligation does not go away with it.
 
 - **Implementation gate, declared folded bug-fix stories (implementation):** at
-  every implementation gate `implementation.md` runs (gate1, gate2, gate3), for
+  implementation gate 3, the one implementation gate that runs gate validation, for
   each declared folded bug-fix story, run exactly two things: the shape
   validator on the story,
   `scripts/ai-dlc/validate-provenance-block.sh <story-file> --require-skill bmad-review`,
@@ -1608,7 +1546,7 @@ under `_bmad-output/party-mode/s<N>/` is never this check's artifact.
 
 - **Fold architecture gate (bug-investigation):** for each folded bug-fix story,
   wherever the bug-fix arm above runs for it and at every implementation gate
-  after, the architect that `bug-investigation.md` §4 dispatches writes
+  3 after, the architect that `bug-investigation.md` §4 dispatches writes
   `_bmad-output/planning-artifacts/s<N>/fold-architecture-<slug>.md`, the same
   `<slug>` as the story's `s<N>/bug-fix-oneshot-<slug>.md`. Call that file
   `<residue>` and the one-shot `<one-shot>`. Run this ONE command,
@@ -1627,7 +1565,7 @@ under `_bmad-output/party-mode/s<N>/` is never this check's artifact.
   `tool_use_id`; neither is a PASS. An unknown variant is refused.
   **When a legacy `s<N>/bug-fix-oneshot.md` is present in the slot, run the
   same command on it as well**, once per gate, at the bug-investigation gate
-  and at every implementation gate, whether or not any story is folded, with
+  and at every implementation gate 3, whether or not any story is folded, with
   `<one-shot>` that file and `<residue>`
   `_bmad-output/planning-artifacts/s<N>/fold-architecture.md`. The legacy name
   still declares no folded story to any other arm of this check; this is the
@@ -3576,7 +3514,7 @@ If any check fails:
 2. Re-run the failed check. What that costs depends on where the FAIL came from.
    A script-arm FAIL found before the dispatch is re-run as that script alone, and
    no adjudicator is involved. A FAIL inside the adjudicator's verdict is a whole
-   new dispatch: the lead mints a fresh `gate_nonce` and the adjudicator
+   new dispatch: the lead re-runs `gate-run.sh arms` (at implementation gate 3, `gate-transition.sh <story> 3 <flags>`), which mints a fresh `gate_nonce`, and the adjudicator
    re-derives the full escalated set at a fresh nonce. The failed pass's
    `gate_series_id` rides into that dispatch's brief under the same-series rule
    at gate entry.

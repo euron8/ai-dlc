@@ -1694,8 +1694,8 @@ case "$ROLE" in
     case "${SPAWN_SHARD:-}" in [0-9]*/*" implementation") DG_GP_SUBJECT=true ;; esac
     # A STORYLESS ADJUDICATOR IS NO SUBJECT. gate-transition.sh runs one story per call, so a
     # gate dispatched over several stories or over none has no plan to cite, and its brief carries
-    # no `story:` line (gate-validation.md "The slug names the one story"); the lead runs that
-    # gate's script arms, mints and opens itself. Residual, unbounded here and at
+    # no `story:` line (gate-validation.md "The slug names the one story"); that gate opens through
+    # `gate-run.sh arms`, and every implementation gate 3 is one story (implementation.md). Residual, unbounded here and at
     # validate-gate-adjudication.sh (its series-form check treats the slug as optional and counts no
     # stories): a one-story implementation gate-3 adjudicator brief that omits its `story:` line is not
     # judged against a plan, and the gate-3 script arms then rest on the lead.

@@ -268,7 +268,26 @@ the path is not derivable from the key.
 
 ### 6. Gate Validation and Proceed
 
-Run gate validation [implementation] (`gate-validation.md`).
+Run gate validation [implementation] (`gate-validation.md`) through the gate program, in this order:
+
+1. Run the script arms that no row of `gates/bug-investigation.arms` carries, each exactly as
+   `gate-validation.md` spells it: Check 4's placeholder scan, Check 16's stub audit, Check 2c's
+   `validate-suppression-lifetime`, Check 5's
+   `sprint-status.sh check-stories` and `derive-stories --check`, Check 17's "Bug-fix story
+   readiness gate (bug-investigation)" and "Fold architecture gate (bug-investigation)" bullets,
+   and Check 22's `validate-spawn-ledger.sh` run. A result that check's text calls a FAIL is a
+   **Gate Failure** now, before any nonce exists.
+2. Run `scripts/ai-dlc/gate-run.sh arms --gate bug-investigation --sprint <N> --step bug-investigation.md --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`,
+   where `<N>` is the `sprint_id` line of `_bmad-output/pipeline-snapshot.md`. It runs the
+   file's script rows, mints `gate_nonce`, runs `gate-checkpoint.sh open` and writes
+   the adjudicator worklist its `ADJUDICATE <worklist> nonce=<n>` line names. Exit 1 is a
+   **Gate Failure**.
+3. Dispatch the `gate-adjudicator` against that worklist through `_gate-procedures.md`
+   "Gate-adjudication dispatch", with a brief that carries no `story:` line, and join its verdict.
+4. Record the lead rows (13, H1 and every extension check) with
+   `scripts/ai-dlc/gate-checkpoint.sh --nonce <gate_nonce> record <check-id> <PASS|FAIL|SKIP>`.
+5. Run `scripts/ai-dlc/gate-run.sh close --gate bug-investigation --nonce <gate_nonce> --sprint <N> --step bug-investigation.md --transcript <this session's transcript_path> --transcript-dir <the directory that transcript sits in>`.
+   It does Checks 26, 14, 12 and 15 and the checkpoint close.
 
 **A FAIL on a check the next step does not consume routes now and repairs
 in parallel.** On any FAIL, before routing:

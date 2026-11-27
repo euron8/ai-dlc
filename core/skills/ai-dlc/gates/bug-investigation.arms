@@ -1,0 +1,30 @@
+# gate_type: implementation
+# check-id	kind	arm	count	skip
+# The bug-investigation gate rows (bug-investigation.md §6): a subset of the rendered implementation set, run by `gate-run.sh arms --gate bug-investigation`.
+# kind `judgment` rows go to the one adjudicator seat (shard 1/1). Class per row = adjudication_by_gate[implementation], else adjudication.
+# Rows 4, 16 and 17 are absent: 4 and 16 read a dev range ({BASE}, {SHA}, {WORKTREE}) this gate has not got, and 17's arms do not fit one argv row.
+# Checks 4 and 16, the second script of 2c, the script halves of 5 and 22, and 17 run by hand before `gate-run.sh arms`, as bug-investigation.md §6 lists them.
+1	judgment	-	-
+2	judgment	-	-
+2a	script	validate-escalation-resolution.sh --escalations docs/escalations/pending.md --sprint {SPRINT} --transcript-dir {TRANSCRIPT_DIR}	legacy	skip=empty
+2c	script	verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md	legacy	skip=empty
+3	judgment	-	-
+5	judgment	-	-
+6	judgment	-	-
+7	judgment	-	-
+8	judgment	-	-
+9	judgment	-	-
+10	judgment	-	-
+11	judgment	-	-
+11a	judgment	-	-
+12	lead	-	-
+13	lead	-	-
+14	lead	-	-
+15	lead	-	-
+19	judgment	-	-
+22	judgment	-	-
+25	script	validate-steering-budget.sh --transcript {TRANSCRIPT} --count	legacy	skip=rc1
+26	script	@close	-
+H1	lead	-	-
+H2	script	validate-h2-attestation.sh --verify --sprint {SPRINT}	legacy
+failure	lead	-	-

@@ -135,6 +135,7 @@ core/scripts/era-token.sh
 !core/scripts/gate-run.sh
 core/scripts/gate_run.py
 core/skills/ai-dlc/enforcement-map.yaml
+core/skills/ai-dlc/gates/bug-investigation.arms
 core/skills/ai-dlc/gates/implementation-g3.arms
 core/skills/ai-dlc/gates/planning.arms
 core/skills/ai-dlc/gates/story.arms

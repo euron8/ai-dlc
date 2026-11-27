@@ -275,18 +275,18 @@ Monitor task progress:
   (`qa.md` Validation Checklist), ask the operator by `AskUserQuestion`
   under Rule 3(a), with no flag, before dispatching any dev rework.
 - Track gate approvals (gate1: code review, gate2: QA, gate3: story validation)
-- The implementation `gate-adjudicator` brief at a one-story gate 3 carries `gate-plan: <plan path>`
-  naming the g3 plan, beside the `story:` line `gate-validation.md` requires. A gate 3
-  dispatched over several stories, or over none, carries neither line and runs no
-  `gate-transition.sh <story> 3`: the lead runs its script arms, mints and opens, as
-  `gate-validation.md` prescribes for every gate without a `story:` line.
+- Every implementation gate 3 is dispatched for exactly one story (its adjudicator brief carries a
+  `story:` line) through `gate-transition.sh <story> 3`. Its `gate-adjudicator` brief carries
+  `gate-plan: <plan path>` naming the g3 plan, beside the `story:` line `gate-validation.md` requires.
 
 **Gate type for validation loading (Rule 21 / Lever 2).** The gates run
-at this step are `implementation` gates — when running gate validation
-(`gate-validation.md`) at gate1/gate2/gate3, declare it `run gate
+at this step are `implementation` gates, and gate validation
+(`gate-validation.md`) runs at gate 3 only; declare it `run gate
 validation [implementation]` so the loader loads the implementation
 slice (universal core + Checks 5, 6, 8, 9, 10, 11, 11a, 17, 19, 22).
-At each of those gates Check 17 runs its implementation gate arm for every
+Gates 1 and 2 run no gate validation: the lead records their plan's
+`gate-log:` lines and the verdict in the story's gate log.
+At gate 3 Check 17 runs its implementation gate arm for every
 declared folded bug-fix story in the sprint: the story's shape check, pinned to
 the `bmad-review` adversarial-lens one-shot that `bug-investigation.md` §4
 stamps it with, and the fold architecture gate, which is ONE
