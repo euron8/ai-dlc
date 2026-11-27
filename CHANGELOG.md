@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1268.0] - 2026-11-26
+
+### The remediator reads its resolution guidance only when a repair cycle has stopped
+
+- For every consumer: the remediator's "A REPAIR IS NOT A RESOLUTION" guidance moves out of its role file into `.claude/team-roles/appendix/remediator-resolution.md`, which it reads only when the cycle under repair has stopped (a `DIVERGENT_HARD_BLOCK` or a stall) or its brief names a resolution kind. The text is unchanged; the role file is 977 B smaller.
+- In the distribution only: the backlog records why the other role-file splits (qa, code-reviewer, adversary, dev, and the rest of remediator) were built and not shipped: on graph every dispatch of those roles already holds its contract in the agent definition, so moving text into extra files would add Reads and save nothing. It also records the reading of lead idle wakes on graph's s323.
+- Action for consumers: none.
+
 ## [0.1267.0] - 2026-11-26
 
 ### Two gate fixtures run their subjects in process, so their suites start fewer programs
