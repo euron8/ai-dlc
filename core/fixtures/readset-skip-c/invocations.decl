@@ -6,4 +6,6 @@
 # BL-982: every drive of the deriver through the runner inproc() logs one in-process pass, keyed on the path (a mutant
 # copy at the subject path counts, as lib/inproc.sh states); measured by one counted run.
 # 59 -> 60, BL-878 (268-T): the STAT PAIRING TRUST ROOT arm adds one pass; one counted run measured 60 (J3).
-60 inproc:core/scripts/derive-fixture-readsets.sh
+# BL-878 (c): every pool-span and deriver-span drive is paired with fx_inproc naming the program the span was cut from; one counted run. 60 -> 84.
+84 inproc:core/scripts/derive-fixture-readsets.sh
+12 inproc:core/git-hooks/pre-push

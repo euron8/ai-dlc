@@ -1,4 +1,5 @@
 # Set from one counted run (scripts/seed-verdict-store.sh) after the batteries were removed; every row is exact.
 194 *
-9 inproc:core/git-hooks/pre-push
+# BL-878 (c): ls_judge and the census cl_publish/cl_write calls are paired with fx_inproc; 9 -> 14, one counted run.
+14 inproc:core/git-hooks/pre-push
 0 core/git-hooks/pre-push

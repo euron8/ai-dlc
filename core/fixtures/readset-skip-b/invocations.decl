@@ -10,4 +10,6 @@
 0 core/git-hooks/pre-push
 0 core/scripts/derive-fixture-readsets.sh
 # BL-878 (d): tk_rec drives readset_pending_recorded: one paired source and three calls (the third, READSET_NO_CHANGE=1), each logged by fx_inproc.
-4 inproc:core/git-hooks/pre-push
+# BL-878 (c): every pool-span and deriver-span drive is paired with fx_inproc naming the program the span was cut from; one counted run. 4 -> 238.
+238 inproc:core/git-hooks/pre-push
+19 inproc:core/scripts/derive-fixture-readsets.sh

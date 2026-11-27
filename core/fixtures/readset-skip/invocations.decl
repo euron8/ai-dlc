@@ -7,3 +7,6 @@
 204 *
 0 core/git-hooks/pre-push
 20 core/scripts/derive-fixture-readsets.sh
+# BL-878 (c): every pool-span and deriver-span drive is paired with fx_inproc naming the program the span was cut from; one counted run.
+96 inproc:core/git-hooks/pre-push
+29 inproc:core/scripts/derive-fixture-readsets.sh

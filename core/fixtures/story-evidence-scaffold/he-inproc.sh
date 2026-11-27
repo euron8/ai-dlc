@@ -35,6 +35,7 @@ rcpt_run() {
     _UT_RW="$1"; _UT_RF="$2"; shift 2
     if [ "$_UT_RW" = - ]; then unset RCPT_WORLD; else export RCPT_WORLD="$_UT_RW"; fi
     _ut_fresh
+    fx_inproc "$_UT_RF"
     # shellcheck source=/dev/null
     . "$_UT_RF" "$@"
   )

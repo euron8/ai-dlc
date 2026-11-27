@@ -2104,8 +2104,8 @@ fb_probe() {
   nops_stubs
   fb_f_="$(sed -n '/^wfd_start_of() {/,/^}/p' "$SUBJ")"
   [ -n "$fb_f_" ] || broken "could not extract the inline wfd_start_of from $SUBJ"
-  fb_real_="$(eval "$fb_f_"; wfd_start_of $$)"
-  fb_stub_="$(eval "$fb_f_"; PATH="$TMPROOT/nops:$PATH"; wfd_start_of $$)"
+  fb_real_="$(eval "$fb_f_"; fx_inproc "$SUBJ"; wfd_start_of $$)"
+  fb_stub_="$(eval "$fb_f_"; PATH="$TMPROOT/nops:$PATH"; fx_inproc "$SUBJ"; wfd_start_of $$)"
   fb_de_="$(LC_ALL=de_DE.UTF-8 ps -o lstart= -p $$ 2>/dev/null)"; fb_c_="$(LC_ALL=C ps -o lstart= -p $$ 2>/dev/null)"
   FB_OK=1; FB_WHY=""
   [ -n "$fb_real_" ] && [ "$fb_stub_" = "$fb_real_" ] || { FB_OK=0; FB_WHY="with ps stubbed the perl fallback read '$fb_stub_', not '$fb_real_' -- no usable perl here (it is optional)"; }

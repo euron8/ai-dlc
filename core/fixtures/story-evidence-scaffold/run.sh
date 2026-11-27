@@ -895,6 +895,7 @@ if gsel receipts; then
   # Each receipt named LITERALLY (validate-fixture-hygiene E1 reads a computed receipt name as inert).
   for rc_f in "$DIR/receipt-bl1036.sh" "$DIR/receipt-bl1037.sh" "$DIR/receipt-bl1040.sh"; do
     rc_n="${rc_f##*/receipt-bl}"; rc_n="${rc_n%.sh}"
+    echo "HERMETIC-CONSUMED core/fixtures/story-evidence-scaffold/${rc_f##*/}"
     rc_o="$(rcpt_run - "$rc_f" "$HECTL" 2>&1)"; rc_x=$?
     case "$rc_x:$rc_o" in
       0:*FIXED:*|1:*LIVE:*) ok "RECEIPT BL-$rc_n measurable (exit $rc_x): $(grep -E '^(FIXED|LIVE):' <<<"$rc_o")" ;;
