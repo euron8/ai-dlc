@@ -28,3 +28,4 @@ wc
 chmod
 uniq
 paste
+jq

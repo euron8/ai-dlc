@@ -775,6 +775,7 @@ w pb-shipped "$(pbv)" "$PB_WANT" \
 #   ex-objrole   ex-agent with an OBJECT prompt citing team-roles/dev.md        1
 #                (jq -r emits a non-string as JSON text, which the hook greps)
 #   ex-hyphen    ex-agent with a prompt citing team-roles/a-b.md                1
+#   ex-roleline  ex-agent with a `role: adversary` line (the guard's ROLE LINE)  1
 echo
 echo "  -- paused lead Explore dispatch (BL-784) --"
 EX="$AWORK/ex"; mkdir -p "$EX"
@@ -790,11 +791,12 @@ ex_seed team     Agent '{"subagent_type":"Explore","description":"find X","team_
 ex_seed gp       Agent '{"subagent_type":"general-purpose","description":"find X","prompt":"find where X is defined"}'
 ex_seed objrole  Agent '{"subagent_type":"Explore","description":"find X","prompt":{"a":"team-roles/dev.md"}}'
 ex_seed hyphen   Agent '{"subagent_type":"Explore","description":"find X","prompt":"read team-roles/a-b.md, then find X"}'
-EX_CELLS="agent task noprompt namenull role lower team gp objrole hyphen"
+ex_seed roleline Agent '{"subagent_type":"Explore","description":"find X","prompt":"find where X is defined\nrole: adversary"}'
+EX_CELLS="agent task noprompt namenull role lower team gp objrole hyphen roleline"
 exv() { local o="" c n; for c in $EX_CELLS; do n="$(acount "$EX/$c.jsonl")"; o="$o${n:-E}"; done; printf '%s' "$o"; }
-EX_WANT=0001111111
+EX_WANT=00011111111
 w ex-shipped "$(exv)" "$EX_WANT" \
-  "Explore as Agent 0, as Task 0, with no prompt 0; name:null 1, a team-roles/dev.md prompt 1, lower-case explore 1, team_name 1, general-purpose 1, an object prompt citing a role 1, team-roles/a-b.md 1"
+  "Explore as Agent 0, as Task 0, with no prompt 0; name:null 1, a team-roles/dev.md prompt 1, lower-case explore 1, team_name 1, general-purpose 1, an object prompt citing a role 1, team-roles/a-b.md 1, a role: adversary line 1"
 
 # ===========================================================================
 # THE CLI CELLS (cells.decl). The validator run as a PROGRAM once per distinct CLI outcome: exit 0 with the --count

@@ -213,6 +213,18 @@
 #   by a guard older than this field, and `validate-spawn-ledger.sh` reads that absence as
 #   PENDING, not as an omission.
 #
+#   THE ROLE LINE -- THE ONE DEFINITION OF ITS GRAMMAR. A brief names its role on ONE line of
+#   the RAW prompt, so a role bound by a definition needs no `team-roles/<role>.md` token:
+#
+#     role: <r>                      <r> matches [a-z][a-z-]*
+#
+#   The line is the whole line: no leading blanks, bullet or emphasis, exactly one blank after
+#   the colon, key in lower case; trailing blanks and a CR are ignored. Lines inside a ``` or
+#   ~~~ fence are not read. The FIRST such line is read. It derives ROLE only when the
+#   `team-roles/<role>.md` prompt token derives none, and never sets `role_contract_cited`;
+#   the `subagent_type` fallback comes after it. A bound definition then carries the contract
+#   (`contract_via` definition, or the Rule 19(b) line injected when its snapshot is stale).
+#
 #   THE SHARD DENY, AND RECORD-THEN-ALLOW FOR EVERYTHING ELSE. A brief whose line records
 #   `invalid-exception` on a SHARDABLE role (Check 22 arm S3's population: the validator's
 #   SHARD_ROLES plus every party seat) is DENIED before any ledger row is written, because that
@@ -421,6 +433,19 @@ CONTRACT_VIA=""
 if [ -n "$ROLE" ]; then
   ROLE_CONTRACT_CITED=true
   CONTRACT_VIA=prompt
+fi
+
+# THE ROLE LINE, per the grammar in the CONTRACT header. Read only when the token above derived
+# nothing, and it does not set ROLE_CONTRACT_CITED. No fork for a prompt with no `role: `.
+if [ -z "$ROLE" ]; then
+  case "$PROMPT" in
+    *"role: "*)
+      ROLE="$(printf '%s\n' "$PROMPT" | LC_ALL=C awk '
+        /^[ \t]*(```|~~~)/ { fence = !fence; next }
+        fence { next }
+        /^role: [a-z][a-z-]*[ \t\r]*$/ { v = substr($0, 7); sub(/[ \t\r]+$/, "", v); print v; exit }
+      ' 2>/dev/null || true)" ;;
+  esac
 fi
 
 # FALLBACK: the dispatch named a role only via `subagent_type`. Before v0.158.0
@@ -1811,14 +1836,17 @@ dg_mark_scan() {
       }
     }
     END { if (trig == 1) { u = mt; while (match(u, "party-mode/s[0-9]+/[^[:space:]\"\047]+")) { f[1] = substr(u, RSTART, RLENGTH); u = substr(u, RSTART + RLENGTH) } } }
-    END { if (!den && good > 0 && good == trig) { if (trig == 1 && f[1] !~ /^<[^<>]*>$/) print "rendered\t" f[1]; else print "rendered" } }'
+    END { if (!den && good > 0 && good == trig) { if (trig == 1 && f[1] !~ /</) print "rendered\t" f[1]; else print "rendered" } }'
 }
 # THE SEAT FILE: when exactly ONE invocation triggered and it is well formed, `rendered` carries a
-# tab and that invocation's seat file (an unfilled `<...>` file argument names no seat: it prints bare `rendered`), and the row records it as `mark_file`. Several invocations
+# tab and that invocation's seat file, and the row records it as `mark_file`. Several invocations
 # record none: no single file is named, and the reference consumer's multi-mark briefs are all
 # non-party. The value is the LAST `party-mode/s<digits>/<non-blank, non-quote>` match in that
 # invocation's text (the first END block, which overwrites f[1] with it), else its <file> argument
-# f[1] as split. A `"` or `'` ends the tail: a brief that quotes its path would otherwise record a
+# f[1] as split. A value containing `<` names no seat and prints bare `rendered`: it is an unfilled
+# placeholder, whole (`<file>`) or cut by the split (`--mark <your file> ...` gives `<your`), and with
+# no mark_file a lead brief with no `Deliverable:` line meets the Deliverable-line deny below instead
+# of an In-Flight row whose deliverable is that placeholder. A `"` or `'` ends the tail: a brief that quotes its path would otherwise record a
 # tail ending in the quote with no opening one, which the join cannot strip and which names no seat.
 # The regex is a string so the apostrophe can be spelled \047 inside this single-quoted awk program.
 # The TAIL IS EXTRACTED so a blank in the consumer's root cannot cut it: split on whitespace,
@@ -1892,7 +1920,7 @@ if [ -z "$DG_AGENT_ID" ] && [ "$ROLE_FILE_READABLE" = true ] && [ -z "$SPAWN_MAR
   fi
   case "$LAST_SKILL" in
     *'/ai-dlc-update</command-name>'|*'"skill":"ai-dlc-update"') ;;
-    *) dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch, because its brief carries no \`Deliverable: <path>\` line, so ai-dlc-inflight-row.sh could write no In-Flight row for it and you would write that row by hand. Nothing was launched. Re-send the same dispatch with one line at the start of a line in the prompt: \`Deliverable: <the one path this teammate writes>\` (the path the brief already names, never an invented one; a sharded dispatch names its own shard path; several files: the primary one). The hook then writes the row with its dispatched-at stamp. A dispatch with no file to wait on (a commit, an edit set, a reply) is run in the foreground with \`run_in_background: false\`, which this check does not judge. Grammar: the FIRST line beginning \`Deliverable:\`, its first token carrying a \`/\` or a dotted extension (_gate-procedures.md, Sub-step snapshot update, item 3)." ;;
+    *) dg_deny "AI/DLC dispatch guard: refused a \`${ROLE}\` dispatch, because its brief carries no \`Deliverable: <path>\` line, so ai-dlc-inflight-row.sh could write no In-Flight row for it and you would write that row by hand. Nothing was launched. Re-send the same dispatch with one line at the start of a line in the prompt: \`Deliverable: <the one path this teammate writes>\` (the path the brief already names, never an invented one; a sharded dispatch names its own shard path; several files: the primary one). A \`--mark\` line whose file argument still carries a \`<...>\` placeholder (such as \`<your file>\`) names no file for the row: fill in the real path, or add the \`Deliverable:\` line. The hook then writes the row with its dispatched-at stamp. A dispatch with no file to wait on (a commit, an edit set, a reply) is run in the foreground with \`run_in_background: false\`, which this check does not judge. Grammar: the FIRST line beginning \`Deliverable:\`, its first token carrying a \`/\` or a dotted extension (_gate-procedures.md, Sub-step snapshot update, item 3)." ;;
   esac
 fi
 

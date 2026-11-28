@@ -95,6 +95,15 @@
 #           row"), no plan. Newest wins: the older 26-PASS verdict is never fallen back to. control: CLOSEM.
 #   CLOSEP  a story whose slugged verdict is OLDER than the storyless one closes on the slugged nonce, with no
 #           `gate3-scope:` line: the story-scoped lookup wins. control: CLOSEM.
+#   ASIDE   after G3, G3P and G3N (three gate-3 arms at 1-1 pass 1), the plan carries the newest nonce and each earlier
+#           nonce's plan stands at `1-1-g3-p1.plan.<nonce>` carrying that nonce. control: ANEW.
+#   ANEW    gate 3 at a new pass (1-1 pass 2) sets nothing aside: the pass-1 plan keeps its name and nonce. control: ASIDE.
+#   CLOSE10 `close` over g3 plans at p2 and p10 (the glob lists p10 first), distinct nonces and check22-waiver headers,
+#           a FAIL_WAIVED verdict naming p10's header at p10's nonce only: exit 0 with p10's nonce. A reader taking the
+#           last plan in glob order, or p10's nonce with p2's record, refuses.
+#   ARULE   a same-pass gate-3 re-arm over a seeded g3 plan naming G1, then gate 1 pass 2 over the rework: the aside
+#           names G1, the current plan names WK, and Rule A reads WK (`gate: 1`, "does not descend"); read from the
+#           aside it would be G3K's GATE1-SKIP. control: G3K.
 # Gate 3's script arms run from a COPY of the scripts directory in which the eight check siblings are
 # stubs answering PASS (one refuses on demand, GT_FX_REFUSE); gate-transition.sh and gate-checkpoint.sh
 # in that copy are the real files. A real gate-3 world needs a sprint canonical, a spawn ledger, settings
@@ -644,13 +653,13 @@ st_g3q() { # gate 3, the Check 22 arm exiting 1: G3Q
 }
 st_g3p() { # gate 3, the Check 22 arm exiting 3 (PRE-LEDGER): G3P
   GT_FX_RC22=3 gtrun "$1" "$2" g3p 2 - 1-1 3 --transcript-dir "$WD/td"
-  V_G3P=0
+  V_G3P=0; X2="$(sed -n 's/^nonce: //p' "$P/1-1-g3-p1.plan" 2> /dev/null)"
   [ "$RC" = 0 ] && grep -qxF "gate-log: Check 22 exit 3: PRE-LEDGER: 4 row(s) in ledger.jsonl, NONE of them S1." "$P/1-1-g3-p1.plan" \
     && grep -qxF "gate-log: Check 22 COUNTS: examined 0 S1 spawn row(s) of 4 in ledger.jsonl;" "$P/1-1-g3-p1.plan" && V_G3P=1
 }
 st_g3n() { # gate 3, the Check 22 arm exiting 3 from the NO ROLE-BOUND ROWS branch: G3N
   GT_FX_RC22=3 GT_FX_MSG22=norole gtrun "$1" "$2" g3n 2 - 1-1 3 --transcript-dir "$WD/td"
-  V_G3N=0
+  V_G3N=0; X3="$(sed -n 's/^nonce: //p' "$P/1-1-g3-p1.plan" 2> /dev/null)"
   [ "$RC" = 0 ] && grep -qxF "gate-log: Check 22 exit 3: NO ROLE-BOUND ROWS: EXAMINED NOTHING -- 2 S1 row(s) exist and NONE of them was judged" "$P/1-1-g3-p1.plan" \
     && ! grep -q 'PRE-LEDGER' "$P/1-1-g3-p1.plan" && V_G3N=1
 }
@@ -743,6 +752,64 @@ st_cww() { # the same close over check 22 FAIL_WAIVED with the recorded header a
   gtrun "$1" "$2" cww 2 - 1-4 close
   V_CLOSEWW=0
   [ "$RC" = 0 ] && [ -n "$Y" ] && grep -qx 'gate: close' "$P/1-4-gclose-p1.plan" && grep -qxF "nonce: $Y" "$P/1-4-gclose-p1.plan" && V_CLOSEWW=1
+}
+# --- a gate-3 re-arm keeps the earlier nonce's plan (BL-1186 item 14) ---------------------------------------------
+# ASIDE reads the plans G3, G3P and G3N left (three gate-3 starts at story 1-1 pass 1, three nonces); no start of its own.
+st_aside() {
+  V_ASIDE=0
+  # Nonces have one-second resolution, so two back-to-back arms may share one: no inequality is asserted.
+  [ -n "$X" ] && [ -n "$X2" ] && [ -n "$X3" ] \
+    && grep -qxF "nonce: $X" "$P/1-1-g3-p1.plan.$X" && grep -qxF "nonce: $X2" "$P/1-1-g3-p1.plan.$X2" \
+    && grep -qxF "nonce: $X3" "$P/1-1-g3-p1.plan" && V_ASIDE=1
+}
+asides11() { # the 1-1 pass-1 and pass-2 asides on disk, one name per line (builtins only)
+  local f
+  for f in "$P/1-1-g3-p1.plan."* "$P/1-1-g3-p2.plan."*; do [ -e "$f" ] && printf '%s\n' "${f##*/}"; done
+  return 0
+}
+st_anew() { # gate 3 at a NEW pass (1-1 pass 2): the run adds no aside, the pass-1 plan keeps its own name: ANEW
+  local a0
+  a0="$(asides11)"
+  gtrun "$1" "$2" anew 2 - 1-1 3 --pass 2 --transcript-dir "$WD/td"
+  V_ANEW=0; X4="$(sed -n 's/^nonce: //p' "$P/1-1-g3-p2.plan" 2> /dev/null)"
+  [ "$RC" = 0 ] && [ -n "$X4" ] && grep -qxF "nonce: $X3" "$P/1-1-g3-p1.plan" \
+    && [ "$(asides11)" = "$a0" ] && V_ANEW=1
+}
+# g3pl <idx> <pass> <sha> <nonce> [extra plan lines...] : a g3 plan in write_plan's line order.
+g3pl() {
+  local f="$P/$1-g3-p$2.plan" i="$1" p="$2" s="$3" n="$4" l; shift 4
+  { printf 'story: %s\ngate: 3\npass: %s\nsha: %s\nworktree: %s\nmanifest: none\nroute: gate3 adjudicator\nnonce: %s\n' "$i" "$p" "$s" "$WT" "$n"
+    for l in "$@"; do printf '%s\n' "$l"; done; } > "$f"
+}
+NC2=implementation-20260310T000000Z; NC10=implementation-20260311T000000Z
+H2HDR='[S1-CHECK22-GT-P2] pass-2 waiver'; H10HDR='[S1-CHECK22-GT-P10] pass-10 waiver'
+st_cten() { # close over g3 plans at p2 and p10: the highest pass by NUMBER binds the nonce and the Check 22 record: CLOSE10
+  g3pl 14-1 2 "$WK" "$NC2" 'gate-log: Check 22 exit 4: RECORDED: pass 2.' "check22-waiver: $H2HDR"
+  g3pl 14-1 10 "$WK" "$NC10" 'gate-log: Check 22 exit 4: RECORDED: pass 10.' "check22-waiver: $H10HDR"
+  bash "$SCR/gate-checkpoint.sh" --nonce "$NC2" record 26 PASS > /dev/null 2>&1
+  bash "$SCR/gate-checkpoint.sh" --nonce "$NC10" record 26 PASS > /dev/null 2>&1
+  jq -n --arg n "$NC10" --arg w "$H10HDR" '{schema_id: "GATE_ADJUDICATION_VERDICT v1", gate_type: "implementation",
+    gate_series_id: "implementation-story14x1-s1-20260311T000000Z", gate_nonce: $n, verdicts: [{check_id: 22, verdict: "FAIL_WAIVED", waiver_id: $w}]}' \
+    > "$L/_bmad-output/gate-adjudication/$NC10.verdict.json"
+  # The glob lists p10 before p2, so a last-in-glob reader takes pass 2: the seeds must give that reader another answer.
+  [ "$(cd "$P" && LC_ALL=C ls 14-1-g3-p*.plan | tail -1)" = 14-1-g3-p2.plan ] && [ "$H2HDR" != "$H10HDR" ] \
+    || { echo "FIXTURE BROKEN: CLOSE10's seeds do not separate the highest pass from the last in glob order" >&2; exit 2; }
+  gtrun "$1" "$2" cten 2 - 14-1 close
+  V_CLOSE10=0
+  [ "$RC" = 0 ] && grep -qx 'gate: close' "$P/14-1-gclose-p1.plan" && grep -qxF "nonce: $NC10" "$P/14-1-gclose-p1.plan" && V_CLOSE10=1
+}
+N13=implementation-20260312T000000Z
+st_arule() { # a same-pass re-arm over a g3 plan naming G1, then gate 1 pass 2 over the rework: Rule A reads the CURRENT plan: ARULE
+  g1f "$RV/13-1-code-review.md" APPROVED "$G1"
+  g3pl 13-1 1 "$G1" "$N13"
+  gtrun "$1-g3" "$GT3" arule3 2 - 13-1 3 --transcript-dir "$WD/td"
+  V_ARULE3="$RC"
+  local wt0="$WT"
+  WT="$WRA"; gtrun "$1-g1" "$GTR" arule1 2 - 13-1 1 --pass 2; WT="$wt0"
+  V_ARULE=0
+  # The aside names G1 (gate 1 would answer GATE1-SKIP from it); the current plan names WK, which G1 is not below.
+  [ "$V_ARULE3" = 0 ] && grep -qxF "sha: $G1" "$P/13-1-g3-p1.plan.$N13" && grep -qxF "sha: $WK" "$P/13-1-g3-p1.plan" \
+    && [ "$RC" = 0 ] && grep -qx 'gate: 1' "$P/13-1-g1-p2.plan" && grep -qF "names $WK, which does not descend from the pass 1 reviewed-sha $G1" "$P/13-1-g1-p2.plan" && V_ARULE=1
 }
 
 echo "gate-transition:"
@@ -935,6 +1002,19 @@ st_cwp cwp "$GTR"
 st_cww cww "$GTR"
 [ "$V_CLOSEWW" = 1 ] && ok "CLOSEWW the same close over check 22 FAIL_WAIVED with waiver_id the recorded header: exit 0, gate: close, nonce: $Y" \
   || bad "CLOSEWW rc=$RC: $(head -2 "$WD/cww.err" | tr '\n' ' ')"
+st_aside
+[ "$V_ASIDE" = 1 ] && ok "ASIDE three gate-3 arms at 1-1 pass 1: the plan reads the newest nonce and each earlier nonce's plan stands at 1-1-g3-p1.plan.<nonce>" \
+  || bad "ASIDE nonces [$X] [$X2] [$X3]: $(cd "$P" && ls 1-1-g3-p1.plan* 2> /dev/null | tr '\n' ' ')"
+st_anew anew "$GT3"
+[ "$V_ANEW" = 1 ] && ok "ANEW gate 3 at a new pass (1-1 pass 2, nonce $X4): no plan is set aside, the pass-1 plan keeps its own name and nonce" \
+  || bad "ANEW rc=$RC nonce=[$X4]: $(cd "$P" && ls 1-1-g3-p* 2> /dev/null | tr '\n' ' ') $(head -2 "$WD/anew.err" | tr '\n' ' ')"
+mkdir -p "$L/_bmad-output/gate-adjudication"
+st_cten cten "$GTR"
+[ "$V_CLOSE10" = 1 ] && ok "CLOSE10 close over g3 plans at pass 2 and pass 10: binds pass 10's nonce and reads pass 10's check22-waiver record" \
+  || bad "CLOSE10 rc=$RC: $(grep '^nonce:' "$P/14-1-gclose-p1.plan" 2> /dev/null) $(head -2 "$WD/cten.err" | tr '\n' ' ')"
+st_arule arule
+[ "$V_ARULE" = 1 ] && ok "ARULE gate 1 pass 2 after a same-pass gate-3 re-arm: Rule A reads the current plan's sha, not the set-aside plan's" \
+  || bad "ARULE g3 rc=$V_ARULE3 g1 rc=$RC: $(cd "$P" && ls 13-1-* 2> /dev/null | tr '\n' ' ') $(grep -E '^(gate|gate-log: Rule A)' "$P/13-1-g1-p2.plan" 2> /dev/null | tr '\n' ' ' | cut -c1-300) $(head -2 "$WD/arule3.err" "$WD/arule1.err" | tr '\n' ' ' | cut -c1-300)"
 
 # --- GATE-RUN (BL-819): the real gate-run.sh over a toy world, and GM3's binding -----------------------------------
 # One toy root (a copy of the skill tree, schemas, a whole copy of the scripts directory plus three stub arms) and a

@@ -19,6 +19,59 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1276.0] - 2026-11-27
+
+### A serial QA review can now bind to a story whose file name opens its slug with a digit when the view row declares that file
+
+- `merge-review-shards.sh` refused `--check-serial --gate qa` for a story such as `story-4-1-903b-window-and-clean-smoke.md` whose view row is keyed by the sprint ordinal (`story-324-10`): the literal rule rejects a digit-led slug and the row-stem rule reads only the key. The refusal's remedy told the reader to pass the very file it had rejected. Reported by the consumer as PC-S324-STORY-BIND-UNSATISFIABLE-WHEN-REVIEW-INDEX-AND-FILE-INDEX-AND-KEY-DIVERGE (BL-1258).
+- When the literal and stem rules both fail, a declared-row rule now binds the review to the `--story` file if the view row for the review's sprint declares that file, no other reading of the file name belongs to that row's key, and no other entry shares the index's file family at the base and the frozen sha, on the run and no-run branches. Every other input still refuses: the refusal keeps its old wording through "(a longer index)", then names the row and the condition that failed, and its remedy now states the rule instead of naming the rejected file. The view's history check widens only when this rule bound.
+- `core/team-roles/qa.md` states the rule.
+- Action for consumers: none for this release. On the reporting consumer's recorded command for story 4-1, STORY-BIND now passes and the check stops at NOT-RECORD-ONLY, because that range touches 7 changed paths, 4 of them non-record by record-only-diff.sh's partition (first `_bmad-output/implementation-artifacts/dev-s324-4-1.md`; the other three are planning-artifacts close/repair records under `_bmad-output/planning-artifacts/s324/`), so the refusal is by contract; the record-only claim is the consumer's to correct (record the run, or waive it from planning) before that review's gate-2 record can be written.
+
+### Adversary and remediator round members no longer Read their role file when their agent definition carries it (BL-1187)
+
+- In consumer sprints, the adversary and remediator briefs that `gen-round-briefs.sh` writes now omit the "read your role contract first" sentence when the member's rendered agent definition is current. The definition already holds the contract, so the member skips a multi-chunk read of a 30 KB role file. On graph's sprint s324 these members made 2.09 (adversary) and 1.00 (remediator) role-file Reads per dispatch.
+- Every such brief now carries a `role: <role>` line. The dispatch guard binds the role from that line when the prompt names no role file, so the binding and the contract check work as before. The guard still injects the Rule 19(b) line when the session snapshot of the definition is missing or out of date, and still refuses a drifted definition.
+- `render-agent-definitions.sh --check --role <role>` reports whether one role's definition is current.
+- The briefs keep the sentence when the definition is missing or out of date, or when the role file is not the standard `.claude/team-roles/<role>.md`.
+- A brief also keeps the sentence when the text the lead embedded in it (focus, gated text, prior records, findings, subject) names a `team-roles/` file, so the brief's own role file is the first the guard sees and another role's file named in that text cannot bind the member.
+- While the pipeline is paused, a lead's Explore dispatch whose prompt carries a `role: <role>` line is no longer exempt, the same as one that names a `team-roles/<role>.md` file, because the dispatch guard would rewrite it to that role.
+- Action for consumers: none.
+
+### Re-arming a single-story gate 3 keeps the earlier plan, and the dispatch guard stops recording placeholder marks (BL-1186, BL-541)
+
+- Re-arming a single-story implementation gate 3 at the same pass keeps the earlier nonce's plan as `<plan>.<nonce>`. The name sits outside `*.plan`, so the dispatch guard never takes it for a live plan.
+- `gate-transition.sh close` binds the nonce and plan of the highest gate 3 pass. It no longer picks by glob order, where pass 10 sorted before pass 2.
+- The dispatch guard records no spawn-ledger `mark_file` for a `--mark` tail that still carries a `<...>` placeholder, so the In-Flight row is never written against a placeholder.
+- The existing Deliverable-line deny now names that case in its remedy.
+- A lead dispatch whose `--mark` line still carries an unfilled `<...>` placeholder (for example `--mark <shard path>` copied verbatim) and whose brief has no `Deliverable: <path>` line is now refused by the existing Deliverable-line deny, whose message says to fill the path or add the line. In graph's history that is at most 64 dispatches, none since 2026-11-24.
+- Action for consumers: a lead fills every `--mark` path, or adds a `Deliverable:` line, before dispatch.
+
+### The strategy's ids come only from a story's Acceptance Criteria section (BL-1259)
+
+- `strategy-rows.sh` now reads acceptance criteria only under a story's one Acceptance Criteria section. The section opens at a markdown heading of any level (`#` to `######`) in any case, with optional bold and a trailing colon, matched on the whole line, or at the bold label `**Acceptance Criteria:**` alone on its line (the `:` may sit inside or outside the bold, any case). A heading section ends at the next heading of the same or a shallower level; a label takes the level of the nearest heading above it. `## Acceptance Criteria Evidence`, `## Acceptance Criteria (cont.)` and `**Acceptance Criteria Evidence:**` are not that section. An AC-form line anywhere else (`## Deferred ACs`, `## Dev Agent Record`, a restatement) is a record and no longer mints a strategy id. Before, every `- **AC<n>` line in the file was an id, so a dev restatement added a phantom row to the test-strategy table.
+- A story with a frontmatter id and no Acceptance Criteria section, two of them (a heading and a label count as two), or no acceptance criterion under it is refused: `strategy-rows.sh` lists each such story by name on stderr and exits 2 before it prints any row. The no-section message says what to add: a `## Acceptance Criteria` heading or the bold label `**Acceptance Criteria:**` over the story's AC lines.
+- `--check` and `--check-strategy` read PENDING (exit 0) on a story whose Strategy Test IDs table already has a filled Kind or Resolves-to cell, ahead of that refusal, as they did before; `--rows` and `--bind` still refuse.
+- Measured on graph's stories at this batch: s324 carries 233 AC lines, 200 inside the section and 33 outside; the old `--rows` printed 267 rows and the section-scoped read prints 233. s323 read section-scoped, with `--letters S323-5.4:AC2=3`, reproduces its frozen 176-row table byte for byte (the old read printed 203). All 37 stories of the two sprints carry exactly one section and the section count equals each story's frontmatter `acceptance_criteria:`. s320 has 3 stories with a `####` heading, 5 with the bold label and 5 (3-1 to 3-5) with neither; the first 8 read cleanly and the last 5 are refused by name.
+- `steps/stories-test-strategy.md` states the rule beside the AC header form. Discharges `PC-S324-STRATEGY-ROWS-COUNTS-AC-RESTATEMENTS-OUTSIDE-THE-ACCEPTANCE-CRITERIA-SECTION`.
+- Action for consumers: a story file that restates an AC outside its Acceptance Criteria section needs no change; a story file with no such heading or label must gain one before `--rows` or `--bind` will run on it (graph s320 stories 3-1 to 3-5: add `## Acceptance Criteria` or `**Acceptance Criteria:**` above their AC lines).
+
+### What the s323 gate failures caught, recorded for the gate-cost entry (BL-512)
+
+- A new analysis, `docs/analysis/step-value-b256/bl512/s323-catches.md`, reads each of graph's 10 discarded s323 gate passes as 13 defects and asks which ones no other round had recorded. Four were found only by the gate, and all four were records or process; none changed product code or tests. The two fixes that did change product code or tests (e2e specs on two stories) were defects code review and QA had already recorded and accepted as deferrals.
+- For whoever decides BL-512: all four would have stayed in committed records a consumer reads, so under the step-value ruling the gate-adjudicator pass of the planning, sprint-review and implementation gates is kept, and BL-512 gains no remove-or-merge work. The entry stays PARTIAL until its outcome reading, which waits on graph's next sprint. The scan code is committed beside the analysis.
+- Action for consumers: none.
+
+### A later stories pass tells each story's adversary when to review the whole story (BL-1005, partial)
+
+- In a stories adversarial review pass after the first, the brief `gen-round-briefs.sh` writes for each story's shard now tells that adversary how to decide whether its story is unchanged since the previous pass: read the `artifact_sha:` entry for the story in the previous pass record, which the brief names by its path (the most recent earlier pass record among the prior records it was given), and compare it with `shasum -a 256` of the story file. When they match, the adversary reviews the whole story, not only the repair. Before this, every later-pass brief said the pass reviews only the repair, stories included, and only the adversary's later-pass appendix said otherwise.
+- When none of the prior records is an earlier pass record, the brief carries no such instruction and the shard reviews the repair.
+- The cross shard, and every shard of a requirements-document or subject pass, still reviews the repair.
+- The same rule is stated in `steps/_gate-procedures.md` (adversarial review and divergence-resolution dispatch), Rule 8, and the adversary role.
+- Test coverage: the merge fixture again checks how an older engine's narrowed stories pass is recomputed (a story with an open MAJOR stays owed, stories are matched by file name rather than position, and a previous pass with no story fingerprints falls back to the full set). The brief text is checked for story shards (a fourth pass given the first and second passes' records, with no third, names the second pass's record; no pass record means no instruction), the cross shard and a requirements-document control.
+- BL-1005 stays open: its close is a measurement on a future graph sprint.
+- Action for consumers: none.
+
 ## [0.1275.0] - 2026-11-27
 
 ### The compaction-resume backstop closes every gate a lead walked out of (BL-819)

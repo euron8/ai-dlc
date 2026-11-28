@@ -23,6 +23,9 @@ including at pass 1.** The residue that decides it: `team-roles/adversary.md`.
 Pass 2+ reviews the REPAIR, not the document again, and verifies the prior
 pass's findings landed.
 
+In files (stories) mode, a part shard whose story is unchanged since the previous pass reviews the WHOLE
+story, not only the REPAIR: `team-roles/appendix/adversary-later-pass.md`.
+
 **A MAJOR whose every quoted span the previous repair wrote does not block the exit, and is
 still repaired, never deferred:** `team-roles/adversary.md`, "The verdict".
 

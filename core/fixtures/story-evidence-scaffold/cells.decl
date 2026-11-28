@@ -2,6 +2,8 @@
 # token line the judge reads, and the handoff verdict on what it wrote). strategy-self-check.sh starts unguarded child validators, which
 # he-inproc.sh would hand to a real bash (an INPROC finding), so neither script is asked in process.
 e2e core/scripts/strategy-rows.sh cli-era-bind why=the CLI --bind is the producer whose token line the judge reads
+e2e core/scripts/strategy-rows.sh cli-era-refuse why=the CLI --rows refusal (exit 2) on stories with no, two, or an empty Acceptance Criteria section
+e2e core/scripts/strategy-rows.sh cli-era-pending why=the CLI --check reads PENDING on a filled table ahead of the no-marker refusal, the allow twin of cli-era-refuse
 e2e core/scripts/strategy-self-check.sh cli-era-unit why=the CLI --handoff verdict on a stamped table with Kind unit
 e2e core/scripts/strategy-self-check.sh cli-era-test why=the CLI --handoff verdict on the same stamped table with Kind test, its allow twin
 e2e core/scripts/strategy-self-check.sh cli-era-own why=the CLI --handoff --story verdict, scoped to one story beside an empty-cell sibling
@@ -13,3 +15,19 @@ e2e core/scripts/gen-round-briefs.sh cli-rbriefs-lanejoin why=the CLI --plan-fil
 e2e core/scripts/gen-round-briefs.sh cli-rbriefs-zero why=the CLI --plan-file refusal on a cross token the plan gives no CROSS item
 e2e core/scripts/gen-round-briefs.sh cli-rbriefs-elic why=the CLI elicitation run whose briefs must carry the elicitation region and the method line
 e2e core/scripts/gen-round-briefs.sh cli-rbriefs-two why=the CLI --plan-file refusal on a cross token the plan gives two CROSS items
+# The RBRIEFS role-line cells (BL-1187) render one consumer-layout world with the real renderer, then run gen-round-briefs.sh once per variant and round with cwd = the world root; the briefs it writes are the subject.
+e2e core/scripts/render-agent-definitions.sh cli-rbriefs-render why=the CLI --root render writes the definitions the briefs' bound-and-current check reads; the real renderer, never a hand-written definition
+e2e core/scripts/render-agent-definitions.sh cli-rbriefs-role-edit-review why=the --check start of the in-process review pass on the world whose role file was edited after the render, the sentence-kept variant
+e2e core/scripts/render-agent-definitions.sh cli-rbriefs-role-edit-repair why=the --check start of the in-process repair pass on the world whose role file was edited after the render, the sentence-kept variant
+e2e core/scripts/render-agent-definitions.sh cli-rbriefs-role-drift-review why=the --check start of the in-process review pass on the world whose settings effort drifted from the definition, the sentence-kept variant
+e2e core/scripts/render-agent-definitions.sh cli-rbriefs-role-drift-repair why=the --check start of the in-process repair pass on the world whose settings effort drifted from the definition, the sentence-kept variant
+e2e core/scripts/render-agent-definitions.sh cli-rbriefs-role-focus-review why=the --check start of the in-process review pass on the bound, current world whose focus text names a team-roles file, the sentence-kept variant
+e2e core/scripts/gen-round-briefs.sh cli-rbriefs-role-cur-review why=the CLI review run on the bound, current world whose brief omits the role-file sentence
+e2e core/scripts/gen-round-briefs.sh cli-rbriefs-role-cur-repair why=the CLI repair run on the bound, current world whose brief omits the role-file sentence
+e2e core/scripts/gen-round-briefs.sh cli-rbriefs-role-nodef-review why=the CLI review run on the world with no definition, the sentence-kept twin
+e2e core/scripts/gen-round-briefs.sh cli-rbriefs-role-nodef-repair why=the CLI repair run on the world with no definition, the sentence-kept twin
+nested core/scripts/gen-round-briefs.sh core/scripts/render-agent-definitions.sh why=gen-round-briefs.sh runs the sibling renderer --check --role to decide the role-file sentence; its logged parent is a start of gen-round-briefs.sh
+e2e core/scripts/gen-round-briefs.sh cli-rbriefs-whole why=the CLI files-axis later review pass whose part briefs must carry the whole-story procedure and whose cross brief must not
+e2e core/scripts/gen-round-briefs.sh cli-rbriefs-wholesec why=the CLI sections-axis later review pass whose briefs must not carry the whole-story procedure, the control
+e2e core/scripts/gen-round-briefs.sh cli-rbriefs-whole3 why=the CLI files-axis pass 4 of artifact stories-adversarial with p1 and p2 among the priors and no p3 whose part brief must name the p2 prior path, not p1
+e2e core/scripts/gen-round-briefs.sh cli-rbriefs-wholenone why=the CLI files-axis later review pass with no pass record among the priors whose part briefs must carry no whole-story sentence

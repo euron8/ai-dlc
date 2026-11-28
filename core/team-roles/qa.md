@@ -411,7 +411,10 @@ Read `.claude/team-roles/appendix/qa-conditional-acs.md` when the story carries 
   to the index from `--base` to frozen: it is refused when any version of the view from the base
   up to the frozen sha keyed that file under another index. A re-key made in planning, before
   the base, binds. `merge-review-shards.sh` STORY-BIND refuses any other
-  story under that index.
+  story under that index. A story file whose slug opens with a digit (`4-1-qa-validation.md` and
+  `story-4-1-903b-<slug>.md`) binds when the row `story-<N>-<...>` naming it declares it by `file:`,
+  its key reads no other index of that name, and no other entry names a `story-4-1-*.md` file or is
+  keyed under the index, at the base or the frozen sha.
 
 **A job you need the result of runs in the foreground.** Run it ITSELF in the foreground with the
 Bash `timeout: 600000`, never with `run_in_background` and never in a poll loop. Only a job that can

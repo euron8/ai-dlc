@@ -714,6 +714,57 @@ SN_SS="$(snapcell "$SS_W" "$CW_A")"
   && ok "(ss) role file edited and re-rendered after the snapshot -> the snapshot body is stale, the role line is put at the head of the prompt" \
   || bad "(ss) scored '$SN_SS', expected 'allow:prompt:line' — a body this session does not hold was credited"
 
+# --- THE ROLE LINE: a brief names its role on one `role: <r>` line, and a bound definition then carries the contract --------
+# gen-round-briefs.sh writes `role: <r>` into every adversary and remediator brief and omits the role-file Read sentence
+# when the definition is current. A dispatch carrying that line and no `team-roles/<r>.md` token and no subagent_type derives
+# ROLE from the line (updatedInput.subagent_type is set to it); the line never sets role_contract_cited. Scored
+# `<decision>:<updatedInput subagent_type>:<ledger contract_via>:<prompt head>:<ledger rows>` (`-` when absent; head `line`
+# when the prompt starts with the injected Rule 19(b) line, `brief` when it is the brief as sent):
+#   rl1 bound definition, current snapshot (session s-dmg-1)       -> allow:defok:definition:brief:1
+#   rl2 same brief, session with no snapshot (the stale twin)      -> allow:defok:prompt:line:1
+#   rl3 unbound definition (frontmatter model drift), role line    -> deny, as the same role named by subagent_type is
+#   rl4 no role line (from the lead), and a role line in a fence   -> no decision, no row
+rlcell() { # rlcell <json> -> the score above
+  local o d t v h n
+  rm -f "$CONSUMER/_bmad-output/spawn-ledger.jsonl"
+  o="$(printf '%s' "$1" | CLAUDE_PROJECT_DIR="$CONSUMER" dgrun "$HOOK" 2>/dev/null)"
+  d="$(jq -r '.hookSpecificOutput.permissionDecision // "none"' <<<"$o" 2>/dev/null)"; [ -n "$d" ] || d=none
+  t="$(jq -r '.hookSpecificOutput.updatedInput.subagent_type // "-"' <<<"$o" 2>/dev/null)"
+  n="$(wc -l < "$CONSUMER/_bmad-output/spawn-ledger.jsonl" 2>/dev/null | tr -d ' ')"; n="${n:-0}"
+  v="$(tail -1 "$CONSUMER/_bmad-output/spawn-ledger.jsonl" 2>/dev/null | jq -r '.contract_via | tostring' 2>/dev/null)"
+  h="$(jq -r '.hookSpecificOutput.updatedInput.prompt // "-"' <<<"$o" 2>/dev/null | head -1)"
+  case "$h" in
+    'Your operating contract is `.claude/team-roles/defok.md`. Read it and follow it as your FIRST action'*) h=line ;;
+    'You are a shard.'*) h=brief ;;
+    *) h="-" ;;
+  esac
+  printf '%s:%s:%s:%s:%s' "$d" "${t:--}" "${v:--}" "$h" "$n"
+}
+RL_PROMPT="$(printf 'You are a shard.\n\nDeliverable: /x/1.md\nshard: 1/2 a.md\nrole: defok\n\nSubject: a.md')"
+RL_1="$(jq -nc --arg p "$RL_PROMPT" '{session_id:"s-dmg-1",tool_name:"Agent",tool_input:{name:"rl-1",prompt:$p}}')"
+RL_S="$(rlcell "$RL_1")"
+[ "$RL_S" = "allow:defok:definition:brief:1" ] \
+  && ok "(rl1) role: line, no team-roles token, no subagent_type, bound definition with a current snapshot -> ROLE defok, subagent_type rewritten, contract_via=definition, no Rule 19(b) line injected" \
+  || bad "(rl1) scored '$RL_S', expected 'allow:defok:definition:brief:1'"
+RL_2="$(rlcell "$(jq -c '.session_id = "s-dmg-nosnap"' <<<"$RL_1")")"
+[ "$RL_2" = "allow:defok:prompt:line:1" ] \
+  && ok "(rl2) the same brief with no snapshot for the session -> the Rule 19(b) line is injected at the head, contract_via=prompt" \
+  || bad "(rl2) scored '$RL_2', expected 'allow:defok:prompt:line:1'"
+RL_3="$(rlcell "$(jq -c '.tool_input.prompt |= sub("role: defok"; "role: defstalemodel")' <<<"$RL_1")")"
+RL_3T="$(rlcell "$(jq -nc '{session_id:"s-dmg-1",tool_name:"Agent",tool_input:{name:"rl-3t",subagent_type:"defstalemodel",prompt:"Do the work."}}')")"
+if [ "$RL_3" = "deny:-:-:-:0" ] && [ "$RL_3T" = "deny:-:-:-:0" ]; then
+  ok "(rl3) role: line naming a role whose definition is UNBOUND (model drift) -> DENIED with no row, as subagent_type naming it is"
+else
+  bad "(rl3) role line scored '$RL_3', subagent_type twin scored '$RL_3T', expected 'deny:-:-:-:0' for both"
+fi
+RL_4="$(rlcell "$(jq -c '.tool_input.prompt |= sub("role: defok"; "")' <<<"$RL_1")")"
+RL_4F="$(rlcell "$(jq -c '.tool_input.prompt |= sub("role: defok"; "```\nrole: defok\n```")' <<<"$RL_1")")"
+if [ "$RL_4" = "none:-:-:-:0" ] && [ "$RL_4F" = "none:-:-:-:0" ] && [ "$RL_S" = "allow:defok:definition:brief:1" ]; then
+  ok "(rl4) no role line, and a role line inside a fence, derive no role: no decision and no ledger row (rl1 is the twin that does)"
+else
+  bad "(rl4) no-line scored '$RL_4', fenced scored '$RL_4F', expected 'none:-:-:-:0' for both"
+fi
+
 # --- THE SHARD LINE: AN INVENTED SERIAL EXCEPTION IS RECORDED, NEVER LAUNDERED TO NULL --------
 # Rule 28 names four serial exceptions. A `none` naming anything else records
 # `invalid-exception` plus the lead text in `shard_raw`, which Check 22 arm S3 FAILS on. Seeded
@@ -1059,9 +1110,15 @@ GF_QUOTED='Run `/Users/n8/graph/scripts/ai-dlc/wait-for-deliverable.sh --mark "/
 # G-c7: the same brief with its path single-quoted -> the tail stops before the closing apostrophe.
 GF_SQUOTED="Run \`/Users/n8/graph/scripts/ai-dlc/wait-for-deliverable.sh --mark '/Users/n8/graph/_bmad-output/party-mode/s321/architecture-tea-01.md' architecture tea 1/6 findings=0\`."
 # G-c8: an unfilled `<...>` seat-file argument (the placeholder a remediator brief carried) names no seat, so the row records
-# no mark_file; G-c9 is its near-miss, a real path merely containing `<`, which stays rendered with its path.
+# no mark_file; G-c9: a path merely containing `<` records none either (any `<` in the value names no seat).
+# G-c10: the graph remediator shape `--mark <your file> ...`, which splits to `<your`, records none.
+# G-c11: a `party-mode/s321/<role>-01.md` tail, whose `<` is not its first character, records none.
+# G-c12: the near-miss `party-mode/s321/x.md`, a relative tail with no `<`, still records its path.
 GF_PH='Run `/g/scripts/ai-dlc/wait-for-deliverable.sh --mark <record> architecture dev 1/6 findings=0`.'
 GF_PHNEAR='Run `/g/scripts/ai-dlc/wait-for-deliverable.sh --mark /g/<x>.md architecture dev 1/6 findings=0`.'
+GF_PHYOUR='Run `/g/scripts/ai-dlc/wait-for-deliverable.sh --mark <your file> <step> <role> <shard> findings=<n>`.'
+GF_PHMID='Run `/g/scripts/ai-dlc/wait-for-deliverable.sh --mark party-mode/s321/<role>-01.md architecture dev 1/6 findings=0`.'
+GF_PHREL='Run `/g/scripts/ai-dlc/wait-for-deliverable.sh --mark party-mode/s321/x.md architecture dev 1/6 findings=0`.'
 GCELL=""
 gcell() { # gcell <guard> <brief line> -> sets GCELL
   local d n m f
@@ -1074,13 +1131,13 @@ gcell() { # gcell <guard> <brief line> -> sets GCELL
 }
 gf_cell() { # gf_cell <guard> <cell> -> that cell's value
   local j
-  case "$2" in gc1) j="$GF_ONE" ;; gc2) j="$ML_NONE" ;; gc3) j="$GF_TWO" ;; gc4) j="$GF_BLANK" ;; gc5) j="$GF_NOBLANK" ;; gc6) j="$GF_QUOTED" ;; gc7) j="$GF_SQUOTED" ;; gc8) j="$GF_PH" ;; gc9) j="$GF_PHNEAR" ;; esac
+  case "$2" in gc1) j="$GF_ONE" ;; gc2) j="$ML_NONE" ;; gc3) j="$GF_TWO" ;; gc4) j="$GF_BLANK" ;; gc5) j="$GF_NOBLANK" ;; gc6) j="$GF_QUOTED" ;; gc7) j="$GF_SQUOTED" ;; gc8) j="$GF_PH" ;; gc9) j="$GF_PHNEAR" ;; gc10) j="$GF_PHYOUR" ;; gc11) j="$GF_PHMID" ;; gc12) j="$GF_PHREL" ;; esac
   gcell "$1" "$j"
   case "$2:$GCELL" in gc[4567]:*:*party-mode/s321/architecture-tea-01.md) GCELL="${GCELL%:*}:tail" ;; esac
   printf '%s' "$GCELL"
 }
-GF_WANT='gc1=allow:1:rendered:party-mode/s321/architecture-dev-01.md;gc2=allow:1:null:null;gc3=allow:1:rendered:null;gc4=allow:1:rendered:tail;gc5=allow:1:rendered:tail;gc6=allow:1:rendered:tail;gc7=allow:1:rendered:tail;gc8=allow:1:rendered:null;gc9=allow:1:rendered:/g/<x>.md'
-GF_TIP="gc1=$(gf_cell "$HOOK" gc1);gc2=$(gf_cell "$HOOK" gc2);gc3=$(gf_cell "$HOOK" gc3);gc4=$(gf_cell "$HOOK" gc4);gc5=$(gf_cell "$HOOK" gc5);gc6=$(gf_cell "$HOOK" gc6);gc7=$(gf_cell "$HOOK" gc7);gc8=$(gf_cell "$HOOK" gc8);gc9=$(gf_cell "$HOOK" gc9)"
+GF_WANT='gc1=allow:1:rendered:party-mode/s321/architecture-dev-01.md;gc2=allow:1:null:null;gc3=allow:1:rendered:null;gc4=allow:1:rendered:tail;gc5=allow:1:rendered:tail;gc6=allow:1:rendered:tail;gc7=allow:1:rendered:tail;gc8=allow:1:rendered:null;gc9=allow:1:rendered:null;gc10=allow:1:rendered:null;gc11=allow:1:rendered:null;gc12=allow:1:rendered:party-mode/s321/x.md'
+GF_TIP="gc1=$(gf_cell "$HOOK" gc1);gc2=$(gf_cell "$HOOK" gc2);gc3=$(gf_cell "$HOOK" gc3);gc4=$(gf_cell "$HOOK" gc4);gc5=$(gf_cell "$HOOK" gc5);gc6=$(gf_cell "$HOOK" gc6);gc7=$(gf_cell "$HOOK" gc7);gc8=$(gf_cell "$HOOK" gc8);gc9=$(gf_cell "$HOOK" gc9);gc10=$(gf_cell "$HOOK" gc10);gc11=$(gf_cell "$HOOK" gc11);gc12=$(gf_cell "$HOOK" gc12)"
 _old_ifs="$IFS"; IFS=';'
 for _c in $GF_WANT; do
   case ";$GF_TIP;" in
@@ -2057,6 +2114,8 @@ gp_world() { # gp_world <name> <step-file body> <position block> -> prints the p
   gp_plan 7-5-g1-p1.plan 7-5 1 "$GP_S1" none '' $'1\tcore\tsrc/a.sh' $'2\tdocs\tdocs/b.md'
   gp_plan 7-2-g3-p1.plan 7-2 3 "$GP_S1" none "$GP_NS"
   gp_plan 7-6-g3-p1.plan 7-6 3 "$GP_S1" none "$GP_NX"
+  # The set-aside plan gate-transition.sh leaves on a same-pass gate-3 re-arm (`<plan>.<nonce>`): allowable content, so only its name decides.
+  cp "$p/$GP_PD/7-2-g3-p1.plan" "$p/$GP_PD/7-2-g3-p1.plan.$GP_NS"
   gp_plan 7-2-gclose-p1.plan 7-2 close "$GP_S1" none "$GP_NS"
   gp_plan 7-7-gclose-p1.plan 7-7 close "$GP_S1" none "$GP_NF"
   gp_plan 7-2-g2-p1.plan 7-2 rerun "$GP_S1" none ''
@@ -2135,6 +2194,7 @@ gp_cell() { # gp_cell <guard> <cell>
     g3sh)    gp_run "$1" "$GW" code-reviewer 'shard: 1/2 core' "gate-plan: $P/7-2-g3-p1.plan" ;;
     adj)     gp_run "$1" "$GW" gate-adjudicator "gate_nonce: $GP_NS" 'story: 7-2' "gate-plan: $P/7-2-g3-p1.plan" ;;
     adjno)   gp_run "$1" "$GW" gate-adjudicator "gate_nonce: $GP_NX" 'story: 7-6' "gate-plan: $P/7-6-g3-p1.plan" ;;
+    adjaside) gp_run "$1" "$GW" gate-adjudicator "gate_nonce: $GP_NS" 'story: 7-2' "gate-plan: $P/7-2-g3-p1.plan.$GP_NS" ;;
     adjsh)   gp_run "$1" "$GW" gate-adjudicator 'shard: 1/3 implementation' 'story: 7-2' ;;
     adjnp)   gp_run "$1" "$GW" gate-adjudicator "gate_nonce: $GP_NS" 'story: 7-2' ;;
     adjsl)   gp_run "$1" "$GW" gate-adjudicator "gate_nonce: $GP_NS" ;;
@@ -2146,8 +2206,8 @@ gp_cell() { # gp_cell <guard> <cell>
     empty)   gp_run "$1" "$GE" code-reviewer 'shard: 1/1 7-2' ;;
   esac
 }
-ALL_GP=nogp,absent,story,match,part,partx,sha,mnone,esc,escok,cw,cwword,cwnoled,close,close26,g3sh,adj,adjno,adjsh,legacy,near,deploy,gv,empty,rerunqa,rerunrv,qag1,rvg2,qag2,qamnone,packed,packedx,cross,crossx,nonex,noshard,multi,adjnp,adjsl,adjslsh
-GP_WANT='nogp=deny:-:a;absent=deny:-:b;story=deny:-:c;match=none:-:-;part=none:-:-;partx=deny:-:c5;sha=deny:-:d;mnone=deny:-:f1;esc=deny:-:a;escok=none:-:-;cw=none:-:-;cwword=deny:-:a;cwnoled=deny:-:f2;close=none:-:-;close26=deny:-:f26;g3sh=deny:-:g;adj=allow:-:-;adjno=deny:-:e;adjsh=deny:-:a;legacy=none:-:-;near=none:-:-;deploy=none:-:-;gv=deny:-:a;empty=none:E:-;rerunqa=deny:-:g;rerunrv=deny:-:g;qag1=deny:-:g;rvg2=deny:-:g;qag2=none:-:-;qamnone=deny:-:f1;packed=none:-:-;packedx=deny:-:c5;cross=none:-:-;crossx=deny:-:cx;nonex=deny:-:nx;noshard=none:-:-;multi=deny:-:m;adjnp=deny:-:a;adjsl=allow:-:-;adjslsh=allow:-:-'
+ALL_GP=nogp,absent,story,match,part,partx,sha,mnone,esc,escok,cw,cwword,cwnoled,close,close26,g3sh,adj,adjno,adjsh,legacy,near,deploy,gv,empty,rerunqa,rerunrv,qag1,rvg2,qag2,qamnone,packed,packedx,cross,crossx,nonex,noshard,multi,adjnp,adjsl,adjslsh,adjaside
+GP_WANT='nogp=deny:-:a;absent=deny:-:b;story=deny:-:c;match=none:-:-;part=none:-:-;partx=deny:-:c5;sha=deny:-:d;mnone=deny:-:f1;esc=deny:-:a;escok=none:-:-;cw=none:-:-;cwword=deny:-:a;cwnoled=deny:-:f2;close=none:-:-;close26=deny:-:f26;g3sh=deny:-:g;adj=allow:-:-;adjno=deny:-:e;adjsh=deny:-:a;legacy=none:-:-;near=none:-:-;deploy=none:-:-;gv=deny:-:a;empty=none:E:-;rerunqa=deny:-:g;rerunrv=deny:-:g;qag1=deny:-:g;rvg2=deny:-:g;qag2=none:-:-;qamnone=deny:-:f1;packed=none:-:-;packedx=deny:-:c5;cross=none:-:-;crossx=deny:-:cx;nonex=deny:-:nx;noshard=none:-:-;multi=deny:-:m;adjnp=deny:-:a;adjsl=allow:-:-;adjslsh=allow:-:-;adjaside=deny:-:b'
 GP_TIP="$(for _c in ${ALL_GP//,/ }; do printf '%s=%s;' "$_c" "$(gp_cell "$HOOK" "$_c")"; done)"
 _old_ifs="$IFS"; IFS=';'
 for _c in $GP_WANT; do
@@ -2346,6 +2406,8 @@ printf '# Brief\nDeliverable: x/y.md\n' > "$DLA_PA/b-ok.md"
 printf '# Brief\nno deliverable line here\n' > "$DLA_PA/b-nodl.md"
 printf '# Brief\nDeliverable: x/y.md\nYour operating contract is `.claude/team-roles/dev.md`.\n' > "$DLA_PA/b-role.md"
 printf '# Brief\nDeliverable: x/y.md\n' > "$DLA/_bmad-output/escape.md"
+# The graph remediator shape: its `<your file>` tail records no mark_file, so this deny is armed.
+DL_MARKPH='Run `scripts/ai-dlc/wait-for-deliverable.sh --mark <your file> <step> <role> <shard> findings=<n>` when done.'
 DL_MARKBAD='Run `scripts/ai-dlc/wait-for-deliverable.sh --mark _bmad-output/party-mode/s320/dev-1.md implementation dev 1/1` when done.'
 dl_base() { mkjson Agent dev sonnet | jq -c '.tool_use_id = "toolu_dl" | .transcript_path = "/nonexistent" | .tool_input.run_in_background = true'; }
 dl_add() { jq -c --arg s "$2" '.tool_input.prompt += $s' <<<"$1"; } # dl_add <json> <text appended to the prompt>
@@ -2356,7 +2418,8 @@ dl_kind() { # dl_kind <hook stdout> -> dl (THIS deny) | other (a different deny)
   d="$(jq -r '.hookSpecificOutput.permissionDecision // empty' <<<"$1" 2>/dev/null)"
   if [ "$d" = deny ]; then
     rs="$(jq -r '.hookSpecificOutput.permissionDecisionReason // empty' <<<"$1" 2>/dev/null)"
-    case "$rs" in *'carries no `Deliverable: <path>` line'*) echo dl ;; *) echo other ;; esac
+    # dl requires the remedy for a placeholder --mark tail too, so cell markph asserts that phrase.
+    case "$rs" in *'carries no `Deliverable: <path>` line'*'still carries a `<...>` placeholder'*) echo dl ;; *) echo other ;; esac
   else echo pass; fi
 }
 dl_cell() { # dl_cell <guard> <cell> -> "<kind>:<ledger rows after one call on a fresh ledger>"; seq -> the rows after allow, refuse, allow
@@ -2381,6 +2444,8 @@ dl_cell() { # dl_cell <guard> <cell> -> "<kind>:<ledger rows after one call on a
     role)     j="$(mkjson Agent ghostrole sonnet | jq -c '.tool_use_id = "toolu_dl" | .transcript_path = "/nonexistent" | .tool_input.run_in_background = true')" ;;
     mark)     j="$(dl_add "$j" $'\n'"$DL_MARK")" ;;
     markbad)  j="$(dl_add "$j" $'\n'"$DL_MARKBAD")" ;;
+    markph)   j="$(dl_add "$j" $'\n'"$DL_MARKPH")" ;;
+    markphdl) j="$(dl_add "$j" $'\nDeliverable: x/y.md\n'"$DL_MARKPH")" ;;
     brief)    j="$(dl_add "$j" $'\nBrief: _bmad-output/planning-artifacts/b-ok.md')" ;;
     briefnodl) j="$(dl_add "$j" $'\nBrief: _bmad-output/planning-artifacts/b-nodl.md')" ;;
     briefmiss) j="$(dl_add "$j" $'\nBrief: _bmad-output/planning-artifacts/b-absent.md')" ;;
@@ -2398,8 +2463,8 @@ dl_cell() { # dl_cell <guard> <cell> -> "<kind>:<ledger rows after one call on a
   o="$(dl_run "$g" "$w" "$j")"
   printf '%s:%s' "$(dl_kind "$o")" "$(dl_rows "$w")"
 }
-ALL_DL=nodl,dl,dlmid,indent,bold,nopath,bgabsent,agent,fg,nosnap,noera,updcmd,updskill,updlead,leadtr,role,mark,markbad,seq,brief,briefnodl,briefmiss,briefesc,briefrole
-DL_WANT='nodl=dl:0;dl=pass:1;dlmid=pass:1;indent=dl:0;bold=dl:0;nopath=dl:0;bgabsent=dl:0;agent=pass:1;fg=pass:1;nosnap=pass:1;noera=pass:1;updcmd=pass:1;updskill=pass:1;updlead=dl:0;leadtr=dl:0;role=pass:1;mark=pass:1;markbad=dl:0;seq=1-1-2;brief=pass:1;briefnodl=dl:0;briefmiss=dl:0;briefesc=dl:0;briefrole=pass:0'
+ALL_DL=nodl,dl,dlmid,indent,bold,nopath,bgabsent,agent,fg,nosnap,noera,updcmd,updskill,updlead,leadtr,role,mark,markbad,markph,markphdl,seq,brief,briefnodl,briefmiss,briefesc,briefrole
+DL_WANT='nodl=dl:0;dl=pass:1;dlmid=pass:1;indent=dl:0;bold=dl:0;nopath=dl:0;bgabsent=dl:0;agent=pass:1;fg=pass:1;nosnap=pass:1;noera=pass:1;updcmd=pass:1;updskill=pass:1;updlead=dl:0;leadtr=dl:0;role=pass:1;mark=pass:1;markbad=dl:0;markph=dl:0;markphdl=pass:1;seq=1-1-2;brief=pass:1;briefnodl=dl:0;briefmiss=dl:0;briefesc=dl:0;briefrole=pass:0'
 DL_LAB() { # DL_LAB <cell> -> what the cell establishes
   case "$1" in
     nodl) echo "a lead dispatch with no Deliverable line is refused by this deny and leaves no ledger row" ;;
@@ -2420,6 +2485,8 @@ DL_LAB() { # DL_LAB <cell> -> what the cell establishes
     role) echo "a role with no readable team-role file: not judged" ;;
     mark) echo "a brief whose one well-formed wait-for-deliverable.sh --mark line yields a mark_file: not this deny" ;;
     markbad) echo "the same mark line without its findings=<n> field yields no mark_file and is refused" ;;
+    markph) echo "a mark line whose file argument is the placeholder '<your file>' yields no mark_file and is refused, the remedy naming the placeholder" ;;
+    markphdl) echo "the same placeholder mark line beside a column-0 Deliverable line is not refused and is recorded" ;;
     brief) echo "a prompt whose only Deliverable line is in the Brief: file under planning-artifacts is not refused and is recorded" ;;
     briefnodl) echo "a Brief: file with no Deliverable line is still refused" ;;
     briefmiss) echo "a Brief: path that does not exist is still refused" ;;

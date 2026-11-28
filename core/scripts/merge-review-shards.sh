@@ -255,7 +255,15 @@
 #   the row alone, the history check holds --story's pairs to the index from --base to frozen (every row a
 #   version of the view in that window pairs with --story's basename must be keyed under the index), so a
 #   range that re-keys the view cannot bind another story's file, and read its waiver, under this index,
-#   while a re-key the lead made in planning, before --base, binds. The review's
+#   while a re-key the lead made in planning, before --base, binds. THE DECLARED-ROW RULE (BL-1258) is the fallback
+#   when both fail, for a --story named `story-<idx>-<slug>.md` whose slug opens with a digit (review 4-1, story
+#   `story-4-1-903b-<slug>.md`, row `story-<N>-10`): it binds when (F2) the one row naming --story at the frozen sha
+#   declares it by `file:` (a key-only row resolving through its key binds nothing), (F3) that row's key names no other
+#   reading of the name (each leading run of its components after `story-` that idx_ok accepts, `4`, `4-1-903b`, by
+#   stem_rows), so `story-2-1` never binds `story-2-1-y.md` to index 2, (F4) the key's slot after `story-` is the review's
+#   sprint, and (F5) no other entry of the view at <base> or <frozen> names a file `story-<idx>.md` or `story-<idx>-*.md`
+#   of ANY slug, or is keyed under the index; no --base, no fallback. Each failure refuses with the index refusal's
+#   text, then the row and the condition that failed. The review's
 #   <idx> is `-`-joined components, each digits with at most one trailing lower-case letter (`1-1`,
 #   `2-3a`), so a review named for a slug (`1-1-z-qa-validation.md`) carries no index; or a letter-led index (`B1`,
 #   `B-1`, `DASH`), any text with no `/`, `.` or whitespace, bound the same way: the index is compared with --story's
@@ -273,7 +281,11 @@
 #   --story's directory and <frozen> (`sprint-status.sh view-history`, which owns the view's path and
 #   grammar) refuses when it is under the index, in this sprint and not --story, so a base whose row
 #   was deleted or repointed off the index still has the real story named in the view's history; a
-#   history that cannot be read is REFUSED, and a key-only row (no `file:`) is not seen. THE SPRINT is the review's own:
+#   history that cannot be read is REFUSED, and a key-only row (no `file:`) is not seen. When --story bound by THE
+#   DECLARED-ROW RULE, the history reads under it too: a version of the view from --base to frozen pairing --story's
+#   basename with a key passes when that key meets F3 and F4, and a `file:` value of another basename under the index
+#   by any slug (`story-<idx>-*.md`, a digit-led slug included) refuses. The one-story check is unchanged by the rule,
+#   whose F5 already reads both ends. THE SPRINT is the review's own:
 #   <N> of its lead-assigned slot `docs/reviews/s<N>/` (qa.md; in the merge, the shard directory's
 #   `docs/reviews/s<N>/shards/` parent), and a claimed exemption on a review path carrying no `s<N>` is REFUSED. The
 #   view's `sprint:` must read <N> at <base> and at <frozen>, and --story must sit in stories_dir(<N>), so a seat
@@ -310,7 +322,8 @@
 #   the override; until it does, the first PASS refuses with a message naming that fix.
 #   STORY-BIND ON THE RUN BRANCH. The index rule and the view-row rule above also hold a `Canonical run:` that IS a
 #   run, whenever --story and a frozen sha are given (the merge always has its manifest's sha), so a run claim never
-#   carries another story's --story. The one-story, history and record-only rules stay the exemption's own.
+#   carries another story's --story. THE DECLARED-ROW RULE holds there too, F5 included, and refuses a run claim given
+#   no --base. The one-story, history and record-only rules stay the exemption's own.
 #   THE PARTITION RECORD. `--record-partition <qa shard-dir>`, run by the lead right after the gate-2 partition and
 #   before any QA is dispatched, writes the story's `partition-base`, `partition-sha` (the manifest's) and `qa-era`
 #   (`held` when qa.md as installed AT THE BASE, tracked first, else on disk in the manifest's worktree at that moment,
@@ -723,6 +736,7 @@ adv_has() { grep -qF -- "$ADVISOR_SENTINEL" "$1"; } # <role file> -> 0 when it p
 
 # story_idx_ok <basename> <idx>: 0 when <basename> carries story index <idx> (header: THE EXEMPTION), as
 # `story-<idx>.md` or `story-<idx>-<slug>.md` whose slug does not open with a digit (index 1 is not story-1-2-y.md).
+# A digit-led slug it refuses is THE DECLARED-ROW RULE's to bind (dr_f1 onward), never this test's.
 # Every comparison against <idx> is a LITERAL string comparison: no pattern is built from the index text, so an index
 # carrying `*`, `?` or `[` names only itself.
 story_idx_ok() {
@@ -740,7 +754,8 @@ story_idx_ok() {
 # (`1-1-z-qa-validation.md`) carries no index. A letter-led index (`B1`, `B-1`, `DASH`, `SR1`) is any text with no `/`,
 # `.` or whitespace; STORY-BIND then binds it as it binds a numeric one, by story_idx_ok's literal match against
 # --story and the implementation view's row listing that story, so a letter-led index no listed story carries is REFUSED
-# there. Empty and a leading `-` are refused by the digit-led grammar.
+# there. Empty and a leading `-` are refused by the digit-led grammar. THE DECLARED-ROW RULE's F3 (dr_f3_bad) reads a
+# story name's other indexes by this grammar, so for a letter-led index every leading run of components is a reading.
 idx_ok() {
   ix_s_="$1"
   case "$ix_s_" in [ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz]*) case "$ix_s_" in */* | *.* | *[[:space:]]*) return 1 ;; esac; return 0 ;; esac
@@ -880,8 +895,88 @@ ss_bound() { ( unset AI_DLC_SPRINT_STATUS_SCHEMA AI_DLC_PROJECT_ROOT; . "$cg_ss_
 # view row by its KEY calls, each after the literal story_idx_ok rule. Prints, one per line, each key whose
 # sprint-stripped stem is `story-<cg_i_>` under the REVIEW's sprint cg_n_ (never the view's), as sprint-status.sh
 # stem-names decides it, so no second key grammar exists here; non-zero when that gives no answer.
-# A caller tests a key's membership in the printed set as a literal string.
-stem_rows() { [ -n "$1" ] || return 0; ss_bound stem-names --sprint "$cg_n_" --keys "$1" "$cg_i_" < /dev/null; }
+# A caller tests a key's membership in the printed set as a literal string. THE DECLARED-ROW RULE asks the same seam
+# under other indexes through stem_rows_at: F3 (a key's other readings) and F4 (its sprint slot).
+stem_rows() { stem_rows_at "$1" "$cg_i_"; }
+# stem_rows_at <entry keys> <idx>: stem_rows for another index <idx>, the seam THE DECLARED-ROW RULE asks of a key's
+# other readings (F3) and of its sprint slot (F4).
+stem_rows_at() { [ -n "$1" ] || return 0; ss_bound stem-names --sprint "$cg_n_" --keys "$1" "$2" < /dev/null; }
+# THE DECLARED-ROW RULE (BL-1258, header: THE EXEMPTION): the fallback STORY-BIND tries, after the literal and the row
+# stem rule both fail, for --story story-<idx>-<digit-led slug>.md. dr_f1 <basename> is F1, a pure literal test (no
+# pattern is built from the index): 0 when <basename> opens `story-<cg_i_>-`, the rest opens with a digit and ends `.md`.
+dr_f1() {
+  df_p_="story-$cg_i_-"
+  [ "${1:0:${#df_p_}}" = "$df_p_" ] || return 1
+  df_r_="${1:${#df_p_}}"
+  case "$df_r_" in [0-9]*.md) return 0 ;; esac
+  return 1
+}
+# dr_under <basename>: 0 when <basename> is `story-<cg_i_>.md` or opens `story-<cg_i_>-`, whatever its slug (F5 and the
+# history's file lines under the rule), compared literally.
+dr_under() {
+  du_p_="story-$cg_i_"
+  [ "$1" = "$du_p_.md" ] || [ "${1:0:${#du_p_}+1}" = "$du_p_-" ]
+}
+# dr_f3_bad <keys>: F3. Prints each key that stem_rows_at reads under ANOTHER reading of --story's basename: every leading
+# run of its `-` components after `story-` (`.md` dropped) that idx_ok accepts (story-4-1-903b-w.md reads 4, 4-1,
+# 4-1-903b), the index itself excepted. One stem-names call per reading; non-zero when one gives no answer.
+dr_f3_bad() {
+  d3_n_="${STORY_F##*/}"; d3_n_="${d3_n_#story-}"; d3_n_="${d3_n_%.md}"; d3_a_=""
+  while :; do
+    d3_a_="${d3_a_:+$d3_a_-}${d3_n_%%-*}"
+    idx_ok "$d3_a_" || return 0
+    if [ "$d3_a_" != "$cg_i_" ]; then stem_rows_at "$1" "$d3_a_" || return 1; fi
+    [ "$d3_n_" != "${d3_n_#*-}" ] || return 0
+    d3_n_="${d3_n_#*-}"
+  done
+}
+# dr_f4_ok <key>: F4, 0 when the slot after `story-` in <key> is the review's sprint: stem_rows_at for the rest of the
+# key prints the key itself (one stem-names call, so the sprint slot's spelling stays sprint-status.sh's).
+dr_f4_ok() {
+  d4_o_="$(stem_rows_at "$1" "${1#story-*-}")" && [ "$d4_o_" = "$1" ]
+}
+# dr_bind: F2-F5 over --story (cg_sr_) and its row cg_rk_; sets cg_fb_=1 when it binds, else REFUSES with the index
+# message (cg_ix_) as prefix, naming the condition that failed, then the remedy (cg_im_).
+dr_bind() {
+  db_x_="$cg_ix_; the view's row ${cg_rk_:-<none>} names it, and"
+  [ -n "$cg_rk_" ] \
+    || refuse_to "$cg_o_" "$db_x_ no single row with a status names it at $cg_z_; $cg_im_"
+  [ -n "$cg_b_" ] \
+    || refuse_to "$cg_o_" "$db_x_ no --base was given, so no other entry under the index can be ruled out at the base; $cg_im_"
+  # F2: the row, in list-stories at <frozen>, declares --story by `file:` and resolves to it.
+  db_lz_="$(ss_bound list-stories --ref "$cg_z_" --root "$cg_r_" 2>&1 < /dev/null)" \
+    || refuse_to "$cg_o_" "$db_x_ the implementation view gives no answer at $cg_z_ (${db_lz_##*$'\n'}); $cg_im_"
+  db_d_="$(awk -F'\t' -v k="$cg_rk_" '$1 == k { print $3 "\t" $4; exit }' <<<"$db_lz_")"
+  db_dd_="${db_d_%%$'\t'*}"
+  [ "${db_d_#*$'\t'}" = "$cg_sr_" ] && [ "${db_dd_##*/}" = "${cg_sr_##*/}" ] \
+    || refuse_to "$cg_o_" "$db_x_ that row does not declare it by 'file:' (declared ${db_dd_:--}); a row that names it only through its key binds no digit-led slug; $cg_im_"
+  # F3: the key reads no other index of --story's name.
+  db_3_="$(dr_f3_bad "$cg_rk_" 2>&1)" \
+    || refuse_to "$cg_o_" "$db_x_ its key cannot be read under the other indexes of that name (${db_3_##*$'\n'}); $cg_im_"
+  [ -z "$db_3_" ] \
+    || refuse_to "$cg_o_" "$db_x_ its key reads another index of ${cg_sr_##*/}, so the name binds that index, not $cg_i_; $cg_im_"
+  # F4: the key's slot after `story-` is the review's sprint.
+  dr_f4_ok "$cg_rk_" \
+    || refuse_to "$cg_o_" "$db_x_ its key carries no sprint-$cg_n_ slot right after 'story-'; $cg_im_"
+  # F5: no other entry at <base> or <frozen> names a file under the index, by a literal basename of any slug or by its key.
+  db_lb_="$(ss_bound list-stories --ref "$cg_b_" --root "$cg_r_" 2>&1 < /dev/null)" \
+    || refuse_to "$cg_o_" "$db_x_ the implementation view gives no answer at $cg_b_ (${db_lb_##*$'\n'}); $cg_im_"
+  db_ok_=""
+  for db_ref_ in "$cg_b_" "$cg_z_"; do
+    if [ "$db_ref_" = "$cg_b_" ]; then db_l_="$db_lb_"; else db_l_="$db_lz_"; fi
+    while IFS=$'\t' read -r db_k_ db_s_ db_dd_ db_p_; do
+      [ -n "$db_k_" ] && [ "$db_p_" != "$cg_sr_" ] && [ "${db_dd_##*/}" != "${cg_sr_##*/}" ] || continue
+      { dr_under "${db_dd_##*/}" || dr_under "${db_p_##*/}"; } \
+        && refuse_to "$cg_o_" "$db_x_ the view's entry $db_k_ (status $db_s_, file $db_dd_, resolved $db_p_) names another file under index $cg_i_ at $db_ref_; $cg_im_"
+      db_ok_="$db_ok_$db_k_"$'\n'
+    done <<<"$db_l_"
+  done
+  db_5_="$(stem_rows "$db_ok_" 2>&1)" \
+    || refuse_to "$cg_o_" "$db_x_ the view's keys cannot be read under that index (${db_5_##*$'\n'}); $cg_im_"
+  [ -z "$db_5_" ] \
+    || refuse_to "$cg_o_" "$db_x_ the view's entry ${db_5_%%$'\n'*} is keyed under index $cg_i_ at --base $cg_b_ or frozen; $cg_im_"
+  cg_fb_=1
+}
 
 # pr_record <qa shard-dir>: `--record-partition`, written through the lead-record helpers above (the one copy of the
 # record's path and format). Run by the lead right after the gate-2 partition writes the shard
@@ -1142,7 +1237,8 @@ canon_gate() {
   fi
   # STORY-BIND ON BOTH BRANCHES (header: THE EXEMPTION): the index and view-row binding below runs for a no-run claim
   # and for a run claim alike whenever --story and a frozen sha are given (the merge always has the manifest's sha), so
-  # a run claim cannot carry another story's --story. The one-story, history and record-only checks stay the exemption's.
+  # a run claim cannot carry another story's --story; THE DECLARED-ROW RULE (dr_bind, F5 included) runs on both too.
+  # The one-story, history and record-only checks stay the exemption's.
   if [ "$cg_x_" = 1 ] || { [ -n "$STORY_F" ] && [ -n "$cg_z_" ]; }; then
     # STORY-BIND (header: THE EXEMPTION): --story is the story file the implementation view lists at <frozen>.
     [ -n "$cg_i_" ] && idx_ok "$cg_i_" \
@@ -1157,17 +1253,22 @@ canon_gate() {
     cg_row_="$(ss_bound story-status --ref "$cg_z_" --root "$cg_r_" "$cg_sr_" 2>&1 < /dev/null)"
     # THE INDEX (BL-956): --story carries the review's index literally, else the view's row naming --story at <frozen>
     # (the row read below) is keyed under that index (stem_rows), so `6-qa-validation.md` binds story-1-6-<slug>.md
-    # when row story-<N>-6 names it. The row is not required at <base>.
+    # when row story-<N>-6 names it. The row is not required at <base>. Else THE DECLARED-ROW RULE (BL-1258, header:
+    # THE EXEMPTION) binds a digit-led slug, story-<idx>-<digit>...md, by the row that declares it by `file:` (dr_bind).
+    cg_fb_=""; cg_rk_=""
     if ! story_idx_ok "${cg_sr_##*/}" "$cg_i_"; then
       cg_rk_="$(awk -F'\t' '$1 == "row" { n++; s = $2; k = $3 } END { if (n == 1 && s != "") { sub(/ \(.*$/, "", k); print k } }' <<<"$cg_row_")"
-      { [ -n "$cg_rk_" ] && cg_sk_="$(stem_rows "$cg_rk_")" && [ "$cg_sk_" = "$cg_rk_" ]; } \
-        || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and --story $STORY_F is not story-$cg_i_.md or story-$cg_i_-*.md, or its slug opens with a digit (a longer index); pass the story file the review is for"
+      cg_ix_="STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and --story $STORY_F is not story-$cg_i_.md or story-$cg_i_-*.md, or its slug opens with a digit (a longer index)"
+      cg_im_="--story binds index $cg_i_ only as story-$cg_i_.md or story-$cg_i_-<slug>.md whose slug opens with no digit, by a view row at $cg_z_ whose key with the review's sprint stripped from the slot after 'story-' is story-$cg_i_, or, for story-$cg_i_-<digit-led slug>.md, by the row keyed story-$cg_n_-<...> that declares it by 'file:' and whose key reads no other index of that name, with no other entry naming a file under the index at --base or frozen; pass the lead's own story file for this review, or correct the view's row"
+      if [ -n "$cg_rk_" ] && cg_sk_="$(stem_rows "$cg_rk_")" && [ "$cg_sk_" = "$cg_rk_" ]; then :
+      elif dr_f1 "${cg_sr_##*/}"; then dr_bind
+      else refuse_to "$cg_o_" "$cg_ix_; $cg_im_"; fi
     fi
     # Keyed on the `row` line naming an entry with a status, never on the exit: story-status exits 0
     # on a path no entry names.
     cg_rw_="$(awk -F'\t' '$1 == "row" { n++; s = $2; w = $3 } END { if (n == 1 && s != "") print "ok"; else if (n == 1) print w; else print "story-status printed " n + 0 " row line(s)" }' <<<"$cg_row_")"
     [ "$cg_rw_" = ok ] \
-      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption, and --story $cg_sr_ is not a story the implementation view lists at $cg_z_ (${cg_rw_:-$cg_row_}); pass the lead's own story file for this review (implementation.md, the lead re-runs a serial QA's check), which the view must list at $cg_z_ under a row keyed for index $cg_i_; on the no-run exemption claim STORY-BIND also holds --story's pairs to the index from --base to frozen, because inside the range the view is a record the dev writes, so a row moved there is no authority"
+      || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption, and --story $cg_sr_ is not a story the implementation view lists at $cg_z_ (${cg_rw_:-$cg_row_}); pass the lead's own story file for this review (implementation.md, the lead re-runs a serial QA's check), which the view must list at $cg_z_ under one row with a status, keyed for index $cg_i_ or, for a digit-led slug story-$cg_i_-<digit>...md, declaring it by 'file:' under the declared-row rule; on the no-run exemption claim STORY-BIND also holds --story's pairs to the index from --base to frozen, because inside the range the view is a record the dev writes, so a row moved there is no authority"
     STORY_F="$cg_sr_"
   fi
   if [ "$cg_x_" = 1 ]; then
@@ -1182,7 +1283,7 @@ canon_gate() {
     # <frozen> names a file under the review's index, by its declared `file:` or its resolved file, WHATEVER its status;
     # a view that gives no answer at either ref (absent, no `sprint:`, a `stories:` block that is not ok) is REFUSED,
     # never read as "nothing listed". It runs after the serial base checks, so a base that is no gate-1 base is refused
-    # with that remedy, not this one.
+    # with that remedy, not this one. THE DECLARED-ROW RULE does not widen it: the rule's own F5 reads both ends wider.
     for cg_ref_ in "$cg_b_" "$cg_z_"; do
       cg_ls_="$(ss_bound list-stories --ref "$cg_ref_" --root "$cg_r_" 2>&1 < /dev/null)" \
         || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view gives no answer at $cg_ref_ (${cg_ls_##*$'\n'}), so the stories under that index are unknown; the exemption is decided only over a range whose view lists the sprint's stories at both ends"
@@ -1210,6 +1311,8 @@ canon_gate() {
     # owns the view's path and grammar), under the index, in this sprint and not --story, refuses; no `since` line refuses.
     # A value is under the index by its literal basename or, BL-956, by the key of the row that named it (stem_rows over
     # the keys of `view-history --with-key`); --story's own pairs are held to the index from --base to frozen (THE RE-KEY, below).
+    # When --story bound by THE DECLARED-ROW RULE (cg_fb_), a value is also under the index by a basename of any slug
+    # (dr_under), and --story's pairs pass on a key meeting F3 and F4.
     cg_vh_="$(ss_bound view-history --with-key --ref "$cg_z_" --base "$cg_b_" --sprint "$cg_n_" --root "$cg_r_" "$STORY_F" 2>&1 < /dev/null)" \
       && [ "${cg_vh_%%$'\t'*}" = since ] \
       || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view's history up to $cg_z_ is unknown (${cg_vh_##*$'\n'}); the exemption is decided only where that history can be read"
@@ -1220,6 +1323,23 @@ canon_gate() {
     done <<<"${cg_vh_}"
     cg_sk_="$(stem_rows "$cg_ok_" 2>&1)" \
       || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view's history keys up to $cg_z_ cannot be read under that index (${cg_sk_##*$'\n'}); the exemption is decided only where every entry's index is known"
+    # THE DECLARED-ROW RULE (cg_fb_): a `window` key pairing --story's basename passes when it meets F3 and F4, as the
+    # frozen row cg_rk_ (proved at the bind, so never asked again) did: F3 once per reading over every other window key.
+    cg_fk_="$cg_rk_"$'\n'
+    if [ "$cg_fb_" = 1 ]; then
+      cg_wk_=""
+      while IFS=$'\t' read -r cg_k_ cg_hk_ cg_d_; do
+        [ "$cg_k_" = window ] && [ -n "$cg_hk_" ] && [ "$cg_hk_" != "$cg_rk_" ] && [ "${cg_d_##*/}" = "${STORY_F##*/}" ] || continue
+        case $'\n'"$cg_wk_" in *$'\n'"$cg_hk_"$'\n'*) ;; *) cg_wk_="$cg_wk_$cg_hk_"$'\n' ;; esac
+      done <<<"$cg_vh_"
+      cg_w3_="$(dr_f3_bad "$cg_wk_" 2>&1)" \
+        || refuse_to "$cg_o_" "STORY-BIND: $cg_f_ claims the record-only exemption for story index $cg_i_, and the implementation view's history keys pairing --story's file cannot be read under the other indexes of its name (${cg_w3_##*$'\n'}); the exemption is decided only where every entry's index is known"
+      while IFS= read -r cg_hk_; do
+        [ -n "$cg_hk_" ] || continue
+        case $'\n'"$cg_w3_"$'\n' in *$'\n'"$cg_hk_"$'\n'*) continue ;; esac
+        dr_f4_ok "$cg_hk_" && cg_fk_="$cg_fk_$cg_hk_"$'\n'
+      done <<<"$cg_wk_"
+    fi
     while IFS=$'\t' read -r cg_k_ cg_hk_ cg_d_; do
       [ "$cg_k_" = file ] || [ "$cg_k_" = window ] || continue
       # THE RE-KEY (BL-956): --story's own file, when --story does not carry the index literally, binds only by its row,
@@ -1228,16 +1348,18 @@ canon_gate() {
       # keyed elsewhere, or absent) binds that story, whose waiver is then read. Neither the literal rule nor the key's
       # stem naming <idx> is a key under ANOTHER index. A version BEFORE --base is the lead's planning, not the range's,
       # so a story the lead re-keyed there binds; the other stories' values stay the `file` lines, from the creation.
+      # Under THE DECLARED-ROW RULE a pair also passes on a key in cg_fk_ (F3 and F4 met).
       cg_rx_=""
       if [ "${cg_d_##*/}" = "${STORY_F##*/}" ]; then
         [ "$cg_k_" = window ] || continue
         story_idx_ok "${cg_d_##*/}" "$cg_i_" && continue
         [ -n "$cg_hk_" ] && case $'\n'"$cg_sk_"$'\n' in *$'\n'"$cg_hk_"$'\n'*) continue ;; esac
+        [ "$cg_fb_" = 1 ] && [ -n "$cg_hk_" ] && case $'\n'"$cg_fk_" in *$'\n'"$cg_hk_"$'\n'*) continue ;; esac
         cg_rx_=rekey
       else
         [ "$cg_k_" = file ] || continue
       fi
-      [ -n "$cg_rx_" ] || story_idx_ok "${cg_d_##*/}" "$cg_i_" \
+      [ -n "$cg_rx_" ] || story_idx_ok "${cg_d_##*/}" "$cg_i_" || { [ "$cg_fb_" = 1 ] && dr_under "${cg_d_##*/}"; } \
         || { [ -n "$cg_hk_" ] && case $'\n'"$cg_sk_"$'\n' in *$'\n'"$cg_hk_"$'\n'*) : ;; *) false ;; esac; } || continue
       # This sprint only: the declared directory, its leading ../ and ./ stripped, is a component suffix of --story's.
       cg_dd_="${cg_d_%/*}"; [ "$cg_dd_" != "$cg_d_" ] || cg_dd_=""
