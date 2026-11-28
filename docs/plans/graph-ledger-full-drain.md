@@ -1,6 +1,6 @@
 # Drain the graph consumer's push-candidate ledger — full sweep
 
-**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273, 70..76, 65..75, 66..75, 1796..1816, 55..62, 1814..1817, 93..113, 71..93, 66..88, 72..106, 88..111, 88..128, 78..117, 74..104, 68..96, 71..90, 68..90, 65..85. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
+**Archived sections live at `docs/plans/archive/graph-ledger-full-drain.md`** — rotated by `scripts/plan-rotate.sh`, original lines 144..196, 159..187, 170..214, 135..234, 149..216, 119..197, 118..174, 123..171, 102..124, 86..117, 85..101, 72..81, 69..76, 1235..1273, 70..76, 65..75, 66..75, 1796..1816, 55..62, 1814..1817, 93..113, 71..93, 66..88, 72..106, 88..111, 88..128, 78..117, 74..104, 68..96, 71..90, 68..90, 65..85, 136..171. It is a RECORD, not an instruction: read it for the evidence behind a figure, never for something to do.
 
 ## RESUME HERE
 
@@ -45,41 +45,94 @@ silences P9 through P13 on this file. **A record is moved whole, including any s
 written inside it**, so a rule that must outlive its batch belongs in action 1r under
 `### NEXT ACTIONS`, not in a batch record.
 
-**BATCH 270 — CLOSED.** Lead `ai-dlc-17`. Landed eight releases (`git log --format='%h %s' c8e5f5ec9..4fd882fa9`; PR numbers and merge shas from `gh pr view <n> --json mergeCommit`): 0.1266.0 = PR #1682 -> `461d79d09`, 0.1267.0 = PR #1683 -> `84bf5a7fb`, 0.1268.0 = PR #1684 -> `f7c6d7040`, 0.1269.0 = PR #1685 -> `736e6603a`, 0.1270.0 = PR #1686 -> `786978878`, 0.1271.0 = PR #1687 -> `88aa59ea3`, 0.1272.0 = PR #1688 -> `ef99eb33d`, 0.1273.0 = PR #1689 -> `4fd882fa9`; then the batch-close docs commit that adds this record. Each landing was verified by tree (origin/main tree equal to the pushed tree, the previous main tree DIFF as control). Owners: A `ai-dlc-80`, B and B2 `ai-dlc-3d`, C `ai-dlc-11`, D and D2 `ai-dlc-da`, E `ai-dlc-fa`, F `ai-dlc-7b`, G `ai-dlc-65`, H `ai-dlc-80 [2bd57d]`, I `ai-dlc-3c`, J `ai-dlc-28`, K `ai-dlc-51`; all CLOSABLE.
-- **What the batch delivered, in plain words:**
-  - The pre-push self-check runs a fixture whose only change is its own declaration files; the shard-merge fixture asks the merge for an ordinal map once per distinct story listing; six backlog records brought up to date, and the discard counter no longer counts a story-routing failure as a waiver (0.1266.0 = A + E + D; BL-1155, BL-1175, BL-1186, BL-1187, BL-819, BL-1005, BL-512, BL-1152).
-  - Two gate fixtures run their subjects in process, so their suites start fewer programs (0.1267.0 = B; BL-878).
-  - The remediator reads its resolution guidance only when a repair cycle has stopped, so its always-loaded role file shrinks; the per-wake recount for the batch-258 dispatcher options is recorded (0.1268.0 = H + B2 + D2; BL-1187, BL-538, BL-878).
-  - Eight fixtures count every in-process pass of their subjects, so no unrouted pass is left owed (0.1269.0 = F; BL-878).
-  - Every gate that runs gate validation closes through the gate program; Checks 12, 14 and 15 lose their hand-written path (0.1270.0 = G; BL-819, BL-1186).
-  - Pre-push pre-suite steps rerun when a declared input's file mode changes; `ledger-status-vocabulary` and `schema-install-fallback` copy only the files they read and now have sandbox read-set readings (0.1271.0 = I + J; BL-1155).
-  - A stories adversarial pass after the first reviews every story again, not only those whose text changed; the operator ruling that an entry's own decision rule, once met, is applied by the lead is in `.claude/rules/operator-rulings.md` (0.1272.0 = K; BL-1005 partial).
-  - The `--complete-repair --dispatch` wait beat names a serial remediator that finished without sealing its record and ends at once, and a `--complete` join over a serial record briefed with `--mark` WARNs (0.1273.0 = C; BL-541 partial).
-- **Rulings that bind later batches:** none added to action 1r.
-- **Close notes (NOTE tier):** the action-5 receipt histogram has nothing to run: every live entry declares `verify: manual` at both `c8e5f5ec9` and `4fd882fa9` (38 HAND-REVIEW each; the extraction emits 2 rows on a seeded two-receipt file). Graph pulled itself from 0.1259.0 to 0.1271.0 during the batch, on its own schedule. `PC-S325-SUPPRESSION-LIFETIME-CAP`, named by 0.1251.0, is still live in graph's ledger at a 0.1271.0 stamp.
-- **Owed, as facts:** BL-1155 (I's latent items 2-5 with their reopening triggers; J's two OWED items, the stale `git.decl` `seed` row and the unexercised VERSION-present install branch); BL-1005 (outcome reading at the next measured graph sprint; the later-pass brief carriers that still tell every shard to review only the repair; fixture coverage owed line); BL-541 (outcome reading at s324 close; its three owed items); BL-1212 item 3; BL-878 open items; BL-583, BL-1167 and BL-1255 outcome readings (graph's sprint 324 is not closed: `sprint 324 closed` 0, controls 323 = 1, 999 = 0); BL-806 open items; batch 265's owed list (BL-1221 item 3, BL-1207, BL-1187 item 3).
-- **Live entries** (each a `^## BL-` heading in `docs/backlog.md` at `4fd882fa9`, 38; derive with `grep -oE '^## BL-[0-9]+' docs/backlog.md`).
-- **NET:** NET 0 (`c8e5f5ec9`..`4fd882fa9`; heading sets of `docs/backlog.md` and `docs/backlog.archive.md` at both, compared by id): closed 0, filed 0, vanished 0; live 38->38, archive 1180->1180. Ctl: BL-1005 live at both, BL-99977 none.
-- **Derive block at `4fd882fa9`** (one fence at a time, detached worktree, graph read-only): VERSION `0.1273.0`; `docs/backlog.md` 38 headings, `docs/backlog.archive.md` 1180; receipt histogram 38 HAND-REVIEW, 0 CLOSE-CANDIDATE; qualifying refs 53; filings ahead of main 1 (SUPPRESSION-LIFETIME-CAP); uncommitted filings 0; live ledger 2, archived 458, TERMINAL 299; discharged and still live upstream 1 (SUPPRESSION-LIFETIME-CAP), in flight 1 (CONTEXT-MODE), untouched 0, discharged but unnamed 0, overlap 0; worklist 1 (BL-1212 citing PC-S323-CONTEXT-MODE; 2 entries cite a PC id). Oldest release naming each live id: CONTEXT-MODE `0.1184.0` (on `Not-discharged:` lines only), SUPPRESSION-LIFETIME-CAP `0.1251.0`. Graph's stamp on its checked-out branch and on `ai-dlc/carry-over/base-capital-path` (local and `origin/`): all four fields 0.1271.0 / 88aa59ea; graph's `main` 0.1195.0 / 91090ef5. Controls: floor 1, live 2; main ledger headings 60, main live ids 11; assertion 0; presence controls 1 each (7), impossible 0; delivery-gap impossible ids UNNAMED (both).
-- **Action 7 and 7a at `4fd882fa9` (detection only; no runbook, no pull):** graph's stamp 0.1271.0 / 88aa59ea on all four fields (`commit:` and `skill_commit:` the same sha) against shipped 0.1273.0: 2 behind. PENDING 0: no PC id named in `88aa59ea..4fd882fa9` messages (control PC-ZZZ-NOPE-0 0; present control PC-S325-DELIVER-REFUSES over all of origin/main 1). Bootstrapping step in the range: NO (`preclassify`, `apply.sh`, `ledger-reverify`, the ai-dlc `SKILL.md` and `core/skills/ai-dlc-update/` 0 of 15 changed `core/` files); mode-only changes 0 of 15. 7a: `git diff --name-only 88aa59ea..4fd882fa9 -- core/skills/ai-dlc-update/` is empty (control: 15 files under `core/`), so no engine changed and there is nothing to run. Reading: BANK IT. Sprint 324 not closed (0; controls 323 = 1, 999 = 0).
-- **Branch and worktree record:** every owner reported its cleanup after a content check (containment under a scratch index, or a per-file compare where the version stamp makes containment undiscriminating). The lead deleted `270-bundle-2` to `270-bundle-8` on the remote (`--no-verify`, exact names), each tip tree equal to a landed main tree (control: the batch-start tree, 0); after the delete, 0 `270-*` heads remain (control: `main` 1). Kept: `~/.cache/ai-dlc/readset-windows/batch-269/` and `batch-268/` (cited by BL-1155 and BL-878), and the local refs `267-U-fix` `b85e52cdc`, `267-U-fixture` `ba93fb226`, `267-U-docs` `14e40888f` and `rescue/b264-a2dd2a-pull-sh` `137739bfc`.
+**BATCH 271 — CLOSED.** Lead `ai-dlc-c3`.
 
-**BATCH 269 — CLOSED.** Lead `ai-dlc-5e`. Landed six releases (`git log --format='%h %s' 7c6892b51..059e555b8`; PR numbers and merge shas from `gh pr view <n> --json mergeCommit`): 0.1260.0 = PR #1675 -> `b805214c5`, 0.1261.0 = PR #1676 -> `f7b952d0d`, 0.1262.0 = PR #1677 -> `a1a2fe0b6`, 0.1263.0 = PR #1678 -> `cbe6abee6`, 0.1264.0 = PR #1679 -> `f58416eb9`, 0.1265.0 = PR #1680 -> `059e555b8`; then the batch-close docs commit that adds this record. Each landing was verified by tree (origin/main tree equal to the pushed tree, the previous main tree DIFF as control). Owners: A `ai-dlc-5b`, B `ai-dlc-b1`, C `ai-dlc-85`, D `ai-dlc-cc`, E `ai-dlc-a1`, F `ai-dlc-2c`, G `ai-dlc-e4`, H `ai-dlc-53`, I and I2 `ai-dlc-ae`; all CLOSABLE. Reserves `ai-dlc-11` and `ai-dlc-da` were not used.
+Four releases landed (`git log --format='%h %s' 2f3ea52f2..9af5a1157`; PR numbers and merge shas from `gh pr view <n> --json mergeCommit`):
+- 0.1274.0 = PR #1691 -> `1220f80ed`
+- 0.1275.0 = PR #1692 -> `d880ebf4a`
+- 0.1276.0 = PR #1693 -> `821023247`
+- 0.1277.0 = PR #1694 -> `9af5a1157`
+
+Then came the batch-close docs commit that adds this record. Each landing was verified by tree: the origin/main tree equals the pushed tree, with the previous main tree reading DIFF as the control.
+
+Owners: A `ai-dlc-9c`, B `ai-dlc-1d`, C `ai-dlc-84`, D `ai-dlc-df`, E `ai-dlc-01`, F `ai-dlc-17`, G `ai-dlc-cf`, H `ai-dlc-f0`, I `ai-dlc-da`. All are CLOSABLE.
+
+0.1276.0 bundled six owners' releases, assembled by the lead. 0.1277.0 shipped alone because it changes the bootstrapping `pull.sh`.
 - **What the batch delivered, in plain words:**
-  - Post-compact recovery and the consumer `CLAUDE.md` template order the `SKILL.md` Read in chunks of at most 16 KB; a forged `#inproc` marker is refused; the ledger-reverify shard question is answered with no change (0.1260.0; BL-1212 stays open on item 3, PC-S323-CONTEXT-MODE on its `Not-discharged:` line; BL-878; BL-1255 open for its outcome reading; BL-1175).
-  - Repair rounds stop dealing items to read-only adjudicator batches; the one lane or fan-in writer decides every item (0.1261.0; BL-716, BL-812, BL-974 partial).
-  - `snapshot-update.sh` warns when a lead writes an estimated `~HH:MMZ` time more than 10 minutes ahead of the clock (0.1262.0; BL-806).
-  - A consumer-layout side record keys on mode state, so an exec-bit or symlink-only change runs the unit; the consumer pre-push's layer-entries check does less work for the same answer; the escalation-status-vocabulary arm runs for real (0.1263.0; BL-1155 and BL-1167 partial; BL-878).
-  - `pull.sh deliver` on an already-open pull request updates it and exits 0, and a failed gh call after the push prints `DECIDE pr-failed`; the hard-remedies record keys on the consumer's HEAD and survives the self-update fast-forward (0.1264.0; bootstrapping; BL-1257 filed and closed, BL-1256 closed; discharges PC-S325-DELIVER-REFUSES-GH-PR-CREATE-AFTER-PUSH).
-  - Five fixtures declare the reads a sandbox trace found undeclared; `apply-drift-refile-b` and `-c`, which ship, key on seven `reconcile/` files (0.1265.0; BL-1155, BL-878 partial).
+  - The installer's version stamp is tested from a source that carries a VERSION and a commit. A stale `git.decl` row is gone, and two fixture comments now match their code (0.1274.0 = G; BL-878, BL-1155).
+  - The compaction-resume backstop closes every gate a lead walked out of, including gates opened and closed through `gate-run.sh`. BL-1221 is closed on its 268-bundle-8 push evidence (0.1275.0 = C; BL-819, BL-1221, BL-1155).
+  - Both of graph's sprint-324 candidates are fixed and closed here:
+    - Review binding works for a story whose slug starts with a digit (BL-1258, discharges `PC-S324-STORY-BIND-UNSATISFIABLE-WHEN-REVIEW-INDEX-AND-FILE-INDEX-AND-KEY-DIVERGE`).
+    - Acceptance-criteria ids are minted only inside the story's one Acceptance Criteria section (BL-1259, discharges `PC-S324-STRATEGY-ROWS-COUNTS-AC-RESTATEMENTS-OUTSIDE-THE-ACCEPTANCE-CRITERIA-SECTION`).
+
+    The same release also carries:
+    - Round briefs drop the role-file Read for a bound, current agent definition.
+    - A gate-3 re-arm at the same pass keeps the earlier plan.
+    - The dispatch guard records no placeholder mark.
+    - A later stories pass reviews an unchanged story whole.
+    - The s323 gate-pass value analysis: 4 of 10 FAILs were caught by no other round, so the pass stays.
+
+    (0.1276.0 = A + B + D + E + F + H; BL-1258, BL-1259, BL-1187, BL-1005, BL-1186, BL-541, BL-512.)
+  - The update engine's `pull.sh` runs in process for gate fixtures, so `layer-readopt-gate-e` starts two fewer programs (0.1277.0 = I, bootstrapping, shipped alone; BL-878).
 - **Rulings that bind later batches:** none added to action 1r.
-- **Close notes (NOTE tier):** `operator-rulings.md` "no pre-merge advisor call" disagrees with the advisor hook, which denied a `gh pr merge` until the advisor was called; the hook is outside the repo. `ledger-status-vocabulary` has no read-set reading: the sandbox tracer dropped its stream in every window and retake, and only `fs_usage` (operator-only) can read it. `PC-S325-DELIVER-REFUSES-GH-PR-CREATE-AFTER-PUSH` is named in 0.1264.0's message but cited by no backlog entry, so the derive block reads it UNTOUCHED. 33 worktrees are registered in this repo under `/private/var/folders/.../T/tmp.*/` (directories present, `.git/worktrees` dated 2026-11-19 to 2026-11-25, before this batch); unattributed and not removed.
-- **Owed, as facts:** BL-1155 (schema-install-fallback reading; ledger-status-vocabulary reading; the pregate selection gap for `inputs.decl`-only changes, its OWED item; five mode-key limits); BL-1212 item 3; BL-878 items other than 6; BL-583, BL-1167 and BL-1255 outcome readings (graph's sprint 324 is not closed: `sprint 324 closed` 0, controls 323 = 1, 999 = 0); BL-541 and BL-806 open items; batch 265's owed list (BL-1221 item 3, BL-1207, BL-1187 item 3).
-- **Live entries** (each a `^## BL-` heading in `docs/backlog.md` at `059e555b8`, 38; derive with `grep -oE '^## BL-[0-9]+' docs/backlog.md`).
-- **NET:** NET -1 (`7c6892b51`..`059e555b8`; heading sets of `docs/backlog.md` and `docs/backlog.archive.md` at both): closed 2 (BL-1256 from an earlier batch, plus BL-1257 filed and closed in-batch), filed 1 (BL-1257), vanished 0; live 39->38, archive 1178->1180. Ctl: BL-1005 live, BL-99977 none.
-- **Derive block at `059e555b8`** (one fence at a time, detached worktree, graph read-only, porcelain 31 before and after): VERSION `0.1265.0`; `docs/backlog.md` 38 headings, `docs/backlog.archive.md` 1180; receipt histogram 38 HAND-REVIEW, 0 CLOSE-CANDIDATE; qualifying refs 47; filings ahead of main 2 (SUPPRESSION-LIFETIME-CAP, DELIVER-REFUSES); uncommitted filings 0; live ledger 3, archived 457, TERMINAL 299; discharged and still live upstream 1 (SUPPRESSION-LIFETIME-CAP), in flight 1 (CONTEXT-MODE), untouched 1 (DELIVER-REFUSES), discharged but unnamed 0, overlap 0; worklist 1 (BL-1212 citing PC-S323-CONTEXT-MODE; 2 entries cite a PC id). Oldest release naming each live id: CONTEXT-MODE `0.1184.0` (on `Not-discharged:` lines only), SUPPRESSION-LIFETIME-CAP `0.1251.0`, DELIVER-REFUSES `0.1264.0`. Graph's stamp on its checked-out branch and on `ai-dlc/carry-over/base-capital-path` (local and `origin/`): all four fields 0.1259.0 / 1ceb8a0e; graph's `main` 0.1195.0 / 91090ef5. Controls: floor 1, live 3; main ledger headings 60, main live ids 11; assertion 0; presence controls 1 each (7), impossible 0; delivery-gap impossible ids UNNAMED (both).
-- **Action 7 and 7a at `059e555b8` (detection only; no runbook, no pull):** graph's stamp 0.1259.0 / 1ceb8a0e on all four fields (`commit:` and `skill_commit:` the same sha) against shipped 0.1265.0: 6 behind, WIDE. PENDING 1: PC-S325-DELIVER-REFUSES-GH-PR-CREATE-AFTER-PUSH, named by 0.1264.0 on a `Closes` line (`git log 1ceb8a0e..059e555b8 -F --grep`; control PC-ZZZ-NOPE-0 0); CONTEXT-MODE is named by 0.1260.0 on a `Not-discharged:` line only. Bootstrapping step in the range: YES (`git diff --name-only 1ceb8a0e..059e555b8 -- core/skills/ai-dlc-update/` = `SKILL.md`, `reconcile/pull.sh`, against 56 files under `core/`). 7a for the one changed engine, `pull.sh` (old and new copies DIFFER by `cmp -s`; `self-update-gate.sh`, `apply.sh`, `post-write-gates.sh` byte-identical): `gate` IDENTICAL (rc 0/0, 2457/2457 bytes, `GATE DEFER` with a `SELF-UPDATE-SAFE-STOP` row to 0.1260.0 first); `dry-run` DIFFER on the `PULL ... key=` token only (rc 0/0, 512/512 bytes; raw and `run=`-normalized both differ, the NOTE line's clone path left unnormalized; the key is `pull-key.sh`'s fingerprint F, which hashes every `reconcile/` file by blob, so the changed `pull.sh` moves it by construction). Controls in the same invocation: old `gate`, `dry-run` and `self-update-gate.sh` with theirs=base each differ from the real-argument run. Reading: owed, not shown required by a differential; BANK IT. Not measured: the 0.1264.0 fix lives in `deliver`, which 7a must not run; graph's uncommitted files; the `SKILL.md` change's effect. Graph's own session moved its HEAD from `7608cda85` to `b76ae529b` during the run (stamp unchanged; porcelain 31, then 23). Sprint 324 not closed (0; controls 323 = 1, 999 = 0).
-- **Branch and worktree record:** every owner reported its cleanup after a content check (containment under a scratch index, or a per-file blob compare where later edits made containment undiscriminating); superseded drafts deleted with their shas kept in the lead's rulings log. The lead deleted `269-bundle-1` to `269-bundle-4`, `269-A` and `269-I2` on the remote (`--no-verify`), each tip tree equal to a landed main tree (control: the batch-start tree, 0). Live agent worktrees under `.claude/worktrees/` at close: 0. Kept: `~/.cache/ai-dlc/readset-windows/batch-269/` (BL-1155 and BL-878 cite its judge outputs) and, carried from batch 268, `~/.cache/ai-dlc/readset-windows/batch-268/` (BL-878 item 9 cites it), the local refs `267-U-fix` `b85e52cdc`, `267-U-fixture` `ba93fb226` and `267-U-docs` `14e40888f` (superseded inside 0.1249.0) and `rescue/b264-a2dd2a-pull-sh` `137739bfc`.
+- **Close notes (NOTE tier):**
+  - The action-5 receipt histogram has nothing to run. Every live entry declares `verify: manual` at both `2f3ea52f2` and `9af5a1157` (37 HAND-REVIEW at the end; the extraction emits 2 rows on a seeded two-receipt file).
+  - Read-set traces in the lead's window after the last merge (main checkout detached at `9af5a1157`, 0 agent worktrees). Their readings are in BL-878 and BL-1155:
+    - `story-evidence-scaffold-c` and `layer-readopt-gate-e` were traced with `--declared-out`. The `layer-readopt-gate-e` reading is PLUS 3 / MINUS 1, decision owed.
+    - `retro-compliance-workflow` was traced with plain `--list`, and the map came out byte-identical to the committed one, so there is nothing to commit.
+  - Graph's `pending.md` carries 15 entries with no status, which its next Check 2 will refuse. That is graph's own state. It was measured earlier in the batch and reported to the operator; it was not re-derived at close.
+  - `CITE1` of `scripts/validate-backlog-receipts.sh` does not cover a citation that goes stale because its TARGET file moved. Its population is only entries whose body changed since the merge-base (header at `scripts/validate-backlog-receipts.sh:1765` "POPULATION: the entries, by BL id, whose body"). On this close's first tree (eadfbc0d7), BL-512 cited this plan at line 982 for action 1o's heading while that heading sat at line 1034, and both the validator and pregate read rc 0. The lead re-pointed it by hand. Recommend filing next batch: a plan edit or rotation should re-judge every live citation into the edited file.
+  - 33 worktrees from earlier batches remain registered under `/private/var/folders/.../T/tmp.*/`, plus one, `rot-v1`, under another session's scratchpad. None is attributed to this batch and none was removed.
+- **Owed, as facts:**
+  - BL-878: item 6 for the remaining fixtures, and the `layer-readopt-gate-e` PLUS/MINUS decision.
+  - BL-1155: its latent items.
+  - BL-1187 and BL-1186: their NOTEs.
+  - BL-541: rendering the shard-close line of `core/skills/ai-dlc/steps/implementation.md:430`.
+  - BL-1005 and BL-512: outcome readings at the next measured graph sprint.
+  - BL-1212 item 3.
+  - BL-583, BL-1167 and BL-1255: outcome readings. Graph's sprint 324 is not closed (`sprint 324 closed` reads 0; controls 323 = 1, 999 = 0).
+  - BL-806: open items.
+  - Batch 265's owed list: BL-1221 item 3, BL-1207, BL-1187 item 3.
+- **Live entries:** 37 `^## BL-` headings in `docs/backlog.md` at `9af5a1157`. Derive with `grep -oE '^## BL-[0-9]+' docs/backlog.md`.
+- **NET:** -1, over `2f3ea52f2`..`9af5a1157`, comparing the heading sets of `docs/backlog.md` and `docs/backlog.archive.md` at both ends by id. Closed 3: BL-1221 from an earlier batch, plus BL-1258 and BL-1259, which were filed and closed in this batch. Filed 2: BL-1258 and BL-1259. Vanished 0. Live went 38->37 and the archive 1180->1183. Controls: BL-1005 is live at both ends; BL-99977 appears at neither.
+- **Derive block at `9af5a1157`:** one fence at a time, from a detached worktree, with graph read-only (graph porcelain 4 before and after).
+  - VERSION `0.1277.0`. `docs/backlog.md` has 37 headings; `docs/backlog.archive.md` has 1183.
+  - Receipt histogram: 37 HAND-REVIEW, 0 CLOSE-CANDIDATE.
+  - Qualifying refs 56. Filings ahead of main 3: STORY-BIND, STRATEGY-ROWS, SUPPRESSION-LIFETIME-CAP. Uncommitted filings 0.
+  - Live ledger 4, archived 458, TERMINAL 299.
+  - Discharged and still live upstream: 3 (the three S324 ids). In flight: 1 (CONTEXT-MODE). Untouched 0, discharged but unnamed 0, overlap 0.
+  - Worklist: 1 (BL-1212, citing PC-S323-CONTEXT-MODE). 2 entries cite a PC id.
+  - Oldest release naming each live id:
+
+    | Live id | Oldest release |
+    |---|---|
+    | CONTEXT-MODE | `0.1184.0` (on `Not-discharged:` lines only) |
+    | SUPPRESSION-LIFETIME-CAP | `0.1251.0` |
+    | STORY-BIND | `0.1276.0` |
+    | STRATEGY-ROWS | `0.1276.0` |
+
+  - Graph's stamp is 0.1273.0 / 2f3ea52f on all four fields, on its checked-out branch and on `ai-dlc/carry-over/base-capital-path` (local and `origin/`). Graph's `main` is 0.1195.0 / 91090ef5.
+  - Controls:
+    - floor 1, live 4;
+    - main ledger headings 60, main live ids 11;
+    - assertion 0;
+    - presence controls 1 each (7), impossible 0;
+    - delivery-gap impossible ids UNNAMED (both).
+- **Action 7 and 7a at `9af5a1157`:** detection only; no runbook, no pull.
+  - **Stamp and gap:** graph's stamp, 0.1273.0 / 2f3ea52f on all four fields, against shipped 0.1277.0, so graph is 4 behind.
+  - **PENDING 2:** the two S324 ids named by 0.1276.0. Both are live headings in graph's ledger. Controls: PC-ZZZ-NOPE-0 reads 0 in the range; the present control PC-S325-DELIVER-REFUSES reads 1 over all of origin/main.
+  - **Bootstrapping step in the range: YES.** `core/skills/ai-dlc-update/reconcile/pull.sh` changed, in 0.1277.0 only. It is the one changed file under `core/skills/ai-dlc-update/`, out of 46 changed `core/` files. Mode-only changes: 0 of 46 (blob-equal test only; no seeded positive control was run for it).
+  - **7a differential.** Old engine = `git archive 2f3ea52f`; new = `git archive origin/main`. Each ran under `env -i` against its own fresh `file://` clone of graph's sprint branch, with `origin` removed. A `cmp -s` control confirms the two `pull.sh` copies differ.
+    - `pull.sh gate` exits 0 on both sides; raw output is IDENTICAL (`GATE DEFER`).
+    - `pull.sh dry-run` exits 0 on both sides, with the same finding rows: 7 `HARD-LAYER-ADJUDICATION-MISSING` and 1 `DECIDE setup-site-merge`. Raw: DIFFER. With only the `run=` path normalized: DIFFER (the `NOTE report-restarted` row embeds the clone path and a utc stamp). After normalizing clone path, utc stamp and pid, the only difference is the `PULL key=` field. From the code (`core/skills/ai-dlc-update/reconcile/pull-key.sh:83-86`, not traced in this run), that key hashes the engine's `reconcile/` files, which is expected to differ. With that masked, the outputs are IDENTICAL.
+  - **Reading: BANK IT.** The null does not cover:
+    - the sourced in-process branch of the wrap;
+    - the `apply`/`finish`/`deliver` forms;
+    - graph's uncommitted `_bmad-output/` state.
+- **Branch and worktree record:**
+  - Every owner reported its cleanup after a content check: containment under a scratch index, or a per-file compare where version stamping makes containment undiscriminating. Superseded drafts were deleted on the lead's ruling, recorded in the batch's rulings log.
+  - The lead deleted `271-bundle-1` to `271-bundle-4` on the remote (`--no-verify`, exact names). Each tip tree equals a landed main tree. After the delete, 0 `271-*` heads remain (control: `main` 1).
+  - Kept: `~/.cache/ai-dlc/readset-windows/batch-269/` and `batch-268/`, and the local refs `267-U-fix` `b85e52cdc`, `267-U-fixture` `ba93fb226`, `267-U-docs` `14e40888f` and `rescue/b264-a2dd2a-pull-sh` `137739bfc`.
 
 ### Derive the state; do not trust the numbers below
 
