@@ -83,7 +83,7 @@
 #
 # Detectors run ONCE per `apply`: one render with --keep-raw, then the union gate and apply.sh's three
 # pre-write calls answer from that store while F (reconcile/pull-key.sh) is unchanged.
-set -uo pipefail
+pl_main() { set -uo pipefail
 
 case "${BASH_SOURCE[0]}" in */*) R="${BASH_SOURCE[0]%/*}" ;; *) R=. ;; esac
 R="$(cd "$R" && pwd)"
@@ -1665,3 +1665,6 @@ case "$cmd" in
   cut-from) [ $# -eq 2 ] || usage; pl_cut_from "$@" ;;
   *) usage ;;
 esac
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] || return 0
+pl_main "$@"

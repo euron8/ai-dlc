@@ -19,6 +19,14 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1277.0] - 2026-11-27
+
+### The update engine's `pull.sh` can now be driven in process, so a gate fixture no longer starts it as a program (BL-878)
+
+- `core/skills/ai-dlc-update/reconcile/pull.sh` is wrapped as a loadable `pl_main`: running the file behaves exactly as before, and sourcing it only defines functions. Fixtures use this to run a pull merge inside their own process instead of starting a new shell for it.
+- The `layer-readopt-gate` fixture's two `pull.sh merge` runs now go in process, and its shard `layer-readopt-gate-e` drops its two end-to-end cells. The second merge runs on its own copy of the consumer so two merges in the same second cannot share a run directory.
+- Action for consumers: none. The first pull after this release re-runs the detectors once, because the engine's `reconcile/` files are part of the stored detector fingerprint; it costs time and changes no answer.
+
 ## [0.1276.0] - 2026-11-27
 
 ### A serial QA review can now bind to a story whose file name opens its slug with a digit when the view row declares that file

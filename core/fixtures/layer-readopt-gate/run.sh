@@ -152,6 +152,7 @@ DRIFT="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/layer-drift.sh" \
 REG="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/register-drift.sh" \
             "$HERE/../../../core/skills/ai-dlc-update/reconcile/register-drift.sh" \
             "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/register-drift.sh")"
+PULL="$(dirname "$READOPT")/pull.sh"
 DIST="$ROOT/dist"; CONS="$ROOT/consumer"
 OVR="$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md"
 BASE="$(git -C "$DIST" rev-parse --short HEAD~1)"
@@ -160,12 +161,13 @@ THEIRS="$(git -C "$DIST" rev-parse --short HEAD)"
 # shellcheck source=/dev/null
 . "$HERE/../lib/report.sh" || { echo "FIXTURE ERROR: lib/report.sh not found" >&2; exit 2; }
 
-# IN PROCESS (BL-878), every shard. Every drive of readopt-override.sh, unregistered-drift.sh and register-drift.sh
-# (units main, f, e2, gh, j, stub) calls the subject's entry function (rov_main, ud_main, rd_main) through
-# lib/inproc.sh's inproc_run, in a subshell made to look like a fresh `bash <subject>`. No inproc_load: three subjects,
-# so each pass sources the path it runs and fx_inproc logs it under that path (one `inproc:` row per subject a shard
-# drives). The only command-line starts of the three are shard a's `cli` cells of cells.decl, one per distinct CLI
-# outcome, each compared byte for byte with the in-process call. Units c3 and sup drive none of the three.
+# IN PROCESS (BL-878), every shard. Every drive of readopt-override.sh, unregistered-drift.sh, register-drift.sh and
+# pull.sh (units main, f, e2, gh, j, stub) calls the subject's entry function (rov_main, ud_main, rd_main, pl_main)
+# through lib/inproc.sh's inproc_run, in a subshell made to look like a fresh `bash <subject>`. No inproc_load: four
+# subjects, so each pass sources the path it runs and fx_inproc logs it under that path (one `inproc:` row per subject
+# a shard drives). The only command-line starts of the first three are shard a's `cli` cells of cells.decl, one per
+# distinct CLI outcome, each compared byte for byte with the in-process call; pull.sh has none. Units c3 and sup
+# drive none of the four.
 #
 # THE BLOB MEMO. A CLI run sources lib.sh at the top of its own process and builds a private memo for that run; in a
 # subshell lib.sh does not (it keys on `$BASH_SUBSHELL` 0). So `lrg_ip` hands each run a FRESH memo, as private to
@@ -183,9 +185,9 @@ if sg main || sg f || sg e2 || sg gh || sg j || sg stub; then
   . "$HERE/../lib/mutant.sh" || { echo "FIXTURE ERROR: sourcing lib/mutant.sh failed" >&2; exit 2; }
   [ -f "$HERE/../lib/inproc.sh" ] || { echo "FIXTURE ERROR: lib/inproc.sh not found beside $HERE" >&2; exit 2; }
   . "$HERE/../lib/inproc.sh" || { echo "FIXTURE ERROR: sourcing lib/inproc.sh failed" >&2; exit 2; }
-  lrg_gate() { # <subject> <entry> -> returns on a wrapped subject; SKIP, FAIL or FIXTURE ERROR otherwise
+  lrg_gate() { # <subject> <entry> [exact def line] -> returns on a wrapped subject; SKIP, FAIL or FIXTURE ERROR otherwise
     local _s="$1" _e="$2" _def=0 _grd=0 _gx
-    grep -q "^$_e() {\$" "$_s"; _gx=$?
+    grep -qxF "${3:-$_e() {}" "$_s"; _gx=$?
     [ "$_gx" -le 1 ] || { echo "FIXTURE ERROR: cannot read $_s (grep exit $_gx) -- an unreadable subject is not one that predates the wrap" >&2; exit 2; }
     [ "$_gx" -ne 0 ] || _def=1
     grep -qxF '[ "${BASH_SOURCE[0]}" = "$0" ] || return 0' "$_s"; _gx=$?
@@ -201,14 +203,15 @@ if sg main || sg f || sg e2 || sg gh || sg j || sg stub; then
   [ -z "$REG" ] || lrg_gate "$REG" rd_main
 fi
 lrg_ip() { # <subject> <entry> [args...] -> what `bash <subject> [args...]` prints and exits with, in process
-  # The subject is named by a literal basename, never forwarded as a positional: shard e declares the unguarded
-  # pull.sh, and an inproc_run operand no static scan can resolve would read as a source of it (P2).
+  # The subject is named by a literal basename, never forwarded as a positional: an inproc_run operand no static
+  # scan can resolve would read as a source of the subject (P2).
   local _m _rc _lrg_p
   case "$1" in
     "$READOPT") _lrg_p="${1%/*}/readopt-override.sh" ;;
     "$UNREG")   _lrg_p="${1%/*}/unregistered-drift.sh" ;;
     "$REG")     _lrg_p="${1%/*}/register-drift.sh" ;;
-    *) echo "lrg_ip: $1 is none of the three in-process subjects" >&2; return 125 ;;
+    "$PULL")    _lrg_p="${1%/*}/pull.sh" ;;
+    *) echo "lrg_ip: $1 is none of the four in-process subjects" >&2; return 125 ;;
   esac
   shift
   case "$(declare -p AI_DLC_RECONCILE_MEMO 2>/dev/null)" in
@@ -1845,12 +1848,21 @@ if sg stub; then
 # Its own world: one dist with a BASE, a theirs whose `## Rule 8` carries lib.sh's pointer sentence (the stub) and a
 # sibling theirs whose section is byte-identical but for that one line (the twin). The same override is driven
 # against both, so every stub arm has a twin one property apart. Shard e is .dist-only: the subject is always
-# present here, so a missing pointer grammar is a regression (bad), never a SKIP.
+# present here, so a missing pointer grammar is a regression (bad), never a SKIP. pull.sh is the exception: a consumer
+# can receive this file one pull before the wrapped pull.sh, so its shape is gated first (lrg_gate).
 REC_DIR="$(cd "$(dirname "$READOPT")" && pwd -P)"
 echo "HERMETIC-CONSUMED $REC_DIR/pull.sh"
 if [ -z "$DRIFT" ] || [ ! -f "$REC_DIR/pull.sh" ] || ! grep -q '^rule_body_pointers() {' "$REC_DIR/lib.sh"; then
   bad "stub: layer-drift.sh, pull.sh or lib.sh's rule_body_pointers() is missing beside readopt-override.sh -- the pointer-stub arms cannot run"
 else
+  lrg_gate "$PULL" pl_main 'pl_main() { set -uo pipefail'
+  # The #inproc parent marker of an in-process pull.sh pass (drv_mark of trunk-audit-gate): one row naming pull.sh,
+  # then FXCOUNT_PARENT, so the readopt-override.sh children the merge starts read as nested under it. Literal ids.
+  lrg_mark() { # <id>
+    [ -n "${FXCOUNT_LOG:-}" ] || return 0
+    printf '#inproc\t%s\t\t%s\t%s\n' "$1" "${FXCOUNT_PARENT:-}" "$PULL" 2>/dev/null >> "$FXCOUNT_LOG" || :
+    export FXCOUNT_PARENT="$1"
+  }
   SW="$(mktemp -d "${TMPDIR:-/tmp}/lrg-stub.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
   SD="$SW/dist"; SC="$SW/consumer"
   mkdir -p "$SD/core/skills/ai-dlc/rule-bodies" "$SC/.claude/skills/ai-dlc/overrides"
@@ -1881,6 +1893,12 @@ else
       'Intro line kept across the range.' '' 'Second paragraph, kept across the range.' '' 'Divergence clause, OLD wording.'
   } > "$SOV"
   git -C "$SC" add -A && git -C "$SC" commit -qm consumer
+  # pull.sh names its run directory run-<utc second>-$$, and in process $$ is this fixture's pid: two merges on ONE
+  # consumer started in the same second would collide, so the twin merge runs on its own copy.
+  SC2="$SW/consumer-twin"
+  cp -R "$SC" "$SC2" || { echo "FIXTURE ERROR: cannot copy the consumer" >&2; exit 2; }
+  SOV2="$SC2/.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md"
+  SDEC2="$SC2/_bmad-output/ai-dlc-update/pull-decisions.tsv"
   st_diff="$(git -C "$SD" diff "$STW" "$STS" -- core/skills/ai-dlc/SKILL.md)"
   [ -n "$SB" ] && [ -n "$STS" ] && [ -n "$STW" ] && [ "$STS" != "$STW" ] \
     && [ "$(grep -c '^[-+][^-+]' <<<"$st_diff")" = 1 ] \
@@ -1939,18 +1957,18 @@ else
   SDEC="$SC/_bmad-output/ai-dlc-update/pull-decisions.tsv"
   SOV_REL=.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md
   cp "$SW/ovr.pristine" "$SOV" || { echo "FIXTURE ERROR: cannot restore the override" >&2; exit 2; }
-  FXCELL=stub-pm bash "$REC_DIR/pull.sh" merge "$SD" "$SB" "$SC" "$STS" "$SOV_REL" > "$SW/pm.out" 2> "$SW/pm.err" < /dev/null; pm_rc=$?
+  ( lrg_mark i$$.pm; lrg_ip "$PULL" pl_main merge "$SD" "$SB" "$SC" "$STS" "$SOV_REL" ) > "$SW/pm.out" 2> "$SW/pm.err" < /dev/null; pm_rc=$?
   if [ "$pm_rc" = 3 ] && grep -q '^REFUSED  SKILL__Rule-8.md: OVERRIDE-SHADOWS-POINTER-STUB ' "$SW/pm.out" \
      && ! grep -q '^DECIDE ' "$SW/pm.out" && [ ! -e "$SDEC" ] && [ "$(git hash-object "$SOV")" = "$sov0" ]; then
     ok "stub-pull-merge: pull.sh merge relays the OVERRIDE-SHADOWS-POINTER-STUB refusal, exits 3, records no decision row and leaves the override's bytes"
   else
     bad "stub-pull-merge: rc=$pm_rc decisions-file=$([ -e "$SDEC" ] && echo present || echo absent) out: $(head -3 "$SW/pm.out" | tr '\n' '|') err: $(head -2 "$SW/pm.err" | tr '\n' '|')"
   fi
-  cp "$SW/ovr.pristine" "$SOV" || { echo "FIXTURE ERROR: cannot restore the override" >&2; exit 2; }
-  FXCELL=stub-pmt bash "$REC_DIR/pull.sh" merge "$SD" "$SB" "$SC" "$STW" "$SOV_REL" > "$SW/pmt.out" 2> "$SW/pmt.err" < /dev/null; pmt_rc=$?
+  cp "$SW/ovr.pristine" "$SOV2" || { echo "FIXTURE ERROR: cannot restore the override" >&2; exit 2; }
+  ( lrg_mark i$$.pmt; lrg_ip "$PULL" pl_main merge "$SD" "$SB" "$SC2" "$STW" "$SOV_REL" ) > "$SW/pmt.out" 2> "$SW/pmt.err" < /dev/null; pmt_rc=$?
   if [ "$pmt_rc" = 0 ] && grep -q '^DECIDE override-drift .claude/skills/ai-dlc/overrides/SKILL__Rule-8.md merged$' "$SW/pmt.out" \
-     && grep -q '^override-drift	.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md	' "$SDEC" 2>/dev/null \
-     && grep -q 'Divergence clause, NEW wording.' "$SOV" && grep -q 'Consumer intensity: service/ is FULL' "$SOV" \
+     && grep -q '^override-drift	.claude/skills/ai-dlc/overrides/SKILL__Rule-8.md	' "$SDEC2" 2>/dev/null \
+     && grep -q 'Divergence clause, NEW wording.' "$SOV2" && grep -q 'Consumer intensity: service/ is FULL' "$SOV2" \
      && ! grep -q 'OVERRIDE-SHADOWS-POINTER-STUB' "$SW/pmt.out" "$SW/pmt.err"; then
     ok "stub-pull-merge-twin: on the twin, pull.sh merge merges cleanly (theirs' clause in, the consumer line kept) and records its decision row"
   else

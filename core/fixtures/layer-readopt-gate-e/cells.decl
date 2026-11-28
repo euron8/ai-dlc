@@ -1,6 +1,4 @@
-# layer-readopt-gate-e's starts of its subjects (BL-879 grammar). Unit stub drives readopt-override.sh in process
-# (rov_main through inproc_run); its two pull.sh merge runs stay end to end, and pull.sh starts readopt-override.sh as
-# its own child, which the nested row covers.
-e2e core/skills/ai-dlc-update/reconcile/pull.sh stub-pm why=pull.sh has no entry function, so its merge runs start as a program; the merge path reads no reconcile/lib.sh memo (pull.sh never sources lib.sh, readopt-override.sh is its own child at BASH_SUBSHELL 0); converting needs pull.sh wrapped as an entry function driven by inproc_run, a bootstrapping change that ships alone; the merge relays the readopt-override.sh child's refusal and exit
-e2e core/skills/ai-dlc-update/reconcile/pull.sh stub-pmt why=pull.sh has no entry function, so its merge runs start as a program; the merge path reads no reconcile/lib.sh memo (pull.sh never sources lib.sh, readopt-override.sh is its own child at BASH_SUBSHELL 0); converting needs pull.sh wrapped as an entry function driven by inproc_run, a bootstrapping change that ships alone; the twin merge records the readopt-override.sh child's decision row
-nested core/skills/ai-dlc-update/reconcile/pull.sh core/skills/ai-dlc-update/reconcile/readopt-override.sh why=pull.sh merge starts readopt-override.sh --merge once per override
+# layer-readopt-gate-e's starts of its subjects (BL-879 grammar). Unit stub drives readopt-override.sh (rov_main) and
+# pull.sh (pl_main) in process through inproc_run; neither is started as a program here. pull.sh sources only
+# reconcile/pull-key.sh, and its merge starts readopt-override.sh as a child, once per override.
+nested core/skills/ai-dlc-update/reconcile/pull.sh core/skills/ai-dlc-update/reconcile/readopt-override.sh why=an in-process pl_merge starts readopt-override.sh --merge as a program under an #inproc marker naming pull.sh, once per override
