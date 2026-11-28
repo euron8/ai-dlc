@@ -49960,3 +49960,63 @@ Step: pipeline
 Provenance: batch 269, lead ai-dlc-5e, owner ai-dlc-5b; consumer candidate filed by graph.
 
 verify: sh grep -Fq 'dp-a:' core/fixtures/reconcile-pull-driver/run.sh || exit 9; o=$(mktemp) || exit 9; bash core/fixtures/reconcile-pull-driver/run.sh > "$o" 2>&1 || exit 1; grep -Fq 'PASS: reconcile-pull-driver' "$o" || exit 1; for l in 'dp-a:' 'dp-d:' 'dp-n:' 'dp-f:'; do grep -Fq "ok    $l" "$o" || exit 1; done
+## BL-1221 — pre-push consumer-layout selection: a skip on a confirmed placement record is named nowhere, and one box-wide record file per fixture lets pushes from different trees invalidate each other's `<fx>@consumer` units
+
+**NOTE.** Filed 2026-11-22 (batch 264, cluster L). Owner: `.githooks/pre-push` (`cl_select`, `cl_publish`; hook copies bound by I66).
+
+Goal: a push log names every `<fx>@consumer` unit it did not run, and a placement record written by one tree is not overwritten by another. One done condition: the log names the confirmed-record skips, and `cl_publish` keys or guards its record so a push from tree B leaves tree A's record intact.
+
+Baseline: 24 of 38 placement records written at 10:56:02 on 2026-11-22 hold installed `run.sh` sha256 values that match no revision of `core/fixtures/<fx>/run.sh` in any ref or any of the 58 worktrees (control: `adversarial-shard-merge-c` and `-d` found at 56877eb4d); the other 14 match a historical revision. The claimed 10:49:00 rewrite did not reproduce (none at that mtime; 36 at 11:09:53). The waste per push is not yet measured; item 3 owns it.
+
+Work list:
+
+1. Name the confirmed-record skips. `.githooks/pre-push:3376` "counted on the selection line and not named" says an `<fx>@consumer` unit skipped on an unchanged, confirmed record is counted and not named. The named sites are `:3369` "consumer layout: %s of %s shipping fixture(s)", the `$4 == "d"` skips at `:3371`, `:3383` "skipped on a pass recorded elsewhere" (unconfirmed-record skips only) and `:3524` "PENDING count is unrecorded". A by-name coverage check over the push log cannot tell such a unit from a gap; the count is recoverable only by subtraction.
+2. Key the placement records by content, or have `cl_publish` refuse to overwrite a record a different tree wrote. Records are one file per fixture, `<vs>/consumer-placement-keys/<repo root commit>/<fx>.key` (`rec_home`, `:3301`), with no per-tree or per-clone component, and `cl_publish` (`:3419` `mv "$kd/$2.key.tmp.$$" "$kd/$2.key"`) replaces the old file, so the last writer across every tree and clone on the box wins.
+3. Measure `<fx>@consumer` reruns per push before and after, from `.git/ai-dlc-suite-key.log` and `.git/ai-dlc-fixture-durations`, and write the outcome beside the baseline.
+
+**PARTIAL (v0.1233.0).** Batch 265, cluster H. Items 1 and 2 are built; item 3 is owed (the before and after `<fx>@consumer` reruns per push, read off the gate record after landing). Item 1: the selection prints a `placement records:` line naming each `<fx>@consumer` unit skipped on a confirmed record (the `.rskip` set minus `.vs.u`), naming a content-keyed (`h`) skip on its own `placement records:` line as a content-keyed pass, never as a confirmed record, because a census-written side record was never confirmed. Item 2: `cl_publish` keeps `<kd>/<fx>.key` and also writes `<kd>/<fx>.k/<sha256 of the record's non-`#` rows>`; the `cl_select` reader turns a row that is both `run` and flag `k` into `skip` with reason `h` when the prospective record's row hash has a side record, so a record written by another tree is no longer displaced. A record written before this build reads exactly as at base; `quiet()` and `.unconfirmed` stay per fixture. Both hooks carry it (I66). D3 as built: the `h` skip applies in census mode when `AI_DLC_CL_DIST_OUT` is named, so `scripts/predict-push-set.sh` predicts it as `d` is predicted, and a real census still runs every unit (arm `cl.hp`). D2 as built: an `h` skip's `#pending` count is read from its own side record (`.cl/.kpn`), not from `<fx>.key`, and `cl_publish` copies the side record from its private temporary file before the `mv` (arm `cl.h` poisons the foreign record's count). The filed receipt passed a never-overwrite wedge and a side copy nothing reads, and would now also pass this build without testing the reader; it is withdrawn, and the entry carries `verify: manual` while item 3 is open (arm R12). Intended close receipt, for item 3's landing: `for h in .githooks/pre-push core/git-hooks/pre-push; do [ -f $h ] || exit 9; grep -q 'placement records:' $h || exit 1; grep -qF '>> "$c/.hhit"' $h || exit 1; done; grep -q 'cl.h' core/fixtures/consumer-suite-pool/run.sh || exit 9` together with the outcome line beside the baseline; the reader itself is driven by arm `cl.h` of `core/fixtures/consumer-suite-pool/run.sh`.
+
+**Outcome, item 3 (batch 265 close; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The three batch-265 gate logs, each run by the new hook and green (rc 0, `pre-push: all gates green`), partition all 174 shipping fixtures' `<fx>@consumer` units on their selection lines. Derivation: per selection line, `tr ' ' '\n' | grep -c '@consumer$'`, less the `<fx>@consumer` token in the line's own text; units run, `grep -cE 'done [0-9]+/[0-9]+ +ok .*@consumer$'`; control, `zz-nonexistent-fx9@consumer`, 0 in each log. Columns are: ran, skipped as byte copies of a passed distribution twin, skipped on a confirmed placement record, skipped on a pass recorded elsewhere.
+- 0.1233.0 push (main checkout at 95dc4e1b4): 24, 15, 97, 38 (sum 174).
+- 0.1234.0 push (from a hand worktree, 8a55be03b): 6, 43, 121, 4 (sum 174).
+- 0.1235.0 push (eda852baf): 1, 73, 99, 1 (sum 174).
+- Every unit is named in each log, so item 1's by-name check closes on the log alone.
+- Content-keyed (`h`) skips: 0 in all three (`grep -c 'skipped on a content-keyed pass'`; control `skipped on a confirmed record`, 1 per log; the string is emitted at `.githooks/pre-push:3405`). The 0.1233.0 push was the first under the new hook, so no side record existed and its 0 is structural. No push has yet shown an `h` skip, so item 2's effect is not yet observed on a push.
+- Before: not taken, and a source exists. `.git/ai-dlc-fixture-durations` keeps one cost per unit and `.git/ai-dlc-suite-key.log` one HIT or MISS per suite, so neither holds a per-push `<fx>@consumer` count. A push log from before 0.1233.0 would hold it, and none was read.
+- Item 3 stays owed: the before reading, and an `h` skip observed on a push.
+
+**Outcome, item 3 before (batch 268, M; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The before reading is taken from 10 real pushes of this repo made before 0.1233.0, all on 2026-11-22 (batch 264), all green, all run by the old hook (no `placement records:` line, and each log's mtime is before the 0.1233.0 commit at 20:36:44-05:00). Columns as above: ran, twin, confirmed, elsewhere; 174 shipping fixtures in each.
+
+| push log | time | ran | twin | confirmed | elsewhere |
+|---|---|---|---|---|---|
+| push-A | 08:39 | 17 | 4 | 104 | 49 |
+| push-B2 | 09:05 | 1 | 5 | 78 | 90 |
+| push-F | 09:29 | 3 | 6 | 100 | 65 |
+| push-G | 09:50 | 1 | 6 | 129 | 38 |
+| push-K | 10:06 | 10 | 7 | 123 | 34 |
+| push-H | 10:24 | 3 | 5 | 101 | 65 |
+| push-D | 10:42 | 9 | 14 | 147 | 4 |
+| push-J | 11:10 | 4 | 19 | 115 | 36 |
+| push-O | 13:39 | 15 | 18 | 106 | 35 |
+| push-I | 15:43 | 0 | 18 | 124 | 32 |
+
+- Derivation: the batch-265 derivation above, by the same script. The confirmed column before 0.1233.0 is BY SUBTRACTION (174 − ran − twin − elsewhere), because the old hook did not name those skips (item 1's defect).
+- Filter: 449 transport-tail files under the session scratchpads and `.git` (depth 4, at least 20 KB), 443 with the consumer-layout line, less 410 fixture-world copies and 3 `push.log` files of another repository, leaves 30 files and 29 distinct by md5. The 10 above are those before 0.1233.0. The logs are under session a99f7c96's scratchpad, `b264/`, a perishable scratch path.
+- Controls: non-ok `done` lines on an `@consumer` unit, 0; `ran` equals the selection line's "N of 174" in every log; `zz-nonexistent-fx9@consumer`, 0 in every log.
+- Cross-check: the same script over the batch-265 logs reproduces the three rows above (24/15/97/38, 6/43/121/4, 1/73/99/1).
+- The pushed shas are not recoverable: each log's tail names a branch, and the batch-264, -266 and -267 branches are deleted.
+- The `h` skip: 0 `skipped on a content-keyed pass` lines in each of 19 distinct real pushes after 0.1233.0 (20 files, one a duplicate), against a control of 1 `skipped on a confirmed record` line per log. So item 2's effect is still not observed on a push, and that half of item 3 stays owed.
+
+**Outcome, item 3 after, and close (batch 271, cluster C; records only, no code change).** The `h` skip is observed on a real push. Log: the 268-bundle-8 push (tree 39ef94fcf, branch `268-bundle-8`, `pre-push: all gates green.`, new branch created on the remote), `/Users/n8/.cache/ai-dlc/handoffs/batch-271/bl1221-268-bundle-8-push.log`, run by the 0.1233.0-or-later hook. Its selection lines read `consumer layout: 8 of 174 shipping fixture(s) run as <fx>@consumer`, `consumer layout: 19 <fx>@consumer unit(s) skipped, the distribution twin passed on this key`, `placement records: 135 <fx>@consumer unit(s) skipped on a confirmed record` and `placement records: 2 <fx>@consumer unit(s) skipped on a content-keyed pass (a side record of exactly these keys): hook-registration-join@consumer retro-compliance-workflow@consumer`, and `verdict store: 10 fixture(s) skipped on a pass recorded elsewhere`; 8 + 19 + 135 + 2 + 10 = 174, so every unit is named. The 8 that ran are the 8 `done N/M ok ... @consumer` lines; the 2 `h`-skipped units have no `done` line (`grep -cE 'done .*(hook-registration-join|retro-compliance-workflow)@consumer$'` reads 0; control, `grep -c 'hook-registration-join@consumer'` reads 1, the skip line). Control for the absence claims, `zz-nonexistent-fx9@consumer`, reads 0 in the log. Against the baseline: the 10 pre-0.1233.0 pushes ran 0 to 17 units and named none of their confirmed skips; the 3 batch-265 pushes ran 24, 6 and 1; this push ran 8, named all 174, and honoured a content-keyed side record on 2 units. Done condition: the log names the confirmed-record skips (the `placement records:` lines above) and `cl_publish`'s side record keeps another tree's record usable (the `h` skip above). Not established by this log: that the 2 side records were written by a different tree than the one that pushed; the `h` reader's own behaviour is driven by arm `cl.h` of `core/fixtures/consumer-suite-pool/run.sh`. The entry keeps `verify: manual`: the mechanism shipped in 0.1233.0, so a receipt passing at base and tip would discriminate nothing.
+
+**LANDED (v0.1275.0).** Batch 271, cluster C.
+
+Step: n/a
+
+Related: I66.
+
+Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
+
+verify: manual
+
+

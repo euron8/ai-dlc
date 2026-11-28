@@ -1612,6 +1612,8 @@ Owed under items 7 and 14 (batch 265, 265-R): the outcome reading on the next gr
    (c) `core/skills/ai-dlc/steps/gate-validation.md:1007` "on the same terms as a missing per-check result" points at a sentence that was cut.
    (d) `core/hooks/ai-dlc-recover.sh:471-477` comment ("orders the close after"; the gate "opens on" `gate-checkpoint.sh open` or `gate-transition.sh`) has no `gate-run.sh arms` or `close` event in its transcript grammar.
 
+**PARTIAL (v0.1275.0).** Batch 271, cluster C, owner ai-dlc-84. Item 23 (a) to (d) is built. (a) to (c) are step-file wording: implementation gate 3 reads as one story, the "re-run Check 14 and Check 15" sentence says to re-run `gate-run.sh close`, and the dangling cross-reference in `gate-validation.md` is fixed. (d) is the comment and the hook grammar in `core/hooks/ai-dlc-recover.sh`: the compaction-resume backstop now reads `gate-run.sh arms` (first argument) as a gate open and `gate-run.sh close` as a gate close in the session transcript, where it saw only `gate-checkpoint.sh open|close` and `gate-transition.sh <story> 3`, so a compacted lead is no longer sent back into a finished gate at the gates other than implementation gate 3's open; the comment no longer cites another program's grammar; new gate-resume fixture worlds cover both directions. Still owed, from the Owed line above: item 3's closing graph sprint and the outcome reading on the next graph sprint that runs these releases together; the extension checks stay `lead` rows until a script id and an arm row exist for them. The entry stays open, `verify: manual` unchanged.
+
 Step: pipeline
 
 verify: manual
@@ -3282,7 +3284,7 @@ NOTE: `templates/audit-anchors.md.template` is not reported in either window. No
 Candidate, not built: a traced-run `core.preloadIndex=false` (for example `GIT_CONFIG_*` on the launch line), which reschedules the same lstats without changing what is read. Its burst rate under the profile is unmeasured, and a launch-line knob also rides `--in-pool`, which is the push's real run.
 
 Owed:
-- A guarded `--declared-out` re-trace of the C4 and C9 fixtures named below, once those land.
+- ~~A guarded `--declared-out` re-trace of the C4 and C9 fixtures named below, once those land.~~ Discharged in `**PARTIAL (v0.1263.0).** Batch 269, cluster D, ai-dlc-cc.`, Subject 1 table and its "Owed item 1" bullet (the C4 five by the batch-258 lead ruling, the C9 fixtures decided in 0.1212.0 or deleted in 0.1222.0).
 - ~~A measured fix for the install-heavy fixtures' loss (schema-install-fallback, install-scaffold-ignored), then their trace.~~ Superseded by BL-1134's LANDED line (see above): their `core/` and `templates/` rows are decided as `whole` while `install.sh:24` stands.
 - BUILT, D1 (batch 267, cluster W; built batch 268, cluster R): see the `**PARTIAL (v0.1253.0).**` paragraph below.
 - BUILT, D2 (batch 267, cluster W; built batch 268, cluster R): see the same paragraph.
@@ -3537,7 +3539,7 @@ Provenance: batch 257, wave 12, W12-16 (ai-dlc-68), split out of BL-1144 on land
   - `schema-install-fallback` (W4): 338 traced files, PLUS 0 (control ok), MINUS 1: `core/fixtures/*/inputs.decl` had 0 reads, because the stubbed copy no longer reads fixture bytes; the line is removed from its `inputs.decl` in this change. Per declared line: `scripts/install.sh` 1, `scripts/install-scaffold-ignore.sh` 1, `core/` 325, `patterns/` 5, `templates/` 6, `core/fixtures/lib/report.sh` 1. The rebase onto 0.1268.0 adds one file under `core/` (`core/team-roles/appendix/remediator-resolution.md`), which the `core/` line covers.
   - Worktree-path stop: 0 path rows naming `.claude/worktrees/` or `/private/tmp/` in either declared-out file; control, present token `scripts/install.sh`, read 4.
 - `scripts/invalidation-guard.sh --ratchet` exits 0 on this tree (no whole row added).
-- Disposition: the lines `OWED: schema-install-fallback has no reading...` and `Still OWED: ` followed by `schema-install-fallback` has no reading; `ledger-status-vocabulary` has no reading... are discharged by this paragraph. The entry stays PARTIAL because other OWED lines remain: the `retro-compliance-workflow` read-set re-trace (above), and the guarded `--declared-out` re-trace of the C4 and C9 fixtures. The "OWED in this entry" mode-key bullets are disposed by the batch 270 cluster I paragraph.
+- Disposition: the lines `OWED: schema-install-fallback has no reading...` and `Still OWED: ` followed by `schema-install-fallback` has no reading; `ledger-status-vocabulary` has no reading... are discharged by this paragraph. The entry stays PARTIAL because other OWED lines remain: the `retro-compliance-workflow` read-set re-trace (above), and ~~the guarded `--declared-out` re-trace of the C4 and C9 fixtures~~ (discharged in the 0.1263.0 paragraph, "Owed item 1"). The "OWED in this entry" mode-key bullets are disposed by the batch 270 cluster I paragraph.
 - Cost, catch, who would notice: catch on record is both fixtures OMITTED or unread in every sandbox window before this (`schema-install-fallback` in W1-W3 and the W12-16 trace, `ledger-status-vocabulary` in its windows and solo retake). The owner of either `inputs.decl` notices it gone. BL-868: the copies are file lists and git listings, no clock or load.
 - OWED: ledger-status-vocabulary's git.decl still declares `seed` with a reason that no longer holds (line 1 reads "# `seed`: run.sh refuses a root that is not a git checkout and builds its copies from `git ls-files`."; run.sh makes no git call since the narrowed copy), and the comment at core/fixtures/ledger-status-vocabulary/run.sh:107 still says each assertion copies the tracked tree; correct both, and drop the `seed` row only if a run without it stays green.
 - OWED: schema-install-fallback now installs from a copied source with no VERSION and an unborn HEAD, so install.sh's VERSION-present and HEAD-present branches (scripts/install.sh:15-18 and :21-28, feeding the "Version:" echo at :35 and the .claude/.ai-dlc-version stamp at :873-889) are exercised by no arm here; add an arm that asserts the stamp on a source carrying VERSION and a commit, or name the fixture that already asserts it.
@@ -3545,7 +3547,7 @@ Provenance: batch 257, wave 12, W12-16 (ai-dlc-68), split out of BL-1144 on land
 **PARTIAL (v0.1274.0).** Batch 271, cluster G, owner ai-dlc-cf. The two OWED lines of the 0.1271.0 cluster J paragraph are discharged; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line.
 - (a) Built: `core/fixtures/ledger-status-vocabulary/git.decl` is deleted. Its only row was `seed`, and its reason was stale: run.sh makes no git call. `core/scripts/hermetic-run.sh` reads git.decl only when present (:494; header :63, "optional"). The comment at `core/fixtures/ledger-status-vocabulary/run.sh:107-108` now says each assertion copies the file list run.sh names. Without `seed`, `bash scripts/seed-verdict-store.sh ledger-status-vocabulary` exits 0.
 - (b) Built: no existing fixture ran `install.sh` from a source carrying VERSION and a commit and asserted the stamp; `core/fixtures/layer-crosswalk-home/run.sh:418` and `core/fixtures/prepush-pool-depth/run.sh:1452` write the stamp by hand. `core/fixtures/schema-install-fallback/run.sh` gains arm VS (:550-591): before CW2's existing re-install, the scratch copy gets a fake VERSION `9.8.7-vs` and one commit (`world_git`, `core/fixtures/lib/world.sh`). VS asserts the stamp lines `version: 9.8.7-vs`, `skill_version: 9.8.7-vs`, `commit: <sha>`, `skill_commit: <sha>` (sha = the copy's `rev-parse --short HEAD`) and `Version: 9.8.7-vs (<sha>)` in the run output; `installed_at` is not read (a clock, BL-868). No install run is added; cli-install-ok, cli-install-refuse and the main in-process install keep the no-VERSION, unborn-HEAD source. `inputs.decl` gains `core/fixtures/lib/world.sh`; `invocations.decl` is unchanged. Mutants, by hand once: `install.sh` `commit:` set to `deadbee`, rc 1, VS FAIL; `version:` emptied, rc 1, VS FAIL; unmutated rc 0, 16 assertions. Seeded rc 0.
-- Still owed: the `retro-compliance-workflow` read-set re-trace (above), run by the lead's window after the batch's last merge; the guarded `--declared-out` re-trace of the C4 and C9 fixtures.
+- Still owed: the `retro-compliance-workflow` read-set re-trace (above), run by the lead's window after the batch's last merge; ~~the guarded `--declared-out` re-trace of the C4 and C9 fixtures~~ (discharged in the 0.1263.0 paragraph, "Owed item 1").
 
 verify: manual
 
@@ -4548,62 +4550,6 @@ Provenance: batch 264, cluster D (ai-dlc-41); id allocated by the lead.
 
 verify: manual
 
-
-
-## BL-1221 — pre-push consumer-layout selection: a skip on a confirmed placement record is named nowhere, and one box-wide record file per fixture lets pushes from different trees invalidate each other's `<fx>@consumer` units
-
-**NOTE.** Filed 2026-11-22 (batch 264, cluster L). Owner: `.githooks/pre-push` (`cl_select`, `cl_publish`; hook copies bound by I66).
-
-Goal: a push log names every `<fx>@consumer` unit it did not run, and a placement record written by one tree is not overwritten by another. One done condition: the log names the confirmed-record skips, and `cl_publish` keys or guards its record so a push from tree B leaves tree A's record intact.
-
-Baseline: 24 of 38 placement records written at 10:56:02 on 2026-11-22 hold installed `run.sh` sha256 values that match no revision of `core/fixtures/<fx>/run.sh` in any ref or any of the 58 worktrees (control: `adversarial-shard-merge-c` and `-d` found at 56877eb4d); the other 14 match a historical revision. The claimed 10:49:00 rewrite did not reproduce (none at that mtime; 36 at 11:09:53). The waste per push is not yet measured; item 3 owns it.
-
-Work list:
-
-1. Name the confirmed-record skips. `.githooks/pre-push:3376` "counted on the selection line and not named" says an `<fx>@consumer` unit skipped on an unchanged, confirmed record is counted and not named. The named sites are `:3369` "consumer layout: %s of %s shipping fixture(s)", the `$4 == "d"` skips at `:3371`, `:3383` "skipped on a pass recorded elsewhere" (unconfirmed-record skips only) and `:3524` "PENDING count is unrecorded". A by-name coverage check over the push log cannot tell such a unit from a gap; the count is recoverable only by subtraction.
-2. Key the placement records by content, or have `cl_publish` refuse to overwrite a record a different tree wrote. Records are one file per fixture, `<vs>/consumer-placement-keys/<repo root commit>/<fx>.key` (`rec_home`, `:3301`), with no per-tree or per-clone component, and `cl_publish` (`:3419` `mv "$kd/$2.key.tmp.$$" "$kd/$2.key"`) replaces the old file, so the last writer across every tree and clone on the box wins.
-3. Measure `<fx>@consumer` reruns per push before and after, from `.git/ai-dlc-suite-key.log` and `.git/ai-dlc-fixture-durations`, and write the outcome beside the baseline.
-
-**PARTIAL (v0.1233.0).** Batch 265, cluster H. Items 1 and 2 are built; item 3 is owed (the before and after `<fx>@consumer` reruns per push, read off the gate record after landing). Item 1: the selection prints a `placement records:` line naming each `<fx>@consumer` unit skipped on a confirmed record (the `.rskip` set minus `.vs.u`), naming a content-keyed (`h`) skip on its own `placement records:` line as a content-keyed pass, never as a confirmed record, because a census-written side record was never confirmed. Item 2: `cl_publish` keeps `<kd>/<fx>.key` and also writes `<kd>/<fx>.k/<sha256 of the record's non-`#` rows>`; the `cl_select` reader turns a row that is both `run` and flag `k` into `skip` with reason `h` when the prospective record's row hash has a side record, so a record written by another tree is no longer displaced. A record written before this build reads exactly as at base; `quiet()` and `.unconfirmed` stay per fixture. Both hooks carry it (I66). D3 as built: the `h` skip applies in census mode when `AI_DLC_CL_DIST_OUT` is named, so `scripts/predict-push-set.sh` predicts it as `d` is predicted, and a real census still runs every unit (arm `cl.hp`). D2 as built: an `h` skip's `#pending` count is read from its own side record (`.cl/.kpn`), not from `<fx>.key`, and `cl_publish` copies the side record from its private temporary file before the `mv` (arm `cl.h` poisons the foreign record's count). The filed receipt passed a never-overwrite wedge and a side copy nothing reads, and would now also pass this build without testing the reader; it is withdrawn, and the entry carries `verify: manual` while item 3 is open (arm R12). Intended close receipt, for item 3's landing: `for h in .githooks/pre-push core/git-hooks/pre-push; do [ -f $h ] || exit 9; grep -q 'placement records:' $h || exit 1; grep -qF '>> "$c/.hhit"' $h || exit 1; done; grep -q 'cl.h' core/fixtures/consumer-suite-pool/run.sh || exit 9` together with the outcome line beside the baseline; the reader itself is driven by arm `cl.h` of `core/fixtures/consumer-suite-pool/run.sh`.
-
-**Outcome, item 3 (batch 265 close; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The three batch-265 gate logs, each run by the new hook and green (rc 0, `pre-push: all gates green`), partition all 174 shipping fixtures' `<fx>@consumer` units on their selection lines. Derivation: per selection line, `tr ' ' '\n' | grep -c '@consumer$'`, less the `<fx>@consumer` token in the line's own text; units run, `grep -cE 'done [0-9]+/[0-9]+ +ok .*@consumer$'`; control, `zz-nonexistent-fx9@consumer`, 0 in each log. Columns are: ran, skipped as byte copies of a passed distribution twin, skipped on a confirmed placement record, skipped on a pass recorded elsewhere.
-- 0.1233.0 push (main checkout at 95dc4e1b4): 24, 15, 97, 38 (sum 174).
-- 0.1234.0 push (from a hand worktree, 8a55be03b): 6, 43, 121, 4 (sum 174).
-- 0.1235.0 push (eda852baf): 1, 73, 99, 1 (sum 174).
-- Every unit is named in each log, so item 1's by-name check closes on the log alone.
-- Content-keyed (`h`) skips: 0 in all three (`grep -c 'skipped on a content-keyed pass'`; control `skipped on a confirmed record`, 1 per log; the string is emitted at `.githooks/pre-push:3405`). The 0.1233.0 push was the first under the new hook, so no side record existed and its 0 is structural. No push has yet shown an `h` skip, so item 2's effect is not yet observed on a push.
-- Before: not taken, and a source exists. `.git/ai-dlc-fixture-durations` keeps one cost per unit and `.git/ai-dlc-suite-key.log` one HIT or MISS per suite, so neither holds a per-push `<fx>@consumer` count. A push log from before 0.1233.0 would hold it, and none was read.
-- Item 3 stays owed: the before reading, and an `h` skip observed on a push.
-
-**Outcome, item 3 before (batch 268, M; the entry stays PARTIAL, `verify: manual` unchanged, no LANDED line).** The before reading is taken from 10 real pushes of this repo made before 0.1233.0, all on 2026-11-22 (batch 264), all green, all run by the old hook (no `placement records:` line, and each log's mtime is before the 0.1233.0 commit at 20:36:44-05:00). Columns as above: ran, twin, confirmed, elsewhere; 174 shipping fixtures in each.
-
-| push log | time | ran | twin | confirmed | elsewhere |
-|---|---|---|---|---|---|
-| push-A | 08:39 | 17 | 4 | 104 | 49 |
-| push-B2 | 09:05 | 1 | 5 | 78 | 90 |
-| push-F | 09:29 | 3 | 6 | 100 | 65 |
-| push-G | 09:50 | 1 | 6 | 129 | 38 |
-| push-K | 10:06 | 10 | 7 | 123 | 34 |
-| push-H | 10:24 | 3 | 5 | 101 | 65 |
-| push-D | 10:42 | 9 | 14 | 147 | 4 |
-| push-J | 11:10 | 4 | 19 | 115 | 36 |
-| push-O | 13:39 | 15 | 18 | 106 | 35 |
-| push-I | 15:43 | 0 | 18 | 124 | 32 |
-
-- Derivation: the batch-265 derivation above, by the same script. The confirmed column before 0.1233.0 is BY SUBTRACTION (174 − ran − twin − elsewhere), because the old hook did not name those skips (item 1's defect).
-- Filter: 449 transport-tail files under the session scratchpads and `.git` (depth 4, at least 20 KB), 443 with the consumer-layout line, less 410 fixture-world copies and 3 `push.log` files of another repository, leaves 30 files and 29 distinct by md5. The 10 above are those before 0.1233.0. The logs are under session a99f7c96's scratchpad, `b264/`, a perishable scratch path.
-- Controls: non-ok `done` lines on an `@consumer` unit, 0; `ran` equals the selection line's "N of 174" in every log; `zz-nonexistent-fx9@consumer`, 0 in every log.
-- Cross-check: the same script over the batch-265 logs reproduces the three rows above (24/15/97/38, 6/43/121/4, 1/73/99/1).
-- The pushed shas are not recoverable: each log's tail names a branch, and the batch-264, -266 and -267 branches are deleted.
-- The `h` skip: 0 `skipped on a content-keyed pass` lines in each of 19 distinct real pushes after 0.1233.0 (20 files, one a duplicate), against a control of 1 `skipped on a confirmed record` line per log. So item 2's effect is still not observed on a push, and that half of item 3 stays owed.
-
-Step: n/a
-
-Related: I66.
-
-Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
-
-verify: manual
 
 
 ## BL-1255 — the ledger-reverify fixture's shards are unbalanced, and no per-unit cost is read to choose a move

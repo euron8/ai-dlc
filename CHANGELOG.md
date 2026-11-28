@@ -19,6 +19,19 @@ QUEUE, and `scripts/validate-backlog-size.sh` bounds that one.
   migration.
 - **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
 
+## [0.1275.0] - 2026-11-27
+
+### The compaction-resume backstop closes every gate a lead walked out of (BL-819)
+
+- A lead that compacts mid-sprint is no longer sent back into a gate it had already finished. The recover hook now reads `gate-run.sh arms` as a gate open and `gate-run.sh close` as a gate close in the session transcript; before, it saw only `gate-checkpoint.sh open|close` and `gate-transition.sh <story> 3`, so at every gate except implementation gate 3's open it never closed the marker.
+- Step-file wording: implementation gate 3 reads as one story, the "re-run Check 14 and Check 15" sentence says to re-run `gate-run.sh close`, a dangling cross-reference in `gate-validation.md` is fixed, and `_gate-procedures.md` stops calling implementation gate 3 "one-story" in its two brief sentences.
+- Action for consumers: none; the hook ships with the pull.
+
+### A content-keyed placement skip is on record from a real push (BL-1221)
+
+- BL-1221 closes: the green push of `268-bundle-8` (2026-11-26) skipped `hook-registration-join@consumer` and `retro-compliance-workflow@consumer` on a content-keyed pass, the real-push observation the entry still owed. Records only.
+- BL-1155's stale "C4 and C9 re-trace owed" restatements are struck; that re-trace was discharged in 0.1263.0.
+
 ## [0.1274.0] - 2026-11-27
 
 ### Installer version stamp tested from a versioned source; fixture comments match their code (BL-878, BL-1155)

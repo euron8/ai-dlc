@@ -488,7 +488,7 @@ The script half of Check 2 at an implementation gate. Run
 `scripts/ai-dlc/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md` and
 `scripts/ai-dlc/verdict.sh validate-suppression-lifetime --escalations docs/escalations/pending.md`; exit 0 from
 both is required, and either exit 0 printing `OK: EXAMINED NOTHING` is a pass because no escalation exists.
-At a one-story implementation gate 3 `gate-transition.sh` has already run both before the adjudicator is
+At an implementation gate 3 `gate-transition.sh` has already run both before the adjudicator is
 dispatched, so this check carries no adjudicator verdict; Check 2 there is the hard-block half alone.
 
 ### 3. Requirement anchor integrity?
@@ -804,7 +804,7 @@ An absent flag is not a skip.
 No `implementation` gate fetches a production URL.
 Gates 1, 2 and 3 run before the stories they gate are deployed, so the absence of a deployment is never a Check 9 FAIL at an `implementation` gate.
 A one-story gate (its adjudicator brief carries a `story:` line) decides on that story's own range, `<base>..<frozen-sha>`: `<base>` is the PASS-1 gate-1 partition manifest's `base`, the parent of the dev's first commit (`implementation.md` "Pre-gate commit-presence check."), and `<frozen-sha>` the sha this gate judges (`implementation.md`).
-At a one-story gate 3 that same value is the `base:` line of the g3 plan its brief's `gate-plan:` names.
+At an implementation gate 3 that same value is the `base:` line of the g3 plan its brief's `gate-plan:` names.
 The `base` of a re-review pass's gate-1 manifest (`-p<M>`, M >= 2) is the prior reviewed sha and is never the range (`implementation.md` "A re-review, pass M >= 2").
 
 **A gate over several stories, or over none, decides on the UNION of the gate's changed files.** Such a gate carries no `story:` line.
@@ -1004,7 +1004,7 @@ it: a positive match the same command returns elsewhere, a non-zero count from t
 same corpus, or the command's own listing of what it did scan. A bare zero is
 indistinguishable from a command that matched nothing because it was malformed,
 scoped to the wrong path, or run against an empty set. A row that claims absence
-without a control is incomplete on the same terms as a missing per-check result,
+without a control is incomplete, as a check with no recorded result is,
 and is rewritten before proceeding.
 
 **A state claim MUST carry its command.** Any evidence row asserting repository
@@ -1299,7 +1299,7 @@ When the budget measurement above (`verdict.sh validate-artifact-budget --only p
   Remedy: KEEP the row and set its status cell with `--row-set <agent> status <word>`, where
   `<word>` is exactly `in-flight`, `delivered-reachable` or `stopped`. Do not delete it.
 
-Then re-run Check 14 and Check 15.
+Then re-run `gate-run.sh close` with the same arguments as the close it repairs.
 
 A `warn` line (over budget, inside the grace band) does **not** fail the gate — trim
 at your next natural pause. See Rule 25(d), "Warn at 100%, block at 100% + grace."
@@ -1321,8 +1321,8 @@ site. Reconcile reports have proposed the `--warn-only` route four times across 
 consumer's pull series; it was never available any of those times.
 
 The snapshot is the only artifact whose budget is enforced *at gates* rather than
-only at sprint start: it is the only one that grows *within* a sprint. The protocol
-whole-reads it here (Checks 14/15; native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`), on every resume, and after every compaction
+only at sprint start: it is the only one that grows *within* a sprint. Checks 14/15 validate it here; the protocol
+whole-reads it (native Read, in consecutive `offset`/`limit` chunks of at most 16 KB covering the whole file, never `ctx_*`), on every resume, and after every compaction
 (`ai-dlc-recover.sh`).
 
 A snapshot over budget means the schema stopped being enforced at gate passages.

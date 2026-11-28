@@ -471,11 +471,12 @@ done
 # A MARKER THE LEAD LEFT BEHIND IS CLOSED, NOT RESUMED. `gate-validation.md` orders the close after
 # Check 15 and nothing else enforces it, so a lead that moves to the next step without it leaves
 # `.gate-checkpoint/OPEN` standing, and the resume block below would send a compacted lead back into
-# a finished gate. Read from THIS session's transcript, in order, with `extract.py`'s gate_event()
-# grammar (a command split at `||`, `&&`, `|`, `;`, `&` and newlines; leading `bash`, `sh`, `env` and
-# `VAR=x` words dropped; the script's basename in command position; the verb an exact word): a gate
-# opens on `gate-checkpoint.sh … open` or `gate-transition.sh <story> 3`, and closes on
-# `gate-checkpoint.sh … close`. While one is open, a Read with no offset and no limit of a step file
+# a finished gate. Read from THIS session's transcript, in order, with this hook's own command grammar:
+# a command is split at `||`, `&&`, `|`, `;`, `&` and newlines, leading `bash`, `sh`, `env` and `VAR=x`
+# words are dropped, the script's basename is taken in command position, and the verb is an exact word.
+# A gate opens on `gate-checkpoint.sh … open`, `gate-transition.sh <story> 3` or `gate-run.sh arms`,
+# and closes on `gate-checkpoint.sh … close` or `gate-run.sh close`. For `gate-run.sh` the verb is its
+# first argument and nothing else, so `gate-run.sh --help arms` is neither. While one is open, a Read with no offset and no limit of a step file
 # that is not `gate-validation`, not a `_` procedure file and not the step entered before the open
 # LEAVES it. Any later `gate-checkpoint.sh` verb (`record`, `done`, `list`) or Read of
 # `gate-validation` RETURNS to it: on the reference consumer a lead recorded checks after reading the
@@ -484,7 +485,9 @@ done
 # a step was entered before its open, and the marker's nonce was minted within 120 s of that open's
 # tool call, either side: a marker minted outside that window names a gate this transcript never
 # opened, such as another session's live gate behind a `gate-transition.sh … 3` that refused before
-# its own open.
+# its own open. The binding holds for `gate-run.sh arms` because its nonce carries the call's start
+# time (gate_run.py:386, :514), not the time the open runs. A transcript close counts even if the
+# close was refused, and the resume block then stands.
 # Anything unreadable leaves the resume block as it was.
 #
 # A GATE ALREADY CLOSED AT A STEP ENTRY IS REPORTED ONCE, FROM ITS RECORD. ai-dlc-handoff-entry.sh
@@ -511,6 +514,8 @@ GATE_JQ='def ev: [splits("\\|\\||&&|[|;&\\n]")
       | if $b == "gate-checkpoint.sh" then
           (if any($a[]; . == "close") then "C" elif any($a[]; . == "open") then "O"
            elif any($a[]; . == "record" or . == "done" or . == "list") then "V" else empty end)
+        elif $b == "gate-run.sh" then
+          (if ($a | length) > 0 and $a[0] == "arms" then "O" elif ($a | length) > 0 and $a[0] == "close" then "C" else empty end)
         elif $b == "gate-transition.sh" then
           ([$a[] | select(startswith("-") | not)] as $p | if ($p | length) > 1 and $p[1] == "3" then "O" else empty end)
         else empty end];
@@ -533,7 +538,7 @@ GATE_JQ='def ev: [splits("\\|\\||&&|[|;&\\n]")
 # The awk prints `<step left to> <open timestamp> <the gate's own step>`; the third goes into LEFT.
 if [ -z "$GATE_LEFT_REC" ] && [ -n "$GATE_NONCE" ] && [ -n "$GATE_CKP" ] && [ -n "$REC_TP" ] && [ -r "$REC_TP" ]; then
   _gl="$(grep -E '"tool_use"' "$REC_TP" 2>/dev/null \
-    | grep -E 'gate-checkpoint\.sh|gate-transition\.sh|/steps/[A-Za-z0-9_.-]+\.md' \
+    | grep -E 'gate-checkpoint\.sh|gate-run\.sh|gate-transition\.sh|/steps/[A-Za-z0-9_.-]+\.md' \
     | jq -rR "$GATE_JQ" 2>/dev/null \
     | awk '
         $1 == "O" { gate = 1; m = main; ot = $2; left = ""; next }
