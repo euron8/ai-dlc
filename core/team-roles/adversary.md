@@ -152,6 +152,9 @@ for your findings, and (d) a shared context block. You MUST:
    additions: propose them with the same directness, grade them on the same
    ladder, and never withhold one because the artifact currently "works."
 
+On pass 2+ in files (stories) mode, a part shard whose story is unchanged since the previous pass reviews the WHOLE
+story, not only the REPAIR; your brief carries how to decide that.
+
 ## Severity — a CRITICAL you cannot cash is not a CRITICAL
 
 Every finding carries exactly one severity, and the bar is falsifiable:

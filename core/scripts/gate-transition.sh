@@ -51,7 +51,7 @@
 #            here; `gate-run.sh close` runs it.
 #   close    verifies that the story's last gate-3 ledger carries a `26 PASS` row, read through
 #            gate-checkpoint.sh list, and writes a close plan. It never calls open. The nonce is the
-#            newest g3 plan's, else the newest gate-adjudication verdict whose gate_series_id
+#            newest g3 plan's (the highest pass by number, whose Check 22 record close also reads), else the newest gate-adjudication verdict whose gate_series_id
 #            carries this story's slug and sprint (gate-validation.md, the series id), else the
 #            newest whose gate_series_id is the storyless `implementation-s<N>-<TS>` (a multi-story
 #            gate 3); that plan carries a `gate3-scope:` line, since no verdict field names a story.
@@ -59,7 +59,8 @@
 # THE PLAN. `_bmad-output/implementation-artifacts/s<N>/gate-transition/<idx>-g<gate>-p<M>.plan`
 # under the project root, `gclose` for close. It lives in a declared area with the sprint in the
 # directory only, never in the basename (artifact-path-grammar.md, held by I82 and I82b). Any plan already at that path is removed BEFORE the first
-# check, and the new one is written only after every check has passed, through a temporary file
+# check; at gate 3 one carrying a `nonce: <N>` line is instead renamed to `<that path>.<N>` (an aside already at that
+# name is kept and the stale plan removed), outside the `*.plan` names, so re-arming a pass keeps the earlier nonce's plan. The new one is written only after every check has passed, through a temporary file
 # and mv. So a plan on disk is a completion record. Lines, in order:
 #   story: <idx> / gate: <1|2|3|skip|close> / pass: <M> / sha: <frozen sha> / worktree: <abs> /
 #   manifest: <shard-dir>/.manifest, or none / route: <kind> <answer line> / nonce: <gate_nonce>
@@ -128,9 +129,21 @@ STATE_DIR="${ROOT}/${AI_DLC_STATE_DIR:-_bmad-output}"
 PDIR="${ROOT}/_bmad-output/implementation-artifacts/s${SPRINT}/gate-transition"
 GKEY="$GATE"; [ "$GATE" = close ] && GKEY=close
 PLAN="${PDIR}/${IDX}-g${GKEY}-p${PASS}.plan"
-# A stale plan is removed BEFORE any check, so a refusal below can never leave one standing. That
+# A stale plan is removed from $PLAN BEFORE any check, so a refusal below can never leave one standing. That
 # includes the exit-2 refusals that follow: the plan's path needs only the story, gate, pass and
 # sprint, all validated above, so no later exit, refusal or could-not-run, can leave an older plan.
+# At gate 3 a stale plan whose first `nonce:` line names one path component N is set aside, not deleted:
+# it is renamed to `$PLAN.N`, outside the `*.plan` names every plan reader globs, so a same-pass re-arm keeps
+# the earlier nonce's plan on disk and that plan can never authorize a seat. An aside already at `$PLAN.N`
+# is kept and the stale plan removed; every other stale plan is removed as before.
+if [ "$GATE" = 3 ] && [ -f "$PLAN" ]; then
+  ONONCE=""
+  while IFS= read -r l; do case "$l" in 'nonce: '*) ONONCE="${l#nonce: }"; break ;; esac; done < "$PLAN"
+  case "$ONONCE" in
+    '' | . | .. | *[!A-Za-z0-9_.-]*) ;;
+    *) [ -e "$PLAN.$ONONCE" ] || mv -f "$PLAN" "$PLAN.$ONONCE" 2> /dev/null ;;
+  esac
+fi
 rm -f "$PLAN"
 [ -n "$WT" ] && [ -n "$BASE" ] && [ -n "$STORY" ] || die "$USAGE (no plan stands at $PLAN)"
 WT_ARG="$WT"
@@ -316,17 +329,18 @@ write_plan() {
 # APPROVED is a same-gate re-review, and always runs. Otherwise it asks --gate1-rerun from PSHA: GATE1-SKIP writes a
 # `gate: skip` plan with no shard lines, which authorizes no seat, and the lead runs its `next:` gate-2 command;
 # GATE1-RERUN or any refusal is recorded and the pass goes on as a re-review below. Returns 0 unless it wrote a plan.
-# g3_newest: the story's newest g3 plan (the highest p<K> in $PDIR). Sets G3K (0 when none), G3SHA and G3NONCE.
+# g3_newest: the story's newest g3 plan (the highest p<K> in $PDIR, compared as a number; a set-aside `.plan.<N>`
+# is never one). Sets G3K (0 when none), G3SHA, G3NONCE and G3PLAN (its path).
 g3_newest() {
   local p k l v n
-  G3K=0; G3SHA=""; G3NONCE=""
+  G3K=0; G3SHA=""; G3NONCE=""; G3PLAN=""
   for p in "$PDIR/${IDX}-g3-p"*.plan; do
     [ -f "$p" ] || continue
     k="${p##*-g3-p}"; k="${k%.plan}"
     case "$k" in '' | *[!0-9]* | 0*) continue ;; esac
     [ "$k" -gt "$G3K" ] || continue
     v=""; n=""; while IFS= read -r l; do case "$l" in 'sha: '*) [ -n "$v" ] || v="${l#sha: }" ;; 'nonce: '*) [ -n "$n" ] || n="${l#nonce: }" ;; esac; done < "$p"
-    G3K="$k"; G3SHA="$v"; G3NONCE="$n"
+    G3K="$k"; G3SHA="$v"; G3NONCE="$n"; G3PLAN="$p"
   done
 }
 g1_after_g3() {
@@ -641,11 +655,8 @@ $(tail_of)" "repair what the validator names, then re-run gate-transition.sh $ID
   write_plan 3
   ;;
 close)
-  NPLAN=""
-  for p in "$PDIR/${IDX}-g3-p"*.plan; do
-    [ -f "$p" ] || continue
-    while IFS= read -r l; do case "$l" in 'nonce: '*) NONCE="${l#nonce: }"; NPLAN="$p" ;; esac; done < "$p"
-  done
+  # The nonce and the plan whose Check 22 record is read are the newest g3 plan's (the highest pass by number).
+  g3_newest; NONCE="$G3NONCE"; NPLAN=""; [ -z "$NONCE" ] || NPLAN="$G3PLAN"
   if [ -z "$NONCE" ]; then
     slug="$(printf '%s' "$IDX" | sed -e 's/[[:punct:]]*$//' | tr 'A-Z.-' 'a-zxx')"
     for v in "$STATE_DIR"/gate-adjudication/implementation-*.verdict.json; do

@@ -2128,6 +2128,83 @@ p_dv10() {
   awk '/^shard_tool_use_ids:/ { sub(/ 0*1=[^ ]+/, "") } { print }' "$WORK/dv10.p3" > "$o" || return 1
   dv_gate "$m" "$s"; has "$CO" "dispatched parts {2 3 4 5 6 7 8} but owed {3 6}"
 }
+# ---- FILES-MODE derive_set THROUGH --derived-set (BL-1005). The merge prints the full map for every stories pass
+# after p1, but arm N still recomputes an OLDER engine's narrowed pass through --derived-set, which reads only the
+# two pass RECORDS (pass M's embedded map and `<stem>@<sha>` list, its predecessor's list and open findings), never
+# a story on disk. So each world is two hand-built records in the merged-pass shape seed.files-b3-merged.expected
+# holds, in a sprint dir with no stories: p1, and a p2 whose shard_tool_use_ids name a STRICT subset of its map
+# (a pass dispatching every ordinal is read full width before any derivation is consulted).
+# dvs_sha <n> -> a fixed 64-hex sha standing for story content n.
+dvs_sha() { printf '%064d' "$1"; }
+# dvs_pass <pass file> <map basenames> <content numbers, one per map row, or - for no artifact_sha line>
+#   <dispatched ordinals> [<SEVERITY>:<cited ordinal> ...]
+dvs_pass() {
+  local f="$1" names="$2" shas="$3" ids="$4" x b o=0 nm=0 nn=0 l="" t=""; shift 4
+  {
+    printf '# stories -- adversarial pass %s (merged from hand-built shards)\n\n' "${f##*-adversarial-p}"
+    printf 'Verdict RECOMPUTED by merge-adversarial-shards.sh from the summed residue; shard verdicts are advisory.\n\n'
+    printf '## Shard ordinal map\n\n```text\n'
+    for b in $names; do o=$((o + 1)); printf '%s\t%s\n' "$o" "$b"; done
+    printf '```\n\n'
+    for x in "$@"; do
+      printf '## Shard: story %s\n\n# stories -- adversarial shard %s\n\n## Findings\n\n' "${x#*:}" "${x#*:}"
+      case "${x%%:*}" in MAJOR) nm=$((nm + 1)); printf '### M1' ;; *) nn=$((nn + 1)); printf '### N1' ;; esac
+      printf ' — %s — a seeded finding\n\nstories: %s\n\nBody.\n\n## Probed and found sound\n\nNothing further.\n\n\n' "${x%%:*}" "${x#*:}"
+    done
+    for x in $ids; do t="$t $x=toolu_01DvsDispatch$(printf '%011d' "$x")"; done
+    if [ "$shas" != - ]; then
+      set -- $shas
+      for b in $names; do l="$l ${b%.md}@$(dvs_sha "$1")"; shift; done
+    fi
+    printf '<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\ninvoked_at: 2026-08-24T15:01:19Z\n'
+    printf 'tool_use_id: toolu_01DvsDispatch00000000000\nshard_tool_use_ids:%s cross=toolu_01DvsDispatch99999999999\n' "$t"
+    printf 'mode: subagent\nlead_role: .claude/skills/ai-dlc/steps/stories-test-strategy.md\n'
+    printf 'artifact: _bmad-output/planning-artifacts/s1/stories\n'
+    [ -z "$l" ] || printf 'artifact_sha:%s\n' "$l"
+    printf 'findings_critical: 0\nfindings_critical_prior_scope: 0\nfindings_major: %s\nfindings_major_underived: 0\n' "$nm"
+    printf 'findings_minor: %s\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$nn"
+  } > "$f"
+}
+DVS_8="story-01-k.md story-02-k.md story-03-k.md story-04-k.md story-05-k.md story-06-k.md story-07-k.md story-08-k.md"
+# dvs_world <p1 shas> <p1 finding> <p2 map> <p2 shas> <p2 dispatched> -> runs --derived-set on the p2 (pc_ds)
+dvs_world() {
+  local s; s="$(mktemp -d "$WORK/dvs.XXXXXX")" || return 1
+  dvs_pass "$s/stories-adversarial-p1.md" "$DVS_8" "$1" "1 2 3 4 5 6 7 8" $2 || return 1
+  dvs_pass "$s/stories-adversarial-p2.md" "$3" "$4" "$5" || return 1
+  pc_ds "$MERGE" "$s/stories-adversarial-p2.md"
+  grep -qx "FROM	stories-adversarial-p1.md" "$WORK/pc.ds"
+}
+# DVa: an OPEN MAJOR keeps its story in the set though the story is byte-unchanged. p1's MAJOR cites story 5;
+# p2 changed only story 3 and dispatched {3 5} -> owes {3 5}, narrowed. Control, the same world with the finding
+# MINOR: {3} (a MINOR is not open). The control's output is kept for DVc ($WORK/dvs-minor.ds).
+p_dva() {
+  local p2="1 2 103 4 5 6 7 8"
+  PC_CELL=minor; dvs_world "1 2 3 4 5 6 7 8" MINOR:5 "$DVS_8" "$p2" "3" || { PC_WHY="no FROM line: $(head -2 "$WORK/pc.ds")"; return 1; }
+  cp "$WORK/pc.ds" "$WORK/dvs-minor.ds" || return 1
+  [ "$DS_RC" -eq 0 ] && [ "$DS_ORDS" = 3 ] && [ -z "$DS_FULL" ] || { PC_WHY="rc=$DS_RC [$DS_ORDS] [$DS_FULL], want {3}"; return 1; }
+  PC_CELL=major; dvs_world "1 2 3 4 5 6 7 8" MAJOR:5 "$DVS_8" "$p2" "3 5" || { PC_WHY="no FROM line: $(head -2 "$WORK/pc.ds")"; return 1; }
+  [ "$DS_RC" -eq 0 ] && [ "$DS_ORDS" = "3 5" ] && [ -z "$DS_FULL" ] || { PC_WHY="rc=$DS_RC [$DS_ORDS] [$DS_FULL], want {3 5}"; return 1; }
+}
+# DVb: KEYED ON BASENAME, never on an ordinal. p1 (stories 01..08) has MAJORs on 5 and 7; p2 adds story-00-a.md,
+# which sorts FIRST and shifts every ordinal by one, and changed stories 3 and 6. Owed exactly {1 4 6 7 8}: the new
+# story (1), the changed 3 and 6 at 4 and 7, the cited unchanged 5 and 7 at 6 and 8; the unchanged uncited stories
+# at their shifted ordinals 2 3 5 9 are absent. An ordinal-aligned comparison (both the sha join and the cite
+# mapping) owes every ordinal 1..9.
+p_dvb() {
+  dvs_world "1 2 3 4 5 6 7 8" "MAJOR:5 MAJOR:7" "story-00-a.md $DVS_8" "900 1 2 103 4 5 106 7 8" "1 4 6 7 8" \
+    || { PC_WHY="no FROM line: $(head -2 "$WORK/pc.ds")"; return 1; }
+  [ "$DS_RC" -eq 0 ] && [ "$DS_ORDS" = "1 4 6 7 8" ] && [ -z "$DS_FULL" ] || { PC_WHY="rc=$DS_RC [$DS_ORDS] [$DS_FULL], want {1 4 6 7 8}"; return 1; }
+}
+# DVc: the predecessor notarizes NO `<stem>@<sha>` list (its artifact_sha: line dropped) -> FULL with the reason
+# `stories-adversarial-p1.md notarizes no <stem>=<sha> list`, then every ordinal 1..8. Control: DVa's MINOR world,
+# the same two records but p1's list present, narrowed to {3} with no FULL line ($WORK/dvs-minor.ds).
+p_dvc() {
+  [ -f "$WORK/dvs-minor.ds" ] && grep -qx 3 "$WORK/dvs-minor.ds" && ! grep -q '^FULL' "$WORK/dvs-minor.ds" \
+    || { PC_CELL=control; PC_WHY="DVa's readable-list world did not narrow to {3}"; return 1; }
+  PC_CELL=full; dvs_world - MINOR:5 "$DVS_8" "1 2 103 4 5 6 7 8" "3" || { PC_WHY="no FROM line: $(head -2 "$WORK/pc.ds")"; return 1; }
+  [ "$DS_RC" -eq 0 ] && [ "$DS_ORDS" = "1 2 3 4 5 6 7 8" ] && [ "$DS_FULL" = "stories-adversarial-p1.md notarizes no <stem>=<sha> list" ] \
+    || { PC_WHY="rc=$DS_RC [$DS_ORDS] [$DS_FULL]"; return 1; }
+}
 # ---- THE SHIPPED SEQUENCE (BL-911). DV4D seeds a world that still holds its pre-repair snapshot; the lead's
 # real flow never leaves one, and the narrowing never reads one (it joins p1's notarized `part_sha:`). These
 # worlds stop at the p1 merge (cached), and each use then drives the shipped programs in order: the split keyed

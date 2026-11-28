@@ -187,6 +187,26 @@ a decimal ordinal optionally suffixed with one lowercase letter (`AC1`,
 `AC4a`). One AC per header. The header carries the AC; every following
 line up to the next AC header or the next markdown heading belongs to it.
 
+Each story file carries exactly one Acceptance Criteria section, opened by
+either form `scripts/ai-dlc/validate-ac-falsifiability.sh` Check 31 accepts, and
+each matched on the whole line (stricter than Check 31's prefix trigger):
+- a markdown heading of any level, `#` to `######`, in any case, with optional
+  `**` bold and a trailing `:`;
+- the bold label alone on its line, in any case, with the `:` inside or outside
+  the bold (`**Acceptance Criteria:**`, `**Acceptance criteria**`,
+  `**Acceptance Criteria**:`), which takes the level of the nearest heading above
+  it.
+`## Acceptance Criteria Evidence`, `## Acceptance Criteria Verification`,
+`## Acceptance Criteria (cont.)` and `**Acceptance Criteria Evidence:**` are not
+that section. Acceptance criteria are read only under it, up to the next
+heading of the same or a shallower level (a label with no heading above it ends
+at the next heading of any level); a deeper heading stays inside the section. An
+AC-form line anywhere else (`## Deferred ACs`, `## Dev Agent Record`, a
+restatement) is a record and mints no strategy id.
+`scripts/ai-dlc/strategy-rows.sh` refuses (exit 2) a story with no such section,
+with two (a heading and a label count as two), or with no acceptance criterion
+under it.
+
 A single declared form is what lets Check 31 read acceptance criteria
 without guessing. A story that declares acceptance criteria and presents
 none in this form FAILS Check 31 as DISARMED — an AC the checker cannot

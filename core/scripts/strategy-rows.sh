@@ -6,8 +6,12 @@
 # Stories-test-strategy §5. The strategy id of an acceptance criterion and the letters of its cases are
 # mechanical, so a script writes them and a seat does not:
 #   - stories are taken in story order, the numeric order of the frontmatter `id:` (`S323-1.1`, `S323-1.2`, ... `S323-5.5`);
-#   - every `- **AC<n>` line in a story opens one acceptance criterion, which gets the next id `ST<N>-<k>`, `k` running
-#     over the whole sprint from 1;
+#   - every `- **AC<n>` line under a story's one Acceptance Criteria section heading (any level 1-6, any case, optional bold
+#     and trailing colon, the whole heading; or the bold label `**Acceptance Criteria:**` alone on its line, which takes the
+#     level of the nearest heading above it: both forms are the ones Check 31 in validate-ac-falsifiability.sh accepts) opens
+#     one acceptance criterion, which gets the next id `ST<N>-<k>`, `k` running over the whole sprint from 1; the section
+#     ends at the next heading of the same or a shallower level (a label with no heading above it, at any heading), a deeper heading ends the criterion open at it and not the section, and an AC-form line
+#     outside the section (`## Deferred ACs`, `## Dev Agent Record`) is ignored;
 #   - an AC gets lettered cases exactly when its own text enumerates its own sub-items as parenthesized lowercase letters
 #     in sequence from `(a)`, at least `(a)` and `(b)`. A `(x)` directly after a letter, digit, `_` or `)` (`AC3(c)`,
 #     `f(a)`), after the word Rule, option, story, FR, AD, step, item, section or arm (any case of the first letter) alone
@@ -29,7 +33,8 @@
 # --check and --check-strategy read PENDING (exit 0) when a story table already has a filled Kind or Resolves-to cell, and
 # --check-strategy when the strategy carries no mapping row of the grammar: such a series is past authoring or older than this
 # grammar and is never a difference.
-# Exit: 0 ok or PENDING, 1 difference, 2 usage or an unreadable input, 3 --bind refused.
+# Exit: 0 ok or PENDING, 1 difference, 2 usage, an unreadable input, or a story with a frontmatter id that carries no
+# Acceptance Criteria section heading or bold label, more than one, or no `- **AC<n>` line under it (every such story is listed on stderr), 3 --bind refused.
 sr_main() {
 set -u
 LC_ALL=C; export LC_ALL
@@ -78,7 +83,7 @@ sort "$TMP/order" > "$TMP/order.s"
 : > "$TMP/derived"
 k=0
 while IFS="$(printf '\t')" read -r _ id f; do
-  awk -v sp="$SPRINT" -v sid="$id" -v k0="$k" -v ovr="$OVR" '
+  awk -v sp="$SPRINT" -v sid="$id" -v k0="$k" -v ovr="$OVR" -v sf="$TMP/secs.$id" '
     function flush(   s, tok, pre, nl, cnt) {
       if (!inac) return
       k++
@@ -101,18 +106,36 @@ while IFS="$(printf '\t')" read -r _ id f; do
       else printf "%s\tST%s-%d\t-\n", sid, sp, k
       inac = 0; blk = ""
     }
-    BEGIN { k = k0 }
-    /^- \*\*AC[0-9]+/ { flush(); inac = 1; blk = $0; next }
-    /^#/ { flush(); next }
+    # The heading form is the one validate-ac-falsifiability.sh Check 31 DISARM trigger (grep -qiE on
+    # `^#{1,6}[[:space:]]*\**[[:space:]]*Acceptance[[:space:]]+Criteria`) accepts: level 1-6, any case, optional bold; matched
+    # WHOLE here (optional closing bold and `:`, then end of line), so `## Acceptance Criteria Evidence` is not one.
+    function isac(r) {
+      r = tolower(r)
+      return r ~ /^[ \t]*\**[ \t]*acceptance[ \t]+criteria[ \t]*\**[ \t]*:?[ \t]*\**[ \t]*$/
+    }
+    # The second alternative of the same trigger, `^[[:space:]]*\*\*Acceptance[[:space:]]+Criteria`, is the bold label that
+    # opens the section without a heading; matched WHOLE (bold, optional `:` inside or outside it, nothing after), so
+    # `**Acceptance Criteria Evidence:**` is not one.
+    function isl(r) {
+      r = tolower(r)
+      return r ~ /^[ \t]*\*\*[ \t]*acceptance[ \t]+criteria[ \t]*:?[ \t]*\*\*[ \t]*:?[ \t]*$/
+    }
+    BEGIN { k = k0; sec = 0; secl = 0; curh = 0; nsec = 0; nac = 0 }
+    /^#/ {
+      flush(); l = match($0, /^#+/) ? RLENGTH : 0; curh = l
+      if (l <= 6 && isac(substr($0, l + 1))) { sec = 1; secl = l; nsec++; next }
+      if (sec && l <= secl) sec = 0
+      next
+    }
+    isl($0) { flush(); sec = 1; secl = curh ? curh : 7; nsec++; next }
+    sec && /^- \*\*AC[0-9]+/ { flush(); inac = 1; nac++; blk = $0; next }
     { if (inac) blk = blk "\n" $0 }
-    END { flush(); print k > "/dev/stderr" }
+    END { flush(); print k > "/dev/stderr"; print nsec, nac >> sf }
   ' "$f" >> "$TMP/derived" 2> "$TMP/k" || exit 2
   k="$(tail -1 "$TMP/k")"
 done < "$TMP/order.s"
-[ -s "$TMP/derived" ] || { echo "strategy-rows: no '- **AC<n>' line in any story under $DIR" >&2; exit 2; }
-
 # A table with a filled Kind or Resolves-to cell is past authoring (the dev's work, ACs amended since): the two --check
-# modes read PENDING there, never a difference.
+# modes read PENDING there, never a difference, and ahead of the section refusal below (--rows and --bind still refuse).
 FILLED_ANY=0
 while IFS="$(printf '\t')" read -r _ _ f; do
   r="$(awk -F'|' '
@@ -127,6 +150,17 @@ pending() { echo "strategy-rows: PENDING -- $1"; exit 0; }
 case "$MODE:$FILLED_ANY" in
   check:1|strategy:1) pending "a Strategy Test IDs table already carries a filled Kind or Resolves-to cell; the story is past authoring and this mode judges authoring-time tables only" ;;
 esac
+
+# Acceptance criteria are read only under the story's one Acceptance Criteria section (heading or bold label): judge every story, list every refusal.
+BAD=0
+while IFS="$(printf '\t')" read -r _ id f; do
+  read -r ns na < "$TMP/secs.$id" || { echo "strategy-rows: $f: section count unreadable" >&2; BAD=1; continue; }
+  if [ "$ns" -eq 0 ]; then echo "strategy-rows: $f: no Acceptance Criteria section heading or bold label; add a '## Acceptance Criteria' heading or the bold label '**Acceptance Criteria:**' over the story's AC lines" >&2; BAD=1
+  elif [ "$ns" -gt 1 ]; then echo "strategy-rows: $f: $ns Acceptance Criteria sections; a story carries exactly one" >&2; BAD=1
+  elif [ "$na" -eq 0 ]; then echo "strategy-rows: $f: no '- **AC<n>' line under its Acceptance Criteria section" >&2; BAD=1; fi
+done < "$TMP/order.s"
+[ "$BAD" -eq 0 ] || exit 2
+
 
 case "$MODE" in
   rows)

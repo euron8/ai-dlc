@@ -252,7 +252,9 @@ cold write on each spawn.
 **Round-dispatcher brief.** A round that Rule 28 "A wide round is run by
 a round-dispatcher" names goes out through this brief. The lead writes
 each member's brief, verbatim as the step file renders it (its
-role-contract line, `shard:` line and `--mark` line), to
+role-contract line when the brief carries one, its `role:` line, which
+the dispatch guard reads under THE ROLE LINE, its `shard:` line and its
+`--mark` line), to
 `_bmad-output/planning-artifacts/s<N>/rounds/<round>/<i>.brief`, and the
 dispatcher brief LISTS every brief path and states their count; the
 dispatcher never globs that directory, because a reused round name would

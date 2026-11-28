@@ -50020,3 +50020,66 @@ Provenance: batch 264, cluster L (ai-dlc-83); id allocated by the lead.
 verify: manual
 
 
+## BL-1259 — strategy-rows.sh mints strategy ids from every `- **AC<n>` line in a story, including restatements outside the Acceptance Criteria section
+
+**DEFECT.** Discharges `PC-S324-STRATEGY-ROWS-COUNTS-AC-RESTATEMENTS-OUTSIDE-THE-ACCEPTANCE-CRITERIA-SECTION`. Filed 2026-11-27 (batch 271, cluster B); id allocated by the lead. Owner: `core/scripts/strategy-rows.sh`, `core/skills/ai-dlc/steps/stories-test-strategy.md`.
+
+Goal: the strategy's ids come only from the acceptance criteria a story declares under its one Acceptance Criteria section, opened by a heading (any level 1-6, any case, optional bold and trailing colon) or by the bold label alone on its line (`**Acceptance Criteria:**`, `**Acceptance criteria**`), each matched on the whole line, and a story that cannot be read that way is refused by name. One done condition: the `story-evidence-scaffold` fixture's BL-1259 cells show a restatement under `## Deferred ACs` minting no id, a `###` subheading inside the section staying in it, a lowercase `#### acceptance criteria` section and a bold-label section each read to the next heading of their own or a shallower level, a story with no heading and no label (and a story with two, and one with none under it) refused with exit 2 naming the story, and a near-miss story with one heading unchanged.
+
+Baseline (the consumer's derivation, measured on graph's stories at this batch): s324 carries 233 `- **AC<n>` lines, 200 inside its `## Acceptance Criteria` section and 33 outside (Deferred ACs 26, Dev Agent Record 6, Scope Verification 1). The base `strategy-rows.sh --rows` printed 267 rows for s324; read section-scoped it prints 233. s323 read section-scoped, with `--letters S323-5.4:AC2=3`, reproduces s323's frozen 176-row test-strategy table byte for byte (base 203). s320's 13 stories are 3 heading-form (`#### Acceptance criteria`), 5 bold-label (`**Acceptance Criteria:**`, 2-1 to 2-3, 4-1, 4-2) and 5 with neither (3-1 to 3-5, AC lines under `## LOCKED_REQUIREMENTS`); the last 5 are refused by name, and the other 8 run alone give rc 0 and 85 rows, each with its frontmatter `acceptance_criteria:` count (base also miscounted 3-3, 8 AC lines against 6, and 3-4, 12 against 10). PENDING measured on a scratch copy of s320 (all 13 stories carry filled Strategy Test IDs tables, 109 rows): `--check` and `--check-strategy test-strategy.md` read rc 0 PENDING at base and rc 2 (no marker, story 3-1) at the tip before the reorder; after it both read rc 0 PENDING. All 37 stories of the two sprints carry exactly one `## Acceptance Criteria` heading, and each section's count equals its frontmatter `acceptance_criteria:`. The consumer ledger's own 271 and 235 are stale: graph commit 63e43ae8e re-derived s324's mapping with the faulty script to 266 rows.
+
+Work list:
+
+1. `strategy-rows.sh` opens the section at a heading of level 1 to 6 whose whole text is `Acceptance Criteria` in any case with optional `**` bold and a trailing `:` (the form `validate-ac-falsifiability.sh` Check 31's DISARM trigger accepts, matched whole so `## Acceptance Criteria Evidence` is not one) or at a bold label alone on its line (the second alternative of the same trigger, matched whole, taking the level of the nearest heading above it) and closes it at the next heading of the same or a shallower level (at any heading when none is above); a deeper heading flushes the open AC and stays inside. Only a `- **AC<n>` line inside the section opens an AC.
+2. A story with a frontmatter id and no section, two sections, or no AC under the heading is listed on stderr by name and the run exits 2 once, naming the remedy (add a `## Acceptance Criteria` heading or the bold label `**Acceptance Criteria:**` over the AC lines); in the two `--check` modes a filled Strategy Test IDs cell reads PENDING ahead of that refusal, while `--rows` and `--bind` still refuse.
+3. `core/skills/ai-dlc/steps/stories-test-strategy.md` states the rule beside the AC header form.
+4. The `story-evidence-scaffold` ERA seeds carry the heading, and its BL-1259 cells (restatement, subheading, heading-tolerance, cli-era-refuse refusal, pending-before-refuse, near-miss) fire each arm once.
+
+**LANDED (v0.1276.0).** batch 271, cluster B, filed and closed in one release. Filed by the consumer as PC-S324-STRATEGY-ROWS-COUNTS-AC-RESTATEMENTS-OUTSIDE-THE-ACCEPTANCE-CRITERIA-SECTION (graph push-candidate ledger, the entry at about line 698). Items 1 to 4 built as listed.
+
+Owed hardening (NOTEs, not built):
+
+- A col-0 `#` line inside a fenced block in the section closes it, so the ACs after it are not counted (graph: 43 of 1202 story files carry a col-0 `#` line inside a fenced block, counted anywhere in the file, not only in the section); guard: compare the section's AC count with the frontmatter `acceptance_criteria:`.
+- Only `--check` has a fixture cell (pending-before-refuse); no cell runs `--bind` or `--check-strategy`, so refuse-before-write and the `--check-strategy` PENDING are held by a hand probe only.
+- A duplicate frontmatter `id:` across two story files is judged in file-name order.
+
+Step: stories-test-strategy
+
+Provenance: batch 271 cluster B; id allocated by the lead.
+
+verify: sh f=core/fixtures/story-evidence-scaffold/run.sh; [ -r "$f" ] || exit 9; o=$(mktemp) || exit 9; bash "$f" > "$o" 2>&1 || exit 1; for l in 'BL-1259 restatement' 'BL-1259 subheading' 'BL-1259 heading-tolerance' 'BL-1259 cli-era-refuse' 'BL-1259 pending-before-refuse' 'BL-1259 near-miss'; do grep -Fq "ok    $l" "$o" || exit 1; done
+## BL-1258 — `merge-review-shards.sh` STORY-BIND cannot bind a review to a story whose slug opens with a digit when the view row's `file:` names that story
+
+**DEFECT.** Filed 2026-11-27 (batch 271, cluster A). Owner: `core/scripts/merge-review-shards.sh` (STORY-BIND and THE VIEW'S HISTORY), `core/team-roles/qa.md`. Filed by the consumer as PC-S324-STORY-BIND-UNSATISFIABLE-WHEN-REVIEW-INDEX-AND-FILE-INDEX-AND-KEY-DIVERGE. Discharges PC-S324-STORY-BIND-UNSATISFIABLE-WHEN-REVIEW-INDEX-AND-FILE-INDEX-AND-KEY-DIVERGE.
+
+Goal: a serial QA's `--check-serial --gate qa` re-run binds a review whose index is the epic index (`4-1`) to the story file its view row declares (`story-4-1-903b-…`, row keyed by the sprint ordinal `story-324-10`), instead of refusing with a remedy that names the file the guard rejects. One done condition: the `bind956` cells `dr-binds`, `dr-binds-run`, `dr-wrong`, `dr-sibling`, `dr-sibling-base`, `dr-keyonly`, `dr-noslot`, `dr-f3` and `dr-hist` of `core/fixtures/review-shard-merge-g` give the rc and token the work list states, and `cr-bind-trunc` of `review-shard-merge-e` stays rc 2.
+
+Derivation (the consumer's, `test-results/s324-41-storybind-derivation.txt`, same run, lead checkout):
+
+- DEFECT: `merge-review-shards.sh --check-serial docs/reviews/s324/4-1-qa-validation.md --gate qa --story …/story-4-1-903b-window-and-clean-smoke.md --lead-range 1d21827b4 …` exits 2 with `REFUSED: STORY-BIND … is not story-4-1.md or story-4-1-*.md, or its slug opens with a digit (a longer index); pass the story file the review is for`. Rule 1 (`story_idx_ok`) refuses the digit-led slug (`903b` is a legal longer index); rule 2 (`stem_rows`) reads the entry key only (`story-324-10` gives index `10`, never `4-1`). The view's own row `story-324-10` carries `file: …/story-4-1-903b-window-and-clean-smoke.md` at the frozen sha and the guard never reads it.
+- CONTROL 1 (wrong story): the same command with `story-1-3-base-offramp-config.md` is refused, rc 2, as it should be.
+- CONTROL 2 (discriminating): `docs/reviews/s324/5-8-qa-validation-p4.md --story …/story-5-8-backlog-hygiene.md` (letter slug, same repo, same key-ordinal-versus-epic divergence) prints `SERIAL-OK … verdict=PASS`, rc 0. The slug is the only difference.
+
+Work list:
+
+1. STORY-BIND declared-row rule, run only inside `if ! story_idx_ok` after the stem rule also fails, all six holding: F1 the `--story` basename begins `story-<idx>-`, the remainder begins with a digit and ends `.md` (any other input refuses with today's text through `(a longer index)`, then a rewritten remedy tail stating the declared-row rule); F2 `ss_bound list-stories` gives the entry key a declared `file:` whose basename equals `--story`'s and a resolved path equal to the resolved `--story`; F3 the key names no other reading of the basename (`story-<r>` for each leading run of index components `r` other than `<idx>`), which `dr-f3` alone tells (`cr-bind-trunc` refuses on F3 and F4 together, so it cannot kill an F3 drop); F4 the key's sprint slot is the review's sprint; F5 at `<base>` and at `<frozen>`, on the run and no-run branches, no other entry's declared or resolved basename is `story-<idx>.md` or starts `story-<idx>-`, and no other key is in the stem rows for `<idx>`; F6 the existing row check is unchanged. A refusal where F1 holds and F2 to F5 fail is today's text through `(a longer index)` as prefix, then the row, the failed condition and the rewritten remedy.
+2. THE VIEW'S HISTORY, only when the fallback bound: a window pair for `--story`'s basename passes if its key meets F3 and F4, and any other `file` value whose basename is `story-<idx>.md` or starts `story-<idx>-` refuses. ONE STORY PER INDEX does not move.
+3. Remedy text at the two STORY-BIND refusals states the declared-row rule instead of telling the reader to pass the file the guard rejects; header, comments and `core/team-roles/qa.md` (one sentence appended at the end of the bullet) state it; the fixture prose strings for `canon` and `bind956` follow.
+4. Fixture cells in `bind956` (`review-shard-merge-g`): dr-binds (rc 0, `SERIAL-OK:`), dr-binds-run (rc 0, `SERIAL-OK:`), dr-wrong and dr-wrong-run (rc 2, `is not story-4-1.md or story-4-1-*.md`, naming no row), dr-sibling, dr-sibling-run and dr-sibling-base (rc 2, the F5 token), dr-keyonly (rc 2, the F2 token), dr-noslot (rc 2, the F4 token), dr-f3 (rc 2, the F3 token `its key reads another index of story-4-1-903b-w.md`), dr-hist (rc 2, `named stories/story-4-1-2-x.md under that index between`).
+
+Cost: no input refused today starts a process unless it passes F1; the consumer's case adds about six `sprint-status.sh` starts. `sprint-status.sh` is unchanged. The `invocations.decl` rows of `review-shard-merge-e` and `-g` move and are ratcheted by the lead.
+
+NOTE (accepted residual). On an ordinal-keyed corpus, a file truly at index `4-1-2` that is the only `story-4-1-` file, with no `4-1` story listed, would bind a `4-1` review. It is reachable only if a `4-1` review is dispatched with no `4-1` story.
+
+BL-868: no cell's verdict depends on load.
+
+**LANDED (v0.1276.0).** Filed and closed in one release. Filed by the consumer as PC-S324-STORY-BIND-UNSATISFIABLE-WHEN-REVIEW-INDEX-AND-FILE-INDEX-AND-KEY-DIVERGE (graph push-candidate ledger, S324 lead session, 2026-11-27). Items 1 to 4 built as listed, with dr-f3 added to item 4 as F3's only killer.
+
+Consumer-side close measurement (batch 271, a scratch clone of the consumer; the consumer's own tree was not written, its `git status --porcelain` reading 33 lines before and after). The clone's installed `merge-review-shards.sh` is `cmp`-identical to the engine at 2f3ea52f2. The consumer's recorded command (`--check-serial docs/reviews/s324/4-1-qa-validation.md --gate qa --story …/story-4-1-903b-window-and-clean-smoke.md --lead-range 1d21827b4 0acbd587875efac1a58c1259f2f6086844cb9e82`): the OLD engine exits 2 at STORY-BIND exactly as recorded; the NEW engine passes STORY-BIND (no F5 or history refusal) and exits 2 at NOT-RECORD-ONLY, because that range touches 7 changed paths, 4 of them non-record by record-only-diff.sh's partition (first `_bmad-output/implementation-artifacts/dev-s324-4-1.md`; the other three are planning-artifacts close/repair records under `_bmad-output/planning-artifacts/s324/`), so the refusal is by contract. The consumer's record-only claim is theirs to correct (record the run, or waive it from planning); this release alone does not make story 4-1's gate-2 record possible. CONTROL 1 (`--story …/story-1-3-base-offramp-config.md`): rc 2 under both engines. CONTROL 2 (review 5-8, the letter slug `story-5-8-backlog-hygiene.md`): rc 0 `SERIAL-OK` under both.
+
+Step: n/a
+
+Provenance: batch 271 cluster A (owner ai-dlc-9c); id allocated by the lead.
+
+verify: sh grep -Fq 'if cell dr-f3; then' core/fixtures/review-shard-merge/lib.sh || exit 9; o=$(mktemp) || exit 9; bash core/fixtures/review-shard-merge-g/run.sh > "$o" 2>&1 || exit 1; l=$(grep -F '  ok    BIND956 (BL-956): ' "$o") || exit 1; case "$l" in *'BL-1258 THE DECLARED-ROW RULE: 4-1-qa-validation.md binds the digit-led slug'*) ;; *) exit 1 ;; esac
+

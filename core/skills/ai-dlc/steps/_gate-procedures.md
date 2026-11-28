@@ -766,6 +766,11 @@ the dispatch, and the spawn ledger must record that dispatch as an `adversary`. 
 with Write or Edit, never Bash; a Bash-written shard has no harness record and the merge refuses it.
 Filename numbering is load-bearing: Check 24 orders the series by the `p<M>` token.
 
+In files (stories) mode, a part shard of a pass after the first whose story is unchanged since the previous pass
+reviews the WHOLE story, not only the REPAIR: it compares its story's sha256 with the pair the prior pass record's
+`artifact_sha:` line notarizes for its stem, and `gen-round-briefs.sh` writes that procedure into every part brief of
+such a pass. The cross shard, and every shard in document and subject modes, reviews the REPAIR.
+
 **Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh --complete <findings_path>`, which takes a file as delivered only once it ends in its `seat-complete:` line and that line's `sha=` matches.
 
 **Stop a hung review seat the beat names.** Under `--complete`, every beat prints one `REVIEW SHARD` line per undelivered shard with its agent's silence age; the agent is the transcript whose brief names the shard's path. A `REVIEW SEAT HUNG` line names an agent whose newest record is a tool_use with no result older than 1200 s (`AI_DLC_HUNG_TOOL_SECS`); stop that agent with TaskStop and re-dispatch that shard. Use `--shard-header` for adversarial review shards only: a target under a `*-repair` or `*-repair-*` shard directory is refused at arming (exit 64); join repair parts without the flag.
@@ -883,6 +888,9 @@ and STOPS it exactly as a STALL does: its record is `s<N>/<artifact>-resolution-
 pass after a series' first reviews the REPAIR: dispatch it over the parts
 `scripts/ai-dlc/merge-adversarial-shards.sh [--document <artifact path> | --subject <N> --base <base sha>] --derived-map <that dir>` prints (files mode prints the full map; document and subject modes narrow by part digest, and a full map carries its `full width:` reason) plus the cross shard,
 and the merge stamps `shard_set_derived_from:`.
+
+In files (stories) mode, a part shard whose story is unchanged since the previous pass reviews the WHOLE story, not
+only the REPAIR; its brief carries how it decides that. The cross shard reviews the REPAIR.
 
 **STOP → ADJUDICATE → RESOLVE → VERIFY**
 

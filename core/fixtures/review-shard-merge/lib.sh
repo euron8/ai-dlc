@@ -2881,6 +2881,8 @@ G -C "$CR_REPO" checkout -q -b bare "$CR_BASE" && printf -- '---\nstatus: review
 # named 2-qa-validation.md is refused by the digit rule alone; 2-1-qa-validation.md is its ALLOW twin. CR_STORY4 is also
 # cr-bind-sibling's story under the 1-2 review, an index under which nothing is listed. Its row story-2-1 names index
 # 2-1 under sprint 1 (BL-956 stem-names strips only the sprint slot after `story-`), so it binds index 2 by no row.
+# Under THE DECLARED-ROW RULE (BL-1258) the digit-led slug reaches the fallback, which refuses it twice over: the key
+# reads index 2-1 of the name (F3) and its slot after `story-` is not sprint 1 (F4), so this cell cannot tell F3 alone; dr-f3 (p_bind956) does.
 CR_STORYZ="$CR_SDIR/story-1-1-z.md"; CR_STORY4="$CR_SDIR/story-2-1-y.md"
 cr_z() { printf -- '---\nstatus: review\n---\n# Story Z\n' > "$CR_REPO/$CR_STORYZ"; }
 G -C "$CR_REPO" checkout -q -b rk "$CR_REC" && cr_z && cr_view review \
@@ -3041,6 +3043,39 @@ done
 _b6h="$(G -C "$CR_REPO" show "${CR_B6H}:$CR_VIEW")" || _b6h=""; _b6q="$(G -C "$CR_REPO" show "${CR_B6Q}:$CR_VIEW")" || _b6q=""
 grep -qF 'stories/story-q.md' <<<"$_b6q" && ! grep -qF 'story-q.md' <<<"$_b6h" && grep -qF 'stories/story-1-6-a.md' <<<"$_b6h" \
   || { echo "FIXTURE STALE: B6Q's row does not name story-q.md, or B6H's still does or does not name story-1-6-a.md" >&2; exit 2; }
+# THE DECLARED-ROW RULE (BL-1258): review 4-1-qa-validation.md, --story story-4-1-903b-w.md (a digit-led slug, which the
+# literal rule reads as a longer index). Each world is plumbing commits (b956_pc) over CR_BASE, story-1-1 listed alone.
+#   DR_B..DR_F    row story-1-10 declares the story by file: at the base and frozen               binds (both claims)
+#   DR_B..DR_SIB  plus row story-1-11 declaring story-4-1-2-x.md at frozen                       F5 refuses (both claims)
+#   DR_SBB..DR_SBF that sibling row at the base only, deleted in the range                       F5 refuses at the base
+#   DR_HB..DR_HF  that sibling row in DR_H1 only, after the stories directory, before the base   the history refuses
+#   CR_BASE..DR_KO  key-only row story-1-4-1-1 (resolver stem story-4, index stem story-4-1-1)   F2 refuses
+#   CR_BASE..DR_NS  row story-10 (no sprint slot) declaring the story                           F4 refuses
+#   CR_BASE..DR_F3  row story-1-4-1-903b declaring the story (reads index 4-1-903b of the name)  F3 refuses
+#   CR_BASE..DR_W   row story-1-3 declaring story-1-3-q.md, --story that file                   F1 refuses
+CR_S41="$CR_SDIR/story-4-1-903b-w.md"; CR_SQ13="$CR_SDIR/story-1-3-q.md"
+DR_VH='sprint: 1\nstatus: in_progress\nstories:\n  story-1-1:\n    status: ready-for-dev\n    file: stories/story-1-1-x.md\n'
+dr_r() { printf '  %s:\n    status: %s\n' "$1" "$2"; [ -z "${3:-}" ] || printf '    file: %s\n' "$3"; } # <key> <status> [<file:>]
+dr_v() { printf '%b' "$DR_VH"; while [ "$#" -ge 2 ]; do dr_r "$1" "$2" "${3:-}"; shift 3 || shift "$#"; done; printf _; } # (<key> <status> <file:|''>)...
+dr_s() { printf -- '---\nstatus: %s\n---\n# Story 4.1\n_' "$1"; }
+DR_SIBF=stories/story-4-1-2-x.md; DR_FF=stories/story-4-1-903b-w.md
+DR_B="$(b956_pc "$CR_BASE" dr-b "$CR_S41" "$(dr_s ready-for-dev)" "$CR_VIEW" "$(dr_v story-1-10 ready-for-dev "$DR_FF")")" \
+  && DR_F="$(b956_pc "$DR_B" dr-f "$CR_S41" "$(dr_s review)" "$CR_VIEW" "$(dr_v story-1-10 review "$DR_FF")")" \
+  && DR_SIB="$(b956_pc "$DR_B" dr-sib "$CR_S41" "$(dr_s review)" "$CR_VIEW" "$(dr_v story-1-10 review "$DR_FF" story-1-11 review "$DR_SIBF")")" \
+  && DR_SBB="$(b956_pc "$CR_BASE" dr-sbb "$CR_S41" "$(dr_s ready-for-dev)" "$CR_VIEW" "$(dr_v story-1-10 ready-for-dev "$DR_FF" story-1-11 ready-for-dev "$DR_SIBF")")" \
+  && DR_SBF="$(b956_pc "$DR_SBB" dr-sbf "$CR_S41" "$(dr_s review)" "$CR_VIEW" "$(dr_v story-1-10 review "$DR_FF")")" \
+  && DR_H1="$(b956_pc "$CR_BASE" dr-h1 "$CR_VIEW" "$(dr_v story-1-11 ready-for-dev "$DR_SIBF")")" \
+  && DR_HB="$(b956_pc "$DR_H1" dr-hb "$CR_S41" "$(dr_s ready-for-dev)" "$CR_VIEW" "$(dr_v story-1-10 ready-for-dev "$DR_FF")")" \
+  && DR_HF="$(b956_pc "$DR_HB" dr-hf "$CR_S41" "$(dr_s review)" "$CR_VIEW" "$(dr_v story-1-10 review "$DR_FF")")" \
+  && DR_KO="$(b956_pc "$CR_BASE" dr-ko "$CR_S41" "$(dr_s review)" "$CR_VIEW" "$(dr_v story-1-4-1-1 review '')")" \
+  && DR_NS="$(b956_pc "$CR_BASE" dr-ns "$CR_S41" "$(dr_s review)" "$CR_VIEW" "$(dr_v story-10 review "$DR_FF")")" \
+  && DR_F3="$(b956_pc "$CR_BASE" dr-f3 "$CR_S41" "$(dr_s review)" "$CR_VIEW" "$(dr_v story-1-4-1-903b review "$DR_FF")")" \
+  && DR_W="$(b956_pc "$CR_BASE" dr-w "$CR_SQ13" "$(dr_s review)" "$CR_VIEW" "$(dr_v story-1-3 review stories/story-1-3-q.md)")" \
+  || { echo "FIXTURE ERROR: the BL-1258 declared-row worlds were not seeded" >&2; exit 2; }
+_drv="$(G -C "$CR_REPO" show "${DR_SIB}:$CR_VIEW")" || _drv=""; _drk="$(G -C "$CR_REPO" show "${DR_KO}:$CR_VIEW")" || _drk=""
+grep -qF "file: $DR_SIBF" <<<"$_drv" && grep -qF "file: $DR_FF" <<<"$_drv" && grep -qF 'story-1-4-1-1:' <<<"$_drk" && ! grep -qF 'story-4-1' <<<"$_drk" \
+  && [ "$(G -C "$CR_REPO" diff --name-only "$DR_SBB" "$DR_SBF" | tr '\n' ' ')" = "$CR_VIEW $CR_S41 " ] &&[ "$(G -C "$CR_REPO" diff --name-only "$CR_BASE" "$DR_H1")" = "$CR_VIEW" ] \
+  || { echo "FIXTURE STALE: a BL-1258 world's view does not carry the rows its cell names" >&2; exit 2; }
 # BL-895, THE HISTORY'S OWN TRUST. Each world sits over CR_LRD (x's row deleted by one record-only commit), so only the
 # view's history names x, and each defeats a history read a different way:
 #   CR_HM  (B1) HQ, over CR_LRD, adds z and repoints row story-1-1 to it, dated 2001; CR_HM merges it --no-ff into CR_LRD's
@@ -3489,8 +3524,8 @@ p_canon() {
   # BL-895 B1. cr-bind-repoint-k / -a: a fresh story-1-1-z.md the view lists under another key, or by repointing row
   # story-1-1's file:, over CR_REC where story-1-1-x.md is already `review` -- refused because x is listed under index 1-1
   # at the base. D1. cr-bind-trunc: story-2-1-y.md, the only file under index 2, under a review
-  # named 2-qa-validation.md -- refused by the digit rule alone; cr-bind-trunc-ok, its ALLOW twin
-  # one property apart, the same story under 2-1-qa-validation.md.
+  # named 2-qa-validation.md -- refused at the index, the declared-row rule's F3 and F4 both failing; cr-bind-trunc-ok,
+  # its ALLOW twin one property apart, the same story under 2-1-qa-validation.md.
   if cell cr-bind-repoint-k; then SR_CANON="$SR_NONE" sr_file "$f" "$pv"; cr_no "$sd" "$f" cr-bind-repoint-k "$CR_BONE" --story "$CR_STORYZ" --range "$CR_REC" "$CR_RK"; fi
   if cell cr-bind-trunc; then SR_CANON="$SR_NONE" sr_file "$ft" "$pv"; cr_no "$sd" "$ft" cr-bind-trunc "$CR_BDIG" --story "$CR_STORY4" --range "$CR_BASE" "$CR_TRUNC"; fi
   if cell cr-bind-trunc-ok; then SR_CANON="$SR_NONE" sr_file "$ft2" "$pv"; cr_ok "$sd" "$ft2" cr-bind-trunc-ok --story "$CR_STORY4" --range "$CR_BASE" "$CR_TRUNC"; fi
@@ -3622,7 +3657,7 @@ B956_NONE='Canonical run: none, the diff is record-only (story, view)'
 B956_IDX="is not story-6.md or story-6-*.md, or its slug opens with a digit"
 B956_RK="keyed --story's file stories/story-1-1-x.md under row story-1-1, not under that index"
 p_bind956() {
-  local sd="$1" f6="$CR_REPO/docs/reviews/s1/6-qa-validation.md" pv o rc n
+  local sd="$1" f6="$CR_REPO/docs/reviews/s1/6-qa-validation.md" f41="$CR_REPO/docs/reviews/s1/4-1-qa-validation.md" pv o rc n c
   pv="$(printf '## Verdict\nPASS')"; WHY=""
   b956() { # <cell> <none|run> <ok|refusal token> <frozen> [<story> <base>]
     if [ "$2" = none ]; then SR_CANON="$B956_NONE" sr_file "$f6" "$pv"; else SR_CANON="$CANON_BLK" sr_file "$f6" "$pv"; fi
@@ -3669,6 +3704,30 @@ p_bind956() {
     [ "$s3|$s13|$s322" = "story-3-3|story-3-1-3|story-322-6" ] \
       || WHY="$WHY bind956-stem{3=[$s3] 1-3=[$s13] 322=[$s322]}"
   fi
+  # THE DECLARED-ROW RULE (BL-1258), over the DR_ worlds: review 4-1-qa-validation.md, --story story-4-1-903b-w.md.
+  # dr <cell> <none|run> <ok|refusal token> <frozen> <base> [<story>]; each refusal names the condition that failed.
+  dr() {
+    if [ "$2" = none ]; then SR_CANON="$B956_NONE" sr_file "$f41" "$pv"; else SR_CANON="$CANON_BLK" sr_file "$f41" "$pv"; fi
+    if [ "$3" = ok ]; then cr_ok "$sd" "$f41" "$1" --story "${6:-$CR_S41}" --range "$5" "$4"
+    else cr_no "$sd" "$f41" "$1" "$3" --story "${6:-$CR_S41}" --range "$5" "$4"; fi
+  }
+  if cell dr-binds; then dr dr-binds none ok "$DR_F" "$DR_B"; fi
+  if cell dr-binds-run; then dr dr-binds-run run ok "$DR_F" "$DR_B"; fi
+  # dr-wrong: --story story-1-3-q.md fails F1, so the refusal is the index's own, naming no row.
+  for c in dr-wrong:none dr-wrong-run:run; do
+    if cell "${c%%:*}"; then dr "${c%%:*}" "${c#*:}" "is not story-4-1.md or story-4-1-*.md, or its slug opens with a digit (a longer index); --story binds" "$DR_W" "$CR_BASE" "$CR_SQ13"
+      ! has "$CO" "; the view's row story-" ||WHY="$WHY ${c%%:*}{the F1 refusal names a row: $(head -1 "$CO")}"; fi
+  done
+  for c in dr-sibling:none dr-sibling-run:run; do
+    if cell "${c%%:*}"; then dr "${c%%:*}" "${c#*:}" "names another file under index 4-1 at $DR_SIB;" "$DR_SIB" "$DR_B"
+      has "$CO" "the view's entry story-1-11 (status review, file $DR_SIBF," || WHY="$WHY ${c%%:*}{the F5 refusal does not name entry story-1-11: $(head -1 "$CO")}"; fi
+  done
+  if cell dr-sibling-base; then dr dr-sibling-base none "names another file under index 4-1 at $DR_SBB;" "$DR_SBF" "$DR_SBB"; fi
+  if cell dr-hist; then dr dr-hist none "the implementation view named $DR_SIBF under that index between" "$DR_HF" "$DR_HB"; fi
+  if cell dr-keyonly; then dr dr-keyonly none "the view's row story-1-4-1-1 names it, and that row does not declare it by 'file:' (declared -)" "$DR_KO" "$CR_BASE"; fi
+  if cell dr-noslot; then dr dr-noslot none "the view's row story-10 names it, and its key carries no sprint-1 slot right after 'story-'" "$DR_NS" "$CR_BASE"; fi
+  if cell dr-f3; then dr dr-f3 none "the view's row story-1-4-1-903b names it, and its key reads another index of story-4-1-903b-w.md" "$DR_F3" "$CR_BASE"; fi
+  rm -f "$f41"
   if cell bind956-receipt; then
     o="$(bash "$LIB_DIR/receipt-bl956.sh" "$sd/merge-review-shards.sh" "$PROJ" 2>&1)"; rc=$?
     n="$(grep -cxE 'ok (bare-6|lit-1-6|key-7|lit-keyonly)' <<<"$o")" || n=0

@@ -1131,10 +1131,12 @@ if gsel era; then
     for f in strategy-rows.sh strategy-self-check.sh; do echo "HERMETIC-CONSUMED core/scripts/$f"; done
     ER_W="$WORK/world-era"
     mkdir -p "$ER_W/stories" || bad "ERA: FIXTURE BROKEN -- cannot make the world"
-    printf -- '---\nid: S9-1.1\nstatus: draft\n---\n# Story\n\n- **AC1 (EXISTENTIAL).** one\n- **AC2 (UNIVERSAL).** two\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-1.md"
+    printf -- '---\nid: S9-1.1\nstatus: draft\n---\n# Story\n\n## Acceptance Criteria\n\n- **AC1 (EXISTENTIAL).** one\n- **AC2 (UNIVERSAL).** two\n\n## Deferred ACs\n\n- **AC2** (live_ops). restated\n\n## Acceptance Criteria Evidence\n\n- **AC1 (U).** restated\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-1.md"
     # LETTER: the same --bind run letters a second story. AC1 cites another enumeration through a hyphenated id, AC2 through
     # the word answer; AC3 is the near-miss, its own (a)/(b) right after an id token ended by a colon.
-    printf -- '---\nid: S9-1.2\nstatus: draft\n---\n# Story\n\n- **AC1 (EXISTENTIAL).** the venue holds FR-S9-2 (a) and FR-S9-2 (b) as read\n- **AC2 (EXISTENTIAL).** each path follows the operator answer (a) or answer (b)\n- **AC3 (UNIVERSAL).** FR-S9-2: (a) refuses and (b) logs\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-2.md"
+    printf -- '---\nid: S9-1.2\nstatus: draft\n---\n# Story\n\n## Acceptance Criteria\n\n- **AC1 (EXISTENTIAL).** the venue holds FR-S9-2 (a) and FR-S9-2 (b) as read\n\n### Group\n\n- **AC2 (EXISTENTIAL).** each path follows the operator answer (a) or answer (b)\n- **AC3 (UNIVERSAL).** FR-S9-2: (a) refuses and (b) logs\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-2.md"
+    printf -- '---\nid: S9-1.3\nstatus: draft\n---\n# Story\n\n#### acceptance criteria\n\n- **AC1 (U).** one\n\n##### Notes\n\n- **AC2 (U).** under a deeper child\n\n#### Dev Notes\n\n- **AC3 (U).** restated in a sibling\n\n## Acceptance Criteria (cont.)\n\n- **AC4 (U).** restated\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-3.md"
+    printf -- '---\nid: S9-1.4\nstatus: draft\n---\n# Story\n\n### Scope\n\n**Acceptance criteria**:\n\n- **AC1 (U).** label one\n\n#### Detail\n\n- **AC2 (U).** under a deeper child\n\n### Next\n\n**Acceptance Criteria Evidence:**\n\n- **AC3 (U).** restated after the same-level heading\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n' > "$ER_W/stories/story-1-4.md"
     er_out="$(FXCELL="cli-era-bind" bash "$ER_D/strategy-rows.sh" --sprint 9 --stories-dir "$ER_W/stories" --bind 2>&1)"; er_rc=$?
     er_n="$(grep -cx 'ai-dlc-era: e4-forward-1' "$ER_W/stories/story-1-1.md")"
     if [ "$er_rc" -eq 0 ] && [ "$er_n" = 1 ] && grep -qxF '| ST9-1 | - |  |  |' "$ER_W/stories/story-1-1.md" && grep -qxF '| ST9-2 | - |  |  |' "$ER_W/stories/story-1-1.md"; then
@@ -1174,6 +1176,60 @@ if gsel era; then
     else
       bad "ERA: Kind test in a stamped table: $(grep kind-vocabulary "$ER_W/test.out" | head -1)"
     fi
+    # --- BL-1259: acceptance criteria are read only under the story's one Acceptance Criteria section heading ---------
+    # RESTATEMENT / NEAR MISS: story-1-1 carries '## Deferred ACs' (AC2) and '## Acceptance Criteria Evidence' (AC1) beside
+    # its two section ACs; only the two section ACs mint rows, so its table has exactly ST9-1 and ST9-2 and LETTER's ids hold.
+    # SUBHEADING: story-1-2 carries a '### Group' line inside the section, before AC2; its rows still derive in full.
+    er_f11="$ER_W/stories/story-1-1.md"
+    er_n11="$(grep -c '^| ST9-' "$er_f11")"
+    if [ "$er_n11" = 2 ] && grep -qxF '## Deferred ACs' "$er_f11" && grep -qxF '| ST9-2 | - |  |  |' "$er_f11" && ! grep -qE '^\| ST9-[3-9] ' "$er_f11"; then
+      ok "BL-1259 restatement: an AC line under '## Deferred ACs' mints no row (story 1-1 binds exactly ST9-1 and ST9-2, and story 1-2 starts at ST9-3)"
+    else
+      bad "BL-1259 restatement: story-1-1 bound $er_n11 rows (want 2): $(grep '^| ST9-' "$er_f11" | tr '\n' ' ')"
+    fi
+    if grep -qxF '### Group' "$ER_W/stories/story-1-2.md" && [ "$er_l" = "| ST9-3 | - |  |  | | ST9-4 | - |  |  | | ST9-5 | a |  |  | | ST9-5 | b |  |  | " ]; then
+      ok "BL-1259 subheading: a '### Group' line inside the section keeps the ACs after it (story 1-2 binds ST9-3 to ST9-5 as before)"
+    else
+      bad "BL-1259 subheading: story-1-2 rows [$er_l]"
+    fi
+    if [ "$er_rc" -eq 0 ] && grep -qxF '## Acceptance Criteria Evidence' "$er_f11" && grep -qxF -e '- **AC1 (U).** restated' "$er_f11" && [ "$er_n11" = 2 ]; then
+      ok "BL-1259 near-miss: an AC line under '## Acceptance Criteria Evidence', right after the exact section, adds no row (bind rc 0, two rows)"
+    else
+      bad "BL-1259 near-miss: bind rc=$er_rc rows=$er_n11"
+    fi
+    # LABEL (story-1-4): '**Acceptance criteria**:' under '### Scope' opens the section at level 3; '#### Detail' stays in it, '### Next' closes it, so
+    # the AC after '**Acceptance Criteria Evidence:**' (a bold label with trailing text) mints nothing.
+    # HEADING TOLERANCE: story-1-3 carries '#### acceptance criteria' (level 4, lower case) with an AC under a '#####' child, then a
+    # '#### Dev Notes' sibling and '## Acceptance Criteria (cont.)' restating ACs; only the two in-section ACs mint rows (ST9-6, ST9-7).
+    er_l3="$(grep -E '^\| ST9-[0-9]+ \|' "$ER_W/stories/story-1-3.md" | tr '\n' ' ')"
+    er_l4="$(grep -E '^\| ST9-[0-9]+ \|' "$ER_W/stories/story-1-4.md" | tr '\n' ' ')"
+    if [ "$er_rc" -eq 0 ] && [ "$er_l3" = "| ST9-6 | - |  |  | | ST9-7 | - |  |  | " ] && [ "$er_l4" = "| ST9-8 | - |  |  | | ST9-9 | - |  |  | " ]; then
+      ok "BL-1259 heading-tolerance: '#### acceptance criteria' is the section, a '#####' child stays in it, a '#### Dev Notes' sibling and '(cont.)' close it (story 1-3 binds ST9-6, ST9-7); a bold label under '### Scope' opens one that a '### Next' closes (story 1-4 binds ST9-8, ST9-9)"
+    else
+      bad "BL-1259 heading-tolerance: story-1-3 rows [$er_l3] story-1-4 rows [$er_l4]"
+    fi
+    # REFUSAL: a story with no heading, one with two, one with the heading and no AC under it: rc 2 and one line each.
+    ER_R="$ER_W/refuse"; mkdir -p "$ER_R"
+    printf -- '---\nid: S9-2.1\n---\n# Story\n\n- **AC1 (U).** no heading and no label\n\n## Strategy Test IDs\n\n| Strategy id | Case | Kind | Resolves to |\n|---|---|---|---|\n| ST9-1 | - | test | x.py::t |\n' > "$ER_R/story-2-1.md"
+    printf -- '---\nid: S9-2.2\n---\n# Story\n\n## Acceptance Criteria\n\n- **AC1 (U).** one\n\n## More\n\n**Acceptance Criteria:**\n\n- **AC2 (U).** two\n' > "$ER_R/story-2-2.md"
+    printf -- '---\nid: S9-2.3\n---\n# Story\n\n## Acceptance Criteria\n\nprose only\n' > "$ER_R/story-2-3.md"
+    er_ro="$(FXCELL="cli-era-refuse" bash "$ER_D/strategy-rows.sh" --sprint 9 --stories-dir "$ER_R" --rows 2>&1)"; er_rr=$?
+    if [ "$er_rr" -eq 2 ] \
+       && grep -qxF "strategy-rows: $ER_R/story-2-1.md: no Acceptance Criteria section heading or bold label; add a '## Acceptance Criteria' heading or the bold label '**Acceptance Criteria:**' over the story's AC lines" <<<"$er_ro" \
+       && grep -qxF "strategy-rows: $ER_R/story-2-2.md: 2 Acceptance Criteria sections; a story carries exactly one" <<<"$er_ro" \
+       && grep -qxF "strategy-rows: $ER_R/story-2-3.md: no '- **AC<n>' line under its Acceptance Criteria section" <<<"$er_ro"; then
+      ok "BL-1259 cli-era-refuse: --rows exits 2 listing the story with no heading, the one with two, and the one with no AC under its heading"
+    else
+      bad "BL-1259 cli-era-refuse: refusal world rc=$er_rr [$er_ro]"
+    fi
+    # PENDING BEFORE REFUSAL: the same world under --check, where story 2-1 (no marker) carries a filled Kind cell, reads PENDING rc 0; the
+    # --rows run above is its control (the same story is refused there).
+    er_po="$(FXCELL="cli-era-pending" bash "$ER_D/strategy-rows.sh" --sprint 9 --stories-dir "$ER_R" --check 2>&1)"; er_pr=$?
+    if [ "$er_pr" -eq 0 ] && [ "$er_rr" -eq 2 ] && grep -qF 'strategy-rows: PENDING -- a Strategy Test IDs table already carries a filled Kind' <<<"$er_po"; then
+      ok "BL-1259 pending-before-refuse: --check reads PENDING (rc 0) on a story with no marker and a filled Strategy Test IDs table, where --rows refuses it"
+    else
+      bad "BL-1259 pending-before-refuse: --check rc=$er_pr [$er_po]"
+    fi
   fi
 fi
 
@@ -1194,6 +1250,7 @@ if gsel rbriefs; then
     esac
   else
     echo "HERMETIC-CONSUMED core/scripts/gen-round-briefs.sh"
+    ses_gate "$RB_D/gen-round-briefs.sh" grb_main
     RB_W="$WORK/world-rbriefs"; RB_S="$RB_W/shards/stories-repair-p2"
     mkdir -p "$RB_W/stories" "$RB_W/find" "$RB_S" "$RB_W/lane/shards/stories-serial-repair-p2" || bad "RBRIEFS: FIXTURE BROKEN -- cannot make the world"
     printf '1\tstory-1-1.md\n2\tstory-1-2.md\n3\tstory-2-1.md\n' > "$RB_W/map"
@@ -1268,6 +1325,131 @@ if gsel rbriefs; then
         ok "RBRIEFS: a derived map (ordinals 2,3) briefs the cross shard as 'cross/2 g1/1 1, 2' (positional cover 1..K) and the parts as 2/2 and 3/2"
       else
         bad "RBRIEFS: derived-map shard lines cross=[$(grep -m1 '^shard:' "$RB_W/elic-out/cross.brief" 2>/dev/null)] 2=[$(grep -m1 '^shard:' "$RB_W/elic-out/2.brief" 2>/dev/null)] 3=[$(grep -m1 '^shard:' "$RB_W/elic-out/3.brief" 2>/dev/null)]"
+      fi
+      # --- WHOLE-STORY block: a later review pass on the files axis tells each PART shard how to decide that its story is
+      # unchanged and then review it whole, naming the previous pass record verbatim: the --prior path whose basename is
+      # *-adversarial-p<k>.md with the highest k below --pass. The cross brief, a pass with no pass record among its priors,
+      # and a sections-axis part brief carry the prior records line and not that sentence.
+      rb_ws='Your story is reviewed WHOLE, not only the repair, when it is unchanged since the previous pass.'
+      rb_pl='Pass 2 reviews the REPAIR, not the document again. Read these prior records first:'
+      rb_bq='`'
+      rb_n1="read the previous pass record $rb_bq$RB_W/stories-adversarial-p1.md$rb_bq"
+      rb_n2="read the previous pass record $rb_bq$RB_W/stories-adversarial-p2.md$rb_bq"
+      printf '# stories adversarial pass 1\n' > "$RB_W/stories-adversarial-p1.md"
+      printf '# stories adversarial pass 2\n' > "$RB_W/stories-adversarial-p2.md"
+      printf '# stories repair pass 1\n' > "$RB_W/stories-repair-p1.md"
+      printf '# doc\n\n## A\n\n## B\n' > "$RB_W/doc.md"
+      printf '1\t1\t3\tA\n2\t4\t5\tB\n' > "$RB_W/map-sec"
+      rb_w="$(FXCELL="cli-rbriefs-whole" bash "$RB_D/gen-round-briefs.sh" --round review --axis files --sprint 9 --artifact stories --pass 2 --map "$RB_W/map" --subject-dir "$RB_W/stories" --focus "$RB_W/focus" --role-file "$RB_ROLE" --prior "$RB_W/stories-adversarial-p1.md" --shard-dir "$RB_W/shards/stories-p2" --out-dir "$RB_W/whole-out" 2>&1)"; rb_wrc=$?
+      rb_wn=0
+      for rb_o in 1 2 3; do
+        rb_c="$(grep -cF "$rb_ws" "$RB_W/whole-out/$rb_o.brief" 2>/dev/null)" || rb_c=0
+        rb_wn=$((rb_wn + rb_c))
+      done
+      rb_wx="$(grep -cF "$rb_ws" "$RB_W/whole-out/cross.brief" 2>/dev/null)" || rb_wx=0
+      rb_w1="$(grep -cF "$rb_n1" "$RB_W/whole-out/2.brief" 2>/dev/null)" || rb_w1=0
+      if [ "$rb_wrc" -eq 0 ] && [ "$rb_wn" -eq 3 ] && [ "$rb_wx" -eq 0 ] && grep -qF "$rb_pl" "$RB_W/whole-out/cross.brief" 2>/dev/null \
+         && [ "$rb_w1" -eq 1 ] && grep -qF '`shasum -a 256 <your story file>`' "$RB_W/whole-out/2.brief"; then
+        ok "RBRIEFS: a files-axis pass 2 with --prior p1 briefs each of the 3 part shards with the whole-story procedure (the p1 prior path verbatim, shasum) and the cross shard with the prior records line only"
+      else
+        bad "RBRIEFS: whole-story files rc=$rb_wrc part-sentences=$rb_wn/3 cross-sentence=$rb_wx cross-prior=$(grep -cF "$rb_pl" "$RB_W/whole-out/cross.brief" 2>/dev/null) p1-named=$rb_w1 out=[$rb_w]"
+      fi
+      # One run, three properties: graph's artifact name (--artifact stories-adversarial), a gap (--pass 4 with no p3 among
+      # the priors) and a decoy (p1 beside p2) -> the p2 prior path verbatim: the highest k below M, never literal M-1.
+      rb_3="$(FXCELL="cli-rbriefs-whole3" bash "$RB_D/gen-round-briefs.sh" --round review --axis files --sprint 9 --artifact stories-adversarial --pass 4 --map "$RB_W/map" --subject-dir "$RB_W/stories" --focus "$RB_W/focus" --role-file "$RB_ROLE" --prior "$RB_W/stories-adversarial-p1.md" --prior "$RB_W/stories-adversarial-p2.md" --shard-dir "$RB_W/shards/stories-p4" --out-dir "$RB_W/whole3-out" 2>&1)"; rb_3rc=$?
+      rb_3p2="$(grep -cF "$rb_n2" "$RB_W/whole3-out/1.brief" 2>/dev/null)" || rb_3p2=0
+      rb_3p1="$(grep -cF "$rb_n1" "$RB_W/whole3-out/1.brief" 2>/dev/null)" || rb_3p1=0
+      if [ "$rb_3rc" -eq 0 ] && [ "$rb_3p2" -eq 1 ] && [ "$rb_3p1" -eq 0 ]; then
+        ok "RBRIEFS: --artifact stories-adversarial --pass 4 with p1 and p2 among the priors (no p3) names the p2 prior path verbatim, not p1"
+      else
+        bad "RBRIEFS: whole-story pass 4 gap rc=$rb_3rc p2-named=$rb_3p2 p1-named=$rb_3p1 out=[$rb_3]"
+      fi
+      # No pass record among the priors (a repair record only): the prior records line, no whole-story sentence.
+      rb_z="$(FXCELL="cli-rbriefs-wholenone" bash "$RB_D/gen-round-briefs.sh" --round review --axis files --sprint 9 --artifact stories --pass 2 --map "$RB_W/map" --subject-dir "$RB_W/stories" --focus "$RB_W/focus" --role-file "$RB_ROLE" --prior "$RB_W/stories-repair-p1.md" --shard-dir "$RB_W/shards/stories-none-p2" --out-dir "$RB_W/wholenone-out" 2>&1)"; rb_zrc=$?
+      rb_zx="$(cat "$RB_W/wholenone-out/1.brief" "$RB_W/wholenone-out/2.brief" "$RB_W/wholenone-out/3.brief" 2>/dev/null | grep -cF "$rb_ws")" || rb_zx=0
+      if [ "$rb_zrc" -eq 0 ] && [ "$rb_zx" -eq 0 ] && grep -qF "$rb_pl" "$RB_W/wholenone-out/1.brief" 2>/dev/null; then
+        ok "RBRIEFS: a files-axis pass 2 whose only prior is a repair record briefs its part shards with the prior records line and no whole-story sentence"
+      else
+        bad "RBRIEFS: whole-story no pass record rc=$rb_zrc sentences=$rb_zx part-prior=$(grep -cF "$rb_pl" "$RB_W/wholenone-out/1.brief" 2>/dev/null) out=[$rb_z]"
+      fi
+      rb_s="$(FXCELL="cli-rbriefs-wholesec" bash "$RB_D/gen-round-briefs.sh" --round review --axis sections --sprint 9 --artifact prd --pass 2 --map "$RB_W/map-sec" --doc "$RB_W/doc.md" --focus "$RB_W/focus" --role-file "$RB_ROLE" --prior "$RB_W/stories-adversarial-p1.md" --shard-dir "$RB_W/shards/prd-p2" --out-dir "$RB_W/whole-sec" 2>&1)"; rb_src=$?
+      rb_sx="$(cat "$RB_W/whole-sec/1.brief" "$RB_W/whole-sec/2.brief" "$RB_W/whole-sec/cross.brief" 2>/dev/null | grep -cF "$rb_ws")" || rb_sx=0
+      if [ "$rb_src" -eq 0 ] && [ "$rb_sx" -eq 0 ] && grep -qF "$rb_pl" "$RB_W/whole-sec/1.brief" 2>/dev/null; then
+        ok "RBRIEFS: a sections-axis pass 2 with --prior briefs its part shard with the prior records line and no whole-story sentence"
+      else
+        bad "RBRIEFS: whole-story sections control rc=$rb_src sentences=$rb_sx part-prior=$(grep -cF "$rb_pl" "$RB_W/whole-sec/1.brief" 2>/dev/null) out=[$rb_s]"
+      fi
+    fi
+    # BL-1187 ROLE LINE and the bound-definition omission. A part brief names its role on a `role: <r>` line and omits the
+    # sentence telling the member to Read .claude/team-roles/<r>.md only when that definition is bound AND current: the sibling
+    # renderer's `--check --role <r> --root "$PWD"` exits 0, so gen-round-briefs.sh runs with cwd = the world root. One consumer-
+    # layout world is built once, its definitions rendered by the REAL renderer (never hand-written), and copied per variant;
+    # each variant is one property apart from the current one and is run as a review round (adversary) and a repair round
+    # (remediator). Scored `sent=<role-file sentence present> role=<role line present> deliv=<Deliverable: line> shard=<shard: line>`.
+    RB_REND="$RB_D/render-agent-definitions.sh"
+    RB_REM="$(locate team-roles/remediator.md)" || RB_REM=""
+    if [ ! -f "$RB_REND" ]; then
+      echo "SKIP RBRIEFS-ROLE: render-agent-definitions.sh is not installed beside gen-round-briefs.sh in this consumer yet; nothing was checked"
+    elif [ -z "$RB_ROLE" ] || [ -z "$RB_REM" ]; then
+      bad "RBRIEFS-ROLE: FIXTURE BROKEN -- adversary.md or remediator.md not found (adv=[$RB_ROLE] rem=[$RB_REM])"
+    else
+      echo "HERMETIC-CONSUMED core/scripts/render-agent-definitions.sh"
+      echo "HERMETIC-CONSUMED core/team-roles/adversary.md"
+      echo "HERMETIC-CONSUMED core/team-roles/remediator.md"
+      RV_B="$WORK/world-rbrole"
+      mkdir -p "$RV_B/.claude/team-roles" "$RV_B/.claude/agents" || bad "RBRIEFS-ROLE: FIXTURE BROKEN -- cannot make the world"
+      cp "$RB_ROLE" "$RV_B/.claude/team-roles/adversary.md"; cp "$RB_REM" "$RV_B/.claude/team-roles/remediator.md"
+      printf '%s\n' '{"aiDlcModels":{"opus":"claude-opus-5[1m]"},"aiDlcRoles":{"adversary":{"model":"opus","effort":"high"},"remediator":{"model":"opus","effort":"high"}}}' > "$RV_B/.claude/settings.json"
+      FXCELL="cli-rbriefs-render" bash "$RB_REND" --root "$RV_B" >/dev/null 2>&1; rv_wrc=$?
+      if [ "$rv_wrc" -eq 0 ] && [ -s "$RV_B/.claude/agents/adversary.md" ] && [ -s "$RV_B/.claude/agents/remediator.md" ]; then
+        for rv in cur edit nodef drift focus; do cp -R "$RV_B" "$WORK/rv-$rv"; done
+        # focus: the bound, current world whose lead-written focus text names ANOTHER role's file (dev.md)
+        { cat "$RB_W/focus"; printf '\nSee .claude/team-roles/dev.md for the lead notes.\n'; } > "$WORK/focus-role"
+        printf 'A clause added after the render.\n' >> "$WORK/rv-edit/.claude/team-roles/adversary.md"
+        printf 'A clause added after the render.\n' >> "$WORK/rv-edit/.claude/team-roles/remediator.md"
+        rm -f "$WORK/rv-nodef/.claude/agents/adversary.md" "$WORK/rv-nodef/.claude/agents/remediator.md"
+        jq '.aiDlcRoles.adversary.effort = "low" | .aiDlcRoles.remediator.effort = "low"' "$RV_B/.claude/settings.json" > "$WORK/rv-drift/.claude/settings.json"
+        # rv_score <variant> <round> -> the score of the variant's brief 1 for that round
+        # One end-to-end run per distinct outcome and round (cur omits the sentence, nodef keeps it); every other variant is one in-process
+        # pass of grb_main (fixture-mutants.md clause 6). Called inside the caller's `cd <world>` subshell.
+        rv_gen() { # <variant> <round> <gen-round-briefs args...>
+          local v="$1" rd="$2"; shift 2
+          case "$v" in
+            cur|nodef) FXCELL="cli-rbriefs-role-$v-$rd" bash "$RB_D/gen-round-briefs.sh" "$@" ;;
+            *) fx_inproc "$RB_D/gen-round-briefs.sh" && . "$RB_D/gen-round-briefs.sh" && FXCELL="cli-rbriefs-role-$v-$rd" grb_main "$@" ;; # the pass starts the sibling renderer once; that start carries this tag
+          esac
+        }
+        rv_score() {
+          local w="$WORK/rv-$1" r adv o="$WORK/rv-$1/out-$2" rv_foc="$RB_W/focus"
+          [ "$1" != focus ] || rv_foc="$WORK/focus-role"
+          if [ "$2" = review ]; then
+            r=adversary; mkdir -p "$w/shards"
+            ( cd "$w" && rv_gen "$1" "$2" --round review --axis files --sprint 9 --artifact stories --pass 1 --map "$RB_W/map" --subject-dir "$RB_W/stories" --focus "$rv_foc" --shard-dir "$w/shards/rev" --out-dir "$o" >/dev/null 2>&1 )
+          else
+            r=remediator
+            ( cd "$w" && rv_gen "$1" "$2" --round repair --axis files --sprint 9 --artifact stories --pass 2 --map "$RB_W/map" --subject-dir "$RB_W/stories" --findings-dir "$RB_W/find" --shard-dir "$w/shards/rep" --out-dir "$o" >/dev/null 2>&1 )
+          fi
+          printf 'sent=%s role=%s deliv=%s shard=%s' "$(grep -cF ".claude/team-roles/$r.md (whole file" "$o/1.brief" 2>/dev/null)" "$(grep -cxF "role: $r" "$o/1.brief" 2>/dev/null)" \
+            "$(grep -c '^Deliverable: ' "$o/1.brief" 2>/dev/null)" "$(grep -c '^shard: ' "$o/1.brief" 2>/dev/null)"
+        }
+        rv_ok="sent=0 role=1 deliv=1 shard=1"; rv_sent="sent=1 role=1 deliv=1 shard=1"
+        for rv_rnd in review repair; do
+          rv_c="$(rv_score cur "$rv_rnd")"; rv_e="$(rv_score edit "$rv_rnd")"; rv_n="$(rv_score nodef "$rv_rnd")"; rv_d="$(rv_score drift "$rv_rnd")"
+          if [ "$rv_c" = "$rv_ok" ] && [ "$rv_e" = "$rv_sent" ] && [ "$rv_n" = "$rv_sent" ] && [ "$rv_d" = "$rv_sent" ]; then
+            ok "RBRIEFS-ROLE: $rv_rnd round: a bound, current definition omits the role-file sentence (role: line, Deliverable: and shard: kept); the role file edited after the render, the definition absent, and frontmatter drift each keep it"
+          else
+            bad "RBRIEFS-ROLE: $rv_rnd round: current=[$rv_c] edited=[$rv_e] absent=[$rv_n] drift=[$rv_d]; expected [$rv_ok] then [$rv_sent] x3"
+          fi
+        done
+        # a brief whose embedded focus names a team-roles/ path keeps its own sentence (first in the prompt), and still names its role
+        rv_f="$(rv_score focus review)"
+        if [ "$rv_f" = "$rv_sent" ]; then
+          ok "RBRIEFS-ROLE: review round: a bound, current world whose focus text names .claude/team-roles/dev.md keeps the role-file sentence and the role: line"
+        else
+          bad "RBRIEFS-ROLE: review round: focus naming a role file gave [$rv_f]; expected [$rv_sent]"
+        fi
+      else
+        bad "RBRIEFS-ROLE: FIXTURE BROKEN -- the renderer did not write both definitions (rc=$rv_wrc)"
       fi
     fi
   fi

@@ -24,3 +24,5 @@ core/scripts/era-token.sh
 !core/scripts/gen-round-briefs.sh
 !core/skills/ai-dlc/steps/_gate-procedures.md
 !core/team-roles/adversary.md
+!core/scripts/render-agent-definitions.sh
+!core/team-roles/remediator.md

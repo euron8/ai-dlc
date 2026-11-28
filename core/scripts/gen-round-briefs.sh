@@ -23,7 +23,15 @@
 #   --findings-dir D repair: D/<ordinal>.txt holds that shard's finding tokens, one `<seat-file>#<id> (<severity>)` per line;
 #                    a shard with no file has no findings and gets no brief.
 #   --role-file P    the role contract the brief tells the member to read (default `.claude/team-roles/adversary.md`, or
-#                    `.claude/team-roles/remediator.md` for repair). Review briefs copy the generated
+#                    `.claude/team-roles/remediator.md` for repair). Every adversary and remediator part brief carries a
+#                    `role: <r>` line beside its `shard:` line, <r> being this file's basename without `.md`. The sentence telling the
+#                    member to read the role file is omitted when BOTH hold: this path is literally `.claude/team-roles/<r>.md`, and
+#                    the sibling `render-agent-definitions.sh --check --role <r> --root "$PWD"` exits 0 (the bound definition already
+#                    embeds the current role file); that is decided once per run, and the sentence is kept when the renderer is absent or not executable.
+#                    It is also kept in any one brief whose embedded text (focus, gated text, prior records, findings, subject)
+#                    contains `team-roles/`: the dispatch guard binds the first such path in the prompt, so the brief's own sentence
+#                    must come first.
+#                    Review briefs copy the generated
 #                    `provenance-block/adversary-pass` region out of the adversary role file, never a retyped field list.
 #   --procedures-file P  elicitation only: the file holding the generated `provenance-block/elicitation` region (default
 #                    `.claude/skills/ai-dlc/steps/_gate-procedures.md`). Elicitation briefs copy that region, which carries
@@ -96,6 +104,24 @@ fi
 [ -z "$PLANF" ] || [ "$KIND" = rep ] || grb_die "--plan-file belongs to a repair round"
 if [ "$AXIS" = files ]; then [ -d "$SUBJ" ] || grb_die "--subject-dir DIR is required on the files axis"; else [ -f "$DOC" ] || grb_die "--doc FILE is required on the sections axis"; fi
 mkdir -p "$OUTD" || grb_die "cannot create $OUTD"
+ROLE_NAME="${ROLE##*/}"; ROLE_NAME="${ROLE_NAME%.md}"
+ROLE_SENT=1
+if [ "$ROLE" = ".claude/team-roles/$ROLE_NAME.md" ]; then
+  RAD="$(dirname "${BASH_SOURCE[0]:-$0}")/render-agent-definitions.sh"
+  if [ -x "$RAD" ] && "$RAD" --check --role "$ROLE_NAME" --root "$PWD" >/dev/null 2>&1; then ROLE_SENT=0; fi
+fi
+ADV_FULL=" FIRST read your full role contract: $ROLE (whole file, in consecutive \`offset\`/\`limit\` Read chunks of at most 16 KB through its last line; when a chunk is refused for size, halve its limit) and follow it."
+REP_FULL=" FIRST action: Read $ROLE (whole file, consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line; when a chunk is refused for size, halve its limit) and follow it exactly."
+ADV_SENT=""; REP_SENT=""
+if [ "$ROLE_SENT" -eq 1 ]; then ADV_SENT="$ADV_FULL"; REP_SENT="$REP_FULL"; fi
+# A brief whose embedded text names a `team-roles/` path keeps the sentence: the dispatch guard binds the FIRST such path in
+# the prompt, so the brief's own sentence must come first. Decided per brief over the written file, no fork.
+grb_keep_sent() { # $1 brief file, $2 the sentence
+  [ "$ROLE_SENT" -eq 0 ] || return 0
+  gb_t=""; IFS= read -r -d '' gb_t < "$1" || true
+  case "$gb_t" in *team-roles/*) ;; *) return 0 ;; esac
+  { printf '%s%s\n' "${gb_t%%$'\n'*}" "$2"; printf '%s' "${gb_t#*$'\n'}"; } > "$1"
+}
 
 # The map: ordinals in file order, K = their count; ordinals must be unique.
 ORD="$(awk -F'\t' 'NF >= 2 && $1 != "" { print $1 }' "$MAP")"
@@ -126,6 +152,22 @@ if [ "$ROUND" = elicitation ]; then HDR="elicitation"; else HDR="convergence"; f
 SUBJ_LABEL="$ART"; STEPWORD="$HDR"
 PRIORBLK=""; [ -z "$PRIOR" ] || PRIORBLK="Pass $PASS reviews the REPAIR, not the document again. Read these prior records first:$PRIOR
 "
+# A files-axis PART shard of a later pass reviews its story WHOLE when the story is unchanged since the previous pass.
+# The previous pass record is taken from the --prior paths themselves: the one whose basename is *-adversarial-p<k>.md
+# with the highest k below --pass (the engine's predecessor is the highest existing k < M, never literal M-1). With no
+# such prior there is no sentence.
+PREDREC=""; PREDK=-1
+while IFS= read -r grb_p; do
+  grb_b="${grb_p##*/}"
+  case "$grb_b" in *-adversarial-p*.md) ;; *) continue ;; esac
+  grb_k="${grb_b##*-adversarial-p}"; grb_k="${grb_k%.md}"
+  case "$grb_k" in ''|*[!0-9]*) continue ;; esac
+  if [ $((10#$grb_k)) -lt $((10#$PASS)) ] && [ $((10#$grb_k)) -gt "$PREDK" ]; then PREDK=$((10#$grb_k)); PREDREC="$grb_p"; fi
+done <<GRB_PRIOR
+$PRIOR
+GRB_PRIOR
+WHOLEBLK=""
+[ -z "$PREDREC" ] || WHOLEBLK="Your story is reviewed WHOLE, not only the repair, when it is unchanged since the previous pass. Decide it this way: read the previous pass record \`$PREDREC\` (one of the prior records above) and its \`artifact_sha:\` line, a list of \`<stem>@<sha>\` or \`<stem>=<sha>\` pairs; take the pair whose \`<stem>\` is your story file's basename without \`.md\`; run \`shasum -a 256 <your story file>\` as one read-only Bash call. When the two shas match, the story is unchanged: review the WHOLE story, not only the repair. When they differ, or your stem has no pair, review the repair."
 
 grb_adv_tail() { # $1 deliverable path, $2 shard value
   cat <<EOF
@@ -141,19 +183,22 @@ EOF
 grb_write_adv() { # $1 ordinal-or-cross, $2 shard value, $3 subject text
   f="$OUTD/$1.brief"
   {
-    echo "You are an AI/DLC ADVERSARIAL $ROUND shard for sprint $SPRINT's $SUBJ_LABEL ($AXIS axis, pass $PASS). FIRST read your full role contract: $ROLE (whole file, in consecutive \`offset\`/\`limit\` Read chunks of at most 16 KB through its last line; when a chunk is refused for size, halve its limit) and follow it."
+    echo "You are an AI/DLC ADVERSARIAL $ROUND shard for sprint $SPRINT's $SUBJ_LABEL ($AXIS axis, pass $PASS).$ADV_SENT"
     [ -z "$METHOD" ] || { echo; echo "$METHOD"; }
     echo
     echo "Deliverable: $SDIR/$1.md"
     echo "shard: $2"
+    echo "role: $ROLE_NAME"
     echo
     printf '%s\n' "$3"
     echo
     echo "Review focus: $FOCUS_TXT"
     [ -z "$PRIORBLK" ] || { echo; printf '%s' "$PRIORBLK"; }
+    [ -z "$PRIORBLK" ] || [ -z "$WHOLEBLK" ] || [ "$AXIS" != files ] || [ "$1" = cross ] || { echo; printf '%s\n' "$WHOLEBLK"; }
     [ -z "$GATED_TXT" ] || { echo; printf '%s\n' "$GATED_TXT"; }
     grb_adv_tail "$SDIR/$1.md" "$2"
   } > "$f"
+  grb_keep_sent "$f" "$ADV_FULL"
 }
 
 # ONE OWNER PER FINDING: a cross.txt token must not also sit in a part's <ordinal>.txt (compared by `<file>.md#<id>`), or
@@ -233,16 +278,18 @@ else
     [ -s "$FIND/$o.txt" ] || continue
     if [ "$AXIS" = files ]; then sv="$o/$K $a"; sub="Subject: ONE story file, $SUBJ/$a."; else sv="$o/$K $c"; sub="Subject: lines $a-$b of the REAL document $DOC."; fi
     {
-      echo "You are one shard of the AI/DLC $ART repair (sprint $SPRINT, $AXIS axis, pass $PASS). FIRST action: Read $ROLE (whole file, consecutive \`offset\`/\`limit\` chunks of at most 16 KB through its last line; when a chunk is refused for size, halve its limit) and follow it exactly."
+      echo "You are one shard of the AI/DLC $ART repair (sprint $SPRINT, $AXIS axis, pass $PASS).$REP_SENT"
       echo
       echo "Deliverable: $SDIR/$o.md"
       echo "shard: $sv"
+      echo "role: $ROLE_NAME"
       echo
       echo "$sub Apply ALL of these findings; read each finding's full text in its source file (the token is \`<file>#<id>\`):"
       cat "$FIND/$o.txt"
       echo
       echo "Edit the subject with Write or Edit, never Bash. Write your repair record to the deliverable path."
     } > "$OUTD/$o.brief"
+    grb_keep_sent "$OUTD/$o.brief" "$REP_FULL"
     PATHS="$PATHS $SDIR/$o.md"; n=$((n + 1))
   done < "$MAP"
   [ "$n" -gt 0 ] || grb_die "no shard has a findings file under $FIND" 3

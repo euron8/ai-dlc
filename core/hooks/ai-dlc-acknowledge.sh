@@ -731,6 +731,9 @@ case "$TOOL_NAME" in
     #     Whether this hook sees the payload before or after that rewrite is not established, so
     #     a call reading "Explore" here may run as the role. Fail closed on any citation. The
     #     fixture `updater-session-signals` byte-compares the two copies of the ERE.
+    #   - no role line: `ai-dlc-dispatch-guard.sh` THE ROLE LINE (CONTRACT header) derives a role the same way
+    #     when no `team-roles/` token does; the awk below MIRRORS that implementation (no shared helper:
+    #     the hook and the guard are separate installed files), and is treated exactly like a citation.
     #   - no agent definition NAMED Explore: the harness selects a definition by its frontmatter
     #     `name:`, not by its filename, so `explore_shadowed` reads every `.claude/agents/*.md`
     #     in the project and under `$HOME`, and fails closed on one it cannot read.
@@ -750,6 +753,15 @@ case "$TOOL_NAME" in
             EXPLORE_WHY="its prompt could not be read"
           elif grep -qE 'team-roles/[a-z][a-z-]*\.md' <<< "$EXPLORE_PROMPT"; then
             EXPLORE_WHY="its prompt cites a \`team-roles/<role>.md\` file, and the dispatch guard rewrites \`subagent_type\` to that role"
+          elif case "$EXPLORE_PROMPT" in
+                 *"role: "*) [ -n "$(printf '%s\n' "$EXPLORE_PROMPT" | LC_ALL=C awk '
+                   /^[ \t]*(```|~~~)/ { fence = !fence; next }
+                   fence { next }
+                   /^role: [a-z][a-z-]*[ \t\r]*$/ { print "r"; exit }
+                 ' 2>/dev/null || true)" ] ;;
+                 *) false ;;
+               esac; then
+            EXPLORE_WHY="its prompt carries a \`role: <role>\` line, which the dispatch guard reads as a role (THE ROLE LINE) and rewrites \`subagent_type\` to"
           elif explore_shadowed; then
             EXPLORE_WHY="an agent definition whose frontmatter \`name:\` is Explore exists under \`.claude/agents/\` or \`\$HOME/.claude/agents/\`, and the harness may run it instead of the built-in"
           else

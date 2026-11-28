@@ -678,6 +678,16 @@ const UPDATER_MARKER_RE = new RegExp(UPDATER_MARKER_ERE, "g");
 const EXPLORE_ROLE_ERE = String.raw`team-roles/[a-z][a-z-]*\.md`;
 // <<< I128 EXPLORE ROLE ERE <<<
 const EXPLORE_ROLE_RE = new RegExp(EXPLORE_ROLE_ERE);
+// A prompt carrying THE ROLE LINE (ai-dlc-dispatch-guard.sh CONTRACT header) is treated as a citation, as the hook's
+// awk does: the first unfenced `role: <r>` line, trailing blanks and CR ignored, lines inside a ``` or ~~~ fence skipped.
+const hasRoleLine = (s) => {
+  let fence = false;
+  for (const ln of s.split("\n")) {
+    if (/^[ \t]*(\x60{3}|~~~)/.test(ln)) { fence = !fence; continue; }
+    if (!fence && /^role: [a-z][a-z-]*[ \t\r]*$/.test(ln)) return true;
+  }
+  return false;
+};
 const isPausedExploreAllowed = (b) => {
   const input = b.input;
   if (!(b.name === "Agent" || b.name === "Task")) return false;
@@ -685,7 +695,8 @@ const isPausedExploreAllowed = (b) => {
   if (input.subagent_type !== "Explore") return false;
   if ("name" in input || "team_name" in input) return false;
   const p = input.prompt;
-  return !EXPLORE_ROLE_RE.test(p == null || p === false ? "" : typeof p === "string" ? p : JSON.stringify(p, null, 2));
+  const t = p == null || p === false ? "" : typeof p === "string" ? p : JSON.stringify(p, null, 2);
+  return !EXPLORE_ROLE_RE.test(t) && !hasRoleLine(t);
 };
 // The verdict of the LAST marker on one raw line, keyed as the hook's `case` keys it, by suffix:
 // 1 updater, 0 pipeline, null no marker. The hook greps every line, sidechain records included,

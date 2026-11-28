@@ -79,19 +79,31 @@
 # two codes differently, and none of them re-derives the applicability test.
 #
 # --check NEVER WRITES, so it is safe to call from a gate.
+#
+# --role <r> LIMITS THE RUN TO ONE ROLE, in both modes. `--check --role <r>` exits 0 when that one
+# definition is current and 1 when it is missing, has drifted, or <r> has no rendered definition
+# (absent from `aiDlcRoles`, model-less, or its model key unresolved). Other roles are neither
+# compared nor reported, and the stale-projection pass does not run. Write mode with --role
+# writes only that definition and deletes nothing. A <r> outside the role-name grammar exits 2.
 rad_main() {
 set -uo pipefail
 
 MODE="write"
 PROJECT_ROOT=""
+ONLY_ROLE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --check) MODE="check" ;;
     --root)  shift; PROJECT_ROOT="${1:-}" ;;
+    --role)  shift; ONLY_ROLE="${1:-}"
+             case "$ONLY_ROLE" in
+               ''|*[!a-z0-9-]*|[!a-z]*) echo "render-agent-definitions.sh: --role needs a role name matching [a-z][a-z0-9-]*" >&2; exit 2 ;;
+             esac ;;
     -h|--help)
-      echo "usage: render-agent-definitions.sh [--check] [--root <dir>]"
+      echo "usage: render-agent-definitions.sh [--check] [--role <r>] [--root <dir>]"
       echo "  (default) write .claude/agents/<role>.md for every aiDlcRoles entry with a model"
       echo "  --check   report whether every definition is current; write nothing"
+      echo "  --role r  limit the run to role r (exit 1 under --check when r has no current definition)"
       exit 0 ;;
     *) echo "render-agent-definitions.sh: unknown argument '$1'" >&2; exit 2 ;;
   esac
@@ -293,6 +305,7 @@ EOR
     "S$US"*) role="${role#S"$US"}" ;;
   esac
   [ -n "$role" ] || continue
+  [ -z "$ONLY_ROLE" ] || [ "$role" = "$ONLY_ROLE" ] || continue
 
   # A ROLE NAME IS A PATH COMPONENT AND settings.json IS CONSUMER-OWNED INPUT. Anything outside
   # the role-file grammar the dispatch guard already derives (`[a-z][a-z-]*`) is refused rather
@@ -384,7 +397,7 @@ EOF
 # WRITE MODE DELETES THEM. If it did not, `--check` would go red on a stale projection with no
 # command able to clear it, and a standard nothing can satisfy is one an operator switches off.
 stale=""
-if [ -d "$AGENTS_DIR" ]; then
+if [ -z "$ONLY_ROLE" ] && [ -d "$AGENTS_DIR" ]; then
   for f in "$AGENTS_DIR"/*.md; do
     [ -f "$f" ] || continue
     grep -qF -- "$GEN_PREFIX" "$f" || continue
@@ -402,6 +415,17 @@ $base
       rm -f "$f"
     fi
   done
+fi
+
+# --role <r> naming no rendered definition is a finding, never a vacuous pass.
+if [ -n "$ONLY_ROLE" ]; then
+  case "
+$RENDERED_NAMES" in
+    *"
+$ONLY_ROLE
+"*) : ;;
+    *) echo "FAIL: --role $ONLY_ROLE has no rendered definition (not in aiDlcRoles, model-less, or unresolved model key)" >&2; rc=1 ;;
+  esac
 fi
 
 # --- report ------------------------------------------------------------------------------
